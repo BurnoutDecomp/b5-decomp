@@ -6,7 +6,7 @@
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance + g_aGPVolumeMethods
 
 #include <cmath>     // sqrt, fabs
-#include <cstdint>   // uintptr_t (the console 32-bit mVolumeTag pointer image)
+#include "types.hpp"   // uintptr_t (the console 32-bit mVolumeTag pointer image)
 #include <cstring>   // memcpy (GetMaximumFeature edge copy)
 
 // ===========================================================================
@@ -170,9 +170,9 @@ CylinderVolume* CylinderVolume::Initialize(CylinderVolume** appVolume,
                                            f32 afRadius, f32 afHalfHeight, f32 afFatness)
 {
     CylinderVolume* lpVolume = *appVolume;
-    if (lpVolume == nullptr)
+    if (lpVolume == 0)
     {
-        return nullptr;
+        return 0;
     }
 
     lpVolume->mfFatness = 0.0f;   // flt_82001CC0 pre-clear (overwritten below)
@@ -276,7 +276,7 @@ RwBool CylinderVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransf
     Vec4 lvRow2;   // v11 -- the (optionally rotated) maFrame[2], the axis
     Vec4 lvCentre; // v12 -- the (optionally transformed) maFrame[3]
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         lvRow0   = RotateByTransform3x3(maFrame[0], lpTransform);
         lvRow1   = RotateByTransform3x3(maFrame[1], lpTransform);
@@ -353,7 +353,7 @@ RwBool CylinderVolume::GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& 
     f32 lfExtentY;
     f32 lfExtentZ;
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         // Fatness folded into both dimensions (fadds f13 / fadds f0).
         const f32 lfAxial  = lfFatness + mfHalfHeight;   // v10 = a1[20]+a1[17]

@@ -133,7 +133,7 @@ namespace TestBed
 
     private:
         // CgsTestBedAllocator.h:422 / :562 - the rw::IResourceAllocator overrides (carve/return a block).
-        virtual rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
+        virtual rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) ;
         virtual void         DoFree(const rw::Resource& lrResource);
 
         rw::IResourceAllocator* mpAllocator;        // CgsTestBedAllocator.h:784 - the backing allocator

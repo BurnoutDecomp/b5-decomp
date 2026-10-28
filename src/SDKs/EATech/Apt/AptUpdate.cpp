@@ -208,7 +208,7 @@ static void AptUpdateReplaySavedInputs(int nFrames, int nDepthLayerMask)
 {
     const unsigned int nTargetFrame = gnAptSavedInputFrame + static_cast<unsigned int>(nFrames);
 
-    while (gpAptSavedInputStream != nullptr && gnAptSavedInputFrame != nTargetFrame)
+    while (gpAptSavedInputStream != 0 && gnAptSavedInputFrame != nTargetFrame)
     {
         if (AptSavedInputCheckpoints::CanContinueSavedInputs(*gpAptSavedInputCheckpoints))
         {
@@ -292,10 +292,10 @@ static void AptUpdateReplaySavedInputs(int nFrames, int nDepthLayerMask)
         if (static_cast<int>(gpAptSavedInputCursor - gpAptSavedInputStream) >= gnAptSavedInputStreamSize)
         {
             // End of the stream: replay off, tell the host, stop recording.
-            gpAptSavedInputStream = nullptr;
-            gpAptSavedInputCursor = nullptr;
+            gpAptSavedInputStream = 0;
+            gpAptSavedInputCursor = 0;
             if (gAptFuncs.pfnPlaySavedInputsDone)
-                gAptFuncs.pfnPlaySavedInputsDone(true, nullptr);
+                gAptFuncs.pfnPlaySavedInputsDone(true, 0);
             if (gAptInputRecorderEnabled)
                 gAptInputRecorderEnabled = 0;
             return;
@@ -303,7 +303,7 @@ static void AptUpdateReplaySavedInputs(int nFrames, int nDepthLayerMask)
 
         AptCIH* const pRootNode = gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst;
         if (!AptSavedInputCheckpoints::CanContinueSavedInputs(*gpAptSavedInputCheckpoints)
-            || pRootNode == nullptr
+            || pRootNode == 0
             || (pRootNode->GetCharacterInst()->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
         {
             gpAptTarget->mpLinker->Update();
@@ -335,7 +335,7 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
     {
         AptAnimationTarget* pAnim = gpAptTarget->mpAnimationTarget;
         AptCIH* pRootNode = pAnim->mDisplayList.mpHead->mpFirst;
-        if (pRootNode != nullptr
+        if (pRootNode != 0
             && (pRootNode->GetCharacterInst()->mTypeFlags & 0x3Fu) == 9u)   // x64 low-6-bit tag
         {
             if (AptUpdateRunTargetFrames(nElapsedMs, nDepthLayerMask, nMaxBankedFrames))
@@ -351,7 +351,7 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
         }
     }
 
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
     if (gbAptZombiesDirty)
     {

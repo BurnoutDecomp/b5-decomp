@@ -50,7 +50,7 @@ namespace renderengine { extern u32 guDiagComposites; extern u32 guPresentCount;
 BrnPostFx msPostFx;
 
 BrnPostFx::BrnPostFx()
-    : m_blendJob(nullptr) // EA::Jobs::Job::Job(&m_blendJob, 0): the unnamed tint-blend job
+    : m_blendJob(0) // EA::Jobs::Job::Job(&m_blendJob, 0): the unnamed tint-blend job
 {
     // mPostFxShader, m_b4blurState and m_blendJob are constructed by their own constructors:
     //   BrnPostFxShader::BrnPostFxShader(this)           -- the embedded shader sub-object
@@ -99,18 +99,18 @@ BrnPostFx::BrnPostFx()
 
     // The render-target / effect pointers and the tint-blend counters the ctor zeroes
     // (dword5A0/5A8/5B8/5BC/5C8, lpTint, dword5C4, byte5F4 and the tint-buffer index).
-    m_deviceRt = nullptr;
-    m_mainRt = nullptr;
-    m_renderTarget = nullptr;
-    m_frameRt = nullptr;
-    m_bloomDsRt = nullptr;
-    m_depthOfFieldRt = nullptr;
+    m_deviceRt = 0;
+    m_mainRt = 0;
+    m_renderTarget = 0;
+    m_frameRt = 0;
+    m_bloomDsRt = 0;
+    m_depthOfFieldRt = 0;
 
-    m_pfxDof = nullptr;
-    m_pfxVignette = nullptr;
-    m_pfxTint[0] = nullptr;
-    m_pfxTint[1] = nullptr;
-    m_pfxB4Blur = nullptr;
+    m_pfxDof = 0;
+    m_pfxVignette = 0;
+    m_pfxTint[0] = 0;
+    m_pfxTint[1] = 0;
+    m_pfxB4Blur = 0;
 
     m_processTint = false;
     m_currentTintBuffer = 0;
@@ -208,7 +208,7 @@ namespace
             lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
             lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
         }
-        return lpAllocator->DoAllocate(lDescriptor, nullptr);
+        return lpAllocator->DoAllocate(lDescriptor, 0);
     }
 
     // --- Construct's recovered immediates ---------------------------------------------------------
@@ -261,7 +261,7 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
             lpAllocator,
             static_cast<u32>(sizeof(rw::graphics::postfx::PfxHelper)),   // X360: 0x50
             0x10u);
-        if (lHelperResource.m_baseResources[0] != nullptr)
+        if (lHelperResource.m_baseResources[0] != 0)
         {
             new (lHelperResource.m_baseResources[0])
                 rw::graphics::postfx::PfxHelper(lHelperParameters);
@@ -286,10 +286,10 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
             lpAllocator,
             static_cast<u32>(sizeof(rw::graphics::postfx::DepthOfField)),   // X360: 0x30
             0x10u);
-        m_pfxDof = (lDofResource.m_baseResources[0] != nullptr)
+        m_pfxDof = (lDofResource.m_baseResources[0] != 0)
             ? new (lDofResource.m_baseResources[0])
                   rw::graphics::postfx::DepthOfField(lDofParameters)
-            : nullptr;
+            : 0;
     }
 
     // ---- the vignette (asm 0x8240A150-0x8240A1F0) -----------------------------------------------
@@ -312,10 +312,10 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
             lpAllocator,
             static_cast<u32>(sizeof(rw::graphics::postfx::Vignette)),   // X360: 0xD0
             0x10u);
-        m_pfxVignette = (lVignetteResource.m_baseResources[0] != nullptr)
+        m_pfxVignette = (lVignetteResource.m_baseResources[0] != 0)
             ? new (lVignetteResource.m_baseResources[0])
                   rw::graphics::postfx::Vignette(lVignetteParameters)
-            : nullptr;
+            : 0;
     }
 
     // ---- the shared tint pixel program + the two tint buffers (asm 0x8240A1F4-0x8240A2BC) -------
@@ -384,10 +384,10 @@ void BrnPostFx::Construct(rw::IResourceAllocator* lpAllocator)
             lpAllocator,
             static_cast<u32>(sizeof(rw::graphics::postfx::B4Blur)),   // X360: 0x130
             0x10u);
-        m_pfxB4Blur = (lB4BlurResource.m_baseResources[0] != nullptr)
+        m_pfxB4Blur = (lB4BlurResource.m_baseResources[0] != 0)
             ? new (lB4BlurResource.m_baseResources[0])
                   rw::graphics::postfx::B4Blur(lB4BlurParameters)
-            : nullptr;
+            : 0;
     }
 
     // asm 0x8240A3DC `stw r30, 0x380(r29)` with r30 == 1. THE COMPOSITE'S MASTER LATCH.
@@ -428,7 +428,7 @@ void BrnPostFx::Destruct()
 {
     for (u32 luTint = 0u; luTint < KU_POST_FX_NUM_TINT_BUFFERS; ++luTint)
     {
-        if (m_pfxTint[luTint] != nullptr)
+        if (m_pfxTint[luTint] != 0)
             m_pfxTint[luTint]->Release();
     }
 
@@ -438,14 +438,14 @@ void BrnPostFx::Destruct()
     // DoF's (`lwz r29, off_82FAEE80@l(r27)` then `lwz r3, 0(r29)`) -- and null the member. That is
     // rw::graphics::postfx::DepthOfField::Release() inlined (the DWARF lists Release among the
     // methods that live in the DoF TU; rwgpfxdof.h in this tree records the same).
-    if (m_pfxDof != nullptr)
+    if (m_pfxDof != 0)
         m_pfxDof->Release();
 
     // ---- the vignette and the shared helper (asm 0x824081F8-0x82408204) --------------------------
     // Both already out-of-line on the console.
-    if (m_pfxVignette != nullptr)
+    if (m_pfxVignette != 0)
         m_pfxVignette->Release();
-    if (rw::graphics::postfx::gpPfxHelper != nullptr)
+    if (rw::graphics::postfx::gpPfxHelper != 0)
         rw::graphics::postfx::gpPfxHelper->Release();
 
     // ---- the shader array (asm 0x82408208-0x82408210) --------------------------------------------
@@ -748,7 +748,7 @@ void BrnPostFx::Render(BrnRendererMemory& lrAllocatedMemory,
     // `lwz r11, arg_6C` / `cmplwi` / `bne` / `lwz r23, 0x28(r29)`: use the caller's override texture
     // when it supplied one, else the source render target's colour texture (+0x28 == the postfx
     // RenderTarget's maColourTargets[0].mpTexture, i.e. GetTexture(0)).
-    const bool lbOverrideSource = (lpOverrideSourceTexture != nullptr);
+    const bool lbOverrideSource = (lpOverrideSourceTexture != 0);
     renderengine::Texture* const lpSourceTexture =
         lbOverrideSource ? lpOverrideSourceTexture : lpSourceRenderTarget->GetTexture(0u);
 

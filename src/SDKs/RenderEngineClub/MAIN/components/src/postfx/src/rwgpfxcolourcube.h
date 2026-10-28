@@ -10,8 +10,7 @@
 //
 // Definition lives here so both the SDK home (rwgpfxcolourcube.cpp) and the game-side resource-
 // type handler (CgsRwColourCubeResourceType.cpp) share one declaration.
-namespace rw::graphics::postfx
-{
+namespace rw { namespace graphics { namespace postfx {
     class ColourCube
     {
     public:
@@ -82,8 +81,8 @@ namespace rw::graphics::postfx
     };
 
     // The object IS the serialised header, and GetPixels() depends on it being exactly that.
-    static_assert(sizeof(ColourCube) == ColourCube::KU_HEADER_BYTES,
+    CGS_STATIC_ASSERT((sizeof(ColourCube) == ColourCube::KU_HEADER_BYTES),
                   "rw::graphics::postfx::ColourCube must stay the serialised 16-byte cube header");
-}
+} } }
 
 #endif // RW_GPFX_COLOUR_CUBE_H

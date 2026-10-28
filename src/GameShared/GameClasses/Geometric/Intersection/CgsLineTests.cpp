@@ -19,7 +19,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cmath>     // std::signbit (the vmaxfp / vminfp zero ordering); std::fma (TestLineSphere4's vmaddfp)
-#include <cstdint>   // uintptr_t (TestLineSphere4's :308 alignment assert)
+#include "types.hpp"   // uintptr_t (TestLineSphere4's :308 alignment assert)
 #include <cstring>   // std::memcpy (the Mask4 lanes)
 
 namespace CgsGeometric

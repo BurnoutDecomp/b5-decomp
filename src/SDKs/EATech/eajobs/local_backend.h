@@ -56,7 +56,7 @@ namespace LocalBackend
 {
     // ARTIST Initialize copies a complete EntryPoint (44 bytes on X360).
     // Typed native assignment preserves its wider function pointer.
-    using JobInstanceParameters = EntryPoint;
+    typedef EntryPoint JobInstanceParameters;
 
     // EA::Jobs::LocalBackend::JobInstance -- one scheduler slot (see header banner).
     struct JobInstance
@@ -228,7 +228,7 @@ namespace LocalBackend
         // X360: `lis r8,0x6000` compared against `clrrwi r9,r9,29` (top-3-bits mask).
         static constexpr u64 KU_SLOT_STATE_MASK = 0xE000000000000000ull;
         static constexpr u64 KU_SLOT_STATE_FREE = 0x6000000000000000ull;
-        static_assert(sizeof(SlotWord)==sizeof(u64), "packed job slot width");
+        CGS_STATIC_ASSERT((sizeof(SlotWord)==sizeof(u64)), "packed job slot width");
 
         // @ 0x82BCBCB8 -- bring the backend up: stamp the vtable, default the cursors,
         // construct the 32 idle worker threads, release the submission counter, default

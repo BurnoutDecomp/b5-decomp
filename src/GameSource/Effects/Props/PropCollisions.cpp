@@ -30,7 +30,7 @@
 
 #include <cmath>     // std::fma / std::sqrt
 #include <cstdarg>   // [DIAG] va_list
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 #include <cstdio>    // [DIAG] vsnprintf
 #include <cstdlib>   // [DIAG] getenv
 
@@ -331,7 +331,7 @@ namespace
     void PropCollisions::BuildPropToMaterialTable()
     {
         typedef BrnPhysics::Props::PropPhysicsDataHeader PropPhysicsDataHeader;
-        static_assert(KU_MAX_PROP_TYPE_MAPPINGS == BrnPhysics::Props::KU_MAX_PROP_TYPES,
+        CGS_STATIC_ASSERT((KU_MAX_PROP_TYPE_MAPPINGS == BrnPhysics::Props::KU_MAX_PROP_TYPES),
                       "maPropToMaterialMappings[500] is KU_MAX_PROP_TYPES");
 
         CgsResource::ResourcePtr<PropPhysicsDataHeader> lpPhysics(mPropDataResourceHandle);   // :290 0x82288690

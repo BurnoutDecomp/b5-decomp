@@ -526,39 +526,39 @@ namespace BrnNetwork
     // and (b) the pointer-free runs, as console deltas from the run's first member.
     void BrnNetworkModule::_AssertLayout()
     {
-        static_assert(std::is_same<decltype(BrnNetworkModule::mNetworkManager), BrnNetworkManager>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mNetworkManager), BrnNetworkManager>::value),
                       "mNetworkManager must be the real BrnNetworkManager");
-        static_assert(std::is_same<decltype(BrnNetworkModule::mVehicleDriverInputInterface),
-                                   BrnPhysics::Vehicle::VehicleDriverInputInterface>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mVehicleDriverInputInterface),
+                                   BrnPhysics::Vehicle::VehicleDriverInputInterface>::value),
                       "mVehicleDriverInputInterface must be the real type");
-        static_assert(std::is_same<decltype(BrnNetworkModule::mVehicleInputInterface),
-                                   BrnPhysics::Vehicle::VehicleInputInterface>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mVehicleInputInterface),
+                                   BrnPhysics::Vehicle::VehicleInputInterface>::value),
                       "mVehicleInputInterface must be the real type");
-        static_assert(std::is_same<decltype(BrnNetworkModule::mVehicleOutputInterface),
-                                   BrnPhysics::Vehicle::VehicleOutputInterface>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mVehicleOutputInterface),
+                                   BrnPhysics::Vehicle::VehicleOutputInterface>::value),
                       "mVehicleOutputInterface must be the real type");
-        static_assert(std::is_same<decltype(BrnNetworkModule::mGameEventQueue),
-                                   BrnGameState::GameStateModuleIO::GameEventQueue>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mGameEventQueue),
+                                   BrnGameState::GameStateModuleIO::GameEventQueue>::value),
                       "mGameEventQueue must be the real GameStateModuleIO::GameEventQueue");
 
         // The stage/flag/cache run after the manager: +614656 .. +614704 on the console.
-        static_assert(offsetof(BrnNetworkModule, meReleaseStage)             - offsetof(BrnNetworkModule, mePrepareStage) == 4,  "meReleaseStage @ +4");
-        static_assert(offsetof(BrnNetworkModule, mbOutputSendUpdateMessages) - offsetof(BrnNetworkModule, mePrepareStage) == 8,  "mbOutputSendUpdateMessages @ +8");
-        static_assert(offsetof(BrnNetworkModule, mbOutputRecvUpdateMessages) - offsetof(BrnNetworkModule, mePrepareStage) == 9,  "mbOutputRecvUpdateMessages @ +9");
-        static_assert(offsetof(BrnNetworkModule, mbPadIdle)                  - offsetof(BrnNetworkModule, mePrepareStage) == 10, "mbPadIdle @ +10");
-        static_assert(offsetof(BrnNetworkModule, maCachedPlayerIDsInGame)    - offsetof(BrnNetworkModule, mePrepareStage) == 12, "maCachedPlayerIDsInGame @ +12");
-        static_assert(offsetof(BrnNetworkModule, miCachedPlayersInGame)      - offsetof(BrnNetworkModule, mePrepareStage) == 44, "miCachedPlayersInGame @ +44");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, meReleaseStage)             - offsetof(BrnNetworkModule, mePrepareStage) == 4),  "meReleaseStage @ +4");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, mbOutputSendUpdateMessages) - offsetof(BrnNetworkModule, mePrepareStage) == 8),  "mbOutputSendUpdateMessages @ +8");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, mbOutputRecvUpdateMessages) - offsetof(BrnNetworkModule, mePrepareStage) == 9),  "mbOutputRecvUpdateMessages @ +9");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, mbPadIdle)                  - offsetof(BrnNetworkModule, mePrepareStage) == 10), "mbPadIdle @ +10");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, maCachedPlayerIDsInGame)    - offsetof(BrnNetworkModule, mePrepareStage) == 12), "maCachedPlayerIDsInGame @ +12");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, miCachedPlayersInGame)      - offsetof(BrnNetworkModule, mePrepareStage) == 44), "miCachedPlayersInGame @ +44");
 
         // The player controls and the game-event queue are pointer-free: +827880 -> +827940.
-        static_assert(sizeof(BrnWorld::PlayerVehicleControls) == 60, "PlayerVehicleControls console span 60");
-        static_assert(offsetof(BrnNetworkModule, mGameEventQueue) - offsetof(BrnNetworkModule, mPlayerVehicleControls) == 60,
+        CGS_STATIC_ASSERT((sizeof(BrnWorld::PlayerVehicleControls) == 60), "PlayerVehicleControls console span 60");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, mGameEventQueue) - offsetof(BrnNetworkModule, mPlayerVehicleControls) == 60),
                       "mGameEventQueue @ mPlayerVehicleControls + 60");
 
         // The three module-owned GUI/network queues and the perf-monitor ids are pointer-free:
         // +829832 -> +848280 -> +852392 -> +866408 .. +866444.
-        static_assert(offsetof(BrnNetworkModule, mOutputGuiEventQueue)  - offsetof(BrnNetworkModule, mInputGuiEventQueue) == 848280 - 829832, "mOutputGuiEventQueue delta");
-        static_assert(offsetof(BrnNetworkModule, mNetworkEventQueue)    - offsetof(BrnNetworkModule, mInputGuiEventQueue) == 852392 - 829832, "mNetworkEventQueue delta");
-        static_assert(offsetof(BrnNetworkModule, miNetworkBeforeSimPM)  - offsetof(BrnNetworkModule, mInputGuiEventQueue) == 866408 - 829832, "miNetworkBeforeSimPM delta");
-        static_assert(offsetof(BrnNetworkModule, miNetworkAfterSim8PM)  - offsetof(BrnNetworkModule, miNetworkBeforeSimPM) == 36,            "the ten perf-monitor ids are contiguous");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, mOutputGuiEventQueue)  - offsetof(BrnNetworkModule, mInputGuiEventQueue) == 848280 - 829832), "mOutputGuiEventQueue delta");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, mNetworkEventQueue)    - offsetof(BrnNetworkModule, mInputGuiEventQueue) == 852392 - 829832), "mNetworkEventQueue delta");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, miNetworkBeforeSimPM)  - offsetof(BrnNetworkModule, mInputGuiEventQueue) == 866408 - 829832), "miNetworkBeforeSimPM delta");
+        CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, miNetworkAfterSim8PM)  - offsetof(BrnNetworkModule, miNetworkBeforeSimPM) == 36),            "the ten perf-monitor ids are contiguous");
     }
 }

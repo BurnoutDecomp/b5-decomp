@@ -24,7 +24,7 @@ namespace
 // The original function is inlined in FixupAnimatedMaterial @827FBB10..30.
 ICPUShader* MaterialAnimationFactory::Create(f32 lfPeriod, f32 lfStepsU, f32 lfStepsV)
 {
-    if (lfPeriod == 0.0f) return nullptr;
+    if (lfPeriod == 0.0f) return 0;
     if (lfStepsU == 0.0f) return &mSmoothLoopShader;
     if (lfStepsV == 0.0f) return &mSteppedLoopShader;
     return &mSteppedGridLoopShader;

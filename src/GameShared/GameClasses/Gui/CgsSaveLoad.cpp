@@ -107,7 +107,7 @@ namespace BrnGui
     void CrashNavMapEventKeyboardListener::KeyboardClosed(const CgsGui::CgsUtf16* lpResultText)
     {
         mbKeyboardClosed = true;                       // stb 1, 0x24
-        if (lpResultText != nullptr)
+        if (lpResultText != 0)
         {
             mbNewData = true;                          // stb 1, 0x25
             CgsGui::ConvertWideCharToAsciiSafe(
@@ -137,7 +137,7 @@ namespace BrnGui
     void CrashNavProductCodeKeyboardListener::KeyboardClosed(const CgsGui::CgsUtf16* lpResultText)
     {
         mbKeyboardClosed = true;                       // stb 1, 0x18
-        if (lpResultText != nullptr)
+        if (lpResultText != 0)
         {
             mbNewData = false;                         // stb 0, 0x19 (cleared before the scan)
 

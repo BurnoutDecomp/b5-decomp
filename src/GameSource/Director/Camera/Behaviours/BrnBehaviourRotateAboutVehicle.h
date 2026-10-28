@@ -166,13 +166,13 @@ public:
     // ⭐ Construct @0x8222BEC0 -- THE WHOLE BODY (completed 2026-08-01 from the 113-line asm).
     // The base's virtual slot 0, which BehaviourManager::BehaviourHelper::Prepare dispatches
     // on every freshly pooled behaviour.
-    void Construct() override;
+    void Construct() ;
 
     // ⭐⭐ Update @0x822493C0 -- vtable slot 2, the whole per-frame job. BODIED 2026-08-01 in
     // this behaviour's .cpp from the full 995-line asm. IT WAS NOT DECLARED AT ALL until
     // then, so `Behaviour::Update`'s `return true;` was this behaviour's real Update and the
     // orbit camera has never once moved on PC. See the class banner.
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;
 
     // ⭐ GetCollisionPolicy @0x821FB410 -- vtable slot 5. `addi r3, r3, 0x50 ; blr`.
     // ⚠️ IT IS VIRTUAL (DWARF cpp:272) and used NOT to be declared virtual here, so every
@@ -186,10 +186,10 @@ public:
     //   "…BehaviourRotateAboutVehicle::" (50 chars) and @0x821FACE8's is
     //   "…BehaviourIceAnim::GetCollisio" -- the same 50-char truncation, and Construct
     //   @0x8222BEDC proves the member at +0x50 is the CollisionPolicyAttachedToVehicle.
-    CollisionPolicyAttachedToVehicle* GetCollisionPolicy() override { return &mCollisionPolicy; }
+    CollisionPolicyAttachedToVehicle* GetCollisionPolicy()  { return &mCollisionPolicy; }
 
     // ⭐ GetName -- vtable slot 7. Three instructions: return the literal.
-    const char* GetName() const override { return "BehaviourRotateAboutVehicle"; }
+    const char* GetName() const  { return "BehaviourRotateAboutVehicle"; }
 
     // ---- this class's OWN virtuals (slots 8 and 9 of its ten-word table) ---------------------
     // Not base overrides: the base declares no virtual Get/SetParameters (see Behaviour.h), so

@@ -60,8 +60,8 @@ namespace BrnGame
         static const s32 KI_NETWORK_IN_EVENT_TELEMETRY             = 16;
         static const s32 KI_NETWORK_IN_EVENT_LOCAL_PLAYER_CRASHES  = 54;
 
-        static_assert(sizeof(BrnWorld::PlayerVehicleControls) == 60, "PlayerVehicleControls is the console's 60-byte record");
-        static_assert(sizeof(BrnWorldIO::PlayerVehicleControls) == sizeof(BrnWorld::PlayerVehicleControls),
+        CGS_STATIC_ASSERT((sizeof(BrnWorld::PlayerVehicleControls) == 60), "PlayerVehicleControls is the console's 60-byte record");
+        CGS_STATIC_ASSERT((sizeof(BrnWorldIO::PlayerVehicleControls) == sizeof(BrnWorld::PlayerVehicleControls)),
                       "the world output's PlayerVehicleControls slice spans the real record");
 
         std::memcpy(lpNetworkInput->GetPlayerVehicleControls(),

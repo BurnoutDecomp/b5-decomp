@@ -91,11 +91,11 @@ public:
         // Nothing here holds a pointer, so both facts transfer verbatim from the X360 to x64.
         static void _AssertLayout()
         {
-            static_assert(offsetof(BrnBlobbyShadowBuffer, maShadowPos) == 0x10,
+            CGS_STATIC_ASSERT((offsetof(BrnBlobbyShadowBuffer, maShadowPos) == 0x10),
                           "maShadowPos @0x10 -- AddShadow addresses record i as this+0x10+64*i");
-            static_assert(sizeof(BrnBlobbyShadowBuffer) == 0x1010,
+            CGS_STATIC_ASSERT((sizeof(BrnBlobbyShadowBuffer) == 0x1010),
                           "buffer stride 0x1010 == 0x10 header + 64 * 0x40 records");
-            static_assert(sizeof(ShadowStruct) == 0x40,
+            CGS_STATIC_ASSERT((sizeof(ShadowStruct) == 0x40),
                           "ShadowStruct == 64 bytes (slwi count, 6)");
         }
     };

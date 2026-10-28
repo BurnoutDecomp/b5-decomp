@@ -113,12 +113,12 @@ struct ModuleRecord
     void*                 mpInstanceList;    // +0x60
 };
 
-static_assert(offsetof(ModuleBank, mLink) == 0x60, "native AEMS bank link");
-static_assert(sizeof(ModuleBank) == 0x78, "native AEMS bank header");
-static_assert(offsetof(ModuleRecord, mClassHandle) == 0x08, "native AEMS class handle");
-static_assert(offsetof(ModuleRecord, mConstructorNode) == 0x18, "native AEMS constructor node");
-static_assert(offsetof(ModuleRecord, mpProgram) == 0x48, "native AEMS program pointer");
-static_assert(sizeof(ModuleRecord) == 0x68, "native AEMS module fixed record");
+CGS_STATIC_ASSERT((offsetof(ModuleBank, mLink) == 0x60), "native AEMS bank link");
+CGS_STATIC_ASSERT((sizeof(ModuleBank) == 0x78), "native AEMS bank header");
+CGS_STATIC_ASSERT((offsetof(ModuleRecord, mClassHandle) == 0x08), "native AEMS class handle");
+CGS_STATIC_ASSERT((offsetof(ModuleRecord, mConstructorNode) == 0x18), "native AEMS constructor node");
+CGS_STATIC_ASSERT((offsetof(ModuleRecord, mpProgram) == 0x48), "native AEMS program pointer");
+CGS_STATIC_ASSERT((sizeof(ModuleRecord) == 0x68), "native AEMS module fixed record");
 
 inline s32* ModuleRecordOffsets(ModuleRecord* apRecord)
 {

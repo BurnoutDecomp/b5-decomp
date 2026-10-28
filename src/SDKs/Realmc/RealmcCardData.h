@@ -42,7 +42,7 @@
 //     object) is identical.
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -53,8 +53,8 @@ namespace RealmcIface
 // ---------------------------------------------------------------------------
 struct CardDataBlock
 {
-    std::uint32_t muState;       // +0x00  state/id word (the compare key)
-    std::uint8_t  maPayload[76]; // +0x04  opaque card payload (76 bytes)
+    uint32_t muState;       // +0x00  state/id word (the compare key)
+    uint8_t  maPayload[76]; // +0x04  opaque card payload (76 bytes)
 };
 // 0x04 + 76 == 0x50 (80) bytes per block.
 

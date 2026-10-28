@@ -16,9 +16,9 @@ namespace BrnWorld
         void Destruct();
 
     protected:
-        const char* GetName() const override;
-        const char* GetPath() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
+        void OnActivate() ;
 
     private:
         void RegisterBoostVariables();

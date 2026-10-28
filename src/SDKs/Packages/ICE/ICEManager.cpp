@@ -241,18 +241,18 @@ void ICEManager::Destruct()
 {
     // Release the manager-cached subsystem pointers (ownership passes back to the
     // bundle owner; the manager no longer references them).
-    mpFileHandler = nullptr;
-    mpICEMemory   = nullptr;
+    mpFileHandler = 0;
+    mpICEMemory   = 0;
 
     // Tear down the editor menus.
     mController.DestructMenus();
 
     if (mController.mpMenuA)
-        mController.mpMenuA = nullptr;   // +0xF74
+        mController.mpMenuA = 0;   // +0xF74
     if (mController.mpMenuB)
-        mController.mpMenuB = nullptr;   // +0xF70
+        mController.mpMenuB = 0;   // +0xF70
     if (mController.mpMenuC)
-        mController.mpMenuC = nullptr;   // +0xF78
+        mController.mpMenuC = 0;   // +0xF78
 }
 
 } // namespace ICE

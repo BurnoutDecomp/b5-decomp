@@ -412,8 +412,8 @@ namespace Vehicle
         static const f32 kvfWallNormalMaxHeight             = 0.3f;   // bit3, flt_82004740 (f30)
         static const f32 KVF_CAR_BOTTOM_PLANE_MODIFIER      = 0.0f;   // bit4, flt_82001CC0
 
-        CGS_ASSERT(lpInOutContact != nullptr, "lpInOutContact != NULL");           // :7419
-        CGS_ASSERT(lpTriCacheInterface != nullptr, "lpTriCacheInterface != NULL"); // :7420
+        CGS_ASSERT(lpInOutContact != 0, "lpInOutContact != NULL");           // :7419
+        CGS_ASSERT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL"); // :7420
 
         CGS_ASSERT(IsValidVec3Lanes(lpInOutContact->mNormal),
                    "Normal invalid on entry to validate\n");                       // :7421

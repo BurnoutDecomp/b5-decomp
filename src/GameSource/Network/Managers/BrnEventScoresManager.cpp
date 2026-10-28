@@ -118,8 +118,8 @@ namespace BrnNetwork
         mpNetworkModule    = lpNetworkModule;
         mpServerInterface  = lpServerInterface;
 
-        CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
+        CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
 
         maPendingUploads.Clear();          // stw 0 -> +0x310 (live count word)
         miUploadCount = 0;                 // stw 0 -> +0x320
@@ -149,8 +149,8 @@ namespace BrnNetwork
         miUploadCount     = 0;                 // +0x320 = 0
         mUploadRetryTimer.SetFloatVal( 0.0f ); // SetFloatVal(this+0x318, 0.0)
         maPendingUploads.Clear();              // +0x310 = 0
-        mpServerInterface = nullptr;           // +0x32C = 0
-        mpNetworkModule   = nullptr;           // +0x328 = 0
+        mpServerInterface = 0;           // +0x32C = 0
+        mpNetworkModule   = 0;           // +0x328 = 0
         mDebugComponent.Destruct();            // DebugComponent::Destruct(this+0x330)
     }
 
@@ -200,8 +200,8 @@ namespace BrnNetwork
     {
         if ( meState != KI_STATE_IDLE )
         {
-            CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
                         "mpNetworkModule->GetNetworkManager()" );
             mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( KI_AUTOLOGIN_STAGE_SCORES_DONE );
         }
@@ -224,7 +224,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------------------
     void EventScoresManager::ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput )
     {
-        CGS_ASSERT( lpInput != nullptr, "lpInput" );
+        CGS_ASSERT( lpInput != 0, "lpInput" );
         ProcessNetworkEvents( lpInput->GetNetworkEventQueue() );
     }
 
@@ -250,14 +250,14 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------------------
     void EventScoresManager::ProcessNetworkEvents( const BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue )
     {
-        CGS_ASSERT( lpNetworkEventQueue != nullptr, "lpNetworkEventQueue" );
+        CGS_ASSERT( lpNetworkEventQueue != 0, "lpNetworkEventQueue" );
 
 
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 leEventType = lpNetworkEventQueue->GetFirstEvent( &lpEvent, &liSize );
 
-        while ( lpEvent != nullptr )
+        while ( lpEvent != 0 )
         {
             if ( leEventType == KI_NETEVENT_SCORE_LEADERBOARD )
             {
@@ -268,7 +268,7 @@ namespace BrnNetwork
                 {
                     const ScoreLeaderboardEvent* lpScoreLeaderboardEvent =
                         reinterpret_cast<const ScoreLeaderboardEvent*>( lpEvent );
-                    CGS_ASSERT( lpScoreLeaderboardEvent != nullptr, "lpScoreLeaderboardEvent" );
+                    CGS_ASSERT( lpScoreLeaderboardEvent != 0, "lpScoreLeaderboardEvent" );
                     StoreEventScoreForUpload( lpScoreLeaderboardEvent->mu64EventID,
                                               lpScoreLeaderboardEvent->muScore,
                                               lpScoreLeaderboardEvent->meGameMode );
@@ -278,14 +278,14 @@ namespace BrnNetwork
             {
                 const NonUploadedScoresEvent* lpNonUploadedScoresEvent =
                     reinterpret_cast<const NonUploadedScoresEvent*>( lpEvent );
-                CGS_ASSERT( lpNonUploadedScoresEvent != nullptr, "lpNonUploadedScoresEvent" );
+                CGS_ASSERT( lpNonUploadedScoresEvent != 0, "lpNonUploadedScoresEvent" );
                 // Replace the live pending list with the saved snapshot: clear (count word -> 0),
                 // then append every record of the saved array.
                 maPendingUploads.Clear();
                 maPendingUploads.AppendArray( *lpNonUploadedScoresEvent->mpPendingUploads );
             }
 
-            const CgsModule::Event* lpNextEvent = nullptr;
+            const CgsModule::Event* lpNextEvent = 0;
             leEventType = lpNetworkEventQueue->GetNextEvent( lpEvent, &lpNextEvent, &liSize );
             lpEvent = lpNextEvent;
         }
@@ -349,8 +349,8 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
                         "mpNetworkModule->GetNetworkManager()" );
             mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( KI_AUTOLOGIN_STAGE_SCORES_DONE );
             meState = KI_STATE_IDLE;
@@ -406,8 +406,8 @@ namespace BrnNetwork
                 }
             }
 
-            CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-            CGS_ASSERT( mpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+            CGS_ASSERT( mpServerInterface->GetCustomCommandsComponent() != 0,
                         "mpServerInterface->GetCustomCommandsComponent()" );
             mpServerInterface->GetCustomCommandsComponent()->UploadEventScoreData(
                 &lEventScoreData, &EventScoresManager::_UploadEventScoreCallback, this );
@@ -433,10 +433,10 @@ namespace BrnNetwork
         (void)lpResult;
 
         EventScoresManager* lpEventScoresManager = static_cast<EventScoresManager*>( lpData );
-        CGS_ASSERT( lpEventScoresManager != nullptr, "lpEventScoresManager" );
+        CGS_ASSERT( lpEventScoresManager != 0, "lpEventScoresManager" );
 
         BrnServerInterfaceBase* lpServerInterface = lpEventScoresManager->mpServerInterface;
-        CGS_ASSERT( lpServerInterface != nullptr, "lpServerInterface" );
+        CGS_ASSERT( lpServerInterface != 0, "lpServerInterface" );
 
         if ( lbSuccess && lpEventScoresManager->meState == KI_STATE_UPLOADING )
         {
@@ -450,15 +450,15 @@ namespace BrnNetwork
                 lpEventScoresManager->maPendingUploads.Erase( 0 );
             }
 
-            CGS_ASSERT( lpEventScoresManager->mpNetworkModule != nullptr,
+            CGS_ASSERT( lpEventScoresManager->mpNetworkModule != 0,
                         "lpEventScoresManager->mpNetworkModule" );
-            CGS_ASSERT( lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue() != nullptr,
+            CGS_ASSERT( lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue() != 0,
                         "lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue()" );
             lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>( &lUploadedScoresEvent ),
                 KI_NETEVENT_UPLOADED_SCORES, KI_UPLOADED_SCORES_PAYLOAD_SIZE );
 
-            CGS_ASSERT( lpServerInterface->GetDownloadableConfigComponent() != nullptr,
+            CGS_ASSERT( lpServerInterface->GetDownloadableConfigComponent() != 0,
                         "lpServerInterface->GetDownloadableConfigComponent()" );
             lpEventScoresManager->mUploadRetryTimer.SetFloatVal(
                 lpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesUploads() );
@@ -466,7 +466,7 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != 0,
                         "lpServerInterface->GetCustomCommandsComponent()" );
             ServerInterfaceCustomCommands* lpCustomCommands = lpServerInterface->GetCustomCommandsComponent();
             if ( lpCustomCommands->GetStatus() == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR )
@@ -479,9 +479,9 @@ namespace BrnNetwork
                 lpEventScoresManager->meState = KI_STATE_IDLE;
             }
 
-            CGS_ASSERT( lpEventScoresManager->mpNetworkModule != nullptr,
+            CGS_ASSERT( lpEventScoresManager->mpNetworkModule != 0,
                         "lpEventScoresManager->mpNetworkModule" );
-            CGS_ASSERT( lpEventScoresManager->mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT( lpEventScoresManager->mpNetworkModule->GetNetworkManager() != 0,
                         "lpEventScoresManager->mpNetworkModule->GetNetworkManager()" );
             lpEventScoresManager->mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete(
                 KI_AUTOLOGIN_STAGE_SCORES_DONE );

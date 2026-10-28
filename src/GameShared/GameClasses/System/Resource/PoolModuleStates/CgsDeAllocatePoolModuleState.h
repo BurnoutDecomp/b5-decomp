@@ -55,7 +55,7 @@ namespace CgsResource
         // so the driver never reads this object's layout through console-width offsets.
         Events::AllocateResourceListRequest* GetPendingAllocation()
         {
-            return mbGotPendingAllocationRequest ? &mPendingAllocationRequest : nullptr;
+            return mbGotPendingAllocationRequest ? &mPendingAllocationRequest : 0;
         }
         void CancelPendingAllocation() { mbGotPendingAllocationRequest = false; }
 

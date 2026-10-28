@@ -61,74 +61,74 @@ namespace BrnPhysics
         using namespace PhysicsModuleX360Layout;
 
         // ---------- the seven sub-objects, walked base-to-base ----------
-        static_assert(KU_OFF_SIMULATIONMODULE + KU_X360_SIZEOF_SIMULATIONMODULE == KU_OFF_VEHICLEMANAGER,
+        CGS_STATIC_ASSERT((KU_OFF_SIMULATIONMODULE + KU_X360_SIZEOF_SIMULATIONMODULE == KU_OFF_VEHICLEMANAGER),
                       "PhysicsModule: mSimulationModule (18544, CgsPhysicsSimulationModule.h's own "
                       "mpSimulation@0x4864 closure) must land mVehicleManager on the asm-literal "
                       "0x4AA0 (ctor/Construct/Destruct `addi r3,r31,0x4AA0`)");
 
-        static_assert(KU_OFF_VEHICLEMANAGER + KU_X360_SIZEOF_VEHICLEMANAGER == KU_OFF_CONTACTDATA,
+        CGS_STATIC_ASSERT((KU_OFF_VEHICLEMANAGER + KU_X360_SIZEOF_VEHICLEMANAGER == KU_OFF_CONTACTDATA),
                       "PhysicsModule: mVehicleManager (172624, BrnVehicleManager.h's own map ending "
                       "at +172616) must land mContactData on the asm-literal 191728 "
                       "(`addis r3,r31,3 ; addi r3,r3,-0x1310`)");
 
-        static_assert(KU_OFF_CONTACTDATA + KU_X360_SIZEOF_CONTACTSPYDATA == KU_OFF_DEFORMATIONMANAGER,
+        CGS_STATIC_ASSERT((KU_OFF_CONTACTDATA + KU_X360_SIZEOF_CONTACTSPYDATA == KU_OFF_DEFORMATIONMANAGER),
                       "PhysicsModule: mContactData (0x1DEB0, stated outright by BrnContactSpyData.h) "
                       "must land mDeformationManager on the asm-literal 314272 "
                       "(`addis r3,r31,5 ; addi r3,r3,-0x3460`)");
 
-        static_assert(KU_OFF_DEFORMATIONMANAGER + KU_X360_SIZEOF_DEFORMATIONMANAGER == KU_OFF_DEFORMATIONINPUT,
+        CGS_STATIC_ASSERT((KU_OFF_DEFORMATIONMANAGER + KU_X360_SIZEOF_DEFORMATIONMANAGER == KU_OFF_DEFORMATIONINPUT),
                       "PhysicsModule: mDeformationManager (76752, its own perf-mon run ending at "
                       "+76736) must land mDeformationInput on the asm-literal 391024 "
                       "(`addis r3,r31,6 ; addi r3,r3,-0x890`)");
 
-        static_assert(KU_OFF_DEFORMATIONINPUT + KU_X360_SIZEOF_DEFORMATIONINPUT == KU_OFF_DEFORMATIONOUTPUT,
+        CGS_STATIC_ASSERT((KU_OFF_DEFORMATIONINPUT + KU_X360_SIZEOF_DEFORMATIONINPUT == KU_OFF_DEFORMATIONOUTPUT),
                       "PhysicsModule: mDeformationInput (5072, its own mbResetPlayerScratches@+5056) "
                       "must land mDeformationOutput on the asm-literal 396096 "
                       "(`addis r3,r31,6 ; addi r3,r3,0xB40`)");
 
-        static_assert(KU_OFF_DEFORMATIONOUTPUT + KU_X360_SIZEOF_DEFORMATIONOUTPUT == KU_OFF_PROPMANAGER,
+        CGS_STATIC_ASSERT((KU_OFF_DEFORMATIONOUTPUT + KU_X360_SIZEOF_DEFORMATIONOUTPUT == KU_OFF_PROPMANAGER),
                       "PhysicsModule: mDeformationOutput (10992, its own maLocatorData[28]@0x2A04) "
                       "must land mPropManager on the asm-literal 407088 -- the seat the retired "
                       "`ContainedListInterface mContainedList` was wrongly occupying");
 
-        static_assert(KU_OFF_PROPMANAGER + KU_X360_SIZEOF_PROPMANAGER == KU_OFF_PREPARESTAGE,
+        CGS_STATIC_ASSERT((KU_OFF_PROPMANAGER + KU_X360_SIZEOF_PROPMANAGER == KU_OFF_PREPARESTAGE),
                       "PhysicsModule: mPropManager (25984, its own miNumPropsAddedToContactGen@0x6570) "
                       "must land mePrepareStage on the asm-literal 433072 (`stwx 0, 0x69BB0`)");
 
         // ---------- the trailing state block, walked member-to-member ----------
-        static_assert(KU_OFF_PREPARESTAGE + 4u == KU_OFF_RELEASESTAGE,
+        CGS_STATIC_ASSERT((KU_OFF_PREPARESTAGE + 4u == KU_OFF_RELEASESTAGE),
                       "PhysicsModule: meReleaseStage on the asm-literal 0x69BB4 (`stwx 7`)");
 
         // 433080 is 8-aligned, which is what lets the u64 handle sit here with no padding.
-        static_assert(KU_OFF_RELEASESTAGE + 4u == KU_OFF_WORLDRIGIDBODYID, "PhysicsModule: mWorldRigidBodyId at 433080");
-        static_assert(KU_OFF_WORLDRIGIDBODYID % 8u == 0u, "PhysicsModule: mWorldRigidBodyId's seat must be 8-aligned");
+        CGS_STATIC_ASSERT((KU_OFF_RELEASESTAGE + 4u == KU_OFF_WORLDRIGIDBODYID), "PhysicsModule: mWorldRigidBodyId at 433080");
+        CGS_STATIC_ASSERT((KU_OFF_WORLDRIGIDBODYID % 8u == 0u), "PhysicsModule: mWorldRigidBodyId's seat must be 8-aligned");
 
         // THE LOAD-BEARING ONE. If RigidBodyId were 4 bytes the whole tail would shift and every
         // assert below would move. The 8 comes from PrepareWorldRigidBody's `stdx r30,r29,r4`
         // (r4 == 0x69BB8) -- a store-DOUBLEWORD -- corroborated by CgsRigidBody.h deriving
         // CgsPhysics::RigidBodyId as a single u64 from a different function in a different class.
-        static_assert(KU_OFF_WORLDRIGIDBODYID + 8u == KU_OFF_WORLDENTITYID,
+        CGS_STATIC_ASSERT((KU_OFF_WORLDRIGIDBODYID + 8u == KU_OFF_WORLDENTITYID),
                       "PhysicsModule: mWorldRigidBodyId is EIGHT bytes (stdx), so mWorldEntityId "
                       "lands on the asm-literal 0x69BC0");
 
-        static_assert(KU_OFF_WORLDENTITYID + 4u == KU_OFF_CURRENTGAMEMODE,
+        CGS_STATIC_ASSERT((KU_OFF_WORLDENTITYID + 4u == KU_OFF_CURRENTGAMEMODE),
                       "PhysicsModule: meCurrentGameMode on the asm-literal 0x69BC4 (`stwx -1` == E_MODE_NONE)");
 
-        static_assert(KU_OFF_CURRENTGAMEMODE + 4u == KU_OFF_FIRSTPERFMON,
+        CGS_STATIC_ASSERT((KU_OFF_CURRENTGAMEMODE + 4u == KU_OFF_FIRSTPERFMON),
                       "PhysicsModule: miPhysicsPreSceneUpdatePM on the asm-literal 0x69BC8");
 
         // THE SECOND CLOSURE. KU_NUM_PERFMON_IDS is counted from the DWARF declaration list
         // (BrnPhysicsModule.h:211..:237), NOT from these two offsets -- and 27 four-byte ids fill
         // the asm-literal span 0x69BC8..0x69C30 with nothing left over. The brief this wave was
         // given said "twenty-one"; 21 leaves the block 24 bytes short and this assert is what says so.
-        static_assert(KU_OFF_FIRSTPERFMON + (KU_NUM_PERFMON_IDS - 1u) * 4u == KU_OFF_LASTPERFMON,
+        CGS_STATIC_ASSERT((KU_OFF_FIRSTPERFMON + (KU_NUM_PERFMON_IDS - 1u) * 4u == KU_OFF_LASTPERFMON),
                       "PhysicsModule: the DWARF's 27 int32 perf-monitor ids must exactly span the "
                       "asm literals 0x69BC8 (miPhysicsPreSceneUpdatePM) .. 0x69C30 "
                       "(miPhysicsUpdateFixUpVehContactsPM)");
 
-        static_assert(KU_OFF_LASTPERFMON + 4u == KU_OFF_FRAMESTOFORCESLOWMO,
+        CGS_STATIC_ASSERT((KU_OFF_LASTPERFMON + 4u == KU_OFF_FRAMESTOFORCESLOWMO),
                       "PhysicsModule: miFramesToForceSuperSlowMotion on the asm-literal 0x69C34");
-        static_assert(KU_OFF_FRAMESTOFORCESLOWMO + 4u == KU_OFF_ISONLINEGAMEMODE,
+        CGS_STATIC_ASSERT((KU_OFF_FRAMESTOFORCESLOWMO + 4u == KU_OFF_ISONLINEGAMEMODE),
                       "PhysicsModule: mbIsOnlineGameMode on the asm-literal 0x69C38 (`stbx`, one byte)");
     }
 
@@ -142,11 +142,11 @@ namespace BrnPhysics
 // host sizes, but the SPACING inside the block is width-invariant (no pointer, no vptr), so it must
 // reproduce the console deltas exactly.
 #define BRNPHYS_TAIL_SEAT(member, type, consoleOffset)                                              \
-    static_assert(std::is_same<decltype(PhysicsModule::member), type>::value,                       \
+    CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::member), type>::value),                       \
                   #member " must stay a " #type " -- a same-width retype (s32->u32, s32->f32) "     \
                   "would slip past every offset assert in this file");                              \
-    static_assert(offsetof(PhysicsModule, member) - offsetof(PhysicsModule, mePrepareStage)         \
-                      == (consoleOffset) - PhysicsModuleX360Layout::KU_OFF_PREPARESTAGE,            \
+    CGS_STATIC_ASSERT((offsetof(PhysicsModule, member) - offsetof(PhysicsModule, mePrepareStage)         \
+                      == (consoleOffset) - PhysicsModuleX360Layout::KU_OFF_PREPARESTAGE),            \
                   #member " must sit on its X360 seat " #consoleOffset " relative to mePrepareStage")
 
     void PhysicsModule::_AssertLayout()
@@ -162,38 +162,38 @@ namespace BrnPhysics
         // members is ever demoted back to a padding blob, or retyped to a base/other class, the
         // corresponding assert fires before a single byte is written.
         // ------------------------------------------------------------------------------------
-        static_assert(std::is_same<decltype(PhysicsModule::mSimulationModule),
-                                   CgsPhysics::PhysicsSimulationModule>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mSimulationModule),
+                                   CgsPhysics::PhysicsSimulationModule>::value),
                       "mSimulationModule must be the real PhysicsSimulationModule (its Construct is "
                       "dispatched through this member's own vtable slot 0)");
-        static_assert(std::is_same<decltype(PhysicsModule::mVehicleManager),
-                                   BrnPhysics::Vehicle::VehicleManager>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mVehicleManager),
+                                   BrnPhysics::Vehicle::VehicleManager>::value),
                       "mVehicleManager must be the real VehicleManager");
-        static_assert(std::is_same<decltype(PhysicsModule::mContactData),
-                                   ContactSpy::ContactSpyData>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mContactData),
+                                   ContactSpy::ContactSpyData>::value),
                       "mContactData must be the real ContactSpyData");
-        static_assert(std::is_same<decltype(PhysicsModule::mDeformationManager),
-                                   Deformation::DeformationManager>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mDeformationManager),
+                                   Deformation::DeformationManager>::value),
                       "mDeformationManager must be the real DeformationManager");
-        static_assert(std::is_same<decltype(PhysicsModule::mDeformationInput),
-                                   Deformation::DeformationInputInterface>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mDeformationInput),
+                                   Deformation::DeformationInputInterface>::value),
                       "mDeformationInput must be the real DeformationInputInterface");
-        static_assert(std::is_same<decltype(PhysicsModule::mDeformationOutput),
-                                   Deformation::DeformationOutputInterface>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mDeformationOutput),
+                                   Deformation::DeformationOutputInterface>::value),
                       "mDeformationOutput must be the real DeformationOutputInterface");
-        static_assert(std::is_same<decltype(PhysicsModule::mPropManager),
-                                   Props::PropManager>::value,
+        CGS_STATIC_ASSERT((std::is_same<decltype(PhysicsModule::mPropManager),
+                                   Props::PropManager>::value),
                       "mPropManager must be the real PropManager -- this is the seat the retired "
                       "112-byte ContainedListInterface was sitting on");
 
         // Declaration order on the host must be the DWARF order, which is ascending console order.
-        static_assert(offsetof(PhysicsModule, mSimulationModule)   < offsetof(PhysicsModule, mVehicleManager),      "order :189 < :190");
-        static_assert(offsetof(PhysicsModule, mVehicleManager)     < offsetof(PhysicsModule, mContactData),         "order :190 < :192");
-        static_assert(offsetof(PhysicsModule, mContactData)        < offsetof(PhysicsModule, mDeformationManager),  "order :192 < :194");
-        static_assert(offsetof(PhysicsModule, mDeformationManager) < offsetof(PhysicsModule, mDeformationInput),    "order :194 < :195");
-        static_assert(offsetof(PhysicsModule, mDeformationInput)   < offsetof(PhysicsModule, mDeformationOutput),   "order :195 < :196");
-        static_assert(offsetof(PhysicsModule, mDeformationOutput)  < offsetof(PhysicsModule, mPropManager),         "order :196 < :198");
-        static_assert(offsetof(PhysicsModule, mPropManager)        < offsetof(PhysicsModule, mePrepareStage),       "order :198 < :200");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mSimulationModule)   < offsetof(PhysicsModule, mVehicleManager)),      "order :189 < :190");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mVehicleManager)     < offsetof(PhysicsModule, mContactData)),         "order :190 < :192");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mContactData)        < offsetof(PhysicsModule, mDeformationManager)),  "order :192 < :194");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mDeformationManager) < offsetof(PhysicsModule, mDeformationInput)),    "order :194 < :195");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mDeformationInput)   < offsetof(PhysicsModule, mDeformationOutput)),   "order :195 < :196");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mDeformationOutput)  < offsetof(PhysicsModule, mPropManager)),         "order :196 < :198");
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mPropManager)        < offsetof(PhysicsModule, mePrepareStage)),       "order :198 < :200");
 
         // ADJACENCY. Each declared member must be followed IMMEDIATELY by the next declared one,
         // with nothing but alignment padding in between. Without these, an EIGHTH sub-object could
@@ -203,10 +203,10 @@ namespace BrnPhysics
         // version of the "reorder" case inserted a member instead of swapping and came back SILENT.)
         // 16 is the largest alignment any of these types carries.
 #define BRNPHYS_ADJACENT(prev, prevType, next)                                                      \
-    static_assert(offsetof(PhysicsModule, next) >= offsetof(PhysicsModule, prev) + sizeof(prevType),\
+    CGS_STATIC_ASSERT((offsetof(PhysicsModule, next) >= offsetof(PhysicsModule, prev) + sizeof(prevType)),\
                   #prev " must occupy its own span before " #next);                                 \
-    static_assert(offsetof(PhysicsModule, next) - offsetof(PhysicsModule, prev)                     \
-                      < sizeof(prevType) + 16u,                                                     \
+    CGS_STATIC_ASSERT((offsetof(PhysicsModule, next) - offsetof(PhysicsModule, prev)                     \
+                      < sizeof(prevType) + 16u),                                                     \
                   "nothing may be inserted between " #prev " and " #next)
 
         BRNPHYS_ADJACENT(mSimulationModule,   CgsPhysics::PhysicsSimulationModule,      mVehicleManager);
@@ -264,15 +264,15 @@ namespace BrnPhysics
 
         // The two widths the asm proved directly, asserted as widths so a retype that preserves
         // spacing still fails.
-        static_assert(sizeof(PhysicsModule::mWorldRigidBodyId) == 8,
+        CGS_STATIC_ASSERT((sizeof(PhysicsModule::mWorldRigidBodyId) == 8),
                       "mWorldRigidBodyId is written with a single `stdx` -- eight bytes");
-        static_assert(sizeof(PhysicsModule::mbIsOnlineGameMode) == 1,
+        CGS_STATIC_ASSERT((sizeof(PhysicsModule::mbIsOnlineGameMode) == 1),
                       "mbIsOnlineGameMode is written with `stbx` -- one byte");
 
         // Whole-block span: 433208 - 433072 == 136. Fires if anything is inserted or removed
         // anywhere in the tail, including a change the per-member seats above could not localise.
-        static_assert(offsetof(PhysicsModule, mbIsOnlineGameMode) - offsetof(PhysicsModule, mePrepareStage)
-                          == KU_OFF_ISONLINEGAMEMODE - KU_OFF_PREPARESTAGE,
+        CGS_STATIC_ASSERT((offsetof(PhysicsModule, mbIsOnlineGameMode) - offsetof(PhysicsModule, mePrepareStage)
+                          == KU_OFF_ISONLINEGAMEMODE - KU_OFF_PREPARESTAGE),
                       "PhysicsModule: the trailing state/perf-monitor block must span exactly 136 bytes");
     }
 

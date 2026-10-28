@@ -119,7 +119,7 @@ const f32 GuiCursor::KF_AUTOREPEAT_REPEAT_DELAY = 0.1f;          // flt_82004014
 // @ 0x824941A8
 void GuiCursor::Update()
 {
-    CGS_ASSERT( mpStateInterface != nullptr, "mpStateInterface" );
+    CGS_ASSERT( mpStateInterface != 0, "mpStateInterface" );
 
     GuiEventCursorUpdate lEvent;
     lEvent.muHeader0   = 32;

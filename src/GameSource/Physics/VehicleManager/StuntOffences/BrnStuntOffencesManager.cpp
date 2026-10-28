@@ -1074,52 +1074,52 @@ namespace BrnPhysics
     // ============================================================================================
     void StuntOffencesManager::_AssertLayout()
     {
-        static_assert(offsetof(StuntOffencesManager, mvCurrentInAirRotations)  == 0x000, "0x000");
-        static_assert(offsetof(StuntOffencesManager, mvStuntRollInProgress)    == 0x010, "0x010");
-        static_assert(offsetof(StuntOffencesManager, mfTimeInTheAirSoFar)      == 0x020, "0x020");
-        static_assert(offsetof(StuntOffencesManager, mfLastAirTime)            == 0x024, "0x024");
-        static_assert(offsetof(StuntOffencesManager, muCurrentRaceCarState)    == 0x028, "0x028");
-        static_assert(offsetof(StuntOffencesManager, muStuntActionInProgress)  == 0x02C, "0x02C");
-        static_assert(offsetof(StuntOffencesManager, muStuntActionComplete)    == 0x030, "0x030");
-        static_assert(offsetof(StuntOffencesManager, mvRaceCarPositionLastFrame) == 0x040, "0x040");
-        static_assert(offsetof(StuntOffencesManager, mfBearingLastFrame)       == 0x050, "0x050");
-        static_assert(offsetof(StuntOffencesManager, mfHandBreakAngleSoFar)    == 0x054, "0x054");
-        static_assert(offsetof(StuntOffencesManager, mfHandBrakeStabiliseTime) == 0x058, "0x058");
-        static_assert(offsetof(StuntOffencesManager, mbHandbreakTurnAttempting)== 0x05C, "0x05C");
-        static_assert(offsetof(StuntOffencesManager, mvTakeOffVector)          == 0x060, "0x060");
-        static_assert(offsetof(StuntOffencesManager, mvLandingVector)          == 0x070, "0x070");
-        static_assert(offsetof(StuntOffencesManager, mbKeepCheckingForCleanLanding) == 0x080, "0x080");
-        static_assert(offsetof(StuntOffencesManager, mfCleanLandingCheckTimeSoFar)  == 0x084, "0x084");
-        static_assert(offsetof(StuntOffencesManager, mvPositionAtTakeoff)      == 0x090, "0x090");
-        static_assert(offsetof(StuntOffencesManager, mfDistanceInAirSoFar)     == 0x0A0, "0x0A0");
-        static_assert(offsetof(StuntOffencesManager, mfDistanceOfLastJump)     == 0x0A4, "0x0A4");
-        static_assert(offsetof(StuntOffencesManager, mfSuccesssfulLandingCheckTimeSoFar) == 0x0A8, "0x0A8");
-        static_assert(offsetof(StuntOffencesManager, mbKeepCheckingForSuccessfulLanding) == 0x0AC, "0x0AC");
-        static_assert(offsetof(StuntOffencesManager, mbInAirLastFrame)         == 0x0AD, "0x0AD");
-        static_assert(offsetof(StuntOffencesManager, mbSuccessfulLanding)      == 0x0AE, "0x0AE");
-        static_assert(offsetof(StuntOffencesManager, mbTookOffInReverse)       == 0x0AF, "0x0AF");
-        static_assert(offsetof(StuntOffencesManager, mbWasDriftingLastFrame)   == 0x0B0, "0x0B0");
-        static_assert(offsetof(StuntOffencesManager, mfTimeDriftingLastFrame)  == 0x0B4, "0x0B4");
-        static_assert(offsetof(StuntOffencesManager, maConvoyDistance)         == 0x0B8, "0x0B8");
-        static_assert(offsetof(StuntOffencesManager, maConvoyTimer)            == 0x0D8, "0x0D8");
-        static_assert(offsetof(StuntOffencesManager, maConvoyDistance2)        == 0x0F8, "0x0F8");
-        static_assert(offsetof(StuntOffencesManager, miConvoyCount)            == 0x118, "0x118");
-        static_assert(offsetof(StuntOffencesManager, maCompletedTailgateA)     == 0x11C, "0x11C");
-        static_assert(offsetof(StuntOffencesManager, maCompletedTailgateB)     == 0x13C, "0x13C");
-        static_assert(offsetof(StuntOffencesManager, maCompletedTailgateC)     == 0x15C, "0x15C");
-        static_assert(offsetof(StuntOffencesManager, maCompletedTailgateFlag)  == 0x17C, "0x17C");
-        static_assert(offsetof(StuntOffencesManager, miCompletedConvoyCount)   == 0x184, "0x184");
-        static_assert(offsetof(StuntOffencesManager, mfCompletedBarrelRollAngle) == 0x188, "0x188");
-        static_assert(offsetof(StuntOffencesManager, miCompletedBarrelRolls)   == 0x19C, "0x19C");
-        static_assert(offsetof(StuntOffencesManager, mfCompletedAir)           == 0x1A0, "0x1A0");
-        static_assert(offsetof(StuntOffencesManager, mfCompletedAirDistance)   == 0x1A4, "0x1A4");
-        static_assert(offsetof(StuntOffencesManager, miCompletedAirSpinTurns)  == 0x1AC, "0x1AC");
-        static_assert(offsetof(StuntOffencesManager, mfInProgressBarrelRollAngle)  == 0x1B0, "0x1B0");
-        static_assert(offsetof(StuntOffencesManager, mfInProgressDriftDistance)    == 0x1C0, "0x1C0");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mvCurrentInAirRotations)  == 0x000), "0x000");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mvStuntRollInProgress)    == 0x010), "0x010");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfTimeInTheAirSoFar)      == 0x020), "0x020");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfLastAirTime)            == 0x024), "0x024");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, muCurrentRaceCarState)    == 0x028), "0x028");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, muStuntActionInProgress)  == 0x02C), "0x02C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, muStuntActionComplete)    == 0x030), "0x030");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mvRaceCarPositionLastFrame) == 0x040), "0x040");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfBearingLastFrame)       == 0x050), "0x050");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfHandBreakAngleSoFar)    == 0x054), "0x054");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfHandBrakeStabiliseTime) == 0x058), "0x058");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbHandbreakTurnAttempting)== 0x05C), "0x05C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mvTakeOffVector)          == 0x060), "0x060");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mvLandingVector)          == 0x070), "0x070");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbKeepCheckingForCleanLanding) == 0x080), "0x080");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfCleanLandingCheckTimeSoFar)  == 0x084), "0x084");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mvPositionAtTakeoff)      == 0x090), "0x090");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfDistanceInAirSoFar)     == 0x0A0), "0x0A0");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfDistanceOfLastJump)     == 0x0A4), "0x0A4");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfSuccesssfulLandingCheckTimeSoFar) == 0x0A8), "0x0A8");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbKeepCheckingForSuccessfulLanding) == 0x0AC), "0x0AC");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbInAirLastFrame)         == 0x0AD), "0x0AD");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbSuccessfulLanding)      == 0x0AE), "0x0AE");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbTookOffInReverse)       == 0x0AF), "0x0AF");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mbWasDriftingLastFrame)   == 0x0B0), "0x0B0");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfTimeDriftingLastFrame)  == 0x0B4), "0x0B4");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maConvoyDistance)         == 0x0B8), "0x0B8");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maConvoyTimer)            == 0x0D8), "0x0D8");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maConvoyDistance2)        == 0x0F8), "0x0F8");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, miConvoyCount)            == 0x118), "0x118");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maCompletedTailgateA)     == 0x11C), "0x11C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maCompletedTailgateB)     == 0x13C), "0x13C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maCompletedTailgateC)     == 0x15C), "0x15C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, maCompletedTailgateFlag)  == 0x17C), "0x17C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, miCompletedConvoyCount)   == 0x184), "0x184");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfCompletedBarrelRollAngle) == 0x188), "0x188");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, miCompletedBarrelRolls)   == 0x19C), "0x19C");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfCompletedAir)           == 0x1A0), "0x1A0");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfCompletedAirDistance)   == 0x1A4), "0x1A4");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, miCompletedAirSpinTurns)  == 0x1AC), "0x1AC");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfInProgressBarrelRollAngle)  == 0x1B0), "0x1B0");
+        CGS_STATIC_ASSERT((offsetof(StuntOffencesManager, mfInProgressDriftDistance)    == 0x1C0), "0x1C0");
         // X360 last member ends at 0x1C4; the embedded rw::math::vpu::Vector3/Vector2 are alignas(16),
         // so the host ABI rounds sizeof up to the next 16 (0x1D0 == 464). Every recovered offset is
         // pinned by the offsetof asserts below, so the rounded sizeof loses no fidelity.
-        static_assert(sizeof(StuntOffencesManager) == 464, "sizeof StuntOffencesManager == 464 (0x1C4 rounded to 16-byte align)");
+        CGS_STATIC_ASSERT((sizeof(StuntOffencesManager) == 464), "sizeof StuntOffencesManager == 464 (0x1C4 rounded to 16-byte align)");
     }
 
     // ============================================================================================

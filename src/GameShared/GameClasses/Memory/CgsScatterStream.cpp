@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Memory/CgsScatterStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstring>                                    // memcpy (XMemCpy)
-#include <cstdint>                                    // uintptr_t
+#include "types.hpp"                                    // uintptr_t
 
 // CgsMemory::ScatterStream / ScatterStreamBase - see the header. Faithful port; the
 // transfer is XMemCpy -> memcpy. Copies packed -> scattered.

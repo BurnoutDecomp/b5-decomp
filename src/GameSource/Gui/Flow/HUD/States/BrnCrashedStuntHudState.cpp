@@ -52,13 +52,13 @@ void CrashedStuntHudState::OnEnter()
 {
     meInternalState = E_CRASHINTERNALSTATE_LOADING;
     meRunningState = E_CRASHRUNNINGSTATE_NONE;
-    mpCache = nullptr;
+    mpCache = 0;
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
     // FLAG deferred: replay serialiser EndMessage, shared with the other HUD states.
     auto* lpAccess = mpStateInterface->GetAccessPointers();
-    CGS_ASSERT(lpAccess != nullptr, "mpAccessPointers != NULL");
+    CGS_ASSERT(lpAccess != 0, "mpAccessPointers != NULL");
     auto* lpFlapt = lpAccess->GetFlaptManager();
-    CGS_ASSERT(lpFlapt != nullptr, "NULL != mpFlaptManager");
+    CGS_ASSERT(lpFlapt != 0, "NULL != mpFlaptManager");
     BrnFlapt::FileRef lFile;
     lpFlapt->GetFile(&lFile, 0);
     BrnFlapt::MovieClipRef lRoot;
@@ -66,17 +66,17 @@ void CrashedStuntHudState::OnEnter()
     lRoot.FindChildMovieClip(&mCrashHudAnimator, "CrashHUD_mc");
     CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
     mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
-    mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, nullptr);
+    mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, 0);
     auto* lpCache = lpAccess->GetGuiCache();
-    CGS_ASSERT(lpCache != nullptr, "mpGuiCache");
+    CGS_ASSERT(lpCache != 0, "mpGuiCache");
     mHudMessageComponent.SetInGameMessagesQueue(lpCache->GetInGameMessagesQueue());
     mHudMessageComponent.Prepare("crashHudMessages_mc", lFile);
-    mStuntScoreAnimator.Construct("StuntScore_anim", mpStateInterface, nullptr);
-    mStuntMultiplierAnimator.Construct("MultiplierScore_anim", mpStateInterface, nullptr);
-    mScoreTallyAnimator.Construct("ScoreTally_cpt", mpStateInterface, nullptr);
-    mStuntRunScoreText.Construct("StuntScore_mc", mpStateInterface, nullptr);
+    mStuntScoreAnimator.Construct("StuntScore_anim", mpStateInterface, 0);
+    mStuntMultiplierAnimator.Construct("MultiplierScore_anim", mpStateInterface, 0);
+    mScoreTallyAnimator.Construct("ScoreTally_cpt", mpStateInterface, 0);
+    mStuntRunScoreText.Construct("StuntScore_mc", mpStateInterface, 0);
     mStuntRunScoreText.SetAutoSize(true);
-    mStuntRunMultiplierText.Construct("MultiplierScore_mc", mpStateInterface, nullptr);
+    mStuntRunMultiplierText.Construct("MultiplierScore_mc", mpStateInterface, 0);
     mbHudMessages = true;
     mbBoostBar = true;
     miStartScore = miStartMultiplier = miFinishScore = miFinishMultiplier = miCurrentScore = miCurrentMultiplier = 0;
@@ -128,14 +128,14 @@ bool CrashedStuntHudState::UpdateLoading()
 }
 bool CrashedStuntHudState::UpdateWFInit()
 {
-    CGS_ASSERT(mpCache != nullptr, "mpCache");
+    CGS_ASSERT(mpCache != 0, "mpCache");
     return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
 }
 
 // ARTIST 0x82475910, inline helper sub_824F87C0 hashes and appends each name.
 void CrashedStuntHudState::SetExpectedAptComponentList()
 {
-    CGS_ASSERT(mpCache != nullptr, "mpCache");
+    CGS_ASSERT(mpCache != 0, "mpCache");
     mpCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
     const char* lapcNames[] = { mStuntScoreAnimator.GetName(), mStuntMultiplierAnimator.GetName(),
         mScoreTallyAnimator.GetName(), mStuntRunScoreText.GetName(), mStuntRunMultiplierText.GetName() };
@@ -149,7 +149,7 @@ void CrashedStuntHudState::SetExpectedAptComponentList()
 // ARTIST 0x8247D9E0.
 bool CrashedStuntHudState::UpdateSetupState()
 {
-    CGS_ASSERT(mpCache != nullptr, "Cache pointer should be valid by now as its used in the WFInit stage");
+    CGS_ASSERT(mpCache != 0, "Cache pointer should be valid by now as its used in the WFInit stage");
     mbBoostBar = false;
     mbHudMessages = true;
     struct BoostVisibility : CgsGui::GuiEvent<214>
@@ -190,7 +190,7 @@ bool CrashedStuntHudState::UpdateRunning()
 {
     bool lbFinished = false;
     auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
          liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))

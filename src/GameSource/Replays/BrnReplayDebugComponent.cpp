@@ -110,7 +110,7 @@ namespace BrnReplays
             rw::ResourceDescriptor lDescriptor;
             lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-            return lpAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0];
+            return lpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
         };
         mpSerialisers = static_cast<DebugSerialiserInfo*>(Allocate(sizeof(DebugSerialiserInfo) * KI_NUM_SERIALISERS));
         mpWriteSlotsUsedGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
@@ -141,7 +141,7 @@ namespace BrnReplays
         Vector2f lv2Min;
         Vector2f lv2Max;
         // Measurement pass: no draw target, just accumulate the window extents.
-        RenderMainWindow(nullptr, &lv2Min, &lv2Max);
+        RenderMainWindow(0, &lv2Min, &lv2Max);
 
         // Frame fill behind the window (KU_COL_WINDOW_FRAME, semi-transparent white).
         lpRender->DrawBox(lv2Min.X(), lv2Min.Y(),
@@ -486,7 +486,7 @@ namespace BrnReplays
                 const f32 lfX = static_cast<f32>(liCol) * lfStep + lfOriginX;
                 const f32 lfY = static_cast<f32>(liRow) * lfStep + lfOriginY;
                 RGBA lColour = KU_COL_BLOCK_EMPTY;
-                if (lpHeader != nullptr && lpHeader->mpFrameOffsets != nullptr)
+                if (lpHeader != 0 && lpHeader->mpFrameOffsets != 0)
                 {
                     s32 liRingCell = liCell;
                     if (liRingCell < lpHeader->miFirstFrunk)
@@ -548,7 +548,7 @@ namespace BrnReplays
                 const f32 lfX = static_cast<f32>(liCol) * lfStep + lfOriginX;
                 const f32 lfY = static_cast<f32>(liRow) * lfStep + lfOriginY;
                 RGBA lColour = KU_COL_BLOCK_EMPTY;
-                if (lpHeader != nullptr && lpHeader->mpFrameOffsets != nullptr)
+                if (lpHeader != 0 && lpHeader->mpFrameOffsets != 0)
                 {
                     s32 liRingCell = liCell;
                     if (liRingCell < lpHeader->miFirstFrunk)
@@ -690,7 +690,7 @@ namespace BrnReplays
     // ----------------------------------------------------------------------------
     void DebugComponent::OnActivate()
     {
-        CGS_ASSERT(mpReplayModule != nullptr, "No replay module\n");
+        CGS_ASSERT(mpReplayModule != 0, "No replay module\n");
 
         RegisterVariable(&mbShowHud, "Show HUD");
         RegisterVariable(mpReplayModule->GetAutoStartFlagPtr(), "Enable auto-start");

@@ -59,15 +59,15 @@ namespace CgsDev
 
         // Pin the byte layout to the X360 ARTIST globals (Construct memsets exactly 0x0A78 bytes; the
         // read/write indices sit at the tail of that region, the tick->percent factor sits just past it).
-        static_assert(sizeof(PerfMonGpuBuffer) == 0x0A78,
+        CGS_STATIC_ASSERT((sizeof(PerfMonGpuBuffer) == 0x0A78),
                       "PerfMonGpuBuffer must match the X360 gValues region (2680 bytes)");
-        static_assert(offsetof(PerfMonGpuBuffer, mabUsedThisFrame) == 0x0A50,
+        CGS_STATIC_ASSERT((offsetof(PerfMonGpuBuffer, mabUsedThisFrame) == 0x0A50),
                       "mabUsedThisFrame must sit at +0x0A50");
-        static_assert(offsetof(PerfMonGpuBuffer, miCurrentReadBuffer) == 0x0A70,
+        CGS_STATIC_ASSERT((offsetof(PerfMonGpuBuffer, miCurrentReadBuffer) == 0x0A70),
                       "miCurrentReadBuffer must sit at +0x0A70");
         // The X360 monitor-name records (unk_83019288) are stride 56 - the exact sizeof of the class's
         // PerfMonGpuInstance (macName[32] + RGBA + u64 + f32, 8-aligned). Pins the header to the asm.
-        static_assert(sizeof(PerfMonGpuInstance) == 56,
+        CGS_STATIC_ASSERT((sizeof(PerfMonGpuInstance) == 56),
                       "PerfMonGpuInstance must match the X360 monitor-record stride (56 bytes)");
 
         PerfMonGpuBuffer gBuffer;                 // X360 gValues @ 0x83018270

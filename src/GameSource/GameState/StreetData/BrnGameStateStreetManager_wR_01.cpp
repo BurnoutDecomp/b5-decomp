@@ -129,7 +129,7 @@ void StreetManager::GetHighScoreEntry( BrnStreetData::ChallengeIndex liIndex,
         }
     }
 
-    lpEntry->UpdateEntry( &lLocalPlayerEntry, nullptr );
+    lpEntry->UpdateEntry( &lLocalPlayerEntry, 0 );
 }
 
 // ----------------------------------------------------------------------------

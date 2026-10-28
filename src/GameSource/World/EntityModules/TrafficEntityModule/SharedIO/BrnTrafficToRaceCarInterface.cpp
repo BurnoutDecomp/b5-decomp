@@ -59,7 +59,7 @@ namespace BrnTrafficIO
     void TrafficToRaceCarInterface_PreScene::AddPotentialStompee(
             u32 luEntityIndex, Vector3 lPosition, f32 lfDistanceSquared)
     {
-        static_assert(offsetof(TrafficToRaceCarInterface_PreScene, miPotentialStompeeCount) == 520,
+        CGS_STATIC_ASSERT((offsetof(TrafficToRaceCarInterface_PreScene, miPotentialStompeeCount) == 520),
                       "miPotentialStompeeCount @520");
 
         if (miPotentialStompeeCount < KI_MAX_POTENTIAL_STOMPEES)

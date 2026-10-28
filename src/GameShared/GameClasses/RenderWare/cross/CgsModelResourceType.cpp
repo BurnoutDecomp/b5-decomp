@@ -168,7 +168,7 @@ namespace CgsResource
 
         if (luIndex >= luCount)
         {
-            *lppValue = nullptr;
+            *lppValue = 0;
             *lpuOffset = 0;
         }
         else

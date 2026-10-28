@@ -26,8 +26,8 @@ namespace ContactSpy
         const Vector3* lpInSpy,
         const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact)
     {
-        CGS_ASSERT(lpInSpy != nullptr, "lpInSpy != NULL");
-        CGS_ASSERT(lpInPotentialContact != nullptr, "lpInPotentialContact != NULL");
+        CGS_ASSERT(lpInSpy != 0, "lpInSpy != NULL");
+        CGS_ASSERT(lpInPotentialContact != 0, "lpInPotentialContact != NULL");
 
         // Entity words = high dword of each 8-byte VolumeInstanceId (X360 ld;srdi 32;stw).
         lpResult->mEntityIdA.muValue =

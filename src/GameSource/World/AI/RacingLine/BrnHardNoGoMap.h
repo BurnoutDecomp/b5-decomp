@@ -142,10 +142,10 @@ public:
     // :139 / :142 / :145 / :148 -- the four packed corners. The X360 unpacks the "previous"
     // pair with `vpermwi128 v, v, 0xBF` (lanes z,w -> x,y); only lanes x/y are ever read, so
     // the z/w lanes (which the console leaves as a copy of w) are published as zero here.
-    Vector2 GetPreviousLeft()  { return Vector2{ mCurrentAndPreviousLeft.z,  mCurrentAndPreviousLeft.w,  0.0f, 0.0f }; }
-    Vector2 GetPreviousRight() { return Vector2{ mCurrentAndPreviousRight.z, mCurrentAndPreviousRight.w, 0.0f, 0.0f }; }
-    Vector2 GetCurrentLeft()   { return Vector2{ mCurrentAndPreviousLeft.x,  mCurrentAndPreviousLeft.y,  0.0f, 0.0f }; }
-    Vector2 GetCurrentRight()  { return Vector2{ mCurrentAndPreviousRight.x, mCurrentAndPreviousRight.y, 0.0f, 0.0f }; }
+    Vector2 GetPreviousLeft()  { { const Vector2 lResult = { mCurrentAndPreviousLeft.z,  mCurrentAndPreviousLeft.w,  0.0f, 0.0f }; return lResult; } }
+    Vector2 GetPreviousRight() { { const Vector2 lResult = { mCurrentAndPreviousRight.z, mCurrentAndPreviousRight.w, 0.0f, 0.0f }; return lResult; } }
+    Vector2 GetCurrentLeft()   { { const Vector2 lResult = { mCurrentAndPreviousLeft.x,  mCurrentAndPreviousLeft.y,  0.0f, 0.0f }; return lResult; } }
+    Vector2 GetCurrentRight()  { { const Vector2 lResult = { mCurrentAndPreviousRight.x, mCurrentAndPreviousRight.y, 0.0f, 0.0f }; return lResult; } }
 
     f32 GetAverageRoadWidth()  { return mfAverageWidth; }                         // :151
 
@@ -194,7 +194,7 @@ private:
     bool    mbReady;                      // :241 (+0x48)
 };
 
-static_assert(sizeof(HardNoGoMap) == 0x50, "HardNoGoMap is 0x50 bytes (SectionData +0x50 .. +0xA0)");
+CGS_STATIC_ASSERT((sizeof(HardNoGoMap) == 0x50), "HardNoGoMap is 0x50 bytes (SectionData +0x50 .. +0xA0)");
 }
 
 #endif

@@ -40,7 +40,7 @@ namespace Environment
 CarStereoEffect::CarStereoEffect()
     : BrnEffectObject()   // installs the base dual vptrs + zero-inits base members (BY NAME)
     , mVoice()            // tail `bl CgsSound::Logic::VoiceWrapper::VoiceWrapper(this+0x38)`
-    , mpLogicModule(nullptr)
+    , mpLogicModule(0)
     , mbHasStereo(false)
 {
 }
@@ -82,7 +82,7 @@ bool CarStereoEffect::Attach()
 
     const BrnSound::Vehicles::VehicleState* lpState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpState->GetAttachInfo().mpVehicleAsset != nullptr,
+    CGS_ASSERT(lpState->GetAttachInfo().mpVehicleAsset != 0,
                "lpState->GetAttachInfo().mpVehicleAsset");
 
     if (siNumStereos >= KI_MAX_CAR_STEREOS_PLAYING || !ShouldPlayMusic() ||
@@ -216,7 +216,7 @@ bool CarStereoEffect::ShouldPlayMusic()
 {
     const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameModeInterface =
         mpLogicModule->GetBrnInputStructure()->GetGameModeInterface();
-    CGS_ASSERT(lpGameModeInterface != nullptr, "lpGameModeInterface");
+    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");
     return lpGameModeInterface->miCurrentGameModeType ==
            BrnGameState::GameStateModuleIO::E_MODE_NONE;
 }

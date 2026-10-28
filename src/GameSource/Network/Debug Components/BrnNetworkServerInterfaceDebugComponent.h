@@ -37,7 +37,7 @@ namespace BrnNetwork
     {
     public:
         void Construct(BrnServerInterfaceBase* lpServerInterfaceBase);   // @ 0x82585700
-        void Update() override;                                          // @ 0x8258AC70
+        void Update() ;                                          // @ 0x8258AC70
 
         // The server interface's prepare / release / destruct stages reset the menu state (inlined
         // into those stages on the console; defined in this component's TU because Prepare reads
@@ -48,7 +48,7 @@ namespace BrnNetwork
 
         // @0x82597690 -- gate the connection-status table on mbDisplayConnectionStatus, then
         // tail-call RenderConnectionStatus. Overrides CgsDev::DebugComponent::RenderHUD.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) ;
 
         // BrnNetworkManager::Construct hands the component its manager (+0x14) and the manager's
         // current server type (+0x0C) right after the server interface is constructed.
@@ -67,10 +67,10 @@ namespace BrnNetwork
         }
 
     protected:
-        const char* GetName() const override;   // @ 0x82585798
+        const char* GetName() const ;   // @ 0x82585798
         // ARTIST vtable 0x820CE4AC, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Network"; }
-        void        OnActivate() override;       // @ 0x8258AD10
+        const char* GetPath() const  { return "Network"; }
+        void        OnActivate() ;       // @ 0x8258AD10
 
         // @0x82594AC0 -- the connApi connection-status HUD table (called by RenderHUD).
         void RenderConnectionStatus(CgsDev::Debug2DImmediateRender* lpDisplay);

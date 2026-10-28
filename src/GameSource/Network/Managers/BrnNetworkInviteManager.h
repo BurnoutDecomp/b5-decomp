@@ -172,9 +172,9 @@ namespace BrnNetwork
 
     inline void NetworkInviteManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkInviteManager, mPlayerInfoData) == 0xA0, "mPlayerInfoData @ +0xA0");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkInviteManager, mPlayerNameToGetGameID) == 0x1A0, "mPlayerNameToGetGameID @ +0x1A0");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkInviteManager, mpNetworkModule) == 0x1B8, "mpNetworkModule @ +0x1B8");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkInviteManager) == 0x1C0, "NetworkInviteManager is 0x1C0 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkInviteManager, mPlayerInfoData) == 0xA0), "mPlayerInfoData @ +0xA0");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkInviteManager, mPlayerNameToGetGameID) == 0x1A0), "mPlayerNameToGetGameID @ +0x1A0");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkInviteManager, mpNetworkModule) == 0x1B8), "mpNetworkModule @ +0x1B8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkInviteManager) == 0x1C0), "NetworkInviteManager is 0x1C0 bytes");
     }
 }

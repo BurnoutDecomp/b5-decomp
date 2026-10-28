@@ -81,7 +81,7 @@ namespace RaceCarEntityModuleIO
     // BaseGameActionQueue<13312>). It was NOT collapsed here because no consumer in this tree
     // has yet been measured to need the base type by pointer; the day one does, the symptom is
     // a hard C2664, not a silent divergence.
-    struct alignas(16) GameActionQueue : public CgsModule::VariableEventQueue<13312, 16>
+    struct CGS_ALIGN(16) GameActionQueue : public CgsModule::VariableEventQueue<13312, 16>
     {
     };
 
@@ -107,7 +107,7 @@ namespace RaceCarEntityModuleIO
     // GameActionQueue above (DWARF :97 -> `typedef InputBuffer::TakedownEventQueue
     // TakedownEventQueue`, chaining to EventQueue<BrnGameState::TakedownEvent,8>); left forked
     // because no measured consumer needs the base type by pointer.
-    struct alignas(16) TakedownEventQueue
+    struct CGS_ALIGN(16) TakedownEventQueue
         : public CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>
     {
     };
@@ -128,7 +128,7 @@ namespace RaceCarEntityModuleIO
     // Derives (rather than typedefs) so existing `struct GameEventQueue` forward references
     // stay valid -- same move as SceneResultQueue below. (PotentialContactQueue no longer
     // belongs on that list: its fork was collapsed to the DWARF typedef on 2026-08-19.)
-    struct alignas(16) GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
+    struct CGS_ALIGN(16) GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
     {
     };
 
@@ -178,7 +178,7 @@ namespace RaceCarEntityModuleIO
     // CgsModule::VariableEventQueue<32768,16>::Append<32768,16>(const VariableEventQueue
     // <32768,16>&) -- pinning the type. Derives (rather than typedefs) so existing
     // `struct SceneResultQueue` forward references stay valid.
-    struct alignas(16) SceneResultQueue : public CgsModule::VariableEventQueue<32768, 16>
+    struct CGS_ALIGN(16) SceneResultQueue : public CgsModule::VariableEventQueue<32768, 16>
     {
     };
 
@@ -195,7 +195,7 @@ namespace RaceCarEntityModuleIO
     // like SceneResultQueue above; RequestInterface<8192> holds its RequestQueue<8192> at
     // offset 0, so WorldModule::BridgeRaceCarResourceRequestsToOutput_Prepare's
     // reinterpret_cast to VariableEventQueue<8192,16> keeps working unchanged.
-    struct alignas(16) ResourceRequestInterface
+    struct CGS_ALIGN(16) ResourceRequestInterface
         : public BrnResource::GameDataIO::RequestInterface<8192>
     {
     };

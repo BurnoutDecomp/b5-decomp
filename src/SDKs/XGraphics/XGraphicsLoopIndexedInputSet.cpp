@@ -34,7 +34,7 @@ LoopIndexedInputSet* LoopIndexedInputSet::NewItem(s32 aiIndex, s32 aiType, CFG* 
     // -4 OOM sentinel; construct in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(LoopIndexedInputSet));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) LoopIndexedInputSet(aiIndex, aiType, apContext);
 }

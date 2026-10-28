@@ -107,10 +107,10 @@ namespace BrnNetwork
     bool NetworkRoadRulesManager::Release()
     {
         mBufferedRoadRulesRecvQueue.Clear();
-        mpTimeManager     = nullptr;
-        mpPlayerManager   = nullptr;
-        mpServerInterface = nullptr;
-        mpNetworkModule   = nullptr;
+        mpTimeManager     = 0;
+        mpPlayerManager   = 0;
+        mpServerInterface = 0;
+        mpNetworkModule   = 0;
         mbDownloadedLocalScores = false;
         return true;
     }
@@ -169,17 +169,17 @@ namespace BrnNetwork
     {
         (void)lUpdateSet;
 
-        CGS_ASSERT( lpOutput != nullptr, "lpOutput" );
+        CGS_ASSERT( lpOutput != 0, "lpOutput" );
 
         if ( !mbBufferRoadRulesReceived )
         {
-            CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkToGameStateInterface() != nullptr,
+            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+            CGS_ASSERT( mpNetworkModule->GetNetworkToGameStateInterface() != 0,
                         "mpNetworkModule->GetNetworkToGameStateInterface()" );
 
             BrnNetworkModuleIO::NetworkToGameStateInterface::RoadRulesReceivedQueue* lpOutputRoadRulesRecvQueue =
                 mpNetworkModule->GetNetworkToGameStateInterface()->GetRoadRulesReceivedQueue();
-            CGS_ASSERT( lpOutputRoadRulesRecvQueue != nullptr, "lpOutputRoadRulesRecvQueue" );
+            CGS_ASSERT( lpOutputRoadRulesRecvQueue != 0, "lpOutputRoadRulesRecvQueue" );
 
             if ( lpOutputRoadRulesRecvQueue->GetLength() == 0 )
             {
@@ -187,7 +187,7 @@ namespace BrnNetwork
                 mBufferedRoadRulesRecvQueue.Clear();
             }
 
-            CGS_ASSERT( mpNetworkModule->GetNetworkEventQueue() != nullptr,
+            CGS_ASSERT( mpNetworkModule->GetNetworkEventQueue() != 0,
                         "mpNetworkModule->GetNetworkEventQueue()" );
 
             if ( mRoadRulesPersonalBestBuffer.GetLength() > 0 )
@@ -229,8 +229,8 @@ namespace BrnNetwork
                 }
                 else
                 {
-                    CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-                    CGS_ASSERT( mpNetworkModule->GetNetworkManager() != nullptr,
+                    CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+                    CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
                                 "mpNetworkModule->GetNetworkManager()" );
 
                     mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( 0 );
@@ -250,16 +250,16 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::AddPlayer( NetworkPlayerID lPlayerID )
     {
-        CGS_ASSERT( mpPlayerManager != nullptr, "mpPlayerManager" );
+        CGS_ASSERT( mpPlayerManager != 0, "mpPlayerManager" );
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID( lPlayerID );
-        if ( lpNetworkPlayer == nullptr )
+        if ( lpNetworkPlayer == 0 )
         {
             return;
         }
 
         RoadRulesData* lpDataEntry = GetNextFreeRoadRulesDataEntry();
-        CGS_ASSERT( lpDataEntry != nullptr, "lpDataEntry" );
+        CGS_ASSERT( lpDataEntry != 0, "lpDataEntry" );
 
         lpNetworkPlayer->RegisterMessageType( KI_ROAD_RULES_MESSAGE_TYPE, sizeof( RoadRulesMessage ),
                                               &lpDataEntry->mRoadRulesMessageSend,
@@ -283,10 +283,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::RemovePlayer( NetworkPlayerID lPlayerID )
     {
-        CGS_ASSERT( mpPlayerManager != nullptr, "mpPlayerManager" );
+        CGS_ASSERT( mpPlayerManager != 0, "mpPlayerManager" );
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID( lPlayerID );
-        if ( lpNetworkPlayer == nullptr )
+        if ( lpNetworkPlayer == 0 )
         {
             return;
         }
@@ -295,7 +295,7 @@ namespace BrnNetwork
         lpNetworkPlayer->UnRegisterMessageType( KI_ROAD_RULES_PERSONAL_BEST_MESSAGE_TYPE );
 
         RoadRulesData* lpDataEntry = GetRoadRulesDataEntry( lPlayerID );
-        CGS_ASSERT( lpDataEntry != nullptr, "lpDataEntry" );
+        CGS_ASSERT( lpDataEntry != 0, "lpDataEntry" );
 
         lpDataEntry->mPlayerID                   = CgsNetwork::KI_INVALID_PLAYER_ID;
         lpDataEntry->mIndexOfNextChallengeToSend = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS;
@@ -330,7 +330,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::HandleNewPersonalBest(
         const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent )
     {
-        CGS_ASSERT( lpNetworkRoadRulesPBEvent != nullptr, "lpNetworkRoadRulesPBEvent" );
+        CGS_ASSERT( lpNetworkRoadRulesPBEvent != 0, "lpNetworkRoadRulesPBEvent" );
 
         if ( lpNetworkRoadRulesPBEvent->mbLobbyPersonalBest )
         {
@@ -347,7 +347,7 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::StartSendingRoadRulesScoresToPlayer( RoadRulesData* lpPlayerDataEntry )
     {
-        CGS_ASSERT( lpPlayerDataEntry != nullptr, "lpPlayerDataEntry" );
+        CGS_ASSERT( lpPlayerDataEntry != 0, "lpPlayerDataEntry" );
         CGS_ASSERT( lpPlayerDataEntry->mPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID,
                     "lpPlayerDataEntry->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID" );
 
@@ -361,8 +361,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::SendPersonalBestScore()
     {
-        CGS_ASSERT( mpPlayerManager != nullptr, "mpPlayerManager" );
-        CGS_ASSERT( mpTimeManager != nullptr, "mpTimeManager" );
+        CGS_ASSERT( mpPlayerManager != 0, "mpPlayerManager" );
+        CGS_ASSERT( mpTimeManager != 0, "mpTimeManager" );
 
         if ( mPersonalBestToSendBuffer.GetLength() <= 0 )
         {
@@ -406,8 +406,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::HandleSendingRoadRulesScores( bool lbAreWePlaying )
     {
-        CGS_ASSERT( mpPlayerManager != nullptr, "mpPlayerManager" );
-        CGS_ASSERT( mpTimeManager != nullptr, "mpTimeManager" );
+        CGS_ASSERT( mpPlayerManager != 0, "mpPlayerManager" );
+        CGS_ASSERT( mpTimeManager != 0, "mpTimeManager" );
 
         const u16 lu16Frame = static_cast<u16>( mpTimeManager->GetFrameCount() % KU_FRAME_WRAP );
 
@@ -506,7 +506,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::UpdateLocalLobbyScoresWithNewPB(
         const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent )
     {
-        CGS_ASSERT( lpNetworkRoadRulesPBEvent != nullptr, "lpNetworkRoadRulesPBEvent" );
+        CGS_ASSERT( lpNetworkRoadRulesPBEvent != 0, "lpNetworkRoadRulesPBEvent" );
         CGS_ASSERT( lpNetworkRoadRulesPBEvent->mChallengeIndex >= 0,
                     "lpNetworkRoadRulesPBEvent->mChallengeIndex >= 0" );
         CGS_ASSERT( lpNetworkRoadRulesPBEvent->mChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS,
@@ -551,10 +551,10 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
                     "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
@@ -568,7 +568,7 @@ namespace BrnNetwork
 
         if ( lUploadData.GetNumScores() > 0 )
         {
-            CGS_ASSERT( mpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT( mpServerInterface->GetCustomCommandsComponent() != 0,
                         "mpServerInterface->GetCustomCommandsComponent()" );
             CGS_ASSERT( NULL != macRoadRulesServerKey, "NULL != macRoadRulesServerKey" );
 
@@ -599,11 +599,11 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::ProcessNetworkEvents( const BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue )
     {
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liEventType = lpNetworkEventQueue->GetFirstEvent( &lpEvent, &liSize );
 
-        while ( lpEvent != nullptr )
+        while ( lpEvent != 0 )
         {
             switch ( liEventType )
             {
@@ -611,7 +611,7 @@ namespace BrnNetwork
             {
                 const BrnNetworkModuleIO::NetworkInRoadRulesDataEvent* lpRoadRulesScoreDataEvent =
                     reinterpret_cast<const BrnNetworkModuleIO::NetworkInRoadRulesDataEvent*>( lpEvent );
-                CGS_ASSERT( lpRoadRulesScoreDataEvent != nullptr, "lpRoadRulesScoreDataEvent" );
+                CGS_ASSERT( lpRoadRulesScoreDataEvent != 0, "lpRoadRulesScoreDataEvent" );
 
                 lpRoadRulesScoreDataEvent->GetRoadRulesScoreData( maLocalRoadScoresToUpload,
                                                                   sizeof( maLocalRoadScoresToUpload ) );
@@ -624,7 +624,7 @@ namespace BrnNetwork
             {
                 const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent =
                     reinterpret_cast<const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent*>( lpEvent );
-                CGS_ASSERT( lpNetworkRoadRulesPBEvent != nullptr, "lpNetworkRoadRulesPBEvent" );
+                CGS_ASSERT( lpNetworkRoadRulesPBEvent != 0, "lpNetworkRoadRulesPBEvent" );
 
                 if ( lpNetworkRoadRulesPBEvent->mbLobbyPersonalBest )
                 {
@@ -645,7 +645,7 @@ namespace BrnNetwork
                 break;
             }
 
-            const CgsModule::Event* lpNextEvent = nullptr;
+            const CgsModule::Event* lpNextEvent = 0;
             liEventType = lpNetworkEventQueue->GetNextEvent( lpEvent, &lpNextEvent, &liSize );
             lpEvent = lpNextEvent;
         }
@@ -658,7 +658,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::UpdateLocalRoadRulesScoresWithNewPB(
         const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent )
     {
-        CGS_ASSERT( lpNetworkRoadRulesPBEvent != nullptr, "lpNetworkRoadRulesPBEvent" );
+        CGS_ASSERT( lpNetworkRoadRulesPBEvent != 0, "lpNetworkRoadRulesPBEvent" );
         CGS_ASSERT( lpNetworkRoadRulesPBEvent->mChallengeIndex >= 0,
                     "lpNetworkRoadRulesPBEvent->mChallengeIndex >= 0" );
         CGS_ASSERT( lpNetworkRoadRulesPBEvent->mChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS,
@@ -700,7 +700,7 @@ namespace BrnNetwork
 
             const BrnStreetData::ChallengePlayerScoreEntry* lpRoadScoreDataEntry =
                 &maLocalRoadScoresToUpload[lChallengeIndex];
-            CGS_ASSERT( lpRoadScoreDataEntry != nullptr, "lpRoadScoreDataEntry" );
+            CGS_ASSERT( lpRoadScoreDataEntry != 0, "lpRoadScoreDataEntry" );
 
             if ( !mbForceOverwriteServerRecords && !lpRoadScoreDataEntry->IsDirty( BrnStreetData::E_SCORE_TYPE_COUNT ) )
             {
@@ -759,14 +759,14 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::_DownloadRoadRulesCallback( void* lpData, void* lpResult, bool lbSuccess )
     {
-        CGS_ASSERT( lpData != nullptr, "lpData" );
+        CGS_ASSERT( lpData != 0, "lpData" );
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpData );
-        CGS_ASSERT( lpRoadRulesManager != nullptr, "lpRoadRulesManager" );
+        CGS_ASSERT( lpRoadRulesManager != 0, "lpRoadRulesManager" );
 
         if ( lbSuccess && lpRoadRulesManager->meState == E_ROAD_RULES_STATE_DOWNLOADING )
         {
             RoadRulesDownloadData* lpDownloadedData = static_cast<RoadRulesDownloadData*>( lpResult );
-            CGS_ASSERT( lpDownloadedData != nullptr, "lpDownloadedData" );
+            CGS_ASSERT( lpDownloadedData != 0, "lpDownloadedData" );
 
             if ( lpDownloadedData->GetNumScores() == 0 )
             {
@@ -789,7 +789,7 @@ namespace BrnNetwork
                 RoadRulesDownloadEvent lDownloadEvent;
                 lDownloadEvent.Construct();
 
-                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != nullptr, "lpRoadRulesManager->mpNetworkModule" );
+                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != 0, "lpRoadRulesManager->mpNetworkModule" );
 
                 for ( BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
                       leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++ )
@@ -827,11 +827,11 @@ namespace BrnNetwork
 
                 lDownloadEvent.mRoadRulesData.mChallengeIndex = lChallengeIndex;
 
-                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != nullptr,
+                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != 0,
                             "lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface()" );
                 BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
                     lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface();
-                CGS_ASSERT( lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue() != nullptr,
+                CGS_ASSERT( lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue() != 0,
                             "lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue()" );
                 lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue()->AddEvent( lDownloadEvent );
             }
@@ -851,7 +851,7 @@ namespace BrnNetwork
         else
         {
             BrnServerInterface* lpServerInterface = lpRoadRulesManager->mpServerInterface;
-            CGS_ASSERT( lpServerInterface != nullptr, "lpServerInterface" );
+            CGS_ASSERT( lpServerInterface != 0, "lpServerInterface" );
 
             lpRoadRulesManager->mIndexOfNextChallengeToDownload = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS;
             if ( lpRoadRulesManager->meState != E_ROAD_RULES_STATE_IN_GAME )
@@ -859,7 +859,7 @@ namespace BrnNetwork
                 lpRoadRulesManager->meState = KI_STATE_AUTO_LOGIN_PRIMED;
             }
 
-            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != 0,
                         "lpServerInterface->GetCustomCommandsComponent()" );
             if ( lpServerInterface->GetCustomCommandsComponent()->GetStatus()
                  == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR )
@@ -878,15 +878,15 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::_DownloadLocalRoadRulesCallback( void* lpData, void* lpResult, bool lbSuccess )
     {
-        CGS_ASSERT( lpData != nullptr, "lpData" );
+        CGS_ASSERT( lpData != 0, "lpData" );
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpData );
-        CGS_ASSERT( lpRoadRulesManager != nullptr, "lpRoadRulesManager" );
+        CGS_ASSERT( lpRoadRulesManager != 0, "lpRoadRulesManager" );
 
         if ( lbSuccess && lpRoadRulesManager->meState == E_ROAD_RULES_STATE_DOWNLOADING_LOCAL )
         {
             RoadRulesLocalPlayerDownloadedScores* lpDownloadedData =
                 static_cast<RoadRulesLocalPlayerDownloadedScores*>( lpResult );
-            CGS_ASSERT( lpDownloadedData != nullptr, "lpDownloadedData" );
+            CGS_ASSERT( lpDownloadedData != 0, "lpDownloadedData" );
 
             Road::ChallengeIndex lEndDownloadIndex =
                 lpRoadRulesManager->mIndexOfNextLocalChallengeToDownload + KI_NUM_CHALLENGES_PER_DOWNLOAD_BATCH;
@@ -916,12 +916,12 @@ namespace BrnNetwork
                 lScoreData.mu64RoadRulesID = lpDownloadedData->GetRoadRulesID();
                 lScoreData.mChallengeIndex = lChallengeIndex;
 
-                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != nullptr, "lpRoadRulesManager->mpNetworkModule" );
-                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != nullptr,
+                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != 0, "lpRoadRulesManager->mpNetworkModule" );
+                CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != 0,
                             "lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface()" );
                 BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
                     lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface();
-                CGS_ASSERT( lpNetworkToGameStateInterface->GetLocalRoadRulesDownloadedQueue() != nullptr,
+                CGS_ASSERT( lpNetworkToGameStateInterface->GetLocalRoadRulesDownloadedQueue() != 0,
                             "lpNetworkToGameStateInterface->GetLocalRoadRulesDownloadedQueue()" );
                 lpNetworkToGameStateInterface->GetLocalRoadRulesDownloadedQueue()->AddEvent( lScoreData );
             }
@@ -942,7 +942,7 @@ namespace BrnNetwork
         else
         {
             BrnServerInterface* lpServerInterface = lpRoadRulesManager->mpServerInterface;
-            CGS_ASSERT( lpServerInterface != nullptr, "lpServerInterface" );
+            CGS_ASSERT( lpServerInterface != 0, "lpServerInterface" );
 
             lpRoadRulesManager->mIndexOfNextLocalChallengeToDownload = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS;
             if ( lpRoadRulesManager->meState != E_ROAD_RULES_STATE_IN_GAME )
@@ -950,7 +950,7 @@ namespace BrnNetwork
                 lpRoadRulesManager->meState = KI_STATE_AUTO_LOGIN_PRIMED;
             }
 
-            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != 0,
                         "lpServerInterface->GetCustomCommandsComponent()" );
             if ( lpServerInterface->GetCustomCommandsComponent()->GetStatus()
                  == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR )
@@ -969,10 +969,10 @@ namespace BrnNetwork
                                                                     NetworkPlayerID lSendingPlayerID, void* lpUserData )
     {
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpUserData );
-        CGS_ASSERT( lpRoadRulesManager != nullptr, "lpRoadRulesManager" );
+        CGS_ASSERT( lpRoadRulesManager != 0, "lpRoadRulesManager" );
 
         RoadRulesMessage* lpRoadRulesMessage = static_cast<RoadRulesMessage*>( lpMessage );
-        CGS_ASSERT( lpRoadRulesMessage != nullptr, "lpRoadRulesMessage" );
+        CGS_ASSERT( lpRoadRulesMessage != 0, "lpRoadRulesMessage" );
 
         s32                  liNumRoadRulesScoresRecv;
         RoadRulesMessageData laRoadRulesMessageData[KI_MAX_ROAD_RULES_MESSAGE_ENTRIES];
@@ -980,10 +980,10 @@ namespace BrnNetwork
         CGS_ASSERT( lbRetrieved,
                     "lpRoadRulesMessage->Retrieve(&liNumRoadRulesScoresRecv, laRoadRulesMessageData)" );
 
-        CGS_ASSERT( lpRoadRulesManager->mpPlayerManager != nullptr, "lpRoadRulesManager->mpPlayerManager" );
+        CGS_ASSERT( lpRoadRulesManager->mpPlayerManager != 0, "lpRoadRulesManager->mpPlayerManager" );
         CgsNetwork::PlayerMenuData* lpPlayerMenuData =
             lpRoadRulesManager->mpPlayerManager->GetMenuDataByID( lSendingPlayerID );
-        CGS_ASSERT( lpPlayerMenuData != nullptr, "lpPlayerMenuData" );
+        CGS_ASSERT( lpPlayerMenuData != 0, "lpPlayerMenuData" );
 
         CgsNetwork::PlayerName lPlayerName;
         lPlayerName.Construct( lpPlayerMenuData->macName );
@@ -995,12 +995,12 @@ namespace BrnNetwork
         lRoadRulesRecvData.mPlayerName              = lPlayerName;
         lRoadRulesRecvData.mPlayerID                = lSendingPlayerID;
 
-        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != nullptr, "lpRoadRulesManager->mpNetworkModule" );
-        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != nullptr,
+        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != 0, "lpRoadRulesManager->mpNetworkModule" );
+        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != 0,
                     "lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface()" );
         BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
             lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface();
-        CGS_ASSERT( lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue() != nullptr,
+        CGS_ASSERT( lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue() != 0,
                     "lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue()" );
 
         if ( lpRoadRulesManager->mbBufferRoadRulesReceived )
@@ -1051,12 +1051,12 @@ namespace BrnNetwork
                                                                          NetworkPlayerID lSendingPlayerID, void* lpUserData )
     {
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpUserData );
-        CGS_ASSERT( lpRoadRulesManager != nullptr, "lpRoadRulesManager" );
+        CGS_ASSERT( lpRoadRulesManager != 0, "lpRoadRulesManager" );
 
-        CGS_ASSERT( lpRoadRulesManager->mpPlayerManager != nullptr, "lpRoadRulesManager->mpPlayerManager" );
+        CGS_ASSERT( lpRoadRulesManager->mpPlayerManager != 0, "lpRoadRulesManager->mpPlayerManager" );
         CgsNetwork::PlayerMenuData* lpPlayerMenuData =
             lpRoadRulesManager->mpPlayerManager->GetMenuDataByID( lSendingPlayerID );
-        CGS_ASSERT( lpPlayerMenuData != nullptr, "lpPlayerMenuData" );
+        CGS_ASSERT( lpPlayerMenuData != 0, "lpPlayerMenuData" );
 
         CgsNetwork::PlayerName lPlayerName;
         lPlayerName.Construct( lpPlayerMenuData->macName );
@@ -1065,15 +1065,15 @@ namespace BrnNetwork
         lRoadRulesPbEvent.mPersonalBestPlayerID = lSendingPlayerID;
 
         RoadRulesPersonalBestMessage* lpRoadRulesPBMessage = static_cast<RoadRulesPersonalBestMessage*>( lpMessage );
-        CGS_ASSERT( lpRoadRulesPBMessage != nullptr, "lpRoadRulesPBMessage" );
+        CGS_ASSERT( lpRoadRulesPBMessage != 0, "lpRoadRulesPBMessage" );
         lpRoadRulesPBMessage->Retrieve( &lPlayerName, &lRoadRulesPbEvent.mPersonalBestChallengeIndex,
                                         &lRoadRulesPbEvent.mPersonalBestScore );
 
-        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != nullptr, "lpRoadRulesManager->mpNetworkModule" );
-        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkManager() != nullptr,
+        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != 0, "lpRoadRulesManager->mpNetworkModule" );
+        CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkManager() != 0,
                     "lpRoadRulesManager->mpNetworkModule->GetNetworkManager()" );
         auto* lpBuddyManager = lpRoadRulesManager->mpNetworkModule->GetNetworkManager()->GetBuddyManager();
-        CGS_ASSERT( lpBuddyManager != nullptr, "lpBuddyManager" );
+        CGS_ASSERT( lpBuddyManager != 0, "lpBuddyManager" );
         lRoadRulesPbEvent.mbWasPBByFriend = lpBuddyManager->IsFullBuddy( &lPlayerName );
 
         if ( !lpRoadRulesManager->mbBufferRoadRulesReceived )
@@ -1082,7 +1082,7 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != nullptr,
+            CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0,
                         "lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()" );
             lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>( &lRoadRulesPbEvent ),
@@ -1122,10 +1122,10 @@ namespace BrnNetwork
         (void)lpResult;
 
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpData );
-        CGS_ASSERT( lpRoadRulesManager != nullptr, "lpRoadRulesManager" );
+        CGS_ASSERT( lpRoadRulesManager != 0, "lpRoadRulesManager" );
 
         BrnServerInterface* lpServerInterface = lpRoadRulesManager->mpServerInterface;
-        CGS_ASSERT( lpServerInterface != nullptr, "lpServerInterface" );
+        CGS_ASSERT( lpServerInterface != 0, "lpServerInterface" );
 
         if ( lbSuccess && lpRoadRulesManager->meState == E_ROAD_RULES_STATE_UPLOADING )
         {
@@ -1141,7 +1141,7 @@ namespace BrnNetwork
 
                 BrnStreetData::ChallengePlayerScoreEntry* lpChallengeData =
                     &lpRoadRulesManager->maLocalRoadScoresToUpload[lChallengeIndex];
-                CGS_ASSERT( lpChallengeData != nullptr, "lpChallengeData" );
+                CGS_ASSERT( lpChallengeData != 0, "lpChallengeData" );
                 lpChallengeData->mDirty.UnSetAll();
             }
 
@@ -1149,14 +1149,14 @@ namespace BrnNetwork
             lUploadedEvent.mStartUploadIndex = lpRoadRulesManager->mIndexOfNextChallengeToUpload;
             lUploadedEvent.mEndUploadIndex   = lEndUploadIndex;
 
-            CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != nullptr, "lpRoadRulesManager->mpNetworkModule" );
-            CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != nullptr,
+            CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != 0, "lpRoadRulesManager->mpNetworkModule" );
+            CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0,
                         "lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()" );
             lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>( &lUploadedEvent ),
                 lUploadedEvent.GetEventType(), sizeof( lUploadedEvent ) );
 
-            CGS_ASSERT( lpServerInterface->GetDownloadableConfigComponent() != nullptr,
+            CGS_ASSERT( lpServerInterface->GetDownloadableConfigComponent() != 0,
                         "lpServerInterface->GetDownloadableConfigComponent()" );
 
             lpRoadRulesManager->mIndexOfNextChallengeToUpload = lEndUploadIndex;
@@ -1180,7 +1180,7 @@ namespace BrnNetwork
                 lpRoadRulesManager->meState = KI_STATE_AUTO_LOGIN_PRIMED;
             }
 
-            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != 0,
                         "lpServerInterface->GetCustomCommandsComponent()" );
             if ( lpServerInterface->GetCustomCommandsComponent()->GetStatus()
                  == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR )

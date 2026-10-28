@@ -35,5 +35,5 @@ namespace BrnTraffic
         CgsID mVehicleId;   // (:66)
     };
 
-    static_assert(sizeof(VehicleAsset) == 8, "VehicleAsset stride");
+    CGS_STATIC_ASSERT((sizeof(VehicleAsset) == 8), "VehicleAsset stride");
 }

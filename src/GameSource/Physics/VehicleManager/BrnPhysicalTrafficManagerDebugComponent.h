@@ -51,12 +51,12 @@ namespace Vehicle
     protected:
         // @0x827DBA50: the debug-menu display name for this component.
         //   asm: lis r11,aPhysicalTraffi@ha ; addi r3,r11,aPhysicalTraffi@l "Physical traffic" ; blr
-        const char* GetName() const override;
+        const char* GetName() const ;
 
         // @0x8261C678: register the 18 original debug controls with their source ranges and steps.
-        void OnActivate() override;
+        void OnActivate() ;
         // @0x82636628: dispatch the world-overlay groups.
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ;
 
     private:
         // Never called -- exists only so offsetof() can see the private members below (offsetof

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include <cstdint>   // uintptr_t (64-bit addresses on the x64 PC build)
+#include "types.hpp"   // uintptr_t (64-bit addresses on the x64 PC build)
 
 // CgsDev::StackUnpick - the captured call-stack the assert/exception systems carry and the map-file
 // reader resolves. Decompiled from the X360 build: StackUnpickBase owns the storage + the accessor the

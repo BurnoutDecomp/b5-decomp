@@ -114,20 +114,20 @@ namespace BrnNetwork
         // (replicated-payload pattern + data accessors); declared here so GameParams
         // is instantiable. Bodies homed in the behavioural game-params TU.
         // (GetPatternLength is not overridden: the console vtable keeps the base default.)
-        virtual const char* GetPattern() const override;
-        virtual u32         GetDataSize() const override;
-        virtual void*       GetData() override;
-        virtual const void* GetData() const override;
+        virtual const char* GetPattern() const ;
+        virtual u32         GetDataSize() const ;
+        virtual void*       GetData() ;
+        virtual const void* GetData() const ;
 
         // Reset to the prepared/default state (declared-only). Overrides the X360
         // base's virtual `bool Prepare()` (CgsServerInterfaceGameParamsX360.h:66); the
         // corrected base makes this an override, so the signature matches the base's
         // bool return rather than the earlier standalone void form.
-        virtual bool Prepare() override;
+        virtual bool Prepare() ;
 
         // Serialise the platform game record, then let each of the seven player-param
         // records read its own player entry of the lobby record.
-        virtual void SerialiseFromGame(const void* lpGame) override;
+        virtual void SerialiseFromGame(const void* lpGame) ;
 
         // Burnout game-mode discriminant (E_GAME_MODE_*).
         s32  GameMode() const;                               // @0x82584098

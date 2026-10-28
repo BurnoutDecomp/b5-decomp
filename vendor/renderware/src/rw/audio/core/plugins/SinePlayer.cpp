@@ -35,8 +35,8 @@ const f32 KF_ZERO   = 0.0f;       // flt_82001CC0
 // off_820AA810 -- the base PlugIn v-table the deleting destructor reinstalls (shared with
 // Gain / RawPuller2 / Pan2D1 / ReverbModel1). Opaque data symbols in the XEX; modelled as
 // honest placeholders (installed/reinstalled only, never dereferenced here).
-void *const KVTABLE_SINEPLAYER = nullptr; // off_8217F544
-void *const KVTABLE_PLUGIN_BASE = nullptr; // off_820AA810
+void *const KVTABLE_SINEPLAYER = 0; // off_8217F544
+void *const KVTABLE_PLUGIN_BASE = 0; // off_820AA810
 } // namespace
 
 // ---------------------------------------------------------------------------

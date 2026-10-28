@@ -34,7 +34,7 @@ TempValue* TempValue::NewItem(s32 aiIndex, s32 aiType, CFG* apContext)
     // sentinel; construct in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(TempValue));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) TempValue(aiIndex, aiType, apContext);
 }

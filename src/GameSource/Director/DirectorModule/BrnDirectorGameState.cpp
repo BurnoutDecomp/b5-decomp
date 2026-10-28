@@ -39,7 +39,7 @@ void GameState::Clear()
 
     // --- scalar / flag resets (each at its asm-attested offset; values are the exact
     //     register stored: r10=0, r11=0, r8=1, r7=3, r9=-1, r27=-1, f0=0.0) ---
-    mpEventJLBox                        = nullptr; // stw 0, 0x000
+    mpEventJLBox                        = 0; // stw 0, 0x000
 
     mbDriveThruActive                   = false;  // stb 0, 0x0D0
     meDriveThruType                     = E_DRIVETHRU_INVALID; // stw 0, 0x0D4

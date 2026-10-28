@@ -44,7 +44,7 @@ namespace CgsDev
     {
         mpMetrics = lpMetrics;
         CGS_ASSERT(mpMetrics, "mpMetrics");
-        mpDebugManagerPad = nullptr;
+        mpDebugManagerPad = 0;
         ClearPad();
         ClearKeyboard();
         ClearEvent();

@@ -94,9 +94,9 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
     mFlags             = 0;
     mNextEmissionTime  = 0;
     mpDescriptor       = apDescriptor;
-    mpBindings         = nullptr;
-    mpBucket           = nullptr;
-    mpNext             = nullptr;
+    mpBindings         = 0;
+    mpBucket           = 0;
+    mpNext             = 0;
     mPhysicsHandle     = 0;
     mLastTime.BuildZero();
     mParentIndex       = 0;
@@ -106,12 +106,12 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
 
     m_age              = 0.0f;
     mUpdateLastTime.BuildZero();
-    mpParentEmitter    = nullptr;
-    mpCurrentBehaviour = nullptr;
-    mpTempBehaviour    = nullptr;
+    mpParentEmitter    = 0;
+    mpCurrentBehaviour = 0;
+    mpTempBehaviour    = 0;
     mBlendLast         = KF_BLEND_LAST_NONE;
 
-    if (apDescriptor == nullptr)
+    if (apDescriptor == 0)
     {
         return;
     }
@@ -126,7 +126,7 @@ void cParticleEmitter::Init(cParticleDescriptor* apDescriptor)
     if (apDescriptor->mBehaviourCount > 1)
     {
         mpTempBehaviour = cLionParticleEffectManager::Instance().CreateBehaviour();
-        if (mpTempBehaviour != nullptr)
+        if (mpTempBehaviour != 0)
         {
             mpTempBehaviour->Init();
             mpTempBehaviour->Build();
@@ -164,7 +164,7 @@ namespace
 {
     inline rw::math::vpu::Vector4 LaneCast(const cVector& arV)
     {
-        return rw::math::vpu::Vector4{ arV.x, arV.y, arV.z, arV.w };
+        { const rw::math::vpu::Vector4 lResult = { arV.x, arV.y, arV.z, arV.w }; return lResult; }
     }
 
     inline cVector LaneCast(const rw::math::vpu::Vector3Plus& arV)
@@ -321,7 +321,7 @@ void cParticleEmitter::InitialiseParticle(sParticleNucleus& arParticleNucleus,
     // ---- the spawn transform ---------------------------------------------------------------
     // DO_IGNORE_ROT (descriptor flag 0x100, `rlwinm r11, r16, 0,23,23` @0x82911B18): the
     // particle keeps the spawn POSITION but not the spawn ORIENTATION.
-    if (apParticleMatrix != nullptr)
+    if (apParticleMatrix != 0)
     {
         if ((luFlags & cParticleDescriptor::E_FLAG_IGNORE_ROT) != 0)
         {
@@ -337,7 +337,7 @@ void cParticleEmitter::InitialiseParticle(sParticleNucleus& arParticleNucleus,
     // The optional per-particle vector slot takes the spawn POSITION -- arLocator's w row,
     // whole (`lvx128 v0, r15, r17(0x30)` / `stvx128 v0, r0, r11` @0x82911BC4). Note it is
     // copied from arLocator, NOT from apParticleMatrix, so DO_IGNORE_ROT does not change it.
-    if (apParticleVector != nullptr)
+    if (apParticleVector != 0)
     {
         *apParticleVector = arLocator.wa;
     }
@@ -381,9 +381,9 @@ bool cParticleEmitter::ParticleInsert(cParticleBucket* apBucket,
         return false;
     }
 
-    sParticleNucleus* lpNucleus = nullptr;
-    cVector*          lpVector  = nullptr;
-    cMatrix*          lpMatrix  = nullptr;
+    sParticleNucleus* lpNucleus = 0;
+    cVector*          lpVector  = 0;
+    cMatrix*          lpMatrix  = 0;
     if (!apBucket->AllocateParticle(auSlot, &lpNucleus, &lpVector, &lpMatrix))
     {
         return false;
@@ -439,8 +439,8 @@ bool cParticleEmitter::IsGenerating(cParticleRandomSeed& arSeed,
 
     // Four rejects, in the console's own order (0x8290D560..0x8290D590).
     if ((mFlags & KU_FLAG_ACTIVE) == 0)   return false;
-    if (mpDescriptor == nullptr)          return false;
-    if (lpTrigger == nullptr)             return false;
+    if (mpDescriptor == 0)          return false;
+    if (lpTrigger == 0)             return false;
     if (!lpTrigger->IsRunning())          return false;
 
     const cParticleDescriptor& lrDescriptor = *mpDescriptor;
@@ -748,7 +748,7 @@ void CountBlendDifferences(const cParticleBehaviour& arA, const cParticleBehavio
 cParticleBehaviour* AdvanceBehaviours(cParticleBehaviour* apHead, u32 auCount)
 {
     cParticleBehaviour* lpBehaviour = apHead;
-    for (u32 luIndex = 0; luIndex < auCount && lpBehaviour != nullptr; ++luIndex)
+    for (u32 luIndex = 0; luIndex < auCount && lpBehaviour != 0; ++luIndex)
     {
         lpBehaviour = lpBehaviour->mpNext.Get();
     }
@@ -768,10 +768,10 @@ void cParticleEmitter::Blend()
     {
         // asm 0x8290F774..0x8290F7A0.
         f32 lfPosition = 0.0f;
-        if (mpBindings != nullptr)
+        if (mpBindings != 0)
         {
             const cParticleScaler* lpScaler = mpBindings->GetpScaler();
-            if (lpScaler != nullptr && mpTempBehaviour != nullptr)
+            if (lpScaler != 0 && mpTempBehaviour != 0)
             {
                 lfPosition = lpScaler->GetScale();
             }
@@ -797,7 +797,7 @@ void cParticleEmitter::Blend()
             const s32 liLayer  = static_cast<s32>(lfFloor);
             const s32 liLayerN = liLayer + 1;
 
-            cParticleBehaviour* lpChosen = nullptr;
+            cParticleBehaviour* lpChosen = 0;
             f32 lfNewBlendLast = lfPosition;
 
             if (liLayer >= liBehaviourCount - 1)
@@ -930,20 +930,20 @@ void cParticleEmitter::Blend()
 void cParticleEmitter::DeInit()
 {
     cParticleBucket* lpBucket = mpBucket;
-    while (lpBucket != nullptr)
+    while (lpBucket != 0)
     {
         cParticleBucket* lpNext = lpBucket->GetEmitterNext();
         cParticleBucketManager::Instance().Free(lpBucket);
         lpBucket = lpNext;
     }
 
-    if (mpTempBehaviour != nullptr)
+    if (mpTempBehaviour != 0)
     {
         cLionParticleEffectManager::Instance().Free(mpTempBehaviour);
-        mpTempBehaviour = nullptr;
+        mpTempBehaviour = 0;
     }
 
-    Init(nullptr);
+    Init(0);
 }
 
 // ================================================================================================

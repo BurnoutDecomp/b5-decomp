@@ -25,7 +25,7 @@
 #include "rw/audio/core/Mixer.h"    // the process context + StackAllocator (the scratch carve)
 
 #include <cstring>  // std::memset / std::memcpy (the X360 XMemSet / _blkmov)
-#include <cstdint>  // uintptr_t
+#include "types.hpp"  // uintptr_t
 
 namespace rw
 {
@@ -38,8 +38,8 @@ namespace core
 // PlugIn v-table the deleting destructor reinstalls before any free. These are opaque data
 // symbols in the XEX (no exported contents); modelled as honest placeholder storage so the
 // bodies below link without fabricating their contents.
-static void *const KRS_ResampleVTable = nullptr;    // off_8217F504
-static void *const KRS_BasePlugInVTable = nullptr;  // off_820AA810
+static void *const KRS_ResampleVTable = 0;    // off_8217F504
+static void *const KRS_BasePlugInVTable = 0;  // off_820AA810
 
 // flt_821565B0 -- the fraction scale LinearInterpolate multiplies the 16-bit phase by.
 // ⭐ IT IS NOT 1/65536. The XEX word at file_off 0x1595B0 is 37 7F FC 9C == 1.5258e-05f,

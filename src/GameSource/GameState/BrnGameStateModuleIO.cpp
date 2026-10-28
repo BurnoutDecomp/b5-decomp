@@ -124,7 +124,7 @@ void PreWorldInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lp
 void PreWorldInputBuffer::SetButtonPressed(const ControllerActionSource* lpActionInfo)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    CGS_ASSERT(lpActionInfo != nullptr, "No action info supplied\n");
+    CGS_ASSERT(lpActionInfo != 0, "No action info supplied\n");
 
     const u32 KU_PRESSED_BIT = 2;
     const u32 KU_HELD_BIT    = 1;
@@ -480,8 +480,8 @@ void OutputBuffer::Construct()
     // The re-homed +0x3414 member must occupy EXACTLY the console's span, or every later
     // offset in this buffer moves. RequestInterface<3072> is pointer-free, so its host size
     // is the console's.
-    static_assert(sizeof(BrnResource::GameDataIO::RequestInterface<3072>)
-                      == (0x4024 - 0x3414),
+    CGS_STATIC_ASSERT((sizeof(BrnResource::GameDataIO::RequestInterface<3072>)
+                      == (0x4024 - 0x3414)),
                   "ResourceRequestInterface must be exactly 3088 bytes (RequestInterface<3072>)");
 
     CgsModule::IOBuffer::Construct();
@@ -584,7 +584,7 @@ void OutputBuffer::Construct()
     //     memset(this + 173240, 0, 2736)   // the scoring snapshot, console width
     std::memset(&mScoringOutputInterfaceStorage, 0, sizeof(mScoringOutputInterfaceStorage));
     // ARTIST 82382AA0 stores -1 at scoring +0xA3C after the zero fill.
-    static_assert(sizeof(ScoringOutputInterface) == sizeof(mScoringOutputInterfaceStorage),
+    CGS_STATIC_ASSERT((sizeof(ScoringOutputInterface) == sizeof(mScoringOutputInterfaceStorage)),
                   "complete ARTIST scoring snapshot fits its existing storage exactly");
     reinterpret_cast<ScoringOutputInterface*>(&mScoringOutputInterfaceStorage)->meGameModeType = E_MODE_NONE;
 
@@ -820,7 +820,7 @@ const RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterfac
 const ScoringOutputInterface* OutputBuffer::GetScoringOutputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    static_assert(sizeof(ScoringOutputInterface) == (175976 - 173240),
+    CGS_STATIC_ASSERT((sizeof(ScoringOutputInterface) == (175976 - 173240)),
                   "ScoringOutputInterface matches the console's 2736-byte span");
     return reinterpret_cast<const ScoringOutputInterface*>(&mScoringOutputInterfaceStorage);
 }
@@ -830,7 +830,7 @@ const ScoringOutputInterface* OutputBuffer::GetScoringOutputInterface() const
 const OnlineScoringOutputInterface* OutputBuffer::GetOnlineScoringOutputInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    static_assert(sizeof(OnlineScoringOutputInterface) <= (176140 - 175976),
+    CGS_STATIC_ASSERT((sizeof(OnlineScoringOutputInterface) <= (176140 - 175976)),
                   "OnlineScoringOutputInterface must fit the console's +175976 span (164 bytes)");
     return reinterpret_cast<const OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
 }

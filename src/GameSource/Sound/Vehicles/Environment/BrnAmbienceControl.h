@@ -37,7 +37,7 @@ struct AmbienceControl : public BrnSound::Logic::BrnEffectControl
     AmbienceControl()
         : mMap2d()
         , mRegion(0)
-        , mpEnclosureControl(nullptr)
+        , mpEnclosureControl(0)
         , mfTimeSinceUpdate(0.0f)
     {
         mMap2dResource.Clear();
@@ -47,11 +47,11 @@ struct AmbienceControl : public BrnSound::Logic::BrnEffectControl
     // RTTI factory hook.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    void UpdateParams(f32 afTimeStep) override;
-    bool Attach() override;
-    void SetupLoadData() override;
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    void UpdateParams(f32 afTimeStep) ;
+    bool Attach() ;
+    void SetupLoadData() ;
 
     const CgsSound::Utils::DataPoint<u8>& GetRegion() const { return mRegion; }
 

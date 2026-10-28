@@ -217,9 +217,9 @@ namespace BrnNetwork
 
     inline void StandingsManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(StandingsData, mFinishTime) == 2 * sizeof(PlayerFinishedRoundMessage), "StandingsData::mFinishTime follows the two messages");
-        static_assert(sizeof(void*) != 4 || sizeof(StandingsData) == 2 * sizeof(PlayerFinishedRoundMessage) + 0x20, "StandingsData tail is 0x20 bytes");
-        static_assert(sizeof(void*) != 4 || offsetof(StandingsManager, mpNetworkModule) == KI_MAX_PLAYERS * sizeof(StandingsData), "mpNetworkModule follows maStandingsData");
-        static_assert(sizeof(void*) != 4 || sizeof(StandingsManager) == KI_MAX_PLAYERS * sizeof(StandingsData) + 0x0C, "StandingsManager tail is three pointers");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(StandingsData, mFinishTime) == 2 * sizeof(PlayerFinishedRoundMessage)), "StandingsData::mFinishTime follows the two messages");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(StandingsData) == 2 * sizeof(PlayerFinishedRoundMessage) + 0x20), "StandingsData tail is 0x20 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(StandingsManager, mpNetworkModule) == KI_MAX_PLAYERS * sizeof(StandingsData)), "mpNetworkModule follows maStandingsData");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(StandingsManager) == KI_MAX_PLAYERS * sizeof(StandingsData) + 0x0C), "StandingsManager tail is three pointers");
     }
 } // namespace BrnNetwork

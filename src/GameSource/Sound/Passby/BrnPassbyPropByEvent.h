@@ -28,7 +28,7 @@ namespace Logic
 {
 namespace Passby
 {
-    struct alignas(16) PassbyPropByEvent
+    struct CGS_ALIGN(16) PassbyPropByEvent
     {
         u8 macOpaquePayload[64];
     };

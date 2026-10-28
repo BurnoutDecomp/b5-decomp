@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead allocator
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 
-#include <cstdint>   // uintptr_t (heap-memory alignment check)
+#include "types.hpp"   // uintptr_t (heap-memory alignment check)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the node-exhaustion boot gate
 
 // CgsResource::Heap method bodies, decompiled from the X360 ARTIST IDA (addresses noted).
@@ -546,7 +546,7 @@ namespace CgsResource
         if (mbNeedToRecalcLargestFree)
         {
             u32 luLargestFree = 0;
-            HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : nullptr;
+            HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : 0;
             while (lpNode)
             {
                 const HeapEntry* lpEntry = lpNode->GetData();
@@ -567,7 +567,7 @@ namespace CgsResource
     {
         u32 luFreeNodes = 0;
         u32 luAllocatedNodes = 0;
-        HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : nullptr;
+        HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : 0;
         while (lpNode)
         {
             if (lpNode->GetData()->IsAllocated())

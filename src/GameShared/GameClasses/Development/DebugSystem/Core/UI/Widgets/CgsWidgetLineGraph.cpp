@@ -12,11 +12,11 @@ namespace DebugUI
 // this construct at each use site (it only ever stores the vptr + miHistoryCount==360 there; the
 // remaining fields are immediately overwritten by the setters).
 WidgetLineGraph::WidgetLineGraph()
-    : mpaaiValuesArray(nullptr)
+    : mpaaiValuesArray(0)
     , miFloatCount(0)
     , miHistoryCount(KI_HISTORY_SIZE)
     , miFirstValueIndex(0)
-    , mpColoursArray(nullptr)
+    , mpColoursArray(0)
     , miColoursArraySize(0)
     , mColourBackground(0)
 {
@@ -49,7 +49,7 @@ void WidgetLineGraph::SetCustomBackgroundColour(RGBA lColour)
 // [KI_HISTORY_SIZE] float grid; each line reads its history ring backwards from miFirstValueIndex.
 void WidgetLineGraph::Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight)
 {
-    if (mpaaiValuesArray == nullptr || miFloatCount == 0 || miHistoryCount == 0)
+    if (mpaaiValuesArray == 0 || miFloatCount == 0 || miHistoryCount == 0)
         return;
 
     // ARTIST 828245C8 calls the scalar min/max wrapper (color in r8).
@@ -66,7 +66,7 @@ void WidgetLineGraph::Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY,
         const s32 liFloatBase = liFloatIndex * KI_HISTORY_SIZE;
 
         RGBA lColour = lDefaultColour;
-        if (mpColoursArray != nullptr)
+        if (mpColoursArray != 0)
             lColour = mpColoursArray[liFloatIndex % miColoursArraySize];
 
         f32 lfPrevY = -1.0f;   // sentinel: no previous point plotted yet

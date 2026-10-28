@@ -101,7 +101,7 @@ int XCamGetControlIDTerminalID(int iCode, int* lpControlId, int* lpTerminalId, i
 int XCamHandleSetCompConfig(int a1, int a2, void* a3)
 {
     int  iResult = 0;
-    XCamOverlappedInfo* lpOverlap = nullptr; // r28
+    XCamOverlappedInfo* lpOverlap = 0; // r28
     u8   uEntryIndex = 0;                     // r22 (byte counter)
     KXCamConfigPayload payload;              // v15 @ var_70
     payload.uWord = 0;
@@ -150,7 +150,7 @@ int XCamHandleSetCompConfig(int a1, int a2, void* a3)
         }
 
         void* lpCompletion = a3 ? reinterpret_cast<void*>(&HandleSetCompCompletion)
-                                : nullptr;
+                                : 0;
         iResult = XUsbcamSetConfig(gXCamDeviceHandle, iTerminalId, iControlId,
                                    &payload, lpCompletion, lpOverlap);
         if (iResult)
@@ -181,7 +181,7 @@ int XCamHandleSetCompConfig(int a1, int a2, void* a3)
 int XCamSetConfigInternal(int a1, int a2, int* a3)
 {
     int  iValue = a2;                       // r28
-    XCamOverlappedInfo* lpOverlap = nullptr; // r26
+    XCamOverlappedInfo* lpOverlap = 0; // r26
     KXCamConfigPayload  payload;            // v13 @ var_50
     payload.uWord = 0;
 
@@ -220,7 +220,7 @@ int XCamSetConfigInternal(int a1, int a2, int* a3)
 
     {
         void* lpCompletion = a3 ? reinterpret_cast<void*>(&HandleCompletion)
-                                : nullptr;
+                                : 0;
         iStatus = XUsbcamSetConfig(gXCamDeviceHandle, iTerminalId, iControlId,
                                    &payload, lpCompletion, lpOverlap);
     }

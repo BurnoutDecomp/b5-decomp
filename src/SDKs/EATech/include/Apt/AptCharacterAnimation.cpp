@@ -26,7 +26,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"          // AptRenderItem::mpCharacter
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiGeometryObjects.h"  // native-8 shape-geometry rebase
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
 
 // ===========================================================================
@@ -386,15 +386,15 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
     // pointer _parseStream reads at ctx+0x28 while the Fixup walk parses each stream).
     // The slot is const-chunk-relative (x64: `v12 = v11 + a4`). Idempotence-guarded the
     // same way every other slot relocate is (only a plausible small offset is promoted).
-    uintptr_t* pnItemStart = nullptr;
-    if (pConstFile != nullptr)
+    uintptr_t* pnItemStart = 0;
+    if (pConstFile != 0)
     {
         pnItemStart = reinterpret_cast<uintptr_t*>(
             reinterpret_cast<char*>(pConstFile) + 0x28);
         if (*pnItemStart != 0 && *pnItemStart < 0x10000000u)   // still a file offset
             *pnItemStart += reinterpret_cast<uintptr_t>(pConstFile);
         else
-            pnItemStart = nullptr;                             // absent/already live: no un-relocate
+            pnItemStart = 0;                             // absent/already live: no un-relocate
     }
 
     // Clear the resolve walk's parsed-value accumulator (console `*(a1+48)=0` == def+0x30
@@ -404,7 +404,7 @@ AptCharacterAnimation* AptCharacterAnimation::Resolve(void* pBase, AptConstFile*
 
     // Un-relocate after Fixup (console `*(a3+28) -= a3`): the ctx table is live only
     // while the parse runs; the unload path re-parses with a null ctx (never reads it).
-    if (pnItemStart != nullptr)
+    if (pnItemStart != 0)
         *pnItemStart -= reinterpret_cast<uintptr_t>(pConstFile);
 
     return pResult;
@@ -469,9 +469,9 @@ namespace
     AptCharacterInst* ResolveAnimationScope(void* pA2)
     {
         if (!pA2)
-            return nullptr;
+            return 0;
         AptCIH* const pLevel = static_cast<AptCIH*>(pA2)->GetRootAnimation();
-        return pLevel ? pLevel->GetCharacterInst() : nullptr;   // v14 = *(pLevel+0x20)
+        return pLevel ? pLevel->GetCharacterInst() : 0;   // v14 = *(pLevel+0x20)
     }
 }
 
@@ -484,7 +484,7 @@ namespace
 // singleton is the homed gAptActionInterpreter (AptGlobals.cpp).
 void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 {
-    void* result = nullptr;
+    void* result = 0;
 
     const int32_t nLabels = mnInitListCount;                // [c:0x28] initCount
     for (int32_t iLabel = 0; iLabel < nLabels; ++iLabel)
@@ -551,7 +551,7 @@ void* AptCharacterAnimation::ExportClassDefinitionAssets(void* pA2)
 // consumed (negate the id). this[c:+4] is the timeline-command table. FAITHFUL.
 void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 {
-    void* result = nullptr;
+    void* result = 0;
 
     void* pCmdHdr = mpFrames;                            // frame[0] == the init command table
     const int32_t nCmds = BlobI32(pCmdHdr, 0x00);        // NATIVE-8 frame record (count@0, cmds@8)
@@ -608,7 +608,7 @@ void* AptCharacterAnimation::ExecuteInitAction(void* pA2, int32_t nId)
 // real data bounds -- the whole path runs on the widened records.
 void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 {
-    void* result = nullptr;
+    void* result = 0;
     int32_t nResolvedId = nId;                            // v5 (r27)
     void* pBucketOwner  = this;                           // v6 (r28)
 
@@ -618,13 +618,13 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
     // Default bucket = the supplied CIH's clip movie (console chase *(*(*(pA2+0x20)+4)+4)+0x10
     // == CIH -> charInst -> renderItem -> character -> embedded movie). NATIVE-8: the typed
     // chain with the widened body offset (KU_AptEmbeddedMovieOff).
-    void* pBucket = nullptr;
+    void* pBucket = 0;
     {
         AptCIH* pCIH = reinterpret_cast<AptCIH*>(pA2);
-        AptCharacterInst* pCI = pCIH ? pCIH->GetCharacterInst() : nullptr;
-        AptRenderItem* pRI = pCI ? pCI->mpRenderItem : nullptr;
-        AptCharacter* pChar = pRI ? pRI->mpCharacter : nullptr;
-        if (pChar != nullptr)
+        AptCharacterInst* pCI = pCIH ? pCIH->GetCharacterInst() : 0;
+        AptRenderItem* pRI = pCI ? pCI->mpRenderItem : 0;
+        AptCharacter* pChar = pRI ? pRI->mpCharacter : 0;
+        if (pChar != 0)
             pBucket = reinterpret_cast<char*>(pChar) + 0x20;   // the embedded AptMovie
     }
     if (nImports > 0)
@@ -650,22 +650,22 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
             // *(def+0x10)[id*4] -> char+0x10).
             AptImportEntry& rImportEntry = mpImportTable[iSlot];
             AptFile* pFile = reinterpret_cast<AptFile*>(rImportEntry.mpFile);
-            void* pImportedRoot = pFile ? pFile->mpData : nullptr;             // the root char header
-            if (pImportedRoot != nullptr)
+            void* pImportedRoot = pFile ? pFile->mpData : 0;             // the root char header
+            if (pImportedRoot != 0)
             {
                 pBucketOwner = reinterpret_cast<char*>(pImportedRoot) + 0x20;  // def base (native-8)
                 AptCharacterAnimation* pOwner =
                     reinterpret_cast<AptCharacterAnimation*>(pBucketOwner);
                 if (nResolvedId >= 0 && nResolvedId < pOwner->mnCharacterCount &&
-                    pOwner->mpCharacterTable != nullptr &&
-                    pOwner->mpCharacterTable[nResolvedId] != nullptr)
+                    pOwner->mpCharacterTable != 0 &&
+                    pOwner->mpCharacterTable[nResolvedId] != 0)
                 {
                     pBucket = reinterpret_cast<char*>(pOwner->mpCharacterTable[nResolvedId]) + 0x20;
                 }
             }
         }
     }
-    if (pBucket == nullptr)
+    if (pBucket == 0)
         return result;
 
     // Run every pending type-3 (PLACE) init command in the bucket's frame 0.
@@ -676,7 +676,7 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
         void* pHdr    = BlobPtr(pBucket, 0x08);                          // frames -> frame[0]
         void** pCmds  = reinterpret_cast<void**>(BlobPtr(pHdr, 0x08));   // frame[0].cmds
         int32_t nCmds = BlobI32(pHdr, 0x00);                            // frame[0].count
-        if (pHdr != nullptr && pCmds != nullptr && nCmds > 0)
+        if (pHdr != 0 && pCmds != 0 && nCmds > 0)
         {
             int32_t iCmd = 0;
             do
@@ -719,7 +719,7 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 void* AptCharacterAnimation::Unresolve(intptr_t nBase)
 {
     const intptr_t nB = nBase;
-    void* result = nullptr;
+    void* result = 0;
     mnParsedValueCount = 0;                                   // *(a1+0x50) = 0
 
     auto IsImportId = [this](int32_t nLogical) -> bool
@@ -740,14 +740,14 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
     {
         rSlot = rSlot ? reinterpret_cast<void*>(
                             reinterpret_cast<intptr_t>(rSlot) - nB)
-                      : nullptr;
+                      : 0;
     };
 
     // ---- pass 1: release imported characters / re-index type-8 xrefs ----------
     for (int32_t i = 0; i < mnCharacterCount; ++i)
     {
         AptCharacter* const pChar = mpCharacterTable[i];
-        if (pChar == nullptr)
+        if (pChar == 0)
             continue;
         if (!IsImportId(i))
         {
@@ -777,7 +777,7 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
     for (int32_t i = 0; i < mnCharacterCount; ++i)
     {
         AptCharacter* const pChar = mpCharacterTable[i];
-        if (pChar == nullptr || IsImportId(i))
+        if (pChar == 0 || IsImportId(i))
             continue;
         char* const pc = reinterpret_cast<char*>(pChar);
         switch (pChar->mnType)
@@ -787,8 +787,8 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
                 *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12)) &= ~0x8000u;
                 void** const ppUnit = reinterpret_cast<void**>(pc + 0x30);
                 gAptFuncs.pfnFreeRenderingUnit(*ppUnit);
-                *ppUnit = nullptr;
-                result = nullptr;
+                *ppUnit = 0;
+                result = 0;
                 break;
             }
             case 2:   // Text: un-relocate the text (+0x50) + variable (+0x58).
@@ -825,7 +825,7 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
                     gAptFuncs.pfnFreeTexture(*ppUnit);
                 }
                 rFlags &= ~3u;
-                *ppUnit = nullptr;
+                *ppUnit = 0;
                 break;
             }
             case 10:  // StaticText: per record (stride 0x40) un-relocate the
@@ -848,18 +848,18 @@ void* AptCharacterAnimation::Unresolve(intptr_t nBase)
         AptImportEntry& rEntry = mpImportTable[i];
         AptFilePtr* const pSlot = reinterpret_cast<AptFilePtr*>(&rEntry.mpFile);
         AptFile* const pOld = pSlot->pData;
-        pSlot->pData = nullptr;
-        if (pOld != nullptr && AptSharedPtrDecRef(pOld) == 0)
+        pSlot->pData = 0;
+        if (pOld != 0 && AptSharedPtrDecRef(pOld) == 0)
             AptSharedPtrDelete(pOld);
         result = pOld;
-        mpCharacterTable[rEntry.mnId] = nullptr;
+        mpCharacterTable[rEntry.mnId] = 0;
     }
 
     // ---- pass 4: stamp the owned characters freed + un-relocate their slots ---
     for (int32_t i = 0; i < mnCharacterCount; ++i)
     {
         AptCharacter* const pChar = mpCharacterTable[i];
-        if (pChar != nullptr)
+        if (pChar != 0)
         {
             // The freed sentinel lands in the fixup-link slot (+8).
             *reinterpret_cast<int32_t*>(

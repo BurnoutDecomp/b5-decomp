@@ -242,7 +242,7 @@ namespace CgsResource
             if (luFirstSegment >= luTotalSegments - 1u)
                 luFirstSegment = luTotalSegments - 1u;
             Heap::HeapEntryNode* lpNode = lpHeap->mUsedNodes.GetCount() > 0
-                ? lpHeap->mUsedNodes.GetHead() : nullptr;
+                ? lpHeap->mUsedNodes.GetHead() : 0;
             u32 luBackgroundColumns = luTotalSegments - luFirstSegment;
             if (luBackgroundColumns > luColumns)
                 luBackgroundColumns = luColumns;

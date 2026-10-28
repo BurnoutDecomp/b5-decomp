@@ -96,7 +96,7 @@ namespace BrnDirector
     class DirectorResourceManager;
     namespace Camera { struct Camera; }
 
-    struct alignas(16) KeyAnimShakeController
+    struct CGS_ALIGN(16) KeyAnimShakeController
     {
         // @0x8223D240. Seed the wobble state, the shake tunings, the RNG and the shot clock,
         // and latch the director resource manager the shot group is resolved through.

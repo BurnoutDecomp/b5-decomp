@@ -1,7 +1,7 @@
 #include "SharedClasses/Progression/BrnProfileUpgradeResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetImportPointer NOT-IMPLEMENTED)
 #include "rw/rwcore_structs.h"                         // rw::BaseResourceDescriptor[5] (CgsResource::ResourceDescriptor)
-#include <cstdint>                                     // uintptr_t (self-relative pointer relocation)
+#include "types.hpp"                                     // uintptr_t (self-relative pointer relocation)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnProgression::ProfileUpgradeResourceType::GetSerialisedResourceDescriptor @0x8267D870

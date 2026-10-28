@@ -33,7 +33,7 @@ namespace Log
         using StrStreamBase::operator<<;
 
         // The char sink forwards to the recovered Append body; Open() is required.
-        StrStreamBase& operator<<(const char* lpcText) override;
+        StrStreamBase& operator<<(const char* lpcText) ;
 
     protected:
         void Append(const char* lpcText);

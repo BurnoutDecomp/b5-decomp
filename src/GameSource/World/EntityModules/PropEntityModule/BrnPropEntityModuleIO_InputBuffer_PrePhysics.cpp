@@ -28,7 +28,7 @@ namespace PropEntityIO
 {
     void InputBuffer_PrePhysics::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PrePhysics, mPotentialContactQueue) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PrePhysics, mPotentialContactQueue) == 0x10),
                       "mPotentialContactQueue @ +0x10");
     }
 

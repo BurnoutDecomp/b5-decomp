@@ -97,7 +97,7 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
 // these at once (the lookback rig plus the three zoom beats), and unlike the gyro rig (which the
 // host widening pushed out of the small bucket onto the eight-slot large pool) this one costs the
 // large pool nothing.
-static_assert(sizeof(BehaviourLooseAttachment) <= 100u * 16u,
+CGS_STATIC_ASSERT((sizeof(BehaviourLooseAttachment) <= 100u * 16u),
               "BehaviourLooseAttachment fits the small behaviour pool bucket");
 
 // ----------------------------------------------------------------------------
@@ -280,16 +280,16 @@ void BehaviourLooseAttachment::SetTarget(s32 leRaceCarIndex)
 // spacing among themselves -- the "Impact" sub-block at console +0x2C and the loose-attachment
 // tunables at the +0x48..+0x60 offsets the write/read/menu assembly loads and stores.
 typedef BehaviourLooseAttachment::Parameters LooseAttachmentParameters;
-static_assert(offsetof(LooseAttachmentParameters, mPositionLagParams) == sizeof(Behaviour::Parameters), "position-lag block follows the head (console +0x08)");
-static_assert(offsetof(LooseAttachmentParameters, mShakeParams)       - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x1C - 0x08, "shake block @ console +0x1C");
-static_assert(offsetof(LooseAttachmentParameters, mImpact)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x2C - 0x08, "Impact block @ console +0x2C");
-static_assert(offsetof(LooseAttachmentParameters, mfPitch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x48 - 0x08, "Pitch @ console +0x48");
-static_assert(offsetof(LooseAttachmentParameters, mfHeight)           - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x4C - 0x08, "Height @ console +0x4C");
-static_assert(offsetof(LooseAttachmentParameters, mfDistance)         - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x50 - 0x08, "Distance @ console +0x50");
-static_assert(offsetof(LooseAttachmentParameters, mfField54)          - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x54 - 0x08, "FOV @ console +0x54");
-static_assert(offsetof(LooseAttachmentParameters, mfDutch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x58 - 0x08, "Dutch @ console +0x58");
-static_assert(offsetof(LooseAttachmentParameters, mfDetachLerpAmount) - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x5C - 0x08, "Detach Lerp Amount @ console +0x5C");
-static_assert(offsetof(LooseAttachmentParameters, mbLookFromTarget)   - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x60 - 0x08, "Look from target @ console +0x60");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mPositionLagParams) == sizeof(Behaviour::Parameters)), "position-lag block follows the head (console +0x08)");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mShakeParams)       - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x1C - 0x08), "shake block @ console +0x1C");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mImpact)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x2C - 0x08), "Impact block @ console +0x2C");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mfPitch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x48 - 0x08), "Pitch @ console +0x48");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mfHeight)           - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x4C - 0x08), "Height @ console +0x4C");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mfDistance)         - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x50 - 0x08), "Distance @ console +0x50");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mfField54)          - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x54 - 0x08), "FOV @ console +0x54");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mfDutch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x58 - 0x08), "Dutch @ console +0x58");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mfDetachLerpAmount) - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x5C - 0x08), "Detach Lerp Amount @ console +0x5C");
+CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mbLookFromTarget)   - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x60 - 0x08), "Look from target @ console +0x60");
 
 } // namespace Camera
 } // namespace BrnDirector

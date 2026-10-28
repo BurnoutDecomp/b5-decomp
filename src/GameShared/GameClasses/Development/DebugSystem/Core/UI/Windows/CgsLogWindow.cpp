@@ -25,7 +25,7 @@ namespace CgsDev
         LogWindow::LogWindow()
             : CustomWindow()
             , mLog()
-            , mpLinesArray(nullptr)
+            , mpLinesArray(0)
             , miLineCount(0)
             , miLineHead(0)
             , mfHorizontalIndent(0.0f)

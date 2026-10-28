@@ -33,7 +33,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptFileSavedInputState.h"   // element type + E_APT_SAVED_INPUT_STATE
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"        // EAStringC (the Checkpoint key)
@@ -52,7 +52,7 @@ struct AptFileSavedInputStateVector
     int32_t                 mnCapacity;    // [1] allocated slots
     AptFileSavedInputState* mpData;        // [2] element storage
 
-    AptFileSavedInputStateVector() : mnSize(0), mnCapacity(0), mpData(nullptr) {}
+    AptFileSavedInputStateVector() : mnSize(0), mnCapacity(0), mpData(0) {}
 
     AptFileSavedInputState*       begin()       { return mpData; }
     AptFileSavedInputState*       end()         { return mpData + mnSize; }

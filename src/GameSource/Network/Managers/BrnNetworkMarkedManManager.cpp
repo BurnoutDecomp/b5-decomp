@@ -38,7 +38,7 @@ namespace BrnNetwork
     // BrnNetwork::MarkedManManager::Construct  @ 0x825539F0
     void MarkedManManager::Construct(BrnNetworkManager* lpNetworkManager)
     {
-        CGS_ASSERT(lpNetworkManager != nullptr, "lpNetworkManager");
+        CGS_ASSERT(lpNetworkManager != 0, "lpNetworkManager");
 
         mpNetworkManager = lpNetworkManager;
 
@@ -90,7 +90,7 @@ namespace BrnNetwork
             maPlayers[liPlayerIndex].mMarkedManMessageRecv.Construct();
         }
 
-        mpNetworkManager = nullptr;
+        mpNetworkManager = 0;
         miNumberOfPlayersFinishedMarking = 0;
     }
 
@@ -125,14 +125,14 @@ namespace BrnNetwork
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lPlayerID);
 
-        if (lpNetworkPlayer == nullptr)
+        if (lpNetworkPlayer == 0)
         {
             return;
         }
 
         // The X360 inlines a linear scan for an existing slot with this id and asserts it is
         // NOT already present ("Trying to add player <id> twice.").
-        DataEntry* lpExistingEntry = nullptr;
+        DataEntry* lpExistingEntry = 0;
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_MARKED_MAN_PLAYERS; ++liPlayerIndex)
         {
             if (maPlayers[liPlayerIndex].mPlayerID == lPlayerID)
@@ -141,10 +141,10 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(lpExistingEntry == nullptr, "Trying to add a player that is already marked.");
+        CGS_ASSERT(lpExistingEntry == 0, "Trying to add a player that is already marked.");
 
         // Find the first free slot (mPlayerID == -1) and assert there is one.
-        DataEntry* lpDataEntry = nullptr;
+        DataEntry* lpDataEntry = 0;
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_MARKED_MAN_PLAYERS; ++liPlayerIndex)
         {
             if (maPlayers[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID)
@@ -153,8 +153,8 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(lpDataEntry != nullptr, "No free entry for this player");
-        if (lpDataEntry == nullptr)
+        CGS_ASSERT(lpDataEntry != 0, "No free entry for this player");
+        if (lpDataEntry == 0)
         {
             return;
         }
@@ -172,7 +172,7 @@ namespace BrnNetwork
     // BrnNetwork::MarkedManManager::RemovePlayer  @ 0x82553CF8
     void MarkedManManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        DataEntry* lpDataEntry = nullptr;
+        DataEntry* lpDataEntry = 0;
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_MARKED_MAN_PLAYERS; ++liPlayerIndex)
         {
             if (maPlayers[liPlayerIndex].mPlayerID == lPlayerID)
@@ -182,14 +182,14 @@ namespace BrnNetwork
             }
         }
 
-        if (lpDataEntry == nullptr)
+        if (lpDataEntry == 0)
         {
             return;
         }
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->UnRegisterMessageType(KE_MESSAGE_TYPE_MARKED_MAN);
         }
@@ -242,7 +242,7 @@ namespace BrnNetwork
     // scan the 7 slots for the matching id, assert on no match, return the entry (or null).
     MarkedManManager::DataEntry* MarkedManManager::GetDataEntry(NetworkPlayerID lPlayerID)
     {
-        DataEntry* lpDataEntry = nullptr;
+        DataEntry* lpDataEntry = 0;
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_MARKED_MAN_PLAYERS; ++liPlayerIndex)
         {
             if (maPlayers[liPlayerIndex].mPlayerID == lPlayerID)
@@ -252,7 +252,7 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(lpDataEntry != nullptr, "lpDataEntry");
+        CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
         return lpDataEntry;
     }
 
@@ -278,10 +278,10 @@ namespace BrnNetwork
         BrnNetwork::PlayerMenuData* lpMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             lpMarkedManManager->mpNetworkManager->GetPlayerManager()->GetMenuDataByID(
                 lSendingPlayerID));
-        CGS_ASSERT(lpMenuData != nullptr, "lpMenuData");
+        CGS_ASSERT(lpMenuData != 0, "lpMenuData");
 
         MarkedManMessage* lpMarkedManMessage = static_cast<MarkedManMessage*>(lpMessage);
-        CGS_ASSERT(lpMarkedManMessage != nullptr, "lpMarkedManMessage");
+        CGS_ASSERT(lpMarkedManMessage != 0, "lpMarkedManMessage");
 
         NetworkPlayerID lMarkedManPlayerID = KI_INVALID_PLAYER_ID;
         bool            lbIsFinal          = false;

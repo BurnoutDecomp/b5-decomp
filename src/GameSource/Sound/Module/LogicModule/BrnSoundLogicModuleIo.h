@@ -84,7 +84,7 @@ namespace Io
             lpAttribSysQueue->Clear();
 
             for (auto& lpSerialiser : mReplayRequestInterface.mapSerialisers)
-                lpSerialiser = nullptr;
+                lpSerialiser = 0;
         }
 
         // BrnSoundLogicModuleIo.h:65 / :73 (DWARF; own TU, declared-only here) --
@@ -125,11 +125,11 @@ namespace Io
 
         static void _AssertLayout()
         {
-            static_assert(offsetof(LogicOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x04,
+            CGS_STATIC_ASSERT((offsetof(LogicOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x04),
                           "LogicOutputBuffer.mAttribSysRequestInterface @ +0x04");
-            static_assert(sizeof(void*) != 4 || offsetof(LogicOutputBuffer, mReplayRequestInterface) == 0x1824,
+            CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(LogicOutputBuffer, mReplayRequestInterface) == 0x1824),
                           "LogicOutputBuffer.mReplayRequestInterface @ +0x1824 (X360 Construct @0x826C9A28)");
-            static_assert(sizeof(void*) != 4 || sizeof(LogicOutputBuffer) == 6224,
+            CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(LogicOutputBuffer) == 6224),
                           "LogicOutputBuffer == 6224 (the X360 CreateIOBuffer Alloc literal @0x826DCD30)");
         }
     };

@@ -143,6 +143,6 @@ namespace BrnParticle
     void* BrnVFXMeshCollectionResourceType::Serialise(const void* /*lpResource*/, const rw::Resource& /*lrDest*/) const
     {
         CGS_ASSERT(false, "This code is not expected at runtime.");
-        return nullptr;
+        return 0;
     }
 }

@@ -33,7 +33,7 @@
 // ---------------------------------------------------------------------------
 void AptSharedPtr<AptFile>::Dispose(AptFile* pData)
 {
-    AptSharedPtrDisposeDebugHook(pData, 0, nullptr);
+    AptSharedPtrDisposeDebugHook(pData, 0, 0);
 
     if (pData)
     {
@@ -42,7 +42,7 @@ void AptSharedPtr<AptFile>::Dispose(AptFile* pData)
             count = AptSharedPtrDelete(pData);
     }
 
-    AptSharedPtrDisposeDebugHook(nullptr, 0, nullptr);
+    AptSharedPtrDisposeDebugHook(0, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
         {
             --p;
             AptFile* elem = *p;
-            *p = nullptr;
+            *p = 0;
             AptSharedPtr<AptFile>::Dispose(elem);
         }
 
@@ -146,7 +146,7 @@ void* AptSharedPtr<AptFile>::VectorDeletingDestructor(char flags)
     {
         // Scalar form: a single AptFile* slot.
         AptFile* elem = *base;
-        *base = nullptr;
+        *base = 0;
         AptSharedPtr<AptFile>::Dispose(elem);
 
         if ((flags & 1) != 0)

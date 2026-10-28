@@ -68,7 +68,7 @@ namespace CgsDev
                 miMaxSize = static_cast<s16>(liMaxSize);
                 miCount   = 0;
                 for (s32 liIndex = 0; liIndex < liMaxSize; ++liIndex)
-                    mppItems[liIndex] = nullptr;
+                    mppItems[liIndex] = 0;
             }
 
             void Clear() { miCount = 0; }
@@ -100,7 +100,7 @@ namespace CgsDev
 
                 for (s32 liShift = liIndex; liShift < miCount - 1; ++liShift)
                     mppItems[liShift] = mppItems[liShift + 1];
-                mppItems[miCount - 1] = nullptr;
+                mppItems[miCount - 1] = 0;
                 --miCount;
             }
 
@@ -113,7 +113,7 @@ namespace CgsDev
             }
 
             T*   GetFree();
-            T*   GetFirst() const  { return (miCount > 0) ? mppItems[0] : nullptr; }
+            T*   GetFirst() const  { return (miCount > 0) ? mppItems[0] : 0; }
             bool IsEmpty() const   { return miCount == 0; }
             s32  GetMaxSize() const{ return miMaxSize; }
             s32  GetCount() const  { return miCount; }
@@ -164,11 +164,11 @@ namespace CgsDev
             T* Allocate()
             {
                 if (mFree.GetCount() <= 0)
-                    return nullptr;
+                    return 0;
 
                 T* lpItem = mFree.PopBack();
                 if (!lpItem)
-                    return nullptr;
+                    return 0;
 
                 mActive.Add(lpItem);
                 return lpItem;
@@ -203,9 +203,9 @@ namespace CgsDev
         {
             T* mpList;
 
-            void Clear() { mpList = nullptr; }
+            void Clear() { mpList = 0; }
 
-            bool IsEmpty() const  { return mpList == nullptr; }
+            bool IsEmpty() const  { return mpList == 0; }
             T*   GetFirst() const { return mpList; }
             T*   GetNext(const T* lpItem) const { return lpItem->mpDebugLinkedListNext; }
 
@@ -251,7 +251,7 @@ namespace CgsDev
                 {
                     mpList = lpItem;
                 }
-                lpItem->mpDebugLinkedListNext = nullptr;
+                lpItem->mpDebugLinkedListNext = 0;
             }
 
             // X360 0x828282B0: splice lpItem in directly after lpItemReference.
@@ -275,7 +275,7 @@ namespace CgsDev
                 if (mpList == lpItem)
                 {
                     mpList = lpItem->mpDebugLinkedListNext;
-                    lpItem->mpDebugLinkedListNext = nullptr;
+                    lpItem->mpDebugLinkedListNext = 0;
                     return;
                 }
                 for (T* lpNode = mpList; lpNode; lpNode = lpNode->mpDebugLinkedListNext)
@@ -283,7 +283,7 @@ namespace CgsDev
                     if (lpNode->mpDebugLinkedListNext == lpItem)
                     {
                         lpNode->mpDebugLinkedListNext = lpItem->mpDebugLinkedListNext;
-                        lpItem->mpDebugLinkedListNext = nullptr;
+                        lpItem->mpDebugLinkedListNext = 0;
                         return;
                     }
                 }
@@ -305,7 +305,7 @@ namespace CgsDev
                         lpPrevious->mpDebugLinkedListNext = lpNew;
                     }
                 }
-                lpOld->mpDebugLinkedListNext = nullptr;
+                lpOld->mpDebugLinkedListNext = 0;
             }
 
             T* GetPrevious(const T* lpItem) const
@@ -313,7 +313,7 @@ namespace CgsDev
                 for (T* lpNode = mpList; lpNode; lpNode = lpNode->mpDebugLinkedListNext)
                     if (lpNode->mpDebugLinkedListNext == lpItem)
                         return lpNode;
-                return nullptr;
+                return 0;
             }
 
             T* GetNextWrap(const T* lpItem) const

@@ -56,7 +56,7 @@ extern "C"
 
 namespace CgsGraphics
 {
-    static_assert(sizeof(Matrix44) == 0x40,
+    CGS_STATIC_ASSERT((sizeof(Matrix44) == 0x40),
                   "ARTIST Construct allocates one 64-byte Matrix44 per query slot");
 
     namespace
@@ -225,8 +225,8 @@ namespace CgsGraphics
         // PC record, so size this passed-allocator request from the actual host type.
         mpQueryList = static_cast<OcclusionQueryList*>(
             AllocateMemoryResource(lpAllocator, static_cast<u32>(sizeof(OcclusionQueryList)), 0x80u));
-        mpQueryList->mpBoxToClipMatrices = nullptr;
-        mpQueryList->mpuTrivialAcceptBits = nullptr;
+        mpQueryList->mpBoxToClipMatrices = 0;
+        mpQueryList->mpuTrivialAcceptBits = 0;
         mpQueryList->muSize = luQueryListSize;
         mpQueryList->muNumQueries = 0u;
 

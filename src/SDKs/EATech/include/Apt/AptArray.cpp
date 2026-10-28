@@ -28,19 +28,19 @@
 // AptAllocatorInitialize @0x82ADD118; the null guard covers the pre-init window.)
 void* AptArray::operator new(size_t size)
 {
-    return (gpGCPoolManager != nullptr) ? gpGCPoolManager->AllocateAptValueGC(size) : nullptr;
+    return (gpGCPoolManager != 0) ? gpGCPoolManager->AllocateAptValueGC(size) : 0;
 }
 
 void AptArray::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != nullptr)
+    if (gpGCPoolManager != 0)
         gpGCPoolManager->DeallocateAptValueGC(p, size);
 }
 
 // ctor @0x82D978 -- empty array (object hash capacity 8).
 AptArray::AptArray() : AptObject(AptVFT_Array, 8)
 {
-    mpArray    = nullptr;
+    mpArray    = 0;
     mnCapacity = 0;
     mnLength   = 0;
 }
@@ -48,7 +48,7 @@ AptArray::AptArray() : AptObject(AptVFT_Array, 8)
 // ctor @0x82D728 -- array of nCount given elements.
 AptArray::AptArray(int nCount, AptValue** ppItems) : AptObject(AptVFT_Array, nCount)
 {
-    mpArray    = nullptr;
+    mpArray    = 0;
     mnCapacity = 0;
     mnLength   = nCount;
     _reserve(nCount);
@@ -67,11 +67,11 @@ AptArray::~AptArray()
             if (mpArray[i])
             {
                 mpArray[i]->Release();
-                mpArray[i] = nullptr;
+                mpArray[i] = 0;
             }
         }
         gpNonGCPoolManager->Deallocate(mpArray, sizeof(AptValue*) * mnCapacity);
-        mpArray = nullptr;
+        mpArray = 0;
     }
     mnCapacity = 0;
     mnLength = 0;
@@ -173,13 +173,13 @@ void AptArray::DestroyGCPointers()
         if (mpArray[i])
         {
             mpArray[i]->Release();
-            mpArray[i] = nullptr;
+            mpArray[i] = 0;
         }
     }
     if (mpArray)
         gpNonGCPoolManager->Deallocate(mpArray, sizeof(AptValue*) * mnCapacity);
     mnCapacity = 0;
-    mpArray    = nullptr;
+    mpArray    = 0;
     mnLength   = 0;
 }
 
@@ -244,7 +244,7 @@ AptValue* AptArray::sMethod_pop(AptArray* pThis)
         pElement = gpUndefinedValue;
 
     pThis->mnLength = nLast;
-    pThis->mpArray[nLast] = nullptr;   // transfer ref to caller -- do NOT Release
+    pThis->mpArray[nLast] = 0;   // transfer ref to caller -- do NOT Release
 
     return pElement;
 }
@@ -289,7 +289,7 @@ AptValue* AptArray::sMethod_unshift(AptArray* pThis, int nArgCount)
         {
             // The memmove duplicated this pointer into a higher slot; clear the
             // front slot so set()'s SetAt does not Release the live element.
-            pThis->mpArray[i] = nullptr;
+            pThis->mpArray[i] = 0;
             pThis->set(i, gppAptNativeArgStack[gnAptNativeArgCount - 1 - i]);
         }
     }
@@ -391,7 +391,7 @@ AptValue* AptArray::sMethod_splice(AptArray* pThis, int nArgCount)
         // The now-duplicated tail slots are cleared (they alias values still owned
         // after the move, so no Release here).
         for (int k = 0; k < nDeleteCount; ++k)
-            pThis->mpArray[pThis->length() - nDeleteCount + k] = nullptr;
+            pThis->mpArray[pThis->length() - nDeleteCount + k] = 0;
 
         pThis->mnLength -= nDeleteCount;
     }
@@ -415,7 +415,7 @@ AptValue* AptArray::sMethod_splice(AptArray* pThis, int nArgCount)
         {
             // Clear the aliased slot first so set()'s SetAt does not Release a value
             // that was just memmoved (and is still owned at its new home).
-            pThis->mpArray[nStart + k] = nullptr;
+            pThis->mpArray[nStart + k] = 0;
             pThis->set(nStart + k,
                        gppAptNativeArgStack[gnAptNativeArgCount - k - 3]);
         }
@@ -538,24 +538,24 @@ AptValue* AptArray::sMethod_join(AptArray* pThis, int nArgCount)
 // sort-state slots (0x8324E3F8/0x8324E3FC) hold the script compare function + its
 // context while a qsort with a user comparator is in flight.
 // ---------------------------------------------------------------------------
-static AptNativeFunction* gpArrayMethod_concat   = nullptr;   // off_8324E3E0
-static AptNativeFunction* gpArrayMethod_join     = nullptr;   // off_8324E3E4
-static AptNativeFunction* gpArrayMethod_pop      = nullptr;   // off_8324E3E8
-static AptNativeFunction* gpArrayMethod_push     = nullptr;   // off_8324E3EC
-static AptNativeFunction* gpArrayMethod_shift    = nullptr;   // off_8324E3F0
-static AptNativeFunction* gpArrayMethod_unshift  = nullptr;   // off_8324E3F4
-static AptNativeFunction* gpArrayMethod_sort     = nullptr;   // off_8324E400
-static AptNativeFunction* gpArrayMethod_sortOn   = nullptr;   // off_8324E404
-static AptNativeFunction* gpArrayMethod_reverse  = nullptr;   // off_8324E408
-static AptNativeFunction* gpArrayMethod_splice   = nullptr;   // off_8324E40C
-static AptNativeFunction* gpArrayMethod_slice    = nullptr;   // off_8324E410
+static AptNativeFunction* gpArrayMethod_concat   = 0;   // off_8324E3E0
+static AptNativeFunction* gpArrayMethod_join     = 0;   // off_8324E3E4
+static AptNativeFunction* gpArrayMethod_pop      = 0;   // off_8324E3E8
+static AptNativeFunction* gpArrayMethod_push     = 0;   // off_8324E3EC
+static AptNativeFunction* gpArrayMethod_shift    = 0;   // off_8324E3F0
+static AptNativeFunction* gpArrayMethod_unshift  = 0;   // off_8324E3F4
+static AptNativeFunction* gpArrayMethod_sort     = 0;   // off_8324E400
+static AptNativeFunction* gpArrayMethod_sortOn   = 0;   // off_8324E404
+static AptNativeFunction* gpArrayMethod_reverse  = 0;   // off_8324E408
+static AptNativeFunction* gpArrayMethod_splice   = 0;   // off_8324E40C
+static AptNativeFunction* gpArrayMethod_slice    = 0;   // off_8324E410
 
 // Sort-state for a user (script) compare function: the AS function value
 // (dword_8324E3F8) and its bound context (dword_8324E3FC == the function's
 // mpCIH at console +0x20, the bound character-instance handle). sMethod_sort
 // latches them, scriptFunctionSortFunc reads them.
-static AptValue* gpSortScriptFunction = nullptr;   // dword_8324E3F8
-static AptValue* gpSortScriptContext  = nullptr;   // dword_8324E3FC
+static AptValue* gpSortScriptFunction = 0;   // dword_8324E3F8
+static AptValue* gpSortScriptContext  = 0;   // dword_8324E3FC
 
 // Homed HERE with the sort natives (its only console xrefs are this TU's
 // sortOn path + comparator): the "sortOn" field-name string,
@@ -601,7 +601,7 @@ AptValue* AptArray::sMethod_shift(AptArray* pThis)
     if (nOldLen != 1)
         std::memmove(pThis->mpArray, pThis->mpArray + 1,
                      sizeof(AptValue*) * static_cast<size_t>(nOldLen - 1));   // 4*(v4-1) -> x64 stride
-    pThis->mpArray[pThis->mnLength] = nullptr;   // *(4*length + mpArray) = 0 -- transfer ref out
+    pThis->mpArray[pThis->mnLength] = 0;   // *(4*length + mpArray) = 0 -- transfer ref out
 
     return pElement;
 }
@@ -638,11 +638,11 @@ int AptArray::defaultSortOnCompareFunc(AptValue* const* ppA, AptValue* const* pp
         AptArray* pArrB = static_cast<AptArray*>(pB);
 
         int nIndexA = atoi(gAptSortOnField.GetBuffer());
-        if (nIndexA < 0 || nIndexA >= pArrA->mnLength || (pFieldA = pArrA->mpArray[nIndexA]) == nullptr)
+        if (nIndexA < 0 || nIndexA >= pArrA->mnLength || (pFieldA = pArrA->mpArray[nIndexA]) == 0)
             pFieldA = gpUndefinedValue;
 
         int nIndexB = atoi(gAptSortOnField.GetBuffer());
-        if (nIndexB < 0 || nIndexB >= pArrB->mnLength || (pFieldB = pArrB->mpArray[nIndexB]) == nullptr)
+        if (nIndexB < 0 || nIndexB >= pArrB->mnLength || (pFieldB = pArrB->mpArray[nIndexB]) == 0)
             pFieldB = gpUndefinedValue;
     }
     else
@@ -682,7 +682,7 @@ int AptArray::scriptFunctionSortFunc(AptValue* const* ppA, AptValue* const* ppB)
     pA->AddRef();
 
     gAptActionInterpreter.callFunction(gpSortScriptContext, gpSortScriptFunction,
-                                       2, nullptr, nullptr);
+                                       2, 0, 0);
     const int nResult =
         gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1]->toInteger();
     gAptActionInterpreter.stackPop();
@@ -805,12 +805,12 @@ AptValue* AptArray::objectMemberLookup(AptValue* const /*pThis*/,
 
     // --- numeric index: strtol the whole name; if it consumed the entire string
     // (and the name is non-empty), index the element vector.
-    char* pEnd = nullptr;
+    char* pEnd = 0;
     long  nIndex = strtol(szName, &pEnd, 10);
     if (pName->GetLength() != 0 && pEnd == szName + pName->GetLength())
     {
         AptValue* pElement;
-        if (nIndex < 0 || nIndex >= mnLength || (pElement = mpArray[nIndex]) == nullptr)
+        if (nIndex < 0 || nIndex >= mnLength || (pElement = mpArray[nIndex]) == 0)
             pElement = gpUndefinedValue;
         return pElement;
     }
@@ -850,17 +850,17 @@ bool AptArray::objectMemberSet(AptValue* const /*pThis*/,
 // ---------------------------------------------------------------------------
 void AptArray::CleanNativeFunctions()
 {
-    if (gpArrayMethod_concat)  { gpArrayMethod_concat->Release();  gpArrayMethod_concat  = nullptr; }
-    if (gpArrayMethod_join)    { gpArrayMethod_join->Release();    gpArrayMethod_join    = nullptr; }
-    if (gpArrayMethod_pop)     { gpArrayMethod_pop->Release();     gpArrayMethod_pop     = nullptr; }
-    if (gpArrayMethod_push)    { gpArrayMethod_push->Release();    gpArrayMethod_push    = nullptr; }
-    if (gpArrayMethod_shift)   { gpArrayMethod_shift->Release();   gpArrayMethod_shift   = nullptr; }
-    if (gpArrayMethod_unshift) { gpArrayMethod_unshift->Release(); gpArrayMethod_unshift = nullptr; }
-    if (gpArrayMethod_reverse) { gpArrayMethod_reverse->Release(); gpArrayMethod_reverse = nullptr; }
-    if (gpArrayMethod_sort)    { gpArrayMethod_sort->Release();    gpArrayMethod_sort    = nullptr; }
-    if (gpArrayMethod_splice)  { gpArrayMethod_splice->Release();  gpArrayMethod_splice  = nullptr; }
-    if (gpArrayMethod_slice)   { gpArrayMethod_slice->Release();   gpArrayMethod_slice   = nullptr; }
-    if (gpArrayMethod_sortOn)  { gpArrayMethod_sortOn->Release();  gpArrayMethod_sortOn  = nullptr; }
+    if (gpArrayMethod_concat)  { gpArrayMethod_concat->Release();  gpArrayMethod_concat  = 0; }
+    if (gpArrayMethod_join)    { gpArrayMethod_join->Release();    gpArrayMethod_join    = 0; }
+    if (gpArrayMethod_pop)     { gpArrayMethod_pop->Release();     gpArrayMethod_pop     = 0; }
+    if (gpArrayMethod_push)    { gpArrayMethod_push->Release();    gpArrayMethod_push    = 0; }
+    if (gpArrayMethod_shift)   { gpArrayMethod_shift->Release();   gpArrayMethod_shift   = 0; }
+    if (gpArrayMethod_unshift) { gpArrayMethod_unshift->Release(); gpArrayMethod_unshift = 0; }
+    if (gpArrayMethod_reverse) { gpArrayMethod_reverse->Release(); gpArrayMethod_reverse = 0; }
+    if (gpArrayMethod_sort)    { gpArrayMethod_sort->Release();    gpArrayMethod_sort    = 0; }
+    if (gpArrayMethod_splice)  { gpArrayMethod_splice->Release();  gpArrayMethod_splice  = 0; }
+    if (gpArrayMethod_slice)   { gpArrayMethod_slice->Release();   gpArrayMethod_slice   = 0; }
+    if (gpArrayMethod_sortOn)  { gpArrayMethod_sortOn->Release();  gpArrayMethod_sortOn  = 0; }
 }
 
 // (The AptValue_AptArrayToString thunk was RETIRED 2026-07-10: AptValue::toString's
@@ -878,7 +878,7 @@ void AptArray::CleanNativeFunctions()
 AptValue* AptFrameStackFirstLocal(AptValue* pValue)
 {
     AptArray* const pArray = static_cast<AptArray*>(pValue);
-    if (pArray->mnLength > 0 && pArray->mpArray != nullptr && pArray->mpArray[0] != nullptr)
+    if (pArray->mnLength > 0 && pArray->mpArray != 0 && pArray->mpArray[0] != 0)
         return pArray->mpArray[0];
-    return nullptr;
+    return 0;
 }

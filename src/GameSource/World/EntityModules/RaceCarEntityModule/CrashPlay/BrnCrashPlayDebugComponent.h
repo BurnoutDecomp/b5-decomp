@@ -67,14 +67,14 @@ namespace BrnWorld
     public:
         void Construct(CrashPlayManager* lpCrashPlayManager);
         void Destruct();
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
-        void Update() override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) ;
+        void Update() ;
 
     protected:
-        const char* GetName() const override;
-        const char* GetPath() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
+        void OnActivate() ;
 
     private:
         CrashPlayManager* mpCrashPlayManager;
@@ -306,42 +306,42 @@ namespace BrnWorld
         // property that actually encodes the DWARF member order, and it is width-independent.
         static void _AssertLayout()
         {
-            static_assert(offsetof(CrashPlayManager, mfAftertouchPower)
-                          == offsetof(CrashPlayManager, mfBoostPercentage) + 4,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfAftertouchPower)
+                          == offsetof(CrashPlayManager, mfBoostPercentage) + 4),
                           "mfAftertouchPower immediately follows mfBoostPercentage (console +0x134/+0x138)");
-            static_assert(offsetof(CrashPlayManager, mfDifficultyLevel)
-                          == offsetof(CrashPlayManager, mfBoostPercentage) + 8,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfDifficultyLevel)
+                          == offsetof(CrashPlayManager, mfBoostPercentage) + 8),
                           "mfDifficultyLevel @ console +0x13C");
-            static_assert(offsetof(CrashPlayManager, mfBounceBoostTimer)
-                          == offsetof(CrashPlayManager, mfBoostPercentage) + 12,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfBounceBoostTimer)
+                          == offsetof(CrashPlayManager, mfBoostPercentage) + 12),
                           "mfBounceBoostTimer @ console +0x140");
-            static_assert(offsetof(CrashPlayManager, mfLoseBoostGracePeriod)
-                          == offsetof(CrashPlayManager, mfBoostPercentage) + 16,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfLoseBoostGracePeriod)
+                          == offsetof(CrashPlayManager, mfBoostPercentage) + 16),
                           "mfLoseBoostGracePeriod @ console +0x144");
-            static_assert(offsetof(CrashPlayManager, miConsecutiveBouncesOnGround)
-                          == offsetof(CrashPlayManager, mfBoostPercentage) + 20,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, miConsecutiveBouncesOnGround)
+                          == offsetof(CrashPlayManager, mfBoostPercentage) + 20),
                           "miConsecutiveBouncesOnGround @ console +0x148");
-            static_assert(offsetof(CrashPlayManager, mbIsCrashPlayActive)
-                          == offsetof(CrashPlayManager, mfBoostPercentage) + 24,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbIsCrashPlayActive)
+                          == offsetof(CrashPlayManager, mfBoostPercentage) + 24),
                           "mbIsCrashPlayActive @ console +0x14C");
-            static_assert(offsetof(CrashPlayManager, mbIsInShowtime)
-                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 1,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbIsInShowtime)
+                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 1),
                           "mbIsInShowtime @ console +0x14D");
-            static_assert(offsetof(CrashPlayManager, mbInfiniteAftertouch)
-                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 2,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbInfiniteAftertouch)
+                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 2),
                           "mbInfiniteAftertouch @ console +0x14E");
-            static_assert(offsetof(CrashPlayManager, mbInfiniteBoost)
-                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 3,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbInfiniteBoost)
+                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 3),
                           "mbInfiniteBoost @ console +0x14F");
-            static_assert(offsetof(CrashPlayManager, mbBoostChargePending)
-                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 7,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbBoostChargePending)
+                          == offsetof(CrashPlayManager, mbIsCrashPlayActive) + 7),
                           "mbBoostChargePending @ console +0x153 -- the whole bool run is contiguous");
             // Head: the two members whose console offsets the bodies read as literals.
-            static_assert(offsetof(CrashPlayManager, mfTimeSinceLastInAir)
-                          == offsetof(CrashPlayManager, mfCrashPlayTime) + 4,
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfTimeSinceLastInAir)
+                          == offsetof(CrashPlayManager, mfCrashPlayTime) + 4),
                           "mfTimeSinceLastInAir @ console +0x118");
-            static_assert(offsetof(CrashPlayManager, mfTimeSinceLastTrafficStomp) + 4
-                          == offsetof(CrashPlayManager, mfBoostPercentage),
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfTimeSinceLastTrafficStomp) + 4
+                          == offsetof(CrashPlayManager, mfBoostPercentage)),
                           "mfTimeSinceLastTrafficStomp is the member immediately before the tail (+0x130)");
         }
     };

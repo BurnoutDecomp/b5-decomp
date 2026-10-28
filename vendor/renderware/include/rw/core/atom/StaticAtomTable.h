@@ -1,7 +1,7 @@
 #ifndef RW_CORE_ATOM_STATICATOMTABLE_H
 #define RW_CORE_ATOM_STATICATOMTABLE_H
 
-#include <cstdint>
+#include "types.hpp"
 
 // ===========================================================================
 // rw::core::atom::StaticAtomTable -- the RenderWare core "atom" string-interning

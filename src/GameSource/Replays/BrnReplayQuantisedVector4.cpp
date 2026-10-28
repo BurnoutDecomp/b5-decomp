@@ -24,11 +24,11 @@ namespace BrnReplays
 {
     void QuantisedVector4Compression::_AssertLayout()
     {
-        static_assert(offsetof(QuantisedVector4Compression, maBitCounts) == 0x00,
+        CGS_STATIC_ASSERT((offsetof(QuantisedVector4Compression, maBitCounts) == 0x00),
                       "maBitCounts @0x00");
-        static_assert(offsetof(QuantisedVector4Compression, mMin) == 0x10, "mMin @0x10");
-        static_assert(offsetof(QuantisedVector4Compression, mMax) == 0x20, "mMax @0x20");
-        static_assert(sizeof(QuantisedVector4Compression) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(QuantisedVector4Compression, mMin) == 0x10), "mMin @0x10");
+        CGS_STATIC_ASSERT((offsetof(QuantisedVector4Compression, mMax) == 0x20), "mMax @0x20");
+        CGS_STATIC_ASSERT((sizeof(QuantisedVector4Compression) == 0x30),
                       "sizeof QuantisedVector4Compression == 0x30");
     }
 

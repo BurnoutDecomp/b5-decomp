@@ -49,7 +49,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"          // base AptRenderItem
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"      // mTextValue / mVarValue
@@ -81,8 +81,8 @@ struct AptRenderItemDynamicText : public AptRenderItem
     // flag; the data members copy from the source, the handle + TextFormat start fresh.
     AptRenderItemDynamicText(const AptRenderItemDynamicText* pSource, int nCreatedOnTick, bool bCopyExtended);
 
-    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;   // @0x82AEFE38
-    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;  // @0x82AEFAD0
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) ;   // @0x82AEFE38
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const ;  // @0x82AEFAD0
     virtual ~AptRenderItemDynamicText();   // (frees mpTextFormat + the render-data handle)
 
     // ---- text / variable strings -----------------------------------------

@@ -8,8 +8,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     _XBOX=1
 )
 
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
-
 target_sources(${PROJECT_NAME} PUBLIC types.hpp BrnCommonTypes.h)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC EABase EASTL EAThread rw::core EA::CoreAllocator EA::PPMalloc EA::DirtySDK zlib)

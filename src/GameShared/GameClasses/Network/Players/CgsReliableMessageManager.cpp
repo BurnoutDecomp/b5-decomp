@@ -60,15 +60,15 @@ s32 ReliableMessageManager::GetNextReliableMessageToResend(NetworkPlayerID liPla
 // the valid-send bit array. Always reports success.
 bool ReliableMessageManager::Release()
 {
-    mpPlayerManager = nullptr;
+    mpPlayerManager = 0;
 
     if (mpReliableMessageBuffer)
     {
         CGS_ASSERT(mpHeapAllocator, "mpHeapAllocator");
         mpHeapAllocator->Free(mpReliableMessageBuffer);
-        mpReliableMessageBuffer = nullptr;
+        mpReliableMessageBuffer = 0;
     }
-    mpHeapAllocator = nullptr;
+    mpHeapAllocator = 0;
 
     // Clear the three 64-bit fields of the valid-send bit array (+0x8C8/+0x8D0/+0x8D8).
     mabValidSendData.UnSetAll();

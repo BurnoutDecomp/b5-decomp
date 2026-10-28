@@ -30,8 +30,8 @@ namespace core
 // "Rechannel"). These are opaque data symbols in the XEX (no exported contents); modelled
 // as honest placeholder storage so the bodies below link without fabricating their
 // contents -- the same idiom Gain.cpp / Send.cpp use.
-static void *const KRC_RechannelVTable = nullptr;   // off_8217F4F4
-static void *const KRC_BasePlugInVTable = nullptr;  // off_820AA810
+static void *const KRC_RechannelVTable = 0;   // off_8217F4F4
+static void *const KRC_BasePlugInVTable = 0;  // off_820AA810
 // off_82F8F884 -- the "Rechannel" runtime descriptor, REAL (descriptor-record wave;
 // the one registered plug-in with a live PreProcess AND variable input channels).
 // Metadata FLAG'd null.

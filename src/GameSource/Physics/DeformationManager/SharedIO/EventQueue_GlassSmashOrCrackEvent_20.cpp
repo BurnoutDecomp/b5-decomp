@@ -22,7 +22,7 @@ template void CgsModule::EventQueue<BrnPhysics::Deformation::GlassSmashOrCrackEv
 // The 192-byte stride matches sizeof(GlassSmashOrCrackEvent) == alignas(16){ 4xVector3(64) +
 // Vector3 mNormal(16) + Vector3 mLinearVelocity(16) + Matrix44Affine(64) + EntityId(4) +
 // EBodyParts(4) + EGlassState(4) + f32(4) + bool(1) } == 177 rounded to 192.
-static_assert(sizeof(BrnPhysics::Deformation::GlassSmashOrCrackEvent) == 192,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::GlassSmashOrCrackEvent) == 192),
               "GlassSmashOrCrackEvent stride 192");
 
 template bool

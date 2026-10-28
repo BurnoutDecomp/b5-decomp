@@ -13,10 +13,10 @@ namespace CgsResource
         return (muFlags & luFlag) != 0;
     }
 
-    bool BundleV2::IsCompressed() const           { return IsFlagSet(static_cast<u32>(Flags::IsCompressed)); }
-    bool BundleV2::IsMainMemOptimised() const     { return IsFlagSet(static_cast<u32>(Flags::IsMainMemOptimised)); }
-    bool BundleV2::IsGraphicsMemOptimised() const { return IsFlagSet(static_cast<u32>(Flags::IsGraphicsMemOptimised)); }
-    bool BundleV2::ContainsDebugData() const      { return IsFlagSet(static_cast<u32>(Flags::ContainsDebugData)); }
+    bool BundleV2::IsCompressed() const           { return IsFlagSet(static_cast<u32>(Flags::KU_FLAG_IS_COMPRESSED)); }
+    bool BundleV2::IsMainMemOptimised() const     { return IsFlagSet(static_cast<u32>(Flags::KU_FLAG_MAIN_MEM_OPTIMISED)); }
+    bool BundleV2::IsGraphicsMemOptimised() const { return IsFlagSet(static_cast<u32>(Flags::KU_FLAG_GRAPHICS_MEM_OPTIMISED)); }
+    bool BundleV2::ContainsDebugData() const      { return IsFlagSet(static_cast<u32>(Flags::KU_FLAG_CONTAINS_DEBUG_DATA)); }
 
     // ---- ResourceEntry size/alignment (a packed word: size in the low 28 bits, log2(align) in the
     // high 4, so size = word & KU_SIZE_MASK and alignment = 1 << (word >> 28)) ----

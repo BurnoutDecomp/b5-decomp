@@ -65,13 +65,13 @@ void cParticleEmitterManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocat
         static_cast<size_t>(aEmitterCount) * sizeof(cParticleEmitter),
         lLine + lFile + lName));
 
-    mpUsed = nullptr;
+    mpUsed = 0;
     mpFree = mpEmitters;
 
     // Bring every pooled emitter to its idle state (no descriptor yet).
     for (u32 lIndex = 0; lIndex < mEmitterCount; ++lIndex)
     {
-        mpEmitters[lIndex].Init(nullptr);
+        mpEmitters[lIndex].Init(0);
     }
 
     // Thread the free list: each emitter points at the next; the last keeps Init's null.
@@ -86,18 +86,18 @@ cParticleEmitter* cParticleEmitterManager::Register(cParticleDescriptor* apDescr
 {
     if (!apDescriptor)
     {
-        return nullptr;
+        return 0;
     }
 
     // The descriptor must own a behaviour chain and a material to be playable.
     cParticleBehaviour* lpBehaviour = apDescriptor->GetBehaviours();
     if (!lpBehaviour)
     {
-        return nullptr;
+        return 0;
     }
     if (!apDescriptor->mpMaterial)
     {
-        return nullptr;
+        return 0;
     }
 
     // Behaviour flag 0x1000 gates a scan of the used list for an emitter already playing
@@ -105,7 +105,7 @@ cParticleEmitter* cParticleEmitterManager::Register(cParticleDescriptor* apDescr
     // was consumed only in a debug path ARTIST dropped); reproduced here for branch fidelity.
     if ((lpBehaviour->mFlags & KU_BEHAVIOUR_FLAG_SINGLE_INSTANCE) != 0)
     {
-        for (cParticleEmitter* lpExisting = mpUsed; lpExisting != nullptr;
+        for (cParticleEmitter* lpExisting = mpUsed; lpExisting != 0;
              lpExisting = lpExisting->GetNextEmitter())
         {
             if (lpExisting->GetDescriptor() == apDescriptor)
@@ -119,7 +119,7 @@ cParticleEmitter* cParticleEmitterManager::Register(cParticleDescriptor* apDescr
     cParticleEmitter* lpEmit = mpFree;
     if (!lpEmit)
     {
-        return nullptr;
+        return 0;
     }
 
     mpFree = lpEmit->GetNextEmitter();   // read next BEFORE Init overwrites it
@@ -136,11 +136,11 @@ cParticleEmitter* cParticleEmitterManager::Register(cParticleDescriptor* apDescr
 // cParticleEmitterManager::RegisterSubEmitter @ 0x82913668
 cParticleEmitter* cParticleEmitterManager::RegisterSubEmitter(cParticleDescriptor* apDescriptor)
 {
-    cParticleEmitter* lpPrev = nullptr;
+    cParticleEmitter* lpPrev = 0;
     cParticleEmitter* lpEmit = mpUsed;
     if (!lpEmit)
     {
-        return nullptr;
+        return 0;
     }
 
     // Locate the used emitter this sub-emitter attaches under: the one whose descriptor is
@@ -150,7 +150,7 @@ cParticleEmitter* cParticleEmitterManager::RegisterSubEmitter(cParticleDescripto
     {
         cParticleEmitter* lpNext = lpEmit->GetNextEmitter();
         const cParticleDescriptor* lpEmitDes = lpEmit->GetDescriptor();
-        if (lpParent != nullptr &&
+        if (lpParent != 0 &&
             (lpEmitDes == lpParent || lpParent->IsChildOf(*lpEmitDes)))
         {
             break;  // insert ahead of lpEmit (i.e. after lpPrev)
@@ -160,7 +160,7 @@ cParticleEmitter* cParticleEmitterManager::RegisterSubEmitter(cParticleDescripto
         lpEmit = lpNext;
         if (!lpNext)
         {
-            return nullptr;  // no parent emitter live
+            return 0;  // no parent emitter live
         }
     }
 
@@ -168,14 +168,14 @@ cParticleEmitter* cParticleEmitterManager::RegisterSubEmitter(cParticleDescripto
     cParticleEmitter* lpNew = mpFree;
     if (!lpNew)
     {
-        return nullptr;
+        return 0;
     }
 
     mpFree = lpNew->GetNextEmitter();   // read next BEFORE Init overwrites it
     lpNew->Init(apDescriptor);
     lpNew->SetActiveFlag(KU_EMITTER_ACTIVE);
 
-    if (lpPrev != nullptr)
+    if (lpPrev != 0)
     {
         // Splice in after lpPrev (immediately before the matched emitter).
         lpNew->SetNext(lpPrev->GetNextEmitter());
@@ -195,7 +195,7 @@ cParticleEmitter* cParticleEmitterManager::RegisterSubEmitter(cParticleDescripto
 void cParticleEmitterManager::Update(const cTime& arTime)
 {
     cParticleEmitter* lpEmit = mpUsed;
-    while (lpEmit != nullptr)
+    while (lpEmit != 0)
     {
         // Cache the successor first: UnRegister recycles lpEmit and rewrites its next-ptr.
         cParticleEmitter* lpNext = lpEmit->GetNextEmitter();

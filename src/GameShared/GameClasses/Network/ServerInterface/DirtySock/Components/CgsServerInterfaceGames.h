@@ -56,7 +56,7 @@ namespace CgsNetwork
     struct ServerInterfaceQuickJoinParamsBase;
     struct ServerInterfaceEndGameDataBase;
     struct ServerInterfaceGameResultsBase;
-    enum   EServerInterfaceEvent : s32;
+    enum   EServerInterfaceEvent ;
 
     namespace DirtySock
     {

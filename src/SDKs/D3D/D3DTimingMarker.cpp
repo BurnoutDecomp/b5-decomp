@@ -35,7 +35,7 @@ TimingMarker::TimingMarker(s32 iMarker)
 // offset is pinned exactly.
 void _TimingMarkerAssertLayout()
 {
-    static_assert(offsetof(TimingMarker, miMarker) == 0,
+    CGS_STATIC_ASSERT((offsetof(TimingMarker, miMarker) == 0),
                   "marker value is word[0]");
 }
 

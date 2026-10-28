@@ -41,7 +41,7 @@
 #include "rw/audio/core/Voice.h"       // VoiceStageConfig (GetSize's config argument)
 
 #include <cstddef>  // offsetof / size_t (the host history-buffer placement)
-#include <cstdint>  // uintptr_t (the GetHistoryBuffer idiom)
+#include "types.hpp"  // uintptr_t (the GetHistoryBuffer idiom)
 
 namespace rw
 {

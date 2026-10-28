@@ -51,11 +51,11 @@ namespace BrnNetwork
         bool                          Retrieve(CgsID* lpChallengeID,
                                                NetworkPlayerID* lpaNetworkPlayerIDs,
                                                s32* lpiNumPlayersInChallenge);
-        s32                           GetPackedMessageSize() override;
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
-        const char*                   GetName() const override;
+        s32                           GetPackedMessageSize() ;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
+        const char*                   GetName() const ;
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(ActiveFburnChallengeMessage) == 0x58, "sizeof(ActiveFburnChallengeMessage) == 0x58");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ActiveFburnChallengeMessage) == 0x58), "sizeof(ActiveFburnChallengeMessage) == 0x58");
 } // namespace BrnNetwork

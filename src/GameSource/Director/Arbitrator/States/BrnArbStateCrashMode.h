@@ -52,11 +52,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (vtable order; see base) -------------------
-        void        Construct() override;
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;   // vtable slot 1
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;   // vtable slot 3
-        const char* GetName() const override;
+        void        Construct() ;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;   // vtable slot 1
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;   // vtable slot 3
+        const char* GetName() const ;
 
         // Destruct() is not in this TU's function set (it keeps the base declaration; no
         // override added here).

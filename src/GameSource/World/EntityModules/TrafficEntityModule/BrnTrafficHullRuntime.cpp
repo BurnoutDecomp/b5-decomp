@@ -45,7 +45,7 @@ void HullRuntime::Construct()
 // bakes are 70 (lpHull) and 71 (mbPrepared == false).
 void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 {
-    CGS_ASSERT(lpHull != nullptr, "lpHull");
+    CGS_ASSERT(lpHull != 0, "lpHull");
     CGS_ASSERT(mbPrepared == false, "mbPrepared == false");
 
     for (u32 luStopline = 0; luStopline < lpHull->muNumStoplines; ++luStopline)
@@ -135,19 +135,19 @@ bool HullRuntime::IsStoplineRed(u32 luStopline) const
 // BrnTrafficHullRuntime.h's banner names which X360 function attests each one.
 void HullRuntime::_AssertLayout()
 {
-    static_assert(offsetof(HullRuntime, mafJunctionStateChangeTimes) == 0x000,
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, mafJunctionStateChangeTimes) == 0x000),
                   "mafJunctionStateChangeTimes");
-    static_assert(offsetof(HullRuntime, mauJunctionCurrentStates) == 0x040,
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, mauJunctionCurrentStates) == 0x040),
                   "mauJunctionCurrentStates");
-    static_assert(offsetof(HullRuntime, mauFirstParamInSection) == 0x050,
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, mauFirstParamInSection) == 0x050),
                   "mauFirstParamInSection");
-    static_assert(offsetof(HullRuntime, mabStoplineRedState) == 0x250, "mabStoplineRedState");
-    static_assert(offsetof(HullRuntime, mauSectionSpanVehicleCount) == 0x290,
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, mabStoplineRedState) == 0x250), "mabStoplineRedState");
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, mauSectionSpanVehicleCount) == 0x290),
                   "mauSectionSpanVehicleCount");
-    static_assert(offsetof(HullRuntime, muHullIndex) == 0x490, "muHullIndex");
-    static_assert(offsetof(HullRuntime, mbPrepared) == 0x492, "mbPrepared");
-    static_assert(offsetof(HullRuntime, muNumSectionsInHull) == 0x493, "muNumSectionsInHull");
-    static_assert(offsetof(HullRuntime, muNumStoplinesInHull) == 0x494, "muNumStoplinesInHull");
-    static_assert(sizeof(HullRuntime) == 0x498, "sizeof(HullRuntime)");
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, muHullIndex) == 0x490), "muHullIndex");
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, mbPrepared) == 0x492), "mbPrepared");
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, muNumSectionsInHull) == 0x493), "muNumSectionsInHull");
+    CGS_STATIC_ASSERT((offsetof(HullRuntime, muNumStoplinesInHull) == 0x494), "muNumStoplinesInHull");
+    CGS_STATIC_ASSERT((sizeof(HullRuntime) == 0x498), "sizeof(HullRuntime)");
 }
 }

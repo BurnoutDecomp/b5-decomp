@@ -41,7 +41,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptFileSavedInputState.h"   // element type (@0x82AEFC00)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"             // AptSharedPtr<AptFile> element (@0x82AFD5E0)

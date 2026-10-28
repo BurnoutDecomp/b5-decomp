@@ -25,7 +25,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (AptMovieData native-8 offset static_asserts)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC mFileName member
 
@@ -120,7 +120,7 @@ struct AptExportEntry            // native-8 record = 16 bytes {name@+0, id@+8}
     int32_t     mnCharacterId;   // +0x08  index into mpCharacterTable
     int32_t     mnPad0C;         // +0x0C  (pad to the serialized 0x10 stride)
 };
-static_assert(sizeof(AptExportEntry) == 0x10, "AptExportEntry native-8 stride 0x10");
+CGS_STATIC_ASSERT((sizeof(AptExportEntry) == 0x10), "AptExportEntry native-8 stride 0x10");
 
 struct AptMovieData
 {
@@ -143,10 +143,10 @@ struct AptMovieData
     int32_t         _pad64;              // def+0x44  (pad to the def+0x48 pointer slot)
     AptExportEntry* mpExportTable;       // def+0x48  (root+0x68, stride 0x10)  (== initList)
 };
-static_assert(offsetof(AptMovieData, mnCharacterCount) == 0x38, "AptMovieData.charCount@root+0x38");
-static_assert(offsetof(AptMovieData, mpCharacterTable) == 0x40, "AptMovieData.charTable@root+0x40");
-static_assert(offsetof(AptMovieData, mnMillisecondsPerFrame) == 0x50, "AptMovieData.msPerFrame@root+0x50");
-static_assert(offsetof(AptMovieData, mnImportCount)    == 0x54, "AptMovieData.importCount@root+0x54");
-static_assert(offsetof(AptMovieData, mpImportTable)    == 0x58, "AptMovieData.importTable@root+0x58");
-static_assert(offsetof(AptMovieData, mnExportCount)    == 0x60, "AptMovieData.exportCount@root+0x60");
-static_assert(offsetof(AptMovieData, mpExportTable)    == 0x68, "AptMovieData.exportTable@root+0x68");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mnCharacterCount) == 0x38), "AptMovieData.charCount@root+0x38");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mpCharacterTable) == 0x40), "AptMovieData.charTable@root+0x40");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mnMillisecondsPerFrame) == 0x50), "AptMovieData.msPerFrame@root+0x50");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mnImportCount)    == 0x54), "AptMovieData.importCount@root+0x54");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mpImportTable)    == 0x58), "AptMovieData.importTable@root+0x58");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mnExportCount)    == 0x60), "AptMovieData.exportCount@root+0x60");
+CGS_STATIC_ASSERT((offsetof(AptMovieData, mpExportTable)    == 0x68), "AptMovieData.exportTable@root+0x68");

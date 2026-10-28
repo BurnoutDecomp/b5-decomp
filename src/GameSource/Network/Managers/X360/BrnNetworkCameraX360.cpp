@@ -489,7 +489,7 @@ namespace BrnNetwork
     {
         // Console offsets, pinned in a 32-bit build (inert on the 64-bit host).
 #define BRN_CAM_AT(type, member, off) \
-        static_assert(sizeof(void*) != 4 || offsetof(type, member) == off, #member " @ " #off)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(type, member) == off), #member " @ " #off)
         BRN_CAM_AT(VideoPacket, maOverlapped,             0x410);
         BRN_CAM_AT(VideoPacket, mbInUse,                  0x42C);
         BRN_CAM_AT(RemotePlayerData, mXuid,               0x28);
@@ -502,7 +502,7 @@ namespace BrnNetwork
         BRN_CAM_AT(RemotePlayerData, mRequestMessageSend, 0xB8);
         BRN_CAM_AT(RemotePlayerData, mResponseMessageSend, 0x110);
         BRN_CAM_AT(RemotePlayerData, mResponseMessageRecv, 0x13C);
-        static_assert(sizeof(void*) != 4 || sizeof(RemotePlayerData) == 0x168, "sizeof(RemotePlayerData) == 0x168");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(RemotePlayerData) == 0x168), "sizeof(RemotePlayerData) == 0x168");
         BRN_CAM_AT(CameraX360, mpStreamEngine,            0x43000);
         BRN_CAM_AT(CameraX360, maRemotePlayers,           0x43008);
         BRN_CAM_AT(CameraX360, mpNetworkManager,          0x43B48);
@@ -516,35 +516,35 @@ namespace BrnNetwork
         BRN_CAM_AT(CameraX360, miUserSetting,             0x43B9C);
         BRN_CAM_AT(CameraX360, mbPrepared,                0x43BA0);
         BRN_CAM_AT(CameraX360, mbFeedActiveAny,           0x43BA2);
-        static_assert(sizeof(void*) != 4 || sizeof(CameraX360) == 0x43BA8, "sizeof(CameraX360) == 0x43BA8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CameraX360) == 0x43BA8), "sizeof(CameraX360) == 0x43BA8");
 #undef BRN_CAM_AT
 
         // VideoPacket field order: the receive buffer precedes the overlapped, which precedes the
         // in-use flag.
-        static_assert(offsetof(VideoPacket, maOverlapped) > offsetof(VideoPacket, maReceiveBuffer),
+        CGS_STATIC_ASSERT((offsetof(VideoPacket, maOverlapped) > offsetof(VideoPacket, maReceiveBuffer)),
                       "receive buffer precedes the overlapped");
-        static_assert(offsetof(VideoPacket, mbInUse) > offsetof(VideoPacket, maOverlapped),
+        CGS_STATIC_ASSERT((offsetof(VideoPacket, mbInUse) > offsetof(VideoPacket, maOverlapped)),
                       "overlapped precedes the in-use flag");
 
         // RemotePlayerData field order (descriptor -> xuid -> indices -> states -> texture -> flags).
-        static_assert(offsetof(RemotePlayerData, mXuid) > offsetof(RemotePlayerData, maStreamDescriptor),
+        CGS_STATIC_ASSERT((offsetof(RemotePlayerData, mXuid) > offsetof(RemotePlayerData, maStreamDescriptor)),
                       "stream descriptor precedes mXuid");
-        static_assert(offsetof(RemotePlayerData, miPlayerID) > offsetof(RemotePlayerData, mXuid),
+        CGS_STATIC_ASSERT((offsetof(RemotePlayerData, miPlayerID) > offsetof(RemotePlayerData, mXuid)),
                       "mXuid precedes miPlayerID");
-        static_assert(offsetof(RemotePlayerData, meReceiveState) > offsetof(RemotePlayerData, miPlayerID),
+        CGS_STATIC_ASSERT((offsetof(RemotePlayerData, meReceiveState) > offsetof(RemotePlayerData, miPlayerID)),
                       "miPlayerID precedes meReceiveState");
-        static_assert(offsetof(RemotePlayerData, mbFeedRequested) > offsetof(RemotePlayerData, mbFeedActive),
+        CGS_STATIC_ASSERT((offsetof(RemotePlayerData, mbFeedRequested) > offsetof(RemotePlayerData, mbFeedActive)),
                       "mbFeedActive precedes mbFeedRequested");
 
         // Table-vs-tail: the stream engine follows the packet ring; the remote table follows the
         // stream engine; the deps tail follows the remote table.
-        static_assert(offsetof(CameraX360, mpStreamEngine) > offsetof(CameraX360, maVideoPackets),
+        CGS_STATIC_ASSERT((offsetof(CameraX360, mpStreamEngine) > offsetof(CameraX360, maVideoPackets)),
                       "packet ring precedes the stream engine");
-        static_assert(offsetof(CameraX360, maRemotePlayers) > offsetof(CameraX360, mpStreamEngine),
+        CGS_STATIC_ASSERT((offsetof(CameraX360, maRemotePlayers) > offsetof(CameraX360, mpStreamEngine)),
                       "stream engine precedes the remote table");
-        static_assert(offsetof(CameraX360, mpNetworkManager) > offsetof(CameraX360, maRemotePlayers),
+        CGS_STATIC_ASSERT((offsetof(CameraX360, mpNetworkManager) > offsetof(CameraX360, maRemotePlayers)),
                       "remote table precedes the deps tail");
-        static_assert(offsetof(CameraX360, mbFeedActiveAny) > offsetof(CameraX360, mbPrepared),
+        CGS_STATIC_ASSERT((offsetof(CameraX360, mbFeedActiveAny) > offsetof(CameraX360, mbPrepared)),
                       "mbPrepared precedes mbFeedActiveAny");
     }
 }

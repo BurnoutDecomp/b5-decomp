@@ -79,7 +79,7 @@ namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 // (AGENTS.md forward-declaration exception (b)). The real definitions live in
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h and
 // .../SharedIO/BrnVehicleLocatorData.h, which the .cpp that bodies SetLightLocators includes.
-namespace BrnPhysics { namespace Deformation { enum ETagPointType : s32; struct VehicleLocatorData; } }
+namespace BrnPhysics { namespace Deformation { enum ETagPointType ; struct VehicleLocatorData; } }
 namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to RaceCar::UpdatePositioningData
 // Detach / RemoveFromScene / RemoveFromCollision take it by pointer only (the .cpp includes
 // the owning header). DWARF spells it OutputBuffer_PreScene::SceneInputInterface, which is a
@@ -124,7 +124,7 @@ const u32 KU_MAX_RACE_CAR_VERLET_POINTS     = 128;
 
 // DWARF BrnActiveRaceCar.h:101. The crash bookkeeping ActiveRaceCar embeds by value;
 // Attach @0x822BEEE0 zeroes the whole 80 bytes with ten 64-bit stores at this+0x540.
-struct alignas(16) RaceCarCrashData
+struct CGS_ALIGN(16) RaceCarCrashData
 {
     Matrix44Affine mInitialTransform;   // DWARF :103
     bool           mbFirstCrash;        // DWARF :104

@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                   // CgsNumeric::Random (PropCollisions::mRandom, BY VALUE)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"      // CgsResource::ResourcePtr / ResourceHandle (BY VALUE)
 
-#include <cstdint>   // uintptr_t (the collection's 32-bit address words)
+#include "types.hpp"   // uintptr_t (the collection's 32-bit address words)
 
 // ============================================================================
 // GameSource/Effects/Props/PropCollisions.h

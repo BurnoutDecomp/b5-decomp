@@ -16,8 +16,8 @@ namespace CgsResource
     {
     public:
         void Reset(const Pool* lpPool);
-        void Render(CgsDev::Debug2DImmediateRender* lpRender) override;
-        void Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent) override;
+        void Render(CgsDev::Debug2DImmediateRender* lpRender) ;
+        void Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent) ;
 
     private:
         void AddToCount(s32 liSize);

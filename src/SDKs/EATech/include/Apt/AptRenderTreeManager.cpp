@@ -45,7 +45,7 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
     if (!pCharacter)
     {
         void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemLevel));
-        return p ? new (p) AptRenderItemLevel(nullptr, nTick) : nullptr;
+        return p ? new (p) AptRenderItemLevel(0, nTick) : 0;
     }
 
     switch (pCharacter->mnType)
@@ -53,35 +53,35 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
         case 1:   // shape
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemShape));
-            return p ? new (p) AptRenderItemShape(pCharacter, nTick) : nullptr;
+            return p ? new (p) AptRenderItemShape(pCharacter, nTick) : 0;
         }
         case 5:   // sprite / movie clip
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemSprite));
-            return p ? new (p) AptRenderItemSprite(pCharacter, nTick) : nullptr;
+            return p ? new (p) AptRenderItemSprite(pCharacter, nTick) : 0;
         }
         case 8:   // morph / tween
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemMorph));
-            return p ? new (p) AptRenderItemMorph(pCharacter, nTick) : nullptr;
+            return p ? new (p) AptRenderItemMorph(pCharacter, nTick) : 0;
         }
         case 9:   // imported animation
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemAnimation));
-            return p ? new (p) AptRenderItemAnimation(pCharacter, nTick) : nullptr;
+            return p ? new (p) AptRenderItemAnimation(pCharacter, nTick) : 0;
         }
         case 10:  // static text
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemStaticText));
-            return p ? new (p) AptRenderItemStaticText(pCharacter, nTick) : nullptr;
+            return p ? new (p) AptRenderItemStaticText(pCharacter, nTick) : 0;
         }
         case 2:   // dynamic / edit text
         {
             void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemDynamicText));
-            return p ? new (p) AptRenderItemDynamicText(pCharacter, nTick) : nullptr;
+            return p ? new (p) AptRenderItemDynamicText(pCharacter, nTick) : 0;
         }
         default:  // unhandled / not-yet-built character type -> no render item
-            return nullptr;
+            return 0;
     }
 }
 
@@ -101,8 +101,8 @@ AptRenderItem* AptRenderItem::Manager_CreateItem(AptCharacter* pCharacter, int n
 // placed node's render item links into the render tree the AptRender walk traverses.
 AptRenderTreeManager* AptCurrentRenderTreeManager()
 {
-    if (gpAptTarget == nullptr)
-        return nullptr;
+    if (gpAptTarget == 0)
+        return 0;
     // The anchor slot (mppRenderRootAnchor == *(target+0x2C)) reinterpreted as the manager:
     // its first member (mpRootList) IS the head-cell-slot the console addresses, so the
     // Render_GetRoot / Update_SetRootItem head-cell reads/writes land on the same storage.
@@ -119,7 +119,7 @@ AptRenderItem* AptGetTickItemWritable(AptRenderTreeManager* pMgr, const AptRende
 {
     // NULL-SAFE (see AptRTM_CreateItem): a null manager returns the item unchanged rather than
     // dereferencing the null manager.
-    if (pMgr == nullptr)
+    if (pMgr == 0)
         return const_cast<AptRenderItem*>(pItem);
     return pMgr->Update_GetTickItemWritable(pItem, nTick);
 }
@@ -162,12 +162,12 @@ AptRenderItem* AptGetTickItemWritable(AptRenderTreeManager* pMgr, const AptRende
 // ---------------------------------------------------------------------------
 void AptRenderTreeManager::_AptRenderItemRootList::Shutdown(_AptRenderItemRootList* pHead)
 {
-    for (_AptRenderItemRootList* lpCell = pHead; lpCell != nullptr; )
+    for (_AptRenderItemRootList* lpCell = pHead; lpCell != 0; )
     {
         AptRenderItem*          lpItem = lpCell->mpItem;   // r3 = *node
         _AptRenderItemRootList* lpNext = lpCell->mpNext;   // r30 = node[1] (read next first)
 
-        lpCell->mpItem = nullptr;                          // *node = 0
+        lpCell->mpItem = 0;                          // *node = 0
         if (lpItem)
             lpItem->ReleaseReference();                    // release (deletes at zero)
 
@@ -210,7 +210,7 @@ AptRenderTreeManager::_AptRenderItemRootList::Get(int nTick)
     _AptRenderItemRootList* lpCur       = this;
     _AptRenderItemRootList* lpLookAhead = mpNext;
 
-    while (lpLookAhead != nullptr)
+    while (lpLookAhead != 0)
     {
         const AptRenderItem* lpItem = lpLookAhead->mpItem;
         // expired = created on/before nTick AND NOT flagged the writable revision
@@ -225,7 +225,7 @@ AptRenderTreeManager::_AptRenderItemRootList::Get(int nTick)
             break;
 
         AptRenderItem* lpRelease = lpCur->mpItem;   // release the CURRENT cell's item
-        lpCur->mpItem = nullptr;
+        lpCur->mpItem = 0;
         if (lpRelease)
             lpRelease->ReleaseReference();
 
@@ -268,7 +268,7 @@ AptRenderTreeManager::_AptRenderItemRootList::InsertNewRoot(AptRenderItem* pItem
 
     // Walk to the tail cell.
     _AptRenderItemRootList* lpTail = this;
-    for (_AptRenderItemRootList* lpNode = mpNext; lpNode != nullptr; lpNode = lpNode->mpNext)
+    for (_AptRenderItemRootList* lpNode = mpNext; lpNode != 0; lpNode = lpNode->mpNext)
         lpTail = lpNode;
 
     // Allocate + zero a fresh cell from the shared Apt pool.
@@ -276,8 +276,8 @@ AptRenderTreeManager::_AptRenderItemRootList::InsertNewRoot(AptRenderItem* pItem
         static_cast<_AptRenderItemRootList*>(gpAptRenderManagerPool->Allocate(sizeof(_AptRenderItemRootList)));
     if (lpCell)
     {
-        lpCell->mpItem = nullptr;
-        lpCell->mpNext = nullptr;
+        lpCell->mpItem = 0;
+        lpCell->mpNext = 0;
     }
 
     // Take a reference on the root (X360 inline lwarx/stwcx. of mRefCount).
@@ -285,7 +285,7 @@ AptRenderTreeManager::_AptRenderItemRootList::InsertNewRoot(AptRenderItem* pItem
 
     // Fill the cell and link it at the tail.
     lpCell->mpItem = pItem;
-    lpCell->mpNext = nullptr;
+    lpCell->mpNext = 0;
     lpTail->mpNext = lpCell;
 
     return this;
@@ -314,8 +314,8 @@ AptRenderTreeManager::_AptRenderItemRootList::Create(AptRenderItem* pItem)
         static_cast<_AptRenderItemRootList*>(gpAptRenderManagerPool->Allocate(sizeof(_AptRenderItemRootList)));
     if (lpCell)
     {
-        lpCell->mpItem = nullptr;
-        lpCell->mpNext = nullptr;
+        lpCell->mpItem = 0;
+        lpCell->mpNext = 0;
     }
 
     // Take a reference on the root item (X360 inline lwarx/stwcx. of mRefCount).
@@ -324,7 +324,7 @@ AptRenderTreeManager::_AptRenderItemRootList::Create(AptRenderItem* pItem)
     if (lpCell)
     {
         lpCell->mpItem = pItem;
-        lpCell->mpNext = nullptr;
+        lpCell->mpNext = 0;
     }
     return lpCell;
 }
@@ -362,7 +362,7 @@ void AptRenderTreeManager::Update_ItemFirstChildChanged(AptCIH* pNode)
     AptCIH* lpFirstChild = pNode->GetFirstChild();
     AptRenderItem* lpChildItem = lpFirstChild
         ? lpFirstChild->mpCharacterInst->mpRenderItem   // *(*(child+0x20)+4)
-        : nullptr;
+        : 0;
     lpWritable->Manager_SetFirstChild(lpChildItem);
 }
 
@@ -386,7 +386,7 @@ void AptRenderTreeManager::Update_ItemNextSiblingChanged(AptCIH* pNode)
     AptCIH* lpNext = pNode->mpDisplayListNext;            // *(node+0x18)
     AptRenderItem* lpSiblingItem = lpNext
         ? lpNext->mpCharacterInst->mpRenderItem           // *(*(next+0x20)+4)
-        : nullptr;
+        : 0;
     lpWritable->Manager_SetNextSibling(lpSiblingItem);
 }
 
@@ -412,7 +412,7 @@ AptRenderItem* AptRenderTreeManager::Update_CloneItem(AptCIH* pSourceCIH, AptCIH
     AptRenderItem* lpClone =
         pSourceCIH->mpCharacterInst->mpRenderItem->Manager_CloneNewItem(nTick);   // r30
 
-    AptRenderItem* lpResult = nullptr;
+    AptRenderItem* lpResult = 0;
 
     AptCIH* lpFirstChild = pNode->GetFirstChild();
     if (lpFirstChild)
@@ -462,13 +462,13 @@ AptRenderItem* AptRenderTreeManager::Update_ItemMoved(AptCIH* pNode, int nTick)
 {
     AptCharacterInst* lpInst = pNode->mpCharacterInst;   // *(node+0x20)
     if (!lpInst)
-        return nullptr;
+        return 0;
 
     AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();   // v9 = r30
 
     // ---- previous-sibling / parent-first-child link -----------------------
     AptCIH* lpPrev = pNode->mpDisplayListPrevious;       // *(node+0x14)
-    AptCIH* lpParent = nullptr;
+    AptCIH* lpParent = 0;
     bool    lbLinkParent = false;
     if (lpPrev)
     {
@@ -511,7 +511,7 @@ AptRenderItem* AptRenderTreeManager::Update_ItemMoved(AptCIH* pNode, int nTick)
 
     // ---- next-sibling link ------------------------------------------------
     AptCIH* lpNext = pNode->mpDisplayListNext;            // *(node+0x18)
-    AptRenderItem* lpNextItem = nullptr;
+    AptRenderItem* lpNextItem = 0;
     if (lpNext)
     {
         // Skip mask-flagged next neighbours.
@@ -551,8 +551,8 @@ void AptRenderTreeManager::Update_ItemSetMaskState(AptCIH* pNode, int /*nTick*/,
         return;
 
     AptRenderItem* lpWritable = lpInst->GetRenderItemWritable();   // r28
-    AptRenderItem* lpNextNonMask = nullptr;   // r30
-    AptRenderItem* lpPrevNonMask = nullptr;   // r31
+    AptRenderItem* lpNextNonMask = 0;   // r30
+    AptRenderItem* lpPrevNonMask = 0;   // r31
 
     if (bIsMask)   // a4 == 1: becoming a mask -> bridge the gap it leaves behind
     {
@@ -594,7 +594,7 @@ void AptRenderTreeManager::Update_ItemSetMaskState(AptCIH* pNode, int /*nTick*/,
                     pNode->mpDisplayListParent->mpCharacterInst->GetRenderItemWritable();
                 lpParentWritable->Manager_SetFirstChild(lpNextNonMask);
             }
-            lpWritable->Manager_SetNextSibling(nullptr);
+            lpWritable->Manager_SetNextSibling(0);
         }
         if (lpPrevNonMask)
             lpPrevNonMask->Manager_SetNextSibling(lpNextNonMask);
@@ -602,7 +602,7 @@ void AptRenderTreeManager::Update_ItemSetMaskState(AptCIH* pNode, int /*nTick*/,
         {
             AptRenderItem* lpParentWritable =
                 pNode->mpDisplayListParent->mpCharacterInst->GetRenderItemWritable();
-            lpParentWritable->Manager_SetFirstChild(nullptr);
+            lpParentWritable->Manager_SetFirstChild(0);
         }
     }
     else   // a4 != 1: ceasing to be a mask -> fold back into the sibling chain
@@ -623,7 +623,7 @@ void AptRenderTreeManager::Update_ItemSetMaskState(AptCIH* pNode, int /*nTick*/,
         // nearest non-mask PREVIOUS neighbour -> link it to `writable` (or, none ->
         // link the parent's first child to `writable`), then writable->next = r30.
         AptCIH* lpPrev = pNode->mpDisplayListPrevious;    // *(node+0x14)
-        AptRenderItem* lpPrevWritable = nullptr;
+        AptRenderItem* lpPrevWritable = 0;
         if (lpPrev)
         {
             while (lpPrev->mpCharacterInst->mpRenderItem->GetIsMask())
@@ -676,9 +676,9 @@ AptRenderItem* AptRenderTreeManager::Render_GetChildInvisible(AptRenderItem* pIt
     if (lpChild)
     {
         if (!lpChild->IsRenderableForThisTick(nTick))
-            return nullptr;
+            return 0;
     }
-    AptRenderItem* lpRevision = lpChild ? lpChild->Manager_GetRenderRevision(nTick) : nullptr;
+    AptRenderItem* lpRevision = lpChild ? lpChild->Manager_GetRenderRevision(nTick) : 0;
     pItem->Manager_UpdateFirstChild(lpRevision);
     return pItem->mpManagerFirstChild;
 }
@@ -692,9 +692,9 @@ AptRenderItem* AptRenderTreeManager::Render_GetMaskInvisible(AptRenderItem* pIte
     if (lpMask)
     {
         if (!lpMask->IsRenderableForThisTick(nTick))
-            return nullptr;
+            return 0;
     }
-    AptRenderItem* lpRevision = lpMask ? lpMask->Manager_GetRenderRevision(nTick) : nullptr;
+    AptRenderItem* lpRevision = lpMask ? lpMask->Manager_GetRenderRevision(nTick) : 0;
     pItem->Manager_UpdateMask(lpRevision);
     return pItem->mpMask;
 }
@@ -709,9 +709,9 @@ AptRenderItem* AptRenderTreeManager::Render_GetSiblingInvisible(AptRenderItem* p
     if (lpSibling)
     {
         if (!lpSibling->IsRenderableForThisTick(nTick))
-            return nullptr;
+            return 0;
     }
-    AptRenderItem* lpRevision = lpSibling ? lpSibling->Manager_GetRenderRevision(nTick) : nullptr;
+    AptRenderItem* lpRevision = lpSibling ? lpSibling->Manager_GetRenderRevision(nTick) : 0;
     pItem->Manager_UpdateNextSibling(lpRevision);
     return pItem->mpManagerNextSibling;
 }
@@ -743,12 +743,12 @@ AptRenderItem* AptRenderTreeManager::Render_GetSiblingInvisible(AptRenderItem* p
 AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppHeadCellSlot, int nTick)
 {
     if (!*ppHeadCellSlot)
-        return nullptr;
+        return 0;
 
     _AptRenderItemRootList* lpCell = (*ppHeadCellSlot)->Get(nTick);   // prune expired roots
     *ppHeadCellSlot = lpCell;
     if (!lpCell)
-        return nullptr;
+        return 0;
 
     AptRenderItem* lpRoot = lpCell->mpItem;   // *(cell) = root item
 
@@ -757,14 +757,14 @@ AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppH
     const bool lbRenderable = (nTick - lpRoot->GetCreatedOnTick()) >= 0
                            && (lpRoot->mFlags & 0x40u) == 0;   // x64 bit 6 (0x14083B330 `test [rcx+2Ch], 40h`)
     if (!lbRenderable)
-        return nullptr;
+        return 0;
 
     AptRenderItem* lpRevision = lpRoot->Manager_GetRenderRevision(nTick);
     if (lpRevision != lpCell->mpItem)
     {
         lpRevision->AddReference();                 // X360 inline lwarx/stwcx. of mRefCount
         AptRenderItem* lpOld = lpCell->mpItem;
-        lpCell->mpItem = nullptr;
+        lpCell->mpItem = 0;
         lpOld->ReleaseReference();
         lpCell->mpItem = lpRevision;
     }
@@ -811,21 +811,21 @@ struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pN
 // ---------------------------------------------------------------------------
 void AptRenderTreeManager::Update_SetRootItem(AptCIH* pNode, int /*nTick*/)
 {
-    if (pNode == nullptr)
+    if (pNode == 0)
         return;
     AptCharacterInst* lpInst = pNode->GetCharacterInst();   // *(node+0x20)
-    if (lpInst == nullptr)
+    if (lpInst == 0)
         return;
 
     AptRenderItem* lpItem = lpInst->GetRenderItemWritable();
-    if (lpItem == nullptr)
+    if (lpItem == 0)
         return;
 
     // The head-cell slot is the manager's leading member (aliases mppRenderRootAnchor's cell).
     _AptRenderItemRootList*& lrpHead =
         *reinterpret_cast<_AptRenderItemRootList**>(&mpRootList);
 
-    if (lrpHead == nullptr)
+    if (lrpHead == 0)
         lrpHead = _AptRenderItemRootList::Create(lpItem);   // first root -> fresh anchor cell
     else
         lrpHead = lrpHead->InsertNewRoot(lpItem);           // append (no-op if already anchored)
@@ -841,7 +841,7 @@ void AptRenderTreeManager::Update_SetRootItem(AptCIH* pNode, int /*nTick*/)
 void AptRenderTreeManager::Update_ItemInserted(AptCIH* pNode, int nTick)
 {
     AptCharacterInst* lpInst = pNode->GetCharacterInst();   // *(node+0x20)
-    if (lpInst == nullptr)
+    if (lpInst == 0)
         return;
     lpInst->GetRenderItemWritable()->Manager_SetDeletionMark(false);
     Update_ItemMoved(pNode, nTick);

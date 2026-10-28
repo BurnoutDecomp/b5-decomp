@@ -7,7 +7,7 @@
 #pragma once
 
 #include "types.hpp"
-#include <cstdint>
+#include "types.hpp"
 #include "GameShared/GameClasses/Memory/MemoryMap/CgsMemoryMap.h"
 
 namespace BrnResource
@@ -151,10 +151,10 @@ namespace BrnResource
         static CgsMemory::MemoryMap& GetMemoryMap() { return GetImage().map; }
 
     private:
-        static std::uintptr_t OffsetFromMap(const Image& lrImage, const void* lpAddress)
+        static uintptr_t OffsetFromMap(const Image& lrImage, const void* lpAddress)
         {
-            return reinterpret_cast<std::uintptr_t>(lpAddress) -
-                   reinterpret_cast<std::uintptr_t>(&lrImage.map);
+            return reinterpret_cast<uintptr_t>(lpAddress) -
+                   reinterpret_cast<uintptr_t>(&lrImage.map);
         }
 
         static void CopyFixedName(char* lpDestination, u32 luCapacity, const char* lpcSource)
@@ -433,7 +433,7 @@ namespace BrnResource
             // CgsResource::Events::CreatePoolRequest rows, including all sixteen dependency ids.
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[0].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 0;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Fonts");
@@ -459,7 +459,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[1].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 1;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Physics");
@@ -485,7 +485,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[2].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 2;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "OpenWorldPhy");
@@ -511,7 +511,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[3].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 5;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "GameData");
@@ -537,7 +537,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[4].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 6;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Sound");
@@ -563,7 +563,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[5].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 7;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "AttribSysPool");
@@ -589,7 +589,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[6].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 8;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Gui_Persistent_Apt_Pool");
@@ -615,7 +615,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[7].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 9;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Apt_Streaming_Data");
@@ -641,7 +641,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[8].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 10;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Global Textures");
@@ -667,7 +667,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[9].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 3;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "OpenWorldGr");
@@ -693,7 +693,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[10].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 11;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Gui_Lang_Fsm_Data_Pool");
@@ -719,7 +719,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[11].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 12;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Gui_Sat_Nav_Textures");
@@ -745,7 +745,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[12].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 13;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "VFX Pool");
@@ -771,7 +771,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[13].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 14;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "ICE Pool");
@@ -797,7 +797,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[14].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 16;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Environment");
@@ -823,7 +823,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[15].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 17;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car0 Physics");
@@ -849,7 +849,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[16].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 18;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car1 Physics");
@@ -875,7 +875,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[17].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 19;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car2 Physics");
@@ -901,7 +901,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[18].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 20;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car3 Physics");
@@ -927,7 +927,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[19].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 21;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car4 Physics");
@@ -953,7 +953,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[20].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 22;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car5 Physics");
@@ -979,7 +979,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[21].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 23;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car6 Physics");
@@ -1005,7 +1005,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[22].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 24;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Car7 Physics");
@@ -1031,7 +1031,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[23].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 25;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "CarSharedPool");
@@ -1057,7 +1057,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[24].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 4;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "CarPool");
@@ -1083,7 +1083,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[25].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 15;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Traffic");
@@ -1109,7 +1109,7 @@ namespace BrnResource
             }
             {
                 CgsResource::Events::CreatePoolRequest& lrRequest = lrImage.maPools[26].mRequest;
-                lrRequest.mpUser = nullptr;
+                lrRequest.mpUser = 0;
                 lrRequest.miEventId = -1;
                 lrRequest.miPoolId = 26;
                 CopyFixedName(lrRequest.mpcName, sizeof(lrRequest.mpcName), "Freeburn Challenges");
@@ -1137,7 +1137,7 @@ namespace BrnResource
             // The five typed allocator families use the original request event constructors and data.
             {
                 CgsMemory::MemoryIO::CreateResourceRequest& lrRequest = lrImage.maRawResources[0].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Ice");
                 lrRequest.SetBankId(34);
                 lrRequest.SetParentBankId(29);
@@ -1153,172 +1153,172 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[0].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("AttribSysLinAlloc");
                 lrRequest.SetBankId(22);
                 lrRequest.SetParentBankId(10);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(278528);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[1].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Behaviours");
                 lrRequest.SetBankId(30);
                 lrRequest.SetParentBankId(29);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(65536);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[2].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Gui_State_Allocator");
                 lrRequest.SetBankId(44);
                 lrRequest.SetParentBankId(5);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(983040);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[3].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Replays Allocator");
                 lrRequest.SetBankId(48);
                 lrRequest.SetParentBankId(47);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(2097152);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[4].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("SP Allocator");
                 lrRequest.SetBankId(61);
                 lrRequest.SetParentBankId(2);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(4296704);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[5].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Mugshots");
                 lrRequest.SetBankId(65);
                 lrRequest.SetParentBankId(5);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(1048576);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maLinearAllocators[6].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("FLAPT_Allocator");
                 lrRequest.SetBankId(66);
                 lrRequest.SetParentBankId(5);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(921600);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[0].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("AttrSysHeap");
                 lrRequest.SetBankId(19);
                 lrRequest.SetParentBankId(10);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(606208);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[1].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("GameTalkAlloc");
                 lrRequest.SetBankId(20);
                 lrRequest.SetParentBankId(10);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(147456);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[2].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("EAStl");
                 lrRequest.SetBankId(21);
                 lrRequest.SetParentBankId(10);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(16384);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[3].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Network Memory");
                 lrRequest.SetBankId(27);
                 lrRequest.SetParentBankId(26);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(7274496);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[4].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Apt_Heap_Allocator");
                 lrRequest.SetBankId(32);
                 lrRequest.SetParentBankId(5);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(851968);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[5].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Gui_FSM_Lang_Alloc");
                 lrRequest.SetBankId(38);
                 lrRequest.SetParentBankId(5);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(524288);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[6].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("VFX Heap");
                 lrRequest.SetBankId(41);
                 lrRequest.SetParentBankId(33);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(3407872);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateAllocatorRequest& lrRequest = lrImage.maHeapAllocators[7].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Massive Heap");
                 lrRequest.SetBankId(63);
                 lrRequest.SetParentBankId(62);
                 lrRequest.SetResourceType(0);
                 lrRequest.SetSize(131072);
-                lrRequest.SetHeapAllocator(nullptr);
-                lrRequest.SetLinearAllocator(nullptr);
+                lrRequest.SetHeapAllocator(0);
+                lrRequest.SetLinearAllocator(0);
             }
             {
                 CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[0].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("PhysicsAlloc");
                 lrRequest.SetBankId(23);
                 lrRequest.SetParentBankId(2);
@@ -1334,7 +1334,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[1].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Network Image Allocator");
                 lrRequest.SetBankId(42);
                 lrRequest.SetParentBankId(26);
@@ -1350,7 +1350,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[2].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Scene Manager");
                 lrRequest.SetBankId(49);
                 lrRequest.SetParentBankId(2);
@@ -1366,7 +1366,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateLinearAllocatorRequest& lrRequest = lrImage.maRWLinearAllocators[3].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("VFX Graphics Allocator");
                 lrRequest.SetBankId(60);
                 lrRequest.SetParentBankId(33);
@@ -1382,7 +1382,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[0].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Playback");
                 lrRequest.SetBankId(9);
                 lrRequest.SetParentBankId(4);
@@ -1398,7 +1398,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[1].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Rwac");
                 lrRequest.SetBankId(24);
                 lrRequest.SetParentBankId(4);
@@ -1414,7 +1414,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[2].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("Logic");
                 lrRequest.SetBankId(25);
                 lrRequest.SetParentBankId(4);
@@ -1430,7 +1430,7 @@ namespace BrnResource
             }
             {
                 CgsMemory::MemoryIO::CreateGeneralAllocatorRequest& lrRequest = lrImage.maRWGeneralAllocators[3].mRequest;
-                lrRequest.Construct(nullptr, 0);
+                lrRequest.Construct(0, 0);
                 lrRequest.SetBankName("2D Immediate Heap");
                 lrRequest.SetBankId(31);
                 lrRequest.SetParentBankId(8);

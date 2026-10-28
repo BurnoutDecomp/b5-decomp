@@ -45,10 +45,10 @@ public:
     // includes this header rather than only the sibling .cpp.
     static void _AssertLayout()
     {
-        static_assert(offsetof(GraphicsStub, mpVehicleGraphics) == 0,
+        CGS_STATIC_ASSERT((offsetof(GraphicsStub, mpVehicleGraphics) == 0),
                       "mpVehicleGraphics is import slot 0 -- GetImportPointer @0x82752780 hands out "
                       "offset 0 for it and GetGraphicsSpec @0x8271D440 reads *(stub + 0)");
-        static_assert(sizeof(GraphicsStub) == 8,
+        CGS_STATIC_ASSERT((sizeof(GraphicsStub) == 8),
                       "the whole serialised record is 8 bytes -- the literal 0x800000004 that "
                       "GetSerialisedResourceDescriptor @0x82760708 stores as {size 8, align 4}");
     }

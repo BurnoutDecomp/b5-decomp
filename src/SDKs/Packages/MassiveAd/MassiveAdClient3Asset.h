@@ -147,14 +147,14 @@ public:
     // asset downloaded (state 20) and records a benchmark sample -- or, on an empty
     // response, marks it failed (state 23, error -593). Always removes the request
     // from the builder's collection.
-    int HandleResponse(CRequestObject* pRequest) override;
+    int HandleResponse(CRequestObject* pRequest) ;
 
     // @ 0x82BDA380 (slot 2 override). On a failed download request (server type
     // 84): records -598 with the request's URL and marks the asset failed
     // (state 23). Then decrements the media-buffer reference count (floored at 0)
     // and removes the request from the collection. The error-code argument is
     // unused by the X360.
-    int HandleError(CRequestObject* pRequest, int nErrorCode) override;
+    int HandleError(CRequestObject* pRequest, int nErrorCode) ;
 
     // ----- media buffer ------------------------------------------------------
 

@@ -109,7 +109,7 @@ void NetworkPlayer::ReceiveAckOrNack(SignalMessage* lpMessage, bool lbAck)
             continue;
         }
 
-        if (lData.mpfMsgDeliveredCallback != nullptr)
+        if (lData.mpfMsgDeliveredCallback != 0)
         {
             void* lpUserData = lData.mpCallbackUserData;
             if ((lpMessage->mx8Flags & KX8_FLAGS_ACK) != 0)

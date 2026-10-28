@@ -78,7 +78,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Read(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != nullptr, "lpStaticLayout");
+        CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
 
         // Only progress while actually playing back (mode == E_MODE_PLAYING). The asm
         // walks the playing family {4,5,6} then strips the prepare/stall/restore modes,
@@ -106,7 +106,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Write(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != nullptr, "lpStaticLayout");
+        CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
 
         // Only progress while recording (mode in the recording family {1,2,3}).
         if (meMode == E_MODE_RECORDING_PREPARING ||
@@ -138,7 +138,7 @@ namespace BrnReplays
         // GetStaticLayout asserts on a too-small buffer; the asm guards on its (non-null)
         // return before doing any work.
         PropSerialiserStaticLayout* lpStaticLayout = GetStaticLayout();
-        if (lpStaticLayout == nullptr)
+        if (lpStaticLayout == 0)
         {
             return false;
         }

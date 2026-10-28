@@ -114,7 +114,7 @@ private:
 inline void NetworkTextureDXTCompress::_AssertLayout()
 {
 #define CGS_DXT_AT(member, off) \
-    static_assert(sizeof(void*) != 4 || offsetof(NetworkTextureDXTCompress, member) == off, #member " @ " #off)
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkTextureDXTCompress, member) == off), #member " @ " #off)
     CGS_DXT_AT(mDXTCompressData,         0x700);
     CGS_DXT_AT(mDXTDecodeData,           0x780);
     CGS_DXT_AT(miWriteToSource,          0x800);
@@ -125,7 +125,7 @@ inline void NetworkTextureDXTCompress::_AssertLayout()
     CGS_DXT_AT(mCompressionCompleteCallback, 0x828);
     CGS_DXT_AT(mDecodeCompleteCallback,  0x830);
     CGS_DXT_AT(miCompressedBufferSize,   0x83C);
-    static_assert(sizeof(void*) != 4 || sizeof(NetworkTextureDXTCompress) == 0x880,
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkTextureDXTCompress) == 0x880),
                   "sizeof(NetworkTextureDXTCompress) == 0x880");
 #undef CGS_DXT_AT
 }

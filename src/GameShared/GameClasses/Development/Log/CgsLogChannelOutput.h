@@ -43,7 +43,7 @@ struct LogChannelOutput : public StrStreamBase
     void SetChannel(EUserChannel leChannel) { miChannel = static_cast<s32>(leChannel); }
 
     // Concrete sink so the StrStreamBase pure-virtual is satisfied; forwards to Append.
-    StrStreamBase& operator<<(const char* lpcText) override
+    StrStreamBase& operator<<(const char* lpcText)
     {
         Append(lpcText);
         return *this;

@@ -1224,8 +1224,8 @@ namespace Camera
     // shared-slice re-declarations collide with each other and with the real shared headers).
     // ========================================================================
 
-    static_assert(sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
-                      == BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS * sizeof(rw::math::vpu::Vector4),
+    CGS_STATIC_ASSERT((sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
+                      == BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS * sizeof(rw::math::vpu::Vector4)),
                   "the small bucket is KU_SMALL_BEHAVIOUR_POOL_UNITS Vector4");
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCam>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCrash>();

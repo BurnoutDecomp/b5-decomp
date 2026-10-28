@@ -285,10 +285,10 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     StoreImageField(lpaImage, SaveImage::KU_VERSION, liImageVersion);
 
     // ---- identity / last-known car placement ----------------------------------------
-    static_assert(sizeof(macName) == 32, "X360 memcpy(image+4, name, 0x20)");
+    CGS_STATIC_ASSERT((sizeof(macName) == 32), "X360 memcpy(image+4, name, 0x20)");
     StoreImageBlock(lpaImage, SaveImage::KU_NAME, macName, sizeof(macName));
 
-    static_assert(sizeof(Vector3) == 16, "X360 stores each Vector3 as two std");
+    CGS_STATIC_ASSERT((sizeof(Vector3) == 16), "X360 stores each Vector3 as two std");
     StoreImageField(lpaImage, SaveImage::KU_CAR_POSITION,  mCarPosition);
     StoreImageField(lpaImage, SaveImage::KU_CAR_DIRECTION, mCarDirection);
 
@@ -356,12 +356,12 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     StoreImageField(lpaImage, SaveImage::KU_TOTAL_TAKEDOWN_COUNT,        miTotalTakedownCount);
     StoreImageField(lpaImage, SaveImage::KU_TOTAL_ONLINE_VERT_TAKEDOWNS, miTotalOnlineVerticleTakedownCount);
 
-    static_assert(sizeof(maiTakedownTypeCounts) == 52, "X360 memcpy(image+0x190, +0x1A0, 0x34)");
+    CGS_STATIC_ASSERT((sizeof(maiTakedownTypeCounts) == 52), "X360 memcpy(image+0x190, +0x1A0, 0x34)");
     StoreImageBlock(lpaImage, SaveImage::KU_TAKEDOWN_TYPE_COUNTS, maiTakedownTypeCounts, sizeof(maiTakedownTypeCounts));
 
-    static_assert(sizeof(maiWinsPerOfflineGameMode) == 40, "X360 10-word copy loop");
-    static_assert(sizeof(maiRankWinsPerOfflineGameMode) == 40, "X360 10-word copy loop");
-    static_assert(sizeof(maiLossesPerOfflineGameMode) == 40, "X360 10-word copy loop");
+    CGS_STATIC_ASSERT((sizeof(maiWinsPerOfflineGameMode) == 40), "X360 10-word copy loop");
+    CGS_STATIC_ASSERT((sizeof(maiRankWinsPerOfflineGameMode) == 40), "X360 10-word copy loop");
+    CGS_STATIC_ASSERT((sizeof(maiLossesPerOfflineGameMode) == 40), "X360 10-word copy loop");
     StoreImageBlock(lpaImage, SaveImage::KU_WINS_PER_MODE,      maiWinsPerOfflineGameMode,     sizeof(maiWinsPerOfflineGameMode));
     StoreImageBlock(lpaImage, SaveImage::KU_RANK_WINS_PER_MODE, maiRankWinsPerOfflineGameMode, sizeof(maiRankWinsPerOfflineGameMode));
     StoreImageBlock(lpaImage, SaveImage::KU_LOSSES_PER_MODE,    maiLossesPerOfflineGameMode,   sizeof(maiLossesPerOfflineGameMode));
@@ -420,7 +420,7 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
         SaveImageDLC1::KI_MAX_DLC_EVENTS);
 
     // ---- discovery sets / world progress ---------------------------------------------
-    static_assert(sizeof(maStuntElements) == 12312, "X360 memcpy(image+0x75E8, +0x75F8, 0x3018)");
+    CGS_STATIC_ASSERT((sizeof(maStuntElements) == 12312), "X360 memcpy(image+0x75E8, +0x75F8, 0x3018)");
     StoreImageBlock(lpaImage, SaveImage::KU_STUNT_ELEMENT_SETS, maStuntElements, sizeof(maStuntElements));
 
     StoreImageField(lpaImage, SaveImage::KU_MEDAL_COUNT_FROM_THE_START, muMedalCountFromTheStart);
@@ -435,21 +435,21 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     // so image+42504 is written by nobody and mJunkYardsDriveThruSet is lost across a
     // save/load. Reproduced exactly: this is observable behaviour ("visited junkyards"
     // discovery does not persist), not a transcription slip.
-    static_assert(sizeof(mBodyShopsDriveThruSet)   == 96,  "X360 memcpy 0x60");
-    static_assert(sizeof(mPaintShopsDriveThruSet)  == 48,  "X360 six-qword copy loop");
-    static_assert(sizeof(mGasStationsDriveThruSet) == 120, "X360 memcpy 0x78");
-    static_assert(sizeof(mCarParksDriveThruSet)    == 96,  "X360 memcpy 0x60");
+    CGS_STATIC_ASSERT((sizeof(mBodyShopsDriveThruSet)   == 96),  "X360 memcpy 0x60");
+    CGS_STATIC_ASSERT((sizeof(mPaintShopsDriveThruSet)  == 48),  "X360 six-qword copy loop");
+    CGS_STATIC_ASSERT((sizeof(mGasStationsDriveThruSet) == 120), "X360 memcpy 0x78");
+    CGS_STATIC_ASSERT((sizeof(mCarParksDriveThruSet)    == 96),  "X360 memcpy 0x60");
     StoreImageBlock(lpaImage, SaveImage::KU_BODY_SHOPS_SET, &mBodyShopsDriveThruSet, sizeof(mBodyShopsDriveThruSet));
     StoreImageBlock(lpaImage, SaveImage::KU_BODY_SHOPS_SET, &mBodyShopsDriveThruSet, sizeof(mBodyShopsDriveThruSet));
     StoreImageBlock(lpaImage, SaveImage::KU_PAINT_SHOPS_SET,  &mPaintShopsDriveThruSet,  sizeof(mPaintShopsDriveThruSet));
     StoreImageBlock(lpaImage, SaveImage::KU_GAS_STATIONS_SET, &mGasStationsDriveThruSet, sizeof(mGasStationsDriveThruSet));
     StoreImageBlock(lpaImage, SaveImage::KU_CAR_PARKS_SET,    &mCarParksDriveThruSet,    sizeof(mCarParksDriveThruSet));
 
-    static_assert(sizeof(maFreeBurnChallengeData) == 16008, "X360 memcpy 0x3E88");
-    static_assert(sizeof(mabHitPropBitArray)      == 37504, "X360 memcpy 0x9280");
-    static_assert(sizeof(maaiStuntCountsByCounty) == 30,    "X360 memcpy 0x1E");
-    static_assert(sizeof(maNetworkChallengeData)  == 3584,  "X360 memcpy 0xE00");
-    static_assert(sizeof(maChallengeData)         == 2560,  "X360 memcpy 0xA00");
+    CGS_STATIC_ASSERT((sizeof(maFreeBurnChallengeData) == 16008), "X360 memcpy 0x3E88");
+    CGS_STATIC_ASSERT((sizeof(mabHitPropBitArray)      == 37504), "X360 memcpy 0x9280");
+    CGS_STATIC_ASSERT((sizeof(maaiStuntCountsByCounty) == 30),    "X360 memcpy 0x1E");
+    CGS_STATIC_ASSERT((sizeof(maNetworkChallengeData)  == 3584),  "X360 memcpy 0xE00");
+    CGS_STATIC_ASSERT((sizeof(maChallengeData)         == 2560),  "X360 memcpy 0xA00");
     StoreImageBlock(lpaImage, SaveImage::KU_FREEBURN_CHALLENGE_DATA, &maFreeBurnChallengeData, sizeof(maFreeBurnChallengeData));
     StoreImageBlock(lpaImage, SaveImage::KU_HIT_PROP_BITS,           &mabHitPropBitArray,      sizeof(mabHitPropBitArray));
     StoreImageBlock(lpaImage, SaveImage::KU_STUNT_COUNTS_BY_COUNTY,  maaiStuntCountsByCounty,  sizeof(maaiStuntCountsByCounty));
@@ -469,7 +469,7 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     // @0x8235A020 -- the sole writer -- always Prepares the texture over
     // macPlayerLicenceTextureData with the fixed KI_PLAYERLICENCEPICTURE_* constants, so the
     // descriptor carries no information the pixels + the valid flag do not.
-    static_assert(sizeof(macPlayerLicenceTextureData) == 9600, "X360 memcpy 0x2580");
+    CGS_STATIC_ASSERT((sizeof(macPlayerLicenceTextureData) == 9600), "X360 memcpy 0x2580");
     StoreImageBlock(lpaImage, SaveImage::KU_LICENCE_TEXTURE_DATA, macPlayerLicenceTextureData, sizeof(macPlayerLicenceTextureData));
     StoreImageField(lpaImage, SaveImage::KU_LICENCE_PICTURE_IS_VALID, mbPlayerLicencePictureIsValid);
 
@@ -482,7 +482,7 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     // x64 too -- MugshotInfo stopped being an align-1 opaque pad when its real members landed
     // (the 24-byte UniquePlayerID gives it the console's 8-byte alignment), so the live gallery
     // and the image slot are the same size again. The <= assert below still holds either way.
-    static_assert(sizeof(maaMugshotInfo[0]) <= SaveImage::KU_MUGSHOT_GALLERY_STRIDE,
+    CGS_STATIC_ASSERT((sizeof(maaMugshotInfo[0]) <= SaveImage::KU_MUGSHOT_GALLERY_STRIDE),
                   "a live gallery must fit the console's 1128-byte image slot");
     for (s32 liGallery = 0; liGallery < SaveImage::KI_MUGSHOT_GALLERY_COUNT; ++liGallery)
     {
@@ -492,16 +492,16 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
                         &maaMugshotInfo[liGallery], sizeof(maaMugshotInfo[liGallery]));
     }
 
-    static_assert(sizeof(maAvailableMugshotFileIDs) == 40, "X360 five-qword copy loop");
-    static_assert(sizeof(mafCarTypes)               == 12, "X360 three-word copy");
-    static_assert(sizeof(maHasPlayerSeenTraining)   == 32, "X360 four-qword copy");
+    CGS_STATIC_ASSERT((sizeof(maAvailableMugshotFileIDs) == 40), "X360 five-qword copy loop");
+    CGS_STATIC_ASSERT((sizeof(mafCarTypes)               == 12), "X360 three-word copy");
+    CGS_STATIC_ASSERT((sizeof(maHasPlayerSeenTraining)   == 32), "X360 four-qword copy");
     StoreImageBlock(lpaImage, SaveImage::KU_MUGSHOT_FILE_ID_BITS, maAvailableMugshotFileIDs, sizeof(maAvailableMugshotFileIDs));
     StoreImageBlock(lpaImage, SaveImage::KU_CAR_TYPES,            mafCarTypes,               sizeof(mafCarTypes));
     StoreImageField(lpaImage, SaveImage::KU_CURRENT_CAR_TYPE,     meCurrentCarType);
     StoreImageBlock(lpaImage, SaveImage::KU_TRAINING_SEEN_BITS,   &maHasPlayerSeenTraining,  sizeof(maHasPlayerSeenTraining));
 
     // ---- online tallies, dates, completion flags ---------------------------------------
-    static_assert(sizeof(CgsSystem::DateAndTime) == 12, "X360 three-word date copy");
+    CGS_STATIC_ASSERT((sizeof(CgsSystem::DateAndTime) == 12), "X360 three-word date copy");
     StoreImageField(lpaImage, SaveImage::KU_NUM_ONLINE_RACES_DONE,       miNumOnlineRacesDone);
     StoreImageField(lpaImage, SaveImage::KU_NUM_ONLINE_RACES_WON,        miNumOnlineRacesWon);
     StoreImageField(lpaImage, SaveImage::KU_NUM_MUGSHOTS_SENT,           miNumMugshotsSent);
@@ -563,8 +563,8 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     const s32 liImageVersionDLC1 = BrnGuiSaveLoad::ProfileDLC1::KI_VERSION_CURRENT;   // 6
     StoreImageField(lpaImageDLC, SaveImageDLC1::KU_VERSION, liImageVersionDLC1);
 
-    static_assert(sizeof(maTargetEventScores)   == 1968, "X360 memcpy(dlc1+8, +0x1CD38, 0x7B0)");
-    static_assert(sizeof(maEventScoresToUpload) == 792,  "X360 memcpy(dlc1+0x7B8, +0x1D4E8, 0x318)");
+    CGS_STATIC_ASSERT((sizeof(maTargetEventScores)   == 1968), "X360 memcpy(dlc1+8, +0x1CD38, 0x7B0)");
+    CGS_STATIC_ASSERT((sizeof(maEventScoresToUpload) == 792),  "X360 memcpy(dlc1+0x7B8, +0x1D4E8, 0x318)");
     StoreImageBlock(lpaImageDLC, SaveImageDLC1::KU_TARGET_EVENT_SCORES,    &maTargetEventScores,   sizeof(maTargetEventScores));
     StoreImageBlock(lpaImageDLC, SaveImageDLC1::KU_EVENT_SCORES_TO_UPLOAD, &maEventScoresToUpload, sizeof(maEventScoresToUpload));
 
@@ -572,7 +572,7 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     // FastBitArray<15>, the image's is a FastBitArray<120>. The X360 clears both image
     // fields first (redundant after the memset, but it is the container's Clear) and then
     // walks the live set's iterator, setting each index it reports.
-    static_assert(sizeof(DeveloperChallengeImageBits) == 16, "the DLC1 slot is 0x2628..0x2638");
+    CGS_STATIC_ASSERT((sizeof(DeveloperChallengeImageBits) == 16), "the DLC1 slot is 0x2628..0x2638");
     DeveloperChallengeImageBits* lpImageChallengeBits =
         ImageObjectAt<DeveloperChallengeImageBits>(lpaImageDLC, SaveImageDLC1::KU_DEVELOPER_CHALLENGE_BITS);
     lpImageChallengeBits->UnSetAll();
@@ -666,10 +666,10 @@ void Profile::Deserialise(const BrnGuiSaveLoad::Profile* lpImage,
     LoadImageField(lpaImage, SaveImage::KU_RIVAL_COUNT,  miRivalCount);
     LoadImageField(lpaImage, SaveImage::KU_EVENT_COUNT,  miEventCount);
 
-    static_assert(sizeof(maCars)          == 12288, "X360 memcpy 0x3000 (512 * 0x18)");
-    static_assert(sizeof(maLiveryChoices) == 12288, "X360 memcpy 0x3000 (512 * 0x18)");
-    static_assert(sizeof(maRivals)        == 3584,  "X360 memcpy 0xE00 (64 * 0x38)");
-    static_assert(sizeof(maEvents)        == 1400,  "X360 memcpy 0x578 (175 * 8)");
+    CGS_STATIC_ASSERT((sizeof(maCars)          == 12288), "X360 memcpy 0x3000 (512 * 0x18)");
+    CGS_STATIC_ASSERT((sizeof(maLiveryChoices) == 12288), "X360 memcpy 0x3000 (512 * 0x18)");
+    CGS_STATIC_ASSERT((sizeof(maRivals)        == 3584),  "X360 memcpy 0xE00 (64 * 0x38)");
+    CGS_STATIC_ASSERT((sizeof(maEvents)        == 1400),  "X360 memcpy 0x578 (175 * 8)");
     LoadImageBlock(lpaImage, SaveImage::KU_CARS,     maCars,          sizeof(maCars));
     LoadImageBlock(lpaImage, SaveImage::KU_LIVERIES, maLiveryChoices, sizeof(maLiveryChoices));
     LoadImageBlock(lpaImage, SaveImage::KU_RIVALS,   maRivals,        sizeof(maRivals));

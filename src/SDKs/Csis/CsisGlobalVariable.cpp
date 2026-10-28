@@ -45,7 +45,7 @@ Result GlobalVariable::SetFast(GlobalVariableHandle* pHandle, const CsisDef::Par
 
     GlobalVariableSubscriber* pNode = pDesc->phead;
     pDesc->curVal.intVal = pValue->intVal;
-    while (pNode != nullptr)
+    while (pNode != 0)
     {
         pNode->pfnCallback(&pDesc->curVal, pNode->pUserData);
         pNode = pNode->pNext;
@@ -63,9 +63,9 @@ Result GlobalVariable::SubscribeFast(GlobalVariableHandle* pHandle, GlobalVariab
         return status;
 
     CsisDef::GlobalVariableDesc* pDesc = ResolveDesc(pHandle);
-    pNode->pPrev = nullptr;
+    pNode->pPrev = 0;
     pNode->pNext = pDesc->phead;
-    if (pDesc->phead != nullptr)
+    if (pDesc->phead != 0)
         pDesc->phead->pPrev = pNode;
     pDesc->phead = pNode;
     pNode->pfnCallback(&pDesc->curVal, pNode->pUserData);
@@ -84,9 +84,9 @@ Result GlobalVariable::UnsubscribeFast(GlobalVariableHandle* pHandle, GlobalVari
     CsisDef::GlobalVariableDesc* pDesc = ResolveDesc(pHandle);
     if (pNode == pDesc->phead)
         pDesc->phead = pNode->pNext;
-    if (pNode->pPrev != nullptr)
+    if (pNode->pPrev != 0)
         pNode->pPrev->pNext = pNode->pNext;
-    if (pNode->pNext != nullptr)
+    if (pNode->pNext != 0)
         pNode->pNext->pPrev = pNode->pPrev;
     return static_cast<Result>(0);
 }

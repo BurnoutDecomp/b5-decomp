@@ -123,7 +123,7 @@ namespace
 
         GuiEventRivalShutdownDisplayFinished() : CgsGui::GuiEvent<295>(1, 12), mucPad(0) {}
     };
-    static_assert(sizeof(GuiEventRivalShutdownDisplayFinished) == 16,
+    CGS_STATIC_ASSERT((sizeof(GuiEventRivalShutdownDisplayFinished) == 16),
                   "the console posts a 16-byte record for GUI 295 (`li r6, 0x10`)");
 
     // The console streams the fixed prefix, the offending value and a suffix into the global

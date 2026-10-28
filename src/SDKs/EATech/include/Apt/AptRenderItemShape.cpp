@@ -36,7 +36,7 @@ AptRenderItem* AptRenderItemShape::Clone(int nCreatedOnTick, bool bCopyExtended)
 {
     void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemShape));
     if (!p)
-        return nullptr;
+        return 0;
     return new (p) AptRenderItemShape(this, nCreatedOnTick, bCopyExtended);
 }
 

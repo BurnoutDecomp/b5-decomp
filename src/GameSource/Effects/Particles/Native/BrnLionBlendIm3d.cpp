@@ -156,7 +156,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpPixelProgramBinary, u32 luPixelProgramSize)
 {
     s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != nullptr)
+    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
     {
         li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
         if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
@@ -167,7 +167,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     if (li8ProgramIndex < KI8_MAX_PROGRAMS)
     {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == nullptr,
+        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
                    "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
     }
 
@@ -238,15 +238,15 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
 {
     CGS_ASSERT((li8Program >= 0) && (li8Program < KI8_MAX_PROGRAMS),
                "( li8Program >= 0 ) && ( li8Program < KI8_MAX_PROGRAMS )");
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
                "mapVertexProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
 
     // X360 stores `this + 4` (the ImRendererBase subobject past this renderer's vptr) == `this`, or 0
     // when `this` is null.
-    mgpActiveRenderer = (this != nullptr) ? static_cast<ImRendererBase*>(this) : nullptr;
+    mgpActiveRenderer = (this != 0) ? static_cast<ImRendererBase*>(this) : 0;
 
     shadow::Device::ResetShadowing();
 
@@ -368,16 +368,16 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     mi8CurrentProgram = 0;
     for (s32 liSlot = 0; liSlot < KI8_MAX_PROGRAMS; ++liSlot)
     {
-        mapVertexProgramBuffer[liSlot] = nullptr;
-        mapPixelProgramBuffer[liSlot]  = nullptr;
+        mapVertexProgramBuffer[liSlot] = 0;
+        mapPixelProgramBuffer[liSlot]  = 0;
     }
 
     // Upload each supplied program pair.
     for (s32 liProgram = 0; liProgram < li8NumberPrograms; ++liProgram)
     {
-        CGS_ASSERT(lapVertexProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapVertexProgramBinary[liProgram] != 0,
                    "lapVertexProgramBinary[ li8ProgramIndex ] != NULL");
-        CGS_ASSERT(lapPixelProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapPixelProgramBinary[liProgram] != 0,
                    "lapPixelProgramBinary[ li8ProgramIndex ] != NULL");
         if (lauVertexProgramSize[liProgram] == 0)
         {
@@ -403,9 +403,9 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
                "mapVertexProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
@@ -509,7 +509,7 @@ namespace
     // Vector4 -- exactly as the asm does.
     void StageShaderConstant(void* lpCursor, const void* lpSource, u32 luBytes)
     {
-        if (lpCursor != nullptr)
+        if (lpCursor != 0)
         {
             memcpy(lpCursor, lpSource, luBytes);
         }
@@ -592,8 +592,8 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
     // head of BrnLionBlendIm3d.h.
     const renderengine::ProgramBufferData* const lpVertexProgram0 =
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
-    CGS_ASSERT(lpVertexProgram0 != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
-    if (lpVertexProgram0 != nullptr)
+    CGS_ASSERT(lpVertexProgram0 != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    if (lpVertexProgram0 != 0)
     {
         renderengine::ProgramBuffer::GetVariableHandleByName(
             lpVertexProgram0, reinterpret_cast<const u8*>("worldViewProj"),
@@ -605,8 +605,8 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
 
     const renderengine::ProgramBufferData* const lpVertexProgram1 =
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[1]);
-    CGS_ASSERT(lpVertexProgram1 != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
-    if (lpVertexProgram1 != nullptr)
+    CGS_ASSERT(lpVertexProgram1 != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    if (lpVertexProgram1 != 0)
     {
         renderengine::ProgramBuffer::GetVariableHandleByName(
             lpVertexProgram1, reinterpret_cast<const u8*>("worldViewProj"),
@@ -624,8 +624,8 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
 
     const renderengine::ProgramBufferData* const lpPixelProgram1 =
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[1]);
-    CGS_ASSERT(lpPixelProgram1 != nullptr, "mapPixelProgramBuffer[ li8Program ] != NULL");
-    if (lpPixelProgram1 != nullptr)
+    CGS_ASSERT(lpPixelProgram1 != 0, "mapPixelProgramBuffer[ li8Program ] != NULL");
+    if (lpPixelProgram1 != 0)
     {
         renderengine::ProgramBuffer::GetVariableHandleByName(
             lpPixelProgram1, reinterpret_cast<const u8*>("gDepthConversion"),
@@ -676,7 +676,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
 
     // The staged shader-constant cursor renderengine::Device::BeginShaderStates advances
     // (X360 var_B0; every call returns the next row through it).
-    void* lpConstantCursor = nullptr;
+    void* lpConstantCursor = 0;
 
     // The tail constant both paths share (X360 var_60..var_54, copied at loc_8228230C).
     Vector4 lvTailConstant = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -686,7 +686,7 @@ void Im3dBlend::BeginRendering(const Matrix44& arViewProjection,
         // ---- program slot 1: the depth-fading pair -------------------------------------------
         CgsGraphics::ImRenderer<LionBlendVertex>::BeginRendering(static_cast<s8>(1));
 
-        CGS_ASSERT(apDepthTextureState != nullptr, "lpDepthTextureState != NULL");
+        CGS_ASSERT(apDepthTextureState != 0, "lpDepthTextureState != NULL");
         // asm words 27-29: bind the scene depth texture on sampler unit 1.
         shadow::Device::SetState(apDepthTextureState, 1);
 

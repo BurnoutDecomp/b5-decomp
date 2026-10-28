@@ -128,7 +128,7 @@ namespace BrnNetworkModuleIO
 
         void Clear();   // no standalone console body (inlined into PlayerResultsInterface::Clear)
     };
-    static_assert(sizeof(PlayerResultsData) == 28, "PlayerResultsData on-disk stride (0x1C)");
+    CGS_STATIC_ASSERT((sizeof(PlayerResultsData) == 28), "PlayerResultsData on-disk stride (0x1C)");
 
     // ========================================================================
     // PlayerResultsInterface (original home SharedIO/BrnNetworkModulePlayerResultsInterface.h)
@@ -159,7 +159,7 @@ namespace BrnNetworkModuleIO
     private:
         PlayerResultsData maPlayerResultsData[8];   // 8 records, 28-byte stride
     };
-    static_assert(sizeof(PlayerResultsInterface) == 8 * 28, "PlayerResultsInterface layout (8 x 0x1C)");
+    CGS_STATIC_ASSERT((sizeof(PlayerResultsInterface) == 8 * 28), "PlayerResultsInterface layout (8 x 0x1C)");
 
     // ========================================================================
     // PreSimulationInputBuffer : IOBuffer
@@ -193,11 +193,11 @@ namespace BrnNetworkModuleIO
 
         static void _AssertLayout()
         {
-            static_assert(offsetof(PreSimulationInputBuffer, mbSysMenuOnScreen) == 1, "PreSim mbSysMenuOnScreen @ +1");
-            static_assert(offsetof(PreSimulationInputBuffer, mbPadIdle)         == 2, "PreSim mbPadIdle @ +2");
-            static_assert(offsetof(PreSimulationInputBuffer, miControllerPort)  == 4, "PreSim miControllerPort @ +4");
-            static_assert(offsetof(PreSimulationInputBuffer, mTimerInterface)   == 8, "PreSim mTimerInterface @ +8");
-            static_assert(sizeof(CgsSystem::TimerStatusInterface) == 48, "TimerStatusInterface is 48 bytes");
+            CGS_STATIC_ASSERT((offsetof(PreSimulationInputBuffer, mbSysMenuOnScreen) == 1), "PreSim mbSysMenuOnScreen @ +1");
+            CGS_STATIC_ASSERT((offsetof(PreSimulationInputBuffer, mbPadIdle)         == 2), "PreSim mbPadIdle @ +2");
+            CGS_STATIC_ASSERT((offsetof(PreSimulationInputBuffer, miControllerPort)  == 4), "PreSim miControllerPort @ +4");
+            CGS_STATIC_ASSERT((offsetof(PreSimulationInputBuffer, mTimerInterface)   == 8), "PreSim mTimerInterface @ +8");
+            CGS_STATIC_ASSERT((sizeof(CgsSystem::TimerStatusInterface) == 48), "TimerStatusInterface is 48 bytes");
         }
     };
 
@@ -361,7 +361,7 @@ namespace BrnNetworkModuleIO
         EActiveRaceCarIndex                                 mePlayerActiveRaceCarIndex;         // console +178688
         // GameStateModuleIO::GameEventQueue (include cycle, see the banner): storage of the
         // queue's exact size; the accessors return it as the real type.
-        alignas(4) u8 maGameEventQueueStorage[sizeof(CgsModule::VariableEventQueue<1536, 16>)]; // console +178692
+        CGS_ALIGN(4) u8 maGameEventQueueStorage[sizeof(CgsModule::VariableEventQueue<1536, 16>)]; // console +178692
         TakedownEventQueue                                  mTakedownEventOutputQueue;          // console +180248
         bool                                                mbIsPlaying;                        // console +180584
         bool                                                mbIsConnected;                      // console +180585
@@ -389,10 +389,10 @@ namespace BrnNetworkModuleIO
 
         static void _AssertLayout()
         {
-            static_assert(offsetof(NetworkOutRecvRoadRulesPBEvent, mPersonalBestPlayerID) == 0x38, "tag 35 +0x38");
-            static_assert(offsetof(NetworkOutRecvRoadRulesPBEvent, mPersonalBestChallengeIndex) == 0x3C, "tag 35 +0x3C");
-            static_assert(offsetof(NetworkOutRecvRoadRulesPBEvent, mbWasPBByFriend) == 0x40, "tag 35 +0x40");
-            static_assert(sizeof(NetworkOutRecvRoadRulesPBEvent) == 72, "tag 35 is queued as 72 bytes");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutRecvRoadRulesPBEvent, mPersonalBestPlayerID) == 0x38), "tag 35 +0x38");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutRecvRoadRulesPBEvent, mPersonalBestChallengeIndex) == 0x3C), "tag 35 +0x3C");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutRecvRoadRulesPBEvent, mbWasPBByFriend) == 0x40), "tag 35 +0x40");
+            CGS_STATIC_ASSERT((sizeof(NetworkOutRecvRoadRulesPBEvent) == 72), "tag 35 is queued as 72 bytes");
         }
     };
 }

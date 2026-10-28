@@ -11,7 +11,7 @@
 
 // The data block the decode job reads (+0x780 inside NetworkTextureDXTCompress, handed to the
 // job with SetData size 128, hence the 128-byte alignment).
-struct alignas(128) DXTDecodeData
+struct CGS_ALIGN(128) DXTDecodeData
 {
     char* mpCompressedPixels;   // +0x00 DXT1 source
     char* mpDecodedPixels;      // +0x04 32-bit destination

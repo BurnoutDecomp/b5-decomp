@@ -22,7 +22,7 @@ namespace ContactSpy
     {
         // The console clears the (32-bit) pointer slot; on this host the slot IS the pointer.
         // (PROMOTED 2026-08-06: was `muField0 = 0;` over a u32 stand-in slot -- see the header.)
-        mpData = nullptr;
+        mpData = 0;
         return this;
     }
 
@@ -37,7 +37,7 @@ namespace ContactSpy
     //   becomes the named-member access the console inlined.
     const ContactSpyData::RaceCarContactRunList* ContactSpyInterface::GetRaceCarContactRunList() const
     {
-        CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+        CGS_ASSERT(mpData != 0, "mpData != NULL");
         return mpData->GetRaceCarContactRunList();
     }
 }

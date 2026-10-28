@@ -52,7 +52,7 @@ namespace BrnGame
 
         lrStream << "        <cpumonitor";
         lrStream << " name=\"";
-        lrStream << ((lrData.mpcName != nullptr) ? lrData.mpcName : "<NULLSTRING>");
+        lrStream << ((lrData.mpcName != 0) ? lrData.mpcName : "<NULLSTRING>");
         lrStream << "\"";
         lrStream << " currentvalue=\"";
         lrStream << lrData.mfCurrentValue << "\"";
@@ -75,7 +75,7 @@ namespace BrnGame
 
         lrStream << "        <gpumonitor";
         lrStream << " name=\"";
-        lrStream << ((lrData.mpcName != nullptr) ? lrData.mpcName : "<NULLSTRING>");
+        lrStream << ((lrData.mpcName != 0) ? lrData.mpcName : "<NULLSTRING>");
         lrStream << "\"";
         lrStream << " currentvalue=\"";
         lrStream << lrData.mfCurrentValue << "\"";
@@ -92,7 +92,7 @@ namespace BrnGame
 
         lrStream << "        <pool";
         lrStream << " name=\"";
-        lrStream << ((lrStats.mpcPoolName != nullptr) ? lrStats.mpcPoolName : "<NULLSTRING>");
+        lrStream << ((lrStats.mpcPoolName != 0) ? lrStats.mpcPoolName : "<NULLSTRING>");
         lrStream << "\"";
         lrStream << " maxresources=\"";
         lrStream << lrStats.miPoolMaxResources << "\"";
@@ -144,7 +144,7 @@ namespace BrnGame
             return;
         }
 
-        const char* lpcFileName = (lpcName != nullptr) ? lpcName : "gamestate.xml";
+        const char* lpcFileName = (lpcName != 0) ? lpcName : "gamestate.xml";
 
         ++miFramesSinceLastGameStateSave;
         if (miFramesSinceLastGameStateSave >= KI_GAMESTATE_SAVE_FRAME_WRAP)

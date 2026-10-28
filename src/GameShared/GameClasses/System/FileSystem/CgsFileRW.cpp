@@ -50,7 +50,7 @@ namespace CgsFileSystem
         AsyncOp* AllocateAsyncOp()
         {
             void* lpMem = Manager::Allocate(static_cast<u32>(sizeof(AsyncOp)));
-            return lpMem ? new (lpMem) AsyncOp() : nullptr;
+            return lpMem ? new (lpMem) AsyncOp() : 0;
         }
 
         // Destroy + free a completed op (asm: ~AsyncOp(op); Manager::Free(op)).
@@ -78,7 +78,7 @@ namespace CgsFileSystem
         CGS_ASSERT(muPendingOperationCount == 0,
                    "Should only never have pending operations on open request\n");
 
-        mpHandle                = nullptr;
+        mpHandle                = 0;
         mpcFileName             = lpcFileName;
         meFileAccess            = leFileAccess;
         muLastOperationSize     = 0;
@@ -105,7 +105,7 @@ namespace CgsFileSystem
         FileFutexHelper lGuard(mFutex);
 
         CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
-        CGS_ASSERT(mpHandle != nullptr, "No file handle to begin read\n");
+        CGS_ASSERT(mpHandle != 0, "No file handle to begin read\n");
 
         muAttemptedReadFilePos   = luPosition;
         muAttemptedReadOpSize    = luSize;
@@ -128,7 +128,7 @@ namespace CgsFileSystem
         CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
         CGS_ASSERT(meFileAccess == E_FILEACCESS_WRITE,
                    "File has only read access. Cannot write to it\n");
-        CGS_ASSERT(mpHandle != nullptr, "No file handle to begin write\n");
+        CGS_ASSERT(mpHandle != 0, "No file handle to begin write\n");
 
         AsyncOp* lpOp = AllocateAsyncOp();
         lpOp->Write(mpHandle, const_cast<void*>(lpBuffer), luPosition, luSize,
@@ -165,7 +165,7 @@ namespace CgsFileSystem
         s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
         if (liStatus == -2)
         {
-            mpHandle    = nullptr;
+            mpHandle    = 0;
             meFileState = E_FILESTATE_ERROR;
 
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
@@ -176,7 +176,7 @@ namespace CgsFileSystem
         }
         else if (liStatus == -1)
         {
-            mpHandle    = nullptr;
+            mpHandle    = 0;
             meFileState = E_FILESTATE_CLOSED;
         }
         else if (liStatus == 1)
@@ -286,7 +286,7 @@ namespace CgsFileSystem
         else if (liStatus == 1)
         {
             meFileAccess = E_FILEACCESS_CLOSED;
-            mpHandle     = nullptr;
+            mpHandle     = 0;
             meFileState  = E_FILESTATE_CLOSED;
         }
         else

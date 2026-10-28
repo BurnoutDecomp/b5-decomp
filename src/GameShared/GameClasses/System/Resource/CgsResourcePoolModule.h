@@ -24,7 +24,7 @@ namespace CgsResource { namespace Events { struct CreatePoolRequest; struct Acqu
 namespace CgsResource { namespace Events { struct CreatePoolResponse; struct UnacquireResourceRequest; struct InvalidatePoolRequest; struct ValidatePoolRequest; struct DeletePoolRequest; } }
 // Defrag distribution/relocation records (pointer members only; full layouts live in the deferred
 // defrag subsystem -- forward-declared to avoid a transitive cascade for pointer-only storage).
-namespace CgsResource { using RelocationEntry = CgsMemory::RelocateOp; }
+namespace CgsResource { typedef CgsMemory::RelocateOp RelocationEntry; }
 
 // CgsResource::PoolModule - the resource-pool manager module (X360 CgsPoolModule.cpp). It
 // owns the game's fixed bank of 128 resource Pools and a registry of resource Types, and

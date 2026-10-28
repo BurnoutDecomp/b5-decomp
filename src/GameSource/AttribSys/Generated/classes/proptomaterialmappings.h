@@ -22,7 +22,7 @@ namespace Gen
     {
     public:
         static const u64 KU_CLASS_KEY = 0x4916214D378020A6ull;
-        explicit proptomaterialmappings(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit proptomaterialmappings(Collection* lpCollection = 0, void* lpOwner = 0);
 
         Collection* ChangeWithDefault(u64 luCollectionKey)
         {

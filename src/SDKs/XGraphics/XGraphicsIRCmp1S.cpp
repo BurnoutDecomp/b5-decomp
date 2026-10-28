@@ -75,7 +75,7 @@ IRCmp1S* IRCmp1S::NewInst(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRCmp1S));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRCmp1S(aiOpcode, apContext);
 }

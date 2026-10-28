@@ -31,8 +31,8 @@ namespace Gen
             s16 miRoadnoiseLoop;           // +0x1E
         };
 
-        explicit audiosurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit audiosurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+        explicit audiosurface(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit audiosurface(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         const f32& SurfaceLoopVolume() const { return Layout().mSurfaceLoopVolume; }
         const f32& EnvelopeVolume() const { return Layout().mEnvelopeVolume; }
@@ -47,7 +47,7 @@ namespace Gen
         }
     };
 
-    static_assert(sizeof(audiosurface::_LayoutStruct) == 0x20,
+    CGS_STATIC_ASSERT((sizeof(audiosurface::_LayoutStruct) == 0x20),
                   "audiosurface serialised layout must remain 0x20 bytes");
 
     // Chain the Instance ctor, assert the collection's class is ClassName::audiosurface,

@@ -43,7 +43,7 @@
 #include "types.hpp"
 
 #include <cstddef>   // offsetof, used by every record's layout static_asserts
-#include <cstdint>
+#include "types.hpp"
 
 template <typename T>
 class tLionSerialisedPtr
@@ -93,7 +93,7 @@ private:
 };
 
 // The whole point of the type: four bytes, four-byte aligned, whatever T is.
-static_assert(sizeof(tLionSerialisedPtr<char>) == 4,
+CGS_STATIC_ASSERT((sizeof(tLionSerialisedPtr<char>) == 4),
               "a LION serialised link is one 4-byte slot");
-static_assert(alignof(tLionSerialisedPtr<char>) == 4,
+CGS_STATIC_ASSERT((__alignof(tLionSerialisedPtr<char>) == 4),
               "a LION serialised link is 4-byte aligned");

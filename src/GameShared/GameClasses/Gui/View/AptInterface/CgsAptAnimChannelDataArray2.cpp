@@ -19,6 +19,6 @@
 
 // Pin the X360-proven element stride: Append @ 0x824E5CF8 copies 6 dwords into
 // `&v2[6 * count]`, so sizeof(AnimChannelData) must be 24 (0x18).
-static_assert(sizeof(CgsGui::AnimChannelData) == 24, "AnimChannelData stride 24 (X360 0x824E5CF8)");
+CGS_STATIC_ASSERT((sizeof(CgsGui::AnimChannelData) == 24), "AnimChannelData stride 24 (X360 0x824E5CF8)");
 
 template void Array<CgsGui::AnimChannelData, 2>::Append(const CgsGui::AnimChannelData&);

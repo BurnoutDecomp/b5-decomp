@@ -79,7 +79,7 @@ namespace CgsGeometric
 
         inline Vector3 MakeFrustumDebugVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
         {
-            return Vector3{ lfX, lfY, lfZ, lfW };
+            { const Vector3 lResult = { lfX, lfY, lfZ, lfW }; return lResult; }
         }
 
         // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
@@ -642,29 +642,29 @@ namespace CgsGeometric
     void Frustum::_AssertLayout()
     {
         // One 16-byte SIMD lane per plane slot.
-        static_assert(sizeof(Vector4) == 16, "Vector4 must be one 16-byte SIMD lane");
-        static_assert(alignof(Vector4) == 16, "Vector4 must be 16-byte aligned");
+        CGS_STATIC_ASSERT((sizeof(Vector4) == 16), "Vector4 must be one 16-byte SIMD lane");
+        CGS_STATIC_ASSERT((__alignof(Vector4) == 16), "Vector4 must be 16-byte aligned");
 
         // 8 lanes = 0x80. This is the size FrustumJobQueryInfo::operator=
         // block-copies per maFrustum[] element, and the +0x40 batch split every
         // accessor here relies on.
-        static_assert(sizeof(Frustum::maSwizzledPlanes) == 128, "Frustum plane batch must be 128 bytes");
-        static_assert(sizeof(Frustum::maSwizzledPlanes) / sizeof(Vector4) == 8, "Frustum must store exactly 8 swizzled lanes");
-        static_assert(sizeof(Frustum) == 128, "sizeof(CgsGeometric::Frustum) must be 128 (0x80)");
-        static_assert(alignof(Frustum) == 16, "Frustum must be 16-byte aligned (lvx128/stvx128)");
+        CGS_STATIC_ASSERT((sizeof(Frustum::maSwizzledPlanes) == 128), "Frustum plane batch must be 128 bytes");
+        CGS_STATIC_ASSERT((sizeof(Frustum::maSwizzledPlanes) / sizeof(Vector4) == 8), "Frustum must store exactly 8 swizzled lanes");
+        CGS_STATIC_ASSERT((sizeof(Frustum) == 128), "sizeof(CgsGeometric::Frustum) must be 128 (0x80)");
+        CGS_STATIC_ASSERT((__alignof(Frustum) == 16), "Frustum must be 16-byte aligned (lvx128/stvx128)");
 
         // POINTER INVARIANT: maSwizzledPlanes is the SOLE data member and is
         // exactly as large as the whole object, so it is necessarily at offset 0.
         // That is what lets CalcVertices/IsSphereInFrustum address the lanes as
         // `this + 0x00 .. this + 0x70` the way the X360 asm does.
-        static_assert(sizeof(Frustum) == sizeof(Frustum::maSwizzledPlanes), "maSwizzledPlanes must be the whole object (offset 0)");
+        CGS_STATIC_ASSERT((sizeof(Frustum) == sizeof(Frustum::maSwizzledPlanes)), "maSwizzledPlanes must be the whole object (offset 0)");
 
         // The PlaneId numbering is load-bearing: CalcVertices' de-swizzle reads
         // plane k from float lane (k & 3) of batch (k >= 4), so these values ARE
         // the lane indices, not labels. Pinned by the splat-word order in the
         // @0x82840DF8 transpose.
-        static_assert(PlaneLeft == 0 && PlaneTop == 1 && PlaneRight == 2, "batch 0 lane order");
-        static_assert(PlaneBottom == 3 && PlaneFar == 4 && PlaneNear == 5, "batch 0/1 lane order");
+        CGS_STATIC_ASSERT((PlaneLeft == 0 && PlaneTop == 1 && PlaneRight == 2), "batch 0 lane order");
+        CGS_STATIC_ASSERT((PlaneBottom == 3 && PlaneFar == 4 && PlaneNear == 5), "batch 0/1 lane order");
     }
 
     // ------------------------------------------------------------------------

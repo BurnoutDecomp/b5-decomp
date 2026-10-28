@@ -306,7 +306,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 // and the background mask; 587 selects end or replay credits.
 void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent != nullptr, " null event passed ");
+    CGS_ASSERT(lpEvent != 0, " null event passed ");
     if (liEventType == 14)
     {
         const auto* lpNotification =
@@ -344,7 +344,7 @@ void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
             lParameters.mu8Field43 = 1;
             lParameters.mu8Field44 = 1;
             lParameters.mpTexture = *static_cast<renderengine::Texture**>(lFont.mpResourceMemory);
-            CGS_ASSERT(lParameters.mpTexture != nullptr, "lpTexture!=NULL");
+            CGS_ASSERT(lParameters.mpTexture != 0, "lpTexture!=NULL");
             u32 lauDescriptor[10];
             renderengine::TextureState::GetResourceDescriptor(lauDescriptor);
             rw::ResourceDescriptor lDescriptor;
@@ -353,7 +353,7 @@ void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
                 lDescriptor.m_baseResourceDescriptors[lu].m_size = lauDescriptor[2 * lu];
                 lDescriptor.m_baseResourceDescriptors[lu].m_alignment = lauDescriptor[2 * lu + 1];
             }
-            mBackgroundMaskTextureStateResource = mpHeapAllocator->DoAllocate(lDescriptor, nullptr);
+            mBackgroundMaskTextureStateResource = mpHeapAllocator->DoAllocate(lDescriptor, 0);
             mpBackgroundMaskTextureState = renderengine::TextureState::Initialize(
                 &mBackgroundMaskTextureStateResource, &lParameters);
         }

@@ -11,14 +11,14 @@ namespace BrnGui
     class MovieAllocator : public rw::IResourceAllocator
     {
     public:
-        ~MovieAllocator() override;
+        ~MovieAllocator() ;
         void Construct();
         bool Prepare(rw::Resource lResource, rw::ResourceDescriptor lDescriptor);
         bool Release();
         void Destruct();
-        rw::Resource DoAllocate(const rw::ResourceDescriptor&, const char*) override;
-        void DoFree(const rw::Resource&) override;
-        void DoFreeDisposable(rw::Resource&) override;
+        rw::Resource DoAllocate(const rw::ResourceDescriptor&, const char*) ;
+        void DoFree(const rw::Resource&) ;
+        void DoFreeDisposable(rw::Resource&) ;
     private:
         CgsMemory::HeapMalloc mMainAllocator;
         CgsMemory::LinearMalloc mGraphicsAllocator;

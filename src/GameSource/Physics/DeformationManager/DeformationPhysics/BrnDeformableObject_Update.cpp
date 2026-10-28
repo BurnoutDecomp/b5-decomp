@@ -519,7 +519,7 @@ namespace Deformation
     // =============================================================================================
     void DeformableObject::UpdateLocators(DetachedPartManager* lpPartMgr)
     {
-        CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");   // line 4202 (non-gating)
+        CGS_ASSERT(mpDeformationSpec != 0, "mpDeformationSpec");   // line 4202 (non-gating)
         const Matrix44Affine lInverseGraphics =
             rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(
                 GetVehiclePhysics()->GetGraphicsVehicleTransform());
@@ -576,7 +576,7 @@ namespace Deformation
     // =============================================================================================
     void DeformableObject::ClearStoredContacts()
     {
-        CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");   // line 4336 (non-gating)
+        CGS_ASSERT(mpDeformationSpec != 0, "mpDeformationSpec");   // line 4336 (non-gating)
 
         const s32 liNumSensors = GetNumSensors() - 4;   // *(mpDeformationSpec + 1618)
         for ( s32 li = 0; li < liNumSensors; ++li )
@@ -666,7 +666,7 @@ namespace Deformation
         // i.e. mPointDisplacement_BiggestImpulseThisFrame.w = max(.w, magnitude). This is the
         // exact value CheckSensorForcesForJointDetachment @0x825C17F8 splats to decide panel/door
         // detach -- with the old local-copy fold no hit could ever detach a part.
-        if ( lpSensor != nullptr )
+        if ( lpSensor != 0 )
         {
             f32& lrLatch = lpSensor->mPointDisplacement_BiggestImpulseThisFrame.w;
             if ( lvfImpulseMagnitude.x > lrLatch )
@@ -724,7 +724,7 @@ namespace Deformation
         //                                           == the two fields' spacing in ImpulseParams)
         //     r6 = lbz 0xB8(params)              -> mbWorldContact (+0xB8 == its console seat; the
         //                                           PS3 wrapper's arg is even NAMED lbIsWorldImpulse)
-        const bool lbIgnoringPassedOn = (lpVehicle != nullptr) && lpVehicle->IsPlayerVehicleInShowtime();
+        const bool lbIgnoringPassedOn = (lpVehicle != 0) && lpVehicle->IsPlayerVehicleInShowtime();
         if ( lbIgnoringPassedOn )
         {
             // 0x8260798C  vmulfp128 v1, v116, v120  ==  lImpulseDir * lvfImpulseMagnitude
@@ -742,7 +742,7 @@ namespace Deformation
         // The vehicle's crashed byte (asm: `*(vehicle + 1808)`), read separately from the vtable+0x10
         // predicate above -- it selects both the budget branch and the suspension-limit displacement
         // source. IsCrashing() is the homed +1808 accessor.
-        const bool lbCrashed = (lpVehicle != nullptr) && lpVehicle->IsCrashing();
+        const bool lbCrashed = (lpVehicle != 0) && lpVehicle->IsCrashing();
 
         // (3) allowed-compression budget. The game-mode selector reads HIBYTE(*(this+26384)) == the
         // handling-body-id high byte (asm 1606), NOT the +26392 game-mode word -- use
@@ -907,19 +907,19 @@ namespace Deformation
             // `lwz r11, 0x19C(lpSensor) ; lvx v0, r11 ; vspltw v13, v0, 3` -- the sensor's LOCAL
             // sphere, w lane == the radius.
             const CgsGeometric::Sphere* lpLocalSphere =
-                ( lpSensor != nullptr ) ? lpSensor->GetLocalSpaceSphere() : nullptr;
-            const f32 lfSphereRadius = ( lpLocalSphere != nullptr )
+                ( lpSensor != 0 ) ? lpSensor->GetLocalSpaceSphere() : 0;
+            const f32 lfSphereRadius = ( lpLocalSphere != 0 )
                                      ? lpLocalSphere->mPositionRadius.w : 0.0f;
             const f32 lfPad    = lbCrashed ? 0.5f : 0.0f;          // vcfsx(vspltisw 1,1) == 0.5
             const f32 lfRadius = lfSphereRadius + lfPad;
             ++guDeformLimitRowArmApplies[lbCrashed ? 1 : 0];       // [deform-bbox] arm counter (DIAG)
             const Vector3& lrDriveMin = GetDriveTimeLimitsMin();   // this + 0x66F0
             const Vector3& lrDriveMax = GetDriveTimeLimitsMax();   // this + 0x6700
-            const Vector3 lDeformedMin = ( lbCrashed && lpVehicle != nullptr )
+            const Vector3 lDeformedMin = ( lbCrashed && lpVehicle != 0 )
                 ? Vector3{ lpVehicle->GetDeformableAABB().mMin.x, lpVehicle->GetDeformableAABB().mMin.y,
                            lpVehicle->GetDeformableAABB().mMin.z, lpVehicle->GetDeformableAABB().mMin.w }
                 : lrDriveMin;                                       // vehicle + 0x6D0
-            const Vector3 lDeformedMax = ( lbCrashed && lpVehicle != nullptr )
+            const Vector3 lDeformedMax = ( lbCrashed && lpVehicle != 0 )
                 ? Vector3{ lpVehicle->GetDeformableAABB().mMax.x, lpVehicle->GetDeformableAABB().mMax.y,
                            lpVehicle->GetDeformableAABB().mMax.z, lpVehicle->GetDeformableAABB().mMax.w }
                 : lrDriveMax;                                       // vehicle + 0x6E0
@@ -944,7 +944,7 @@ namespace Deformation
         //   0x82607928  lvx128 v123, r10, 0x10  ; row 1 (+0x20)
         //   0x82607938  lvx128 v122, r10, 0x20  ; row 2 (+0x30)
         Matrix44Affine lBodyTransform;
-        if ( lpVehicle != nullptr ) { lBodyTransform = lpVehicle->GetTransform(); }
+        if ( lpVehicle != 0 ) { lBodyTransform = lpVehicle->GetTransform(); }
         else                       { lBodyTransform.SetIdentity(); }
 
         // ⭐ v126 == the IMPULSE VECTOR: `vmulfp128 v126, v116, v120` @0x82607AB4, where the prologue
@@ -1077,7 +1077,7 @@ namespace Deformation
                 // And this object's own gate, so "the player was not in showtime" is on the row
                 // rather than inferred from arm != 1. ONE call, exactly as the console makes.
                 const bool lbSelfInShowtime =
-                    ( lpVehicle != nullptr && lpVehicle->IsPlayerVehicleInShowtime() );  // vtbl +0x10
+                    ( lpVehicle != 0 && lpVehicle->IsPlayerVehicleInShowtime() );  // vtbl +0x10
                 const s32 liStSelfShowtime = lbSelfInShowtime ? 1 : 0;
 
                 if ( lbSelfInShowtime )
@@ -1086,7 +1086,7 @@ namespace Deformation
                     lfShapedMagnitude *= lfShowtimeScale;
                     liStArm = 1; lfStScale = lfShowtimeScale;
 
-                    if ( lContact.mpOtherVehicle != nullptr )
+                    if ( lContact.mpOtherVehicle != 0 )
                     {
                         lfShapedMagnitude *= KF_SHOWTIME_MAG_CARCAR_DAMP;               // 0.1
                         lfStDamp = KF_SHOWTIME_MAG_CARCAR_DAMP;
@@ -1106,7 +1106,7 @@ namespace Deformation
                     lfShapedMagnitude *= lfFade;
                     lfStFade = lfFade;
                 }
-                else if ( lContact.mpOtherVehicle != nullptr )
+                else if ( lContact.mpOtherVehicle != 0 )
                 {
                     const BrnPhysics::Vehicle::VehiclePhysics* lpOtherVehicle =
                         lContact.mpOtherVehicle->GetVehiclePhysics();
@@ -1174,13 +1174,13 @@ namespace Deformation
                     static u32 suStMagCarCar = 0;   // traffic-on-traffic -- the noise floor
                     static u32 suStMagWorld  = 0;   // world contact -- context only
                     const bool lbStPlayerPair =
-                        ( lContact.mpOtherVehicle != nullptr )
+                        ( lContact.mpOtherVehicle != 0 )
                         && ( GetHandlingBodyIdHighByte() == 1
                              || lContact.mpOtherVehicle->GetHandlingBodyIdHighByte() == 1 );
                     bool lbStBudget;
                     if      ( liStArm != 0 )                      { lbStBudget = ( ++suStMagShaped <= 6000u ); }
                     else if ( lbStPlayerPair )                    { lbStBudget = ( ++suStMagPlayer <= 6000u ); }
-                    else if ( lContact.mpOtherVehicle != nullptr ) { lbStBudget = ( ++suStMagCarCar <= 1500u ); }
+                    else if ( lContact.mpOtherVehicle != 0 ) { lbStBudget = ( ++suStMagCarCar <= 1500u ); }
                     else                                          { lbStBudget = ( ++suStMagWorld  <=  300u ); }
                     if ( siStMagProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && lbStBudget )
                     {
@@ -1205,7 +1205,7 @@ namespace Deformation
                             // car was hit by the RACE CAR and the showtime predicate still read
                             // false" (oOwner 1), which would be a live defect. 5,754 rows of the
                             // first were nearly published as the second.
-                            << " oOwner "      << ( lContact.mpOtherVehicle != nullptr
+                            << " oOwner "      << ( lContact.mpOtherVehicle != 0
                                                     ? static_cast<s32>(lContact.mpOtherVehicle
                                                         ->GetHandlingBodyIdHighByte())
                                                     : -1 )
@@ -1216,7 +1216,7 @@ namespace Deformation
                             // mpOtherVehicle is not the race car, or it is and the owner byte
                             // read against it is wrong. `oGid` separates those two, and they are
                             // completely different defects.
-                            << " oGid "        << ( lContact.mpOtherVehicle != nullptr
+                            << " oGid "        << ( lContact.mpOtherVehicle != 0
                                                     ? static_cast<s32>((lContact.mpOtherVehicle
                                                         ->GetGlobalEntityId().muValue >> 10) & 0x3FFFu)
                                                     : -1 )
@@ -1228,7 +1228,7 @@ namespace Deformation
                             << " damp "        << lfStDamp
                             << " fade "        << lfStFade
                             << " gain "        << lfStGain
-                            << " other "       << ( lContact.mpOtherVehicle != nullptr ? 1 : 0 )
+                            << " other "       << ( lContact.mpOtherVehicle != 0 ? 1 : 0 )
                             << "\n";
                     }
                 }
@@ -1263,7 +1263,7 @@ namespace Deformation
 
             // dispatch into the sensor body: lpSensor->ApplyLocalImpulse(&v215). CollidableBody vtable
             // slot 0 (the `(**a37)(a37, v215)` indirect call).
-            if ( lpSensor != nullptr )
+            if ( lpSensor != 0 )
             {
                 ++gChainProbe.muDispatched;   // [chain] probe
                 // [T5-sens] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Tag the dispatch with
@@ -1356,7 +1356,7 @@ namespace Deformation
         //     add = |tangential| * timestep * 1.5e-4 (unk_82FB8330) * min(scaledMag, 1000
         //           (unk_82FB95C0)) [* 5.0 (unk_82FB9D30) when crashed]
         //     scratch = min( max(0, scratch + add), max(0.75, scratch) )       (the fsel ladder)
-        if ( lpVehicle != nullptr )
+        if ( lpVehicle != 0 )
         {
             // scale-row select -- the AFTERTOUCH-OUTSIDE-SHOWTIME guard, then the crash ladder.
             // See the banner: 0x82607F7C dispatches vtable +0x24 (IsUsingAftertouch) and
@@ -1373,8 +1373,8 @@ namespace Deformation
                 {
                     lImpulseRow = KVF_APPLY_WORLD_CRASH_SCALE;      // unk_82FB8060 = splat(5.0)
                 }
-                else if ( lContact.mpOtherVehicle != nullptr
-                          && lContact.mpOtherVehicle->GetVehiclePhysics() != nullptr
+                else if ( lContact.mpOtherVehicle != 0
+                          && lContact.mpOtherVehicle->GetVehiclePhysics() != 0
                           && lContact.mpOtherVehicle->GetVehiclePhysics()->IsCrashing() )
                 {
                     lImpulseRow = KVF_APPLY_CARCAR_CRASH_SCALE;     // unk_82FB8300 = splat(20.0)
@@ -1421,7 +1421,7 @@ namespace Deformation
                                                        &lWorldImpulse, &lWorldAngularImpulse);
 
                 // car-car attrib scale (previously missing).
-                if ( !lParams.mbWorldContact && lpVehicle->GetAttribs() != nullptr )
+                if ( !lParams.mbWorldContact && lpVehicle->GetAttribs() != 0 )
                 {
                     const f32 lfCarScale = lpVehicle->GetAttribs()->mCollisionAttribs
                         .mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y;
@@ -1486,7 +1486,7 @@ namespace Deformation
                 }
 
                 // the sensor scratch ladder -- THE home of the 1.5e-4 / 1000 / 5.0 rows.
-                if ( lpSensor != nullptr )
+                if ( lpSensor != 0 )
                 {
                     f32 lfMagClamped = lfScaledMag;
                     if ( lfMagClamped > KVF_APPLY_FRICTION_CLAMP.x )   // unk_82FB95C0 = 1000
@@ -1510,7 +1510,7 @@ namespace Deformation
 
             // (6) spy accumulation (runs on the gate-skip path too, with zero bank/force --
             // 0x82608360 falls into this block).
-            if ( lbAddToSpy && lpSensor != nullptr )
+            if ( lbAddToSpy && lpSensor != 0 )
             {
                 lpSensor->maPostPhysicsVec0[0] += lLocalForce.x + lBankLocal.x;   // v125 + v118
                 lpSensor->maPostPhysicsVec0[1] += lLocalForce.y + lBankLocal.y;
@@ -1836,7 +1836,7 @@ namespace Deformation
     {
         const f32 lfW = mVehicleBody.GetVehiclePhysics()
             ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w;
-        return VecFloat{ lfW, lfW, lfW, lfW };   // vspltw lane-3 broadcast
+        { const VecFloat lResult = { lfW, lfW, lfW, lfW }; return lResult; }   // vspltw lane-3 broadcast
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -2033,7 +2033,7 @@ namespace Deformation
             // because the wave that asked "is the five-impulse collapse what the console does"
             // had to read this loop instruction by instruction anyway.
             f32 lfSortKey;
-            if ( lContact.mpOtherSensor != nullptr )
+            if ( lContact.mpOtherSensor != 0 )
             {
                 lfSortKey = lContact.mfImpactTimeInFrame;                 // car-car: earliest first
             }
@@ -2310,7 +2310,7 @@ namespace Deformation
 
             // [carcar-dv] PC witness: capture both race cars before the apply and arm the tap.
             CarCarDvBody laCarCarDv[2] = {};
-            const bool lbCarCarDv = ( lContact.mpOtherSensor != nullptr ) && CarCarDvEnabled()
+            const bool lbCarCarDv = ( lContact.mpOtherSensor != 0 ) && CarCarDvEnabled()
                 && CgsDev::Log::gpDebugPrint != 0 && suCarCarDvLines < KU_CARCAR_DV_MAX_LINES
                 && GetHandlingBodyIdHighByte() == 1u
                 && lContact.mpOtherVehicle->GetHandlingBodyIdHighByte() == 1u;
@@ -2325,7 +2325,7 @@ namespace Deformation
             }
 
             bool lbApplied;
-            if ( lContact.mpOtherSensor != nullptr )   // +0x34; see the sort-loop note above
+            if ( lContact.mpOtherSensor != 0 )   // +0x34; see the sort-loop note above
             {
                 lbApplied = ApplyCarCarImpulse(lContact, lvfTimeStep, lvfIterationZero,
                                                liSensor, lrRandom);
@@ -2345,9 +2345,9 @@ namespace Deformation
                 // 7.5 m/s f6386 drain was attributed to the car-car arm by the ABSENCE of a
                 // [kerb-imp] line that frame -- sound, but an inference from a silence. This
                 // makes the same claim a positive statement on the drain's own line.
-                gpcDvDrainTag = ( lContact.mpOtherSensor != nullptr ) ? "carcar" : "world";
+                gpcDvDrainTag = ( lContact.mpOtherSensor != 0 ) ? "carcar" : "world";
                 GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
-                if ( lContact.mpOtherSensor != nullptr )
+                if ( lContact.mpOtherSensor != 0 )
                 {
                     lContact.mpOtherVehicle->GetVehicleBody().CalculateNewVelocity(lvfTimeStep);
                 }
@@ -3102,7 +3102,7 @@ namespace Deformation
         if ( ((mGlobalEntityId.muValue >> 24) & 0xFFu) == 1u )   // HIBYTE(+26392) == E_ENTITYTYPE_RACECAR
         {
             BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
-            if ( lpRaceCar != nullptr && lpRaceCar->IsInAICrashSlowMo() )
+            if ( lpRaceCar != 0 && lpRaceCar->IsInAICrashSlowMo() )
             {
                 lvfStep.x *= 0.01f; lvfStep.y *= 0.01f; lvfStep.z *= 0.01f; lvfStep.w *= 0.01f;
             }

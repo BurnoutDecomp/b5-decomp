@@ -550,8 +550,8 @@ void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
                                       const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
                                       const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact )
 {
-    CGS_ASSERT(lpOutPropContact != nullptr, "lpOutPropContact != NULL");   // :529
-    CGS_ASSERT(lpInContact != nullptr, "lpInContact != NULL");             // :530
+    CGS_ASSERT(lpOutPropContact != 0, "lpOutPropContact != NULL");   // :529
+    CGS_ASSERT(lpInContact != 0, "lpInContact != NULL");             // :530
 
     const u32 luSpyIdAHigh = static_cast<u32>(lpInContact->mIDA >> 32);
     CGS_ASSERT((luSpyIdAHigh >> 24) == 3u,
@@ -1808,12 +1808,12 @@ namespace
     // The byte image of rw::collision::AABBox (mMin @+0x00, mMax @+0x10, 16-byte float4 rows)
     // over the vendor POD Vector3 this TU already speaks -- see the banner; layout pinned by
     // PropManager_wQ4_03_embed_check.cpp.
-    struct alignas(16) AABBoxRows
+    struct CGS_ALIGN(16) AABBoxRows
     {
         Vector3 mMin;
         Vector3 mMax;
     };
-    static_assert( sizeof( AABBoxRows ) == 32, "AABBox image is two 16-byte rows" );
+    CGS_STATIC_ASSERT(( sizeof( AABBoxRows ) == 32), "AABBox image is two 16-byte rows" );
 
     template< typename TTypeData >
     Vector3 AccumulateVolumeHalfExtents( const TTypeData* lpType )

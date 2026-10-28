@@ -43,7 +43,7 @@ namespace Deformation
     //   +0x30  displacement delta     ((B - A) minus the row's previous +0x20 value)
     //   +0x40  spec scalar (f32 at spec+40) + 12 bytes the writer leaves untouched
     // Names are role-derived from that writer (FLAG: no DWARF for the interior).
-    struct alignas(16) CarSensorState
+    struct CGS_ALIGN(16) CarSensorState
     {
         Vector3 mRestPosition;        // +0x00
         Vector3 mWorldScalarVector;   // +0x10
@@ -53,7 +53,7 @@ namespace Deformation
         u8      maReserved[12];       // +0x44 .. +0x50 (writer leaves untouched)
     };
 
-    struct alignas(16) CarState
+    struct CGS_ALIGN(16) CarState
     {
         // ⭐ CAPACITY SETTLED 2026-08-24 (deform-land wave): the old "bounding capacity 21"
         // guess is RETIRED. The producer (DeformableObject) owns maDeformationSensors[20]

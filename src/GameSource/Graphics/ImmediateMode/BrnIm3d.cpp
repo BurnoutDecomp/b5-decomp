@@ -108,9 +108,9 @@ namespace
     // ImRenderer<V>::SetTransform reconstruction does) keeps the observable stores identical.
     void PushShaderConstant(renderengine::ProgramVariableHandle* lpHandle, const void* lpValue16)
     {
-        void* lpShaderState = nullptr;
+        void* lpShaderState = 0;
         RenderEngineDeviceBeginShaderStates(lpHandle, &lpShaderState);
-        if (lpShaderState != nullptr)
+        if (lpShaderState != 0)
         {
             std::memcpy(lpShaderState, lpValue16, 16);
         }
@@ -148,7 +148,7 @@ void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
     // ---- vertex-program constants (X360 lwz r3, 0x14(r31) before each lookup) ----------
     renderengine::ProgramBufferData* const lpVertexProgram =
         reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
-    if (lpVertexProgram != nullptr)
+    if (lpVertexProgram != 0)
     {
         // "worldViewProj" lands in maShaderStateBlocks[0], NOT in maStateHandles. The X360 target
         // is `this + 88` (0x58), which is exactly `this + 4*(mi8CurrentProgram + 22)` for slot 0 --
@@ -185,7 +185,7 @@ void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
     // ---- pixel-program constants (X360 lwz r3, 0x34(r31) before each lookup) -----------
     renderengine::ProgramBufferData* const lpPixelProgram =
         reinterpret_cast<renderengine::ProgramBufferData*>(mapPixelProgramBuffer[0]);
-    if (lpPixelProgram != nullptr)
+    if (lpPixelProgram != 0)
     {
         renderengine::ProgramBuffer::GetVariableHandleByName(
             lpPixelProgram, reinterpret_cast<const u8*>("g_densitySampler"), &maStateHandles[9]);

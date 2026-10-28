@@ -38,7 +38,7 @@
 #include "types.hpp"                                                          // u32 / u64
 #include "rw/math/vpu/types.h"                                                // Vector4
 #include <cstring>                                                            // std::memcpy (TextAt)
-#include <cstdint>                                                            // uintptr_t  (TextAt)
+#include "types.hpp"                                                            // uintptr_t  (TextAt)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"             // Attrib::FindCollection
 

@@ -116,8 +116,8 @@ namespace CgsSceneManager
         static void _AssertLayout();
 
         // --- members (offsets pinned above) ---
-        alignas(16) u8 macVolumeVolumeQueryBuffer[KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE];  // +0x00000 (host size, above)
-        alignas(16) u8 macVolumeLineQueryBuffer[KU_VOLUME_LINE_QUERY_MEM_SIZE];         // +0x49000 (host +0x49600)
+        CGS_ALIGN(16) u8 macVolumeVolumeQueryBuffer[KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE];  // +0x00000 (host size, above)
+        CGS_ALIGN(16) u8 macVolumeLineQueryBuffer[KU_VOLUME_LINE_QUERY_MEM_SIZE];         // +0x49000 (host +0x49600)
 
         EFineIntersectionTestPrepareStage mePrepareStage;  // +0x59800
         EFineIntersectionTestReleaseStage meReleaseStage;  // +0x59804

@@ -73,9 +73,9 @@ namespace BrnGui
             *lpuNumberOfResources = static_cast<u32>(miNumResourcesToLoad);
         }
 
-        virtual void OnEnter() override;
-        virtual void OnLeave() override;
-        virtual void Update() override;
+        virtual void OnEnter() ;
+        virtual void OnLeave() ;
+        virtual void Update() ;
 
     private:
         void CheckForCompletedLoads();

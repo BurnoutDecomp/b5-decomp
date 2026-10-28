@@ -356,37 +356,37 @@ namespace BrnGui
         static void _AssertLayout()
         {
             // (1) The two array bounds the X360 loop/index arithmetic proves.
-            static_assert(sizeof(EventInfoComponent::maTextField)
-                        / sizeof(TextFieldComponentType) == 7,
+            CGS_STATIC_ASSERT((sizeof(EventInfoComponent::maTextField)
+                        / sizeof(TextFieldComponentType) == 7),
                           "maTextField is [7] on X360 (PrepareComponentsForGameMode loop bound @0x824291B4)");
-            static_assert(KI_STUNT_TYPE_STRING_ID_COUNT == 18,
+            CGS_STATIC_ASSERT((KI_STUNT_TYPE_STRING_ID_COUNT == 18),
                           "KAC_STUNT_TYPE_STRING_IDS is [18] on X360 (cmplwi 0x12, BrnEventInfo.cpp:1677)");
 
             // (2) The 13 animators are one contiguous stride-sizeof run, in X360 order.
-            static_assert(offsetof(EventInfoComponent, mTextStateAnimatorRace)
+            CGS_STATIC_ASSERT((offsetof(EventInfoComponent, mTextStateAnimatorRace)
                         - offsetof(EventInfoComponent, mAddScoreAnimator)
-                        == 2 * sizeof(AnimatorComponentType),
+                        == 2 * sizeof(AnimatorComponentType)),
                           "mTextStateAnimatorRace is animator #3 (X360 +0x0F8)");
-            static_assert(offsetof(EventInfoComponent, mTakedownNumbersAnimator)
+            CGS_STATIC_ASSERT((offsetof(EventInfoComponent, mTakedownNumbersAnimator)
                         - offsetof(EventInfoComponent, mAddScoreAnimator)
-                        == 4 * sizeof(AnimatorComponentType),
+                        == 4 * sizeof(AnimatorComponentType)),
                           "mTakedownNumbersAnimator is animator #5 (X360 +0x168)");
-            static_assert(offsetof(EventInfoComponent, mDistanceAnimatorRace)
+            CGS_STATIC_ASSERT((offsetof(EventInfoComponent, mDistanceAnimatorRace)
                         - offsetof(EventInfoComponent, mTakedownNumbersAnimator)
-                        == 1 * sizeof(AnimatorComponentType),
+                        == 1 * sizeof(AnimatorComponentType)),
                           "mDistanceAnimatorRace follows the takedown-numbers animator (X360 +0x1A0)");
-            static_assert(offsetof(EventInfoComponent, mMultiplierAnimator)
+            CGS_STATIC_ASSERT((offsetof(EventInfoComponent, mMultiplierAnimator)
                         - offsetof(EventInfoComponent, mAddScoreAnimator)
-                        == 12 * sizeof(AnimatorComponentType),
+                        == 12 * sizeof(AnimatorComponentType)),
                           "thirteen animators, contiguous (X360 +0x088..+0x35F)");
 
             // (3) The pointer-free scalar run, pinned as deltas from +0x3D0. Every value
             //     below is (X360 offset - 0x3D0); ClearEventSpecificData @0x82412CA8 and
             //     Construct @0x82421160 attest each store.
             #define BRN_EVENTINFO_SCALAR_PIN(member, delta)                              \
-                static_assert(offsetof(EventInfoComponent, member)                        \
+                CGS_STATIC_ASSERT((offsetof(EventInfoComponent, member)                        \
                             - offsetof(EventInfoComponent, mfDistanceWarningThreshold)    \
-                            == (delta), "EventInfoComponent scalar run: " #member)
+                            == (delta)), "EventInfoComponent scalar run: " #member)
 
             BRN_EVENTINFO_SCALAR_PIN(meCurrentEventType,                     4);
             BRN_EVENTINFO_SCALAR_PIN(meCurrentOnlineGameMode,                8);

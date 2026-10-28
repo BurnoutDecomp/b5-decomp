@@ -73,7 +73,7 @@ struct SBitmapInfoHeader
 };
 // All fixed-width fields, so this 40-byte BITMAPINFOHEADER layout is identical on
 // the X360 and the PC x64 target.
-static_assert(sizeof(SBitmapInfoHeader) == 40, "SBitmapInfoHeader must be 40 bytes");
+CGS_STATIC_ASSERT((sizeof(SBitmapInfoHeader) == 40), "SBitmapInfoHeader must be 40 bytes");
 
 // --- Xbox "EMB" media encoder SDK (platform boundary) ----------------------
 // Opaque encoder session handle and the EMB* entry points the encoder drives.

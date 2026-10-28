@@ -589,7 +589,7 @@ namespace vpu
 
         inline Vector3 Scale(const Vector3& lrVector, float lfScale)   // vmulfp128 against a splat, four lanes
         {
-            return Vector3{ lrVector.x * lfScale, lrVector.y * lfScale, lrVector.z * lfScale, lrVector.w * lfScale };
+            { const Vector3 lResult = { lrVector.x * lfScale, lrVector.y * lfScale, lrVector.z * lfScale, lrVector.w * lfScale }; return lResult; }
         }
 
         // vmaxfp / vminfp: a NaN in either operand gives a NaN (vA's when both are), and -0 < +0.
@@ -614,11 +614,11 @@ namespace vpu
             const Vector3& x = lrMatrix.xAxis;
             const Vector3& y = lrMatrix.yAxis;
             const Vector3& z = lrMatrix.zAxis;
-            return Vector3{
+            { const Vector3 lResult = {
                 std::fmaf(lrVector.z, z.x, std::fmaf(lrVector.y, y.x, lrVector.x * x.x)),
                 std::fmaf(lrVector.z, z.y, std::fmaf(lrVector.y, y.y, lrVector.x * x.y)),
                 std::fmaf(lrVector.z, z.z, std::fmaf(lrVector.y, y.z, lrVector.x * x.z)),
-                std::fmaf(lrVector.z, z.w, std::fmaf(lrVector.y, y.w, lrVector.x * x.w)) };
+                std::fmaf(lrVector.z, z.w, std::fmaf(lrVector.y, y.w, lrVector.x * x.w)) }; return lResult; }
         }
 
         // rw::math::vpu::QueryRotateDegenerateUnitAxis @0x82203768 as SLerp's axis query calls it (the vendor

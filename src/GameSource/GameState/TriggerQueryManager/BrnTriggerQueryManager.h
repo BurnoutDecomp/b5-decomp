@@ -330,7 +330,7 @@ private:
 // Pointer-free sub-struct: X360 32-bit offsets hold on the 64-bit gate (both members are 4-byte enums).
 inline void _PackedIndex_AssertLayout()
 {
-    static_assert(offsetof(PackedIndex, meGlobalRaceCarIndex) == 0, "meGlobalRaceCarIndex @ +0");
-    static_assert(offsetof(PackedIndex, meActiveRaceCarIndex) == 4, "meActiveRaceCarIndex @ +4");
-    static_assert(sizeof(PackedIndex) == 8, "PackedIndex is two 4-byte enum words");
+    CGS_STATIC_ASSERT((offsetof(PackedIndex, meGlobalRaceCarIndex) == 0), "meGlobalRaceCarIndex @ +0");
+    CGS_STATIC_ASSERT((offsetof(PackedIndex, meActiveRaceCarIndex) == 4), "meActiveRaceCarIndex @ +4");
+    CGS_STATIC_ASSERT((sizeof(PackedIndex) == 8), "PackedIndex is two 4-byte enum words");
 }

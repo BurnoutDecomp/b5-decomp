@@ -40,8 +40,8 @@ namespace Gen
     class speechdata : private Instance
     {
     public:
-        explicit speechdata(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit speechdata(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit speechdata(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit speechdata(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
 
         // speechdata.h:81; FirstTimeTips is a RefSpec array keyed by 0x564FC966.

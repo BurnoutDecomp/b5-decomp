@@ -156,7 +156,7 @@ struct PolygonSoupTesterJob
     // that makes the cursor's alignment arithmetic mean on the host what it means on
     // the console. This is a runtime-carved static, never a serialized record, so
     // growing sizeof is free.
-    alignas(128) u8 maArena[KI_ARENA_BYTES];          // X360 +0x20
+    CGS_ALIGN(128) u8 maArena[KI_ARENA_BYTES];          // X360 +0x20
     s32  miAllocCursor;                               // X360 +0x19020
     s32  maiFetchTags[7];                             // X360 +0x19024
 };

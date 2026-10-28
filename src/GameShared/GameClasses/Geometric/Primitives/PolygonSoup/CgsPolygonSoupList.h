@@ -35,7 +35,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox4.h"
-#include <cstdint>
+#include "types.hpp"
 
 namespace CgsGeometric
 {

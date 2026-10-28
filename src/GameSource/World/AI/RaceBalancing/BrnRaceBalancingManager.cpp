@@ -425,17 +425,17 @@ void RaceBalancingManager::CalculateScheduleOffset(const AICar* lpAICar,
 // layout (offsetof needs this member-function context to see the private members).
 void RaceBalancingManager::_AssertLayout()
 {
-    static_assert(offsetof(RaceBalancingManager, maRaceBalancingGraphs) == 0x0000,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, maRaceBalancingGraphs) == 0x0000),
                   "maRaceBalancingGraphs @ +0");
-    static_assert(offsetof(RaceBalancingManager, maRaceBalancingRoutes) == 0x01C4,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, maRaceBalancingRoutes) == 0x01C4),
                   "maRaceBalancingRoutes @ +0x1C4");
-    static_assert(offsetof(RaceBalancingManager, mfRaceTime)            == 0x4870,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, mfRaceTime)            == 0x4870),
                   "mfRaceTime @ +0x4870");
-    static_assert(offsetof(RaceBalancingManager, miCheckpointCount)     == 0x4874,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, miCheckpointCount)     == 0x4874),
                   "miCheckpointCount @ +0x4874");
-    static_assert(offsetof(RaceBalancingManager, mbInRace)              == 0x4878,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, mbInRace)              == 0x4878),
                   "mbInRace @ +0x4878");
-    static_assert(offsetof(RaceBalancingManager, mbOnStartLine)         == 0x4879,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, mbOnStartLine)         == 0x4879),
                   "mbOnStartLine @ +0x4879");
 }
 

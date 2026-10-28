@@ -185,14 +185,14 @@ namespace BrnWorld
         // (Construct(const BrnCpuMonitors&) etc., per the DWARF); the no-arg overrides
         // exist only to satisfy the abstract CgsModule contract.
         // ====================================================================
-        void Construct() override { CgsModule::ModuleSingleBuffered::Construct(); }
-        bool Prepare()   override { return CgsModule::ModuleSingleBuffered::Prepare(); }
+        void Construct()  { CgsModule::ModuleSingleBuffered::Construct(); }
+        bool Prepare()    { return CgsModule::ModuleSingleBuffered::Prepare(); }
         // Release/Destruct: on the X360 the this-only virtual slots ARE the real
         // per-stage teardown bodies (@0x827BCE58 / @0x827BD0F0) -- declared below
         // with the lifecycle group, bodied in the cpp.
-        bool Release()   override;
-        void Destruct()  override;
-        void Update()    override { CgsModule::ModuleSingleBuffered::Update(); }
+        bool Release()   ;
+        void Destruct()  ;
+        void Update()     { CgsModule::ModuleSingleBuffered::Update(); }
 
         // DWARF :358 (virtual). @0x827D63E8 -- the real per-frame world UPDATE
         // spine (the X360 vtable+76 slot the game module's DoUpdate_World and the

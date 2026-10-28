@@ -197,7 +197,7 @@ namespace BrnDirector
 
             // Resolve the shop-specific shot-group (X360: a switch on meDriveThruType that
             // reads one of five manager-embedded shotgroups, one per shop kind).
-            const Attrib::Gen::shotgroup* lpShotGroup = nullptr;
+            const Attrib::Gen::shotgroup* lpShotGroup = 0;
             switch (lrGameState.meDriveThruType)
             {
             case GameState::E_DRIVETHRU_AUTO_PARTS:

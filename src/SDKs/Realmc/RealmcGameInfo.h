@@ -34,7 +34,7 @@
 // ===========================================================================
 
 #include <cstddef>
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -47,11 +47,11 @@ public:
     //                 pSource points at a 66-byte source blob.
     explicit GameInfo(const void* pSource);
 
-    std::uint8_t  maName[64];  // +0x00  64-byte name buffer
-    std::uint16_t muField40;   // +0x40  re-zeroed after the copy
-    std::uint32_t muField44;   // +0x44
-    std::uint32_t muField48;   // +0x48
-    std::uint32_t muField4C;   // +0x4C
+    uint8_t  maName[64];  // +0x00  64-byte name buffer
+    uint16_t muField40;   // +0x40  re-zeroed after the copy
+    uint32_t muField44;   // +0x44
+    uint32_t muField48;   // +0x48
+    uint32_t muField4C;   // +0x4C
 };
 // sizeof(GameInfo) == 0x50 (80) bytes.
 

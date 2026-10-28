@@ -47,7 +47,7 @@
 #include "GameSource/Effects/Particles/LionParticleRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstdio>
 
 // ----------------------------------------------------------------------------
@@ -439,7 +439,7 @@ int cLionFX::BinSave(void* apData, int aiEndianTwiddleFlag, void* apStream)
 cParticleLocator* cLionFX::LocatorRegister(const char* /*apcName*/)
 {
     cParticleLocator* lpLocator = static_cast<cParticleLocator*>(gLionLocatorAllocator.Alloc());
-    if (lpLocator != nullptr)
+    if (lpLocator != 0)
     {
         lpLocator->Init();
     }
@@ -449,7 +449,7 @@ cParticleLocator* cLionFX::LocatorRegister(const char* /*apcName*/)
 // cLionFX::LocatorUpdate @0x8290AC58 (DWARF LionFX.h:29). A null check and a tail call.
 void cLionFX::LocatorUpdate(cParticleLocator* apLocator, const cMatrix& arMat, const cTime& arTime)
 {
-    if (apLocator != nullptr)
+    if (apLocator != 0)
     {
         apLocator->Update(arMat, arTime);
     }
@@ -459,7 +459,7 @@ void cLionFX::LocatorUpdate(cParticleLocator* apLocator, const cMatrix& arMat, c
 cParticleTrigger* cLionFX::TriggerRegister(const char* /*apcName*/)
 {
     cParticleTrigger* lpTrigger = static_cast<cParticleTrigger*>(gLionTriggerAllocator.Alloc());
-    if (lpTrigger != nullptr)
+    if (lpTrigger != 0)
     {
         lpTrigger->Init();
     }
@@ -469,7 +469,7 @@ cParticleTrigger* cLionFX::TriggerRegister(const char* /*apcName*/)
 // cLionFX::TriggerUpdate @0x82908888 (DWARF LionFX.h:50).
 void cLionFX::TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTime& arTime)
 {
-    if (apTrigger != nullptr)
+    if (apTrigger != 0)
     {
         apTrigger->Update(auFlags, arTime);
     }
@@ -498,7 +498,7 @@ void cLionFX::TriggerUpdate(cParticleTrigger* apTrigger, u32 auFlags, const cTim
 cParticleScaler* cLionFX::ScalerRegister(const char* /*apcName*/)
 {
     cParticleScaler* lpScaler = static_cast<cParticleScaler*>(gLionScalerAllocator.Alloc());
-    if (lpScaler != nullptr)
+    if (lpScaler != 0)
     {
         lpScaler->Init();
     }
@@ -509,7 +509,7 @@ cParticleScaler* cLionFX::ScalerRegister(const char* /*apcName*/)
 // cParticleScaler::Update to a single `stfs`; it is de-inlined onto the scaler.
 void cLionFX::ScalerUpdate(cParticleScaler* apScaler, f32 afScale, const cTime& arTime)
 {
-    if (apScaler != nullptr)
+    if (apScaler != 0)
     {
         apScaler->Update(afScale, arTime);
     }
@@ -552,7 +552,7 @@ void cLionFX::EffectDestroy(cLionEffectInstance* apInstance)
 // bindings and is written as that rather than as a raw offset store.
 void cLionFX::EffectSetWorldIndex(cLionEffectInstance* apInstance, u32 auWorldIndex)
 {
-    if (apInstance != nullptr)
+    if (apInstance != 0)
     {
         apInstance->GetBindings().SetWorldIndex(auWorldIndex);
     }

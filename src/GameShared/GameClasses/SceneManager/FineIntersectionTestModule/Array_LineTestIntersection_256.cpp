@@ -3,7 +3,7 @@
 
 // The Append asm (0x828AE378) puts miCount at +0x4000 == 256 * sizeof(T) and uses stride 64
 // (slwi index<<6) to address each element -> sizeof(LineTestIntersection) must be 64.
-static_assert(sizeof(CgsSceneManager::LineTestIntersection) == 64,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::LineTestIntersection) == 64),
               "LineTestIntersection must be 64 bytes (Array<...,256> Append stride/0x4000 count offset)");
 
 // Explicit instantiation of the generic Array<T,N>::Append (inline in CgsArray.h) for the

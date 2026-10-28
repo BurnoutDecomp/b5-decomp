@@ -221,16 +221,16 @@ namespace BrnWorld
     // Layout pins (X360 accessor store offsets/widths).
     void RaceCarCrash::_AssertLayout()
     {
-        static_assert(offsetof(RaceCarCrash, mRaceCarVolumeInstanceId) == 0,    "mRaceCarVolumeInstanceId @0");
-        static_assert(offsetof(RaceCarCrash, mfSecondsBeforeCleanup)   == 0xC,  "mfSecondsBeforeCleanup @0xC");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mRaceCarVolumeInstanceId) == 0),    "mRaceCarVolumeInstanceId @0");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mfSecondsBeforeCleanup)   == 0xC),  "mfSecondsBeforeCleanup @0xC");
         // [crash exit 2026-08-25] the four newly-named interior fields, each pinned by the
         // Construct/Tick store offsets quoted in the header.
-        static_assert(offsetof(RaceCarCrash, mfTimeCrashing)           == 0x8,  "mfTimeCrashing @0x8 (Construct stfs 8)");
-        static_assert(offsetof(RaceCarCrash, mfTimeStationary)         == 0x10, "mfTimeStationary @0x10 (Construct stfs 0x10)");
-        static_assert(offsetof(RaceCarCrash, mi8NumCleanupExtensions)  == 0x14, "mi8NumCleanupExtensions @0x14 (Construct stb 0x14)");
-        static_assert(offsetof(RaceCarCrash, mu8Reserved15)            == 0x15, "mu8Reserved15 @0x15 (Construct stb 0x15)");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mfTimeCrashing)           == 0x8),  "mfTimeCrashing @0x8 (Construct stfs 8)");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mfTimeStationary)         == 0x10), "mfTimeStationary @0x10 (Construct stfs 0x10)");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mi8NumCleanupExtensions)  == 0x14), "mi8NumCleanupExtensions @0x14 (Construct stb 0x14)");
+        CGS_STATIC_ASSERT((offsetof(RaceCarCrash, mu8Reserved15)            == 0x15), "mu8Reserved15 @0x15 (Construct stb 0x15)");
         // sizeof pin: the Array<RaceCarCrash,8> stride asm (index*24, count word @ +0xC0 == 8*24)
         // proves the element is 24 bytes wide (see BrnRaceCarCrash.h SIZE banner).
-        static_assert(sizeof(RaceCarCrash) == 24, "sizeof RaceCarCrash == 24 (Array<,8> stride)");
+        CGS_STATIC_ASSERT((sizeof(RaceCarCrash) == 24), "sizeof RaceCarCrash == 24 (Array<,8> stride)");
     }
 }

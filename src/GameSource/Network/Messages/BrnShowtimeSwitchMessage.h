@@ -28,12 +28,12 @@ namespace BrnNetwork
         void                           PrepareForSend(u16 lu16FrameCount, s32 liFinalShowtimeScore,
                                                        bool lbEnteringShowtime);
         bool                           Retrieve(s32* lpiFinalShowtimeScore, bool* lpbEnteringShowtime);
-        s32                            GetPackedMessageSize() override;
-        bool                           OldMessagesAreValid() const override;
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
-        const char*                    GetName() const override;
+        s32                            GetPackedMessageSize() ;
+        bool                           OldMessagesAreValid() const ;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
+        const char*                    GetName() const ;
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(ShowtimeSwitchMessage) == 0x30, "sizeof(ShowtimeSwitchMessage) == 0x30");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ShowtimeSwitchMessage) == 0x30), "sizeof(ShowtimeSwitchMessage) == 0x30");
 } // namespace BrnNetwork

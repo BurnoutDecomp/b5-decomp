@@ -315,8 +315,8 @@ namespace CgsSceneManager
         };
 
         // ---- lifecycle (CgsModule virtuals) ----
-        void Construct() override;   // @ 0x828D09A0
-        void Destruct() override;    // @ 0x828D1640
+        void Construct() ;   // @ 0x828D09A0
+        void Destruct() ;    // @ 0x828D1640
 
         // @ 0x828D13E0 -- staged, resumable prepare of every sub-manager. The X360
         // threads four resources: the coarse construct params, the scene resource

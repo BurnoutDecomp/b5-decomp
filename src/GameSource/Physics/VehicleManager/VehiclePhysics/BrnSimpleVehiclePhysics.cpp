@@ -277,7 +277,7 @@ namespace Vehicle
     // it at BrnSimpleVehiclePhysics.cpp:768; VehiclePhysics overrides it with @0x825D4028.
     VecFloat SimpleVehiclePhysics::GetSteeringAngle() const
     {
-        return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+        { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
     }
 
     // -------------------------------------------------------------------------------------------

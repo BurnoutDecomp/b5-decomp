@@ -66,8 +66,8 @@ namespace BrnWorld
             EActiveRaceCarIndex meCarIndex;
         };
 
-        static_assert(sizeof(ScalarBoostEvent) == 4, "Breaker scalar boost events are 4 bytes");
-        static_assert(sizeof(TailgatingBoostEvent) == 8, "Breaker tailgating event is 8 bytes");
+        CGS_STATIC_ASSERT((sizeof(ScalarBoostEvent) == 4), "Breaker scalar boost events are 4 bytes");
+        CGS_STATIC_ASSERT((sizeof(TailgatingBoostEvent) == 8), "Breaker tailgating event is 8 bytes");
     }
 
 // Prepare @0x822A5C48.  The apparent VMX stores in Breaker are the compiler's
@@ -139,7 +139,7 @@ void BoostStrategy::SetForceBoost(bool lbForceBoost) // 0x822A5DC8
 
 bool BoostStrategy::GetIsChainNotifyPending(u32* lpOutNumChained) // 0x822A5DF0
 {
-    CGS_ASSERT(lpOutNumChained != nullptr, "lpOutNumChained");
+    CGS_ASSERT(lpOutNumChained != 0, "lpOutNumChained");
     *lpOutNumChained = 0;
     return false;
 }
@@ -391,7 +391,7 @@ void BoostStrategy::Update(RaceCarEntityModuleIO::GameEventQueue* lpEventQueue,
         if (mfCurrentBoostingTime != 0.0f)
         {
             const ScalarBoostEvent lEvent = { mfCurrentBoostingTime };
-            CGS_ASSERT(lpEventQueue != nullptr, "lpEventQueue");
+            CGS_ASSERT(lpEventQueue != 0, "lpEventQueue");
             AddBoostEvent(lpEventQueue, lEvent, 55);
         }
         mfCurrentBoostingTime = 0.0f;

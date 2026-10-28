@@ -25,7 +25,7 @@ namespace CgsGraphics
              liSamplerIndex = static_cast<s8>(static_cast<u8>(liSamplerIndex) + 1u))
         {
             const renderengine::TextureState* lpState = mpaSamplers.Get()[liSamplerIndex].state.Get();
-            if (lpState != nullptr && lpTexture == nullptr)
+            if (lpState != 0 && lpTexture == 0)
                 return true;
         }
         return false;

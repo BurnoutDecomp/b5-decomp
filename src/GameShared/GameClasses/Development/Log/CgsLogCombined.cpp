@@ -19,7 +19,7 @@ namespace CgsDev
         {
             for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
             {
-                if (mapStreams[li] == nullptr)
+                if (mapStreams[li] == 0)
                 {
                     mapStreams[li] = lpStream;
                     return;
@@ -34,7 +34,7 @@ namespace CgsDev
             {
                 if (mapStreams[li] == lpStream)
                 {
-                    mapStreams[li] = nullptr;
+                    mapStreams[li] = 0;
                     return;
                 }
             }
@@ -44,7 +44,7 @@ namespace CgsDev
         void LogCombined::RemoveAllStreams()
         {
             for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
-                mapStreams[li] = nullptr;
+                mapStreams[li] = 0;
         }
 
         // X360 0x82817698. Fan the text out to every non-null child stream's char* sink (the X360
@@ -54,7 +54,7 @@ namespace CgsDev
             const char* lpcOut = lpcText ? lpcText : "<NULLSTRING>";
             for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
             {
-                if (mapStreams[li] != nullptr)
+                if (mapStreams[li] != 0)
                 {
                     *mapStreams[li] << lpcOut;
                 }

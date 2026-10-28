@@ -1181,11 +1181,11 @@ namespace BrnAI
         if (mpCarHost != 0)
         {
             // ARTIST8278B2D4..8278B344: keyed car -> handling -> steering.
-            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, nullptr);
+            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, 0);
             Attrib::Gen::physicsvehiclehandling lHandling(
-                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), nullptr);
+                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
             Attrib::Gen::physicsvehiclesteeringattribs lSteering(
-                const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), nullptr);
+                const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), 0);
             mfTimeToLookAheadForDrift = lSteering.GetDriverTimeToLookAheadForDrift();
             mfMinDistanceToLookAheadForDrift = lSteering.GetDriverMinDistanceToLookAheadForDrift();
 
@@ -1209,14 +1209,14 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::ResetPIDTuningState()
     {
-        if (mpCarHost != nullptr)
+        if (mpCarHost != 0)
         {
             //8277DA68..8277DAC4: preserve both validation and balanced instance lifetimes.
-            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, nullptr);
+            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, 0);
             Attrib::Gen::physicsvehiclehandling lHandling(
-                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), nullptr);
+                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
             Attrib::Gen::physicsvehiclesteeringattribs lSteering(
-                const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), nullptr);
+                const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), 0);
         }
 
         const f32 lafNormal[3] = { KF_PID_NORMAL_P, KF_PID_NORMAL_I, KF_PID_NORMAL_D };

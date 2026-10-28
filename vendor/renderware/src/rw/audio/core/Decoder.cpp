@@ -58,19 +58,19 @@ extern "C" System *off_83271928;
 // @0x82B6C778 (`mulli r21, r26, 0x14`), which is itself an exporter gap and is not bodied
 // on the host yet -- when it lands, it must use the host sizeof or the ring and its
 // consumers will disagree.
-static_assert(offsetof(DecoderRequest, miStartSample) < offsetof(DecoderRequest, miEndSample),
+CGS_STATIC_ASSERT((offsetof(DecoderRequest, miStartSample) < offsetof(DecoderRequest, miEndSample)),
               "DecoderRequest: the sample range must stay in start-then-end order");
-static_assert(offsetof(DecoderRequest, mpFedData) == 0,
+CGS_STATIC_ASSERT((offsetof(DecoderRequest, mpFedData) == 0),
               "DecoderRequest: the fed-chunk pointer is the leading word (Feed: stw r4, 0)");
-static_assert(offsetof(DecoderRequest, mpSeekData) == sizeof(void *),
+CGS_STATIC_ASSERT((offsetof(DecoderRequest, mpSeekData) == sizeof(void *)),
               "DecoderRequest: the seek-table base is the SECOND word (Feed: stw r8, 4)");
-static_assert(sizeof(DecoderRequest) >= 20,
+CGS_STATIC_ASSERT((sizeof(DecoderRequest) >= 20),
               "DecoderRequest must still cover every console field it carries");
 // ⭐ 2026-08-29: the record carries TWO pointers, not one. `mpSeekData` was `u32
 // muReserved04`; on x64 that silently truncated the seek-table base every consumer needs.
 // The pin above exists so a future "tidy-up" that reorders or re-narrows either pointer
 // fails the build instead of corrupting the ring.
-static_assert(sizeof(DecoderRequest) >= 2 * sizeof(void *) + 3 * sizeof(u32),
+CGS_STATIC_ASSERT((sizeof(DecoderRequest) >= 2 * sizeof(void *) + 3 * sizeof(u32)),
               "DecoderRequest: two pointers plus the sample range and flags must all fit");
 
 // -------------------------------------------------------------------------------------

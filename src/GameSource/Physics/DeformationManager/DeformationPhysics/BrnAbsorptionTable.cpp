@@ -183,7 +183,7 @@ namespace Deformation
         CGS_ASSERT(luValue < KU_NUM_ABSORPTION_VALUES, "luValue < KU_NUM_ABSORPTION_VALUES");
 
         const f32 lfAbsorption = KsaAbsorptionCurve[leSet][luValue].mfAbsorption;
-        return Vector4{ lfAbsorption, lfAbsorption, lfAbsorption, lfAbsorption };
+        { const Vector4 lResult = { lfAbsorption, lfAbsorption, lfAbsorption, lfAbsorption }; return lResult; }
     }
 
     // -----------------------------------------------------------------------------------------
@@ -199,7 +199,7 @@ namespace Deformation
 
         const VecFloat lScale = KsaSpeedScaleTable[liScaleIndex];
         const f32 lfSpeed = KsaAbsorptionCurve[leSet][luValue].mfSpeedForMaxAbsorbtion;
-        return Vector4{ lfSpeed * lScale.x, lfSpeed * lScale.y, lfSpeed * lScale.z, lfSpeed * lScale.w };
+        { const Vector4 lResult = { lfSpeed * lScale.x, lfSpeed * lScale.y, lfSpeed * lScale.z, lfSpeed * lScale.w }; return lResult; }
     }
 
     // -----------------------------------------------------------------------------------------
@@ -212,7 +212,7 @@ namespace Deformation
         CGS_ASSERT(luValue < KU_NUM_ABSORPTION_VALUES, "luValue < KU_NUM_ABSORPTION_VALUES");
 
         const f32 lfProportion = KsaAbsorptionCurve[leSet][luValue].mfProportionToSpeed;
-        return Vector4{ lfProportion, lfProportion, lfProportion, lfProportion };
+        { const Vector4 lResult = { lfProportion, lfProportion, lfProportion, lfProportion }; return lResult; }
     }
 }
 }

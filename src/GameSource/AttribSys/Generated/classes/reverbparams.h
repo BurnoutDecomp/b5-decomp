@@ -16,7 +16,7 @@ public:
         f32 Brightness;
     };
 
-    explicit reverbparams(const RefSpec& arRef, void* apOwner = nullptr)
+    explicit reverbparams(const RefSpec& arRef, void* apOwner = 0)
         : Instance(arRef, apOwner)
     {
         static const u64 KU_CLASS = 0xA59AD4BD63B62A88ull;
@@ -31,7 +31,7 @@ public:
     // returns int, so calling that truncates this 64-bit class identity.
     u64 GetClass() const
     {
-        const Class* lpClass = mpCollection ? mpCollection->mpClass : nullptr;
+        const Class* lpClass = mpCollection ? mpCollection->mpClass : 0;
         return lpClass ? lpClass->GetKey() : 0;
     }
 

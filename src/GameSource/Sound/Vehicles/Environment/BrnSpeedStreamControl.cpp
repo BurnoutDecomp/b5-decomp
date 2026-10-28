@@ -39,7 +39,7 @@ namespace Environment
 
 SpeedStreamControl::SpeedStreamControl()
     : BrnSound::Logic::BrnEffectControl()
-    , mpPhysicsControl(nullptr)
+    , mpPhysicsControl(0)
     , mfSpeedHighTime(0.0f)
     , mfBoostHighTime(0.0f)
     , mSpeedStreamOn(false)
@@ -72,7 +72,7 @@ bool SpeedStreamControl::Attach()
 
 void SpeedStreamControl::UpdateParams(f32 afTimeStep)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 
@@ -108,7 +108,7 @@ void SpeedStreamControl::UpdateParams(f32 afTimeStep)
 
 void SpeedStreamControl::UpdateDuckers()
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 

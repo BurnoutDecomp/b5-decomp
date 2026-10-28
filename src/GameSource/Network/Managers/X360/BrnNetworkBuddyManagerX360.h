@@ -105,7 +105,7 @@ namespace BrnNetwork
         // online/offline/join events (types 8/9/11) into a "buddy list updated" poke, then defer
         // to the game base ProcessEvent for every event.
         virtual void ProcessNetworkQueue(const BrnNetworkModuleIO::NetworkEventQueue* lpInQueue,
-                                         BrnNetworkModuleIO::NetworkEventQueue* lpOutQueue) override;
+                                         BrnNetworkModuleIO::NetworkEventQueue* lpOutQueue) ;
 
     private:
         // X360 0x825700A8 -- begin a Live invite/join for the given launch parameters. If the

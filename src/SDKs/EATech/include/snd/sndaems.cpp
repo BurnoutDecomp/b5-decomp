@@ -28,7 +28,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>
 #include <limits>
 
@@ -93,7 +93,7 @@ struct CsisRelocationRecord
     u8 maPadding[3];
 };
 
-static_assert(sizeof(CsisRelocationRecord) == 12,
+CGS_STATIC_ASSERT((sizeof(CsisRelocationRecord) == 12),
               "native AEMS CSIS relocation record");
 
 InstanceLink* gpInstanceUpdateList = 0;
@@ -874,8 +874,8 @@ struct AemsPlayerBlock
     AemsPlayerInput maInputs[1];
 };
 
-static_assert(sizeof(AemsPlayerInput) == 12, "native AEMS player input");
-static_assert(offsetof(AemsPlayerBlock, maInputs) == 0x28,
+CGS_STATIC_ASSERT((sizeof(AemsPlayerInput) == 12), "native AEMS player input");
+CGS_STATIC_ASSERT((offsetof(AemsPlayerBlock, maInputs) == 0x28),
               "native AEMS player block");
 
 // The native loader expands byte_140C3D3D8 into these 36 fixed-point values
@@ -1402,7 +1402,7 @@ struct RemoveModuleBankCommand
     u32   muPadding;
 };
 
-static_assert(sizeof(RemoveModuleBankCommand) == 0x18,
+CGS_STATIC_ASSERT((sizeof(RemoveModuleBankCommand) == 0x18),
               "native AEMS remove command");
 
 // ----------------------------------------------------------------------------

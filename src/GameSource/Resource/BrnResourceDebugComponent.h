@@ -55,15 +55,15 @@ namespace BrnResource
         void Construct(GameDataModule* lpModule, rw::IResourceAllocator* lpAllocator);
 
         // DecFIGS declaration and ARTIST vtable slots for the original stats reader/HUD.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
-        void Update() override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
+        void Update() ;
 
         // X360 0x827DD200; DecFIGS declares this accessor const.
-        const char* GetName() const override { return "GameDataModule"; }
+        const char* GetName() const  { return "GameDataModule"; }
 
         // X360 0x826626A8. Registers the Show HUD flag and the two read-only
         // event-slot counters under this component's own path.
-        void OnActivate() override;
+        void OnActivate() ;
 
         // Per-channel linear interpolation of two packed 0xAARRGGBB colours, used by
         // RenderHUD to fade the resource-bar colours. lfFactor selects toward luColourT
@@ -90,6 +90,6 @@ namespace BrnResource
         s32                      miSlotsFree;
     };
 
-    static_assert(sizeof(DebugComponent::AllocatorStatsRow) == 164,
+    CGS_STATIC_ASSERT((sizeof(DebugComponent::AllocatorStatsRow) == 164),
                   "ARTIST AllocatorInfo rows use a 0xA4 byte stride");
 }

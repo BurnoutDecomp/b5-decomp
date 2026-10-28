@@ -27,7 +27,7 @@ namespace BrnGameState
 // Only an online mode sitting in its splash state moves on (E_GME_NEXT); anything else ignores it.
 void ModeManager::FinishedSplashScreen()
 {
-    if (mpCurrentGameMode != nullptr && mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_ONLINE_SPLASH)
+    if (mpCurrentGameMode != 0 && mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_ONLINE_SPLASH)
     {
         mpCurrentGameMode->SendEvent(E_GME_NEXT);
     }
@@ -37,7 +37,7 @@ void ModeManager::FinishedSplashScreen()
 // advanced either way.
 void ModeManager::FinishedMapPan()
 {
-    if (mpCurrentGameMode == nullptr)
+    if (mpCurrentGameMode == 0)
     {
         return;
     }

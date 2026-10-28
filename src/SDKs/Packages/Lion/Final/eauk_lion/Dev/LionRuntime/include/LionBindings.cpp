@@ -39,16 +39,16 @@
 // ----------------------------------------------------------------------------
 void cLionBindings::Init()
 {
-    mpLocator     = nullptr;
-    mpScaler      = nullptr;
-    mpTrigger     = nullptr;
-    mppLocators   = nullptr;
+    mpLocator     = 0;
+    mpScaler      = 0;
+    mpTrigger     = 0;
+    mppLocators   = 0;
     mLocatorCount = 0;
 
     mSeed.Init();
 
     mWorldIndex   = 0;
-    mpNext        = nullptr;
+    mpNext        = 0;
 }
 
 void cLionBindings::DeInit()
@@ -58,7 +58,7 @@ void cLionBindings::DeInit()
     if (mppLocators)
     {
         cLionEffectManager::GetMe()->GetpAllocator()->Free(mppLocators, 0);
-        mppLocators   = nullptr;
+        mppLocators   = 0;
         mLocatorCount = 0;
     }
 }

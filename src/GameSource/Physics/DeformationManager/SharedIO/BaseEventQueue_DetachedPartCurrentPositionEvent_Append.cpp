@@ -21,7 +21,7 @@
 // EventQueue<DetachedPartCurrentPositionEvent,50> family whose Construct instantiation lives in
 // EventQueue_DetachedPartCurrentPositionEvent_50.cpp; called from Deformation::DeformationOutputInterface::operator=.
 // X360-attested element stride (len*80 via *4/*5/*16).
-static_assert(sizeof(BrnPhysics::Deformation::DetachedPartCurrentPositionEvent) == 80,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::DetachedPartCurrentPositionEvent) == 80),
               "DetachedPartCurrentPositionEvent stride 80");
 
 template bool

@@ -67,7 +67,7 @@ namespace CgsSceneManager
     //     DoPairQuery casts between the two spellings at its two call sites with the
     //     equivalence static_asserted in that TU.
     // -------------------------------------------------------------------------
-    struct alignas(16) Contact
+    struct CGS_ALIGN(16) Contact
     {
         Vector4 mPosition;             // +0x00
         Vector4 mImpulse;              // +0x10
@@ -83,7 +83,7 @@ namespace CgsSceneManager
         // fields land at their asm offsets. Two parallel per-contact-point vec4
         // arrays sit at base 0x500 (slot index 80) and 0x600 (slot index 96), each
         // indexed by the contact-point index; muNumPoints (offset 0x740) bounds them.
-        struct alignas(16) SourceResult
+        struct CGS_ALIGN(16) SourceResult
         {
             u8      maReserved00[4];       // +0x000
             u32     muFieldA;              // +0x004  -> Contact::muFieldA

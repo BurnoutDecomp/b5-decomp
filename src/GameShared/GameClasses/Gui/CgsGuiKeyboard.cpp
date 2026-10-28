@@ -24,9 +24,9 @@ static const u32 KU_KEYBOARD_FLAGS = 0x30000064u;
 
 // CgsXOverlapped is the canonical one-member standard-layout wrapper. The
 // system API receives its pointer-interconvertible first XOVERLAPPED member.
-static_assert(std::is_standard_layout<CgsSystem::CgsXOverlapped>::value,
+CGS_STATIC_ASSERT((std::is_standard_layout<CgsSystem::CgsXOverlapped>::value),
               "XDK wrapper and its sole native member are pointer-interconvertible");
-static_assert(sizeof(CgsSystem::CgsXOverlapped) == sizeof(XOVERLAPPED),
+CGS_STATIC_ASSERT((sizeof(CgsSystem::CgsXOverlapped) == sizeof(XOVERLAPPED)),
               "keyboard contains the complete canonical overlapped wrapper");
 
 namespace CgsGui
@@ -48,7 +48,7 @@ namespace CgsGui
                           GuiKeyboardListener& lListener)
     {
         // X360: assert no dialog already active (mpListener at +0x41C is null), at :205.
-        CGS_ASSERT(mpListener == nullptr, "GuiKeyboard::Show: already being shown.");
+        CGS_ASSERT(mpListener == 0, "GuiKeyboard::Show: already being shown.");
 
         mpListener = &lListener;
 
@@ -62,13 +62,13 @@ namespace CgsGui
     // @ 0x8284D0C0
     void GuiKeyboard::Update()
     {
-        if (mpListener == nullptr)
+        if (mpListener == 0)
         {
             return;
         }
 
         // Poll without waiting. While the op is still pending, leave it running.
-        const u32 luResult = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(&mOverlapped), nullptr, 0);
+        const u32 luResult = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(&mOverlapped), 0, 0);
         const bool lbStillPending =
             (luResult == ERROR_IO_PENDING) || (luResult == ERROR_IO_INCOMPLETE);
         if (lbStillPending)
@@ -80,10 +80,10 @@ namespace CgsGui
         // re-query: a non-zero code means the op errored, so hand the listener null;
         // ERROR_SUCCESS (0) hands it the populated result buffer.
         GuiKeyboardListener* lpListener = mpListener;
-        mpListener = nullptr;
+        mpListener = 0;
 
-        const u32 luFinal = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(&mOverlapped), nullptr, 0);
-        const CgsUtf16* lpResultText = (luFinal != 0) ? nullptr : maResultBuffer;
+        const u32 luFinal = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(&mOverlapped), 0, 0);
+        const CgsUtf16* lpResultText = (luFinal != 0) ? 0 : maResultBuffer;
         lpListener->KeyboardClosed(lpResultText);
     }
 }

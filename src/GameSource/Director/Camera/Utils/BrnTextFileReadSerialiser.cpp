@@ -24,7 +24,7 @@ void TextFileReadSerialiser::Construct(const char* lpcFilename)
 
 void TextFileReadSerialiser::Destruct()
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
         std::fclose(mpFile);
 }
 
@@ -35,7 +35,7 @@ void TextFileReadSerialiser::Destruct()
 // ----------------------------------------------------------------------------
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, f32& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lrValue);
@@ -44,7 +44,7 @@ void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, f32& lrValue)
 
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, u32& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue);
@@ -53,7 +53,7 @@ void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, u32& lrValue)
 
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, s32& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue);
@@ -65,7 +65,7 @@ void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, s32& lrValue)
 // store an indeterminate value.
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, bool& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         s32  liValue = lrValue ? 1 : 0;
@@ -76,7 +76,7 @@ void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, bool& lrValue)
 
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Utils::VersionNumber& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue.muVersion);
@@ -85,7 +85,7 @@ void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Utils::VersionNu
 
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Utils::FOV& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lrValue.mfFOV);
@@ -126,7 +126,7 @@ void TextFileReadSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
 template<s32 INDEX>
 void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Vector3& lrVector)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         f32& lrLane = (INDEX == 0) ? lrVector.x : (INDEX == 1) ? lrVector.y : lrVector.z;
 

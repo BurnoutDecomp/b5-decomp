@@ -22,7 +22,7 @@ namespace BrnWorld
 namespace RaceCarEntityModuleIO
 {
     // DWARF :49 -- request to spawn a rival into the traffic system. sizeof == 48.
-    struct alignas(16) CreateRivalInTrafficSystemEvent
+    struct CGS_ALIGN(16) CreateRivalInTrafficSystemEvent
     {
     public:
         void                Construct(Vector3 lSpawnPosition, Vector3 lSpawnDirection,

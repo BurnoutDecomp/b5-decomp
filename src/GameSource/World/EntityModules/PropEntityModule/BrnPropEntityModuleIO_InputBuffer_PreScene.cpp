@@ -164,21 +164,21 @@ void
 InputBuffer_PreScene::_AssertLayout()
 {
     // The 2-byte notification events + the capacities the X360 Construct passes.
-    static_assert(sizeof(PropInstancesNeededForZoneEvent) == 2, "2-byte zone-id event");
-    static_assert(sizeof(PropGraphicsLoadedEvent) == 2,         "2-byte graphics-id event");
-    static_assert(sizeof(PropGraphicsUnloadedEvent) == 2,       "2-byte graphics-id event");
-    static_assert(PropInstancesNeededForZoneQueue::KI_LENGTH == 30, "0x4C-0x04 == 12 + 30*2");
-    static_assert(PropGraphicsLoadedQueue::KI_LENGTH == 25,         "0x8C-0x4C == 12 + 25*2 (round 4)");
-    static_assert(PropGraphicsUnloadedQueue::KI_LENGTH == 25,       "sibling of the loaded queue");
+    CGS_STATIC_ASSERT((sizeof(PropInstancesNeededForZoneEvent) == 2), "2-byte zone-id event");
+    CGS_STATIC_ASSERT((sizeof(PropGraphicsLoadedEvent) == 2),         "2-byte graphics-id event");
+    CGS_STATIC_ASSERT((sizeof(PropGraphicsUnloadedEvent) == 2),       "2-byte graphics-id event");
+    CGS_STATIC_ASSERT((PropInstancesNeededForZoneQueue::KI_LENGTH == 30), "0x4C-0x04 == 12 + 30*2");
+    CGS_STATIC_ASSERT((PropGraphicsLoadedQueue::KI_LENGTH == 25),         "0x8C-0x4C == 12 + 25*2 (round 4)");
+    CGS_STATIC_ASSERT((PropGraphicsUnloadedQueue::KI_LENGTH == 25),       "sibling of the loaded queue");
 
     // The nine `stvx128` slots Construct zeroes: one position + eight velocities, 16B each.
-    static_assert(sizeof(Vector3) == 16, "one SIMD lane per vector");
-    static_assert(sizeof(maRaceCarVelocity) == 8 * 16,
+    CGS_STATIC_ASSERT((sizeof(Vector3) == 16), "one SIMD lane per vector");
+    CGS_STATIC_ASSERT((sizeof(maRaceCarVelocity) == 8 * 16),
                   "maRaceCarVelocity[8] -- the 0x700..0x770 stvx128 run");
 
     // 300000 bits == 37504 bytes == the memcpy size PreSceneUpdate uses for the profile's
     // hit-props copy. If this ever stops holding, that copy is copying the wrong thing.
-    static_assert(sizeof(HitPropsBitArray) == 37504, "BitArray<300000> == the 37504-byte memcpy");
+    CGS_STATIC_ASSERT((sizeof(HitPropsBitArray) == 37504), "BitArray<300000> == the 37504-byte memcpy");
 }
 
 }

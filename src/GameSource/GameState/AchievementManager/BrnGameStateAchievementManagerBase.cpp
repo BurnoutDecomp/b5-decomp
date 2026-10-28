@@ -164,7 +164,7 @@ void AchievementManagerBase::OnTakedown()
     // The X360 takes the address of the embedded Profile (mpProgressionManager + 0x170)
     // and asserts it non-null ("lpProfile"). With a non-null mpProgressionManager that
     // interior address is always non-null; the assert is preserved for parity below.
-    CGS_ASSERT(mpProgressionManager != nullptr, "lpProfile");
+    CGS_ASSERT(mpProgressionManager != 0, "lpProfile");
 
     if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_GET_500_TAKEDOWNS)
         && mpProgressionManager->GetProfileTotalTakedowns() >= KI_GET_500_TAKEDOWNS)

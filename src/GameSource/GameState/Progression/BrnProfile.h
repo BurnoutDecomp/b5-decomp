@@ -1164,13 +1164,13 @@ private:
     // @ +118032..+118039).
     static void _AssertLayout()
     {
-        static_assert(sizeof(mb100PercentCompletionSequenceShown) == 1,
+        CGS_STATIC_ASSERT((sizeof(mb100PercentCompletionSequenceShown) == 1),
                       "completion flags are single bytes (X360 lbzx/stbx)");
-        static_assert(offsetof(Profile, mbHaveSeenEliteCompletionSequence) -
-                      offsetof(Profile, mb100PercentCompletionSequenceShown) == 6,
+        CGS_STATIC_ASSERT((offsetof(Profile, mbHaveSeenEliteCompletionSequence) -
+                      offsetof(Profile, mb100PercentCompletionSequenceShown) == 6),
                       "X360: elite flag @ +0x1CD16 == 100%-completion flag @ +0x1CD10 + 6");
-        static_assert(offsetof(Profile, mbRedundantBool4) -
-                      offsetof(Profile, mb100PercentCompletionSequenceShown) == 7,
+        CGS_STATIC_ASSERT((offsetof(Profile, mbRedundantBool4) -
+                      offsetof(Profile, mb100PercentCompletionSequenceShown) == 7),
                       "X360: the eight-bool completion cluster is contiguous (+118032..+118039)");
     }
 };

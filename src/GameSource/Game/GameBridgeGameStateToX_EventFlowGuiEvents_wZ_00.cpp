@@ -38,7 +38,7 @@ namespace
         s32 miTotalDriveThrusOfThisType;       // +0x04
         s32 miNumDriveThrusOfThisTypeFound;    // +0x08
     };
-    static_assert(sizeof(DriveThruDiscoveredActionMirror) == 12, "action 104 is posted with size 12");
+    CGS_STATIC_ASSERT((sizeof(DriveThruDiscoveredActionMirror) == 12), "action 104 is posted with size 12");
 
     // The player-trigger action (109, 24 bytes), one per trigger region the player car is in,
     // every frame. Posted by TriggerQueryManager::PreWorldUpdate's fan-out.
@@ -51,7 +51,7 @@ namespace
         u8    mbFirstFrame;                    // +0x14
         u8    mauPad[3];                       // +0x15
     };
-    static_assert(sizeof(PlayerTriggerActionMirror) == 24, "action 109 is posted with size 24");
+    CGS_STATIC_ASSERT((sizeof(PlayerTriggerActionMirror) == 24), "action 109 is posted with size 24");
 
     // id 315 size 1 -- AddGuiEvent<CgsGui::GuiEvent<315>>. The arm posts a stack byte it never
     // writes; the consumer (HudMessageAnalyzer case 315 -> "EvryDrveThru") reads only the id.
@@ -60,18 +60,18 @@ namespace
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 315; }
     };
-    static_assert(sizeof(AllDriveThrusFoundWire315) == 1, "id 315 size 1");
+    CGS_STATIC_ASSERT((sizeof(AllDriveThrusFoundWire315) == 1), "id 315 size 1");
 
-    static_assert(sizeof(BrnGui::GuiEnteredJunkyard) == 1,              "id 79 size 1");
-    static_assert(sizeof(BrnGui::GuiEventEnterLandmarkArea) == 2,       "id 165 size 2");
-    static_assert(sizeof(BrnGui::GuiEventHideDriveThru) == sizeof(CgsID), "id 201 size 8");
-    static_assert(sizeof(BrnGui::GuiEventMiniMapSwitch) == 1,           "id 205 size 1");
-    static_assert(sizeof(BrnGui::GuiEventJumpStarted) == sizeof(CgsID), "id 216 size 8");
-    static_assert(sizeof(BrnGui::GuiEventDriveThruDiscovered) == 12,    "id 314 size 12");
-    static_assert(sizeof(BrnGui::GuiEventSuperJumpFailed) == 1,         "id 549 size 1");
-    static_assert(sizeof(BrnGui::GuiEventCantPaintCar) == 1,            "id 551 size 1");
-    static_assert(sizeof(BrnGui::GuiEventReturnDistrict) == 8,          "id 196 size 8");
-    static_assert(sizeof(BrnGui::GuiEventAllJunctionsDiscoveredOfType) == 4, "id 313 size 4");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEnteredJunkyard) == 1),              "id 79 size 1");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventEnterLandmarkArea) == 2),       "id 165 size 2");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventHideDriveThru) == sizeof(CgsID)), "id 201 size 8");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventMiniMapSwitch) == 1),           "id 205 size 1");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventJumpStarted) == sizeof(CgsID)), "id 216 size 8");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventDriveThruDiscovered) == 12),    "id 314 size 12");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventSuperJumpFailed) == 1),         "id 549 size 1");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventCantPaintCar) == 1),            "id 551 size 1");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventReturnDistrict) == 8),          "id 196 size 8");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventAllJunctionsDiscoveredOfType) == 4), "id 313 size 4");
 
     // id 312 size 1 -- AddGuiEvent<CgsGui::GuiEvent<312>>. The arm posts a stack byte it never
     // writes; the consumer (HudMessageAnalyzer case 312 -> "EvryEventJnc") reads only the id.
@@ -80,8 +80,8 @@ namespace
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 312; }
     };
-    static_assert(sizeof(AllEventsDiscoveredWire312) == 1, "id 312 size 1");
-    static_assert(sizeof(BrnGui::GuiEventMustFixCarFirst) == 1,         "id 552 size 1");
+    CGS_STATIC_ASSERT((sizeof(AllEventsDiscoveredWire312) == 1), "id 312 size 1");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventMustFixCarFirst) == 1),         "id 552 size 1");
 
 }   // anonymous namespace
 

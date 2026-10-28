@@ -78,7 +78,7 @@
 #include <cstring>   // memcpy
 
 // EPaybackType is a network enum homed elsewhere; only its name/width is needed here.
-namespace BrnNetwork { enum EPaybackType : s32; }
+namespace BrnNetwork { enum EPaybackType ; }
 
 namespace BrnWorldIO
 {

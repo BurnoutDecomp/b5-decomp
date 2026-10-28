@@ -6,7 +6,7 @@
 // than re-declaring the shared helper.
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestLocateService.h"
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>
 
 // ===========================================================================
@@ -84,7 +84,7 @@ char* CRequestDownloadBinary::SetRequestURL(const char* pcURL)
     if (mpRequestURL)
         return strncpy(mpRequestURL, pcURL, lnLength);
 
-    return reinterpret_cast<char*>(static_cast<std::intptr_t>(
+    return reinterpret_cast<char*>(static_cast<intptr_t>(
         SetLastError(-99, "Could not allocate buffer to store request URL")));
 }
 

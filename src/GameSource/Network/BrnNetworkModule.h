@@ -115,11 +115,11 @@ namespace BrnNetwork
 
         // Slot 2. The staged release (EReleaseStage): the network-event queue and the two debug
         // toggles, then the manager, then the base Release().
-        bool Release() override;
+        bool Release() ;
 
         // Slot 3. Destructs the manager and the game-event queue, clears the player-ID cache, then
         // the base Destruct().
-        void Destruct() override;
+        void Destruct() ;
 
         // ---- per-frame update (non-virtual; called by the game module's network legs) ----------
         // Returns whether the local player is in a game (DoUpdate_NetworkPreSim stores it).

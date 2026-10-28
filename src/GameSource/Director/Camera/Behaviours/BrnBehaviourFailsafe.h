@@ -100,23 +100,23 @@ public:
     // ---- the Behaviour virtual interface -----------------------------------------------------
     // Seed a freshly pooled instance (policy, controller playback, orientation lag, spin).
     //                                                                                  (slot 0)
-    void Construct() override;
+    void Construct() ;
 
     // Bind the key-anim controller to the first "Failsafe" take and point the orientation lag at
     // its tunables. Always true.                                                       (slot 1)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lSharedInfo) override;
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lSharedInfo) ;
 
     // Run the take, re-anchor it to the lagged upright car frame and spin it.          (slot 2)
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) ;
 
     // The vehicle-attached policy Construct seeded.                                    (slot 5)
-    CollisionPolicy* GetCollisionPolicy() override;
+    CollisionPolicy* GetCollisionPolicy() ;
 
     // Reset the tweaker it is handed; the failsafe maps nothing onto it.              (slot 6)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;
 
     //                                                                                  (slot 7)
-    const char* GetName() const override;
+    const char* GetName() const ;
 
     // Adopt a failsafe parameter block: assert it carries the failsafe type tag, store the
     // pointer and take the block's debug name. Declared over the derived Parameters, so it hides
@@ -136,11 +136,11 @@ public:
     static void _AssertLayout()
     {
         typedef BehaviourFailsafe T;
-        static_assert(offsetof(T, mOrientationLag) < offsetof(T, mOrientationLagParams) &&
+        CGS_STATIC_ASSERT((offsetof(T, mOrientationLag) < offsetof(T, mOrientationLagParams) &&
                       offsetof(T, mOrientationLagParams) < offsetof(T, mCollisionPolicy) &&
                       offsetof(T, mCollisionPolicy) < offsetof(T, mKeyAnimController) &&
                       offsetof(T, mKeyAnimController) < offsetof(T, mpParameters) &&
-                      offsetof(T, mpParameters) < offsetof(T, mfRotationOffset),
+                      offsetof(T, mpParameters) < offsetof(T, mfRotationOffset)),
                       "BehaviourFailsafe: members in console order");
     }
 };

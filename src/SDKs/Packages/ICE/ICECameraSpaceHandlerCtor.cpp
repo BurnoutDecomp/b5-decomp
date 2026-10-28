@@ -25,12 +25,12 @@ namespace ICE
 // --- Layout proofs -------------------------------------------------------
 // Matrix44Affine is the 16-aligned 4x4 affine the lvx128/stvx128 stride-16 idiom
 // walks: four 16-byte Vector3 lanes = 64 bytes.
-static_assert(sizeof(rw::math::vpu::Matrix44Affine) == 64,
+CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Matrix44Affine) == 64),
               "Matrix44Affine must be 64 bytes (four 16-byte affine rows)");
 
 // The eight take matrices form a contiguous 512-byte block (8 * 64) -- exactly
 // the span the X360 copy ctor / operator= flat-copy with 32 vector moves.
-static_assert(8 * sizeof(rw::math::vpu::Matrix44Affine) == 512,
+CGS_STATIC_ASSERT((8 * sizeof(rw::math::vpu::Matrix44Affine) == 512),
               "the eight take matrices must occupy a 512-byte block");
 
 // mpGamePlayCam sits at offset 0x200 == 512 (the trailing lwz/stw word in the
@@ -41,12 +41,12 @@ static_assert(8 * sizeof(rw::math::vpu::Matrix44Affine) == 512,
 // 512-byte matrix block the asm offsets depend on. The "512" the X360 copy walks
 // is the MATRIX block, not the whole object. The object begins with the 512-byte
 // matrix block, so the whole object is at least that large.
-static_assert(sizeof(CameraSpaceHandler) >= 512,
+CGS_STATIC_ASSERT((sizeof(CameraSpaceHandler) >= 512),
               "CameraSpaceHandler embeds the 512-byte matrix block");
 
 // CameraSpaceHandler is trivially copyable, which is WHY the defaulted copy
 // ctor / operator= reproduce the X360 flat (lvx/stvx + lwz/stw) copy exactly.
-static_assert(__is_trivially_copyable(CameraSpaceHandler),
+CGS_STATIC_ASSERT((__is_trivially_copyable(CameraSpaceHandler)),
               "the flat-copy parity relies on CameraSpaceHandler being trivially copyable");
 
 // ODR-use both special members so the gate instantiates and checks the copy

@@ -169,7 +169,7 @@ namespace Attrib
         void* operator new(size_t lnBytes);
     };
 
-    static_assert(alignof(EditTable::node_type) <= EASTL_ALLOCATOR_MIN_ALIGNMENT,
+    CGS_STATIC_ASSERT((__alignof(EditTable::node_type) <= EASTL_ALLOCATOR_MIN_ALIGNMENT),
                   "EditTable nodes must never take the over-aligned allocation branch");
 
     // -----------------------------------------------------------------------------------------

@@ -219,22 +219,22 @@ private:
     // Compile-time guards: the X360 Construct stores pin every offset.
     static void _AssertLayout()
     {
-        static_assert(sizeof(CameraStatusData) == 0x08, "CameraStatusData must be 8 bytes");
-        static_assert(offsetof(MugshotManager, maCameraStatusData)           == 0x00, "maCameraStatusData @ +0x00");
-        static_assert(offsetof(MugshotManager, mRoadRuleMugshotBeatenRoadID) == 0x40, "mRoadRuleMugshotBeatenRoadID @ +0x40");
-        static_assert(offsetof(MugshotManager, meMugshotCaptureRaceCarIndex) == 0x48, "meMugshotCaptureRaceCarIndex @ +0x48");
-        static_assert(offsetof(MugshotManager, meMugshotShowRaceCarIndex)    == 0x4C, "meMugshotShowRaceCarIndex @ +0x4C");
-        static_assert(offsetof(MugshotManager, mfMugshotCaptureTimer)        == 0x50, "mfMugshotCaptureTimer @ +0x50");
-        static_assert(offsetof(MugshotManager, mfMugshotShowTimer)           == 0x54, "mfMugshotShowTimer @ +0x54");
-        static_assert(offsetof(MugshotManager, meMugshotCaptureState)        == 0x58, "meMugshotCaptureState @ +0x58");
-        static_assert(offsetof(MugshotManager, meMugshotShowState)           == 0x5C, "meMugshotShowState @ +0x5C");
-        static_assert(offsetof(MugshotManager, meCaptureMugshotType)         == 0x60, "meCaptureMugshotType @ +0x60");
-        static_assert(offsetof(MugshotManager, mpGameStateModule)            == 0x68, "mpGameStateModule @ +0x68");
+        CGS_STATIC_ASSERT((sizeof(CameraStatusData) == 0x08), "CameraStatusData must be 8 bytes");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, maCameraStatusData)           == 0x00), "maCameraStatusData @ +0x00");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, mRoadRuleMugshotBeatenRoadID) == 0x40), "mRoadRuleMugshotBeatenRoadID @ +0x40");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, meMugshotCaptureRaceCarIndex) == 0x48), "meMugshotCaptureRaceCarIndex @ +0x48");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, meMugshotShowRaceCarIndex)    == 0x4C), "meMugshotShowRaceCarIndex @ +0x4C");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, mfMugshotCaptureTimer)        == 0x50), "mfMugshotCaptureTimer @ +0x50");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, mfMugshotShowTimer)           == 0x54), "mfMugshotShowTimer @ +0x54");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, meMugshotCaptureState)        == 0x58), "meMugshotCaptureState @ +0x58");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, meMugshotShowState)           == 0x5C), "meMugshotShowState @ +0x5C");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, meCaptureMugshotType)         == 0x60), "meCaptureMugshotType @ +0x60");
+        CGS_STATIC_ASSERT((offsetof(MugshotManager, mpGameStateModule)            == 0x68), "mpGameStateModule @ +0x68");
         // mbIsAnythingPaused sits one pointer-width past mpGameStateModule. On the 4-byte-pointer
         // X360 ABI that is +0x6C (the authoritative offset); the host gate is a 64-bit (8-byte
         // pointer) build, so guard the exact check on the X360 pointer width.
-        static_assert(sizeof(void*) != 4
-                      || offsetof(MugshotManager, mbIsAnythingPaused) == 0x6C, "mbIsAnythingPaused @ +0x6C (4B-ptr ABI)");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4
+                      || offsetof(MugshotManager, mbIsAnythingPaused) == 0x6C), "mbIsAnythingPaused @ +0x6C (4B-ptr ABI)");
     }
 };
 } // namespace BrnGameState

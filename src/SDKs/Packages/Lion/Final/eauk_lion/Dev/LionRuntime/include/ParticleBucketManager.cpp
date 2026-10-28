@@ -46,8 +46,8 @@ const u32 KU_MATRIX_BUCKET_STRIDE = 16u * sizeof(cMatrix);   // 1024 bytes
 // Byte-stride pins: the shift/mask arithmetic below bakes 256 (<<8) and 1024 (>>10).
 static void _AssertStrides()
 {
-    static_assert(KU_VECTOR_BUCKET_STRIDE == 256, "vector bucket stride == 256 (16 * cVector)");
-    static_assert(KU_MATRIX_BUCKET_STRIDE == 1024, "matrix bucket stride == 1024 (16 * cMatrix)");
+    CGS_STATIC_ASSERT((KU_VECTOR_BUCKET_STRIDE == 256), "vector bucket stride == 256 (16 * cVector)");
+    CGS_STATIC_ASSERT((KU_MATRIX_BUCKET_STRIDE == 1024), "matrix bucket stride == 1024 (16 * cMatrix)");
 }
 }  // namespace
 
@@ -76,19 +76,19 @@ void cParticleBucketManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocato
         static_cast<size_t>(mMatrixBucketCount) * KU_MATRIX_BUCKET_STRIDE,
         lMatricesLine + lMatricesFile + lMatricesName));
 
-    mpFree = nullptr;
-    mpUsed = nullptr;
+    mpFree = 0;
+    mpUsed = 0;
 
     // Clear every bucket's manager/emitter links, side-array pointers, live count and
     // active mask, and seed its RNG.
     for (u32 lIndex = 0; lIndex < mBucketCount; ++lIndex)
     {
         cParticleBucket& lrBucket = mpBuckets[lIndex];
-        lrBucket.mpManagerNext                = nullptr;
-        lrBucket.mpEmitter                    = nullptr;
-        lrBucket.mpEmitterNext                = nullptr;
-        lrBucket.mpMatrices                   = nullptr;
-        lrBucket.mpVectors                    = nullptr;
+        lrBucket.mpManagerNext                = 0;
+        lrBucket.mpEmitter                    = 0;
+        lrBucket.mpEmitterNext                = 0;
+        lrBucket.mpMatrices                   = 0;
+        lrBucket.mpVectors                    = 0;
         lrBucket.mnNextParticlePositionToFill = 0;
         lrBucket.mActiveBits                  = 0;
         lrBucket.mRandomSeed.Init();
@@ -123,13 +123,13 @@ void cParticleBucketManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocato
 void cParticleBucketManager::AppDeInit()
 {
     mpAllocator->Free(mpVectorBucketActiveBits, 0);
-    mpVectorBucketActiveBits = nullptr;
+    mpVectorBucketActiveBits = 0;
 
     mpAllocator->Free(mpBuckets, 0);
-    mpBuckets = nullptr;
+    mpBuckets = 0;
 
     mpAllocator->Free(mpMatrices, 0);
-    mpMatrices = nullptr;
+    mpMatrices = 0;
 }
 
 // Remove apBucket from the singly-linked (mpManagerNext) list headed by arpHead.
@@ -153,7 +153,7 @@ void cParticleBucketManager::ListRemove(cParticleBucket*& arpHead, cParticleBuck
     }
 
     *lppLink = lpNode->mpManagerNext;
-    lpNode->mpManagerNext = nullptr;
+    lpNode->mpManagerNext = 0;
 }
 
 // cParticleBucketManager::BucketAlloc @ 0x82913050
@@ -174,10 +174,10 @@ cParticleBucket* cParticleBucketManager::BucketAlloc(u32 /*auCount*/, const cTim
     cParticleBucket* lpUsed = mpUsed;
     if (!lpUsed)
     {
-        return nullptr;
+        return 0;
     }
 
-    cParticleBucket* lpVictim = nullptr;
+    cParticleBucket* lpVictim = 0;
     s32 lBestDelta = 0;
     for (;;)
     {
@@ -207,7 +207,7 @@ cParticleBucket* cParticleBucketManager::BucketAlloc(u32 /*auCount*/, const cTim
 
     if (!lpVictim)
     {
-        return nullptr;
+        return 0;
     }
 
     // Free() recycles the victim onto the free list; pull it straight back onto the used list.
@@ -225,24 +225,24 @@ cParticleBucket* cParticleBucketManager::AllocateBucket(u32 auCount, const cTime
     cParticleBucket* lpBucket = BucketAlloc(auCount, arTime);
     if (!lpBucket)
     {
-        return nullptr;
+        return 0;
     }
 
     switch (aeType)
     {
         case cParticleDescriptor::E_BUCKET_LIGHT:
-            lpBucket->mpMatrices = nullptr;
+            lpBucket->mpMatrices = 0;
             lpBucket->mpVectors  = VectorBucketAlloc();
             break;
 
         case cParticleDescriptor::E_BUCKET_HEAVY:
             lpBucket->mpMatrices = MatrixBucketAlloc();
-            lpBucket->mpVectors  = nullptr;
+            lpBucket->mpVectors  = 0;
             break;
 
         default:
-            lpBucket->mpMatrices = nullptr;
-            lpBucket->mpVectors  = nullptr;
+            lpBucket->mpMatrices = 0;
+            lpBucket->mpVectors  = 0;
             break;
     }
 
@@ -267,7 +267,7 @@ void cParticleBucketManager::Free(cParticleBucket* apBucket)
             / KU_MATRIX_BUCKET_STRIDE;
         u32 lMask = 0xF0000000u >> ((lMatIndex & 7u) * 4u);
         mpVectorBucketActiveBits[lMatIndex >> 3] &= ~lMask;
-        apBucket->mpMatrices = nullptr;
+        apBucket->mpMatrices = 0;
     }
 
     // Release the vector side array: clear its single bit in the map.
@@ -278,7 +278,7 @@ void cParticleBucketManager::Free(cParticleBucket* apBucket)
             / KU_VECTOR_BUCKET_STRIDE;
         u32 lBit = 1u << (31u - (lVecIndex & 0x1Fu));
         mpVectorBucketActiveBits[lVecIndex >> 5] &= ~lBit;
-        apBucket->mpVectors = nullptr;
+        apBucket->mpVectors = 0;
     }
 
     // Tell the owning emitter to drop this bucket.
@@ -299,10 +299,10 @@ cVector* cParticleBucketManager::VectorBucketAlloc()
     u32 lIndex = mVectorBucketCount;
     if (lIndex == 0)
     {
-        return nullptr;
+        return 0;
     }
 
-    cVector* lpResult = nullptr;
+    cVector* lpResult = 0;
     s32 lByteOffset = static_cast<s32>(lIndex * KU_VECTOR_BUCKET_STRIDE);
     do
     {
@@ -382,10 +382,10 @@ cMatrix* cParticleBucketManager::MatrixBucketAlloc()
 {
     if (static_cast<s32>(mMatrixBucketCount) <= 0)
     {
-        return nullptr;
+        return 0;
     }
 
-    cMatrix* lpResult = nullptr;
+    cMatrix* lpResult = 0;
     s32 lByteOffset = 0;
     for (u32 lIndex = 0; lIndex < mMatrixBucketCount; ++lIndex)
     {

@@ -6,7 +6,7 @@
 #include "SharedClasses/Progression/BrnRaceEventData.h"   // EventRacerPersonality (complete: GetPersonality indexes the 16-byte table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (GetPersonality's :497 guard)
 
-#include <cstdint>            // uintptr_t (the serialised 32-bit array-base slots below)
+#include "types.hpp"            // uintptr_t (the serialised 32-bit array-base slots below)
 
 // =============================================================================
 // BrnProgressionData.h  (OWNING HEADER for BrnProgression::ProgressionData)
@@ -260,7 +260,7 @@ private:
 // The 0x50 (80-byte) root ProgressionData::FixDown @0x8267F220 reads as 20 u32 words, and the
 // root progression_transcode.py ports (SIZEOF['ROOT'] == 0x50). A host-pointer widening of any
 // base slot breaks this.
-static_assert(sizeof(ProgressionData) == 0x50, "BrnProgression::ProgressionData is an 0x50 serialised record");
+CGS_STATIC_ASSERT((sizeof(ProgressionData) == 0x50), "BrnProgression::ProgressionData is an 0x50 serialised record");
 }
 
 #endif // BRN_PROGRESSION_DATA_H

@@ -173,7 +173,7 @@ namespace BrnResource
         // process lifetime; the operating system reclaims these static-allocator backing blocks.
         // No fallback size or allocator policy is added. A failed host allocation is passed to
         // LinearMalloc::Create so its original lpBuffer assertion and post-assert stores run.
-        void* gaInitialDefaultLinearBacking[2] = { nullptr, nullptr };
+        void* gaInitialDefaultLinearBacking[2] = { 0, 0 };
 
         const char* const KAC_DEFAULT_LINEAR_RESOURCE_NAMES[5] =
         {
@@ -254,7 +254,7 @@ namespace BrnResource
             {
                 maAllocators[liType].SetAlignment(lrLane.m_alignment);
                 lResource.m_baseResources[liType] = maAllocators[liType].Malloc(lrLane.m_size);
-                if (lResource.m_baseResources[liType] == nullptr)
+                if (lResource.m_baseResources[liType] == 0)
                     FireDefaultLinearAllocatorAssert("Failed to allocate memory\n", 948);
             }
         }
@@ -290,7 +290,7 @@ namespace BrnResource
     // the compiler emits its polymorphic-delete thunk (the X360 `scalar deleting destructor'
     // @0x82666948). The underlying object teardown is trivial (only the rw::IResourceAllocator
     // base) -- the X360 thunk just rewrites the vptr and conditionally operator-deletes.
-    DefaultLinearAllocator::~DefaultLinearAllocator() = default;
+    DefaultLinearAllocator::~DefaultLinearAllocator() {}
 
     // rw::IResourceAllocator virtual entry point -> forward to Allocate.
     rw::Resource HeapResourceAllocator::DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName)
@@ -374,7 +374,7 @@ namespace BrnResource
     // lane is initialized to {0,1} by82C5FEE8, matching the other four data lanes.
     rw::Resource Allocators::mGlobalGraphicsMemory;
     rw::ResourceDescriptor Allocators::mGlobalGraphicsMemoryDescriptor;
-    rw::LinearResourceAllocator* Allocators::mpInternalGraphicsAllocator = nullptr;
+    rw::LinearResourceAllocator* Allocators::mpInternalGraphicsAllocator = 0;
     LinearResourceAllocator Allocators::mGlobalGraphicsAllocator;
 
     void LinearResourceAllocator::Construct(rw::LinearResourceAllocator* lpAllocator,
@@ -441,7 +441,7 @@ namespace BrnResource
                "We don't support disposable unitialized memory\n", 1294);
         Assert(lrDescriptor.m_baseResourceDescriptors[1].m_size == 0,
                "We don't support disposable memory\n", 1295);
-        Assert(mpLinearAllocator != nullptr, "General allocator not set\n", 1305);
+        Assert(mpLinearAllocator != 0, "General allocator not set\n", 1305);
 
         const rw::ResourceDescriptor lAvailable = mpLinearAllocator->GetAvailable();
         if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -512,10 +512,10 @@ namespace BrnResource
                 CgsDev::Assert::EndAssert();
             }
         };
-        Assert(lrResource.m_baseResources[3] == nullptr, "We don't support unitialized memory\n", 1385);
-        Assert(lrResource.m_baseResources[4] == nullptr, "We don't support disposable unitialized memory\n", 1386);
-        Assert(lrResource.m_baseResources[1] == nullptr, "We don't support disposable memory\n", 1387);
-        Assert(mpLinearAllocator != nullptr, "General allocator not set\n", 1397);
+        Assert(lrResource.m_baseResources[3] == 0, "We don't support unitialized memory\n", 1385);
+        Assert(lrResource.m_baseResources[4] == 0, "We don't support disposable unitialized memory\n", 1386);
+        Assert(lrResource.m_baseResources[1] == 0, "We don't support disposable memory\n", 1387);
+        Assert(mpLinearAllocator != 0, "General allocator not set\n", 1397);
         mpLinearAllocator->DoFree(lrResource);
     }
 

@@ -133,8 +133,8 @@ namespace BrnGui
 
         // Record-size pins: both payloads are pointer-free, so the X360's AddEvent size
         // immediates must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "overlay wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "overlay wait-finish record is 24 bytes");
 
         // ---- overlay / state-event vocabularies (the asm's rodata literals) --------
         const char KAC_OVERLAY_LOBBY_DELETED[]   = "CNLobbyDlted";   // lobby went away under us

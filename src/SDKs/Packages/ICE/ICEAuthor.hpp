@@ -355,25 +355,25 @@ struct ICEAuthor
 // fields (the f32 / s32 scalars) ARE offset-stable relative to mEditTake, so a
 // couple of those relative pins are kept too.
 // ---------------------------------------------------------------------------
-static_assert(offsetof(ICEAuthor, mpFileHandler) < offsetof(ICEAuthor, mEditTake),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, mpFileHandler) < offsetof(ICEAuthor, mEditTake)),
     "ICEAuthor head pointer block precedes mEditTake");
-static_assert(offsetof(ICEAuthor, mEditTake) < offsetof(ICEAuthor, mScratchTake),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, mEditTake) < offsetof(ICEAuthor, mScratchTake)),
     "ICEAuthor mEditTake precedes mScratchTake");
-static_assert(offsetof(ICEAuthor, mScratchTake) + sizeof(ICETake) == offsetof(ICEAuthor, miState),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, mScratchTake) + sizeof(ICETake) == offsetof(ICEAuthor, miState)),
     "ICEAuthor miState immediately follows the second embedded take (state block @ take2 end)");
-static_assert(offsetof(ICEAuthor, miPrevState) == offsetof(ICEAuthor, miState) + sizeof(s32),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, miPrevState) == offsetof(ICEAuthor, miState) + sizeof(s32)),
     "ICEAuthor miPrevState immediately follows miState");
-static_assert(offsetof(ICEAuthor, miCurrentChannel) == offsetof(ICEAuthor, miPrevState) + sizeof(s32),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, miCurrentChannel) == offsetof(ICEAuthor, miPrevState) + sizeof(s32)),
     "ICEAuthor miCurrentChannel immediately follows miPrevState");
-static_assert(offsetof(ICEAuthor, maiElementWidget) == offsetof(ICEAuthor, miCurrentChannel) + sizeof(s32),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, maiElementWidget) == offsetof(ICEAuthor, miCurrentChannel) + sizeof(s32)),
     "ICEAuthor widget side-table immediately follows miCurrentChannel");
-static_assert(offsetof(ICEAuthor, mfRangeHi) == offsetof(ICEAuthor, mfRangeLo) + sizeof(f32),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, mfRangeHi) == offsetof(ICEAuthor, mfRangeLo) + sizeof(f32)),
     "ICEAuthor mfRangeHi immediately follows mfRangeLo (AdjustZoomRange treats them as a 2-float window)");
-static_assert(offsetof(ICEAuthor, mfZoomHi) == offsetof(ICEAuthor, mfZoomLo) + sizeof(f32),
+CGS_STATIC_ASSERT((offsetof(ICEAuthor, mfZoomHi) == offsetof(ICEAuthor, mfZoomLo) + sizeof(f32)),
     "ICEAuthor mfZoomHi immediately follows mfZoomLo (zoom window is a 2-float pair)");
-static_assert(sizeof(((ICEAuthor*)0)->maiElementWidget) == KI_ICE_AUTHOR_ELEMENTS * sizeof(s32),
+CGS_STATIC_ASSERT((sizeof(((ICEAuthor*)0)->maiElementWidget) == KI_ICE_AUTHOR_ELEMENTS * sizeof(s32)),
     "ICEAuthor widget side-table is 28-wide");
-static_assert(sizeof(((ICEAuthor*)0)->mabElementEnabled) == KI_ICE_AUTHOR_ELEMENTS,
+CGS_STATIC_ASSERT((sizeof(((ICEAuthor*)0)->mabElementEnabled) == KI_ICE_AUTHOR_ELEMENTS),
     "ICEAuthor element-enable flags are 28-wide");
 
 } // namespace ICE

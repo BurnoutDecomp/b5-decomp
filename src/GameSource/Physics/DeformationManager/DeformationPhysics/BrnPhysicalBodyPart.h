@@ -446,8 +446,8 @@ namespace Deformation
         // friendship, no raw offsets).
         void ClearPoolSlotBindings()
         {
-            mpIKPart           = nullptr;        // stw 0 -> +0x1DC
-            mpDeformableObject = nullptr;        // stw 0 -> +0x1E0
+            mpIKPart           = 0;        // stw 0 -> +0x1DC
+            mpDeformableObject = 0;        // stw 0 -> +0x1E0
             mbAddedToScene     = false;          // stb 0 -> +0x1E5
             mRigidBodyId.muEntityWord = 0xFFFFFFFFu;   // std K_INVALID_RIGID_BODY_ID (~0ull)
             mRigidBodyId.muSubA       = 0xFFFFu;       //   spread over the packed id's

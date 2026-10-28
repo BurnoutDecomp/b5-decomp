@@ -37,7 +37,7 @@
 // instance (X360 off_8324E3B8). Null until the first "toString" lookup builds
 // it; CleanNativeFunctions releases + clears it at Apt shutdown.
 // ---------------------------------------------------------------------------
-AptNativeFunction* AptError::spToStringFunction = nullptr;   // off_8324E3B8
+AptNativeFunction* AptError::spToStringFunction = 0;   // off_8324E3B8
 
 // ---------------------------------------------------------------------------
 // GC pool operator new / delete (X360 @0x82AE6850 / @0x82AF0BF8).
@@ -102,7 +102,7 @@ AptValue* AptError::objectMemberLookup(AptValue* const /*pThis*/,
     }
 
     if (strcmp(pName->c_str(), "toString") != 0)
-        return nullptr;
+        return 0;
 
     // Lazily build the shared toString native method, root it in the GC, and take
     // the owning reference. (The console's `if(mem) ctor else 0` null-check is the
@@ -174,6 +174,6 @@ void AptError::CleanNativeFunctions()
     if (spToStringFunction)
     {
         spToStringFunction->Release();
-        spToStringFunction = nullptr;
+        spToStringFunction = 0;
     }
 }

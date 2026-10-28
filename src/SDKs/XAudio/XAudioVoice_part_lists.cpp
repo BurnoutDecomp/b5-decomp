@@ -98,7 +98,7 @@ s32 CVoice::OnStartVoice()
             {
                 const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                 lpLock->muSavedIrql   = 0;
-                lpLock->mpOwnerThread = nullptr;
+                lpLock->mpOwnerThread = 0;
                 KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                 KfLowerIrql(luRestoreIrql);
             }
@@ -148,7 +148,7 @@ s32 CVoice::OnStopVoice()
         {
             const KIRQL luRestoreIrql = lpLock->muSavedIrql;
             lpLock->muSavedIrql   = 0;
-            lpLock->mpOwnerThread = nullptr;
+            lpLock->mpOwnerThread = 0;
             KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
             KfLowerIrql(luRestoreIrql);
         }
@@ -216,7 +216,7 @@ s32 CVoice::Start()
                 {
                     const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                     lpLock->muSavedIrql   = 0;
-                    lpLock->mpOwnerThread = nullptr;
+                    lpLock->mpOwnerThread = 0;
                     KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                     KfLowerIrql(luRestoreIrql);
                 }
@@ -252,7 +252,7 @@ s32 CVoice::Start()
             {
                 const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                 lpLock->muSavedIrql   = 0;
-                lpLock->mpOwnerThread = nullptr;
+                lpLock->mpOwnerThread = 0;
                 KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                 KfLowerIrql(luRestoreIrql);
             }
@@ -270,7 +270,7 @@ s32 CVoice::Start()
             {
                 const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                 lpLock->muSavedIrql   = 0;
-                lpLock->mpOwnerThread = nullptr;
+                lpLock->mpOwnerThread = 0;
                 KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                 KfLowerIrql(luRestoreIrql);
             }

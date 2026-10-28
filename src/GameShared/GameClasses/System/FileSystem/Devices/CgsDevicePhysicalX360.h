@@ -70,20 +70,20 @@ namespace CgsFileSystem
         static const s32 KI_MAX_OPEN_FILES = 256;
 
         // ---- worker-dispatched ops (Device base vtable order) ----
-        int Connect() override;                                                                  // Init @0x828DE998 (debug trace)
-        int Open(const char* lpcPath, u32 luMode, Handle::DeviceHandle* lppOutHandle) override; // @0x828F9728
-        int Close(Handle::DeviceHandle lpHandle) override;                                      // @0x828F9D90
+        int Connect() ;                                                                  // Init @0x828DE998 (debug trace)
+        int Open(const char* lpcPath, u32 luMode, Handle::DeviceHandle* lppOutHandle) ; // @0x828F9728
+        int Close(Handle::DeviceHandle lpHandle) ;                                      // @0x828F9D90
         int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
-                 u32* lpuOutResult) override;                                                    // @0x828DE9F0
+                 u32* lpuOutResult) ;                                                    // @0x828DE9F0
         int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
-                 u64* lpu64OutPosition) override;                                                // @0x828DEB98
+                 u64* lpu64OutPosition) ;                                                // @0x828DEB98
 
         // ---- directory enumeration (Device base directory virtuals) ----
         int OpenDirectory(const char* lpcPath, void* lpEntryBuffer, u32 luMaxEntries,
-                          u32* lpuOutCount, Handle::DeviceHandle* lppOutHandle) override;          // @0x828F9E40
-        int CloseDirectory(Handle::DeviceHandle lpHandle) override;                              // @0x828FA8B0
+                          u32* lpuOutCount, Handle::DeviceHandle* lppOutHandle) ;          // @0x828F9E40
+        int CloseDirectory(Handle::DeviceHandle lpHandle) ;                              // @0x828FA8B0
         int ReadDirectory(Handle::DeviceHandle lpHandle, void* lpEntryBuffer, u32 luMaxEntries,
-                          u32* lpuOutCount) override;                                             // @0x828DEC30
+                          u32* lpuOutCount) ;                                             // @0x828DEC30
 
     private:
         // Embedded handle pool (this+16; byte-indexed, element stride 0x110). The opaque handle
@@ -97,7 +97,7 @@ namespace CgsFileSystem
     // DirectoryEntry type tag follows the 256-byte name. Uncalled.
     inline void _AssertLayout()
     {
-        static_assert(offsetof(FileHandleRecord, mu64Position) == 0x00, "position word at record+0");
-        static_assert(offsetof(DirectoryEntry,   miType)       == 0x100, "dir-entry type tag at +256");
+        CGS_STATIC_ASSERT((offsetof(FileHandleRecord, mu64Position) == 0x00), "position word at record+0");
+        CGS_STATIC_ASSERT((offsetof(DirectoryEntry,   miType)       == 0x100), "dir-entry type tag at +256");
     }
 }

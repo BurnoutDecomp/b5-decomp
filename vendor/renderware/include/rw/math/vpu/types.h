@@ -20,10 +20,10 @@ namespace vpu
     // The complex SIMD math (add/mul/transform) stays in the *_operation headers; only
     // the trivial initialisers the SDK exposes as type methods (SetZero/SetIdentity,
     // spelled `v.SetZero()` / `m.SetIdentity()` at the call sites) are provided here.
-    struct alignas(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
-    struct alignas(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
+    struct CGS_ALIGN(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
+    struct CGS_ALIGN(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
                                  typedef const Vector3& InParam; };   // w: unused 4th lane
-    struct alignas(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
+    struct CGS_ALIGN(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
                                  typedef const Vector4& InParam; };
 
     // ADDITIVE GROW (rw-physics solver group): the SDK quaternion -- one 16-byte lane
@@ -36,43 +36,43 @@ namespace vpu
     // rw/math/vpu/types.h ...) sit outside this wave's writable tree; move them there on the
     // next grow of that header". This is that grow -- the definition moved here verbatim and
     // JointFrames.hpp now includes it rather than declaring a second copy.
-    struct alignas(16) Quaternion
+    struct CGS_ALIGN(16) Quaternion
     {
         float x, y, z, w;
         void SetIdentity() { x = y = z = 0.0f; w = 1.0f; }
     };
-    struct alignas(16) Vector3Plus
+    struct CGS_ALIGN(16) Vector3Plus
     {
         float x, y, z, w;
 
         void SetZero() { x = y = z = w = 0.0f; }
-        Vector3 GetVector3() const { return Vector3{ x, y, z, 0.0f }; }
+        Vector3 GetVector3() const { const Vector3 lResult = { x, y, z, 0.0f }; return lResult; }
         void SetVector3(Vector3 lVector) { x = lVector.x; y = lVector.y; z = lVector.z; }
         float GetPlus() const { return w; }
         void SetPlus(float lfValue) { w = lfValue; }
     }; // w: the "plus" lane
 
     // Row-major; the last row of an affine is implicit (0,0,0,1) but still stored.
-    struct alignas(16) Matrix44
+    struct CGS_ALIGN(16) Matrix44
     {
         typedef const Matrix44& InParam;
         Vector4 xAxis, yAxis, zAxis, wAxis;
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {
-            xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
-            zAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; wAxis = { 0.0f, 0.0f, 0.0f, 1.0f };
+            const Vector4 lxAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; xAxis = lxAxis; const Vector4 lyAxis = { 0.0f, 1.0f, 0.0f, 0.0f }; yAxis = lyAxis;
+            const Vector4 lzAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; zAxis = lzAxis; const Vector4 lwAxis = { 0.0f, 0.0f, 0.0f, 1.0f }; wAxis = lwAxis;
         }
     };
-    struct alignas(16) Matrix44Affine
+    struct CGS_ALIGN(16) Matrix44Affine
     {
         typedef const Matrix44Affine& InParam;
         Vector3 xAxis, yAxis, zAxis, wAxis;
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {
-            xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
-            zAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; wAxis = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lxAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; xAxis = lxAxis; const Vector3 lyAxis = { 0.0f, 1.0f, 0.0f, 0.0f }; yAxis = lyAxis;
+            const Vector3 lzAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; zAxis = lzAxis; const Vector3 lwAxis = { 0.0f, 0.0f, 0.0f, 0.0f }; wAxis = lwAxis;
         }
 
         Vector3& Right() { return xAxis; }
@@ -92,14 +92,14 @@ namespace vpu
     // for BrnPhysics::ExternalPhysicsBody::m{Local,World}InverseInertia (DWARF spells those
     // members `Matrix33`). No existing user; purely a new type-vocabulary entry in the
     // canonical RW math home. SetIdentity sets the upper-3x3 to the identity basis.
-    struct alignas(16) Matrix33
+    struct CGS_ALIGN(16) Matrix33
     {
         Vector3 xAxis, yAxis, zAxis;
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); }
         void SetIdentity()
         {
-            xAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
-            zAxis = { 0.0f, 0.0f, 1.0f, 0.0f };
+            const Vector3 lxAxis = { 1.0f, 0.0f, 0.0f, 0.0f }; xAxis = lxAxis; const Vector3 lyAxis = { 0.0f, 1.0f, 0.0f, 0.0f }; yAxis = lyAxis;
+            const Vector3 lzAxis = { 0.0f, 0.0f, 1.0f, 0.0f }; zAxis = lzAxis;
         }
     };
 
@@ -112,7 +112,7 @@ namespace vpu
     // vcmpeqfp). The SIMD producers (the vcmp operations themselves) live in the SDK
     // *_operation headers and are not modelled here; only the scalar reduction the SDK
     // exposes as a type method is provided.
-    struct alignas(16) MaskScalar
+    struct CGS_ALIGN(16) MaskScalar
     {
         float x, y, z, w;
 

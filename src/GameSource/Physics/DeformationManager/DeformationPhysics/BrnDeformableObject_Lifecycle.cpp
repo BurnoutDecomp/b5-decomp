@@ -552,7 +552,7 @@ namespace Deformation
         // still answered with its old entity word.
         mHandlingBodyID.SetInvalid();              // RigidBodyId::SetInvalid()
         mGlobalEntityId.muValue   = 0xFFFFFFFFu;   // EntityId::SetInvalid()
-        mpDeformationSpec         = nullptr;
+        mpDeformationSpec         = 0;
         mu16DeformableObjectIndex = 0xFFFFu;   // asm: +26290 = -1 (the index sentinel)
         mbActive                  = false;
     }
@@ -865,7 +865,7 @@ namespace Deformation
                     for (s32 liT = 0; liT < miNumTagPoints; ++liT)
                     {
                         const TagPointSpec* lpTS = maTagPoints[liT].GetSpec();
-                        if (lpTS != nullptr && lpTS->IsSkinned()) ++liRun;
+                        if (lpTS != 0 && lpTS->IsSkinned()) ++liRun;
                     }
                     *CgsDev::Log::gpDebugPrint << "[restrow] gather rows " << liRun << " (skinned tags among all " << miNumTagPoints << ")\n";
                     for (s32 liP = 0; liP < miNumIKBodyParts; ++liP)
@@ -1182,7 +1182,7 @@ namespace Deformation
     void DeformableObject::ResetSensors(Vector3Plus lA, Vector3 lB, Vector3 lC, Vector3 lD)
     {
         // :848 -- the spec must be resolved before sensors can be seeded (fire-and-continue).
-        CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");
+        CGS_ASSERT(mpDeformationSpec != 0, "mpDeformationSpec");
 
         BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
 
@@ -1563,13 +1563,13 @@ namespace Deformation
 
         BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
         // :402 -- fire-and-continue tripwire (the asm re-reads the pointer and carries on).
-        CGS_ASSERT(lpVehicle != nullptr, "mVehicleBody.GetVehiclePhysics() != NULL");
+        CGS_ASSERT(lpVehicle != 0, "mVehicleBody.GetVehiclePhysics() != NULL");
 
         // [marked deviation, 2026-08-14] mpAttribs NULL-guard -- same root cause as
         // CalculateDriveTimeLimits' (per-car VehiclePhysics::Construct still gated behind
         // PrepareData, so the CREATE-time reset can run before SetAttributes seats the pointer).
         // Zero limits until seated; the console never sees a null here.
-        if (lpVehicle == nullptr || lpVehicle->mpAttribs == nullptr)
+        if (lpVehicle == 0 || lpVehicle->mpAttribs == 0)
         {
             lrLimitA = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
             lrLimitB = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };

@@ -21,7 +21,7 @@ namespace Gen
     {
     public:
         static const u64 KU_CLASS_KEY = 0xF86D8C0755C79CC2ull;
-        explicit crashbinlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit crashbinlist(Collection* lpCollection = 0, void* lpOwner = 0);
 
         Collection* ChangeWithDefault(u64 luCollectionKey)
         {

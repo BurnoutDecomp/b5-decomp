@@ -426,7 +426,7 @@ namespace BrnAI
         mfTimeInFreeRoam += lfTimeStep;
 
         EGlobalRaceCarIndex leCarToTeleport = E_GLOBAL_RACE_CAR_INDEX_COUNT;   // 35 sentinel
-        const AICar*        lpChosenCar     = nullptr;
+        const AICar*        lpChosenCar     = 0;
         s32                 liChosenSlot    = -1;
         bool                lbFound         = false;
 

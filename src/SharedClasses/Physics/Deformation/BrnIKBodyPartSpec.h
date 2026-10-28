@@ -143,12 +143,12 @@ namespace Deformation
         // private members; never called, compile-time only.
         static void LayoutTripwires()
         {
-            static_assert(offsetof(IKBodyPartSpec, mBBoxSkinData)          ==  64, "bbox spec @ +64");
-            static_assert(offsetof(IKBodyPartSpec, mpaJointSpecs)          == 448, "joint slot @ +448");
-            static_assert(offsetof(IKBodyPartSpec, miNumJoints)            == 452, "joint count @ +452");
-            static_assert(offsetof(IKBodyPartSpec, miNumberOfDrivenPoints) == 464, "driven count @ +464");
-            static_assert(offsetof(IKBodyPartSpec, miNumberOfTagPoints)    == 472, "tag count @ +472");
-            static_assert(sizeof(IKBodyPartSpec)                           == 480, "IKBodyPartSpec stride 480");
+            CGS_STATIC_ASSERT((offsetof(IKBodyPartSpec, mBBoxSkinData)          ==  64), "bbox spec @ +64");
+            CGS_STATIC_ASSERT((offsetof(IKBodyPartSpec, mpaJointSpecs)          == 448), "joint slot @ +448");
+            CGS_STATIC_ASSERT((offsetof(IKBodyPartSpec, miNumJoints)            == 452), "joint count @ +452");
+            CGS_STATIC_ASSERT((offsetof(IKBodyPartSpec, miNumberOfDrivenPoints) == 464), "driven count @ +464");
+            CGS_STATIC_ASSERT((offsetof(IKBodyPartSpec, miNumberOfTagPoints)    == 472), "tag count @ +472");
+            CGS_STATIC_ASSERT((sizeof(IKBodyPartSpec)                           == 480), "IKBodyPartSpec stride 480");
         }
     };
 }

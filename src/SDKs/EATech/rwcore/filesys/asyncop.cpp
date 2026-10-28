@@ -12,7 +12,7 @@
 #include "SDKs/EATech/rwcore/filesys/device.h"  // Device / Manager / Allocator (AsyncOp dispatches here)
 
 #include <cstring>   // memcpy
-#include <cstdint>   // intptr_t
+#include "types.hpp"   // intptr_t
 #include <new>       // placement new (Handle construction over allocator storage)
 #include <xtl.h> // MemoryBarrier (host mapping of the X360 lwsync)
 
@@ -43,22 +43,22 @@ namespace rw
             //   miResult = -3; mpfnComplete = STUB; everything else 0.
             // -----------------------------------------------------------------------------
             AsyncOp::AsyncOp()
-                : mpNext(nullptr)               // *result = 0
+                : mpNext(0)               // *result = 0
                 , miResult(-3)                  // *(result+4) = -3
                 , mbReserved08(0)               // *(result+8) = 0
                 , mbIsReadOp(0)                 // *(result+9) = 0
                 , miPriority(0)                 // *(result+12) = 0
-                , mpStream(nullptr)             // *(result+16) = 0
+                , mpStream(0)             // *(result+16) = 0
                 , mUserData(0)                  // *(result+20) = 0
                 , mpfnComplete(&DefaultCompletion) // *(result+24) = STUB
                 , muReserved1C(0)
                 , mu64Position(0)               // *(result+32) = 0
                 , mu64ByteCount(0)              // *(result+40) = 0
-                , mpBuffer(nullptr)             // *(result+48) = 0
+                , mpBuffer(0)             // *(result+48) = 0
                 , muReserved34(0)
                 , mu64BytesDone(0)              // *(result+56) = 0
-                , mpDevice(nullptr)             // *(result+64) = 0
-                , mpfnDoIo(nullptr)             // *(result+68) = 0
+                , mpDevice(0)             // *(result+64) = 0
+                , mpfnDoIo(0)             // *(result+68) = 0
             {
             }
 
@@ -69,11 +69,11 @@ namespace rw
             AsyncOp::~AsyncOp()
             {
                 ::MemoryBarrier();      // lwsync
-                mpStream  = nullptr;    // result[4] (+0x10) = 0
+                mpStream  = 0;    // result[4] (+0x10) = 0
                 mUserData = 0;          // result[5] (+0x14) = 0
-                mpBuffer  = nullptr;    // result[12] (+0x30) = 0
-                mpDevice  = nullptr;    // result[16] (+0x40) = 0
-                mpNext    = nullptr;    // *result (+0x00) = 0
+                mpBuffer  = 0;    // result[12] (+0x30) = 0
+                mpDevice  = 0;    // result[16] (+0x40) = 0
+                mpNext    = 0;    // *result (+0x00) = 0
             }
 
             // -----------------------------------------------------------------------------
@@ -94,13 +94,13 @@ namespace rw
                 mbReserved08  = 0;              // *(a1+8) = 0
                 mbIsReadOp    = 0;              // *(a1+9) = 0
                 miPriority    = liPriority;     // stw r8, 0xC
-                mpStream      = nullptr;        // stw r11(=0), 0x10
+                mpStream      = 0;        // stw r11(=0), 0x10
                 mUserData     = luUserData;     // stw r7, 0x14
                 mu64Position  = luFlags;        // std clrldi(r5,32), 0x20  (flags zero-extended)
                 mu64ByteCount = 0;              // std r11(=0), 0x28
                 mu64BytesDone = 0;              // std r11(=0), 0x38
 
-                Device* lpDevice = Device::GetInstance(lpcPath, nullptr);
+                Device* lpDevice = Device::GetInstance(lpcPath, 0);
                 mpDevice = lpDevice;            // *(a1+64) = Instance
 
                 // Allocate a copy of the path (length incl. NUL) and copy it into mpBuffer.
@@ -215,7 +215,7 @@ namespace rw
                 mpfnComplete  = lpfnComplete;   // *(a1+24) = a3
                 mu64Position  = 0;              // *(a1+32) = 0
                 mu64ByteCount = 0;              // *(a1+40) = 0
-                mpBuffer      = nullptr;        // *(a1+48) = 0
+                mpBuffer      = 0;        // *(a1+48) = 0
                 mu64BytesDone = 0;              // *(a1+56) = 0
 
                 Device* lpDevice = lpStrm->mpDevice; // v6 = *(a2+12)
@@ -232,7 +232,7 @@ namespace rw
                 Handle* lpHandle = reinterpret_cast<Handle*>(lpOp->mpStream); // *(a1+16)
                 if (lpHandle)
                     HandleScalarDeletingDtor(lpHandle, 1);
-                lpOp->mpStream = nullptr;       // *(a1+16) = 0
+                lpOp->mpStream = 0;       // *(a1+16) = 0
                 return 1;
             }
 
@@ -246,7 +246,7 @@ namespace rw
             s32 AsyncOp::DoOpen(AsyncOp* lpOp)
             {
                 void* lpRaw = gpFileSysAllocator->Alloc(0x28, "rw::core::filesystem::Manager::Allocate", 0, 4, 0);
-                Handle* lpHandle = nullptr;
+                Handle* lpHandle = 0;
                 if (lpRaw)
                 {
                     // Handle::Handle(storage, path=mpBuffer(+0x30), openFlags=(u32)mu64Position(+0x24),
@@ -266,7 +266,7 @@ namespace rw
                     return 1;
                 if (lpResult)
                     HandleScalarDeletingDtor(lpResult, 1);
-                lpOp->mpStream = nullptr;       // a1[4] = 0
+                lpOp->mpStream = 0;       // a1[4] = 0
                 return -2;
             }
 

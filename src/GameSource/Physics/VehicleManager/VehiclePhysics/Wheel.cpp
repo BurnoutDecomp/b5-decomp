@@ -85,7 +85,7 @@ namespace Vehicle
         }
 
         const f32 lfResult = lfSign * lfCoeff;
-        return VecFloat{ lfResult, lfResult, lfResult, lfResult };
+        { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
     }
 
     // ===========================================================================================
@@ -108,7 +108,7 @@ namespace Vehicle
         mWheelLongDirection.SetZero();               // +0xB0 (r10=176)
         mWheelLatDirection.SetZero();                // +0xC0 (r9=192)
 
-        mpTireAttribs  = nullptr;                    // *(result+208)=0
+        mpTireAttribs  = 0;                    // *(result+208)=0
         mi8NumContacts = 0;                          // *(result+212)=0
         mbHasTraction  = false;                      // *(result+214)=0
         mu8State       = 0;                          // *(result+215)=0

@@ -144,22 +144,22 @@ namespace BrnResource
             return;
         }
 
-        if (mpAllocatorStats == nullptr)
+        if (mpAllocatorStats == 0)
         {
             mpAllocatorStats = static_cast<AllocatorStatsRow*>(
-                mpAllocator->AllocateMemoryResource(KI_ALLOCATOR_STATS_BUFFER_SIZE, 16u, nullptr));
-            if (mpAllocatorStats != nullptr)
+                mpAllocator->AllocateMemoryResource(KI_ALLOCATOR_STATS_BUFFER_SIZE, 16u, 0));
+            if (mpAllocatorStats != 0)
                 std::memset(mpAllocatorStats, 0, KI_ALLOCATOR_STATS_BUFFER_SIZE);
         }
 
-        if (mpAllocatorStats != nullptr)
+        if (mpAllocatorStats != 0)
         {
             const CgsMemory::MemoryMap* lpMemoryMap = mpModule->mpMemoryMap;
             GameDataIO::AllocatorList& lrAllocatorList = mpModule->mAllocatorList;
 
             // Row 0 describes the one raw resource. Its two visible sizes and current
             // usages are the lane-zero and lane-two descriptor sizes from the map.
-            if (lrAllocatorList.mapRawResources[0] != nullptr)
+            if (lrAllocatorList.mapRawResources[0] != 0)
             {
                 const CgsMemory::MemoryIO::CreateResourceRequest* lpRequest =
                     lpMemoryMap->GetRawResource(0)->GetRequest();
@@ -183,7 +183,7 @@ namespace BrnResource
             {
                 CgsMemory::LinearMalloc* lpLinearAllocator =
                     lrAllocatorList.mapLinearAllocators[liIndex];
-                if (lpLinearAllocator == nullptr)
+                if (lpLinearAllocator == 0)
                     continue;
 
                 const CgsMemory::MemoryIO::CreateAllocatorRequest* lpRequest =
@@ -203,7 +203,7 @@ namespace BrnResource
             {
                 CgsMemory::HeapMalloc* lpHeapAllocator =
                     lrAllocatorList.mapHeapAllocators[liIndex];
-                if (lpHeapAllocator == nullptr)
+                if (lpHeapAllocator == 0)
                     continue;
 
                 const CgsMemory::MemoryIO::CreateAllocatorRequest* lpRequest =
@@ -214,7 +214,7 @@ namespace BrnResource
 
                 GenAllocUsage lUsage = {};
                 lpHeapAllocator->GetAllocator()->ReportHeap(
-                    &DebugComponent::GeneralAllocatorReportCB, &lUsage, 31, false, nullptr, 0);
+                    &DebugComponent::GeneralAllocatorReportCB, &lUsage, 31, false, 0, 0);
                 lrRow.mMainMemInfo.miCurrUsed = static_cast<s32>(lUsage.muAllocated);
                 lrRow.mMainMemInfo.miSize = lpRequest->GetSize();
                 lrRow.mVideoMemInfo.miSize = 0;
@@ -227,7 +227,7 @@ namespace BrnResource
             {
                 rw::LinearResourceAllocator* lpLinearAllocator =
                     lrAllocatorList.mapRWLinearAllocators[liIndex];
-                if (lpLinearAllocator == nullptr)
+                if (lpLinearAllocator == 0)
                     continue;
 
                 const CgsMemory::MemoryIO::CreateLinearAllocatorRequest* lpRequest =
@@ -254,7 +254,7 @@ namespace BrnResource
             {
                 rw::core::GeneralResourceAllocator* lpGeneralAllocator =
                     lrAllocatorList.mapRWGeneralAllocators[liIndex];
-                if (lpGeneralAllocator == nullptr)
+                if (lpGeneralAllocator == 0)
                     continue;
 
                 const CgsMemory::MemoryIO::CreateGeneralAllocatorRequest* lpRequest =
@@ -273,10 +273,10 @@ namespace BrnResource
                     // GeneralResourceAllocator, that is its canonical m_mainAllocator.
                     lpGeneralAllocator->m_mainAllocator.ReportHeap(
                         &DebugComponent::GeneralAllocatorReportCB, &lMainUsage,
-                        31, false, nullptr, 0);
+                        31, false, 0, 0);
                     lpGeneralAllocator->GetPhysicalGeneralAllocator().ReportHeap(
                         &DebugComponent::GeneralAllocatorReportCB, &lVideoUsage,
-                        31, false, nullptr, 0);
+                        31, false, 0, 0);
 
                     lrRow.mMainMemInfo.miSize = static_cast<s32>(
                         lrDescriptor.m_baseResourceDescriptors[0].m_size);
@@ -304,7 +304,7 @@ namespace BrnResource
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
         CgsDev::DebugComponent::RenderHUD(lpRender);
-        if (!mbShowHud || mpAllocatorStats == nullptr)
+        if (!mbShowHud || mpAllocatorStats == 0)
             return;
 
         // These values mirror ARTIST's lazy initialization of dword_82FFACF0..F4.
@@ -447,7 +447,7 @@ namespace BrnResource
 
         mpModule = lpModule;
         mbShowHud = true;
-        mpAllocatorStats = nullptr;
+        mpAllocatorStats = 0;
         miSlotsUsed = 0;
         miSlotsFree = 0;
         mpAllocator = lpAllocator;
@@ -458,7 +458,7 @@ namespace BrnResource
     // non-fatal module assertion.
     void DebugComponent::OnActivate()
     {
-        if (mpModule == nullptr)
+        if (mpModule == 0)
         {
             CgsDev::Assert::BeginAssert();
             char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];

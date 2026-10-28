@@ -43,7 +43,7 @@ namespace BrnPhysics
         // ⭐ On the host the two pointer-pairs widen (handle 8->16, mpVehiclePhysics 4->8) and the
         // record becomes 176 -- and every SIMD member lands back on its EXACT console offset
         // (+0x20/+0x30/+0x70/+0x80), which the pre-widening 160-byte host layout did NOT.
-        struct alignas(16) AddDeformationModelEvent
+        struct CGS_ALIGN(16) AddDeformationModelEvent
         {
             ResourceHandle             mModelHandle;
             RigidBodyId                mHandlingBodyID;
@@ -59,7 +59,7 @@ namespace BrnPhysics
         };
 
         // Output event: a joint between two parts has broken.
-        struct alignas(16) BrokenJointNotificationEvent
+        struct CGS_ALIGN(16) BrokenJointNotificationEvent
         {
             Vector3    mPointOnA;
             EntityId   mVehicleId;
@@ -68,7 +68,7 @@ namespace BrnPhysics
 
         // Input event: stop simulating a deformable model. The X360 places the
         // owning queue's inline buffer 16-byte aligned.
-        struct alignas(16) DeactivateDeformationModelEvent
+        struct CGS_ALIGN(16) DeactivateDeformationModelEvent
         {
             RigidBodyId          mHandlingBodyID;
             f32                  mfInitialDamageAmount;
@@ -76,20 +76,20 @@ namespace BrnPhysics
         };
 
         // Input event: remove a deformation model from simulation.
-        struct alignas(16) RemoveDeformationModelEvent
+        struct CGS_ALIGN(16) RemoveDeformationModelEvent
         {
             RigidBodyId mHandlingBodyID;
         };
 
         // Input event: toggle a deformation model's collision.
-        struct alignas(16) SetModelCollisionEvent
+        struct CGS_ALIGN(16) SetModelCollisionEvent
         {
             RigidBodyId mHandlingBodyID;
             bool        mbCollide;
         };
 
         // Output event: a part has detached from a vehicle.
-        struct alignas(16) DetachedPartNotificationEvent
+        struct CGS_ALIGN(16) DetachedPartNotificationEvent
         {
             Vector3    mPointOnA;
             EntityId   mVehicleId;
@@ -103,7 +103,7 @@ namespace BrnPhysics
         // 64-byte Matrix44Affine in four 16-byte SIMD stores (offsets +0/+16/+32/+48), then the
         // two scalar dwords at +64/+68 and the bool at +72 — i.e. stride 80 (0x50). alignas(16):
         // carries a Matrix44Affine (SIMD) and the owning queue's inline buffer is 16-byte aligned.
-        struct alignas(16) DetachedPartRenderEvent
+        struct CGS_ALIGN(16) DetachedPartRenderEvent
         {
             Matrix44Affine mTransform;        // +0x00  (4x Vector3 lane = 64 bytes)
             EntityId       mVehicleEntityId;  // +0x40
@@ -124,7 +124,7 @@ namespace BrnPhysics
         };
 
         // Input event: set a deformation model's scene culling group.
-        struct alignas(16) SetModelCullingGroupEvent
+        struct CGS_ALIGN(16) SetModelCullingGroupEvent
         {
             RigidBodyId  mHandlingBodyID;
             typedef u32  CullingGroup;   // InEventAddForCollision::CullingGroup (CgsSceneManagerTypes.h)

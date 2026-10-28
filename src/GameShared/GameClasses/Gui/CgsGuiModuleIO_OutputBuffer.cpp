@@ -53,8 +53,8 @@ namespace CgsGuiModuleIO
 
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mResourceRequestQueue) == 0x0004, "mResourceRequestQueue @0x0004");
-        static_assert(offsetof(OutputBuffer, mOutEvents)            == 0x0814, "mOutEvents @0x0814");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mResourceRequestQueue) == 0x0004), "mResourceRequestQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mOutEvents)            == 0x0814), "mOutEvents @0x0814");
     }
 
     // X360 0x8284F388: write-lock handle to the resource-request queue. The pseudocode tests

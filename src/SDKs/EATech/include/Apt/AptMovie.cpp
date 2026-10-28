@@ -8,7 +8,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"            // AptPseudoCIH_t, gpAptPseudoDataPool
@@ -132,9 +132,9 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
 //   AptDisplayList::removeObject(a1, match);
 static void AptDispatchRemoveCommand(AptDisplayList* pDisplayList, int nDepth)
 {
-    AptCIH* pPrev  = nullptr;   // the console's 12-byte prev triple; only the out-pointers matter
-    AptCIH* pMatch = nullptr;
-    pDisplayList->AsState()->findInst(nDepth, nullptr, &pPrev, &pMatch);
+    AptCIH* pPrev  = 0;   // the console's 12-byte prev triple; only the out-pointers matter
+    AptCIH* pMatch = 0;
+    pDisplayList->AsState()->findInst(nDepth, 0, &pPrev, &pMatch);
     pDisplayList->removeObject(pMatch);
 }
 
@@ -208,7 +208,7 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
     const bool bHasCharacter = (nFlags & 0x02u) != 0u;
     const bool bMove         = (nFlags & 0x01u) != 0u;
     if (!bHasCharacter && !bMove)
-        return nullptr;
+        return 0;
 
     const int32_t nDepth  = CmdI32(pBody, 0x04);
     const int32_t nCharId = CmdI32(pBody, 0x08);
@@ -234,7 +234,7 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
         (luAnimTablePtr >= 0x10000u) && ((luAnimTablePtr >> 47) == 0u);
     AptCharacter* const pCharacter =
         (bAnimSane && nCharId >= 0 && nCharId < pAnim->mnCharacterCount)
-            ? pAnim->mpCharacterTable[nCharId] : nullptr;
+            ? pAnim->mpCharacterTable[nCharId] : 0;
 
     // FLAG (import not loaded): a null charTable entry is an IMPORTED character (from another
     // GUIAPT bundle) whose id is in this movie's import table -- e.g. TITLE_SCREEN02 charId 30 ==
@@ -248,12 +248,12 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
 
     // The instance name (when HasName, bit5): the record's name pointer @body+0x30 was relocated
     // to a live C string by resolve64. Build a bracketed EAStringC over it.
-    const EAStringC* pName = nullptr;
+    const EAStringC* pName = 0;
     EAStringC nameStr;
     if ((nFlags & 0x20u) != 0u)
     {
         const char* const pNamePtr = static_cast<const char*>(CmdPtr(pBody, 0x30));   // relocated name C-string
-        if (pNamePtr != nullptr)
+        if (pNamePtr != 0)
         {
             nameStr = EAStringC(pNamePtr);
             pName = &nameStr;
@@ -265,9 +265,9 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
     //   ratio @body+0x2C (HasRatio bit4)              clipDepth @body+0x38 (native-8, 8-byte name ptr)
     //   clipActions block @body+0x40 (HasClipActions bit7; the slot resolve64 relocated)
     const float* const pPosition = ((nFlags & 0x04u) != 0u)
-        ? reinterpret_cast<const float*>(pBody + 0x0C) : nullptr;
+        ? reinterpret_cast<const float*>(pBody + 0x0C) : 0;
     const AptUint32CXForm* const pPackedColor = ((nFlags & 0x08u) != 0u)
-        ? reinterpret_cast<const AptUint32CXForm*>(pBody + 0x24) : nullptr;
+        ? reinterpret_cast<const AptUint32CXForm*>(pBody + 0x24) : 0;
     const double fFrameValue = static_cast<double>(CmdF32(pBody, 0x2C));
     const int16_t nClipDepth = static_cast<int16_t>(CmdI32(pBody, 0x38));
 
@@ -275,7 +275,7 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
     // mpClipEventHandlers slot (queueClipEvents scans it; _addToSetCaches folds its
     // masks). The block + each record's stream pointer are already relocated (and the
     // streams parsed) by resolve64's case-3 walk.
-    const void* pClipActions = nullptr;
+    const void* pClipActions = 0;
     if ((nFlags & 0x80u) != 0u)
         pClipActions = CmdPtr(pBody, 0x40);   // clipActions block (resolve64-relocated)
 
@@ -291,30 +291,30 @@ static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void*
     // charTable[-1] junk-place never composes on our bring-up either).
     if (bMove && !bHasCharacter)
     {
-        AptCIH* pPrev = nullptr;
-        AptCIH* pMatch = nullptr;
+        AptCIH* pPrev = 0;
+        AptCIH* pMatch = 0;
         AptDisplayListState* pState = pDisplayList->AsState();
-        if (pState != nullptr)
-            pState->findInst(nDepth, nullptr, &pPrev, &pMatch);
-        if (pMatch != nullptr)
+        if (pState != 0)
+            pState->findInst(nDepth, 0, &pPrev, &pMatch);
+        if (pMatch != 0)
         {
             if (!pMatch->GetASChanged())   // x64 bit 0 (X360: sign test on reversed bit31)
             {
                 return pDisplayList->placeObjectNCXForm(
-                    /*pExistingNode*/ pMatch, /*nDepth*/ 0, /*pCharacter*/ nullptr,
-                    /*pName*/ nullptr, pParent, /*bForceRemove*/ 0, /*nClipDepth*/ -1,
+                    /*pExistingNode*/ pMatch, /*nDepth*/ 0, /*pCharacter*/ 0,
+                    /*pName*/ 0, pParent, /*bForceRemove*/ 0, /*nClipDepth*/ -1,
                     fFrameValue, pPosition, pClipActions, pPackedColor);
             }
-            return nullptr;
+            return 0;
         }
         // no existing node at that depth: fall through (fresh place when a character exists)
     }
 
-    if (pCharacter == nullptr)
-        return nullptr;   // (see the import-not-loaded FLAG above; also the charId==-1 Move miss)
+    if (pCharacter == 0)
+        return 0;   // (see the import-not-loaded FLAG above; also the charId==-1 Move miss)
 
     return pDisplayList->placeObjectNCXForm(
-        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pParent,
+        /*pExistingNode*/ 0, nDepth, pCharacter, pName, pParent,
         /*bForceRemove*/  0, nClipDepth, fFrameValue, pPosition,
         /*pPlacementClipActions*/ pClipActions, pPackedColor);
 }
@@ -355,7 +355,7 @@ const AptMovie* AptMovie::runFrameActions(AptCIH* pCIH, int nFrame) const
         // PrepareForExecution(&gAptActionInterpreter, &setup) == PushStaticData.
         void* pSavedBase = AptScriptFunctionBase::PushStaticData();
 
-        AptCharacterInst* pInst = nullptr;
+        AptCharacterInst* pInst = 0;
         if (pCIH)
             pInst = pCIH->GetRootAnimation()->GetCharacterInst();   // console [8] on the root
 
@@ -397,7 +397,7 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
     }
     else
     {
-        pHashOut = nullptr;
+        pHashOut = 0;
     }
     result = pHashOut;
 
@@ -551,7 +551,7 @@ void* AptMovie::unresolve(int nBase, int a3)
                     // action: un-parse then un-relocate the stream pointer (+4).
                     gAptActionInterpreter._parseStream(
                         reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x04)),
-                        nBase, nullptr, a3);
+                        nBase, 0, a3);
                     int32_t v34 = CmdI32(pCmd, 0x04);
                     int32_t v35 = v34 ? (v34 - nBase) : 0;
                     CmdSetI32(pCmd, 0x04, v35);
@@ -576,7 +576,7 @@ void* AptMovie::unresolve(int nBase, int a3)
                             char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
                             gAptActionInterpreter._parseStream(
                                 reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),   // serialized .apt init record stream ptr @+8
-                                nBase, nullptr, a3);
+                                nBase, 0, a3);
                             int32_t v22 = CmdI32(pRec, 8);
                             int32_t v23 = v22 ? (v22 - nBase) : 0;
                             CmdSetI32(pRec, 8, v23);
@@ -600,7 +600,7 @@ void* AptMovie::unresolve(int nBase, int a3)
                     // command's id (+4) is negative (run this frame), restore it.
                     gAptActionInterpreter._parseStream(
                         reinterpret_cast<const unsigned char*>(CmdPtr(pCmd, 0x08)),
-                        nBase, nullptr, a3);
+                        nBase, 0, a3);
                     int32_t v13 = CmdI32(pCmd, 0x08);
                     int32_t v14 = v13 ? (v13 - nBase) : 0;
                     CmdSetI32(pCmd, 0x08, v14);
@@ -614,7 +614,7 @@ void* AptMovie::unresolve(int nBase, int a3)
                 // here guards on the ORIGINAL value being non-zero before write).
                 void** pSlot = &pFrame->mpCommands[i];
                 int32_t v37 = reinterpret_cast<intptr_t>(*pSlot) - nBase;
-                if (*pSlot == nullptr)
+                if (*pSlot == 0)
                     v37 = 0;
                 *pSlot = reinterpret_cast<void*>(static_cast<intptr_t>(v37));
             }
@@ -641,7 +641,7 @@ void* AptMovie::unresolve(int nBase, int a3)
         pHash->~AptNativeHash();
         gpNonGCPoolManager->Deallocate(pHash, sizeof(AptNativeHash));
         result = pHash;
-        this->mpLabelHash = nullptr;
+        this->mpLabelHash = 0;
     }
     return result;
 }

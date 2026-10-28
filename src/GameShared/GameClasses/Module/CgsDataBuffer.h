@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "types.hpp"
 
 #include <GameShared/GameClasses/Containers/CgsFlagSet.h>
 #include "CgsDataStructure.h"
@@ -13,7 +13,7 @@ namespace CgsModule
         EA::Thread::RWMutex mMutex;
         DataStructure* mpDataStructure;
 
-        typedef CgsContainers::FlagSet<std::int8_t> FlagSet8;
+        typedef CgsContainers::FlagSet<int8_t> FlagSet8;
         FlagSet8 mxStatusFlags;
 
         bool mbMultiThreaded;

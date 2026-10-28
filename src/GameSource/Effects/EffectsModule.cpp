@@ -2153,7 +2153,7 @@ void EffectsModule::PreRenderUpdate(BrnGame::DispatchThreadInputBuffer* lpDispat
 // ARTIST 0x8227FE88: only the dispatch owner consumes particle events/jobs.
 void EffectsModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
-    CGS_ASSERT(lpDispatchThreadInputBuffer != nullptr, "lpDispatchThreadInputBuffer != NULL");
+    CGS_ASSERT(lpDispatchThreadInputBuffer != 0, "lpDispatchThreadInputBuffer != NULL");
     lpDispatchThreadInputBuffer->LockForRead();
     mParticleModule.DispatchThreadUpdate(lpDispatchThreadInputBuffer);
     lpDispatchThreadInputBuffer->UnlockForRead();
@@ -2913,7 +2913,7 @@ void EffectsModule::ProcessRaceCarContacts(
         CGS_ASSERT(leIndexA != E_ACTIVE_RACE_CAR_INDEX_INVALID && leIndexA != E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "( leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT )");
         const RaceCarState* const lpStateA = lpActiveRaceCars->GetRaceCarState(leIndexA);
-        CGS_ASSERT(lpStateA != nullptr, "lpActiveRaceCarState != NULL");
+        CGS_ASSERT(lpStateA != 0, "lpActiveRaceCarState != NULL");
         if (lpStateA->mbIsHidden)                                       // +0x452
             continue;
 
@@ -2992,7 +2992,7 @@ void EffectsModule::ProcessRaceCarContacts(
                     continue;
                 const EActiveRaceCarIndex leIndexB = static_cast<EActiveRaceCarIndex>(luIndexB);
                 const RaceCarState* const lpStateB = lpActiveRaceCars->GetRaceCarState(leIndexB);
-                CGS_ASSERT(lpStateB != nullptr, "lpActiveRaceCarStateB != NULL");
+                CGS_ASSERT(lpStateB != 0, "lpActiveRaceCarStateB != NULL");
 
                 HandleVehicleVehicleSparks(lvPoint, lpStateB->mLinearVelocity, lrCarA, lpStateA,
                                            lrParams.mDt, lrParams.mTime);

@@ -64,16 +64,16 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     void StateManager::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != nullptr, "lpNetworkModule");
+        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
         mpNetworkModule  = lpNetworkModule;
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
         meState                  = E_STATE_COUNT;
         meOutputPlayerTexture    = 0;
         mNetworkPlayerIDToOutput = -1;
-        mpTOS                    = nullptr;
-        mpNews                   = nullptr;
+        mpTOS                    = 0;
+        mpNews                   = 0;
 
         mNewCarData.mCarModelId        = 0;
         mNewCarData.mWheelModelId      = 0;
@@ -120,8 +120,8 @@ namespace BrnNetwork
         meState                  = E_STATE_COUNT;
         meOutputPlayerTexture    = 0;
         mNetworkPlayerIDToOutput = -1;
-        mpTOS                    = nullptr;
-        mpNews                   = nullptr;
+        mpTOS                    = 0;
+        mpNews                   = 0;
 
         mNewCarData.mCarModelId        = 0;
         mNewCarData.mWheelModelId      = 0;
@@ -147,8 +147,8 @@ namespace BrnNetwork
         mbReadyToJoinGameSession = false;
         mbLoadingScreenVisible   = false;
 
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != nullptr,
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != 0,
                    "mpNetworkManager->GetHostMigrationManager()");
         mpNetworkManager->GetHostMigrationManager()->RegisterHostMigrationCallback(&HostChangedCallback, this);
 
@@ -173,8 +173,8 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     bool StateManager::Release()
     {
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != nullptr,
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != 0,
                    "mpNetworkManager->GetHostMigrationManager()");
         mpNetworkManager->GetHostMigrationManager()->UnregisterHostMigrationCallback(&HostChangedCallback);
 
@@ -212,15 +212,15 @@ namespace BrnNetwork
         meLeftReason = E_LEFT_GAME_REASON_COUNT;
         meKickReason = CgsNetwork::E_KICKREASON_COUNT;
 
-        if (mpTOS != nullptr)
+        if (mpTOS != 0)
         {
             CgsNetwork::ServerInterfaceDirtySock::MemFree(mpTOS, 0, 0);
-            mpTOS = nullptr;
+            mpTOS = 0;
         }
-        if (mpNews != nullptr)
+        if (mpNews != 0)
         {
             CgsNetwork::ServerInterfaceDirtySock::MemFree(mpNews, 0, 0);
-            mpNews = nullptr;
+            mpNews = 0;
         }
 
         return true;
@@ -252,10 +252,10 @@ namespace BrnNetwork
         mbSetNotPlaying          = false;
         meState                  = E_STATE_COUNT;
         meOutputPlayerTexture    = 0;
-        mpNetworkManager         = nullptr;
-        mpNetworkModule          = nullptr;
-        mpTOS                    = nullptr;
-        mpNews                   = nullptr;
+        mpNetworkManager         = 0;
+        mpNetworkModule          = 0;
+        mpTOS                    = 0;
+        mpNews                   = 0;
 
         mbStartFreeburnLobbyThisFrame       = false;
         mbStartingAfterJoinThisFrame        = false;
@@ -295,7 +295,7 @@ namespace BrnNetwork
     char* StateManager::StripWebOfferControlCodes(char* lpcBuffer)
     {
         lpcBuffer = strstr(lpcBuffer, "%}");
-        if (lpcBuffer != nullptr)
+        if (lpcBuffer != 0)
         {
             lpcBuffer += 2;
 
@@ -306,7 +306,7 @@ namespace BrnNetwork
             }
 
             char* lpcEndTag = strstr(lpcBuffer, "%{");
-            if (lpcEndTag != nullptr)
+            if (lpcEndTag != 0)
             {
                 *lpcEndTag = '\0';
             }
@@ -410,9 +410,9 @@ namespace BrnNetwork
                 mpNetworkManager->GetServerInterface()->GetGameComponent();
             PlayerParams lPlayerParams;
 
-            CGS_ASSERT(lpGamesComponent != nullptr, "lpGamesComponent");
-            CGS_ASSERT(lpInput != nullptr, "lpInput");
-            CGS_ASSERT(lpInput->GetActiveRaceCarInterface() != nullptr, "lpInput->GetActiveRaceCarInterface()");
+            CGS_ASSERT(lpGamesComponent != 0, "lpGamesComponent");
+            CGS_ASSERT(lpInput != 0, "lpInput");
+            CGS_ASSERT(lpInput->GetActiveRaceCarInterface() != 0, "lpInput->GetActiveRaceCarInterface()");
 
             if (lpInput->GetActiveRaceCarInterface()->IsPlayerCarActive())
             {
@@ -517,7 +517,7 @@ namespace BrnNetwork
                 {
                     PlayerMenuData* lpMenuData = static_cast<PlayerMenuData*>(
                         mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
-                    CGS_ASSERT(lpMenuData != nullptr, "lpMenuData");
+                    CGS_ASSERT(lpMenuData != 0, "lpMenuData");
                     lpMenuData->mbFinalCarSelection = false;
                 }
             }
@@ -818,7 +818,7 @@ namespace BrnNetwork
 
         // A client whose host started the game while we idled in the lobby (or while syncing
         // for a freeburn-lobby / showtime round) joins the launch.
-        if (mpNetworkModule != nullptr && mpNetworkModule->GetGameStateToNetworkInterface() != nullptr)
+        if (mpNetworkModule != 0 && mpNetworkModule->GetGameStateToNetworkInterface() != 0)
         {
             if (meState == E_STATE_COUNT
                 || (meState == E_STATE_SYNC_TIME

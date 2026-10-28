@@ -14,7 +14,7 @@ namespace CgsDev
     namespace DebugUI
     {
         MenuItemFunction::MenuItemFunction()
-            : mpFunction(nullptr)
+            : mpFunction(0)
         {
         }
 

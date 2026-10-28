@@ -55,7 +55,7 @@ namespace BrnResource
     intptr_t DLCManager::X360DLCEnumerationThreadProc(void* lpContext)
     {
         DLCManager* const lpManager = static_cast<DLCManager*>(lpContext);
-        alignas(RealmcIface::XCONTENT_DATA) u8 lacTempBuffer[0x2000];
+        CGS_ALIGN(RealmcIface::XCONTENT_DATA) u8 lacTempBuffer[0x2000];
         u32 luPriorPackageCount;
 
         {

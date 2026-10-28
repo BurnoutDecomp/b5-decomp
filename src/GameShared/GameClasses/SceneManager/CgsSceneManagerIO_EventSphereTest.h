@@ -45,7 +45,7 @@ namespace SceneManagerIO
     struct EventBaseSphereTestFast {};
 
     // EventQueue<InEventSphereTestFast, N> element. 16-byte aligned, stride 48 (0x30).
-    struct alignas(16) InEventSphereTestFast : public EventBaseSphereTestFast
+    struct CGS_ALIGN(16) InEventSphereTestFast : public EventBaseSphereTestFast
     {
         Vector3Plus    mSpherePosPlusRadius; //  +0x00  centre xyz, radius in w
         SceneQueryId   mQueryId;             //  +0x10
@@ -55,12 +55,12 @@ namespace SceneManagerIO
         u8             mxVolumeTypeFlags;    //  +0x20
     };
 
-    static_assert(offsetof(InEventSphereTestFast, mQueryId)            == 0x10, "query id +0x10");
-    static_assert(offsetof(InEventSphereTestFast, mx32EntityTypeFlags) == 0x14, "entity-type flags +0x14");
-    static_assert(offsetof(InEventSphereTestFast, mExcludeEntityId)    == 0x18, "exclude entity +0x18");
-    static_assert(offsetof(InEventSphereTestFast, meExclusionMode)     == 0x1C, "exclusion mode +0x1C");
-    static_assert(offsetof(InEventSphereTestFast, mxVolumeTypeFlags)   == 0x20, "volume-type flags +0x20");
-    static_assert(sizeof(InEventSphereTestFast)  == 0x30, "Append strides 0x30");
-    static_assert(alignof(InEventSphereTestFast) == 16,   "maEvents at +0x10");
+    CGS_STATIC_ASSERT((offsetof(InEventSphereTestFast, mQueryId)            == 0x10), "query id +0x10");
+    CGS_STATIC_ASSERT((offsetof(InEventSphereTestFast, mx32EntityTypeFlags) == 0x14), "entity-type flags +0x14");
+    CGS_STATIC_ASSERT((offsetof(InEventSphereTestFast, mExcludeEntityId)    == 0x18), "exclude entity +0x18");
+    CGS_STATIC_ASSERT((offsetof(InEventSphereTestFast, meExclusionMode)     == 0x1C), "exclusion mode +0x1C");
+    CGS_STATIC_ASSERT((offsetof(InEventSphereTestFast, mxVolumeTypeFlags)   == 0x20), "volume-type flags +0x20");
+    CGS_STATIC_ASSERT((sizeof(InEventSphereTestFast)  == 0x30), "Append strides 0x30");
+    CGS_STATIC_ASSERT((__alignof(InEventSphereTestFast) == 16),   "maEvents at +0x10");
 }
 }

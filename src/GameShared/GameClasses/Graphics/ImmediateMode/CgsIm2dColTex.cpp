@@ -106,7 +106,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpPixelProgramBinary, u32 luPixelProgramSize)
 {
     s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != nullptr)
+    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
     {
         li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
         if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
@@ -117,7 +117,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     if (li8ProgramIndex < KI8_MAX_PROGRAMS)
     {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == nullptr,
+        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
                    "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
     }
 
@@ -243,16 +243,16 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     mi8CurrentProgram = 0;
     for (s32 liSlot = 0; liSlot < KI8_MAX_PROGRAMS; ++liSlot)
     {
-        mapVertexProgramBuffer[liSlot] = nullptr;
-        mapPixelProgramBuffer[liSlot]  = nullptr;
+        mapVertexProgramBuffer[liSlot] = 0;
+        mapPixelProgramBuffer[liSlot]  = 0;
     }
 
     // Upload each supplied program pair.
     for (s32 liProgram = 0; liProgram < li8NumberPrograms; ++liProgram)
     {
-        CGS_ASSERT(lapVertexProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapVertexProgramBinary[liProgram] != 0,
                    "lapVertexProgramBinary[ li8ProgramIndex ] != NULL");
-        CGS_ASSERT(lapPixelProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapPixelProgramBinary[liProgram] != 0,
                    "lapPixelProgramBinary[ li8ProgramIndex ] != NULL");
         if (lauVertexProgramSize[liProgram] == 0)
         {
@@ -299,15 +299,15 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
     // BY NAME via &maShaderStateBlocks[slot] per row and re-fetches the cursor per row -- the persistent
     // mauTransform store (the real side-effect) is faithful; the per-row block stride + cursor
     // accumulation re-derive when the Device block layout lands.
-    void* lpResult = nullptr;
+    void* lpResult = 0;
     for (s32 liRow = 0; liRow < 4; ++liRow)
     {
-        void* lpShaderState = nullptr;
+        void* lpShaderState = 0;
         lpResult = RenderEngineDeviceBeginShaderStates(
             &this->maShaderStateBlocks[this->mi8CurrentProgram], &lpShaderState);
 
         u8* lpDst = reinterpret_cast<u8*>(lpShaderState);
-        if (lpDst != nullptr)
+        if (lpDst != 0)
         {
             const u8* lpRow = &this->mauTransform[liRow * 16];
             for (s32 liByte = 0; liByte < 16; ++liByte)

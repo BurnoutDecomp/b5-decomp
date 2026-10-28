@@ -256,7 +256,7 @@ const TextureState* ImRendererBase::ConstructDefaultTextureState(
 
     rw::ResourceDescriptor lDescriptor;
     renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
-    rw::Resource lStateResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
+    rw::Resource lStateResource = lpAllocator->DoAllocate(lDescriptor, 0);
 
     return reinterpret_cast<const TextureState*>(
         renderengine::TextureState::Initialize(&lStateResource, &lParameters));
@@ -336,7 +336,7 @@ renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAlloca
     // The console call is Lock(texture, flags=2, level=0, face=0, out). The host API orders these
     // as (level, face, flags, out) and returns void, so its lock-result assert cannot be represented.
     renderengine::Texture::Lock(lpWhiteTexture, 0, 0, 0, &lLocked);
-    CGS_ASSERT(lLocked.mpPixelData != nullptr, "lLocked.pixelData");
+    CGS_ASSERT(lLocked.mpPixelData != 0, "lLocked.pixelData");
 
     u8* lpPixelRow = static_cast<u8*>(lLocked.mpPixelData);
     const u32 luStrideBytes = lLocked.muStride & 0xFFFFFFFCu;
@@ -521,7 +521,7 @@ void ImRendererBase::SetState(const renderengine::TextureState* lpTextureState)
 }
 
 // ---- module statics (X360 .data home of this TU) --------------------------------------------------
-ImRendererBase*       ImRendererBase::mgpActiveRenderer        = nullptr;  // dword_83010F9C
+ImRendererBase*       ImRendererBase::mgpActiveRenderer        = 0;  // dword_83010F9C
 ImRendererBase::StateLibrary ImRendererBase::mgStateLibrary = {};
 bool ImRendererBase::mgbStateLibraryConstructed = false;
 // mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled were second host

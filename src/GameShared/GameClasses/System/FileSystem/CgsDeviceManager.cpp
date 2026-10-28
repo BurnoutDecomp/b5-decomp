@@ -20,13 +20,13 @@ namespace CgsFileSystem
 {
     // ---- statics ----
     // X360 globals: dword_830EA400 (singleton), off_830EA404 (allocator).
-    DeviceManager* DeviceManager::mpDeviceManager = nullptr;
-    void*          DeviceManager::mpAllocator     = nullptr;
+    DeviceManager* DeviceManager::mpDeviceManager = 0;
+    void*          DeviceManager::mpAllocator     = 0;
 
     // CgsFileSystem::GetDeviceManager @ 0x8264AD88
     DeviceManager* GetDeviceManager()
     {
-        CGS_ASSERT(DeviceManager::mpDeviceManager != nullptr, "Device manager not initialized\n");
+        CGS_ASSERT(DeviceManager::mpDeviceManager != 0, "Device manager not initialized\n");
         return DeviceManager::mpDeviceManager;
     }
 
@@ -59,9 +59,9 @@ namespace CgsFileSystem
         mDeviceListFutex.Lock();
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
-            maPhysicalDevices[liIndex].mpDevice = nullptr;
+            maPhysicalDevices[liIndex].mpDevice = 0;
         for (s32 liIndex = 0; liIndex < KI_MAX_VIRTUAL_DEVICES; ++liIndex)
-            maVirtualDevices[liIndex].mpDevice = nullptr;
+            maVirtualDevices[liIndex].mpDevice = 0;
 
         mbInitialized = true;
         mbReleasing   = false;
@@ -74,14 +74,14 @@ namespace CgsFileSystem
     // constructs the DeviceManager, then runs InitInternal.
     bool DeviceManager::InitializeDeviceManager(void* lpAllocator)
     {
-        CGS_ASSERT(mpDeviceManager == nullptr, "Device manager already exists\n");
-        CGS_ASSERT(lpAllocator != nullptr, "Allocator required\n");
+        CGS_ASSERT(mpDeviceManager == 0, "Device manager already exists\n");
+        CGS_ASSERT(lpAllocator != 0, "Allocator required\n");
 
         mpAllocator     = lpAllocator;
         mpDeviceManager = new DeviceManager();
         if (mpDeviceManager)
             mpDeviceManager->InitInternal();
-        return mpDeviceManager != nullptr;
+        return mpDeviceManager != 0;
     }
 
     // FindDevice — return the device registered under lpcPrefix (physical first, then virtual),
@@ -89,7 +89,7 @@ namespace CgsFileSystem
     Device* DeviceManager::FindDevice(const char* lpcPrefix)
     {
         if (!lpcPrefix)
-            return nullptr;
+            return 0;
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             if (maPhysicalDevices[liIndex].mpDevice &&
@@ -101,7 +101,7 @@ namespace CgsFileSystem
                 strcmp(maVirtualDevices[liIndex].macPrefix, lpcPrefix) == 0)
                 return maVirtualDevices[liIndex].mpDevice;
 
-        return nullptr;
+        return 0;
     }
 
     // AddPhysicalDevice @0x828F9320 — register lpDevice under lpcPrefix (asserting the name is
@@ -110,7 +110,7 @@ namespace CgsFileSystem
     {
         mDeviceListFutex.Lock();
 
-        CGS_ASSERT(FindDevice(lpcPrefix) == nullptr, "Device name already in use\n");
+        CGS_ASSERT(FindDevice(lpcPrefix) == 0, "Device name already in use\n");
 
         s32 liSlot = -1;
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
@@ -142,7 +142,7 @@ namespace CgsFileSystem
 
     void DeviceManager::SetDefaultPath(const char* lpcPath)
     {
-        CGS_ASSERT(lpcPath != nullptr, "Default path required\n");
+        CGS_ASSERT(lpcPath != 0, "Default path required\n");
         if (!lpcPath)
             return;
         const size_t luLength = strlen(lpcPath);
@@ -158,7 +158,7 @@ namespace CgsFileSystem
                              AsyncCompletionCallback lpfCallback, void* lpContext,
                              s32 liPriority)
     {
-        CGS_ASSERT(lpcFileName != nullptr, "File name required\n");
+        CGS_ASSERT(lpcFileName != 0, "File name required\n");
 
         const char* lpcColon = strchr(lpcFileName, ':');
         if (!lpcColon)
@@ -185,9 +185,9 @@ namespace CgsFileSystem
         const size_t luPrefixLength = static_cast<size_t>(lpcColon - lpcFileName);
         lacFileName[luPrefixLength] = 0;
         Device* lpDevice = FindDevice(lacFileName);
-        CGS_ASSERT(lpDevice != nullptr, "Could not find device\n");
+        CGS_ASSERT(lpDevice != 0, "Could not find device\n");
 
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
         s32 liDeviceIndex = 0;
         while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
                maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
@@ -203,7 +203,7 @@ namespace CgsFileSystem
                     sizeof(lOperation.macPath) - 1);
             lOperation.macPath[sizeof(lOperation.macPath) - 1] = 0;
             lOperation.muFlags = luFlags;
-            lOperation.mHandle = Handle::Make(lpDevice, nullptr);
+            lOperation.mHandle = Handle::Make(lpDevice, 0);
             lOperation.mpfCallback = lpfCallback;
             lOperation.mpContext = lpContext;
             lOperation.miPriority = liPriority;
@@ -221,7 +221,7 @@ namespace CgsFileSystem
     {
         mDeviceListFutex.Lock();
         Device* lpDevice = lHandle.GetDevice();
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
         s32 liDeviceIndex = 0;
         while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
                maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
@@ -251,7 +251,7 @@ namespace CgsFileSystem
     {
         mDeviceListFutex.Lock();
         Device* lpDevice = lHandle.GetDevice();
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
         s32 liDeviceIndex = 0;
         while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
                maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
@@ -280,7 +280,7 @@ namespace CgsFileSystem
     {
         mDeviceListFutex.Lock();
         Device* lpDevice = lHandle.GetDevice();
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : nullptr;
+        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
         s32 liDeviceIndex = 0;
         while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
                maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
@@ -357,7 +357,7 @@ namespace CgsFileSystem
             }
             case E_OP_OPEN:
             {
-                Handle::DeviceHandle lpDeviceHandle = nullptr;
+                Handle::DeviceHandle lpDeviceHandle = 0;
                 const int liResult = lpDevice->Open(lOp.macPath, lOp.muFlags, &lpDeviceHandle);
                 if (lOp.mpfCallback)
                     lOp.mpfCallback(liResult, Handle::Make(lpDevice, lpDeviceHandle), 0,
@@ -464,7 +464,7 @@ namespace CgsFileSystem
     s32 DeviceManager::ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize)
     {
         // Route through the first registered physical device.
-        PhysicalDeviceSlot* lpSlot = nullptr;
+        PhysicalDeviceSlot* lpSlot = 0;
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             if (maPhysicalDevices[liIndex].mpDevice) { lpSlot = &maPhysicalDevices[liIndex]; break; }
         if (!lpSlot)
@@ -484,7 +484,7 @@ namespace CgsFileSystem
         Operation lOp;
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType   = E_OP_OPEN;
-        lOp.mHandle = Handle::Make(lpDevice, nullptr);
+        lOp.mHandle = Handle::Make(lpDevice, 0);
         strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
         lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
         lOp.muFlags     = 1;
@@ -523,11 +523,11 @@ namespace CgsFileSystem
         if (lpuOutSize) *lpuOutSize = 0;
 
         // Route through the first registered physical device.
-        PhysicalDeviceSlot* lpSlot = nullptr;
+        PhysicalDeviceSlot* lpSlot = 0;
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             if (maPhysicalDevices[liIndex].mpDevice) { lpSlot = &maPhysicalDevices[liIndex]; break; }
         if (!lpSlot)
-            return nullptr;
+            return 0;
 
         Device*        lpDevice = lpSlot->mpDevice;
         OperationPool* lpPool   = &lpSlot->mOperations;
@@ -544,14 +544,14 @@ namespace CgsFileSystem
         // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
         memset(&lOp, 0, sizeof(lOp));
         lOp.miType   = E_OP_OPEN;
-        lOp.mHandle = Handle::Make(lpDevice, nullptr);
+        lOp.mHandle = Handle::Make(lpDevice, 0);
         strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
         lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
         lOp.muFlags = 1;
         const int liOpenResult = EnqueueAndWait(lpPool, &lOp, &lComp);
         const Handle lHandle = lComp.mHandle;
         if (liOpenResult != 0 || lHandle.IsNull())
-            return nullptr;
+            return 0;
 
         // GETFILESIZE (the worker passes the size as the callback result).
         memset(&lOp, 0, sizeof(lOp));
@@ -560,7 +560,7 @@ namespace CgsFileSystem
         const int liSizeResult = EnqueueAndWait(lpPool, &lOp, &lComp);
         const int liSize = liSizeResult == 0 ? static_cast<int>(lComp.muSize) : -1;
 
-        void* lpBuffer = nullptr;
+        void* lpBuffer = 0;
         u32   luBytes  = 0;
         if (liSize > 0)
         {
@@ -583,7 +583,7 @@ namespace CgsFileSystem
                 else
                 {
                     free(lpBuffer);   // short / failed read -> the whole-file read failed
-                    lpBuffer = nullptr;
+                    lpBuffer = 0;
                 }
             }
         }

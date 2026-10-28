@@ -29,8 +29,8 @@ namespace core
 // registered run-time descriptor record (its +0x00 label is the string "Pan2D"). These are
 // opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
 // storage so the bodies below link without fabricating their contents (same idiom as Gain).
-static void *const KP2_Pan2DVTable      = nullptr; // off_8217F4A4
-static void *const KP2_BasePlugInVTable = nullptr; // off_820AA810
+static void *const KP2_Pan2DVTable      = 0; // off_8217F4A4
+static void *const KP2_BasePlugInVTable = 0; // off_820AA810
 // off_82F8EFB8 -- the "Pan2D" runtime descriptor, REAL (descriptor-record wave).
 // Metadata FLAG'd null.
 static PlugInDescRunTime g_Pan2DDesc = {

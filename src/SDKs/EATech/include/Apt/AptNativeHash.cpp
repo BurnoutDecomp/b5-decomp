@@ -131,9 +131,9 @@ extern const int32_t gAptMemberIndexToEventBit[];   // X360 dword_82143BA8
 AptNativeHash::AptNativeHash(int32_t nCapacity)
 {
     mnCapacity         = nCapacity;
-    mpTable            = nullptr;
-    mp__Proto__        = nullptr;
-    mpPrototype        = nullptr;
+    mpTable            = 0;
+    mp__Proto__        = 0;
+    mpPrototype        = 0;
     mnEventHandlerMask = 0;
 
     if (((nCapacity - 1) & nCapacity) != 0)   // not already a power of two
@@ -162,7 +162,7 @@ void AptNativeHash::FirstAllocation()
     memset(mpTable, 0, nBytes);
 }
 
-bool AptNativeHash::IsEmpty() const { return mpTable == nullptr; }   // @0x82AD51D0
+bool AptNativeHash::IsEmpty() const { return mpTable == 0; }   // @0x82AD51D0
 
 AptValue* AptNativeHash::GetAt(int32_t nIndex) const { return mpTable[nIndex].mpValue; }
 
@@ -191,8 +191,8 @@ AptHashItem* AptNativeHash::HashFindKey(const EAStringC& key) const
     const int home = key.GetHashValue() & (cap - 1);
 
     AptHashItem* homeItem = &mpTable[home];
-    if (homeItem->mKey.m_pData == nullptr)
-        return nullptr;                                   // unused home -> absent
+    if (homeItem->mKey.m_pData == 0)
+        return 0;                                   // unused home -> absent
     if (!homeItem->mKey.IsEmpty() && homeItem->mKey.EqualNoCaseHash(key))
         return homeItem;
 
@@ -216,20 +216,20 @@ AptHashItem* AptNativeHash::HashFindKey(const EAStringC& key) const
     for (int idx = home + 1; idx <= hi; ++idx)
     {
         AptHashItem* item = &mpTable[idx];
-        if (item->mKey.m_pData == nullptr)
-            return nullptr;
+        if (item->mKey.m_pData == 0)
+            return 0;
         if (!item->mKey.IsEmpty() && item->mKey.EqualNoCaseHash(key))
             return item;
     }
     for (int idx = home - 1; idx >= lo; --idx)
     {
         AptHashItem* item = &mpTable[idx];
-        if (item->mKey.m_pData == nullptr)
+        if (item->mKey.m_pData == 0)
             break;
         if (!item->mKey.IsEmpty() && item->mKey.EqualNoCaseHash(key))
             return item;
     }
-    return nullptr;
+    return 0;
 }
 
 // HashSet (shared core) -- insert/replace key->value, growing on a full window.
@@ -239,7 +239,7 @@ void AptNativeHash::HashSet(const EAStringC& key, AptValue* pValue)
     int home = key.GetHashValue() & (cap - 1);
     AptHashItem* homeItem = &mpTable[home];
 
-    while (homeItem->mKey.m_pData != nullptr)             // home occupied or tombstoned
+    while (homeItem->mKey.m_pData != 0)             // home occupied or tombstoned
     {
         int reuse = home;
         if (!homeItem->mKey.IsEmpty())                    // home holds a real key
@@ -269,7 +269,7 @@ void AptNativeHash::HashSet(const EAStringC& key, AptValue* pValue)
         for (int idx = home + 1; idx <= hi; ++idx)
         {
             AptHashItem* item = &mpTable[idx];
-            if (item->mKey.m_pData == nullptr)            // empty -> occupy fresh
+            if (item->mKey.m_pData == 0)            // empty -> occupy fresh
             {
                 item->mKey.m_pData = key.m_pData;
                 item->mKey.IncreaseInternalRefCount();
@@ -285,7 +285,7 @@ void AptNativeHash::HashSet(const EAStringC& key, AptValue* pValue)
         for (int idx = home - 1; idx >= lo; --idx)
         {
             AptHashItem* item = &mpTable[idx];
-            if (item->mKey.m_pData == nullptr)
+            if (item->mKey.m_pData == 0)
             {
                 item->mKey.m_pData = key.m_pData;
                 item->mKey.IncreaseInternalRefCount();
@@ -333,7 +333,7 @@ void AptNativeHash::Expand()
     for (int i = 0; i < oldCap; ++i)
     {
         AptHashItem* e = &oldTab[i];
-        if (e->mKey.m_pData != nullptr && !e->mKey.IsEmpty())
+        if (e->mKey.m_pData != 0 && !e->mKey.IsEmpty())
             bigger.HashSet(e->mKey, e->mpValue);
     }
 
@@ -391,7 +391,7 @@ void AptNativeHash::Unset(const EAStringC& key)
             item->mKey.m_pData = reinterpret_cast<EAStringC::DebugDataC*>(EAStringC::s_EmptyInternalData);   // tombstone
             if (pValue)
                 pValue->Release();
-            item->mpValue = nullptr;
+            item->mpValue = 0;
             return;
         }
     }
@@ -413,10 +413,10 @@ AptValue* AptNativeHash::Lookup(const EAStringC& key) const
             return item->mpValue;
     }
     if (h == 1689)
-        return key.EqualNoCase(gAptKeyPrototype) ? mpPrototype : nullptr;
+        return key.EqualNoCase(gAptKeyPrototype) ? mpPrototype : 0;
     if (h == 27581)
-        return key.EqualNoCase(StringPool::saConstant[0]) ? mp__Proto__ : nullptr;
-    return nullptr;
+        return key.EqualNoCase(StringPool::saConstant[0]) ? mp__Proto__ : 0;
+    return 0;
 }
 
 // ---- proto / __proto__ fast-slots ----------------------------------------
@@ -439,12 +439,12 @@ void AptNativeHash::SetPrototype(AptValue* pValue)   // @0x82ADA010
 
 void AptNativeHash::UnsetPrototype()   // @0x82ADA080
 {
-    if (mpPrototype) { mpPrototype->Release(); mpPrototype = nullptr; }
+    if (mpPrototype) { mpPrototype->Release(); mpPrototype = 0; }
 }
 
 void AptNativeHash::Unset__Proto__()
 {
-    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = nullptr; }
+    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = 0; }
 }
 
 // ---- bucket iteration -----------------------------------------------------
@@ -453,19 +453,19 @@ void AptNativeHash::Unset__Proto__()
 AptHashItem* AptNativeHash::GetFirstItem() const
 {
     AptHashItem* tab = mpTable;
-    if (tab == nullptr)
-        return nullptr;
+    if (tab == 0)
+        return 0;
     const int cap = mnCapacity;
     if (cap <= 0)
-        return nullptr;
+        return 0;
 
     for (int i = 0; i < cap; ++i)
     {
         AptHashItem* item = &tab[i];
-        if (item->mKey.m_pData != nullptr && !item->mKey.IsEmpty())
+        if (item->mKey.m_pData != 0 && !item->mKey.IsEmpty())
             return item;
     }
-    return nullptr;
+    return 0;
 }
 
 // GetNextItem @0x82ADA130 -- the next occupied bucket strictly after pCurrent, or
@@ -473,20 +473,20 @@ AptHashItem* AptNativeHash::GetFirstItem() const
 AptHashItem* AptNativeHash::GetNextItem(const AptHashItem* pCurrent) const
 {
     AptHashItem* tab = mpTable;
-    if (tab == nullptr)
-        return nullptr;
+    if (tab == 0)
+        return 0;
 
     AptHashItem* item = const_cast<AptHashItem*>(pCurrent) + 1;
     AptHashItem* end  = &tab[mnCapacity];
     if (item >= end)
-        return nullptr;
+        return 0;
 
     for (; item < end; ++item)
     {
-        if (item->mKey.m_pData != nullptr && !item->mKey.IsEmpty())
+        if (item->mKey.m_pData != 0 && !item->mKey.IsEmpty())
             return item;
     }
-    return nullptr;
+    return 0;
 }
 
 // ---- packed AS event-handler bitmask --------------------------------------
@@ -535,7 +535,7 @@ void AptNativeHash::UpdateObjectMethods(const AptValue* pKeyValue,
     // Resolve the member name (key string) through the sprite-member gperf index.
     const SpriteMembersIndex::Entry* pEntry =
         SpriteMembersIndex::in_word_set(pKeyName->GetBuffer(), pKeyName->GetLength());
-    if (pEntry == nullptr)
+    if (pEntry == 0)
         return;
 
     const int32_t nMemberIndex = static_cast<int32_t>(pEntry->muMemberIndex);
@@ -622,23 +622,23 @@ void AptNativeHash::DestroyGCPointers()
         mnEventHandlerMask = 0;
         for (int i = 0; i < mnCapacity; ++i)      // mnCapacity re-read per iteration
         {
-            if (mpTable == nullptr)
+            if (mpTable == 0)
                 break;
             if (mpTable[i].mpValue)
             {
                 mpTable[i].mpValue->Release();
-                mpTable[i].mpValue = nullptr;     // console: reload mpTable, then store
+                mpTable[i].mpValue = 0;     // console: reload mpTable, then store
             }
             if (mpTable[i].mKey.m_pData)          // real key or tombstone
             {
                 EAStringC::DecreaseInternalRefCount(mpTable[i].mKey.m_pData);   // guards the tombstone
-                mpTable[i].mKey.m_pData = nullptr;
+                mpTable[i].mKey.m_pData = 0;
             }
         }
         if (mpTable)
         {
             gpNonGCPoolManager->Deallocate(mpTable, sizeof(AptHashItem) * mnCapacity);
-            mpTable = nullptr;
+            mpTable = 0;
         }
     }
 }
@@ -648,8 +648,8 @@ void AptNativeHash::DestroyGCPointers()
 // the table walk only touches buckets whose key slot is occupied/tombstoned.
 void AptNativeHash::ClearData()
 {
-    if (mpPrototype) { mpPrototype->Release(); mpPrototype = nullptr; }
-    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = nullptr; }
+    if (mpPrototype) { mpPrototype->Release(); mpPrototype = 0; }
+    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = 0; }
 
     AptHashItem* tab = mpTable;
     if (tab)
@@ -663,14 +663,14 @@ void AptNativeHash::ClearData()
                 if (e->mpValue)
                 {
                     e->mpValue->Release();
-                    e->mpValue = nullptr;
+                    e->mpValue = 0;
                 }
                 EAStringC::DecreaseInternalRefCount(e->mKey.m_pData);
-                e->mKey.m_pData = nullptr;
+                e->mKey.m_pData = 0;
             }
         }
         gpNonGCPoolManager->Deallocate(tab, sizeof(AptHashItem) * cap);
-        mpTable = nullptr;
+        mpTable = 0;
     }
     mnEventHandlerMask = 0;
 }
@@ -679,8 +679,8 @@ void AptNativeHash::ClearData()
 // free it / null mpTable); the table is left allocated but empty for reuse.
 void AptNativeHash::ClearDataNoDelete()
 {
-    if (mpPrototype) { mpPrototype->Release(); mpPrototype = nullptr; }
-    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = nullptr; }
+    if (mpPrototype) { mpPrototype->Release(); mpPrototype = 0; }
+    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = 0; }
 
     AptHashItem* tab = mpTable;
     if (tab)
@@ -694,10 +694,10 @@ void AptNativeHash::ClearDataNoDelete()
                 if (e->mpValue)
                 {
                     e->mpValue->Release();
-                    e->mpValue = nullptr;
+                    e->mpValue = 0;
                 }
                 EAStringC::DecreaseInternalRefCount(e->mKey.m_pData);
-                e->mKey.m_pData = nullptr;
+                e->mKey.m_pData = 0;
             }
         }
     }

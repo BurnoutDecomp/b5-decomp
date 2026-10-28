@@ -36,7 +36,7 @@ namespace Engines
 
 struct HybridEngineControl : public HybridExhaustControl
 {
-    HybridEngineControl() : mpHybridExhaustControl(nullptr) {}
+    HybridEngineControl() : mpHybridExhaustControl(0) {}
     virtual ~HybridEngineControl();     // anchor for the scalar deleting destructor @ 0x826CC7F0
 
     // @ 0x826CC738 -- RTTI factory hook.

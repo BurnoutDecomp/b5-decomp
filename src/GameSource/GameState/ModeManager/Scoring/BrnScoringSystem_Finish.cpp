@@ -144,7 +144,7 @@ namespace BrnGameState
                                              const CgsSystem::Time& lTime)
     {
         CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData == nullptr)
+        if (lpCarData == 0)
         {
             return;
         }
@@ -205,8 +205,8 @@ namespace BrnGameState
                                                                GameStateModuleIO::EGameModeType leGameMode)
     {
         CarData* lpCarData = GetCarData(leRaceCarIndex);
-        CGS_ASSERT(lpCarData != nullptr, "No car data");
-        if (lpCarData == nullptr)
+        CGS_ASSERT(lpCarData != 0, "No car data");
+        if (lpCarData == 0)
         {
             return;
         }

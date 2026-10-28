@@ -105,7 +105,7 @@ int CRemoteConsoleList::DoWork()
 {
     ExAcquireReadWriteLockShared(&mLock);
     for (ListLink* pLink = mActiveList.mpNext;
-         pLink != &mActiveList && pLink != nullptr;
+         pLink != &mActiveList && pLink != 0;
          pLink = pLink->mpNext)
     {
         ConsoleFromLink(pLink)->DoWork();
@@ -121,7 +121,7 @@ int CRemoteConsoleList::GetActiveConsoleAddresses(void* pOutAddresses, u32* pInO
 
     u8* pOut = static_cast<u8*>(pOutAddresses);
     ListLink* pLink = mActiveList.mpNext;
-    while (pLink != &mActiveList && pLink != nullptr && uCount < *pInOutCount)
+    while (pLink != &mActiveList && pLink != 0 && uCount < *pInOutCount)
     {
         std::memcpy(pOut, ConsoleFromLink(pLink)->maAddress, 36);
         pLink = pLink->mpNext;
@@ -138,18 +138,18 @@ int CRemoteConsoleList::GetActiveConsoleAddresses(void* pOutAddresses, u32* pInO
 CRemoteConsole* CRemoteConsoleList::GetFirstActiveRemoteConsole()
 {
     ListLink* pLink = mActiveList.mpNext;
-    if (pLink != &mActiveList && pLink != nullptr)
+    if (pLink != &mActiveList && pLink != 0)
         return ConsoleFromLink(pLink);
-    return nullptr;
+    return 0;
 }
 
 // @ 0x82983228
 CRemoteConsole* CRemoteConsoleList::GetNextActiveRemoteConsole(CRemoteConsole* pConsole)
 {
     ListLink* pLink = pConsole->mLink.mpNext;
-    if (pLink != &mActiveList && pLink != nullptr)
+    if (pLink != &mActiveList && pLink != 0)
         return ConsoleFromLink(pLink);
-    return nullptr;
+    return 0;
 }
 
 // @ 0x82983258
@@ -157,7 +157,7 @@ int CRemoteConsoleList::SetEnabledStateForAllActiveConsoles(int iEnabled)
 {
     ExAcquireReadWriteLockShared(&mLock);
     for (ListLink* pLink = mActiveList.mpNext;
-         pLink != &mActiveList && pLink != nullptr;
+         pLink != &mActiveList && pLink != 0;
          pLink = pLink->mpNext)
     {
         ConsoleFromLink(pLink)->mbDisabled = (iEnabled == 0);
@@ -171,7 +171,7 @@ CRemoteConsole* CRemoteConsoleList::ActivateRemoteConsole(const void* pAddress)
     ExAcquireReadWriteLockShared(&mLock);
 
     CRemoteConsole* pConsole = FindRemoteConsole(pAddress);
-    if (pConsole == nullptr)
+    if (pConsole == 0)
     {
         ListLink* pLink = mFreeList.mpNext;
         if (pLink != &mFreeList)   // a free console is available
@@ -191,7 +191,7 @@ CRemoteConsole* CRemoteConsoleList::ActivateRemoteConsole(const void* pAddress)
 int CRemoteConsoleList::DeActivateRemoteConsole(const void* pAddress)
 {
     CRemoteConsole* pConsole = FindRemoteConsole(pAddress);
-    if (pConsole == nullptr)
+    if (pConsole == 0)
         return 87;   // ERROR_INVALID_PARAMETER
 
     ExAcquireReadWriteLockExclusive(&mLock);

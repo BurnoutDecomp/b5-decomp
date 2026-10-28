@@ -60,7 +60,7 @@ int SnapshotChannel::GetCurrentVolume()
 int SnapshotChannel::GetFinalVolume()
 {
     SnapshotChannel* lpCeiling = mpCeiling;   // lwz r3, 0xC(r31)
-    if (lpCeiling == nullptr)
+    if (lpCeiling == 0)
     {
         return GetCurrentVolume();            // bl GetCurrentVolume (this) -> return
     }
@@ -80,7 +80,7 @@ int SnapshotChannel::GetFinalVolume()
 int SnapshotChannel::GetCeilingVolume()
 {
     SnapshotChannel* lpCeiling = mpCeiling;   // lwz r3, 0xC(r3)
-    if (lpCeiling != nullptr)
+    if (lpCeiling != 0)
     {
         return lpCeiling->GetFinalVolume();   // b GetFinalVolume (tail call, this = ceiling)
     }

@@ -35,13 +35,13 @@ namespace BrnNetwork
         bool Retrieve(LiveRevengeRelationship* lpLiveRevengeRelationship);
         void Release();
         void Destruct();
-        s32 GetPackedMessageSize() override;
+        s32 GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD00 -- bodied in this TU.
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         // DWARF spells these BrnNetworkManager::PackOrUnpackResult; that nested name is an
@@ -57,5 +57,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeSyncMessage) == 0xA0, "sizeof(LiveRevengeSyncMessage) == 0xA0");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(LiveRevengeSyncMessage) == 0xA0), "sizeof(LiveRevengeSyncMessage) == 0xA0");
 } // namespace BrnNetwork

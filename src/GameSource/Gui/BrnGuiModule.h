@@ -145,20 +145,20 @@ namespace BrnGui
             E_RELEASE_DONE = 15,
         };
 
-        bool Prepare() override;
+        bool Prepare() ;
         // ARTIST825194B8; original native vtable+0x5C. The selected host
         // keeps PrepareWorldData2 until the outer phase is migrated as a whole.
         virtual bool Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
-        bool Release() override;
-        void Destruct() override;
-        void Update() override;
+        bool Release() ;
+        void Destruct() ;
+        void Update() ;
 
         // ARTIST 0x8251A3D0; native owner of GUI pre-world validation, profile-upgrade requests,
         // movie-data acquire publication, and the shared GUI model's PreWorld update.
         void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
                             CgsModule::IOBufferStack* lpOutputBufferStack,
                             CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
-                            CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer) override;
+                            CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer) ;
 
         // The frame's simulation update set. X360 GuiModule::Update @0x82527A58 receives it as
         // its second argument from the module scheduler (`a2`) and reads ONE bit of it: bit 8

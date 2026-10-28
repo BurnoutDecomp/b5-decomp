@@ -44,6 +44,6 @@ namespace BrnDirector
         bool mbPauseRequestState;                  // +0x0F
     };
 
-    static_assert(sizeof(DirectorOutputInterface) == 0x10,
+    CGS_STATIC_ASSERT((sizeof(DirectorOutputInterface) == 0x10),
                   "DirectorOutputInterface has a pointer-free 16-byte payload");
 }

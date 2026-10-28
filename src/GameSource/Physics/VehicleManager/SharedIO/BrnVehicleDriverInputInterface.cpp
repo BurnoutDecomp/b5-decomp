@@ -27,11 +27,11 @@ namespace Vehicle
     // inline VariableEventQueue<5040,16> size or the SIMD-array alignment.
     void VehicleDriverInputInterface::_AssertLayout()
     {
-        static_assert(offsetof(VehicleDriverInputInterface, mTargetAssistPositions)  == 5056, "mTargetAssistPositions @ +5056");
-        static_assert(offsetof(VehicleDriverInputInterface, mTargetAssistIDs)        == 5184, "mTargetAssistIDs @ +5184");
-        static_assert(offsetof(VehicleDriverInputInterface, miTargetAssistCount)     == 5216, "miTargetAssistCount @ +5216");
-        static_assert(offsetof(VehicleDriverInputInterface, maBaseDeformationAmounts) == 5220, "maBaseDeformationAmounts @ +5220");
-        static_assert(offsetof(VehicleDriverInputInterface, maBaseDeformationFrames)  == 5252, "maBaseDeformationFrames @ +5252");
+        CGS_STATIC_ASSERT((offsetof(VehicleDriverInputInterface, mTargetAssistPositions)  == 5056), "mTargetAssistPositions @ +5056");
+        CGS_STATIC_ASSERT((offsetof(VehicleDriverInputInterface, mTargetAssistIDs)        == 5184), "mTargetAssistIDs @ +5184");
+        CGS_STATIC_ASSERT((offsetof(VehicleDriverInputInterface, miTargetAssistCount)     == 5216), "miTargetAssistCount @ +5216");
+        CGS_STATIC_ASSERT((offsetof(VehicleDriverInputInterface, maBaseDeformationAmounts) == 5220), "maBaseDeformationAmounts @ +5220");
+        CGS_STATIC_ASSERT((offsetof(VehicleDriverInputInterface, maBaseDeformationFrames)  == 5252), "maBaseDeformationFrames @ +5252");
     }
     // @0x822CBF60  VehicleDriverInputInterface::Construct
     //

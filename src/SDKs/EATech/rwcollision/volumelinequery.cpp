@@ -40,7 +40,7 @@ namespace rw
             u8    mPad117[11];
         };
 
-        static_assert(sizeof(QueryRefEntry) == 128, "QueryRefEntry must match X360 stride");
+        CGS_STATIC_ASSERT((sizeof(QueryRefEntry) == 128), "QueryRefEntry must match X360 stride");
 
         struct VolumeHeader
         {
@@ -158,7 +158,7 @@ namespace rw
         {
             VolumeLineQuery* lpQuery = static_cast<VolumeLineQuery*>(*ppBuffer);
             if (!lpQuery)
-                return nullptr;
+                return 0;
 
             lpQuery->muVolumeRefCapacity = static_cast<u32>(liVolumes);
             lpQuery->muPrimitiveRefCapacity = static_cast<u32>(liResults);

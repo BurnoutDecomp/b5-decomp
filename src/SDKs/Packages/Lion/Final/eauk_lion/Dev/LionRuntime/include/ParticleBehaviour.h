@@ -307,15 +307,15 @@ struct cParticleBehaviour
 
 // cParticleBehaviour::Serialise @0x8290F098 does `DataStore(this, 1216)`, and
 // GetSerialiseSize @0x8290CCD0 adds the same 1216 per node.
-static_assert(sizeof(cParticleBehaviour) == 1216,
+CGS_STATIC_ASSERT((sizeof(cParticleBehaviour) == 1216),
               "cParticleBehaviour is the 1216-byte serialised record "
               "(cParticleBehaviour::Serialise @0x8290F098 DataStore(this, 1216)) -- if this "
               "reads 1212, cVector has lost its alignas(16)");
-static_assert(offsetof(cParticleBehaviour, mDivisors)       == 0x200, "CompileBaseVariance");
-static_assert(offsetof(cParticleBehaviour, mFlags)          == 0x2C4, "the rlwinm masks");
-static_assert(offsetof(cParticleBehaviour, mpWaveFormX)     == 0x2C8, "Relocate asm word 178");
-static_assert(offsetof(cParticleBehaviour, mpNext)          == 0x2DC, "Relocate asm word 183");
-static_assert(offsetof(cParticleBehaviour, mBVCompiled)     == 0x2E0, "CompileBaseVariance");
-static_assert(offsetof(cParticleBehaviour, mEmitterVelWeight) == 1176, "Init @0x82908EA0");
-static_assert(offsetof(cParticleBehaviour, mAABBMin)        == 1184, "Lerp @0x8290B1F8");
-static_assert(offsetof(cParticleBehaviour, mAABBMax)        == 1200, "Lerp @0x8290B1F8");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mDivisors)       == 0x200), "CompileBaseVariance");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mFlags)          == 0x2C4), "the rlwinm masks");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mpWaveFormX)     == 0x2C8), "Relocate asm word 178");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mpNext)          == 0x2DC), "Relocate asm word 183");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mBVCompiled)     == 0x2E0), "CompileBaseVariance");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mEmitterVelWeight) == 1176), "Init @0x82908EA0");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mAABBMin)        == 1184), "Lerp @0x8290B1F8");
+CGS_STATIC_ASSERT((offsetof(cParticleBehaviour, mAABBMax)        == 1200), "Lerp @0x8290B1F8");

@@ -47,7 +47,7 @@ const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* FindOnlinePlayer(
         if (lpPlayer->meActiveRaceCarIndex == leCar)
             return lpPlayer;
     }
-    return nullptr;
+    return 0;
 }
 
 f32 ClampAboveCarUnit(f32 lfValue)
@@ -172,24 +172,24 @@ void AboveCarRenderer::Construct()
     CustomRenderComponentInterface::Construct();
     mePrepareStage = E_PREPARESTAGE_START;
     meReleaseStage = E_RELEASESTAGE_START;
-    mpHeapAllocator = nullptr;
-    mpBlendState = nullptr;
+    mpHeapAllocator = 0;
+    mpBlendState = 0;
     maBankingScores.Clear(); // stw0,+4A0; Array<BankingScore,6> count
     mRecentCrashSet.UnSetAll();
-    mTextObject.Construct(nullptr, 0);
+    mTextObject.Construct(0, 0);
     mpScoreFont.Clear();
-    mpTextRenderer = nullptr;
-    mpLanguageManager = nullptr;
-    mpGuiCache = nullptr;
-    mpGuiModuleSerialiser = nullptr;
+    mpTextRenderer = 0;
+    mpLanguageManager = 0;
+    mpGuiCache = 0;
+    mpGuiModuleSerialiser = 0;
     for (s32 liIndex = 0; liIndex < 8; ++liIndex)
     {
         PlayerGamerTagAboveCarInfo& lrInfo = maCachedPlayerGameTagInfos[liIndex];
         lrInfo.mbUsed = false;
         lrInfo.macRivalName[0] = 0;
-        lrInfo.mpRivalName = nullptr;
+        lrInfo.mpRivalName = 0;
         lrInfo.macPositionText[0] = 0;
-        lrInfo.mpPositionText = nullptr;
+        lrInfo.mpPositionText = 0;
         maAboveCarObjectLayouts[liIndex].Clear();
     }
     mbTimeExtensionPending = false;
@@ -250,7 +250,7 @@ void AboveCarRenderer::Update()
     if (lbRecording || lbPlaying)
     {
         auto* lpLayout = mpGuiModuleSerialiser->GetStaticLayout();
-        static_assert(sizeof(maAboveCarObjectLayouts) == sizeof(lpLayout->maCarRecordsA),
+        CGS_STATIC_ASSERT((sizeof(maAboveCarObjectLayouts) == sizeof(lpLayout->maCarRecordsA)),
                       "Replay copies eight complete32-byte records");
         if (lbRecording)
             std::memcpy(lpLayout->maCarRecordsA, maAboveCarObjectLayouts, sizeof(maAboveCarObjectLayouts));
@@ -529,7 +529,7 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
         lParams.mbState16 = 1;
         rw::ResourceDescriptor lDescriptor;
         renderengine::BlendState::GetResourceDescriptor(&lDescriptor, &lParams);
-        mBlendStateResource = mpHeapAllocator->DoAllocate(lDescriptor, nullptr);
+        mBlendStateResource = mpHeapAllocator->DoAllocate(lDescriptor, 0);
         auto* lpMaterial = static_cast<renderengine::BlendMaterialState*>(mBlendStateResource.m_baseResources[0]);
         mpBlendState = static_cast<renderengine::BlendMaterialState*>(
             renderengine::BlendState::Initialize(&lpMaterial, &lParams));

@@ -22,8 +22,8 @@ public:
     CRequestEnterZone();
     virtual ~CRequestEnterZone();
 
-    const char* GetRequestURL() override;
-    int Parse() override;
+    const char* GetRequestURL() ;
+    int Parse() ;
 
     // Builds the request block (zone name, player / session ids and, when all three are
     // non-zero, the bandwidth usage since the last zone) and marks it ready to submit.

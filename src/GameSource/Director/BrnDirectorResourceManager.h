@@ -34,8 +34,8 @@ class ICEResourceMgr : public ICE::IResourceManager
 public:
     void Construct(DirectorResourceManager* lpResourceManager);
 
-    const ICE::ICETakeData* GetTakeData(CgsResource::ID lId) const override;
-    const ICE::ICETakeData* GetTakeData(s32 liIndex) const override;
+    const ICE::ICETakeData* GetTakeData(CgsResource::ID lId) const ;
+    const ICE::ICETakeData* GetTakeData(s32 liIndex) const ;
 
 private:
     DirectorResourceManager* mpResourceManager;

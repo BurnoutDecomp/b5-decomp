@@ -78,8 +78,8 @@ namespace Deformation
                                               const CgsNumeric::Random& lRandom)
     {
         // The contact must reference the other car + the sensor on it that owns the contact.
-        CGS_ASSERT(lContact.mpOtherSensor  != nullptr, "lContact.mpOtherSensor");
-        CGS_ASSERT(lContact.mpOtherVehicle != nullptr, "lContact.mpOtherVehicle");
+        CGS_ASSERT(lContact.mpOtherSensor  != 0, "lContact.mpOtherSensor");
+        CGS_ASSERT(lContact.mpOtherVehicle != 0, "lContact.mpOtherVehicle");
 
         ExternalPhysicsBody&       lThisBody  = GetVehicleBody();
         DeformableObject&          lOtherCar  = *lContact.mpOtherVehicle;
@@ -103,7 +103,7 @@ namespace Deformation
         // for both cars on acceptance; the console zeroes it AGAIN here, for the car being solved.
         {
             BrnPhysics::Vehicle::VehiclePhysics* const lpThisVehicle = mVehicleBody.GetVehiclePhysics();
-            if (lpThisVehicle != nullptr)
+            if (lpThisVehicle != 0)
             {
                 lpThisVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
             }
@@ -540,7 +540,7 @@ namespace Deformation
             if ( (lfSignY * lrN.y) * lrN.y >= (lrN.x * lrN.x + lrN.z * lrN.z) )
             {
                 BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
-                if ( lpRaceCar != nullptr )
+                if ( lpRaceCar != 0 )
                 {
                     // ⚠️ OPERAND CORRECTED 2026-09-05 against ARTIST: `lvx128 v1, r0, r29`
                     // @0x82624A50 loads the contact base (r29 == &lContact, i.e. +0x00 ==

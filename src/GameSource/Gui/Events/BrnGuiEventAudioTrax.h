@@ -47,7 +47,7 @@ namespace BrnGui
         s32 GetEventType() const { return 458; }
     };
 
-    static_assert(sizeof(GuiEventAudioTraxUpdate) == 32,
+    CGS_STATIC_ASSERT((sizeof(GuiEventAudioTraxUpdate) == 32),
                   "OutputGuiEvent<GuiEventAudioTraxUpdate> @0x824C30A0 copies 32 bytes from "
                   "offset 0 and posts a 48-byte record");
 
@@ -93,7 +93,7 @@ namespace BrnGui
         s32 GetEventType() const { return 502; }
     };
 
-    static_assert(sizeof(GuiEATraxNewTrackEvent) == 24,
+    CGS_STATIC_ASSERT((sizeof(GuiEATraxNewTrackEvent) == 24),
                   "MusicEffect posts this record as AddEvent(&r, 502, 24)");
 
     // DecFIGS names these members. ARTIST UpdateParams @0x826FE5C8 posts
@@ -107,7 +107,7 @@ namespace BrnGui
 
         s32 GetEventType() const { return 503; }
     };
-    static_assert(sizeof(GuiClassicalChyronEvent) == 100,
+    CGS_STATIC_ASSERT((sizeof(GuiClassicalChyronEvent) == 100),
                   "ARTIST posts 100 bytes for the classical chyron");
 
     // GUI event 462 -- the trax play-order selector (the profile stores it as a 4-byte word

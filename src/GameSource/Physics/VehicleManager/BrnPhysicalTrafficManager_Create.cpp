@@ -108,15 +108,15 @@ namespace Vehicle
             VehicleDriver* lpaRaceCarDrivers,
             CgsContainers::BitArray<8u>* lpUsedRaceCars)
     {
-        CGS_ASSERT(lpCreateArticulatedTrafficEvents != nullptr,
+        CGS_ASSERT(lpCreateArticulatedTrafficEvents != 0,
                    "lpCreateArticulatedTrafficQueue != NULL"); // :935
-        CGS_ASSERT(lpManagerOutputInterface != nullptr,
+        CGS_ASSERT(lpManagerOutputInterface != 0,
                    "lpManagerOutputInterface != NULL"); // :936
-        CGS_ASSERT(lpDeformationInterface != nullptr,
+        CGS_ASSERT(lpDeformationInterface != 0,
                    "lpDeformationInterface != NULL"); // :937
-        CGS_ASSERT(lpaRaceCarVehicles != nullptr,
+        CGS_ASSERT(lpaRaceCarVehicles != 0,
                    "lpaRaceCarVehicles != NULL"); // :938
-        CGS_ASSERT(lpUsedRaceCars != nullptr,
+        CGS_ASSERT(lpUsedRaceCars != 0,
                    "lpUsedRaceCars != NULL"); // :939
 
         TotalPhysicalTrafficBitArray lDoNotRecycle;
@@ -177,7 +177,7 @@ namespace Vehicle
             lTrailerTransform.wAxis = lTrailerTransform.wAxis + lHalfSeparation;
             lpTrailer->mpVehicleBody->SetTransform(lTrailerTransform);
 
-            CGS_ASSERT(mpArticulatedJointCreateBuffer != nullptr,
+            CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
                        "mpArticulatedJointCreateBuffer != NULL"); // :1045
             const EntityId lCabEntityId = GetPhysicsEntityId(liCab);
             const EntityId lTrailerEntityId = GetPhysicsEntityId(liTrailer);

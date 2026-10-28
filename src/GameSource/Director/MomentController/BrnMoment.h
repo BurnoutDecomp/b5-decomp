@@ -218,18 +218,18 @@ namespace BrnDirector
             bool mbTakedownMoment;
         };
 
-        bool Prepare(void* lrBehaviourController) override;
+        bool Prepare(void* lrBehaviourController) ;
 
         // The rest of the override set (GROWN by this moment's own TU, batch 14 --
         // Moments/BrnMomentBystanderSeesAction.cpp replaces the earlier concrete
         // stubs with the real bodies):
-        void  Construct() override;
+        void  Construct() ;
         void  Update(f32 lfTimeStep, void* lrBehaviourController,
-                     const void* lSharedInfo) override;
-        void  SetParameters(const Moment::Parameters* lpParameters) override;
-        bool  Release() override;
-        const char* GetName() const override;
-        EType GetInstanceType() override { return E_MOMENT_BYSTANDER_SEES_ACTION; }
+                     const void* lSharedInfo) ;
+        void  SetParameters(const Moment::Parameters* lpParameters) ;
+        bool  Release() ;
+        const char* GetName() const ;
+        EType GetInstanceType()  { return E_MOMENT_BYSTANDER_SEES_ACTION; }
 
         // ⭐ ADDED 2026-08-29 (crash-camera wave). Squash the bystander camera's
         // perceived distance so a long crash stays readable. ArbStateCrashing::Update calls it

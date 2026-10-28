@@ -155,7 +155,7 @@ void CPacketizer::SetBitrate(int iBitrate)
 // @ 0x82986748
 void CPacketizer::BufferWriteCompleted(u32 uLength, const u8* pMarker)
 {
-    if (uLength == 0xFFFFFFFFu || pMarker == nullptr)
+    if (uLength == 0xFFFFFFFFu || pMarker == 0)
         return;
 
     // Stamp the just-written packet buffer's header with the current stream state.
@@ -258,7 +258,7 @@ int CPacketizer::GetEncodedPacket(int iSeq, u8* pOut, int* piOutLen)
         return 87;
 
     // Pick the retained buffer whose sequence base is closest at/below iSeq.
-    u8* pBuf = nullptr;
+    u8* pBuf = 0;
     for (int i = 0; i < 3; ++i)
     {
         const int iDist = iSeq - static_cast<int>(reinterpret_cast<u32*>(mpBuffers[i])[0]);

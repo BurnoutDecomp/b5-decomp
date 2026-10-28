@@ -107,7 +107,7 @@ namespace SceneManagerIO
 
         if (lbHasIntersection)
         {
-            CGS_ASSERT(lpIntersection != nullptr, "Expected intersection result\n");
+            CGS_ASSERT(lpIntersection != 0, "Expected intersection result\n");
 
             const u8* lpSrc = reinterpret_cast<const u8*>(lpIntersection);
 

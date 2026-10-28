@@ -94,7 +94,7 @@ namespace CgsGeometric
     // ------------------------------------------------------------------------
     const f32 KF_BOX_VALIDITY_TOLERANCE = 0.1f;
 
-    struct alignas(16) Box
+    struct CGS_ALIGN(16) Box
     {
         // --------------------------------------------------------------------
         // Set(Matrix44Affine, Vector3Plus) -- DWARF CgsBox.h:35.

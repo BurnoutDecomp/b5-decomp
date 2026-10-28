@@ -31,31 +31,31 @@
 // -----------------------------------------------------------------------------
 bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData()
 {
-    bool lbHasData = (mpFineLineTestQueue != nullptr) && (mpFineLineTestQueue->GetLength() != 0);
+    bool lbHasData = (mpFineLineTestQueue != 0) && (mpFineLineTestQueue->GetLength() != 0);
 
     if (!lbHasData)
     {
-        lbHasData = (mpFineLineTestNearestQueue != nullptr) && (mpFineLineTestNearestQueue->GetLength() != 0);
+        lbHasData = (mpFineLineTestNearestQueue != 0) && (mpFineLineTestNearestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpFineVolumeTestDeepestQueue != nullptr) && (mpFineVolumeTestDeepestQueue->GetLength() != 0);
+        lbHasData = (mpFineVolumeTestDeepestQueue != 0) && (mpFineVolumeTestDeepestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpFineVolumeTestQueue != nullptr) && (mpFineVolumeTestQueue->GetLength() != 0);
+        lbHasData = (mpFineVolumeTestQueue != 0) && (mpFineVolumeTestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpTriangleCollisionLineTestQueue != nullptr) && (mpTriangleCollisionLineTestQueue->GetLength() != 0);
+        lbHasData = (mpTriangleCollisionLineTestQueue != 0) && (mpTriangleCollisionLineTestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpTriangleCollisionLineTestNearestQueue != nullptr) && (mpTriangleCollisionLineTestNearestQueue->GetLength() != 0);
+        lbHasData = (mpTriangleCollisionLineTestNearestQueue != 0) && (mpTriangleCollisionLineTestNearestQueue->GetLength() != 0);
     }
     if (!lbHasData)
     {
-        lbHasData = (mpTriangleCollisionSphereTestQueue != nullptr) && (mpTriangleCollisionSphereTestQueue->GetLength() != 0);
+        lbHasData = (mpTriangleCollisionSphereTestQueue != 0) && (mpTriangleCollisionSphereTestQueue->GetLength() != 0);
     }
 
     return lbHasData;
@@ -73,7 +73,7 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData()
 s32 CgsSceneManager::SceneManagerIO::TriangleCacheInterface::GetNumCachedTriangleBatches(
     s32 liCacheSlotIndex) const
 {
-    CGS_ASSERT(mpTriangleCacheManager != nullptr, "mpTriangleCacheManager != NULL");
+    CGS_ASSERT(mpTriangleCacheManager != 0, "mpTriangleCacheManager != NULL");
     return mpTriangleCacheManager->mpaCachedObjectSlots[liCacheSlotIndex].miNumCachedTriangleBatches;
 }
 

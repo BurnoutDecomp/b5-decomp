@@ -90,8 +90,8 @@ public:
 
     // @ 0x826F5AC0 (vtable +0x0C). The per-manager boot bring-up state machine.
     virtual bool Prepare();
-    virtual void UpdateParams(f32 lfDeltaTime) override;
-    virtual CgsSound::Logic::State* GetFreeState(void* lpvAttachment) override;
+    virtual void UpdateParams(f32 lfDeltaTime) ;
+    virtual CgsSound::Logic::State* GetFreeState(void* lpvAttachment) ;
 
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them to

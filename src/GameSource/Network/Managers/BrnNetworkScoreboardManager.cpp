@@ -35,7 +35,7 @@
 
 #include <cstdlib>   // atoi, qsort
 #include <cstdio>    // snprintf (the rank-column "%d" formatter)
-#include <cstdint>   // uintptr_t (this <-> s32 user-data round-trip)
+#include "types.hpp"   // uintptr_t (this <-> s32 user-data round-trip)
 
 namespace BrnNetwork
 {
@@ -607,7 +607,7 @@ namespace BrnNetwork
                                      lpScoreTargetEvent->miVariation);
 
         // Resolve which event table applies.
-        const u64* lpau64EventIDs = nullptr;
+        const u64* lpau64EventIDs = 0;
         if (mpRankings->ScoreboardHasParam(KI_SCORE_TARGET_PARAM_A))
         {
             lpau64EventIDs = KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS;
@@ -903,7 +903,7 @@ namespace BrnNetwork
                     reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
                     lScoreboardEvent.GetEventType(), sizeof(lScoreboardEvent));
 
-                const u64* lpau64EventIDs = nullptr;
+                const u64* lpau64EventIDs = 0;
                 if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_STUNT_RUN))
                 {
                     CGS_ASSERT(miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
@@ -917,7 +917,7 @@ namespace BrnNetwork
                     lpau64EventIDs = KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS;
                 }
 
-                if (lpau64EventIDs != nullptr)
+                if (lpau64EventIDs != 0)
                 {
                     BrnNetworkModuleIO::NetworkOutDldChallengeableEvent lChallengeableEvent;
                     lChallengeableEvent.mID = lpau64EventIDs[miCurrentVariation];
@@ -1002,7 +1002,7 @@ namespace BrnNetwork
             {
                 PlayerInfoData lPlayerInfo;
 
-                CGS_ASSERT(mpRankings != nullptr, "mpRankings");
+                CGS_ASSERT(mpRankings != 0, "mpRankings");
                 CGS_ASSERT(miCurrentCategory != KI_INVALID_HEADING, "miCurrentCategory != KI_INVALID_HEADING");
                 CGS_ASSERT(miCurrentIndex != KI_INVALID_HEADING, "miCurrentIndex != KI_INVALID_HEADING");
 
@@ -1015,15 +1015,15 @@ namespace BrnNetwork
                 const s32   liUserType      = mpRankings->GetUserType();
                 if (liUserType == KI_USER_TYPE_BUDDIES)
                 {
-                    CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-                    CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr, "mpNetworkModule->GetNetworkManager()");
+                    CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, "mpNetworkModule->GetNetworkManager()");
                     BuddyManagerX360* lpBuddyManager = mpNetworkModule->GetNetworkManager()->GetBuddyManager();
-                    CGS_ASSERT(lpBuddyManager != nullptr, "lpBuddyManager");
+                    CGS_ASSERT(lpBuddyManager != 0, "lpBuddyManager");
                     liUserListCount = lpBuddyManager->GetAllBuddyNames(lapcUserListNames);
 
-                    CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != nullptr,
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
                                "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
-                    CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent() != nullptr,
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent() != 0,
                                "mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent()");
                     mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent()
                         ->GetLocalPlayerInfo(&lPlayerInfo);

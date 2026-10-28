@@ -37,7 +37,7 @@ namespace
     // Open the constant row lrHandle names and store one 16-byte vector into it.
     void UploadVectorConstant(renderengine::ProgramVariableHandle& lrHandle, const void* lpValue)
     {
-        void* lpConstant = nullptr;
+        void* lpConstant = 0;
         RenderEngineDeviceBeginShaderStates(&lrHandle, &lpConstant);
         std::memcpy(lpConstant, lpValue, 16);
     }
@@ -120,11 +120,11 @@ void Im2d::SetMaskPixelShaderState()
     UploadVectorConstant(lrLayer.mPixelMaskUVDifference,   &lrLayer.mvPixelMaskUVDifference);
     UploadVectorConstant(lrMask.mPixelMaskUseHandle,       &lrMask.mvPixelMask);
 
-    if (lrLayer.mpMaskTextureState != nullptr)
+    if (lrLayer.mpMaskTextureState != 0)
     {
         SetState(lrLayer.mpMaskTextureState, mu32NumMasks);
     }
-    else if (lrLayer.mpMaskTexture != nullptr)
+    else if (lrLayer.mpMaskTexture != 0)
     {
         SetTexture(lrLayer.mpMaskTexture, mu32NumMasks);
     }

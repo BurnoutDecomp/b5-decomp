@@ -23,9 +23,9 @@ namespace RealmcIface
 // ---------------------------------------------------------------------------
 LoadEntryInfo::LoadEntryInfo()
 {
-    mpAuxData     = nullptr;
+    mpAuxData     = 0;
     muAuxDataSize = 0;
-    mpData        = nullptr;
+    mpData        = 0;
     muDataSize    = 0;
     maHead[0]     = 0;
 }

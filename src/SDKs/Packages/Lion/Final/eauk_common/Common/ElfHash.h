@@ -40,7 +40,7 @@ inline void* cLionTokenTable::BuildHashes()
         else
         {
             lpEntry->miHash = 0;
-            lpResult = nullptr;
+            lpResult = 0;
         }
     }
 

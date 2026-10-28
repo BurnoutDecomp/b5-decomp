@@ -24,17 +24,17 @@ namespace ReplayIO
 {
     void OutputBuffer_PostSim::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PostSim, mGameEventQueue) == 0x0004,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostSim, mGameEventQueue) == 0x0004),
                       "mGameEventQueue @0x0004");
-        static_assert(sizeof(OutputBuffer_PostSim) == 1560,
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PostSim) == 1560),
                       "OutputBuffer_PostSim stride == 1560 (ReplayIO this+4 .. this+1564)");
     }
 
     void ReplayIO_Buffer::_AssertLayout()
     {
-        static_assert(offsetof(ReplayIO_Buffer, mPostSimBuffer) == 0x0004,
+        CGS_STATIC_ASSERT((offsetof(ReplayIO_Buffer, mPostSimBuffer) == 0x0004),
                       "mPostSimBuffer @0x0004 (GetOutputBuffer_PostSim -> this+4)");
-        static_assert(offsetof(ReplayIO_Buffer, mPreSimBuffer) == 0x061C,
+        CGS_STATIC_ASSERT((offsetof(ReplayIO_Buffer, mPreSimBuffer) == 0x061C),
                       "mPreSimBuffer @0x061C (GetOutputBuffer_PreSim -> this+1564)");
     }
 
@@ -98,11 +98,11 @@ namespace ReplayIO
 
     void OutputBuffer_PreSim::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PreSim, mStatusInterface) == 0x0004,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreSim, mStatusInterface) == 0x0004),
                       "mStatusInterface @0x0004 (GetStatusInterface -> this+4)");
-        static_assert(offsetof(OutputBuffer_PreSim, mGameDataRequestInterface) == 0x061C,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreSim, mGameDataRequestInterface) == 0x061C),
                       "mGameDataRequestInterface @0x061C (GetGameDataRequestInterface -> this+0x61C)");
-        static_assert(offsetof(OutputBuffer_PreSim, mGuiEventQueue) == 0x0A2C,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreSim, mGuiEventQueue) == 0x0A2C),
                       "mGuiEventQueue @0x0A2C (GetGuiEventQueue -> this+0xA2C)");
     }
 
@@ -148,9 +148,9 @@ namespace ReplayIO
 
     void InputBuffer_PreSim::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PreSim, mGameActionQueue) == 0x0004,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PreSim, mGameActionQueue) == 0x0004),
                       "mGameActionQueue @0x0004 (AppendGameActionQueue -> this+4)");
-        static_assert(offsetof(InputBuffer_PreSim, mTimerStatusInterface) == 0x3414,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PreSim, mTimerStatusInterface) == 0x3414),
                       "mTimerStatusInterface @0x3414 (Get/SetTimerStatusInterface -> this+0x3414)");
     }
 

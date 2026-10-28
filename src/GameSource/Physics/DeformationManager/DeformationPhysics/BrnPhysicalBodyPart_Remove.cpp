@@ -64,7 +64,7 @@ namespace Deformation
     {
         struct BoxInitialiseStorage
         {
-            alignas(16) char maBoxInitialiseBuffer[96];  // DWARF BrnPhysicalBodyPart.h:297 -- the BoxVolume
+            CGS_ALIGN(16) char maBoxInitialiseBuffer[96];  // DWARF BrnPhysicalBodyPart.h:297 -- the BoxVolume
             char maConsoleNeighbourTail[32];             // NOT a source member: the 32 bytes the
                                                          // consumer's 128-byte copy runs into (see above)
         };

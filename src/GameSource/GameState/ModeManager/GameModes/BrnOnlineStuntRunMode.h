@@ -79,21 +79,21 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::GetName)) != 0),
               "OnlineStuntRunMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::GetOutroTimeout)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::GetOutroTimeout)) != 0),
               "OnlineStuntRunMode::GetOutroTimeout must bind GameMode vtable slot 16");
-static_assert(sizeof(static_cast<void (OnlineStuntRunMode::*)(GameStateModuleIO::OutputBuffer*,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineStuntRunMode::*)(GameStateModuleIO::OutputBuffer*,
                                                               const GameStateModuleIO::PreWorldInputBuffer*,
                                                               const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*,
                                                               const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*,
                                                               bool,
-                                                              const ScoringSystem*)>(&OnlineStuntRunMode::PreWorldUpdate)) != 0,
+                                                              const ScoringSystem*)>(&OnlineStuntRunMode::PreWorldUpdate)) != 0),
               "OnlineStuntRunMode::PreWorldUpdate must bind GameMode vtable slot 2");
-static_assert(sizeof(static_cast<bool (OnlineStuntRunMode::*)(ScoringSystem*)>(&OnlineStuntRunMode::ShouldFinish)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineStuntRunMode::*)(ScoringSystem*)>(&OnlineStuntRunMode::ShouldFinish)) != 0),
               "OnlineStuntRunMode::ShouldFinish must bind GameMode vtable slot 14");
-static_assert(sizeof(static_cast<void (OnlineStuntRunMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineStuntRunMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineStuntRunMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineStuntRunMode::Start)) != 0),
               "OnlineStuntRunMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<bool (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::HasLoadingScreen)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::HasLoadingScreen)) != 0),
               "OnlineStuntRunMode::HasLoadingScreen must bind GameMode vtable slot 24");
 }

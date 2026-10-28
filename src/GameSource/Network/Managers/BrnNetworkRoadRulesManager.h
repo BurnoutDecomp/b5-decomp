@@ -235,28 +235,28 @@ namespace BrnNetwork
         // Uncalled layout pin (console layout; inert on the 64-bit host).
         static void _AssertLayout()
         {
-            static_assert( sizeof(void*) != 4 || sizeof(RoadRulesData) == 0x2B8, "RoadRulesData stride 0x2B8" );
-            static_assert( sizeof(void*) != 4 || offsetof(RoadRulesData, mRoadRulesMessageRecv) == 0x120, "mRoadRulesMessageRecv @ +0x120" );
-            static_assert( sizeof(void*) != 4 || offsetof(RoadRulesData, mRoadRulesPBMessageSend) == 0x240, "mRoadRulesPBMessageSend @ +0x240" );
-            static_assert( sizeof(void*) != 4 || offsetof(RoadRulesData, mRoadRulesPBMessageRecv) == 0x278, "mRoadRulesPBMessageRecv @ +0x278" );
-            static_assert( sizeof(void*) != 4 || offsetof(RoadRulesData, mPlayerID) == 0x2B0, "mPlayerID @ +0x2B0" );
-            static_assert( sizeof(void*) != 4 || offsetof(RoadRulesData, mIndexOfNextChallengeToSend) == 0x2B4, "mIndexOfNextChallengeToSend @ +0x2B4" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || sizeof(RoadRulesData) == 0x2B8), "RoadRulesData stride 0x2B8" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(RoadRulesData, mRoadRulesMessageRecv) == 0x120), "mRoadRulesMessageRecv @ +0x120" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(RoadRulesData, mRoadRulesPBMessageSend) == 0x240), "mRoadRulesPBMessageSend @ +0x240" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(RoadRulesData, mRoadRulesPBMessageRecv) == 0x278), "mRoadRulesPBMessageRecv @ +0x278" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(RoadRulesData, mPlayerID) == 0x2B0), "mPlayerID @ +0x2B0" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(RoadRulesData, mIndexOfNextChallengeToSend) == 0x2B4), "mIndexOfNextChallengeToSend @ +0x2B4" );
 
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, maLocalRoadScoresToUpload) == 0x1308, "maLocalRoadScoresToUpload @ +0x1308" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, maLocalLobbyScores) == 0x1D08, "maLocalLobbyScores @ +0x1D08" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mRoadRulesPersonalBestBuffer) == 0x2308, "mRoadRulesPersonalBestBuffer @ +0x2308" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mBufferedRoadRulesRecvQueue) == 0x2708, "mBufferedRoadRulesRecvQueue @ +0x2708" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, macRoadRulesServerKey) == 0x3588, "macRoadRulesServerKey @ +0x3588" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mPersonalBestToSendBuffer) == 0x3598, "mPersonalBestToSendBuffer @ +0x3598" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mu64RoadRulesID) == 0x3608, "mu64RoadRulesID @ +0x3608" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mTimeUntilNextResultUpload) == 0x3610, "mTimeUntilNextResultUpload @ +0x3610" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mIndexOfNextChallengeToUpload) == 0x3620, "mIndexOfNextChallengeToUpload @ +0x3620" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, meState) == 0x3634, "meState @ +0x3634" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mbBufferRoadRulesReceived) == 0x3638, "mbBufferRoadRulesReceived @ +0x3638" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mpTimeManager) == 0x363C, "mpTimeManager @ +0x363C" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mbDownloadedLocalScores) == 0x364C, "mbDownloadedLocalScores @ +0x364C" );
-            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mRoadRulesDebugComponent) == 0x3650, "mRoadRulesDebugComponent @ +0x3650" );
-            static_assert( sizeof(void*) != 4 || sizeof(NetworkRoadRulesManager) == 0x3660, "NetworkRoadRulesManager is 0x3660 bytes" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, maLocalRoadScoresToUpload) == 0x1308), "maLocalRoadScoresToUpload @ +0x1308" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, maLocalLobbyScores) == 0x1D08), "maLocalLobbyScores @ +0x1D08" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mRoadRulesPersonalBestBuffer) == 0x2308), "mRoadRulesPersonalBestBuffer @ +0x2308" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mBufferedRoadRulesRecvQueue) == 0x2708), "mBufferedRoadRulesRecvQueue @ +0x2708" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, macRoadRulesServerKey) == 0x3588), "macRoadRulesServerKey @ +0x3588" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mPersonalBestToSendBuffer) == 0x3598), "mPersonalBestToSendBuffer @ +0x3598" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mu64RoadRulesID) == 0x3608), "mu64RoadRulesID @ +0x3608" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mTimeUntilNextResultUpload) == 0x3610), "mTimeUntilNextResultUpload @ +0x3610" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mIndexOfNextChallengeToUpload) == 0x3620), "mIndexOfNextChallengeToUpload @ +0x3620" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, meState) == 0x3634), "meState @ +0x3634" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mbBufferRoadRulesReceived) == 0x3638), "mbBufferRoadRulesReceived @ +0x3638" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mpTimeManager) == 0x363C), "mpTimeManager @ +0x363C" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mbDownloadedLocalScores) == 0x364C), "mbDownloadedLocalScores @ +0x364C" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mRoadRulesDebugComponent) == 0x3650), "mRoadRulesDebugComponent @ +0x3650" );
+            CGS_STATIC_ASSERT(( sizeof(void*) != 4 || sizeof(NetworkRoadRulesManager) == 0x3660), "NetworkRoadRulesManager is 0x3660 bytes" );
         }
     };
 }

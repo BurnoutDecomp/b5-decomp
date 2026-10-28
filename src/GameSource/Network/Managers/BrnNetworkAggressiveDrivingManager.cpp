@@ -125,7 +125,7 @@ namespace BrnNetwork
                 return &maAggressiveDrivingData[liIndex];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // ---------------------------------------------------------------------------------
@@ -135,8 +135,8 @@ namespace BrnNetwork
     void NetworkAggressiveDrivingManager::ProcessBeforeSimulation(
             BrnNetworkModuleIO::OutputBuffer* lpOutput, f32 lfTimeStep)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
 
         if (mbAreWeInOnlineGame)
         {
@@ -152,7 +152,7 @@ namespace BrnNetwork
     void NetworkAggressiveDrivingManager::ProcessAfterSimulation(
             const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
 
         if (mbAreWeInOnlineGame)
         {
@@ -166,20 +166,20 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void NetworkAggressiveDrivingManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             // Claim the first free table slot (mPlayerID == -1).
             AggressiveDrivingData* lpDataEntry = GetAggressiveDrivingDataEntry(-1);
-            CGS_ASSERT(lpDataEntry != nullptr, "lpDataEntry");
+            CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
 
             lpNetworkPlayer->RegisterMessageType(KI_AGGRESSIVE_DRIVING_MESSAGE_TYPE,
                                                  sizeof(AggressiveDrivingMessage),
                                                  &lpDataEntry->mAggressiveDrivingMessageSend,
                                                  &lpDataEntry->mAggressiveDrivingMessageRecv,
-                                                 nullptr, nullptr, this);
+                                                 0, 0, this);
             lpDataEntry->mPlayerID = lPlayerID;
         }
     }
@@ -190,7 +190,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void NetworkAggressiveDrivingManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
 
@@ -212,7 +212,7 @@ namespace BrnNetwork
             }
         }
 
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->UnRegisterMessageType(KI_AGGRESSIVE_DRIVING_MESSAGE_TYPE);
             AggressiveDrivingData* lpEntry = GetAggressiveDrivingDataEntry(lPlayerID);
@@ -382,7 +382,7 @@ namespace BrnNetwork
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             AggressiveDrivingData* lpEntry = &maAggressiveDrivingData[liIndex];
-            CGS_ASSERT(lpEntry != nullptr, "lpEntry");
+            CGS_ASSERT(lpEntry != 0, "lpEntry");
             CGS_ASSERT(leImpactAggressorActiveRaceCarIndex >= 0,
                        "leImpactAggressorActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
             CGS_ASSERT(leImpactAggressorActiveRaceCarIndex < KI_MAX_RACE_CARS,
@@ -467,7 +467,7 @@ namespace BrnNetwork
 
         const NetworkPlayerID lPlayerID = lpInterface->GetNetworkPlayerID(leRemoteActiveRaceCarIndex);
         AggressiveDrivingData* lpEntry = GetAggressiveDrivingDataEntry(lPlayerID);
-        CGS_ASSERT(lpEntry != nullptr, "lpEntry");
+        CGS_ASSERT(lpEntry != 0, "lpEntry");
 
         // Map the physics impact type onto the aggressive-move type.
         AggressiveMoveData lNewMove;
@@ -580,13 +580,13 @@ namespace BrnNetwork
         if (lRevengePlayerID != -1)
         {
             BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
-            CGS_ASSERT(lpNetworkManager != nullptr, "mpNetworkModule->GetNetworkManager()");
-            CGS_ASSERT(lpNetworkManager->GetLiveRevengeManager() != nullptr,
+            CGS_ASSERT(lpNetworkManager != 0, "mpNetworkModule->GetNetworkManager()");
+            CGS_ASSERT(lpNetworkManager->GetLiveRevengeManager() != 0,
                        "mpNetworkModule->GetNetworkManager()->GetLiveRevengeManager()");
 
             LiveRevengeRelationship* lpLiveRevengeRelationship =
                 lpNetworkManager->GetLiveRevengeManager()->GetNonConstRevengeRelation(lRevengePlayerID);
-            CGS_ASSERT(lpLiveRevengeRelationship != nullptr, "lpLiveRevengeRelationship");
+            CGS_ASSERT(lpLiveRevengeRelationship != 0, "lpLiveRevengeRelationship");
 
             const s32 liCurrentScore = lpLiveRevengeRelationship->GetCurrentScoreForLocalPlayer();
             if ((liCurrentScore > 0 && lbLocalIsAggressor) || (liCurrentScore < 0 && lbLocalIsVictim))
@@ -603,7 +603,7 @@ namespace BrnNetwork
             AggressiveDrivingData* lpEntry = &maAggressiveDrivingData[liIndex];
             CGS_ASSERT(lpEntry->mPlayerID != lLocalPlayerID,
                        "maAggressiveDrivingData[liIndex].mPlayerID != lLocalPlayerID");
-            CGS_ASSERT(lpEntry != nullptr, "lpEntry");
+            CGS_ASSERT(lpEntry != 0, "lpEntry");
 
             if (lpEntry->mPlayerID != -1)
             {
@@ -664,8 +664,8 @@ namespace BrnNetwork
     void NetworkAggressiveDrivingManager::ProcessInputQueue(
             const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactQueue =
             lpInput->GetVehicleOutputInterface()->GetImpactEventQueue();
@@ -691,8 +691,8 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void NetworkAggressiveDrivingManager::HandleSendingMessages()
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         // First pass: drop any move that has already been sent its full quota.
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_NETWORK_PLAYERS; ++liPlayerIndex)
@@ -750,7 +750,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void NetworkAggressiveDrivingManager::HandleReceivingMessages(BrnNetworkModuleIO::OutputBuffer* lpOutput)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
 
         CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactEventQueue =
             lpOutput->GetVehicleInputInterface()->GetImpactEventQueue();

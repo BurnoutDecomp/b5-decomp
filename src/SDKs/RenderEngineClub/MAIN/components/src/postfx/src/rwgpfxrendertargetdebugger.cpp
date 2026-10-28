@@ -25,9 +25,9 @@ namespace
         "\x00\x00\x08\x21\x00\x01\x00\x01\x00\x00\x00\x01\x00\x00\x30\x50\x00\x00\x00\x00\x20\x01\xC4\x00\x22\x00\x00\x09\x10\x08\x00\x01"
         "\x1F\x1F\xFE\x88\x00\x00\x40\x00\xC8\x8F\xC0\x00\x00\xC0\xC0\x00\xE2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
 
-    static_assert(sizeof(gacRenderTargetDebuggerVertexProgram) - 1 == 240,
+    CGS_STATIC_ASSERT((sizeof(gacRenderTargetDebuggerVertexProgram) - 1 == 240),
                   "RenderTargetDebugger vertex shader size mismatch");
-    static_assert(sizeof(gacRenderTargetDebuggerPixelProgram) - 1 == 224,
+    CGS_STATIC_ASSERT((sizeof(gacRenderTargetDebuggerPixelProgram) - 1 == 224),
                   "RenderTargetDebugger pixel shader size mismatch");
 }
 
@@ -38,9 +38,9 @@ namespace graphics
 namespace postfx
 {
     RenderTargetDebugger::RenderTargetDebugger()
-        : mpVertexDescriptor(nullptr)
-        , mpVertexProgram(nullptr)
-        , mpPixelProgram(nullptr)
+        : mpVertexDescriptor(0)
+        , mpVertexProgram(0)
+        , mpPixelProgram(0)
     {
         renderengine::VertexDescriptor::Parameters lParameters;
 
@@ -58,16 +58,16 @@ namespace postfx
         rw::IResourceAllocator* lpAllocator =
             rw::ResourceAllocatorRegistry::GetDefaultAllocator();
         rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
         mpVertexDescriptor =
             renderengine::VertexDescriptor::Initialize(&lResource, &lParameters);
 
         mpVertexProgram = PfxHelper::CreateProgram(
             0, gacRenderTargetDebuggerVertexProgram,
-            sizeof(gacRenderTargetDebuggerVertexProgram) - 1, nullptr);
+            sizeof(gacRenderTargetDebuggerVertexProgram) - 1, 0);
         mpPixelProgram = PfxHelper::CreateProgram(
             1, gacRenderTargetDebuggerPixelProgram,
-            sizeof(gacRenderTargetDebuggerPixelProgram) - 1, nullptr);
+            sizeof(gacRenderTargetDebuggerPixelProgram) - 1, 0);
     }
 }
 }

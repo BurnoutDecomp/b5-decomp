@@ -25,7 +25,7 @@
 // interior grow (WorldEntityModule TU) widened ZoneEntry::mpZoneData to a host
 // pointer, so the PC stride departs (semantic-by-NAME, x64 gate); the queue walks
 // by sizeof, which stays self-consistent.
-static_assert(sizeof(BrnWorld::PVSIO::GetZoneResponse) % 16 == 0, "GetZoneResponse 16-align drift");
+CGS_STATIC_ASSERT((sizeof(BrnWorld::PVSIO::GetZoneResponse) % 16 == 0), "GetZoneResponse 16-align drift");
 
 template void
 CgsModule::EventQueue<BrnWorld::PVSIO::GetZoneResponse, 8>::Construct();

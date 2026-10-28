@@ -113,7 +113,7 @@ namespace BrnGameState
 // shape leads IsOnlineGameMode @0x82311410 and IsInPostEvent @0x823113D0.
 bool ModeManager::IsInGameMode() const
 {
-    return (mpCurrentGameMode != nullptr);
+    return (mpCurrentGameMode != 0);
 }
 
 // PINNED FROM ASM (two independent inlined call sites, both rendering identically):
@@ -125,7 +125,7 @@ bool ModeManager::IsInGameMode() const
 // GameMode::meCurrentState, the same word IsInPostEvent reads.) 2 == E_GMS_IN_PROGRESS.
 bool ModeManager::IsInProgress() const
 {
-    if (mpCurrentGameMode == nullptr)
+    if (mpCurrentGameMode == 0)
     {
         return false;
     }
@@ -148,7 +148,7 @@ bool ModeManager::IsInProgress() const
 // frames as well; no offline path is affected, because an offline mode never enters 6 or 7.
 bool ModeManager::IsInPreEvent() const
 {
-    if (mpCurrentGameMode == nullptr)
+    if (mpCurrentGameMode == 0)
     {
         return false;
     }
@@ -164,7 +164,7 @@ bool ModeManager::IsInPreEvent() const
 // real lie.
 GameStateModuleIO::EGameModeState ModeManager::GetCurrentGameModeState() const
 {
-    if (mpCurrentGameMode == nullptr)
+    if (mpCurrentGameMode == 0)
     {
         return GameStateModuleIO::E_GMS_INVALID;
     }
@@ -249,7 +249,7 @@ void ModeManager::FinishCurrentModeNextUpdateWithFinishPosition(s32 liFinishPosi
 
 GameStateModule* ModeManager::GetGameStateModule()
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
     return mpGameStateModule;
 }
 
@@ -293,7 +293,7 @@ void ModeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlayerID,
 // TriggerQueryManager's ResourcePtr at TQM+1568 (0x620).
 const BrnTrigger::TriggerData* ModeManager::GetTriggerData() const
 {
-    CGS_ASSERT(mpTriggerQueryManager != nullptr, "mpTriggerQueryManager");
+    CGS_ASSERT(mpTriggerQueryManager != 0, "mpTriggerQueryManager");
     return mpTriggerQueryManager->GetTriggerData();
 }
 
@@ -329,7 +329,7 @@ const BrnTrigger::TriggerData* ModeManager::GetCheckpointTriggerData() const
 const BrnTraffic::TrafficData* ModeManager::GetTrafficData() const
 {
     const BrnTraffic::TrafficData* lpTrafficData = mpTriggerQueryManager->GetTrafficData();
-    CGS_ASSERT(lpTrafficData != nullptr, "lpTrafficData");
+    CGS_ASSERT(lpTrafficData != 0, "lpTrafficData");
     return lpTrafficData;
 }
 
@@ -342,7 +342,7 @@ const BrnTraffic::TrafficData* ModeManager::GetTrafficData() const
 const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
     ModeManager::GetGlobalRaceCarOutputInterface() const
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
     return mpGameStateModule->GetLastGlobalRaceCarInterface();
 }
 
@@ -354,7 +354,7 @@ const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
     ModeManager::GetLastActiveRaceCarOutputInterface() const
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
     return mpGameStateModule->GetLastActiveRaceCarInterface();
 }
 
@@ -401,7 +401,7 @@ EActiveRaceCarIndex ModeManager::GlobalToActiveRaceCarIndex(EGlobalRaceCarIndex 
 // two UpdateCumulativeResults arguments must never be swapped.
 s32 ModeManager::GetNetworkGameRandomSeed() const
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
     return static_cast<s32>(mpGameStateModule->GetNetworkRandomSeed());
 }
 
@@ -420,7 +420,7 @@ s32 ModeManager::GetNetworkGameRandomSeed() const
 // BrnNetworkRoundManager.cpp. The console arithmetic (the -1 included) lives inside it.
 s32 ModeManager::GetOnlineCurrentRound() const
 {
-    CGS_ASSERT(mpNetworkRoundManager != nullptr, "mpNetworkRoundManager");
+    CGS_ASSERT(mpNetworkRoundManager != 0, "mpNetworkRoundManager");
     return mpNetworkRoundManager->GetCurrentRound();
 }
 
@@ -569,7 +569,7 @@ s32 ModeManager::GetOnlineCurrentRound() const
 u32 ModeManager::GetRoadRageTakedownTarget()
 {
     const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-    CGS_ASSERT(lpProgressionData != nullptr, "lpProgressionData != NULL");   // BrnModeManager.cpp:1315
+    CGS_ASSERT(lpProgressionData != 0, "lpProgressionData != NULL");   // BrnModeManager.cpp:1315
 
     // The console re-fetches the resource pointer for the count read and inlines
     // ProgressionData::GetProgressionRankData (whose own bound assert is baked at
@@ -577,7 +577,7 @@ u32 ModeManager::GetRoadRageTakedownTarget()
     const s32 liLastRank = static_cast<s8>(lpProgressionData->GetProgressionRankCount() - 1);
     const BrnProgression::ProgressionRankData* lpProgressionRankDataLastRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liLastRank));
-    CGS_ASSERT(lpProgressionRankDataLastRank != nullptr, "lpProgressionRankDataLastRank");   // :1320
+    CGS_ASSERT(lpProgressionRankDataLastRank != 0, "lpProgressionRankDataLastRank");   // :1320
 
     const s32 liThisRankForGameMode = static_cast<s8>(
         mpProgressionManager->GetProgressionRankForGameMode(GameStateModuleIO::E_MODE_ROAD_RAGE));
@@ -591,11 +591,11 @@ u32 ModeManager::GetRoadRageTakedownTarget()
 
     const BrnProgression::ProgressionRankData* lpProgressionRankDataThisRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liThisRankForGameMode));
-    CGS_ASSERT(lpProgressionRankDataThisRank != nullptr, "lpProgressionRankDataThisRank");   // :1331
+    CGS_ASSERT(lpProgressionRankDataThisRank != 0, "lpProgressionRankDataThisRank");   // :1331
     const s32 liNextRankForGameMode = static_cast<s8>(liThisRankForGameMode + 1);
     const BrnProgression::ProgressionRankData* lpProgressionRankDataNextRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liNextRankForGameMode));
-    CGS_ASSERT(lpProgressionRankDataNextRank != nullptr, "lpProgressionRankDataNextRank");   // :1335
+    CGS_ASSERT(lpProgressionRankDataNextRank != 0, "lpProgressionRankDataNextRank");   // :1335
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {

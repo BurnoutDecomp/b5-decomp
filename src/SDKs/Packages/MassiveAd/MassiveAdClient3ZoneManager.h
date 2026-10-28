@@ -141,13 +141,13 @@ public:
     // (0x65) logs. Then RemoveFromRequestCollect, and -- when the zone reached
     // state 4 -- CMassiveClientCore::ZoneManagerRemove(this), WHICH DELETES THIS
     // ZONE MANAGER.
-    int HandleResponse(CRequestObject* pRequest) override;
+    int HandleResponse(CRequestObject* pRequest) ;
 
     // @ 0x82BD3368 (slot 2 override). On a failed Enter (-298) / Exit (-297) /
     // Impression-update (-391) request -- discriminated by the request's server-
     // type word -- records the error (clearing the zone state on a failed enter)
     // and removes the request from the collection.
-    int HandleError(CRequestObject* pRequest, int nErrorCode) override;
+    int HandleError(CRequestObject* pRequest, int nErrorCode) ;
 
     // ----- pre-subscriber queue ----------------------------------------------
 

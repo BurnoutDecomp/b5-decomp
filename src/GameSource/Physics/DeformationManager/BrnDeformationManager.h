@@ -273,21 +273,21 @@ namespace Deformation
     // for all three Add*Pair methods (@0x760100/@0x75B050/@0x760E6C:
     // ...PNS2_12CgsCollision24PrimitivePairListBuilderE). ALIASED to the real homed type, the
     // IOBufferStack precedent directly below.
-    using PrimitivePairListBuilder = CgsSceneManager::CgsCollision::PrimitivePairListBuilder;
+    typedef CgsSceneManager::CgsCollision::PrimitivePairListBuilder PrimitivePairListBuilder;
 
     // SolvePenetration / UpdatePostPhysics scratch stack. ALIASED to the real homed CgsModule type
     // (was a bare local forward-decl) so CreateIOBuffer<>/DestroyIOBuffer<> resolve. FLAG: additive.
-    using IOBufferStack = CgsModule::IOBufferStack;
+    typedef CgsModule::IOBufferStack IOBufferStack;
     // UpdateTriangleCache arg (DWARF InputBuffer_Update*). ALIASED to the real homed CgsSceneManager
     // type so GetSceneUpdateInterface() resolves. FLAG: additive.
-    using InputBuffer_Update = CgsSceneManager::SceneManagerIO::InputBuffer_Update;
+    typedef CgsSceneManager::SceneManagerIO::InputBuffer_Update InputBuffer_Update;
     // ⭐⭐ 2026-08-27 (detach-3 wave): was `struct VehicleInTriangleCacheInterface;` -- a declare-only
     // fork with NO definition anywhere in the tree, so DoBodyPartWorldContactGeneration /
     // DoDetachedWheelWorldContactGeneration mangled to symbols no TU could define. ALIASED to the
     // real homed type, which is what BrnVehicleInputInterface.h:33 already typedefs the DWARF's
     // nested VehicleInputInterface::InTriangleCacheInterface to, and what the one caller
     // (VehicleManager::StartPartContactGeneration) already carries. FLAG: additive.
-    using VehicleInTriangleCacheInterface = CgsSceneManager::SceneManagerIO::TriangleCacheInterface;
+    typedef CgsSceneManager::SceneManagerIO::TriangleCacheInterface VehicleInTriangleCacheInterface;
 
     // ========================================================================
     // BrnPhysics::Deformation::DeformationManager

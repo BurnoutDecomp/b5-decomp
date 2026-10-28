@@ -24,7 +24,7 @@ u32 PlayerManager::GetTotalBytesSent()
         if (lpNetworkPlayer->GetConnectionData().IsValid())
         {
             const NetGameLinkStatT* lpStat = NetGameLinkStatus(lpNetworkPlayer->GetConnectionData().mpNetGameLink);
-            if (lpStat != nullptr)
+            if (lpStat != 0)
             {
                 luRate = static_cast<u32>(lpStat->outrps);
             }
@@ -49,7 +49,7 @@ u32 PlayerManager::GetTotalBytesSentToDirtySock()
         if (lpNetworkPlayer->GetConnectionData().IsValid())
         {
             const NetGameLinkStatT* lpStat = NetGameLinkStatus(lpNetworkPlayer->GetConnectionData().mpNetGameLink);
-            if (lpStat != nullptr)
+            if (lpStat != 0)
             {
                 luRate = static_cast<u32>(lpStat->outbps);
             }
@@ -74,7 +74,7 @@ u32 PlayerManager::GetTotalBytesSentWithOverhead()
         if (lpNetworkPlayer->GetConnectionData().IsValid())
         {
             const NetGameLinkStatT* lpStat = NetGameLinkStatus(lpNetworkPlayer->GetConnectionData().mpNetGameLink);
-            if (lpStat != nullptr)
+            if (lpStat != 0)
             {
                 luRate = static_cast<u32>(lpStat->outnps);
             }

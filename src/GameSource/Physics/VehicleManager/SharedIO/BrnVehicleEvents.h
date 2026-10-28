@@ -31,7 +31,7 @@ namespace Vehicle
     // Per-wheel sim state published to consumers (a "lite" projection of Wheel). Embedded
     // 4x in RaceCarState (and PhysicalTrafficState). Layout/order/types from the DWARF
     // (BrnVehicleEvents.h:88). 16-byte aligned (carries Vector3 / RoadContact).
-    struct alignas(16) WheelLite
+    struct CGS_ALIGN(16) WheelLite
     {
         Wheel::RoadContact mRoadContact;
         Vector3            mVelocity;
@@ -96,7 +96,7 @@ namespace Vehicle
     // adopt u64 -- the same escape BrnRaceCarAIInterfaces.h:143 already took for
     // AttachAIControlEvent::mCarAssetAttribKey. The typedef itself is left alone (the
     // 4-byte serialised claim is untested for BrnDirectorEvents.h / BrnMessageData.h).
-    struct alignas(16) RaceCarState
+    struct CGS_ALIGN(16) RaceCarState
     {
         WheelLite                   maWheels[4];                     // @0
         AboveGroundTestResult       mAboveGroundTestResult;          // @448
@@ -183,7 +183,7 @@ namespace Vehicle
     //   matrices/vectors region [448..800) + scalar tail at +800 (mEntityID, u32),
     //   +804 (mfSpeed, f32), +808/+809/+810 (3 bools), +812 (mfSteering, f32).
     // sizeof == 816 (0x330). 16-byte aligned (carries Matrix44Affine / Vector3Plus).
-    struct alignas(16) PhysicalTrafficState
+    struct CGS_ALIGN(16) PhysicalTrafficState
     {
         WheelLite      maWheels[4];                       // @0   (4 * 112 = 448)
         Matrix44Affine mTransform;                        // @448
@@ -206,7 +206,7 @@ namespace Vehicle
     };
 
     // A vehicle-vs-vehicle impact (aggressor/victim, severity, recovery).
-    struct alignas(16) ImpactEvent
+    struct CGS_ALIGN(16) ImpactEvent
     {
         Vector3            mDirection;
         EImpactType        meImpactType;
@@ -220,7 +220,7 @@ namespace Vehicle
     };
 
     // Spawn a physical traffic vehicle.
-    struct alignas(16) CreatePhysicalTrafficEvent
+    struct CGS_ALIGN(16) CreatePhysicalTrafficEvent
     {
         VolumeInstanceId   mVolumeInstanceID;
         EntityId           mCrasherID;
@@ -248,12 +248,10 @@ namespace Vehicle
         // (SharedIO/CreatePhysicalTrafficEvent.cpp) mounts now and owns the out-of-line default
         // (C2084 otherwise); same shape as CreateRaceCarEvent below.
         CreatePhysicalTrafficEvent& operator=( const CreatePhysicalTrafficEvent& );   // @0x825B7AE8 is the trivial copy
-        CreatePhysicalTrafficEvent() = default;
-        CreatePhysicalTrafficEvent( const CreatePhysicalTrafficEvent& ) = default;
     };
 
     // Spawn a race car (player/AI/network).
-    struct alignas(16) CreateRaceCarEvent
+    struct CGS_ALIGN(16) CreateRaceCarEvent
     {
         VolumeInstanceId       mVolumeInstanceID;
         Matrix44Affine         mInitialTransform;
@@ -306,7 +304,7 @@ namespace Vehicle
     };
 
     // Reset a vehicle's transform/velocity/deformation (e.g. after a wreck).
-    struct alignas(16) ResetVehicleEvent
+    struct CGS_ALIGN(16) ResetVehicleEvent
     {
         u32            miRaceCarIndex;
         Matrix44Affine mInitialTransform;
@@ -372,7 +370,7 @@ namespace Vehicle
         EntityId         mCrasherEntityID;
     };
 
-    struct alignas(16) UpdateNetworkTrafficEvent
+    struct CGS_ALIGN(16) UpdateNetworkTrafficEvent
     {
         VolumeInstanceId mVolumeInstanceID;
         Matrix44Affine   mTransform;
@@ -387,7 +385,7 @@ namespace Vehicle
     };
 
     // A race car crashed (takedown/contact info).
-    struct alignas(16) RaceCarCrashEvent
+    struct CGS_ALIGN(16) RaceCarCrashEvent
     {
         VolumeInstanceId            mRaceCarVolumeInstanceID;
         EntityId                    mCrasherEntityID;
@@ -409,7 +407,7 @@ namespace Vehicle
 
     // Spawn an articulated (cab + trailer) traffic vehicle. The cab/trailer halves
     // are split into two CreatePhysicalTrafficEvents downstream.
-    struct alignas(16) CreateArticulatedTrafficEvent
+    struct CGS_ALIGN(16) CreateArticulatedTrafficEvent
     {
         Matrix44Affine mInitialTransform_Cab;
         Matrix44Affine mInitialTransform_Trailer;
@@ -440,8 +438,6 @@ namespace Vehicle
         // ledger func has a definition site. ADDITIVE GROW (flagged): an explicitly-declared-and-
         // defaulted operator= over the same trivial copy.
         CreateArticulatedTrafficEvent& operator=( const CreateArticulatedTrafficEvent& );
-        CreateArticulatedTrafficEvent() = default;
-        CreateArticulatedTrafficEvent( const CreateArticulatedTrafficEvent& ) = default;
 
         // X360 0x825B3030 / 0x825B3108: project the cab / trailer half of this articulated event
         // onto a CreatePhysicalTrafficEvent (bodied in CreateArticulatedTrafficEvent.cpp).
@@ -454,7 +450,7 @@ namespace Vehicle
     // maEvents element stride (VolumeInstanceId(8)@0 + u32@8 + f32@12 + Vector3Plus(16)@16 +
     // Vector3(16)@32 + f32@48, rounded up to 64). Element of the VehicleEffectsInputInterface
     // mAirRamQueue.
-    struct alignas(16) CreateAirRamEvent
+    struct CGS_ALIGN(16) CreateAirRamEvent
     {
         VolumeInstanceId mVolumeId;              // @0
         u32              muEffectFlags;          // @8
@@ -468,7 +464,7 @@ namespace Vehicle
     // alignas(16) (carries Vector3). sizeof==48 (VolumeInstanceId 8 -> Vector3 padded to @16 ->
     // f32 @32, rounded up to 48), matching the X360 EventQueue<...,10> / Append 48*count stride.
     // Element of the VehicleEffectsInputInterface mSpinQueue.
-    struct alignas(16) CreateSpinEvent
+    struct CGS_ALIGN(16) CreateSpinEvent
     {
         VolumeInstanceId mVolumeId;  // @0
         Vector3          mForce;     // @16 (padded from 8; Vector3 is alignas(16))
@@ -488,7 +484,7 @@ namespace Vehicle
     // Spawn/register a world-fixture vehicle at a fixed transform. DWARF BrnVehicleEvents.h:702.
     // alignas(16) (Matrix44Affine). Matrix44Affine(64)@0 + VolumeInstanceId(8)@64 == 72, rounded
     // up to sizeof==80. Element of the PhysicsModuleIO InputBuffer's mCreateWorldEventQueue.
-    struct alignas(16) CreateWorldEvent
+    struct CGS_ALIGN(16) CreateWorldEvent
     {
         Matrix44Affine   mInitialTransform;   // @0
         VolumeInstanceId mVolumeInstanceId;   // @64
@@ -499,7 +495,7 @@ namespace Vehicle
     // sizeof==32, matching the X360 EventQueue<...,8> / AddEvent / Append 32-byte element stride
     // (the RaceCarResetEvent queue spanning +0x5B0..+0x6C0 in VehicleManagerOutputInterface).
     // Element of the VehicleManagerOutputInterface mRaceCarResetEventQueue.
-    struct alignas(16) RaceCarResetEvent
+    struct CGS_ALIGN(16) RaceCarResetEvent
     {
         EActiveRaceCarIndex meActiveRaceCarIndex;   // @0
         bool                mbResettingAfterWreck;  // @4

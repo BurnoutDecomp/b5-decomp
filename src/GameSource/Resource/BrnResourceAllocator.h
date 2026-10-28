@@ -43,7 +43,7 @@ public:
 
     // rw::IResourceAllocator interface: the resource modules allocate their backing memory through
     // this (virtual) entry point; it just forwards to Allocate.
-    rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) override;
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) ;
 };
 
 // The initial process-wide RenderWare resource allocator. ARTIST Construct @0x82661A60 and
@@ -55,12 +55,12 @@ class DefaultLinearAllocator : public rw::IResourceAllocator
 {
 public:
     void Construct(u32 luPreAllocatedSize);
-    ~DefaultLinearAllocator() override;
+    ~DefaultLinearAllocator() ;
 
 protected:
-    rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
-    void DoFree(const rw::Resource& lrResource) override;
-    void DoFreeDisposable(rw::Resource& lrResource) override;
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) ;
+    void DoFree(const rw::Resource& lrResource) ;
+    void DoFreeDisposable(rw::Resource& lrResource) ;
 
 private:
     CgsMemory::LinearMalloc maAllocators[5];
@@ -81,9 +81,9 @@ public:
     const rw::Resource&    GetLinearHeapBase() const;
 
 protected:
-    rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
-    void DoFree(const rw::Resource& lrResource) override;
-    void DoFreeDisposable(rw::Resource& lrResource) override;
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lrDescriptor, const char* lpcName) ;
+    void DoFree(const rw::Resource& lrResource) ;
+    void DoFreeDisposable(rw::Resource& lrResource) ;
 
 private:
     rw::LinearResourceAllocator* mpLinearAllocator;

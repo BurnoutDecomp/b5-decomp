@@ -38,12 +38,12 @@ String16::String16()
     mpBegin         = gRealmcEmptyString16;
     mpEnd           = gRealmcEmptyString16;
     mpCapEnd        = gRealmcEmptyString16 + 1;
-    mpAllocatorName = nullptr;
+    mpAllocatorName = 0;
 }
 
 String16::String16(const char16_t* pFirst, const char16_t* pLast)
 {
-    mpAllocatorName = nullptr;
+    mpAllocatorName = 0;
     RangeInitialize(pFirst, pLast);   // seats begin/end/capEnd (allocates when non-empty)
 }
 
@@ -57,10 +57,10 @@ String16::String16(const char16_t* pFirst, const char16_t* pLast)
 // ---------------------------------------------------------------------------
 String16::String16(const char16_t* pString, const allocator& /*rAllocator*/)
 {
-    mpBegin         = nullptr;
-    mpEnd           = nullptr;
-    mpCapEnd        = nullptr;
-    mpAllocatorName = nullptr;
+    mpBegin         = 0;
+    mpEnd           = 0;
+    mpCapEnd        = 0;
+    mpAllocatorName = 0;
 
     const char16_t* pEnd = pString;
     while (*pEnd != 0)
@@ -420,7 +420,7 @@ void IntVector::DoInsertValue(int* pPos, const int* pValue)
 
         int* pNew = nNewCap
             ? static_cast<int*>(allocator::allocate(4u * nNewCap, 0))
-            : nullptr;
+            : 0;
 
         const std::size_t nPrefix = static_cast<std::size_t>(pPos - mpBegin);
         std::memcpy(pNew, mpBegin, nPrefix * sizeof(int));
@@ -475,7 +475,7 @@ int* IntVector::DoRealloc(unsigned int nCapacity, int* pBegin, int* pEnd)
 {
     int* pNew = nCapacity
         ? static_cast<int*>(allocator::allocate(4u * nCapacity, 0))
-        : nullptr;
+        : 0;
 
     std::memcpy(pNew, pBegin,
                 static_cast<std::size_t>(pEnd - pBegin) * sizeof(int));

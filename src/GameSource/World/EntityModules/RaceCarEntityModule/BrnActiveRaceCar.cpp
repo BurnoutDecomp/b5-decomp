@@ -138,7 +138,7 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
 
     meRaceStartState             = E_RACE_START_STATE_RACING;     // 0x77C = 2
     mfTimeSinceCreation          = 0.0f;                          // 0x728
-    mpRaceCar                    = nullptr;                       // 0x6F0
+    mpRaceCar                    = 0;                       // 0x6F0
     mfDeferredResetTimer         = 0.0f;                          // 0x720
     muState                      = E_STATE_INACTIVE;              // 0x740
     meOnlineState                = E_ONLINE_STATE_NORMAL;         // 0x744 = 1
@@ -216,7 +216,7 @@ bool ActiveRaceCar::Prepare()
     muPrevAISection      = 0x7FFF;                                 // 0x73C
     muCurrAISection      = 0x7FFF;                                 // 0x73E
     mfTimeSinceCreation  = 0.0f;                                   // 0x728
-    mpRaceCar            = nullptr;                                // 0x6F0
+    mpRaceCar            = 0;                                // 0x6F0
     muState              = E_STATE_INACTIVE;                       // 0x740
     meRaceStartState     = E_RACE_START_STATE_RACING;              // 0x77C = 2
 
@@ -283,8 +283,8 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
     mHandlingBodyVolumeId.SetEntityIDEntityIndex(static_cast<u32>(meActiveRaceCarIndex));
 
     CGS_ASSERT(!IsAttached(), "!IsAttached()");
-    CGS_ASSERT(lpRaceCar != nullptr, "lpRaceCar != NULL");
-    CGS_ASSERT(mpRaceCar == nullptr, "mpRaceCar == NULL");
+    CGS_ASSERT(lpRaceCar != 0, "lpRaceCar != NULL");
+    CGS_ASSERT(mpRaceCar == 0, "mpRaceCar == NULL");
 
     mpRaceCar = lpRaceCar;                                         // 0x6F0
     muState   = E_STATE_ATTACHED;                                  // 0x740 = 1
@@ -963,14 +963,14 @@ RaceCar* ActiveRaceCar::GetGlobalRaceCar() const
 
 bool ActiveRaceCar::IsAttached() const
 {
-    return mpRaceCar != nullptr;
+    return mpRaceCar != 0;
 }
 
 // IsActive @ 0x822A1FB8. The two asserts are the X360's own, in asm order.
 bool ActiveRaceCar::IsActive() const
 {
     CGS_ASSERT(muState < E_STATE_COUNT, "muState < E_STATE_COUNT");
-    CGS_ASSERT(muState == E_STATE_INACTIVE || mpRaceCar != nullptr,
+    CGS_ASSERT(muState == E_STATE_INACTIVE || mpRaceCar != 0,
                "Active ActiveRaceCar without a RaceCar");
 
     return muState == E_STATE_ACTIVE;
@@ -1265,7 +1265,7 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
 Matrix44Affine ActiveRaceCar::GetTransform() const
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
-    CGS_ASSERT(GetGlobalRaceCar() != nullptr, "mpRaceCar != NULL");
+    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
     return GetGlobalRaceCar()->GetTransform();
@@ -1278,7 +1278,7 @@ Matrix44Affine ActiveRaceCar::GetTransform() const
 Vector3 ActiveRaceCar::GetPosition() const
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
-    CGS_ASSERT(GetGlobalRaceCar() != nullptr, "mpRaceCar != NULL");
+    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
     return GetGlobalRaceCar()->GetPosition();
@@ -1290,7 +1290,7 @@ Vector3 ActiveRaceCar::GetPosition() const
 Vector3 ActiveRaceCar::GetDirection() const
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
-    CGS_ASSERT(GetGlobalRaceCar() != nullptr, "mpRaceCar != NULL");
+    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
     return GetGlobalRaceCar()->GetDirection();
@@ -1315,7 +1315,7 @@ Vector3 ActiveRaceCar::GetVelocity() const
 // ----------------------------------------------------------------------------
 bool ActiveRaceCar::IsPlayer() const
 {
-    CGS_ASSERT(GetGlobalRaceCar() != nullptr, "mpRaceCar != NULL");
+    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
     RaceCar* lpGlobalRaceCar = GetGlobalRaceCar();
@@ -1370,7 +1370,7 @@ bool ActiveRaceCar::IsInAnyRaceStartState() const
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::SetBraking(bool lbBraking)
 {
-    CGS_ASSERT(GetGlobalRaceCar() != nullptr, "mpRaceCar != NULL");
+    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
     RaceCar* lpGlobalRaceCar = GetGlobalRaceCar();

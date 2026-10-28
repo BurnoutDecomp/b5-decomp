@@ -86,7 +86,7 @@ namespace CgsSceneManager
         // ---- module virtual surface (DWARF CgsOverlapGenerationModule.h:42-115; every
         //      declaration below is spelled with the DWARF's own parameter types, and the
         //      trailing comment carries the DWARF's .cpp decl_line + the X360 address) ----
-        void Construct() override;                                              // .cpp:44  @ 0x828D0460
+        void Construct() ;                                              // .cpp:44  @ 0x828D0460
 
         // ⭐ 2026-08-18 (wave Q5 cluster E2). WAS `Prepare(void*, void*)`, a placeholder that
         // made the SWEEPER call at CgsOverlapGenerationModule.cpp:97 a hard C2664 (the landed
@@ -105,10 +105,10 @@ namespace CgsSceneManager
         virtual bool Prepare(u8* lpaVolumeInstanceCullingGroup,
                              rw::BitTable::Storage* lpCullingTable);            // .cpp:77  @ 0x828CB6B0
 
-        bool Release() override;                                                // .cpp:138 @ 0x828CB798
+        bool Release() ;                                                // .cpp:138 @ 0x828CB798
 
         // SceneManagerModule::Destruct @CgsSceneManagerModule.cpp:285 calls it.
-        void Destruct() override;                                               // .cpp:196
+        void Destruct() ;                                               // .cpp:196
 
         // ⭐ 2026-08-18 (wave Q5 cluster E2). WAS `void Update() override;` -- a placeholder
         // that does NOT exist on the console class. The DecFIGS DWARF lists exactly one

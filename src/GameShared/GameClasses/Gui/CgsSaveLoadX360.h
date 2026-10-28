@@ -487,7 +487,7 @@ namespace CgsGui
         // parks ({func, delta}, 8 bytes on the console). An MSVC x64 pointer to a member of
         // this multiply-inherited class does not fit in mField128, so the host keeps it here
         // and mField128 only keeps the console's layout slot.
-        void (SaveLoadSystem::*mpfnPendingUIClosed)() = nullptr;
+        void (SaveLoadSystem::*mpfnPendingUIClosed)() = 0;
 
         MessageDisplay* mpActiveMessageDisplay;   // +0x130 the display driving the live operation
         MessageDisplay* mpMessageDisplay;         // +0x134 the display passed to Construct

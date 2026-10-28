@@ -179,11 +179,11 @@ namespace CgsGraphics
     // ARTIST828019E8: r4 is the real buffered3D renderer, r5 the TextObject.
     void TextRenderer::RenderString(Im3dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject)
     {
-        mpIm2dRenderBuffer = nullptr;
+        mpIm2dRenderBuffer = 0;
         mpIm3dRenderBuffer = lpRenderBuffer;
-        mpBufferedRenderBuffer = nullptr;
+        mpBufferedRenderBuffer = 0;
         RenderStringInternal(lrTextObject, EImRenderingType_Buffered);
-        mpIm3dRenderBuffer = nullptr;
+        mpIm3dRenderBuffer = 0;
     }
 
     // FLAG (PC fold; see the header note): the Apt string path -- the glyphs ride the SAME
@@ -542,7 +542,7 @@ namespace CgsGraphics
             // ARTIST827FDC90..FE040: reserve3D vertices directly. The main
             // glyph run remains in the 2D scratch until RenderBufferRenderEnd.
             Im3dVertex* const lpOut3d = mpIm3dRenderBuffer->RenderStart(luVertexCount);
-            if (lpOut3d == nullptr)
+            if (lpOut3d == 0)
                 return;
             CGS_ASSERT(luVertexCount < KU_MAX_VERTICES, "luVertexCount<KU_MAX_VERTICES");
             for (u32 luI = 0; luI < luVertexCount; ++luI)
@@ -788,7 +788,7 @@ namespace CgsGraphics
 
         if (mpIm2dRenderBuffer != 0)
             mpIm2dRenderBuffer->SetState(lpTextureState);
-        else if (mpIm3dRenderBuffer != nullptr)
+        else if (mpIm3dRenderBuffer != 0)
             mpIm3dRenderBuffer->SetState(lpTextureState);
     }
 

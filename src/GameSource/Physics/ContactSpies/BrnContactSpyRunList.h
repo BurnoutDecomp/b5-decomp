@@ -15,7 +15,7 @@ namespace BrnPhysics
         // One per-entity run of accumulated contacts. Recovered from
         // BrnContactSpyRunList.h (DecFIGS DWARF, :56). The Vector3 members make it
         // 16-byte aligned, which places the owning queue's inline buffer at +16.
-        struct alignas(16) ContactSpyRunData
+        struct CGS_ALIGN(16) ContactSpyRunData
         {
             EntityId mEntityId;
             Vector3  mTotalFrictionStress;
@@ -97,7 +97,7 @@ namespace BrnPhysics
                         return lpRunData;
                     }
                 }
-                return nullptr;
+                return 0;
             }
 
         private:

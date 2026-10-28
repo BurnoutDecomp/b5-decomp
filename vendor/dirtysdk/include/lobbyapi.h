@@ -146,19 +146,19 @@ struct LobbyApiUserSetT
 };
 
 #ifdef __cplusplus
-static_assert(sizeof(LobbyApiUserT) == 0x234, "LobbyApiUserT");
-static_assert(offsetof(LobbyApiUserT, game) == 0x1B0, "LobbyApiUserT::game");
-static_assert(offsetof(LobbyApiUserT, MachineAddr) == 0x1D0, "LobbyApiUserT::MachineAddr");
-static_assert(sizeof(LobbyApiPlayerT) == 0xA4, "LobbyApiPlayerT");
-static_assert(offsetof(LobbyApiPlayerT, strMachineAddr) == 0x1C, "LobbyApiPlayerT::strMachineAddr");
-static_assert(offsetof(LobbyApiPlayerT, strParams) == 0x68, "LobbyApiPlayerT::strParams");
-static_assert(offsetof(LobbyApiPlayT, strSess) == 0x4C, "LobbyApiPlayT::strSess");
-static_assert(offsetof(LobbyApiPlayT, uSysflags) == 0x1E4, "LobbyApiPlayT::uSysflags");
-static_assert(offsetof(LobbyApiPlayT, uGamePort) == 0x1F4, "LobbyApiPlayT::uGamePort");
-static_assert(offsetof(LobbyApiPlayT, iCount) == 0x28C, "LobbyApiPlayT::iCount");
-static_assert(offsetof(LobbyApiPlayT, aOpponents) == 0x294, "LobbyApiPlayT::aOpponents");
-static_assert(sizeof(LobbyApiPlayT) == 0x858, "LobbyApiPlayT");
-static_assert(sizeof(LobbyApiUserSetT) == 0xD4, "LobbyApiUserSetT");
+CGS_STATIC_ASSERT((sizeof(LobbyApiUserT) == 0x234), "LobbyApiUserT");
+CGS_STATIC_ASSERT((offsetof(LobbyApiUserT, game) == 0x1B0), "LobbyApiUserT::game");
+CGS_STATIC_ASSERT((offsetof(LobbyApiUserT, MachineAddr) == 0x1D0), "LobbyApiUserT::MachineAddr");
+CGS_STATIC_ASSERT((sizeof(LobbyApiPlayerT) == 0xA4), "LobbyApiPlayerT");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayerT, strMachineAddr) == 0x1C), "LobbyApiPlayerT::strMachineAddr");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayerT, strParams) == 0x68), "LobbyApiPlayerT::strParams");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayT, strSess) == 0x4C), "LobbyApiPlayT::strSess");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayT, uSysflags) == 0x1E4), "LobbyApiPlayT::uSysflags");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayT, uGamePort) == 0x1F4), "LobbyApiPlayT::uGamePort");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayT, iCount) == 0x28C), "LobbyApiPlayT::iCount");
+CGS_STATIC_ASSERT((offsetof(LobbyApiPlayT, aOpponents) == 0x294), "LobbyApiPlayT::aOpponents");
+CGS_STATIC_ASSERT((sizeof(LobbyApiPlayT) == 0x858), "LobbyApiPlayT");
+CGS_STATIC_ASSERT((sizeof(LobbyApiUserSetT) == 0xD4), "LobbyApiUserSetT");
 #endif
 
 // Display-list types LobbyApiListAlloc / Flush / Free accept.

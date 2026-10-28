@@ -87,12 +87,12 @@ namespace Vehicle
         const unsigned KU_A_SPHERES       = KU_A_WHEELS   + 4u * KU_SVP_WHEEL_STRIDE;      // :358
         const unsigned KU_A_TRACTIONPTS   = KU_A_SPHERES  + 4u * KU_SVP_SWEPTSPHERE_SIZE;  // :359
         const unsigned KU_A_ABOVEGROUND   = KU_A_TRACTIONPTS + 4u * 0x10u;                 // :360
-        static_assert(KU_A_ABOVEGROUND == KU_SVP_ABOVEGROUND_OFF,
+        CGS_STATIC_ASSERT((KU_A_ABOVEGROUND == KU_SVP_ABOVEGROUND_OFF),
                       "SVP: the wheel/sphere/traction arrays must land mAboveGroundTestResult on the "
                       "asm-literal 0x570 (Construct `addi r11,r31,0x570`)");
 
         const unsigned KU_A_SIMPLEATTRIBS = KU_A_ABOVEGROUND + KU_SVP_ABOVEGROUND_SIZE;    // :361
-        static_assert(KU_A_SIMPLEATTRIBS == KU_SVP_SIMPLEATTRIBS_OFF,
+        CGS_STATIC_ASSERT((KU_A_SIMPLEATTRIBS == KU_SVP_SIMPLEATTRIBS_OFF),
                       "SVP: AboveGroundTestResult (pos,normal,f32,tag,bool -> 0x30) must land "
                       "mSimpleAttribs on the asm-literal 0x5A0 (`addi r3,r31,0x5A0`)");
 
@@ -102,83 +102,83 @@ namespace Vehicle
         // separately witnessed; flagged rather than dressed up.
         const unsigned KU_SVP_SIMPLEATTRIBS_SIZE =
             KU_SVP_HANDLINGBODYOFFSET - KU_SVP_SIMPLEATTRIBS_OFF;                          // 240
-        static_assert(KU_SVP_SIMPLEATTRIBS_SIZE == 240u, "SVP: 0x690 - 0x5A0 == 240");
+        CGS_STATIC_ASSERT((KU_SVP_SIMPLEATTRIBS_SIZE == 240u), "SVP: 0x690 - 0x5A0 == 240");
 
         const unsigned KU_A_HANDLINGBODY  = KU_A_SIMPLEATTRIBS + KU_SVP_SIMPLEATTRIBS_SIZE; // :362
         const unsigned KU_A_HALFEXTENT    = KU_A_HANDLINGBODY + 0x10u;                      // :363
         const unsigned KU_A_WHEELPLANE    = KU_A_HALFEXTENT   + 0x10u;                      // :364
         const unsigned KU_A_SPEEDMPH      = KU_A_WHEELPLANE   + 0x10u;                      // :365
         const unsigned KU_A_DEFORMAABB    = KU_A_SPEEDMPH     + 0x10u;                      // :366
-        static_assert(KU_A_HALFEXTENT == 0x6A0u,
+        CGS_STATIC_ASSERT((KU_A_HALFEXTENT == 0x6A0u),
                       "SVP: mHalfExtent on the asm-literal 0x6A0 (Construct `li r8,0x6A0`)");
-        static_assert(KU_A_SPEEDMPH == 0x6C0u,
+        CGS_STATIC_ASSERT((KU_A_SPEEDMPH == 0x6C0u),
                       "SVP: mfSpeedMPH on the asm-literal 0x6C0 (UpdateHandBrake `li r7,0x6C0`)");
-        static_assert(KU_A_DEFORMAABB == KU_SVP_DEFORMABLE_AABB_OFF,
+        CGS_STATIC_ASSERT((KU_A_DEFORMAABB == KU_SVP_DEFORMABLE_AABB_OFF),
                       "SVP: mDeformableAABB on the asm-literal 0x6D0 (SetRaceCarCrashing's "
                       "ResetDeformableAABB copy DESTINATION)");
 
         const unsigned KU_A_ORIGINALAABB  = KU_A_DEFORMAABB   + KU_SVP_AABB_SIZE;           // :367
-        static_assert(KU_A_ORIGINALAABB == KU_SVP_ORIGINAL_AABB_OFF,
+        CGS_STATIC_ASSERT((KU_A_ORIGINALAABB == KU_SVP_ORIGINAL_AABB_OFF),
                       "SVP: mOriginalAABB on the asm-literal 0x6F0 (the same copy's SOURCE)");
 
         const unsigned KU_A_MBCRASHING    = KU_A_ORIGINALAABB + KU_SVP_AABB_SIZE;           // :368
-        static_assert(KU_A_MBCRASHING == KU_SVP_MBCRASHING_OFF,
+        CGS_STATIC_ASSERT((KU_A_MBCRASHING == KU_SVP_MBCRASHING_OFF),
                       "SVP: mbCrashing on 0x710 -- the seat the console's own assert string names "
                       "(FireAssert(\"mbCrashing\", \".../RaceCarPhysics.h\", 328))");
 
         // :369..:373 are five more bools -> last data byte 0x715, then 16-align.
         const unsigned KU_A_SVP_RAW_END   = KU_A_MBCRASHING + 6u;                           // 0x716
         const unsigned KU_A_SVP_SIZEOF    = (KU_A_SVP_RAW_END + 15u) & ~15u;
-        static_assert(KU_A_SVP_SIZEOF == KU_SVP_SIZEOF,
+        CGS_STATIC_ASSERT((KU_A_SVP_SIZEOF == KU_SVP_SIZEOF),
                       "⭐ SVP CLOSURE: the six trailing bools must round the block to 0x720");
 
         // ---------- VehiclePhysics: 0x720 -> 0x13F0 ----------
         // DWARF VehiclePhysics.h:822-982, in declaration order.
-        static_assert(KU_SVP_SIZEOF == KU_VP_MPATTRIBS_OFF,
+        CGS_STATIC_ASSERT((KU_SVP_SIZEOF == KU_VP_MPATTRIBS_OFF),
                       "⭐ THE FIRST JOIN: sizeof(SimpleVehiclePhysics) must equal the asm-literal "
                       "offset VehiclePhysics::Construct stores mpAttribs at (`stw r30,0x720(r31)`). "
                       "Two functions, no shared assumption.");
 
         // mpAttribs (4 bytes on the console) + the 12 bytes of alignment the 16-aligned
         // VehicleAttribs forces.
-        static_assert(KU_VP_AIATTRIBS_OFF == ((KU_VP_MPATTRIBS_OFF + 4u + 15u) & ~15u),
+        CGS_STATIC_ASSERT((KU_VP_AIATTRIBS_OFF == ((KU_VP_MPATTRIBS_OFF + 4u + 15u) & ~15u)),
                       "VP: mAIVehicleAttribs must be the next 16-aligned slot after the 4-byte "
                       "mpAttribs (asm: `addi r3,r31,0x730`)");
-        static_assert(KU_VP_PLAYERATTRIBS_OFF == KU_VP_AIATTRIBS_OFF + KU_VP_VEHICLEATTRIBS_SIZE,
+        CGS_STATIC_ASSERT((KU_VP_PLAYERATTRIBS_OFF == KU_VP_AIATTRIBS_OFF + KU_VP_VEHICLEATTRIBS_SIZE),
                       "VP: the two VehicleAttribs Construct calls are 0x370 apart");
 
         const unsigned KU_B_SPRINGS       = KU_VP_PLAYERATTRIBS_OFF + KU_VP_VEHICLEATTRIBS_SIZE;
-        static_assert(KU_B_SPRINGS == KU_VP_SPRINGS_OFF,
+        CGS_STATIC_ASSERT((KU_B_SPRINGS == KU_VP_SPRINGS_OFF),
                       "⭐ VP: mPlayerVehicleAttribs + 0x370 must land maSprings on the asm-literal "
                       "0xE10 (Construct `addi r29,r31,0xE10`). Three asm literals, one arithmetic.");
 
         const unsigned KU_B_SPRINGSCALERS = KU_B_SPRINGS + 4u * KU_VP_SPRING_STRIDE;
-        static_assert(KU_B_SPRINGSCALERS == KU_VP_SPRINGMASSSCALERS_OFF,
+        CGS_STATIC_ASSERT((KU_B_SPRINGSCALERS == KU_VP_SPRINGMASSSCALERS_OFF),
                       "VP: 4 springs at the asm-literal 0x30 stride must land mvSpringMassScalers "
                       "on the asm-literal 0xED0 (Construct `li r11,0xED0`)");
 
         const unsigned KU_B_WEIGHTXFER    = KU_B_SPRINGSCALERS + 0x10u;   // :830
         const unsigned KU_B_SPEEDONCRASH  = KU_B_WEIGHTXFER    + 0x10u;   // :831
-        static_assert(KU_B_SPEEDONCRASH == KU_VP_SPEEDONLASTCRASH_OFF,
+        CGS_STATIC_ASSERT((KU_B_SPEEDONCRASH == KU_VP_SPEEDONLASTCRASH_OFF),
                       "VP: mWeightTransfer between them puts mvSpeedOnLastCrashMPH_... on the "
                       "asm-literal 0xEF0 (Construct `li r28,0xEF0`)");
 
         const unsigned KU_B_ENGINE        = KU_B_SPEEDONCRASH + 0x10u;    // :833
-        static_assert(KU_B_ENGINE == KU_VP_ENGINE_OFF,
+        CGS_STATIC_ASSERT((KU_B_ENGINE == KU_VP_ENGINE_OFF),
                       "VP: mEngine on the asm-literal 0xF00 (Construct `addi r30,r31,0xF00`)");
 
         // sizeof(Engine): mAttribs is the asm-literal 0xA0 (Engine::Prepare `memcpy(this,src,0xA0)`),
         // then two Vector4s put mu8CurrentGear at the asm-literal Engine+0xC0 (Prepare
         // `stw r10,0xC0(r31)`), then two bools -> 0xC6 -> 16-round -> 0xD0.
-        static_assert(KU_VP_ENGINEATTRIBS_SIZE + 2u * 0x10u == KU_VP_ENGINE_GEAR_OFF,
+        CGS_STATIC_ASSERT((KU_VP_ENGINEATTRIBS_SIZE + 2u * 0x10u == KU_VP_ENGINE_GEAR_OFF),
                       "Engine: EngineAttribs(0xA0) + two Vector4s must land mu8CurrentGear on the "
                       "asm-literal Engine+0xC0");
-        static_assert(((KU_VP_ENGINE_GEAR_OFF + 4u + 2u + 15u) & ~15u) == KU_VP_ENGINE_SIZE,
+        CGS_STATIC_ASSERT((((KU_VP_ENGINE_GEAR_OFF + 4u + 2u + 15u) & ~15u) == KU_VP_ENGINE_SIZE),
                       "Engine: mu8CurrentGear(u32) + two bools -> sizeof(Engine) == 0xD0");
 
         const unsigned KU_B_WHEELFRICTION = KU_B_ENGINE + KU_VP_ENGINE_SIZE;   // :835
         const unsigned KU_B_STEERINGANGLE = KU_B_WHEELFRICTION + 0x10u;        // :879
-        static_assert(KU_B_STEERINGANGLE == KU_VP_STEERINGANGLE_OFF,
+        CGS_STATIC_ASSERT((KU_B_STEERINGANGLE == KU_VP_STEERINGANGLE_OFF),
                       "⭐ VP: sizeof(Engine)==0xD0 plus mvfWheelFrictionLinearMultiplier must land "
                       "mvSteeringAngle_... on the asm-literal 0xFE0 (GetSteeringAngle "
                       "`addi r11,r31,0xFE0`, whose lane .x IS the steering angle)");
@@ -187,65 +187,65 @@ namespace Vehicle
         // more steps of 0x10 reach the last of them. Together with the VecFloat at 0xFD0 the run is
         // twelve 16-byte registers, 0xFD0..0x1090.
         const unsigned KU_B_HANDBRAKETIMERS = KU_B_STEERINGANGLE + 10u * 0x10u;   // :889
-        static_assert(KU_B_HANDBRAKETIMERS == KU_VP_HANDBRAKETIMERS_OFF,
+        CGS_STATIC_ASSERT((KU_B_HANDBRAKETIMERS == KU_VP_HANDBRAKETIMERS_OFF),
                       "⭐ VP: the eleven-Vector4 bank must end on the asm-literal 0x1080 -- the "
                       "register UpdateHandBrake works lanes z/w of, which the DWARF member name "
                       "calls TimeHandbrakeHasBeenOn / TimeSinceLastHandBrake");
 
         const unsigned KU_B_PREVCONTROLS  = KU_B_HANDBRAKETIMERS + 0x10u;         // :905
-        static_assert(KU_B_PREVCONTROLS + 0x44u == KU_VP_DRIVERTYPE_OFF,
+        CGS_STATIC_ASSERT((KU_B_PREVCONTROLS + 0x44u == KU_VP_DRIVERTYPE_OFF),
                       "⭐ VP: mPreviousControls at 0x1090 puts its meDriverType (+0x44, a seat an "
                       "EARLIER wave pinned from BrnNetworkDriverControls::Clear) on the asm-literal "
                       "0x10D4 that VehiclePhysics::Prepare stores with `stw r30,0x10D4(r31)`");
 
         const unsigned KU_B_STEERINGDIR   = (KU_B_PREVCONTROLS + KU_VP_CONTROLS_SIZE + 15u) & ~15u;  // :906
-        static_assert(KU_B_STEERINGDIR == 0x10E0u, "VP: mSteeringDirection @0x10E0");
+        CGS_STATIC_ASSERT((KU_B_STEERINGDIR == 0x10E0u), "VP: mSteeringDirection @0x10E0");
         const unsigned KU_B_STUCKTIMER    = KU_B_STEERINGDIR + 0x10u;   // :907
-        static_assert(KU_B_STUCKTIMER == KU_VP_STUCKTIMER_OFF,
+        CGS_STATIC_ASSERT((KU_B_STUCKTIMER == KU_VP_STUCKTIMER_OFF),
                       "VP: mfTimeUntilStuckInCollisionTest on the asm-literal 0x10F0 "
                       "(UpdatePlayerStuckInCollisionSpheres `lfs`/`stfs 0x10F0`)");
         const unsigned KU_B_DRIFTFLAGS    = KU_B_STUCKTIMER + 4u;       // :910
-        static_assert(KU_B_DRIFTFLAGS == KU_VP_DRIFTFLAGS_OFF,
+        CGS_STATIC_ASSERT((KU_B_DRIFTFLAGS == KU_VP_DRIFTFLAGS_OFF),
                       "VP: mDriftFlags on the asm-literal 0x10F4 (ExitDrift `stb r4,0x10F4(r3)`)");
 
         // :912/:913/:916/:919 -- four bools -> 0x10F9 -> 16-round.
         const unsigned KU_B_SLAMEFFECT    = (KU_B_DRIFTFLAGS + 1u + 4u + 15u) & ~15u;   // :927
-        static_assert(KU_B_SLAMEFFECT == KU_VP_SLAMEFFECT_OFF,
+        CGS_STATIC_ASSERT((KU_B_SLAMEFFECT == KU_VP_SLAMEFFECT_OFF),
                       "⭐ VP: mDriftFlags + four bools must land mSlamEffect on 0x1100 -- the base "
                       "AddSlam addresses ALL SEVEN SlamEffect fields off, at the sub-struct's own "
                       "DWARF offsets (+0x14/+0x18 steering pair, +0x1C life, +0x20 total, +0x24 "
                       "recovery, +0x28 the slam number it clamps to KI8_MAX_NUM_SLAMS-1)");
 
         const unsigned KU_B_SHUNTEFFECT   = KU_B_SLAMEFFECT + 0x30u;   // :928
-        static_assert(KU_B_SHUNTEFFECT == KU_VP_SHUNTEFFECT_OFF,
+        CGS_STATIC_ASSERT((KU_B_SHUNTEFFECT == KU_VP_SHUNTEFFECT_OFF),
                       "VP: sizeof(SlamEffect)==0x30 lands mShuntEffect on the asm-literal 0x1130");
         const unsigned KU_B_LASTCONTACTED = KU_B_SHUNTEFFECT + 0x20u;  // :929
-        static_assert(KU_B_LASTCONTACTED == KU_VP_LASTCONTACTED_OFF,
+        CGS_STATIC_ASSERT((KU_B_LASTCONTACTED == KU_VP_LASTCONTACTED_OFF),
                       "VP: sizeof(ShuntEffect)==0x20 lands mi8LastContactedRaceCar on the "
                       "asm-literal 0x1150 (HandleRaceCarRaceCarContact `stb r14,0x1150(r16)`)");
 
         // BitArray<N> is one 64-bit field, so it is 8-ALIGNED: the s8 above leaves 7 bytes of pad.
         const unsigned KU_B_USEDAIRRAMS   = (KU_B_LASTCONTACTED + 1u + 7u) & ~7u;   // :932
-        static_assert(KU_B_USEDAIRRAMS == KU_VP_USEDAIRRAMS_OFF,
+        CGS_STATIC_ASSERT((KU_B_USEDAIRRAMS == KU_VP_USEDAIRRAMS_OFF),
                       "⭐ VP: mUsedAirRams on the asm-literal 0x1158 -- both the address Construct "
                       "zeroes with `std r30,0x1158(r31)` and the base UpdateAirRam walks with a "
                       "`ld`/`cntlzd` scan BOUNDED AT 4, which is the template argument");
         const unsigned KU_B_AIRRAMEFFECT  = (KU_B_USEDAIRRAMS + 8u + 15u) & ~15u;   // :933
-        static_assert(KU_B_AIRRAMEFFECT == KU_VP_AIRRAMEFFECT_OFF,
+        CGS_STATIC_ASSERT((KU_B_AIRRAMEFFECT == KU_VP_AIRRAMEFFECT_OFF),
                       "VP: mAirRamEffect[4] @0x1160");
         const unsigned KU_B_USEDSPINS     = KU_B_AIRRAMEFFECT + 4u * 0x30u;         // :935
-        static_assert(KU_B_USEDSPINS == KU_VP_USEDSPINS_OFF,
+        CGS_STATIC_ASSERT((KU_B_USEDSPINS == KU_VP_USEDSPINS_OFF),
                       "⭐ VP: four 0x30 AirRamEffects land mUsedSpins on the asm-literal 0x1220 -- "
                       "Construct's `std r30,0x1220(r31)` and UpdateSpinEffects' scan BOUNDED AT 8");
         const unsigned KU_B_SPINEFFECTS   = (KU_B_USEDSPINS + 8u + 15u) & ~15u;     // :936
-        static_assert(KU_B_SPINEFFECTS == KU_VP_SPINEFFECTS_OFF, "VP: maSpinEffects[8] @0x1230");
+        CGS_STATIC_ASSERT((KU_B_SPINEFFECTS == KU_VP_SPINEFFECTS_OFF), "VP: maSpinEffects[8] @0x1230");
 
         const unsigned KU_B_PREVWORLDVEL  = KU_B_SPINEFFECTS + 8u * 0x20u;          // :939
-        static_assert(KU_B_PREVWORLDVEL == KU_VP_PREVWORLDVEL_OFF,
+        CGS_STATIC_ASSERT((KU_B_PREVWORLDVEL == KU_VP_PREVWORLDVEL_OFF),
                       "VP: eight 0x20 SpinEffects land mPreviousWorldSpaceVelocity on the "
                       "asm-literal 0x1330 (Construct `li r6,0x1330 ; stvx128 v127,r31,r6`)");
         const unsigned KU_B_NORMLINVEL    = KU_B_PREVWORLDVEL + 0x10u;              // :942
-        static_assert(KU_B_NORMLINVEL == KU_VP_NORMLINVELMAG_OFF,
+        CGS_STATIC_ASSERT((KU_B_NORMLINVEL == KU_VP_NORMLINVELMAG_OFF),
                       "VP: mNormLinearVelocityMag on the asm-literal 0x1340 "
                       "(UpdateLinearVelocityMagnitude `addi r10,r3,0x1340`)");
 
@@ -253,62 +253,62 @@ namespace Vehicle
         // role-attested in the header's map; the arithmetic below only has to reproduce the four
         // offsets that HAVE asm literals plus the 16-align at the end.
         const unsigned KU_B_HASAIR        = KU_B_NORMLINVEL + 0x10u;                // :945
-        static_assert(KU_B_HASAIR == KU_VP_HASAIR_OFF, "VP: mbHasAir @0x1350");
-        static_assert(KU_B_HASAIR + 2u == KU_VP_DRIFTSTATE_OFF,
+        CGS_STATIC_ASSERT((KU_B_HASAIR == KU_VP_HASAIR_OFF), "VP: mbHasAir @0x1350");
+        CGS_STATIC_ASSERT((KU_B_HASAIR + 2u == KU_VP_DRIFTSTATE_OFF),
                       "VP: mbHadAirLastFrame then mu8DriftState -> the asm-literal 0x1352 "
                       "(ExitDrift `stb r5,0x1352(r3)`)");
         // :948 mu8DriftState, :949 mi8NumWorldCollisions, then :950 miNumCollisions (4-aligned).
-        static_assert(((KU_VP_DRIFTSTATE_OFF + 1u + 1u + 3u) & ~3u) == KU_VP_NUMCOLLISIONS_OFF,
+        CGS_STATIC_ASSERT((((KU_VP_DRIFTSTATE_OFF + 1u + 1u + 3u) & ~3u) == KU_VP_NUMCOLLISIONS_OFF),
                       "VP: mi8NumWorldCollisions then the 4-aligned miNumCollisions -> the "
                       "asm-literal 0x1354 (ApplyCarContactImpulse `lwz`+`stw 0x1354`)");
-        static_assert(KU_VP_NUMCOLLISIONS_OFF + 4u == KU_VP_HANDBRAKE_OFF,
+        CGS_STATIC_ASSERT((KU_VP_NUMCOLLISIONS_OFF + 4u == KU_VP_HANDBRAKE_OFF),
                       "VP: miNumCollisions(4) -> mbHandBrake on the asm-literal 0x1358");
-        static_assert(KU_VP_HANDBRAKE_OFF + 1u == KU_VP_DEFORMACTIVE_OFF,
+        CGS_STATIC_ASSERT((KU_VP_HANDBRAKE_OFF + 1u == KU_VP_DEFORMACTIVE_OFF),
                       "⭐ VP: mbDeformationModelIsActive is the byte right after mbHandBrake -- the "
                       "0x1359 SetRaceCarCrashing sets to 1 beside the ResetDeformableAABB copy. "
                       "(The record used to call this `mbCrashCommitted` at 3097.)");
-        static_assert(KU_VP_DEFORMACTIVE_OFF + 4u == KU_VP_JUSTBEENSLAMMED_OFF,
+        CGS_STATIC_ASSERT((KU_VP_DEFORMACTIVE_OFF + 4u == KU_VP_JUSTBEENSLAMMED_OFF),
                       "VP: mbDeformedThisFrame/mbAllWheelsHaveTraction/mbResetCarTransform sit "
                       "between it and the asm-literal 0x135D (AddSlam `stb r10,0x135D`)");
-        static_assert(KU_VP_JUSTBEENSLAMMED_OFF + 2u == KU_VP_WEDGED_OFF,
+        CGS_STATIC_ASSERT((KU_VP_JUSTBEENSLAMMED_OFF + 2u == KU_VP_WEDGED_OFF),
                       "VP: mbOverrideSteering between mbJustBeenSlammed and the asm-literal 0x135F "
                       "(DoPlayerStuckLineTests)");
-        static_assert(KU_VP_WEDGED_OFF + 1u == KU_VP_FRONTRAY_OFF,
+        CGS_STATIC_ASSERT((KU_VP_WEDGED_OFF + 1u == KU_VP_FRONTRAY_OFF),
                       "VP: the two DoPlayerStuckLineTests bytes are adjacent");
-        static_assert(KU_VP_FRONTRAY_OFF + 1u == KU_VP_BURNOUT_OFF,
+        CGS_STATIC_ASSERT((KU_VP_FRONTRAY_OFF + 1u == KU_VP_BURNOUT_OFF),
                       "VP: mbDoingBurnout on the asm-literal 0x1361 (UpdateBurnout)");
-        static_assert(KU_VP_BURNOUT_OFF + 1u == KU_VP_CONTACTINGWALL_OFF,
+        CGS_STATIC_ASSERT((KU_VP_BURNOUT_OFF + 1u == KU_VP_CONTACTINGWALL_OFF),
                       "VP: mbContactingWall on the asm-literal 0x1362 (CheckForGrindingAndRubbing)");
 
         const unsigned KU_B_PREVTRANSFORM = (KU_VP_CONTACTINGWALL_OFF + 1u + 15u) & ~15u;   // :969
-        static_assert(KU_B_PREVTRANSFORM == KU_VP_PREVTRANSFORM_OFF,
+        CGS_STATIC_ASSERT((KU_B_PREVTRANSFORM == KU_VP_PREVTRANSFORM_OFF),
                       "⭐ VP: the flag run must 16-round onto the asm-literal 0x1370 "
                       "(GetTransformDelta `addi r11,r4,0x1370` + four row loads)");
 
         const unsigned KU_B_LASTLINVEL    = KU_B_PREVTRANSFORM + 0x40u;   // :970
         const unsigned KU_B_PITCHYAWROLL  = KU_B_LASTLINVEL    + 0x10u;   // :972
-        static_assert(KU_B_PITCHYAWROLL == KU_VP_PITCHYAWROLL_OFF,
+        CGS_STATIC_ASSERT((KU_B_PITCHYAWROLL == KU_VP_PITCHYAWROLL_OFF),
                       "⭐ VP: Matrix44Affine(0x40) + mLastLinearVelocity must land "
                       "mPitchYawRollFromTakeOff on the asm-literal 0x13C0 (UpdateInAirBehaviour)");
 
         const unsigned KU_B_WHEELFFSPRING = KU_B_PITCHYAWROLL + 0x10u;    // :973
-        static_assert(KU_B_WHEELFFSPRING == KU_VP_WHEELFFSPRING_OFF,
+        CGS_STATIC_ASSERT((KU_B_WHEELFFSPRING == KU_VP_WHEELFFSPRING_OFF),
                       "VP: mWheelFFSpring on the asm-literal 0x13D0 (UpdateDriving `stfs 0x13D0` "
                       "and `stfs 0x13D4` -- TWO floats, which is exactly the DWARF struct)");
         const unsigned KU_B_ROLLINGINAIR  = KU_B_WHEELFFSPRING + 8u;      // :974
-        static_assert(KU_B_ROLLINGINAIR == KU_VP_ROLLINGINAIR_OFF,
+        CGS_STATIC_ASSERT((KU_B_ROLLINGINAIR == KU_VP_ROLLINGINAIR_OFF),
                       "⭐ VP: sizeof(WheelFFSpring)==8 lands mbRollingInAir on the asm-literal "
                       "0x13D8 (UpdateInAirBehaviour `stb`/`lbz 0x13D8`)");
         const unsigned KU_B_CARTYPE       = (KU_B_ROLLINGINAIR + 1u + 3u) & ~3u;   // :977
-        static_assert(KU_B_CARTYPE == KU_VP_CARTYPE_OFF,
+        CGS_STATIC_ASSERT((KU_B_CARTYPE == KU_VP_CARTYPE_OFF),
                       "⭐ VP: the 4-aligned meCarType on the asm-literal 0x13DC -- the seat the "
                       "record used to call `mfPlayerBoostStrengthStat`, and it is stored with "
                       "`stw` by BOTH VehiclePhysics::Prepare and VehicleManager::ApplyPlayerStats");
         const unsigned KU_B_LASTATTACKER  = KU_B_CARTYPE + 4u;            // :979
-        static_assert(KU_B_LASTATTACKER == KU_VP_LASTATTACKER_OFF,
+        CGS_STATIC_ASSERT((KU_B_LASTATTACKER == KU_VP_LASTATTACKER_OFF),
                       "VP: mi8LastAttackersRaceCarIndex on the asm-literal 0x13E0 (AddSlam/AddShunt)");
         const unsigned KU_B_DEBUGCOMPONENT = (KU_B_LASTATTACKER + 1u + 3u) & ~3u;  // :982
-        static_assert(KU_B_DEBUGCOMPONENT == KU_VP_DEBUGCOMPONENT_OFF,
+        CGS_STATIC_ASSERT((KU_B_DEBUGCOMPONENT == KU_VP_DEBUGCOMPONENT_OFF),
                       "VP: the 4-aligned console pointer mpDebugComponent on the asm-literal "
                       "0x13E4 (ApplySuspensionForces / UpdateDownForce `lwz r11,0x13E4`)");
 
@@ -318,7 +318,7 @@ namespace Vehicle
         // block closes with zero slack on the 0x1460 per-car stride a THIRD function bakes as a
         // literal. Nothing in this file knows about that derivation; it just has to land on it.
         const unsigned KU_B_VP_SIZEOF = (KU_B_DEBUGCOMPONENT + 4u + 15u) & ~15u;
-        static_assert(KU_B_VP_SIZEOF == KU_VP_SIZEOF,
+        CGS_STATIC_ASSERT((KU_B_VP_SIZEOF == KU_VP_SIZEOF),
                       "⭐⭐ VP CLOSURE: the own block must end exactly at 0x13F0 == the start of "
                       "the RaceCarPhysics own block");
     }
@@ -357,46 +357,46 @@ namespace Vehicle
         // right-hand side is the X360 asm literal, the left is what MSVC actually laid out.
         // ==========================================================================================
 
-        static_assert(sizeof(VehiclePhysics::SlamEffect) == 0x30,
+        CGS_STATIC_ASSERT((sizeof(VehiclePhysics::SlamEffect) == 0x30),
                       "SlamEffect: Vector3 + six f32 + s8 -> 0x30 (the 0x1130 - 0x1100 gap)");
         // AddSlam @0x825D4870 addresses SIX of SlamEffect's seven fields by absolute offset off
         // the 0x1100 base, so each of these is an asm literal minus 0x1100 -- and unlike the sizeof
         // above they are NOT blind to a member added inside the struct (tamper case 6).
-        static_assert(offsetof(VehiclePhysics::SlamEffect, mfSteering) == 0x14,
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics::SlamEffect, mfSteering) == 0x14),
                       "AddSlam `stfs f0,0x1114(r11)`");
-        static_assert(offsetof(VehiclePhysics::SlamEffect, mfOriginalSteering) == 0x18,
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics::SlamEffect, mfOriginalSteering) == 0x18),
                       "AddSlam `stfs f0,0x1118(r11)` -- the SAME register as mfSteering");
-        static_assert(offsetof(VehiclePhysics::SlamEffect, mfSlamLife) == 0x1C,
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics::SlamEffect, mfSlamLife) == 0x1C),
                       "AddSlam `lfs f0,0x111C(r11)` (the IsActive() test) and `stfs f1,0x111C`");
-        static_assert(offsetof(VehiclePhysics::SlamEffect, mfTotalSlamTime) == 0x20,
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics::SlamEffect, mfTotalSlamTime) == 0x20),
                       "AddSlam `lfs f12,0x1120(r11)` / `stfs f1,0x1120`");
-        static_assert(offsetof(VehiclePhysics::SlamEffect, mfRecoveryTime) == 0x24,
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics::SlamEffect, mfRecoveryTime) == 0x24),
                       "AddSlam `stfs f3,0x1124(r11)`");
-        static_assert(offsetof(VehiclePhysics::SlamEffect, mi8SlamNumber) == 0x28,
+        CGS_STATIC_ASSERT((offsetof(VehiclePhysics::SlamEffect, mi8SlamNumber) == 0x28),
                       "AddSlam `lbz r10,0x1128(r11)` ... `stb r10,0x1128(r11)`, clamped to "
                       "KI8_MAX_NUM_SLAMS-1 == 2");
         // The above-ground result's interior is pinned the same way, by
         // SimpleVehiclePhysics::Construct's writes off `addi r11,r31,0x570`.
-        static_assert(offsetof(AboveGroundTestResult, mIntersectionNormal) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(AboveGroundTestResult, mIntersectionNormal) == 0x10),
                       "SVP::Construct `stvx128 v1,r11,0x10`");
-        static_assert(offsetof(AboveGroundTestResult, mfVerticalDistance) == 0x20,
+        CGS_STATIC_ASSERT((offsetof(AboveGroundTestResult, mfVerticalDistance) == 0x20),
                       "SVP::Construct `stfs f0,0x20(r11)`");
-        static_assert(offsetof(AboveGroundTestResult, mCollisionTag) == 0x24,
+        CGS_STATIC_ASSERT((offsetof(AboveGroundTestResult, mCollisionTag) == 0x24),
                       "SVP::Construct `sth r6,0x24(r11)` + `sth r7,0x26(r11)` -- one u32 tag, two "
                       "halfword stores");
-        static_assert(offsetof(AboveGroundTestResult, mbValid) == 0x28,
+        CGS_STATIC_ASSERT((offsetof(AboveGroundTestResult, mbValid) == 0x28),
                       "SVP::Construct `stb r30,0x28(r11)`");
-        static_assert(sizeof(VehiclePhysics::ShuntEffect) == 0x20,
+        CGS_STATIC_ASSERT((sizeof(VehiclePhysics::ShuntEffect) == 0x20),
                       "ShuntEffect: Vector3Plus + Vector4 -> 0x20 (the 0x1150 - 0x1130 gap)");
-        static_assert(sizeof(VehiclePhysics::AirRamEffect) == 0x30,
+        CGS_STATIC_ASSERT((sizeof(VehiclePhysics::AirRamEffect) == 0x30),
                       "AirRamEffect: two Vector3 + f32 + InputSpace + f32 -> 0x30 (the "
                       "0x1220 - 0x1160 gap over four entries)");
-        static_assert(sizeof(VehiclePhysics::SpinEffect) == 0x20,
+        CGS_STATIC_ASSERT((sizeof(VehiclePhysics::SpinEffect) == 0x20),
                       "SpinEffect: Vector3 + two f32 -> 0x20 (the 0x1330 - 0x1230 gap over eight)");
-        static_assert(sizeof(CgsInput::Device::WheelFFSpring) == 8,
+        CGS_STATIC_ASSERT((sizeof(CgsInput::Device::WheelFFSpring) == 8),
                       "WheelFFSpring: two f32 -- UpdateDriving writes 0x13D0 and 0x13D4 and nothing "
                       "else, and mbRollingInAir is at 0x13D8");
-        static_assert(sizeof(BrnPlayerDriverControls) == X360Layout::KU_VP_CONTROLS_SIZE,
+        CGS_STATIC_ASSERT((sizeof(BrnPlayerDriverControls) == X360Layout::KU_VP_CONTROLS_SIZE),
                       "BrnPlayerDriverControls: 0x48, the literal VehiclePhysics::UpdateDriving "
                       "memcpys -- and the reason meDriverType lands on 0x10D4");
         // meDriverType is `protected` inside BrnPlayerDriverControls, so its offset cannot be taken
@@ -405,11 +405,11 @@ namespace Vehicle
         // two role-confirmed bool ends of the run, UpdateBoost, and the AddEvent record size).
         // PART 1 above asserts the consequence -- 0x1090 + 0x44 == the asm-literal 0x10D4 -- which
         // is the part this wave is responsible for.
-        static_assert(sizeof(BrnPhysics::SuspensionSpring) == X360Layout::KU_VP_SPRING_STRIDE,
+        CGS_STATIC_ASSERT((sizeof(BrnPhysics::SuspensionSpring) == X360Layout::KU_VP_SPRING_STRIDE),
                       "SuspensionSpring: 0x30 == the maSprings stride Construct's Prepare loop uses");
-        static_assert(sizeof(AboveGroundTestResult) == X360Layout::KU_SVP_ABOVEGROUND_SIZE,
+        CGS_STATIC_ASSERT((sizeof(AboveGroundTestResult) == X360Layout::KU_SVP_ABOVEGROUND_SIZE),
                       "AboveGroundTestResult: 0x30 == the 0x5A0 - 0x570 gap Construct pins");
-        static_assert(sizeof(CgsGeometric::AxisAlignedBox) == X360Layout::KU_SVP_AABB_SIZE,
+        CGS_STATIC_ASSERT((sizeof(CgsGeometric::AxisAlignedBox) == X360Layout::KU_SVP_AABB_SIZE),
                       "AxisAlignedBox: 0x20 == the 32 bytes SetRaceCarCrashing copies 0x6F0 -> 0x6D0");
 
         // The two classes' own members must at least still EXIST under the names the map uses.
@@ -417,21 +417,21 @@ namespace Vehicle
         // through offsetof is the cheapest compile-time existence proof that also proves the
         // ACCESS: a member that moved to another class, or lost its name, stops compiling here.
         typedef VehiclePhysics V;
-        static_assert(offsetof(V, mpAttribs) < offsetof(V, mAIVehicleAttribs), "DWARF order :822 < :823");
-        static_assert(offsetof(V, mAIVehicleAttribs) < offsetof(V, mPlayerVehicleAttribs), "DWARF :823 < :824");
-        static_assert(offsetof(V, mvSpringMassScalers) < offsetof(V, mWeightTransfer), "DWARF :829 < :830");
-        static_assert(offsetof(V, mWeightTransfer)
-                          < offsetof(V, mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare),
+        CGS_STATIC_ASSERT((offsetof(V, mpAttribs) < offsetof(V, mAIVehicleAttribs)), "DWARF order :822 < :823");
+        CGS_STATIC_ASSERT((offsetof(V, mAIVehicleAttribs) < offsetof(V, mPlayerVehicleAttribs)), "DWARF :823 < :824");
+        CGS_STATIC_ASSERT((offsetof(V, mvSpringMassScalers) < offsetof(V, mWeightTransfer)), "DWARF :829 < :830");
+        CGS_STATIC_ASSERT((offsetof(V, mWeightTransfer)
+                          < offsetof(V, mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare)),
                       "DWARF :830 < :831");
-        static_assert(offsetof(V, mUsedAirRams) < offsetof(V, mAirRamEffect), "DWARF :932 < :933");
-        static_assert(offsetof(V, mAirRamEffect) < offsetof(V, mUsedSpins), "DWARF :933 < :935");
-        static_assert(offsetof(V, mUsedSpins) < offsetof(V, maSpinEffects), "DWARF :935 < :936");
-        static_assert(offsetof(V, mLastLinearVelocity) < offsetof(V, mPitchYawRollFromTakeOff),
+        CGS_STATIC_ASSERT((offsetof(V, mUsedAirRams) < offsetof(V, mAirRamEffect)), "DWARF :932 < :933");
+        CGS_STATIC_ASSERT((offsetof(V, mAirRamEffect) < offsetof(V, mUsedSpins)), "DWARF :933 < :935");
+        CGS_STATIC_ASSERT((offsetof(V, mUsedSpins) < offsetof(V, maSpinEffects)), "DWARF :935 < :936");
+        CGS_STATIC_ASSERT((offsetof(V, mLastLinearVelocity) < offsetof(V, mPitchYawRollFromTakeOff)),
                       "DWARF :970 < :972");
-        static_assert(offsetof(V, mPitchYawRollFromTakeOff) < offsetof(V, mbRollingInAir),
+        CGS_STATIC_ASSERT((offsetof(V, mPitchYawRollFromTakeOff) < offsetof(V, mbRollingInAir)),
                       "DWARF :972 < :974 (mWheelFFSpring is declared earlier in this header)");
-        static_assert(offsetof(V, mbRollingInAir) < offsetof(V, meCarType), "DWARF :974 < :977");
-        static_assert(offsetof(V, meCarType) < offsetof(V, mpDebugComponent), "DWARF :977 < :982");
+        CGS_STATIC_ASSERT((offsetof(V, mbRollingInAir) < offsetof(V, meCarType)), "DWARF :974 < :977");
+        CGS_STATIC_ASSERT((offsetof(V, meCarType) < offsetof(V, mpDebugComponent)), "DWARF :977 < :982");
 
         // THE MEASURED BLIND SPOT, and what covers it. Two runs of this block live entirely
         // inside alignment padding, so NO arithmetic and NO sizeof can see a member added to or

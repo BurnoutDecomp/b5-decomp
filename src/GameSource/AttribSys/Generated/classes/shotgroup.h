@@ -69,7 +69,7 @@ namespace Gen
         //
         // ⚠️ THE KEY IS NO LONGER DEFAULTED. See the ELEMENT ctor immediately below: the
         // no-argument spelling must NOT resolve a collection.
-        explicit shotgroup(u64 luGroupNameKey, void* lpOwner = nullptr);
+        explicit shotgroup(u64 luGroupNameKey, void* lpOwner = 0);
 
         // ⭐ THE ELEMENT / DEFAULT ctor -- X360 `sub_827DC838`, the one
         // DirectorResourceManager::DirectorResourceManager @0x827DEB98 calls 64 times
@@ -86,7 +86,7 @@ namespace Gen
         // one of them would call Attrib::FindCollection before Attrib::Database exists --
         // the exact pre-main AV the AttribSys wave hit with FindCollection and
         // gGameModule. Default construction must resolve NOTHING.
-        explicit shotgroup(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit shotgroup(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The base's validity test, re-exported (the generated classes derive Instance
         // PRIVATELY, so it needs an explicit using-declaration to be reachable through a

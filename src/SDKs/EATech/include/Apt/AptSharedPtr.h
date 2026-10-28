@@ -29,7 +29,7 @@
 //   shared primitives (see the debug-hook note below).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager
 

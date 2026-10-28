@@ -46,7 +46,7 @@ namespace CgsGui
 {
 namespace ViewIO
 {
-    using IOBufferStack = CgsModule::IOBufferStack; // original shared stack owner
+    typedef CgsModule::IOBufferStack IOBufferStack; // original shared stack owner
     struct InputBuffer;     // the module's input buffer (Update / Render / RenderInternal)
     struct OutputBuffer;    // the module's output buffer (Update)
 }

@@ -160,19 +160,19 @@ struct cParticleLocator
 // and each one is pinned to the instruction that proves it. Only the trailing pointer widens,
 // which is why sizeof is deliberately not asserted. Break a member and the gate fails here,
 // not in the game.
-static_assert(offsetof(cParticleLocator, mVel)        == 0x40,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mVel)        == 0x40),
               "Init @0x82909874 zeroes +0x40..+0x4C right after the identity matrix");
-static_assert(offsetof(cParticleLocator, mCacheQuat)  == 0x50,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mCacheQuat)  == 0x50),
               "GetMat @0x8290E354 forms the rotation key address as 16*(index+5)+this");
-static_assert(offsetof(cParticleLocator, mCachePos)   == 0x70,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mCachePos)   == 0x70),
               "GetMat @0x8290E398 forms the translation key address as 16*(index+7)+this");
-static_assert(offsetof(cParticleLocator, mCacheTime)  == 0x90,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mCacheTime)  == 0x90),
               "GetMat @0x8290E2BC indexes the key times at 4*(index+0x24)+this");
-static_assert(offsetof(cParticleLocator, mTime)       == 0x98,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mTime)       == 0x98),
               "GetMat @0x8290E2A4 reads the cached time with lwz 0x98(r31)");
-static_assert(offsetof(cParticleLocator, mIndex)      == 0x9C,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mIndex)      == 0x9C),
               "GetMat @0x8290E2B4 reads the key index with lwz 0x9C(r31)");
-static_assert(offsetof(cParticleLocator, mFlags)      == 0xA0,
+CGS_STATIC_ASSERT((offsetof(cParticleLocator, mFlags)      == 0xA0),
               "Init @0x8290988C stores 1 here -- flag bit 0, NOT a phantom mKeyCount");
 
 // ⚠ mpPosEvaluator IS THE ONE MEMBER WITH NO OFFSET PIN, AND THAT IS DELIBERATE. The console

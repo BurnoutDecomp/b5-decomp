@@ -83,7 +83,7 @@ namespace CgsCollision
         // outer loop strides mpTriangles by sizeof(Triangle4) == 0xE0 once per decrement
         // (`0x8292212C addi r10, r10, 0xE0` / `0x82922128 addi r20, r20, -1`). The console's own
         // field name would read as a triangle count; it is not one, and the name here says so.
-        struct alignas(16) StreamCommand
+        struct CGS_ALIGN(16) StreamCommand
         {
             Vector4 maLineStart[KI_MAX_LINES_PER_COMMAND];  // +0x00
             Vector4 maLineEnd[KI_MAX_LINES_PER_COMMAND];    // +0x50
@@ -101,7 +101,7 @@ namespace CgsCollision
         // position and to normal and a zero word to the tag before the hit test). A port that
         // skips the clear inherits the previous command's answer -- the exact silent-drop shape
         // this project keeps paying for -- so the clear is unconditional here too.
-        struct alignas(16) StreamResult
+        struct CGS_ALIGN(16) StreamResult
         {
             Vector4 maHitPosition[KI_MAX_LINES_PER_COMMAND];  // +0x00
             Vector4 maHitNormal[KI_MAX_LINES_PER_COMMAND];    // +0x50
@@ -131,17 +131,17 @@ namespace CgsCollision
     // The two size contracts the producer is constructed with. Both are GATES, not comments:
     // CreateLineWithTriangleListStream hands GetRequiredBufferSizes / Construct the literals 176
     // and 192, and the poster strides the shared buffer by them.
-    static_assert(sizeof(LineWithTriangleListStreamJobDesc::StreamResult) == 192,
+    CGS_STATIC_ASSERT((sizeof(LineWithTriangleListStreamJobDesc::StreamResult) == 192),
                   "StreamResult must stay the producer's miResultSize (192)");
-    static_assert(offsetof(LineWithTriangleListStreamJobDesc::StreamCommand, maLineEnd) == 0x50,
+    CGS_STATIC_ASSERT((offsetof(LineWithTriangleListStreamJobDesc::StreamCommand, maLineEnd) == 0x50),
                   "maLineEnd @ +0x50 -- the stride the worker indexes with (addi r16, r18, 0x50)");
-    static_assert(offsetof(LineWithTriangleListStreamJobDesc::StreamCommand, mpTriangles) == 0xA0,
+    CGS_STATIC_ASSERT((offsetof(LineWithTriangleListStreamJobDesc::StreamCommand, mpTriangles) == 0xA0),
                   "mpTriangles @ +0xA0");
-    static_assert(offsetof(LineWithTriangleListStreamJobDesc::StreamResult, maHitNormal) == 0x50,
+    CGS_STATIC_ASSERT((offsetof(LineWithTriangleListStreamJobDesc::StreamResult, maHitNormal) == 0x50),
                   "maHitNormal @ +0x50");
-    static_assert(offsetof(LineWithTriangleListStreamJobDesc::StreamResult, mauSurfaceTag) == 0xA0,
+    CGS_STATIC_ASSERT((offsetof(LineWithTriangleListStreamJobDesc::StreamResult, mauSurfaceTag) == 0xA0),
                   "mauSurfaceTag @ +0xA0");
-    static_assert(offsetof(LineWithTriangleListStreamJobDesc::StreamResult, mabHit) == 0xB4,
+    CGS_STATIC_ASSERT((offsetof(LineWithTriangleListStreamJobDesc::StreamResult, mabHit) == 0xB4),
                   "mabHit @ +0xB4 -- where BOTH consumers read the per-line hit flag");
 }
 }

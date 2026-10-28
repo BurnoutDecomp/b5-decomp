@@ -256,9 +256,9 @@ private:
     // pointer members are 8 bytes wide -- still parity-correct, just not byte-identical).
     static void _AssertLayout()
     {
-        static_assert(sizeof(::EActiveRaceCarIndex) == 4, "EActiveRaceCarIndex is a 4-byte enum");
-        static_assert(sizeof(CgsContainers::BitArray<3u>) == 8, "BitArray<3> is one 8-byte field");
-        static_assert(sizeof(BrnWorld::WorldRegion) == 8, "WorldRegion is 8 bytes");
+        CGS_STATIC_ASSERT((sizeof(::EActiveRaceCarIndex) == 4), "EActiveRaceCarIndex is a 4-byte enum");
+        CGS_STATIC_ASSERT((sizeof(CgsContainers::BitArray<3u>) == 8), "BitArray<3> is one 8-byte field");
+        CGS_STATIC_ASSERT((sizeof(BrnWorld::WorldRegion) == 8), "WorldRegion is 8 bytes");
     }
 };
 } // namespace BrnGameState

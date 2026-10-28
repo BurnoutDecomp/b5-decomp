@@ -274,33 +274,33 @@ namespace Props
     // image in the same step -- the two silently disagreeing is the STREETDATA failure mode.
     inline void PropPartTypeData::_AssertLayout()
     {
-        static_assert( sizeof( Vector3 ) == 16, "Vector3 is a 16-byte SIMD lane quad" );
-        static_assert( sizeof( ::rw::collision::Volume ) == 96,
+        CGS_STATIC_ASSERT(( sizeof( Vector3 ) == 16), "Vector3 is a 16-byte SIMD lane quad" );
+        CGS_STATIC_ASSERT(( sizeof( ::rw::collision::Volume ) == 96),
                        "rwcollision Volume is a 96-byte serialised record on both targets" );
-        static_assert( offsetof( PropPartTypeData, mfMass )             == 0x20, "mfMass @0x20" );
-        static_assert( offsetof( PropPartTypeData, maCollisionVolumes ) == 0x28,
+        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, mfMass )             == 0x20), "mfMass @0x20" );
+        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, maCollisionVolumes ) == 0x28),
                        "PropPartTypeData::maCollisionVolumes @0x28 (console +0x24)" );
-        static_assert( offsetof( PropPartTypeData, mfSphereRadius )     == 0x30, "mfSphereRadius @0x30" );
-        static_assert( offsetof( PropPartTypeData, muNumberOfVolumes )  == 0x34, "muNumberOfVolumes @0x34" );
+        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, mfSphereRadius )     == 0x30), "mfSphereRadius @0x30" );
+        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, muNumberOfVolumes )  == 0x34), "muNumberOfVolumes @0x34" );
     }
 
     inline void PropTypeData::_AssertLayout()
     {
-        static_assert( offsetof( PropTypeData, mCOMOffset )        == 0x10, "mCOMOffset @0x10" );
-        static_assert( offsetof( PropTypeData, mInertia )          == 0x20, "mInertia @0x20" );
-        static_assert( offsetof( PropTypeData, mResourceId )       == 0x30, "mResourceId @0x30" );
-        static_assert( offsetof( PropTypeData, mfMass )            == 0x38, "mfMass @0x38" );
-        static_assert( offsetof( PropTypeData, maCollisionVolumes) == 0x40,
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mCOMOffset )        == 0x10), "mCOMOffset @0x10" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mInertia )          == 0x20), "mInertia @0x20" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mResourceId )       == 0x30), "mResourceId @0x30" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfMass )            == 0x38), "mfMass @0x38" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, maCollisionVolumes) == 0x40),
                        "PropTypeData::maCollisionVolumes @0x40 (console +0x3C)" );
-        static_assert( offsetof( PropTypeData, maParts )           == 0x48,
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, maParts )           == 0x48),
                        "PropTypeData::maParts @0x48 (console +0x40)" );
-        static_assert( offsetof( PropTypeData, mfSphereRadius )    == 0x50, "mfSphereRadius @0x50" );
-        static_assert( offsetof( PropTypeData, mfMaxJointAngleCos )== 0x54, "mfMaxJointAngleCos @0x54" );
-        static_assert( offsetof( PropTypeData, mfSmashThreshold )  == 0x60, "mfSmashThreshold @0x60" );
-        static_assert( offsetof( PropTypeData, muNumberOfParts )   == 0x69, "muNumberOfParts @0x69" );
-        static_assert( offsetof( PropTypeData, muNumberOfVolumes ) == 0x6A, "muNumberOfVolumes @0x6A" );
-        static_assert( offsetof( PropTypeData, mu8ExtraTypeInfo )  == 0x6C, "mu8ExtraTypeInfo @0x6C" );
-        static_assert( sizeof( PropTypeData ) == 112,
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfSphereRadius )    == 0x50), "mfSphereRadius @0x50" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfMaxJointAngleCos )== 0x54), "mfMaxJointAngleCos @0x54" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfSmashThreshold )  == 0x60), "mfSmashThreshold @0x60" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, muNumberOfParts )   == 0x69), "muNumberOfParts @0x69" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, muNumberOfVolumes ) == 0x6A), "muNumberOfVolumes @0x6A" );
+        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mu8ExtraTypeInfo )  == 0x6C), "mu8ExtraTypeInfo @0x6C" );
+        CGS_STATIC_ASSERT(( sizeof( PropTypeData ) == 112),
                        "PropTypeData stride is 112 on both targets" );
     }
 }

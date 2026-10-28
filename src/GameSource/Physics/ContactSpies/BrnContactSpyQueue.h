@@ -111,7 +111,7 @@ namespace BrnPhysics
                     case 7: return "traffic deformable part";
                     default:
                         CGS_ASSERT(false, "Invalid entity type");
-                        return nullptr;
+                        return 0;
                 }
             }
 

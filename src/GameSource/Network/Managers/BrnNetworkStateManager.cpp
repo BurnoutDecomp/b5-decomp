@@ -59,7 +59,7 @@ namespace BrnNetwork
         CGS_ASSERT(lbSuccess, "Team selection has failed somehow\n");
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
 
         lpStateManager->meState = E_STATE_WAIT_CAR_SELECT;
     }

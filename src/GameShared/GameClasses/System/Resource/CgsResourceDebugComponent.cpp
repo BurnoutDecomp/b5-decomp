@@ -66,7 +66,7 @@ namespace CgsResource
         maTypeStringList[1].mpcName = KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_ARTIST];
         maTypeStringList[2].miValue = E_POOLTYPELISTMODE_RAW;
         maTypeStringList[2].mpcName = KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_RAW];
-        maTypeStringList[E_POOLTYPELISTMODE_COUNT] = {0, nullptr};
+        maTypeStringList[E_POOLTYPELISTMODE_COUNT] = {0, 0};
 
         miSortMode = E_DEBUGSORTMODE_NONE;
         for (s32 liMode = 0; liMode < E_DEBUGSORTMODE_COUNT; ++liMode)
@@ -75,7 +75,7 @@ namespace CgsResource
             maSortModeStringList[liMode].mpcName = KAPC_DEBUGSORTMODENAMES[liMode];
         }
         maSortModeStringList[E_DEBUGSORTMODE_COUNT].miValue = 0;
-        maSortModeStringList[E_DEBUGSORTMODE_COUNT].mpcName = nullptr;
+        maSortModeStringList[E_DEBUGSORTMODE_COUNT].mpcName = 0;
 
         miRenderMode = E_DEBUGTEXTURERENDERMODE_STRETCH;
         for (s32 liMode = 0; liMode < E_DEBUGTEXTURERENDERMODE_COUNT; ++liMode)
@@ -84,7 +84,7 @@ namespace CgsResource
             maRenderModeStringList[liMode].mpcName = KAPC_DEBUGTEXTURERENDERMODE[liMode];
         }
         maRenderModeStringList[E_DEBUGTEXTURERENDERMODE_COUNT].miValue = 0;
-        maRenderModeStringList[E_DEBUGTEXTURERENDERMODE_COUNT].mpcName = nullptr;
+        maRenderModeStringList[E_DEBUGTEXTURERENDERMODE_COUNT].mpcName = 0;
 
         mbTriggerStatsDump      = false;
         miStatsDumpCount        = 0;
@@ -110,7 +110,7 @@ namespace CgsResource
             if (lrPool.GetId() != -1)
                 maStringList[liNext++] = {lrPool.GetId(), lrPool.GetName()};
         }
-        maStringList[liNext] = {-1, nullptr};
+        maStringList[liNext] = {-1, 0};
     }
 
     // ARTIST828EE200. These are the original18 registration sites.
@@ -368,9 +368,9 @@ namespace CgsResource
         }
         lDescriptor.m_baseResourceDescriptors[0].m_size = 65536;
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        const rw::Resource lResource = mParams.mpDebugAllocator->DoAllocate(lDescriptor, nullptr);
+        const rw::Resource lResource = mParams.mpDebugAllocator->DoAllocate(lDescriptor, 0);
         char* const lpcBuffer = static_cast<char*>(lResource.m_baseResources[0]);
-        if (lpcBuffer != nullptr)
+        if (lpcBuffer != 0)
         {
             char lacFileName[192];
             CgsCore::SPrintf(lacFileName, 128, "d:\\cgsresourcedump_%d.txt", miStatsDumpCount);
@@ -424,7 +424,7 @@ namespace CgsResource
                 continue;
 
             const Entry* lpEntry = lrPool1.FindResource(lrPool0.GetEntryDirect(luIndex)->mID, false,
-                                                        KU8_ENTRY_STATUS_LOADED, nullptr);
+                                                        KU8_ENTRY_STATUS_LOADED, 0);
             if (lpEntry)
             {
                 for (s32 liMemType = 0; liMemType < 3; ++liMemType)

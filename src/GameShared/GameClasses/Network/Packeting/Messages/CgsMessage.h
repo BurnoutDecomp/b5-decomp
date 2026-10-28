@@ -155,13 +155,13 @@ namespace CgsNetwork
     };
 
     // Console layout, checked on a 32-bit build (the vptr is the +0x00 word).
-    static_assert(sizeof(void*) != 4 || offsetof(Message, mePackOrUnpack) == 0x04, "Message::mePackOrUnpack @ +0x04");
-    static_assert(sizeof(void*) != 4 || offsetof(Message, mBitstream)     == 0x08, "Message::mBitstream @ +0x08");
-    static_assert(sizeof(void*) != 4 || offsetof(Message, mu8GameID)      == 0x18, "Message::mu8GameID @ +0x18");
-    static_assert(sizeof(void*) != 4 || offsetof(Message, mx8Flags)       == 0x19, "Message::mx8Flags @ +0x19");
-    static_assert(sizeof(void*) != 4 || offsetof(Message, mi8Type)        == 0x1A, "Message::mi8Type @ +0x1A");
-    static_assert(sizeof(void*) != 4 || offsetof(Message, mu16Frame)      == 0x1C, "Message::mu16Frame @ +0x1C");
-    static_assert(sizeof(void*) != 4 || sizeof(Message) == 0x20, "sizeof(Message) == 0x20");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(Message, mePackOrUnpack) == 0x04), "Message::mePackOrUnpack @ +0x04");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(Message, mBitstream)     == 0x08), "Message::mBitstream @ +0x08");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(Message, mu8GameID)      == 0x18), "Message::mu8GameID @ +0x18");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(Message, mx8Flags)       == 0x19), "Message::mx8Flags @ +0x19");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(Message, mi8Type)        == 0x1A), "Message::mi8Type @ +0x1A");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(Message, mu16Frame)      == 0x1C), "Message::mu16Frame @ +0x1C");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(Message) == 0x20), "sizeof(Message) == 0x20");
 
     // 16-bit frame-ring helpers (homed in CgsMessageFrameUtils.cpp; declared in
     // CgsMessageFrameUtils.h). Declared here so the rest of the Message hierarchy

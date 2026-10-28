@@ -46,8 +46,8 @@
 // ---------------------------------------------------------------------------
 AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter)
 {
-    if (pCharacter == nullptr)
-        return nullptr;
+    if (pCharacter == 0)
+        return 0;
     return reinterpret_cast<AptCharacterAnimation*>(
         reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);   // [c:0x10] addi r3, mpCharacter, <hdrSize>
 }
@@ -116,7 +116,7 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
     // Drop one reference on the imported source .apt file; delete the shared AptFile
     // when its reference count reaches zero.
     AptFile* pFile = mAnimationFilePtr.pData;
-    mAnimationFilePtr.pData = nullptr;
+    mAnimationFilePtr.pData = 0;
     if (pFile && AptSharedPtrDecRef(pFile) == 0)
         AptSharedPtrDelete(pFile);
 
@@ -151,11 +151,11 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 // ---------------------------------------------------------------------------
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
 {
-    if (pFile == nullptr)
-        return nullptr;
+    if (pFile == 0)
+        return 0;
     void* lpMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterAnimationInst));    // Allocate(off_8324D808, 0x2C)
-    if (lpMem == nullptr)
-        return nullptr;
+    if (lpMem == 0)
+        return 0;
 
     // Derive the ctor args from the pending file (the Update caller's r4/r5 setup):
     // the movie root (pFile->mpData) is the AptCharacter the base ctor builds over,
@@ -163,7 +163,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     AptCharacter* lpCharacter = reinterpret_cast<AptCharacter*>(pFile->mpData);   // r4 = *(pFile+0x14)
     AptFilePtr    laHeldFile;
     laHeldFile.pData = pFile;
-    if (pFile != nullptr)
+    if (pFile != 0)
         AptSharedPtrIncRef(pFile);                       // incref into the stack AptFilePtr (r5)
 
     // ---- base ctor + member init (the folded ctor body) -----------------------
@@ -176,7 +176,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     ::new (static_cast<void*>(static_cast<AptCharacterSpriteInstBase*>(pInst)))
         AptCharacterSpriteInstBase(lpCharacter);
 
-    pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
+    pInst->mAnimationFilePtr.pData = 0;    // *(this+0x28) = 0 (pre-op= clear)
     pInst->mnAccumulatedUpdateMs = 0;            // *(this+0x24) = 0
 
     // (1) @0x82AFFDF8..: the movie root's own embedded AptFilePtr (a2+0xC) = a3.
@@ -199,9 +199,9 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
         {
             AptFile* lpOld = lpRootFilePtr->pData;
             lpRootFilePtr->pData = laHeldFile.pData;
-            if (laHeldFile.pData != nullptr)
+            if (laHeldFile.pData != 0)
                 AptSharedPtrIncRef(laHeldFile.pData);
-            if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
+            if (lpOld != 0 && AptSharedPtrDecRef(lpOld) == 0)
                 AptSharedPtrDelete(lpOld);
         }
     }
@@ -213,9 +213,9 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
         {
             AptFile* lpOld = pInst->mAnimationFilePtr.pData;
             pInst->mAnimationFilePtr.pData = laHeldFile.pData;
-            if (laHeldFile.pData != nullptr)
+            if (laHeldFile.pData != 0)
                 AptSharedPtrIncRef(laHeldFile.pData);
-            if (lpOld != nullptr && AptSharedPtrDecRef(lpOld) == 0)
+            if (lpOld != 0 && AptSharedPtrDecRef(lpOld) == 0)
                 AptSharedPtrDelete(lpOld);
         }
     }
@@ -238,7 +238,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
 
     AptFilePtr laIncArg;
     laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3
-    if (laIncArg.pData != nullptr)
+    if (laIncArg.pData != 0)
         AptSharedPtrIncRef(laIncArg.pData);           // lwarx/+1/stwcx. @0x82AFFE50
     AptGetMovieCharacterAnimation(pInst->mpRenderItem->mpCharacter)
         ->IncCharacterList(laIncArg);                 // IncCharacterList(*(mpRenderItem->mpChar)+embed, v16) @0x82AFFE74
@@ -247,8 +247,8 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // zero (IncCharacterList kept its own table references, not this arg).
     {
         AptFile* lpArg = laIncArg.pData;
-        laIncArg.pData = nullptr;                     // v16[0] = 0
-        if (lpArg != nullptr && AptSharedPtrDecRef(lpArg) == 0)
+        laIncArg.pData = 0;                     // v16[0] = 0
+        if (lpArg != 0 && AptSharedPtrDecRef(lpArg) == 0)
             AptSharedPtrDelete(lpArg);
     }
 
@@ -258,8 +258,8 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // wrapper owns that hand-off here.)
     {
         AptFile* lpHeld = laHeldFile.pData;
-        laHeldFile.pData = nullptr;
-        if (lpHeld != nullptr && AptSharedPtrDecRef(lpHeld) == 0)
+        laHeldFile.pData = 0;
+        if (lpHeld != 0 && AptSharedPtrDecRef(lpHeld) == 0)
             AptSharedPtrDelete(lpHeld);
     }
 

@@ -137,7 +137,7 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
     // Walk every batch, opening a render group each time the material changes and issuing one
     // DrawVertices per batch. The length is re-read each iteration (its assert re-fires) to match
     // the console loop.
-    const cParticleMaterial* lpCurrentMaterial = nullptr;
+    const cParticleMaterial* lpCurrentMaterial = 0;
     for (u32 luIndex = 0; luIndex < arBatchArray.GetLength(); ++luIndex)
     {
         const LionBatch& lrBatch = arBatchArray.GetItem(luIndex);
@@ -145,7 +145,7 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
 
         if (lrBatch.GetMaterial() != lpCurrentMaterial)
         {
-            if (lpCurrentMaterial != nullptr)
+            if (lpCurrentMaterial != 0)
             {
                 mpRenderer->RenderGroupEnd();
             }
@@ -336,23 +336,23 @@ void cParticleRender::Update(const cTime& /*arTime*/)
 void cParticleRender::_AssertLayout()
 {
     // The two cVectors must be 16-byte aligned: that alignment is what puts mLodDistances on 0x40.
-    static_assert(alignof(cVector) == 16, "cVector must be 16-byte aligned (vector stride/align)");
-    static_assert(sizeof(cVector) == 16,  "cVector must be 16 bytes");
+    CGS_STATIC_ASSERT((__alignof(cVector) == 16), "cVector must be 16-byte aligned (vector stride/align)");
+    CGS_STATIC_ASSERT((sizeof(cVector) == 16),  "cVector must be 16 bytes");
 
-    static_assert(offsetof(cParticleRender, mpAllocator) == 0x00,
+    CGS_STATIC_ASSERT((offsetof(cParticleRender, mpAllocator) == 0x00),
                   "mpAllocator at +0x00 -- cLionFX::Init's first store");
-    static_assert(offsetof(cParticleRender, mpRenderer) == sizeof(void*),
+    CGS_STATIC_ASSERT((offsetof(cParticleRender, mpRenderer) == sizeof(void*)),
                   "mpRenderer follows mpAllocator -- cLionFX::Init's second store");
-    static_assert(offsetof(cParticleRender, mCamPos) == 0x20,
+    CGS_STATIC_ASSERT((offsetof(cParticleRender, mCamPos) == 0x20),
                   "mCamPos at +0x20 (declared in the original header) -- 16-byte aligned after the "
                   "two pointers + four scalars");
-    static_assert(offsetof(cParticleRender, mCamDir) == 0x30,
+    CGS_STATIC_ASSERT((offsetof(cParticleRender, mCamDir) == 0x30),
                   "mCamDir at +0x30 (declared in the original header)");
-    static_assert(offsetof(cParticleRender, mLodDistances) == 0x40,
+    CGS_STATIC_ASSERT((offsetof(cParticleRender, mLodDistances) == 0x40),
                   "mLodDistances at +0x40 -- the eight float stores in cLionFX::Init");
-    static_assert(offsetof(cParticleRender, mFogAlphas) == 0x60,
+    CGS_STATIC_ASSERT((offsetof(cParticleRender, mFogAlphas) == 0x60),
                   "mFogAlphas at +0x60, right after the 8-entry lod table");
-    static_assert(sizeof(cParticleRender) == 0x460,
+    CGS_STATIC_ASSERT((sizeof(cParticleRender) == 0x460),
                   "sizeof(cParticleRender) == 0x460 -- the object ends exactly at "
                   "its magic-static guard word");
 }

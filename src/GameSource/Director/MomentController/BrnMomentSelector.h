@@ -69,7 +69,7 @@ struct MomentDescription
 };
 
 // No pointer members, so the console build 0x10 size holds on the x64 host build too.
-static_assert(sizeof(MomentDescription) == 0x10, "MomentDescription layout drift");
+CGS_STATIC_ASSERT((sizeof(MomentDescription) == 0x10), "MomentDescription layout drift");
 
 class MomentSelector
 {

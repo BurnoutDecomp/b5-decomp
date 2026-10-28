@@ -41,23 +41,23 @@ namespace RaceCarEntityModuleIO
 void RCEntityGlobalRaceCarOutputInterface::Clear()
 {
     typedef RCEntityGlobalRaceCarOutputInterface T;
-    static_assert(offsetof(T, maRaceCarPositions)        == 0,    "maRaceCarPositions @+0");
-    static_assert(offsetof(T, maRaceCarAts)              == 560,  "maRaceCarAts @+0x230");
-    static_assert(offsetof(T, maRaceCarWorldRegions)     == 1120, "maRaceCarWorldRegions @+0x460");
-    static_assert(offsetof(T, maRivalIds)                == 1400, "maRivalIds @+0x578");
-    static_assert(offsetof(T, maCarModelIds)             == 1680, "maCarModelIds @+0x690");
-    static_assert(offsetof(T, mafRaceCarSpeeds)          == 1960, "mafRaceCarSpeeds @+0x7A8");
-    static_assert(offsetof(T, maeActiveRaceCarIndices)   == 2100, "maeActiveRaceCarIndices @+0x834");
-    static_assert(offsetof(T, maiRivalIndices)           == 2240, "maiRivalIndices @+0x8C0");
-    static_assert(offsetof(T, mauAISectionIndices)       == 2276, "mauAISectionIndices @+0x8E4");
-    static_assert(offsetof(T, mGlobalRaceCarIndices)     == 2352, "mGlobalRaceCarIndices @+0x930");
-    static_assert(offsetof(T, mIsPlayerFlags)            == 2360, "mIsPlayerFlags @+0x938");
-    static_assert(offsetof(T, mIsRivalAIFlags)           == 2368, "mIsRivalAIFlags @+0x940");
-    static_assert(offsetof(T, mIsNetworkFlags)           == 2376, "mIsNetworkFlags @+0x948");
-    static_assert(offsetof(T, mIsInCurrentModeFlags)     == 2384, "mIsInCurrentModeFlags @+0x950");
-    static_assert(offsetof(T, mIsDispersingFlags)        == 2392, "mIsDispersingFlags @+0x958");
-    static_assert(offsetof(T, mIsInRangeFlags)           == 2400, "mIsInRangeFlags @+0x960");
-    static_assert(offsetof(T, mePlayerGlobalRaceCarIndex)== 2408, "mePlayerGlobalRaceCarIndex @+0x968");
+    CGS_STATIC_ASSERT((offsetof(T, maRaceCarPositions)        == 0),    "maRaceCarPositions @+0");
+    CGS_STATIC_ASSERT((offsetof(T, maRaceCarAts)              == 560),  "maRaceCarAts @+0x230");
+    CGS_STATIC_ASSERT((offsetof(T, maRaceCarWorldRegions)     == 1120), "maRaceCarWorldRegions @+0x460");
+    CGS_STATIC_ASSERT((offsetof(T, maRivalIds)                == 1400), "maRivalIds @+0x578");
+    CGS_STATIC_ASSERT((offsetof(T, maCarModelIds)             == 1680), "maCarModelIds @+0x690");
+    CGS_STATIC_ASSERT((offsetof(T, mafRaceCarSpeeds)          == 1960), "mafRaceCarSpeeds @+0x7A8");
+    CGS_STATIC_ASSERT((offsetof(T, maeActiveRaceCarIndices)   == 2100), "maeActiveRaceCarIndices @+0x834");
+    CGS_STATIC_ASSERT((offsetof(T, maiRivalIndices)           == 2240), "maiRivalIndices @+0x8C0");
+    CGS_STATIC_ASSERT((offsetof(T, mauAISectionIndices)       == 2276), "mauAISectionIndices @+0x8E4");
+    CGS_STATIC_ASSERT((offsetof(T, mGlobalRaceCarIndices)     == 2352), "mGlobalRaceCarIndices @+0x930");
+    CGS_STATIC_ASSERT((offsetof(T, mIsPlayerFlags)            == 2360), "mIsPlayerFlags @+0x938");
+    CGS_STATIC_ASSERT((offsetof(T, mIsRivalAIFlags)           == 2368), "mIsRivalAIFlags @+0x940");
+    CGS_STATIC_ASSERT((offsetof(T, mIsNetworkFlags)           == 2376), "mIsNetworkFlags @+0x948");
+    CGS_STATIC_ASSERT((offsetof(T, mIsInCurrentModeFlags)     == 2384), "mIsInCurrentModeFlags @+0x950");
+    CGS_STATIC_ASSERT((offsetof(T, mIsDispersingFlags)        == 2392), "mIsDispersingFlags @+0x958");
+    CGS_STATIC_ASSERT((offsetof(T, mIsInRangeFlags)           == 2400), "mIsInRangeFlags @+0x960");
+    CGS_STATIC_ASSERT((offsetof(T, mePlayerGlobalRaceCarIndex)== 2408), "mePlayerGlobalRaceCarIndex @+0x968");
 
     const f32 lfClearedSpeed = -1.0f;
     for (s32 luIndex = 0; luIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++luIndex)

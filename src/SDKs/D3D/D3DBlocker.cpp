@@ -78,7 +78,7 @@ CBlocker::~CBlocker()
     PIXAddPixOpWithData(dword_82102EE8[miType] | 0x400000u, 0, 0);
 
     void* pCallback = pDevice->mpProfileCallback;    // lwz 0x347C(device)
-    if (pCallback != nullptr)
+    if (pCallback != 0)
     {
         // ms = secondsPerTick * elapsedTicks * <rodata scale>. The X360 leaves
         // callback arg #3 (r5) holding the residual 0 from the PIX end-op call.
@@ -141,13 +141,13 @@ bool CBlocker::Check()
 // the X360-absolute byte offsets (every access above is by name).
 void _CBlockerAssertLayout()
 {
-    static_assert(offsetof(CBlocker, miType) == offsetof(CBlocker, mpDevice) + sizeof(void*),
+    CGS_STATIC_ASSERT((offsetof(CBlocker, miType) == offsetof(CBlocker, mpDevice) + sizeof(void*)),
                   "miType immediately follows mpDevice");
-    static_assert(offsetof(CBlocker, muProgressFence) - offsetof(CBlocker, muLastProgress) == 4,
+    CGS_STATIC_ASSERT((offsetof(CBlocker, muProgressFence) - offsetof(CBlocker, muLastProgress) == 4),
                   "progress-fence follows last-progress");
-    static_assert(offsetof(CBlocker, muStartFence) - offsetof(CBlocker, muProgressFence) == 4,
+    CGS_STATIC_ASSERT((offsetof(CBlocker, muStartFence) - offsetof(CBlocker, muProgressFence) == 4),
                   "start-fence follows progress-fence");
-    static_assert(offsetof(CBlocker, muStartTimeBase) - offsetof(CBlocker, muStartFence) == 4,
+    CGS_STATIC_ASSERT((offsetof(CBlocker, muStartTimeBase) - offsetof(CBlocker, muStartFence) == 4),
                   "start-time-base follows start-fence");
 }
 

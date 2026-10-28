@@ -78,12 +78,12 @@ namespace CgsNetwork
         void               Update();
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DE368 -- inline header-homed accessor.
-        const char*        GetName() const override { return "Connection Status Message"; }
+        const char*        GetName() const  { return "Connection Status Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         // +0x28 .. +0x5F (after the 0x28-byte ReliableMessage base).
         PlayerConnectionData maConnectionData[KI_CONNECTION_STATUS_PLAYER_COUNT];

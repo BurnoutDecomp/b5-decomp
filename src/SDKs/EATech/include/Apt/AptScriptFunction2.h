@@ -44,7 +44,7 @@
 // ===========================================================================
 
 #include <cstddef>   // size_t
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // base + AptConstantPool + AptVFT_*
 

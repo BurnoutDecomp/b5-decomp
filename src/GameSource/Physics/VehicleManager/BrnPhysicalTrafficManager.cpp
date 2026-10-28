@@ -176,14 +176,14 @@ EntityId PhysicalTrafficManager::GetGlobalTrafficEntityId(u16 lu16TrafficCarInde
 void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* lpInputBufferStack,
                                                       CgsModule::IOBufferStack* lpOutputBufferStack)
 {
-    CGS_ASSERT(lpInputBufferStack != nullptr, "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != nullptr, "lpOutputBufferStack != NULL");
-    CGS_ASSERT(mpArticulatedJointCreateBuffer == nullptr, "mpArticulatedJointCreateBuffer == NULL");
+    CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
+    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+    CGS_ASSERT(mpArticulatedJointCreateBuffer == 0, "mpArticulatedJointCreateBuffer == NULL");
 
     lpInputBufferStack->CreateIOBuffer<ArticulatedJointCreateBuffer>(
         &mpArticulatedJointCreateBuffer, "ArticulatedJointBuffer");
 
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != nullptr, "mpArticulatedJointCreateBuffer != NULL");
+    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, "mpArticulatedJointCreateBuffer != NULL");
 }
 
 // ---------------------------------------------------------------------------------------
@@ -197,8 +197,8 @@ void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* l
 void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
         VehicleOutputRequestInterface* lpOutputRequestInterface)
 {
-    CGS_ASSERT(lpOutputRequestInterface != nullptr, "lpOutputRequestInterface != NULL");
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != nullptr, "mpArticulatedJointCreateBuffer != NULL");
+    CGS_ASSERT(lpOutputRequestInterface != 0, "lpOutputRequestInterface != NULL");
+    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, "mpArticulatedJointCreateBuffer != NULL");
 
     mArticulatedJointPool.SendCreateRemoveJointEvents(lpOutputRequestInterface,
                                                       mpArticulatedJointCreateBuffer);
@@ -641,7 +641,7 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
                                              const Deformation::StreamedDeformationSpec* lpModelData,
                                              const Vector3* lpWheelPositions, const f32* lpafWheelRadii)
 {
-    CGS_ASSERT(mpVehicleBody != nullptr, "mpVehicleBody != NULL");
+    CGS_ASSERT(mpVehicleBody != 0, "mpVehicleBody != NULL");
     CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT, "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
 
     if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
@@ -702,7 +702,7 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
 {
     CGS_ASSERT(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0 && leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0) && (leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
-    CGS_ASSERT(lpRaceCarPhysics != nullptr, "lpRaceCarPhysics");
+    CGS_ASSERT(lpRaceCarPhysics != 0, "lpRaceCarPhysics");
 
     miCheckOwner           = static_cast<s8>(leOwner);   // +0x33
     mfTimeSinceCheckNotify = 0.0f;                        // +0x18
@@ -1291,7 +1291,7 @@ void PhysicalTrafficManager::ResolveArticulatedJoints()
 void PhysicalTrafficManager::AddArticulatedJointContacts(
     BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface)
 {
-    CGS_ASSERT(lpPotentialContactsInterface != nullptr,
+    CGS_ASSERT(lpPotentialContactsInterface != 0,
                "lpPotentialContactsInterface != NULL");                                     // :3986
 
     for (s32 liTraffic = mUsedTrafficVehicles.GetFirstNonZeroBit();

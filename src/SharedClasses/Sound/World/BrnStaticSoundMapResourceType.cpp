@@ -67,14 +67,14 @@ void StaticSoundMapResourceType::FixUp(void* lpResource, const rw::Resource& lrR
 {
     // Porter-contract pins (world_type_transcode.py transcode_staticsoundmap): the host
     // layout below is the platform-4 serialised header form.
-    static_assert(offsetof(StaticSoundMap, mMin)             == 0x00, "StaticSoundMap::mMin @ +0");
-    static_assert(offsetof(StaticSoundMap, mMax)             == 0x10, "StaticSoundMap::mMax @ +0x10");
-    static_assert(offsetof(StaticSoundMap, mfSubRegionSize)  == 0x20, "StaticSoundMap::mfSubRegionSize @ +0x20");
-    static_assert(offsetof(StaticSoundMap, mpSubRegions)     == 0x28, "StaticSoundMap::mpSubRegions @ +0x28");
-    static_assert(offsetof(StaticSoundMap, miNumSubRegionsX) == 0x30, "StaticSoundMap::miNumSubRegionsX @ +0x30");
-    static_assert(offsetof(StaticSoundMap, mpEntities)       == 0x38, "StaticSoundMap::mpEntities @ +0x38");
-    static_assert(offsetof(StaticSoundMap, miNumEntities)    == 0x40, "StaticSoundMap::miNumEntities @ +0x40");
-    static_assert(sizeof(StaticSoundMap) == 0x50, "StaticSoundMap header 0x50 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMin)             == 0x00), "StaticSoundMap::mMin @ +0");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMax)             == 0x10), "StaticSoundMap::mMax @ +0x10");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mfSubRegionSize)  == 0x20), "StaticSoundMap::mfSubRegionSize @ +0x20");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpSubRegions)     == 0x28), "StaticSoundMap::mpSubRegions @ +0x28");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumSubRegionsX) == 0x30), "StaticSoundMap::miNumSubRegionsX @ +0x30");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpEntities)       == 0x38), "StaticSoundMap::mpEntities @ +0x38");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumEntities)    == 0x40), "StaticSoundMap::miNumEntities @ +0x40");
+    CGS_STATIC_ASSERT((sizeof(StaticSoundMap) == 0x50), "StaticSoundMap header 0x50 (porter contract)");
 
     StaticSoundMap* lpMap = static_cast<StaticSoundMap*>(lpResource);
 
@@ -91,7 +91,7 @@ void StaticSoundMapResourceType::FixUp(void* lpResource, const rw::Resource& lrR
     // no-op; reconstructed faithfully.
     for (s32 liEntityIndex = 0; liEntityIndex < lpMap->miNumEntities; ++liEntityIndex)
     {
-        CGS_ASSERT(lpMap->mpEntities != nullptr, "mpEntities");
+        CGS_ASSERT(lpMap->mpEntities != 0, "mpEntities");
         CGS_ASSERT(liEntityIndex < lpMap->miNumEntities, "liEntityIndex < miNumEntities");
     }
 }

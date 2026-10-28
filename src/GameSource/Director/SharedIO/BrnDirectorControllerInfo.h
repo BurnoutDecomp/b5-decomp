@@ -28,10 +28,10 @@ struct ControllerInfo
     bool IsLookbackHeld() const { return mbLookback; }
     bool IsGameTalkRefreshRequested() const { return mbGameTalkRefreshRequest; }
 };
-static_assert(offsetof(ControllerInfo, mCarModifier) == 16, "controller car vector");
-static_assert(offsetof(ControllerInfo, mCameraModifier) == 32, "controller camera vector");
-static_assert(sizeof(ControllerInfo) == 224, "controller snapshot");
-using ControlInput = ControllerInfo;
+CGS_STATIC_ASSERT((offsetof(ControllerInfo, mCarModifier) == 16), "controller car vector");
+CGS_STATIC_ASSERT((offsetof(ControllerInfo, mCameraModifier) == 32), "controller camera vector");
+CGS_STATIC_ASSERT((sizeof(ControllerInfo) == 224), "controller snapshot");
+typedef ControllerInfo ControlInput;
 }
-using ControllerInfo = DirectorIO::ControllerInfo;
+typedef DirectorIO::ControllerInfo ControllerInfo;
 }

@@ -15,7 +15,7 @@ namespace Gen
     class iceanim : private Instance
     {
     public:
-        explicit iceanim(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit iceanim(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The 64-bit class-key tag identifying an iceanim runtime object. Checked by
         // BrnDirector::SimpleIceTakedownPlayer::SetIceAnim against a passed object's

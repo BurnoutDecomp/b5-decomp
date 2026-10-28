@@ -30,7 +30,7 @@ struct SMassiveImpression
     unsigned char mbAudible;      // +0x18
     float         mfDistance;     // +0x1C
 };
-static_assert(sizeof(SMassiveImpression) == 32, "the impression record is 32 bytes");
+CGS_STATIC_ASSERT((sizeof(SMassiveImpression) == 32), "the impression record is 32 bytes");
 
 class CMassiveAdObject : public CMassiveBaseObject
 {

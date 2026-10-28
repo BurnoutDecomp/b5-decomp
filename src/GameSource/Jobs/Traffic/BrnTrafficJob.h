@@ -27,7 +27,7 @@ namespace BrnTraffic {
 // DWARF Traffic.h:28. The snapshot of the job parameter block the worker reads. On the X360
 // it lives in a fixed 256-byte reserved slot (SetData is handed 0x100); the live UpdateVehicles
 // arm is 160 bytes (== sizeof(UpdateVehiclesJobParams)).
-struct alignas(128) TrafficJobData
+struct CGS_ALIGN(128) TrafficJobData
 {
     JobParams mParams;    // Traffic.h:31
 };
@@ -63,7 +63,7 @@ void TrafficJobEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs
 struct TrafficJobStub
 {
 public:
-    TrafficJobStub() : mbRunningJob(false), mJob(nullptr) {}
+    TrafficJobStub() : mbRunningJob(false), mJob(0) {}
     void Construct();                                       // h:55
     void Destruct();                                        // h:59
     // @0x82752CB0 -- wire the embedded job at TrafficJobEntry over a snapshot of lpParams and

@@ -43,7 +43,7 @@ struct AptAction_TryCatchFinallyBlock
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptAction_TryCatchFinallyBlock, mpszCaughtVarName) == 0x10, "B4 szCaughtVarName; the widened pointer puts the body at +0x18");
+        CGS_STATIC_ASSERT((offsetof(AptAction_TryCatchFinallyBlock, mpszCaughtVarName) == 0x10), "B4 szCaughtVarName; the widened pointer puts the body at +0x18");
     }
 
     // The try block starts immediately after the (x64) 0x18-byte header.

@@ -35,7 +35,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* TrafficState::GetStaticT
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
         0x30000,
         "TrafficState",
-        nullptr,
+        0,
         &TrafficState::CreateObject );
     return &sTypeInfo;
 }

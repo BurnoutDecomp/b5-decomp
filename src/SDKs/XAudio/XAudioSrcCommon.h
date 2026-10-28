@@ -96,21 +96,21 @@ struct XAUDIOSRCHDR
 // ---------------------------------------------------------------------------
 inline void _AssertLayout()
 {
-    static_assert(offsetof(XAUDIOSRCHDR, mpSource) == 0,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, mpSource) == 0),
                   "XAUDIOSRCHDR: source base must lead the header");
-    static_assert(offsetof(XAUDIOSRCHDR, miSourcePos) - offsetof(XAUDIOSRCHDR, miSourceFrames) == 4,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, miSourcePos) - offsetof(XAUDIOSRCHDR, miSourceFrames) == 4),
                   "XAUDIOSRCHDR: source frame-count/cursor spacing");
-    static_assert(offsetof(XAUDIOSRCHDR, muChannels) - offsetof(XAUDIOSRCHDR, miSourcePos) == 5,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, muChannels) - offsetof(XAUDIOSRCHDR, miSourcePos) == 5),
                   "XAUDIOSRCHDR: channel-count sits 5 bytes past the source cursor (+0x0D)");
-    static_assert(offsetof(XAUDIOSRCHDR, miDestPos) - offsetof(XAUDIOSRCHDR, miDestFrames) == 4,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, miDestPos) - offsetof(XAUDIOSRCHDR, miDestFrames) == 4),
                   "XAUDIOSRCHDR: dest frame-count/cursor spacing");
-    static_assert(offsetof(XAUDIOSRCHDR, mfVolCurrent) - offsetof(XAUDIOSRCHDR, miDestPos) == 8,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, mfVolCurrent) - offsetof(XAUDIOSRCHDR, miDestPos) == 8),
                   "XAUDIOSRCHDR: volume block sits 8 bytes past the dest cursor");
-    static_assert(offsetof(XAUDIOSRCHDR, mfVolTarget) - offsetof(XAUDIOSRCHDR, mfVolCurrent) == 4,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, mfVolTarget) - offsetof(XAUDIOSRCHDR, mfVolCurrent) == 4),
                   "XAUDIOSRCHDR: current/target volume are adjacent f32s");
-    static_assert(offsetof(XAUDIOSRCHDR, mScratch) - offsetof(XAUDIOSRCHDR, mfVolTarget) == 12,
+    CGS_STATIC_ASSERT((offsetof(XAUDIOSRCHDR, mScratch) - offsetof(XAUDIOSRCHDR, mfVolTarget) == 12),
                   "XAUDIOSRCHDR: history scratch begins 12 bytes past the target volume (+0x34)");
-    static_assert(sizeof(SrcHistorySample) == 4, "history slot is a 4-byte punned union");
+    CGS_STATIC_ASSERT((sizeof(SrcHistorySample) == 4), "history slot is a 4-byte punned union");
 }
 
 } // namespace SRC

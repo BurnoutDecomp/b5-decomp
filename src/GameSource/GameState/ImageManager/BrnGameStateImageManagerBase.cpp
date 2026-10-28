@@ -98,28 +98,28 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         u8  mbIsDeletePreview; // +0x2D (1 in delete preview, 0 otherwise)
         u8  maPad[0x30 - 0x2E];
     };
-    static_assert(offsetof(ImageInfoEvent, mu64WorldRegionRaw) == 0x0C, "world region@0x0C");
-    static_assert(offsetof(ImageInfoEvent, miImageWord2C) == 0x14, "word2C@0x14");
-    static_assert(offsetof(ImageInfoEvent, miSlotIndex)   == 0x18, "slot@0x18");
-    static_assert(offsetof(ImageInfoEvent, mUniquePlayerID) == 0x1C, "uniqueId@0x1C");
-    static_assert(offsetof(ImageInfoEvent, mu8LockedFlag) == 0x2C, "locked@0x2C");
-    static_assert(sizeof(ImageInfoEvent) == 0x30, "ImageInfoEvent==48");
-    static_assert(sizeof(ImageInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction),
+    CGS_STATIC_ASSERT((offsetof(ImageInfoEvent, mu64WorldRegionRaw) == 0x0C), "world region@0x0C");
+    CGS_STATIC_ASSERT((offsetof(ImageInfoEvent, miImageWord2C) == 0x14), "word2C@0x14");
+    CGS_STATIC_ASSERT((offsetof(ImageInfoEvent, miSlotIndex)   == 0x18), "slot@0x18");
+    CGS_STATIC_ASSERT((offsetof(ImageInfoEvent, mUniquePlayerID) == 0x1C), "uniqueId@0x1C");
+    CGS_STATIC_ASSERT((offsetof(ImageInfoEvent, mu8LockedFlag) == 0x2C), "locked@0x2C");
+    CGS_STATIC_ASSERT((sizeof(ImageInfoEvent) == 0x30), "ImageInfoEvent==48");
+    CGS_STATIC_ASSERT((sizeof(ImageInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction)),
                   "producer image-info bytes match the typed action record");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mCaptureDate) ==
-                  offsetof(ImageInfoEvent, miImageWord0), "producer date words match action +0x00");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mWorldRegion) ==
-                  offsetof(ImageInfoEvent, mu64WorldRegionRaw), "producer region bytes match action +0x0C");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miNumCaptures) ==
-                  offsetof(ImageInfoEvent, miImageWord2C), "producer capture count matches action +0x14");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miSlotIndex) ==
-                  offsetof(ImageInfoEvent, miSlotIndex), "producer slot matches action +0x18");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mPlayerName) ==
-                  offsetof(ImageInfoEvent, mUniquePlayerID), "producer player id matches action +0x1C");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbLocked) ==
-                  offsetof(ImageInfoEvent, mu8LockedFlag), "producer lock byte matches action +0x2C");
-    static_assert(offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbHasDeleted) ==
-                  offsetof(ImageInfoEvent, mbIsDeletePreview), "producer delete byte matches action +0x2D");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mCaptureDate) ==
+                  offsetof(ImageInfoEvent, miImageWord0)), "producer date words match action +0x00");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mWorldRegion) ==
+                  offsetof(ImageInfoEvent, mu64WorldRegionRaw)), "producer region bytes match action +0x0C");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miNumCaptures) ==
+                  offsetof(ImageInfoEvent, miImageWord2C)), "producer capture count matches action +0x14");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, miSlotIndex) ==
+                  offsetof(ImageInfoEvent, miSlotIndex)), "producer slot matches action +0x18");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mPlayerName) ==
+                  offsetof(ImageInfoEvent, mUniquePlayerID)), "producer player id matches action +0x1C");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbLocked) ==
+                  offsetof(ImageInfoEvent, mu8LockedFlag)), "producer lock byte matches action +0x2C");
+    CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::ImageGalleryImageInfoAction, mbHasDeleted) ==
+                  offsetof(ImageInfoEvent, mbIsDeletePreview)), "producer delete byte matches action +0x2D");
 
     // type 290 (48 bytes): an EMPTY gallery slot record (no mugshot present). Field offsets are the
     // X360 stack-store map of the empty branch of ProcessScrollImagesEvent (0x82384E7C..0x82384EA8,
@@ -142,13 +142,13 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         u8  maPad[0x30 - 0x2E];
     };
 #pragma pack(pop)
-    static_assert(offsetof(EmptySlotInfoEvent, meCounty)   == 0x0C, "county@0x0C");
-    static_assert(offsetof(EmptySlotInfoEvent, meDistrict) == 0x10, "district@0x10");
-    static_assert(offsetof(EmptySlotInfoEvent, miSlotIndex) == 0x18, "slot@0x18");
-    static_assert(offsetof(EmptySlotInfoEvent, mu8FlagB)   == 0x2C, "flagB@0x2C");
-    static_assert(offsetof(EmptySlotInfoEvent, mu8FlagC)   == 0x2D, "flagC@0x2D");
-    static_assert(sizeof(EmptySlotInfoEvent) == 0x30, "EmptySlotInfoEvent==48");
-    static_assert(sizeof(EmptySlotInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction),
+    CGS_STATIC_ASSERT((offsetof(EmptySlotInfoEvent, meCounty)   == 0x0C), "county@0x0C");
+    CGS_STATIC_ASSERT((offsetof(EmptySlotInfoEvent, meDistrict) == 0x10), "district@0x10");
+    CGS_STATIC_ASSERT((offsetof(EmptySlotInfoEvent, miSlotIndex) == 0x18), "slot@0x18");
+    CGS_STATIC_ASSERT((offsetof(EmptySlotInfoEvent, mu8FlagB)   == 0x2C), "flagB@0x2C");
+    CGS_STATIC_ASSERT((offsetof(EmptySlotInfoEvent, mu8FlagC)   == 0x2D), "flagC@0x2D");
+    CGS_STATIC_ASSERT((sizeof(EmptySlotInfoEvent) == 0x30), "EmptySlotInfoEvent==48");
+    CGS_STATIC_ASSERT((sizeof(EmptySlotInfoEvent) == sizeof(GameStateModuleIO::ImageGalleryImageInfoAction)),
                   "empty-slot record uses the same 48-byte action wire");
 
     // type 292 (16 bytes): the gallery's live-mugshot bitfield (rebuilt after a delete). Field offsets
@@ -161,10 +161,10 @@ const s32 KI_EVENT_IMAGE_INFO        = 290; // 48-byte gallery image-info record
         s32 miPad04;            // +0x04 (never written by the asm)
         u64 mu64LiveBits;       // +0x08 (one bit per live mugshot index; std r21 @var_D8)
     };
-    static_assert(sizeof(LoadCompleteEvent) == sizeof(GameStateModuleIO::ImageGalleryDataAction),
+    CGS_STATIC_ASSERT((sizeof(LoadCompleteEvent) == sizeof(GameStateModuleIO::ImageGalleryDataAction)),
                   "producer bit-set record matches typed action 292");
-    static_assert(offsetof(LoadCompleteEvent, mu64LiveBits) ==
-                  offsetof(GameStateModuleIO::ImageGalleryDataAction, mActiveBitArray),
+    CGS_STATIC_ASSERT((offsetof(LoadCompleteEvent, mu64LiveBits) ==
+                  offsetof(GameStateModuleIO::ImageGalleryDataAction, mActiveBitArray)),
                   "producer occupancy bits start at action +0x08");
 
     // Shared typed action294 payload: its X360 tail word remains unwritten and follows the
@@ -192,8 +192,8 @@ void GameStateImageManagerBase::PreWorldUpdate(::EActiveRaceCarIndex lePlayerRac
                                                const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
                                                GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpTakedownEventQueue != nullptr, "lpQueue");
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+    CGS_ASSERT(lpTakedownEventQueue != 0, "lpQueue");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
 
     UpdateTakedownEvents(lePlayerRaceCarIndex, lpTakedownEventQueue);
     UpdateNewImageRequests(lpOutput);
@@ -205,7 +205,7 @@ void GameStateImageManagerBase::PreWorldUpdate(::EActiveRaceCarIndex lePlayerRac
 // ---------------------------------------------------------------------------
 void GameStateImageManagerBase::HandleWorldRegionChangeEvent(const WorldRegionChangeEvent* lpWorldRegionChangeEvent)
 {
-    CGS_ASSERT(lpWorldRegionChangeEvent != nullptr, "lpWorldRegionChangeEvent");
+    CGS_ASSERT(lpWorldRegionChangeEvent != 0, "lpWorldRegionChangeEvent");
 
     // v3[39]=*a2 / v3[40]=a2[1] -> meCurrentWorldRegion {county@+0x9C, district@+0xA0}.
     meCurrentWorldRegion.Construct(lpWorldRegionChangeEvent->meDistrict);
@@ -216,7 +216,7 @@ void GameStateImageManagerBase::HandleWorldRegionChangeEvent(const WorldRegionCh
 // ---------------------------------------------------------------------------
 void GameStateImageManagerBase::HandleImageFilesSavedEvent(const ImageFilesSavedEvent* lpImageFilesSavedEvent)
 {
-    CGS_ASSERT(lpImageFilesSavedEvent != nullptr, "lpImageFilesSavedEvent");
+    CGS_ASSERT(lpImageFilesSavedEvent != 0, "lpImageFilesSavedEvent");
 
     for (s32 liSavedFileIndex = 0; liSavedFileIndex < lpImageFilesSavedEvent->miNumSavedFiles; ++liSavedFileIndex)
     {
@@ -266,19 +266,19 @@ void GameStateImageManagerBase::UpdateTakedownEvents(::EActiveRaceCarIndex lePla
 void GameStateImageManagerBase::HandleImageGalleryCountRequest(const ImageGalleryCountRequestEvent* lpImageGalleryCountReqEvent,
                                                                GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpImageGalleryCountReqEvent != nullptr, "lpImageGalleryCountReqEvent");
+    CGS_ASSERT(lpImageGalleryCountReqEvent != 0, "lpImageGalleryCountReqEvent");
     CGS_ASSERT(lpImageGalleryCountReqEvent->meImageGalleryImageType < GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT,
                "lpImageGalleryCountReqEvent->meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
 
     struct CountReply { s32 meImageGalleryType; s32 miCount; } lReply;
-    static_assert(sizeof(CountReply) == sizeof(GameStateModuleIO::ImageGalleryCountAction),
+    CGS_STATIC_ASSERT((sizeof(CountReply) == sizeof(GameStateModuleIO::ImageGalleryCountAction)),
                   "producer count reply matches typed action 291");
-    static_assert(offsetof(CountReply, meImageGalleryType) ==
-                  offsetof(GameStateModuleIO::ImageGalleryCountAction, meImageType),
+    CGS_STATIC_ASSERT((offsetof(CountReply, meImageGalleryType) ==
+                  offsetof(GameStateModuleIO::ImageGalleryCountAction, meImageType)),
                   "producer gallery type matches action +0x00");
-    static_assert(offsetof(CountReply, miCount) ==
-                  offsetof(GameStateModuleIO::ImageGalleryCountAction, miUsedCount),
+    CGS_STATIC_ASSERT((offsetof(CountReply, miCount) ==
+                  offsetof(GameStateModuleIO::ImageGalleryCountAction, miUsedCount)),
                   "producer gallery count matches action +0x04");
     lReply.meImageGalleryType = lpImageGalleryCountReqEvent->meImageGalleryImageType;
     lReply.miCount            = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryCountReqEvent->meImageGalleryImageType);
@@ -294,7 +294,7 @@ void GameStateImageManagerBase::HandleImageGalleryCountRequest(const ImageGaller
 void GameStateImageManagerBase::HandleImageGalleryDataRequest(const ImageGalleryDataRequestEvent* lpImageGalleryDataReqEvent,
                                                               GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpImageGalleryDataReqEvent != nullptr, "lpImageGalleryDataReqEvent");
+    CGS_ASSERT(lpImageGalleryDataReqEvent != 0, "lpImageGalleryDataReqEvent");
     CGS_ASSERT(lpImageGalleryDataReqEvent->meImageGalleryImageType < GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT,
                "lpImageGalleryDataReqEvent->meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
 
@@ -303,7 +303,7 @@ void GameStateImageManagerBase::HandleImageGalleryDataRequest(const ImageGallery
     lImageData.miPad04            = 0;
     lImageData.mu64LiveBits       = 0;
 
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
     const s32 liNumMugshots = mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryDataReqEvent->meImageGalleryImageType);
     for (s32 liMugshotIndex = 0; liMugshotIndex < liNumMugshots; ++liMugshotIndex)
     {
@@ -326,11 +326,11 @@ void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBu
         CgsNetwork::NetworkTexture* mpTexture;     // +0x00 (null when the slot is not rendered)
         s32                         miSlotIndex;   // +0x04
     };
-    static_assert(sizeof(ImageToRenderEvent) ==
-                  sizeof(GameStateModuleIO::ImageGalleryRenderImageAction),
+    CGS_STATIC_ASSERT((sizeof(ImageToRenderEvent) ==
+                  sizeof(GameStateModuleIO::ImageGalleryRenderImageAction)),
                   "producer render record matches typed action 289");
-    static_assert(offsetof(ImageToRenderEvent, miSlotIndex) ==
-                  offsetof(GameStateModuleIO::ImageGalleryRenderImageAction, miTextureIndex),
+    CGS_STATIC_ASSERT((offsetof(ImageToRenderEvent, miSlotIndex) ==
+                  offsetof(GameStateModuleIO::ImageGalleryRenderImageAction, miTextureIndex)),
                   "render slot follows the native-width texture pointer");
 
     for (s32 liSlotIndex = 0; liSlotIndex < KI_NUM_PICTURES; ++liSlotIndex)
@@ -338,7 +338,7 @@ void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBu
         ImageToRenderEvent lImageToRender;
         lImageToRender.mpTexture   = mImagesToRenderBitArray.IsBitSet(static_cast<u32>(liSlotIndex))
                                          ? &maImageGalleryMugshots[liSlotIndex]
-                                         : nullptr;
+                                         : 0;
         lImageToRender.miSlotIndex = liSlotIndex;
 
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
@@ -353,9 +353,9 @@ void GameStateImageManagerBase::UpdateImagesToRender(GameStateModuleIO::OutputBu
 void GameStateImageManagerBase::HandleImageFilesLoadedEvent(const ImageFilesLoadedEvent* lpImageFilesLoadedEvent,
                                                             GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
-    CGS_ASSERT(lpImageFilesLoadedEvent != nullptr, "lpImageFilesLoadedEvent");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpImageFilesLoadedEvent != 0, "lpImageFilesLoadedEvent");
 
     // If the load request was already cancelled (the request list was emptied), just clear the flag.
     if (maImageLoadRequests.GetLength() != 0)
@@ -372,7 +372,7 @@ void GameStateImageManagerBase::HandleImageFilesLoadedEvent(const ImageFilesLoad
             const s32 liDestSlot = maLoadedImagesToSlotMapping[liSlotIndex];
 
             CGS_ASSERT(lrFileInfo.miSize > 0, "lpImageFileInfo->miSize > 0");
-            CGS_ASSERT(lrFileInfo.mpBuffer != nullptr, "lpImageFileInfo->mpBuffer != NULL");
+            CGS_ASSERT(lrFileInfo.mpBuffer != 0, "lpImageFileInfo->mpBuffer != NULL");
 
             CgsNetwork::NetworkTexture& lDestTexture = maImageGalleryMugshots[liDestSlot];
             CGS_ASSERT(lDestTexture.GetTextureSize() == lrFileInfo.miSize,
@@ -406,9 +406,9 @@ void GameStateImageManagerBase::HandleImageSaveEvent(const ImageToSaveEvent* lpI
         return;
     }
 
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
-    CGS_ASSERT(lpImageSaveEvent != nullptr, "lpImageSaveEvent");
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
+    CGS_ASSERT(lpImageSaveEvent != 0, "lpImageSaveEvent");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
 
     const GameStateModuleIO::EImageGalleryType leImageGalleryType =
         KAE_IMAGE_TYPE_TO_GALLERY_TYPE_MAPPING[lpImageSaveEvent->meImageType];
@@ -450,7 +450,7 @@ void GameStateImageManagerBase::HandleImageSaveEvent(const ImageToSaveEvent* lpI
 
         if (liNewMugshotIndex >= 0)
         {
-            CGS_ASSERT(lpImageSaveEvent->mpTexture != nullptr, "lpImageSaveEvent->mpTexture");
+            CGS_ASSERT(lpImageSaveEvent->mpTexture != 0, "lpImageSaveEvent->mpTexture");
             RequestImageSave(liNewMugshotIndex, lpImageSaveEvent->mpTexture, lpOutput);
         }
     }
@@ -462,8 +462,8 @@ void GameStateImageManagerBase::HandleImageSaveEvent(const ImageToSaveEvent* lpI
 void GameStateImageManagerBase::RequestImageSave(s32 liFileID, CgsNetwork::NetworkTexture* lpTexture,
                                                  GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpTexture != nullptr, "lpTexture");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpTexture != 0, "lpTexture");
     CGS_ASSERT(miMugshotToSaveIndex < KI_NUM_PICTURES, "miMugshotToSaveIndex < KI_IMAGE_GALLERY_NUM_PICTURES");
 
     CgsNetwork::NetworkTexture& lSaveSlot = maImageGalleryMugshots[miMugshotToSaveIndex];
@@ -474,7 +474,7 @@ void GameStateImageManagerBase::RequestImageSave(s32 liFileID, CgsNetwork::Netwo
     std::memcpy(lSaveSlot.GetTexture(), lpTexture->GetTexture(),
            static_cast<size_t>(lSaveSlot.GetTextureSize()));
 
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
 
     GameStateModuleIO::ImageSaveRequestAction lSaveRequest;
     lSaveRequest.miFileID        = liFileID;
@@ -497,7 +497,7 @@ void GameStateImageManagerBase::RequestImageSave(s32 liFileID, CgsNetwork::Netwo
 void GameStateImageManagerBase::HandleImageGalleryRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                                           GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpImageGalleryReqEvent != nullptr, "lpImageGalleryReqEvent");
+    CGS_ASSERT(lpImageGalleryReqEvent != 0, "lpImageGalleryReqEvent");
 
     switch (lpImageGalleryReqEvent->meImageGalleryRequest)
     {
@@ -519,13 +519,13 @@ void GameStateImageManagerBase::HandleImageGalleryRequest(const ImageGalleryRequ
             break;
         case GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_EXPORT:
         {
-            CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+            CGS_ASSERT(mpProgression != 0, "mpProgression");
             if (lpImageGalleryReqEvent->miImageIndex
                 >= mpProgression->GetProfile()->GetNumMugshots(lpImageGalleryReqEvent->meImageGalleryImageType))
             {
                 // Out of range -> reply with an empty-slot marker rather than exporting.
-                CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-                CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+                CGS_ASSERT(lpOutput != 0, "lpOutput");
+                CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
                 char lEmptyMarker = 0;
                 AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
@@ -573,24 +573,24 @@ void GameStateImageManagerBase::ProcessNewImageRequest(const ImageGalleryRequest
 void GameStateImageManagerBase::ProcessShowGamerCardRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                                             GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpImageGalleryReqEvent != nullptr, "lpImageGalleryReqEvent");
+    CGS_ASSERT(lpImageGalleryReqEvent != 0, "lpImageGalleryReqEvent");
     CGS_ASSERT(lpImageGalleryReqEvent->meImageGalleryRequest == GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_SHOW_GAMERCARD,
                "GsmIO::E_IMAGE_GALLERY_REQUEST_SHOW_GAMERCARD == lpImageGalleryReqEvent->meImageGalleryRequest");
     CGS_ASSERT(lpImageGalleryReqEvent->miSlotIndex < KI_NUM_PICTURES,
                "lpImageGalleryReqEvent->miSlotIndex < KI_IMAGE_GALLERY_NUM_PICTURES");
     CGS_ASSERT(lpImageGalleryReqEvent->miSlotIndex >= 0, "lpImageGalleryReqEvent->miSlotIndex >= 0");
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
 
     BrnProgression::MugshotInfo* lpMugshotInfo = mpProgression->GetProfile()->GetMugshotInfo(
         lpImageGalleryReqEvent->meImageGalleryImageType, lpImageGalleryReqEvent->miImageIndex);
-    if (lpMugshotInfo != nullptr)
+    if (lpMugshotInfo != 0)
     {
         // The X360 posts the 8-byte qword at MugshotInfo +0x10 (ld r11,0x10(r3); std @var_30), the
         // gamercard XUID -- NOT the unique-player-id at +0x00.
         u64 lu64GamerCardXuid = lpMugshotInfo->GetGamerCardXuid();
 
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lu64GamerCardXuid), KI_EVENT_SHOW_GAMERCARD, 8);
     }
@@ -602,16 +602,16 @@ void GameStateImageManagerBase::ProcessShowGamerCardRequest(const ImageGalleryRe
 void GameStateImageManagerBase::ProcessAskDeleteRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                                         GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpImageGalleryReqEvent != nullptr, "lpImageGalleryReqEvent");
+    CGS_ASSERT(lpImageGalleryReqEvent != 0, "lpImageGalleryReqEvent");
     CGS_ASSERT(lpImageGalleryReqEvent->meImageGalleryRequest == GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_ASK_DELETE,
                "GsmIO::E_IMAGE_GALLERY_REQUEST_ASK_DELETE == lpImageGalleryReqEvent->meImageGalleryRequest");
     CGS_ASSERT(lpImageGalleryReqEvent->miSlotIndex < KI_NUM_PICTURES,
                "lpImageGalleryReqEvent->miSlotIndex < KI_IMAGE_GALLERY_NUM_PICTURES");
     CGS_ASSERT(lpImageGalleryReqEvent->miSlotIndex >= 0, "lpImageGalleryReqEvent->miSlotIndex >= 0");
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
 
     if (mpProgression->GetProfile()->GetMugshotInfo(lpImageGalleryReqEvent->meImageGalleryImageType,
-                                                    lpImageGalleryReqEvent->miImageIndex) != nullptr)
+                                                    lpImageGalleryReqEvent->miImageIndex) != 0)
     {
         CgsID lLineUpDeleteId = CgsIDCompress("LineUpDelete");
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
@@ -619,8 +619,8 @@ void GameStateImageManagerBase::ProcessAskDeleteRequest(const ImageGalleryReques
     }
     else
     {
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
         char lEmptyMarker[8] = { 0 };
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lEmptyMarker), KI_EVENT_EMPTY_SLOT, 1);
@@ -633,12 +633,12 @@ void GameStateImageManagerBase::ProcessAskDeleteRequest(const ImageGalleryReques
 void GameStateImageManagerBase::ProcessLockRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                                    GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
-    CGS_ASSERT(lpImageGalleryReqEvent != nullptr, "lpImageGalleryReqEvent");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpImageGalleryReqEvent != 0, "lpImageGalleryReqEvent");
     CGS_ASSERT(lpImageGalleryReqEvent->meImageGalleryRequest == GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_LOCK,
                "GsmIO::E_IMAGE_GALLERY_REQUEST_LOCK == lpImageGalleryReqEvent->meImageGalleryRequest");
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
     CGS_ASSERT(lpImageGalleryReqEvent->meImageGalleryImageType < GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT,
                "lpImageGalleryReqEvent->meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
 
@@ -678,7 +678,7 @@ namespace
                            BrnProgression::MugshotInfo* lpMugshotInfo, s32 liStartSlotIndex,
                            u8 lu8IsDeletePreview)
     {
-        if (lpMugshotInfo != nullptr)
+        if (lpMugshotInfo != 0)
         {
             ImageInfoEvent lImageInfo;
             lImageInfo.mUniquePlayerID  = lpMugshotInfo->GetUniquePlayerID();
@@ -719,14 +719,14 @@ namespace
 void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                                          GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
-    CGS_ASSERT(lpImageGalleryReqEvent != nullptr, "lpImageGalleryReqEvent");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpImageGalleryReqEvent != 0, "lpImageGalleryReqEvent");
     CGS_ASSERT(lpImageGalleryReqEvent->meImageGalleryRequest == GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_SCROLL_LEFT
                || lpImageGalleryReqEvent->meImageGalleryRequest == GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_SCROLL_RIGHT,
                "( GsmIO::E_IMAGE_GALLERY_REQUEST_SCROLL_LEFT == lpImageGalleryReqEvent->meImageGalleryRequest ) || "
                "( GsmIO::E_IMAGE_GALLERY_REQUEST_SCROLL_RIGHT == lpImageGalleryReqEvent->meImageGalleryRequest )");
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
     BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
@@ -788,12 +788,12 @@ void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryReque
                       : (liSlotIndex - liSlotOffset + 1);
     for (s32 liImageIndex = liFirstNewImage; liImageIndex < liLastNewImage; ++liImageIndex, ++liStartSlot)
     {
-        CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+        CGS_ASSERT(mpProgression != 0, "mpProgression");
         BrnProgression::MugshotInfo* lpMugshotInfo = lpProfile->GetMugshotInfo(leGalleryType, liImageIndex);
 
         CGS_ASSERT(liStartSlot < KI_NUM_PICTURES, "liStartSlotIndex < KI_IMAGE_GALLERY_NUM_PICTURES");
         PostSlotImageInfo(lpQueue, lpMugshotInfo, liStartSlot, 0);
-        if (lpMugshotInfo == nullptr && liStartSlot >= 0 && liStartSlot < KI_NUM_PICTURES)
+        if (lpMugshotInfo == 0 && liStartSlot >= 0 && liStartSlot < KI_NUM_PICTURES)
         {
             mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liStartSlot));
         }
@@ -804,7 +804,7 @@ void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryReque
 
     // Re-publish the slot the scroll re-centred on, if it still holds a picture.
     if (liNewCentreSlot >= 0
-        && lpProfile->GetMugshotInfo(leGalleryType, liNewCentreSlot) != nullptr)
+        && lpProfile->GetMugshotInfo(leGalleryType, liNewCentreSlot) != 0)
     {
         ImageLoadRequest lImageLoadRequest;
         lImageLoadRequest.miImageIndex            = liNewCentreSlot;
@@ -847,13 +847,13 @@ void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryReque
 void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEvent* lpImageGalleryReqEvent,
                                                      GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpImageGalleryReqEvent != nullptr, "lpImageGalleryReqEvent");
+    CGS_ASSERT(lpImageGalleryReqEvent != 0, "lpImageGalleryReqEvent");
     CGS_ASSERT(lpImageGalleryReqEvent->meImageGalleryRequest == GameStateModuleIO::E_IMAGE_GALLERY_REQUEST_DELETE,
                "GsmIO::E_IMAGE_GALLERY_REQUEST_DELETE == lpImageGalleryReqEvent->meImageGalleryRequest");
     CGS_ASSERT(lpImageGalleryReqEvent->miSlotIndex < KI_NUM_PICTURES,
                "lpImageGalleryReqEvent->miSlotIndex < KI_IMAGE_GALLERY_NUM_PICTURES");
     CGS_ASSERT(lpImageGalleryReqEvent->miSlotIndex >= 0, "lpImageGalleryReqEvent->miSlotIndex >= 0");
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
     BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
@@ -867,8 +867,8 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
         return;
     }
 
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
 
     const s32 liSlotIndex  = lpImageGalleryReqEvent->miSlotIndex;
     const s32 liFirstImage = lpImageGalleryReqEvent->miImageIndex;
@@ -884,7 +884,7 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     }
 
     // Rebuild + publish the gallery's live-mugshot bitfield.
-    CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, "mpProgression");
     const s32 liNumMugshots = lpProfile->GetNumMugshots(leGalleryType);
     LoadCompleteEvent lLoadComplete;
     lLoadComplete.meImageGalleryType = leGalleryType;
@@ -916,13 +916,13 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
 
     // Clear the now-trailing slot texture.
     CgsNetwork::NetworkTexture& lLastSlot = maImageGalleryMugshots[KI_NUM_PICTURES - 1];
-    CGS_ASSERT(lLastSlot.GetTexture() != nullptr, "mpcTexture");
+    CGS_ASSERT(lLastSlot.GetTexture() != 0, "mpcTexture");
     std::memset(lLastSlot.GetTexture(), 0, static_cast<size_t>(lLastSlot.GetTextureSize()));
 
     // If a freshly-uncovered image exists past the deletion, prepare it for render (type 295).
     const s32 liUncoverImageIndex = liFirstImage - liSlotIndex + (KI_NUM_PICTURES - 1);
     BrnProgression::MugshotInfo* lpUncoverInfo = lpProfile->GetMugshotInfo(leGalleryType, liUncoverImageIndex);
-    if (lpUncoverInfo != nullptr)
+    if (lpUncoverInfo != 0)
     {
         CgsGui::ImageFileInfo laPrepareRender[KI_NUM_PICTURES];
         for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
@@ -946,7 +946,7 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     }
 
     // Re-set the render bits of the slots that still hold an image (up to the deleted slot).
-    if (lpProfile->GetMugshotInfo(leGalleryType, liFirstImage) != nullptr)
+    if (lpProfile->GetMugshotInfo(leGalleryType, liFirstImage) != 0)
     {
         for (s32 liSetSlot = liSlotIndex; liSetSlot < KI_NUM_PICTURES - 1; ++liSetSlot)
         {
@@ -961,11 +961,11 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
 // ---------------------------------------------------------------------------
 void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
-    BrnProgression::Profile* lpProfile = (mpProgression != nullptr) ? mpProgression->GetProfile() : nullptr;
+    BrnProgression::Profile* lpProfile = (mpProgression != 0) ? mpProgression->GetProfile() : 0;
 
     // Local scratch list of slots whose textures need loading from disk. The X360 record is
     // CgsGui::ImageFileInfo[3] (48 bytes); native pointers widen each record to 24 bytes.
@@ -974,7 +974,7 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     {
         laPendingLoads[liIndex].miId     = -1;
         laPendingLoads[liIndex].miSize   = 0;
-        laPendingLoads[liIndex].mpBuffer = nullptr;
+        laPendingLoads[liIndex].mpBuffer = 0;
         // mbIsCorrupt and record padding remain unwritten, as in ARTIST's init loop.
     }
 
@@ -1000,13 +1000,13 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
 
         if (lrImageLoadRequest.miImageIndex >= 0)
         {
-            CGS_ASSERT(mpProgression != nullptr, "mpProgression");
+            CGS_ASSERT(mpProgression != 0, "mpProgression");
             CGS_ASSERT(lrImageLoadRequest.meImageGalleryImageType < GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT,
                        "lImageLoadRequest.meImageGalleryImageType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
 
             BrnProgression::MugshotInfo* lpMugshotInfo = lpProfile->GetMugshotInfo(
                 lrImageLoadRequest.meImageGalleryImageType, lrImageLoadRequest.miImageIndex);
-            if (lpMugshotInfo != nullptr)
+            if (lpMugshotInfo != 0)
             {
                 PostSlotImageInfo(lpQueue, lpMugshotInfo, liSlotIndex, 0);
                 ++liNumLoadsQueued;
@@ -1020,13 +1020,13 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
             }
             else
             {
-                PostSlotImageInfo(lpQueue, nullptr, liSlotIndex, 0);
+                PostSlotImageInfo(lpQueue, 0, liSlotIndex, 0);
                 ++liNumProcessed;
             }
         }
         else
         {
-            PostSlotImageInfo(lpQueue, nullptr, liSlotIndex, 0);
+            PostSlotImageInfo(lpQueue, 0, liSlotIndex, 0);
             ++liNumProcessed;
         }
     }

@@ -34,7 +34,7 @@
 //
 // X360-attested element stride (`slwi r9,r29,1; add r9,r29,r9; slwi r5,r9,2` == *3*4 == *12),
 // cross-confirmed by the sibling AddEvent @0x822AB7D0 (three 32-bit `stw` per element).
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::InEventSetCullingGroupPair) == 12,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::InEventSetCullingGroupPair) == 12),
               "InEventSetCullingGroupPair stride 12");
 
 template bool

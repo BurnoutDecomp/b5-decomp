@@ -1,7 +1,6 @@
 #include "types.hpp"
 
-namespace rw::math::vpu
-{
+namespace rw { namespace math { namespace vpu {
 class VecFloat
 {
 public:
@@ -19,4 +18,4 @@ VecFloat::VecFloat(const float* pfValue)
     mafLane[2] = lfValue;
     mafLane[3] = lfValue;
 }
-}
+} } }

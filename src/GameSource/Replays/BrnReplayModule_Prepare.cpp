@@ -41,7 +41,7 @@ namespace BrnReplays
             mpcHeaderStreamBuffer =
                 static_cast<char*>(mpLinearMalloc->Malloc(0x4000));
             mpSecondaryStreamBuffer = static_cast<MemBuffer*>(
-                BrnResource::GetDebugAllocator()->AllocateMemoryResource(0x80048, 16, nullptr));
+                BrnResource::GetDebugAllocator()->AllocateMemoryResource(0x80048, 16, 0));
             mpcHeaderBuffer =
                 static_cast<char*>(mpLinearMalloc->Malloc(0x20000));
         }

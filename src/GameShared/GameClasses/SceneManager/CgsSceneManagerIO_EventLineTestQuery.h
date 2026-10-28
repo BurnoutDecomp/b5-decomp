@@ -44,7 +44,7 @@ namespace SceneManagerIO
 
     // EventQueue<InEventLineTest, N> element. 16-byte aligned (carries two Vector3 lanes),
     // sizeof 0x40 (64).
-    struct alignas(16) InEventLineTest : public EventBaseLineTestQuery
+    struct CGS_ALIGN(16) InEventLineTest : public EventBaseLineTestQuery
     {
         Vector3      mLineStart;          // +0x00 (16B SIMD lane)
         Vector3      mLineEnd;            // +0x10 (16B SIMD lane)

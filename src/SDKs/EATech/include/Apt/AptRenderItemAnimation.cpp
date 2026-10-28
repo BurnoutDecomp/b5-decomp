@@ -25,7 +25,7 @@ AptRenderItem* AptRenderItemAnimation::Clone(int nCreatedOnTick, bool bCopyExten
 {
     void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemAnimation));
     if (!p)
-        return nullptr;
+        return 0;
     return new (p) AptRenderItemAnimation(this, nCreatedOnTick, bCopyExtended);
 }
 

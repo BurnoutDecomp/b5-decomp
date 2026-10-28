@@ -35,10 +35,10 @@ struct CarStereoEffect : public BrnSound::Logic::BrnEffectObject
     // @ 0x826E6298 -- RTTI factory hook.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
 
-    bool Attach() override;
-    void UpdateParams(f32 afTimeStep) override;
-    void ProcessUpdate() override;
-    bool Detach() override;
+    bool Attach() ;
+    void UpdateParams(f32 afTimeStep) ;
+    void ProcessUpdate() ;
+    bool Detach() ;
 
 private:
     // True while the player is in free roam (no current game mode).

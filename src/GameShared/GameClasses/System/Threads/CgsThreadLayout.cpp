@@ -112,7 +112,7 @@ namespace CgsSystem
         mpThreadClass->OnCompletionOfVsyncWait();
         if (miPerfMonResource >= 0)
             CgsDev::PerfMonCpu::StartMonitor(miPerfMonResource);
-        mpThreadClass->ResourceUpdateThread(nullptr);
+        mpThreadClass->ResourceUpdateThread(0);
         if (miPerfMonResource >= 0)
             CgsDev::PerfMonCpu::StopMonitor(miPerfMonResource);
         mpThreadClass->OnEndOfUpdateFrame();

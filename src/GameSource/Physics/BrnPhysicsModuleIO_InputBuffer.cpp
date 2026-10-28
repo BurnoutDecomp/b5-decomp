@@ -44,27 +44,27 @@ namespace PhysicsModuleIO
         // The pre-drift seats stay absolute pins; the post-drift seats are pinned RELATIVE
         // (console offset + KU_DRIFT), which still fails on any wrong pad run -- the gate keeps
         // its teeth.
-        static_assert(offsetof(InputBuffer, mCameraInput)                  == 16,     "mCameraInput @16");
-        static_assert(offsetof(InputBuffer, mVehicleInputInterface)       == 368,    "mVehicleInputInterface @368");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mCameraInput)                  == 16),     "mCameraInput @16");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mVehicleInputInterface)       == 368),    "mVehicleInputInterface @368");
         {
             constexpr size_t KU_DRIFT =
                 (368 + sizeof(VehicleInputInterfaceStorage)) - 142544;   // host growth of the vehicle-input span
-            static_assert(sizeof(VehicleInputInterfaceStorage) >= 142176,
+            CGS_STATIC_ASSERT((sizeof(VehicleInputInterfaceStorage) >= 142176),
                           "vehicle-input span smaller than the console span -- retype regressed");
-            static_assert(offsetof(InputBuffer, mVehicleDriverInterface)       == 142544 + KU_DRIFT, "mVehicleDriverInterface @142544+D");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mVehicleDriverInterface)       == 142544 + KU_DRIFT), "mVehicleDriverInterface @142544+D");
             // mVehicleDriverInterface is the REAL
             // Vehicle::VehicleDriverInputInterface now. Unlike the vehicle-input span it does NOT
             // grow on the host -- every member is pointer-free -- so it must land EXACTLY on the
             // console span or the members below it would need a second drift constant. Pin it.
-            static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT), "mVehicleEffectsInputInterface @147840+D");
             // mVehicleEffectsInputInterface is the REAL
             // Vehicle::VehicleEffectsInputInterface now (it was a 1-byte span the pre-physics
             // bridge Appends up to 1792 bytes into -- see the header). Like the driver interface
             // and unlike the vehicle-input span it does NOT grow on the host, so it must land
             // EXACTLY on the console span or every member below would need another drift. Pin it.
-            static_assert(sizeof(VehicleEffectsInputInterfaceStorage) == 149632 - 147840,
+            CGS_STATIC_ASSERT((sizeof(VehicleEffectsInputInterfaceStorage) == 149632 - 147840),
                           "vehicle-effects span must equal the console 1792 (both queue headers are 16 on both targets)");
-            static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT), "mRCEntityOutputInterface @149632+D");
             // mRCEntityOutputInterface is the REAL
             // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface now, and like
             // the vehicle-input and prop-input spans it GROWS on the host (its eight
@@ -80,13 +80,13 @@ namespace PhysicsModuleIO
             // maRaceCarStates[player].mEntityId) are only reachable by NAME once the seat is typed.
             constexpr size_t KU_RCENTITY_DRIFT =
                 sizeof(RCEntityOutputInterfaceStorage) - (160112 - 149632);  // host growth of the RCEntity span
-            static_assert(sizeof(RCEntityOutputInterfaceStorage) >= 160112 - 149632,
+            CGS_STATIC_ASSERT((sizeof(RCEntityOutputInterfaceStorage) >= 160112 - 149632),
                           "RCEntity span smaller than the console span -- retype regressed");
-            static_assert(offsetof(InputBuffer, mPotentialContactQueue)        == 160208 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPotentialContactQueue @160208+D+RD (0x8259FB40)");
-            static_assert(offsetof(InputBuffer, mOverlapPairsQueue)            == 324064 + KU_DRIFT + KU_RCENTITY_DRIFT, "mOverlapPairsQueue @324064+D+RD (0x8259FBE8)");
-            static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT + KU_RCENTITY_DRIFT, "mTimerInterface @327152+D+RD");
-            static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT + KU_RCENTITY_DRIFT, "mSolverMaxIterations @327200+D+RD");
-            static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPropManagerInputInterface @327216+D+RD");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mPotentialContactQueue)        == 160208 + KU_DRIFT + KU_RCENTITY_DRIFT), "mPotentialContactQueue @160208+D+RD (0x8259FB40)");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mOverlapPairsQueue)            == 324064 + KU_DRIFT + KU_RCENTITY_DRIFT), "mOverlapPairsQueue @324064+D+RD (0x8259FBE8)");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT + KU_RCENTITY_DRIFT), "mTimerInterface @327152+D+RD");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT + KU_RCENTITY_DRIFT), "mSolverMaxIterations @327200+D+RD");
+            CGS_STATIC_ASSERT((offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT + KU_RCENTITY_DRIFT), "mPropManagerInputInterface @327216+D+RD");
             // mPropManagerInputInterface is the REAL
             // Props::PropInputInterface now, and -- unlike the driver interface -- it DOES grow
             // on the host (four embedded event queues with an 8-byte mpEvents, plus a
@@ -95,16 +95,16 @@ namespace PhysicsModuleIO
             {
                 constexpr size_t KU_PROP_DRIFT =
                     sizeof(PropInputInterfaceStorage) - (338496 - 327216);  // host growth of the prop-input span
-                static_assert(sizeof(PropInputInterfaceStorage) >= 338496 - 327216,
+                CGS_STATIC_ASSERT((sizeof(PropInputInterfaceStorage) >= 338496 - 327216),
                               "prop-input span smaller than the console span -- retype regressed");
-                static_assert(offsetof(InputBuffer, mGameActionQueue)
-                                  == 338496 + KU_DRIFT + KU_RCENTITY_DRIFT + KU_PROP_DRIFT,
+                CGS_STATIC_ASSERT((offsetof(InputBuffer, mGameActionQueue)
+                                  == 338496 + KU_DRIFT + KU_RCENTITY_DRIFT + KU_PROP_DRIFT),
                               "mGameActionQueue @338496+D+RD+PD");
             }
         }
         // The game-action queue member must be the real 13328-byte queue, not a stand-in: it is
         // the LAST member and WorldModule::BridgeActionsToPhysicsModule AddEvents into it.
-        static_assert(sizeof(InputBuffer::GameActionQueueStorage) == 13328,
+        CGS_STATIC_ASSERT((sizeof(InputBuffer::GameActionQueueStorage) == 13328),
                       "PhysicsModuleIO::InputBuffer::mGameActionQueue must be VariableEventQueue<13312,16> (13328 bytes)");
     }
 

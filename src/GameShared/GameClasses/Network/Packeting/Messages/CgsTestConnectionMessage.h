@@ -41,15 +41,15 @@ namespace CgsNetwork
         void               Update();
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DE358 -- inline header-homed accessor.
-        const char* GetName() const override { return "Test Connection Message"; }
+        const char* GetName() const  { return "Test Connection Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(TestConnectionMessage) == 0x28, "sizeof(TestConnectionMessage) == 0x28");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(TestConnectionMessage) == 0x28), "sizeof(TestConnectionMessage) == 0x28");
 
 } // namespace CgsNetwork

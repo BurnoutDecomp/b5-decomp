@@ -16,7 +16,7 @@ namespace CgsResource
     {
         BaseDefragPoolModuleState::Construct(lpPoolModule);
         meState = E_STATE_IDLE;
-        mpScratchPool = nullptr;
+        mpScratchPool = 0;
     }
 
     // -------- Begin --------

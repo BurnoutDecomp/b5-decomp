@@ -47,8 +47,8 @@ extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
 //   off_82F8C228 -- the registered run-time descriptor record (its +0x00 label is the
 //                   string "AiffWriter").
 // -------------------------------------------------------------------------------------
-static void *const KAIFF_WriterVTable = nullptr; // off_8217F308
-static void *const KAIFF_BaseVTable   = nullptr; // off_820AA810
+static void *const KAIFF_WriterVTable = 0; // off_8217F308
+static void *const KAIFF_BaseVTable   = 0; // off_820AA810
 // off_82F8C228 -- the "AiffWriter" runtime descriptor, REAL (descriptor-record wave
 // 2026-08-28; XEX record recovery + field proof: progress/scratch_dossiers/
 // plugindesc_layout_codex.md). Host callbacks; the four metadata pointers are
@@ -167,14 +167,14 @@ int AiffWriter::CreateInstance(AiffWriter *self)
     // Buffer size = muBufferChannels * 512 bytes (rotlwi r4, r10, 9 == <<9).
     const u32 uBufferBytes = static_cast<u32>(self->muBufferChannels) << 9;
 
-    self->mpFile        = nullptr; // stw 0 -> +0x3C
+    self->mpFile        = 0; // stw 0 -> +0x3C
     self->mbDataWritten = 0;       // stb 0 -> +0x4C
     self->mbTimerCreated = 0;      // stb 0 -> +0x4D
 
     void *buf = System::Alloc(self->mpSystem, uBufferBytes,
                               "rw::audio::core::AiffWriter::mpBuf", 16, 0);
     self->mpBuf = buf; // +0x40
-    return buf != nullptr;
+    return buf != 0;
 }
 
 // -------------------------------------------------------------------------------------
@@ -480,7 +480,7 @@ int AiffWriter::StopHandler(void *pCommandRecord)
         std::fclose(self->mpFile);
 
         const u8 timerCreated = self->mbTimerCreated; // *(v1+77)
-        self->mpFile = nullptr;                       // *(v1+60) = 0
+        self->mpFile = 0;                       // *(v1+60) = 0
         if (timerCreated)
         {
             System::RemoveTimer(self->mpSystem, &self->mTimerHandle);
@@ -504,7 +504,7 @@ int AiffWriter::StopHandler(void *pCommandRecord)
 int AiffWriter::ReleaseEvent(AiffWriter *self)
 {
     AiffStopCommandRecord rec;
-    rec.mpfnHandler = nullptr;
+    rec.mpfnHandler = 0;
     rec.mpWriter    = self;    // v5 = a1  (StopHandler reads *(rec+4))
 
     int result = AiffWriter::StopHandler(&rec);
@@ -512,7 +512,7 @@ int AiffWriter::ReleaseEvent(AiffWriter *self)
     void *buf = self->mpBuf; // v3 = *(a1+64)
     if (buf)
     {
-        System::Free(self->mpSystem, buf, nullptr);
+        System::Free(self->mpSystem, buf, 0);
         return 0; // System::Free is void; the asm's returned r3 is that void register
     }
     return result;

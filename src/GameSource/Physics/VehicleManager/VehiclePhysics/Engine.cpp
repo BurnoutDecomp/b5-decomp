@@ -27,26 +27,26 @@ namespace Vehicle
     // Every number is an address literal in Reset @0x825CF130 / Prepare @0x825F3F38.
     void Engine::BpAssertConsoleLayout()
     {
-        static_assert(offsetof(Engine, mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay)
-                      == 0xA0, "Reset writes EngineDrive/ReactionTorque/FlyWheel/ClutchDelay at [this+0xA0]");
-        static_assert(offsetof(Engine, mvClutchFactor_RPM_CurrentGearChangeTime)
-                      == 0xB0, "Reset writes ClutchFactor/RPM/CurrentGearChangeTime at [this+0xB0]");
-        static_assert(offsetof(Engine, mu8CurrentGear)
-                      == 0xC0, "Reset: stw <gear>, 0xC0(this); Prepare: stw <1>, 0xC0(this)");
-        static_assert(offsetof(Engine, mbAllowToChangeUpGear)
-                      == 0xC4, "Reset: stb <1>, 0xC4(this)");
-        static_assert(offsetof(Engine, mbAllowToChangeDownGear)
-                      == 0xC5, "Reset: stb <1>, 0xC5(this)");
+        CGS_STATIC_ASSERT((offsetof(Engine, mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay)
+                      == 0xA0), "Reset writes EngineDrive/ReactionTorque/FlyWheel/ClutchDelay at [this+0xA0]");
+        CGS_STATIC_ASSERT((offsetof(Engine, mvClutchFactor_RPM_CurrentGearChangeTime)
+                      == 0xB0), "Reset writes ClutchFactor/RPM/CurrentGearChangeTime at [this+0xB0]");
+        CGS_STATIC_ASSERT((offsetof(Engine, mu8CurrentGear)
+                      == 0xC0), "Reset: stw <gear>, 0xC0(this); Prepare: stw <1>, 0xC0(this)");
+        CGS_STATIC_ASSERT((offsetof(Engine, mbAllowToChangeUpGear)
+                      == 0xC4), "Reset: stb <1>, 0xC4(this)");
+        CGS_STATIC_ASSERT((offsetof(Engine, mbAllowToChangeDownGear)
+                      == 0xC5), "Reset: stb <1>, 0xC5(this)");
 
         // The gear array is addressed by the console as `16 * (gear + 4) + this` -- the `+4` IS
         // the 0x40 base of mAttribs.mavGearRatios, and mAttribs is Engine's leading member. If
         // either of those two facts moved, Reset and ComputeGear would index the wrong register.
-        static_assert(offsetof(Engine, mAttribs) == 0,
+        CGS_STATIC_ASSERT((offsetof(Engine, mAttribs) == 0),
                       "mAttribs is Engine's leading member (Prepare memcpy's to `this`)");
-        static_assert(offsetof(Engine, mAttribs)
+        CGS_STATIC_ASSERT((offsetof(Engine, mAttribs)
                       + offsetof(EngineAttribs, mavGearRatios_TorqueScales_GearUpRPMs)
-                      == 16 * 4, "gear[g] must sit at 16*(g+4) from `this`");
-        static_assert(sizeof(EngineAttribs) == 0xA0, "Prepare's memcpy size is the literal 160");
+                      == 16 * 4), "gear[g] must sit at 16*(g+4) from `this`");
+        CGS_STATIC_ASSERT((sizeof(EngineAttribs) == 0xA0), "Prepare's memcpy size is the literal 160");
     }
 
 namespace
@@ -336,7 +336,7 @@ namespace
         const f32 lfDenominator = lfAssertDenom * KF_RADIANS_PER_SEC_TO_RPM;
         const f32 lfResult      = (lfDenominator != 0.0f) ? (lfMaxRPM / lfDenominator) : 0.0f;
 
-        return Vector4{ lfResult, lfResult, lfResult, lfResult };
+        { const Vector4 lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
     }
 
     // ---------------------------------------------------------------------------------------

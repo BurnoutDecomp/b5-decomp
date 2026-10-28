@@ -105,9 +105,9 @@ struct LightTrigger
     // Layout pin. NEVER CALLED, in-class because the members it measures are private.
     static void _AssertLayout()
     {
-        static_assert(offsetof(LightTrigger, mDimensions)  == 0x00, "LightTrigger::mDimensions");
-        static_assert(offsetof(LightTrigger, mPosPlusYRot) == 0x10, "LightTrigger::mPosPlusYRot");
-        static_assert(sizeof(LightTrigger) == 0x20, "sizeof(LightTrigger) -- ManageTriggers stride");
+        CGS_STATIC_ASSERT((offsetof(LightTrigger, mDimensions)  == 0x00), "LightTrigger::mDimensions");
+        CGS_STATIC_ASSERT((offsetof(LightTrigger, mPosPlusYRot) == 0x10), "LightTrigger::mPosPlusYRot");
+        CGS_STATIC_ASSERT((sizeof(LightTrigger) == 0x20), "sizeof(LightTrigger) -- ManageTriggers stride");
     }
 
 private:
@@ -118,7 +118,7 @@ private:
 // DWARF spells this "ERaceDesinationType" (sic) at BrnTrafficLightTrigger.h:145; the
 // per-destination difficulty grade. Only referenced by the declared-only
 // GetDestinationDifficulty below, so a forward enum decl is sufficient for this slice.
-enum ERaceDesinationType : s32;
+enum ERaceDesinationType ;
 
 // BrnTrafficLightTrigger.h:133 -- the start/destination block for one traffic-light junction.
 struct LightTriggerStartData

@@ -178,7 +178,7 @@ void BrnBlobbyShadowManager::Render(Matrix44 lViewProjection,
 
     lpIm3d->BeginRendering();
     lpIm3d->SetTransform(lViewProjection);
-    CGS_ASSERT(lpBlobbyShadowTexture != nullptr, "lpBlobbyShadowTexture");
+    CGS_ASSERT(lpBlobbyShadowTexture != 0, "lpBlobbyShadowTexture");
     lpIm3d->SetTexture(lpBlobbyShadowTexture);
     lpIm3d->SetState(reinterpret_cast<const CgsGraphics::DepthStencilState*>(
         CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF)));

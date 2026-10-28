@@ -46,7 +46,7 @@ namespace Fuzzy
         mSwerveDistanceEnvelopes.Construct();
         mSwerveAngleEnvelopes.Construct();
 
-        CGS_ASSERT(lpTweakValues != nullptr, "lpTweakValues");
+        CGS_ASSERT(lpTweakValues != 0, "lpTweakValues");
         mpTweakValues = lpTweakValues;
 
         ResetToDefaults();
@@ -67,7 +67,7 @@ namespace Fuzzy
                                             f32 lfAttackStart, f32 lfAttackStop,
                                             f32 lfDecayStart, f32 lfDecayStop)
     {
-        FuzzyEnvelopeSet4* lpSet = nullptr;
+        FuzzyEnvelopeSet4* lpSet = 0;
         switch (liCategory)
         {
             case 0: lpSet = &mDistanceEnvelopes;      break;   // this+0x30
@@ -97,7 +97,7 @@ namespace Fuzzy
     // ---------------------------------------------------------------------------------
     void FuzzyBehaviourLogic::SetConstantValue(s32 liValueIndex, f32 lfValue)
     {
-        CGS_ASSERT(mpTweakValues != nullptr, "mpTweakValues");
+        CGS_ASSERT(mpTweakValues != 0, "mpTweakValues");
         if (!mpTweakValues->SetByIndex(liValueIndex, lfValue))
         {
             CGS_ASSERT(false, "Unknown mega-tweek value");
@@ -149,7 +149,7 @@ namespace Fuzzy
         // -- Mega-tweek constants (indices 0..20). The asm seeds index 0 and 1 via a direct
         // mpTweakValues store (mfStoplineVariation=1.0, mfRaceCarStopDist=10.0); the rest
         // through SetConstantValue. Reproduce all 21 via the same path for clarity. --
-        CGS_ASSERT(mpTweakValues != nullptr, "mpTweakValues");
+        CGS_ASSERT(mpTweakValues != 0, "mpTweakValues");
         mpTweakValues->SetByIndex(0, 1.0f);     // mfStoplineVariation
         mpTweakValues->SetByIndex(1, 10.0f);    // mfRaceCarStopDist
         SetConstantValue(2,  0.64999998f);      // mfGapClosingFactor
@@ -209,7 +209,7 @@ namespace Fuzzy
             Vector4 lf_TLDistance_NPDistance_NPClosingSpeed_RCSpeedInOurLane,
             Vector4 lf_TimeQueueing_Obstructedness_DriveAroundStickiness_W) const
     {
-        CGS_ASSERT(lpafOutputs != nullptr, "lpafOutputs");
+        CGS_ASSERT(lpafOutputs != 0, "lpafOutputs");
 
         const Vector4& lRC   = lf_RCDistance_RCHeight_RCClosingSpeed_RCLanePos;
         const Vector4& lTLNP = lf_TLDistance_NPDistance_NPClosingSpeed_RCSpeedInOurLane;

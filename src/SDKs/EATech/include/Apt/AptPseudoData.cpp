@@ -43,12 +43,12 @@ AptPseudoData_t::AptPseudoData_t(const AptPlaceObjectInfo_t* lpSource,
 
     mpMatrix         = (luxFlags & 0x04u)
                            ? const_cast<u8*>(lpBody->maMatrix)
-                           : nullptr;
+                           : 0;
     mpColorTransform = (luxFlags & 0x08u)
                            ? const_cast<u8*>(lpBody->maColorTransform)
-                           : nullptr;
+                           : 0;
     // XB1 14082667E..688: mov r8,[rdx+48h]; mov[rcx+18h],r8.
     // Borrow the same resident authored handler block as initial placement.
-    mpClipActions = (luxFlags & 0x80u) ? lpBody->mpClipActions : nullptr;
+    mpClipActions = (luxFlags & 0x80u) ? lpBody->mpClipActions : 0;
     mfRatio           = (luxFlags & 0x10u) ? lpBody->mfRatio             : 0.0f;
 }

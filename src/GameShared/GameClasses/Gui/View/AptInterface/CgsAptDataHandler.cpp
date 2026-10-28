@@ -96,7 +96,7 @@ namespace CgsGui
             if (maAptDataHeaderInfo[li].mHashKey == luHash)
                 return maAptDataHeaderInfo[li].mpAptDataHeader;
         }
-        return nullptr;   // 128 misses (the asm's `if (++v6 >= 128) return 0`)
+        return 0;   // 128 misses (the asm's `if (++v6 >= 128) return 0`)
     }
 
     // =========================================================================
@@ -131,7 +131,7 @@ namespace CgsGui
         maAptDataHeaderInfo[miNumLoadedAptData].mHashKey = luHash;
         ++miNumLoadedAptData;
         maAptDataHeaderInfo[miNumLoadedAptData - 1].mpAptDataHeader = lpHeader;
-        return nullptr;   // the asm returns the (null) FindAptData result on the add path
+        return 0;   // the asm returns the (null) FindAptData result on the add path
     }
 
     // =========================================================================
@@ -181,7 +181,7 @@ namespace CgsGui
             maAptDataHeaderInfo[li].mHashKey        = maAptDataHeaderInfo[liLast].mHashKey;
             maAptDataHeaderInfo[li].mpAptDataHeader = maAptDataHeaderInfo[liLast].mpAptDataHeader;
             maAptDataHeaderInfo[liLast].mHashKey        = 0;
-            maAptDataHeaderInfo[liLast].mpAptDataHeader = nullptr;
+            maAptDataHeaderInfo[liLast].mpAptDataHeader = 0;
             --miNumLoadedAptData;
 
             lbRemoved = true;

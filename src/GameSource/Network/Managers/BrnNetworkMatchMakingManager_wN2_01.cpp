@@ -44,8 +44,8 @@ namespace BrnNetwork
         mbQuickJoinFreeburn = false;
         mLastSearchTime.SetFloatVal(0.0f);
         mun8NextAction      = 0;
-        mCallback           = nullptr;
-        mpCallbackUserData  = nullptr;
+        mCallback           = 0;
+        mpCallbackUserData  = 0;
         meSubState          = E_SUBSTATE_NONE;
         meCurrentProcess    = E_PROCESS_COUNT;
     }
@@ -57,8 +57,8 @@ namespace BrnNetwork
         mbQuickJoinFreeburn = false;
         mLastSearchTime.SetFloatVal(0.0f);
         mun8NextAction      = 0;
-        mCallback           = nullptr;
-        mpCallbackUserData  = nullptr;
+        mCallback           = 0;
+        mpCallbackUserData  = 0;
         meCurrentProcess    = E_PROCESS_COUNT;
         return true;
     }
@@ -70,8 +70,8 @@ namespace BrnNetwork
         mbQuickJoinFreeburn = false;
         mLastSearchTime.SetFloatVal(0.0f);
         mun8NextAction      = 0;
-        mCallback           = nullptr;
-        mpCallbackUserData  = nullptr;
+        mCallback           = 0;
+        mpCallbackUserData  = 0;
         meCurrentProcess    = E_PROCESS_COUNT;
     }
 
@@ -79,8 +79,8 @@ namespace BrnNetwork
     void MatchMakingManager::Disconnected()
     {
         meSubState         = E_SUBSTATE_NONE;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
         mLastSearchTime.SetFloatVal(0.0f);
         mun8NextAction     = 0;
         meCurrentProcess   = E_PROCESS_COUNT;
@@ -89,7 +89,7 @@ namespace BrnNetwork
     // Run the current sub-state's handler.
     void MatchMakingManager::Update()
     {
-        CGS_ASSERT(maUpdateFunctions[meSubState] != nullptr, "No update function supplied for the current substate");
+        CGS_ASSERT(maUpdateFunctions[meSubState] != 0, "No update function supplied for the current substate");
         (this->*maUpdateFunctions[meSubState])();
     }
 
@@ -101,7 +101,7 @@ namespace BrnNetwork
     {
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
-            maUpdateFunctions[liIndex] = nullptr;
+            maUpdateFunctions[liIndex] = 0;
         }
 
         maUpdateFunctions[E_SUBSTATE_NONE]           = &MatchMakingManager::UpdateNone;
@@ -111,7 +111,7 @@ namespace BrnNetwork
 
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
-            CGS_ASSERT(maUpdateFunctions[liIndex] != nullptr, "No update function supplied for this substate");
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, "No update function supplied for this substate");
         }
     }
 
@@ -121,7 +121,7 @@ namespace BrnNetwork
     {
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            maActionFunctions[liActionIndex] = nullptr;
+            maActionFunctions[liActionIndex] = 0;
             maeComponentToUse[liActionIndex] = CgsNetwork::E_COMPONENTS_COUNT;
         }
 
@@ -153,7 +153,7 @@ namespace BrnNetwork
 
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            CGS_ASSERT(maActionFunctions[liActionIndex] != nullptr, "No function supplied for this action");
+            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, "No function supplied for this action");
             CGS_ASSERT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT,
                        "No component to use supplied for this action");
         }
@@ -240,8 +240,8 @@ namespace BrnNetwork
 
     void MatchMakingManager::StartProcess(EProcess leProcess, Callback lCallback, void* lpCallbackUserData)
     {
-        CGS_ASSERT(lCallback != nullptr, "lCallback");
-        if (mCallback != nullptr)
+        CGS_ASSERT(lCallback != 0, "lCallback");
+        if (mCallback != 0)
         {
             CgsDev::Assert::BeginAssert();
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
@@ -263,12 +263,12 @@ namespace BrnNetwork
     // start a new process.
     void MatchMakingManager::ProcessComplete(bool lbSuccess)
     {
-        CGS_ASSERT(mCallback != nullptr, "mCallback");
+        CGS_ASSERT(mCallback != 0, "mCallback");
 
         Callback lCallback          = mCallback;
         void*    lpCallbackUserData = mpCallbackUserData;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
 
         lCallback(lbSuccess, lpCallbackUserData);
     }
@@ -323,8 +323,8 @@ namespace BrnNetwork
             {
                 Callback lCallback          = mCallback;
                 void*    lpCallbackUserData = mpCallbackUserData;
-                mCallback              = nullptr;
-                mpCallbackUserData     = nullptr;
+                mCallback              = 0;
+                mpCallbackUserData     = 0;
                 mbCreateGameServerGame = false;
                 StartProcess(E_PROCESS_CREATE_GAME, lCallback, lpCallbackUserData);
             }
@@ -474,8 +474,8 @@ namespace BrnNetwork
         mbQuickJoinFreeburn = false;
         mLastSearchTime.SetFloatVal(0.0f);
         mun8NextAction      = 0;
-        mCallback           = nullptr;
-        mpCallbackUserData  = nullptr;
+        mCallback           = 0;
+        mpCallbackUserData  = 0;
         meCurrentProcess    = E_PROCESS_COUNT;
         mFoundGameA.Prepare();
         mFoundGameB.Prepare();

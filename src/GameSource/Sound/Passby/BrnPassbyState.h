@@ -95,11 +95,11 @@ struct PassbyState : public BrnSound::Logic::BrnState
 
     // BrnPassbyState.cpp:73 @ 0x826D4A98. Take a copy of the posted record, restart the
     // time-out, then the base State::Attach. Bodied in BrnPassbyState.cpp.
-    virtual void Attach(void* apvAttachment) override;
+    virtual void Attach(void* apvAttachment) ;
 
     // BrnPassbyState.cpp:94 @ 0x826D4B30. The base update, then the time-out: an attached
     // state detaches itself once it has held a pass-by for more than KF_TIMEOUT_TIMER.
-    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual void UpdateParams(f32 afDeltaTime) ;
 
     // (BrnPassbyState.cpp:118 declares a Detach override, but its body is identical-code-folded
     // with State::Detach -- slot +0x18 of this class's vtable off_820B2B18 IS 0x826C4C20, the

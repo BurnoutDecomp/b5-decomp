@@ -28,7 +28,7 @@ namespace Gen
     class burnoutglobaldata : private Instance
     {
     public:
-        explicit burnoutglobaldata(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit burnoutglobaldata(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // Bounds-checked accessors over generated array attributes. Each returns a
         // pointer to element luIndex (24-byte stride) within the instance's layout
@@ -249,7 +249,7 @@ namespace Gen
         Collection* lpCollection =
             FindCollection(KU_BURNOUTGLOBALDATA_CLASS_KEY, KU_COLLECTION_KEY);
         Change(lpCollection);
-        return lpCollection != nullptr;
+        return lpCollection != 0;
     }
 }
 }

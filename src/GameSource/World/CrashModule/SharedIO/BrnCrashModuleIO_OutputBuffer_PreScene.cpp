@@ -32,11 +32,11 @@ namespace CrashIO
         // blocked. The ORDER is what is load-bearing: the bridges take member ADDRESSES from the
         // accessors below, never a literal offset. Same trade InputBuffer_PostPhysics already
         // makes; its members carry the same "align-16, widens on host" note.
-        static_assert(offsetof(OutputBuffer_PreScene, mTrafficOutputInterface)
-                        < offsetof(OutputBuffer_PreScene, mVehicleInputInterface),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mTrafficOutputInterface)
+                        < offsetof(OutputBuffer_PreScene, mVehicleInputInterface)),
                       "DWARF order: traffic (X360 +0x8) precedes vehicle (X360 +0x670)");
-        static_assert(offsetof(OutputBuffer_PreScene, mVehicleInputInterface)
-                        < offsetof(OutputBuffer_PreScene, mRaceCarOutputInterface),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mVehicleInputInterface)
+                        < offsetof(OutputBuffer_PreScene, mRaceCarOutputInterface)),
                       "DWARF order: vehicle (X360 +0x670) precedes race car (X360 +0x231D0)");
     }
 

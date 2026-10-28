@@ -47,7 +47,7 @@
 // BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics::Construct @0x827615F8,
 // CgsSceneManager::SceneManagerIO::OutputBuffer::Construct @0x828C7CA0.
 // =============================================================================
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::OutOverlapPair) == 24,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::OutOverlapPair) == 24),
               "OutOverlapPair stride 24 (X360 AddEvent @0x828AD390 / Append @0x827A6FE8)");
 
 template void

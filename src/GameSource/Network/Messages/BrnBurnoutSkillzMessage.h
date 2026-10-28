@@ -56,12 +56,12 @@ namespace BrnNetwork
 
         // @ 0x8257C2F0 -- reset the payload (Clear + mbInitialData=false) and chain the
         // ReliableMessage base to compute the packed size.
-        s32 GetPackedMessageSize() override;
+        s32 GetPackedMessageSize() ;
 
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
         // Ledger func @ 0x8257C330 -- inline header-homed accessor.
-        const char* GetName() const override { return "Burnout Skillz Message"; }
+        const char* GetName() const  { return "Burnout Skillz Message"; }
 
     private:
         BrnGameState::BurnoutSkillzData mSkillzData;    // +0x28  (56 bytes)

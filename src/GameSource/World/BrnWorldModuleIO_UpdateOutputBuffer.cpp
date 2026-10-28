@@ -27,7 +27,7 @@ namespace BrnWorldIO
 // are documented on the member declarations instead of being pinned.
 void UpdateOutputBuffer::_AssertLayout()
 {
-    static_assert(offsetof(UpdateOutputBuffer, mVehicleOutputInterface) == 16, "vehicleOutput@16");
+    CGS_STATIC_ASSERT((offsetof(UpdateOutputBuffer, mVehicleOutputInterface) == 16), "vehicleOutput@16");
 }
 
 // ---- lifecycle -----------------------------------------------------------------
@@ -166,7 +166,7 @@ EGlobalRaceCarIndex UpdateOutputBuffer::GetPlayerGlobalRaceCarIndex() const
 // pointer store into mTriangleCacheInterface, X360 this+216112).
 void UpdateOutputBuffer::AppendTriangleCacheInterface(const OutTriangleCacheInterface* lpTriangleCacheInterface)
 {
-    CGS_ASSERT(lpTriangleCacheInterface != nullptr, "lpTriangleCacheInterface != NULL");
+    CGS_ASSERT(lpTriangleCacheInterface != 0, "lpTriangleCacheInterface != NULL");
     mTriangleCacheInterface.Append(lpTriangleCacheInterface);
 }
 

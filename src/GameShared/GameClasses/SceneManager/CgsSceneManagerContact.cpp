@@ -33,7 +33,7 @@ namespace CgsSceneManager
     // -------------------------------------------------------------------------
     Contact* Contact::Construct(const SourceResult* lpResult, u32 luContactPointIndex)
     {
-        CGS_ASSERT(lpResult != nullptr, "lpResult != NULL");                              // :157
+        CGS_ASSERT(lpResult != 0, "lpResult != NULL");                              // :157
         CGS_ASSERT(luContactPointIndex < lpResult->muNumPoints,
                    "luContactPointIndex < lpResult->numPoints");                          // :158
 

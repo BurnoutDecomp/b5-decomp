@@ -59,13 +59,13 @@ namespace CgsGraphics
         f32 GetLodRadius(u32 luIndex) const { return PointerFromU32<f32>(muLodRadii)[luIndex]; }
     };
 
-    static_assert(offsetof(SerialisedModel, muLodRadii) == 8,  "muLodRadii must be at +0x08 (lwz 8)");
-    static_assert(offsetof(SerialisedModel, muNumLods)  == 18, "muNumLods must be at +0x12 (lbz 0x12)");
+    CGS_STATIC_ASSERT((offsetof(SerialisedModel, muLodRadii) == 8),  "muLodRadii must be at +0x08 (lwz 8)");
+    CGS_STATIC_ASSERT((offsetof(SerialisedModel, muNumLods)  == 18), "muNumLods must be at +0x12 (lbz 0x12)");
 
     static const u32 KU_INSTANCE_STRIDE = 80;   // bytes per Instance (X360 v4 += 80)
 
-    static_assert(sizeof(Instance) == KU_INSTANCE_STRIDE, "Instance must be 80 bytes (X360 stride)");
-    static_assert(offsetof(Instance, mfMaxDrawDistanceSq) == 12, "mfMaxDrawDistanceSq must be at +12 (v5[3])");
+    CGS_STATIC_ASSERT((sizeof(Instance) == KU_INSTANCE_STRIDE), "Instance must be 80 bytes (X360 stride)");
+    CGS_STATIC_ASSERT((offsetof(Instance, mfMaxDrawDistanceSq) == 12), "mfMaxDrawDistanceSq must be at +12 (v5[3])");
 
     // GetTypeID @ 0x827E6EE8 (EXECUTED): return 35.
     static const uint32_t KU_INSTANCE_LIST_RESOURCE_TYPE_ID = 35;   // 0x23
@@ -136,7 +136,7 @@ namespace CgsGraphics
                 Instance* lpInstance = lpList->GetInstance(luI);
                 SerialisedModel* lpModel = PointerFromU32<SerialisedModel>(lpInstance->mpModel.muSlot);
 
-                CGS_ASSERT(lpModel != nullptr, "lpModel");                          // :245
+                CGS_ASSERT(lpModel != 0, "lpModel");                          // :245
                 CGS_ASSERT(lpModel->GetNumLods() > 0, "lpModel->GetNumLods() > 0"); // :246
                 if (lpModel->GetNumLods() == 0)
                 {

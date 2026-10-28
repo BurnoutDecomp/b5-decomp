@@ -502,7 +502,7 @@ namespace BrnDirector
 
     // Pin the X360 12-byte element (kept from the earlier slice; the Append
     // @0x821FBA48 asm copies exactly three 32-bit words at a 12-byte stride).
-    static_assert(sizeof(AllVehicleData::NearestCarInfo) == 12, "NearestCarInfo is a 12-byte element");
+    CGS_STATIC_ASSERT((sizeof(AllVehicleData::NearestCarInfo) == 12), "NearestCarInfo is a 12-byte element");
 
     // ------------------------------------------------------------------------------------
     // ⭐ WHAT GetRaceCar HANDS BACK, PINNED. Added this wave because two consumer families
@@ -533,12 +533,12 @@ namespace BrnDirector
     // and if a future edit ever breaks that, this fires at compile time instead of silently
     // handing every position reader the wrong lane.
     // ------------------------------------------------------------------------------------
-    static_assert(sizeof(Camera::VehicleInfo) == 0x4F0,
+    CGS_STATIC_ASSERT((sizeof(Camera::VehicleInfo) == 0x4F0),
                   "GetRaceCar indexes mpRaceCars at the VehicleInfo stride (mulli 0x4F0)");
-    static_assert(offsetof(Camera::VehicleInfo, mRaceCarState) == 0x0,
+    CGS_STATIC_ASSERT((offsetof(Camera::VehicleInfo, mRaceCarState) == 0x0),
                   "VehicleInfo leads with mRaceCarState");
-    static_assert(offsetof(BrnPhysics::Vehicle::RaceCarState, mTransform) == 0x1F0,
+    CGS_STATIC_ASSERT((offsetof(BrnPhysics::Vehicle::RaceCarState, mTransform) == 0x1F0),
                   "the returned race car's car-to-world frame sits at +0x1F0");
-    static_assert(offsetof(Matrix44Affine, wAxis) == 0x30,
+    CGS_STATIC_ASSERT((offsetof(Matrix44Affine, wAxis) == 0x30),
                   "the world position is the frame's wAxis lane (record +0x220)");
 }

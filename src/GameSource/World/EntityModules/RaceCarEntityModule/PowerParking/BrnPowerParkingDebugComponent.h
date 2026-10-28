@@ -27,14 +27,14 @@ namespace BrnWorld
         void Construct(PowerParkingManager* lpPowerParkingManager);
         void Destruct();
 
-        void Update() override;
+        void Update() ;
 
     protected:
-        const char* GetName() const override;
+        const char* GetName() const ;
         // DWARF :95. X360 vtable 0x820CDF20 slot 4 is 0x82312480, the ICF-folded `return "Gameplay"`
         // it shares with CrashPlayDebugComponent::GetPath (PS3 0x126F10 is its own copy).
-        const char* GetPath() const override;
-        void        OnActivate() override;
+        const char* GetPath() const ;
+        void        OnActivate() ;
 
     private:
         PowerParkingManager* mpPowerParkingManager;

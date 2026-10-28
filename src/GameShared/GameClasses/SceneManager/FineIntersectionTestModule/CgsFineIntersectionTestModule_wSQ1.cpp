@@ -21,7 +21,7 @@
 #include "vendor/renderware/collision/KdTreeLineQuery.hpp"          // rw::collision::KdTreeLineQuery / KdTree
 
 #include <cmath>     // std::sqrt (the reciprocal-square-root estimate)
-#include <cstdint>   // uintptr_t (the serialised mesh's pointer words)
+#include "types.hpp"   // uintptr_t (the serialised mesh's pointer words)
 #include <cstring>   // std::memcpy (the vertex words, the cluster parameters)
 
 namespace CgsSceneManager
@@ -332,7 +332,7 @@ namespace
         // GetGroupAndSurfaceId reads the id widths out of an 8-byte copy of the mesh's cluster
         // parameters (`ld 0x38(mesh) ; std`).
         rw::collision::ClusteredMeshCluster::CompressionInfo lInfo;
-        static_assert(sizeof(lInfo) == 8, "the cluster parameters are eight bytes");
+        CGS_STATIC_ASSERT((sizeof(lInfo) == 8), "the cluster parameters are eight bytes");
         std::memcpy(&lInfo, &lpMesh->mfVertexCompressionGranularity, sizeof(lInfo));
         u32 luGroupId   = 0;
         u32 luSurfaceId = 0;

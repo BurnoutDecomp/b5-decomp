@@ -53,21 +53,21 @@ namespace CgsModule
 
     protected:
 
-        CgsModule::DataStructure* CreateInputDataStructure() override
+        CgsModule::DataStructure* CreateInputDataStructure()
         {
             TInputBuffer* lpInput = (TInputBuffer*)&mInputBuffer;
             lpInput->Construct();
             return lpInput;
         }
 
-        CgsModule::DataStructure* CreateOutputDataStructure() override
+        CgsModule::DataStructure* CreateOutputDataStructure()
         {
             TOutputBuffer* lpOutput = (TOutputBuffer*)&mOutputBuffer;
             lpOutput->Construct();
             return lpOutput;
         }
 
-        bool DestroyInputDataStructure(DataStructure *lpDataStructure) override
+        bool DestroyInputDataStructure(DataStructure *lpDataStructure)
         {
             TInputBuffer* lpInput = (TInputBuffer*)lpDataStructure;
             lpInput->Destruct();
@@ -75,7 +75,7 @@ namespace CgsModule
             return true;
         }
 
-        bool DestroyOutputDataStructure(DataStructure *lpDataStructure) override
+        bool DestroyOutputDataStructure(DataStructure *lpDataStructure)
         {
             TOutputBuffer* lpOutput = (TOutputBuffer*)lpDataStructure;
             lpOutput->Destruct();
@@ -83,7 +83,7 @@ namespace CgsModule
             return true;
         }
 
-        bool PrepareDataStructures(DataStructure *lpInputDataStructure, DataStructure *lpOutputDataStructure) override
+        bool PrepareDataStructures(DataStructure *lpInputDataStructure, DataStructure *lpOutputDataStructure)
         {
             TInputBuffer* lpInput = (TInputBuffer*)lpInputDataStructure;
             TOutputBuffer* lpOutput = (TOutputBuffer*)lpOutputDataStructure;
@@ -94,7 +94,7 @@ namespace CgsModule
             return lbDone;
         }
 
-        bool ReleaseDataStructures(DataStructure *lpInputDataStructure, DataStructure *lpOutputDataStructure) override
+        bool ReleaseDataStructures(DataStructure *lpInputDataStructure, DataStructure *lpOutputDataStructure)
         {
             TInputBuffer* lpInput = (TInputBuffer*)lpInputDataStructure;
             TOutputBuffer* lpOutput = (TOutputBuffer*)lpOutputDataStructure;

@@ -86,20 +86,20 @@ static void _AssertLayout()
     typedef BrnWorld::PropEntityIO::InputBuffer_PreScene   PropInput;
     typedef BrnWorld::WorldEntityIO::OutputBuffer_PreScene WorldOutput;
 
-    static_assert(PropInput::PropInstancesNeededForZoneQueue::KI_LENGTH ==
-                  WorldOutput::PropInstancesNeededForZoneQueue::KI_LENGTH,
+    CGS_STATIC_ASSERT((PropInput::PropInstancesNeededForZoneQueue::KI_LENGTH ==
+                  WorldOutput::PropInstancesNeededForZoneQueue::KI_LENGTH),
                   "PropInstancesNeededForZone queue capacity must match on both ends (X360: 30)");
-    static_assert(PropInput::PropInstancesNeededForZoneQueue::KI_LENGTH == 30,
+    CGS_STATIC_ASSERT((PropInput::PropInstancesNeededForZoneQueue::KI_LENGTH == 30),
                   "X360 EventQueue<PropInstancesNeededForZoneEvent,30>");
-    static_assert(PropInput::PropGraphicsLoadedQueue::KI_LENGTH ==
-                  WorldOutput::PropGraphicsLoadedQueue::KI_LENGTH,
+    CGS_STATIC_ASSERT((PropInput::PropGraphicsLoadedQueue::KI_LENGTH ==
+                  WorldOutput::PropGraphicsLoadedQueue::KI_LENGTH),
                   "PropGraphicsLoaded queue capacity must match on both ends (X360: 25)");
-    static_assert(PropInput::PropGraphicsLoadedQueue::KI_LENGTH == 25,
+    CGS_STATIC_ASSERT((PropInput::PropGraphicsLoadedQueue::KI_LENGTH == 25),
                   "X360 EventQueue<PropGraphicsLoadedEvent,25>");
-    static_assert(PropInput::PropGraphicsUnloadedQueue::KI_LENGTH ==
-                  WorldOutput::PropGraphicsUnloadedQueue::KI_LENGTH,
+    CGS_STATIC_ASSERT((PropInput::PropGraphicsUnloadedQueue::KI_LENGTH ==
+                  WorldOutput::PropGraphicsUnloadedQueue::KI_LENGTH),
                   "PropGraphicsUnloaded queue capacity must match on both ends (X360: 25)");
-    static_assert(PropInput::PropGraphicsUnloadedQueue::KI_LENGTH == 25,
+    CGS_STATIC_ASSERT((PropInput::PropGraphicsUnloadedQueue::KI_LENGTH == 25),
                   "X360 EventQueue<PropGraphicsUnloadedEvent,25>");
 }
 

@@ -16,8 +16,8 @@ struct ImCommandSetTransform3dMtwVp : ImCommand
     Matrix44 mModelToWorldMatrix;
     Matrix44 mViewProjectionMatrix;
 };
-static_assert(sizeof(ImCommandSetTransform3dVp) == 80, "ARTIST transform command");
-static_assert(sizeof(ImCommandSetTransform3dMtwVp) == 144, "ARTIST paired transform command");
+CGS_STATIC_ASSERT((sizeof(ImCommandSetTransform3dVp) == 80), "ARTIST transform command");
+CGS_STATIC_ASSERT((sizeof(ImCommandSetTransform3dMtwVp) == 144), "ARTIST paired transform command");
 
 template<class V>
 class Im3dRenderBufferBase : public ImRenderBuffer<V>
@@ -37,7 +37,7 @@ protected:
 class Im3dRenderBuffer : public Im3dRenderBufferBase<BasicColouredTexturedVertex>
 {
 protected:
-    bool HandleCommand(const ImCommand* lpCommand, Im3dBase<BasicColouredTexturedVertex>* lpRenderer) const override;
+    bool HandleCommand(const ImCommand* lpCommand, Im3dBase<BasicColouredTexturedVertex>* lpRenderer) const ;
 };
 
 // DecFIGS CgsIm3dRenderBuffer.h:163; ARTIST Prepare 82409DAC and Swap

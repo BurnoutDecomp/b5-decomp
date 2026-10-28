@@ -16,7 +16,7 @@ public:
                             float fMinAngle, int nRotationType, CMassiveZoneManager* pZone);
     virtual ~CMassiveAdObjectTexture();
 
-    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) override;
+    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) ;
 
 protected:
     unsigned short muMinSize;  // +0x60

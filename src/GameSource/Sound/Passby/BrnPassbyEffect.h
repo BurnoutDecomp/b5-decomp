@@ -63,8 +63,8 @@ struct Passby3DControl : public BrnSound::Logic::Brn3DEffectControl
     // BrnPassbyEffect.cpp:63 (DWARF) -- the RTTI surface. GetTypeInfo @0x82689008 returns
     // &sTypeInfo (0x82F2F97C), GetTypeName @0x82689018 "Passby3DControl", CreateObject
     // @0x826E8E18 the factory.
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();   // h:35
     static CgsSound::Logic::EffectControl* CreateObject(u32 auAllocator);
 };
@@ -91,18 +91,18 @@ struct PassbyEffect : public BrnSound::Logic::BrnEffectObject
     virtual ~PassbyEffect();     // cpp:86 -- @0x826BF6D8 (the scalar deleting destructor @0x826C9200)
 
     // BrnPassbyEffect.cpp:67 (DWARF) -- the RTTI surface.
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();    // h:43
     static CgsSound::Logic::EffectObject* CreateObject(u32 auAllocator);
 
-    virtual s32  GetController(s32 aiIndex) override;                                // cpp:106
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override; // cpp:135
-    virtual bool Prepare(CgsSound::Logic::State* apState) override;                  // cpp:165
-    virtual bool Attach() override;                                                  // cpp:432
-    virtual void UpdateParams(f32 afDeltaTime) override;                             // cpp:224
-    virtual void ProcessUpdate() override;                                           // cpp:306
-    virtual bool Detach() override;                                                  // cpp:526
+    virtual s32  GetController(s32 aiIndex) ;                                // cpp:106
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ; // cpp:135
+    virtual bool Prepare(CgsSound::Logic::State* apState) ;                  // cpp:165
+    virtual bool Attach() ;                                                  // cpp:432
+    virtual void UpdateParams(f32 afDeltaTime) ;                             // cpp:224
+    virtual void ProcessUpdate() ;                                           // cpp:306
+    virtual bool Detach() ;                                                  // cpp:526
 
 private:
     // BrnPassbyEffect.cpp:551 @0x82689108. The sample to play: the next of the bin's

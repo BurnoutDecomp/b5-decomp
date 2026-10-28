@@ -30,11 +30,11 @@ namespace BrnNetwork
 
     void* UsersetParams::GetData()
     {
-        return nullptr;
+        return 0;
     }
 
     const void* UsersetParams::GetData() const
     {
-        return nullptr;
+        return 0;
     }
 }

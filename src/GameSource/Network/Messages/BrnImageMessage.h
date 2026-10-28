@@ -52,15 +52,15 @@ namespace BrnNetwork
                                CgsID* lpBeatenRoadID, u16* lpu16PacketNumber,
                                u16* lpu16TotalPacketCount, u16* lpu16NumberOfBytes,
                                void* lpvPhotoData);
-        s32   GetPackedMessageSize() override;
+        s32   GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD20 -- bodied in this TU (DWARF BrnImageMessage.h:123).
-        const char* GetName() const override;
+        const char* GetName() const ;
 
-        bool  OldMessagesAreValid() const override;
+        bool  OldMessagesAreValid() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         char            macPhotoBuffer[KI_PHOTO_SEGMENT_SIZE];  // DWARF :103
@@ -81,5 +81,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(ImageMessage) == 0x238, "sizeof(ImageMessage) == 0x238");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ImageMessage) == 0x238), "sizeof(ImageMessage) == 0x238");
 } // namespace BrnNetwork

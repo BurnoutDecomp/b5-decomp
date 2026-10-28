@@ -227,26 +227,26 @@ namespace CgsInput
 {
     inline void _InputPads_AssertLayout()
     {
-        static_assert(sizeof(InputPlayer) == 8, "InputPlayer must be 8 bytes");
-        static_assert(sizeof(InputPort)   == 24, "InputPort must be 24 bytes (0x18 stride)");
-        static_assert(offsetof(InputPads, maPads)                  == 0x78,   "maPads @ +0x78");
-        static_assert(offsetof(InputPads, maPlayers)               == 0x788,  "maPlayers @ +0x788 (1928)");
-        static_assert(offsetof(InputPads, maiPortToPlayer)         == 0x7A8,  "maiPortToPlayer @ +0x7A8 (1960)");
-        static_assert(offsetof(InputPads, miCurrentSetOfStates)    == 0x978,  "miCurrentSetOfStates @ +0x978 (2424)");
-        static_assert(offsetof(InputPads, maaabActionsDown)        == 0x97C,  "maaabActionsDown @ +0x97C (2428)");
-        static_assert(offsetof(InputPads, mbPrepared)              == 0xCFC,  "mbPrepared @ +0xCFC (3324)");
-        static_assert(offsetof(InputPads, mauOverrideDeviceState)  == 0xD00,  "mauOverrideDeviceState @ +0xD00 (3328)");
-        static_assert(offsetof(InputPads, maJoltEffects)           == 0xD10,  "maJoltEffects @ +0xD10 (3344)");
-        static_assert(offsetof(InputPads, maiJoltEffectPriorities) == 0xE90,  "maiJoltEffectPriorities @ +0xE90 (3728)");
-        static_assert(offsetof(InputPads, mafJoltTime)             == 0xEB0,  "mafJoltTime @ +0xEB0 (3760)");
-        static_assert(offsetof(InputPads, maRumbleEffects)         == 0xED0,  "maRumbleEffects @ +0xED0 (3792)");
-        static_assert(offsetof(InputPads, mafRumbleTime)           == 0x1050, "mafRumbleTime @ +0x1050 (4176)");
-        static_assert(offsetof(InputPads, mafRumbleVolume)         == 0x1070, "mafRumbleVolume @ +0x1070 (4208)");
-        static_assert(offsetof(InputPads, maiRumbleIds)            == 0x1090, "maiRumbleIds @ +0x1090 (4240)");
-        static_assert(offsetof(InputPads, maiRumbleEffectPriorities) == 0x10B0, "maiRumbleEffectPriorities @ +0x10B0 (4272)");
-        static_assert(offsetof(InputPads, mbRumblePaused)          == 0x10D0, "mbRumblePaused @ +0x10D0 (4304)");
-        static_assert(offsetof(InputPads, mbRumbleEnabled)         == 0x10D1, "mbRumbleEnabled @ +0x10D1 (4305)");
-        static_assert(offsetof(InputPads, mbWheelFFEnabled)        == 0x10D2, "mbWheelFFEnabled @ +0x10D2 (4306)");
-        static_assert(offsetof(InputPads, mWheelFFSpring)          == 0x10D4, "mWheelFFSpring @ +0x10D4 (4308)");
+        CGS_STATIC_ASSERT((sizeof(InputPlayer) == 8), "InputPlayer must be 8 bytes");
+        CGS_STATIC_ASSERT((sizeof(InputPort)   == 24), "InputPort must be 24 bytes (0x18 stride)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maPads)                  == 0x78),   "maPads @ +0x78");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maPlayers)               == 0x788),  "maPlayers @ +0x788 (1928)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maiPortToPlayer)         == 0x7A8),  "maiPortToPlayer @ +0x7A8 (1960)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, miCurrentSetOfStates)    == 0x978),  "miCurrentSetOfStates @ +0x978 (2424)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maaabActionsDown)        == 0x97C),  "maaabActionsDown @ +0x97C (2428)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mbPrepared)              == 0xCFC),  "mbPrepared @ +0xCFC (3324)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mauOverrideDeviceState)  == 0xD00),  "mauOverrideDeviceState @ +0xD00 (3328)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maJoltEffects)           == 0xD10),  "maJoltEffects @ +0xD10 (3344)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maiJoltEffectPriorities) == 0xE90),  "maiJoltEffectPriorities @ +0xE90 (3728)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mafJoltTime)             == 0xEB0),  "mafJoltTime @ +0xEB0 (3760)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maRumbleEffects)         == 0xED0),  "maRumbleEffects @ +0xED0 (3792)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mafRumbleTime)           == 0x1050), "mafRumbleTime @ +0x1050 (4176)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mafRumbleVolume)         == 0x1070), "mafRumbleVolume @ +0x1070 (4208)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maiRumbleIds)            == 0x1090), "maiRumbleIds @ +0x1090 (4240)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maiRumbleEffectPriorities) == 0x10B0), "maiRumbleEffectPriorities @ +0x10B0 (4272)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mbRumblePaused)          == 0x10D0), "mbRumblePaused @ +0x10D0 (4304)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mbRumbleEnabled)         == 0x10D1), "mbRumbleEnabled @ +0x10D1 (4305)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mbWheelFFEnabled)        == 0x10D2), "mbWheelFFEnabled @ +0x10D2 (4306)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mWheelFFSpring)          == 0x10D4), "mWheelFFSpring @ +0x10D4 (4308)");
     }
 }

@@ -121,11 +121,11 @@ static const s32 KI_PAUSE_REASON_CAR_SELECT = 1;
 void CarSelectManager::_AssertLayout()
 {
     // The three car-id members are CgsID (8 bytes) and contiguous in the X360 (std @ +0x40/+0x48/+0x50).
-    static_assert(offsetof(CarSelectManager, mDesiredCarId)
-                      == offsetof(CarSelectManager, mStartCarId) + sizeof(CgsID),
+    CGS_STATIC_ASSERT((offsetof(CarSelectManager, mDesiredCarId)
+                      == offsetof(CarSelectManager, mStartCarId) + sizeof(CgsID)),
                   "mDesiredCarId is contiguous with mStartCarId (CgsID == 8 bytes)");
-    static_assert(offsetof(CarSelectManager, mCacheDuringChangeCarId)
-                      == offsetof(CarSelectManager, mDesiredCarId) + sizeof(CgsID),
+    CGS_STATIC_ASSERT((offsetof(CarSelectManager, mCacheDuringChangeCarId)
+                      == offsetof(CarSelectManager, mDesiredCarId) + sizeof(CgsID)),
                   "mCacheDuringChangeCarId is contiguous with mDesiredCarId (CgsID == 8 bytes)");
     // The spawn-location array is exactly KU_CARSELECT_SPAWNLOCATION_COUNT handles wide.
 }
@@ -151,13 +151,13 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
     mfStateTimer = 0.0f;
     meState      = E_STATE_NONE;
 
-    mpVehicleList.Set(nullptr);
-    mpWheelList.Set(nullptr);
+    mpVehicleList.Set(0);
+    mpWheelList.Set(0);
 
     mJunkyardId = 0;
     for (u32 lu = 0; lu < KU_CARSELECT_SPAWNLOCATION_COUNT; ++lu)
     {
-        maSpawnLocations[lu].Set(nullptr);
+        maSpawnLocations[lu].Set(0);
     }
     meLastSpawnLocationType = KI_SPAWNLOCATIONTYPE_NONE;
 

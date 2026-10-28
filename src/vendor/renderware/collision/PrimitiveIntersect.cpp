@@ -1635,7 +1635,7 @@ RwBool PrimitivePairIntersect(PrimitivePairIntersectResult& arResult,   // r3 (r
     // ---- 3. separating direction + distance ---------------------------------
     Vec4 lvDirection;                                   // var_950
     f32  lfDistance;                                    // f31
-    if (apSepDir != nullptr)                            // cmplwi cr6, r30, 0
+    if (apSepDir != 0)                            // cmplwi cr6, r30, 0
     {
         // lvx128 v0 = *apSepDir; lfs f31, 0xC(r30) = the w-lane distance.
         // vperm v1, v0, v0, [unk_82CDA350] + vrlimi128 v1, v0, 2, 0: the

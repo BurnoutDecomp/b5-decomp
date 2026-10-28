@@ -133,8 +133,8 @@ namespace Attrib
     // The generated Num_<array>() accessors declare their stack cursor as an opaque
     // Attrib::AttributeValue (attribinstance.h, which cannot name Attribute) and let
     // Instance::Get / Collection_Get build an Attribute into it. Keep the two in step.
-    static_assert(sizeof(AttributeValue) == sizeof(Attribute),
+    CGS_STATIC_ASSERT((sizeof(AttributeValue) == sizeof(Attribute)),
                   "Attrib::AttributeValue must be a byte-exact stack home for Attrib::Attribute");
-    static_assert(alignof(AttributeValue) >= alignof(Attribute),
+    CGS_STATIC_ASSERT((__alignof(AttributeValue) >= __alignof(Attribute)),
                   "Attrib::AttributeValue must be at least as aligned as Attrib::Attribute");
 }

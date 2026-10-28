@@ -30,7 +30,7 @@
 // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Append.
 //
 // X360-attested element stride (`slwi r, count, 3` == *8).
-static_assert(sizeof(CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache) == 8,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache) == 8),
               "InEventAddToCache stride 8");
 
 template bool

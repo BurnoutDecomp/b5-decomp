@@ -54,10 +54,10 @@
 namespace CgsPhysics
 {
     // Host-stable element strides (X360-attested, pointer-width-independent).
-    static_assert(sizeof(JointLimits)   == 64, "JointLimits stride 64 (h:jointlimits.h)");
-    static_assert(sizeof(JointFrames)   == 80, "JointFrames stride 80 (h:jointframes.h)");
-    static_assert(sizeof(DriveFrames)   == 64, "DriveFrames stride 64 (h:driveframes.h)");
-    static_assert(sizeof(DriveDynamics) == 32, "DriveDynamics stride 32 (h:drivedynamics.h)");
+    CGS_STATIC_ASSERT((sizeof(JointLimits)   == 64), "JointLimits stride 64 (h:jointlimits.h)");
+    CGS_STATIC_ASSERT((sizeof(JointFrames)   == 80), "JointFrames stride 80 (h:jointframes.h)");
+    CGS_STATIC_ASSERT((sizeof(DriveFrames)   == 64), "DriveFrames stride 64 (h:driveframes.h)");
+    CGS_STATIC_ASSERT((sizeof(DriveDynamics) == 32), "DriveDynamics stride 32 (h:drivedynamics.h)");
 
     // ⚠️ THE DriveDynamics INTERIOR PINS MOVED, THEY WERE NOT DROPPED (task #143). They used
     // to sit here and gate the FORKED local copy's `mfSpring`/`meType` spellings. The record
@@ -66,7 +66,7 @@ namespace CgsPhysics
     // Same for the 64-byte DriveFrames interior -> _rw_physics_DriveFrames_AssertLayout().
     // The two strides above are kept here as well, because here they are a claim about
     // DriveData's array layout rather than about the records themselves.
-    static_assert(sizeof(DriveDynamics::Params) == 16, "DriveDynamics::Params is 16B (drivedynamics.h:204-207)");
+    CGS_STATIC_ASSERT((sizeof(DriveDynamics::Params) == 16), "DriveDynamics::Params is 16B (drivedynamics.h:204-207)");
 
     // ===================== JointData =======================================
 
@@ -98,9 +98,9 @@ namespace CgsPhysics
         // X360-exact and host-invariant up to the first pointer array: maLimits at
         // 0xB40 == 36*80, maRWJoints at 0x1440 == 0xB40 + 36*64. Past that the
         // pointer slot widens on x64, so the tail is pinned relative to it.
-        static_assert(offsetof(JointData, maFrames)   == 0,    "maFrames @+0");
-        static_assert(offsetof(JointData, maLimits)   == 2880, "maLimits @+0xB40 (X360-exact: 36*80)");
-        static_assert(offsetof(JointData, maRWJoints) == 5184, "maRWJoints @+0x1440 (X360-exact: 0xB40 + 36*64)");
+        CGS_STATIC_ASSERT((offsetof(JointData, maFrames)   == 0),    "maFrames @+0");
+        CGS_STATIC_ASSERT((offsetof(JointData, maLimits)   == 2880), "maLimits @+0xB40 (X360-exact: 36*80)");
+        CGS_STATIC_ASSERT((offsetof(JointData, maRWJoints) == 5184), "maRWJoints @+0x1440 (X360-exact: 0xB40 + 36*64)");
 
         // ---- task #144: the two element STRIDES, spelled as the MEMBER, not as a literal ----
         // The two lines above are 2880 and 5184 because the elements are 80 and 64 bytes wide.
@@ -111,20 +111,20 @@ namespace CgsPhysics
         // were -- breaks the gate. Both strides are the drains' own arithmetic:
         // ProcessUpdateJointFramesQueue steps maFrames by i*80 (five lvx128 lanes) and
         // ProcessUpdateJointLimitsQueue steps maLimits by (i+45)*64 (eight ld/std pairs).
-        static_assert(sizeof(JointData::maFrames[0]) == 80,
+        CGS_STATIC_ASSERT((sizeof(JointData::maFrames[0]) == 80),
                       "JointData element stride 80 (drain @0x8289F4E8 `slwi/add/slwi` == i*5*16)");
-        static_assert(sizeof(JointData::maLimits[0]) == 64,
+        CGS_STATIC_ASSERT((sizeof(JointData::maLimits[0]) == 64),
                       "JointData element stride 64 (drain @0x8289F724 `addi r10,r31,0x2D; slwi r10,r10,6`)");
-        static_assert(offsetof(JointData, maLimits)   == KI_SIZE * sizeof(JointData::maFrames[0]),
+        CGS_STATIC_ASSERT((offsetof(JointData, maLimits)   == KI_SIZE * sizeof(JointData::maFrames[0])),
                       "maLimits follows the 36 JointFrames");
-        static_assert(offsetof(JointData, maRWJoints) == offsetof(JointData, maLimits) + KI_SIZE * sizeof(JointData::maLimits[0]),
+        CGS_STATIC_ASSERT((offsetof(JointData, maRWJoints) == offsetof(JointData, maLimits) + KI_SIZE * sizeof(JointData::maLimits[0])),
                       "maRWJoints follows the 36 JointLimits");
-        static_assert(offsetof(JointData, maGameIDs)  == 5184 + KI_SIZE * sizeof(rw_physics::Joint*),
+        CGS_STATIC_ASSERT((offsetof(JointData, maGameIDs)  == 5184 + KI_SIZE * sizeof(rw_physics::Joint*)),
                       "maGameIDs follows the 36 Joint* slots (X360 +0x14D0 at 4-byte pointers)");
-        static_assert(offsetof(JointData, mabUsedSlot) == offsetof(JointData, maGameIDs) + KI_SIZE * sizeof(JointId),
+        CGS_STATIC_ASSERT((offsetof(JointData, mabUsedSlot) == offsetof(JointData, maGameIDs) + KI_SIZE * sizeof(JointId)),
                       "mabUsedSlot follows the 36 JointIds (X360 +0x15F0)");
         // X360 closure: 0x15F0 + 36 == 5652 -> 16-align -> 5664 == 0x1620 == 0x4730 - 0x3110.
-        static_assert(sizeof(JointData) == ((offsetof(JointData, mabUsedSlot) + KI_SIZE + 15) / 16) * 16,
+        CGS_STATIC_ASSERT((sizeof(JointData) == ((offsetof(JointData, mabUsedSlot) + KI_SIZE + 15) / 16) * 16),
                       "sizeof(JointData) is mabUsedSlot + 36, rounded to the 16-byte element alignment");
     }
 
@@ -313,13 +313,13 @@ namespace CgsPhysics
         // ---- layout pins. Every one of these is X360-EXACT *and* host-invariant:
         // the single Drive* slot at +0x80 is followed by an 8-aligned DriveId, which
         // lands maGameIDs at +0x88 on both ABIs, so nothing here widens.
-        static_assert(offsetof(DriveData, maFrames)         == 0,   "maFrames @+0x00");
-        static_assert(offsetof(DriveData, maDynamics)       == 64,  "maDynamics @+0x40 (asm addi r11, r10, 0x40)");
-        static_assert(offsetof(DriveData, maScaledDynamics) == 96,  "maScaledDynamics @+0x60 (asm addi r10, r10, 0x60)");
-        static_assert(offsetof(DriveData, maRWDrives)       == 128, "maRWDrives @+0x80");
-        static_assert(offsetof(DriveData, maGameIDs)        == 136, "maGameIDs @+0x88 (8-aligned after the Drive* slot)");
-        static_assert(offsetof(DriveData, mabUsedSlot)      == 144, "mabUsedSlot @+0x90 (asm stb 0, 0x47C0(r31) == mDriveData+0x90)");
-        static_assert(sizeof(DriveData)                     == 160, "sizeof(DriveData) == 0xA0 == 0x47D0 - 0x4730");
+        CGS_STATIC_ASSERT((offsetof(DriveData, maFrames)         == 0),   "maFrames @+0x00");
+        CGS_STATIC_ASSERT((offsetof(DriveData, maDynamics)       == 64),  "maDynamics @+0x40 (asm addi r11, r10, 0x40)");
+        CGS_STATIC_ASSERT((offsetof(DriveData, maScaledDynamics) == 96),  "maScaledDynamics @+0x60 (asm addi r10, r10, 0x60)");
+        CGS_STATIC_ASSERT((offsetof(DriveData, maRWDrives)       == 128), "maRWDrives @+0x80");
+        CGS_STATIC_ASSERT((offsetof(DriveData, maGameIDs)        == 136), "maGameIDs @+0x88 (8-aligned after the Drive* slot)");
+        CGS_STATIC_ASSERT((offsetof(DriveData, mabUsedSlot)      == 144), "mabUsedSlot @+0x90 (asm stb 0, 0x47C0(r31) == mDriveData+0x90)");
+        CGS_STATIC_ASSERT((sizeof(DriveData)                     == 160), "sizeof(DriveData) == 0xA0 == 0x47D0 - 0x4730");
     }
 
     // X360: inlined into PhysicsSimulationModule::Construct as the single
@@ -480,8 +480,8 @@ namespace CgsPhysics
     // (qword_82F33E18 here, qword_82F2A3A8 in the vehicle-manager TU) actually attest.
 
     // Host-stable element strides (X360-attested).
-    static_assert(sizeof(Inertia)     == 48, "Inertia stride 48 (GetInertia 48*(idx+50))");
-    static_assert(sizeof(RigidBodyId) == 8,  "RigidBodyId is a single u64 (CgsRigidBody.h:48)");
+    CGS_STATIC_ASSERT((sizeof(Inertia)     == 48), "Inertia stride 48 (GetInertia 48*(idx+50))");
+    CGS_STATIC_ASSERT((sizeof(RigidBodyId) == 8),  "RigidBodyId is a single u64 (CgsRigidBody.h:48)");
 
     // The seven Inertia-interior offsetof pins that used to sit here MOVED to
     // rw/physics/inertia.h (_rw_physics_Inertia_AssertLayout) with the de-fork, task #141.
@@ -520,12 +520,12 @@ namespace CgsPhysics
         // on x64; each offset is therefore pinned to the one before it plus the element
         // count times the element size, which is exactly what the console arithmetic is.
         // X360 closure, for the record: 200*4 + 200*8 + 200*48 == 12000 == 0x3110 - 0x230.
-        static_assert(offsetof(RigidBodyData, maRWBodies) == 0, "maRWBodies @+0x00");
-        static_assert(offsetof(RigidBodyData, maGameIDs)  == KI_SIZE * sizeof(rw_physics::RigidBody*),
+        CGS_STATIC_ASSERT((offsetof(RigidBodyData, maRWBodies) == 0), "maRWBodies @+0x00");
+        CGS_STATIC_ASSERT((offsetof(RigidBodyData, maGameIDs)  == KI_SIZE * sizeof(rw_physics::RigidBody*)),
                       "maGameIDs follows the 200 RigidBody* slots (X360 +0x320 at 4-byte pointers)");
-        static_assert(offsetof(RigidBodyData, maInertias) == offsetof(RigidBodyData, maGameIDs) + KI_SIZE * sizeof(RigidBodyId),
+        CGS_STATIC_ASSERT((offsetof(RigidBodyData, maInertias) == offsetof(RigidBodyData, maGameIDs) + KI_SIZE * sizeof(RigidBodyId)),
                       "maInertias follows the 200 RigidBodyIds (X360 +0x960; asm addi r11, r3, 0x960)");
-        static_assert(sizeof(RigidBodyData) == offsetof(RigidBodyData, maInertias) + KI_SIZE * sizeof(Inertia),
+        CGS_STATIC_ASSERT((sizeof(RigidBodyData) == offsetof(RigidBodyData, maInertias) + KI_SIZE * sizeof(Inertia)),
                       "RigidBodyData ends with the 200 Inertias -- no trailing member");
     }
 
@@ -859,63 +859,63 @@ namespace CgsPhysics
     {
 
         // The head: the two stage words are adjacent, and mBodyData starts the 16-aligned run.
-        static_assert(offsetof(PhysicsSimulationModule, meReleaseStage) == offsetof(PhysicsSimulationModule, mePrepareStage) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, meReleaseStage) == offsetof(PhysicsSimulationModule, mePrepareStage) + 4),
                       "meReleaseStage immediately follows mePrepareStage (asm 0x228 / 0x22C)");
-        static_assert(offsetof(PhysicsSimulationModule, mBodyData) % 16 == 0,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mBodyData) % 16 == 0),
                       "mBodyData must land 16-aligned (its Inertia elements are alignas(16))");
 
         // The three slot tables are contiguous, in this order, with nothing between them.
-        static_assert(offsetof(PhysicsSimulationModule, mJointData) == offsetof(PhysicsSimulationModule, mBodyData) + sizeof(RigidBodyData),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mJointData) == offsetof(PhysicsSimulationModule, mBodyData) + sizeof(RigidBodyData)),
                       "mJointData immediately follows mBodyData (X360 0x3110 == 0x230 + 12000)");
-        static_assert(offsetof(PhysicsSimulationModule, mDriveData) == offsetof(PhysicsSimulationModule, mJointData) + sizeof(JointData),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mDriveData) == offsetof(PhysicsSimulationModule, mJointData) + sizeof(JointData)),
                       "mDriveData immediately follows mJointData (X360 0x4730 == 0x3110 + 5664)");
 
         // The pointer/scalar block (X360 +0x47D0, 24 bytes at 4-byte pointers).
-        static_assert(offsetof(PhysicsSimulationModule, mpJointedPairs) == offsetof(PhysicsSimulationModule, mDriveData) + sizeof(DriveData),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mpJointedPairs) == offsetof(PhysicsSimulationModule, mDriveData) + sizeof(DriveData)),
                       "mpJointedPairs immediately follows mDriveData (X360 0x47D0 == 0x4730 + 160)");
-        static_assert(offsetof(PhysicsSimulationModule, mpDrivenPairs)  == offsetof(PhysicsSimulationModule, mpJointedPairs) + sizeof(rw::physics::PairSet*),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mpDrivenPairs)  == offsetof(PhysicsSimulationModule, mpJointedPairs) + sizeof(rw::physics::PairSet*)),
                       "mpDrivenPairs follows mpJointedPairs");
-        static_assert(offsetof(PhysicsSimulationModule, mpContactPairs) == offsetof(PhysicsSimulationModule, mpDrivenPairs) + sizeof(rw::physics::PairSet*),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mpContactPairs) == offsetof(PhysicsSimulationModule, mpDrivenPairs) + sizeof(rw::physics::PairSet*)),
                       "mpContactPairs follows mpDrivenPairs");
-        static_assert(offsetof(PhysicsSimulationModule, miNeedThaw)     == offsetof(PhysicsSimulationModule, mpContactPairs) + sizeof(rw::physics::PairSet*),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miNeedThaw)     == offsetof(PhysicsSimulationModule, mpContactPairs) + sizeof(rw::physics::PairSet*)),
                       "miNeedThaw follows the three PairSet pointers");
-        static_assert(offsetof(PhysicsSimulationModule, miActive)       == offsetof(PhysicsSimulationModule, miNeedThaw) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miActive)       == offsetof(PhysicsSimulationModule, miNeedThaw) + 4),
                       "miActive follows miNeedThaw");
-        static_assert(offsetof(PhysicsSimulationModule, mpiNextIndex)   >= offsetof(PhysicsSimulationModule, miActive) + 4
-                      && offsetof(PhysicsSimulationModule, mpiNextIndex) % sizeof(s32*) == 0,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mpiNextIndex)   >= offsetof(PhysicsSimulationModule, miActive) + 4
+                      && offsetof(PhysicsSimulationModule, mpiNextIndex) % sizeof(s32*) == 0),
                       "mpiNextIndex follows miActive at its natural pointer alignment");
 
         // The three bit arrays -- the twelve zero stores.
-        static_assert(offsetof(PhysicsSimulationModule, mNeedFreeze) == offsetof(PhysicsSimulationModule, mpiNextIndex) + sizeof(s32*),
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mNeedFreeze) == offsetof(PhysicsSimulationModule, mpiNextIndex) + sizeof(s32*)),
                       "mNeedFreeze follows mpiNextIndex (X360 0x47E8)");
-        static_assert(offsetof(PhysicsSimulationModule, mDone) == offsetof(PhysicsSimulationModule, mNeedFreeze) + 32,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mDone) == offsetof(PhysicsSimulationModule, mNeedFreeze) + 32),
                       "mDone follows mNeedFreeze (X360 0x4808)");
-        static_assert(offsetof(PhysicsSimulationModule, mSeen) == offsetof(PhysicsSimulationModule, mDone) + 32,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mSeen) == offsetof(PhysicsSimulationModule, mDone) + 32),
                       "mSeen follows mDone (X360 0x4828)");
 
         // The three counters -- the three `stw 0`.
-        static_assert(offsetof(PhysicsSimulationModule, miNumRigidBodies) == offsetof(PhysicsSimulationModule, mSeen) + 32,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miNumRigidBodies) == offsetof(PhysicsSimulationModule, mSeen) + 32),
                       "miNumRigidBodies follows mSeen (X360 0x4848)");
-        static_assert(offsetof(PhysicsSimulationModule, miNumDrives) == offsetof(PhysicsSimulationModule, miNumRigidBodies) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miNumDrives) == offsetof(PhysicsSimulationModule, miNumRigidBodies) + 4),
                       "miNumDrives follows miNumRigidBodies (X360 0x484C)");
-        static_assert(offsetof(PhysicsSimulationModule, miNumJoints) == offsetof(PhysicsSimulationModule, miNumDrives) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miNumJoints) == offsetof(PhysicsSimulationModule, miNumDrives) + 4),
                       "miNumJoints follows miNumDrives (X360 0x4850)");
 
         // The four AddMonitor handles, in call order.
-        static_assert(offsetof(PhysicsSimulationModule, miTimeInSim1) == offsetof(PhysicsSimulationModule, miNumJoints) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miTimeInSim1) == offsetof(PhysicsSimulationModule, miNumJoints) + 4),
                       "miTimeInSim1 follows miNumJoints (X360 0x4854, the 'Sim setup' handle)");
-        static_assert(offsetof(PhysicsSimulationModule, miTimeInSim2) == offsetof(PhysicsSimulationModule, miTimeInSim1) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miTimeInSim2) == offsetof(PhysicsSimulationModule, miTimeInSim1) + 4),
                       "miTimeInSim2 (X360 0x4858, 'Sim freezing')");
-        static_assert(offsetof(PhysicsSimulationModule, miTimeInSim3) == offsetof(PhysicsSimulationModule, miTimeInSim2) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miTimeInSim3) == offsetof(PhysicsSimulationModule, miTimeInSim2) + 4),
                       "miTimeInSim3 (X360 0x485C, 'Sim update')");
-        static_assert(offsetof(PhysicsSimulationModule, miTimeInSim4) == offsetof(PhysicsSimulationModule, miTimeInSim3) + 4,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, miTimeInSim4) == offsetof(PhysicsSimulationModule, miTimeInSim3) + 4),
                       "miTimeInSim4 (X360 0x4860, 'Sim output')");
 
         // The tail.
-        static_assert(offsetof(PhysicsSimulationModule, mpSimulation) >= offsetof(PhysicsSimulationModule, miTimeInSim4) + 4
-                      && offsetof(PhysicsSimulationModule, mpSimulation) % sizeof(void*) == 0,
+        CGS_STATIC_ASSERT((offsetof(PhysicsSimulationModule, mpSimulation) >= offsetof(PhysicsSimulationModule, miTimeInSim4) + 4
+                      && offsetof(PhysicsSimulationModule, mpSimulation) % sizeof(void*) == 0),
                       "mpSimulation is the last member, after the four handles (X360 0x4864)");
-        static_assert(sizeof(PhysicsSimulationModule) >= offsetof(PhysicsSimulationModule, mpSimulation) + sizeof(void*),
+        CGS_STATIC_ASSERT((sizeof(PhysicsSimulationModule) >= offsetof(PhysicsSimulationModule, mpSimulation) + sizeof(void*)),
                       "nothing is declared after mpSimulation");
     }
 
@@ -1297,7 +1297,7 @@ namespace CgsPhysics
             // written into maRWBodies[] at the bottom of this loop. Passing lpBody here
             // instead would look tidier and would reorder the two writes.
             const s32 liBodyIndex = mBodyData.AddBody(
-                nullptr,
+                0,
                 RigidBodyId{ lrEvent.mID },
                 lInertia);
             CGS_ASSERT(liBodyIndex != -1, "liBodyIndex != -1");   // .cpp:1065
@@ -1405,8 +1405,8 @@ namespace CgsPhysics
             rw::physics::RigidBody* const lpParentBody = mBodyData.GetRigidBody(liParentIndex);
             rw::physics::RigidBody* const lpChildBody  = mBodyData.GetRigidBody(liChildIndex);
 
-            CGS_ASSERT(lpParentBody != nullptr, "lpParentBody");   // .cpp:1858 tripwire
-            CGS_ASSERT(lpChildBody  != nullptr, "lpChildBody");    // .cpp:1859 tripwire
+            CGS_ASSERT(lpParentBody != 0, "lpParentBody");   // .cpp:1858 tripwire
+            CGS_ASSERT(lpChildBody  != 0, "lpChildBody");    // .cpp:1859 tripwire
 
             // The console copies both payloads out of the queue element into its own frame
             // first (four lvx128 from event+0x20, four ld/std from event+0x60) and passes
@@ -1420,7 +1420,7 @@ namespace CgsPhysics
             // The timestep argument is read from the simulation and then ignored by the
             // callee; see DriveData::AddDrive.
             const s32 liDriveIndex = mDriveData.AddDrive(
-                nullptr,
+                0,
                 lFrames,
                 lDynamics,
                 DriveId{ lrEvent.mu64Id },
@@ -1654,8 +1654,8 @@ namespace CgsPhysics
 
             rw_physics::RigidBody* const lpParentBody = mBodyData.GetRigidBody(liParentBodyIndex);
             rw_physics::RigidBody* const lpChildBody  = mBodyData.GetRigidBody(liChildBodyIndex);
-            CGS_ASSERT(lpParentBody != nullptr, "lpParentBody");             // .cpp:1516
-            CGS_ASSERT(lpChildBody  != nullptr, "lpChildBody");              // .cpp:1517
+            CGS_ASSERT(lpParentBody != 0, "lpParentBody");             // .cpp:1516
+            CGS_ASSERT(lpChildBody  != 0, "lpChildBody");              // .cpp:1517
 
             // The console copies both payloads out of the queue element onto the stack first
             // (8x ld/std from event+0x70, then 5x lvx128 from event+0x20) and passes those
@@ -1663,7 +1663,7 @@ namespace CgsPhysics
             const JointFrames lFrames = lrEvent.mJointFrames;
             const JointLimits lLimits = lrEvent.mJointLimits;
 
-            const s32 liJointIndex = mJointData.AddJoint(nullptr, lFrames, lLimits,
+            const s32 liJointIndex = mJointData.AddJoint(0, lFrames, lLimits,
                                                          JointId{ lrEvent.mu64Id });
             CGS_ASSERT(liJointIndex != -1, "liJointIndex != -1");            // .cpp:1521
 

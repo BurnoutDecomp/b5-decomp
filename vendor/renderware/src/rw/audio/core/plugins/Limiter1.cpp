@@ -43,8 +43,8 @@ namespace core
 // PlugIn::Initialize<Limiter1> installs. The host never dispatches through mBase.mpVTable
 // (every call goes through the descriptor's function pointers), so both words are null on
 // the host, the convention every composition-view plug-in in this directory follows.
-static void *const KLM_BasePlugInVTable = nullptr;   // off_820AA810
-static void *const KLM_Limiter1VTable = nullptr;     // the Limiter1 v-table (Initialize<Limiter1>)
+static void *const KLM_BasePlugInVTable = 0;   // off_820AA810
+static void *const KLM_Limiter1VTable = 0;     // the Limiter1 v-table (Initialize<Limiter1>)
 
 // CreateInstance immediates. The first two are the vendor's INIT_THRESHOLD (120 dB) and
 // INIT_RELEASETIME; the third is CHANNELMODE_GROUPED as a float.

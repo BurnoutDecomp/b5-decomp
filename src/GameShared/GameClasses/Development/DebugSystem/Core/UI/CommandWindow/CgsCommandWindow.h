@@ -14,16 +14,16 @@ namespace CgsDev
             CommandWindow();
 
             void Construct();
-            virtual void Render(Debug2DImmediateRender* lpRender) override;
-            virtual void Update(f32 lfTimeStep, InputEvent leEvent) override;
+            virtual void Render(Debug2DImmediateRender* lpRender) ;
+            virtual void Update(f32 lfTimeStep, InputEvent leEvent) ;
 
             void Register(const char* lpcName);
             void Unregister();
             void ToggleShow();
             bool IsVisible();
 
-            virtual void OnGetFocus() override;
-            virtual void OnLostFocus() override;
+            virtual void OnGetFocus() ;
+            virtual void OnLostFocus() ;
 
         protected:
             void Clear();

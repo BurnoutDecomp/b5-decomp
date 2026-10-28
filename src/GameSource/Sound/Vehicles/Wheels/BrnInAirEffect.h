@@ -13,7 +13,7 @@ namespace BrnTraffic { namespace BrnTrafficIO { struct TrafficSoundEntity; } }
 
 namespace BrnSound
 {
-namespace Logic { namespace Collision { class CollisionStateManager; enum ECollisionSpliceTags : int; } }
+namespace Logic { namespace Collision { class CollisionStateManager; enum ECollisionSpliceTags ; } }
 namespace Vehicles
 {
 namespace Engines { struct PhysicsControl; }
@@ -63,14 +63,14 @@ struct InAirEffect : public BrnSound::Logic::BrnEffectObject
     InAirEffect();
     virtual ~InAirEffect();
 
-    const char* GetTypeName() const override;
-    s32 GetController(s32 aiSlot) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    void SetupLoadData() override;
-    bool Attach() override;
-    void UpdateParams(f32 afTimeStep) override;
-    void ProcessUpdate() override;
-    bool Detach() override;
+    const char* GetTypeName() const ;
+    s32 GetController(s32 aiSlot) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    void SetupLoadData() ;
+    bool Attach() ;
+    void UpdateParams(f32 afTimeStep) ;
+    void ProcessUpdate() ;
+    bool Detach() ;
 
 protected:
     virtual void UpdatePhysicsData(f32 afTimeStep);
@@ -110,15 +110,15 @@ struct TrafficInAir : public InAirEffect
     virtual ~TrafficInAir();
 
     static CgsSound::Logic::EffectObject* CreateObject(u32 luType);
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
 
-    bool Attach() override;
-    void ProcessUpdate() override;
+    bool Attach() ;
+    void ProcessUpdate() ;
 
 protected:
-    void UpdatePhysicsData(f32 afTimeStep) override;
+    void UpdatePhysicsData(f32 afTimeStep) ;
     void Clear();
 
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* mpTrafficEntity;
@@ -130,15 +130,15 @@ struct JunkyardInAirEffect : public InAirEffect
     virtual ~JunkyardInAirEffect();
 
     static CgsSound::Logic::EffectObject* CreateObject(u32 luType);
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
 
-    bool Attach() override;
-    void Notify(const CgsSound::Io::MessageHeader* apkMessage) override;
+    bool Attach() ;
+    void Notify(const CgsSound::Io::MessageHeader* apkMessage) ;
 
 protected:
-    void UpdatePhysicsData(f32 afTimeStep) override;
+    void UpdatePhysicsData(f32 afTimeStep) ;
     void FlushData(const BrnPhysics::Vehicle::RaceCarState* apkVehicleData);
 
     CgsSound::Utils::DataPoint<bool> mbIsVehicleValid;

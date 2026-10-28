@@ -61,7 +61,7 @@ namespace CgsNetwork
         mu16HostKeepAliveSendTimeout      = KU16_INVALID_FRAME;
         mu16HostKeepAliveTimeout          = KU16_INVALID_FRAME;
         mu16HostKeepAliveInitialTimeout   = KU16_INVALID_FRAME;
-        mpPlayerManager                   = nullptr;
+        mpPlayerManager                   = 0;
         meFrameRate                       = static_cast<CgsSystem::EFrameRate>(-1);
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
@@ -69,8 +69,8 @@ namespace CgsNetwork
 
         for (s32 liIndex = 0; liIndex < KI_MAX_HOST_MIGRATION_CALLBACKS; ++liIndex)
         {
-            mapHostMigrationCallback[liIndex]     = nullptr;
-            mapHostMigrationCallbackData[liIndex] = nullptr;
+            mapHostMigrationCallback[liIndex]     = 0;
+            mapHostMigrationCallbackData[liIndex] = 0;
         }
 
         mHostMigrationDebugComponent.mpHostMigrationManager = this;
@@ -116,7 +116,7 @@ namespace CgsNetwork
                                        u16 lu16CurrentFrame)
     {
         mpPlayerManager = lpPlayerManager;
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
             maHostMigrationPlayerIDs[liIndex] = KI_INVALID_PLAYER_ID;
@@ -146,7 +146,7 @@ namespace CgsNetwork
     // -------------------------------------------------------------------------------
     bool HostMigrationManager::Release()
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         ClearAllCallbacks();
 
@@ -160,7 +160,7 @@ namespace CgsNetwork
             lData.mNewHostMessageRecv.Construct();
         }
 
-        mpPlayerManager                 = nullptr;
+        mpPlayerManager                 = 0;
         meFrameRate                     = static_cast<CgsSystem::EFrameRate>(-1);
         mu16HostKeepAliveSendTimeout    = KU16_INVALID_FRAME;
         mu16HostKeepAliveTimeout        = KU16_INVALID_FRAME;
@@ -175,8 +175,8 @@ namespace CgsNetwork
     {
         for (s32 liIndex = 0; liIndex < KI_MAX_HOST_MIGRATION_CALLBACKS; ++liIndex)
         {
-            mapHostMigrationCallback[liIndex]     = nullptr;
-            mapHostMigrationCallbackData[liIndex] = nullptr;
+            mapHostMigrationCallback[liIndex]     = 0;
+            mapHostMigrationCallbackData[liIndex] = 0;
         }
     }
 
@@ -369,7 +369,7 @@ namespace CgsNetwork
                                                              void* lpUserData)
     {
         s32 liIndex = 0;
-        while (mapHostMigrationCallback[liIndex] != nullptr)
+        while (mapHostMigrationCallback[liIndex] != 0)
         {
             ++liIndex;
             if (liIndex >= KI_MAX_HOST_MIGRATION_CALLBACKS)
@@ -395,8 +395,8 @@ namespace CgsNetwork
                 return;
             }
         }
-        mapHostMigrationCallback[liIndex]     = nullptr;
-        mapHostMigrationCallbackData[liIndex] = nullptr;
+        mapHostMigrationCallback[liIndex]     = 0;
+        mapHostMigrationCallbackData[liIndex] = 0;
     }
 
     // -------------------------------------------------------------------------------
@@ -414,7 +414,7 @@ namespace CgsNetwork
 
         for (s32 liCallbackIndex = 0; liCallbackIndex < KI_MAX_HOST_MIGRATION_CALLBACKS; ++liCallbackIndex)
         {
-            if (mapHostMigrationCallback[liCallbackIndex] != nullptr)
+            if (mapHostMigrationCallback[liCallbackIndex] != 0)
             {
                 mapHostMigrationCallback[liCallbackIndex](lpTimerStatus, liOldHostID, liNewHostID,
                                                           mapHostMigrationCallbackData[liCallbackIndex]);
@@ -454,7 +454,7 @@ namespace CgsNetwork
         lData.mNewHostMessageRecv.Construct();
 
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-        CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
+        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
 
         // The lengths are the message sizes (console 0x20 / 0x44). Both messages are
         // unreliable, so the length is only range-checked; it is the byte count the reliable
@@ -462,17 +462,17 @@ namespace CgsNetwork
         lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE,
                                          static_cast<s32>(sizeof(HostKeepAliveMessage)),
                                          &lData.mHostKeepAliveMessageSend,
-                                         &lData.mHostKeepAliveMessageRecv, nullptr, nullptr, nullptr);
+                                         &lData.mHostKeepAliveMessageRecv, 0, 0, 0);
         lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_NEW_HOST, static_cast<s32>(sizeof(NewHostMessage)),
                                          &lData.mNewHostMessageSend,
-                                         &lData.mNewHostMessageRecv, nullptr, nullptr, nullptr);
+                                         &lData.mNewHostMessageRecv, 0, 0, 0);
     }
 
     // -------------------------------------------------------------------------------
     void HostMigrationManager::UnregisterMessages(NetworkPlayerID liPlayerID)
     {
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-        CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
+        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
 
         s32 liEntry = 0;
         while (maMessageData[liEntry].mOwnerPlayer != liPlayerID)
@@ -485,7 +485,7 @@ namespace CgsNetwork
             }
         }
 
-        if (lpNetPlayer != nullptr)
+        if (lpNetPlayer != 0)
         {
             if (lpNetPlayer->IsMessageTypeRegistered(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE))
                 lpNetPlayer->UnRegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE);
@@ -499,7 +499,7 @@ namespace CgsNetwork
     // -------------------------------------------------------------------------------
     void HostMigrationManager::SendHostKeepAliveMessage(NetworkPlayer* lpNetPlayer, u16 lu16CurrentFrame)
     {
-        CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
+        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
         CGS_ASSERT(mHostPlayerID != KI_INVALID_PLAYER_ID, "mHostPlayerID != K_INVALID_PLAYER_ID");
 
         Message* lpMessage = lpNetPlayer->GetRegisteredSendMessage(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE);
@@ -529,7 +529,7 @@ namespace CgsNetwork
                  &liPlayerID, PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-            if (lpNetPlayer != nullptr && !lpNetPlayer->HasConnectionFailed() &&
+            if (lpNetPlayer != 0 && !lpNetPlayer->HasConnectionFailed() &&
                 mpPlayerManager->IsPlayerTurnToSendRoundRobinMessage(liPlayerID, true, 0))
             {
                 SendHostKeepAliveMessage(lpNetPlayer, lu16CurrentFrame);
@@ -557,7 +557,7 @@ namespace CgsNetwork
                  &liPlayerID, PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-            if (lpNetPlayer == nullptr)
+            if (lpNetPlayer == 0)
                 continue;
 
             HostKeepAliveMessage* lpKeepAlive = static_cast<HostKeepAliveMessage*>(
@@ -659,7 +659,7 @@ namespace CgsNetwork
                  &liPlayerID, PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-            if (lpNetPlayer == nullptr)
+            if (lpNetPlayer == 0)
                 continue;
 
             // Skip players already in the received-clients set.
@@ -717,7 +717,7 @@ namespace CgsNetwork
             }
 
             NetworkPlayer* lpCandidate = mpPlayerManager->GetPlayerByID(liCandidate);
-            if (lpCandidate != nullptr)
+            if (lpCandidate != 0)
             {
                 *CgsDev::Log::gpDebugPrint << "Network player " << static_cast<s32>(liCandidate)
                                            << " is the next player in the list of host migration IDs\n";
@@ -754,7 +754,7 @@ namespace CgsNetwork
                  &liPlayerID, PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-            if (lpNetPlayer == nullptr)
+            if (lpNetPlayer == 0)
                 continue;
 
             for (s32 liCheck1 = 1; liCheck1 < KI_MAX_PLAYERS; ++liCheck1)
@@ -786,7 +786,7 @@ namespace CgsNetwork
 
         // Consume any host keep-alive we received this frame.
         NetworkPlayer* lpHostPlayer = mpPlayerManager->GetPlayerByID(mHostPlayerID);
-        if (lpHostPlayer != nullptr)
+        if (lpHostPlayer != 0)
         {
             HostKeepAliveMessage* lpKeepAlive = static_cast<HostKeepAliveMessage*>(
                 lpHostPlayer->GetRegisteredRecvMessage(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE));
@@ -820,7 +820,7 @@ namespace CgsNetwork
                                        << static_cast<s32>(liChosenHostID) << "\n";
         }
 
-        if (lpHostPlayer != nullptr)
+        if (lpHostPlayer != 0)
         {
             if (!lbResult)
             {

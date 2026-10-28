@@ -47,10 +47,10 @@ namespace RealmcCore
 // Reproduced as an init-list in declaration order (== the X360 store order).
 // ---------------------------------------------------------------------------
 Allocator64::Allocator64(unsigned int nByteCapacity)
-    : mppPageArray(nullptr), mnPageSlots(0),
-      mpFrontCur(nullptr), mpFrontBegin(nullptr), mpFrontEnd(nullptr),
-      mppFrontSlot(nullptr), mpBackCur(nullptr), mpBackBegin(nullptr),
-      mpBackEnd(nullptr), mppBackSlot(nullptr)
+    : mppPageArray(0), mnPageSlots(0),
+      mpFrontCur(0), mpFrontBegin(0), mpFrontEnd(0),
+      mppFrontSlot(0), mpBackCur(0), mpBackBegin(0),
+      mpBackEnd(0), mppBackSlot(0)
 {
     DoInit(nByteCapacity);
 }
@@ -348,7 +348,7 @@ void Allocator64::DoFreeSubar(char** ppBegin, char** ppEnd)
 Allocator64::Element Allocator64::PopFront()
 {
     if (mpFrontCur == mpBackCur)
-        return nullptr;
+        return 0;
 
     Element const lpValue = *reinterpret_cast<const Element*>(mpFrontCur);
     char* lpNext = mpFrontCur + sizeof(Element);

@@ -36,7 +36,7 @@
 //
 // X360-attested element stride (`slwi r,count,3; add; slwi r,r,4` == *(1+8)*16 == *144;
 // cross-confirmed by the sibling AddEvent @ 0x822AB670 18x8-byte doubleword copy loop = 144B).
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::InEventReplaceDynamicVolume) == 144,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::InEventReplaceDynamicVolume) == 144),
               "InEventReplaceDynamicVolume stride 144");
 
 template bool

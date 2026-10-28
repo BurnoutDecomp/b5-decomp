@@ -22,15 +22,15 @@ namespace Camera
 // derived members start at the end of that head and keep the console spacing among themselves
 // (console offset - 0x08 from mShakeParams).
 typedef BehaviourGyroCam::Parameters GyroCamParameters;
-static_assert(offsetof(GyroCamParameters, mShakeParams) == sizeof(Behaviour::Parameters), "mShakeParams follows the head");
-static_assert(offsetof(GyroCamParameters, mLagParams)                    - offsetof(GyroCamParameters, mShakeParams) == 0x18 - 0x08, "mLagParams @ console +0x18");
-static_assert(offsetof(GyroCamParameters, mLookerParams)                 - offsetof(GyroCamParameters, mShakeParams) == 0x2C - 0x08, "mLookerParams @ console +0x2C");
-static_assert(offsetof(GyroCamParameters, mAttachmentTruckParams)        - offsetof(GyroCamParameters, mShakeParams) == 0x90 - 0x08, "mAttachmentTruckParams @ console +0x90");
-static_assert(offsetof(GyroCamParameters, mfSlowDistance)                - offsetof(GyroCamParameters, mShakeParams) == 0x98 - 0x08, "mfSlowDistance @ console +0x98");
-static_assert(offsetof(GyroCamParameters, mfField_B0)                    - offsetof(GyroCamParameters, mShakeParams) == 0xB0 - 0x08, "mfField_B0 @ console +0xB0");
-static_assert(offsetof(GyroCamParameters, mfHeightDistanceVelocityRange) - offsetof(GyroCamParameters, mShakeParams) == 0xC4 - 0x08, "mfHeightDistanceVelocityRange @ console +0xC4");
-static_assert(offsetof(GyroCamParameters, mbUseTruck)                    - offsetof(GyroCamParameters, mShakeParams) == 0xC8 - 0x08, "mbUseTruck @ console +0xC8");
-static_assert(offsetof(GyroCamParameters, mbStickToGround)               - offsetof(GyroCamParameters, mShakeParams) == 0xCB - 0x08, "mbStickToGround @ console +0xCB");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mShakeParams) == sizeof(Behaviour::Parameters)), "mShakeParams follows the head");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mLagParams)                    - offsetof(GyroCamParameters, mShakeParams) == 0x18 - 0x08), "mLagParams @ console +0x18");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mLookerParams)                 - offsetof(GyroCamParameters, mShakeParams) == 0x2C - 0x08), "mLookerParams @ console +0x2C");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mAttachmentTruckParams)        - offsetof(GyroCamParameters, mShakeParams) == 0x90 - 0x08), "mAttachmentTruckParams @ console +0x90");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mfSlowDistance)                - offsetof(GyroCamParameters, mShakeParams) == 0x98 - 0x08), "mfSlowDistance @ console +0x98");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mfField_B0)                    - offsetof(GyroCamParameters, mShakeParams) == 0xB0 - 0x08), "mfField_B0 @ console +0xB0");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mfHeightDistanceVelocityRange) - offsetof(GyroCamParameters, mShakeParams) == 0xC4 - 0x08), "mfHeightDistanceVelocityRange @ console +0xC4");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mbUseTruck)                    - offsetof(GyroCamParameters, mShakeParams) == 0xC8 - 0x08), "mbUseTruck @ console +0xC8");
+CGS_STATIC_ASSERT((offsetof(GyroCamParameters, mbStickToGround)               - offsetof(GyroCamParameters, mShakeParams) == 0xCB - 0x08), "mbStickToGround @ console +0xCB");
 
 template<class TSerialiser>
 void BehaviourGyroCam::Parameters::Serialise(TSerialiser& lrSerialiser)

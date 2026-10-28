@@ -649,7 +649,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                 {
                     if ( maActiveRaceCars[liC].GetRenderParams() == lpRenderParams ) { liUploadCar = liC; }
                 }
-                static_assert( E_ACTIVE_RACE_CAR_INDEX_COUNT == 8,
+                CGS_STATIC_ASSERT(( E_ACTIVE_RACE_CAR_INDEX_COUNT == 8),
                                "safLastSum's initialiser lists one slot per race car plus the -1 slot" );
                 static f32 safLastSum[E_ACTIVE_RACE_CAR_INDEX_COUNT + 1] = { -1.0f, -1.0f, -1.0f, -1.0f,
                                                                              -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };

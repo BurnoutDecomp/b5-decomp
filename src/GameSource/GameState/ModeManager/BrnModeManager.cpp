@@ -43,19 +43,19 @@ namespace BrnGameState
 // previous-state mirror; a finished mode still exits while simulation is paused.
 void ModeManager::PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutput");
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutput");
     GameStateModuleIO::GameModeOutputInterface* const lpModeOutput =
         lpOutputBuffer->GetGameModeOutputInterface();
     lpModeOutput->miCurrentGameModeType = meCurrentGameModeType;
     lpModeOutput->miPreviousGameModeType = mePreviousGameModeType;
-    lpModeOutput->miCurrentGameModeState = mpCurrentGameMode != nullptr
+    lpModeOutput->miCurrentGameModeState = mpCurrentGameMode != 0
         ? mpCurrentGameMode->GetCurrentState() : -1;
     lpModeOutput->miPreviousGameModeState = mePreviousGameModeState;
 
     mePreviousGameModeType = meCurrentGameModeType;
     mePreviousGameModeState = static_cast<GameStateModuleIO::EGameModeState>(
-        mpCurrentGameMode != nullptr ? mpCurrentGameMode->GetCurrentState() : -1);
-    if (mpCurrentGameMode != nullptr && mpCurrentGameMode->HasFinished())
+        mpCurrentGameMode != 0 ? mpCurrentGameMode->GetCurrentState() : -1);
+    if (mpCurrentGameMode != 0 && mpCurrentGameMode->HasFinished())
         ExitCurrentMode(lpOutputBuffer, mbHasTimedOut,
                         static_cast<GameStateModuleIO::EGameModeType>(18));
 }
@@ -67,20 +67,20 @@ void ModeManager::PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 // silent drift here would ship a mis-parsed results action to the GUI/standings consumers rather
 // than failing anything, which is exactly why it is asserted at compile time.
 // ----------------------------------------------------------------------------
-static_assert(sizeof(GameStateModuleIO::FinishedModeAction) == 48,
+CGS_STATIC_ASSERT((sizeof(GameStateModuleIO::FinishedModeAction) == 48),
               "SendModeResults @0x82343438 posts sizeof == 48 (`li r6,0x30`)");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mFinishTime) == 0x00, "mFinishTime @+0x00");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mFastestLapTime) == 0x08, "mFastestLapTime @+0x08");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, meFinishedGameModeType) == 0x10, "meFinishedGameModeType @+0x10");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, meEliminatorIndex) == 0x14, "meEliminatorIndex @+0x14");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, meBeatenRivalIndex) == 0x18, "meBeatenRivalIndex @+0x18");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, miNumberOfTakedowns) == 0x1C, "miNumberOfTakedowns @+0x1C");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mfDistanceFromFinish) == 0x20, "mfDistanceFromFinish @+0x20");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, miFinishPosition) == 0x24, "miFinishPosition @+0x24");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, miEliminations) == 0x28, "miEliminations @+0x28");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbIsOnlineGameMode) == 0x2C, "mbIsOnlineGameMode @+0x2C");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbTimedOut) == 0x2D, "mbTimedOut @+0x2D");
-static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbWonRound) == 0x2E, "mbWonRound @+0x2E");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mFinishTime) == 0x00), "mFinishTime @+0x00");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mFastestLapTime) == 0x08), "mFastestLapTime @+0x08");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, meFinishedGameModeType) == 0x10), "meFinishedGameModeType @+0x10");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, meEliminatorIndex) == 0x14), "meEliminatorIndex @+0x14");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, meBeatenRivalIndex) == 0x18), "meBeatenRivalIndex @+0x18");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, miNumberOfTakedowns) == 0x1C), "miNumberOfTakedowns @+0x1C");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mfDistanceFromFinish) == 0x20), "mfDistanceFromFinish @+0x20");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, miFinishPosition) == 0x24), "miFinishPosition @+0x24");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, miEliminations) == 0x28), "miEliminations @+0x28");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mbIsOnlineGameMode) == 0x2C), "mbIsOnlineGameMode @+0x2C");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mbTimedOut) == 0x2D), "mbTimedOut @+0x2D");
+CGS_STATIC_ASSERT((offsetof(GameStateModuleIO::FinishedModeAction, mbWonRound) == 0x2E), "mbWonRound @+0x2E");
 
 // ----------------------------------------------------------------------------
 // Small predicates (X360-inlined field reads de-inlined to named accessors).
@@ -90,7 +90,7 @@ static_assert(offsetof(GameStateModuleIO::FinishedModeAction, mbWonRound) == 0x2
 bool ModeManager::IsOnlineGameMode() const
 {
     // v1 = mpCurrentGameMode; if (v1) return v1->IsOnline(); else return 0;
-    if (mpCurrentGameMode != nullptr)
+    if (mpCurrentGameMode != 0)
     {
         return mpCurrentGameMode->IsOnline();   // X360 mode+0xAC (the cached online flag)
     }
@@ -100,7 +100,7 @@ bool ModeManager::IsOnlineGameMode() const
 // X360 0x823113D0. True when the current mode is in one of its post-event states (3/5/4).
 bool ModeManager::IsInPostEvent() const
 {
-    if (mpCurrentGameMode == nullptr)
+    if (mpCurrentGameMode == 0)
     {
         return false;
     }
@@ -201,7 +201,7 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
         // X360: bail unless the car is present and its per-car state field (CarData+0x13C) == 2.
         // FLAG: CarData+0x13C is outside the minimal CarData slice; the only state-style field this
         // TU can name is GetStatus(). E_PLAYER_STATUS_COUNT == 2 matches the compared constant.
-        if ((lpCarData == nullptr) || (lpCarData->GetStatus() != CarData::E_PLAYER_STATUS_COUNT))
+        if ((lpCarData == 0) || (lpCarData->GetStatus() != CarData::E_PLAYER_STATUS_COUNT))
         {
             return false;
         }
@@ -265,7 +265,7 @@ bool ModeManager::HasPlayerWon()
 void ModeManager::SetupStuntChallenge()
 {
     StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != nullptr, "lpStuntModeScoring");
+    CGS_ASSERT(lpStuntModeScoring != 0, "lpStuntModeScoring");
     // The reset is the virtual at vtable +0x10 (0x8231EB44..0x8231EB54 `lwz r11,0(r31) ; lwz r11,0x10(r11)
     // ; bctrl`). The object at ss+0x2620 carries the StuntModeScoringOnline vtable 0x820CF9EC (ScoringSystem
     // ctor 0x827E0998), whose +0x10 entry is StuntModeScoringOnline::ClearData 0x82321968.
@@ -280,7 +280,7 @@ void ModeManager::SetupStuntChallenge()
 void ModeManager::EndStuntChallenge()
 {
     StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != nullptr, "lpStuntModeScoring");
+    CGS_ASSERT(lpStuntModeScoring != 0, "lpStuntModeScoring");
     // The same vtable +0x10 reset as SetupStuntChallenge (0x8231212C..0x8231213C) ==
     // StuntModeScoringOnline::ClearData 0x82321968.
     lpStuntModeScoring->ClearData();
@@ -306,7 +306,7 @@ void ModeManager::OnProfileLoaded()
 void ModeManager::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liScore)
 {
     CarData* lpCarData = mScoringSystem.GetCarData(lNetworkPlayerID);
-    CGS_ASSERT(lpCarData != nullptr, "lpCarData != NULL");
+    CGS_ASSERT(lpCarData != 0, "lpCarData != NULL");
 
     // Snapshot the prior online stunt score (CarData+0xD4 == CarScoreData::miOnlineStuntScore) and the
     // car's active-race-car index (CarData+0x144 == meRaceCarIndex) into the network-stunt cache.
@@ -377,7 +377,7 @@ void ModeManager::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface* l
 // check -- are carried by the named setter; the GetCarData enum-range assert is GetCarData's own.)
 void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDistanceInterface* lpRaceDistanceInterface)
 {
-    if (mpCurrentGameMode == nullptr)   // X360 if (*(this+0xD98))
+    if (mpCurrentGameMode == 0)   // X360 if (*(this+0xD98))
     {
         return;
     }
@@ -396,7 +396,7 @@ void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDist
             mScoringSystem.GetCarData(static_cast<EActiveRaceCarIndex>(liRaceCarIndex));
 
         f32 lfDistanceToFinish;
-        if (lpCarData != nullptr)
+        if (lpCarData != 0)
         {
             lfDistanceToFinish = lpCarData->GetScoreData()->GetDistanceToFinishLive();   // X360 CarData+0x18
         }
@@ -457,7 +457,7 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
         // (online stunt scorer end-of-mode finalise -- see FLAG)
     }
 
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
     const EActiveRaceCarIndex lePlayer = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
     lAction.meFinishedGameModeType = meCurrentGameModeType;
@@ -528,9 +528,9 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
 // X360 0x82329B68. Refresh the cumulative results and latch the final-standings flag.
 void ModeManager::TellGuiToShowOnlineFinalStandings()
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
 
-    const bool lbOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+    const bool lbOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
 
     // X360 @0x82329BD0..0x82329BE8: ScoringSystem::UpdateCumulativeResults(seed, round, final).
     // [stuntrace waveB fix round, 2026-08-26] RENAMED, ORDER UNCHANGED. The first argument is

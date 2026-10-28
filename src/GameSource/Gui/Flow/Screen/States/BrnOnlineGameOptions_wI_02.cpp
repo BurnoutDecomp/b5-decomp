@@ -90,7 +90,7 @@ namespace BrnGui
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host; if a host layout ever drifts,
         // this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
     }
 
     // ---- CheckPrivileges @ 0x82485C18 ----------------------------------------------

@@ -36,13 +36,13 @@ namespace BrnNetwork
         void          PrepareForSend(u16 lu16Frame, s32 liNumRoadRulesScores,
                                      RoadRulesMessageData* lpRoadRulesMessageData);
         bool          Retrieve(s32* lpiNumRoadRulesScores, RoadRulesMessageData* lpRoadRulesMessageData);
-        s32   GetPackedMessageSize() override;
+        s32   GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD50 -- bodied in this TU (DWARF BrnRoadRulesMessage.h:93).
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         RoadRulesMessageData maRoadRulesMessageData[10]; // DWARF :79
@@ -58,5 +58,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(RoadRulesMessage) == 0x120, "sizeof(RoadRulesMessage) == 0x120");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(RoadRulesMessage) == 0x120), "sizeof(RoadRulesMessage) == 0x120");
 } // namespace BrnNetwork

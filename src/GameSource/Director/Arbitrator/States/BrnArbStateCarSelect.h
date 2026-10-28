@@ -183,11 +183,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) ----------
-        void        Construct() override;                                // @0x8225AFB8
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;   // @0x8226EFA0
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;    // @0x8226F5D0
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;   // @0x82236050
-        const char* GetName() const override;                             // @0x821F6490
+        void        Construct() ;                                // @0x8225AFB8
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;   // @0x8226EFA0
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;    // @0x8226F5D0
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;   // @0x82236050
+        const char* GetName() const ;                             // @0x821F6490
 
         // Destruct is not in this TU's exported X360 function set -- the base declaration stands.
         // (Release WAS missing too, and that was a leak, not a hole: see its body in the .cpp.)

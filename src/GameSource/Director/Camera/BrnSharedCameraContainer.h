@@ -95,6 +95,6 @@ namespace BrnDirector
     // Pin only the size-stable offsets the X360 asm proves (the two selection-flag bytes).
     // The handle offsets (X360 +0x04 / +0x18) are not pinned on x64, where 8-byte pointers
     // shift them; the fields are reached by name, so the absolute offset is not load-bearing.
-    static_assert(offsetof(SharedCameraContainer, mbUseGameplayExternal) == 0x00, "use-external flag @+0x00");
-    static_assert(offsetof(SharedCameraContainer, mbLookbackOverride)    == 0x01, "lookback-override flag @+0x01");
+    CGS_STATIC_ASSERT((offsetof(SharedCameraContainer, mbUseGameplayExternal) == 0x00), "use-external flag @+0x00");
+    CGS_STATIC_ASSERT((offsetof(SharedCameraContainer, mbLookbackOverride)    == 0x01), "lookback-override flag @+0x01");
 }

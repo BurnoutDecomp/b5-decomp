@@ -48,7 +48,7 @@ namespace BrnNetwork
             { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_VOIP_ONLY,"Voip direct first"                          },
             { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY,"Game direct first"                          },
             { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_NO_FALLBACK,       "Game and voip always through rebroadcaster" },
-            { 0, nullptr },
+            { 0, 0 },
         };
 
         const CgsDev::DebugUI::StringList KA_SERVER_TYPE_OPTIONS[] =
@@ -60,7 +60,7 @@ namespace BrnNetwork
             { CgsNetwork::E_SERVER_TYPE_ARTIST, "Juice Server"       },
             { CgsNetwork::E_SERVER_TYPE_DEMO_1, "Artist Server"      },
             { CgsNetwork::E_SERVER_TYPE_DEMO_2, "Demo Server 1"      },
-            { 0, nullptr },
+            { 0, 0 },
         };
 
         // Every cell in the connection-status table is drawn white (X360 r29 = -1 == 0xFFFFFFFF,
@@ -87,7 +87,7 @@ namespace BrnNetwork
             default: break;
             }
             CGS_ASSERT(false, "Unknown connapi status");
-            return nullptr;
+            return 0;
         }
     }
 
@@ -109,14 +109,14 @@ namespace BrnNetwork
     // bodies); it is a no-op and carries no observable effect, so it is dropped.
     void ServerInterfaceDebugComponent::Construct(BrnServerInterfaceBase* lpServerInterfaceBase)
     {
-        CGS_ASSERT(lpServerInterfaceBase != nullptr, "lpServerInterfaceBase");
+        CGS_ASSERT(lpServerInterfaceBase != 0, "lpServerInterfaceBase");
 
         mpServerInterfaceBase       = lpServerInterfaceBase;
         miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY; // 3
         mbDisconnectNextUpdate      = false;
         mbApplyServerTypeNextUpdate = false;
         mbDisplayConnectionStatus   = false;
-        mpNetworkManager            = nullptr;
+        mpNetworkManager            = 0;
         miServerType                = CgsNetwork::E_SERVER_TYPE_COUNT; // 7 (sentinel: no server type yet)
 
         Register();
@@ -130,7 +130,7 @@ namespace BrnNetwork
         mbDisconnectNextUpdate      = false;
         mbApplyServerTypeNextUpdate = false;
         mbDisplayConnectionStatus   = false;
-        if (mpNetworkManager != nullptr)
+        if (mpNetworkManager != 0)
         {
             miServerType = mpNetworkManager->GetNetworkServers()->GetServerType();
         }
@@ -156,15 +156,15 @@ namespace BrnNetwork
         miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY;
         mbApplyServerTypeNextUpdate = false;
         mbDisplayConnectionStatus   = false;
-        mpServerInterfaceBase       = nullptr;
-        mpNetworkManager            = nullptr;
+        mpServerInterfaceBase       = 0;
+        mpNetworkManager            = 0;
     }
 
     // @ 0x825857A8. "Disconnect" menu action: flag a disconnect for the next Update tick. The void*
     // user-data is the component (registered via RegisterFunction(&Disconnect, this, "Disconnect")).
     void ServerInterfaceDebugComponent::Disconnect(void* lpData)
     {
-        CGS_ASSERT(lpData != nullptr, "lpServerInterfaceDebugComponent");
+        CGS_ASSERT(lpData != 0, "lpServerInterfaceDebugComponent");
         static_cast<ServerInterfaceDebugComponent*>(lpData)->mbDisconnectNextUpdate = true;
     }
 
@@ -189,7 +189,7 @@ namespace BrnNetwork
 
         RegisterVariable(&mbDisplayConnectionStatus, "Display Connection Status");
 
-        if (mpNetworkManager != nullptr)
+        if (mpNetworkManager != 0)
         {
             miServerType = mpNetworkManager->GetNetworkServers()->GetServerType();
 
@@ -215,7 +215,7 @@ namespace BrnNetwork
         if (mbApplyServerTypeNextUpdate)
         {
             mbApplyServerTypeNextUpdate = false;
-            CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+            CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
             mpNetworkManager->GetNetworkServers()->SetServerType(static_cast<CgsNetwork::EServerType>(miServerType));
         }
     }
@@ -258,13 +258,13 @@ namespace BrnNetwork
         }
 
         CgsNetwork::DirtySock::ConnApiRefT* lpConnApi = lpServerInterface->GetConnAPIRef();
-        if (lpConnApi == nullptr)
+        if (lpConnApi == 0)
         {
             return;
         }
 
         const ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
-        if (lpClientList == nullptr)
+        if (lpClientList == 0)
         {
             return;
         }
@@ -296,7 +296,7 @@ namespace BrnNetwork
                 MaybeDrawText(lpDisplay, "No", lfBaseX + KF_COL_LOCAL, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
                 const char* lpcGameStatus = GetConnApiStatusLabel(lrClient.GameInfo.eStatus);
-                if (lpcGameStatus != nullptr)
+                if (lpcGameStatus != 0)
                 {
                     MaybeDrawText(lpDisplay, lpcGameStatus, lfBaseX + KF_COL_GAME_STATUS, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
                 }
@@ -305,7 +305,7 @@ namespace BrnNetwork
                               lfBaseX + KF_COL_GAME_DEMANGLE, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
                 const char* lpcVoipStatus = GetConnApiStatusLabel(lrClient.VoipInfo.eStatus);
-                if (lpcVoipStatus != nullptr)
+                if (lpcVoipStatus != 0)
                 {
                     MaybeDrawText(lpDisplay, lpcVoipStatus, lfBaseX + KF_COL_VOIP_STATUS, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
                 }
@@ -359,7 +359,7 @@ namespace BrnNetwork
     // component is non-null, then unconditionally sets the deferred-apply flag.
     void ServerInterfaceDebugComponent::ServerTypeSelectCallback(void* /*lpData*/, void* lpUserData)
     {
-        CGS_ASSERT(lpUserData != nullptr, "lpServerInterfaceDebugComponent");
+        CGS_ASSERT(lpUserData != 0, "lpServerInterfaceDebugComponent");
         static_cast<ServerInterfaceDebugComponent*>(lpUserData)->mbApplyServerTypeNextUpdate = true;
     }
 }

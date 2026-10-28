@@ -349,14 +349,14 @@ struct ICEController
 // (sizeof(ICETake) differs on the 64-bit host; the source-spine spine is the offset source --
 // the bodies access by named member, not by cast). Only the leading author-head edit
 // take and the offsets independent of pointer widening are asserted.
-static_assert(offsetof(ICEController, mEditTake) == 0x28, "ICEController::mEditTake @0x28");
+CGS_STATIC_ASSERT((offsetof(ICEController, mEditTake) == 0x28), "ICEController::mEditTake @0x28");
 
 // Pin the RELATIVE placement of the three trailing widgets (these differences are
 // independent of sizeof(ICETake)/the wider host time bars, so they hold on the host):
 // mTargetBox @+0x7170, mWideScrMarker @+0x71E0 (delta 0x70), mLogo @+0x71E4 (delta 0x74).
-static_assert(offsetof(ICEController, mWideScrMarker) - offsetof(ICEController, mTargetBox) == 0x70,
+CGS_STATIC_ASSERT((offsetof(ICEController, mWideScrMarker) - offsetof(ICEController, mTargetBox) == 0x70),
               "ICEController::mWideScrMarker sits 0x70 after mTargetBox (+0x7170 -> +0x71E0)");
-static_assert(offsetof(ICEController, mLogo) - offsetof(ICEController, mTargetBox) == 0x74,
+CGS_STATIC_ASSERT((offsetof(ICEController, mLogo) - offsetof(ICEController, mTargetBox) == 0x74),
               "ICEController::mLogo sits 0x74 after mTargetBox (+0x7170 -> +0x71E4)");
 
 } // namespace ICE

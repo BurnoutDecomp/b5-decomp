@@ -26,10 +26,10 @@ namespace BrnNetwork
         miNumEncodes   = 0;
         mbRenderImage  = false;
 
-        CGS_ASSERT( lpImageManager != nullptr, "lpImageManager" );
+        CGS_ASSERT( lpImageManager != 0, "lpImageManager" );
         mpImageManager = lpImageManager;
 
-        CGS_ASSERT( lpTextureCompressor != nullptr, "lpTextureCompressor" );
+        CGS_ASSERT( lpTextureCompressor != 0, "lpTextureCompressor" );
         mpTextureCompressor = lpTextureCompressor;
 
         Register();
@@ -86,7 +86,7 @@ namespace BrnNetwork
     // Tear down the menu registrations this component added in OnActivate.
     bool ImageManagerDebugComponent::Release()
     {
-        UnregisterFunction( &EncodeMugshotAtSelectedQuality, nullptr );
+        UnregisterFunction( &EncodeMugshotAtSelectedQuality, 0 );
         UnregisterVariable( &miImageQuality );
         return true;
     }

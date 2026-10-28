@@ -83,7 +83,7 @@ namespace
 void DebugComponent::Construct(EnvironmentManager* lpEnvironmentManager)
 {
     CgsDev::DebugComponent::Construct();
-    CGS_ASSERT(lpEnvironmentManager != nullptr, "lpEnvironmentManager != NULL");
+    CGS_ASSERT(lpEnvironmentManager != 0, "lpEnvironmentManager != NULL");
 
     mpEnvironmentManager = lpEnvironmentManager;
     HH_MM_SS(&muTimeOfDay_HH, &muTimeOfDay_MM, &muTimeOfDay_SS, 46800.0f);

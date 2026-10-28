@@ -80,7 +80,7 @@ namespace CgsDev
             for (s32 liFloatIndex = 0; liFloatIndex < KI_MAX_FLOATS; ++liFloatIndex)
             {
                 const f32* lpfValue = mapfFloats[liFloatIndex];
-                if (lpfValue != nullptr)
+                if (lpfValue != 0)
                 {
                     const f32 lfValue = *lpfValue;
                     if (lfValue < mfMinVal)
@@ -112,7 +112,7 @@ namespace CgsDev
                     maafHistory[liFloat][liSample] = 0.0f;
 
             for (s32 liFloat = 0; liFloat < KI_MAX_FLOATS; ++liFloat)
-                mapfFloats[liFloat] = nullptr;
+                mapfFloats[liFloat] = 0;
 
             miHistoryHead = 0;
         }

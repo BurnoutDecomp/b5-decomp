@@ -24,8 +24,8 @@ namespace CgsPhysics
         static void* FixDown(void* pData, int liDelta);
         static void* FixUp(void* pData, int liDelta);
     };
-    void* CollisionMeshData::FixDown(void*, int) { __debugbreak(); return nullptr; }
-    void* CollisionMeshData::FixUp(void*, int)   { __debugbreak(); return nullptr; }
+    void* CollisionMeshData::FixDown(void*, int) { __debugbreak(); return 0; }
+    void* CollisionMeshData::FixUp(void*, int)   { __debugbreak(); return 0; }
 }
 
 namespace rw { namespace collision

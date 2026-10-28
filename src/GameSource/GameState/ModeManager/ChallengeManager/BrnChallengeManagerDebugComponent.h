@@ -41,12 +41,12 @@ namespace BrnGameState
 
     protected:
         // Menu label (X360 0x823171E0). Overrides CgsDev::DebugComponent::GetName.
-        const char* GetName() const override;        // @ BrnChallengeManagerDebugComponent.cpp:69
+        const char* GetName() const ;        // @ BrnChallengeManagerDebugComponent.cpp:69
         // ARTIST vtable 0x820CE034, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Gameplay"; }
+        const char* GetPath() const  { return "Gameplay"; }
 
         // Registers this component's tweakables + actions with the debug menu (X360 0x8233EA18).
-        void OnActivate() override;                  // @ BrnChallengeManagerDebugComponent.cpp:93
+        void OnActivate() ;                  // @ BrnChallengeManagerDebugComponent.cpp:93
 
         // The original callback at X360 0x82817350 is ICF-folded with the perf-monitor reset
         // callback, but its body is only `li 1; stb 0x14(r3); blr`. DecFIGS names this component

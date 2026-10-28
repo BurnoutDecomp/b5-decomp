@@ -1,6 +1,6 @@
 #include "types.hpp"
 
-#include <cstdint>                                                                         // intptr_t
+#include "types.hpp"                                                                         // intptr_t
 #include <cstring>                                                                         // strlen / strncpy
 
 #include "GameSource/Network/BrnNetworkManager.h"

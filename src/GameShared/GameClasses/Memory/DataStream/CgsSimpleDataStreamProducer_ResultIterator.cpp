@@ -31,7 +31,7 @@ namespace CgsMemory
     // miAlignedResultSize(0x30)*miResultIndex + mpResultBuffer(0x34).
     const void* SimpleDataStreamResultIterator::GetCurrent()
     {
-        CGS_ASSERT(mpParent != nullptr, "No parent\n");
+        CGS_ASSERT(mpParent != 0, "No parent\n");
         CGS_ASSERT(!mpParent->mbIsStreaming, "Parent is streaming\n");
 
         SimpleDataStreamProducer* const lpParent = mpParent;
@@ -40,7 +40,7 @@ namespace CgsMemory
         if (miResultIndex >= liNumAddedCommands)
         {
             miResultIndex = liNumAddedCommands;
-            return nullptr;
+            return 0;
         }
 
         return reinterpret_cast<const char*>(lpParent->mpResultBuffer)

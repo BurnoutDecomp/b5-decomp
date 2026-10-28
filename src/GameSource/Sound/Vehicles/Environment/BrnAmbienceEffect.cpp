@@ -61,7 +61,7 @@ AmbienceEffect::AmbienceEffect()
     : BrnSound::Logic::BrnEffectObject()
     , BrnSound::Logic::Streaming::IStreamUser()
     , mParams()
-    , mpAmbienceControl(nullptr)
+    , mpAmbienceControl(0)
 {
 }
 
@@ -105,7 +105,7 @@ void AmbienceEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 // ---------------------------------------------------------------------------
 void AmbienceEffect::UpdateParams(f32 /*afTimeStep*/)
 {
-    CGS_ASSERT(mpAmbienceControl != nullptr, "mpAmbienceControl");
+    CGS_ASSERT(mpAmbienceControl != 0, "mpAmbienceControl");
 
     const CgsSound::Utils::DataPoint<u8>& lrRegion = mpAmbienceControl->GetRegion();
     if (!lrRegion.HasChanged())
@@ -115,7 +115,7 @@ void AmbienceEffect::UpdateParams(f32 /*afTimeStep*/)
         static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
             static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                 ->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMan != nullptr, "lpStreamingStateMan");
+    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
 
     mParams.mpLogicModule = mpLogicModule;
     mParams.mFactoryName = static_cast<u32>(
@@ -155,7 +155,7 @@ bool AmbienceEffect::Detach()
             static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
                 static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                     ->GetEnvironment().GetStateManager(6));
-        CGS_ASSERT(lpStreamingStateMan != nullptr, "lpStreamingStateMan");
+        CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
         lpStreamingStateMan->PostStreamRequest(
             BrnSound::Logic::Streaming::StreamStopRequest(this, KF_AMBIENCE_FADE_TIME));
     }

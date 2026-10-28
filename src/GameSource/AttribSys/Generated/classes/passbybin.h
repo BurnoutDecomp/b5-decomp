@@ -66,7 +66,7 @@ namespace Gen
             u8        mauPad6C[4];           // +0x6C  (layout size 0x70)
         };
 
-        explicit passbybin(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit passbybin(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // DWARF passbybin.h:35. The console binds the effect's bin with the attested base
         // Attrib::Instance::ChangeWithDefault @0x8280D258 (PassbyEffect::Attach 0x826D5324);
@@ -101,21 +101,21 @@ namespace Gen
 
     // Every member pinned to its schema Definition record's mOffset (see the record addresses
     // on the members above), and the whole block to the ClassLoadData mLayoutSize.
-    static_assert(offsetof(passbybin::_LayoutStruct, VolumeNormal) == 0x00, "schema 0x82CD6F88");
-    static_assert(offsetof(passbybin::_LayoutStruct, VolumeBoost) == 0x10, "schema 0x82CD6EF8");
-    static_assert(offsetof(passbybin::_LayoutStruct, PitchCurveNormal) == 0x20, "schema 0x82CD6E98");
-    static_assert(offsetof(passbybin::_LayoutStruct, PitchCurveBoost) == 0x30, "schema 0x82CD6EE0");
-    static_assert(offsetof(passbybin::_LayoutStruct, LastPassBy) == 0x40, "schema 0x82CD6F28");
-    static_assert(offsetof(passbybin::_LayoutStruct, LastBoostPassBy) == 0x44, "schema 0x82CD6FD0");
-    static_assert(offsetof(passbybin::_LayoutStruct, FirstPassBy) == 0x48, "schema 0x82CD6F40");
-    static_assert(offsetof(passbybin::_LayoutStruct, FirstBoostPassBy) == 0x4C, "schema 0x82CD6EC8");
-    static_assert(offsetof(passbybin::_LayoutStruct, VelocityThreshold_Min) == 0x50, "schema 0x82CD6FA0");
-    static_assert(offsetof(passbybin::_LayoutStruct, VelocityThreshold_Max) == 0x54, "schema 0x82CD6F70");
-    static_assert(offsetof(passbybin::_LayoutStruct, TriggerRadius) == 0x58, "schema 0x82CD6F58");
-    static_assert(offsetof(passbybin::_LayoutStruct, mLastPassBy) == 0x5C, "schema 0x82CD6F10");
-    static_assert(offsetof(passbybin::_LayoutStruct, mLastBoostPassBy) == 0x60, "schema 0x82CD6FB8");
-    static_assert(offsetof(passbybin::_LayoutStruct, mFirstBoostPassBy) == 0x68, "schema 0x82CD6EB0");
-    static_assert(sizeof(passbybin::_LayoutStruct) == passbybin::KU_LAYOUT_SIZE,
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, VolumeNormal) == 0x00), "schema 0x82CD6F88");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, VolumeBoost) == 0x10), "schema 0x82CD6EF8");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, PitchCurveNormal) == 0x20), "schema 0x82CD6E98");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, PitchCurveBoost) == 0x30), "schema 0x82CD6EE0");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, LastPassBy) == 0x40), "schema 0x82CD6F28");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, LastBoostPassBy) == 0x44), "schema 0x82CD6FD0");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, FirstPassBy) == 0x48), "schema 0x82CD6F40");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, FirstBoostPassBy) == 0x4C), "schema 0x82CD6EC8");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, VelocityThreshold_Min) == 0x50), "schema 0x82CD6FA0");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, VelocityThreshold_Max) == 0x54), "schema 0x82CD6F70");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, TriggerRadius) == 0x58), "schema 0x82CD6F58");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, mLastPassBy) == 0x5C), "schema 0x82CD6F10");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, mLastBoostPassBy) == 0x60), "schema 0x82CD6FB8");
+    CGS_STATIC_ASSERT((offsetof(passbybin::_LayoutStruct, mFirstBoostPassBy) == 0x68), "schema 0x82CD6EB0");
+    CGS_STATIC_ASSERT((sizeof(passbybin::_LayoutStruct) == passbybin::KU_LAYOUT_SIZE),
                   "schema ClassLoadData 0x82CD4288: mLayoutSize 0x70");
 
     // Chain the Instance ctor, assert the collection's class is ClassName::passbybin,

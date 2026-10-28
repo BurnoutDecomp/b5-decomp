@@ -107,8 +107,8 @@ namespace BrnNetwork
 
     inline void NetworkDirtyTrickManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || sizeof(DirtyTrickData) == 4 + 2 * sizeof(DirtyTrickMessage), "DirtyTrickData is the id plus two messages");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkDirtyTrickManager) == KI_MAX_DIRTY_TRICK_PLAYERS * sizeof(DirtyTrickData) + 12, "NetworkDirtyTrickManager tail is three pointers");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(DirtyTrickData) == 4 + 2 * sizeof(DirtyTrickMessage)), "DirtyTrickData is the id plus two messages");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkDirtyTrickManager) == KI_MAX_DIRTY_TRICK_PLAYERS * sizeof(DirtyTrickData) + 12), "NetworkDirtyTrickManager tail is three pointers");
     }
 
     // NOTE on the X360 record stride: GetDirtyTrickDataEntry @0x825486A8 walks this table

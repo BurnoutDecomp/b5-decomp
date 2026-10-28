@@ -12,10 +12,10 @@ namespace BrnVehicle
 class GraphicsSpecResourceType : public CgsResource::Type
 {
 public:
-    uint32_t                        GetTypeID() const override;
-    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
-    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void                            FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t                        GetTypeID() const ;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
+    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void                            FixDown(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 

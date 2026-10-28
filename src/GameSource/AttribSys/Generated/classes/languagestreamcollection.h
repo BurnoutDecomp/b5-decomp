@@ -33,10 +33,10 @@ namespace Gen
     class languagestreamcollection : private Instance
     {
     public:
-        explicit languagestreamcollection(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit languagestreamcollection(Collection* lpCollection = 0, void* lpOwner = 0);
         // SpeechEffect::Notify @0x826E7D40 builds one straight off an embedded RefSpec
         // (speechdata.mpAttributeData + 368, the Atomika free-burn VO collection).
-        explicit languagestreamcollection(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit languagestreamcollection(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
         bool IsValid() const { return Instance::IsValid(); }
 

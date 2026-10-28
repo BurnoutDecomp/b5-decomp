@@ -63,7 +63,7 @@ void cParticleLocator::Init()
     mTime.BuildZero();
     mIndex = 0;
     mFlags = 1;
-    mpPosEvaluator = nullptr;
+    mpPosEvaluator = 0;
 
     for (u32 luKey = 0; luKey < 2; ++luKey)
     {

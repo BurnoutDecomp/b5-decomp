@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
 #include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
+#include "types.hpp"   // uintptr_t (the Heap allocation owner is the slot index)
 #include <cstddef>
 //
 // The console frees GPU-VISIBLE memory in FreeMemoryForResource: the bundle's
@@ -73,26 +73,26 @@ namespace CgsResource
         PoolManagementStorageLayout CalculatePoolManagementStorageLayout(const Pool::InitOptions& lrOptions)
         {
             size_t luOffset = 0;
-            size_t luAlignment = alignof(s16);
-            if (alignof(Entry) > luAlignment) luAlignment = alignof(Entry);
-            if (alignof(u8) > luAlignment) luAlignment = alignof(u8);
-            if (alignof(s32) > luAlignment) luAlignment = alignof(s32);
-            if (alignof(HashTable::HashEntry) > luAlignment) luAlignment = alignof(HashTable::HashEntry);
-            if (alignof(Heap::HeapEntryNode) > luAlignment) luAlignment = alignof(Heap::HeapEntryNode);
+            size_t luAlignment = __alignof(s16);
+            if (__alignof(Entry) > luAlignment) luAlignment = __alignof(Entry);
+            if (__alignof(u8) > luAlignment) luAlignment = __alignof(u8);
+            if (__alignof(s32) > luAlignment) luAlignment = __alignof(s32);
+            if (__alignof(HashTable::HashEntry) > luAlignment) luAlignment = __alignof(HashTable::HashEntry);
+            if (__alignof(Heap::HeapEntryNode) > luAlignment) luAlignment = __alignof(Heap::HeapEntryNode);
 
             const size_t luMaxResources = lrOptions.muMaxResources;
             const size_t luHashLength = GetManagementHashLength(lrOptions.muMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * luMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(Entry), sizeof(Entry) * luMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(u8), sizeof(u8) * luMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(s16), sizeof(s16) * luMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(s32), sizeof(s32) * luMaxResources);
-            ReservePoolManagementStorage(luOffset, alignof(HashTable::HashEntry),
+            ReservePoolManagementStorage(luOffset, __alignof(s16), sizeof(s16) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, __alignof(Entry), sizeof(Entry) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, __alignof(u8), sizeof(u8) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, __alignof(s16), sizeof(s16) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, __alignof(s32), sizeof(s32) * luMaxResources);
+            ReservePoolManagementStorage(luOffset, __alignof(HashTable::HashEntry),
                                          sizeof(HashTable::HashEntry) * luHashLength);
             for (s32 liMemType = 0; liMemType < Pool::KI_NUM_TYPES; ++liMemType)
             {
                 if (lrOptions.maHeapInfo[liMemType].muHeapMemorySize != 0)
-                    ReservePoolManagementStorage(luOffset, alignof(Heap::HeapEntryNode),
+                    ReservePoolManagementStorage(luOffset, __alignof(Heap::HeapEntryNode),
                         sizeof(Heap::HeapEntryNode) * lrOptions.maHeapInfo[liMemType].muMaxNodes);
             }
             PoolManagementStorageLayout lLayout = { luOffset, luAlignment };
@@ -678,17 +678,17 @@ namespace CgsResource
         lOverheadAllocator.Create(lpOverheadBlock, luOverheadSize);
         lOverheadAllocator.SetAlignment(lStorageLayout.mAlignment);
 
-        lOverheadAllocator.SetAlignment(alignof(s16));
+        lOverheadAllocator.SetAlignment(__alignof(s16));
         mpnBatchIndices         = static_cast<s16*>(lOverheadAllocator.Malloc(sizeof(s16) * luMax));
-        lOverheadAllocator.SetAlignment(alignof(Entry));
+        lOverheadAllocator.SetAlignment(__alignof(Entry));
         mpResourceEntries       = static_cast<Entry*>(lOverheadAllocator.Malloc(sizeof(Entry) * luMax));
-        lOverheadAllocator.SetAlignment(alignof(u8));
+        lOverheadAllocator.SetAlignment(__alignof(u8));
         mpx8ResourceStatuses    = static_cast<u8*>(lOverheadAllocator.Malloc(sizeof(u8) * luMax));
-        lOverheadAllocator.SetAlignment(alignof(s16));
+        lOverheadAllocator.SetAlignment(__alignof(s16));
         mpiResourceRefCounts    = static_cast<s16*>(lOverheadAllocator.Malloc(sizeof(s16) * luMax));
-        lOverheadAllocator.SetAlignment(alignof(s32));
+        lOverheadAllocator.SetAlignment(__alignof(s32));
         mpiResourceImportCounts = static_cast<s32*>(lOverheadAllocator.Malloc(sizeof(s32) * luMax));
-        lOverheadAllocator.SetAlignment(alignof(HashTable::HashEntry));
+        lOverheadAllocator.SetAlignment(__alignof(HashTable::HashEntry));
         mpHashEntries           = static_cast<HashTable::HashEntry*>(
             lOverheadAllocator.Malloc(sizeof(HashTable::HashEntry) * luHashLength));
 
@@ -698,7 +698,7 @@ namespace CgsResource
         miBankId               = lpOptions->miBankId;
         mbAllowDefragmentation = lpOptions->mbAllowDefragmentation;
         miDefragFrame          = -1; // ARTIST 82902204: no relocation in progress
-        mpCurrentScratchPool   = nullptr; // ARTIST 8290220C
+        mpCurrentScratchPool   = 0; // ARTIST 8290220C
         meDefragStage          = DEFRAGSTAGE_IDLE;   // (defrag-state init; the full machinery is deferred.
                                                      //  ⚠ when it lands: a defrag MOVE relocates a resource
                                                      //  without FreeMemoryForResource, so it must also notify
@@ -715,7 +715,7 @@ namespace CgsResource
             if (lrHeapInfo.muHeapMemorySize == 0)
                 continue;
             CGS_ASSERT(lrHeapInfo.muHeapAlignment >= 16, "For performance reasons heaps must have a minimum alignment of 16 bytes!");   // :353
-            lOverheadAllocator.SetAlignment(alignof(Heap::HeapEntryNode));
+            lOverheadAllocator.SetAlignment(__alignof(Heap::HeapEntryNode));
             maHeaps[luMemType].Prepare(lrHeapInfo.muMaxNodes, &lOverheadAllocator, lapHeapMemory[luMemType],
                                        lrHeapInfo.muHeapMemorySize, lrHeapInfo.muHeapAlignment, macName);
         }
@@ -831,7 +831,7 @@ namespace CgsResource
             Entry* lpEntry = lbFixUpDependencies
                 ? FindResourceWithDependencies(lpIDs[li], &lpOwner, false, 1, &liIndex)
                 : FindResource(lpIDs[li], false, 1, &liIndex);
-            if (lpEntry != nullptr)
+            if (lpEntry != 0)
             {
                 lpOwner->FixUpEntry(lpEntry);
                 if (!lpOwner->ResolveImportsForEntry(liIndex))
@@ -849,7 +849,7 @@ namespace CgsResource
                 Entry* lpEntry = lbFixUpDependencies
                     ? FindResourceWithDependencies(lpIDs[li], &lpOwner, false, 1, &liIndex)
                     : FindResource(lpIDs[li], false, 1, &liIndex);
-                if (lpEntry != nullptr)
+                if (lpEntry != 0)
                 {
                     lpOwner->SetEntryStatus(liIndex, 2);
                     lpOwner->PostFixUpEntry(lpEntry);
@@ -916,7 +916,7 @@ namespace CgsResource
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
-        CGS_ASSERT(lpEntry != nullptr, "Failed to find entry to delete memory for\n");
+        CGS_ASSERT(lpEntry != 0, "Failed to find entry to delete memory for\n");
         for (s32 t = 0; t < 3; ++t)
         {
             void* lpMemory = lpEntry->mResource.m_baseResources[t];
@@ -936,18 +936,18 @@ namespace CgsResource
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
-        CGS_ASSERT(lpEntry != nullptr, "Failed to find entry to delete memory for\n");
+        CGS_ASSERT(lpEntry != 0, "Failed to find entry to delete memory for\n");
         SmallResource lResource;
         for (s32 t = 0; t < 3; ++t)
         {
-            lResource.m_baseResources[t] = nullptr;
+            lResource.m_baseResources[t] = 0;
             const u32 luSize = lpDescriptor->m_baseResourceDescriptors[t].m_size;
             if (luSize)
             {
                 u16 luNode;
                 void* lpMemory = maHeaps[t].Malloc(luSize, "", reinterpret_cast<void*>(static_cast<uintptr_t>(liSlot)),
-                    0xFFFF, &luNode, true, true, nullptr);
-                CGS_ASSERT(lpMemory != nullptr, "Failed to re-allocate memory\n");
+                    0xFFFF, &luNode, true, true, 0);
+                CGS_ASSERT(lpMemory != 0, "Failed to re-allocate memory\n");
                 lResource.m_baseResources[t] = lpMemory;
                 lpEntry->mauHeapIndices[t] = luNode;
             }
@@ -979,7 +979,7 @@ namespace CgsResource
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         const u16 luCount = static_cast<u16>(liNumSlots);
         if (muNumFreeResources < luCount)
-            return nullptr;
+            return 0;
         u16 luFound = 0;
         for (u16 luSlot = 0; luFound < luCount; ++luSlot)
         {
@@ -1192,9 +1192,9 @@ namespace CgsResource
         }
         if (IsDefragmenting())
         {
-            if (mpCurrentRelocator != nullptr)
+            if (mpCurrentRelocator != 0)
                 UpdateEmergencyDefrag();
-            else if (mpCurrentScratchPool != nullptr)
+            else if (mpCurrentScratchPool != 0)
                 UpdateDefrag();
             else
                 CGS_ASSERT(false, "Invalid defragmentation mode - don't have a relocator (for emergency frag) or scratch pool (for silent frag)\n");
@@ -1209,7 +1209,7 @@ namespace CgsResource
         const s32 liEntryId = static_cast<s32>(reinterpret_cast<uintptr_t>(mpRelocateSources[luIndex].mpOwner));
         Entry* lpEntry = &mpResourceEntries[liEntryId];
         void* lpDestination = maHeaps[miDefragMemType].GetBaseAddress() + mpRelocateRequests[luIndex].muDestOffset;
-        if (mpCurrentScratchPool->AddEntry(lpEntry, liEntryId, miDefragMemType, lpDestination) == nullptr)
+        if (mpCurrentScratchPool->AddEntry(lpEntry, liEntryId, miDefragMemType, lpDestination) == 0)
             return false;
         lpEntry->mauHeapIndices[miDefragMemType] = mpRelocateRequests[luIndex].muNode;
         return true;
@@ -1314,7 +1314,7 @@ namespace CgsResource
             Entry& lrEntry = mpResourceEntries[lu];
             const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
                 reinterpret_cast<uintptr_t>(lrEntry.mResource.m_baseResources[0]) + lrEntry.muImportTableOffset);
-            if (lpImports == nullptr)
+            if (lpImports == 0)
                 continue;
             for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
             {
@@ -1333,7 +1333,7 @@ namespace CgsResource
             Entry& lrEntry = mpResourceEntries[lu];
             const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
                 reinterpret_cast<uintptr_t>(lrEntry.mResource.m_baseResources[0]) + lrEntry.muImportTableOffset);
-            if (lpImports == nullptr)
+            if (lpImports == 0)
                 continue;
             for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
             {

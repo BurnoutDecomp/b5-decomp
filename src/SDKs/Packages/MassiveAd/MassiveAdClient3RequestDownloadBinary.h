@@ -80,7 +80,7 @@ public:
     // (mnDataLength) does not equal the expected size (mnField48), or when the
     // MD5 of the received payload does not match the expected 32-byte digest
     // (mpSignature). Returns 1 on a valid response, 0 otherwise.
-    int Parse() override;
+    int Parse() ;
 
     // @ 0x82BDD3A8. Called by CMassiveAsset::RequestDownloadBinary. Rejects a
     // null builder, URL or expected-MD5 pointer (-100); records the URL, copies
@@ -97,7 +97,7 @@ public:
     char* SetRequestURL(const char* pcURL);
 
     // The asset URL this request downloads (the owned copy SetRequestURL made).
-    const char* GetRequestURL() override { return mpRequestURL; }
+    const char* GetRequestURL()  { return mpRequestURL; }
 
 private:
     char* mpRequestURL; // +0x50 (owned URL copy, or 0)

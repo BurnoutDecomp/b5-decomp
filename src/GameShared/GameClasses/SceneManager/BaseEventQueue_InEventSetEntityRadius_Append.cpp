@@ -33,7 +33,7 @@
 //
 // X360-attested element stride (`slwi r, count, 3` == *8); matches the committed
 // InEventSetEntityRadius element (EntityId + f32, sizeof 8).
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::InEventSetEntityRadius) == 8,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::InEventSetEntityRadius) == 8),
               "InEventSetEntityRadius stride 8");
 
 template bool

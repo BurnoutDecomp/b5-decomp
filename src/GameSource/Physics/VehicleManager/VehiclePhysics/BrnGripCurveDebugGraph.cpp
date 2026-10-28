@@ -42,7 +42,7 @@ namespace Vehicle
     // window's Render uses as the vertical advance between its two stacked graphs.
     void GripCurveDebugGraph::Construct()
     {
-        mpGripCurve = nullptr;
+        mpGripCurve = 0;
 
         mAxisTopLeft.SetZero();
         mAxisRanges.SetZero();

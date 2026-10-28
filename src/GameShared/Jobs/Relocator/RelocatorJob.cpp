@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstring>   // memcpy
-#include <cstdint>
+#include "types.hpp"
 
 // RelocatorJob::Execute - the copy body of the relocation job.
 
@@ -46,9 +46,9 @@ void RelocatorJob::Execute(void* lpvJobData)
         // on every chunk. Real car resources exceed the 1 MiB bounce buffer.
         // Advance both sides and copy backward when a higher destination overlaps
         // unread source bytes. Preserve the bounded temporary-buffer contract.
-        CGS_ASSERT(lpData->mpBounceBuffer != nullptr && lpData->miBounceBufferSize > 0,
+        CGS_ASSERT(lpData->mpBounceBuffer != 0 && lpData->miBounceBufferSize > 0,
                    "Overlapping relocation requires a non-empty bounce buffer\n");
-        if (lpData->mpBounceBuffer == nullptr || lpData->miBounceBufferSize <= 0)
+        if (lpData->mpBounceBuffer == 0 || lpData->miBounceBufferSize <= 0)
             return;
         u32 luRemaining = luSize;
         while (luRemaining != 0)

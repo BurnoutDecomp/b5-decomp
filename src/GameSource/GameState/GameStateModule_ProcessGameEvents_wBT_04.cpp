@@ -200,7 +200,7 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
 
         // The event's region goes out verbatim as action 112.
         GameStateModuleIO::WorldRegionChangeAction lWorldRegionChangeAction;
-        static_assert(sizeof(lWorldRegionChangeAction.mNewWorldRegion) == sizeof(WorldRegionChangeEvent),
+        CGS_STATIC_ASSERT((sizeof(lWorldRegionChangeAction.mNewWorldRegion) == sizeof(WorldRegionChangeEvent)),
                       "action 112 carries the event's 8-byte region");
         std::memcpy(&lWorldRegionChangeAction.mNewWorldRegion, lpWorldRegionChangeEvent,
                     sizeof(lWorldRegionChangeAction.mNewWorldRegion));

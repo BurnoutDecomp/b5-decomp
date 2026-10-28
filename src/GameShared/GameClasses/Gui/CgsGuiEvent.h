@@ -53,7 +53,7 @@ namespace CgsGui
     {
         s32 GetEventType() const { return 91; }
     };
-    static_assert(sizeof(GuiEvent<91>) == 1, "ARTIST GUI tag 91 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<91>) == 1), "ARTIST GUI tag 91 is one byte");
 
     // ARTIST's Payback bridge uses these one-byte tag instantiations, not the generic
     // 12-byte header record: AddGuiEvent helpers 0x823D7570/0x823D7628/0x823D2FB8 pin
@@ -73,8 +73,8 @@ namespace CgsGui
     {
         s32 GetEventType() const { return 183; }
     };
-    static_assert(sizeof(GuiEvent<178>) == 1 && sizeof(GuiEvent<180>) == 1 &&
-                  sizeof(GuiEvent<183>) == 1, "ARTIST Payback tag records are one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<178>) == 1 && sizeof(GuiEvent<180>) == 1 &&
+                  sizeof(GuiEvent<183>) == 1), "ARTIST Payback tag records are one byte");
 
     // ARTIST823D8540 posts tag523 with size1 (823D85DC/E0). Action293
     // stores no payload byte; retain the original empty event representation.
@@ -83,7 +83,7 @@ namespace CgsGui
     {
         s32 GetEventType() const { return 523; }
     };
-    static_assert(sizeof(GuiEvent<523>) == 1, "ARTIST GUI tag523 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<523>) == 1), "ARTIST GUI tag523 is one byte");
 
     // Original PFX tags carry one unwritten byte: ARTIST8250D828/2C
     // posts497, and823CEFA4/A8 posts500. The queue owns their type/size.
@@ -97,7 +97,7 @@ namespace CgsGui
     {
         s32 GetEventType() const { return 500; }
     };
-    static_assert(sizeof(GuiEvent<497>) == 1 && sizeof(GuiEvent<500>) == 1,
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<497>) == 1 && sizeof(GuiEvent<500>) == 1),
                   "PFX tags497 and500 are one-byte empty events");
 
     // ARTIST GuiDebug callbacks post these original tags as one unwritten byte.
@@ -107,43 +107,43 @@ namespace CgsGui
     {
         s32 GetEventType() const { return 226; }
     };
-    static_assert(sizeof(GuiEvent<226>) == 1, "ARTIST GuiDebug tag226 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<226>) == 1), "ARTIST GuiDebug tag226 is one byte");
     template <>
     struct GuiEvent<227> : public CgsModule::Event
     {
         s32 GetEventType() const { return 227; }
     };
-    static_assert(sizeof(GuiEvent<227>) == 1, "ARTIST GuiDebug tag227 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<227>) == 1), "ARTIST GuiDebug tag227 is one byte");
     template <>
     struct GuiEvent<228> : public CgsModule::Event
     {
         s32 GetEventType() const { return 228; }
     };
-    static_assert(sizeof(GuiEvent<228>) == 1, "ARTIST GuiDebug tag228 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<228>) == 1), "ARTIST GuiDebug tag228 is one byte");
     template <>
     struct GuiEvent<229> : public CgsModule::Event
     {
         s32 GetEventType() const { return 229; }
     };
-    static_assert(sizeof(GuiEvent<229>) == 1, "ARTIST GuiDebug tag229 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<229>) == 1), "ARTIST GuiDebug tag229 is one byte");
     template <>
     struct GuiEvent<230> : public CgsModule::Event
     {
         s32 GetEventType() const { return 230; }
     };
-    static_assert(sizeof(GuiEvent<230>) == 1, "ARTIST GuiDebug tag230 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<230>) == 1), "ARTIST GuiDebug tag230 is one byte");
     template <>
     struct GuiEvent<288> : public CgsModule::Event
     {
         s32 GetEventType() const { return 288; }
     };
-    static_assert(sizeof(GuiEvent<288>) == 1, "ARTIST GuiDebug tag288 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<288>) == 1), "ARTIST GuiDebug tag288 is one byte");
     template <>
     struct GuiEvent<511> : public CgsModule::Event
     {
         s32 GetEventType() const { return 511; }
     };
-    static_assert(sizeof(GuiEvent<511>) == 1, "ARTIST GuiDebug tag511 is one byte");
+    CGS_STATIC_ASSERT((sizeof(GuiEvent<511>) == 1), "ARTIST GuiDebug tag511 is one byte");
 
     // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
     // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /

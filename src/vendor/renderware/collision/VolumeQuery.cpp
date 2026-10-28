@@ -77,7 +77,7 @@ VolumeVolumeQuery* VolumeVolumeQuery::Construct(int /*liVolumes*/, int liResults
     VolumeBBoxQuery::GetResourceDescriptor(laDescriptor, liResults, liResults);
     u32 luDescSize = laDescriptor[0];
 
-    m_cullTable                 = nullptr;                        // +0x10
+    m_cullTable                 = 0;                        // +0x10
     m_intersectionBufferMaxSize = liResults;                      // +0x34
 
     // Side-B sub-query sits one descriptor past side A.
@@ -122,7 +122,7 @@ void* VolumeVolumeQuery::Initialize(void** lppBuffer, int liVolumes, int liResul
     }
     else
     {
-        lpQuery = nullptr;
+        lpQuery = 0;
     }
 
     // --- side-A sub-query ---
@@ -265,7 +265,7 @@ namespace
     Vec4& BoxMin(AABBox& arBox) { return *reinterpret_cast<Vec4*>(&arBox.mMin); }
     Vec4& BoxMax(AABBox& arBox) { return *reinterpret_cast<Vec4*>(&arBox.mMax); }
 
-    static_assert(sizeof(AABBox) == 0x20, "AABBox must be two 16-byte corner rows");
+    CGS_STATIC_ASSERT((sizeof(AABBox) == 0x20), "AABBox must be two 16-byte corner rows");
 
     // vsubfp / vaddfp / vminfp / vmaxfp: per-lane, all four lanes (the pad
     // vector's W lane is 0 so W rides through the fatten unchanged).
@@ -651,9 +651,9 @@ void* VolumeLineQuery::GetResourceDescriptor(void* lpOut, int liVolumes, int liR
 void* VolumeLineQuery::Initialize(void** lppBuffer, int liVolumes, int liResults)
 {
     VolumeLineQuery* lpQuery = static_cast<VolumeLineQuery*>(lppBuffer[0]);
-    if (lpQuery == nullptr)
+    if (lpQuery == 0)
     {
-        return nullptr;
+        return 0;
     }
 
     lpQuery->m_stackMax       = static_cast<u32>(liVolumes);

@@ -93,7 +93,7 @@ namespace CgsSceneManager
     // VolRef::Volume in place (DWARF CgsVolumeStore.h:51/64). The buffer sizes the
     // ObjectPool stride (589824 / 4608 == 128 on the X360). 16-byte aligned -- see the
     // alignment block in the banner.
-    struct alignas(16) VolumeSlot
+    struct CGS_ALIGN(16) VolumeSlot
     {
         // CgsVolumeStore.h:56 -- copy a serialised volume of liSizeInBytes bytes into
         // macBuffer. Inlined by the console into VolumeStore<4608>::ReplaceVolume
@@ -166,12 +166,12 @@ namespace CgsSceneManager
     //   mObjectsAllocated BitArray<4608> +608264         72 * 8        -> 608840
     //   tail pad to alignof(VolumeSlot) == 16                          -> 608848
     // and 608848 IS the measured offset of VolumeManager::mVolumePool.
-    static_assert(sizeof(VolumeSlot) == 128,
+    CGS_STATIC_ASSERT((sizeof(VolumeSlot) == 128),
                   "VolumeSlot is KI_VOLUME_SLOT_SIZE bytes (X360 pool stride 589824/4608)");
-    static_assert(alignof(VolumeSlot) == 16,
+    CGS_STATIC_ASSERT((__alignof(VolumeSlot) == 16),
                   "VolumeSlot holds a serialised rw::collision::Volume image (descriptor alignment 0x10)");
-    static_assert(sizeof(CgsContainers::ObjectPool<VolumeSlot, 4608, s32>) == 608848,
+    CGS_STATIC_ASSERT((sizeof(CgsContainers::ObjectPool<VolumeSlot, 4608, s32>) == 608848),
                   "ObjectPool<VolumeSlot,4608,int> spans the X360 offsets 0/589824/608256/608264 + 16-byte tail pad");
-    static_assert(sizeof(VolumeStore<4608>) == 608848,
+    CGS_STATIC_ASSERT((sizeof(VolumeStore<4608>) == 608848),
                   "VolumeStore<4608> is its pool (X360: VolumeManager::mVolumePool sits at +608848)");
 }

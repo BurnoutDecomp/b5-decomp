@@ -33,7 +33,7 @@ namespace
 // Global function pointer set up by the DirectInput / XAudio FF init path.
 // X360 image: dword_8327FDD0 (data-section thunk). Non-null only after the
 // force-feedback subsystem has been initialised; callers treat null as "not available".
-static int (*s_pfnGetFFDeviceContext)(u32 dwUserIndex, u32 dwFlags, void** ppContextOut) = nullptr;
+static int (*s_pfnGetFFDeviceContext)(u32 dwUserIndex, u32 dwFlags, void** ppContextOut) = 0;
 
 namespace
 {

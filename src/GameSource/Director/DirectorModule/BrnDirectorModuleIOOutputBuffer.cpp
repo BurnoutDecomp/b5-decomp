@@ -33,8 +33,8 @@ namespace DirectorIO
     // member) and CgsGraphics::Camera's own pointer-free stride ARE identical on both and stay pinned.
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mCgsCamera)               == 0x0010, "mCgsCamera @0x0010");
-        static_assert(sizeof(CgsGraphics::Camera)                      == 0x0170, "CgsGraphics::Camera stride 0x170");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mCgsCamera)               == 0x0010), "mCgsCamera @0x0010");
+        CGS_STATIC_ASSERT((sizeof(CgsGraphics::Camera)                      == 0x0170), "CgsGraphics::Camera stride 0x170");
     }
 
     // ---- Construct ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ namespace DirectorIO
         for (s32 liSerialiser = 0; liSerialiser < BrnReplays::ReplayIO::KI_MAX_SERIALISERS;
              ++liSerialiser)
         {
-            mReplayRequestInterface.mapSerialisers[liSerialiser] = nullptr;
+            mReplayRequestInterface.mapSerialisers[liSerialiser] = 0;
         }
         mCameraOutput.Construct();
         mResourceInterface.Construct();

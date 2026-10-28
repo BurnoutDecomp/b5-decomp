@@ -71,8 +71,8 @@ namespace TriggerEntityModuleIO
     {
         Vector3 mDimensions;
     };
-    static_assert(sizeof(InAddTriggerEvent) == 80, "trigger event base");
-    static_assert(sizeof(InAddBoxTriggerEvent) == 96, "box trigger event");
+    CGS_STATIC_ASSERT((sizeof(InAddTriggerEvent) == 80), "trigger event base");
+    CGS_STATIC_ASSERT((sizeof(InAddBoxTriggerEvent) == 96), "box trigger event");
 
     // ADDITIVE GROW (Process* TU): element record of the trigger-query input queue
     // (CgsModule::VariableEventQueue<4096,16>). X360 ProcessTriggerQueryEvents (0x82306BB0) reads,
@@ -105,7 +105,7 @@ namespace TriggerEntityModuleIO
         Vector3 mLineStart;
         Vector3 mLineEnd;
     };
-    static_assert(sizeof(InLineTestEvent) == 48, "line query payload");
+    CGS_STATIC_ASSERT((sizeof(InLineTestEvent) == 48), "line query payload");
 
     // ADDITIVE GROW (Process* TU): the management input interface aggregate -- the add + remove
     // trigger queues the world bridge fills each frame. The X360 ProcessAddTriggerEvents drains

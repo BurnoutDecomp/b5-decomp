@@ -3,7 +3,7 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::InLineTestEvent
 
 // X360 0x8238E960 forwards sizeof(InLineTestEvent) == 0x30 (li r6,0x30) to the three-arg AddEvent.
-static_assert(sizeof(BrnWorld::TriggerEntityModuleIO::InLineTestEvent) == 48,
+CGS_STATIC_ASSERT((sizeof(BrnWorld::TriggerEntityModuleIO::InLineTestEvent) == 48),
               "InLineTestEvent must be 48 bytes (X360 AddEvent<InLineTestEvent> forwards li r6,0x30)");
 
 // Explicit per-method instantiation of CgsModule::VariableEventQueue<4096, 16>.

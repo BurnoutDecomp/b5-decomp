@@ -377,7 +377,7 @@ void BurnoutSkillsManager::SetSkillsData(EActiveRaceCarIndex leActiveRaceCar,
         // Skill index 11 is never folded in (the asm jumps straight to the increment).
         if (leSkill != BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_ROAD_RULE_CRASH)
         {
-            EActiveRaceCarIndex* lpRecordHolder = nullptr;
+            EActiveRaceCarIndex* lpRecordHolder = 0;
             bool                 lbBeaten       = false;
 
             if (leSkill == BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_EXTRA_12)

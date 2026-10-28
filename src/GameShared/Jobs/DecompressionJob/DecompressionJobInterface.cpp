@@ -151,7 +151,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
         // An entry created after the final complete resource may not yet
         // have source bytes; RunFlushJobs excludes that entry from the job.
         const CompressedData lLast = mpEntries[muNumEntries - 1];
-        if (lLast.mpSourceBuffer != nullptr && mJobStatus.miLastInflateResult != Z_OK)
+        if (lLast.mpSourceBuffer != 0 && mJobStatus.miLastInflateResult != Z_OK)
         {
             char lacMessage[256];
             std::snprintf(lacMessage, sizeof(lacMessage),
@@ -163,7 +163,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
         }
         mpEntries[0] = lLast;
         muNumEntries = 1;
-        mpEntries[0].mpSourceBuffer = nullptr;
+        mpEntries[0].mpSourceBuffer = 0;
         mpEntries[0].muSourceSize = 0;
     }
     else

@@ -10,17 +10,17 @@ class SurvivorMode : public OfflineGameMode
 {
 public:
     void Start(const StartGameModeParams* lpStartGameModeParams, GameModeParams* lpGameModeParams,
-               ScoringSystem* lpScoringSystem) override;
+               ScoringSystem* lpScoringSystem) ;
     void PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
                         const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                         const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCars,
                         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
-                        bool lbPaused, const ScoringSystem* lpScoringSystem) override;
-    void OnPlayerInShortCut() override;
-    bool ShouldExit(const ScoringSystem* lpScoringSystem) const override;
+                        bool lbPaused, const ScoringSystem* lpScoringSystem) ;
+    void OnPlayerInShortCut() ;
+    bool ShouldExit(const ScoringSystem* lpScoringSystem) const ;
     void FillInGameModeSpecificResults(const ScoringSystem* lpScoringSystem,
-                                      GameStateModuleIO::FinishedModeAction* lpAction) override;
-    void OnPlayerUsesPaintShop() override;
+                                      GameStateModuleIO::FinishedModeAction* lpAction) ;
+    void OnPlayerUsesPaintShop() ;
     virtual const char* GetName() const;                               // slot 6,  X360 0x827E2560
     virtual f32         GetOutroTimeout() const;                       // slot 16, X360 0x827E2570
 
@@ -46,8 +46,8 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (SurvivorMode::*)() const>(&SurvivorMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (SurvivorMode::*)() const>(&SurvivorMode::GetName)) != 0),
               "SurvivorMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (SurvivorMode::*)() const>(&SurvivorMode::GetOutroTimeout)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (SurvivorMode::*)() const>(&SurvivorMode::GetOutroTimeout)) != 0),
               "SurvivorMode::GetOutroTimeout must bind GameMode vtable slot 16");
 }

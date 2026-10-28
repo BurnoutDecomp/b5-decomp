@@ -38,7 +38,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC keys (friend access)
 

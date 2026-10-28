@@ -131,9 +131,9 @@ namespace CgsGui
         EventObserver* lpEventObserver;
     };
 
-    static_assert(offsetof(GuiEventPriorityRegisterForEvents, muOverrideCount) == 0x964,
+    CGS_STATIC_ASSERT((offsetof(GuiEventPriorityRegisterForEvents, muOverrideCount) == 0x964),
         "ARTIST600-element priority list followed by count");
-    static_assert(offsetof(GuiEventPriorityRegisterForEvents, lpEventObserver) == 0x968,
+    CGS_STATIC_ASSERT((offsetof(GuiEventPriorityRegisterForEvents, lpEventObserver) == 0x968),
         "Priority observer follows the count");
 
     struct StateInterface

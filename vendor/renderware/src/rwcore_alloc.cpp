@@ -48,8 +48,8 @@ namespace rw
         template <class Allocator>
         uint32_t GetAllocatorStorageAlignment(uint32_t luAlignment)
         {
-            return luAlignment < alignof(Allocator)
-                ? static_cast<uint32_t>(alignof(Allocator)) : luAlignment;
+            return luAlignment < __alignof(Allocator)
+                ? static_cast<uint32_t>(__alignof(Allocator)) : luAlignment;
         }
 
         template <class Allocator>
@@ -131,8 +131,8 @@ namespace rw
         Resource lDisposable;
         lDisposable.m_baseResources[1] = lrResource.m_baseResources[1];
         lDisposable.m_baseResources[4] = lrResource.m_baseResources[4];
-        lrResource.m_baseResources[1] = nullptr;
-        lrResource.m_baseResources[4] = nullptr;
+        lrResource.m_baseResources[1] = 0;
+        lrResource.m_baseResources[4] = 0;
         DoFree(lDisposable);
     }
 
@@ -198,8 +198,8 @@ namespace rw
         const Resource& lrResource, const ResourceDescriptor& lrCapacity)
     {
         void* const lpStorage = lrResource.m_baseResources[0];
-        if (lpStorage == nullptr)
-            return nullptr;
+        if (lpStorage == 0)
+            return 0;
         Resource lHeapResource = lrResource;
         lHeapResource.m_baseResources[0] = static_cast<unsigned char*>(lpStorage)
             + GetAllocatorStorageSize<LinearResourceAllocator>(
@@ -247,7 +247,7 @@ namespace rw
 
         for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
             if (lrDescriptor.m_baseResourceDescriptors[luLane].m_size == 0)
-                lResult.m_baseResources[luLane] = nullptr;
+                lResult.m_baseResources[luLane] = 0;
         m_currentUsage += lPadding;
         m_currentUsage += lrDescriptor;
         for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
@@ -301,7 +301,7 @@ namespace core
         : m_hasPhysical(false)
     {
         Resource lHeapResource = lrResource;
-        if (lHeapResource.m_baseResources[0] != nullptr)
+        if (lHeapResource.m_baseResources[0] != 0)
             lHeapResource.m_baseResources[0] =
                 static_cast<unsigned char*>(lHeapResource.m_baseResources[0])
                 + GetAllocatorStorageSize<GeneralResourceAllocator>(
@@ -341,14 +341,14 @@ namespace core
         const Resource& lrResource, const ResourceDescriptor& lrCapacity)
     {
         void* const lpStorage = lrResource.m_baseResources[0];
-        return lpStorage != nullptr
-            ? new (lpStorage) GeneralResourceAllocator(lrResource, lrCapacity) : nullptr;
+        return lpStorage != 0
+            ? new (lpStorage) GeneralResourceAllocator(lrResource, lrCapacity) : 0;
     }
 
     void* GeneralResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)
     {
         if (luType == 2)
-            return m_hasPhysical ? m_physicalAllocator.MallocAligned(luSize, luAlignment) : nullptr;
+            return m_hasPhysical ? m_physicalAllocator.MallocAligned(luSize, luAlignment) : 0;
         const int liAllocationFlags = (luType == 1 || luType == 4) ? 1 : 0;
         return m_mainAllocator.MallocAligned(luSize, luAlignment, 0, liAllocationFlags);
     }
@@ -382,7 +382,7 @@ namespace core
             if (luAlignment < 1)
                 luAlignment = 1;
             lResult.m_baseResources[luPool] = Alloc(luPool, luSize, luAlignment);
-            if (lResult.m_baseResources[luPool] == nullptr)
+            if (lResult.m_baseResources[luPool] == 0)
             {
                 lbFailed = true;
                 break;
@@ -392,7 +392,7 @@ namespace core
         if (lrPhysical.m_size != 0)
         {
             lResult.m_baseResources[2] = Alloc(2, lrPhysical.m_size, lrPhysical.m_alignment);
-            if (lResult.m_baseResources[2] == nullptr)
+            if (lResult.m_baseResources[2] == 0)
                 lbFailed = true;
         }
         if (lbFailed)

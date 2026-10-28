@@ -41,8 +41,8 @@ namespace Gen
             RefSpec mAudioSurface;            // +0x70
         };
 
-        explicit surface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit surface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+        explicit surface(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit surface(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         // The resolved attribute-data pointer (Attrib::Instance::GetLayoutPointer, public
         // on the base but reachable only from within the private-derived class). The wheel
@@ -85,9 +85,9 @@ namespace Gen
         }
     };
 
-    static_assert(offsetof(surface::_LayoutStruct, mRumbleSurface) == 0x28, "RumbleSurface @+0x28 (UpdateSurfaceRumble 0x82378D14)");
-    static_assert(offsetof(surface::_LayoutStruct, mPhysicsSurface) == 0x40, "PhysicsSurface @+0x40 (ReadSurfaceProperties)");
-    static_assert(offsetof(surface::_LayoutStruct, mAudioSurface) == 0x70, "AudioSurface @+0x70 (RoadnoiseEffect::UpdateParams)");
+    CGS_STATIC_ASSERT((offsetof(surface::_LayoutStruct, mRumbleSurface) == 0x28), "RumbleSurface @+0x28 (UpdateSurfaceRumble 0x82378D14)");
+    CGS_STATIC_ASSERT((offsetof(surface::_LayoutStruct, mPhysicsSurface) == 0x40), "PhysicsSurface @+0x40 (ReadSurfaceProperties)");
+    CGS_STATIC_ASSERT((offsetof(surface::_LayoutStruct, mAudioSurface) == 0x70), "AudioSurface @+0x70 (RoadnoiseEffect::UpdateParams)");
 
     // Chain the Instance ctor, assert the collection's class is ClassName::surface,
     // then give the instance a default data area (0x90 bytes) if it has none.

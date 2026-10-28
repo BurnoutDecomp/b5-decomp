@@ -105,7 +105,7 @@ namespace Native
     // alignment. The C++ below reproduces that by construction -- Matrix44Affine is
     // alignas(16) -- and 0x90 + 0x40 == 0xD0 closes the stride exactly. (The previous
     // comment said +0x88; the layout was already right, only the note was wrong.)
-    struct alignas(16) SparkFrameData
+    struct CGS_ALIGN(16) SparkFrameData
     {
         rw::math::vpu::Matrix44Affine mViewMatrix;                       // +0x00 (64)
         rw::math::vpu::Matrix44       mProjectionMatrix;                 // +0x40 (64)
@@ -145,7 +145,7 @@ namespace Native
 
     // BrnSparkRenderer.h:149 (DWARF). 16-byte aligned so sizeof rounds 36 up to 48,
     // giving the attested per-particle stride.
-    struct alignas(16) BrnSpark
+    struct CGS_ALIGN(16) BrnSpark
     {
         rw::math::vpu::Vector4 mPosition; // BrnSparkRenderer.h:152 -- @ +0x00
         rw::math::vpu::Vector4 mVelocity; // BrnSparkRenderer.h:153 -- @ +0x10
@@ -173,7 +173,7 @@ namespace Native
     // The host object is wider only where a console 4-byte pointer widens to 8 (the two
     // banks and the name), exactly as every other widened record in this tree.
     // ========================================================================
-    struct alignas(16) SparkArray
+    struct CGS_ALIGN(16) SparkArray
     {
         // BrnSparkRenderer.h:257 (DWARF) -- one bank of spark buckets.
         //

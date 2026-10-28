@@ -31,37 +31,37 @@ namespace RealmcCore
 // ---------------------------------------------------------------------------
 void ObjectManager::Initialize()
 {
-    if (void* const lpHolder = AllocateMem(nullptr, sizeof(MessagePtr)))
+    if (void* const lpHolder = AllocateMem(0, sizeof(MessagePtr)))
     {
-        void* const lpMessage = AllocateMem(nullptr, sizeof(Message));
-        Message* const pMessage = lpMessage ? new (lpMessage) Message() : nullptr;
+        void* const lpMessage = AllocateMem(0, sizeof(Message));
+        Message* const pMessage = lpMessage ? new (lpMessage) Message() : 0;
         g_pRealmcEmptyMessage = new (lpHolder) MessagePtr(pMessage);
     }
     else
     {
-        g_pRealmcEmptyMessage = nullptr;
+        g_pRealmcEmptyMessage = 0;
     }
 
-    if (void* const lpHolder = AllocateMem(nullptr, sizeof(ResponsePtr)))
+    if (void* const lpHolder = AllocateMem(0, sizeof(ResponsePtr)))
     {
-        void* const lpResponse = AllocateMem(nullptr, sizeof(Response));
-        Response* const pResponse = lpResponse ? new (lpResponse) Response(0) : nullptr;
+        void* const lpResponse = AllocateMem(0, sizeof(Response));
+        Response* const pResponse = lpResponse ? new (lpResponse) Response(0) : 0;
         g_pRealmcEmptyResponse = new (lpHolder) ResponsePtr(pResponse);
     }
     else
     {
-        g_pRealmcEmptyResponse = nullptr;
+        g_pRealmcEmptyResponse = 0;
     }
 
-    if (void* const lpHolder = AllocateMem(nullptr, sizeof(ResponsePtr)))
+    if (void* const lpHolder = AllocateMem(0, sizeof(ResponsePtr)))
     {
-        void* const lpResponse = AllocateMem(nullptr, sizeof(Response));
-        Response* const pResponse = lpResponse ? new (lpResponse) Response(5) : nullptr;
+        void* const lpResponse = AllocateMem(0, sizeof(Response));
+        Response* const pResponse = lpResponse ? new (lpResponse) Response(5) : 0;
         g_pRealmcUnfilteredResponse = new (lpHolder) ResponsePtr(pResponse);
     }
     else
     {
-        g_pRealmcUnfilteredResponse = nullptr;
+        g_pRealmcUnfilteredResponse = 0;
     }
 }
 
@@ -81,9 +81,9 @@ void ObjectManager::Finalize()
     if (g_pRealmcUnfilteredResponse)
         delete g_pRealmcUnfilteredResponse;
 
-    g_pRealmcEmptyMessage       = nullptr;
-    g_pRealmcEmptyResponse      = nullptr;
-    g_pRealmcUnfilteredResponse = nullptr;
+    g_pRealmcEmptyMessage       = 0;
+    g_pRealmcEmptyResponse      = 0;
+    g_pRealmcUnfilteredResponse = 0;
 }
 
 } // namespace RealmcCore

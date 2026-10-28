@@ -30,7 +30,7 @@ namespace rw
         {
             // X360 off_8327F07C -- the global filesys allocator. Installed by filesys
             // bring-up; null until then. Single definition lives here.
-            Allocator* gpFileSysAllocator = nullptr;
+            Allocator* gpFileSysAllocator = 0;
 
             // Handle::Handle
             //
@@ -43,8 +43,8 @@ namespace rw
             // existing handle (Open's out-parameter), whose owner and device it adopts.
             Handle::Handle(const char* lpcPath, u32 luFlags, Device* lpDevice)
                 : mField0(0)
-                , mpOwnerHandle(nullptr)
-                , mpFile(nullptr)
+                , mpOwnerHandle(0)
+                , mpFile(0)
                 , mpDevice(lpDevice)
                 , mpDriver(lpDevice->GetDriver())
                 , mu64Size(0)
@@ -53,7 +53,7 @@ namespace rw
                 if (lpcPath[0] == '.' && (lpcPath[1] == '/' || lpcPath[1] == '\\'))
                     lpcPath += 2;
 
-                Handle* lpLinkedHandle = nullptr;
+                Handle* lpLinkedHandle = 0;
                 Device* lpOpenDevice = lpDevice;
 
                 if (lpDevice == gpFileSysManager->mpDefaultDevice)
@@ -108,10 +108,10 @@ namespace rw
                     mpDriver->Close(mpFile);
 
                 // Zero in the console's store order: +4, +8, +0xC, +0x10, then +0.
-                mpOwnerHandle = nullptr;
-                mpFile        = nullptr;
-                mpDevice      = nullptr;
-                mpDriver      = nullptr;
+                mpOwnerHandle = 0;
+                mpFile        = 0;
+                mpDevice      = 0;
+                mpDriver      = 0;
                 mField0       = 0;
             }
 

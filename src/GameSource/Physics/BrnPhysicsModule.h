@@ -120,7 +120,7 @@
 namespace CgsModule { struct IOBufferStack; }
 namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; struct PotentialContact; } }
 namespace BrnResource { namespace GameDataIO { struct AllocatorList; } }
-namespace BrnWorld { class WorldModule; enum EEntityTypeID : int; }   // fixed-underlying-type opaque decl (home BrnEntityTypes.h)
+namespace BrnWorld { class WorldModule; enum EEntityTypeID ; }   // fixed-underlying-type opaque decl (home BrnEntityTypes.h)
 
 namespace BrnPhysics
 {
@@ -267,7 +267,7 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         // Only Construct is bodied so far (BrnPhysicsModule.cpp); the module-level
         // Prepare/Release/Destruct surface is the no-arg base contract, while the argful
         // entry points above are the physics module's own driver methods.
-        void Construct() override;
+        void Construct() ;
 
         // Layout gate. Never called; defined in the MOUNTED BrnPhysicsModule_layout_check.cpp
         // so its static_asserts are actually compiled. It needs member-function context to

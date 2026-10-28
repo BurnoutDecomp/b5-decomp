@@ -115,7 +115,7 @@ s32 Pcm16BigDec::DecodeEvent(DecoderBuffer *pOutput, s32 iNumSamples)
         // request (immediately re-seeded below, matching the console code).
         if (!pDesc->mucContinue)
         {
-            mpSampleCursor = nullptr;
+            mpSampleCursor = 0;
             miRemainingSamples = 0;
         }
 

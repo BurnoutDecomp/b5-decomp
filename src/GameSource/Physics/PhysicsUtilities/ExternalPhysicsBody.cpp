@@ -42,7 +42,7 @@ extern "C" char __ImageBase;
 // adds nothing and therefore shares the class's frame exactly).
 #include <cstddef>   // offsetof
 
-static_assert(sizeof(BrnPhysics::ExternalPhysicsBody) == 0x120,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::ExternalPhysicsBody) == 0x120),
               "sizeof == 0x120 (the four 16-byte accumulators end the class)");
 
 namespace
@@ -58,21 +58,21 @@ namespace
         using BrnPhysics::ExternalPhysicsBody::mTotalAngularImpulse;
     };
 
-    static_assert(sizeof(EpbLayoutProbe) == sizeof(BrnPhysics::ExternalPhysicsBody),
+    CGS_STATIC_ASSERT((sizeof(EpbLayoutProbe) == sizeof(BrnPhysics::ExternalPhysicsBody)),
                   "the probe adds nothing, so it shares the class's frame");
-    static_assert(offsetof(EpbLayoutProbe, mLocalInverseInertia) == 0x70,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mLocalInverseInertia) == 0x70),
                   "mLocalInverseInertia @ +0x70");
-    static_assert(offsetof(EpbLayoutProbe, mWorldInverseInertia) == 0xA0,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mWorldInverseInertia) == 0xA0),
                   "mWorldInverseInertia @ +0xA0");
-    static_assert(offsetof(EpbLayoutProbe, mfMass)               == 0xD0,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mfMass)               == 0xD0),
                   "mfMass @ +0xD0");
-    static_assert(offsetof(EpbLayoutProbe, mTotalLinearForce)    == 0xE0,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mTotalLinearForce)    == 0xE0),
                   "mTotalLinearForce @ +0xE0");
-    static_assert(offsetof(EpbLayoutProbe, mTotalTorque)         == 0xF0,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mTotalTorque)         == 0xF0),
                   "mTotalTorque @ +0xF0");
-    static_assert(offsetof(EpbLayoutProbe, mTotalLinearImpulse)  == 0x100,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mTotalLinearImpulse)  == 0x100),
                   "mTotalLinearImpulse @ +0x100");
-    static_assert(offsetof(EpbLayoutProbe, mTotalAngularImpulse) == 0x110,
+    CGS_STATIC_ASSERT((offsetof(EpbLayoutProbe, mTotalAngularImpulse) == 0x110),
                   "mTotalAngularImpulse @ +0x110");
 }
 
@@ -224,7 +224,7 @@ namespace BrnPhysics
     // the banked linear/angular impulse, the torque*dt, and the resulting change of angular
     // velocity in the car's own axes. Null == nobody is watched (the default, and every run
     // without BRN_CRASH_RESPONSE_DIAG=1).
-    const ExternalPhysicsBody* gpCrashResponseDiagBody = nullptr;
+    const ExternalPhysicsBody* gpCrashResponseDiagBody = 0;
 
     // ---- [dv] THE ONE-STEP VELOCITY WITNESS -- PC bring-up instrument ---------------------------
     // OPT-IN (BRN_DV_PROBE=<threshold m/s>, e.g. 2). NOT IN THE X360 BINARY. Off by default: the
@@ -355,7 +355,7 @@ namespace BrnPhysics
     //     made and withdrawn INSIDE this wave: the first run's 3967 "Not locked for writing"
     //     asserts were filed against the effects wave, and a rerun of the same binary with the
     //     main tree's complete converted data fired 17. Reproducible was not attributable.
-    const ExternalPhysicsBody* gpDvWatchBody = nullptr;
+    const ExternalPhysicsBody* gpDvWatchBody = 0;
 
     // ⭐⭐⭐ THE CALL-SITE TAG, AND WHY A RETURN ADDRESS IS NOT ENOUGH (added 2026-09-03, kerb
     // wave 6). DeformableObject::UpdateContacts routes each sorted contact to ApplyCarCarImpulse
@@ -1140,7 +1140,7 @@ namespace BrnPhysics
         Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
         VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut)
     {
-        CGS_ASSERT(lpvfInvInertiaOut != nullptr, "lpvfInvInertiaOut != NULL");
+        CGS_ASSERT(lpvfInvInertiaOut != 0, "lpvfInvInertiaOut != NULL");
 
         const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar (de-modelled lane)
 
@@ -1201,8 +1201,8 @@ namespace BrnPhysics
         Vector3 lImpactVel, Vector3 lCollisionNormal, VecFloat lvfRestitution,
         Vector3* lpImpulseOut, VecFloat* lpfInvInertiaAOut, VecFloat* lpfInvInertiaBOut) const
     {
-        CGS_ASSERT(lpfInvInertiaAOut != nullptr, "lpfInvInertiaAOut != NULL");
-        CGS_ASSERT(lpfInvInertiaBOut != nullptr, "lpfInvInertiaBOut != NULL");
+        CGS_ASSERT(lpfInvInertiaAOut != 0, "lpfInvInertiaAOut != NULL");
+        CGS_ASSERT(lpfInvInertiaBOut != 0, "lpfInvInertiaBOut != NULL");
 
         const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar
 
@@ -1277,7 +1277,7 @@ namespace BrnPhysics
         // this is the same vector either way on the live path; the INANIMATE sibling's twin store
         // uses +|j| because its caller passes the un-negated normal. Reproduced as shipped rather
         // than folded, so a separating contact that somehow reached here keeps the console's sign.
-        if (lpImpulseOut != nullptr)
+        if (lpImpulseOut != 0)
         {
             const f32 lfNegativeMagnitude = -std::fabs(lfImpVal);
             *lpImpulseOut = vpu::Mult(lCollisionNormal, lfNegativeMagnitude);

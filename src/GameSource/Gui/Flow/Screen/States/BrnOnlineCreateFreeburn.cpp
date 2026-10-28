@@ -145,13 +145,13 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiEventNetworkCreateGame) == 480, "create-game payload is 480 bytes");
-        static_assert(sizeof(GuiEventNetworkCreateGameWire) == 492, "create-game record is 492 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiEvent533Wire) == 16, "id-533 record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCreateGame) == 480), "create-game payload is 480 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCreateGameWire) == 492), "create-game record is 492 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEvent533Wire) == 16), "id-533 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
     }
 
     // ================================================================================

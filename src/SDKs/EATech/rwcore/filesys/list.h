@@ -27,7 +27,7 @@ namespace rw
                     void Append(T* lpNode)
                     {
                         T* lpTail = mpTail;
-                        lpNode->mpNext = nullptr;
+                        lpNode->mpNext = 0;
                         mpTail = lpNode;
                         ++muCount;
                         if (lpTail)
@@ -95,8 +95,8 @@ namespace rw
                             --muCount;
                             if (lpNode == lpTail)
                             {
-                                mpTail = nullptr;
-                                mpHead = nullptr;
+                                mpTail = 0;
+                                mpHead = 0;
                             }
                             else
                             {
@@ -105,7 +105,7 @@ namespace rw
                         }
 
                         if (lbRemoved)
-                            lpNode->mpNext = nullptr;
+                            lpNode->mpNext = 0;
 
                         return lbRemoved;
                     }

@@ -223,9 +223,9 @@ namespace
     {
         // The stored segment and the save-image class must describe the same 118064 bytes
         // (ProfileManager::KI_PROGRESSION_PROFILE_SIZE_BYTES is private to the manager).
-        static_assert(BrnGuiSaveLoad::Profile::KI_IMAGE_SIZE_BYTES == 118064,
+        CGS_STATIC_ASSERT((BrnGuiSaveLoad::Profile::KI_IMAGE_SIZE_BYTES == 118064),
                       "BrnGuiSaveLoad::Profile must span the progression stored segment");
-        static_assert(BrnGuiSaveLoad::ProfileDLC1::KI_IMAGE_SIZE_BYTES == 9800,
+        CGS_STATIC_ASSERT((BrnGuiSaveLoad::ProfileDLC1::KI_IMAGE_SIZE_BYTES == 9800),
                       "the DLC1 save image Serialise clears is 9800 bytes");
 
         lpProfile->Serialise(reinterpret_cast<BrnGuiSaveLoad::Profile*>(lpSaveImage),
@@ -295,9 +295,9 @@ namespace
 
 // The stored-image segments must stay byte-identical to the X360 image the metadata
 // publishes (KI_PROFILE_SIZE == 0x40000).
-static_assert(sizeof(BrnGuiSaveLoad::ProfileDLC1) == 9800,
+CGS_STATIC_ASSERT((sizeof(BrnGuiSaveLoad::ProfileDLC1) == 9800),
               "stored DLC1 progression segment must match the X360 image");
-static_assert(sizeof(OptionsDataProfileDLC1) == 16,
+CGS_STATIC_ASSERT((sizeof(OptionsDataProfileDLC1) == 16),
               "stored DLC1 options segment must match the X360 image");
 
 // ---------------------------------------------------------------------------

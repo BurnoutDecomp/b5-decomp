@@ -47,7 +47,7 @@ extern "C" System *off_83271928;
 // off_8215A8E8 -- the CMpegBase v-table reinstalled by the deleting destructor before any
 // free. An opaque data symbol in the XEX (its function-pointer contents are not exported);
 // modelled as an honest placeholder so the body links without fabricating the table.
-static void *const KMPG_VTable = nullptr; // &off_8215A8E8
+static void *const KMPG_VTable = 0; // &off_8215A8E8
 
 // The MPEG frame-header lookup tables (off_8215A66C / off_8215A680 in the X360 rodata).
 // ProcessHeader only *indexes* them -- their contents (the standard MPEG sample-rate Hz and

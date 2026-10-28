@@ -26,7 +26,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // mpCurrentFunction + SavedExecutionState
 

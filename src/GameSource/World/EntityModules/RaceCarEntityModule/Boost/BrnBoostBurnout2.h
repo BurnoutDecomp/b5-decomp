@@ -238,18 +238,18 @@ private:
     static void _AssertLayout()
     {
         // The anchor: B2's members start where the base ends.
-        static_assert(sizeof(BoostStrategy) == 0x130, "base sizeof anchors every offset below");
+        CGS_STATIC_ASSERT((sizeof(BoostStrategy) == 0x130), "base sizeof anchors every offset below");
 
-        static_assert(offsetof(BoostBurnout2, mfCrashDecrease)             == 0x130, "OnCrash @0x822A6378 lfs 0x130");
-        static_assert(offsetof(BoostBurnout2, mfHiddenBoost)               == 0x134, "OnDriveThru @0x822C1658 stfs 0x134");
-        static_assert(offsetof(BoostBurnout2, mbBoostInterrupted)          == 0x138, "OnCrash @0x822A639C stb 0x138");
-        static_assert(offsetof(BoostBurnout2, miChainSize)                 == 0x13C, "GetIsChainNotifyPending @0x822A65E4 lwz 0x13C");
-        static_assert(offsetof(BoostBurnout2, mfTimeBasedBoostingBonus)    == 0x140, "Prepare @0x822C10F8 stfs 0x140");
-        static_assert(offsetof(BoostBurnout2, mfContinuousBoostingTimeAdd) == 0x144, "ApplyUpdate @0x822C12CC stfs 0x144");
-        static_assert(offsetof(BoostBurnout2, mfTimeBoosting)              == 0x148, "ApplyUpdate @0x822C13E0 stfs 0x148");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, mfCrashDecrease)             == 0x130), "OnCrash @0x822A6378 lfs 0x130");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, mfHiddenBoost)               == 0x134), "OnDriveThru @0x822C1658 stfs 0x134");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, mbBoostInterrupted)          == 0x138), "OnCrash @0x822A639C stb 0x138");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, miChainSize)                 == 0x13C), "GetIsChainNotifyPending @0x822A65E4 lwz 0x13C");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, mfTimeBasedBoostingBonus)    == 0x140), "Prepare @0x822C10F8 stfs 0x140");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, mfContinuousBoostingTimeAdd) == 0x144), "ApplyUpdate @0x822C12CC stfs 0x144");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout2, mfTimeBoosting)              == 0x148), "ApplyUpdate @0x822C13E0 stfs 0x148");
 
-        static_assert(sizeof(BoostBurnout2) == 0x150, "BoostManager::SetBoostStrategy @0x822A3288: B2 at mgr+0x10, B3 at mgr+0x160");
-        static_assert(alignof(BoostBurnout2) == 16, "16-byte alignment inherited from the base's Vector3 member");
+        CGS_STATIC_ASSERT((sizeof(BoostBurnout2) == 0x150), "BoostManager::SetBoostStrategy @0x822A3288: B2 at mgr+0x10, B3 at mgr+0x160");
+        CGS_STATIC_ASSERT((__alignof(BoostBurnout2) == 16), "16-byte alignment inherited from the base's Vector3 member");
     }
 };
 

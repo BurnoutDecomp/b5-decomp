@@ -732,14 +732,14 @@ namespace BrnGame
                 // 545: two words, brightness first -- swap them and the frame goes dark
                 // instead of bright, silently. 546: the handle LEADS and the flag follows
                 // it, which on the host means +16, not the console's +8.
-                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrast, mBrightness) == 0,
+                CGS_STATIC_ASSERT((offsetof(BrnGui::GuiOptionsBrightnessContrast, mBrightness) == 0),
                               "GUI 545 payload: mBrightness is the X360 payload +0 word");
-                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrast, mContrast) == 4,
+                CGS_STATIC_ASSERT((offsetof(BrnGui::GuiOptionsBrightnessContrast, mContrast) == 4),
                               "GUI 545 payload: mContrast is the X360 payload +4 word");
-                static_assert(sizeof(BrnGui::GuiOptionsBrightnessContrast) == 8,
+                CGS_STATIC_ASSERT((sizeof(BrnGui::GuiOptionsBrightnessContrast) == 8),
                               "GUI 545 payload is two words (X360 record 20B = 12B header + 8)");
-                static_assert(offsetof(BrnGui::GuiOptionsBrightnessContrastPostFxControl,
-                                       mColourCalibrationTextureHandle) == 0,
+                CGS_STATIC_ASSERT((offsetof(BrnGui::GuiOptionsBrightnessContrastPostFxControl,
+                                       mColourCalibrationTextureHandle) == 0),
                               "GUI 546 payload: the calibration handle leads (X360 payload +0)");
 
                 if (liCommand == 545)
@@ -1035,8 +1035,8 @@ namespace BrnGame
 
                 case 501:   // Original count plus100 pointers, at native host width.
                             // Retain the existing host record-bound/legacy-wrapper guard.
-                    static_assert(sizeof(BrnGui::GuiPFXHookEnumeration) ==
-                                  BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES,
+                    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiPFXHookEnumeration) ==
+                                  BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES),
                                   "the director copies the canonical501 payload");
                     if (liSize >= static_cast<s32>(BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES
                                                    + (reinterpret_cast<const u8*>(lpuPayload)
@@ -3123,7 +3123,7 @@ namespace BrnGame
         // acquire writes the pair; both words NULL = not yet).
         if (mDebugFont.mpResourceMemory == 0 && mDebugFont.mpSourceEntry == 0)
             return;
-        if (lpIm3dDebug == nullptr || lpIm2dDebug == nullptr)
+        if (lpIm3dDebug == 0 || lpIm2dDebug == 0)
             return;
 
         // 4. the fps state (@0x823BCC24-D44).

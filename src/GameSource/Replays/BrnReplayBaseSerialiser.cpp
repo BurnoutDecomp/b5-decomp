@@ -84,7 +84,7 @@ namespace BrnReplays
     {
         CGS_ASSERT(meMode == E_MODE_PLAYING, "Not playing\n");
         CGS_ASSERT(mbLocked, "Not locked\n");
-        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        CGS_ASSERT(mpBuffer != 0, "Buffer not allocated\n");
         CGS_ASSERT(miBufferUsed - miBufferRead >= liSize,
                    "Not enough data in buffer\n");
 
@@ -105,7 +105,7 @@ namespace BrnReplays
     {
         CGS_ASSERT(IsRecording(), "Not recording\n");
         CGS_ASSERT(mbLocked, "Not locked\n");
-        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        CGS_ASSERT(mpBuffer != 0, "Buffer not allocated\n");
         CGS_ASSERT(miBufferSize - miBufferUsed >= liSize,
                    "Not enough space in buffer\n");
 
@@ -130,7 +130,7 @@ namespace BrnReplays
     {
         CGS_ASSERT(meMode == E_MODE_PLAYING, "Not playing\n");
         CGS_ASSERT(mbLocked, "Not locked\n");
-        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        CGS_ASSERT(mpBuffer != 0, "Buffer not allocated\n");
         CGS_ASSERT(miBufferUsed - miBufferRead >= 1, "Not enough data in buffer\n");
 
         *static_cast<u8*>(lpDest) = static_cast<const u8*>(mpBuffer)[miBufferRead];
@@ -146,7 +146,7 @@ namespace BrnReplays
     {
         CGS_ASSERT(IsRecording(), "Not recording\n");
         CGS_ASSERT(mbLocked, "Not locked\n");
-        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        CGS_ASSERT(mpBuffer != 0, "Buffer not allocated\n");
         CGS_ASSERT(miBufferSize - miBufferUsed >= 1, "Not enough space in buffer\n");
 
         if (meMode == E_MODE_RECORDING)

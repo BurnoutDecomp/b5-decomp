@@ -23,8 +23,8 @@ namespace BrnGameState
         friend struct PaybackManager;
 
     protected:
-        const char* GetName() const override;   // @ 0x82357B88
-        void        OnActivate() override;       // @ 0x82357B98
+        const char* GetName() const ;   // @ 0x82357B88
+        void        OnActivate() ;       // @ 0x82357B98
 
     private:
         // First derived member -> offset +0x0C (vtable ptr + CgsDev::DebugComponent base subobject =

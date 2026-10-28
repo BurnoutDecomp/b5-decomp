@@ -124,18 +124,18 @@ namespace EnvironmentSettings
     {
         // Pointer-invariant on both targets: the count leads the record and the
         // time array is f32 either way.
-        static_assert( offsetof( TimeLine::LocationData, muKeyframeCnt ) == 0,
+        CGS_STATIC_ASSERT(( offsetof( TimeLine::LocationData, muKeyframeCnt ) == 0),
                        "TimeLine::LocationData::muKeyframeCnt leads the record on both targets" );
-        static_assert( sizeof( f32 ) == 4, "keyframe times stay 4-byte floats" );
+        CGS_STATIC_ASSERT(( sizeof( f32 ) == 4), "keyframe times stay 4-byte floats" );
         // Host column of the table in the banner.
     }
 
     inline void TimeLine::_AssertLayout()
     {
-        static_assert( offsetof( TimeLine, muVersion ) == 0,
+        CGS_STATIC_ASSERT(( offsetof( TimeLine, muVersion ) == 0),
                        "TimeLine::muVersion leads the record on both targets (FixUp reads *a2)" );
-        static_assert( offsetof( TimeLine, muLocationCnt )  == 0x04, "TimeLine::muLocationCnt @0x04" );
-        static_assert( offsetof( TimeLine, mpLocationDatii ) == 0x08, "TimeLine::mpLocationDatii @0x08" );
+        CGS_STATIC_ASSERT(( offsetof( TimeLine, muLocationCnt )  == 0x04), "TimeLine::muLocationCnt @0x04" );
+        CGS_STATIC_ASSERT(( offsetof( TimeLine, mpLocationDatii ) == 0x08), "TimeLine::mpLocationDatii @0x08" );
     }
 }
 }

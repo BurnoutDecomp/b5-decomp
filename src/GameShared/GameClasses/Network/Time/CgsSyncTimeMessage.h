@@ -49,12 +49,12 @@ namespace CgsNetwork
                                     CgsSystem::Time* lpClientTime,
                                     MessageWithPlayerIDs::NetworkPlayerID* lpHostID,
                                     CgsSystem::Time* lpHostTime);
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DBC68 -- inline header-homed accessor.
-        const char*        GetName() const override { return "Sync Time Message"; }
+        const char*        GetName() const  { return "Sync Time Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         // +0x20 .. +0x37 (after the 0x20-byte Message base).
         CgsSystem::Time                       mClientSendTime; // +0x20

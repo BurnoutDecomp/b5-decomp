@@ -59,7 +59,7 @@
 // verbatim in the .cpp.
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -83,12 +83,12 @@ public:
     // head, then clear the +0x1F flag byte.
     LoadEntryInfo& operator=(const LoadEntryInfo& rOther);
 
-    std::uint8_t  maHead[0x20];     // +0x00  opaque head; +0x1F is a flag byte
+    uint8_t  maHead[0x20];     // +0x00  opaque head; +0x1F is a flag byte
     void*         mpAuxData;        // +0x20  first DataBuffer argument's pointer
-    std::uint32_t muAuxDataSize;    // +0x24  first DataBuffer argument's size
+    uint32_t muAuxDataSize;    // +0x24  first DataBuffer argument's size
     void*         mpData;           // +0x28  data-buffer pointer (Read/WriteFile
                                     //         buffer + Crc32 input; asm-attested)
-    std::uint32_t muDataSize;       // +0x2C  data byte count (asm-attested)
+    uint32_t muDataSize;       // +0x2C  data byte count (asm-attested)
 };
 // X360 sizeof == 0x30 (48) bytes; host sizeof is larger (the +0x28 data pointer
 // widens to 8 bytes on x64).

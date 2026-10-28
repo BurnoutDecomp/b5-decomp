@@ -316,29 +316,29 @@ namespace CgsDev
         };
 
         // sizeof cross-check: each == the size immediate baked into its AddEventSafe instance.
-        static_assert(sizeof(CInEventDrawText2D)     == 0x10, "CInEventDrawText2D must be 16 bytes (AddEventSafe li r6,0x10)");
-        static_assert(sizeof(CInEventDrawLine2D)     == 0x14, "CInEventDrawLine2D must be 20 bytes");
-        static_assert(sizeof(CInEventDrawBox2D)      == 0x14, "CInEventDrawBox2D must be 20 bytes (AddEventSafe li r6,0x14)");
-        static_assert(sizeof(CInEventDrawFrame2D)    == 0x14, "CInEventDrawFrame2D must be 20 bytes");
-        static_assert(sizeof(CInEventDrawText)       == 0x14, "CInEventDrawText must be 20 bytes (AddEventSafe li r6,0x14)");
-        static_assert(sizeof(CInEventDrawLine)       == 0x1C, "CInEventDrawLine must be 28 bytes (AddEventSafe li r6,0x1C)");
-        static_assert(sizeof(CInEventDrawPoint)      == 0x10, "CInEventDrawPoint must be 16 bytes");
-        static_assert(sizeof(CInEventDrawQuad)       == 0x34, "CInEventDrawQuad must be 52 bytes (AddEventSafe li r6,0x34)");
-        static_assert(sizeof(CInEventDrawAngle)      == 0x14, "CInEventDrawAngle must be 20 bytes");
-        static_assert(sizeof(CInEventDrawAxis)       == 0x30, "CInEventDrawAxis must be 48 bytes (AddEventSafe li r6,0x30)");
-        static_assert(sizeof(CInEventDrawSphere)     == 0x14, "CInEventDrawSphere must be 20 bytes (AddEventSafe li r6,0x14)");
-        static_assert(sizeof(CInEventDrawSolidSphere) == 0x14, "CInEventDrawSolidSphere must be 20 bytes (AddEventSafe li r6,0x14)");
-        static_assert(sizeof(CInEventDrawHollowSphere) == 0x14, "CInEventDrawHollowSphere must be 20 bytes");
-        static_assert(sizeof(CInEventDrawCircle)     == 0x20, "CInEventDrawCircle must be 32 bytes (AddEventSafe li r6,0x20)");
-        static_assert(sizeof(CInEventDrawBox)        == 0x4C, "CInEventDrawBox must be 76 bytes (AddEventSafe li r6,0x4C)");
-        static_assert(sizeof(CInEventDrawBoxAA)      == 0x1C, "CInEventDrawBoxAA must be 28 bytes");
-        static_assert(sizeof(CInEventDrawSolidBox)   == 0x4C, "CInEventDrawSolidBox must be 76 bytes (AddEventSafe li r6,0x4C)");
-        static_assert(sizeof(CInEventDrawSolidBoxAA) == 0x1C, "CInEventDrawSolidBoxAA must be 28 bytes");
-        static_assert(sizeof(CInEventDrawArrow)      == 0x1C, "CInEventDrawArrow must be 28 bytes (AddEventSafe li r6,0x1C)");
-        static_assert(sizeof(CInEventDrawSolidArrow) == 0x1C, "CInEventDrawSolidArrow must be 28 bytes");
-        static_assert(sizeof(CInEventDrawCylinder)   == 0x20, "CInEventDrawCylinder must be 32 bytes");
-        static_assert(sizeof(CInEventDrawCapsule)    == 0x20, "CInEventDrawCapsule must be 32 bytes");
-        static_assert(sizeof(CInEventDrawTriangle)   == 0x28, "CInEventDrawTriangle must be 40 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawText2D)     == 0x10), "CInEventDrawText2D must be 16 bytes (AddEventSafe li r6,0x10)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawLine2D)     == 0x14), "CInEventDrawLine2D must be 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawBox2D)      == 0x14), "CInEventDrawBox2D must be 20 bytes (AddEventSafe li r6,0x14)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawFrame2D)    == 0x14), "CInEventDrawFrame2D must be 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawText)       == 0x14), "CInEventDrawText must be 20 bytes (AddEventSafe li r6,0x14)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawLine)       == 0x1C), "CInEventDrawLine must be 28 bytes (AddEventSafe li r6,0x1C)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawPoint)      == 0x10), "CInEventDrawPoint must be 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawQuad)       == 0x34), "CInEventDrawQuad must be 52 bytes (AddEventSafe li r6,0x34)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawAngle)      == 0x14), "CInEventDrawAngle must be 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawAxis)       == 0x30), "CInEventDrawAxis must be 48 bytes (AddEventSafe li r6,0x30)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawSphere)     == 0x14), "CInEventDrawSphere must be 20 bytes (AddEventSafe li r6,0x14)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawSolidSphere) == 0x14), "CInEventDrawSolidSphere must be 20 bytes (AddEventSafe li r6,0x14)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawHollowSphere) == 0x14), "CInEventDrawHollowSphere must be 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawCircle)     == 0x20), "CInEventDrawCircle must be 32 bytes (AddEventSafe li r6,0x20)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawBox)        == 0x4C), "CInEventDrawBox must be 76 bytes (AddEventSafe li r6,0x4C)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawBoxAA)      == 0x1C), "CInEventDrawBoxAA must be 28 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawSolidBox)   == 0x4C), "CInEventDrawSolidBox must be 76 bytes (AddEventSafe li r6,0x4C)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawSolidBoxAA) == 0x1C), "CInEventDrawSolidBoxAA must be 28 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawArrow)      == 0x1C), "CInEventDrawArrow must be 28 bytes (AddEventSafe li r6,0x1C)");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawSolidArrow) == 0x1C), "CInEventDrawSolidArrow must be 28 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawCylinder)   == 0x20), "CInEventDrawCylinder must be 32 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawCapsule)    == 0x20), "CInEventDrawCapsule must be 32 bytes");
+        CGS_STATIC_ASSERT((sizeof(CInEventDrawTriangle)   == 0x28), "CInEventDrawTriangle must be 40 bytes");
 
         // One debug-draw command handed across a data stream: the event image, its size and id,
         // and which of the buffered renderer's queues (2D or world) it belongs to. 16 bytes on

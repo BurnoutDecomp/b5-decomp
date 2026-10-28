@@ -201,33 +201,33 @@ namespace Vehicle
         // function body provides (same idiom as CarScoreData::_AssertLayout). Never called.
         static void _AssertLayout()
         {
-            static_assert(sizeof(BrnPlayerDriverControls) == 0x48, "record is 72 bytes");
-            static_assert(offsetof(BrnPlayerDriverControls, miVehicleID)                == 0x00, "miVehicleID @+0x00 (stw var_100)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfGas)                      == 0x04, "mfGas @+0x04 (stfs var_FC)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfBrake)                    == 0x08, "mfBrake @+0x08 (stfs var_F8)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfHandBrake)                == 0x0C, "mfHandBrake @+0x0C (stfs var_F4)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfSteering)                 == 0x10, "mfSteering @+0x10 (stfs var_F0)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfForwardSteering)          == 0x14, "mfForwardSteering @+0x14 (stfs var_EC)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfSpin)                     == 0x18, "mfSpin @+0x18 (stfs var_E8)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfRequestedGas)             == 0x1C, "mfRequestedGas @+0x1C (stfs var_E4)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfAftertouchLevel)          == 0x20, "mfAftertouchLevel @+0x20 (stfs var_E0)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfXSensor)                  == 0x24, "mfXSensor @+0x24 (stfs var_DC)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfYSensor)                  == 0x28, "mfYSensor @+0x28 (stfs var_D8)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfZSensor)                  == 0x2C, "mfZSensor @+0x2C (stfs var_D4)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfGSensor)                  == 0x30, "mfGSensor @+0x30 (stfs var_D0)");
-            static_assert(offsetof(BrnPlayerDriverControls, mfBoostMaxSpeedScale)       == 0x34, "mfBoostMaxSpeedScale @+0x34 (stfs var_CC)");
-            static_assert(offsetof(BrnPlayerDriverControls, miVehicleIDToMerge)         == 0x38, "miVehicleIDToMerge @+0x38 (stb var_C8)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbReset)                    == 0x39, "mbReset @+0x39 (stb var_C7)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbToggle)                   == 0x3A, "mbToggle @+0x3A (stb var_C6)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbBoost)                    == 0x3B, "mbBoost @+0x3B (stb var_C5)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbIsInvulnerableToVehicles) == 0x3C, "mbIsInvulnerableToVehicles @+0x3C (stb var_C4)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbIsInvulnerableToWorld)    == 0x3D, "mbIsInvulnerableToWorld @+0x3D (stb var_C3)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbForceDrift)               == 0x3E, "mbForceDrift @+0x3E (stb var_C2)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbBoostBounce)              == 0x3F, "mbBoostBounce @+0x3F (stb var_C1)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbIsOnStartLine)            == 0x40, "mbIsOnStartLine @+0x40 (stb var_C0)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbIsSteeringWheel)          == 0x41, "mbIsSteeringWheel @+0x41 (stb var_BF)");
-            static_assert(offsetof(BrnPlayerDriverControls, mbHorn)                     == 0x42, "mbHorn @+0x42 (stb var_BE)");
-            static_assert(offsetof(BrnPlayerDriverControls, meDriverType)               == 0x44, "meDriverType @+0x44 (stw var_BC, the ctor's store)");
+            CGS_STATIC_ASSERT((sizeof(BrnPlayerDriverControls) == 0x48), "record is 72 bytes");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, miVehicleID)                == 0x00), "miVehicleID @+0x00 (stw var_100)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfGas)                      == 0x04), "mfGas @+0x04 (stfs var_FC)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfBrake)                    == 0x08), "mfBrake @+0x08 (stfs var_F8)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfHandBrake)                == 0x0C), "mfHandBrake @+0x0C (stfs var_F4)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfSteering)                 == 0x10), "mfSteering @+0x10 (stfs var_F0)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfForwardSteering)          == 0x14), "mfForwardSteering @+0x14 (stfs var_EC)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfSpin)                     == 0x18), "mfSpin @+0x18 (stfs var_E8)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfRequestedGas)             == 0x1C), "mfRequestedGas @+0x1C (stfs var_E4)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfAftertouchLevel)          == 0x20), "mfAftertouchLevel @+0x20 (stfs var_E0)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfXSensor)                  == 0x24), "mfXSensor @+0x24 (stfs var_DC)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfYSensor)                  == 0x28), "mfYSensor @+0x28 (stfs var_D8)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfZSensor)                  == 0x2C), "mfZSensor @+0x2C (stfs var_D4)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfGSensor)                  == 0x30), "mfGSensor @+0x30 (stfs var_D0)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfBoostMaxSpeedScale)       == 0x34), "mfBoostMaxSpeedScale @+0x34 (stfs var_CC)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, miVehicleIDToMerge)         == 0x38), "miVehicleIDToMerge @+0x38 (stb var_C8)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbReset)                    == 0x39), "mbReset @+0x39 (stb var_C7)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbToggle)                   == 0x3A), "mbToggle @+0x3A (stb var_C6)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbBoost)                    == 0x3B), "mbBoost @+0x3B (stb var_C5)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbIsInvulnerableToVehicles) == 0x3C), "mbIsInvulnerableToVehicles @+0x3C (stb var_C4)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbIsInvulnerableToWorld)    == 0x3D), "mbIsInvulnerableToWorld @+0x3D (stb var_C3)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbForceDrift)               == 0x3E), "mbForceDrift @+0x3E (stb var_C2)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbBoostBounce)              == 0x3F), "mbBoostBounce @+0x3F (stb var_C1)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbIsOnStartLine)            == 0x40), "mbIsOnStartLine @+0x40 (stb var_C0)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbIsSteeringWheel)          == 0x41), "mbIsSteeringWheel @+0x41 (stb var_BF)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbHorn)                     == 0x42), "mbHorn @+0x42 (stb var_BE)");
+            CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, meDriverType)               == 0x44), "meDriverType @+0x44 (stw var_BC, the ctor's store)");
         }
     };
 
@@ -308,19 +308,19 @@ namespace Vehicle
 
     // The layout gate. These are the four numbers every attestation above closes on; if a member
     // is added, removed or reordered the build fails here rather than in a physics body.
-    static_assert(sizeof(BrnPlayerDriverControls) == 0x48,
+    CGS_STATIC_ASSERT((sizeof(BrnPlayerDriverControls) == 0x48),
                   "BrnPlayerDriverControls is 72 bytes (X360 UpdateDriving memcpy `li r5, 0x48`)");
-    static_assert(offsetof(BrnPlayerDriverControls, mfBoostMaxSpeedScale) == 0x34,
+    CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mfBoostMaxSpeedScale) == 0x34),
                   "the thirteenth control float (X360 Clear `stfs 1.0f, 0x34`)");
-    static_assert(offsetof(BrnPlayerDriverControls, miVehicleIDToMerge) == 0x38,
+    CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, miVehicleIDToMerge) == 0x38),
                   "miVehicleIDToMerge (X360 Clear `stb -1, 0x38`)");
-    static_assert(offsetof(BrnPlayerDriverControls, mbReset) == 0x39,
+    CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbReset) == 0x39),
                   "mbReset (X360 UpdateDriving gates HackedResetAndFlyAround on +0x39)");
-    static_assert(offsetof(BrnPlayerDriverControls, mbBoost) == 0x3B,
+    CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbBoost) == 0x3B),
                   "mbBoost (X360 UpdateBoost reads the boost button at +0x3B)");
-    static_assert(offsetof(BrnPlayerDriverControls, mbIsSteeringWheel) == 0x41,
+    CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbIsSteeringWheel) == 0x41),
                   "mbIsSteeringWheel (X360 UpdateDriving gates the steering-wheel remap on +0x41)");
-    static_assert(offsetof(BrnPlayerDriverControls, mbHorn) == 0x42,
+    CGS_STATIC_ASSERT((offsetof(BrnPlayerDriverControls, mbHorn) == 0x42),
                   "mbHorn closes the ten-byte bool run 0x39..0x42");
 }
 }

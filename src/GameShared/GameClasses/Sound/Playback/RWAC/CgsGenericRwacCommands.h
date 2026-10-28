@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 
-#include <cstdint> // std::uintptr_t
+#include "types.hpp" // std::uintptr_t
 
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/Rwac/CgsGenericRwacCommands.h
@@ -254,7 +254,7 @@ struct RwacCommandQueue
     template <typename T>
     void Post(const T& arCommand)
     {
-        static_assert((sizeof(T) % sizeof(uintptr_t)) == 0,
+        CGS_STATIC_ASSERT(((sizeof(T) % sizeof(uintptr_t)) == 0),
                       "RWAC commands are pointer-width word records");
         const u32 luWordCount = static_cast<u32>(sizeof(T) / sizeof(uintptr_t));
         PostCommand(luWordCount);

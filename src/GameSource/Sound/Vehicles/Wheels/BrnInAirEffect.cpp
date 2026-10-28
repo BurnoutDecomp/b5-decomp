@@ -122,9 +122,9 @@ InAirEffect::InAirPhysicsData::InAirPhysicsData()
 
 InAirEffect::InAirEffect()
     : BrnSound::Logic::BrnEffectObject()
-    , mpWheelControl(nullptr)
-    , mpPhysicsControl(nullptr)
-    , mpEnclosureControl(nullptr)
+    , mpWheelControl(0)
+    , mpPhysicsControl(0)
+    , mpEnclosureControl(0)
     , mInAirVoice()
     , mLandingVoices()
     , mHardLandingVoice()
@@ -138,7 +138,7 @@ InAirEffect::InAirEffect()
     , mfSuspensionThreshold(0.0f)
     , mBin()
     , muRoundRobin(0)
-    , mpCollisionMgr(nullptr)
+    , mpCollisionMgr(0)
     , mfTimeSinceJumpCamera(0.0f)
     , mPhysicsData()
 {
@@ -175,7 +175,7 @@ void InAirEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 
 void InAirEffect::SetupLoadData()
 {
-    LoadAsset("sound\\aems\\InAir.bundle", nullptr,
+    LoadAsset("sound\\aems\\InAir.bundle", 0,
               BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
@@ -205,7 +205,7 @@ bool InAirEffect::Attach()
     {
         // The bank comes from the player state manager (mapStateManagers[1]),
         // which owns inair.abi.
-        CgsSound::Logic::Content* lpContent = nullptr;
+        CgsSound::Logic::Content* lpContent = 0;
         CgsSound::Logic::StateManager* lpPlayerStateMan =
             static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
                 ->GetEnvironment().GetStateManager(1);
@@ -214,7 +214,7 @@ bool InAirEffect::Attach()
             lpContent = lpPlayerStateMan->GetContent(
                 CgsSound::Playback::Name("inair.abi"));
         }
-        CGS_ASSERT(lpContent != nullptr, "lpContent");
+        CGS_ASSERT(lpContent != 0, "lpContent");
 
         CgsSound::Logic::VoiceWrapper::CreateParams lParams;
         lParams.mpLogicModule = GetLogicModule();
@@ -235,14 +235,14 @@ bool InAirEffect::Attach()
 
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    CGS_ASSERT(lpModule != nullptr, "lpLogicModule");
+    CGS_ASSERT(lpModule != 0, "lpLogicModule");
     if (lpModule)
     {
         mpCollisionMgr = static_cast<BrnSound::Logic::Collision::CollisionStateManager*>(
             lpModule->GetEnvironment().GetStateManager(5));
         mBin.ChangeWithDefault(lpModule->GetGlobalData().InAirCrashBin());
     }
-    CGS_ASSERT(mpCollisionMgr != nullptr, "mpCollisionMgr");
+    CGS_ASSERT(mpCollisionMgr != 0, "mpCollisionMgr");
     CGS_ASSERT(mBin.mNumCollisionsMedium() > 0,
                "mBin.mNumCollisionsMedium() > 0");
 
@@ -258,7 +258,7 @@ bool InAirEffect::Detach()
     mHardLandingVoice.Release();
     mJunkyardLandingSweetnerVoice.Release();
     mJumpCamLandingVoice.Release();
-    mpCollisionMgr = nullptr;
+    mpCollisionMgr = 0;
     return BrnSound::Logic::BrnEffectObject::Detach();
 }
 
@@ -319,8 +319,8 @@ void InAirEffect::UpdateParams(f32 afTimeStep)
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     BrnSound::Module::Io::LogicInputBuffer* lpInput =
-        lpModule ? lpModule->GetBrnInputStructure() : nullptr;
-    CGS_ASSERT(lpInput != nullptr, "lpInput");
+        lpModule ? lpModule->GetBrnInputStructure() : 0;
+    CGS_ASSERT(lpInput != 0, "lpInput");
     if (GetStateId() == 1 && lpInput && lpInput->GetDirectorCamera() &&
         (lpInput->GetDirectorCamera()->mState_uFlags & 0x80) != 0)
     {
@@ -345,15 +345,15 @@ void InAirEffect::UpdateParams(f32 afTimeStep)
 
 void InAirEffect::UpdatePhysicsData(f32 afTimeStep)
 {
-    CGS_ASSERT(mpWheelControl != nullptr, "mpWheelControl");
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpWheelControl != 0, "mpWheelControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpWheelControl || !mpPhysicsControl)
         return;
 
     mPhysicsData.mIsOnGround = mpWheelControl->IsOnGround();
     const BrnSound::Vehicles::VehicleData* lpRaw =
         mpPhysicsControl->GetRawPhysicsData();
-    CGS_ASSERT(lpRaw != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(lpRaw != 0, "mpVehiclePhysicsData");
     if (!lpRaw)
         return;
 
@@ -575,8 +575,8 @@ void InAirEffect::PlayJumpCamLanding()
     BrnSound::Logic::GlobalStateManager* lpGlobal = lpModule
         ? static_cast<BrnSound::Logic::GlobalStateManager*>(
               lpModule->GetEnvironment().GetStateManager(0))
-        : nullptr;
-    CGS_ASSERT(lpGlobal != nullptr, "lpGlobalStateMgr");
+        : 0;
+    CGS_ASSERT(lpGlobal != 0, "lpGlobalStateMgr");
     if (!lpGlobal || mPhysicsData.mfTimeSinceReset <= KF_MIN_TIME_SINCE_RESET)
         return;
 
@@ -629,7 +629,7 @@ CgsSound::Logic::EffectObject* TrafficInAir::CreateObject(u32)
 
 TrafficInAir::TrafficInAir()
     : InAirEffect()
-    , mpTrafficEntity(nullptr)
+    , mpTrafficEntity(0)
 {
 }
 
@@ -649,7 +649,7 @@ bool TrafficInAir::Attach()
 
     BrnSound::Logic::Traffic::TrafficState* lpState =
         static_cast<BrnSound::Logic::Traffic::TrafficState*>(GetStateBase());
-    CGS_ASSERT(lpState != nullptr, "lpState");
+    CGS_ASSERT(lpState != 0, "lpState");
     mpTrafficEntity = lpState->GetTrafficEntity();
     return true;
 }
@@ -682,7 +682,7 @@ void TrafficInAir::UpdatePhysicsData(f32 afTimeStep)
             static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
         const BrnSound::Module::Io::LogicInputBuffer* lpInputBuffer =
             lpModule->GetBrnInputStructure();
-        CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
         const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue*
             lpPhysicalTrafficStates = lpInputBuffer->GetPhysicalTrafficStates();
 

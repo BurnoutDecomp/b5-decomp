@@ -1,6 +1,6 @@
 #include "CgsBaseEventReceiverQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include <cstdint>                                    // uintptr_t
+#include "types.hpp"                                    // uintptr_t
 #include <cstring>                                    // memcpy
 
 namespace CgsModule

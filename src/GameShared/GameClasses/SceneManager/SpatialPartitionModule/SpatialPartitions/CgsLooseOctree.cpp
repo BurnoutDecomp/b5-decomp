@@ -2178,7 +2178,7 @@ namespace CgsSceneManager
             const s32 liNumElements = static_cast<s32>(lrNode.muNumElements);           // cmpwi (signed)
             if (liNumElements > 0)
             {
-                alignas(16) CgsGeometric::Sphere laBatch[4] = {};                           // sp+0xD0
+                CGS_ALIGN(16) CgsGeometric::Sphere laBatch[4] = {};                           // sp+0xD0
                 u16 lau16BatchEntities[4] = { 0, 0, 0, 0 };                                // sp+0x60
                 s32 liBatchCount = 0;
 
@@ -2221,7 +2221,7 @@ namespace CgsSceneManager
 
                 if (liBatchCount > 0)
                 {
-                    alignas(16) s32 laiResults[4];
+                    CGS_ALIGN(16) s32 laiResults[4];
                     CgsGeometric::TestLineSphere4(laBatch[0], laBatch[1], laBatch[2], laBatch[3],
                                                   lpParams->mLineStart, lpParams->mLineDirection,
                                                   lpParams->mfLineLength, laiResults);

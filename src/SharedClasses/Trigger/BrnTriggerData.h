@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (rw::math::vpu::Vector3), CgsID
-#include <cstdint>            // uintptr_t (relocation delta)
+#include "types.hpp"            // uintptr_t (relocation delta)
 #include <cstddef>            // offsetof (host layout static_asserts)
 #include "SharedClasses/Trigger/BrnKillzone.h"   // complete BrnTrigger::Killzone (GetKillzone 16B stride)
 #include "SharedClasses/Trigger/BrnRoamingLocation.h" // unchecked array indexing needs the complete element
@@ -182,13 +182,13 @@ private:
     // in-class because the members are private (the project's _AssertIoLayout idiom).
     static void _AssertLayout()
     {
-        static_assert(offsetof(TriggerData, mPlayerStartPosition) == 0x10, "TriggerData::mPlayerStartPosition");
-        static_assert(offsetof(TriggerData, mpLandmarks)          == 0x30, "TriggerData::mpLandmarks");
-        static_assert(offsetof(TriggerData, miLandmarkCount)      == 0x38, "TriggerData::miLandmarkCount");
-        static_assert(offsetof(TriggerData, mpSignatureStunts)    == 0x40, "TriggerData::mpSignatureStunts");
-        static_assert(offsetof(TriggerData, mpKillzones)          == 0x60, "TriggerData::mpKillzones");
-        static_assert(offsetof(TriggerData, mppRegions)           == 0xB0, "TriggerData::mppRegions");
-        static_assert(offsetof(TriggerData, miRegionCount)        == 0xB8, "TriggerData::miRegionCount");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mPlayerStartPosition) == 0x10), "TriggerData::mPlayerStartPosition");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpLandmarks)          == 0x30), "TriggerData::mpLandmarks");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miLandmarkCount)      == 0x38), "TriggerData::miLandmarkCount");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpSignatureStunts)    == 0x40), "TriggerData::mpSignatureStunts");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpKillzones)          == 0x60), "TriggerData::mpKillzones");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mppRegions)           == 0xB0), "TriggerData::mppRegions");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miRegionCount)        == 0xB8), "TriggerData::miRegionCount");
     }
 };
 

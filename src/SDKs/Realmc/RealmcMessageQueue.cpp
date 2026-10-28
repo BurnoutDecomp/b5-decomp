@@ -21,8 +21,8 @@ namespace RealmcCore
 MessageQueue::MessageQueue()
     : mbInitialized(false)
     , mbShuttingDown(false)
-    , mMutex(nullptr, false)
-    , mCondition(nullptr, false)
+    , mMutex(0, false)
+    , mCondition(0, false)
     , miWaitTimeoutMs(6000)
 {
     // mMessageList / mResponseList self-initialise to the empty state through
@@ -49,10 +49,10 @@ int MessageQueue::Initialize(int iTimeoutMs)
             miWaitTimeoutMs = iTimeoutMs;
         }
 
-        EA::Thread::ConditionParameters lConditionParams(true, nullptr);
+        EA::Thread::ConditionParameters lConditionParams(true, 0);
         mCondition.Init(&lConditionParams);
 
-        EA::Thread::MutexParameters lMutexParams(true, nullptr);
+        EA::Thread::MutexParameters lMutexParams(true, 0);
         mMutex.Init(&lMutexParams);
 
         mbInitialized = true;

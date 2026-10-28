@@ -31,26 +31,26 @@ namespace BrnGuiSaveLoad
     {
         u8 maRaw[0x18];
     };
-    static_assert(sizeof(CarData) == 0x18, "BrnGuiSaveLoad::CarData must be the 0x18 SplitArray stride");
+    CGS_STATIC_ASSERT((sizeof(CarData) == 0x18), "BrnGuiSaveLoad::CarData must be the 0x18 SplitArray stride");
 
     // Save-image twin of BrnProgression::LiveryData (0x18 stride, three-qword copy).
     struct LiveryData
     {
         u8 maRaw[0x18];
     };
-    static_assert(sizeof(LiveryData) == 0x18, "BrnGuiSaveLoad::LiveryData must be the 0x18 SplitArray stride");
+    CGS_STATIC_ASSERT((sizeof(LiveryData) == 0x18), "BrnGuiSaveLoad::LiveryData must be the 0x18 SplitArray stride");
 
     // Save-image twin of BrnProgression::RivalData (0x38 stride, seven-qword copy).
     struct RivalData
     {
         u8 maRaw[0x38];
     };
-    static_assert(sizeof(RivalData) == 0x38, "BrnGuiSaveLoad::RivalData must be the 0x38 SplitArray stride");
+    CGS_STATIC_ASSERT((sizeof(RivalData) == 0x38), "BrnGuiSaveLoad::RivalData must be the 0x38 SplitArray stride");
 
     // Save-image twin of BrnProgression::ProfileEvent (0x08 stride, two-dword copy).
     struct ProfileEvent
     {
         u8 maRaw[0x08];
     };
-    static_assert(sizeof(ProfileEvent) == 0x08, "BrnGuiSaveLoad::ProfileEvent must be the 0x08 SplitArray stride");
+    CGS_STATIC_ASSERT((sizeof(ProfileEvent) == 0x08), "BrnGuiSaveLoad::ProfileEvent must be the 0x08 SplitArray stride");
 }

@@ -107,9 +107,9 @@ ProgressionManager::ProgressionManager()
     miNumberOfNumberOfCompleteRoadRulesRuledByPlayer = 0;
 
     // Prepare2 back-pointers start null.
-    mpTriggerData        = nullptr;
-    mpModeManager        = nullptr;
-    mpAchievementManager = nullptr;
+    mpTriggerData        = 0;
+    mpModeManager        = 0;
+    mpAchievementManager = 0;
 
     // [stuntrace waveB MOUNT-CLOSURE round] The landmark -> AI-section cache starts blank.
     // ⚠️ FLAG (HOST-ONLY INITIALISATION, same precedent as the five zero-initialised pointer
@@ -299,8 +299,8 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
                                   void* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");            // X360 BrnProgressionManager.cpp:249
-    CGS_ASSERT(lpReceiverQueue != nullptr, "lpReceiverQueue");  // X360 :250
+    CGS_ASSERT(lpOutput != 0, "lpOutput");            // X360 BrnProgressionManager.cpp:249
+    CGS_ASSERT(lpReceiverQueue != 0, "lpReceiverQueue");  // X360 :250
 
     // ✅ [progression wave: lifecycle, 2026-09-06] THE PROFILE BOOT SEAM IS RETIRED, ITS OWN
     // DELETE-WHEN PAID. The seam that stood here (landed 2026-08-24, deform-land wave) called
@@ -322,11 +322,11 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
         return false;
     }
 
-    CGS_ASSERT(lpTriggerData != nullptr, "lpTriggerData");
+    CGS_ASSERT(lpTriggerData != 0, "lpTriggerData");
     mpTriggerData     = lpTriggerData;           // X360 +0x20924 (a5)
     mpModeManager = lpModeManager;               // X360 +0x2093C (a3) -- the MODE manager; see the header
 
-    CGS_ASSERT(lpAchievementManager != nullptr, "lpAchievementManager");
+    CGS_ASSERT(lpAchievementManager != 0, "lpAchievementManager");
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
     // The five trailing calls are dispatched by RunPrepare2Tail in the original order.
@@ -726,7 +726,7 @@ void ProgressionManager::RepairUnlockedVehicle(CgsID lCarId)
 // ------------------------------------------------------------------------------------
 void ProgressionManager::SetRoadRuleChallengeData(const BrnStreetData::ChallengePlayerScoreEntry* lpaChallengeScores)
 {
-    CGS_ASSERT(lpaChallengeScores != nullptr, "lpaChallengeScores");
+    CGS_ASSERT(lpaChallengeScores != 0, "lpaChallengeScores");
     mProfile.SetRoadRuleChallengeData(lpaChallengeScores);
 }
 
@@ -738,7 +738,7 @@ void ProgressionManager::SetRoadRuleChallengeData(const BrnStreetData::Challenge
 // ------------------------------------------------------------------------------------
 void ProgressionManager::SetRoadRuleNetworkHighScores(const BrnStreetData::ChallengeHighScoreEntry* lpaChallengeHighScores)
 {
-    CGS_ASSERT(lpaChallengeHighScores != nullptr, "lpaChallengeHighScores");
+    CGS_ASSERT(lpaChallengeHighScores != 0, "lpaChallengeHighScores");
     mProfile.SetRoadRuleNetworkHighScores(lpaChallengeHighScores);
 }
 

@@ -28,10 +28,10 @@ namespace CgsFileSystem
     FileSystem::FileSystem()
         : mbPrepared(false)
         , muNumUsedReadStreams(0)
-        , mpFileSystemAllocator(nullptr)
-        , mpDebugAllocator(nullptr)
-        , mpDiskLayout(nullptr)
-        , mpMemFileSystem(nullptr)
+        , mpFileSystemAllocator(0)
+        , mpDebugAllocator(0)
+        , mpDiskLayout(0)
+        , mpMemFileSystem(0)
         , mbReleasing(false)
     {
     }
@@ -59,7 +59,7 @@ namespace CgsFileSystem
                    "Out of read streams\n");
 
         ReadStream lResult;
-        lResult.Construct(nullptr);
+        lResult.Construct(0);
         for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
         {
             StreamDeviceDiskRead& lrDevice = maReadStreams[luIndex];
@@ -165,7 +165,7 @@ namespace CgsFileSystem
     // @0x828D6650. Receives the ReadStream by value (= the StreamDeviceDiskRead*).
     bool FileSystem::IsReadStreamOpen(ReadStream lStream)
     {
-        CGS_ASSERT(lStream.mpStreamDevice != nullptr, "No device found");
+        CGS_ASSERT(lStream.mpStreamDevice != 0, "No device found");
         return GetEffectiveStreamStatus(lStream.mpStreamDevice) ==
                StreamDeviceDiskRead::E_STATUS_OPEN;
     }
@@ -175,7 +175,7 @@ namespace CgsFileSystem
     {
         CGS_ASSERT(static_cast<u32>(liIndex) < KU_MAX_READ_STREAMS, "Index out of range");
         const StreamDeviceDiskRead* lpStream = &maReadStreams[liIndex];
-        CGS_ASSERT(lpStream != nullptr, "No device found");
+        CGS_ASSERT(lpStream != 0, "No device found");
         return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
     }
 

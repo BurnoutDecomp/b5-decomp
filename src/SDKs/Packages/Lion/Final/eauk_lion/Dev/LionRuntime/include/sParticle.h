@@ -104,24 +104,24 @@ struct sParticleNucleus
 
 // The nucleus array stride cParticleBucket::AllocateParticle @0x82908750 indexes with
 // (`mulli r10, r10, 0xE0`), and the sum of the DWARF's fourteen 16-byte members.
-static_assert(sizeof(sParticleNucleus) == 0xE0,
+CGS_STATIC_ASSERT((sizeof(sParticleNucleus) == 0xE0),
               "sParticleNucleus is the 224-byte nucleus (AllocateParticle @0x82908750 "
               "mulli r10,r10,0xE0)");
 // Each offset below is the destination of one InitialiseParticle @0x829116A8 store, in the
 // order the asm issues them (see the banner's table). Break one and the gate fails here
 // rather than the game failing somewhere downstream.
-static_assert(offsetof(sParticleNucleus, mPos)          == 0x00, "InitialiseParticle store 1");
-static_assert(offsetof(sParticleNucleus, mVel)          == 0x10, "InitialiseParticle store 2");
-static_assert(offsetof(sParticleNucleus, mAcc)          == 0x20, "InitialiseParticle store 3");
-static_assert(offsetof(sParticleNucleus, mRot)          == 0x30, "InitialiseParticle store 4");
-static_assert(offsetof(sParticleNucleus, mRotVel)       == 0x40, "InitialiseParticle store 5");
-static_assert(offsetof(sParticleNucleus, mRotAcc)       == 0x50, "InitialiseParticle store 6");
-static_assert(offsetof(sParticleNucleus, mOffsetRot)    == 0x60, "InitialiseParticle store 7");
-static_assert(offsetof(sParticleNucleus, mOffsetRotVel) == 0x70, "InitialiseParticle store 8");
-static_assert(offsetof(sParticleNucleus, mOffsetRotAcc) == 0x80, "InitialiseParticle store 9");
-static_assert(offsetof(sParticleNucleus, mSize)         == 0x90, "InitialiseParticle store 10");
-static_assert(offsetof(sParticleNucleus, mSizeVel)      == 0xA0, "InitialiseParticle store 11");
-static_assert(offsetof(sParticleNucleus, mSizeAcc)      == 0xB0, "InitialiseParticle store 12");
-static_assert(offsetof(sParticleNucleus, mLocatorVel)   == 0xC0, "InitialiseParticle store 13");
-static_assert(offsetof(sParticleNucleus, mvLifeTimeAndFrameTimeAndFPSAndBirthTime) == 0xD0,
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mPos)          == 0x00), "InitialiseParticle store 1");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mVel)          == 0x10), "InitialiseParticle store 2");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mAcc)          == 0x20), "InitialiseParticle store 3");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mRot)          == 0x30), "InitialiseParticle store 4");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mRotVel)       == 0x40), "InitialiseParticle store 5");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mRotAcc)       == 0x50), "InitialiseParticle store 6");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mOffsetRot)    == 0x60), "InitialiseParticle store 7");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mOffsetRotVel) == 0x70), "InitialiseParticle store 8");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mOffsetRotAcc) == 0x80), "InitialiseParticle store 9");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mSize)         == 0x90), "InitialiseParticle store 10");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mSizeVel)      == 0xA0), "InitialiseParticle store 11");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mSizeAcc)      == 0xB0), "InitialiseParticle store 12");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mLocatorVel)   == 0xC0), "InitialiseParticle store 13");
+CGS_STATIC_ASSERT((offsetof(sParticleNucleus, mvLifeTimeAndFrameTimeAndFPSAndBirthTime) == 0xD0),
               "InitialiseParticle's `addi r28, r29, 0xD0` life/frame/FPS/birth register");

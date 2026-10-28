@@ -45,7 +45,7 @@ namespace BrnNetwork
 
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
-            CGS_ASSERT(maUpdateFunctions[liIndex] != nullptr,
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0,
                        "No update function supplied for this sub state");
         }
     }
@@ -62,7 +62,7 @@ namespace BrnNetwork
     {
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            maActionFunctions[liActionIndex] = nullptr;
+            maActionFunctions[liActionIndex] = 0;
         }
 
         maActionFunctions[E_ACTION_SEND_RESULTS]        = &PostRoundManager::ActionSendResults;
@@ -75,7 +75,7 @@ namespace BrnNetwork
 
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            CGS_ASSERT(maActionFunctions[liActionIndex] != nullptr,
+            CGS_ASSERT(maActionFunctions[liActionIndex] != 0,
                        "No update function supplied for this substate");
         }
 
@@ -155,8 +155,8 @@ namespace BrnNetwork
         InitialiseActionArray();
 
         mpNetworkManager   = lpNetworkManager;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
         meSubState         = E_SUBSTATE_NONE;
         mun8CurrentAction  = 0;
         meCurrentProcess   = E_PROCESS_COUNT;
@@ -172,8 +172,8 @@ namespace BrnNetwork
     {
         mun8CurrentAction  = 0;
         meCurrentProcess   = E_PROCESS_COUNT;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
         meSubState         = E_SUBSTATE_NONE;
         mbDidTheUserQuit   = false;
 
@@ -188,8 +188,8 @@ namespace BrnNetwork
     {
         mun8CurrentAction  = 0;
         meCurrentProcess   = E_PROCESS_COUNT;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
         meSubState         = E_SUBSTATE_NONE;
         mbDidTheUserQuit   = false;
         return true;
@@ -202,8 +202,8 @@ namespace BrnNetwork
     {
         mun8CurrentAction  = 0;
         meCurrentProcess   = E_PROCESS_COUNT;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
         meSubState         = E_SUBSTATE_NONE;
         mbDidTheUserQuit   = false;
     }
@@ -215,8 +215,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------
     void PostRoundManager::Disconnected()
     {
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
         meSubState         = E_SUBSTATE_NONE;
         mun8CurrentAction  = 0;
         meCurrentProcess   = E_PROCESS_COUNT;
@@ -229,7 +229,7 @@ namespace BrnNetwork
     void PostRoundManager::Update()
     {
         const UpdateFunction lpfUpdate = maUpdateFunctions[meSubState];
-        CGS_ASSERT(lpfUpdate != nullptr,
+        CGS_ASSERT(lpfUpdate != 0,
                    "No update function supplied for the current substate");
         (this->*lpfUpdate)();
     }
@@ -376,7 +376,7 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------
     void PostRoundManager::StartProcess(EProcess leProcess, Callback lpfCallback, void* lpCallbackUserData)
     {
-        CGS_ASSERT(lpfCallback != nullptr, "lCallback");
+        CGS_ASSERT(lpfCallback != 0, "lCallback");
         CGS_ASSERT(leProcess >= E_PROCESS_END_ROUND && leProcess < E_PROCESS_COUNT,
                    "(leProcess >= E_PROCESS_END_ROUND) && (leProcess < E_PROCESS_COUNT)");
 
@@ -407,10 +407,10 @@ namespace BrnNetwork
     {
         mbDidTheUserQuit = lbQuit;
 
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface() != nullptr,
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0,
                    "mpNetworkManager->GetServerInterface()");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent() != nullptr,
+        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent() != 0,
                    "mpNetworkManager->GetServerInterface()->GetConnectionComponent()");
 
         if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
@@ -441,13 +441,13 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------
     void PostRoundManager::ProcessComplete(bool lbSuccess)
     {
-        CGS_ASSERT(mCallback != nullptr, "mCallback");
+        CGS_ASSERT(mCallback != 0, "mCallback");
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != nullptr, "lpServerInterfaceGames");
+        CGS_ASSERT(lpServerInterfaceGames != 0, "lpServerInterfaceGames");
 
         CgsNetwork::NetworkPlayerID lLocalNetworkPlayerID = static_cast<CgsNetwork::NetworkPlayerID>(-1);
         const bool lbHaveLocalPlayer =
@@ -462,8 +462,8 @@ namespace BrnNetwork
 
         const Callback lpfCallback = mCallback;
         void* const lpCallbackUserData = mpCallbackUserData;
-        mCallback          = nullptr;
-        mpCallbackUserData = nullptr;
+        mCallback          = 0;
+        mpCallbackUserData = 0;
 
         lpfCallback(lbSuccess, lpCallbackUserData);
     }
@@ -483,9 +483,9 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(lpPostRoundManager->mpNetworkManager != nullptr,
+        CGS_ASSERT(lpPostRoundManager->mpNetworkManager != 0,
                    "lpPostRoundManager->mpNetworkManager");
-        CGS_ASSERT(lpPostRoundManager->mpNetworkManager->GetServerInterface() != nullptr,
+        CGS_ASSERT(lpPostRoundManager->mpNetworkManager->GetServerInterface() != 0,
                    "lpPostRoundManager->mpNetworkManager->GetServerInterface()");
 
         BrnServerInterface* lpServerInterface =
@@ -497,7 +497,7 @@ namespace BrnNetwork
         // below preserve the contract).
         lpServerInterface->GetStatus(12);
 
-        CGS_ASSERT(lpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT(lpServerInterface->GetConnectionComponent() != 0,
                    "lpPostRoundManager->mpNetworkManager->GetServerInterface()->GetConnectionComponent()");
 
         lpPostRoundManager->meSubState = E_SUBSTATE_NONE;
@@ -526,10 +526,10 @@ namespace BrnNetwork
     bool PostRoundManager::ActionSendResults()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != nullptr, "lpServerInterfaceGames");
+        CGS_ASSERT(lpServerInterfaceGames != 0, "lpServerInterfaceGames");
 
         lpServerInterfaceGames->SendGameResult(&mGameResults);
         meSubState = E_SUBSTATE_WAIT_IDLE;
@@ -611,10 +611,10 @@ namespace BrnNetwork
     bool PostRoundManager::ActionChangePlayerParams()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != nullptr, "lpServerInterfaceGames");
+        CGS_ASSERT(lpServerInterfaceGames != 0, "lpServerInterfaceGames");
 
         if (lpServerInterfaceGames->IsLocalPlayerInGame())
         {
@@ -639,10 +639,10 @@ namespace BrnNetwork
     bool PostRoundManager::ActionChangeGameParams()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != nullptr, "lpServerInterfaceGames");
+        CGS_ASSERT(lpServerInterfaceGames != 0, "lpServerInterfaceGames");
 
         if (lpServerInterfaceGames->IsLocalPlayerInGame())
         {

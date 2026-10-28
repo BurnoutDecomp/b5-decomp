@@ -251,7 +251,7 @@ namespace BrnGui
         GuiEventShowHideHud lHideHud;
         lHideHud.maData[0] = 0;
         CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> lRecord(lHideHud);
-        static_assert(sizeof(lRecord) == 16,
+        CGS_STATIC_ASSERT((sizeof(lRecord) == 16),
                       "ARTIST ShowHideHud record is {1,148,12} plus one byte");
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord),
@@ -307,7 +307,7 @@ namespace BrnGui
             // direct-pass OutputGuiEvent template cannot carry GuiEventRunFsm:
             // the flow drain needs its inner event id and aligned payload offset.
             CgsGui::GuiEventWrapper<GuiEventRunFsm, 40> lRunFsmRecord(lRunFsm);
-            static_assert(sizeof(lRunFsmRecord) == 40,
+            CGS_STATIC_ASSERT((sizeof(lRunFsmRecord) == 40),
                           "RunFsm record contains a 16-byte header and 24-byte payload");
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRunFsmRecord),
@@ -373,7 +373,7 @@ namespace BrnGui
                 GuiEventShowHideHud lHideHud;
                 lHideHud.maData[0] = 0;
                 CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> lRecord(lHideHud);
-                static_assert(sizeof(lRecord) == 16,
+                CGS_STATIC_ASSERT((sizeof(lRecord) == 16),
                               "ARTIST ShowHideHud record is {1,148,12} plus one byte");
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lRecord),

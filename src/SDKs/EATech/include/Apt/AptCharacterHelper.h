@@ -29,7 +29,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 struct AptCharacter;              // base of the cached templates
 struct AptCharacterDynamicText;   // the text template's concrete type (off_8324E498)

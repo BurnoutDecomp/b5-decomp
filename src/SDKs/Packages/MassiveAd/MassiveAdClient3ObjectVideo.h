@@ -16,7 +16,7 @@ public:
                           float fMaxDistance, int nRotationType, CMassiveZoneManager* pZone);
     virtual ~CMassiveAdObjectVideo();
 
-    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) override;
+    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) ;
 
 protected:
     float          mfMaxDistance; // +0x60

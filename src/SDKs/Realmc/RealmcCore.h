@@ -49,7 +49,7 @@
 // ===========================================================================
 
 #include <cstddef>
-#include <cstdint>
+#include "types.hpp"
 
 #include "types.hpp"   // u32 -- matches the FreeMemSize declaration in RealmcIfaceMessages.h
 
@@ -126,7 +126,7 @@ public:
     virtual void Unreferenced();
 
 protected:
-    std::int32_t miRefCount;  // +4
+    int32_t miRefCount;  // +4
 };
 
 class allocator;  // RealmcCore::allocator, defined below (RealmcString's allocator)
@@ -151,7 +151,7 @@ class RealmcString
 {
 public:
     RealmcString()
-        : mpBegin(nullptr), mpEnd(nullptr), mpCapEnd(nullptr), mpAllocatorName(nullptr) {}
+        : mpBegin(0), mpEnd(0), mpCapEnd(0), mpAllocatorName(0) {}
 
     // Construct from a NUL-terminated string: zero the three pointers, copy the
     // allocator (an empty body), then Assign(pString, pString + strlen(pString)).
@@ -160,7 +160,7 @@ public:
     // Copy constructor (basic_string(const basic_string&)): a fresh buffer over
     // rOther's range, never a shared one.
     RealmcString(const RealmcString& rOther)
-        : mpBegin(nullptr), mpEnd(nullptr), mpCapEnd(nullptr), mpAllocatorName(nullptr)
+        : mpBegin(0), mpEnd(0), mpCapEnd(0), mpAllocatorName(0)
     {
         Assign(rOther.mpBegin, rOther.mpEnd);
     }
@@ -302,7 +302,7 @@ public:
 
     // slot +0 -- restore the RefCount vtable; the deleting form frees the
     //            object through the Realmc backend (operator delete below).
-    ~Message() override;
+    ~Message() ;
 
     // slot +8 -- pProcessor->ProcessMessage(this), the processor's +0x54 slot
     //            (the plain-Message handler). The console thunk swaps its two
@@ -380,10 +380,10 @@ public:
     explicit Response(int iValue);
 
     // slot +0
-    ~Response() override;
+    ~Response() ;
 
     // slot +8 -- pProcessor->ProcessMessage(this), the processor's +0x50 slot.
-    void Apply(IMessageProcessor* pProcessor) override;
+    void Apply(IMessageProcessor* pProcessor) ;
 
     // The result word ResponsePtr::GetValue reads.
     int GetValue() const { return miValue; }
@@ -410,16 +410,16 @@ class MessageString : public Message
 public:
     // Install the vtable, atomically zero the refcount, store muId, then
     // copy-construct maText from rText (Assign over rText's [begin, end) range).
-    MessageString(std::uint32_t uId, const RealmcString& rText);
+    MessageString(uint32_t uId, const RealmcString& rText);
 
     // Free the owned string buffer (the RealmcString member's destructor).
-    ~MessageString() override;
+    ~MessageString() ;
 
     // slot +8 -- pProcessor->ProcessMessage(this), the processor's +0x4C slot.
-    void Apply(IMessageProcessor* pProcessor) override;
+    void Apply(IMessageProcessor* pProcessor) ;
 
 private:
-    std::uint32_t muId;    // +8
+    uint32_t muId;    // +8
     RealmcString  maText;  // +0xC
 };
 
@@ -487,7 +487,7 @@ public:
     ResponsePtr(const ResponsePtr& rOther) : MessagePtr(rOther) {}
 
     // Reinstall the ResponsePtr vtable, then the shared MessagePtr teardown.
-    ~ResponsePtr() override;
+    ~ResponsePtr() ;
 
     // The held response's result word (Response +8).
     int GetValue() const;
@@ -536,21 +536,21 @@ public:
 
     // Tear down maResponse (Release + null); restore the IMessageProcessor
     // vtable.
-    ~MessageFilter() override;
+    ~MessageFilter() ;
 
-    void ProcessMessage(RealmcIface::MessageSetActiveCardDone*) override {}
-    void ProcessMessage(RealmcIface::MessageCardRemoved*) override {}
-    void ProcessMessage(RealmcIface::MessageCheckLoadedData*) override {}
-    void ProcessMessage(RealmcIface::MessageSetAutosaveDone*) override {}
-    void ProcessMessage(RealmcIface::MessageLoadDone*) override {}
-    void ProcessMessage(RealmcIface::MessageSaveDone*) override {}
-    void ProcessMessage(RealmcIface::MessageBootupDone*) override {}
-    void ProcessMessage(RealmcIface::MessageShowAutosaveIcon*) override {}
-    void ProcessMessage(MessageClear*) override {}
-    void ProcessMessage(MessageTrc*) override {}
-    void ProcessMessage(MessageString*) override {}
-    void ProcessMessage(Response*) override {}
-    void ProcessMessage(Message*) override {}
+    void ProcessMessage(RealmcIface::MessageSetActiveCardDone*)  {}
+    void ProcessMessage(RealmcIface::MessageCardRemoved*)  {}
+    void ProcessMessage(RealmcIface::MessageCheckLoadedData*)  {}
+    void ProcessMessage(RealmcIface::MessageSetAutosaveDone*)  {}
+    void ProcessMessage(RealmcIface::MessageLoadDone*)  {}
+    void ProcessMessage(RealmcIface::MessageSaveDone*)  {}
+    void ProcessMessage(RealmcIface::MessageBootupDone*)  {}
+    void ProcessMessage(RealmcIface::MessageShowAutosaveIcon*)  {}
+    void ProcessMessage(MessageClear*)  {}
+    void ProcessMessage(MessageTrc*)  {}
+    void ProcessMessage(MessageString*)  {}
+    void ProcessMessage(Response*)  {}
+    void ProcessMessage(Message*)  {}
 
     // slot +0x58 -- rebind maResponse to the unfiltered-response holder, let
     //               the message apply itself to this filter (MessagePtr slot +4,

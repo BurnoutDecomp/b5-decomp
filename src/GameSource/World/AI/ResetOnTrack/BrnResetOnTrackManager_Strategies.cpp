@@ -147,7 +147,7 @@ namespace
         const f32 lfLengthSquared =
             lVector.x * lVector.x + lVector.y * lVector.y + lVector.z * lVector.z;
         const f32 lfInverse = 1.0f / sqrtf(lfLengthSquared);
-        return Vector3{ lVector.x * lfInverse, lVector.y * lfInverse, lVector.z * lfInverse, 0.0f };
+        { const Vector3 lResult = { lVector.x * lfInverse, lVector.y * lfInverse, lVector.z * lfInverse, 0.0f }; return lResult; }
     }
 
     f32 Dot3D(Vector3 lA, Vector3 lB)
@@ -219,7 +219,7 @@ namespace
     Vector2 Normalise2D(Vector2 lVector)
     {
         const f32 lfInverse = 1.0f / sqrtf(lVector.x * lVector.x + lVector.y * lVector.y);
-        return Vector2{ lVector.x * lfInverse, lVector.y * lfInverse, 0.0f, 0.0f };
+        { const Vector2 lResult = { lVector.x * lfInverse, lVector.y * lfInverse, 0.0f, 0.0f }; return lResult; }
     }
 
     // |v| through the same rsqrt pipeline (d2 * rsqrt(d2)) with its `vcmpeqfp ; vsel` zero guard
@@ -656,10 +656,10 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
         return lNextPortalPosition;
     }
 
-    return Vector3{ (lNextPortalPosition.x - lPrevPortalPosition.x) * lfInterp + lPrevPortalPosition.x,
+    { const Vector3 lResult = { (lNextPortalPosition.x - lPrevPortalPosition.x) * lfInterp + lPrevPortalPosition.x,
                     (lNextPortalPosition.y - lPrevPortalPosition.y) * lfInterp + lPrevPortalPosition.y,
                     (lNextPortalPosition.z - lPrevPortalPosition.z) * lfInterp + lPrevPortalPosition.z,
-                    0.0f };
+                    0.0f }; return lResult; }
 }
 
 // =================================================================================================
@@ -1164,10 +1164,10 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
         return lExitNodePosition;
     }
 
-    return Vector3{ (lExitNodePosition.x - lEntranceNodePosition.x) * lfInterp + lEntranceNodePosition.x,
+    { const Vector3 lResult = { (lExitNodePosition.x - lEntranceNodePosition.x) * lfInterp + lEntranceNodePosition.x,
                     (lExitNodePosition.y - lEntranceNodePosition.y) * lfInterp + lEntranceNodePosition.y,
                     (lExitNodePosition.z - lEntranceNodePosition.z) * lfInterp + lEntranceNodePosition.z,
-                    (lExitNodePosition.w - lEntranceNodePosition.w) * lfInterp + lEntranceNodePosition.w };
+                    (lExitNodePosition.w - lEntranceNodePosition.w) * lfInterp + lEntranceNodePosition.w }; return lResult; }
 }
 
 // =================================================================================================

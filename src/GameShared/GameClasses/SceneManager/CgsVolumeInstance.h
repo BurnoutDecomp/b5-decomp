@@ -147,32 +147,32 @@ namespace CgsSceneManager
     // DWARF member ORDER and the widths the X360 loads/stores use, so a future
     // edit that reorders or re-widens a field breaks the build instead of
     // silently re-pointing every by-name reader.
-    static_assert(offsetof(VolumeInstance, mWorldSpaceTransform)
-                    < offsetof(VolumeInstance, mPadding),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mWorldSpaceTransform)
+                    < offsetof(VolumeInstance, mPadding)),
                   "VolumeInstance: mWorldSpaceTransform must precede mPadding (DWARF h:48/49)");
-    static_assert(offsetof(VolumeInstance, mPadding) < offsetof(VolumeInstance, mUserID),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mPadding) < offsetof(VolumeInstance, mUserID)),
                   "VolumeInstance: mPadding must precede mUserID (DWARF h:49/50)");
-    static_assert(offsetof(VolumeInstance, mUserID) < offsetof(VolumeInstance, mfCacheSphereRadius),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mUserID) < offsetof(VolumeInstance, mfCacheSphereRadius)),
                   "VolumeInstance: mUserID must precede mfCacheSphereRadius (DWARF h:50/51)");
-    static_assert(offsetof(VolumeInstance, mfCacheSphereRadius) < offsetof(VolumeInstance, miVolumeIndex),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mfCacheSphereRadius) < offsetof(VolumeInstance, miVolumeIndex)),
                   "VolumeInstance: mfCacheSphereRadius must precede miVolumeIndex (DWARF h:51/52)");
-    static_assert(offsetof(VolumeInstance, miVolumeIndex) < offsetof(VolumeInstance, miNextEntityVolumeInstance),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, miVolumeIndex) < offsetof(VolumeInstance, miNextEntityVolumeInstance)),
                   "VolumeInstance: miVolumeIndex must precede miNextEntityVolumeInstance (DWARF h:52/53)");
-    static_assert(offsetof(VolumeInstance, miNextEntityVolumeInstance) < offsetof(VolumeInstance, mu16EntityIndex),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, miNextEntityVolumeInstance) < offsetof(VolumeInstance, mu16EntityIndex)),
                   "VolumeInstance: miNextEntityVolumeInstance must precede mu16EntityIndex (DWARF h:53/54)");
-    static_assert(offsetof(VolumeInstance, mu16EntityIndex) < offsetof(VolumeInstance, mu16FirstCachedTriIndex),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mu16EntityIndex) < offsetof(VolumeInstance, mu16FirstCachedTriIndex)),
                   "VolumeInstance: mu16EntityIndex must precede mu16FirstCachedTriIndex (DWARF h:54/55)");
-    static_assert(offsetof(VolumeInstance, mu16FirstCachedTriIndex) < offsetof(VolumeInstance, mu16NumCachedTris),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mu16FirstCachedTriIndex) < offsetof(VolumeInstance, mu16NumCachedTris)),
                   "VolumeInstance: mu16FirstCachedTriIndex must precede mu16NumCachedTris (DWARF h:55/56)");
-    static_assert(offsetof(VolumeInstance, mu16NumCachedTris) < offsetof(VolumeInstance, mx8Flags),
+    CGS_STATIC_ASSERT((offsetof(VolumeInstance, mu16NumCachedTris) < offsetof(VolumeInstance, mx8Flags)),
                   "VolumeInstance: mu16NumCachedTris must precede mx8Flags (DWARF h:56/57)");
 
     // Widths the X360 accesses pin directly (std/stw/sth/stb + the two 16-byte
     // vector stores).
-    static_assert(sizeof(VolumeInstance::mWorldSpaceTransform) == 64,
+    CGS_STATIC_ASSERT((sizeof(VolumeInstance::mWorldSpaceTransform) == 64),
                   "VolumeInstance::mWorldSpaceTransform is 4 x 16-byte lanes (X360 4x stvx128)");
-    static_assert(sizeof(VolumeInstance::mPadding) == 16,
+    CGS_STATIC_ASSERT((sizeof(VolumeInstance::mPadding) == 16),
                   "VolumeInstance::mPadding is one 16-byte lane (X360 stvx128 v127,r3,0x40)");
-    static_assert(sizeof(VolumeInstance::mx8Flags) == 1,
+    CGS_STATIC_ASSERT((sizeof(VolumeInstance::mx8Flags) == 1),
                   "VolumeInstance::mx8Flags is a byte (X360 lbz/stb at +0x6A)");
 }

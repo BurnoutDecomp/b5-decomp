@@ -54,9 +54,9 @@ namespace rw
             mMagicNumber = KU_MAGIC_NUMBER;
             for (unsigned int lu = 0; lu < 3; ++lu)
             {
-                mData[lu] = nullptr;
+                mData[lu] = 0;
                 mSize[lu] = 0;
-                mContext[lu] = nullptr;
+                mContext[lu] = 0;
             }
             // ARTIST leaves the three stride words untouched.
             mWidth = mHeight = 0;

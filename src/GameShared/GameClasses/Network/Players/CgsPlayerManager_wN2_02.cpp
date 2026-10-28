@@ -11,7 +11,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "lobbyapi.h"                                                                  // LobbyApiDisconnect
 
-#include <cstdint>   // intptr_t
+#include "types.hpp"   // intptr_t
 #include <cstring>   // strlen / strncpy
 
 #include "netconn.h"   // NetConnStatus
@@ -122,7 +122,7 @@ bool PlayerManager::AreAnyPlayersConnected() const
     for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
     {
         const NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayer].GetNetworkPlayer();
-        if (lpNetworkPlayer != nullptr && !lpNetworkPlayer->mbNetworkPlayerPaused)
+        if (lpNetworkPlayer != 0 && !lpNetworkPlayer->mbNetworkPlayerPaused)
         {
             return true;
         }
@@ -155,7 +155,7 @@ void PlayerManager::PlayerDisconnectedCallback(NetworkPlayerID lPlayerID, void* 
         lpPlayerManager->mpServerInterface->GetConnectionComponent());
     CGS_ASSERT(lpServerInterfaceConnection, "lpServerInterfaceConnection");
 
-    if (NetConnStatus(KI_NETCONN_STATUS_PLUG, 0, nullptr, 0) == 0)
+    if (NetConnStatus(KI_NETCONN_STATUS_PLUG, 0, 0, 0) == 0)
     {
         LobbyApiDisconnect(lpServerInterfaceConnection->GetServerInterface()->GetLobbyAPIRef(), 0);
     }
@@ -169,7 +169,7 @@ void PlayerManager::ConnectionFinalisedCallback(bool lbSuccess, NetworkPlayerID 
 {
     PlayerManager* lpPlayerManager = static_cast<PlayerManager*>(lpUserData);
 
-    if (lpPlayerManager->mpfConnectionFinalisedCallback != nullptr)
+    if (lpPlayerManager->mpfConnectionFinalisedCallback != 0)
     {
         lpPlayerManager->mpfConnectionFinalisedCallback(lbSuccess, lPlayerID, lConnectionData,
                                                         lpPlayerManager->mpConnectionFinalisedUserData);
@@ -191,7 +191,7 @@ void PlayerManager::ReleasePlayer(s32 liPlayerIndex)
     CGS_ASSERT(liPlayerIndex < miNumActivePlayers, "liPlayerIndex < miNumActivePlayers");
 
     NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayerIndex].GetNetworkPlayer();
-    if (lpNetworkPlayer != nullptr)
+    if (lpNetworkPlayer != 0)
     {
         lpNetworkPlayer->Release();
     }
@@ -206,7 +206,7 @@ void PlayerManager::ReleasePlayer(s32 liPlayerIndex)
         maActivePlayers[liPlayerIndex].GetMenuData()->miConnectionIndex = liPlayerIndex;
     }
 
-    maActivePlayers[miNumActivePlayers - 1].SetNetworkPlayer(nullptr);
+    maActivePlayers[miNumActivePlayers - 1].SetNetworkPlayer(0);
     maActivePlayers[miNumActivePlayers - 1].SetPlayerID(K_INVALID_PLAYER_ID);
     --miNumActivePlayers;
 }
@@ -218,7 +218,7 @@ PlayerData* PlayerManager::AssignActiveLocalPlayer(s32 liConnectionIndex)
 {
     for (s32 liIndex = 0; liIndex < miNumInactivePlayers; ++liIndex)
     {
-        if (maInactivePlayers[liIndex].GetNetworkPlayer() == nullptr)
+        if (maInactivePlayers[liIndex].GetNetworkPlayer() == 0)
         {
             maActivePlayers[liConnectionIndex] = maInactivePlayers[liIndex];
             maInactivePlayers[liIndex]         = maInactivePlayers[miNumInactivePlayers - 1];
@@ -229,7 +229,7 @@ PlayerData* PlayerManager::AssignActiveLocalPlayer(s32 liConnectionIndex)
     }
 
     CGS_ASSERT(false, "Couldn't find a free inactive local player");
-    return nullptr;
+    return 0;
 }
 
 // ---- AssignActiveNetworkPlayer -------------------------------------------------------
@@ -238,7 +238,7 @@ PlayerData* PlayerManager::AssignActiveNetworkPlayer(s32 liConnectionIndex)
 {
     for (s32 liIndex = 0; liIndex < miNumInactivePlayers; ++liIndex)
     {
-        if (maInactivePlayers[liIndex].GetNetworkPlayer() != nullptr)
+        if (maInactivePlayers[liIndex].GetNetworkPlayer() != 0)
         {
             maActivePlayers[liConnectionIndex] = maInactivePlayers[liIndex];
             maInactivePlayers[liIndex]         = maInactivePlayers[miNumInactivePlayers - 1];
@@ -249,7 +249,7 @@ PlayerData* PlayerManager::AssignActiveNetworkPlayer(s32 liConnectionIndex)
     }
 
     CGS_ASSERT(false, "Couldn't find a free inactive network player");
-    return nullptr;
+    return 0;
 }
 
 // ---- GetNextPlayerID -----------------------------------------------------------------
@@ -288,7 +288,7 @@ bool PlayerManager::GetNextPlayerID(NetworkPlayerID* lpPlayerID, EPlayersToConsi
     {
         for (; liIndex < miNumActivePlayers; ++liIndex)
         {
-            if (maActivePlayers[liIndex].GetNetworkPlayer() == nullptr ||
+            if (maActivePlayers[liIndex].GetNetworkPlayer() == 0 ||
                 mConnectionManager.GetConnectionStatus(maActivePlayers[liIndex].GetPlayerID()) ==
                     E_CONNECTION_SUCCESS)
             {
@@ -326,7 +326,7 @@ bool PlayerManager::GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const
 
     for (; liIndex < miNumActivePlayers; ++liIndex)
     {
-        if (maActivePlayers[liIndex].GetNetworkPlayer() != nullptr)
+        if (maActivePlayers[liIndex].GetNetworkPlayer() != 0)
         {
             *lpPlayerID = maActivePlayers[liIndex].GetPlayerID();
             return true;
@@ -349,7 +349,7 @@ NetworkPlayer* PlayerManager::GetPlayerByID(NetworkPlayerID lPlayerID) const
             return maActivePlayers[i].GetNetworkPlayer();
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---- GetPlayerByName -----------------------------------------------------------------
@@ -359,12 +359,12 @@ NetworkPlayer* PlayerManager::GetPlayerByName(const char* lpcName)
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
         NetworkPlayer* lpNetworkPlayer = maActivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != nullptr && UsernameCompare(lpNetworkPlayer->GetName(), lpcName) == 0)
+        if (lpNetworkPlayer != 0 && UsernameCompare(lpNetworkPlayer->GetName(), lpcName) == 0)
         {
             return lpNetworkPlayer;
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---- GetMenuDataByID -----------------------------------------------------------------
@@ -377,7 +377,7 @@ PlayerMenuData* PlayerManager::GetMenuDataByID(NetworkPlayerID lPlayerID) const
             return maActivePlayers[liIndex].GetMenuData();
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---- host identity -------------------------------------------------------------------
@@ -432,7 +432,7 @@ void PlayerManager::BroadcastEvent(EEvent leEvent, void* lpEventData)
 {
     for (s32 liIndex = 0; liIndex < miNumEventCallbacks; ++liIndex)
     {
-        if (maEventCallbacks[liIndex].mCallback != nullptr)
+        if (maEventCallbacks[liIndex].mCallback != 0)
         {
             maEventCallbacks[liIndex].mCallback(leEvent, lpEventData,
                                                 maEventCallbacks[liIndex].mpUserData);
@@ -455,7 +455,7 @@ s32 PlayerManager::GetNumberLocalPlayers() const
     s32 liNumLocalPlayers = 0;
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
-        if (maActivePlayers[liIndex].GetNetworkPlayer() == nullptr)
+        if (maActivePlayers[liIndex].GetNetworkPlayer() == 0)
         {
             ++liNumLocalPlayers;
         }
@@ -470,7 +470,7 @@ s32 PlayerManager::GetTotalNumberPlayers(EPlayersToConsider leConsider) const
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
         bool lbPlayerFinalised = true;
-        if (maActivePlayers[liIndex].GetNetworkPlayer() != nullptr)
+        if (maActivePlayers[liIndex].GetNetworkPlayer() != 0)
         {
             lbPlayerFinalised = mConnectionManager.GetConnectionStatus(
                                     maActivePlayers[liIndex].GetPlayerID()) == E_CONNECTION_SUCCESS;
@@ -489,7 +489,7 @@ s32 PlayerManager::GetNumberNetworkPlayers(EPlayersToConsider leConsider) const
     s32 liNumNetworkPlayers = 0;
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
-        if (maActivePlayers[liIndex].GetNetworkPlayer() == nullptr)
+        if (maActivePlayers[liIndex].GetNetworkPlayer() == 0)
         {
             continue;
         }
@@ -588,7 +588,7 @@ void PlayerManager::AcceptMessage(Message* lpMessage)
         }
     }
 
-    SignalMessage* lpAckMsg = nullptr;
+    SignalMessage* lpAckMsg = 0;
     for (s32 i = 0; i < KI_MAX_ACKS_TO_BUFFER; ++i)
     {
         if (!maAckMessage[i].IsMessageValid())
@@ -598,7 +598,7 @@ void PlayerManager::AcceptMessage(Message* lpMessage)
         }
     }
 
-    if (lpAckMsg == nullptr)
+    if (lpAckMsg == 0)
     {
         *CgsDev::Log::gpDebugPrint << "WARNING: run out of acks to use...\n";
         return;
@@ -619,7 +619,7 @@ void PlayerManager::ThrowAwayMessage(Message* lpMessage)
         return;
     }
 
-    SignalMessage* lpNackMsg = nullptr;
+    SignalMessage* lpNackMsg = 0;
     for (s32 i = 0; i < KI_MAX_NACKS_TO_BUFFER; ++i)
     {
         if (!maNackMessage[i].IsMessageValid())
@@ -629,7 +629,7 @@ void PlayerManager::ThrowAwayMessage(Message* lpMessage)
         }
     }
 
-    if (lpNackMsg == nullptr)
+    if (lpNackMsg == 0)
     {
         *CgsDev::Log::gpDebugPrint << "WARNING: run out of nacks to use...\n";
         return;

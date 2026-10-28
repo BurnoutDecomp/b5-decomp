@@ -38,7 +38,7 @@ namespace BrnNetwork
 
         // Platform prepare, then publish the default Xbox LIVE search contexts (game type 1,
         // game mode 0).
-        virtual bool Prepare() override;
+        virtual bool Prepare() ;
 
         // Store one matchmaking parameter and count it (at most 16).
         void SetMatchmakingParameter(EBrnQuickJoinParameters leParameter, s32 liValue);

@@ -40,8 +40,8 @@
 
 namespace BrnDirector
 {
-    ArbStateTestbed* ArbStateTestbed::spTestbed        = nullptr;
-    DebugComponent*  ArbStateTestbed::spDebugComponent = nullptr;
+    ArbStateTestbed* ArbStateTestbed::spTestbed        = 0;
+    DebugComponent*  ArbStateTestbed::spDebugComponent = 0;
 
     namespace
     {
@@ -75,8 +75,8 @@ namespace BrnDirector
         mRoadRunner            = Camera::BehaviourHandle<Camera::BehaviourRoadRunner>();
 
         mfRunningTime   = 0.0f;
-        mpParameters    = nullptr;
-        mpShotRef       = nullptr;
+        mpParameters    = 0;
+        mpShotRef       = 0;
         mbUseSlomo      = false;
         mbLoopIceMovies = false;
     }
@@ -107,7 +107,7 @@ namespace BrnDirector
 
             Camera::BehaviourManager* const lpBehaviourManager = lrSharedInfo.mpBehaviourManager;
 
-            if (mpShotRef != nullptr)
+            if (mpShotRef != 0)
             {
                 lpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(mIceCam, this, 0, 1);
                 mIceCam.GetBehaviour()->SetParameters(mpShotRef);
@@ -115,7 +115,7 @@ namespace BrnDirector
                 mIceCam.GetBehaviour()->SetUseCollisionPolicy(true);
                 mpCamera = &mIceCam.GetProducedCamera();
             }
-            else if (mpParameters != nullptr)
+            else if (mpParameters != 0)
             {
                 RegisterParameters();
 
@@ -248,7 +248,7 @@ namespace BrnDirector
 
         case E_STATE_GENERIC_UPDATE:
         {
-            CGS_ASSERT(mpCamera != nullptr, "mpCamera");
+            CGS_ASSERT(mpCamera != 0, "mpCamera");
 
             GetNonConstCamera() = *mpCamera;
             GetNonConstCamera().mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
@@ -417,7 +417,7 @@ namespace BrnDirector
 
     void ArbStateTestbed::UnregisterParameters()
     {
-        if (mpParameters != nullptr)
+        if (mpParameters != 0)
         {
             CGS_ASSERT(spDebugComponent, "spDebugComponent");
 
@@ -442,7 +442,7 @@ namespace BrnDirector
         CGS_ASSERT(spTestbed != NULL, "spTestbed != NULL");
         spTestbed->UnregisterParameters();
         spTestbed->mpParameters = static_cast<Camera::Behaviour::Parameters*>(lpParameters);
-        spTestbed->mpShotRef    = nullptr;
+        spTestbed->mpShotRef    = 0;
         spTestbed->meState      = E_STATE_GENERIC_PREPARE;
     }
 
@@ -451,7 +451,7 @@ namespace BrnDirector
         CGS_ASSERT(spTestbed != NULL, "spTestbed != NULL");
         spTestbed->UnregisterParameters();
         spTestbed->mpShotRef    = static_cast<Camera::Camera::ShotReference*>(lpShotRef);
-        spTestbed->mpParameters = nullptr;
+        spTestbed->mpParameters = 0;
         spTestbed->meState      = E_STATE_GENERIC_PREPARE;
     }
 }

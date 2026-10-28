@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                            // CgsDev::Log::gpDebugPrint
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // CgsNetwork::PlayerManager::ReceiveMessages -- the per-frame receive pump.
 
@@ -28,7 +28,7 @@ namespace
 // log (the packet's header and every known player's connection data) and asserted.
 void PlayerManager::ReceiveMessages()
 {
-    if (mpNetworkAdapter == nullptr)
+    if (mpNetworkAdapter == 0)
     {
         return;
     }
@@ -44,7 +44,7 @@ void PlayerManager::ReceiveMessages()
     while (GetNextPlayerID(&lPlayerId, E_CONSIDER_ALL_PLAYERS))
     {
         NetworkPlayer* lpNetPlayer = GetPlayerByID(lPlayerId);
-        if (lpNetPlayer == nullptr)
+        if (lpNetPlayer == 0)
         {
             continue;
         }
@@ -112,9 +112,9 @@ void PlayerManager::ReceiveMessages()
                         lLog << "Player: " << liPlayerIndex << "\n";
                         lLog << "Name: " << lpOutputMenuData->macName << "\n";
                         lLog << "Player ID: " << lOutputPlayerId << "\n";
-                        lLog << "Local Player: " << (lpOutputNetPlayer != nullptr ? "no" : "yes") << "\n";
+                        lLog << "Local Player: " << (lpOutputNetPlayer != 0 ? "no" : "yes") << "\n";
 
-                        if (lpOutputNetPlayer != nullptr)
+                        if (lpOutputNetPlayer != 0)
                         {
                             ConnectionData lOutputConnectionData = lpOutputNetPlayer->GetConnectionData();
                             if (!lOutputConnectionData.IsValid())

@@ -32,7 +32,7 @@ u32 GetCpuCycle();
 // contents recovered wave E: [0]=Profiler::Release, [1]=this deleting destructor. The
 // host value stays an honest placeholder (the Limiter1 / CMpegBase precedent) -- no host
 // code dispatches through it.
-void *const KPF_ProfilerVTable = nullptr; // off_8214B260
+void *const KPF_ProfilerVTable = 0; // off_8214B260
 
 // The wall-clock object the profiler samples (mpTimeSource, self+0x30). Only its +0x08
 // double -- the current time in seconds -- is read here, so it is treated as a documented

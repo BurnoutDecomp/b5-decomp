@@ -32,12 +32,12 @@ namespace BrnNetwork
         void                           Construct();
         void                           PrepareForSend(u16 lu16FrameCount, EResponse leResponse);
         bool                           Retrieve(EResponse* lpeCameraRequestResponse);
-        s32                    GetPackedMessageSize() override;
+        s32                    GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD90 -- bodied in this TU (DWARF BrnCameraRequestResponseMessage.h:99).
-        const char*            GetName() const override;
+        const char*            GetName() const ;
 
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
     };
 
     // BrnNetwork::CameraRequestResponseMessage::GetName  @ 0x827DFD90
@@ -48,5 +48,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(CameraRequestResponseMessage) == 0x2C, "sizeof(CameraRequestResponseMessage) == 0x2C");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CameraRequestResponseMessage) == 0x2C), "sizeof(CameraRequestResponseMessage) == 0x2C");
 } // namespace BrnNetwork

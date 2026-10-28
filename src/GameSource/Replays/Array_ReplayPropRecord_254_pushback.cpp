@@ -20,7 +20,7 @@ namespace BrnReplays
 {
     // One prop-serialiser record: a single 16-byte aligned quantum the WriteProp path
     // copies via lvx128/stvx128. Field layout unattested; modelled as an opaque span.
-    struct alignas(16) ReplayPropRecord16
+    struct CGS_ALIGN(16) ReplayPropRecord16
     {
         u8 maOpaque[16];
     };

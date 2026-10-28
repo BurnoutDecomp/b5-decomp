@@ -56,8 +56,8 @@ namespace BrnNetwork
         mpNetworkModule   = lpNetworkModule;
         mpServerInterface = lpServerInterface;
 
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
 
         mTimer.SetFloatVal(0.0f);
         mProcessesComplete.UnSetAll();
@@ -71,8 +71,8 @@ namespace BrnNetwork
         mProcessesComplete.UnSetAll();
         mTimer.SetFloatVal(0.0f);
         mfTimeConnected = 0.0f;
-        mpServerInterface = nullptr;
-        mpNetworkModule   = nullptr;
+        mpServerInterface = 0;
+        mpNetworkModule   = 0;
     }
 
     bool
@@ -105,14 +105,14 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != nullptr,
+        CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0,
                    "mpServerInterface->GetDownloadableConfigComponent()");
 
         mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
         mProcessesComplete.UnSetAll();
 
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr,
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
                    "mpNetworkModule->GetNetworkManager()");
 
         mpNetworkModule->GetNetworkManager()->OnAutoLogin();
@@ -155,10 +155,10 @@ namespace BrnNetwork
         // Count the frame time down off the wait timer.
         mTimer -= CgsSystem::Time(lfFrameDelta);
 
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr,
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
                    "mpNetworkModule->GetNetworkManager()");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager() != nullptr,
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager() != 0,
                    "mpNetworkModule->GetNetworkManager()->GetStateManager()");
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
@@ -166,7 +166,7 @@ namespace BrnNetwork
         if (!(mTimer.GetFloatVal() > 0.0f)
             && lpNetworkManager->GetStateManager()->IsIdle())
         {
-            CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != nullptr,
+            CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0,
                        "mpServerInterface->GetDownloadableConfigComponent()");
 
             mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
@@ -192,13 +192,13 @@ namespace BrnNetwork
     void
     AutoLoginManager::UpdateConnecting()
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr,
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
                    "mpNetworkModule->GetNetworkManager()");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != nullptr,
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != 0,
                    "mpNetworkModule->GetNetworkManager()->GetLoginManager()");
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0,
                    "mpServerInterface->GetConnectionComponent()");
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
@@ -238,10 +238,10 @@ namespace BrnNetwork
         // Every process is complete. If the local player is not in a game and the current game
         // mode is below the disconnect bound (and the caller has not forced the connection to
         // stay), drop the server connection.
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0,
                    "mpServerInterface->GetGameComponent()");
-        CGS_ASSERT(mpNetworkModule->GetGameStateToNetworkInterface() != nullptr,
+        CGS_ASSERT(mpNetworkModule->GetGameStateToNetworkInterface() != 0,
                    "mpNetworkModule->GetGameStateToNetworkInterface()");
 
         if (!mpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
@@ -253,7 +253,7 @@ namespace BrnNetwork
                 && (luUpdateSet & KU_UPDATE_SET_STAY_CONNECTED) != KU_UPDATE_SET_STAY_CONNECTED)
             {
                 // (dev log) "Disconnecting from server having completed autologin processes"
-                CGS_ASSERT(mpServerInterface->GetConnectionComponent() != nullptr,
+                CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0,
                            "mpServerInterface->GetConnectionComponent()");
                 mpServerInterface->GetConnectionComponent()->DisconnectFromServer();
             }

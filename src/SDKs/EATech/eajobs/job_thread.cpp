@@ -83,7 +83,7 @@ namespace LocalBackend
         parameters.mnProcessor=mParameters.processor;
         parameters.mnPriority=mParameters.priority;
         parameters.mnStackSize=mParameters.stackSize;
-        mThread.Begin(this,nullptr,&parameters,
+        mThread.Begin(this,0,&parameters,
             EA::Thread::Thread::GetGlobalRunnableClassUserWrapper());
     }
 
@@ -94,7 +94,7 @@ namespace LocalBackend
         {
             // The X360 passes (&unk_821823E8, 0): wait forever, no return-value
             // out-param. unk_821823E8 is the "infinite" absolute-timeout sentinel.
-            mThread.WaitForEnd(EA::Thread::kTimeoutNone, nullptr);
+            mThread.WaitForEnd(EA::Thread::kTimeoutNone, 0);
         }
         mbStarted = false;
     }

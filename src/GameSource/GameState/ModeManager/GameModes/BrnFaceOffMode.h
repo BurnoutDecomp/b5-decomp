@@ -35,10 +35,10 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (FaceOffMode::*)() const>(&FaceOffMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (FaceOffMode::*)() const>(&FaceOffMode::GetName)) != 0),
               "FaceOffMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (FaceOffMode::*)() const>(&FaceOffMode::GetOutroTimeout)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (FaceOffMode::*)() const>(&FaceOffMode::GetOutroTimeout)) != 0),
               "FaceOffMode::GetOutroTimeout must bind GameMode vtable slot 16");
-static_assert(sizeof(static_cast<f32 (FaceOffMode::*)() const>(&FaceOffMode::GetIntroDurationSeconds)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (FaceOffMode::*)() const>(&FaceOffMode::GetIntroDurationSeconds)) != 0),
               "FaceOffMode::GetIntroDurationSeconds must bind GameMode vtable slot 8");
 }

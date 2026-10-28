@@ -97,13 +97,13 @@ namespace BrnGame
     // The image is a BYTE-FOR-BYTE stand-in for DirectorIO::ControllerInfo (that type carries
     // the same three asserts); if either drifts, this stops compiling instead of silently
     // publishing the sticks into the wrong fields again.
-    static_assert(offsetof(DirectorControllerInfoImage, mCarModifier) == 16,
+    CGS_STATIC_ASSERT((offsetof(DirectorControllerInfoImage, mCarModifier) == 16),
                   "ControllerInfo::mCarModifier is at +16");
-    static_assert(offsetof(DirectorControllerInfoImage, mCameraModifier) == 32,
+    CGS_STATIC_ASSERT((offsetof(DirectorControllerInfoImage, mCameraModifier) == 32),
                   "ControllerInfo::mCameraModifier is at +32");
-    static_assert(offsetof(DirectorControllerInfoImage, mDebugController) == 48,
+    CGS_STATIC_ASSERT((offsetof(DirectorControllerInfoImage, mDebugController) == 48),
                   "ControllerInfo::mDebugController is at +48 (X360 addi r3, r1, 0xb0)");
-    static_assert(sizeof(DirectorControllerInfoImage) == 224,
+    CGS_STATIC_ASSERT((sizeof(DirectorControllerInfoImage) == 224),
                   "SetControllerInfo copies 224 bytes");
 
     // ---- world player-vehicle-controls image: RETIRED 2026-09-24 (FX-BRIDGES CC-9) ----------

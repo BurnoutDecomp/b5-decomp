@@ -84,7 +84,7 @@ int XenonUtil::CardExists(const u32* lpuDeviceId)
     u32 luDeviceId = *lpuDeviceId;
     if (luDeviceId == 0)
         return 2;
-    if (XContentGetDeviceState(luDeviceId, nullptr) == 0)
+    if (XContentGetDeviceState(luDeviceId, 0) == 0)
         return 0;
     return 2;
 }
@@ -286,7 +286,7 @@ int XenonUtil::OpenContainer(State* lpState, const void* lpName, s16 lsFlags, in
 
     DWORD luDisposition = 0;
     DWORD luErr = XContentCreate(sDwUserIndex, KPSZ_XENON_ROOT, lpContentData, dwContentFlags,
-                                 &luDisposition, nullptr, nullptr);
+                                 &luDisposition, 0, 0);
     if (lpbCreatedNew)
         *lpbCreatedNew = (luDisposition == 2);
 
@@ -320,7 +320,7 @@ int XenonUtil::OpenContainer(State* lpState, const void* lpName, s16 lsFlags, in
 int XenonUtil::CloseContainer(State* lpState, const XCONTENT_DATA* lpContentData,
                               const ThumbnailData* lpThumbnail)
 {
-    XContentClose(KPSZ_XENON_ROOT, nullptr);
+    XContentClose(KPSZ_XENON_ROOT, 0);
     lpState->mbContainerOpen = 0;
 
     int liResult = CheckState(lpState);
@@ -330,7 +330,7 @@ int XenonUtil::CloseContainer(State* lpState, const XCONTENT_DATA* lpContentData
         if (luSize != 0)
         {
             DWORD luErr = XContentSetThumbnail(sDwUserIndex, lpContentData,
-                                               lpThumbnail->mpbData, luSize, nullptr);
+                                               lpThumbnail->mpbData, luSize, 0);
             if (luErr == 1617 || luErr == 1110)
                 liResult = 2;
             else
@@ -348,7 +348,7 @@ int XenonUtil::DeleteContainer(State* lpState, const XCONTENT_DATA* lpContentDat
     int liResult = CheckState(lpState);
     if (liResult == 0)
     {
-        DWORD luErr = XContentDelete(sDwUserIndex, lpContentData, nullptr);
+        DWORD luErr = XContentDelete(sDwUserIndex, lpContentData, 0);
         if (luErr == 0)
             return 0;
         if (luErr == 2)
@@ -369,7 +369,7 @@ int XenonUtil::FlushContainer(State* lpState)
     int liResult = CheckState(lpState);
     if (liResult == 0)
     {
-        DWORD luErr = XContentFlush(KPSZ_XENON_ROOT, nullptr);
+        DWORD luErr = XContentFlush(KPSZ_XENON_ROOT, 0);
         if (luErr == 0)
             return 0;
         if (luErr == 2)
@@ -394,7 +394,7 @@ int XenonUtil::SetThumbnail(State* lpState, const XCONTENT_DATA* lpContentData,
         return 0;
 
     DWORD luErr = XContentSetThumbnail(sDwUserIndex, lpContentData,
-                                       lpThumbnail->mpbData, luSize, nullptr);
+                                       lpThumbnail->mpbData, luSize, 0);
     if (luErr == 1617 || luErr == 1110)
         return 2;
     return (luErr != 0) ? 1 : 0;
@@ -434,8 +434,8 @@ int XenonUtil::OpenFile(State* lpState, const u8* lpFileName, s16 lsFlags, HANDL
     std::strcat(acPath, ":\\");
     std::strcat(acPath, reinterpret_cast<const char*>(lpFileName));
 
-    HANDLE lHandle = CreateFileA(acPath, dwAccess, 0, nullptr, dwCreationDisposition,
-                                 FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE lHandle = CreateFileA(acPath, dwAccess, 0, 0, dwCreationDisposition,
+                                 FILE_ATTRIBUTE_NORMAL, 0);
     *lpHandleOut = lHandle;
     if (lHandle == INVALID_HANDLE_VALUE)
     {
@@ -471,7 +471,7 @@ int XenonUtil::ReadFile(HANDLE lHandle, void* lpBuffer, u32 luBytes, DWORD* lpuB
 {
     int liResult = 1;
     DWORD luRead = 0;
-    if (::ReadFile(lHandle, lpBuffer, luBytes, &luRead, nullptr))
+    if (::ReadFile(lHandle, lpBuffer, luBytes, &luRead, 0))
     {
         liResult = (luRead != 0 && luRead == luBytes) ? 0 : 10;
     }
@@ -494,7 +494,7 @@ int XenonUtil::WriteFile(HANDLE lHandle, const void* lpBuffer, DWORD luBytes, DW
 {
     int liResult = 1;
     DWORD luWritten = 0;
-    if (::WriteFile(lHandle, lpBuffer, luBytes, &luWritten, nullptr))
+    if (::WriteFile(lHandle, lpBuffer, luBytes, &luWritten, 0))
     {
         liResult = (luWritten != luBytes) ? 1 : 0;
     }
@@ -527,7 +527,7 @@ int XenonUtil::ReadFileLayer2(HANDLE lHandle, const LoadEntryInfo* lpEntry)
     u32   laHeader[7] = {};   // the on-disk 28-byte "MC02" record (7 words)
     DWORD luBytesRead = 0;
 
-    DWORD luFileSize = GetFileSize(lHandle, nullptr);
+    DWORD luFileSize = GetFileSize(lHandle, 0);
 
     int liResult = ReadFile(lHandle, laHeader, 28, &luBytesRead);
     if (liResult != 0)
@@ -572,7 +572,7 @@ int XenonUtil::SaveDataRegular(HANDLE lHandle, const LoadEntryInfo* lpEntry)
     laHeader[3] = lpEntry->muDataSize;
     laHeader[1] = lpEntry->muDataSize + 28;             // header + payload
     laHeader[5] = Crc32(lpEntry->mpData, lpEntry->muDataSize);  // payload CRC
-    laHeader[4] = Crc32(nullptr, 0);                    // empty-input CRC seed
+    laHeader[4] = Crc32(0, 0);                    // empty-input CRC seed
     laHeader[2] = 0;
     laHeader[6] = Crc32(laHeader, 24);                  // header CRC over words 0..5
 

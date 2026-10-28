@@ -48,14 +48,14 @@ namespace BrnNetwork
         void          Destruct();
         void          PrepareForSend(u16 lu16Frame, s32 liRoundNumber, Event* lpEvent);
         bool          Retrieve(s32* lpiRoundNumber, Event* lpEvent);
-        s32   GetPackedMessageSize() override;
-        bool  OldMessagesAreValid() const override;
+        s32   GetPackedMessageSize() ;
+        bool  OldMessagesAreValid() const ;
 
         // LEDGER func @ 0x827DFD30 -- bodied inline below (DWARF BrnSelectedRoutesMessage.h:99).
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         Event mEvent;          // +0x28 (DWARF :88)
@@ -70,5 +70,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(SelectedRoutesMessage) == 0x58, "sizeof(SelectedRoutesMessage) == 0x58");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(SelectedRoutesMessage) == 0x58), "sizeof(SelectedRoutesMessage) == 0x58");
 } // namespace BrnNetwork

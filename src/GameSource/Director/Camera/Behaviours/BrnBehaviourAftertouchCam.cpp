@@ -74,7 +74,7 @@ namespace
     // vmulfp of every lane by one scalar.
     Vector3 Scale(const Vector3& lrVector, f32 lfScalar)
     {
-        return Vector3{ lrVector.x * lfScalar, lrVector.y * lfScalar, lrVector.z * lfScalar, lrVector.w * lfScalar };
+        { const Vector3 lResult = { lrVector.x * lfScalar, lrVector.y * lfScalar, lrVector.z * lfScalar, lrVector.w * lfScalar }; return lResult; }
     }
 
     // rw::math::vpu::Matrix44AffineFromXRotationAngle with the XDK sine and cosine: rows

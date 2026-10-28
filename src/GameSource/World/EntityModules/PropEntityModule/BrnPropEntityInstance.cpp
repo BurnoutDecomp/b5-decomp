@@ -387,9 +387,9 @@ namespace BrnWorld
                                               f32* lpMaxAngle,
                                               const PropEntityRotationParams* lpRotationParams)
     {
-        CGS_ASSERT(lpTrueAngle != nullptr, "lpTrueAngle");
-        CGS_ASSERT(lpMinAngle  != nullptr, "lpMinAngle");
-        CGS_ASSERT(lpMaxAngle  != nullptr, "lpMaxAngle");
+        CGS_ASSERT(lpTrueAngle != 0, "lpTrueAngle");
+        CGS_ASSERT(lpMinAngle  != 0, "lpMinAngle");
+        CGS_ASSERT(lpMaxAngle  != 0, "lpMaxAngle");
 
         // Rodata scales: acos result -> degrees, and packed 8-bit angle -> degrees (256 -> 360).
         const f32 KF_RAD_TO_DEG  = 57.288353f;   // flt_82017B38
@@ -478,22 +478,22 @@ namespace BrnWorld
     // compile error rather than a silent corruption. Anyone who inserts a member (or
     // widens one) will fail here instead of shipping a prop that renders at the wrong
     // type/zone.
-    static_assert(offsetof(PropEntityInstance, mWorldTransform)        ==  0, "prop mWorldTransform @+0  (lvx128 prop+0/0x10/0x20/0x30)");
-    static_assert(offsetof(PropEntityInstance, muInstanceID)           == 64, "prop muInstanceID @+64/0x40 (stw 0x40 in InitialiseFromData)");
-    static_assert(offsetof(PropEntityInstance, muTypeId)               == 68, "prop muTypeId @+68/0x44 (lhz 0x44 @0x822FB86C)");
-    static_assert(offsetof(PropEntityInstance, mu16ZoneIndex)          == 70, "prop mu16ZoneIndex @+70/0x46 (lhz 0x46 @0x822FB868)");
-    static_assert(offsetof(PropEntityInstance, mu16PartsIndex)         == 72, "prop mu16PartsIndex @+72/0x48 (lhz 0x9C8 in GetPart @0x822CDC74)");
-    static_assert(offsetof(PropEntityInstance, mu8Flags)               == 74, "prop mu8Flags @+74/0x4A");
-    static_assert(offsetof(PropEntityInstance, mi8RotationParamsIndex) == 75, "prop mi8RotationParamsIndex @+75/0x4B");
-    static_assert(offsetof(PropEntityInstance, mu8PhysicsIndex)        == 76, "prop mu8PhysicsIndex @+76/0x4C");
-    static_assert(offsetof(PropEntityInstance, mu8State)               == 77, "prop mu8State @+77/0x4D (lbz 0x4D in GetState @0x822A1B68)");
-    static_assert(offsetof(PropEntityInstance, mu8NextState)           == 78, "prop mu8NextState @+78/0x4E");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mWorldTransform)        ==  0), "prop mWorldTransform @+0  (lvx128 prop+0/0x10/0x20/0x30)");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, muInstanceID)           == 64), "prop muInstanceID @+64/0x40 (stw 0x40 in InitialiseFromData)");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, muTypeId)               == 68), "prop muTypeId @+68/0x44 (lhz 0x44 @0x822FB86C)");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mu16ZoneIndex)          == 70), "prop mu16ZoneIndex @+70/0x46 (lhz 0x46 @0x822FB868)");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mu16PartsIndex)         == 72), "prop mu16PartsIndex @+72/0x48 (lhz 0x9C8 in GetPart @0x822CDC74)");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mu8Flags)               == 74), "prop mu8Flags @+74/0x4A");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mi8RotationParamsIndex) == 75), "prop mi8RotationParamsIndex @+75/0x4B");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mu8PhysicsIndex)        == 76), "prop mu8PhysicsIndex @+76/0x4C");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mu8State)               == 77), "prop mu8State @+77/0x4D (lbz 0x4D in GetState @0x822A1B68)");
+    CGS_STATIC_ASSERT((offsetof(PropEntityInstance, mu8NextState)           == 78), "prop mu8NextState @+78/0x4E");
 
     // The PART record's type id sits at +64, NOT +68 -- the two structs are deliberately
     // different, and confusing them is exactly the bug this pin exists to catch
     // (GenerateDispatchLists reads `lhz 0x40` / `lhz 0x42` off a part @0x822FBAE8).
-    static_assert(offsetof(PropPartEntityInstance, mWorldTransform) ==  0, "part mWorldTransform @+0");
-    static_assert(offsetof(PropPartEntityInstance, muTypeId)        == 64, "part muTypeId @+64/0x40");
-    static_assert(offsetof(PropPartEntityInstance, muPartId)        == 66, "part muPartId @+66/0x42");
-    static_assert(offsetof(PropPartEntityInstance, mu16ZoneIndex)   == 68, "part mu16ZoneIndex @+68/0x44");
+    CGS_STATIC_ASSERT((offsetof(PropPartEntityInstance, mWorldTransform) ==  0), "part mWorldTransform @+0");
+    CGS_STATIC_ASSERT((offsetof(PropPartEntityInstance, muTypeId)        == 64), "part muTypeId @+64/0x40");
+    CGS_STATIC_ASSERT((offsetof(PropPartEntityInstance, muPartId)        == 66), "part muPartId @+66/0x42");
+    CGS_STATIC_ASSERT((offsetof(PropPartEntityInstance, mu16ZoneIndex)   == 68), "part mu16ZoneIndex @+68/0x44");
 }

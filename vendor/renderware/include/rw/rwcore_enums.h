@@ -4,10 +4,10 @@
 // Layout-faithful to the x64 PDB; foreign (EA/eastl/std/CRT) fields are
 // exact-size opaque blobs tagged `was: <type>`. Re-run the generator to refresh.
 #pragma once
-#include <cstdint>
+#include "types.hpp"
 
-namespace rw::core::debug::host {
-enum class HostMode : uint32_t {  // size 4
+namespace rw { namespace core { namespace debug { namespace host {
+enum  HostMode : uint32_t {  // size 4
     HOST_READONLY = 1,
     HOST_WRITEONLY = 2,
     HOST_READWRITE = 4,
@@ -16,4 +16,4 @@ enum class HostMode : uint32_t {  // size 4
     HOST_TRUNCATE = 32,
     HOST_BINARY = 64,
 };
-}  // namespace rw::core::debug::host
+} } } }  // namespace rw::core::debug::host

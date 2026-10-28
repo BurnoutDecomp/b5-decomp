@@ -50,10 +50,10 @@ u32* InternalHashTable::Insert(u32 auKey)
     // Lazily allocate this bucket's chain vector, arena-prefixed. On OOM the
     // prefixed allocator yields null and the chain slot is left null (matching the
     // asm, which stores the `Malloc + 4` result even when it comes out null).
-    if (mppBuckets[luBucket] == nullptr)
+    if (mppBuckets[luBucket] == 0)
     {
         void* lpMem = ArenaAllocPrefixed(mpArena, sizeof(InternalVector));
-        mppBuckets[luBucket] = lpMem ? new (lpMem) InternalVector(mpArena) : nullptr;
+        mppBuckets[luBucket] = lpMem ? new (lpMem) InternalVector(mpArena) : 0;
     }
 
     // Push the key at the front of the chain and stamp the slot with it.
@@ -74,7 +74,7 @@ u32* InternalHashTable::Insert(u32 auKey)
 void InternalHashTable::Remove(u32 auKey)
 {
     InternalVector* lpChain = mppBuckets[(muBucketCount - 1) & mpfnHash(auKey)];
-    if (lpChain == nullptr || lpChain->muCount == 0)
+    if (lpChain == 0 || lpChain->muCount == 0)
         return;
 
     u32 luIndex = 0;

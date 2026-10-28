@@ -39,7 +39,7 @@ struct Corona
     s32     miTextureID;   // +0x38  rwgcorona.h:18  atlas page; row = miTextureID * 4 in s_atlasUVs
 };
 
-static_assert(sizeof(Corona) == 64, "renderengine::Corona must match the 64-byte runtime buffer stride");
+CGS_STATIC_ASSERT((sizeof(Corona) == 64), "renderengine::Corona must match the 64-byte runtime buffer stride");
 
 // ---- renderengine::CoronaBuffer (DWARF rwgcoronabuffer.h:10) -----------------------------------
 // A header plus `m_numCoronas` 64-byte records; GetResourceDescriptor sizes the pair as one block.

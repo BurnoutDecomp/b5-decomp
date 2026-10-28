@@ -57,7 +57,7 @@ namespace BrnWorld
 // ---------------------------------------------------------------------------
 void RaceCarAudioStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
-    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    CGS_ASSERT( lpStreamer != 0, "lpStreamer != NULL" );
     mpStreamer = lpStreamer;
 
     mAudioCarLoadedDataQueue.Construct();
@@ -104,7 +104,7 @@ bool RaceCarAudioStreamer::AddEntry( CgsID luAssetID, u64 luUserId, bool lbIsPla
 
     char lacVehicleID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress( luAssetID, lacVehicleID );
-    CGS_ASSERT( strstr( lacVehicleID, "VEH_" ) != nullptr, "strstr(lacVehicleID, \"VEH_\")" );
+    CGS_ASSERT( strstr( lacVehicleID, "VEH_" ) != 0, "strstr(lacVehicleID, \"VEH_\")" );
 
     lEntry.mDesiredId = luAssetID;
 
@@ -182,7 +182,7 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
 
     RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
 
-    CGS_ASSERT( lpEvent != nullptr, "lpEvent" );
+    CGS_ASSERT( lpEvent != 0, "lpEvent" );
     CGS_ASSERT( lEntry.mLoadedBundleId != 0, "lpEntry->mLoadedBundleId" );
     CGS_ASSERT( lEntry.mbLoadedIsPlayer, "lpEntry->mbLoadedIsPlayer" );
     CGS_ASSERT( lEntry.mLoadedBundleId == lpEvent->GetGameDataId(),
@@ -205,7 +205,7 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
 // ---------------------------------------------------------------------------
 bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
 {
-    CGS_ASSERT( lpEntry != nullptr, "lpEntry" );
+    CGS_ASSERT( lpEntry != 0, "lpEntry" );
     CGS_ASSERT( lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACH,
                 "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACH" );
 
@@ -215,7 +215,7 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
     // bare model id used to key the vehicle list (the X360 decodes then re-compresses [+4]).
     char lacVehicleID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress( lpEntry->mDesiredId, lacVehicleID );
-    CGS_ASSERT( strstr( lacVehicleID, "VEH_" ) != nullptr, "strstr(lacVehicleID, \"VEH_\")" );
+    CGS_ASSERT( strstr( lacVehicleID, "VEH_" ) != 0, "strstr(lacVehicleID, \"VEH_\")" );
 
     const CgsID lModelId = CgsIDCompress( lacVehicleID + 4 );
 
@@ -224,7 +224,7 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
     CGS_ASSERT( liVehicleIndex != -1, "liVehicleIndex != -1" );
 
     const BrnResource::VehicleListEntry* lpVehicleEntry = lpVehicleList->GetVehicleData( liVehicleIndex );
-    CGS_ASSERT( lpVehicleEntry != nullptr, "lpVehicleEntry != NULL" );
+    CGS_ASSERT( lpVehicleEntry != 0, "lpVehicleEntry != NULL" );
 
     RaceCarEntityModuleIO::AudioCarDataLoadedEvent lEvent;
     lEvent.meMessageType         = RaceCarEntityModuleIO::AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA;
@@ -251,13 +251,13 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
 // ---------------------------------------------------------------------------
 bool RaceCarAudioStreamer::SendUnLoadRequest( RaceCarStreamingSound* lpEntry )
 {
-    CGS_ASSERT( lpEntry != nullptr, "lpEntry" );
+    CGS_ASSERT( lpEntry != 0, "lpEntry" );
     // The X360 streamed the racecar index into this assert's message buffer.
     CGS_ASSERT( lpEntry->mLoadedBundleId != 0, "Removing an already unloaded car." );
 
     char lacVehicleID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress( lpEntry->mLoadedBundleId, lacVehicleID );
-    CGS_ASSERT( strstr( lacVehicleID, "VEH_" ) != nullptr, "strstr(lacVehicleID, \"VEH_\")" );
+    CGS_ASSERT( strstr( lacVehicleID, "VEH_" ) != 0, "strstr(lacVehicleID, \"VEH_\")" );
 
     const CgsID lModelId = CgsIDCompress( lacVehicleID + 4 );
 
@@ -269,7 +269,7 @@ bool RaceCarAudioStreamer::SendUnLoadRequest( RaceCarStreamingSound* lpEntry )
 
     RaceCarEntityModuleIO::AudioCarDataLoadedEvent lEvent;
     lEvent.meMessageType         = RaceCarEntityModuleIO::AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA;
-    lEvent.mpVehicleListEntry    = nullptr;
+    lEvent.mpVehicleListEntry    = 0;
     lEvent.mAssetID              = lModelId;
     lEvent.miActiveRaceCarIndex  = static_cast<u8>( lpEntry->miUserID );
     lEvent.mbIsPlayer            = lpEntry->mbLoadedIsPlayer;
@@ -396,7 +396,7 @@ void RaceCarAudioStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreS
 
         case RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_ATTACHED:
             // Notify the owning streamer the audio component has loaded, then re-evaluate.
-            OnAssetLoaded( lEntry.miUserID, nullptr );
+            OnAssetLoaded( lEntry.miUserID, 0 );
             // fall through
         case RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED:
             CGS_ASSERT( lEntry.mLoadedBundleId != 0, "lpEntry->mLoadedBundleId != kCGSID_NULL" );
@@ -578,7 +578,7 @@ namespace
 
 void RaceCarGraphicsStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
-    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    CGS_ASSERT( lpStreamer != 0, "lpStreamer != NULL" );
     RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false /*shared car pool*/, BrnResource::E_ASSETSET_GRAPHICS );
     mpStreamer = lpStreamer;
 }
@@ -590,7 +590,7 @@ void RaceCarGraphicsStreamer::Destruct()
 
 void RaceCarPhysicsStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
-    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    CGS_ASSERT( lpStreamer != 0, "lpStreamer != NULL" );
     RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true /*slot-pool: pool 17 + slot*/, BrnResource::E_ASSETSET_PHYSICS );
     mpStreamer = lpStreamer;
 }
@@ -602,7 +602,7 @@ void RaceCarPhysicsStreamer::Destruct()
 
 void RaceCarAttributeStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
-    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    CGS_ASSERT( lpStreamer != 0, "lpStreamer != NULL" );
     RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true /*slot-pool: pool 17 + slot*/, BrnResource::E_ASSETSET_ATTRIBS );
     mpStreamer = lpStreamer;
 }
@@ -614,7 +614,7 @@ void RaceCarAttributeStreamer::Destruct()
 
 void RaceCarWheelGraphicsStreamer::Construct( RaceCarStreamer* lpStreamer )
 {
-    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    CGS_ASSERT( lpStreamer != 0, "lpStreamer != NULL" );
     RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false /*shared car pool*/, BrnResource::E_ASSETSET_GRAPHICS );
     mpStreamer = lpStreamer;
 }

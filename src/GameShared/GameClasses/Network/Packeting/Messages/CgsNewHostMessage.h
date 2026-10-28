@@ -55,12 +55,12 @@ namespace CgsNetwork
         void        PrepareForSend(u16 lu16CurrentFrame, NetworkPlayerID liNewHostID,
                                    NetworkPlayerID* lpReceivedClientsIDs);
         bool        Retrieve(NetworkPlayerID* lpNewHostID, NetworkPlayerID* lpReceivedClientsIDs);
-        s32         GetPackedMessageSize() override;
+        s32         GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DBC58 -- inline header-homed accessor.
-        const char* GetName() const override { return "New Host Message"; }
+        const char* GetName() const  { return "New Host Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         NetworkPlayerID mNewHostID;                                  // DWARF h:75 (after 0x20 base)
         NetworkPlayerID maReceivedClientsIDs[KI_MAX_RECEIVED_CLIENTS]; // DWARF h:76

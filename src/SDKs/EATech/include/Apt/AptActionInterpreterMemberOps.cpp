@@ -50,7 +50,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"      // AptCharacterInst::GetTypeTag
 #include "SDKs/EATech/include/Apt/Apt.h"                   // gAptFuncs (pfnGet/SetExternVariable)
 
-#include <cstdint>
+#include "types.hpp"
 
 // Drain the deferred-release value vector (off_8324E51C) once the operand stack
 // empties -- homed in AptGC.cpp over the real gValuesToRelease vector.
@@ -249,7 +249,7 @@ void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* p
     AptValue* pIndexValue = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = property index
     AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the object
 
-    AptValue* pObject = nullptr;
+    AptValue* pObject = 0;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pObjectOper, &pObject);   // homed member (InterpHelpers.cpp)
 
@@ -284,7 +284,7 @@ void AptActionInterpreter::_FunctionAptActionSetProperty(AptActionInterpreter* p
     AptValue* pIndexValue = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = property index
     AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 3];   // the object
 
-    AptValue* pObject = nullptr;
+    AptValue* pObject = 0;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pObjectOper, &pObject);   // homed member (InterpHelpers.cpp)
 
@@ -366,7 +366,7 @@ void AptActionInterpreter::_FunctionAptActionTypeOf(AptActionInterpreter* pInter
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the operand
 
     AptString* pResult = AptString::Create("");   // console seed @0x820046A7 ("" -- overwritten below)
-    const EAStringC* pTypeName = nullptr;
+    const EAStringC* pTypeName = 0;
 
     if (!pTop->getIsDefined())
     {

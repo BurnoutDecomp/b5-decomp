@@ -21,12 +21,12 @@
 #include "SDKs/EATech/include/Apt/AptCharacter.h"   // AptCharacter (the shape; geometry @ +0x20)
 #include "SDKs/EATech/include/Apt/Apt.h"            // gAptFuncs.pfnDrawRenderingUnit (the installed slot)
 
-#include <cstdint>
+#include "types.hpp"
 
 // The byte offset of the shape character's geometry sub-field within AptCharacter (console
 // v6[8] == this + 0x20). The shape subclass lays it after the 16-byte base; the host reads it
 // positionally (the loaded-shape layout is owned by the .apt parse, not this slice).
-static const std::uintptr_t KU_SHAPE_GEOMETRY_OFFSET = 0x20;
+static const uintptr_t KU_SHAPE_GEOMETRY_OFFSET = 0x20;
 
 // The former AptHookDrawImportGlyph / AptHookResolveImport no-op shims are DELETED
 // (2026-08-07): no caller references them anywhere in the tree, and the real

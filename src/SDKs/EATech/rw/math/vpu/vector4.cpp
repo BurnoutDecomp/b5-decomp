@@ -1,7 +1,6 @@
 #include "types.hpp"
 
-namespace rw::math::vpu
-{
+namespace rw { namespace math { namespace vpu {
 class Vector4
 {
 public:
@@ -15,4 +14,4 @@ Vector4::Vector4(float lfX, float lfY, float lfZ, float lfW)
     : mafLane{lfX, lfY, lfZ, lfW}
 {
 }
-}
+} } }

@@ -17,7 +17,7 @@
 // The 16-byte stride matches sizeof(SetModelCullingGroupEvent) == alignas(16){ RigidBodyId(4) +
 // CullingGroup(u32,4) } rounded to 16. Callers (X360 xrefs): VehicleManager::ProcessCollisionEvents.
 // X360-attested element stride (`slwi r,len,4` == *16; two 64-bit `std` copies).
-static_assert(sizeof(BrnPhysics::Deformation::SetModelCullingGroupEvent) == 16,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::SetModelCullingGroupEvent) == 16),
               "SetModelCullingGroupEvent stride 16");
 
 template bool

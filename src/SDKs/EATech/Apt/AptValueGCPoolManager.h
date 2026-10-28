@@ -32,7 +32,7 @@
 // CXX_NAMING_CONVENTIONS.md the EA SDK identifiers are kept verbatim.
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"    // AptValueGC_MemItem

@@ -49,7 +49,7 @@ namespace CgsGui
     // profile-setting / invite notifications.
     void SystemUserProfile::Update()
     {
-        if (mhNotifyListener == nullptr)
+        if (mhNotifyListener == 0)
             return;
 
         unsigned long luId    = 0;   // var_8C (pdwId)
@@ -65,7 +65,7 @@ namespace CgsGui
                 if (!lbSignedIn)
                 {
                     UpdateUserSigninState();
-                    if (mpListener != nullptr)
+                    if (mpListener != 0)
                         mpListener->UIClosed();     // vtable +12
                 }
                 break;
@@ -96,7 +96,7 @@ namespace CgsGui
     // primed (sign-in state, current user name, current profile settings).
     void SystemUserProfile::AttachListener(Listener& lrListener)
     {
-        CGS_ASSERT(mpListener == nullptr,
+        CGS_ASSERT(mpListener == 0,
                    "SystemUserProfile::AttachListener: listener already attached");
 
         u32 luState = miState;              // lwz r11,4(this)
@@ -115,13 +115,13 @@ namespace CgsGui
     {
         if (mpListener == &lrListener)
         {
-            mpListener = nullptr;
+            mpListener = 0;
         }
         else
         {
             CGS_ASSERT(false,
                        "SystemUserProfile::AttachListener: listener not already attached");
-            mpListener = nullptr;
+            mpListener = 0;
         }
     }
 
@@ -131,7 +131,7 @@ namespace CgsGui
     void SystemUserProfile::UpdateProfileSettings()
     {
         const u32 luUserIndex = miUserIndex;
-        if (luUserIndex == KU_USERINDEX_NONE || miState != 1 || mpListener == nullptr)
+        if (luUserIndex == KU_USERINDEX_NONE || miState != 1 || mpListener == 0)
             return;
 
         const u32 laSettingIds[2] = {
@@ -148,11 +148,11 @@ namespace CgsGui
             u8 maUnused[KU_READ_CAPACITY - sizeof(XUSER_READ_PROFILE_SETTING_RESULT) -
                         2 * sizeof(XUSER_PROFILE_SETTING)];
         } lReadBuffer;
-        static_assert(sizeof(ReadBuffer) == KU_READ_CAPACITY, "original profile-read capacity");
+        CGS_STATIC_ASSERT((sizeof(ReadBuffer) == KU_READ_CAPACITY), "original profile-read capacity");
         u32 lcbResults = sizeof(lReadBuffer);
 
         if (XUserReadProfileSettings(0, luUserIndex, 2, laSettingIds,
-                                     &lcbResults, &lReadBuffer.mResults, nullptr))
+                                     &lcbResults, &lReadBuffer.mResults, 0))
         {
             CGS_ASSERT(false, " problem reading user settings - check buffer length");
         }
@@ -224,7 +224,7 @@ namespace CgsGui
         {
             Listener* lpListener = mpListener;   // read before the state store, as the X360 does
             miState = luSignedIn;                // stw r28, 4(this)
-            if (lpListener != nullptr)
+            if (lpListener != 0)
             {
                 lpListener->SigninStateChanged(static_cast<EUserSigninState>(luSignedIn)); // vtable +8
             }
@@ -265,7 +265,7 @@ namespace CgsGui
         if (liDiff != 0)
         {
             memcpy(macUserName, lacUserName, sizeof(macUserName));
-            if (mpListener != nullptr)
+            if (mpListener != 0)
                 mpListener->UserNameChanged(macUserName);
         }
     }

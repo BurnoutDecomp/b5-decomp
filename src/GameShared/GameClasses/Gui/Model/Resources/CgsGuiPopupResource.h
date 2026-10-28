@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include <cstdint>   // uintptr_t (the relocation delta)
+#include "types.hpp"   // uintptr_t (the relocation delta)
 
 // CgsGui popup vocabulary - the popup style/param/icon enums plus the single
 // popup parameter record. Names/values from the DecFIGS DWARF

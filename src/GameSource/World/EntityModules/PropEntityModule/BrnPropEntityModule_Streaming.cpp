@@ -142,15 +142,15 @@ namespace BrnWorld
 
         // ---- value tripwires for the facts this TU relies on -------------------------
         // (Nothing here keys on a byte offset; these pin the SHAPES the bodies assume.)
-        static_assert(sizeof(PropEntityIO::PropInstancesNeededForZoneEvent) == 2,
+        CGS_STATIC_ASSERT((sizeof(PropEntityIO::PropInstancesNeededForZoneEvent) == 2),
                       "PropInstancesNeededForZoneEvent is the bare u16 zone id");
-        static_assert(PropEntityModule::PropInstancesNeededForZoneQueue::KI_LENGTH == 30,
+        CGS_STATIC_ASSERT((PropEntityModule::PropInstancesNeededForZoneQueue::KI_LENGTH == 30),
                       "EventQueue<PropInstancesNeededForZoneEvent,30> (producer's typedef)");
-        static_assert(PropEntityModule::KI_ZONE_SET_SIZE == 15,
+        CGS_STATIC_ASSERT((PropEntityModule::KI_ZONE_SET_SIZE == 15),
                       "Set<u16,15> -- the X360 SetDifference<15,15> instantiation");
-        static_assert(KU_MAX_ZONES == 500,
+        CGS_STATIC_ASSERT((KU_MAX_ZONES == 500),
                       "the 0x1F4 bound every zone-index tripwire in this TU quotes");
-        static_assert(KU_NUM_ZONE_SLOTS == KU_MAX_LOADED_ZONES,
+        CGS_STATIC_ASSERT((KU_NUM_ZONE_SLOTS == KU_MAX_LOADED_ZONES),
                       "one prop-pool slot per simultaneously-loaded zone");
 
         // ------------------------------------------------------------------

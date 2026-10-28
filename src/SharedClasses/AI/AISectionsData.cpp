@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"    // CgsMemory::LinearMalloc (the scratch allocator)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
-#include <cstdint>   // uintptr_t (load-time pointer relocation arithmetic)
+#include "types.hpp"   // uintptr_t (load-time pointer relocation arithmetic)
 
 #include <cstring>   // memset
 #include <cmath>     // ceilf, floorf
@@ -44,7 +44,7 @@ namespace BrnAI
     // offsets are NOT static-pinned here because PC pointers are 8 bytes -- matching the
     // committed AISectionsData/AISection layout convention, which likewise documents the
     // console offsets in comments without static_assert.
-    struct alignas(16) AISectionPointMap
+    struct CGS_ALIGN(16) AISectionPointMap
     {
         s32      miGridWidth;             // +0x00  cell count along world-X (== KI_GRID_WIDTH)
         s32      miGridHeight;            // +0x04  cell count along world-Z (== KI_GRID_HEIGHT)
@@ -397,7 +397,7 @@ namespace BrnAI
     {
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
 
-        if (mpaSections != nullptr)
+        if (mpaSections != 0)
         {
             mpaSections = reinterpret_cast<AISection*>(
                 reinterpret_cast<uintptr_t>(mpaSections) + luBase);
@@ -408,7 +408,7 @@ namespace BrnAI
             }
         }
 
-        if (mpaSectionResetPairs != nullptr)
+        if (mpaSectionResetPairs != 0)
         {
             mpaSectionResetPairs = reinterpret_cast<SectionResetPair*>(
                 reinterpret_cast<uintptr_t>(mpaSectionResetPairs) + luBase);
@@ -419,7 +419,7 @@ namespace BrnAI
     {
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
 
-        if (mpaSections != nullptr)
+        if (mpaSections != 0)
         {
             for (u32 luSection = 0; luSection < muNumSections; ++luSection)
             {
@@ -430,7 +430,7 @@ namespace BrnAI
                 reinterpret_cast<uintptr_t>(mpaSections) - luBase);
         }
 
-        if (mpaSectionResetPairs != nullptr)
+        if (mpaSectionResetPairs != 0)
         {
             mpaSectionResetPairs = reinterpret_cast<SectionResetPair*>(
                 reinterpret_cast<uintptr_t>(mpaSectionResetPairs) - luBase);

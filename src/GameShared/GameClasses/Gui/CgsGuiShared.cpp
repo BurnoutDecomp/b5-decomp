@@ -10,7 +10,7 @@ namespace CgsGui
     // (GameShared/GameClasses/Gui/CgsGuiShared.h:201).
     BrnGui::GuiCache* GuiAccessPointers::GetGuiCache()
     {
-        CGS_ASSERT(mpGuiCache != nullptr, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
         return mpGuiCache;
     }
 
@@ -21,7 +21,7 @@ namespace CgsGui
     // above: assert the pointer has been wired up, then return it.
     BrnFlapt::FlaptManager* GuiAccessPointers::GetFlaptManager()
     {
-        CGS_ASSERT(mpFlaptManager != nullptr, "NULL != mpFlaptManager");
+        CGS_ASSERT(mpFlaptManager != 0, "NULL != mpFlaptManager");
         return mpFlaptManager;
     }
 
@@ -147,13 +147,13 @@ namespace CgsGui
     // pointers from their modules).
     void GuiAccessPointers::Construct()
     {
-        mpAptAux           = nullptr;
-        mpLanguageManager  = nullptr;
-        mpFlaptFile        = nullptr;
-        mpFlaptManager     = nullptr;
-        mpGuiCache         = nullptr;
-        mpSerialiser       = nullptr;
-        mpGDMInput         = nullptr;
-        mpGDMReceiverQueue = nullptr;
+        mpAptAux           = 0;
+        mpLanguageManager  = 0;
+        mpFlaptFile        = 0;
+        mpFlaptManager     = 0;
+        mpGuiCache         = 0;
+        mpSerialiser       = 0;
+        mpGDMInput         = 0;
+        mpGDMReceiverQueue = 0;
     }
 }

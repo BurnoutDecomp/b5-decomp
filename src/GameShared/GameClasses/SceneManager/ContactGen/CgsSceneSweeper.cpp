@@ -255,17 +255,17 @@ namespace CgsSceneManager
     namespace
     {
         // Element strides the console's memsets / index arithmetic depend on.
-        static_assert(sizeof(Interval) == 24,
+        CGS_STATIC_ASSERT((sizeof(Interval) == 24),
                       "Interval must be 24 bytes (SortLists divides by 24; Clear memsets 4001*24)");
-        static_assert(sizeof(ObjectToIntervalMap) == 4,
+        CGS_STATIC_ASSERT((sizeof(ObjectToIntervalMap) == 4),
                       "ObjectToIntervalMap must be 4 bytes (Clear memsets 5051*4 == 20204)");
-        static_assert(sizeof(IntervalStackEntry) == 16,
+        CGS_STATIC_ASSERT((sizeof(IntervalStackEntry) == 16),
                       "IntervalStackEntry must be 16 bytes (IntervalStack::Push strides by 16)");
-        static_assert(sizeof(CollidingPair) == 12,
+        CGS_STATIC_ASSERT((sizeof(CollidingPair) == 12),
                       "CollidingPair must be 12 bytes (BuildCollidingPairs strides by 12)");
-        static_assert(sizeof(SceneSweeper::IntervalObjectData) == 1,
+        CGS_STATIC_ASSERT((sizeof(SceneSweeper::IntervalObjectData) == 1),
                       "IntervalObjectData must be 1 byte (Clear stb's 5051 of them)");
-        static_assert(sizeof(SceneSweeper::ObjectBitArray) == 632,
+        CGS_STATIC_ASSERT((sizeof(SceneSweeper::ObjectBitArray) == 632),
                       "BitArray<5051> must be 632 bytes (Clear memsets 0x278 three times)");
 
     }
@@ -285,17 +285,17 @@ namespace CgsSceneManager
     // these asserts check.
     void SceneSweeper::AssertLayout()
     {
-        static_assert(offsetof(SceneSweeper, maDynamicIntervalMem)
-                      - offsetof(SceneSweeper, maObjectToIntervalMapMem) == 20204,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, maDynamicIntervalMem)
+                      - offsetof(SceneSweeper, maObjectToIntervalMapMem) == 20204),
                       "maObjectToIntervalMapMem span (0x80024 -> 0x84F10, 5051*4)");
-        static_assert(offsetof(SceneSweeper, maStaticIntervalMem)
-                      - offsetof(SceneSweeper, maDynamicIntervalMem) == 96024,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, maStaticIntervalMem)
+                      - offsetof(SceneSweeper, maDynamicIntervalMem) == 96024),
                       "maDynamicIntervalMem span (0x84F10 -> 0x9C628, 4001*24)");
-        static_assert(offsetof(SceneSweeper, maInactiveIntervalMem)
-                      - offsetof(SceneSweeper, maStaticIntervalMem) == 72,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, maInactiveIntervalMem)
+                      - offsetof(SceneSweeper, maStaticIntervalMem) == 72),
                       "maStaticIntervalMem span (0x9C628 -> 0x9C670, 3*24)");
-        static_assert(offsetof(SceneSweeper, mauDynamicStackIndexMem)
-                      - offsetof(SceneSweeper, maInactiveIntervalMem) == 146424,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mauDynamicStackIndexMem)
+                      - offsetof(SceneSweeper, maInactiveIntervalMem) == 146424),
                       "maInactiveIntervalMem span (0x9C670 -> 0xC0268, 6101*24)");
         // ⚠️ The two u16-index -> IntervalStackEntry spans are the ONLY two that are NOT
         // reproducible as a console number: the entry array is 16-aligned, and the amount of
@@ -305,49 +305,49 @@ namespace CgsSceneManager
         // console's 4008 / 6112 here is exactly the console-value-on-the-host bug; what IS
         // invariant is that the entry array follows the index array immediately, separated by
         // nothing but alignment padding.
-        static_assert(offsetof(SceneSweeper, maDynamicStackIntervalMem)
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, maDynamicStackIntervalMem)
                       - offsetof(SceneSweeper, mauDynamicStackIndexMem) >= KI_DYNAMIC_STACK_SIZE * 2
                       && offsetof(SceneSweeper, maDynamicStackIntervalMem)
-                      - offsetof(SceneSweeper, mauDynamicStackIndexMem) < KI_DYNAMIC_STACK_SIZE * 2 + 16,
+                      - offsetof(SceneSweeper, mauDynamicStackIndexMem) < KI_DYNAMIC_STACK_SIZE * 2 + 16),
                       "maDynamicStackIntervalMem must directly follow mauDynamicStackIndexMem (pad only)");
-        static_assert(offsetof(SceneSweeper, mauSecondaryStackIndexMem)
-                      - offsetof(SceneSweeper, maDynamicStackIntervalMem) == 32000,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mauSecondaryStackIndexMem)
+                      - offsetof(SceneSweeper, maDynamicStackIntervalMem) == 32000),
                       "maDynamicStackIntervalMem span (0xC1210 -> 0xC8F10, 2000*16)");
-        static_assert(offsetof(SceneSweeper, maSecondaryStackIntervalMem)
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, maSecondaryStackIntervalMem)
                       - offsetof(SceneSweeper, mauSecondaryStackIndexMem) >= KI_SECONDARY_STACK_SIZE * 2
                       && offsetof(SceneSweeper, maSecondaryStackIntervalMem)
-                      - offsetof(SceneSweeper, mauSecondaryStackIndexMem) < KI_SECONDARY_STACK_SIZE * 2 + 16,
+                      - offsetof(SceneSweeper, mauSecondaryStackIndexMem) < KI_SECONDARY_STACK_SIZE * 2 + 16),
                       "maSecondaryStackIntervalMem must directly follow mauSecondaryStackIndexMem (pad only)");
-        static_assert(offsetof(SceneSweeper, mDynamicIntervalList)
-                      - offsetof(SceneSweeper, maSecondaryStackIntervalMem) == 48800,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mDynamicIntervalList)
+                      - offsetof(SceneSweeper, maSecondaryStackIntervalMem) == 48800),
                       "maSecondaryStackIntervalMem span (0xCA6F0 -> 0xD6590, 3050*16)");
 
         // The three lists are consecutive: console stride 16, host stride sizeof(IntervalList)
         // (24 on LLP64 -- two widened pointers). Pin the STRIDE RELATION, never the 16.
-        static_assert(offsetof(SceneSweeper, mInactiveIntervalList)
-                      - offsetof(SceneSweeper, mDynamicIntervalList) == sizeof(IntervalList),
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mInactiveIntervalList)
+                      - offsetof(SceneSweeper, mDynamicIntervalList) == sizeof(IntervalList)),
                       "mDynamicIntervalList -> mInactiveIntervalList must be one IntervalList");
-        static_assert(offsetof(SceneSweeper, mStaticIntervalList)
-                      - offsetof(SceneSweeper, mInactiveIntervalList) == sizeof(IntervalList),
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mStaticIntervalList)
+                      - offsetof(SceneSweeper, mInactiveIntervalList) == sizeof(IntervalList)),
                       "mInactiveIntervalList -> mStaticIntervalList must be one IntervalList");
 
-        static_assert(offsetof(SceneSweeper, maObjectData)
-                      - offsetof(SceneSweeper, maCollidingPairs) == 12288,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, maObjectData)
+                      - offsetof(SceneSweeper, maCollidingPairs) == 12288),
                       "maCollidingPairs span (0xD65C0 -> 0xD95C0, 1024*12)");
-        static_assert(offsetof(SceneSweeper, mUseInternalCollision)
-                      - offsetof(SceneSweeper, maObjectData) == 5056,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mUseInternalCollision)
+                      - offsetof(SceneSweeper, maObjectData) == 5056),
                       "maObjectData span (0xD95C0 -> 0xDA980, 5051 + 5 pad)");
-        static_assert(offsetof(SceneSweeper, mCollidingBodies)
-                      - offsetof(SceneSweeper, mUseInternalCollision) == 632,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mCollidingBodies)
+                      - offsetof(SceneSweeper, mUseInternalCollision) == 632),
                       "mUseInternalCollision span (0xDA980 -> 0xDABF8)");
-        static_assert(offsetof(SceneSweeper, mabMovedThisFrame)
-                      - offsetof(SceneSweeper, mCollidingBodies) == 632,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mabMovedThisFrame)
+                      - offsetof(SceneSweeper, mCollidingBodies) == 632),
                       "mCollidingBodies span (0xDABF8 -> 0xDAE70)");
-        static_assert(offsetof(SceneSweeper, mabForceNoPadding)
-                      - offsetof(SceneSweeper, mabMovedThisFrame) == 5056,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mabForceNoPadding)
+                      - offsetof(SceneSweeper, mabMovedThisFrame) == 5056),
                       "mabMovedThisFrame span (0xDAE70 -> 0xDC230, 5051 + 5 pad)");
-        static_assert(offsetof(SceneSweeper, mpaVolumeInstanceCullingGroup)
-                      - offsetof(SceneSweeper, mabForceNoPadding) == 632,
+        CGS_STATIC_ASSERT((offsetof(SceneSweeper, mpaVolumeInstanceCullingGroup)
+                      - offsetof(SceneSweeper, mabForceNoPadding) == 632),
                       "mabForceNoPadding span (0xDC230 -> 0xDC4A8)");
     }
 }
@@ -402,12 +402,12 @@ namespace
     // Same solution, same wording, as the two committed precedents that hit the identical
     // wall: CgsVolumeManager.cpp:54-77 and PropManager_wQ4_03.cpp:289-301.
     // ------------------------------------------------------------------------
-    struct alignas(16) AABBoxRows
+    struct CGS_ALIGN(16) AABBoxRows
     {
         Vector3 mMin;   // AABBox +0x00
         Vector3 mMax;   // AABBox +0x10
     };
-    static_assert(sizeof(AABBoxRows) == 32, "AABBox image is two 16-byte rows");
+    CGS_STATIC_ASSERT((sizeof(AABBoxRows) == 32), "AABBox image is two 16-byte rows");
 }
 
     // ------------------------------------------------------------------------

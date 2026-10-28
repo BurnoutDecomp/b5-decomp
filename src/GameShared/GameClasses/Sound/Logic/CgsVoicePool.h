@@ -87,8 +87,8 @@ class VoicePoolBase
 {
 public:
     VoicePoolBase()
-        : mpLogicModule(nullptr)
-        , mpaPooledVoices(nullptr)
+        : mpLogicModule(0)
+        , mpaPooledVoices(0)
         , muPooledVoiceCount(0)
         , muDebugFrameIndex(0)
     {

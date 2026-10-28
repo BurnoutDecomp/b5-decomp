@@ -73,7 +73,7 @@ void ReliableMessageManager::AddBufferedReliableMessage(NetworkPlayerID lPlayerI
     CGS_ASSERT(lpMsg->IsMessageValid(), "lpMsg->IsMessageValid()");
     CGS_ASSERT(liLength <= KI_MAX_RELIABLE_MESSAGE_SIZE, "liLength <= KI_MAX_RELIABLE_MESSAGE_SIZE");
 
-    BufferedSendMessageData* lpFreeSlot = nullptr;
+    BufferedSendMessageData* lpFreeSlot = 0;
     for (s32 liAttempt = 0; liAttempt < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER; ++liAttempt)
     {
         CGS_ASSERT(miReliableMessageSendIndex >= 0, "miReliableMessageSendIndex >= 0");
@@ -96,7 +96,7 @@ void ReliableMessageManager::AddBufferedReliableMessage(NetworkPlayerID lPlayerI
         }
     }
 
-    if (lpFreeSlot == nullptr)
+    if (lpFreeSlot == 0)
     {
         CGS_ASSERT(false, "Failed to find a reliable message buffer to use");
         return;
@@ -275,7 +275,7 @@ void ReliableMessageManager::FakeNackMessage(Message* lpMessage, NetworkPlayerID
     *CgsDev::Log::gpDebugPrint << "We are calling ourselves " << lRecvingPlayerID << "\n";
 
     NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lRecvingPlayerID);
-    if (lpNetworkPlayer != nullptr)
+    if (lpNetworkPlayer != 0)
     {
         *CgsDev::Log::gpDebugPrint << "Telling player " << lRecvingPlayerID
                                    << " about non-delivered message\n";

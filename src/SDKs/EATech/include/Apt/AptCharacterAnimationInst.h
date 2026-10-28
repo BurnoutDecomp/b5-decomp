@@ -62,7 +62,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"   // base (36 bytes)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"                  // AptFilePtr (the source-file ref)

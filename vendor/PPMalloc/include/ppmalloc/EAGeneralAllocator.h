@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstddef>   // size_t
-#include <cstdint>   // uint32_t / int8_t / wchar_t
+#include "types.hpp"   // uint32_t / int8_t / wchar_t
 
 // EA::Allocator::GeneralAllocator - EA's PPMalloc general-purpose heap allocator (the same EA
 // middleware allocator Burnout's resource system allocates module memory through). It is a

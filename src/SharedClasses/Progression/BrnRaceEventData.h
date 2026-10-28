@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (GetStartGridSlot's two guards)
 #include "GameSource/World/BrnWorldSharedConstants.h"     // BrnWorld::KI_MAX_RIVALS_IN_MODE
 
-#include <cstdint>            // uintptr_t (the serialised 32-bit pointer slots below)
+#include "types.hpp"            // uintptr_t (the serialised 32-bit pointer slots below)
 
 // =============================================================================
 // BrnRaceEventData.h  (OWNING HEADER for the BrnProgression race-event leaf types)
@@ -90,7 +90,7 @@ struct EventJunction
 
 // The 16-byte stride ProgressionData::FixDown @0x8267F220 walks the junction array with
 // (`v3 += 16`), and the stride progression_transcode.py ports the retail table at.
-static_assert(sizeof(EventJunction) == 16, "BrnProgression::EventJunction is a 16-byte record");
+CGS_STATIC_ASSERT((sizeof(EventJunction) == 16), "BrnProgression::EventJunction is a 16-byte record");
 
 // Per-racer AI tuning record carried by the start-grid setup. DWARF BrnRaceEventData.h:99.
 // Four f32 fields: an aggression range, a skill scalar and a speed scalar.
@@ -181,7 +181,7 @@ private:
 
 // The 20-byte stride SetupOpponentData @0x82329348 walks the slot table with, and the stride
 // the 5-dword copy into OpponentData (`li r9, 5; mtctr` @0x82329688) preserves.
-static_assert(sizeof(EventStartGridSlot) == 20, "BrnProgression::EventStartGridSlot is a 20-byte record");
+CGS_STATIC_ASSERT((sizeof(EventStartGridSlot) == 20), "BrnProgression::EventStartGridSlot is a 20-byte record");
 
 // ----------------------------------------------------------------------------
 // BrnProgression::CheckpointData -- one entry of a race event's checkpoint table.
@@ -240,7 +240,7 @@ private:
 
 // The 0x28 element stride RaceEventData::GetCheckpointData hard-codes. Pointer-free scalar
 // run, so this is a host-safe check of the console layout rather than a baked console offset.
-static_assert(sizeof(CheckpointData) == 40, "BrnProgression::CheckpointData is a 40-byte (0x28) record");
+CGS_STATIC_ASSERT((sizeof(CheckpointData) == 40), "BrnProgression::CheckpointData is a 40-byte (0x28) record");
 
 // ----------------------------------------------------------------------------
 // BrnProgression::RaceEventData -- one serialised offline/online race event record. DWARF home
@@ -513,7 +513,7 @@ private:
 
 // The 248-byte (0xF8) stride ProgressionData::FixDown @0x8267F220 walks the event table with
 // (`v8 += 248`), and the stride progression_transcode.py ports the retail table at.
-static_assert(sizeof(RaceEventData) == 248, "BrnProgression::RaceEventData is a 248-byte (0xF8) record");
+CGS_STATIC_ASSERT((sizeof(RaceEventData) == 248), "BrnProgression::RaceEventData is a 248-byte (0xF8) record");
 
 }
 

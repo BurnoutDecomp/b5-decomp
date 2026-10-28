@@ -132,8 +132,8 @@ namespace BrnGui
             u8 mbModeStartedFromRegion;
             u8 muPad0B;
         };
-        static_assert(sizeof(StopModePayload) == 12, "ARTIST GUI322 payload");
-        static_assert(sizeof(ControllerButtonPayload) == 8, "ARTIST GUI6 stripped payload");
+        CGS_STATIC_ASSERT((sizeof(StopModePayload) == 12), "ARTIST GUI322 payload");
+        CGS_STATIC_ASSERT((sizeof(ControllerButtonPayload) == 8), "ARTIST GUI6 stripped payload");
 
         // ARTIST writes type/size/offset and leaves the one-byte tag payload untouched.
         struct PostEventTag290 : CgsModule::Event { s32 GetEventType() const { return 290; } };
@@ -164,7 +164,7 @@ namespace BrnGui
                 s32 miSize, miType, miOffset;
                 GuiAudioTriggerWirePayload457 mPayload;
             } lWire = { 100, 457, 12, {} };
-            static_assert(sizeof(AudioWire) == 112, "ARTIST457 wrapper");
+            CGS_STATIC_ASSERT((sizeof(AudioWire) == 112), "ARTIST457 wrapper");
             std::memcpy(&lWire.mPayload, lEvent.macComponent, sizeof(lWire.mPayload));
             lpInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lWire), 40, sizeof(lWire));
@@ -205,7 +205,7 @@ namespace BrnGui
                 explicit OverlayRequestWire(const GuiOverlayRequest& lrSource)
                     : CgsGui::GuiEvent<184>(288, 16), muPad0C(0), mRequest(lrSource) {}
             } lWire(lrRequest);
-            static_assert(sizeof(OverlayRequestWire) == 304, "ARTIST184 wrapper");
+            CGS_STATIC_ASSERT((sizeof(OverlayRequestWire) == 304), "ARTIST184 wrapper");
             lpInterface->GetOutputEventQueue()->AddEvent(&lWire, 40, sizeof(lWire));
         }
     }

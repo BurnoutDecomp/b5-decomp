@@ -60,14 +60,14 @@ struct CollisionControl : public BrnSound::Logic::BrnEffectControl
     // mpfnCreateObject); returns the EffectControl* base view.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
 
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual s32 GetController(s32 aiIndex) override;
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual s32 GetController(s32 aiIndex) ;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
 
     CollisionState* GetCollisionState() const { return mpCollisionState; }
     const CgsSound::Utils::DataPoint<ScrapeInfo>& GetScrapeInfo() const

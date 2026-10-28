@@ -74,7 +74,7 @@ namespace Vehicle
     //   maRaceCarStates @0x10, mImpactEventQueue @0x2310, mTrafficStateQueue @0x2620,
     //   mGameEventQueue @0x65F0 (0x610 bytes), mAggressiveDrivingFlags @0x6C00).
     // ------------------------------------------------------------------------
-    struct alignas(16) VehicleOutputInterface
+    struct CGS_ALIGN(16) VehicleOutputInterface
     {
         typedef CgsModule::EventQueue<ImpactEvent, 16>          ImpactEventQueue;           // BrnVehicleEvents.h:575
         typedef CgsModule::EventQueue<PhysicalTrafficState, 20> PhysicalTrafficStateQueue;  // BrnVehicleEvents.h:574
@@ -228,7 +228,7 @@ namespace Vehicle
         // this member, and both are only correct while it sits here.
         static void _AssertTrafficStateQueueSeat()
         {
-            static_assert(offsetof(VehicleOutputInterface, mTrafficStateQueue) == 0x2620,
+            CGS_STATIC_ASSERT((offsetof(VehicleOutputInterface, mTrafficStateQueue) == 0x2620),
                           "VehicleOutputInterface::mTrafficStateQueue @+0x2620");
         }
     };
@@ -258,7 +258,7 @@ namespace Vehicle
     //   queue, GUI messages and the wheel FFB spring. The full member set is laid out (all element
     //   types are committed); mCrashedTrafficEventQueue is the first member at offset 0.
     // ------------------------------------------------------------------------
-    struct alignas(16) VehicleManagerOutputInterface
+    struct CGS_ALIGN(16) VehicleManagerOutputInterface
     {
         // ---- ADDITIVE (moved 2026-07-24 from the retired BrnVehicleManager.h shell;
         //      declare-only surface, bodied by this interface's own TU) ----
@@ -318,7 +318,7 @@ namespace Vehicle
         // the other WRONG-CLASS accessor -- moved onto VehicleOutputInterface (whose
         // mAggressiveDrivingFlags @0x6C00 the asm actually writes), with the asm-true parameter
         // meaning (lbPlayerWon: won |= x, lost |= !x per @0x82643B00..0x82643B20).
-    
+
 
         typedef CgsModule::EventQueue<TrafficCrashedEvent, 20> TrafficCrashedEventQueue;      // :55
         typedef CgsModule::EventQueue<TrafficSlammedEvent, 20> TrafficSlammedEventQueue;      // :56
@@ -566,7 +566,7 @@ namespace Vehicle
     // "gate each DWARF declaration on X360 attestation" rule they are left out rather than declared
     // as an unbacked surface.
     // ------------------------------------------------------------------------
-    struct alignas(16) VehicleOutputRequestInterface
+    struct CGS_ALIGN(16) VehicleOutputRequestInterface
     {
         typedef CgsPhysics::PhysicsSimulationIO::InAddJoint    InAddJoint;     // BrnVehicleQueues.h:39 element
         typedef CgsPhysics::PhysicsSimulationIO::InRemoveJoint InRemoveJoint;  // BrnVehicleQueues.h:41 element

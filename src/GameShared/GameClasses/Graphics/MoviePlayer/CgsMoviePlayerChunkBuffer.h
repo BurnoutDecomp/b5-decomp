@@ -57,15 +57,15 @@ namespace CgsGraphics
     struct MoviePlayerCoreAllocator : public EA::Allocator::ICoreAllocator
     {
         MoviePlayerCoreAllocator();
-        ~MoviePlayerCoreAllocator() override;
+        ~MoviePlayerCoreAllocator() ;
 
         void Construct(rw::IResourceAllocator* lpAllocator);
         void Destruct();
 
-        void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) override;
+        void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) ;
         void* Alloc(size_t nSize, const char* pName, unsigned int nFlags,
-                    unsigned int nAlignment, unsigned int nAlignmentOffset = 0) override;
-        void  Free(void* pBlock, size_t nSize = 0) override;
+                    unsigned int nAlignment, unsigned int nAlignmentOffset = 0) ;
+        void  Free(void* pBlock, size_t nSize = 0) ;
 
     private:
         int                      miAllocations;  // +0x04 (after vtable) outstanding block count

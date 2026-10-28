@@ -60,7 +60,7 @@ struct SpeakerVol
 {
     f32 mafGain[6]; // +0x00 .. +0x14  per-speaker gains
 };
-static_assert(sizeof(SpeakerVol) == 24, "Snd9::Hal::SpeakerVol must be 24 bytes");
+CGS_STATIC_ASSERT((sizeof(SpeakerVol) == 24), "Snd9::Hal::SpeakerVol must be 24 bytes");
 
 // One mixer channel's computed output (X360 stride 0x5C). mafSpeakerGain holds the
 // per-speaker gains SetVolInternal writes; mpOutputBuffer is the destination gain

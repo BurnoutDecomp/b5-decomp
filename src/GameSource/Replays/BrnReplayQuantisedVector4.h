@@ -58,7 +58,7 @@ namespace BrnReplays
         void PrintVector4(const Vector4& lrValue);
     }
 
-    struct alignas(16) QuantisedVector4Compression
+    struct CGS_ALIGN(16) QuantisedVector4Compression
     {
         // X360 0x8264C7E8: store the 4 per-lane bit counts (+0..+3), then assert
         // lMin[i] < lMax[i] for each lane and store mMin(+16)/mMax(+32).

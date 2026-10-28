@@ -1923,7 +1923,7 @@ namespace
 
     struct GuiEventPreRaceDescription : public CgsGui::GuiEvent<464>
     {
-        alignas(8) CgsID mLandmarkId;   // +16
+        CGS_ALIGN(8) CgsID mLandmarkId;   // +16
         s32 miDirection;                // +24
         s32 miGameMode;                 // +28
         s32 miTimesPlayed;              // +32

@@ -80,17 +80,17 @@ namespace BrnNetwork
                      BrnNetworkManager* lpNetworkManager, u32 luField29C);
 
         // ServerInterfaceStructureInterface: the replicated payload and its pattern.
-        virtual const char* GetPattern() const override;
-        virtual s32         GetPatternLength() const override;
-        virtual u32         GetDataSize() const override;
-        virtual void*       GetData() override;
-        virtual const void* GetData() const override;
+        virtual const char* GetPattern() const ;
+        virtual s32         GetPatternLength() const ;
+        virtual u32         GetDataSize() const ;
+        virtual void*       GetData() ;
+        virtual const void* GetData() const ;
 
     protected:
         // The custom-flag filter words of the platform search block. Both vtable slots of
         // the leaf hold one shared body that returns 0 (no custom-flag filtering).
-        virtual u32 GetCustomFlagsMask() const override;
-        virtual u32 GetCustomFlagsValue() const override;
+        virtual u32 GetCustomFlagsMask() const ;
+        virtual u32 GetCustomFlagsValue() const ;
 
         // Fill lpbRivalInSameGame[i] with whether the i-th rival with a takedown history is in
         // the same title right now (platform presence). The platform leaf implements it.
@@ -116,7 +116,7 @@ namespace BrnNetwork
         // Fills lpbRivalInSameGame[i] for each stored revenge rival with whether that
         // rival is currently present in a Burnout title (via Xbox LIVE presence).
         // lpNetworkManager reaches the LiveRevengeManager.
-        virtual void AreRivalsInSameGame(bool* lpbRivalInSameGame, BrnNetworkManager* lpNetworkManager) override;
+        virtual void AreRivalsInSameGame(bool* lpbRivalInSameGame, BrnNetworkManager* lpNetworkManager) ;
     };
 }
 

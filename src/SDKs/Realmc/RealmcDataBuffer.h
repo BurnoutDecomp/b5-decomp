@@ -28,7 +28,7 @@
 // ===========================================================================
 
 #include <cstddef>
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -36,14 +36,14 @@ namespace RealmcIface
 class DataBuffer
 {
 public:
-    DataBuffer() : mpData(nullptr), muSize(0) {}
+    DataBuffer() : mpData(0), muSize(0) {}
 
     // @ 0x82B51928 -- copy the source's two words (mpData then muSize) over ours.
     //                 lwz r11,0(r4); stw r11,0(r3); lwz r11,4(r4); stw r11,4(r3).
     DataBuffer& operator=(const DataBuffer& rOther);
 
     void*         mpData;  // +0x00
-    std::uint32_t muSize;  // +0x04
+    uint32_t muSize;  // +0x04
 };
 // sizeof(DataBuffer) == 8 bytes.
 

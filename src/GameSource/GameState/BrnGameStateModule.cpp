@@ -682,7 +682,7 @@ void GameStateModule::EmmPreWorldUpdate(
          leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
     {
         const CarData* const lpCar = lpScoring->GetCarData(leIndex);
-        if (lpCar != nullptr)
+        if (lpCar != 0)
             lpOutput->GetGameStateToNetworkInterface()->SetActiveRaceCarIndex(
                 lpCar->GetNetworkPlayerID(), lpCar->GetActiveRaceCarIndex());
     }
@@ -1364,7 +1364,7 @@ bool GameStateModule::IsOnlineGameMode()
     CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
 
     const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
-    if (lpCurrentGameMode != nullptr)
+    if (lpCurrentGameMode != 0)
     {
         return lpCurrentGameMode->IsOnline();
     }
@@ -1435,7 +1435,7 @@ bool GameStateModule::IsSimPaused(bool lbCheckGameMode, bool lbStrictMask) const
     if (lbCheckGameMode)
     {
         const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
-        if (lpCurrentGameMode != nullptr && lpCurrentGameMode->IsOnline())
+        if (lpCurrentGameMode != 0 && lpCurrentGameMode->IsOnline())
         {
             if (lbStrictMask)
             {
@@ -1463,7 +1463,7 @@ CgsModule::VariableEventQueue<18432, 16>* GameStateModule::GetOutputGuiEventQueu
 void GameStateModule::SetCarUnlockAlreadyShown(CgsID lCarId)
 {
     BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
-    CGS_ASSERT(lpProfile != nullptr, "mProgressionManager.GetProfile()");
+    CGS_ASSERT(lpProfile != 0, "mProgressionManager.GetProfile()");
     lpProfile->SetCarUnlockAlreadyShown(lCarId);
 }
 
@@ -1760,7 +1760,7 @@ bool GameStateModule::ShouldAllowTimedTutorialTips()
         return false;
     }
 
-    if (mModeManager.GetCurrentGameMode() != nullptr)
+    if (mModeManager.GetCurrentGameMode() != 0)
     {
         return false;
     }
@@ -2905,8 +2905,8 @@ void GameStateModule::SendRouteRequestAction(const GameStateModuleIO::LandmarkRo
 {
     typedef GameStateModuleIO::LandmarkRouteRequestEvent RouteRequest;
 
-    CGS_ASSERT(lpRouteRequestEvent != nullptr, "lpRouteRequestEvent");   // BrnGameStateModule.cpp:5899 (0x170B)
-    CGS_ASSERT(lpOutputActionQueue != nullptr, "lpOutputActionQueue");   // BrnGameStateModule.cpp:5900 (0x170C)
+    CGS_ASSERT(lpRouteRequestEvent != 0, "lpRouteRequestEvent");   // BrnGameStateModule.cpp:5899 (0x170B)
+    CGS_ASSERT(lpOutputActionQueue != 0, "lpOutputActionQueue");   // BrnGameStateModule.cpp:5900 (0x170C)
 
     GameStateModuleIO::RequestRouteInfoAction lRouteRequestAction;
     std::memset(&lRouteRequestAction, 0, sizeof(lRouteRequestAction));

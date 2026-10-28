@@ -39,7 +39,7 @@ namespace CgsCollision
     // sizeof(Triangle4): it is a pointer-free, runtime-carved SoA float record, so it
     // does not widen on x64 -- confirmed at runtime last wave, `sizeofTriangle4=224`).
     const s32 KI_TRIANGLE4_STRIDE = 224;
-    static_assert(sizeof(CgsGeometric::Triangle4) == KI_TRIANGLE4_STRIDE,
+    CGS_STATIC_ASSERT((sizeof(CgsGeometric::Triangle4) == KI_TRIANGLE4_STRIDE),
                   "Triangle4 stride must stay 224 (pointer-free SoA record; pinnable)");
 
     struct TriangleList

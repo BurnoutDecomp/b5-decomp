@@ -17,13 +17,13 @@ struct EntryListResource
     u32 muNumEntries;
     ID mIds[1]; // variable-length allocation
 };
-static_assert(offsetof(EntryListResource, muNumEntries) == 0x100, "entry-list count");
-static_assert(offsetof(EntryListResource, mIds) == EntryListResource::KI_HEADERSIZE, "entry-list IDs");
+CGS_STATIC_ASSERT((offsetof(EntryListResource, muNumEntries) == 0x100), "entry-list count");
+CGS_STATIC_ASSERT((offsetof(EntryListResource, mIds) == EntryListResource::KI_HEADERSIZE), "entry-list IDs");
 
 class EntryListResourceType : public Type
 {
 public:
-    uint32_t GetTypeID() const override;
+    uint32_t GetTypeID() const ;
 };
 }
 

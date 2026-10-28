@@ -72,7 +72,7 @@ namespace BrnGui
         void PrepareFlapt(const BrnFlapt::FileRef& lFile);
 
         // @0x824F3920 -- latch the input GUI event queue the manager pumps in Update.
-        void SetInEventQueue(::InputBuffer::GuiEventQueue* lpInGuiEventQueue) override;
+        void SetInEventQueue(::InputBuffer::GuiEventQueue* lpInGuiEventQueue) ;
 
         // @0x82509338 -- pump the input event queue and drive the overlays (save-icon /
         // showtime / achievement / connect faithful; the in-game EATrax + online-invite

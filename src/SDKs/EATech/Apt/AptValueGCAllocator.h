@@ -14,7 +14,7 @@
 // the runtime mode selector exactly as before.
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 typedef struct _AptValueGC_MemItem
 {

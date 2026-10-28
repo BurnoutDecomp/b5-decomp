@@ -56,10 +56,10 @@ AptNativeHash* AptActionInterpreter::GetNodeFrameContextHash(AptValue* pContext)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
     AptCIH* const pParent = pNode->GetDisplayListParent();
-    if (pParent == nullptr)
-        return nullptr;
+    if (pParent == 0)
+        return 0;
     AptCharacterInst* const pInst = pParent->GetCharacterInst();
-    return pInst ? pInst->mpProperties : nullptr;
+    return pInst ? pInst->mpProperties : 0;
 }
 
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptValueConvert.cpp)
@@ -159,7 +159,7 @@ bool AptActionInterpreter::HasMember(AptValue* pValue, EAStringC** pNameSlot)
 
         // console LABEL_14: v9 = GetNativeHashVirtual(); pValue = v9 ? *(v9+8) : 0.
         AptNativeHash* const pHash = pValue->GetNativeHashVirtual();
-        pValue = pHash ? pHash->mp__Proto__ : nullptr;          // console *(v9 + 8)
+        pValue = pHash ? pHash->mp__Proto__ : 0;          // console *(v9 + 8)
     }
 
     // console LABEL_17: probe the (resolved) value's own hash for the name.
@@ -169,7 +169,7 @@ bool AptActionInterpreter::HasMember(AptValue* pValue, EAStringC** pNameSlot)
     {
         AptNativeHash* const pHash = pValue->GetNativeHashVirtual();   // (*(*a1+8))(a1)
         if (pHash)
-            return pHash->Lookup(*reinterpret_cast<const EAStringC*>(pNameSlot)) != nullptr;
+            return pHash->Lookup(*reinterpret_cast<const EAStringC*>(pNameSlot)) != 0;
     }
     return false;
 }
@@ -190,7 +190,7 @@ bool AptActionInterpreter::NameEquals(EAStringC** pNameSlot, const EAStringC* pC
     // operator== would then deref null reading the length word (the 2026-07-05
     // FADE_IN-window AV, cdb-verified stack: EAStringC::operator== <- NameEquals <-
     // _FunctionAptActionCallMethod <- DictCallMethodPop). Null slot == "not this name".
-    if (pNameSlot == nullptr || *reinterpret_cast<void* const*>(pNameSlot) == nullptr)
+    if (pNameSlot == 0 || *reinterpret_cast<void* const*>(pNameSlot) == 0)
         return false;
     return *reinterpret_cast<const EAStringC*>(pNameSlot) == *pConst;
 }
@@ -203,7 +203,7 @@ bool AptActionInterpreter::NameEquals(EAStringC** pNameSlot, const EAStringC* pC
 AptValue* AptActionInterpreter::HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot)
 {
     if (!pHash)
-        return nullptr;
+        return 0;
     return pHash->Lookup(*reinterpret_cast<const EAStringC*>(pNameSlot));
 }
 
@@ -223,7 +223,7 @@ AptValue* AptActionInterpreter::LookupGlobalFallback(AptValue* pContext, const E
     // console @0x82B03628: nDirect (a7/r22) gates the global-frame lookup OFF -- a direct
     // member access (obj.member) returns not-found rather than consulting the _global frame.
     if (nDirect)
-        return nullptr;
+        return 0;
 
     // console: v25 = tag; a CIH/CIHNone context skips the global frame (v26 = 1).
     const AptVirtualFunctionTable_Indices eType = pContext->getVtblIndex();
@@ -231,20 +231,20 @@ AptValue* AptActionInterpreter::LookupGlobalFallback(AptValue* pContext, const E
         (eType == AptVFT_CharacterInstHandle && pContext->getIsDefined())  // tag 12
      || (eType == AptVFT_CIHNone);                                         // tag 37
     if (bIsNode)
-        return nullptr;
+        return 0;
 
     // console: v27 = *(a1 + 60) (the running script function); null -> no global frame.
     AptScriptFunctionBase* const pFunction = pInterp->mpCurrentFunction;
     if (!pFunction)
-        return nullptr;
+        return 0;
 
     // console: v28 = (*(**(v27+36)+8))(*(v27+36)) -- the ParentAnim frame's native hash.
     AptValue* const pGlobalFrame = pFunction->GetParentAnim();   // *(mpCurrentFunction + 0x24)
     if (!pGlobalFrame)
-        return nullptr;
+        return 0;
     AptNativeHash* const pHash = pGlobalFrame->GetNativeHashVirtual();
     if (!pHash)
-        return nullptr;
+        return 0;
 
     // console: AptNativeHash::Lookup(v28, &leafName).
     return pHash->Lookup(*pName);
@@ -302,11 +302,11 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
         (eType == AptVFT_CharacterInstHandle && pContext->getIsDefined())  // tag 12
      || (eType == AptVFT_CIHNone);                                         // tag 37
 
-    AptNativeHash* pDest = nullptr;
+    AptNativeHash* pDest = 0;
 
     // console: v34 (CIH/CIHNone) || mpCurrentFunction==0 -> the node-context branch
     // (this shim is only entered post-getContext, so nDirect is folded out).
-    if (bIsNode || pInterp->mpCurrentFunction == nullptr)
+    if (bIsNode || pInterp->mpCurrentFunction == 0)
     {
         // console: a non-node context here is unhandled (return 1, store nothing).
         if (!bIsNode)
@@ -327,7 +327,7 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
             return true;
         // console: v36 = (*(**(v35+36)+8))(*(v35+36)) -- the global ParentAnim hash.
         AptValue* const pGlobalFrame = pInterp->mpCurrentFunction->GetParentAnim();
-        pDest = pGlobalFrame ? pGlobalFrame->GetNativeHashVirtual() : nullptr;
+        pDest = pGlobalFrame ? pGlobalFrame->GetNativeHashVirtual() : 0;
         if (!pDest)
             return true;   // console goto LABEL_16
     }
@@ -435,7 +435,7 @@ void AptActionInterpreter::loadVariables(AptValue* pScope, AptValue* pTarget, EA
     EAStringC strValue;                                 // console v12
     // console: for ( i = urlDecode(this, body+8, &key, &val); i; i = urlDecode(...) )
     for (const char* p = pInterp->urlDecode(strBody.GetBuffer(), &strKey, &strValue);
-         p != nullptr;
+         p != 0;
          p = pInterp->urlDecode(p, &strKey, &strValue))
     {
         // console: a non-empty key (v11 != the empty sentinel) -> store key = value.
@@ -489,7 +489,7 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
     AptNativeHash* pHash = pVariable->GetNativeHashVirtual();     // (*(*Variable+8))(Variable)
     while (pHash)
     {
-        for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != nullptr;
+        for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != 0;
              pItem = pHash->GetNextItem(pItem))
         {
             // console: skip the two reserved keys (dword_8324E580 / dword_8324E698).
@@ -503,7 +503,7 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
         }
         // console: step to the next hash in the chain (the __proto__ link's hash).
         AptValue* const pProto = pHash->mp__Proto__;                 // *(v10 + 8)
-        pHash = pProto ? pProto->GetNativeHashVirtual() : nullptr;   // (*(*v14+8))(v14)
+        pHash = pProto ? pProto->GetNativeHashVirtual() : 0;   // (*(*v14+8))(v14)
     }
 
     pVariable->Release();   // console (*(*Variable+4))(Variable) -- drop the resolved ref
@@ -532,7 +532,7 @@ int AptBuildPathName(AptActionInterpreter* /*pInterp*/,
     if (pParent)
     {
         // Recurse up to the root first (the console threads pOut through as a2).
-        AptBuildPathName(nullptr, pParent, pOut, nMode);
+        AptBuildPathName(0, pParent, pOut, nMode);
 
         EAStringC& strName = pNode->mInstanceName;                 // console *(v3+8)
         if (strName.GetInternalSize() == 0)   // console: *(v3+8) == &unk_82F72FF8 (the empty sentinel)
@@ -598,7 +598,7 @@ AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget
                                                int nDepth, AptValue* pInitObject)
 {
     // console: valueToObject(scope, target, parentValue, &resolved).
-    AptValue* pResolved = nullptr;
+    AptValue* pResolved = 0;
     valueToObject(reinterpret_cast<AptValue*>(pScope), pTarget,
                                        pParentValue, &pResolved);
 
@@ -635,12 +635,12 @@ AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget
                 AptNativeHash* const pHash = pInitObject->GetNativeHashVirtual();  // (*(*a7+8))(a7)
                 if (pHash)
                 {
-                    for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != nullptr;
+                    for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != 0;
                          pItem = pHash->GetNextItem(pItem))
                     {
                         if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
                             continue;   // skip the two reserved keys
-                        gAptActionInterpreter.setVariable(static_cast<AptValue*>(pClone), nullptr,
+                        gAptActionInterpreter.setVariable(static_cast<AptValue*>(pClone), 0,
                                                           &pItem->mKey, pItem->mpValue, 1, 1, 0);
                     }
                 }
@@ -734,7 +734,7 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
     if (pInterp->mpAbortValue && pInterp->mnStackTop > nBase)
     {
         pInterp->stackSafePop(pInterp->mnStackTop - nBase);
-        pResult = nullptr;   // console: result = the pop's return (the collapsed slot)
+        pResult = 0;   // console: result = the pop's return (the collapsed slot)
     }
     return pResult;
 }
@@ -861,7 +861,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
                     pNode = pNode->GetDisplayListParent();                             // walk up (+0x1C)
                 }
             }
-            AptCharacterInst* const pRunInst = pNode ? pNode->GetCharacterInst() : nullptr;
+            AptCharacterInst* const pRunInst = pNode ? pNode->GetCharacterInst() : 0;
 
 
             // Run the compiled body against the bound CIH + resolved inst (0x82AE3F04).

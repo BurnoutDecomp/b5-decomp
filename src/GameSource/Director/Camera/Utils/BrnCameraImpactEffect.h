@@ -122,7 +122,7 @@ namespace Utils
     // That is the number ArbStateCrashing::ApplySlomoAndShake @0x8224F8D8 proves independently:
     // its shake-suppression arm clears exactly five floats at +0x1B4..+0x1C4 and the state's
     // mMomentSelector starts at +0x1C8.
-    static_assert(sizeof(CameraImpactEffect) == 20, "CameraImpactEffect is f32 + CameraShake(16)");
+    CGS_STATIC_ASSERT((sizeof(CameraImpactEffect) == 20), "CameraImpactEffect is f32 + CameraShake(16)");
 }
 }
 }

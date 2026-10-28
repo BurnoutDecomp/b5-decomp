@@ -74,7 +74,7 @@ bool HybridEngineControl::Attach()
     if (!HybridExhaustControl::Attach())
         return false;
 
-    CGS_ASSERT(mpHybridExhaustControl != nullptr, "mpHybridExhaustControl");
+    CGS_ASSERT(mpHybridExhaustControl != 0, "mpHybridExhaustControl");
     if (!mpHybridExhaustControl)
         return false;
 

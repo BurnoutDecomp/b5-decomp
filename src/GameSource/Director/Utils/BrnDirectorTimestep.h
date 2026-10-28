@@ -36,12 +36,12 @@ namespace BrnDirector
 //   type must be 16 bytes wide. Modelled here as a 16-byte, 16-aligned broadcast register
 //   constructed from / convertible to a scalar f32. Replace with the real VecFloat when the
 //   rw math VecFloat type TU lands; the storage width and the scalar conversions are stable.
-struct alignas(16) VecFloat
+struct CGS_ALIGN(16) VecFloat
 {
     f32 maLanes[4];
 
-    VecFloat() : maLanes{ 0.0f, 0.0f, 0.0f, 0.0f } {}
-    VecFloat(f32 lfScalar) : maLanes{ lfScalar, lfScalar, lfScalar, lfScalar } {}
+    VecFloat() { for (int li = 0; li < 4; ++li) maLanes[li] = 0.0f; }
+    VecFloat(f32 lfScalar) { for (int li = 0; li < 4; ++li) maLanes[li] = lfScalar; }
 
     // The scalar value the register broadcasts (lane 0).
     operator f32() const { return maLanes[0]; }

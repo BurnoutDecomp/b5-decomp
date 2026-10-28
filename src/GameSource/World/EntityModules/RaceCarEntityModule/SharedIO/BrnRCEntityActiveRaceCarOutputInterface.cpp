@@ -47,24 +47,24 @@ RCEntityActiveRaceCarOutputInterface::RCEntityActiveRaceCarOutputInterface(
     : maCarsInTheRace(lrOther.maCarsInTheRace)
 {
     typedef RCEntityActiveRaceCarOutputInterface T;
-    static_assert(offsetof(T, maBoostOutputInfo)                == 528,   "maBoostOutputInfo @+0x210");
-    static_assert(offsetof(T, maRaceCarStates)                  == 816,   "maRaceCarStates @+0x330");
-    static_assert(offsetof(T, maRivalIds)                       == 9776,  "maRivalIds @+0x2630");
-    static_assert(offsetof(T, maCarModelIds)                    == 9840,  "maCarModelIds @+0x2670");
-    static_assert(offsetof(T, mauActiveRaceCarColourIndex)      == 9904,  "mauActiveRaceCarColourIndex @+0x26B0");
-    static_assert(offsetof(T, maiActiveRaceCarPaintFinishIndex) == 9936,  "maiActiveRaceCarPaintFinishIndex @+0x26D0");
-    static_assert(offsetof(T, mau16ActiveRaceCarAISections)     == 9968,  "mau16ActiveRaceCarAISections @+0x26F0");
-    static_assert(offsetof(T, maRaceCarMaterialColours)         == 9984,  "maRaceCarMaterialColours @+0x2700");
-    static_assert(offsetof(T, maxRaceCarFlags)                  == 10112, "maxRaceCarFlags @+0x2780");
-    static_assert(offsetof(T, maCurrentInAirRotations)          == 10128, "maCurrentInAirRotations @+0x2790");
-    static_assert(offsetof(T, mbHasCrashedIntoWater)            == 10256, "mbHasCrashedIntoWater @+0x2810");
-    static_assert(offsetof(T, maGlobalRaceCarIndices)           == 10264, "maGlobalRaceCarIndices @+0x2818");
-    static_assert(offsetof(T, maeActiveRaceCarIndex)            == 10296, "maeActiveRaceCarIndex @+0x2838");
-    static_assert(offsetof(T, mePlayerActiveRaceCarIndex)       == 10328, "mePlayerActiveRaceCarIndex @+0x2858 (ScoringSystem/StuntModeScoring caller offset)");
-    static_assert(offsetof(T, mePlayerEngineState)              == 10332, "mePlayerEngineState @+0x285C");
-    static_assert(offsetof(T, mbIsPlayerCarActive)              == 10336, "mbIsPlayerCarActive @+0x2860");
-    static_assert(offsetof(T, mbAllActiveCarsReady)             == 10337, "mbAllActiveCarsReady @+0x2861");
-    static_assert(sizeof(RaceCarState) == 1120, "RaceCarState stride 0x460");
+    CGS_STATIC_ASSERT((offsetof(T, maBoostOutputInfo)                == 528),   "maBoostOutputInfo @+0x210");
+    CGS_STATIC_ASSERT((offsetof(T, maRaceCarStates)                  == 816),   "maRaceCarStates @+0x330");
+    CGS_STATIC_ASSERT((offsetof(T, maRivalIds)                       == 9776),  "maRivalIds @+0x2630");
+    CGS_STATIC_ASSERT((offsetof(T, maCarModelIds)                    == 9840),  "maCarModelIds @+0x2670");
+    CGS_STATIC_ASSERT((offsetof(T, mauActiveRaceCarColourIndex)      == 9904),  "mauActiveRaceCarColourIndex @+0x26B0");
+    CGS_STATIC_ASSERT((offsetof(T, maiActiveRaceCarPaintFinishIndex) == 9936),  "maiActiveRaceCarPaintFinishIndex @+0x26D0");
+    CGS_STATIC_ASSERT((offsetof(T, mau16ActiveRaceCarAISections)     == 9968),  "mau16ActiveRaceCarAISections @+0x26F0");
+    CGS_STATIC_ASSERT((offsetof(T, maRaceCarMaterialColours)         == 9984),  "maRaceCarMaterialColours @+0x2700");
+    CGS_STATIC_ASSERT((offsetof(T, maxRaceCarFlags)                  == 10112), "maxRaceCarFlags @+0x2780");
+    CGS_STATIC_ASSERT((offsetof(T, maCurrentInAirRotations)          == 10128), "maCurrentInAirRotations @+0x2790");
+    CGS_STATIC_ASSERT((offsetof(T, mbHasCrashedIntoWater)            == 10256), "mbHasCrashedIntoWater @+0x2810");
+    CGS_STATIC_ASSERT((offsetof(T, maGlobalRaceCarIndices)           == 10264), "maGlobalRaceCarIndices @+0x2818");
+    CGS_STATIC_ASSERT((offsetof(T, maeActiveRaceCarIndex)            == 10296), "maeActiveRaceCarIndex @+0x2838");
+    CGS_STATIC_ASSERT((offsetof(T, mePlayerActiveRaceCarIndex)       == 10328), "mePlayerActiveRaceCarIndex @+0x2858 (ScoringSystem/StuntModeScoring caller offset)");
+    CGS_STATIC_ASSERT((offsetof(T, mePlayerEngineState)              == 10332), "mePlayerEngineState @+0x285C");
+    CGS_STATIC_ASSERT((offsetof(T, mbIsPlayerCarActive)              == 10336), "mbIsPlayerCarActive @+0x2860");
+    CGS_STATIC_ASSERT((offsetof(T, mbAllActiveCarsReady)             == 10337), "mbAllActiveCarsReady @+0x2861");
+    CGS_STATIC_ASSERT((sizeof(RaceCarState) == 1120), "RaceCarState stride 0x460");
 
     for (s32 luIndex = 0; luIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luIndex)
     {

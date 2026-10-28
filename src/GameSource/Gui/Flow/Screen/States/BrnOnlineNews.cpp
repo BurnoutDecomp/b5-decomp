@@ -123,10 +123,10 @@ namespace BrnGui
         // { 1, 356, 12, <the byte> }, channel 40, 16 bytes.
         typedef CgsGui::GuiEventWrapper<GuiAutosaveRequestEvent, 40> GuiAutosaveRequestEventWire;
 
-        static_assert(sizeof(GuiEventNetworkNewsAndTOSWire) == 16, "news/TOS record is 16 bytes");
-        static_assert(sizeof(GuiAutosaveRequestEventWire) == 16, "autosave record is 16 bytes");
-        static_assert(sizeof(GuiTelemetryEvent) == 32, "telemetry record is 32 bytes");
-        static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkNewsAndTOSWire) == 16), "news/TOS record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestEventWire) == 16), "autosave record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiTelemetryEvent) == 32), "telemetry record is 32 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
     }
 
     // ================================================================================

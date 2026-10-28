@@ -125,7 +125,7 @@ private:
         f32                 mfLongestDrift;             // +0x3C
         s32                 miOverallStandingsPosition; // +0x40
     };
-    static_assert(sizeof(NetworkAwardData) == 0x44, "NetworkAwardData is the 68-byte qsort row");
+    CGS_STATIC_ASSERT((sizeof(NetworkAwardData) == 0x44), "NetworkAwardData is the 68-byte qsort row");
 
     // Indexed by EOnlineAwardID. The rating comparators order the rows best-first for that award; the
     // give-award tests then decide whether the leading row has earned it. maAwardPriorities is the

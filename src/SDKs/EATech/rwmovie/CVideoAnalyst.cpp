@@ -5,7 +5,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative. No
 // reference source and no DecFIGS DWARF hints exist for this TU.
 // =====================================================================================
-#include <cstdint>
+#include "types.hpp"
 
 #include "types.hpp"
 
@@ -36,7 +36,7 @@ int CVideoAnalyst::Clean()
         // The frame array was allocated with an MSVC array cookie; the X360 tears it down
         // through CVideoFrameAnalyst's vector deleting destructor (flags: free | array).
         mpFrameAnalysts->_vector_deleting_destructor_(3);
-        mpFrameAnalysts = nullptr;
+        mpFrameAnalysts = 0;
     }
 
     // Vestigial return value: the asm returns r3 == the (pre-free) temporal pointer.
@@ -44,10 +44,10 @@ int CVideoAnalyst::Clean()
     if (mpTemporal)
     {
         XMemFree(mpTemporal, KU_VIDEOANALYST_XMEM_ATTRIBUTES);
-        mpTemporal = nullptr;
+        mpTemporal = 0;
     }
 
-    mpFrameAnalysts = nullptr;
+    mpFrameAnalysts = 0;
     miNumAnalysts   = 0;
     miTemporalCount = 0;
     miMaxRefFrames  = 0;
@@ -86,7 +86,7 @@ int CVideoAnalyst::Init(s32 iWidth, s32 iHeight, u32 uNumAnalysts, u32 uMaxRef)
     }
 
     u32* lpuAlloc = static_cast<u32*>(XMemAlloc(luFrameBytes, KU_VIDEOANALYST_XMEM_ATTRIBUTES));
-    CVideoFrameAnalyst* lpFrames = nullptr;
+    CVideoFrameAnalyst* lpFrames = 0;
     if (lpuAlloc)
     {
         *lpuAlloc = uNumAnalysts;   // array cookie: element count (read back by delete[])
@@ -139,7 +139,7 @@ CVideoFrameAnalyst* CVideoAnalyst::analysisFrame(u8* pY, u8* pU, u8* pV, u8* pSo
 {
     if (!mpFrameAnalysts)
     {
-        return nullptr;
+        return 0;
     }
 
     if (miFreeCount <= 0)
@@ -172,7 +172,7 @@ CVideoFrameAnalyst* CVideoAnalyst::analysisFrame(u8* pY, u8* pU, u8* pV, u8* pSo
         }
         if (liIndex == miNumAnalysts)
         {
-            return nullptr;   // pool exhausted / nothing free
+            return 0;   // pool exhausted / nothing free
         }
     }
 
@@ -205,7 +205,7 @@ CVideoFrameAnalyst* CVideoAnalyst::getCurFrameAnalyst()
     s32 liCur = miCurIndex;
     if (liCur < 0)
     {
-        return nullptr;
+        return 0;
     }
 
     s32 liIndex = miSetIndex;
@@ -217,7 +217,7 @@ CVideoFrameAnalyst* CVideoAnalyst::getCurFrameAnalyst()
             liIndex += miNumAnalysts;
             if (liIndex < 0)
             {
-                return nullptr;
+                return 0;
             }
         }
     }
@@ -229,7 +229,7 @@ CVideoFrameAnalyst* CVideoAnalyst::setCurFrameAnalyst(u8* pSourceId)
 {
     if (miNumAnalysts <= 0)
     {
-        return nullptr;
+        return 0;
     }
 
     u32 luSourceId = static_cast<u32>(reinterpret_cast<uintptr_t>(pSourceId));
@@ -238,7 +238,7 @@ CVideoFrameAnalyst* CVideoAnalyst::setCurFrameAnalyst(u8* pSourceId)
     {
         if (++liIndex >= miNumAnalysts)
         {
-            return nullptr;
+            return 0;
         }
     }
 
@@ -298,11 +298,11 @@ CVideoAnalyst::~CVideoAnalyst()
     if (mpFrameAnalysts)
     {
         mpFrameAnalysts->_vector_deleting_destructor_(3);
-        mpFrameAnalysts = nullptr;
+        mpFrameAnalysts = 0;
     }
     if (mpTemporal)
     {
         XMemFree(mpTemporal, KU_VIDEOANALYST_XMEM_ATTRIBUTES);
-        mpTemporal = nullptr;
+        mpTemporal = 0;
     }
 }

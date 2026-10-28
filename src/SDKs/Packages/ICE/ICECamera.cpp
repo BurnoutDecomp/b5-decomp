@@ -68,9 +68,9 @@ namespace ICE
     {
         // Pin the two X360-proven offsets (member fn -> has private access; type is
         // complete here). matrix copy lands at this+0x10, dirty-flags at this+0x150.
-        static_assert(offsetof(ICECamera, mCamera) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(ICECamera, mCamera) == 0x10),
                       "ICECamera transform (mCamera.mTransform) must land at this+0x10");
-        static_assert(offsetof(ICECamera, mCamera) + 0x140 == 0x150,
+        CGS_STATIC_ASSERT((offsetof(ICECamera, mCamera) + 0x140 == 0x150),
                       "ICECamera dirty-flags word must land at this+0x150");
 
         // 1. Copy the take matrix into the director camera's transform (this+0x10): four

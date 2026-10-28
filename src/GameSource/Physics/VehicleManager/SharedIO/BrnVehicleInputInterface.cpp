@@ -48,7 +48,7 @@ namespace Vehicle
         // TriangleCacheInterface::Construct (DWARF CgsSceneManagerModuleIO.h:572; no out-of-line
         // X360 symbol). Crash parity G27-D1: the comment was here, the store was not, and PC IO
         // buffers are not zero-filled, so the pointer kept whatever the IO stack held.
-        mTriangleCacheInterface.mpTriangleCacheManager = nullptr;
+        mTriangleCacheInterface.mpTriangleCacheManager = 0;
         // asm `*(a1 + 142160) = 0` -- mRaceCarsAddedForCollision (BitArray<8>).
         mRaceCarsAddedForCollision.UnSetAll();
     }

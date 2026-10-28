@@ -101,13 +101,13 @@ public:
     void SetCamera(BrnDirector::Camera::Camera& lrCamera) { mCamera = lrCamera; }
 
         // X360 0x82794D08. Reached by the wired WorldModule::Construct @0x827CF540 fleet cascade.
-        void Construct() override;
+        void Construct() ;
         // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
         // X360 0x8276E380. Bodied in BrnAIModule.cpp (crash parity G04-D7); teardown-only.
-        void Destruct() override;
+        void Destruct() ;
         // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
         // Bodied in BrnAIModule_wS34_00.cpp.
-        bool Release() override;
+        bool Release() ;
 
         // X360 0x82798070 -- the 6-stage prepare machine. NOT the base's virtual Prepare()
         // (different signature): the console calls this one directly from WorldModule::Prepare

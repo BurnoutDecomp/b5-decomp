@@ -79,7 +79,7 @@ CXenonRenderer::~CXenonRenderer()
     {
         iResult = XAudioUnregisterRenderDriverClient(mpRenderDriverClient);
         if (iResult >= 0)                               // cmpwi ; blt
-            mpRenderDriverClient = nullptr;             // stw r30(0), 0x18(r31)
+            mpRenderDriverClient = 0;             // stw r30(0), 0x18(r31)
     }
 
     // Final base-dtor re-seat of the secondary vptr to the CObjectRefCount image.
@@ -184,7 +184,7 @@ s32 CXenonRenderer::SetCallback(void* apCallback)
         iResult = XAudioUnregisterRenderDriverClient(mpRenderDriverClient);
         if (iResult < 0) // cmpwi ; blt -> LABEL_6
             return iResult;
-        mpRenderDriverClient = nullptr; // stw r11(0), 0(r30)
+        mpRenderDriverClient = 0; // stw r11(0), 0(r30)
     }
 
     if (apCallback) // cmplwi r29,0 ; beq

@@ -67,8 +67,8 @@ inline s32 MixerValue(f32 afValue)
 SkidEffect::SkidEffect()
     : BrnEffectObject()
     , mDataHandle()
-    , mpWheelControl(nullptr)
-    , mpPhysicsControl(nullptr)
+    , mpWheelControl(0)
+    , mpPhysicsControl(0)
     , mfOverallMax(0.0f)
     , mfSkidAzimuth(0.0f)
     , mbSkidsLatched(false)
@@ -117,13 +117,13 @@ bool SkidEffect::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CgsSound::Logic::Content* lpSkidsContent = nullptr;
+    CgsSound::Logic::Content* lpSkidsContent = 0;
     if (GetStateBase() && GetStateBase()->GetStateManager())
     {
         const CgsSound::Playback::Name lContentName("Skids.abi");
         lpSkidsContent = GetStateBase()->GetStateManager()->GetContent(lContentName);
     }
-    CGS_ASSERT(lpSkidsContent != nullptr, "lpSkidsContent");
+    CGS_ASSERT(lpSkidsContent != 0, "lpSkidsContent");
 
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
     lParams.mpLogicModule = GetLogicModule();
@@ -149,13 +149,13 @@ bool SkidEffect::Attach()
 
 void SkidEffect::UpdateParams(f32)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
-    CGS_ASSERT(mpWheelControl != nullptr, "mpWheelControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
+    CGS_ASSERT(mpWheelControl != 0, "mpWheelControl");
     if (!mpPhysicsControl || !mpWheelControl)
         return;
 
     const BrnSound::Vehicles::VehicleData* lpRaw = mpPhysicsControl->GetRawPhysicsData();
-    CGS_ASSERT(lpRaw != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(lpRaw != 0, "mpVehiclePhysicsData");
     if (!lpRaw)
         return;
 

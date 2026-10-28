@@ -34,9 +34,9 @@ namespace RealmcIface
 // ---------------------------------------------------------------------------
 SaveReq::SaveReq(const void* pHeadSource,
                  const void* pParamsSource,
-                 std::uint32_t uField158,
-                 std::uint32_t uField15C,
-                 const std::uint32_t* pField160Source)
+                 uint32_t uField158,
+                 uint32_t uField15C,
+                 const uint32_t* pField160Source)
 {
     RealmcCopyEntryContentParams(maParams, pParamsSource);  // sub_82B51D10
     muField158 = uField158;                                 // +0x158

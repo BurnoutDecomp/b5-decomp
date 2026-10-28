@@ -75,7 +75,7 @@ AptRenderItem* AptRenderItemStaticText::Clone(int nCreatedOnTick, bool bCopyExte
 {
     void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemStaticText));
     if (!p)
-        return nullptr;
+        return 0;
     return new (p) AptRenderItemStaticText(this, nCreatedOnTick, bCopyExtended);
 }
 

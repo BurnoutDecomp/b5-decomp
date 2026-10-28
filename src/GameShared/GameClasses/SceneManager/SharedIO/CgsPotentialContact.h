@@ -34,7 +34,7 @@ namespace CgsSceneManager
 namespace SceneManagerIO
 {
     // DWARF CgsPotentialContact.h:26. Members BY NAME + SEQUENCE (each carries its DWARF line).
-    struct alignas(16) PotentialContact
+    struct CGS_ALIGN(16) PotentialContact
     {
         Vector3          mPointOnA;             // :60  contact point on volume A (byte +0)
         Vector3          mPointOnB;             // :61  contact point on volume B (byte +16)

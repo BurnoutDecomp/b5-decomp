@@ -241,7 +241,7 @@ SndPlayer1Layout SndPlayer1::ComputeLayout(u8 au8Channels, u32 auMaxRequests)
     // The console's 8 here IS alignof(RequestInternal) -- the record leads with an f64 --
     // so the host uses alignof(RequestInternal) for exactly the same reason.
     const u32 luRequest = AlignUp(luDeclick + static_cast<u32>(sizeof(f32)) * au8Channels,
-                                  static_cast<u32>(alignof(RequestInternal)));
+                                  static_cast<u32>(__alignof(RequestInternal)));
 
     lLayout.muDeclickBufferOffset   = static_cast<u16>(luDeclick);
     lLayout.muRequestInternalOffset = static_cast<u16>(luRequest);
@@ -301,7 +301,7 @@ int SndPlayer1::CreateInstance(SndPlayer1 *self, const ConstructorParams *apPara
     // observable state is identical -- a counter plus n records -- and the pointer stored
     // at mpRequestHandle is still the block base, which the destructor frees.
     const size_t luHead = AlignUp(static_cast<u32>(sizeof(f32)),
-                                  static_cast<u32>(alignof(RequestExternal)));
+                                  static_cast<u32>(__alignof(RequestExternal)));
     const size_t luBytes = luHead + sizeof(RequestExternal) * luMaxRequests;
     void *lpBlock = System::Alloc(self->mpSystemUseGetSystemAccessor,
                                   static_cast<u32>(luBytes), KSZ_ALLOC_NAME, 16, 0);
@@ -722,7 +722,7 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
         nameBytes = std::strlen(play->pStreamFilePath) + 1;
     const size_t recordSize = AlignUpSize(
         offsetof(SndPlayer1PlayCommand, path) + nameBytes,
-        alignof(SndPlayer1PlayCommand));
+        __alignof(SndPlayer1PlayCommand));
     assert(recordSize <= (std::numeric_limits<u16>::max)());
 
     SndPlayer1PlayCommand *command = reinterpret_cast<SndPlayer1PlayCommand *>(
@@ -1317,11 +1317,11 @@ u8 SndPlayer1::HandleSampleEnd(SndPlayer1 *self, u32 index, u8 *finished)
 // at +22. The pins below exist so that a future field edit to either record fails the build
 // instead of silently handing the decoder a misaligned view of the mix buffer.
 // -------------------------------------------------------------------------------------
-static_assert(offsetof(SampleBuffer, mpSamples) == offsetof(DecoderBuffer, mpData),
+CGS_STATIC_ASSERT((offsetof(SampleBuffer, mpSamples) == offsetof(DecoderBuffer, mpData)),
               "SampleBuffer/DecoderBuffer: the sample pointer must alias (console +0x04)");
-static_assert(offsetof(SampleBuffer, muStride) == offsetof(DecoderBuffer, muStride),
+CGS_STATIC_ASSERT((offsetof(SampleBuffer, muStride) == offsetof(DecoderBuffer, muStride)),
               "SampleBuffer/DecoderBuffer: the stride must alias (console +0x0E)");
-static_assert(offsetof(SampleBuffer, muUnk0C) == offsetof(DecoderBuffer, muSampleCursor),
+CGS_STATIC_ASSERT((offsetof(SampleBuffer, muUnk0C) == offsetof(DecoderBuffer, muSampleCursor)),
               "SampleBuffer/DecoderBuffer: the sample cursor must alias (console +0x0C)");
 
 static DecoderBuffer *AsDecoderBuffer(SampleBuffer *apBuffer)

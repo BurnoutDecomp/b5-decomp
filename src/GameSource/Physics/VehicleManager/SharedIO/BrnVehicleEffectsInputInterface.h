@@ -32,7 +32,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    struct alignas(16) VehicleEffectsInputInterface
+    struct CGS_ALIGN(16) VehicleEffectsInputInterface
     {
         // DWARF BrnVehicleQueues.h:43/:44 -- the two queue typedefs.
         typedef CgsModule::EventQueue<CreateAirRamEvent, 20> CreateAirRamEventQueue;

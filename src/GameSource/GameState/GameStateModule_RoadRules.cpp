@@ -82,7 +82,7 @@ struct ImpactTimeStartActionRecord
 
 // X360 0x823814FC `li r6,8` -- WIRE FORMAT, the record crosses into the shared 13312-byte
 // VariableEventQueue. Pinned here rather than passed as a magic number at the call site.
-static_assert(sizeof(ImpactTimeStartActionRecord) == 8,
+CGS_STATIC_ASSERT((sizeof(ImpactTimeStartActionRecord) == 8),
               "X360 UpdateRoadRulesManager posts action 42 with size 8");
 
 namespace

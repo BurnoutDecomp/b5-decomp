@@ -40,6 +40,6 @@ namespace CgsGui
     // GetItem's `idx << 6`) must stay exactly 64 bytes.
     struct BillboardInfo_AssertLayout
     {
-        static void Check() { static_assert(sizeof(BillboardInfo) == 64, "BillboardInfo stride must be 64"); }
+        static void Check() { CGS_STATIC_ASSERT((sizeof(BillboardInfo) == 64), "BillboardInfo stride must be 64"); }
     };
 }

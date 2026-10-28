@@ -49,10 +49,10 @@ struct AptPlaceObjectBody_t
     u8  maPad3C[4];          // body+0x3C  (pad to the +0x40 pointer slot)
     void* mpClipActions;     // body+0x40  clipActions block ptr8         [c: value cmd+0x3C]
 };
-static_assert(offsetof(AptPlaceObjectBody_t, mpName)        == 0x30, "place body name@+0x30");
-static_assert(offsetof(AptPlaceObjectBody_t, miClipDepth)   == 0x38, "place body clipDepth@+0x38");
-static_assert(offsetof(AptPlaceObjectBody_t, mpClipActions) == 0x40, "place body clipActions@+0x40");
-static_assert(sizeof(AptPlaceObjectBody_t)                  == 0x48, "place body native-8 size 0x48");
+CGS_STATIC_ASSERT((offsetof(AptPlaceObjectBody_t, mpName)        == 0x30), "place body name@+0x30");
+CGS_STATIC_ASSERT((offsetof(AptPlaceObjectBody_t, miClipDepth)   == 0x38), "place body clipDepth@+0x38");
+CGS_STATIC_ASSERT((offsetof(AptPlaceObjectBody_t, mpClipActions) == 0x40), "place body clipActions@+0x40");
+CGS_STATIC_ASSERT((sizeof(AptPlaceObjectBody_t)                  == 0x48), "place body native-8 size 0x48");
 
 // The place COMMAND record itself: the FrameItem tag dword, then the pointer-aligned body.
 struct AptPlaceObjectInfo_t

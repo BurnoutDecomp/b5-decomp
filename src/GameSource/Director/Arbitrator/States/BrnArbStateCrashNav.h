@@ -70,11 +70,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        void        Construct() override;                            // @0x82266010
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x822660A8
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x8226DC98
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x8224FAA0
-        const char* GetName() const override;                        // @0x821F6300
+        void        Construct() ;                            // @0x82266010
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ; // @0x822660A8
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;  // @0x8226DC98
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ; // @0x8224FAA0
+        const char* GetName() const ;                        // @0x821F6300
 
         // ⛔ CORRECTED 2026-08-29 (pause-greyscale wave). The note here used to read "Prepare()
         // is NOT in this TU's X360 function set ... its body lives in another driver TU". That

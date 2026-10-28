@@ -28,14 +28,14 @@ namespace BrnWorld
     public:
         void Construct(TriggerEntityModule* lpTriggerEntityModule);   // @ 0x822A8F68
 
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override; // @ 0x822DA1F0
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer) override;  // @ 0x822C4368
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ; // @ 0x822DA1F0
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer) ;  // @ 0x822C4368
 
     protected:
-        const char* GetName() const override;   // @ 0x822A8FF8
+        const char* GetName() const ;   // @ 0x822A8FF8
         // ARTIST vtable 0x820CDD3C, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Triggers"; }
-        void        OnActivate() override;        // @ 0x822A9018
+        const char* GetPath() const  { return "Triggers"; }
+        void        OnActivate() ;        // @ 0x822A9018
 
     private:
         TriggerEntityModule* mpTriggerEntityModule;   // +0x0C

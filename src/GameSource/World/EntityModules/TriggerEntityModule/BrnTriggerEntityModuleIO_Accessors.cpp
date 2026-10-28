@@ -41,9 +41,9 @@ namespace TriggerEntityModuleIO
     // the buffer's only payload, seated at its own alignment right after the status byte.
     void InputBuffer_PreScene::_AssertLayout()
     {
-        static_assert(sizeof(InputBuffer_PreScene)
+        CGS_STATIC_ASSERT((sizeof(InputBuffer_PreScene)
                           == offsetof(InputBuffer_PreScene, mInputInterface)
-                             + sizeof(InputBuffer_PreScene::InputInterface),
+                             + sizeof(InputBuffer_PreScene::InputInterface)),
                       "mInputInterface must be the buffer's only payload member");
     }
 

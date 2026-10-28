@@ -17,7 +17,7 @@ namespace Gen
     class cameraexternalbehaviour : private Instance
     {
     public:
-        explicit cameraexternalbehaviour(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit cameraexternalbehaviour(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // ADDED 2026-08-02 (camera parameter-chain wave). The two base members the console
         // reads straight off the stack instance at every one of this class's four use sites

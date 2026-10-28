@@ -124,7 +124,7 @@ struct IRProjection : public IRInst
     // recorded in comments only.
     static void _AssertLayout()
     {
-        static_assert(sizeof(IRProjection) == sizeof(IRInst),
+        CGS_STATIC_ASSERT((sizeof(IRProjection) == sizeof(IRInst)),
                       "IRProjection must add no members of its own");
     }
 };

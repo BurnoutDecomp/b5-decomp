@@ -57,7 +57,7 @@ s32 CRoutedVoice::SetVoiceOutput(const SVoiceOutputConfig* apConfig)
     // matching the asm which pre-seeds the result accumulator to 0).
     DetachOutputVoices();
 
-    if (apConfig != nullptr)
+    if (apConfig != 0)
     {
         if (apConfig->muCount != 0)
         {
@@ -86,7 +86,7 @@ s32 CRoutedVoice::SetVoiceOutput(const SVoiceOutputConfig* apConfig)
     if (muNumRoutes == 0)
         return liResult; // 0
 
-    liResult = AttachOutputVoice(nullptr, &mpRoutes[0]);
+    liResult = AttachOutputVoice(0, &mpRoutes[0]);
     if (liResult >= 0)
         muNumActiveOutputs = 1;
 

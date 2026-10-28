@@ -88,8 +88,8 @@ void cLionEffectManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator,
     mpAllocator     = apAllocator;
     mEffectCount    = 0;
     mEffectDefCount = 0;
-    mpEffectDefs    = nullptr;
-    mpEffects       = nullptr;
+    mpEffectDefs    = 0;
+    mpEffects       = 0;
 }
 
 // ================================================================================================

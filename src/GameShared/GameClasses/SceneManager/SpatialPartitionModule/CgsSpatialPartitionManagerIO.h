@@ -69,7 +69,7 @@ namespace SpatialPartitionIO
         E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_RADIUS   = 3,
     };
 
-    struct alignas(16) InEventAddEntity : public CgsModule::Event
+    struct CGS_ALIGN(16) InEventAddEntity : public CgsModule::Event
     {
         Vector3 mPosition;      // +0x00 (16-byte vmx lane)
         u16     mu16EntityId;   // +0x10
@@ -84,7 +84,7 @@ namespace SpatialPartitionIO
         u16 mu16Pad02;          // +0x02
     };
 
-    struct alignas(16) InEventSetEntityPosition : public CgsModule::Event
+    struct CGS_ALIGN(16) InEventSetEntityPosition : public CgsModule::Event
     {
         Vector3 mPosition;      // +0x00 (16-byte vmx lane)
         u16     mu16EntityId;   // +0x10

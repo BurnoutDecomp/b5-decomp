@@ -369,25 +369,25 @@ namespace BrnGui
         {
             // run A: overlay record .. selected player id (X360 +87464..+87512; the
             // deltas below are the exact X360 deltas -- no pointer inside the run)
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mCrashNavOptionsData) - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 16, "run A order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, meSubState)              - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 40, "run A order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, miCurrentRoundDisplayed) - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 44, "run A order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mSelectedPlayerID)       - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 48, "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mCrashNavOptionsData) - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 16), "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, meSubState)              - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 40), "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, miCurrentRoundDisplayed) - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 44), "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mSelectedPlayerID)       - offsetof(OnlineGameRoomPlayerInfo, mOverlayCompleteEvent) == 48), "run A order");
             // run B: the scalar tail after the (widening) mpGuiCache pointer
             // (X360 +87520..+87538; exact X360 deltas within the run)
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mfTimeToDisableNextEATrack) - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 4,  "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, miDelayFrameCount)          - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 8,  "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbFirstMapUpdate)           - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 12, "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbShowSplashScreen)         - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 13, "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbNeedToClearSplashScreen)  - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 14, "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbKicked)                   - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 15, "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbShownFromPause)           - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 16, "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbHighlightedNewPlayer)     - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 17, "run B order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mbSettingsChanged)          - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 18, "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mfTimeToDisableNextEATrack) - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 4),  "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, miDelayFrameCount)          - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 8),  "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbFirstMapUpdate)           - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 12), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbShowSplashScreen)         - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 13), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbNeedToClearSplashScreen)  - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 14), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbKicked)                   - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 15), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbShownFromPause)           - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 16), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbHighlightedNewPlayer)     - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 17), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mbSettingsChanged)          - offsetof(OnlineGameRoomPlayerInfo, mfTimeUntilNextEATrack) == 18), "run B order");
             // component ORDER pins (relative ordering only -- component widths widen)
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mMessageText) > offsetof(OnlineGameRoomPlayerInfo, maIcons),            "component order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mSettingToggle) > offsetof(OnlineGameRoomPlayerInfo, mChallengeToggle), "component order");
-            static_assert(offsetof(OnlineGameRoomPlayerInfo, mHelpItemAccept) > offsetof(OnlineGameRoomPlayerInfo, mbSettingsChanged), "component order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mMessageText) > offsetof(OnlineGameRoomPlayerInfo, maIcons)),            "component order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mSettingToggle) > offsetof(OnlineGameRoomPlayerInfo, mChallengeToggle)), "component order");
+            CGS_STATIC_ASSERT((offsetof(OnlineGameRoomPlayerInfo, mHelpItemAccept) > offsetof(OnlineGameRoomPlayerInfo, mbSettingsChanged)), "component order");
         }
     };
 }

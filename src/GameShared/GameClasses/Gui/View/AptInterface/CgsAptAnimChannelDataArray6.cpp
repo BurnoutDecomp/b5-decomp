@@ -22,7 +22,7 @@
 // Pin the X360-proven element stride: Append @ 0x8284D338 copies 6 dwords into
 // `&v2[6 * count]` and GetItem @ 0x8284D830 returns `24 * index + this`, so
 // sizeof(AnimChannelData) must be 24 (0x18).
-static_assert(sizeof(CgsGui::AnimChannelData) == 24, "AnimChannelData stride 24 (X360 0x8284D338/0x8284D830)");
+CGS_STATIC_ASSERT((sizeof(CgsGui::AnimChannelData) == 24), "AnimChannelData stride 24 (X360 0x8284D338/0x8284D830)");
 
 template void                  Array<CgsGui::AnimChannelData, 6>::Append(const CgsGui::AnimChannelData&);
 template CgsGui::AnimChannelData& Array<CgsGui::AnimChannelData, 6>::GetItem(u32);

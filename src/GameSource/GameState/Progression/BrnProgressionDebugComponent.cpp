@@ -476,7 +476,7 @@ namespace BrnProgression
         {
             const BrnResource::VehicleListEntry* lpVehicleEntry =
                 lpVehicleList->GetVehicleData(liVehicle);
-            CGS_ASSERT(lpVehicleEntry != nullptr, "lpVehicleListEntry != NULL");
+            CGS_ASSERT(lpVehicleEntry != 0, "lpVehicleListEntry != NULL");
 
             const u8 lu8LiveryType = lpVehicleEntry->GetLiveryType();
             if (lu8LiveryType != BrnResource::VehicleListEntry::E_LIVERY_TYPE_COLOUR_ALT &&
@@ -487,15 +487,15 @@ namespace BrnProgression
 
             CarData* lpCarData = mpProgressionManager->AddCar(
                 lpVehicleEntry->GetId(), CarData::E_UNLOCK_TYPE_GOLD_SILVER);
-            CGS_ASSERT(lpCarData != nullptr, "lpCarData != NULL");
+            CGS_ASSERT(lpCarData != 0, "lpCarData != NULL");
             lpCarData->SetUnlockSequenceAlreadyShown();
 
             const CgsID lParentCarId = lpVehicleEntry->GetParentId();
-            if (mpProgressionManager->mProfile.FindCar(lParentCarId) == nullptr)
+            if (mpProgressionManager->mProfile.FindCar(lParentCarId) == 0)
             {
                 CarData* lpParentCarData = mpProgressionManager->AddCar(
                     lParentCarId, CarData::E_UNLOCK_TYPE_GOLD_SILVER);
-                CGS_ASSERT(lpParentCarData != nullptr, "lpParentCarData != NULL");
+                CGS_ASSERT(lpParentCarData != 0, "lpParentCarData != NULL");
                 lpParentCarData->SetUnlockSequenceAlreadyShown();
             }
         }
@@ -519,7 +519,7 @@ namespace BrnProgression
                 lpProgressionData->GetProgressionRankData(static_cast<u32>(liRankIndex));
             const CgsID lGiftCarId = lpRankData->GetFreeCarForRankUpID();
 
-            if (mpProgressionManager->mProfile.FindCar(lGiftCarId) == nullptr)
+            if (mpProgressionManager->mProfile.FindCar(lGiftCarId) == 0)
             {
                 CarData* lpCarData = mpProgressionManager->AddCar(
                     lGiftCarId, CarData::E_UNLOCK_TYPE_GIFT);
@@ -540,7 +540,7 @@ namespace BrnProgression
                 mpProgressionManager->DEBUG_ClearMedals();
             }
             mpProgressionManager->UnlockToProgressionRank(
-                static_cast<s8>(miRankToSkipTo), nullptr);
+                static_cast<s8>(miRankToSkipTo), 0);
             mpProgressionManager->CheckForSpecialCarUnlocks();
         }
 
@@ -552,7 +552,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::GetToOneWinBelowBurnoutLicense()
     {
         mpProgressionManager->DEBUG_ClearMedals();
-        mpProgressionManager->UnlockToProgressionRank(4, nullptr);
+        mpProgressionManager->UnlockToProgressionRank(4, 0);
         mpProgressionManager->CheckForSpecialCarUnlocks();
         mpProgressionManager->mbHasJustRankedUp = false;
         mpProgressionManager->mNewlyUnlockedCarID = 0;
@@ -576,7 +576,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::GetToOneWinBelowEliteLicense()
     {
         mpProgressionManager->DEBUG_ClearMedals();
-        mpProgressionManager->UnlockToProgressionRank(5, nullptr);
+        mpProgressionManager->UnlockToProgressionRank(5, 0);
         mpProgressionManager->CheckForSpecialCarUnlocks();
         mpProgressionManager->mbHasJustRankedUp = false;
         mpProgressionManager->mNewlyUnlockedCarID = 0;
@@ -610,7 +610,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::GetToOneWinBelowEliteLicenseBR()
     {
         mpProgressionManager->DEBUG_ClearMedals();
-        mpProgressionManager->UnlockToProgressionRank(5, nullptr);
+        mpProgressionManager->UnlockToProgressionRank(5, 0);
         mpProgressionManager->CheckForSpecialCarUnlocks();
         mpProgressionManager->mbHasJustRankedUp = false;
         mpProgressionManager->mNewlyUnlockedCarID = 0;

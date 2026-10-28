@@ -200,11 +200,11 @@ namespace BrnGui
         // Record-size pins. Every one of these payloads is pointer-free, so the X360's
         // AddEvent size immediate must survive unchanged on the x64 host; if a host layout
         // ever drifts, this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
-        static_assert(sizeof(GuiEventAudioSettingsWire) == 20, "audio settings record is 20 bytes");
-        static_assert(sizeof(GuiEventVoipSettingsWire) == 16, "voip settings record is 16 bytes");
-        static_assert(sizeof(GuiEventLeaveOnlineGameWire) == 16, "leave-game record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventAudioSettingsWire) == 20), "audio settings record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventVoipSettingsWire) == 16), "voip settings record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventLeaveOnlineGameWire) == 16), "leave-game record is 16 bytes");
     }
 
     // ---- HandleAskToLaunchEvent @ 0x82498698 --------------------------------------

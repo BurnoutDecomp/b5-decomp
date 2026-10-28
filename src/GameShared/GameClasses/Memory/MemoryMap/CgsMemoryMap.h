@@ -98,13 +98,13 @@ namespace CgsMemory
         MemoryIO::CreateGeneralAllocatorRequest mRequest;
     };
 
-    static_assert(sizeof(MemoryMapBank) == sizeof(MemoryBank::Params), "memory-map bank is the canonical Params row");
-    static_assert(sizeof(MemoryMapPool) == sizeof(CgsResource::Events::CreatePoolRequest), "memory-map pool is the canonical CreatePoolRequest row");
-    static_assert(sizeof(MemoryMapRawResource) == sizeof(MemoryIO::CreateResourceRequest), "memory-map raw resource uses the canonical request row");
-    static_assert(sizeof(MemoryMapLinearAllocator) == sizeof(MemoryIO::CreateAllocatorRequest), "memory-map linear allocator uses the canonical request row");
-    static_assert(sizeof(MemoryMapHeapAllocator) == sizeof(MemoryIO::CreateAllocatorRequest), "memory-map heap allocator uses the canonical request row");
-    static_assert(sizeof(MemoryMapRWLinearAllocator) == sizeof(MemoryIO::CreateLinearAllocatorRequest), "memory-map rw-linear allocator uses the canonical request row");
-    static_assert(sizeof(MemoryMapRWGeneralAllocator) == sizeof(MemoryIO::CreateGeneralAllocatorRequest), "memory-map rw-general allocator uses the canonical request row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapBank) == sizeof(MemoryBank::Params)), "memory-map bank is the canonical Params row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapPool) == sizeof(CgsResource::Events::CreatePoolRequest)), "memory-map pool is the canonical CreatePoolRequest row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapRawResource) == sizeof(MemoryIO::CreateResourceRequest)), "memory-map raw resource uses the canonical request row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapLinearAllocator) == sizeof(MemoryIO::CreateAllocatorRequest)), "memory-map linear allocator uses the canonical request row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapHeapAllocator) == sizeof(MemoryIO::CreateAllocatorRequest)), "memory-map heap allocator uses the canonical request row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapRWLinearAllocator) == sizeof(MemoryIO::CreateLinearAllocatorRequest)), "memory-map rw-linear allocator uses the canonical request row");
+    CGS_STATIC_ASSERT((sizeof(MemoryMapRWGeneralAllocator) == sizeof(MemoryIO::CreateGeneralAllocatorRequest)), "memory-map rw-general allocator uses the canonical request row");
 
     // CgsMemoryMap.h:45
     struct MemoryMap

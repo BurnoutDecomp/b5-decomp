@@ -37,7 +37,7 @@ int CXCamVideo::Release()
 //   overlap slot is returned unless the driver reported ERROR_IO_PENDING (997).
 int CXCamVideo::ReadFrame(XCamFrameBuffer* lpFrame, int* lpStatus)
 {
-    XCamOverlappedInfo* lpOverlap = nullptr;   // r30 / v5
+    XCamOverlappedInfo* lpOverlap = 0;   // r30 / v5
     int iFrame = CheckCameraReadyForUse();      // r31
 
     if (iFrame == 0)
@@ -58,7 +58,7 @@ int CXCamVideo::ReadFrame(XCamFrameBuffer* lpFrame, int* lpStatus)
         else
         {
             lpOverlap = GetOverlappedInfo();
-            if (lpOverlap == nullptr)
+            if (lpOverlap == 0)
             {
                 iFrame = KI_XCAM_ERROR_BUSY; // 170 (LABEL_9)
             }
@@ -77,7 +77,7 @@ int CXCamVideo::ReadFrame(XCamFrameBuffer* lpFrame, int* lpStatus)
     }
 
     *lpStatus = iFrame;
-    if (iFrame != KI_XCAM_ERROR_IO_PENDING && lpOverlap != nullptr)
+    if (iFrame != KI_XCAM_ERROR_IO_PENDING && lpOverlap != 0)
         ReturnOverlappedInfo(lpOverlap);
     return iFrame;
 }

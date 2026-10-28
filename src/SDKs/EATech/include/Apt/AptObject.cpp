@@ -29,12 +29,12 @@ extern AptValue* gpUndefinedValue;
 // before AptInit's AptAllocatorInitialize @0x82ADD118 wires the pool.
 void* AptObject::operator new(size_t size)
 {
-    return (gpGCPoolManager != nullptr) ? gpGCPoolManager->AllocateAptValueGC(size) : nullptr;
+    return (gpGCPoolManager != 0) ? gpGCPoolManager->AllocateAptValueGC(size) : 0;
 }
 
 void AptObject::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != nullptr)
+    if (gpGCPoolManager != 0)
         gpGCPoolManager->DeallocateAptValueGC(p, size);
 }
 
@@ -45,8 +45,8 @@ void AptObject::operator delete(void* p, size_t size)
 AptObject* AptObject::Create(int nHashCapacity)
 {
     void* pMem = AptObject::operator new(sizeof(AptObject));
-    if (pMem == nullptr)
-        return nullptr;
+    if (pMem == 0)
+        return 0;
     return ::new (pMem) AptObject(AptVFT_Object, nHashCapacity);
 }
 
@@ -81,7 +81,7 @@ AptValue* AptObject::objectMemberLookup(AptValue* const /*pThis*/,
 // the compiler emits automatically for a virtual dtor; they need no source line.
 AptObject::~AptObject()
 {
-    if (mHash.mpTable != nullptr)   // r3+4 = mHash.mpTable; !IsEmpty()
+    if (mHash.mpTable != 0)   // r3+4 = mHash.mpTable; !IsEmpty()
         mHash.DestroyGCPointers();
 }
 
@@ -120,7 +120,7 @@ AptValue* AptObject::GetImplementedObjects(int* pnCountOut) const
 bool AptObject::DoesImplementObject(AptValue* pTarget) const
 {
     // ---- __proto__ chain walk (r31 = i, seeded from mHash.mp__Proto__) -------
-    for (AptValue* i = mHash.mp__Proto__; i != nullptr; )
+    for (AptValue* i = mHash.mp__Proto__; i != 0; )
     {
         if (i == pTarget)
             return true;                         // loc_82AE6A54
@@ -183,7 +183,7 @@ void AptObject::SetPrototype(AptValue* pValue)
 
 // X360 dword_8324E2D4 -- the export-name -> AS-class registry Object.registerClass
 // fills and the clip-placement class binding consumes. Lazily built below.
-AptNativeHash* gpAptClassRegistry = nullptr;
+AptNativeHash* gpAptClassRegistry = 0;
 
 extern AptActionInterpreter gAptActionInterpreter;   // the native-arg stack
 
@@ -192,7 +192,7 @@ AptValue* AptObject::RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
     if (nNumParams == 2)
     {
         AptValue* const pName = gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
-        if (pName != nullptr && pName->getIsDefined())
+        if (pName != 0 && pName->getIsDefined())
         {
             const int nNameType = static_cast<int>(pName->getVtblIndex());
             if (nNameType == AptVFT_StringValue || nNameType == AptVFT_StringObject)
@@ -200,19 +200,19 @@ AptValue* AptObject::RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
                 AptValue* const pClass =
                     gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 2];
 
-                if (gpAptClassRegistry == nullptr)
+                if (gpAptClassRegistry == 0)
                 {
                     // Console: DOGMA Allocate(20) + {cap=8, table=null...} == AptNativeHash(8).
                     void* pMem = gpNonGCPoolManager
-                        ? gpNonGCPoolManager->Allocate(sizeof(AptNativeHash)) : nullptr;
-                    gpAptClassRegistry = pMem ? ::new (pMem) AptNativeHash(8) : nullptr;
+                        ? gpNonGCPoolManager->Allocate(sizeof(AptNativeHash)) : 0;
+                    gpAptClassRegistry = pMem ? ::new (pMem) AptNativeHash(8) : 0;
                 }
 
-                if (gpAptClassRegistry != nullptr)
+                if (gpAptClassRegistry != 0)
                 {
                     EAStringC nameText;
                     pName->toString(&nameText);
-                    if (pClass != nullptr && pClass->getVtblIndex() == AptVFT_None)
+                    if (pClass != 0 && pClass->getVtblIndex() == AptVFT_None)
                         gpAptClassRegistry->Unset(nameText);
                     else
                         gpAptClassRegistry->Set(nameText, pClass);

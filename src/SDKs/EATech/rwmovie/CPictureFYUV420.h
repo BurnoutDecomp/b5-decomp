@@ -72,16 +72,16 @@ private:
     // X360 offsets (getPlane reads +0x38/+0x3C/+0x40 directly).
     static void _AssertLayout()
     {
-        static_assert(offsetof(CPictureFYUV420, mrcChroma) == 0x10, "mrcChroma @ +0x10");
-        static_assert(offsetof(CPictureFYUV420, miLumaArea) == 0x20, "miLumaArea @ +0x20");
-        static_assert(offsetof(CPictureFYUV420, miChromaArea) == 0x24, "miChromaArea @ +0x24");
-        static_assert(offsetof(CPictureFYUV420, miLumaWidth) == 0x28, "miLumaWidth @ +0x28");
-        static_assert(offsetof(CPictureFYUV420, miLumaHeight) == 0x2C, "miLumaHeight @ +0x2C");
-        static_assert(offsetof(CPictureFYUV420, miChromaWidth) == 0x30, "miChromaWidth @ +0x30");
-        static_assert(offsetof(CPictureFYUV420, miChromaHeight) == 0x34, "miChromaHeight @ +0x34");
-        static_assert(offsetof(CPictureFYUV420, muPlaneY) == 0x38, "muPlaneY @ +0x38");
-        static_assert(offsetof(CPictureFYUV420, muPlaneU) == 0x3C, "muPlaneU @ +0x3C");
-        static_assert(offsetof(CPictureFYUV420, muPlaneV) == 0x40, "muPlaneV @ +0x40");
-        static_assert(sizeof(CPictureFYUV420) == 0x44, "CPictureFYUV420 size == 68");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, mrcChroma) == 0x10), "mrcChroma @ +0x10");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, miLumaArea) == 0x20), "miLumaArea @ +0x20");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, miChromaArea) == 0x24), "miChromaArea @ +0x24");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, miLumaWidth) == 0x28), "miLumaWidth @ +0x28");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, miLumaHeight) == 0x2C), "miLumaHeight @ +0x2C");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, miChromaWidth) == 0x30), "miChromaWidth @ +0x30");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, miChromaHeight) == 0x34), "miChromaHeight @ +0x34");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, muPlaneY) == 0x38), "muPlaneY @ +0x38");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, muPlaneU) == 0x3C), "muPlaneU @ +0x3C");
+        CGS_STATIC_ASSERT((offsetof(CPictureFYUV420, muPlaneV) == 0x40), "muPlaneV @ +0x40");
+        CGS_STATIC_ASSERT((sizeof(CPictureFYUV420) == 0x44), "CPictureFYUV420 size == 68");
     }
 };

@@ -24,7 +24,7 @@ namespace Vehicle
 {
     void VehicleManagerOutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(VehicleManagerOutputBuffer, mVehicleOutputRequestInterface) == 16,
+        CGS_STATIC_ASSERT((offsetof(VehicleManagerOutputBuffer, mVehicleOutputRequestInterface) == 16),
                       "mVehicleOutputRequestInterface @16");
     }
 

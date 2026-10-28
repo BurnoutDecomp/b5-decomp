@@ -65,8 +65,8 @@ namespace BrnGraphics
 
     // Pointer-free records, so their sizes are invariant across the 32-bit guest and the LLP64 host --
     // these two are safe to pin, and they are the only layout facts here that are.
-    static_assert(sizeof(AntiAliasTilingPlan::TileRect) == 0x10, "tiling rectangle stride is 0x10");
-    static_assert(sizeof(AntiAliasTilingPlan) == 0x48,
+    CGS_STATIC_ASSERT((sizeof(AntiAliasTilingPlan::TileRect) == 0x10), "tiling rectangle stride is 0x10");
+    CGS_STATIC_ASSERT((sizeof(AntiAliasTilingPlan) == 0x48),
                   "tiling record stride is 0x48 == 0x8203E0C8 - 0x8203E080");
 
     // X360 unk_8203E080: multisample format 1, the screen split into two horizontal bands.

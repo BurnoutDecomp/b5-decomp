@@ -23,7 +23,7 @@ namespace BrnPhysics
         };
 
         // Output event: a detached part's current world transform.
-        struct alignas(16) DetachedPartCurrentPositionEvent
+        struct CGS_ALIGN(16) DetachedPartCurrentPositionEvent
         {
             Matrix44Affine mTransform;
             EntityId       mVehicleEntityId;
@@ -34,7 +34,7 @@ namespace BrnPhysics
         // Proven by the X360 copy-assignment spine @0x82279838 (ten quadwords 0x00..0x90 + three
         // dwords 0xA0/0xA4/0xA8 + one f32 0xAC + one byte 0xB0). The implicit member-wise
         // operator= reproduces it (see BaseEventQueue<GlassSmashOrCrackEvent> instantiations).
-        struct alignas(16) GlassSmashOrCrackEvent
+        struct CGS_ALIGN(16) GlassSmashOrCrackEvent
         {
             Vector3        maCorners[4];          // +0x00 (64)
             Vector3        mNormal;               // +0x40 (16)
@@ -162,7 +162,7 @@ namespace BrnPhysics
         //   +0x2E80 mDetachedPartRenderQueue  EventQueue<DetachedPartRenderEvent,50>
         //   +0x3E30 mGlassSmashOrCrackQueue   EventQueue<GlassSmashOrCrackEvent,20>
         // -------------------------------------------------------------------------
-        struct alignas(16) DeformationOutputInterfaceForEntityModules
+        struct CGS_ALIGN(16) DeformationOutputInterfaceForEntityModules
         {
             typedef CgsModule::EventQueue<DetachedPartRenderEvent, 50> DetachedPartRenderQueue;
 
@@ -225,7 +225,7 @@ namespace BrnPhysics
         private:
             // 400-byte slot per wheel-state entry (asm stride 0x190); the operator= reinterprets each
             // slot as WheelPhysicalStates& to invoke the homed by-name copy.
-            struct alignas(16) WheelStateSlot { u8 mOpaque[0x190]; };  // 400 bytes
+            struct CGS_ALIGN(16) WheelStateSlot { u8 mOpaque[0x190]; };  // 400 bytes
 
             u32                     muNumEntries;                 // +0x0000
             u64                     maBaseIDs[28];                // +0x0008 (VolumeInstanceId)

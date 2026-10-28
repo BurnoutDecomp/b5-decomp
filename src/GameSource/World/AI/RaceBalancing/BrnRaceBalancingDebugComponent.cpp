@@ -136,7 +136,7 @@ const AICar* RaceBalancingDebugComponent::FindAICar(s32 liRivalIndex) const
         }
     }
 
-    return nullptr;
+    return 0;
 }
 
 // ====================================================================================================
@@ -152,7 +152,7 @@ void RaceBalancingDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lp
     }
 
     const AICar* lpCar = FindAICar(miCurrentRival);
-    if (lpCar == nullptr)
+    if (lpCar == 0)
     {
         return;
     }
@@ -283,19 +283,19 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         MaybeDrawText(lpDisplay, lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE, false);
 
         // --- 2b. live completion ratio -----------------------------------------------------------
-        if (lpCar != nullptr && lpCar->HasValidRoute())
+        if (lpCar != 0 && lpCar->HasValidRoute())
         {
             const s32 liNodeIndex = lpCar->GetNextRouteNodeIndex();
             const Route* lpRoute = lpCar->GetRoute();
 
-            const RouteNode* lpNode = nullptr;
+            const RouteNode* lpNode = 0;
             if (liNodeIndex >= 0 && liNodeIndex < lpRoute->GetNodeCount())
             {
                 lpNode = lpCar->GetNextRouteNode();
             }
 
             const f32 lfDistanceToCheckpoint =
-                (lpNode != nullptr) ? lpNode->GetDistanceToCheckpoint() : 0.0f;
+                (lpNode != 0) ? lpNode->GetDistanceToCheckpoint() : 0.0f;
             const f32 lfCompletionRatio =
                 lrRoute.ComputeRaceCompletionRatio(lfDistanceToCheckpoint, lpManager->miCheckpointCount);
 
@@ -330,11 +330,11 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     // AND it is using the RACE route-finding style (*(car+0x14C0) == E_ROUTE_FINDING_RACE == 1).
     // Otherwise show a status line: "Invalid balancing route" when the car IS racing (so the route
     // should have been built) else "Not in race".
-    if (!lrRoute.mbValid || lpCar == nullptr ||
+    if (!lrRoute.mbValid || lpCar == 0 ||
         !lpCar->HasValidRoute() || lpCar->GetRouteFindingStyle() != E_ROUTE_FINDING_RACE)
     {
         CgsDev::SimpleStrStream lStatus;
-        if (lpCar != nullptr && lpCar->GetRouteFindingStyle() == E_ROUTE_FINDING_RACE)
+        if (lpCar != 0 && lpCar->GetRouteFindingStyle() == E_ROUTE_FINDING_RACE)
         {
             lStatus << "Invalid balancing route";
         }
@@ -374,12 +374,12 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     lOut << "RACE: Time: " << static_cast<s32>(lfRaceTime) << "s, ";
 
     const s32 liNodeIndex = lpCar->GetNextRouteNodeIndex();
-    const RouteNode* lpNode = nullptr;
+    const RouteNode* lpNode = 0;
     if (liNodeIndex >= 0 && liNodeIndex < lpCar->GetRoute()->GetNodeCount())
     {
         lpNode = lpCar->GetNextRouteNode();
     }
-    const f32 lfDistToCheckpoint = (lpNode != nullptr) ? lpNode->GetDistanceToCheckpoint() : 0.0f;
+    const f32 lfDistToCheckpoint = (lpNode != 0) ? lpNode->GetDistanceToCheckpoint() : 0.0f;
     const f32 lfCompletionRatio =
         lrRoute.ComputeRaceCompletionRatio(lfDistToCheckpoint, lpManager->miCheckpointCount);
     lOut << "Completion ratio: " << lfCompletionRatio;

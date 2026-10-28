@@ -408,7 +408,7 @@ struct FieldDescriptor
     s32  mType;
     s32  mOffset;
 };
-static_assert( sizeof( FieldDescriptor ) == 264,
+CGS_STATIC_ASSERT(( sizeof( FieldDescriptor ) == 264),
                "FieldDescriptor record must be 264 bytes (name[256] + s32 type + s32 offset)" );
 
 // --- @0x820A3AC8 : BrnEffects::BloomData (3 records) ---

@@ -247,8 +247,8 @@ public:
                            GameStateModuleIO::OutputBuffer*              lpOutput,
                            EGameModeStartMechanism                       leStartMechanism);
 
-    void Construct() override;
-    void Destruct()  override;
+    void Construct() ;
+    void Destruct()  ;
 
     // Original ARTIST 0x8239E578, including all 28 preparation stages.
     virtual bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,

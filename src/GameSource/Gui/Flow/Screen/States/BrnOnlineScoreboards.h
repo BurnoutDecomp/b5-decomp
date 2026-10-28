@@ -194,21 +194,21 @@ namespace BrnGui
         static void _AssertLayout()
         {
             // run A: the expected-component block through the request state (X360 +64..+344)
-            static_assert(offsetof(OnlineScoreboards, muNumExpectedComponents)  - offsetof(OnlineScoreboards, mauExpectedComponentIds) == 16,  "run A order");
-            static_assert(offsetof(OnlineScoreboards, maiAlphabeticalRoadIndex) - offsetof(OnlineScoreboards, mauExpectedComponentIds) == 20,  "run A order");
-            static_assert(offsetof(OnlineScoreboards, meLeaderboardRequestState)- offsetof(OnlineScoreboards, mauExpectedComponentIds) == 276, "run A order");
-            static_assert(offsetof(OnlineScoreboards, miCurrentCategory)        - offsetof(OnlineScoreboards, mauExpectedComponentIds) == 280, "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, muNumExpectedComponents)  - offsetof(OnlineScoreboards, mauExpectedComponentIds) == 16),  "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, maiAlphabeticalRoadIndex) - offsetof(OnlineScoreboards, mauExpectedComponentIds) == 20),  "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, meLeaderboardRequestState)- offsetof(OnlineScoreboards, mauExpectedComponentIds) == 276), "run A order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, miCurrentCategory)        - offsetof(OnlineScoreboards, mauExpectedComponentIds) == 280), "run A order");
             // run B: the scalar tail before the filter group (X360 +3560..+3587)
-            static_assert(offsetof(OnlineScoreboards, mfCurrentTableWaitTime)         - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 4,  "run B order");
-            static_assert(offsetof(OnlineScoreboards, mCurrentTargetScorePlayerName)  - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 8,  "run B order");
-            static_assert(offsetof(OnlineScoreboards, mbUsingFilters)                 - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 24, "run B order");
-            static_assert(offsetof(OnlineScoreboards, mbPerRoadLeaderboard)           - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 25, "run B order");
-            static_assert(offsetof(OnlineScoreboards, mbEventLeaderboard)             - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 26, "run B order");
-            static_assert(offsetof(OnlineScoreboards, mbWaitingForTargetScoreResponse)- offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 27, "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mfCurrentTableWaitTime)         - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 4),  "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mCurrentTargetScorePlayerName)  - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 8),  "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mbUsingFilters)                 - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 24), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mbPerRoadLeaderboard)           - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 25), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mbEventLeaderboard)             - offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 26), "run B order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mbWaitingForTargetScoreResponse)- offsetof(OnlineScoreboards, miCurrentFilterHighlighted) == 27), "run B order");
             // component ORDER pins (relative only -- component widths widen)
-            static_assert(offsetof(OnlineScoreboards, mTable) > offsetof(OnlineScoreboards, mFilterToggleGroup),              "component order");
-            static_assert(offsetof(OnlineScoreboards, mbCurrentlyLoading) > offsetof(OnlineScoreboards, mLoadingIcon),        "component order");
-            static_assert(offsetof(OnlineScoreboards, mbTableEmptyShowing) > offsetof(OnlineScoreboards, mTableEmptyAnimator),"component order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mTable) > offsetof(OnlineScoreboards, mFilterToggleGroup)),              "component order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mbCurrentlyLoading) > offsetof(OnlineScoreboards, mLoadingIcon)),        "component order");
+            CGS_STATIC_ASSERT((offsetof(OnlineScoreboards, mbTableEmptyShowing) > offsetof(OnlineScoreboards, mTableEmptyAnimator)),"component order");
         }
     };
 }

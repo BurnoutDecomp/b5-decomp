@@ -335,32 +335,32 @@ namespace BrnAI
         // committed EventQueue<T,N> instantiations.
         inline void _AssertIoLayout()
         {
-            static_assert(sizeof(RaceRouteRequest) == 128, "RaceRouteRequest stride must be 128");
-            static_assert(offsetof(RaceRouteRequest, mStartPosition)      == 0x00, "mStartPosition @0x00");
-            static_assert(offsetof(RaceRouteRequest, mEndPosition)        == 0x10, "mEndPosition @0x10");
-            static_assert(offsetof(RaceRouteRequest, muStartSectionIndex) == 0x20, "muStartSectionIndex @0x20");
-            static_assert(offsetof(RaceRouteRequest, muEndSectionIndex)   == 0x22, "muEndSectionIndex @0x22");
-            static_assert(offsetof(RaceRouteRequest, mauBlockSections)    == 0x24, "mauBlockSections @0x24");
-            static_assert(offsetof(RaceRouteRequest, muOwnerId)           == 0x68, "muOwnerId @0x68");
-            static_assert(offsetof(RaceRouteRequest, muEventId)           == 0x6A, "muEventId @0x6A");
-            static_assert(offsetof(RaceRouteRequest, meQuality)           == 0x6C, "meQuality @0x6C");
-            static_assert(offsetof(RaceRouteRequest, meDistanceFunction)  == 0x70, "meDistanceFunction @0x70");
-            static_assert(offsetof(RaceRouteRequest, mbUseAIShortcuts)    == 0x74, "mbUseAIShortcuts @0x74");
+            CGS_STATIC_ASSERT((sizeof(RaceRouteRequest) == 128), "RaceRouteRequest stride must be 128");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, mStartPosition)      == 0x00), "mStartPosition @0x00");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, mEndPosition)        == 0x10), "mEndPosition @0x10");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, muStartSectionIndex) == 0x20), "muStartSectionIndex @0x20");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, muEndSectionIndex)   == 0x22), "muEndSectionIndex @0x22");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, mauBlockSections)    == 0x24), "mauBlockSections @0x24");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, muOwnerId)           == 0x68), "muOwnerId @0x68");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, muEventId)           == 0x6A), "muEventId @0x6A");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, meQuality)           == 0x6C), "meQuality @0x6C");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, meDistanceFunction)  == 0x70), "meDistanceFunction @0x70");
+            CGS_STATIC_ASSERT((offsetof(RaceRouteRequest, mbUseAIShortcuts)    == 0x74), "mbUseAIShortcuts @0x74");
 
-            static_assert(sizeof(ExtrapolatedRouteRequest) == 64, "ExtrapolatedRouteRequest stride must be 64");
-            static_assert(offsetof(ExtrapolatedRouteRequest, muOwnerId)                    == 0x00, "muOwnerId @0x00");
-            static_assert(offsetof(ExtrapolatedRouteRequest, muEventId)                    == 0x02, "muEventId @0x02");
-            static_assert(offsetof(ExtrapolatedRouteRequest, muNumberOfSectionsToGenerate) == 0x04, "muNumberOfSectionsToGenerate @0x04");
-            static_assert(offsetof(ExtrapolatedRouteRequest, mCarPosition)                 == 0x10, "mCarPosition @0x10");
-            static_assert(offsetof(ExtrapolatedRouteRequest, mCarDirection)                == 0x20, "mCarDirection @0x20");
-            static_assert(offsetof(ExtrapolatedRouteRequest, muCurrentSectionIndex)        == 0x30, "muCurrentSectionIndex @0x30");
-            static_assert(offsetof(ExtrapolatedRouteRequest, meRouteType)                  == 0x34, "meRouteType @0x34");
+            CGS_STATIC_ASSERT((sizeof(ExtrapolatedRouteRequest) == 64), "ExtrapolatedRouteRequest stride must be 64");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, muOwnerId)                    == 0x00), "muOwnerId @0x00");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, muEventId)                    == 0x02), "muEventId @0x02");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, muNumberOfSectionsToGenerate) == 0x04), "muNumberOfSectionsToGenerate @0x04");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, mCarPosition)                 == 0x10), "mCarPosition @0x10");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, mCarDirection)                == 0x20), "mCarDirection @0x20");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, muCurrentSectionIndex)        == 0x30), "muCurrentSectionIndex @0x30");
+            CGS_STATIC_ASSERT((offsetof(ExtrapolatedRouteRequest, meRouteType)                  == 0x34), "meRouteType @0x34");
 
-            static_assert(sizeof(RouteResponse) == 5136, "RouteResponse stride must be 5136");
-            static_assert(alignof(RouteResponse) == 4, "RouteResponse scalar alignment");
-            static_assert(offsetof(RouteResponse, mRoute) == 0, "route @0");
-            static_assert(offsetof(RouteResponse, muOwnerId) == 0x140C, "owner id follows route");
-            static_assert(offsetof(RouteResponse, muEventId) == 0x140E, "event id follows owner");
+            CGS_STATIC_ASSERT((sizeof(RouteResponse) == 5136), "RouteResponse stride must be 5136");
+            CGS_STATIC_ASSERT((__alignof(RouteResponse) == 4), "RouteResponse scalar alignment");
+            CGS_STATIC_ASSERT((offsetof(RouteResponse, mRoute) == 0), "route @0");
+            CGS_STATIC_ASSERT((offsetof(RouteResponse, muOwnerId) == 0x140C), "owner id follows route");
+            CGS_STATIC_ASSERT((offsetof(RouteResponse, muEventId) == 0x140E), "event id follows owner");
         }
     }
 }

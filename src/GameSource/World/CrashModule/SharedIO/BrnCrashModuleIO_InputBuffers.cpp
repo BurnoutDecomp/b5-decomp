@@ -34,13 +34,13 @@ namespace CrashIO
         // Pointer-free prefix only: mTimerStatusInterface is 48 bytes of PODs (no host widening),
         // landing at +0x4 after the 1-byte IOBuffer status. The following members embed/precede
         // host-widening EventQueue storage, so their X360 offsets are documented (header) not pinned.
-        static_assert(offsetof(InputBuffer_PreScene, mTimerStatusInterface) == 0x4,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PreScene, mTimerStatusInterface) == 0x4),
                       "InputBuffer_PreScene::mTimerStatusInterface @0x4");
         // SetVehicleDriverInterface's whole-object copy (the console's XMemCpy) keeps the driver
         // queue's address-dependent first-event offset valid only because source and destination
         // share the queue's alignment: the interface is 16-aligned (Vector3 members) and the
         // queue sits at its +0.
-        static_assert(alignof(VehicleDriverInterface) == 16,
+        CGS_STATIC_ASSERT((__alignof(VehicleDriverInterface) == 16),
                       "VehicleDriverInputInterface must stay 16-aligned (SetVehicleDriverInterface copy)");
     }
 
@@ -184,7 +184,7 @@ namespace CrashIO
         // at +0x8 after the 1-byte IOBuffer status. mVehicleOutputInterface (@+0xDA0) and
         // mVehicleManagerOutputInterface (@+0x79B0) sit past host-widening EventQueue storage, so
         // their X360 offsets are documented (header) not pinned.
-        static_assert(offsetof(InputBuffer_PostPhysics, mTrafficInputInterface) == 0x8,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PostPhysics, mTrafficInputInterface) == 0x8),
                       "InputBuffer_PostPhysics::mTrafficInputInterface @0x8");
     }
 

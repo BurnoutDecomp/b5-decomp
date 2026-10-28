@@ -16,7 +16,7 @@ class AllPassFilter : public IFilter
 public:
     // ApplyFilter passes this exact six-pointer record. ARTIST +8/+0xC
     // are the crossfade tap/ramp POINTERS, not two integer flags.
-    using Context = DelayLine::TapContext;
+    typedef DelayLine::TapContext Context;
     static AllPassFilter* AllPassFilter_ctor(AllPassFilter* self);
     static void* AllPassFilterApplyFunc(AllPassFilter* self, s32 count, s32 src,
                                         s32 channel, Context* ctx);
@@ -27,7 +27,7 @@ public:
 class CombFilter : public IFilter
 {
 public:
-    using Context = DelayLine::TapContext;
+    typedef DelayLine::TapContext Context;
     static CombFilter* CombFilter_ctor(CombFilter* self);
     static void* CombFilterApplyFunc(CombFilter* self, s32 count, s32 src,
                                      s32 channel, Context* ctx);

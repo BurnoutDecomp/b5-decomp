@@ -45,9 +45,9 @@ static const f32 KF_DENORMAL_FLUSH = 1.0e-18f;
 AllPassFilter *AllPassFilter::AllPassFilter_ctor(AllPassFilter *self)
 {
     self->mfGain1 = KF_ZERO;  // stfs flt @ +0x10
-    self->mpApplyFunc = nullptr;      // stw r10 (0) @ +0x00
+    self->mpApplyFunc = 0;      // stw r10 (0) @ +0x00
     self->mfGain2 = KF_ZERO;  // stfs flt @ +0x14
-    self->mpResetFunc = nullptr;      // stw r10 (0) @ +0x04
+    self->mpResetFunc = 0;      // stw r10 (0) @ +0x04
     self->miChannels = 1;      // stw r11 (1) @ +0x0C
     self->miReadLength = 1;         // stw r11 (1) @ +0x08
     return self;
@@ -111,7 +111,7 @@ void *AllPassFilter::AllPassFilterApplyFunc(AllPassFilter *self, s32 count, s32 
                       /*forwA a8 */ ctx->mpLoadedEnd,
                       /*forwB a9 */ ctx->mpOut,
                       /*lowPass  */ src != 0 ? 1 : 0);
-    return nullptr;
+    return 0;
 }
 
 // -------------------------------------------------------------------------------------
@@ -143,9 +143,9 @@ AllPassFilter *AllPassFilter::SetGains(AllPassFilter *self, f32 g1, f32 g2)
 CombFilter *CombFilter::CombFilter_ctor(CombFilter *self)
 {
     self->mfGain1 = KF_ZERO;  // +0x10
-    self->mpApplyFunc = nullptr;      // +0x00
+    self->mpApplyFunc = 0;      // +0x00
     self->mfGain2 = KF_ZERO;  // +0x14
-    self->mpResetFunc = nullptr;      // +0x04
+    self->mpResetFunc = 0;      // +0x04
     self->mfGain3 = KF_ZERO;  // +0x18
     self->miReadLength = 2;         // +0x08 (li r9,2)
     self->mfGain4 = KF_ZERO;  // +0x1C
@@ -225,7 +225,7 @@ void *CombFilter::CombFilterApplyFunc(CombFilter *self, s32 count, s32 src,
                                    /*accum    */ ctx->mpLoadedEnd,
                                    /*forward  */ ctx->mpOut,
                                    /*lowPass  */ src); // stfs f1 @ +0x20
-    return nullptr;
+    return 0;
 }
 
 // -------------------------------------------------------------------------------------

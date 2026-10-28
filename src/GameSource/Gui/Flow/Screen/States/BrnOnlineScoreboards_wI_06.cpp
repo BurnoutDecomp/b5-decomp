@@ -274,13 +274,13 @@ namespace BrnGui
                 // ...and log which board was asked for. The telemetry record's parameter
                 // buffer starts one word past its type, and TelemetryData is the accessor for
                 // that buffer, so the builder addresses the record through it.
-                static_assert(sizeof(CgsGui::GuiEvent<323>) == 12,
+                CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEvent<323>) == 12),
                               "event 323 record header is 12 bytes");
-                static_assert(sizeof(GuiTelemetryEvent) == 32,
+                CGS_STATIC_ASSERT((sizeof(GuiTelemetryEvent) == 32),
                               "event 323 record is 12-byte header plus 20-byte payload");
-                static_assert(offsetof(GuiTelemetryEvent, miTelemetryType) == 12,
+                CGS_STATIC_ASSERT((offsetof(GuiTelemetryEvent, miTelemetryType) == 12),
                               "event 323 payload begins at record offset 12");
-                static_assert(offsetof(GuiTelemetryEvent, macParams) == 16,
+                CGS_STATIC_ASSERT((offsetof(GuiTelemetryEvent, macParams) == 16),
                               "event 323 parameter string follows the payload type word");
                 GuiTelemetryEvent lTelemetry(KI_TELEMETRY_TYPE_SCOREBOARD_TABLE);
                 BrnNetwork::BrnNetworkModuleIO::TelemetryData* lpTelemetry =

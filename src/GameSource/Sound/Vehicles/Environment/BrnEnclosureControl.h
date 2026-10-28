@@ -67,7 +67,7 @@ struct EntityTriggerInfo
 struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
 {
     EnclosureControl()
-        : mpPhysicsControl(nullptr)
+        : mpPhysicsControl(0)
         , mfTimeSinceTrigger(0.0f)
     {
         maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY].Reset();
@@ -80,10 +80,10 @@ struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
     // @ 0x826D0A30 -- allocate + construct factory. Returns the EffectObject* base view.
     static CgsSound::Logic::EffectControl* Create( bool lbFlavour );
 
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    bool Attach() override;
-    void UpdateParams(f32 afTimeStep) override;
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    bool Attach() ;
+    void UpdateParams(f32 afTimeStep) ;
     void ProcessTriggerAction(const BrnGameState::GameStateModuleIO::SoundTriggerAction& arAction,
                               eTriggerPosition aePosition);
     void DrawDebug() const;

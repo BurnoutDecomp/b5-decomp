@@ -140,28 +140,28 @@ private:
         // The five graph attributes keep the console attribute-table stride of 8 bytes;
         // CreateInstance points mBase.mpAttributes at &mfThreshold and the console Configure
         // indexes that table as a1[10]/a1[12]/a1[14]/a1[16]/a1[18].
-        static_assert(offsetof(Compressor1, mfRatio) - offsetof(Compressor1, mfThreshold) == 8,
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mfRatio) - offsetof(Compressor1, mfThreshold) == 8),
                       "attribute stride");
-        static_assert(offsetof(Compressor1, mfAttack) - offsetof(Compressor1, mfRatio) == 8,
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mfAttack) - offsetof(Compressor1, mfRatio) == 8),
                       "attribute stride");
-        static_assert(offsetof(Compressor1, mfRelease) - offsetof(Compressor1, mfAttack) == 8,
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mfRelease) - offsetof(Compressor1, mfAttack) == 8),
                       "attribute stride");
-        static_assert(offsetof(Compressor1, mfChannelLink) - offsetof(Compressor1, mfRelease) == 8,
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mfChannelLink) - offsetof(Compressor1, mfRelease) == 8),
                       "attribute stride");
 
         // The engine has no pointer members, so its console sizeof survives on the host.
-        static_assert(sizeof(CompressorLimiter1) == 0x50, "engine sizeof");
+        CGS_STATIC_ASSERT((sizeof(CompressorLimiter1) == 0x50), "engine sizeof");
 
         // The snapshot block starts immediately after the embedded engine, and its six words
         // are contiguous with muActive last (the console +0xA0..+0xB8 run).
-        static_assert(offsetof(Compressor1, mfLastThreshold)
-                          == offsetof(Compressor1, mCompressorLimiter) + sizeof(CompressorLimiter1),
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mfLastThreshold)
+                          == offsetof(Compressor1, mCompressorLimiter) + sizeof(CompressorLimiter1)),
                       "engine/snapshot adjacency");
-        static_assert(offsetof(Compressor1, mfLastSampleRate)
-                          - offsetof(Compressor1, mfLastThreshold) == 20,
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mfLastSampleRate)
+                          - offsetof(Compressor1, mfLastThreshold) == 20),
                       "snapshot block contiguity");
-        static_assert(offsetof(Compressor1, muActive)
-                          - offsetof(Compressor1, mfLastSampleRate) == 4,
+        CGS_STATIC_ASSERT((offsetof(Compressor1, muActive)
+                          - offsetof(Compressor1, mfLastSampleRate) == 4),
                       "active flag follows the snapshot block");
     }
 };

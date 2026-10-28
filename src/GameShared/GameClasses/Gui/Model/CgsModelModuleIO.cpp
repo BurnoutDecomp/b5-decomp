@@ -50,7 +50,7 @@ namespace ModelIO
     void OutputBuffer::SetGuiResourceRequestQueue(const GuiResourceRequestQueue* lpResourceRequestQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        CGS_ASSERT(lpResourceRequestQueue != nullptr, "lpResourceRequestQueue != NULL");
+        CGS_ASSERT(lpResourceRequestQueue != 0, "lpResourceRequestQueue != NULL");
         mResourceRequestQueue.Append(*lpResourceRequestQueue);
     }
     // ARTIST8284E0A0, inlined/named by Model.Update's resource bridge.

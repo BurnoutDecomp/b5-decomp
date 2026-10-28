@@ -362,8 +362,8 @@ int AptActionInterpreter::instanceOfChainWalk(AptValue* pObject, AptValue* pClas
         for (;;)
         {
             AptNativeHash* const pHash = p->GetNativeHashVirtual();
-            p = pHash ? pHash->mp__Proto__ : nullptr;                   // +8
-            if (p == nullptr)
+            p = pHash ? pHash->mp__Proto__ : 0;                   // +8
+            if (p == 0)
                 break;
             if (p == pNeedle)
                 nResult = 1;
@@ -378,8 +378,8 @@ int AptActionInterpreter::instanceOfChainWalk(AptValue* pObject, AptValue* pClas
     for (AptValue* p = pObject;;)
     {
         AptNativeHash* const pHash = p->GetNativeHashVirtual();
-        p = pHash ? pHash->mp__Proto__ : nullptr;
-        if (p == nullptr)
+        p = pHash ? pHash->mp__Proto__ : 0;
+        if (p == 0)
             return 0;
         if (p == pNeedle)
             return 1;
@@ -430,7 +430,7 @@ namespace
         if (!isxdigit(static_cast<unsigned char>(c1)))
             return c2;
         char aBuf[3] = { c1, c2, 0 };
-        return static_cast<char>(strtoul(aBuf, nullptr, 16));
+        return static_cast<char>(strtoul(aBuf, 0, 16));
     }
 }
 

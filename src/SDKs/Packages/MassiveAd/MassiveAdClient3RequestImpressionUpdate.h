@@ -71,7 +71,7 @@ public:
 
     // Vftable Parse override the response path dispatches (defined in
     // MassiveAdClient3Request_wL_01.cpp).
-    int Parse() override;
+    int Parse() ;
 
     // @ 0x82BD95A0 (NOT in the ledger/export set -- recovered from the shared
     // .i64 via idat for the CMassiveZoneManager slice; body in this TU's .cpp).

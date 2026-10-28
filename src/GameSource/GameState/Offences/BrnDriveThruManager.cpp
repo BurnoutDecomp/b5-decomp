@@ -84,8 +84,8 @@ static const f32 KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[KI_MAX_DRIVE_THRUS_IN_THE_WORLD]
     130.0f, 120.0f, 100.0f, 140.0f,  80.0f, 140.0f, 110.0f, 100.0f,
     130.0f, 100.0f, 140.0f, 100.0f, 110.0f, 100.0f
 };
-static_assert((sizeof(KAF_MAX_DRIVE_THRU_EXIT_SPEEDS) / sizeof(KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[0]))
-              == KI_MAX_DRIVE_THRUS_IN_THE_WORLD,
+CGS_STATIC_ASSERT(((sizeof(KAF_MAX_DRIVE_THRU_EXIT_SPEEDS) / sizeof(KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[0]))
+              == KI_MAX_DRIVE_THRUS_IN_THE_WORLD),
               "drive-thru exit speed table must stay aligned to the 46 trigger slots");
 // [drive-thru wave 2026-08-27] The sim-timestep multiplier SetPlayerCarDriver applies while the
 // drive-thru presentation is playing (the console's own baked 0.52631581 == 10/19; the
@@ -258,22 +258,22 @@ void DriveThruManager::_AssertLayout()
 {
     // mfTimeToActiveation sits one Vector3 (16B) past mPosition within the entry, independent of the
     // leading pointer's width: pin that relative fact rather than the X360 absolute +0x20.
-    static_assert(offsetof(DriveThruTriggerData, mfTimeToActiveation)
-                      == offsetof(DriveThruTriggerData, mPosition) + sizeof(Vector3),
+    CGS_STATIC_ASSERT((offsetof(DriveThruTriggerData, mfTimeToActiveation)
+                      == offsetof(DriveThruTriggerData, mPosition) + sizeof(Vector3)),
                   "DriveThruTriggerData: timer immediately follows the 16B position");
 
     // VERIFIER FIX (1) PIN: CgsID is u64 (8 bytes); the two id members are contiguous (no spurious
     // pad between them) -- the X360 does std@+0x938 then std@+0x940.
-    static_assert(offsetof(DriveThruManager, mDriveThruToTurnOffId)
-                      == offsetof(DriveThruManager, mRepairedCarID) + sizeof(CgsID),
+    CGS_STATIC_ASSERT((offsetof(DriveThruManager, mDriveThruToTurnOffId)
+                      == offsetof(DriveThruManager, mRepairedCarID) + sizeof(CgsID)),
                   "mDriveThruToTurnOffId is contiguous with mRepairedCarID (CgsID == 8 bytes)");
 
     // mpProgressionManager is the final member, laid out after the seven trailing bool flags.
-    static_assert(offsetof(DriveThruManager, mpProgressionManager)
-                      > offsetof(DriveThruManager, mbNeedToSendMustFixMessage),
+    CGS_STATIC_ASSERT((offsetof(DriveThruManager, mpProgressionManager)
+                      > offsetof(DriveThruManager, mbNeedToSendMustFixMessage)),
                   "mpProgressionManager follows the trailing bool flag block");
-    static_assert(offsetof(DriveThruManager, mpProgressionManager) + sizeof(void*)
-                      == sizeof(DriveThruManager),
+    CGS_STATIC_ASSERT((offsetof(DriveThruManager, mpProgressionManager) + sizeof(void*)
+                      == sizeof(DriveThruManager)),
                   "mpProgressionManager is the last member");
 }
 

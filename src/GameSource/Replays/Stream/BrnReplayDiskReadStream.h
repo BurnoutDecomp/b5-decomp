@@ -141,7 +141,7 @@ namespace BrnReplays
         // mutex's first member). Modelled as an opaque blob reached by name -- same
         // pattern as the sibling GPUDiskWriteStream's lock; the real threading type lands
         // with the mutex layer.
-        alignas(void*) u8 mMutex[40];                        // +0x000
+        CGS_ALIGN(void*) u8 mMutex[40];                        // +0x000
         char            macFileName[256];                    // X360 +0x024 stream file name
         char*           mpBuffer;                            // X360 +0x124 ring backing store
         s32             miBufferSize;                        // X360 +0x128

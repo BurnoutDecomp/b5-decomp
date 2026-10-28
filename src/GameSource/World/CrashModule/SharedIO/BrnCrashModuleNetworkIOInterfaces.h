@@ -24,7 +24,7 @@ namespace CrashIO
     const s32 KI_MAX_NETWORK_TRAFFIC_UPDATES            = 192;
 
     // Network event: a crashing traffic vehicle's updated transform.
-    struct alignas(16) CrashingTrafficUpdateEvent
+    struct CGS_ALIGN(16) CrashingTrafficUpdateEvent
     {
         u16            muVehicleId;
         Matrix44Affine mTransform;

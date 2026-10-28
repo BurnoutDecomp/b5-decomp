@@ -1,7 +1,6 @@
 #include "types.hpp"
 
-namespace rw::math::vpu
-{
+namespace rw { namespace math { namespace vpu {
 class Vector2
 {
 public:
@@ -15,4 +14,4 @@ Vector2::Vector2(float lfX, float lfY)
     : mafLane{lfX, lfY, 0.0f, 0.0f}
 {
 }
-}
+} } }

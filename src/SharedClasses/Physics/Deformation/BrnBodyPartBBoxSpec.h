@@ -87,6 +87,6 @@ namespace Deformation
     // The record is a VIEW over streamed console bytes inside IKBodyPartSpec (which is
     // itself stride-480), so these are contracts against the DATA, not merely against the
     // asm: 0x40 orientation + 10 * 0x20 control points == 0x180.
-    static_assert(sizeof(BodyPartBBoxSpec) == 0x180, "BodyPartBBoxSpec is 384 bytes");
+    CGS_STATIC_ASSERT((sizeof(BodyPartBBoxSpec) == 0x180), "BodyPartBBoxSpec is 384 bytes");
 }
 }

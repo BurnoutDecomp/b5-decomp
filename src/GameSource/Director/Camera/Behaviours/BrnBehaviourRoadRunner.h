@@ -209,12 +209,12 @@ public:
     };
 
     // ---- Behaviour overrides (vtable order -- see Behaviour.h) ---------------
-    void        Construct() override;                                                    // @0x8222BCE0
-    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // @0x8220F748
-    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // @0x82247E98
-    bool        PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override; // @0x8220F850
-    void        SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // :1200
-    const char* GetName() const override;                                                 // @0x821FB130
+    void        Construct() ;                                                    // @0x8222BCE0
+    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;        // @0x8220F748
+    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;     // @0x82247E98
+    bool        PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ; // @0x8220F850
+    void        SetupTweaker(Utils::Tweaker& lrTweaker) ;                         // :1200
+    const char* GetName() const ;                                                 // @0x821FB130
 
     // ---- this class's OWN virtuals -------------------------------------------
     // These are NOT base overrides: the base declares no virtual Get/SetParameters, so this

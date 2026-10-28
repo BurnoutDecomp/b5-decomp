@@ -37,12 +37,12 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (PursuitMode::*)() const>(&PursuitMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (PursuitMode::*)() const>(&PursuitMode::GetName)) != 0),
               "PursuitMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (PursuitMode::*)() const>(&PursuitMode::GetIntroDurationSeconds)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (PursuitMode::*)() const>(&PursuitMode::GetIntroDurationSeconds)) != 0),
               "PursuitMode::GetIntroDurationSeconds must bind GameMode vtable slot 8");
-static_assert(sizeof(static_cast<void (PursuitMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&PursuitMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (PursuitMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&PursuitMode::Start)) != 0),
               "PursuitMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<bool (PursuitMode::*)(const ScoringSystem*) const>(&PursuitMode::ShouldExit)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (PursuitMode::*)(const ScoringSystem*) const>(&PursuitMode::ShouldExit)) != 0),
               "PursuitMode::ShouldExit must bind GameMode vtable slot 13");
 }

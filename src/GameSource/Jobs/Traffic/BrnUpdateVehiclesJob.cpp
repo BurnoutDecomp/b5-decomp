@@ -118,8 +118,8 @@ namespace
     const f32 KF_PARTIAL_UPDATE_RADIUS_SQ = 22500.0f;      // flt_82F36B40
 
     // The default race-car direction FindInterestingRaceCar seeds (unk_82181520 == unit Z).
-    inline Vector3 UnitZ() { return Vector3{ 0.0f, 0.0f, 1.0f, 0.0f }; }
-    inline Vector3 ZeroV3() { return Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }; }
+    inline Vector3 UnitZ() { { const Vector3 lResult = { 0.0f, 0.0f, 1.0f, 0.0f }; return lResult; } }
+    inline Vector3 ZeroV3() { { const Vector3 lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; } }
     inline bool IsValidF(f32 lfValue) { return lfValue == lfValue; }
 
     inline f32 ClampF(f32 lfValue, f32 lfMin, f32 lfMax)

@@ -116,7 +116,7 @@ namespace CgsSceneManager
     // LooseOctreeNode -- one cell (0x60, proven by FlagBranchForUpdate's
     // `nodeAddr = mpNodes + 96 * parentIndex`).
     // ------------------------------------------------------------------
-    struct alignas(16) LooseOctreeNode
+    struct CGS_ALIGN(16) LooseOctreeNode
     {
         Vector3 mPosition;          // +0x00
         Vector3 mHalfDimensions;    // +0x10 {HalfSize, HalfHeight, HalfSize}
@@ -178,14 +178,14 @@ namespace CgsSceneManager
     {
         u32 mxSubTreeEntityFlags;   // +0x00
     };
-    static_assert(sizeof(LooseOctreeNodeEntityInfo) == 4, "Construct sizes the sub-tree mask array as 4 * (nodes)");
+    CGS_STATIC_ASSERT((sizeof(LooseOctreeNodeEntityInfo) == 4), "Construct sizes the sub-tree mask array as 4 * (nodes)");
 
     // ------------------------------------------------------------------
     // FrustumJobQueryInfo -- the staged query set inside one job's 0x800 data block
     // (X360 block +0x20; AddJobFrustumTest @0x828AA958 writes it, the job entry
     // FrustumTestJob::Execute @0x82BE0158 reads the same three arrays back).
     // ------------------------------------------------------------------
-    struct alignas(16) FrustumJobQueryInfo
+    struct CGS_ALIGN(16) FrustumJobQueryInfo
     {
         CgsGeometric::Frustum maFrustums[KU_MAX_QUERIES_PER_JOB];           // +0x000 (0x80 each)
         Matrix44              maViewProjections[KU_MAX_QUERIES_PER_JOB];    // +0x500 (0x40 each)
@@ -200,7 +200,7 @@ namespace CgsSceneManager
     // info). The leading pointers/counters are what let the job walk the tree without
     // a `this`; FrustumTestJobData::operator= @0x82BDFC48 copies exactly this set.
     // ------------------------------------------------------------------
-    struct alignas(16) FrustumTestJobData
+    struct CGS_ALIGN(16) FrustumTestJobData
     {
         LooseOctreeNode*            mpNodes;          // +0x00  <- mpRootNode
         LooseOctreeNodeEntityInfo*  mpNodeTypeMasks;  // +0x04  <- mpNodesEntityInfo
@@ -230,7 +230,7 @@ namespace CgsSceneManager
         {
             u16 muFirstChildIndex;
         };
-        static_assert(sizeof(LooseOctreeNodeAllocation) == 2, "Construct sizes the entry array as 2 * (groups)");
+        CGS_STATIC_ASSERT((sizeof(LooseOctreeNodeAllocation) == 2), "Construct sizes the entry array as 2 * (groups)");
 
         // DWARF CgsLooseOctree.h:581 -- IndexedPool<LooseOctreeNodeAllocation, std::uint16_t> mFreeNodeGroupPool
         // (X360 +0x446A8: +0 entries, +4 free indices, +8 used, +0xA free, +0xC capacity -- the tree's generic
@@ -460,14 +460,14 @@ namespace CgsSceneManager
 
         // The entity arm's volume query (DWARF CgsLooseOctree.h:586 / :592; X360 +0x446C0 / +0x8D8C8): the buffer
         // Construct builds it in, and the handle Initialize returns. See KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE.
-        alignas(16) u8                     macVolumeVolumeQueryBuffer[KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE];
+        CGS_ALIGN(16) u8                     macVolumeVolumeQueryBuffer[KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE];
 
         // DWARF CgsLooseOctree.h:587-595 (X360 +0x8D6C0 / +0x8D7C0 / +0x8D8C0 / +0x8D8C4 / +0x8D8D0 / +0x8D910):
         // the two query volumes Construct builds in place (a unit BoxVolume, a unit SphereVolume) and the two
         // frames VolumeTestRecursive moves them with -- identity rotations whose translation row it rewrites
         // per node / per entity. (The volumes are 0x60 bytes on both sides; the buffers keep the console 256.)
-        alignas(16) u8                     macBoxVolumeBuffer[256];
-        alignas(16) u8                     macSphereVolumeBuffer[256];
+        CGS_ALIGN(16) u8                     macBoxVolumeBuffer[256];
+        CGS_ALIGN(16) u8                     macSphereVolumeBuffer[256];
         rw::collision::SphereVolume*       mpEntityVolume;
         rw::collision::BoxVolume*          mpNodeVolume;
         rw::collision::VolumeVolumeQuery*  mpVolumeVolumeQuery;

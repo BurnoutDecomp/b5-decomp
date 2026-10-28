@@ -102,7 +102,7 @@ namespace Gen
 
         // @0x825BDAE0 -- the (Collection*, owner) ctor every consumer calls, always as
         // `physicsvehiclehandling(carAsset.PhysicsVehicleHandlingAsset().GetCollection(), 0)`.
-        explicit physicsvehiclehandling(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit physicsvehiclehandling(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // @0x825BDB88 (`sub_825BDB88`) -- the generated COPY ctor. It exists out of line
         // because VehicleAttribs::SetupAttribs takes a physicsvehiclehandling BY VALUE, so the

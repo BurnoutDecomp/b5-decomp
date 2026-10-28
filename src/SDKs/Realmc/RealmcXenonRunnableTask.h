@@ -68,7 +68,7 @@ public:
     //                 `scalar deleting destructor' @ 0x82B577C0, which frees the
     //                 20-byte object when the delete flag bit0 is set -- that
     //                 deleting thunk is compiler-generated, not hand-written).
-    ~XenonRunnableTask() override;
+    ~XenonRunnableTask() ;
 
     // @ 0x82B576F8 -- if the active card's device is present, reset the active
     //                 card data to empty and return 7 (device changed / needs

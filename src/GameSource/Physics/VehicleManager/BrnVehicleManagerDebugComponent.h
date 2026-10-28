@@ -118,17 +118,17 @@ namespace Vehicle
 
         // The slam / shunt read-outs (and, with the slam render gate, the two-car contact
         // diagram) for the last recorded race-car impact.
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) ;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
     protected:
         // @0x825B5D80: the debug-menu display name.
         //   lis r11,aVehicleManager@ha ; addi r3,r11,aVehicleManager@l "Vehicle Manager" ; blr
-        const char* GetName() const override;
+        const char* GetName() const ;
 
         // @0x825B5D90: bind the debug menu to this component, VehicleManager's tuning bank,
         // and the VehiclePhysics debug globals using the original registration metadata.
-        void OnActivate() override;
+        void OnActivate() ;
 
     private:
         // Never called -- exists only so offsetof() can see the private members below (offsetof on

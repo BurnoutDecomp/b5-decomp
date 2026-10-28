@@ -72,7 +72,7 @@ u32 CCameraConnector::DoWork()
                 continue;
 
             if (maSlotState[i] != 1 ||
-                (uResult = XGetOverlappedResult(pOverlapped, nullptr, 0)) != 0)
+                (uResult = XGetOverlappedResult(pOverlapped, 0, 0)) != 0)
             {
                 // Slot idle, or its read finished with a non-success code: (re-)issue
                 // a read through the device's vtable slot 3.

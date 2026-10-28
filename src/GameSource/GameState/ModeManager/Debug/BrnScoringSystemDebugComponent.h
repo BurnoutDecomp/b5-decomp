@@ -34,7 +34,7 @@ namespace BrnGameState
         // system and clear the overlay toggle before the component is registered.
         void Construct(ScoringSystem* lpScoringSystem)
         {
-            CGS_ASSERT(lpScoringSystem != nullptr, "lpScoringSystem");
+            CGS_ASSERT(lpScoringSystem != 0, "lpScoringSystem");
             mpScoringSystem = lpScoringSystem;
             mbShowChainableStunts = false;
         }
@@ -50,10 +50,10 @@ namespace BrnGameState
                                         bool lbSimTimerAt50Hz);
 
     protected:
-        const char* GetName() const override;   // @ 0x82312470 ("Scoring System")
+        const char* GetName() const ;   // @ 0x82312470 ("Scoring System")
         // ARTIST vtable 0x820CDE0C, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Gameplay"; }
-        void        OnActivate() override;       // @ 0x82312490
+        const char* GetPath() const  { return "Gameplay"; }
+        void        OnActivate() ;       // @ 0x82312490
 
     private:
         // @ 0x82329D60 - fill one table cell. Produces the cell text in lpcOutBuffer (200-byte) and the

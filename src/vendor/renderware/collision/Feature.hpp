@@ -72,8 +72,8 @@ struct Feature
                                        //         sizeof/stride is 0x240)
 };
 
-static_assert(sizeof(FeatureEdge) == 0x40, "FeatureEdge record stride must be 0x40");
-static_assert(sizeof(Feature) == 0x240, "Feature console stride must be 0x240");
+CGS_STATIC_ASSERT((sizeof(FeatureEdge) == 0x40), "FeatureEdge record stride must be 0x40");
+CGS_STATIC_ASSERT((sizeof(Feature) == 0x240), "Feature console stride must be 0x240");
 
 } // namespace collision
 } // namespace rw

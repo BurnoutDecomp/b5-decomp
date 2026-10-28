@@ -52,7 +52,7 @@ namespace BrnNetwork
         // X360 BrnNetwork::PlayerInfoData::Prepare -- bring the record to its prepared (cleared)
         // state before GetLocalPlayerInfo fills it. Returns true on success (the X360 asserts the
         // result).
-        virtual bool Prepare() override;
+        virtual bool Prepare() ;
 
         // The CgsNetwork::ServerInterfaceStructureInterface pure virtuals this concrete leaf
         // implements (its vtable off_820821EC overrides them). The X360 login flow stack-constructs

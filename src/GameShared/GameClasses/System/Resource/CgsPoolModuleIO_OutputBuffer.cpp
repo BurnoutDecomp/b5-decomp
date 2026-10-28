@@ -43,8 +43,8 @@ namespace PoolIO
 
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mPoolOutputQueue)          == 0x0004, "mPoolOutputQueue @0x0004");
-        static_assert(offsetof(OutputBuffer, mPoolResourceRequestQueue) == 0x2014, "mPoolResourceRequestQueue @0x2014");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mPoolOutputQueue)          == 0x0004), "mPoolOutputQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mPoolResourceRequestQueue) == 0x2014), "mPoolResourceRequestQueue @0x2014");
     }
 
     // Construct the IOBuffer base (sets the constructed status bit) + both embedded event queues.

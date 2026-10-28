@@ -69,11 +69,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        void        Construct() override;                            // @0x82259C00
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x82259D58
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x822643A0
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x82234930
-        const char* GetName() const override;                        // @0x821F6238
+        void        Construct() ;                            // @0x82259C00
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ; // @0x82259D58
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;  // @0x822643A0
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ; // @0x82234930
+        const char* GetName() const ;                        // @0x821F6238
 
         // ⭐⭐ THE MISSING OVERRIDE, ADDED 2026-08-01. The old note here read "Update() /
         // Destruct() are NOT in this TU's X360 function set (they live in their own TUs); they

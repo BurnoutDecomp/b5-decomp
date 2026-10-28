@@ -28,7 +28,7 @@
 
 namespace BrnWorld
 {
-    struct alignas(16) DetachedPartRenderEvent
+    struct CGS_ALIGN(16) DetachedPartRenderEvent
     {
         Matrix44Affine mTransform;    // +0x00  (4x 16-byte SIMD row = 64 bytes)
         s32            miPartIndex;   // +0x40  (dword, stw at +0x40)

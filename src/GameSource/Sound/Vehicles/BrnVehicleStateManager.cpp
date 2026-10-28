@@ -92,7 +92,7 @@ void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFileP
     char lacRegistry[64];
     char lacBundle[64];
     std::snprintf(lacRegistry, sizeof(lacRegistry), "%sRegistry", lpcEngineName);
-    const char* lpcBundle = nullptr;
+    const char* lpcBundle = 0;
     if (lbUseFilePath)
     {
         std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle",
@@ -125,7 +125,7 @@ void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFileP
             << "\n";
     }
 
-    CGS_ASSERT(lpHandle != nullptr, "lpResourceHandle");
+    CGS_ASSERT(lpHandle != 0, "lpResourceHandle");
     if (!lpHandle)
         return;
 

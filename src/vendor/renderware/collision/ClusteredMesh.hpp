@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // ===========================================================================
 // rw::collision::ClusteredMesh -- the clustered collision mesh procedural
@@ -39,7 +39,7 @@ struct ClusteredMesh
     const u32* GetClusterOffsets() const { return reinterpret_cast<const u32*>(static_cast<uintptr_t>(muCluster)); }
 };
 
-static_assert(sizeof(ClusteredMesh) == 0x40, "the view ends after the cluster parameters (+0x3F)");
+CGS_STATIC_ASSERT((sizeof(ClusteredMesh) == 0x40), "the view ends after the cluster parameters (+0x3F)");
 
 } // namespace collision
 } // namespace rw

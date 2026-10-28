@@ -85,7 +85,7 @@ static void _AssertLayout()
     // only while that stays true. If a second member is ever recovered into
     // ContactSpyInterface, the console's single-word copy must be re-derived from the asm
     // before this assignment is widened.
-    static_assert(sizeof(BrnPhysics::ContactSpy::ContactSpyInterface) == sizeof(void*),
+    CGS_STATIC_ASSERT((sizeof(BrnPhysics::ContactSpy::ContactSpyInterface) == sizeof(void*)),
                   "ContactSpyInterface is the single ContactSpyData* the X360 copies as one word");
 
     // ⭐ THE TRIPWIRE THAT KEEPS THE LIVE LEG HONEST, and the one that would have caught the
@@ -94,7 +94,7 @@ static void _AssertLayout()
     // sizeof(T)). PhysicsModuleIO::OutputBuffer is a REAL layout with explicit padding, so its
     // contact-spy member is a named member and its host sizeof covers the console seat. The
     // three parked bridges' sources fail exactly this test today -- see the file banner's table.
-    static_assert(sizeof(BrnPhysics::PhysicsModuleIO::OutputBuffer) > 998192,
+    CGS_STATIC_ASSERT((sizeof(BrnPhysics::PhysicsModuleIO::OutputBuffer) > 998192),
                   "the physics output buffer must be large enough to hold mContactSpyInterface "
                   "(console +998192) -- CreateIOBuffer allocates sizeof(T)");
 
@@ -113,7 +113,7 @@ static void _AssertLayout()
     // The seat this leg reads must be a REAL member of the buffer CreateIOBuffer<T> allocates,
     // not a placeholder: the console's mPropManagerOutputInterface sits at +71792 and the whole
     // interface is 76,864 console bytes wide, so the host object has to cover it by name.
-    static_assert(sizeof(BrnPhysics::Props::PropOutputInterface) > 41632,
+    CGS_STATIC_ASSERT((sizeof(BrnPhysics::Props::PropOutputInterface) > 41632),
                   "PropOutputInterface must be the real interface (its mUpdatedProps is at "
                   "console +41632), not a 1-byte placeholder");
 }

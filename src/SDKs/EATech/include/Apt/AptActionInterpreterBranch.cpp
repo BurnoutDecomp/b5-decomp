@@ -32,7 +32,7 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 
-#include <cstdint>   // uintptr_t / int32_t
+#include "types.hpp"   // uintptr_t / int32_t
 
 // The AptGC deferred-release drain (AptValueVector::ReleaseValues over
 // off_8324E51C == gValuesToRelease): drain once the operand stack empties.

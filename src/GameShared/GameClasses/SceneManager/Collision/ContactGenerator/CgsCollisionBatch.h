@@ -47,7 +47,7 @@ namespace CgsCollision
         static const u32 KU_CONSOLE_BYTES = 256;
 
         // 16-aligned: the descriptors embed Sphere/Vector4 members.
-        alignas(16) u8 macBuffer[KU_CONSOLE_BYTES];
+        CGS_ALIGN(16) u8 macBuffer[KU_CONSOLE_BYTES];
 
         void*       GetBuffer()       { return macBuffer; }
         const void* GetBuffer() const { return macBuffer; }
@@ -60,7 +60,7 @@ namespace CgsCollision
         // no default ctor (only Job(const char*)), so this is required to make the batch (and the
         // BaseCollisionGenerator array that embeds it) constructible; it mirrors the per-batch
         // Job(this, 0) construction BaseCollisionGenerator::Prepare runs (X360 0x828106F4).
-        CollisionBatch() : mJob(nullptr) {}
+        CollisionBatch() : mJob(0) {}
 
         // @0x82810508 (this TU) -- wire the embedded job at ContactGeneratorEntry over the
         // freshly prepared descriptor and hand the ready Job* back.

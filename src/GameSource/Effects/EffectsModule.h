@@ -245,7 +245,7 @@ namespace BrnEffects
 
         // ---- the module lifecycle (EffectsModule.cpp) ---------------------------------
         // @0x8228FE98 (DWARF EffectsModule.cpp:335). vtable slot 0 on the console.
-        void Construct() override;
+        void Construct() ;
         // @0x8229E690 (DWARF :415). `bool Prepare(const AllocatorList*, IOBufferStack*,
         // OutputBuffer*)`: the 5-stage ladder. Returns false while still preparing.
         bool Prepare(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
@@ -256,8 +256,8 @@ namespace BrnEffects
         // colour pair into the trail system (TrailSystem::UpdateTrailType).
         void PostWorldPreparePrepare();
         // @0x8227FCA8 (DWARF :767) / @0x8227FD78 (DWARF :825).
-        bool Release() override;
-        void Destruct() override;
+        bool Release() ;
+        void Destruct() ;
         // @0x8229EC28 (DWARF :852). One simulation sub-step of the whole effects system.
         void Update(CgsModule::IOBufferStack* lpInputBufferStack,
                     CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -276,7 +276,7 @@ namespace BrnEffects
 
         // The module's base Update() (CgsModule::Module slot) is not the entry the game
         // module drives; the 5-arg Update above is (console vtable +68).
-        void Update() override {}
+        void Update()  {}
 
         // ---- accessors (DWARF :303 / :308 / :313) --------------------------------------
         CgsNumeric::Random&          RandomNumberGenerator() { return mRandom; }

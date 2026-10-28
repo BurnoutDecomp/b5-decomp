@@ -103,17 +103,17 @@ namespace
         "\xAB\x05\x00\x00\xC8\x07\x00\x00\x00\xB4\xB1\xB4\xAB\x04\x00\x00\xC8\x8F\xC0\x00\x00\xC0\x6C\xB4\xAB\x03\x00\x00\x00\x00\x00\x00"
         "\x00\x00\x00\x00\x00\x00\x00\x00";
 
-    static_assert(sizeof(gacBloomDSVertexProgram) - 1 == 348,
+    CGS_STATIC_ASSERT((sizeof(gacBloomDSVertexProgram) - 1 == 348),
                   "Bloom downsample vertex shader size mismatch");
-    static_assert(sizeof(gacBloomDSPixelProgram) - 1 == 516,
+    CGS_STATIC_ASSERT((sizeof(gacBloomDSPixelProgram) - 1 == 516),
                   "Bloom downsample pixel shader size mismatch");
-    static_assert(sizeof(gacBloomBlurVertexProgram) - 1 == 368,
+    CGS_STATIC_ASSERT((sizeof(gacBloomBlurVertexProgram) - 1 == 368),
                   "Bloom blur vertex shader size mismatch");
-    static_assert(sizeof(gacBloomBlurPixelProgram) - 1 == 420,
+    CGS_STATIC_ASSERT((sizeof(gacBloomBlurPixelProgram) - 1 == 420),
                   "Bloom blur pixel shader size mismatch");
-    static_assert(sizeof(gacBloomBlurOldVertexProgram) - 1 == 404,
+    CGS_STATIC_ASSERT((sizeof(gacBloomBlurOldVertexProgram) - 1 == 404),
                   "Bloom legacy blur vertex shader size mismatch");
-    static_assert(sizeof(gacBloomBlurOldPixelProgram) - 1 == 424,
+    CGS_STATIC_ASSERT((sizeof(gacBloomBlurOldPixelProgram) - 1 == 424),
                   "Bloom legacy blur pixel shader size mismatch");
 }
 
@@ -202,7 +202,7 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
         // The measurement gate is OFF, so Construct never reached here at all (its own early-out
         // fires first); kept as the belt-and-braces refusal to enter the console route.
         static bool sbReported = false;
-        return nullptr;
+        return 0;
     }
 
     // clang-format off
@@ -216,7 +216,7 @@ renderengine::ProgramBufferData* BrnPostFxBloom::CreateProgram(
     rw::BaseResourceDescriptors<5> lDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lParameters);
     rw::Resource lResource = mpAllocator->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+        reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
     return renderengine::ProgramBuffer::Initialize(
         reinterpret_cast<renderengine::ProgramResourceLayout*>(&lResource),
         &lParameters);
@@ -241,7 +241,7 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
     renderengine::VertexDescriptor::GetResourceDescriptor(
         &lVertexDescriptor, &lVertexParameters);
     mBloomVertexDescriptorResource = mpAllocator->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>(lVertexDescriptor), nullptr);
+        reinterpret_cast<const rw::ResourceDescriptor&>(lVertexDescriptor), 0);
     mpBloomVertexDescriptor = renderengine::VertexDescriptor::Initialize(
         &mBloomVertexDescriptorResource, &lVertexParameters);
 
@@ -318,7 +318,7 @@ void BrnPostFxBloom::Construct(rw::IResourceAllocator* lpAllocator)
 // instruction-by-instruction map.
 void BrnPostFxBloom::Destruct()
 {
-    CGS_ASSERT(mpAllocator != nullptr, "mpAllocator");
+    CGS_ASSERT(mpAllocator != 0, "mpAllocator");
 
     renderengine::VertexDescriptor::Release(mpBloomVertexDescriptor);
     mpAllocator->DoFree(mBloomVertexDescriptorResource);

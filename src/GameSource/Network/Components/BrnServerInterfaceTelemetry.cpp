@@ -138,11 +138,11 @@ void BrnServerInterfaceTelemetry::Update(const BrnNetworkModuleIO::PostSimulatio
 {
     CgsNetwork::ServerInterfaceTelemetry::Update();
 
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 leEventType = lpInput->GetNetworkEventQueue()->GetFirstEvent(&lpEvent, &liSize);
 
-    while (lpEvent != nullptr)
+    while (lpEvent != 0)
     {
         if (leEventType == BrnNetworkModuleIO::NetworkInTelemetryEvent::KI_EVENT_TYPE)
         {

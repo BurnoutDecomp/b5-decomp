@@ -187,10 +187,10 @@ namespace BrnParticle
     //   0x50 : HandleSparkContacts' `li r6, 0x50` at 0x822909D4.
     //   0x50 : ProcessEventQueue case 4's `(n + 4n) << 4` record walk, and PreRenderUpdate's
     //          `count*5 << 4` allocation size.
-    static_assert(sizeof(SpawnSparksAlongLineEvent) == 0x50,
+    CGS_STATIC_ASSERT((sizeof(SpawnSparksAlongLineEvent) == 0x50),
                   "SpawnSparksAlongLineEvent must be 80 bytes (AddEventSafe li r6,0x50)");
-    static_assert(sizeof(SpawnSparksFromPointEvent) == 0x50,
+    CGS_STATIC_ASSERT((sizeof(SpawnSparksFromPointEvent) == 0x50),
                   "SpawnSparksFromPointEvent must be 80 bytes (same field tail as the line event)");
-    static_assert(sizeof(DebrisBatchSpawnEvent::DebrisSpawnData) == 0x50,
+    CGS_STATIC_ASSERT((sizeof(DebrisBatchSpawnEvent::DebrisSpawnData) == 0x50),
                   "DebrisSpawnData must be 80 bytes (ProcessEventQueue's n*80 record walk)");
 }

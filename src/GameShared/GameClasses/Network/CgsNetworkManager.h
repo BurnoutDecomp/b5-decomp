@@ -227,7 +227,7 @@ namespace CgsNetwork
     inline void NetworkManager::_AssertLayout()
     {
 #define CGS_NM_AT(member, off) \
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkManager, member) == off, #member " @ " #off)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkManager, member) == off), #member " @ " #off)
         CGS_NM_AT(mVersionDisplay,            0x0000);
         CGS_NM_AT(mNetworkAdapter,            0x001C);
         CGS_NM_AT(miActiveControllerPort,     0x0060);
@@ -241,8 +241,8 @@ namespace CgsNetwork
         CGS_NM_AT(mTimeManager,               0x32D0);
         CGS_NM_AT(mVoIPManager,               0x366C);
 #undef CGS_NM_AT
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkManager) == 0x38E8, "NetworkManager console size");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkManagerConstructParams) == 0x0C, "NetworkManagerConstructParams console size");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkManagerPrepareParams) == 0x38, "NetworkManagerPrepareParams console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkManager) == 0x38E8), "NetworkManager console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkManagerConstructParams) == 0x0C), "NetworkManagerConstructParams console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkManagerPrepareParams) == 0x38), "NetworkManagerPrepareParams console size");
     }
 }

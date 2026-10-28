@@ -57,13 +57,13 @@ namespace BrnNetwork
         bool Retrieve(CgsID* lpCarId, CgsID* lpWheelId,
                       u16* lpu16CarColourIndex, u16* lpu16CarPaintFinishIndex,
                       f32* lpfBaseDeformationAmount, bool* lpbFinalSelection);
-        s32  GetPackedMessageSize() override;
+        s32  GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFBA8 -- bodied inline below.
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         CgsID mCarId;                    // +0x28  DWARF :91
@@ -82,5 +82,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(CarSelectMessage) == 0x48, "sizeof(CarSelectMessage) == 0x48");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CarSelectMessage) == 0x48), "sizeof(CarSelectMessage) == 0x48");
 } // namespace BrnNetwork

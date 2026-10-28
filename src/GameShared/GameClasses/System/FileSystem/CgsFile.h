@@ -63,7 +63,7 @@ namespace CgsFileSystem
     class FileFutexHelper
     {
     public:
-        inline FileFutexHelper(EA::Thread::Futex& lFutex, const char* lpcName = nullptr)
+        inline FileFutexHelper(EA::Thread::Futex& lFutex, const char* lpcName = 0)
             : mpFutex(&lFutex)
         {
             (void)lpcName;

@@ -9,7 +9,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault (the collection source AddRef)
 #include <new>                                                                        // placement new (the load ctor site)
 
-#include <cstdint> // intptr_t, uintptr_t
+#include "types.hpp" // intptr_t, uintptr_t
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // AttribSys runtime -- Attrib::Collection refcount + attribute-table bodies, reconstructed
@@ -139,7 +139,7 @@ Attrib::Collection::~Collection()
     if (mpClass != NULL)
     {
         mpClass->RemoveCollection(this);
-    
+
         // 0x8280C444 `lwz r11,0x18(r31) ; lwz r3,8(r11) ; bl Attrib::ClassPrivate::Release`
         // -- class+8 is the ClassPrivate; Release drops the layout table's shared refcount
         // and queues the class for deferred deletion on the final drop.

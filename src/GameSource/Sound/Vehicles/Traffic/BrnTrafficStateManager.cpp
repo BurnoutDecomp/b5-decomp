@@ -127,8 +127,8 @@ bool TrafficStateManager::Prepare()
         mHornCsisInterface.Construct(
             GetLogicModule(), luAemsFactory,
             static_cast<u32>( CgsSound::Playback::Name::MakeHash( "HornsCsis" ) ) );
-        LoadAsset( "sound\\aems\\Traffic_Bank.bundle", nullptr, ResourceRegistrar::E_DATA );
-        LoadAsset( "sound\\aems\\patch_bank_horns.bundle", nullptr, ResourceRegistrar::E_DATA );
+        LoadAsset( "sound\\aems\\Traffic_Bank.bundle", 0, ResourceRegistrar::E_DATA );
+        LoadAsset( "sound\\aems\\patch_bank_horns.bundle", 0, ResourceRegistrar::E_DATA );
     }
         // fall through
     case E_PREPARE_UPDATING:

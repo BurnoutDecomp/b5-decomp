@@ -73,19 +73,19 @@ struct GuiEventAudioSettings
 struct MixerControl : public BrnSound::Logic::BrnEffectControl
 {
     MixerControl()
-        : mpMixerData(nullptr), mpcNicotineBundle(nullptr), mpcNicotineAsset(nullptr),
-          mpcNicotineSnapshotAsset(nullptr), mCachedSettings() {}
+        : mpMixerData(0), mpcNicotineBundle(0), mpcNicotineAsset(0),
+          mpcNicotineSnapshotAsset(0), mCachedSettings() {}
     virtual ~MixerControl();
 
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 
-    void SetupLoadData() override;
-    bool Attach() override;
-    void UpdateParams(f32 afDeltaTime) override;
-    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
+    void SetupLoadData() ;
+    bool Attach() ;
+    void UpdateParams(f32 afDeltaTime) ;
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) ;
     s32 GetMusicVolumeForMixer() const { return mCachedSettings.miMusicVolume; }
 
     // MixerControl-owned members observed in the DWARF (BrnMixerControl.h:80-87),

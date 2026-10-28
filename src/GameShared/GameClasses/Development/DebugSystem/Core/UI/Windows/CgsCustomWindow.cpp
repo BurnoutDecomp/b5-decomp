@@ -96,7 +96,7 @@ namespace CgsDev
             if (lrManager.FindMenu(&mMenuItem))
                 return;
 
-            Menu* lpMenu = lrManager.CreateMenuPath(lpcMenuPath, nullptr);
+            Menu* lpMenu = lrManager.CreateMenuPath(lpcMenuPath, 0);
             if (lpMenu)
                 lpMenu->AddMenuItem(&mMenuItem);
         }

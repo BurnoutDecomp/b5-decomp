@@ -41,7 +41,7 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestNearest(
     CGS_ASSERT(
         leExclusionMode == E_NEAREST_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_NEAREST_EXCLUDE_ENTITY_ONLY,
         "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY");
-    CGS_ASSERT(mpFineLineTestNearestQueue != nullptr, "mpFineLineTestNearestQueue");
+    CGS_ASSERT(mpFineLineTestNearestQueue != 0, "mpFineLineTestNearestQueue");
 
     InEventLineTestNearest lEvent;
     lEvent.mLineStart          = lLineStart;           // +0x00  (v1)

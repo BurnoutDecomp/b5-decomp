@@ -10,7 +10,7 @@
 // per-8x8 activity map (u32), muField08 the per-MB block averages (bytes). Each MB owns a
 // 2x2 group of 8x8 samples: row stride 2 * miWidthInBlocks, two samples per MB column.
 // =====================================================================================
-#include <cstdint>
+#include "types.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -87,7 +87,7 @@ static const u8 KAU_DQUAN_TARGET_HIGH[32] = {
 };
 
 // The shared analysis-routine instance (declared in CWMVFARoutines.h).
-CWMVFARoutines* gpWMVFARoutines = nullptr;
+CWMVFARoutines* gpWMVFARoutines = 0;
 
 // The frame analysts store their buffers as 32-bit pointer values; convert on the boundary.
 static inline const u8* lpAnalystBytes(u32 luBuffer)
@@ -122,9 +122,9 @@ static void ShiftPlane(u8* pPlane, u32 uWidth, u32 uHeight, s32 iShift)
 CWMVideoPerceptionModel::CWMVideoPerceptionModel(CWMVideoObjectEncoder* pVideoInfo)
 {
     // Inherited analyst state (the console inlines the base construction).
-    mpFrameAnalysts = nullptr;
+    mpFrameAnalysts = 0;
     miNumAnalysts   = 0;
-    mpTemporal      = nullptr;
+    mpTemporal      = 0;
     miTemporalCount = 0;
     miMaxRefFrames  = 0;
     miCurIndex      = -1;
@@ -132,7 +132,7 @@ CWMVideoPerceptionModel::CWMVideoPerceptionModel(CWMVideoObjectEncoder* pVideoIn
     miFreeCount     = 0;
 
     mpVideoInfo        = pVideoInfo;
-    mpIDquanMap        = nullptr;
+    mpIDquanMap        = 0;
     miField4C          = 0;
     miTextureThreshold = static_cast<s32>(KU_TEXTURE_THRESHOLD_MIN);
     miField44          = KI_PERCEPTIONMODEL_FLAGS_DEFAULT;
@@ -140,7 +140,7 @@ CWMVideoPerceptionModel::CWMVideoPerceptionModel(CWMVideoObjectEncoder* pVideoIn
     if (!gpWMVFARoutines)
     {
         void* lpMemory = XMemAlloc(sizeof(CWMVFARoutines), KU_PERCEPTIONMODEL_XMEM_ATTRIBUTES);
-        gpWMVFARoutines = lpMemory ? new (lpMemory) CWMVFARoutines() : nullptr;
+        gpWMVFARoutines = lpMemory ? new (lpMemory) CWMVFARoutines() : 0;
     }
 }
 
@@ -149,12 +149,12 @@ CWMVideoPerceptionModel::~CWMVideoPerceptionModel()
     if (mpIDquanMap)
     {
         XMemFree(mpIDquanMap, KU_PERCEPTIONMODEL_XMEM_ATTRIBUTES);
-        mpIDquanMap = nullptr;
+        mpIDquanMap = 0;
     }
     if (gpWMVFARoutines)
     {
         XMemFree(gpWMVFARoutines, KU_PERCEPTIONMODEL_XMEM_ATTRIBUTES);
-        gpWMVFARoutines = nullptr;
+        gpWMVFARoutines = 0;
     }
 }
 

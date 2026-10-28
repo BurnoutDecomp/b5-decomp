@@ -33,7 +33,7 @@ namespace CgsSound
 namespace Logic
 {
 
-void (*Cgs3dEffectControl::spDebugRenderingFunction)(const Cgs3dEffectControl*) = nullptr;
+void (*Cgs3dEffectControl::spDebugRenderingFunction)(const Cgs3dEffectControl*) = 0;
 
 Cgs3dEffectControl::Cgs3dEffectControl()
     : EffectControl()

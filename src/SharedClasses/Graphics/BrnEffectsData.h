@@ -456,25 +456,25 @@ private:
     bool                         mbIsGameCamera;
 };
 
-static_assert(sizeof(Vector2) == 16, "Vector2 layout drift");
-static_assert(sizeof(Vector3) == 16, "Vector3 layout drift");
-static_assert(sizeof(Vector4) == 16, "Vector4 layout drift");
-static_assert(sizeof(Matrix44Affine) == 64, "Matrix44Affine layout drift");
-static_assert(sizeof(BrnEffects::BloomData) == 32, "BloomData layout drift");
-static_assert(sizeof(BrnEffects::VignetteData) == 80, "VignetteData layout drift");
-static_assert(sizeof(BrnEffects::DepthOfFieldData) == 32, "DepthOfFieldData layout drift");
-static_assert(sizeof(BrnEffects::BlurData) == 96, "BlurData layout drift");
+CGS_STATIC_ASSERT((sizeof(Vector2) == 16), "Vector2 layout drift");
+CGS_STATIC_ASSERT((sizeof(Vector3) == 16), "Vector3 layout drift");
+CGS_STATIC_ASSERT((sizeof(Vector4) == 16), "Vector4 layout drift");
+CGS_STATIC_ASSERT((sizeof(Matrix44Affine) == 64), "Matrix44Affine layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::BloomData) == 32), "BloomData layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::VignetteData) == 80), "VignetteData layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::DepthOfFieldData) == 32), "DepthOfFieldData layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::BlurData) == 96), "BlurData layout drift");
 // ONE POINTER, whatever the target's pointer is (guest 4, host 8) -- DWARF BrnEffectsData.h:275.
 // The 496-byte frame stride below is what actually pins the layout; this pins the member set.
-static_assert(sizeof(BrnEffects::TintData) == sizeof(rw::graphics::postfx::ColourCube*),
+CGS_STATIC_ASSERT((sizeof(BrnEffects::TintData) == sizeof(rw::graphics::postfx::ColourCube*)),
               "TintData layout drift");
-static_assert(sizeof(BrnEffects::TintData2d) == 16, "TintData2d layout drift");
-static_assert(sizeof(BrnDirector::Camera::MotionBlurData) == 12, "MotionBlurData layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::TintData2d) == 16), "TintData2d layout drift");
+CGS_STATIC_ASSERT((sizeof(BrnDirector::Camera::MotionBlurData) == 12), "MotionBlurData layout drift");
 // The frame stride the whole subsystem is addressed with: every X360 frame address is
 // `496 * (2*slot + internal) + mapaEffectsFrames[layer]` (e.g. EvalTint @0x823FD614
 // `mulli r10, r10, 0x1F0`). Pin it so a member edit that changes the stride fails here
 // instead of silently mis-indexing.
-static_assert(sizeof(BrnEffectsFrame) == 496, "BrnEffectsFrame stride drift (X360 0x1F0)");
+CGS_STATIC_ASSERT((sizeof(BrnEffectsFrame) == 496), "BrnEffectsFrame stride drift (X360 0x1F0)");
 
 inline void BrnEffectsFrame::Construct()
 {

@@ -42,8 +42,8 @@ SweetenersEffect::SweetenersEffect()
     , mExhaustPopsVoice()
     , mSweetenerVoice()
     , mRandomGenerator()
-    , mpPhysicsControl(nullptr)
-    , mpShiftingControl(nullptr)
+    , mpPhysicsControl(0)
+    , mpShiftingControl(0)
     , mSweetenersBank()
     , mfTimeRemainingToPlaySputters(0.0f)
     , mPopsSquareWave()
@@ -53,7 +53,7 @@ SweetenersEffect::SweetenersEffect()
     , meRaceCarEngineState(
           BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF)
     , miRaceCarIndex(0)
-    , mpFXBank(nullptr)
+    , mpFXBank(0)
     , mDamageBangVoice()
     , mfDamageBangVolume(0.0f)
     , mDamagePopVoice()
@@ -89,7 +89,7 @@ s32 SweetenersEffect::GetController(s32 aiSlot)
 
 void SweetenersEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr, "apController");
+    CGS_ASSERT(apController != 0, "apController");
     if (!apController)
         return;
 
@@ -171,13 +171,13 @@ bool SweetenersEffect::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return false;
 
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    CGS_ASSERT(lpModule != nullptr, "mpLogicModule");
+    CGS_ASSERT(lpModule != 0, "mpLogicModule");
     if (!lpModule)
         return false;
 
@@ -207,8 +207,8 @@ bool SweetenersEffect::Attach()
     BrnSound::Logic::GlobalStateManager* lpGlobal =
         static_cast<BrnSound::Logic::GlobalStateManager*>(
             lpModule->GetEnvironment().GetStateManager(0));
-    mpFXBank = lpGlobal ? &lpGlobal->GetFxSpliceBank() : nullptr;
-    CGS_ASSERT(mpFXBank != nullptr, "mpFXBank");
+    mpFXBank = lpGlobal ? &lpGlobal->GetFxSpliceBank() : 0;
+    CGS_ASSERT(mpFXBank != 0, "mpFXBank");
 
     const Attrib::Gen::vehicleengine& lrEngineAttributes =
         mpPhysicsControl->GetVehicleEngineAttributes();
@@ -225,7 +225,7 @@ bool SweetenersEffect::Attach()
     {
         UpdateSweetenerInfo(lrEngineAttributes);
         const char* lpcBankName = lrEngineAttributes.SweetenersAssetName();
-        CGS_ASSERT(lpcBankName != nullptr, "lpcBankName");
+        CGS_ASSERT(lpcBankName != 0, "lpcBankName");
         if (!lpcBankName)
             return false;
         mSweetenersBank.Construct(
@@ -457,7 +457,7 @@ void SweetenersEffect::UpdateCarStart(f32 afTimeStep)
 
 void SweetenersEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
 {
-    CGS_ASSERT(apMessage != nullptr, "lpMessageHeader");
+    CGS_ASSERT(apMessage != 0, "lpMessageHeader");
     if (!apMessage || apMessage->GetEventId() != E_SOUND_MESSAGE_PLAY_BANG)
         return;
 
@@ -554,7 +554,7 @@ void SweetenersEffect::UpdateParams(f32 afTimeStep)
             BrnSound::Module::SoundLogicModule* lpModule =
                 static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
             BrnSound::Module::Io::LogicInputBuffer* lpInput =
-                lpModule ? lpModule->GetBrnInputStructure() : nullptr;
+                lpModule ? lpModule->GetBrnInputStructure() : 0;
             if (lpInput)
             {
                 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*

@@ -32,7 +32,7 @@ namespace BrnNetwork
     // members.
     bool ScoreboardColumn::Prepare(const char* lpcTitle, s32 liWidth, s32 liStyle, EDataType leDataType)
     {
-        if (lpcTitle != nullptr)
+        if (lpcTitle != 0)
         {
             // The bounded copy names the offending string when it does not fit, then copies anyway.
             if (!(std::strlen(lpcTitle) < sizeof(macTitle)))
@@ -64,7 +64,7 @@ namespace BrnNetwork
     // Append one cell: length-check the text into the next 31-char cell and count it.
     void ScoreboardRow::AddCell(const char* lpcData)
     {
-        CGS_ASSERT(lpcData != nullptr, "lpcData");
+        CGS_ASSERT(lpcData != 0, "lpcData");
         CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS");
 
         char* lpcCell = maacData[miNumberOfColumns];
@@ -73,7 +73,7 @@ namespace BrnNetwork
         {
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "String too long: " << (lpcData != nullptr ? lpcData : "<NULLSTRING>");
+            lStrStream << "String too long: " << (lpcData != 0 ? lpcData : "<NULLSTRING>");
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
             CgsDev::Assert::EndAssert();

@@ -208,16 +208,16 @@ namespace CgsResource
             maPools[li].Construct();
 
         rw::IResourceAllocator* lpResourceAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
-        CGS_ASSERT(lpResourceAllocator != nullptr, "lpAllocator");
+        CGS_ASSERT(lpResourceAllocator != 0, "lpAllocator");
 
         // Register the original built-in ID-list handler before game-specific
         // types. Its cache is initialized through the same virtuals as the game types.
         mNumTypes = 0;
         rw::ResourceDescriptor lIdListDescriptor;
         lIdListDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(IdListResourceType);
-        lIdListDescriptor.m_baseResourceDescriptors[0].m_alignment = alignof(IdListResourceType);
-        void* lpIdListMemory = lpResourceAllocator->DoAllocate(lIdListDescriptor, nullptr).m_baseResources[0];
-        CGS_ASSERT(lpIdListMemory != nullptr, "Out of memory\n");
+        lIdListDescriptor.m_baseResourceDescriptors[0].m_alignment = __alignof(IdListResourceType);
+        void* lpIdListMemory = lpResourceAllocator->DoAllocate(lIdListDescriptor, 0).m_baseResources[0];
+        CGS_ASSERT(lpIdListMemory != 0, "Out of memory\n");
         IdListResourceType* lpIdListType = ::new (lpIdListMemory) IdListResourceType;
         lpIdListType->InitCachedValues();
         maTypes[mNumTypes].mpType = lpIdListType;
@@ -260,7 +260,7 @@ namespace CgsResource
         // ARTIST 828FC0B8 allocates 4096 request/result records for each memory
         // type. Native records contain 64-bit pointers, so retain the count and
         // use their host sizeof/alignment when carving the parent allocator.
-        CGS_ASSERT(lpOptions != nullptr, "lpInitOptions");
+        CGS_ASSERT(lpOptions != 0, "lpInitOptions");
         ScratchPool::InitOptions lScratchOptions = {};
         lScratchOptions.muMaxEntries = static_cast<u32>(lpOptions->miMaxResourceToDefrag);
         lScratchOptions.miBankId = 999;
@@ -270,28 +270,28 @@ namespace CgsResource
         rw::ResourceDescriptor lScratchDescriptor;
         lScratchDescriptor.m_baseResourceDescriptors[0].m_size = lScratchOptions.muOverheadMemorySize;
         lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        lScratchOptions.mpOverhead = lpResourceAllocator->DoAllocate(lScratchDescriptor, nullptr).m_baseResources[0];
-        CGS_ASSERT(lScratchOptions.mpOverhead != nullptr, "Out of memory\n");
+        lScratchOptions.mpOverhead = lpResourceAllocator->DoAllocate(lScratchDescriptor, 0).m_baseResources[0];
+        CGS_ASSERT(lScratchOptions.mpOverhead != 0, "Out of memory\n");
         mScratchPool.Prepare();
         mScratchPool.InitPool(&lScratchOptions);
         for (s32 t = 0; t < 3; ++t)
         {
             rw::ResourceDescriptor lDescriptor = {};
             lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(AllocRequest) * KI_MAX_ALLOCATION_REQUESTS;
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = alignof(AllocRequest);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = __alignof(AllocRequest);
             mAllocListSet.mapAllocRequests[t] = static_cast<AllocRequest*>(
-                lpResourceAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0]);
+                lpResourceAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
             lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(AllocResult) * KI_MAX_ALLOCATION_REQUESTS;
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = alignof(AllocResult);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = __alignof(AllocResult);
             mAllocListSet.mapAllocResults[t] = static_cast<AllocResult*>(
-                lpResourceAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0]);
-            CGS_ASSERT(mAllocListSet.mapAllocRequests[t] != nullptr, "Out of memory\n");
-            CGS_ASSERT(mAllocListSet.mapAllocResults[t] != nullptr, "Out of memory\n");
+                lpResourceAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
+            CGS_ASSERT(mAllocListSet.mapAllocRequests[t] != 0, "Out of memory\n");
+            CGS_ASSERT(mAllocListSet.mapAllocResults[t] != 0, "Out of memory\n");
         }
         mAllocListSet.ClearCountsAndResults();
 
         mpAddressedAllocRequests = static_cast<AllocRequestAddressed*>(lAllocateWorkingMemory(
-            sizeof(AllocRequestAddressed) * KI_MAX_ALLOCATION_REQUESTS, alignof(AllocRequestAddressed)));
+            sizeof(AllocRequestAddressed) * KI_MAX_ALLOCATION_REQUESTS, __alignof(AllocRequestAddressed)));
         mpRelocateRequests = static_cast<RelocateRequest*>(lAllocateWorkingMemory(
             sizeof(RelocateRequest) * KU_MAX_POOL_ENTRIES, 128));
         mpLinearHeapNodes = static_cast<LinearHeapNode*>(lAllocateWorkingMemory(
@@ -380,7 +380,7 @@ namespace CgsResource
         lResponse.mpSourceEntry    = 0;
 
         Pool* lpPool = GetPool(lpRequest->miPoolId);
-        if (lpPool != nullptr)
+        if (lpPool != 0)
         {
             // ARTIST828FCD88..C0 passes literal false and null; neither is request data.
             Entry* lpEntry = lpPool->FindResource(lpRequest->mResourceId, false, 2, 0);
@@ -475,10 +475,10 @@ namespace CgsResource
     {
         if (mReceiverQueue.GetCount() > 0)
         {
-            const CgsModule::Event* lpEvent = nullptr;
+            const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             s32 liId = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            while (lpEvent != nullptr)
+            while (lpEvent != 0)
             {
                 if (liId == 10)
                     DoCreatePoolRequest(
@@ -491,7 +491,7 @@ namespace CgsResource
                 else
                     FirePoolCreateAssert("Invalid Event Id.\n", 886);
 
-                const CgsModule::Event* lpNext = nullptr;
+                const CgsModule::Event* lpNext = 0;
                 liId = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;
             }
@@ -504,14 +504,14 @@ namespace CgsResource
     void PoolModule::ProcessInputBuffer(const PoolIO::InputBuffer* lpInputBuffer,
                                        PoolIO::OutputBuffer* lpOutputBuffer)
     {
-        if (lpInputBuffer == nullptr)
+        if (lpInputBuffer == 0)
             FirePoolCreateAssert("lpBuffer", 1069);
 
         const PoolIO::InputBuffer::PoolInputQueue* lpQueue = lpInputBuffer->GetPoolInputQueue();
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             if (liId == 0)
                 SendCreatePoolMemoryRequest(
@@ -550,7 +550,7 @@ namespace CgsResource
             else
                 FirePoolCreateAssert("Invalid Event Id.\n", 1155);
 
-            const CgsModule::Event* lpNext = nullptr;
+            const CgsModule::Event* lpNext = 0;
             liId = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
@@ -562,7 +562,7 @@ namespace CgsResource
                                                  PoolIO::OutputBuffer* lpPoolOutput)
     {
         mPendingCreateRequests.Push(lpRequest);
-        if (lpPoolOutput == nullptr)
+        if (lpPoolOutput == 0)
             FirePoolCreateAssert("lpOutputBuffer", 1183);
 
         rw::ResourceDescriptor lDescriptor;
@@ -622,7 +622,7 @@ namespace CgsResource
         lOptions.mDescriptor = lDescriptor;
 
         CreatePool(&lOptions);
-        if (lpPoolOutput == nullptr)
+        if (lpPoolOutput == 0)
             FirePoolCreateAssert("lpOutputBuffer", 1297);
 
         Events::CreatePoolResponse lResponse;

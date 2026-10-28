@@ -38,12 +38,12 @@ namespace BrnNetwork
         void                             Construct();
         void                             PrepareForSend(u16 lu16Frame, NetworkPlayerID lNewRunnerID);
         bool                             Retrieve(NetworkPlayerID* lpNewRunnerID);
-        s32                              GetPackedMessageSize() override;
-        CgsNetwork::PackOrUnpackResult   PackOrUnpack() override;
-        const char*                      GetName() const override;
+        s32                              GetPackedMessageSize() ;
+        CgsNetwork::PackOrUnpackResult   PackOrUnpack() ;
+        const char*                      GetName() const ;
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(BurningHomeRunSwitchRunnerMessage) == 0x2C,
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(BurningHomeRunSwitchRunnerMessage) == 0x2C),
                   "sizeof(BurningHomeRunSwitchRunnerMessage) == 0x2C");
 } // namespace BrnNetwork

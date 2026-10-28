@@ -113,9 +113,9 @@ struct ModeLoadingScreenAction
 //   GameStateModuleIO::BroadcastModeFinishLinesAction in BrnGameActions.h.
 //   SetupGameMode @0x8234B158 -- `li r6, 1` @0x8234B4B4 paired with `li r5, 0x16` (22)
 //   @0x8234B4B8: a one-byte bare tag.
-static_assert(sizeof(GameStateModuleIO::BroadcastModeFinishLinesAction) == 48,
+CGS_STATIC_ASSERT((sizeof(GameStateModuleIO::BroadcastModeFinishLinesAction) == 48),
               "X360 PrepareForMode posts action 24 with size 48 (`li r6,0x30` @0x82342F5C)");
-static_assert(sizeof(ModeLoadingScreenAction) == 1,
+CGS_STATIC_ASSERT((sizeof(ModeLoadingScreenAction) == 1),
               "X360 SetupGameMode posts action 22 with size 1 (`li r6,1` @0x8234B4B4)");
 
 // ============================================================================

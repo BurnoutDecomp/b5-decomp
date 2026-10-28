@@ -32,7 +32,7 @@ namespace BrnNetwork
     // back-pointer, then the base teardown.
     void RoadRulesManagerDebugComponent::Destruct()
     {
-        mpRoadRulesManager = nullptr;
+        mpRoadRulesManager = 0;
         CgsDev::DebugComponent::Destruct();
     }
 
@@ -63,9 +63,9 @@ namespace BrnNetwork
     // reconstruction retains the same event and stores for that original constant.
     void RoadRulesManagerDebugComponent::TriggerPersonalBest( void* lpData )
     {
-        CGS_ASSERT( lpData != nullptr, "lpData" );
+        CGS_ASSERT( lpData != 0, "lpData" );
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT( lpThis != nullptr, "lpRoadRulesManagerDebugCmpt" );
+        CGS_ASSERT( lpThis != 0, "lpRoadRulesManagerDebugCmpt" );
 
         // The record is a whole personal-best event: the score entry, then challenge 0 and the
         // not-a-lobby-score flag (the two stores just before the call).
@@ -86,9 +86,9 @@ namespace BrnNetwork
     // @ 0x825863A8. Request the latest road-rules high scores from the server.
     void RoadRulesManagerDebugComponent::RequestRoadRulesHighScores( void* lpData )
     {
-        CGS_ASSERT( lpData != nullptr, "lpData" );
+        CGS_ASSERT( lpData != 0, "lpData" );
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT( lpThis != nullptr, "lpRoadRulesManagerDebugCmpt" );
+        CGS_ASSERT( lpThis != 0, "lpRoadRulesManagerDebugCmpt" );
 
         lpThis->mpRoadRulesManager->StartDownloadingRoadRulesScoresFromServer();
     }

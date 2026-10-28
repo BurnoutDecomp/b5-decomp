@@ -91,11 +91,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (vtable order; see base) ------------------
-        void        Construct() override;
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
-        const char* GetName() const override;
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;
+        void        Construct() ;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;
+        const char* GetName() const ;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;
 
         // Destruct() is NOT in this TU's recovered function set -- no symbol and no reference to
         // one exists anywhere in the shipped build for this class -- so it keeps the base

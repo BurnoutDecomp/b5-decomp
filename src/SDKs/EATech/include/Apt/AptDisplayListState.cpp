@@ -200,13 +200,13 @@ AptCIH* AptDisplayListState::ChangeDepth(int16_t nDepth, AptCIH* pItem)
         pOldNext->mpDisplayListPrevious = pOldPrevious;
     if (mpFirst == pItem)
         mpFirst = pOldNext;
-    pItem->mpDisplayListPrevious = nullptr;
-    pItem->mpDisplayListNext     = nullptr;
+    pItem->mpDisplayListPrevious = 0;
+    pItem->mpDisplayListNext     = 0;
 
     // Find the node to insert after for nDepth (null => head).
-    AptCIH* pInsertAfter = nullptr;
-    AptCIH* pMatch       = nullptr;
-    findInst(nDepth, nullptr, &pInsertAfter, &pMatch);
+    AptCIH* pInsertAfter = 0;
+    AptCIH* pMatch       = 0;
+    findInst(nDepth, 0, &pInsertAfter, &pMatch);
 
     AptRenderTreeManager* pManager = AptCurrentRenderTreeManager();
 
@@ -222,7 +222,7 @@ AptCIH* AptDisplayListState::ChangeDepth(int16_t nDepth, AptCIH* pItem)
     else
     {
         // Head insert.
-        pItem->mpDisplayListPrevious = nullptr;
+        pItem->mpDisplayListPrevious = 0;
         if (mpFirst)
         {
             pItem->mpDisplayListNext       = mpFirst;
@@ -230,7 +230,7 @@ AptCIH* AptDisplayListState::ChangeDepth(int16_t nDepth, AptCIH* pItem)
         }
         else
         {
-            pItem->mpDisplayListNext = nullptr;
+            pItem->mpDisplayListNext = 0;
         }
         mpFirst = pItem;
         if (pItem->mpDisplayListParent && pManager)

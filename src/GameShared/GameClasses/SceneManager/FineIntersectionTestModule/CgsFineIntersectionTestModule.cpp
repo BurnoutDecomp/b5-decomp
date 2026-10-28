@@ -42,8 +42,8 @@ void FineIntersectionTestModule::Construct()
 {
     mePrepareStage  = E_FINE_INTERSECTION_PREPARE_START;            // word 91648 <- 0
     meReleaseStage  = E_FINE_INTERSECTION_RELEASE_DONE;             // word 91649 <- 2
-    mpVolumeManager = nullptr;                                      // word 91652 <- 0
-    mpEntityManager = nullptr;                                      // word 91653 <- 0
+    mpVolumeManager = 0;                                      // word 91652 <- 0
+    mpEntityManager = 0;                                      // word 91653 <- 0
 
     // --- volume-volume query ---
     // The X360 descriptor is a 5-entry rw::ResourceDescriptor block (var_80); only entry[0].size
@@ -57,10 +57,10 @@ void FineIntersectionTestModule::Construct()
 
     void* lpVolumeVolumeBuffer[5];
     lpVolumeVolumeBuffer[0] = macVolumeVolumeQueryBuffer;  // backing-store base at [0]
-    lpVolumeVolumeBuffer[1] = nullptr;
-    lpVolumeVolumeBuffer[2] = nullptr;
-    lpVolumeVolumeBuffer[3] = nullptr;
-    lpVolumeVolumeBuffer[4] = nullptr;
+    lpVolumeVolumeBuffer[1] = 0;
+    lpVolumeVolumeBuffer[2] = 0;
+    lpVolumeVolumeBuffer[3] = 0;
+    lpVolumeVolumeBuffer[4] = 0;
     mpVolumeVolumeQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
         rw::collision::VolumeVolumeQuery::Initialize(lpVolumeVolumeBuffer, 100, 100));  // word 91654
 
@@ -74,10 +74,10 @@ void FineIntersectionTestModule::Construct()
 
     void* lpVolumeLineBuffer[5];
     lpVolumeLineBuffer[0] = macVolumeLineQueryBuffer;  // backing-store base (console this + 299008; host + 0x49600)
-    lpVolumeLineBuffer[1] = nullptr;
-    lpVolumeLineBuffer[2] = nullptr;
-    lpVolumeLineBuffer[3] = nullptr;
-    lpVolumeLineBuffer[4] = nullptr;
+    lpVolumeLineBuffer[1] = 0;
+    lpVolumeLineBuffer[2] = 0;
+    lpVolumeLineBuffer[3] = 0;
+    lpVolumeLineBuffer[4] = 0;
     mpVolumeLineQuery = static_cast<rw::collision::VolumeLineQuery*>(
         rw::collision::VolumeLineQuery::Initialize(lpVolumeLineBuffer, 100, 100));  // word 91655
 }
@@ -184,35 +184,35 @@ bool FineIntersectionTestModule::Release()
 // Never called at runtime; pins the asm-attested member byte offsets.
 void FineIntersectionTestModule::_AssertLayout()
 {
-    static_assert(sizeof(u8) == 1, "u8 must be one byte");
-    static_assert(offsetof(FineIntersectionTestModule, macVolumeVolumeQueryBuffer) == 0x00000,
+    CGS_STATIC_ASSERT((sizeof(u8) == 1), "u8 must be one byte");
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, macVolumeVolumeQueryBuffer) == 0x00000),
                   "macVolumeVolumeQueryBuffer @ +0x00000");
     // NOT X360: the host VolumeVolumeQuery buffer is KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE (0x49600), so everything
     // after it sits 0x600 later than the console's +0x49000 / +0x59800 / +0x59804 / +0x59808 / +0x5980C; the
     // contiguity the console offsets encode is what stays pinned.
-    static_assert(offsetof(FineIntersectionTestModule, macVolumeLineQueryBuffer) == KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, macVolumeLineQueryBuffer) == KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE),
                   "macVolumeLineQueryBuffer follows the VolumeVolumeQuery buffer (console +0x49000)");
-    static_assert(offsetof(FineIntersectionTestModule, mePrepareStage) ==
-                      KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE + KU_VOLUME_LINE_QUERY_MEM_SIZE,
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, mePrepareStage) ==
+                      KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE + KU_VOLUME_LINE_QUERY_MEM_SIZE),
                   "mePrepareStage follows the VolumeLineQuery buffer (console +0x59800)");
-    static_assert(offsetof(FineIntersectionTestModule, meReleaseStage) == offsetof(FineIntersectionTestModule, mePrepareStage) + 4,
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, meReleaseStage) == offsetof(FineIntersectionTestModule, mePrepareStage) + 4),
                   "meReleaseStage (console +0x59804)");
-    static_assert(offsetof(FineIntersectionTestModule, miTextX) == offsetof(FineIntersectionTestModule, mePrepareStage) + 8,
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, miTextX) == offsetof(FineIntersectionTestModule, mePrepareStage) + 8),
                   "miTextX (console +0x59808)");
-    static_assert(offsetof(FineIntersectionTestModule, miTextY) == offsetof(FineIntersectionTestModule, mePrepareStage) + 12,
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, miTextY) == offsetof(FineIntersectionTestModule, mePrepareStage) + 12),
                   "miTextY (console +0x5980C)");
     // The trailing pointer members (mpVolumeManager/mpEntityManager/mpVolumeVolumeQuery/
     // mpVolumeLineQuery) sit at X360 byte offsets +0x59810/+0x59814/+0x59818/+0x5981C with
     // 32-bit pointer widths. On the x64 PC build pointers are 8 bytes, so their absolute
     // offsets necessarily diverge; only their relative ORDER is pinned (asserted below).
-    static_assert(offsetof(FineIntersectionTestModule, mpVolumeManager) <
-                      offsetof(FineIntersectionTestModule, mpEntityManager),
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, mpVolumeManager) <
+                      offsetof(FineIntersectionTestModule, mpEntityManager)),
                   "mpVolumeManager precedes mpEntityManager (X360 +0x59810 < +0x59814)");
-    static_assert(offsetof(FineIntersectionTestModule, mpEntityManager) <
-                      offsetof(FineIntersectionTestModule, mpVolumeVolumeQuery),
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, mpEntityManager) <
+                      offsetof(FineIntersectionTestModule, mpVolumeVolumeQuery)),
                   "mpEntityManager precedes mpVolumeVolumeQuery (X360 +0x59814 < +0x59818)");
-    static_assert(offsetof(FineIntersectionTestModule, mpVolumeVolumeQuery) <
-                      offsetof(FineIntersectionTestModule, mpVolumeLineQuery),
+    CGS_STATIC_ASSERT((offsetof(FineIntersectionTestModule, mpVolumeVolumeQuery) <
+                      offsetof(FineIntersectionTestModule, mpVolumeLineQuery)),
                   "mpVolumeVolumeQuery precedes mpVolumeLineQuery (X360 +0x59818 < +0x5981C)");
 }
 

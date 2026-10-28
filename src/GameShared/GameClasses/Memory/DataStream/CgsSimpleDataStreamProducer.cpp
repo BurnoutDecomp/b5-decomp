@@ -41,7 +41,7 @@ namespace CgsMemory
         const s32 liCommandBufferSize = (liMaxCommands * liCommandSize + 127) & ~127;
 
         mCommandPoster.Construct(lpCommandBuffer, liCommandBufferSize, liCommandSize,
-                                 0, nullptr, 0, 0);
+                                 0, 0, 0, 0);
 
         miMaxCommands            = liMaxCommands;
         miCommandSize            = liCommandSize;

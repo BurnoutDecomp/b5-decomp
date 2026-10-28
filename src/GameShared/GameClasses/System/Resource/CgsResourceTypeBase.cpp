@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::BaseResourceDescriptors<5> (= ResourceDescriptor)
-#include <cstdint>
+#include "types.hpp"
 
 // Default bodies for the CgsResource::Type polymorphic base. Concrete handlers (RwRaster, Font, ...)
 // override the virtuals they implement; whatever they leave alone falls through to these no-op /
@@ -51,7 +51,7 @@ namespace CgsResource
     {
         rw::Resource lOffset;
         for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-            lOffset.m_baseResources[lu] = nullptr;
+            lOffset.m_baseResources[lu] = 0;
         lOffset.m_baseResources[liMemType] = reinterpret_cast<void*>(luDelta);
         FixUp(lpResource, lOffset);
     }

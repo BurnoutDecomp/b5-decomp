@@ -22,7 +22,7 @@
 #include "SDKs/WMSDK/CMSMtoN.h"
 
 #include <cstring>  // memcpy
-#include <cstdint>  // intptr_t
+#include "types.hpp"  // intptr_t
 
 // XMem attribute word baked into every alloc/free here (lis 0x248C ; ori 0x8000).
 static const u32 KU_WM_XMEM_ATTRIBUTES = 0x248C8000u;
@@ -114,12 +114,12 @@ int WMSDKRESIZER::allocBuffer()
     if (mpBuffer0)
     {
         XMemFree(mpBuffer0, KU_WM_XMEM_ATTRIBUTES);
-        mpBuffer0 = nullptr;
+        mpBuffer0 = 0;
     }
     if (mpBuffer1)
     {
         XMemFree(mpBuffer1, KU_WM_XMEM_ATTRIBUTES);
-        mpBuffer1 = nullptr;
+        mpBuffer1 = 0;
     }
 
     u32 uSize0 = BMPSize(mAllocDstWidth, mAllocDstHeight);   // this[10], this[11]
@@ -130,7 +130,7 @@ int WMSDKRESIZER::allocBuffer()
         return 0;
 
     mpBuffer1 = static_cast<u8*>(XMemAlloc(uSize1, KU_WM_XMEM_ATTRIBUTES));
-    return mpBuffer1 != nullptr;
+    return mpBuffer1 != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,17 +143,17 @@ WMSDKRESIZER::~WMSDKRESIZER()
     if (mpBuffer0)
     {
         XMemFree(mpBuffer0, KU_WM_XMEM_ATTRIBUTES);
-        mpBuffer0 = nullptr;
+        mpBuffer0 = 0;
     }
     if (mpBuffer1)
     {
         XMemFree(mpBuffer1, KU_WM_XMEM_ATTRIBUTES);
-        mpBuffer1 = nullptr;
+        mpBuffer1 = 0;
     }
     if (mpBitmapInfo)
     {
         XMemFree(mpBitmapInfo, KU_WM_XMEM_ATTRIBUTES);
-        mpBitmapInfo = nullptr;
+        mpBitmapInfo = 0;
     }
 
     reinterpret_cast<CClipResize*>(&mClipResizeState)->~CClipResize();

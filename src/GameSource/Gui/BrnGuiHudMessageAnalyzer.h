@@ -524,15 +524,15 @@ namespace BrnGui
     inline void HudMessageAnalyzer::_AssertLayout()
     {
         // embedded-record sizes (pointer-free structs; X360 == host)
-        static_assert(sizeof(GuiTakedownEvent)             == 40, "mPendingTakedownEvent span 0x3A8..0x3CF");
-        static_assert(sizeof(GuiChallengeEndEvent)         == 24, "mChallengedEndedData span 0x460..0x477");
-        static_assert(sizeof(GuiEventRoadRuleNewHighScore) == 48, "mRoadRuleHighScoreData span 0x480..0x4AF");
-        static_assert(sizeof(GuiEventTrophyCarUnlock)      == 16, "mTrophyCarUnlockedEvent span 0x4D8..0x4E7");
-        static_assert(sizeof(CgsNetwork::PlayerName)       == 16, "byte-aligned 16B name slots @0x4BD/0x4E9");
+        CGS_STATIC_ASSERT((sizeof(GuiTakedownEvent)             == 40), "mPendingTakedownEvent span 0x3A8..0x3CF");
+        CGS_STATIC_ASSERT((sizeof(GuiChallengeEndEvent)         == 24), "mChallengedEndedData span 0x460..0x477");
+        CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleNewHighScore) == 48), "mRoadRuleHighScoreData span 0x480..0x4AF");
+        CGS_STATIC_ASSERT((sizeof(GuiEventTrophyCarUnlock)      == 16), "mTrophyCarUnlockedEvent span 0x4D8..0x4E7");
+        CGS_STATIC_ASSERT((sizeof(CgsNetwork::PlayerName)       == 16), "byte-aligned 16B name slots @0x4BD/0x4E9");
 
         #define HMA_A(member, x360off) \
-            static_assert(offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mePlayersCurrentlyWreckState) \
-                          == ((x360off) - 0x39C), #member " @" #x360off)
+            CGS_STATIC_ASSERT((offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mePlayersCurrentlyWreckState) \
+                          == ((x360off) - 0x39C)), #member " @" #x360off)
         HMA_A(mfCurrentWreckDuration,              0x3A0);
         HMA_A(mbTakedownMessagePending,            0x3A4);
         HMA_A(mPendingTakedownEvent,               0x3A8);
@@ -569,8 +569,8 @@ namespace BrnGui
         #undef HMA_A
 
         #define HMA_B(member, x360off) \
-            static_assert(offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mbOnlineWinnerWaiting) \
-                          == ((x360off) - 0x4BC), #member " @" #x360off)
+            CGS_STATIC_ASSERT((offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mbOnlineWinnerWaiting) \
+                          == ((x360off) - 0x4BC)), #member " @" #x360off)
         HMA_B(mOnlineWinnerName,                   0x4BD);
         HMA_B(mfTimeUntilGameCompletedHudMessage,  0x4D0);
         HMA_B(mbGameCompletedHudMessagePending,    0x4D4);
@@ -583,8 +583,8 @@ namespace BrnGui
         // on the gate vs the X360's 28. Everything past the seam is pinned to the trophy
         // record, whose own phase matches X360 again.
         #define HMA_C(member, x360off) \
-            static_assert(offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mTrophyCarUnlockedEvent) \
-                          == ((x360off) - 0x4D8), #member " @" #x360off)
+            CGS_STATIC_ASSERT((offsetof(HudMessageAnalyzer, member) - offsetof(HudMessageAnalyzer, mTrophyCarUnlockedEvent) \
+                          == ((x360off) - 0x4D8)), #member " @" #x360off)
         HMA_C(mbOnlinePlayerLeft,                  0x4E8);
         HMA_C(mOnlinePlayerLeftName,               0x4E9);
         HMA_C(mbDEBUGDeveloperChallengeComplete,   0x4F9);

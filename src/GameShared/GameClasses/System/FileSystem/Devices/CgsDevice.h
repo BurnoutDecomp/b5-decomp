@@ -34,7 +34,7 @@ namespace CgsFileSystem
     class Device
     {
     public:
-        Device() : mpParent(nullptr), mpfErrorCallback(nullptr) {}
+        Device() : mpParent(0), mpfErrorCallback(0) {}
         virtual ~Device() {}
 
         // ---- the worker-dispatched async op interface (X360 vtable order) -------------

@@ -51,7 +51,7 @@ namespace FineIntersectionTestIO
     // ---- INPUT records (:66 / :80 / :94 / :107) --------------------------------------
     // The line-test pair carry two 16-byte lanes, so alignas(16) and sizeof 0x40 (the console
     // builds them at 16-aligned stack slots: `addi r4, r1, 0x60` in ProcessLineTestNearest).
-    struct alignas(16) InEventLineTestFine : public EventBaseFineIntersectionTest
+    struct CGS_ALIGN(16) InEventLineTestFine : public EventBaseFineIntersectionTest
     {
         Vector3                              mLineStart;              // :69  +0x00
         Vector3                              mLineEnd;                // :70  +0x10
@@ -63,7 +63,7 @@ namespace FineIntersectionTestIO
         bool                                 mbExcludeParts;          // :76  +0x2D
     };
 
-    struct alignas(16) InEventLineTestNearest : public EventBaseFineIntersectionTest
+    struct CGS_ALIGN(16) InEventLineTestNearest : public EventBaseFineIntersectionTest
     {
         Vector3                              mLineStart;              // :83  +0x00
         Vector3                              mLineEnd;                // :84  +0x10
@@ -75,7 +75,7 @@ namespace FineIntersectionTestIO
         bool                                 mbExcludeParts;          // :90  +0x2D
     };
 
-    struct alignas(16) InEventVolumeTestDeepest : public EventBaseFineIntersectionTest
+    struct CGS_ALIGN(16) InEventVolumeTestDeepest : public EventBaseFineIntersectionTest
     {
         Matrix44Affine                       mTransform;              // :96  +0x00 (4 lanes)
         VolumeSlot                           mVolumeBuffer;           // :97  +0x40 (128 bytes)
@@ -87,7 +87,7 @@ namespace FineIntersectionTestIO
         bool                                 mbExcludeParts;          // :103 +0xCD
     };
 
-    struct alignas(16) InEventVolumeTestFine : public EventBaseFineIntersectionTest
+    struct CGS_ALIGN(16) InEventVolumeTestFine : public EventBaseFineIntersectionTest
     {
         Matrix44Affine                       mTransform;              // :109 +0x00
         VolumeSlot                           mVolumeBuffer;           // :110 +0x40
@@ -107,7 +107,7 @@ namespace FineIntersectionTestIO
         const LineTestIntersection* mpaResults;    // :131 +0x08
     };
 
-    struct alignas(16) OutEventLineTestNearestResult : public EventBaseFineIntersectionTest
+    struct CGS_ALIGN(16) OutEventLineTestNearestResult : public EventBaseFineIntersectionTest
     {
         SceneQueryId mQueryId;                // :137 +0x00
         u32          muVolumeInstanceIndex;   // :138 +0x04

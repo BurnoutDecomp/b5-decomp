@@ -16,7 +16,7 @@
 #include "ParticleMaterial.h"
 #include "LionSerialiser.h"
 
-#include <cstdint>
+#include "types.hpp"
 
 namespace
 {
@@ -37,10 +37,10 @@ namespace
 // descriptor's material, then build each behaviour in the descriptor's behaviour chain.
 void cLionParticleEffect::Build()
 {
-    if (this == nullptr)   // ARTIST guards a null effect pointer before touching the chain
+    if (this == 0)   // ARTIST guards a null effect pointer before touching the chain
         return;
 
-    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         const u32 luRenderMode = lpDes->GetRenderMode();
@@ -51,7 +51,7 @@ void cLionParticleEffect::Build()
 
         lpDes->mpMaterial->Build();
 
-        for (cParticleBehaviour* lpBeh = lpDes->GetBehaviours(); lpBeh != nullptr;
+        for (cParticleBehaviour* lpBeh = lpDes->GetBehaviours(); lpBeh != 0;
              lpBeh = lpBeh->mpNext.Get())
         {
             lpBeh->Build();
@@ -66,11 +66,11 @@ void cLionParticleEffect::Build()
 // serialised head words in place.
 void cLionParticleEffect::Delocate(U32 aEndianTwiddleFlag)
 {
-    if (this == nullptr)
+    if (this == 0)
         return;
 
     cParticleDescriptor* lpDes = mpDescriptors.Get();
-    while (lpDes != nullptr)
+    while (lpDes != 0)
     {
         cParticleDescriptor* lpDesNext = lpDes->GetNextDescriptor();
         lpDes->Delocate(aEndianTwiddleFlag);
@@ -108,7 +108,7 @@ FP32 cLionParticleEffect::GetDurationMax() const
 {
     FP32 lDurationMax = 0.0f;
 
-    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         if (lDurationMax < 0.0f)
@@ -129,12 +129,12 @@ FP32 cLionParticleEffect::GetDurationMax() const
 // tally, then let every descriptor add its own serialised size.
 void cLionParticleEffect::GetSerialiseSize(cLionSerialiser& aSer) const
 {
-    if (this == nullptr)
+    if (this == 0)
         return;
 
     aSer.mDataSize += 16;
 
-    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         lpDes->GetSerialiseSize(aSer);
@@ -147,13 +147,13 @@ void cLionParticleEffect::GetSerialiseSize(cLionSerialiser& aSer) const
 // own Relocate fixes up its next pointer first).
 void cLionParticleEffect::Relocate()
 {
-    if (this == nullptr)
+    if (this == 0)
         return;
 
     // Self-relative offset -> pointer for the descriptor-list head.
     mpDescriptors.Relocate(this);
 
-    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         lpDes->Relocate();
@@ -166,8 +166,8 @@ void cLionParticleEffect::Relocate()
 // descriptor's next pointer. Returns the serialised effect copy (null for a null effect).
 cLionParticleEffect* cLionParticleEffect::Serialise(cLionSerialiser& aSer) const
 {
-    if (this == nullptr)
-        return nullptr;
+    if (this == 0)
+        return 0;
 
     // Copy the 12-byte serialised effect header (mHash, mpDescriptors, mpNext -- console
     // 3 x 4-byte words) into the buffer; DataStore returns the destination copy.
@@ -177,7 +177,7 @@ cLionParticleEffect* cLionParticleEffect::Serialise(cLionSerialiser& aSer) const
     // Rebuild the descriptor chain in the copy: link the first descriptor copy through the
     // copied effect's head, each subsequent copy through the previous copy's next pointer.
     tLionSerialisedPtr<cParticleDescriptor>* lppLast = &lpEff->mpDescriptors;
-    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         cParticleDescriptor* lpCopy = lpDes->Serialise(aSer);

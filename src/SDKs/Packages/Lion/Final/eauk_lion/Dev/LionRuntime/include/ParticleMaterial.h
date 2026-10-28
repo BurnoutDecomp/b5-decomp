@@ -235,14 +235,14 @@ public:
 // the member set below exactly, as does Serialise's own `v14 = v13 + 96` mesh-name walk.
 // The record that was four bytes short was cParticleBehaviour, for an unrelated reason
 // (cVector alignment -- see ParticleBehaviour.h).
-static_assert(sizeof(cParticleMaterial) == 164,
+CGS_STATIC_ASSERT((sizeof(cParticleMaterial) == 164),
               "cParticleMaterial is the 164-byte serialised record "
               "(cParticleMaterial::Serialise @0x8290E720 DataStore(this, 164))");
-static_assert(offsetof(cParticleMaterial, mpTextureName)    == 0x10, "Relocate asm word 4");
-static_assert(offsetof(cParticleMaterial, mpNormalMapName)  == 0x18, "Relocate asm word 6");
-static_assert(offsetof(cParticleMaterial, mpMeshName)       == 0x1C, "Relocate asm word 7");
-static_assert(offsetof(cParticleMaterial, mpLayerGroupName) == 0x20, "Relocate asm word 8");
-static_assert(offsetof(cParticleMaterial, mFlags)           == 0x24, "SetMaterial depth state");
-static_assert(offsetof(cParticleMaterial, mBlendMode)       == 0x3A, "HashMaterial FNV-1a run");
-static_assert(offsetof(cParticleMaterial, mShader)          == 0x42, "GetShaderType");
-static_assert(offsetof(cParticleMaterial, mpMeshNames)      == 0x60, "Relocate asm words 24..28");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mpTextureName)    == 0x10), "Relocate asm word 4");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mpNormalMapName)  == 0x18), "Relocate asm word 6");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mpMeshName)       == 0x1C), "Relocate asm word 7");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mpLayerGroupName) == 0x20), "Relocate asm word 8");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mFlags)           == 0x24), "SetMaterial depth state");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mBlendMode)       == 0x3A), "HashMaterial FNV-1a run");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mShader)          == 0x42), "GetShaderType");
+CGS_STATIC_ASSERT((offsetof(cParticleMaterial, mpMeshNames)      == 0x60), "Relocate asm words 24..28");

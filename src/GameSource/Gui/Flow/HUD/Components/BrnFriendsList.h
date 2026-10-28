@@ -173,7 +173,7 @@ namespace BrnGui
         u8  mbSnapshotFlagA;      // +0x4119 = mbSelectionFlagA
         u8  mbSnapshotFlagB;      // +0x411A = mbSelectionFlagB
         // ---- one online-friend record [friends wave]: stride 0x84, base +0xBEC ----
-        using SFriendRecord = BrnNetwork::BrnNetworkModuleIO::BuddyInformation;
+        typedef BrnNetwork::BrnNetworkModuleIO::BuddyInformation SFriendRecord;
 
     private:
         // ---- [friends wave] asm-pinned additions (offsets in comments) ----

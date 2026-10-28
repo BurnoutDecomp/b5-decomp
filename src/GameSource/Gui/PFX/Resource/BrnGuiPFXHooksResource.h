@@ -11,9 +11,9 @@ namespace CgsResource
 class PFXHookBundleResourceType : public Type
 {
 public:
-    uint32_t      GetTypeID() const override;
-    void          FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void          FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t      GetTypeID() const ;
+    void          FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void          FixDown(void* lpResource, const rw::Resource& lrResource) const ;
     virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest) const;
 };
 }

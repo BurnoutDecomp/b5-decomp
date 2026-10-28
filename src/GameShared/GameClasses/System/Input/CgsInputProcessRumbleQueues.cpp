@@ -65,10 +65,10 @@ namespace InputIO
 const PreWorldInputBuffer::PlayRumbleEffectEventQueue*
 PreWorldInputBuffer::GetPlayRumbleEffectEventQueue() const
 {
-    static_assert(offsetof(PreWorldInputBuffer, mPlayJoltEffectEventQueue) < offsetof(PreWorldInputBuffer, mPlayRumbleEffectEventQueue)
+    CGS_STATIC_ASSERT((offsetof(PreWorldInputBuffer, mPlayJoltEffectEventQueue) < offsetof(PreWorldInputBuffer, mPlayRumbleEffectEventQueue)
                   && offsetof(PreWorldInputBuffer, mPlayRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mChangeVolumeRumbleEffectEventQueue)
                   && offsetof(PreWorldInputBuffer, mChangeVolumeRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mStopRumbleEffectEventQueue)
-                  && offsetof(PreWorldInputBuffer, mStopRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mTimerStatusInterface),
+                  && offsetof(PreWorldInputBuffer, mStopRumbleEffectEventQueue) < offsetof(PreWorldInputBuffer, mTimerStatusInterface)),
                   "PreWorldInputBuffer keeps the console member order (+0x4 / +0x100 / +0x21C / +0x328 / +0x364)");
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return &mPlayRumbleEffectEventQueue;

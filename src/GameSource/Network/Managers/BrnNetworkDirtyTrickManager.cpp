@@ -41,7 +41,7 @@ namespace BrnNetwork
     NetworkDirtyTrickManager::DirtyTrickData*
     NetworkDirtyTrickManager::GetDirtyTrickDataEntry(NetworkPlayerID lNetworkPlayerID)
     {
-        DirtyTrickData* lpEntry = nullptr;
+        DirtyTrickData* lpEntry = 0;
 
         for (s32 liIndex = 0; liIndex < KI_MAX_DIRTY_TRICK_PLAYERS; ++liIndex)
         {
@@ -52,7 +52,7 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(lpEntry != nullptr, "lpEntry");
+        CGS_ASSERT(lpEntry != 0, "lpEntry");
         return lpEntry;
     }
 
@@ -113,7 +113,7 @@ namespace BrnNetwork
         CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             DirtyTrickData* lpDataEntry = GetDirtyTrickDataEntry(-1);
             CGS_ASSERT(lpDataEntry, "lpDataEntry");
@@ -135,7 +135,7 @@ namespace BrnNetwork
         CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->UnRegisterMessageType(KI_DIRTY_TRICK_MESSAGE_TYPE);
             GetDirtyTrickDataEntry(lNetworkPlayerID)->mPlayerID = -1;
@@ -184,7 +184,7 @@ namespace BrnNetwork
         while (mpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-            if (lpNetworkPlayer != nullptr)
+            if (lpNetworkPlayer != 0)
             {
                 DirtyTrickMessage* lpDirtyTrickMessage = static_cast<DirtyTrickMessage*>(
                     lpNetworkPlayer->GetRegisteredSendMessage(KI_DIRTY_TRICK_MESSAGE_TYPE));

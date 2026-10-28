@@ -34,7 +34,7 @@ namespace core
 // off_8217F3E4 -- the GainFader v-table (slots: ReleaseEvent / EventEvent /
 // complete-dtor / vector-deleting-dtor). Installed by the compiler here; modelled as an
 // honest placeholder only for the teardown reinstall convention the siblings use.
-static void *const KGF_BasePlugInVTable = nullptr;   // off_820AA810
+static void *const KGF_BasePlugInVTable = 0;   // off_820AA810
 
 static const f32 KF_ONE = 1.0f;    // flt_82001C98
 static const f32 KF_ZERO = 0.0f;   // flt_82001CC0

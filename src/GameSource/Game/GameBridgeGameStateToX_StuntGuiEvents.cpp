@@ -89,11 +89,11 @@ namespace
             ++mi8NumStrings;
         }
     };
-    static_assert(sizeof(TickerCustomMessageWire537) == 2072,
+    CGS_STATIC_ASSERT((sizeof(TickerCustomMessageWire537) == 2072),
                   "X360 AddGuiEvent<GuiEventTickerCustomMessage> posts 2072 bytes (id 537)");
 
     // GUI event 356 is posted as one byte, id 356 size 1, through its canonical record.
-    static_assert(sizeof(BrnGui::GuiAutosaveRequestEvent) == 1, "id 356 size 1");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiAutosaveRequestEvent) == 1), "id 356 size 1");
 
     // ARTIST case 224 calls the one-byte AddGuiEvent<GuiEvent<152>> instantiation.
     // Keep this one-byte legacy tag local: the normal GUI 152 header is 12 bytes and
@@ -104,7 +104,7 @@ namespace
         u8 mu8Unwritten;
         s32 GetEventType() const { return 152; }
     };
-    static_assert(sizeof(GuiEvent152UnwrittenByte) == 1,
+    CGS_STATIC_ASSERT((sizeof(GuiEvent152UnwrittenByte) == 1),
                   "ARTIST action 224 posts GUI 152 as one unwritten byte");
 
     // =========================================================================
@@ -176,13 +176,13 @@ namespace
         f32 mfDistance;                   // +0x00
         s32 GetEventType() const { return 389; }
     };
-    static_assert(sizeof(TrafficCheckEventWire383) == 4, "GUI 383 size 4");
-    static_assert(sizeof(NearMissEventWire384)     == 8, "GUI 384 size 8");
-    static_assert(sizeof(DriftingEventWire385)     == 4, "GUI 385 size 4");
-    static_assert(sizeof(SpinningEventWire386)     == 4, "GUI 386 size 4");
-    static_assert(sizeof(InAirEventWire387)        == 8, "GUI 387 size 8");
-    static_assert(sizeof(OncomingEventWire388)     == 4, "GUI 388 size 4");
-    static_assert(sizeof(TailgatingEventWire389)   == 4, "GUI 389 size 4");
+    CGS_STATIC_ASSERT((sizeof(TrafficCheckEventWire383) == 4), "GUI 383 size 4");
+    CGS_STATIC_ASSERT((sizeof(NearMissEventWire384)     == 8), "GUI 384 size 8");
+    CGS_STATIC_ASSERT((sizeof(DriftingEventWire385)     == 4), "GUI 385 size 4");
+    CGS_STATIC_ASSERT((sizeof(SpinningEventWire386)     == 4), "GUI 386 size 4");
+    CGS_STATIC_ASSERT((sizeof(InAirEventWire387)        == 8), "GUI 387 size 8");
+    CGS_STATIC_ASSERT((sizeof(OncomingEventWire388)     == 4), "GUI 388 size 4");
+    CGS_STATIC_ASSERT((sizeof(TailgatingEventWire389)   == 4), "GUI 389 size 4");
 
     // =========================================================================
     // [crash-parity 2026-09-22] the on-queue record of GUI event 374
@@ -196,7 +196,7 @@ namespace
         u8 mu8Unwritten;                        // +0x00 (never written by the console's arm)
         s32 GetEventType() const { return 374; }
     };
-    static_assert(sizeof(ShutdownFinishedEventWire374) == 1, "GUI 374 size 1");
+    CGS_STATIC_ASSERT((sizeof(ShutdownFinishedEventWire374) == 1), "GUI 374 size 1");
 
     // [FX-FLOW 2026-09-24, G13-X5 remainder] the on-queue record of GUI event 373
     // (BrnGui::GuiShutdownEvent, DWARF BrnGuiEventTypeDefs.h:3618 {CgsID mVictimCarID}), TU-LOCAL
@@ -207,7 +207,7 @@ namespace
         CgsID mVictimCarID;                     // +0x00
         s32 GetEventType() const { return 373; }
     };
-    static_assert(sizeof(ShutdownEventWire373) == 8, "GUI 373 size 8");
+    CGS_STATIC_ASSERT((sizeof(ShutdownEventWire373) == 8), "GUI 373 size 8");
 
     // [FX-FLOW 2026-09-24, G11-D1 remainder] the on-queue record of GUI event 421
     // (BrnGui::GuiInEventNeckAndNeck, no members), TU-LOCAL
@@ -219,7 +219,7 @@ namespace
         u8 mu8Unwritten;                        // +0x00 (never written by the console's arm)
         s32 GetEventType() const { return 421; }
     };
-    static_assert(sizeof(NeckAndNeckEventWire421) == 1, "GUI 421 size 1");
+    CGS_STATIC_ASSERT((sizeof(NeckAndNeckEventWire421) == 1), "GUI 421 size 1");
 
     // [DIAG] NOT IN THE X360 BINARY -- the race-mode HUD message rung (BRN_MODEMGR_DIAG, first 24
     // lines): which HUDMessageLogic action became which GUI event, with its car slot and value
@@ -233,21 +233,21 @@ namespace
         f32 mfTimeLeft;                         // +0x00
         s32 GetEventType() const { return 108; }
     };
-    static_assert(sizeof(OnlineTimeoutWire108) == 4, "GUI 108 size 4");
+    CGS_STATIC_ASSERT((sizeof(OnlineTimeoutWire108) == 4), "GUI 108 size 4");
 
     struct ShowFreeburnChallengeWire582
     {
         CgsID mChallengeID;                     // +0x00
         s32 GetEventType() const { return 582; }
     };
-    static_assert(sizeof(ShowFreeburnChallengeWire582) == 8, "GUI 582 size 8");
+    CGS_STATIC_ASSERT((sizeof(ShowFreeburnChallengeWire582) == 8), "GUI 582 size 8");
 
     struct FburnChallengeEveryPlayerStatusWire581
     {
         BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData mStatus;   // +0x00
         s32 GetEventType() const { return 581; }
     };
-    static_assert(sizeof(FburnChallengeEveryPlayerStatusWire581) == 2104, "GUI 581 size 2104");
+    CGS_STATIC_ASSERT((sizeof(FburnChallengeEveryPlayerStatusWire581) == 2104), "GUI 581 size 2104");
 
     // GUI 104, 579 and 584 are tag-only GuiEvent<N> records: the console queues one
     // unwritten byte for each.
@@ -569,8 +569,8 @@ namespace
             // ARTIST 0x823EC178..0x823EC1AC forwards the 24-byte StuntInfo image as GUI 429.
             case 132:
             {
-                using StuntPerformedAction = BrnGameState::HUDMessageLogic::StuntPerformedMessage;
-                static_assert(sizeof(StuntPerformedAction) == 24, "X360 action 132 payload size");
+                typedef BrnGameState::HUDMessageLogic::StuntPerformedMessage StuntPerformedAction;
+                CGS_STATIC_ASSERT((sizeof(StuntPerformedAction) == 24), "X360 action 132 payload size");
                 const auto& lrAction = *reinterpret_cast<const StuntPerformedAction*>(lpAction);
                 BrnGui::GuiHUDMessageStuntPerformed lEvent = {};
                 lEvent.mStuntInfo = lrAction.mStuntInfo;
@@ -584,11 +584,11 @@ namespace
             // out-slots as one 12-byte action (f32, s32, bool), matching ComboPerformedMessage.
             case 133:
             {
-                using ComboPerformedAction = BrnGameState::HUDMessageLogic::ComboPerformedMessage;
-                static_assert(sizeof(ComboPerformedAction) == 12, "X360 action 133 payload size");
-                static_assert(offsetof(ComboPerformedAction, mfComboTime) == 0, "X360 action 133 float");
-                static_assert(offsetof(ComboPerformedAction, miComboScore) == 4, "X360 action 133 score");
-                static_assert(offsetof(ComboPerformedAction, mbValidCombo) == 8, "X360 action 133 validity");
+                typedef BrnGameState::HUDMessageLogic::ComboPerformedMessage ComboPerformedAction;
+                CGS_STATIC_ASSERT((sizeof(ComboPerformedAction) == 12), "X360 action 133 payload size");
+                CGS_STATIC_ASSERT((offsetof(ComboPerformedAction, mfComboTime) == 0), "X360 action 133 float");
+                CGS_STATIC_ASSERT((offsetof(ComboPerformedAction, miComboScore) == 4), "X360 action 133 score");
+                CGS_STATIC_ASSERT((offsetof(ComboPerformedAction, mbValidCombo) == 8), "X360 action 133 validity");
                 const auto& lrAction = *reinterpret_cast<const ComboPerformedAction*>(lpAction);
                 BrnGui::GuiHUDMessageComboPerformed lEvent = {};
                 lEvent.miScore = lrAction.miComboScore;
@@ -819,8 +819,8 @@ namespace
             // append exactly the live IDs, copy both 128-bit sets, then copy the maximum.
             case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_RESPONSE:
             {
-                using CarSelectionAction = BrnGameState::GameStateModuleIO::CarSelectionResponseAction;
-                static_assert(sizeof(CarSelectionAction) == 1072, "X360 action 184 payload size");
+                typedef BrnGameState::GameStateModuleIO::CarSelectionResponseAction CarSelectionAction;
+                CGS_STATIC_ASSERT((sizeof(CarSelectionAction) == 1072), "X360 action 184 payload size");
                 const auto& lrAction = *reinterpret_cast<const CarSelectionAction*>(lpAction);
                 BrnGui::GuiCarSelectionEvent lEvent;
                 lEvent.maCars.Clear();
@@ -862,8 +862,8 @@ namespace
             // after the GUI event, including the console's metres-to-display-unit factors.
             case 164:
             {
-                using LeaderBoundaryAction = BrnGameState::GameStateModuleIO::LeaderReachedBoundaryAction;
-                static_assert(sizeof(LeaderBoundaryAction) == 12, "X360 action 164 payload size");
+                typedef BrnGameState::GameStateModuleIO::LeaderReachedBoundaryAction LeaderBoundaryAction;
+                CGS_STATIC_ASSERT((sizeof(LeaderBoundaryAction) == 12), "X360 action 164 payload size");
                 const auto& lrAction = *reinterpret_cast<const LeaderBoundaryAction*>(lpAction);
                 if (lrAction.mbIsBoundaryInMiles)
                 {
@@ -964,9 +964,9 @@ namespace
                         3503);
                     CgsDev::Assert::EndAssert();
                 }
-                using BurnoutSkillzAction = BrnGameState::GameStateModuleIO::BurnoutSkillzAction;
-                static_assert(sizeof(BurnoutSkillzAction) == 68 &&
-                              offsetof(BurnoutSkillzAction, meActiveRaceCarIndex) == 0x40,
+                typedef BrnGameState::GameStateModuleIO::BurnoutSkillzAction BurnoutSkillzAction;
+                CGS_STATIC_ASSERT((sizeof(BurnoutSkillzAction) == 68 &&
+                              offsetof(BurnoutSkillzAction, meActiveRaceCarIndex) == 0x40),
                               "X360 action 168 input layout");
                 const auto& lrAction = *reinterpret_cast<const BurnoutSkillzAction*>(lpAction);
                 if ((lrAction.miActionFlags & BurnoutSkillzAction::KI_ACTION_TYPE_UPDATED_VALUE) !=
@@ -1006,9 +1006,9 @@ namespace
                     BrnGameState::BurnoutSkillzData::EBurnoutSkillType meSkill;  // +0x0C
                     EActiveRaceCarIndex meNewOwner;  // +0x10
                 };
-                static_assert(offsetof(NewBurnoutHudMessageActionView, muActionValue) == 0x08 &&
+                CGS_STATIC_ASSERT((offsetof(NewBurnoutHudMessageActionView, muActionValue) == 0x08 &&
                               offsetof(NewBurnoutHudMessageActionView, meSkill) == 0x0C &&
-                              offsetof(NewBurnoutHudMessageActionView, meNewOwner) == 0x10,
+                              offsetof(NewBurnoutHudMessageActionView, meNewOwner) == 0x10),
                               "ARTIST action 169 consumed input offsets");
                 const auto& lrAction =
                     *reinterpret_cast<const NewBurnoutHudMessageActionView*>(lpAction);
@@ -1142,8 +1142,8 @@ namespace
             // ARTIST 0x823EB598..0x823EB5AC forwards the activated dirty-trick type as GUI 182 / 4 bytes.
             case BrnGameState::GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED:
             {
-                using PaybackAction = BrnGameState::GameStateModuleIO::PaybackActivatedAction;
-                static_assert(sizeof(PaybackAction) == 12, "X360 action 215 payload size");
+                typedef BrnGameState::GameStateModuleIO::PaybackActivatedAction PaybackAction;
+                CGS_STATIC_ASSERT((sizeof(PaybackAction) == 12), "X360 action 215 payload size");
                 const auto& lrAction = *reinterpret_cast<const PaybackAction*>(lpAction);
                 BrnGui::GuiPaybackReceivedEvent lEvent = {};
                 std::memcpy(lEvent.maData, &lrAction.mePaybackType, sizeof(lrAction.mePaybackType));
@@ -1711,7 +1711,7 @@ namespace
             // The upstream action producer and its declared payload size remain unlocated.
             case 222:
             {
-                static_assert(sizeof(BrnGui::GuiEventCarEliminatedFromEvent) == 1,
+                CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventCarEliminatedFromEvent) == 1),
                               "ARTIST GUI 151 tag is one byte");
                 BrnGui::GuiEventCarEliminatedFromEvent lEvent;
                 PushGuiEvent(lEvent, lpGuiInput);
@@ -1719,7 +1719,7 @@ namespace
             }
             case 223:
             {
-                static_assert(sizeof(bool) == 1,
+                CGS_STATIC_ASSERT((sizeof(bool) == 1),
                               "ARTIST GUI 150 camera flag is one byte");
                 const u8* lpActionBytes = reinterpret_cast<const u8*>(lpAction);
                 BrnGui::GuiEventCarJoinedEvent lEvent;
@@ -2349,7 +2349,7 @@ namespace
                     u8 mau8Payload[1404];
                     s32 GetEventType() const { return 556; }
                 };
-                static_assert(sizeof(EventStateResponseWire556) == 1404,
+                CGS_STATIC_ASSERT((sizeof(EventStateResponseWire556) == 1404),
                               "X360 AddGuiEvent<GuiEventEventStateResponse> posts 1404 bytes (id 556)");
                 EventStateResponseWire556 lEvent;
                 std::memcpy(lEvent.mau8Payload, lpAction, sizeof(lEvent.mau8Payload));
@@ -2386,9 +2386,9 @@ namespace
             // bytes are not a queue header here); the console then writes only damage at +0x38.
             case BrnGameState::GameStateModuleIO::E_ACTION_PLAYER_INFO_RESPONSE:
             {
-                using PlayerInfoAction = BrnGameState::GameStateModuleIO::PlayerInfoResponseAction;
-                static_assert(sizeof(PlayerInfoAction) == 64, "X360 action 182 payload size");
-                static_assert(sizeof(BrnGui::GuiPlayerInfoResponse) == 64,
+                typedef BrnGameState::GameStateModuleIO::PlayerInfoResponseAction PlayerInfoAction;
+                CGS_STATIC_ASSERT((sizeof(PlayerInfoAction) == 64), "X360 action 182 payload size");
+                CGS_STATIC_ASSERT((sizeof(BrnGui::GuiPlayerInfoResponse) == 64),
                               "X360 GUI 406 payload size");
                 const auto& lrAction = *reinterpret_cast<const PlayerInfoAction*>(lpAction);
                 BrnGui::GuiPlayerInfoResponse lEvent;
@@ -2665,7 +2665,7 @@ namespace
             {
                 const BrnGameState::GameStateModuleIO::FreeburnChallengeUpdateAction* lpUpdateAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::FreeburnChallengeUpdateAction*>(lpAction);
-                static_assert(sizeof(BrnGui::GuiChallengeUpdateEvent) == 144, "GUI 577 size 144");
+                CGS_STATIC_ASSERT((sizeof(BrnGui::GuiChallengeUpdateEvent) == 144), "GUI 577 size 144");
 
                 BrnGui::GuiChallengeUpdateEvent lUpdateEvent = {};
                 lUpdateEvent.miCurrentAction = lpUpdateAction->miCurrentActionIndex;
@@ -2760,7 +2760,7 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_DEVELOPER_CHALLENGES_COMPLETED:
             {
                 CGS_ASSERT(lpAction != 0, "lpDevCompAction");
-                static_assert(sizeof(BrnGui::GuiDeveloperChallengesCompleted) == 8,
+                CGS_STATIC_ASSERT((sizeof(BrnGui::GuiDeveloperChallengesCompleted) == 8),
                               "ARTIST action 298 forwards one FastBitArray<15> word as GUI 596");
                 BrnGui::GuiDeveloperChallengesCompleted lEvent;
                 std::memcpy(&lEvent.mCompletedDeveloperChallenges, lpAction,
@@ -2791,7 +2791,7 @@ namespace
                 const auto* lpResponse = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::DldScoreboardResponse*>(lpAction);
                 BrnGui::GuiEventScoreboardDownloadedChallengeable lEvent;
-                static_assert(sizeof(lEvent) == sizeof(*lpResponse),
+                CGS_STATIC_ASSERT((sizeof(lEvent) == sizeof(*lpResponse)),
                               "ARTIST case 241 copies the same 16-byte record to GUI event 123");
                 std::memcpy(&lEvent, lpResponse, sizeof(lEvent));
                 PushGuiEvent(lEvent, lpGuiInput);

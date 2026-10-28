@@ -110,11 +110,11 @@ void cParticleBucket::GetpMatrix(u32 auIndex, cMatrix* apMatrix, const cTime& ar
 {
     const cParticleEmitter* lpEmitter = mpEmitter;
 
-    if (mpMatrices != nullptr)
+    if (mpMatrices != 0)
     {
         *apMatrix = mpMatrices[auIndex];
     }
-    else if (mpVectors != nullptr)
+    else if (mpVectors != 0)
     {
         const cVector& lrPosition = mpVectors[auIndex];
         apMatrix->BuildIdentity();

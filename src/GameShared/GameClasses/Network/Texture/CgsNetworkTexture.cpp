@@ -33,12 +33,12 @@ namespace CgsNetwork
     // (PIXELFORMAT_A8R8G8B8). The X360 also clears the two trailing bool flags.
     void NetworkTexture::Construct()
     {
-        mpHeapMalloc               = nullptr;   // +0x00
+        mpHeapMalloc               = 0;   // +0x00
         miBitsPerPixel             = 0;         // +0x04
         miWidth                    = 0;         // +0x08
         miHeight                   = 0;         // +0x0C
         mFormat                    = renderengine::PIXELFORMAT_A8R8G8B8;   // +0x10  (0x18280086)
-        mpcTexture                 = nullptr;   // +0x14
+        mpcTexture                 = 0;   // +0x14
         mbTextureAllocatedFromHeap = false;     // +0x18
         mbIsUncompressedYUV        = false;     // +0x19
     }
@@ -49,12 +49,12 @@ namespace CgsNetwork
     // leaves +0x18 alone (Release() is expected to have already freed + cleared it).
     void NetworkTexture::Destruct()
     {
-        mpHeapMalloc        = nullptr;   // +0x00
+        mpHeapMalloc        = 0;   // +0x00
         miBitsPerPixel      = 0;         // +0x04
         miWidth             = 0;         // +0x08
         miHeight            = 0;         // +0x0C
         mFormat             = renderengine::PIXELFORMAT_A8R8G8B8;   // +0x10
-        mpcTexture          = nullptr;   // +0x14
+        mpcTexture          = 0;   // +0x14
         mbIsUncompressedYUV = false;     // +0x19
     }
 
@@ -147,7 +147,7 @@ namespace CgsNetwork
         miBitsPerPixel = GetBitsPerPixel(lFormat);
 
         mpcTexture                 = lacTextureBuffer;
-        mpHeapMalloc               = nullptr;
+        mpHeapMalloc               = 0;
         mbTextureAllocatedFromHeap = false;
         mbIsUncompressedYUV        = false;
 
@@ -166,14 +166,14 @@ namespace CgsNetwork
         {
             CGS_ASSERT(mpcTexture, "mpcTexture");
             mpHeapMalloc->Free(mpcTexture);
-            mpcTexture                 = nullptr;
+            mpcTexture                 = 0;
             mbTextureAllocatedFromHeap = false;
         }
 
         miBitsPerPixel      = 0;
         miWidth             = 0;
         miHeight            = 0;
-        mpHeapMalloc        = nullptr;
+        mpHeapMalloc        = 0;
         mbIsUncompressedYUV = false;
         mFormat             = renderengine::PIXELFORMAT_A8R8G8B8;   // 0x18280086
         return true;

@@ -70,7 +70,7 @@ s32 CReferenceLibrary::RemoveFrame(PictureCYUV420** lppFrame, s32 liIndex)
         return mpQueue->RemoveElement(reinterpret_cast<void**>(lppFrame), liIndex);
     }
 
-    *lppFrame = nullptr;
+    *lppFrame = 0;
     return 0;
 }
 
@@ -83,13 +83,13 @@ s32 CReferenceLibrary::RemoveFrame(PictureCYUV420** lppFrame, s32 liIndex)
 // ---------------------------------------------------------------------------
 s32 CReferenceLibrary::CloseReferenceLibrary()
 {
-    if (mpQueue != nullptr)
+    if (mpQueue != 0)
     {
         if (mpQueue->GetCount() > 0)
         {
-            void* lpElement = nullptr;
+            void* lpElement = 0;
             mpQueue->RemoveElement(&lpElement, 0);
-            while (lpElement != nullptr)
+            while (lpElement != 0)
             {
                 PictureCYUV420* lpFrame = static_cast<PictureCYUV420*>(lpElement);
                 PictureCYUV420_Clean(lpFrame);
@@ -102,11 +102,11 @@ s32 CReferenceLibrary::CloseReferenceLibrary()
             }
         }
 
-        if (mpQueue != nullptr)
+        if (mpQueue != 0)
         {
             mpQueue->DestroyQueue();
             XMemFree(mpQueue, KU_REFERENCELIBRARY_XMEM_ATTRIBUTES);
-            mpQueue = nullptr;
+            mpQueue = 0;
         }
     }
 
@@ -132,8 +132,8 @@ s32 CReferenceLibrary::SetupReferenceLibrary(s32* lpiResult, s32 liParam2, s32 l
     // Allocate + construct the frame queue. The queue ctor writes its own status through the
     // shared out-param (lpiResult).
     void* lpQueueMem = XMemAlloc(sizeof(CQueue), KU_REFERENCELIBRARY_XMEM_ATTRIBUTES);
-    mpQueue = lpQueueMem ? new (lpQueueMem) CQueue(lpiResult, liNumFrames) : nullptr;
-    if (mpQueue == nullptr)
+    mpQueue = lpQueueMem ? new (lpQueueMem) CQueue(lpiResult, liNumFrames) : 0;
+    if (mpQueue == 0)
     {
         *lpiResult = -3;
         return 0;
@@ -146,7 +146,7 @@ s32 CReferenceLibrary::SetupReferenceLibrary(s32* lpiResult, s32 liParam2, s32 l
     for (s32 liFrame = 0; liFrame < liNumFrames; ++liFrame)
     {
         void* lpFrameMem = XMemAlloc(sizeof(PictureCYUV420), KU_REFERENCELIBRARY_XMEM_ATTRIBUTES);
-        if (lpFrameMem == nullptr)
+        if (lpFrameMem == 0)
         {
             *lpiResult = -3;
             return CloseReferenceLibrary();

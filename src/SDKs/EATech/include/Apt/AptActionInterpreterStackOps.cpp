@@ -48,7 +48,7 @@
 #include "SDKs/EATech/include/Apt/AptGlobal.h"             // gpAptGlobalFallback (String-prototype lookup)
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"  // the boxed name unbox (CallMethod)
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>   // memcpy (PushFloat bit reinterpret)
 #include <cmath>     // fmodf (Array integer-length detection)
 #include <string.h>  // _stricmp (the AS class-name compare)
@@ -81,7 +81,7 @@ void AptActionInterpreter::_FunctionAptActionPop(AptActionInterpreter* pInterp, 
     // GC deferred-release vector is drained, mnTop-guarded like the console
     // (off_8324E51C -> lwz r11,4(r3) -- the same drain the Branch* handlers emit).
     // family-(B): the live count is the mnCapacity member (see AptValueVector.h).
-    if (nHadDepth == 1 && gpValuesToRelease != nullptr && gpValuesToRelease->mnCapacity != 0)
+    if (nHadDepth == 1 && gpValuesToRelease != 0 && gpValuesToRelease->mnCapacity != 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -587,7 +587,7 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
 
     EAStringC scratch;                                      // console v19 (&unk_82F72FF8 seed)
     const int nArgs = pCountValue->toInteger();
-    AptValue* pResolvedScope = nullptr;                     // console v10
+    AptValue* pResolvedScope = 0;                     // console v10
 
     // A FrameStack-typed name (tag 14) that owns at least one local resolves to its
     // first slot's value (the captured function); else `undefined`.
@@ -617,7 +617,7 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
     pInterp->stackPop(2);                                  // pop the name + count operands (member)
 
     AptValue* const pCallScope = pResolvedScope ? pResolvedScope : pContext->mpCIH;
-    pInterp->callFunction(pCallScope, pFunction, nArgs, nullptr, nullptr);
+    pInterp->callFunction(pCallScope, pFunction, nArgs, 0, 0);
 
     pFunction->Release();                                   // console (*(*Variable+4))(Variable)
 }
@@ -694,11 +694,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     AptValue*       pMethodName = pInterp->mpStack[pInterp->mnStackTop - 2];   // v7 (r27)
 
     int       nArgs       = pCountValue->toInteger();   // v8/v9/v25
-    EAStringC** pNameSlot  = nullptr;                    // v10 (r23): method-name slot
+    EAStringC** pNameSlot  = 0;                    // v10 (r23): method-name slot
     bool      bPushedFrame = false;                      // v11 (r15)
-    AptValue* pMethod      = nullptr;                    // v12 (r26): resolved method value
-    AptValue* pSavedFrame  = nullptr;                    // v13 (r22)
-    AptValue* pThisBinding = nullptr;                    // v14 (r19)
+    AptValue* pMethod      = 0;                    // v12 (r26): resolved method value
+    AptValue* pSavedFrame  = 0;                    // v13 (r22)
+    AptValue* pThisBinding = 0;                    // v14 (r19)
 
     EAStringC scratch;                                   // v69[0] seed (&unk_82F72FF8)
 
@@ -724,7 +724,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
                 pSavedFrame = reinterpret_cast<AptValue*>(pInterp->mpCallStackE[nReg - 1]);  // v13
                 // keep it only when it is a defined string-object (tag 19 == AptVFT_Object)
                 if (!(pSavedFrame->getVtblIndex() == AptVFT_Object && pSavedFrame->getIsDefined()))
-                    pSavedFrame = nullptr;
+                    pSavedFrame = 0;
             }
         }
         else
@@ -787,7 +787,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             }
             else
             {
-                pMethod = pInterp->getVariable(pMethodName /*the receiver*/, nullptr,
+                pMethod = pInterp->getVariable(pMethodName /*the receiver*/, 0,
                                                reinterpret_cast<const EAStringC*>(pNameSlot), 1, 1, 0);
             }
         }
@@ -795,7 +795,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         {
             // A non-string name value: render it to text and resolve on the receiver.
             pObject->toString(&scratch);                       // console AptValue::toString(v6, v69)
-            pMethod = pInterp->getVariable(pMethodName /*the receiver*/, nullptr, &scratch, 1, 1, 0);
+            pMethod = pInterp->getVariable(pMethodName /*the receiver*/, 0, &scratch, 1, 1, 0);
             pNameSlot = reinterpret_cast<EAStringC**>(&scratch);   // console v10 = v69
         }
     }
@@ -938,7 +938,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             // the recon formerly compared the WRONG context field, mpCharacterInst).
             // re-resolve the bound function under the "this" key.
             pBoundThis = pInterp->getVariable(reinterpret_cast<AptValue*>(pContext->mpCIH),
-                                              nullptr, &gAptThisKey, 1, 1, 0);   // console &dword_8324E6C0
+                                              0, &gAptThisKey, 1, 1, 0);   // console &dword_8324E6C0
         }
 
         if (bBindThis)
@@ -963,11 +963,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         && !AptActionInterpreter::HasMember(pMethodName, pNameSlot))   // console !sub_82AE4058(v7, v10)
     {
         AptValue* pWalk = pMethodName;
-        AptValue* pOwner = nullptr;                               // console v50
+        AptValue* pOwner = 0;                               // console v50
         while (pWalk)
         {
             AptNativeHash* const pHash = pWalk->GetNativeHashVirtual();   // console (*(v49+8))(v50)
-            AptValue* const pProto = pHash ? pHash->Get__Proto__() : nullptr;   // console *(v51+8)
+            AptValue* const pProto = pHash ? pHash->Get__Proto__() : 0;   // console *(v51+8)
             if (!pProto) break;
             if (AptActionInterpreter::HasMember(pProto, pNameSlot)) { pOwner = pProto; break; }   // console sub_82AE4058
             pWalk = pProto;
@@ -975,7 +975,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         if (pOwner)
         {
             AptNativeHash* const pHash = pOwner->GetNativeHashVirtual();   // console (*(*v50+8))(v50)
-            pThisBinding = pHash ? pHash->Get__Proto__() : nullptr;       // console v14 = *(v53+8)
+            pThisBinding = pHash ? pHash->Get__Proto__() : 0;       // console v14 = *(v53+8)
         }
     }
 
@@ -1021,18 +1021,18 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
                 AptScriptFunctionBase* const pFn = static_cast<AptScriptFunctionBase*>(pMethod);
                 AptValue* const pSavedCIH = pFn->GetCIH();
                 pFn->SetCIH(reinterpret_cast<AptValue*>(pContext->mpCIH));
-                pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
+                pInterp->callFunction(pMethodName, pMethod, nArgs, 0, pThisBinding);
                 pFn->SetCIH(pSavedCIH);
             }
             else
             {
-                pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
+                pInterp->callFunction(pMethodName, pMethod, nArgs, 0, pThisBinding);
             }
         }
         else
         {
             // a movie-clip target: pass it as the construct/`this` target (v58 = 0).
-            pInterp->callFunction(pMethodName, pMethod, nArgs, nullptr, pThisBinding);
+            pInterp->callFunction(pMethodName, pMethod, nArgs, 0, pThisBinding);
         }
     }
     else
@@ -1141,7 +1141,7 @@ void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pIn
         EAStringC scratch;                                 // console v14 (&unk_82F72FF8 seed)
         const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
 
-        AptValue* pResolved = nullptr;                     // console v15
+        AptValue* pResolved = 0;                     // console v15
         AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pName, &pResolved, &scratch);
         // console: AptNativeHash::Lookup(resolved's frame-label hash, &scratch) -> toInteger
@@ -1230,7 +1230,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
 
     // Pick the target node (console v4): the current-target slot (a2[2]=v5) first,
     // else the run scope (a2[1]=mpCIH), each only when it is a clip / CIHNone.
-    AptCIH* pNode = nullptr;                               // console v4
+    AptCIH* pNode = 0;                               // console v4
     AptValue* const pTarget = pContext->mpPendingReleaseValue;   // console v5 = a2[2]
     if (pTarget)
     {
@@ -1256,7 +1256,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
         EAStringC scratch;                                 // console v30 (&unk_82F72FF8 seed)
         const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
 
-        AptValue* pResolved = nullptr;                     // console v31
+        AptValue* pResolved = 0;                     // console v31
         AptResolveTargetContext(pContext->mpCIH, pTarget, pName,
                                        &pResolved, &scratch);
         if (pResolved)

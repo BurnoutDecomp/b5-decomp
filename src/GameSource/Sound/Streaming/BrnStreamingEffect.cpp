@@ -99,7 +99,7 @@ StreamingEffect::StreamingEffect()
 // ---------------------------------------------------------------------------
 const StreamRequest& StreamingEffect::GetRequest() const
 {
-    CGS_ASSERT( mpState != nullptr, "lpState" );
+    CGS_ASSERT( mpState != 0, "lpState" );
     const StreamingState* lpState = static_cast<const StreamingState*>(mpState);
     CGS_ASSERT( lpState->IsAttached(), "IsAttached()" );
     return lpState->GetRequest();

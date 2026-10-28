@@ -26,7 +26,7 @@ namespace BrnGameState
 
     void ModeManagerDebugComponent::Construct(ModeManager* lpModeManager)
     {
-        CGS_ASSERT(lpModeManager != nullptr, "lpModeManager");
+        CGS_ASSERT(lpModeManager != 0, "lpModeManager");
         mpModeManager = lpModeManager;
         mbShowModeInfo = false;
         mbInfiniteLives = false;
@@ -67,7 +67,7 @@ namespace BrnGameState
             CgsDev::SimpleStrStream lStream;
             const GameMode* lpCurrentMode = mpModeManager->mpCurrentGameMode;
 
-            if (lpCurrentMode != nullptr)
+            if (lpCurrentMode != 0)
             {
                 lStream << lpCurrentMode->GetName() << " state: " << lpCurrentMode->GetCurrentState() << "\n";
                 MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 100.0f,
@@ -133,7 +133,7 @@ namespace BrnGameState
                 {
                     const CarData* lpCarData = mpModeManager->mScoringSystem.GetCarData(
                         static_cast<EActiveRaceCarIndex>(luCar));
-                    if (lpCarData != nullptr)
+                    if (lpCarData != 0)
                     {
                         lStream << lpCarData->GetScoreData()->GetOnlineStuntScore() << " ";
                     }

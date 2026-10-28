@@ -113,32 +113,32 @@ private:
 // This is the block the whole fix round exists for: agent 5 dispatches Start through vtbl+20 and
 // agent 6 polls ShouldFinish through vtbl+56, and before the 26-slot rewrite the committed header
 // put Start at index 9 and had no slot 14 at all.
-static_assert(sizeof(static_cast<const char* (StuntAttackMode::*)() const>(&StuntAttackMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (StuntAttackMode::*)() const>(&StuntAttackMode::GetName)) != 0),
               "StuntAttackMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (StuntAttackMode::*)() const>(&StuntAttackMode::GetIntroDurationSeconds)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (StuntAttackMode::*)() const>(&StuntAttackMode::GetIntroDurationSeconds)) != 0),
               "StuntAttackMode::GetIntroDurationSeconds must bind GameMode vtable slot 8");
-static_assert(sizeof(static_cast<f32 (StuntAttackMode::*)() const>(&StuntAttackMode::GetOutroTimeout)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (StuntAttackMode::*)() const>(&StuntAttackMode::GetOutroTimeout)) != 0),
               "StuntAttackMode::GetOutroTimeout must bind GameMode vtable slot 16");
-static_assert(sizeof(static_cast<bool (StuntAttackMode::*)() const>(&StuntAttackMode::ShouldCountdownEnd)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (StuntAttackMode::*)() const>(&StuntAttackMode::ShouldCountdownEnd)) != 0),
               "StuntAttackMode::ShouldCountdownEnd must bind GameMode vtable slot 11");
-static_assert(sizeof(static_cast<bool (StuntAttackMode::*)(const ScoringSystem*) const>(&StuntAttackMode::ShouldExit)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (StuntAttackMode::*)(const ScoringSystem*) const>(&StuntAttackMode::ShouldExit)) != 0),
               "StuntAttackMode::ShouldExit must bind GameMode vtable slot 13");
-static_assert(sizeof(static_cast<bool (StuntAttackMode::*)() const>(&StuntAttackMode::RequiresStreaming)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (StuntAttackMode::*)() const>(&StuntAttackMode::RequiresStreaming)) != 0),
               "StuntAttackMode::RequiresStreaming must bind GameMode vtable slot 23");
 // Slot 2 / 5 / 14 -- now asserted against the DERIVED declarations above (they were asserted
 // through the inherited base ones while the three were on the frontier). If a future edit drifts
 // any parameter list, the cast stops compiling here instead of silently minting a new slot.
-static_assert(sizeof(static_cast<void (StuntAttackMode::*)(GameStateModuleIO::OutputBuffer*,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (StuntAttackMode::*)(GameStateModuleIO::OutputBuffer*,
                                                            const GameStateModuleIO::PreWorldInputBuffer*,
                                                            const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*,
                                                            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*,
                                                            bool,
-                                                           const ScoringSystem*)>(&StuntAttackMode::PreWorldUpdate)) != 0,
+                                                           const ScoringSystem*)>(&StuntAttackMode::PreWorldUpdate)) != 0),
               "StuntAttackMode::PreWorldUpdate must bind GameMode vtable slot 2 (X360 0x82344EE0)");
-static_assert(sizeof(static_cast<void (StuntAttackMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&StuntAttackMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (StuntAttackMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&StuntAttackMode::Start)) != 0),
               "StuntAttackMode::Start must bind GameMode vtable slot 5 (X360 0x82331E98)");
-static_assert(sizeof(static_cast<bool (StuntAttackMode::*)(ScoringSystem*)>(&StuntAttackMode::ShouldFinish)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (StuntAttackMode::*)(ScoringSystem*)>(&StuntAttackMode::ShouldFinish)) != 0),
               "StuntAttackMode::ShouldFinish must bind GameMode vtable slot 14 (X360 0x823162B8)");
-static_assert(sizeof(static_cast<bool (StuntAttackMode::*)() const>(&StuntAttackMode::HasLoadingScreen)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (StuntAttackMode::*)() const>(&StuntAttackMode::HasLoadingScreen)) != 0),
               "StuntAttackMode::HasLoadingScreen must bind GameMode vtable slot 24 (inherited FALSE)");
 }

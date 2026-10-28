@@ -15,20 +15,20 @@
 namespace CgsGraphics
 {
     MovieVideoRenderer::TextureInfoType::TextureInfoType()
-        : mpTexture(nullptr), mpTextureState(nullptr), mpPixelData(nullptr) {}
+        : mpTexture(0), mpTextureState(0), mpPixelData(0) {}
 
     MovieVideoRenderer::MovieVideoRenderer()
-        : mpParentMoviePlayer(nullptr), mpAllocator(nullptr), mpReleaseFunc(nullptr),
-          mpReleaseFuncContext(nullptr), muWidth(0), muHeight(0), muTextureIndex(0),
-          mJob(nullptr), miMoviePlayerPM1(-1), miMoviePlayerPM2(-1) {}
+        : mpParentMoviePlayer(0), mpAllocator(0), mpReleaseFunc(0),
+          mpReleaseFuncContext(0), muWidth(0), muHeight(0), muTextureIndex(0),
+          mJob(0), miMoviePlayerPM1(-1), miMoviePlayerPM2(-1) {}
 
     MovieVideoRenderer::~MovieVideoRenderer()
     {
         for (TextureInfoType& lrTexture : maTextureInfoTypes)
         {
-            if (lrTexture.mpTexture != nullptr)
+            if (lrTexture.mpTexture != 0)
                 renderengine::Texture::Destroy(lrTexture.mpTexture);
-            CGS_ASSERT(lrTexture.mpTexture == nullptr || lrTexture.mpTextureState != nullptr,
+            CGS_ASSERT(lrTexture.mpTexture == 0 || lrTexture.mpTextureState != 0,
                        "maTextureInfoTypes[i].mpTextureState");
         }
     }
@@ -45,7 +45,7 @@ namespace CgsGraphics
 
     MovieVideoRenderer* MovieVideoRenderer::Initialize(rw::Resource& lrResource)
     {
-        CGS_ASSERT(lrResource.m_baseResources[0] != nullptr, "lResource.GetMemoryResource()");
+        CGS_ASSERT(lrResource.m_baseResources[0] != 0, "lResource.GetMemoryResource()");
         return new (lrResource.m_baseResources[0]) MovieVideoRenderer();
     }
 

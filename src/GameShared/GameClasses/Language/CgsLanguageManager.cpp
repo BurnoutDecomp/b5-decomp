@@ -59,9 +59,9 @@ namespace CgsLanguage
     {
         mePrepareStage      = E_PREPARESTAGE_START;   // 0 -- stw r29 @0x60EC
         meReleaseStage      = E_RELEASESTAGE_DONE;    // 2 -- stw r11=2 @0x60F0
-        mpResource          = nullptr;                //      stw r29 @0x60E8
-        mpStringElements    = nullptr;                //      stw r29 @0x60E0
-        mpLanguageAllocator = nullptr;                //      stw r29 @0x60E4
+        mpResource          = 0;                //      stw r29 @0x60E8
+        mpStringElements    = 0;                //      stw r29 @0x60E0
+        mpLanguageAllocator = 0;                //      stw r29 @0x60E4
 
         // Re-seed both dynamic-string pools (free sublist owns all 1024 nodes, live empty) -- the
         // X360's two back-to-back InternalInit pairs, identical to the ctor's seeding.
@@ -70,7 +70,7 @@ namespace CgsLanguage
 
         mStrings.Init();                              // __13_::Init(this+8) -- (re-)init the empty hash
 
-        mpcDefaultFontName   = nullptr;               // stw r29 @0x04
+        mpcDefaultFontName   = 0;               // stw r29 @0x04
         mbIsUsingMetricUnits = true;                  // stb r11=1 @0x60F4
 
         mDebugComponent.Construct(this);              // LanguageManagerDebugComponent::Construct(&mDebugComponent, this)

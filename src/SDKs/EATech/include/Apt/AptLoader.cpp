@@ -100,7 +100,7 @@ static int FileNameCompare(const char* a1, const char* a2)
 AptFilePtr AptLoader::findFile(const EAStringC& fileName)
 {
     AptFilePtr result;
-    result.pData = nullptr;
+    result.pData = 0;
 
     MutexAptLoader.Lock();
 
@@ -134,7 +134,7 @@ AptFilePtr AptLoader::findFile(const EAStringC& fileName)
 AptFilePtr AptLoader::IsLoaded(const EAStringC& fileName)
 {
     AptFilePtr result;
-    result.pData = nullptr;
+    result.pData = 0;
 
     MutexAptLoader.Lock();
     AptFilePtr found = findFile(fileName);
@@ -153,7 +153,7 @@ AptFilePtr AptLoader::IsLoaded(const EAStringC& fileName)
 
     // Release the local `found` reference taken by findFile.
     AptFile* tmp = found.pData;
-    found.pData = nullptr;
+    found.pData = 0;
     if (tmp && AptSharedPtrDecRef(tmp) == 0)
         AptSharedPtrDelete(tmp);
     return result;
@@ -166,7 +166,7 @@ AptFilePtr AptLoader::IsLoaded(const EAStringC& fileName)
 AptFilePtr AptLoader::Load(const EAStringC& fileName)
 {
     AptFilePtr result;
-    result.pData = nullptr;
+    result.pData = 0;
 
     MutexAptLoader.Lock();
     AptFilePtr found = findFile(fileName);
@@ -184,11 +184,11 @@ AptFilePtr AptLoader::Load(const EAStringC& fileName)
         AptFile* f = static_cast<AptFile*>(gpNonGCPoolManager->Allocate(sizeof(AptFile)));
         f->mnRefCount = 0;
         new (&f->mFileName) EAStringC(fileName);   // copy ctor: share buffer + IncreaseInternalRefCount
-        f->mpResolveContext = nullptr;
+        f->mpResolveContext = 0;
         f->mnField12        = 1;
         f->mnState          = 1;                    // requested
-        f->mpData           = nullptr;
-        f->mpDataBlock      = nullptr;
+        f->mpData           = 0;
+        f->mpDataBlock      = 0;
         AptSharedPtrIncRef(f);                       // refcount 0 -> 1
 
         // Push a weak node onto the list head.
@@ -208,7 +208,7 @@ AptFilePtr AptLoader::Load(const EAStringC& fileName)
     }
 
     AptFile* tmp = found.pData;
-    found.pData = nullptr;
+    found.pData = 0;
     if (tmp && AptSharedPtrDecRef(tmp) == 0)
         AptSharedPtrDelete(tmp);
     return result;
@@ -287,7 +287,7 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
         // The by-value handle is owned by the callee; release it on this exit too
         // (asm early-exit @0x82AFFA10: *a2=0 + DecRef + delete-if-zero).
         AptSharedPtr<AptFile>::Dispose(filePtr.pData);
-        filePtr.pData = nullptr;
+        filePtr.pData = 0;
         return;
     }
 
@@ -318,7 +318,7 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     if (pConstFile->mnDataRootOffset != 0)
         pConstFile->mnDataRootOffset -= reinterpret_cast<uintptr_t>(pBase);
     AptSharedPtr<AptFile>::Dispose(filePtr.pData);
-    filePtr.pData = nullptr;
+    filePtr.pData = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +349,7 @@ void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, AptConstFil
 
     // Drop the pin (asm's trailing lwarx/stwcx. DecRef + delete-if-zero), and null the handle.
     AptFile* pConsumed = pHandle->pData;
-    pHandle->pData = nullptr;
+    pHandle->pData = 0;
     if (pConsumed && AptSharedPtrDecRef(pConsumed) == 0)
         AptSharedPtrDelete(pConsumed);
 }
@@ -371,7 +371,7 @@ bool AptLoader::AllImportsAvailable(AptFilePtr file)
             // dtor DecreaseInternalRefCount = the asm's per-iteration bracket).
             EAStringC importName(pMovie->mpImportTable[iImport].mpImportFileName);
             AptFilePtr loaded = IsLoaded(importName);
-            const bool bLoaded = (loaded.pData != nullptr);
+            const bool bLoaded = (loaded.pData != 0);
             AptSharedPtr<AptFile>::Dispose(loaded.pData);   // drop IsLoaded's returned ref
 
             if (!bLoaded)
@@ -385,7 +385,7 @@ bool AptLoader::AllImportsAvailable(AptFilePtr file)
     // Consume the passed handle (by-value AptFilePtr param teardown; AptFilePtr has
     // no RAII dtor, so the release is explicit -- matching the asm).
     AptSharedPtr<AptFile>::Dispose(file.pData);
-    file.pData = nullptr;
+    file.pData = 0;
     return bAllAvailable;
 }
 
@@ -423,7 +423,7 @@ void AptLoader::notify(AptFilePtr* pFile)
 
     // Release the passed-in handle (consume it).
     AptFile* pConsumed = pFile->pData;
-    pFile->pData = nullptr;
+    pFile->pData = 0;
     if (pConsumed && AptSharedPtrDecRef(pConsumed) == 0)
         AptSharedPtrDelete(pConsumed);
 }
@@ -618,17 +618,17 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
 // ---------------------------------------------------------------------------
 void AptLoader::InvalidateLoadedData(const void* pDataBlock)
 {
-    if (pDataBlock == nullptr)
+    if (pDataBlock == 0)
         return;
 
     MutexAptLoader.Lock();
 
-    AptLoaderNode* pPrev = nullptr;
+    AptLoaderNode* pPrev = 0;
     AptLoaderNode* pNode = mpHead;
-    while (pNode != nullptr)
+    while (pNode != 0)
     {
         AptFile* const pFile = pNode->mpFile;
-        if (pFile == nullptr || pFile->mpDataBlock != pDataBlock)
+        if (pFile == 0 || pFile->mpDataBlock != pDataBlock)
         {
             pPrev = pNode;
             pNode = pNode->mpNext;
@@ -641,9 +641,9 @@ void AptLoader::InvalidateLoadedData(const void* pDataBlock)
         // Unresolve a freed blob if its last reference ever does drop.
         pFile->mnField12        = pFile->mnState;
         pFile->mnState          = 0;         // orphaned: neither requested nor loaded
-        pFile->mpData           = nullptr;
-        pFile->mpDataBlock      = nullptr;
-        pFile->mpResolveContext = nullptr;
+        pFile->mpData           = 0;
+        pFile->mpDataBlock      = 0;
+        pFile->mpResolveContext = 0;
 
         // ⭐ UNLINK the weak node -- do NOT leave the file "requested" in the list.
         // Leaving it there makes the very next AptLoader::Update re-kick a load for a
@@ -656,7 +656,7 @@ void AptLoader::InvalidateLoadedData(const void* pDataBlock)
         // open half of this bug and is NOT fixed here.
         AptLoaderNode* const pDead = pNode;
         pNode = pNode->mpNext;
-        if (pPrev == nullptr)
+        if (pPrev == 0)
             mpHead = pNode;
         else
             pPrev->mpNext = pNode;

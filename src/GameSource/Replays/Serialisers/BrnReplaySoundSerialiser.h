@@ -32,7 +32,7 @@ namespace BrnReplays
 {
     // Opaque 16-byte position vector, passed by value into AddScrape (X360 receives it in a
     // vector register). Held as a raw byte block; no lane layout is asserted.
-    struct alignas(16) SoundVec128
+    struct CGS_ALIGN(16) SoundVec128
     {
         u8 mau8[16];
     };

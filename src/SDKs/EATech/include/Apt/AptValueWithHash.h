@@ -53,7 +53,7 @@ public:
     // deleting dtor here: the inherited `virtual ~AptValue` + the member `~AptNativeHash`
     // (which is itself `if (mpTable) DestroyGCPointers()`). Defaulted -- the member dtor
     // supplies the body; declared so the override + its X360 address are documented.
-    virtual ~AptValueWithHash() = default;
+    virtual ~AptValueWithHash() {}
 
     // ---- property access (non-virtual; delegate to the hash) --------------
     void      Set(const EAStringC& key, AptValue* pValue) { mHash.Set(key, pValue); } // @0x8042A0

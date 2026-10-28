@@ -36,10 +36,10 @@ const f32 KF_PCM16_FULL_SCALE = 32767.0f;
 // -------------------------------------------------------------------------------------
 Pcm16BigEnc *Pcm16BigEnc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSystem)
 {
-    void *lpMem = System::Alloc(pSystem, static_cast<u32>(sizeof(Pcm16BigEnc)), nullptr, 16,
-                                nullptr);
+    void *lpMem = System::Alloc(pSystem, static_cast<u32>(sizeof(Pcm16BigEnc)), 0, 16,
+                                0);
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     Pcm16BigEnc *lpEnc = ::new (lpMem) Pcm16BigEnc; // the v-table store, nothing else
     lpEnc->mfField08 = KF_ZERO;

@@ -489,18 +489,18 @@ namespace BrnGui
         static void _AssertLayout()
         {
             // run A: the icon-count trio (X360 +0x990..+0x998)
-            static_assert(offsetof(MapIconManager, miMaxNumberIcons)     - offsetof(MapIconManager, miNumUsedIcons) == 4, "run A order");
-            static_assert(offsetof(MapIconManager, mi8CurrentEventIndex) - offsetof(MapIconManager, miNumUsedIcons) == 8, "run A order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, miMaxNumberIcons)     - offsetof(MapIconManager, miNumUsedIcons) == 4), "run A order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mi8CurrentEventIndex) - offsetof(MapIconManager, miNumUsedIcons) == 8), "run A order");
             // run B: the selection/flag tail (X360 +0xAA08..+0xAA21)
-            static_assert(offsetof(MapIconManager, mSelectedLightTriggerID) - offsetof(MapIconManager, meIconFilterMode) == 0x04, "run B order");
-            static_assert(offsetof(MapIconManager, muSelectedJunctionID)    - offsetof(MapIconManager, meIconFilterMode) == 0x08, "run B order");
-            static_assert(offsetof(MapIconManager, miSelectedCheckpoint)    - offsetof(MapIconManager, meIconFilterMode) == 0x0C, "run B order");
-            static_assert(offsetof(MapIconManager, mbIsDisplayingEventInfo) - offsetof(MapIconManager, meIconFilterMode) == 0x10, "run B order");
-            static_assert(offsetof(MapIconManager, mbRotateSatNav)          - offsetof(MapIconManager, meIconFilterMode) == 0x14, "run B order");
-            static_assert(offsetof(MapIconManager, mbIconsVisible)          - offsetof(MapIconManager, meIconFilterMode) == 0x16, "run B order");
-            static_assert(offsetof(MapIconManager, mbShowingOnlineRoute)    - offsetof(MapIconManager, meIconFilterMode) == 0x17, "run B order");
-            static_assert(offsetof(MapIconManager, mbShowingPreRaceRoute)   - offsetof(MapIconManager, meIconFilterMode) == 0x18, "run B order");
-            static_assert(offsetof(MapIconManager, mbShowingCrashNavRoute)  - offsetof(MapIconManager, meIconFilterMode) == 0x19, "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mSelectedLightTriggerID) - offsetof(MapIconManager, meIconFilterMode) == 0x04), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, muSelectedJunctionID)    - offsetof(MapIconManager, meIconFilterMode) == 0x08), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, miSelectedCheckpoint)    - offsetof(MapIconManager, meIconFilterMode) == 0x0C), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mbIsDisplayingEventInfo) - offsetof(MapIconManager, meIconFilterMode) == 0x10), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mbRotateSatNav)          - offsetof(MapIconManager, meIconFilterMode) == 0x14), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mbIconsVisible)          - offsetof(MapIconManager, meIconFilterMode) == 0x16), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mbShowingOnlineRoute)    - offsetof(MapIconManager, meIconFilterMode) == 0x17), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mbShowingPreRaceRoute)   - offsetof(MapIconManager, meIconFilterMode) == 0x18), "run B order");
+            CGS_STATIC_ASSERT((offsetof(MapIconManager, mbShowingCrashNavRoute)  - offsetof(MapIconManager, meIconFilterMode) == 0x19), "run B order");
         }
     };
 }

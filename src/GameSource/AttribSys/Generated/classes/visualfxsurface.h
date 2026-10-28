@@ -45,7 +45,7 @@ namespace Gen
     class visualfxsurface : private Instance
     {
     public:
-        explicit visualfxsurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+        explicit visualfxsurface(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         // The resolved attribute-data pointer (Attrib::Instance::GetLayoutPointer, public
         // on the base but reachable only from within the private-derived class). The wheel

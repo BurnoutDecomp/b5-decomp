@@ -65,13 +65,13 @@ namespace BrnFlapt
     // Vector4 lanes (32 bytes, 16-byte aligned) in the serialised image. They
     // are distinct records in the DecFIGS declaration and feed different rows
     // of the live Im2dTransform.
-    struct alignas(16) Transform
+    struct CGS_ALIGN(16) Transform
     {
         FloatVector4 mRightUp;
         FloatVector4 mOriginXYZ;
     };
 
-    struct alignas(16) ColourTransform
+    struct CGS_ALIGN(16) ColourTransform
     {
         FloatVector4 mScale;
         FloatVector4 mTranslate;
@@ -211,9 +211,9 @@ namespace BrnFlapt
         FileDebugData mDEBUGData;
     };
 
-    static_assert(sizeof(RenderLayer) == 0x07, "FLApt RenderLayer layout");
-    static_assert(sizeof(RenderLayerKeyFrame) == 0x0C, "FLApt RenderLayerKeyFrame layout");
-    static_assert(sizeof(IndexPath) == 0x21, "FLApt IndexPath layout");
+    CGS_STATIC_ASSERT((sizeof(RenderLayer) == 0x07), "FLApt RenderLayer layout");
+    CGS_STATIC_ASSERT((sizeof(RenderLayerKeyFrame) == 0x0C), "FLApt RenderLayerKeyFrame layout");
+    CGS_STATIC_ASSERT((sizeof(IndexPath) == 0x21), "FLApt IndexPath layout");
 }
 
 #endif // BRN_FLAPT_FILE_H

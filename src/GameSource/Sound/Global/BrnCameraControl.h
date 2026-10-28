@@ -59,8 +59,8 @@ struct CameraControl : public BrnSound::Logic::BrnEffectControl
     CameraControl() : mCameraMode(), mfRaceEndEffect(0.0f), mbLockedFor100Percent(false) {}
     virtual ~CameraControl();
 
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
 
@@ -74,10 +74,10 @@ struct CameraControl : public BrnSound::Logic::BrnEffectControl
     // which is why Notify and UpdateParams do `addi r3, rN, -4` before calling the
     // private helpers (those take the MOST-DERIVED this) while every member offset in
     // those bodies is EffectBase-relative, i.e. 4 LOWER than the object offset.
-    bool Attach() override;                                              // @0x8269C518
-    void UpdateParams(f32 af32DeltaTime) override;                       // @0x826F6540
-    void ProcessUpdate() override;                                       // slot 7
-    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;  // @0x8269C550
+    bool Attach() ;                                              // @0x8269C518
+    void UpdateParams(f32 af32DeltaTime) ;                       // @0x826F6540
+    void ProcessUpdate() ;                                       // slot 7
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) ;  // @0x8269C550
 
     // ---- BrnCameraControl.cpp:395 / :443 -- STATIC: the asm's r3 is not a `this` ---
     static BrnSound::ECameraModes GetCameraMode(

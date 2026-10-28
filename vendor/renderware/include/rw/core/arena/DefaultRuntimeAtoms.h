@@ -1,7 +1,7 @@
 #ifndef RW_CORE_ARENA_DEFAULTRUNTIMEATOMS_H
 #define RW_CORE_ARENA_DEFAULTRUNTIMEATOMS_H
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "rw/core/atom/FixupAtoms.h"
 #include "rw/core/atom/UnfixRefixAtoms.h"
@@ -35,17 +35,17 @@ class DefaultRuntimeAtomFixup : public atom::FixupAtoms
 {
 public:
     // Intern lpcName in the global atom table, returning its (possibly new) id.
-    uint16_t At(const char* lpcName) override;
+    uint16_t At(const char* lpcName) ;
 };
 
 class DefaultRuntimeUnfixRefixAtoms : public atom::UnfixRefixAtoms
 {
 protected:
     // The global atom table's string for luAtomId.
-    const char* At(const void* lpBase, uint16_t luAtomId) const override;
+    const char* At(const void* lpBase, uint16_t luAtomId) const ;
 
     // The global atom table's id for lpcName (0xFFFF when it is not interned).
-    uint16_t At(const void* lpBase, const char* lpcName) const override;
+    uint16_t At(const void* lpBase, const char* lpcName) const ;
 };
 
 }  // namespace arena

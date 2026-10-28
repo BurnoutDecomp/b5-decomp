@@ -100,22 +100,22 @@ namespace Vehicle
 
     // The layout gate. Every number is an asm literal from VehicleDriver::Construct @0x825B83C8,
     // and the 224 is independently attested by VehicleManager::Construct's `addi r25, r25, 0xE0`.
-    static_assert(sizeof(VehicleDriver) == 224,
+    CGS_STATIC_ASSERT((sizeof(VehicleDriver) == 224),
                   "VehicleDriver is 224 bytes (VehicleManager::Construct `addi r25, r25, 0xE0`)");
-    static_assert(offsetof(VehicleDriver, mControls) == 0x00,   "mControls @+0");
-    static_assert(offsetof(VehicleDriver, mCatchupTargetTransform) == 0x50,
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) == 0x00),   "mControls @+0");
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mCatchupTargetTransform) == 0x50),
                   "mCatchupTargetTransform (Construct: stvx128 lanes off r3+0x50)");
-    static_assert(offsetof(VehicleDriver, mSlerpTransform) == 0x90,
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mSlerpTransform) == 0x90),
                   "mSlerpTransform (Construct: stvx128 lanes off r3+0x90)");
-    static_assert(offsetof(VehicleDriver, meDriverType) == 0xD0,
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, meDriverType) == 0xD0),
                   "meDriverType (Construct: stw r28(4), 0xD0(r3))");
-    static_assert(offsetof(VehicleDriver, mi8NumOfInterpSteps) == 0xD4,
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mi8NumOfInterpSteps) == 0xD4),
                   "mi8NumOfInterpSteps (Construct: stb r11(0), 0xD4(r3))");
-    static_assert(offsetof(VehicleDriver, mbSnappedThisFrame) == 0xD5,
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mbSnappedThisFrame) == 0xD5),
                   "mbSnappedThisFrame (Construct: stb r11(0), 0xD5(r3))");
     // The three bytes the VehicleManager takedown chain reaches at in-record 59/60/61.
-    static_assert(offsetof(VehicleDriver, mControls) + 0x3B == 59, "mControls.mbBoost is in-record 59");
-    static_assert(offsetof(VehicleDriver, mControls) + 0x3C == 60, "mControls.mbIsInvulnerableToVehicles is in-record 60");
-    static_assert(offsetof(VehicleDriver, mControls) + 0x3D == 61, "mControls.mbIsInvulnerableToWorld is in-record 61");
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) + 0x3B == 59), "mControls.mbBoost is in-record 59");
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) + 0x3C == 60), "mControls.mbIsInvulnerableToVehicles is in-record 60");
+    CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) + 0x3D == 61), "mControls.mbIsInvulnerableToWorld is in-record 61");
 }
 }

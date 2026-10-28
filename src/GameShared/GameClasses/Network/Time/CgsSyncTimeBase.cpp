@@ -69,7 +69,7 @@ namespace CgsNetwork
             }
         }
 
-        *lppMessage = nullptr;
+        *lppMessage = 0;
         return false;
     }
 
@@ -113,7 +113,7 @@ namespace CgsNetwork
     // slot for it.
     bool SyncTimeMessageManager::RegisterMessages(NetworkPlayer* lpPlayer)
     {
-        if (lpPlayer != nullptr)
+        if (lpPlayer != 0)
         {
             CGS_ASSERT(!lpPlayer->IsMessageTypeRegistered(KI_E_MESSAGE_TYPE_SYNC_TIME),
                        "!lpPlayer->IsMessageTypeRegistered( E_MESSAGE_TYPE_SYNC_TIME )");
@@ -131,9 +131,9 @@ namespace CgsNetwork
                                           sizeof(SyncTimeMessage),
                                           &mSyncMessageToSend[liPlayerIndex],
                                           &mSyncMessageToReceive[liPlayerIndex],
-                                          nullptr,
-                                          nullptr,
-                                          nullptr);
+                                          0,
+                                          0,
+                                          0);
         }
 
         return true;
@@ -143,7 +143,7 @@ namespace CgsNetwork
     // Tear down a player's sync-time registration and free its slot.
     bool SyncTimeMessageManager::UnregisterMessages(NetworkPlayer* lpPlayer)
     {
-        if (lpPlayer != nullptr)
+        if (lpPlayer != 0)
         {
             CGS_ASSERT(lpPlayer->IsMessageTypeRegistered(KI_E_MESSAGE_TYPE_SYNC_TIME),
                        "Trying to unregister sync time message that's not registered");

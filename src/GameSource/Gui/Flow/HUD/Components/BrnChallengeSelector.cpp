@@ -68,8 +68,8 @@ void ChallengeSelector::Construct(const char* lpacName,
     // is the embedded field's Construct("Text_mc", mpStateInterface, <this name>).
     mTextfield.Construct(KAC_TEXT_FIELD_NAME, mpStateInterface, GetName());
 
-    mpChallengeList                  = nullptr;   // stw 0, 0x115C
-    mpGuiCache                       = nullptr;   // stw 0, 0x1160
+    mpChallengeList                  = 0;   // stw 0, 0x115C
+    mpGuiCache                       = 0;   // stw 0, 0x1160
     miAvailableChallenges            = 0;         // stw 0, 0x1154
     miCurrentAvailableChallengeIndex = 0;         // stw 0, 0x1158
     mbVisible                        = false;     // stb 0, 0x1165

@@ -39,7 +39,7 @@ ExportSlot* ExportSlot::NewItem(s32 aiUsage, s32 aiType, CFG* apContext)
     // OOM sentinel; construct in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(ExportSlot));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) ExportSlot(aiUsage, aiType, apContext);
 }

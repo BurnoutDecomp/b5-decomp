@@ -319,28 +319,28 @@ namespace BrnGui
         static void _AssertLayout()
         {
             // Run 1: the zoom/type/flag block between mv2DesiredCentre and mpGuiCache.
-            static_assert(offsetof(MainMapComponent, mfDesiredWorldZoomFactor) -
-                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 4,
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, mfDesiredWorldZoomFactor) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 4),
                           "mfDesiredWorldZoomFactor follows mfWorldZoomScaleFactor");
-            static_assert(offsetof(MainMapComponent, meCurrentZoomFactor) -
-                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 8,
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, meCurrentZoomFactor) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 8),
                           "meCurrentZoomFactor follows the two zoom floats");
-            static_assert(offsetof(MainMapComponent, meMapType) -
-                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 12,
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, meMapType) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 12),
                           "meMapType follows meCurrentZoomFactor");
-            static_assert(offsetof(MainMapComponent, mbIsZooming) -
-                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 16,
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, mbIsZooming) -
+                          offsetof(MainMapComponent, mfWorldZoomScaleFactor) == 16),
                           "mbIsZooming closes the pointer-free zoom run");
 
             // Run 2: the five trailing bools after mpGuiCache.
-            static_assert(offsetof(MainMapComponent, mbStickMapDown) -
-                          offsetof(MainMapComponent, mbStickMapUp) == 1, "stick flag order");
-            static_assert(offsetof(MainMapComponent, mbStickMapLeft) -
-                          offsetof(MainMapComponent, mbStickMapUp) == 2, "stick flag order");
-            static_assert(offsetof(MainMapComponent, mbStickMapRight) -
-                          offsetof(MainMapComponent, mbStickMapUp) == 3, "stick flag order");
-            static_assert(offsetof(MainMapComponent, mbIsActive) -
-                          offsetof(MainMapComponent, mbStickMapUp) == 4,
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, mbStickMapDown) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 1), "stick flag order");
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, mbStickMapLeft) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 2), "stick flag order");
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, mbStickMapRight) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 3), "stick flag order");
+            CGS_STATIC_ASSERT((offsetof(MainMapComponent, mbIsActive) -
+                          offsetof(MainMapComponent, mbStickMapUp) == 4),
                           "mbIsActive closes the trailing bool run");
         }
     };

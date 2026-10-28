@@ -294,7 +294,7 @@ namespace CgsGeometric
 
         // The console leaves the result broadcast in a VMX register (every producer here is a
         // vmsum3fp128/vmaxfp, all four lanes equal); the DWARF types it VecFloat.
-        return VecFloat{ lfMaxExtent, lfMaxExtent, lfMaxExtent, lfMaxExtent };
+        { const VecFloat lResult = { lfMaxExtent, lfMaxExtent, lfMaxExtent, lfMaxExtent }; return lResult; }
     }
 
     // ==============================================================================================

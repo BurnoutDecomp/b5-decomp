@@ -61,7 +61,7 @@ public:
     template<class T>
     void Serialise(const char* lpcName, T& lrParams)
     {
-        if (mpFile != nullptr)
+        if (mpFile != 0)
         {
             char lacBuffer[KI_CHARBUFFERLENGTH];
             FormatName(lacBuffer, lpcName);

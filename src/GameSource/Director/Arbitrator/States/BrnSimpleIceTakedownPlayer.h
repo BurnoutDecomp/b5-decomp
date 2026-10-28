@@ -87,19 +87,19 @@ namespace BrnDirector
         // bound shot's takedown look/eye vehicle refs on the live player race car, then report
         // whether the freshly-allocated behaviour is ready. Declared here; body in
         // BrnArbStateTakedown.cpp (this player's owning TU).
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Update @0x8225A1E8 -- drive the camera from the ICE-anim behaviour's produced camera;
         // once PREPARING succeeds advance to ACTIVE; once the anim finishes or fails advance to
         // FINISHED. Body in BrnArbStateTakedown.cpp.
-        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Release @0x82235208 -- drop the ICE-anim behaviour hold (if allocated) and reset the
         // state machine. Body in BrnArbStateTakedown.cpp.
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // HasFinished @0x821F62B0: return meState == E_STATE_FINISHED.
-        bool HasFinished() const override { return meState == E_STATE_FINISHED; }
+        bool HasFinished() const  { return meState == E_STATE_FINISHED; }
 
     private:
         // X360 (4-byte-pointer) layout: vtable@+0x00, mIceCam (the BehaviourHandle<> the
@@ -119,11 +119,11 @@ namespace BrnDirector
         // not asserted (x64 widens BehaviourHandle's pointer members).
         static void _AssertLayout()
         {
-            static_assert(offsetof(SimpleIceTakedownPlayer, mIceCam) < offsetof(SimpleIceTakedownPlayer, mpIceAnim),
+            CGS_STATIC_ASSERT((offsetof(SimpleIceTakedownPlayer, mIceCam) < offsetof(SimpleIceTakedownPlayer, mpIceAnim)),
                           "SimpleIceTakedownPlayer: mIceCam before mpIceAnim");
-            static_assert(offsetof(SimpleIceTakedownPlayer, mpIceAnim) < offsetof(SimpleIceTakedownPlayer, mfActiveTime),
+            CGS_STATIC_ASSERT((offsetof(SimpleIceTakedownPlayer, mpIceAnim) < offsetof(SimpleIceTakedownPlayer, mfActiveTime)),
                           "SimpleIceTakedownPlayer: mpIceAnim before mfActiveTime");
-            static_assert(offsetof(SimpleIceTakedownPlayer, mfActiveTime) < offsetof(SimpleIceTakedownPlayer, meState),
+            CGS_STATIC_ASSERT((offsetof(SimpleIceTakedownPlayer, mfActiveTime) < offsetof(SimpleIceTakedownPlayer, meState)),
                           "SimpleIceTakedownPlayer: mfActiveTime before meState");
         }
     };

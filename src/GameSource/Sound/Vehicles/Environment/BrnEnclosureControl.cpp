@@ -110,7 +110,7 @@ void EnclosureControl::UpdateParams(f32 afTimeStep)
     using BrnGameState::GameStateModuleIO::SoundTriggerAction;
     auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     mfTimeSinceTrigger += afTimeStep;
-    CGS_ASSERT(lpLogicModule != nullptr, "lpLogicModule");
+    CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
     const EntityId leEntity = mpPhysicsControl->GetRawPhysicsData()->mEntityId;
     const SoundTriggerAction* lpAction = lpLogicModule->GetSoundTriggerAction(
         leEntity, SoundTriggerAction::E_TYPE_AT_ENTITY);

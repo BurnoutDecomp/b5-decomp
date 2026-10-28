@@ -22,13 +22,8 @@
 // specific and absent from the DecFIGS DWARF; the layout and the EPrepareStage bound
 // (E_PREPARESTAGE_DONE) are recovered from the asm + assert text.
 
-// ---- XDK entry points (real prototypes live in the Xbox 360 XDK) -------------------
-extern "C" unsigned int _controlfp(unsigned int unNewValue, unsigned int unMask);
-extern "C" char*        GetCommandLineA(void);
-extern "C" unsigned int XGetLaunchData(void* lpBuffer, unsigned int dwBufferSize);
-extern "C" int          XUserGetSigninState(unsigned int dwUserIndex);
-extern "C" unsigned int XUserGetName(unsigned int dwUserIndex, char* szUserName,
-                                     unsigned int cchUserName);
+#include <xtl.h>
+#include <float.h>
 
 // _controlfp NewValue/Mask immediates baked into the X360 asm (lis-only loads).
 //   _controlfp(0x00020000, 0x00030000)  -> rounding-control field
@@ -96,7 +91,7 @@ namespace BrnHW
 
             // Truncate at the first trailing double-quote (strip a quoted exe path tail).
             char* lpcQuote = strrchr(macCommandLine, '"');
-            if (lpcQuote != nullptr)
+            if (lpcQuote != 0)
                 *lpcQuote = 0;
 
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -148,7 +143,7 @@ namespace BrnHW
                                           BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
     {
         BrnMassive::gpMassiveHeapMalloc = lpAllocatorList->GetHeapAllocator(KI_MASSIVE_HEAP_BANK_ID);
-        CGS_ASSERT(BrnMassive::gpMassiveHeapMalloc != nullptr, "spHeapMalloc != NULL");
+        CGS_ASSERT(BrnMassive::gpMassiveHeapMalloc != 0, "spHeapMalloc != NULL");
         return 1;
     }
 

@@ -118,11 +118,11 @@ public:
 };
 
 // --- layout pins (console offsets; the reinterpret in VolumeVTables.cpp rests on these)
-static_assert(offsetof(AggregateVolume, mTransform)   == 0x00, "AggregateVolume::transform");
-static_assert(offsetof(AggregateVolume, muVTableSlot) == 0x40, "AggregateVolume::vTable slot");
-static_assert(offsetof(AggregateVolume, mfRadius)     == 0x50, "AggregateVolume::radius");
-static_assert(offsetof(AggregateVolume, muFlags)      == 0x5C, "AggregateVolume::m_flags");
-static_assert(sizeof(AggregateVolume) == 96,
+CGS_STATIC_ASSERT((offsetof(AggregateVolume, mTransform)   == 0x00), "AggregateVolume::transform");
+CGS_STATIC_ASSERT((offsetof(AggregateVolume, muVTableSlot) == 0x40), "AggregateVolume::vTable slot");
+CGS_STATIC_ASSERT((offsetof(AggregateVolume, mfRadius)     == 0x50), "AggregateVolume::radius");
+CGS_STATIC_ASSERT((offsetof(AggregateVolume, muFlags)      == 0x5C), "AggregateVolume::m_flags");
+CGS_STATIC_ASSERT((sizeof(AggregateVolume) == 96),
               "AggregateVolume models the same 96-byte serialised Volume record");
 
 } // namespace collision

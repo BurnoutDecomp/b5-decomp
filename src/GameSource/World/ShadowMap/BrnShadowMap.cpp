@@ -102,11 +102,11 @@ namespace BrnWorld
     {
         if (!sbOptimiseShadowLodDistances)
         {
-            return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+            { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
         }
 
         const f32 lfModifier = KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[muCurrentShadowMap];
-        return VecFloat{ lfModifier, lfModifier, lfModifier, lfModifier };
+        { const VecFloat lResult = { lfModifier, lfModifier, lfModifier, lfModifier }; return lResult; }
     }
 
     // ========================================================================
@@ -496,7 +496,7 @@ namespace BrnWorld
         Vector4  mMinPerpWorld;               // +0x230  kn + N
         Matrix44 mLightToWorld;               // +0x240  Inverse(mWorldToLight)
     };
-    static_assert(sizeof(TsmDebugRenderInfo) == 640, "TsmDebugRenderInfo must be 640 bytes (X360 stride)");
+    CGS_STATIC_ASSERT((sizeof(TsmDebugRenderInfo) == 640), "TsmDebugRenderInfo must be 640 bytes (X360 stride)");
     TsmDebugRenderInfo gaTsmDebugRenderInfo[KU_NUM_SHADOW_MAPS];
 
     // ------------------------------------------------------------------------
@@ -1610,7 +1610,7 @@ namespace BrnWorld
         u8                    maPad274[12];          // +0x274 pad to the 0x280 frustum
         CgsGeometric::Frustum mLightFrustum;         // +0x280 (:1202) memcpy of maFrustum[i]
     };
-    static_assert(sizeof(BoundingBoxDebugRenderInfo) == 768,
+    CGS_STATIC_ASSERT((sizeof(BoundingBoxDebugRenderInfo) == 768),
                   "BoundingBoxDebugRenderInfo must be 768 bytes (X360 stride)");
 
     // BrnShadowMap.cpp:1203 (DWARF) -- unk_8300EA70.
@@ -1745,7 +1745,7 @@ namespace BrnWorld
 
         Vector3 ToShadowDebugVector3(const Vector4& lrVector)
         {
-            return Vector3{ lrVector.x, lrVector.y, lrVector.z, lrVector.w };
+            { const Vector3 lResult = { lrVector.x, lrVector.y, lrVector.z, lrVector.w }; return lResult; }
         }
 
         // ARTIST DebugRender transforms the three +/-20 axis pairs, then a
@@ -1798,8 +1798,8 @@ namespace BrnWorld
             const f32 lfLenSq = lrVector.x * lrVector.x + lrVector.y * lrVector.y
                               + lrVector.z * lrVector.z;
             const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
-            return Vector4{ lrVector.x * lfInvLen, lrVector.y * lfInvLen,
-                            lrVector.z * lfInvLen, lrVector.w * lfInvLen };
+            { const Vector4 lResult = { lrVector.x * lfInvLen, lrVector.y * lfInvLen,
+                            lrVector.z * lfInvLen, lrVector.w * lfInvLen }; return lResult; }
         }
 
         // rw::math::vpu::Magnitude(Vector4) -- vmsum4fp + rsqrt NR, with the
@@ -1820,10 +1820,10 @@ namespace BrnWorld
         // rotate pair the X360 emits.
         Vector4 Cross3(const Vector4& lrA, const Vector4& lrB)
         {
-            return Vector4{ lrA.y * lrB.z - lrA.z * lrB.y,
+            { const Vector4 lResult = { lrA.y * lrB.z - lrA.z * lrB.y,
                             lrA.z * lrB.x - lrA.x * lrB.z,
                             lrA.x * lrB.y - lrA.y * lrB.x,
-                            0.0f };
+                            0.0f }; return lResult; }
         }
 
         // BrnShadowMap.cpp:356 (DWARF `BrnWorld::_LineIntersection2d`). The XY

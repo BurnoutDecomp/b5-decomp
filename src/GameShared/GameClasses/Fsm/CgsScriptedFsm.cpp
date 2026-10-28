@@ -27,7 +27,7 @@ ScriptedFsm::ScriptedFsm() { Construct(); }
 
 void ScriptedFsm::Construct()
 {
-    mpCurrentState   = nullptr;
+    mpCurrentState   = 0;
     mLuaState.Construct();
     muSequenceNumber = 0;
 }
@@ -43,7 +43,7 @@ bool ScriptedFsm::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource,
                           CgsMemory::HeapMalloc* lpHeapMalloc, CgsID lInitialStateId)
 {
     mLuaState.Prepare(lpLuaCodeResource, lpHeapMalloc);
-    mpCurrentState = nullptr;
+    mpCurrentState = 0;
     // No explicit start state -> ask the script which state it starts in; otherwise force it.
     if (lInitialStateId == 0)
         SetState(mLuaState.GetCurrentState());
@@ -55,9 +55,9 @@ bool ScriptedFsm::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource,
 // @ 0x828366D0
 bool ScriptedFsm::Release()
 {
-    if (mpCurrentState != nullptr)
+    if (mpCurrentState != 0)
         mpCurrentState->OnLeave();
-    mpCurrentState = nullptr;
+    mpCurrentState = 0;
     CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
     mLuaState.Release();
     return true;
@@ -68,19 +68,19 @@ void ScriptedFsm::SetState(CgsID lStateId)
 {
     ++muSequenceNumber;
 
-    ScriptedState* lpTarget = nullptr;
+    ScriptedState* lpTarget = 0;
     const s32 liCount = GetStateCount();
     for (s32 li = 0; li < liCount; ++li)
     {
         ScriptedState* lpState = GetState(li);
-        if (lpState != nullptr && lpState->GetId() == lStateId)
+        if (lpState != 0 && lpState->GetId() == lStateId)
         {
             lpTarget = lpState;
             break;
         }
     }
 
-    if (lpTarget == nullptr)
+    if (lpTarget == 0)
     {
         char lacId[KI_CGSID_STRING_LEN];
         CgsIDUnCompress(lStateId, lacId);
@@ -100,7 +100,7 @@ void ScriptedFsm::SetState(CgsID lStateId)
     // game actually opens, in order. Used to prove menu coverage against the console's
     // own FSM rather than inferring it from which files exist.
 
-    if (mpCurrentState != nullptr)
+    if (mpCurrentState != 0)
         mpCurrentState->OnLeave();
     mpCurrentState = lpTarget;
     lpTarget->OnEnter();
@@ -125,7 +125,7 @@ const ScriptedState* ScriptedFsm::GetStateByIndex(s32 liStateIndex)
         if (lpState->GetId() == lStateId)
             return lpState;
     }
-    return nullptr;
+    return 0;
 }
 
 // @ 0x82836BA8 -- the script's numeric index for the current state.
@@ -137,21 +137,21 @@ s32 ScriptedFsm::GetCurrentStateIndex()
 
 // Base state-table accessors. The concrete FSM (CgsGui::StateMachine) overrides these to
 // index into its fixed state array; the base has no table.
-ScriptedState* ScriptedFsm::GetState(s32 /*liIndex*/) { return nullptr; }
+ScriptedState* ScriptedFsm::GetState(s32 /*liIndex*/) { return 0; }
 s32            ScriptedFsm::GetStateCount()           { return 0; }
 
 // @ 0x82836790 -- push the event's variables into the Lua state via "SetEventVariable",
 // then run the scripted transition: NextState(event.id) -> the script's new current state.
 void ScriptedFsm::SendEvent(const Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != nullptr, "lpEvent != NULL");
+    CGS_ASSERT(lpEvent != 0, "lpEvent != NULL");
     CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
 
     const s32 liCount = lpEvent->GetVariableCount();
     for (s32 li = 0; li < liCount; ++li)
     {
         const Variable* lpVariable = lpEvent->GetVariable(li);
-        if (lpVariable != nullptr)
+        if (lpVariable != 0)
             lpVariable->ToLua(&mLuaState, "SetEventVariable");
     }
 

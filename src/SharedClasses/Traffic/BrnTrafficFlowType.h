@@ -34,6 +34,6 @@ namespace BrnTraffic
         void FixDown(const void* lpBaseData);   // (:61)
     };
 
-    static_assert(offsetof(FlowType, mpauCumulativeProb) == 8, "FlowType::mpauCumulativeProb");
-    static_assert(offsetof(FlowType, muNumVehicleTypes) == 0x10, "FlowType::muNumVehicleTypes");
+    CGS_STATIC_ASSERT((offsetof(FlowType, mpauCumulativeProb) == 8), "FlowType::mpauCumulativeProb");
+    CGS_STATIC_ASSERT((offsetof(FlowType, muNumVehicleTypes) == 0x10), "FlowType::muNumVehicleTypes");
 }

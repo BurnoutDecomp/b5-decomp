@@ -51,7 +51,7 @@ namespace
             NegativeMultiplySubtract(lLhs.z, lRhs.y, lProduct.y),
             NegativeMultiplySubtract(lLhs.x, lRhs.z, lProduct.z),
             NegativeMultiplySubtract(lLhs.w, lRhs.w, lProduct.w) };
-        return Vector3{ lDifference.y, lDifference.z, lDifference.x, lDifference.w };
+        { const Vector3 lResult = { lDifference.y, lDifference.z, lDifference.x, lDifference.w }; return lResult; }
     }
 }
 

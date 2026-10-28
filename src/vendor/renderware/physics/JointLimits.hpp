@@ -128,32 +128,32 @@ namespace physics
     // scalars, which is precisely the committed `{ mVtwist, mVswing, mVswing }`.
     inline void _rw_physics_JointLimits_AssertLayout()
     {
-        static_assert(offsetof(JointLimits, mPprism) == 0x00, "mPprism @+0x00 (Build prismatic box 0x82BC4690)");
-        static_assert(offsetof(JointLimits, mVprism) == 0x10, "mVprism @+0x10");
-        static_assert(offsetof(JointLimits, mVtwist) == 0x20, "mVtwist @+0x20 (Build `lfs 0x20(r28)`)");
-        static_assert(offsetof(JointLimits, mVswing) == 0x24, "mVswing @+0x24 (Build `lfs 0x24(r28)`)");
-        static_assert(offsetof(JointLimits, mSwinga) == 0x28, "mSwinga @+0x28");
-        static_assert(offsetof(JointLimits, mTwista) == 0x2C, "mTwista @+0x2C");
-        static_assert(offsetof(JointLimits, mSwingc) == 0x30, "mSwingc @+0x30 (Build `lfs 0x30(r28)`)");
-        static_assert(offsetof(JointLimits, mTwistc) == 0x34, "mTwistc @+0x34 (Build `lfs 0x34(r28)`)");
-        static_assert(offsetof(JointLimits, mSwingf) == 0x38, "mSwingf @+0x38 (Build `lwz 0x38(r28)` -> 5-way switch)");
-        static_assert(offsetof(JointLimits, mTwistf) == 0x3C, "mTwistf @+0x3C (Build `lwz 0x3C(r28)` -> 3-way switch)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mPprism) == 0x00), "mPprism @+0x00 (Build prismatic box 0x82BC4690)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVprism) == 0x10), "mVprism @+0x10");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVtwist) == 0x20), "mVtwist @+0x20 (Build `lfs 0x20(r28)`)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVswing) == 0x24), "mVswing @+0x24 (Build `lfs 0x24(r28)`)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwinga) == 0x28), "mSwinga @+0x28");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwista) == 0x2C), "mTwista @+0x2C");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingc) == 0x30), "mSwingc @+0x30 (Build `lfs 0x30(r28)`)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistc) == 0x34), "mTwistc @+0x34 (Build `lfs 0x34(r28)`)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingf) == 0x38), "mSwingf @+0x38 (Build `lwz 0x38(r28)` -> 5-way switch)");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistf) == 0x3C), "mTwistf @+0x3C (Build `lwz 0x3C(r28)` -> 3-way switch)");
 
         // Adjacency form -- survives a member WIDENING.
-        static_assert(offsetof(JointLimits, mVprism) == offsetof(JointLimits, mPprism) + sizeof(JointLimits::mPprism), "mVprism follows mPprism");
-        static_assert(offsetof(JointLimits, mVtwist) == offsetof(JointLimits, mVprism) + sizeof(JointLimits::mVprism), "mVtwist follows mVprism");
-        static_assert(offsetof(JointLimits, mVswing) == offsetof(JointLimits, mVtwist) + sizeof(JointLimits::mVtwist), "mVswing follows mVtwist");
-        static_assert(offsetof(JointLimits, mSwinga) == offsetof(JointLimits, mVswing) + sizeof(JointLimits::mVswing), "mSwinga follows mVswing");
-        static_assert(offsetof(JointLimits, mTwista) == offsetof(JointLimits, mSwinga) + sizeof(JointLimits::mSwinga), "mTwista follows mSwinga");
-        static_assert(offsetof(JointLimits, mSwingc) == offsetof(JointLimits, mTwista) + sizeof(JointLimits::mTwista), "mSwingc follows mTwista");
-        static_assert(offsetof(JointLimits, mTwistc) == offsetof(JointLimits, mSwingc) + sizeof(JointLimits::mSwingc), "mTwistc follows mSwingc");
-        static_assert(offsetof(JointLimits, mSwingf) == offsetof(JointLimits, mTwistc) + sizeof(JointLimits::mTwistc), "mSwingf follows mTwistc");
-        static_assert(offsetof(JointLimits, mTwistf) == offsetof(JointLimits, mSwingf) + sizeof(JointLimits::mSwingf), "mTwistf follows mSwingf");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVprism) == offsetof(JointLimits, mPprism) + sizeof(JointLimits::mPprism)), "mVprism follows mPprism");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVtwist) == offsetof(JointLimits, mVprism) + sizeof(JointLimits::mVprism)), "mVtwist follows mVprism");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mVswing) == offsetof(JointLimits, mVtwist) + sizeof(JointLimits::mVtwist)), "mVswing follows mVtwist");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwinga) == offsetof(JointLimits, mVswing) + sizeof(JointLimits::mVswing)), "mSwinga follows mVswing");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwista) == offsetof(JointLimits, mSwinga) + sizeof(JointLimits::mSwinga)), "mTwista follows mSwinga");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingc) == offsetof(JointLimits, mTwista) + sizeof(JointLimits::mTwista)), "mSwingc follows mTwista");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistc) == offsetof(JointLimits, mSwingc) + sizeof(JointLimits::mSwingc)), "mTwistc follows mSwingc");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mSwingf) == offsetof(JointLimits, mTwistc) + sizeof(JointLimits::mTwistc)), "mSwingf follows mTwistc");
+        CGS_STATIC_ASSERT((offsetof(JointLimits, mTwistf) == offsetof(JointLimits, mSwingf) + sizeof(JointLimits::mSwingf)), "mTwistf follows mSwingf");
 
         // The X360-attested ARRAY STRIDE. ProcessUpdateJointLimitsQueue @0x8289F724 steps
         // JointData::maLimits by `addi r10,r31,0x2D / slwi r10,r10,6` == (i+45)*64, i.e. base
         // +0x0B40 with a 64-byte stride, and copies exactly EIGHT 8-byte `ld/std` pairs.
-        static_assert(sizeof(JointLimits) == 64, "JointLimits array stride 64 (drain (i+45)*64 + EIGHT ld/std)");
+        CGS_STATIC_ASSERT((sizeof(JointLimits) == 64), "JointLimits array stride 64 (drain (i+45)*64 + EIGHT ld/std)");
     }
 }
 }

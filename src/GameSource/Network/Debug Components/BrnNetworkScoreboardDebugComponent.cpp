@@ -70,7 +70,7 @@ namespace BrnNetwork
     // selections to "none" and register the component with the debug menu.
     void ScoreboardDebugComponent::Construct(ScoreboardManager* lpScoreboardManager)
     {
-        CGS_ASSERT(lpScoreboardManager != nullptr, "lpScoreboardManager");
+        CGS_ASSERT(lpScoreboardManager != 0, "lpScoreboardManager");
         mpScoreboardManager = lpScoreboardManager;
 
         mScoreboard.Construct();
@@ -281,7 +281,7 @@ namespace BrnNetwork
     // it. The X360 memcpy's the whole 0xB6C-byte Scoreboard payload, then calls PrintScoreboard(this).
     void ScoreboardDebugComponent::HandleScoreboardEvent(const Scoreboard* lpScoreboard)
     {
-        CGS_ASSERT(lpScoreboard != nullptr, "lpScoreboardEvent");
+        CGS_ASSERT(lpScoreboard != 0, "lpScoreboardEvent");
         mScoreboard = *lpScoreboard;   // X360: memcpy(this+0xC, src, 0xB6C) -- whole Scoreboard payload
         PrintScoreboard();             // tail call: render the freshly copied scoreboard
     }

@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsBitStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // Reconstructed from BURNOUT_X360_*.XEX
 //   CgsNetwork::BitStream::Prepare  @ 0x828712A8  — align byte buffer down to a
@@ -85,7 +85,7 @@ namespace
         miBufferSizeInBits = 0;
         miBitWritePosition = 0;
         miBitReadPosition  = 0;
-        mpuBuffer          = nullptr;
+        mpuBuffer          = 0;
         return true;
     }
 

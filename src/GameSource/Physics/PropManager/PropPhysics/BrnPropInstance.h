@@ -201,12 +201,12 @@ namespace Props
     // Pointer-free sub-structs / offset pins. mWorldTransform is the first member after
     // the (vtable-less) object head, and mu8JointIndex..mu8Flags are POD bytes with no
     // pointer widening on the 64-bit host, so these offsets are host-stable and assertable.
-    static_assert(offsetof(PropInstance, mWorldTransform)  == 0x00, "mWorldTransform @0x00");
-    static_assert(offsetof(PropInstance, mLinearVelocity)  == 0x40, "mLinearVelocity @0x40");
-    static_assert(offsetof(PropInstance, mAngularVelocity) == 0x50, "mAngularVelocity @0x50");
-    static_assert(offsetof(PropInstance, mu8JointIndex)    == 0x6C, "mu8JointIndex @0x6C");
-    static_assert(offsetof(PropInstance, mbIsStatic)       == 0x6D, "mbIsStatic @0x6D");
-    static_assert(offsetof(PropInstance, muMovementState)  == 0x6E, "muMovementState @0x6E");
-    static_assert(offsetof(PropInstance, mu8Flags)         == 0x6F, "mu8Flags @0x6F");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, mWorldTransform)  == 0x00), "mWorldTransform @0x00");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, mLinearVelocity)  == 0x40), "mLinearVelocity @0x40");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, mAngularVelocity) == 0x50), "mAngularVelocity @0x50");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, mu8JointIndex)    == 0x6C), "mu8JointIndex @0x6C");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, mbIsStatic)       == 0x6D), "mbIsStatic @0x6D");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, muMovementState)  == 0x6E), "muMovementState @0x6E");
+    CGS_STATIC_ASSERT((offsetof(PropInstance, mu8Flags)         == 0x6F), "mu8Flags @0x6F");
 }
 }

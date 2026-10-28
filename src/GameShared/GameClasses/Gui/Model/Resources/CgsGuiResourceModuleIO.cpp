@@ -28,7 +28,7 @@ namespace GuiResourceModuleIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mRequestQueue) == 0x0004, "mRequestQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mRequestQueue) == 0x0004), "mRequestQueue @0x0004");
     }
 
     // X360 0x8284DEA8: read-lock (bit 4) const handle to the resource-request queue;

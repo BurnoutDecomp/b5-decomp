@@ -23,8 +23,8 @@ void NetworkTextureDXTCompress::Construct()
 {
     for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
     {
-        mapUncompressedBuffers[liBufferIndex] = nullptr;
-        mapCompressedBuffers[liBufferIndex]   = nullptr;
+        mapUncompressedBuffers[liBufferIndex] = 0;
+        mapCompressedBuffers[liBufferIndex]   = 0;
     }
 
     mDXTCompressJob.Clear();
@@ -39,10 +39,10 @@ void NetworkTextureDXTCompress::Construct()
     mbRunningDecodeJob      = false;
     mbNewImageToDecode      = false;
 
-    mCompressionCompleteCallback = nullptr;
-    mpCompressionCompleteData    = nullptr;
-    mDecodeCompleteCallback      = nullptr;
-    mpDecodeCompleteData         = nullptr;
+    mCompressionCompleteCallback = 0;
+    mpCompressionCompleteData    = 0;
+    mDecodeCompleteCallback      = 0;
+    mpDecodeCompleteData         = 0;
     miUncompressedBufferSize     = 0;
     miCompressedBufferSize       = 0;
 }
@@ -50,10 +50,10 @@ void NetworkTextureDXTCompress::Construct()
 // The same reset as Construct, in the console's store order.
 void NetworkTextureDXTCompress::Destruct()
 {
-    mCompressionCompleteCallback = nullptr;
-    mpCompressionCompleteData    = nullptr;
-    mDecodeCompleteCallback      = nullptr;
-    mpDecodeCompleteData         = nullptr;
+    mCompressionCompleteCallback = 0;
+    mpCompressionCompleteData    = 0;
+    mDecodeCompleteCallback      = 0;
+    mpDecodeCompleteData         = 0;
     mbNewImageToCompress         = false;
     mbRunningCompressionJob      = false;
     mbRunningDecodeJob           = false;
@@ -69,8 +69,8 @@ void NetworkTextureDXTCompress::Destruct()
 
     for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
     {
-        mapUncompressedBuffers[liBufferIndex] = nullptr;
-        mapCompressedBuffers[liBufferIndex]   = nullptr;
+        mapUncompressedBuffers[liBufferIndex] = 0;
+        mapCompressedBuffers[liBufferIndex]   = 0;
     }
 
     miUncompressedBufferSize = 0;
@@ -124,17 +124,17 @@ bool NetworkTextureDXTCompress::Release()
         if (mapCompressedBuffers[liBufferIndex])
         {
             mpHeapMalloc->Free(mapCompressedBuffers[liBufferIndex]);
-            mapCompressedBuffers[liBufferIndex] = nullptr;
+            mapCompressedBuffers[liBufferIndex] = 0;
         }
 
         if (mapUncompressedBuffers[liBufferIndex])
         {
             mpHeapMalloc->Free(mapUncompressedBuffers[liBufferIndex]);
-            mapUncompressedBuffers[liBufferIndex] = nullptr;
+            mapUncompressedBuffers[liBufferIndex] = 0;
         }
     }
 
-    mpHeapMalloc             = nullptr;
+    mpHeapMalloc             = 0;
     miUncompressedBufferSize = 0;
     miCompressedBufferSize   = 0;
     return true;
@@ -158,7 +158,7 @@ void NetworkTextureDXTCompress::SetNewTextureToCompress(
     CGS_ASSERT(lpNewSourcePixels, "lpNewSourcePixels");
     CGS_ASSERT(miWriteToSource < KI_NUM_IMAGE_BUFFERS, "miWriteToSource < KI_NUM_IMAGE_BUFFERS");
     CGS_ASSERT(miWriteToSource >= 0, "miWriteToSource >= 0");
-    CGS_ASSERT(mCompressionCompleteCallback == nullptr, "mCompressionCompleteCallback == NULL");
+    CGS_ASSERT(mCompressionCompleteCallback == 0, "mCompressionCompleteCallback == NULL");
     CGS_ASSERT(miUncompressedBufferSize >= liNewSourcePixelsSize,
                "miUncompressedBufferSize >= liNewSourcePixelsSize");
 
@@ -192,7 +192,7 @@ void NetworkTextureDXTCompress::SetNewTextureToDecompress(
     CGS_ASSERT(lpCompressedPixels, "lpCompressedPixels");
     CGS_ASSERT(miWriteToSource < KI_NUM_IMAGE_BUFFERS, "miWriteToSource < KI_NUM_IMAGE_BUFFERS");
     CGS_ASSERT(miWriteToSource >= 0, "miWriteToSource >= 0");
-    CGS_ASSERT(mDecodeCompleteCallback == nullptr, "mDecodeCompleteCallback == NULL");
+    CGS_ASSERT(mDecodeCompleteCallback == 0, "mDecodeCompleteCallback == NULL");
     CGS_ASSERT(miCompressedBufferSize >= liCompressedPixelSize,
                "miCompressedBufferSize >= liCompressedPixelSize");
 
@@ -270,8 +270,8 @@ void NetworkTextureDXTCompress::Update()
         if (lCallback)
         {
             void* const lpData = mpCompressionCompleteData;
-            mCompressionCompleteCallback = nullptr;
-            mpCompressionCompleteData    = nullptr;
+            mCompressionCompleteCallback = 0;
+            mpCompressionCompleteData    = 0;
             lCallback(mapCompressedBuffers[miReadFromTexture], lpData);
         }
         return;
@@ -314,8 +314,8 @@ void NetworkTextureDXTCompress::Update()
         if (lCallback)
         {
             void* const lpData = mpDecodeCompleteData;
-            mDecodeCompleteCallback = nullptr;
-            mpDecodeCompleteData    = nullptr;
+            mDecodeCompleteCallback = 0;
+            mpDecodeCompleteData    = 0;
             lCallback(mapUncompressedBuffers[miReadFromTexture], lpData);
         }
     }

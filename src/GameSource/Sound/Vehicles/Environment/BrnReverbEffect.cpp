@@ -72,7 +72,7 @@ bool ReverbEffect::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CGS_ASSERT(mpEnclosureControl != nullptr, "mpEnclosureControl");
+    CGS_ASSERT(mpEnclosureControl != 0, "mpEnclosureControl");
     mfTime       = 0.0f;
     mfSpaceSize  = 15.0f;
     mfBrightness = 1.0f;
@@ -194,7 +194,7 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
     if (meReverbState == E_REVERB_STATE_INTERPOLATING && mInterpolateReverb.IsFinished())
     {
         auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
-        CGS_ASSERT(lpLogicModule != nullptr, "lpLogicModule");
+        CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
         const Attrib::Gen::reverbparams lParams(lpLogicModule->GetGlobalData().ReverbSettings(leReverb));
         mfTime = lParams.Time();
         mfSpaceSize = lParams.SpaceSize();
@@ -209,7 +209,7 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
     if (KB_DEBUG_REVERB_ZONE)
     {
         auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
-        CGS_ASSERT(lpLogicModule != nullptr, "lpLogicModule");
+        CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
         const Attrib::Gen::reverbparams lParams(lpLogicModule->GetGlobalData().ReverbSettings(mReverbType.GetCurrent()));
         mfTime = lParams.Time();
         mfSpaceSize = lParams.SpaceSize();

@@ -146,11 +146,11 @@ public:
 
     // @ 0x82C46428 -- destroy: tear down the embedded Trc (X360 Trc::~Trc on
     //                 this+8), then the Message base dtor restores the base vtable.
-    ~MessageTrc() override;
+    ~MessageTrc() ;
 
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x48 slot (the MessageTrc handler).
-    void Apply(IMessageProcessor* pProcessor) override;
+    void Apply(IMessageProcessor* pProcessor) ;
 
     // The embedded TCR message (read by the MessageTrc handlers).
     const Trc& GetTrc() const { return mTrc; }

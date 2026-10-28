@@ -46,7 +46,7 @@ namespace SceneManagerIO
     struct EventBaseVolumeTestFine {};
 
     // EventQueue<InEventVolumeTestFine, N> element. 16-byte aligned, stride 224 (0xE0).
-    struct alignas(16) InEventVolumeTestFine : public EventBaseVolumeTestFine
+    struct CGS_ALIGN(16) InEventVolumeTestFine : public EventBaseVolumeTestFine
     {
         union
         {
@@ -64,16 +64,16 @@ namespace SceneManagerIO
         };
     };
 
-    static_assert(offsetof(InEventVolumeTestFine, macOpaquePayload)    == 0x00, "the payload spans the element");
-    static_assert(offsetof(InEventVolumeTestFine, mTransform)          == 0x00, "transform rows +0x00");
-    static_assert(offsetof(InEventVolumeTestFine, mQueryId)            == 0x40, "query id +0x40");
-    static_assert(offsetof(InEventVolumeTestFine, mx32EntityTypeFlags) == 0x44, "entity-type flags +0x44");
-    static_assert(offsetof(InEventVolumeTestFine, mExcludeEntityId)    == 0x48, "exclude entity +0x48");
-    static_assert(offsetof(InEventVolumeTestFine, meExclusionMode)     == 0x4C, "exclusion mode +0x4C");
-    static_assert(offsetof(InEventVolumeTestFine, mVolumeBuffer)       == 0x50, "volume image +0x50");
-    static_assert(offsetof(InEventVolumeTestFine, mxVolumeTypeFlags)   == 0xD0, "volume-type flags +0xD0");
-    static_assert(sizeof(InEventVolumeTestFine().mVolumeBuffer) == 0x80, "the 0x80-byte volume image");
-    static_assert(sizeof(InEventVolumeTestFine)  == 0xE0, "Append strides 0xE0");
-    static_assert(alignof(InEventVolumeTestFine) == 16,   "maEvents at +0x10");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, macOpaquePayload)    == 0x00), "the payload spans the element");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, mTransform)          == 0x00), "transform rows +0x00");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, mQueryId)            == 0x40), "query id +0x40");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, mx32EntityTypeFlags) == 0x44), "entity-type flags +0x44");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, mExcludeEntityId)    == 0x48), "exclude entity +0x48");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, meExclusionMode)     == 0x4C), "exclusion mode +0x4C");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, mVolumeBuffer)       == 0x50), "volume image +0x50");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestFine, mxVolumeTypeFlags)   == 0xD0), "volume-type flags +0xD0");
+    CGS_STATIC_ASSERT((sizeof(InEventVolumeTestFine().mVolumeBuffer) == 0x80), "the 0x80-byte volume image");
+    CGS_STATIC_ASSERT((sizeof(InEventVolumeTestFine)  == 0xE0), "Append strides 0xE0");
+    CGS_STATIC_ASSERT((__alignof(InEventVolumeTestFine) == 16),   "maEvents at +0x10");
 }
 }

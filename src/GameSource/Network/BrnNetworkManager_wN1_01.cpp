@@ -231,7 +231,7 @@ namespace BrnNetwork
                                             &mServerInterface, KU_TITLE_ID);
 
             CgsNetwork::NetworkManagerPrepareParams::PlayerManagerPrepareParams lPlayerManagerParams;
-            lPlayerManagerParams.Construct(&mServerInterface, nullptr, nullptr, nullptr, lpHeapMalloc);
+            lPlayerManagerParams.Construct(&mServerInterface, 0, 0, 0, lpHeapMalloc);
 
             CgsNetwork::NetworkManagerPrepareParams lPrepareParams;
             lPrepareParams.Construct(&lVersionDisplayParams, &lNetworkAdapterParams,

@@ -133,10 +133,10 @@ namespace BrnNetwork
 
     inline void SelectedRoutesManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(SelectedRoutesData, mMessageSend) == 0x18, "SelectedRoutesData::mMessageSend @ +0x18");
-        static_assert(sizeof(void*) != 4 || sizeof(SelectedRoutesData) == 0x18 + 2 * sizeof(SelectedRoutesMessage) + 0x10, "SelectedRoutesData is two messages plus 0x28 bytes");
-        static_assert(sizeof(void*) != 4 || offsetof(SelectedRoutesManager, maSelectedRoutesData) == 0x1B8, "maSelectedRoutesData @ +0x1B8");
-        static_assert(sizeof(void*) != 4 || sizeof(SelectedRoutesManager) == 0x1B8 + KI_MAX_PLAYERS * sizeof(SelectedRoutesData) + 0x10, "SelectedRoutesManager tail is 0x10 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(SelectedRoutesData, mMessageSend) == 0x18), "SelectedRoutesData::mMessageSend @ +0x18");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(SelectedRoutesData) == 0x18 + 2 * sizeof(SelectedRoutesMessage) + 0x10), "SelectedRoutesData is two messages plus 0x28 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(SelectedRoutesManager, maSelectedRoutesData) == 0x1B8), "maSelectedRoutesData @ +0x1B8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(SelectedRoutesManager) == 0x1B8 + KI_MAX_PLAYERS * sizeof(SelectedRoutesData) + 0x10), "SelectedRoutesManager tail is 0x10 bytes");
     }
 
     // ---- Release @ 0x82548B98 -------------------------------------------------------------

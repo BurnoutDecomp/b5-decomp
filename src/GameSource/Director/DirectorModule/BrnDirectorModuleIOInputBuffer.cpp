@@ -29,60 +29,60 @@ namespace DirectorIO
     // ---- byte-offset pins (X360-recovered) --------------------------------------------------
     void InputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer, mGlobalRaceCarInterface) == 0x0010, "mGlobalRaceCarInterface @0x0010");
-        static_assert(sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface) == 0x970,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mGlobalRaceCarInterface) == 0x0010), "mGlobalRaceCarInterface @0x0010");
+        CGS_STATIC_ASSERT((sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface) == 0x970),
                       "RCEntityGlobalRaceCarOutputInterface is the console's 2416 bytes (XMemCpy li r5, 0x970 @0x823E3FE4)");
-        static_assert(offsetof(InputBuffer, mUsedRaceCars)        == 0x0980, "mUsedRaceCars @0x0980");
-        static_assert(offsetof(InputBuffer, mRaceCarInfo)         == 0x0990, "mRaceCarInfo @0x0990");
-        static_assert(sizeof(BrnDirector::Camera::VehicleInfo)    == 1264,   "VehicleInfo stride 0x4F0");
-        static_assert(offsetof(InputBuffer, maVehicleInfoArray)   == 0x3238, "maVehicleInfoArray @0x3238");
-        static_assert(offsetof(InputBuffer, mControllerInfo)      == 0x3260, "mControllerInfo @0x3260");
-        static_assert(offsetof(InputBuffer, mGameActionQueue)     == 0x3340, "mGameActionQueue @0x3340");
-        static_assert(sizeof(ControlInput) <= 224,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUsedRaceCars)        == 0x0980), "mUsedRaceCars @0x0980");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRaceCarInfo)         == 0x0990), "mRaceCarInfo @0x0990");
+        CGS_STATIC_ASSERT((sizeof(BrnDirector::Camera::VehicleInfo)    == 1264),   "VehicleInfo stride 0x4F0");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, maVehicleInfoArray)   == 0x3238), "maVehicleInfoArray @0x3238");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mControllerInfo)      == 0x3260), "mControllerInfo @0x3260");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mGameActionQueue)     == 0x3340), "mGameActionQueue @0x3340");
+        CGS_STATIC_ASSERT((sizeof(ControlInput) <= 224),
                       "ControlInput is the view over the 224-byte controller snapshot @0x3260");
-        static_assert(sizeof(CgsModule::VariableEventQueue<13312, 16>) == 0x6750 - 0x3340,
+        CGS_STATIC_ASSERT((sizeof(CgsModule::VariableEventQueue<13312, 16>) == 0x6750 - 0x3340),
                       "the game-action queue fills the @0x3340 span exactly (0x3410 bytes)");
-        static_assert(offsetof(InputBuffer, mTimerInterface)      == 0x6750, "mTimerInterface @0x6750");
-        static_assert(sizeof(CgsSystem::TimerStatusInterface)     == 0x30,   "TimerStatusInterface fills the @0x6750 span exactly");
-        static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
-        static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
-        static_assert(offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0, "mTrafficOutputInterface @0x6AC0");
-        static_assert(sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface) == 0x78E0 - 0x6AC0,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mTimerInterface)      == 0x6750), "mTimerInterface @0x6750");
+        CGS_STATIC_ASSERT((sizeof(CgsSystem::TimerStatusInterface)     == 0x30),   "TimerStatusInterface fills the @0x6750 span exactly");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780), "mVehicleDriverInputInterface @0x6780");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mContacts)            == 0x6AB8), "mContacts @0x6AB8");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0), "mTrafficOutputInterface @0x6AC0");
+        CGS_STATIC_ASSERT((sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface) == 0x78E0 - 0x6AC0),
                       "TrafficDirectorOutputInterface spans the console's 0xE20 (u16 head, the array @+0x10, its count @+0xE10)");
-        static_assert(sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorEntity) == 0x70,
+        CGS_STATIC_ASSERT((sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorEntity) == 0x70),
                       "TrafficDirectorEntity is the console's 0x70-byte record (sub_823B2368's stride)");
-        static_assert(offsetof(InputBuffer, mPlayerCrashInfo)     == 0x78E0, "mPlayerCrashInfo @0x78E0 (lpInputBuffer + 30944)");
-        static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
-        static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miDirectorProfileData @0x7AA4");
-        static_assert(offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mePlayerCarIndex @0x7AA8");
-        static_assert(offsetof(InputBuffer, mePlayerKillerCarIndex) == 0x7AAC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mePlayerKillerCarIndex @0x7AAC (stw @0x823CD3BC)");
-        static_assert(offsetof(InputBuffer, miRankUpNewRank)      == 0x7AB4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miRankUpNewRank @0x7AB4");
-        static_assert(offsetof(InputBuffer, miCameraType)         == 0x7AB8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miCameraType @0x7AB8");
-        static_assert(offsetof(InputBuffer, mbRankUpThisFrame)      == 0x7ABC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbRankUpThisFrame @0x7ABC");
-        static_assert(offsetof(InputBuffer, mbStartNewProfileIntro) == 0x7ABD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartNewProfileIntro @0x7ABD");
-        static_assert(offsetof(InputBuffer, mbStartGameIntroFlyby)  == 0x7ABE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartGameIntroFlyby @0x7ABE");
-        static_assert(offsetof(InputBuffer, mbStopGameIntroFlyby)   == 0x7ABF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStopGameIntroFlyby @0x7ABF");
-        static_assert(offsetof(InputBuffer, mbPlayerTakenDown)      == 0x7AC0 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbPlayerTakenDown @0x7AC0 (stb @0x823CD3B8)");
-        static_assert(offsetof(InputBuffer, mbHasGotHookEnumeration)           == 0x7AC1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbHasGotHookEnumeration @0x7AC1");
-        static_assert(offsetof(InputBuffer, mbEndOfCarSelect)                  == 0x7AC2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbEndOfCarSelect @0x7AC2");
-        static_assert(offsetof(InputBuffer, mbGotCrashNavShownEvent)           == 0x7AC3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotCrashNavShownEvent @0x7AC3");
-        static_assert(offsetof(InputBuffer, mbGotCrashNavHiddenEvent)          == 0x7AC4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotCrashNavHiddenEvent @0x7AC4");
-        static_assert(offsetof(InputBuffer, mbGotColourCalibrationShownEvent)  == 0x7AC5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotColourCalibrationShownEvent @0x7AC5");
-        static_assert(offsetof(InputBuffer, mbGotColourCalibrationHiddenEvent) == 0x7AC6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotColourCalibrationHiddenEvent @0x7AC6");
-        static_assert(offsetof(InputBuffer, mbSimPaused)                       == 0x7AC8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbSimPaused @0x7AC8");
-        static_assert(offsetof(InputBuffer, mbHasNewDirectorProfileData)       == 0x7AC9 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbHasNewDirectorProfileData @0x7AC9");
-        static_assert(offsetof(InputBuffer, mbCarSelectionChangedThisFrame)    == 0x7ACB + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbCarSelectionChangedThisFrame @0x7ACB");
-        static_assert(offsetof(InputBuffer, mbCarSelectTickerClosedThisFrame)  == 0x7ACC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbCarSelectTickerClosedThisFrame @0x7ACC");
-        static_assert(offsetof(InputBuffer, mbGotShortcutMenuEvent)            == 0x7ACD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotShortcutMenuEvent @0x7ACD");
-        static_assert(offsetof(InputBuffer, mbShortcutMenuState)              == 0x7ACE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbShortcutMenuState @0x7ACE");
-        static_assert(offsetof(InputBuffer, mbLeftOnlinePostEvent)             == 0x7ACF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbLeftOnlinePostEvent @0x7ACF");
-        static_assert(offsetof(InputBuffer, mbEnteredOnlinePostEvent)          == 0x7AD0 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbEnteredOnlinePostEvent @0x7AD0");
-        static_assert(offsetof(InputBuffer, mbFinishedOnlineEventLoading)      == 0x7AD1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbFinishedOnlineEventLoading @0x7AD1");
-        static_assert(offsetof(InputBuffer, mbStartedOnlineEventLoading)       == 0x7AD2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartedOnlineEventLoading @0x7AD2");
-        static_assert(offsetof(InputBuffer, mbStarting100PercentSequence)      == 0x7AD3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStarting100PercentSequence @0x7AD3");
-        static_assert(offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbFinished100PercentSequence @0x7AD4");
-        static_assert(offsetof(InputBuffer, mbPlayerEliminated)                == 0x7AD5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbPlayerEliminated @0x7AD5");
-        static_assert(offsetof(InputBuffer, mbModeTimeExpired)                 == 0x7AD6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbModeTimeExpired @0x7AD6");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mPlayerCrashInfo)     == 0x78E0), "mPlayerCrashInfo @0x78E0 (lpInputBuffer + 30944)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mHookEnumeration)     == 0x7910), "mHookEnumeration @0x7910");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "miDirectorProfileData @0x7AA4");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mePlayerCarIndex @0x7AA8");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mePlayerKillerCarIndex) == 0x7AAC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mePlayerKillerCarIndex @0x7AAC (stw @0x823CD3BC)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, miRankUpNewRank)      == 0x7AB4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "miRankUpNewRank @0x7AB4");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, miCameraType)         == 0x7AB8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "miCameraType @0x7AB8");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbRankUpThisFrame)      == 0x7ABC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbRankUpThisFrame @0x7ABC");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbStartNewProfileIntro) == 0x7ABD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbStartNewProfileIntro @0x7ABD");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbStartGameIntroFlyby)  == 0x7ABE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbStartGameIntroFlyby @0x7ABE");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbStopGameIntroFlyby)   == 0x7ABF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbStopGameIntroFlyby @0x7ABF");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbPlayerTakenDown)      == 0x7AC0 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbPlayerTakenDown @0x7AC0 (stb @0x823CD3B8)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbHasGotHookEnumeration)           == 0x7AC1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbHasGotHookEnumeration @0x7AC1");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbEndOfCarSelect)                  == 0x7AC2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbEndOfCarSelect @0x7AC2");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbGotCrashNavShownEvent)           == 0x7AC3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbGotCrashNavShownEvent @0x7AC3");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbGotCrashNavHiddenEvent)          == 0x7AC4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbGotCrashNavHiddenEvent @0x7AC4");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbGotColourCalibrationShownEvent)  == 0x7AC5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbGotColourCalibrationShownEvent @0x7AC5");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbGotColourCalibrationHiddenEvent) == 0x7AC6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbGotColourCalibrationHiddenEvent @0x7AC6");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbSimPaused)                       == 0x7AC8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbSimPaused @0x7AC8");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbHasNewDirectorProfileData)       == 0x7AC9 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbHasNewDirectorProfileData @0x7AC9");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbCarSelectionChangedThisFrame)    == 0x7ACB + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbCarSelectionChangedThisFrame @0x7ACB");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbCarSelectTickerClosedThisFrame)  == 0x7ACC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbCarSelectTickerClosedThisFrame @0x7ACC");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbGotShortcutMenuEvent)            == 0x7ACD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbGotShortcutMenuEvent @0x7ACD");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbShortcutMenuState)              == 0x7ACE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbShortcutMenuState @0x7ACE");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbLeftOnlinePostEvent)             == 0x7ACF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbLeftOnlinePostEvent @0x7ACF");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbEnteredOnlinePostEvent)          == 0x7AD0 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbEnteredOnlinePostEvent @0x7AD0");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbFinishedOnlineEventLoading)      == 0x7AD1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbFinishedOnlineEventLoading @0x7AD1");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbStartedOnlineEventLoading)       == 0x7AD2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbStartedOnlineEventLoading @0x7AD2");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbStarting100PercentSequence)      == 0x7AD3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbStarting100PercentSequence @0x7AD3");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbFinished100PercentSequence @0x7AD4");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbPlayerEliminated)                == 0x7AD5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbPlayerEliminated @0x7AD5");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbModeTimeExpired)                 == 0x7AD6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "mbModeTimeExpired @0x7AD6");
     }
 
     // ---- Construct @0x822393D0 --------------------------------------------------------------

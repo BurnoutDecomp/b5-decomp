@@ -126,7 +126,7 @@ AStarNode* AStarNodePool::NewNode(const AStarVector2& lPosition, u16 luLinkSecti
     const u16 luBucket = luSectionIndex & KU_HASH_MASK;
     const u16 luBucketCount = mauNodeCount[luBucket];
 
-    AStarNode* lpNode = nullptr;
+    AStarNode* lpNode = 0;
     if (luBucketCount < KU_MAX_PARTITION_NODES && muOpenNodeCount < KU_MAX_OPEN_NODES)
     {
         const u16 luNodeIndex = static_cast<u16>((luBucket << 8) + luBucketCount);
@@ -163,7 +163,7 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
     CGS_ASSERT(!(lfCostWeight < 0.0f) && !(lfCostWeight > 1.0f),
                "lfCostWeight >= 0.0f && lfCostWeight <= 1.0f");
 
-    AStarNode* lpBestNode = nullptr;
+    AStarNode* lpBestNode = 0;
     f32        lfBestScore = 3.4028235e38f;          // FLT_MAX (flt_8204F664)
     u16        luBestOpenNodeIndex = KU_INVALID_NODE_INDEX;
 
@@ -239,7 +239,7 @@ AStarNode* AStarNodePool::FindNode(u16 luSectionIndex, u8 luPortalIndex)
 {
     CgsDev::PerfMonCpu::StartMonitor(dword_8300D534);
 
-    AStarNode* lpResult = nullptr;
+    AStarNode* lpResult = 0;
 
     const u16 luBucket     = static_cast<u16>(luSectionIndex & KU_HASH_MASK);
     const u16 luFirstIndex = static_cast<u16>(luBucket << 8);
@@ -270,10 +270,10 @@ void AStar::Construct(const AISectionsData* lpAISectionsData)
 {
     mpAISectionsData   = lpAISectionsData;
     mfCostWeight       = KF_DEFAULT_COST_WEIGHT;   // flt_820037C8
-    mpBestNode         = nullptr;
+    mpBestNode         = 0;
     mbInProgress       = false;
     meRouteStatus      = Route::E_STATUS_UNINITIALISED;
-    mpDistanceFunction = nullptr;
+    mpDistanceFunction = 0;
 
     if (dword_82F3023C == -1)
     {
@@ -324,7 +324,7 @@ bool AStar::Prepare(const AStarVector2& lStartPosition, const AStarVector2& lEnd
 
     mpBestNode = mAStarNodePool.NewNode(lStartPosition, luStartSectionIndex,
                                         luStartSectionIndex, AStarNodePool::KU_INVALID_PORTAL_INDEX);
-    CGS_ASSERT(mpBestNode != nullptr, "mpBestNode != NULL");
+    CGS_ASSERT(mpBestNode != 0, "mpBestNode != NULL");
 
     mpBestNode->SetCost(0.0f);
     mpBestNode->SetHeuristic(mpDistanceFunction(mpBestNode->GetPosition(), lEndPosition));
@@ -538,7 +538,7 @@ void AStar::BuildRoute(Route* lpOutRoute)
 
     if (meRouteStatus != Route::E_STATUS_BLOCKED)
     {
-        CGS_ASSERT(mpBestNode != nullptr, "mpBestNode != NULL");
+        CGS_ASSERT(mpBestNode != 0, "mpBestNode != NULL");
         BuildRoute(mpBestNode, lpOutRoute);
     }
 }
@@ -568,7 +568,7 @@ void AStar::BuildRoute(Route* lpOutRoute)
 // picked direction maths.
 void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
 {
-    CGS_ASSERT(lpBestNode != nullptr, "lpBestNode != NULL");
+    CGS_ASSERT(lpBestNode != 0, "lpBestNode != NULL");
 
     // ---- 1. back-trace into a stack buffer (start..goal not yet reversed) ----
     // The X360 frame holds a KU_MAX_NODES-deep scratch (the assert below bounds the trace

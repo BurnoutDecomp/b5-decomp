@@ -16,7 +16,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"  // CgsSceneManager::EntityId
 
 // EntityId is a single 32-bit handle word; N==32 (count word at +0x80 == 32*4, element stride 4).
-static_assert(sizeof(CgsSceneManager::EntityId) == 4,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
               "EntityId must be 4 bytes (Array<...,32> Append stride 4 / 0x80 count offset)");
 
 template void Array<CgsSceneManager::EntityId, 32>::Append(

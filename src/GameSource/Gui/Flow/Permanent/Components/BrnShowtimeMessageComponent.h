@@ -73,7 +73,7 @@ namespace BrnGui
         // (const void*, StateInterface*, const void*); only the state interface is used.
         virtual void Construct(const void* lpcDEBUGName,
                                CgsGui::StateInterface* lpStateInterface,
-                               const void* lpcParentName) override;
+                               const void* lpcParentName) ;
 
         // Prepare @ 0x82424F88 -- resolve+bind this banner's apt movie clip out of
         // lFile, reset its timeline, install the per-frame transition-complete

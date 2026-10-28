@@ -54,7 +54,7 @@ namespace Vehicle
         static const f32 KF_CRUSH_BAND_HI = 1.0f;   // flt_82F2A2BC
 
         CGS_ASSERT(mbPlayerCarInShowtime, "mbPlayerCarInShowtime");   // :1157
-        CGS_ASSERT(lpDeformationState != nullptr, "lpDeformationState");   // :1158
+        CGS_ASSERT(lpDeformationState != 0, "lpDeformationState");   // :1158
 
         const u8 luNumSensors = lpDeformationState->mu8NumSensors;    // lbz +0x6A4
         MS.mu8NumBounceSensors = luNumSensors;                        // byte_82FB8590

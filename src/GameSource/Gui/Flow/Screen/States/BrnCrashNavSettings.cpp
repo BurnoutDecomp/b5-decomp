@@ -191,12 +191,12 @@ namespace BrnGui
             {
             }
         };
-        static_assert(KI_EVENT_NETWORK_NEWS_TOS == 266, "ARTIST event id is 266");
-        static_assert(sizeof(CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>) == 12,
+        CGS_STATIC_ASSERT((KI_EVENT_NETWORK_NEWS_TOS == 266), "ARTIST event id is 266");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>) == 12),
                       "event 266 record header is 12 bytes");
-        static_assert(sizeof(GuiNetworkNewsAndTosWire266) == 16,
+        CGS_STATIC_ASSERT((sizeof(GuiNetworkNewsAndTosWire266) == 16),
                       "event 266 record is 12-byte header plus 4-byte payload");
-        static_assert(offsetof(GuiNetworkNewsAndTosWire266, muSelector) == 12,
+        CGS_STATIC_ASSERT((offsetof(GuiNetworkNewsAndTosWire266, muSelector) == 12),
                       "event 266 selector begins at record offset 12");
 
         // { 288, 184, 16, <GuiOverlayRequest> } -- 304 bytes on channel 40. ARTIST
@@ -215,12 +215,12 @@ namespace BrnGui
             {
             }
         };
-        static_assert(sizeof(CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>) == 12,
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>) == 12),
                       "ARTIST overlay request has a three-word channel-40 header");
-        static_assert(sizeof(GuiOverlayRequest) == 288, "ARTIST overlay request payload size");
-        static_assert(offsetof(GuiOverlayRequestWire184, mRequest) == 16,
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest) == 288), "ARTIST overlay request payload size");
+        CGS_STATIC_ASSERT((offsetof(GuiOverlayRequestWire184, mRequest) == 16),
                       "ARTIST overlay request payload begins at +0x10");
-        static_assert(sizeof(GuiOverlayRequestWire184) == 304,
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire184) == 304),
                       "ARTIST overlay request output record size");
 
     }

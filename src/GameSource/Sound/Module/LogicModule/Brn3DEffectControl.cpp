@@ -24,7 +24,7 @@ namespace Logic
 
 Brn3DEffectControl::Brn3DEffectControl()
     : CgsSound::Logic::Cgs3dEffectControl()
-    , mEngineDataAtrib(nullptr, nullptr)
+    , mEngineDataAtrib(0, 0)
     , mDrawSphere()
 {
 }

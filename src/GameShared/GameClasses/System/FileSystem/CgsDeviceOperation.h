@@ -28,8 +28,8 @@ namespace CgsFileSystem
         // file-system layer deliberately treats it as an opaque native-width token.
         typedef void* DeviceHandle;
 
-        void Clear() { mpDevice = nullptr; mDeviceHandle = nullptr; }
-        bool IsNull() const { return mpDevice == nullptr; }
+        void Clear() { mpDevice = 0; mDeviceHandle = 0; }
+        bool IsNull() const { return mpDevice == 0; }
 
         static Handle Make(Device* lpDevice, DeviceHandle lpDeviceHandle)
         {

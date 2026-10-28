@@ -18,8 +18,8 @@ namespace XCAM
 // @ 0x829883B8
 u32 COverlappedIO::Setup(XOVERLAPPED* pOverlapped)
 {
-    mpApc         = nullptr;
-    mpEventObject = nullptr;
+    mpApc         = 0;
+    mpEventObject = 0;
 
     // Stamp the overlapped pending and clear its result fields.
     pOverlapped->InternalLow     = KU_XCAM_IO_PENDING;
@@ -71,7 +71,7 @@ void COverlappedIO::SignalComplete(u32 dwStatus, u32 dwExtendedError, u32 dwInte
     if (mpApc)
     {
         // Queue the APC; if it could not be inserted, run its self-free path here.
-        if (!KeInsertQueueApc(mpApc, nullptr, nullptr, 0))
+        if (!KeInsertQueueApc(mpApc, 0, 0, 0))
         {
             KAPC* pApc = mpApc;
             ObDereferenceObject(pApc->Thread);
@@ -84,7 +84,7 @@ void COverlappedIO::SignalComplete(u32 dwStatus, u32 dwExtendedError, u32 dwInte
         ObDereferenceObject(mpEventObject);
     }
 
-    mpOverlapped = nullptr;
+    mpOverlapped = 0;
 }
 
 // @ 0x829882D8

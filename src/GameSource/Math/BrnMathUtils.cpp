@@ -40,7 +40,7 @@ namespace BrnMath
     Vector2 Flatten(Vector3 lVector)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lVector), "RwMath::IsValid( lVector )");
-        return Vector2{ lVector.x, lVector.z };
+        { const Vector2 lResult = { lVector.x, lVector.z }; return lResult; }
     }
 
     // ---------------------------------------------------------------------------------------

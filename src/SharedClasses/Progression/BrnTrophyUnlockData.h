@@ -109,7 +109,7 @@ namespace BrnProgression
         CgsID mCarUnlockId;           // +0x08  the car this trophy awards
     };
 
-    static_assert(sizeof(TrophyUnlockData) == 16,
+    CGS_STATIC_ASSERT((sizeof(TrophyUnlockData) == 16),
                   "TrophyUnlockData is the 16-byte serialised stride OnTrophyUnlock walks "
                   "(`v46 += 16`) and GetTrophyUnlock indexes (`16 * luIndex`)");
 }

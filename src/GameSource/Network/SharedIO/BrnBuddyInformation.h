@@ -16,5 +16,5 @@ struct BuddyInformation
     bool mbIsJoinable;
     char macPresenceData[100];
 };
-static_assert(sizeof(BuddyInformation) == 132, "ARTIST buddy record");
+CGS_STATIC_ASSERT((sizeof(BuddyInformation) == 132), "ARTIST buddy record");
 }}

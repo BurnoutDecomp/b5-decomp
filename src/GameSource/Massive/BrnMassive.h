@@ -45,10 +45,10 @@ namespace BrnMassive
         explicit BrnMassiveSubscriber(const char* lpcZoneName);
 
         // ----- SDK download callbacks ----------------------------------------
-        int  MediaDownload(int liAdvertId) override;
+        int  MediaDownload(int liAdvertId) ;
         int  MediaDownloadComplete(const void* lpData, int liDataSize,
-                                   unsigned int luMediaType, int liAdvertId) override;
-        void Tick() override;
+                                   unsigned int luMediaType, int liAdvertId) ;
+        void Tick() ;
 
         // Latch a fresh impression description when it supersedes the stored one
         // (a larger screen size, or the previous one has been reported by Tick).

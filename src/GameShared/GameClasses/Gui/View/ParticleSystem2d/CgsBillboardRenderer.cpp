@@ -80,7 +80,7 @@ const f32 BillboardRenderer::maUVDefault[8] = { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.
 void BillboardRenderer::SetUVTable(s32 liFramesX, s32 liFramesY, s32 liNumFrames)
 {
     miNumFrames = 0;
-    mpUVTable   = nullptr;
+    mpUVTable   = 0;
 
     // A non-positive explicit count means "one frame per grid cell".
     if (liNumFrames <= 0)
@@ -140,7 +140,7 @@ void BillboardRenderer::Construct(rw::IResourceAllocator* lpAllocator, s32 liMax
                                   const renderengine::BlendState* lpBlendState,
                                   s32 liFramesX, s32 liFramesY, s32 liNumFrames)
 {
-    mpUVTable       = nullptr;          // +8
+    mpUVTable       = 0;          // +8
     miVertexCount   = 0;               // +0x2014
     miMaxBillboards = liMaxBillboards; // +0x200C
     mpTextureState  = lpTextureState;  // +0x2030
@@ -179,12 +179,12 @@ void BillboardRenderer::Render(
     const BillboardInfo* laBillboards, s32 liNumBillboards) const
 {
     // Nothing to draw, or no bound texture state -> skip entirely.
-    if (liNumBillboards <= 0 || mpTextureState == nullptr)
+    if (liNumBillboards <= 0 || mpTextureState == 0)
         return;
 
     // [DIAG] NOT IN THE X360 BINARY -- boost-bar bring-up guard: a renderer whose vertex
     // carve failed (or that was never Constructed) must report, not fault on the fill below.
-    if (maVertexList == nullptr)
+    if (maVertexList == 0)
     {
         static s32 siNullDiagLeft = 4;
         if (siNullDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)

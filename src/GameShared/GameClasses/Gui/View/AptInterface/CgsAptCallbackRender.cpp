@@ -173,7 +173,7 @@ namespace CgsGui
         // -> nothing to draw. See AptRenderHandler::ZIDToAptString.
         const int liZID = static_cast<int>(reinterpret_cast<intptr_t>(lpAssetString));
         CgsAptString* lpSlot = lrHandler.ZIDToAptString(liZID);
-        if (lpSlot == nullptr || lrHandler.GetTextRenderer() == nullptr)
+        if (lpSlot == 0 || lrHandler.GetTextRenderer() == 0)
             return;
 
         // Fully-transparent batch -> nothing to draw. The guest's early-out is `vcmpeqfp` on the
@@ -246,7 +246,7 @@ namespace CgsGui
 
         const u32 luNumFiles = lpObject->muNumberOfFiles;
         if (luNumFiles == 0)
-            return nullptr;
+            return 0;
 
         const u32* lpFileTable = reinterpret_cast<const u32*>(
             static_cast<uintptr_t>(lpObject->mppGeometryFiles));
@@ -271,7 +271,7 @@ namespace CgsGui
                         static_cast<uintptr_t>(lpMesh->mpTexture));
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // The bsearch comparator (PS3 0x5BAE94, CgsGui::_FindGeometryFile): compare the two records'
@@ -400,7 +400,7 @@ namespace CgsGui
         AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
         const int liZID = static_cast<int>(reinterpret_cast<intptr_t>(lpAssetString));
         CgsAptString* lpSlot = lrHandler.ZIDToAptString(liZID);
-        if (lpSlot != nullptr)
+        if (lpSlot != 0)
             lrHandler.DestroyAptString(lpSlot);
     }
 
@@ -449,8 +449,8 @@ namespace CgsGui
         // instead of letting FindFont's degenerate empty-slot result AV inside Prepare.
         const FontCollection* lpFonts =
             reinterpret_cast<const FontCollection*>(lrHandler.GetFontCollection());
-        if (lpFonts != nullptr && lpFonts->maFonts[0].IsNull())
-            lpFonts = nullptr;
+        if (lpFonts != 0 && lpFonts->maFonts[0].IsNull())
+            lpFonts = 0;
         *lppFontsOut     = lpFonts;
         *lpiEffectOut    = lrHandler.GetTextEffect();
         *lpfSizeScaleOut = lrHandler.GetFontSizeScale();

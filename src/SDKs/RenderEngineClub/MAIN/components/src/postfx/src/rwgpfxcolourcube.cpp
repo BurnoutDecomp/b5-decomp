@@ -22,8 +22,7 @@
 // class declaration carrying GetResourceDescriptor now lives in the shared header rwgpfxcolourcube.h
 // so the game-side resource-type handler (CgsRwColourCubeResourceType.cpp) can share it.
 
-namespace rw::graphics::postfx
-{
+namespace rw { namespace graphics { namespace postfx {
     // X360 0x82402C48.
     rw::BaseResourceDescriptors<5>* ColourCube::GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpResult,
                                                                       const Parameters* lpParameters)
@@ -44,4 +43,4 @@ namespace rw::graphics::postfx
         lpResult->m_baseResourceDescriptors[0].m_alignment = 16;      // big-endian std low word
         return lpResult;
     }
-}
+} } }

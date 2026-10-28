@@ -106,13 +106,13 @@ namespace BrnNetwork
         static void _AssertLayout();
 
         // The whole result payload, console +0x04..+0xE0 (see the header note).
-        alignas(4) u8 mGameData[0xDC];   // +0x04
+        CGS_ALIGN(4) u8 mGameData[0xDC];   // +0x04
     };
 
     inline void GameResults::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(GameResults, mGameData) == 0x04, "mGameData @ +0x04");
-        static_assert(sizeof(void*) != 4 || sizeof(GameResults) == 0xE0, "GameResults is 0xE0 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(GameResults, mGameData) == 0x04), "mGameData @ +0x04");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(GameResults) == 0xE0), "GameResults is 0xE0 bytes");
     }
 }
 

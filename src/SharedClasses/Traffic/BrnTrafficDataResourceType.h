@@ -173,25 +173,25 @@ struct TrafficData
 };
 
 // ---- host layout contract with tools/assets/bundles/lane_transcode.py ---------------
-static_assert(offsetof(TrafficData, muSizeInBytes)         == 0x004, "TrafficData::muSizeInBytes");
-static_assert(offsetof(TrafficData, mpPvs)                 == 0x008, "TrafficData::mpPvs");
-static_assert(offsetof(TrafficData, mpapHulls)             == 0x010, "TrafficData::mpapHulls");
-static_assert(offsetof(TrafficData, mpapFlowTypes)         == 0x018, "TrafficData::mpapFlowTypes");
-static_assert(offsetof(TrafficData, muNumFlowTypes)        == 0x020, "TrafficData::muNumFlowTypes");
-static_assert(offsetof(TrafficData, muNumKillZoneRegions)  == 0x028, "TrafficData::muNumKillZoneRegions");
-static_assert(offsetof(TrafficData, mpaKillZoneIds)        == 0x030, "TrafficData::mpaKillZoneIds");
-static_assert(offsetof(TrafficData, mpaVehicleTraits)      == 0x060, "TrafficData::mpaVehicleTraits");
-static_assert(offsetof(TrafficData, mTrafficLights)        == 0x068, "TrafficData::mTrafficLights");
-static_assert(offsetof(TrafficData, muNumPaintColours)     == 0x1B8, "TrafficData::muNumPaintColours");
-static_assert(offsetof(TrafficData, mpaPaintColours)       == 0x1C0, "TrafficData::mpaPaintColours");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muSizeInBytes)         == 0x004), "TrafficData::muSizeInBytes");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpPvs)                 == 0x008), "TrafficData::mpPvs");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpapHulls)             == 0x010), "TrafficData::mpapHulls");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpapFlowTypes)         == 0x018), "TrafficData::mpapFlowTypes");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muNumFlowTypes)        == 0x020), "TrafficData::muNumFlowTypes");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muNumKillZoneRegions)  == 0x028), "TrafficData::muNumKillZoneRegions");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpaKillZoneIds)        == 0x030), "TrafficData::mpaKillZoneIds");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpaVehicleTraits)      == 0x060), "TrafficData::mpaVehicleTraits");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mTrafficLights)        == 0x068), "TrafficData::mTrafficLights");
+CGS_STATIC_ASSERT((offsetof(TrafficData, muNumPaintColours)     == 0x1B8), "TrafficData::muNumPaintColours");
+CGS_STATIC_ASSERT((offsetof(TrafficData, mpaPaintColours)       == 0x1C0), "TrafficData::mpaPaintColours");
 
 class TrafficDataResourceType : public CgsResource::Type
 {
 public:
-    uint32_t                        GetTypeID() const override;
-    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
-    void                            FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t                        GetTypeID() const ;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
+    void                            FixDown(void* lpResource, const rw::Resource& lrResource) const ;
+    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 

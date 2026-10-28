@@ -19,7 +19,7 @@ namespace Locale
 
 // The installed template-getter callback (X360 dword_832BE200). Null until
 // SetLocaleGetStrCallback installs it. Owning definition.
-static LocaleGetStrCallback g_pfnLocaleGetStr = nullptr;
+static LocaleGetStrCallback g_pfnLocaleGetStr = 0;
 
 // Five rotating output buffers (X360 unk_832BB9F0) and the next-buffer index
 // (X360 dword_832BE1FC). Owning definitions.
@@ -130,10 +130,10 @@ u16* GetString(const char* pszArgSpec, ...)
 
     // Step 2 -- fetch the localized template via the callback.
     if (!g_pfnLocaleGetStr)
-        return nullptr;
+        return 0;
     const u16* lpTemplate = g_pfnLocaleGetStr();
     if (!lpTemplate)
-        return nullptr;
+        return 0;
 
     // Step 3 -- expand into the current rotating buffer.
     const int liBufferIndex = guLocaleBufferIndex;

@@ -153,7 +153,7 @@ void MassiveLog(int nLevel, const char* pcName, const char* pcFormat, ...);
 // The console RTL_CRITICAL_SECTION is 28 bytes; the host one is wider, so the
 // member is an opaque host-sized block the TU views as CRITICAL_SECTION.
 // ---------------------------------------------------------------------------
-struct alignas(8) MassiveCriticalSectionStorage
+struct CGS_ALIGN(8) MassiveCriticalSectionStorage
 {
     // Opaque OS critical-section storage. The X360 RTL_CRITICAL_SECTION is 28
     // bytes; a host-sized reservation (64 bytes covers the wider 64-bit Win32

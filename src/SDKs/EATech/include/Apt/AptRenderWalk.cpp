@@ -91,14 +91,14 @@ extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 // descendant exactly once (asm: the do/while sibling loop + the two recursions).
 static void AptCleanupInvisibleMovieClipInternal(AptRenderItem* pItem, int nTick)
 {
-    if (gpAptTargetTLS == nullptr)
+    if (gpAptTargetTLS == 0)
         return;
     AptRenderTreeManager* const lpMgr =
         reinterpret_cast<AptRenderTreeManager*>(gpAptTargetTLS->mppRenderRootAnchor);
-    if (lpMgr == nullptr)
+    if (lpMgr == 0)
         return;
 
-    while (pItem != nullptr)   // console: the loc_82ADF5BC sibling loop
+    while (pItem != 0)   // console: the loc_82ADF5BC sibling loop
     {
         AptRenderItem* const lpChild = lpMgr->Render_GetChildInvisible(pItem, nTick);
         AptRenderItem* const lpMask  = lpMgr->Render_GetMaskInvisible(pItem, nTick);
@@ -124,12 +124,12 @@ namespace
     // The single render context the walk threads (X360 dword_8324E2AC). One instance, brought
     // up lazily -- the console allocates one at render init; here it is owned + reset each walk
     // is unnecessary (its stacks self-balance across a matched Push/Pop walk).
-    AptRenderingContext* gpAptRenderContext = nullptr;
+    AptRenderingContext* gpAptRenderContext = 0;
     AptRenderingContext  gAptRenderContextStorage;
 
     AptRenderingContext* GetRenderContext()
     {
-        if (gpAptRenderContext == nullptr)
+        if (gpAptRenderContext == 0)
             gpAptRenderContext = new (&gAptRenderContextStorage) AptRenderingContext();
         return gpAptRenderContext;
     }
@@ -178,11 +178,11 @@ static void AptRenderLeaf(AptRenderItem* pItem, bool bBracket, AptRenderingConte
 // ---------------------------------------------------------------------------
 static void AptDecoupleTreeCleanUpInvisibleRI(AptRenderItem* pItem, int nTick)
 {
-    if (gpAptTargetTLS == nullptr)
+    if (gpAptTargetTLS == 0)
         return;
     AptRenderTreeManager* lpMgr =
         reinterpret_cast<AptRenderTreeManager*>(gpAptTargetTLS->mppRenderRootAnchor);
-    if (lpMgr == nullptr)
+    if (lpMgr == 0)
         return;
 
     AptRenderItem* lpChild = lpMgr->Render_GetChildInvisible(pItem, nTick);
@@ -205,17 +205,17 @@ static void AptDecoupleTreeTraversalClipper(AptRenderItem* pItem, int nTick, Apt
 {
     (void)bTopLevel;
     AptRenderItem* lpNode = pItem;
-    while (lpNode != nullptr)
+    while (lpNode != 0)
     {
         AptRenderItem* lpChildRev = lpNode->mpManagerFirstChild
-            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : nullptr;
+            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : 0;
         lpNode->Manager_UpdateFirstChild(lpChildRev);
         AptRenderItem* lpChild = lpNode->mpManagerFirstChild;   // v14[12]
 
         // bracket == leaf when: no first child, OR the node is not a "recurse-as-parent"
         // mask-owner ((mFlags & 0xFC0000) != 0x400000).
-        const bool lbMaskOwner = (lpChild != nullptr) && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
-        if (lpChild == nullptr || lbMaskOwner)
+        const bool lbMaskOwner = (lpChild != 0) && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
+        if (lpChild == 0 || lbMaskOwner)
         {
             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
         }
@@ -230,7 +230,7 @@ static void AptDecoupleTreeTraversalClipper(AptRenderItem* pItem, int nTick, Apt
             break;
 
         AptRenderItem* lpSibRev = lpNode->mpManagerNextSibling
-            ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : nullptr;
+            ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : 0;
         lpNode->Manager_UpdateNextSibling(lpSibRev);
         lpNode = lpNode->mpManagerNextSibling;   // v14[11]
     }
@@ -253,12 +253,12 @@ static AptRenderItem* AptDecoupleClippedTreeTraversal(AptRenderItem* pItem, int 
         lpResume = lpNode;
 
         AptRenderItem* lpChildRev = lpNode->mpManagerFirstChild
-            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : nullptr;
+            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : 0;
         lpNode->Manager_UpdateFirstChild(lpChildRev);
         AptRenderItem* lpChild = lpNode->mpManagerFirstChild;   // *(v12+48)
 
-        const bool lbMaskOwner = (lpChild != nullptr) && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
-        if (lpChild == nullptr || lbMaskOwner)
+        const bool lbMaskOwner = (lpChild != 0) && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
+        if (lpChild == 0 || lbMaskOwner)
         {
             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
         }
@@ -266,19 +266,19 @@ static AptRenderItem* AptDecoupleClippedTreeTraversal(AptRenderItem* pItem, int 
         {
             lpNode->PushRenderData(pCtx, eOp, nDepth);
             // The clipper walks the child span with no explicit sentinel (a8==0 -> to the end).
-            AptDecoupleTreeTraversalClipper(lpChild, nTick, pCtx, eOp, nDepth, nLayerMask, 0, nullptr);
+            AptDecoupleTreeTraversalClipper(lpChild, nTick, pCtx, eOp, nDepth, nLayerMask, 0, 0);
             lpNode->PopRenderData(pCtx, eOp, nDepth);
         }
 
         AptRenderItem* lpSibRev = lpNode->mpManagerNextSibling
-            ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : nullptr;
+            ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : 0;
         lpNode->Manager_UpdateNextSibling(lpSibRev);
         lpNode = lpNode->mpManagerNextSibling;   // *(v12+44)
     }
     // continue while the next sibling exists AND is within this clip node's clip depth AND
     // is itself a normal (clipDepth < 0x8000) node.  *(a1+22)=item->mClipDepth ; *(v12+20)=
     // sibling->mDepth ; *(v12+22)=sibling->mClipDepth.
-    while (lpNode != nullptr
+    while (lpNode != 0
            && pItem->mClipDepth < lpNode->mDepth
            && static_cast<u16>(lpNode->mClipDepth) < 0x8000u);
 
@@ -294,17 +294,17 @@ static void AptDecoupleMaskedTreeTraversal(AptRenderItem* pItem, int nTick, AptR
                                            AptMaskRenderOperation eOp, int nDepth, int nLayerMask)
 {
     AptRenderItem* lpNode = pItem;
-    while (lpNode != nullptr)
+    while (lpNode != 0)
     {
         AptRenderItem* lpChildRev = lpNode->mpManagerFirstChild
-            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : nullptr;
+            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : 0;
         lpNode->Manager_UpdateFirstChild(lpChildRev);
         AptRenderItem* lpChild = lpNode->mpManagerFirstChild;   // v12[12]
 
         // NB: the mask-owner test here is on the ROOT pItem's flags (v6 == the entry item),
         // matching the asm (`(*(v6 + 24) & 0xFC0000) != 0x400000`).
-        const bool lbMaskOwner = (lpChild != nullptr) && ((pItem->mFlags & 0x3F00u) == 0x1000u);
-        if (lpChild == nullptr || lbMaskOwner)
+        const bool lbMaskOwner = (lpChild != 0) && ((pItem->mFlags & 0x3F00u) == 0x1000u);
+        if (lpChild == 0 || lbMaskOwner)
         {
             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
         }
@@ -316,7 +316,7 @@ static void AptDecoupleMaskedTreeTraversal(AptRenderItem* pItem, int nTick, AptR
         }
 
         AptRenderItem* lpSibRev = lpNode->mpManagerNextSibling
-            ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : nullptr;
+            ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : 0;
         lpNode->Manager_UpdateNextSibling(lpSibRev);
         lpNode = lpNode->mpManagerNextSibling;   // v12[11]
     }
@@ -340,10 +340,10 @@ static void AptDecoupleMaskedTreeTraversal(AptRenderItem* pItem, int nTick, AptR
 static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderingContext* pCtx,
                                      AptMaskRenderOperation eOp, int nDepth, int nLayerMask, int bTopLevel)
 {
-    AptRenderItem* lpClipPending = nullptr;   // v13 -- a clip-start node awaiting its close
-    AptRenderItem* lpClipResume  = nullptr;   // v14 -- where the clip span resumes
+    AptRenderItem* lpClipPending = 0;   // v13 -- a clip-start node awaiting its close
+    AptRenderItem* lpClipResume  = 0;   // v14 -- where the clip span resumes
     AptRenderItem* lpNode        = pItem;     // v15
-    if (lpNode == nullptr)
+    if (lpNode == 0)
         return;
 
     do
@@ -361,20 +361,20 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
             // the clip node re-renders with op == SUBTRACT (li -1 into r6), which is what pops
             // the mask (DrawRenderingUnit Subtract -> END_MASK). (Was eOp/Normal -- that drew
             // the mask shape a second time instead of closing the mask. FIXED 2026-07-12.)
-            if (lpClipPending != nullptr)
+            if (lpClipPending != 0)
             {
                 if (lpClipPending->mClipDepth < lpNode->mDepth)
                 {
                     AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx,
                                                     static_cast<AptMaskRenderOperation>(-1), nDepth - 1,
                                                     nLayerMask, bTopLevel, lpClipResume);
-                    lpClipPending = nullptr;
-                    lpClipResume  = nullptr;
+                    lpClipPending = 0;
+                    lpClipResume  = 0;
                     --nDepth;
                 }
             }
 
-            if (lpClipPending != nullptr)
+            if (lpClipPending != 0)
             {
                 // still clipped: fall through to the shared node-render below (LABEL_11)
             }
@@ -407,8 +407,8 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                 else
                 {
                     // ---- mask (if hasMask bit29 set AND the mask link is non-null) ----
-                    AptRenderItem* lpMaskItem = nullptr;
-                    if ((luFlags & 0x4u) != 0 && lpNode->mpMask != nullptr)   // hasMask (x64 bit 2) + *(v15+28)
+                    AptRenderItem* lpMaskItem = 0;
+                    if ((luFlags & 0x4u) != 0 && lpNode->mpMask != 0)   // hasMask (x64 bit 2) + *(v15+28)
                     {
                         AptRenderItem* lpMaskRev = lpNode->mpMask->Manager_GetRenderRevision(nTick);
                         lpNode->Manager_UpdateMask(lpMaskRev);
@@ -434,13 +434,13 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                     if ((luFlags & 0x2u) == 0)   // isMask (x64 bit 1, ?GetIsMask @0x140839180) clear
                     {
                         AptRenderItem* lpChildRev = lpNode->mpManagerFirstChild
-                            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : nullptr;
+                            ? lpNode->mpManagerFirstChild->Manager_GetRenderRevision(nTick) : 0;
                         lpNode->Manager_UpdateFirstChild(lpChildRev);
                         AptRenderItem* lpChild = lpNode->mpManagerFirstChild;   // *(v15+48)
 
-                        const bool lbMaskOwner = (lpChild != nullptr)
+                        const bool lbMaskOwner = (lpChild != 0)
                             && ((lpNode->mFlags & 0x3F00u) == 0x1000u);
-                        if (lpChild == nullptr || lbMaskOwner)
+                        if (lpChild == 0 || lbMaskOwner)
                         {
                             AptRenderLeaf(lpNode, lbMaskOwner, pCtx, eOp, nDepth);
                         }
@@ -453,7 +453,7 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                     }
 
                     // ---- close the mask ----
-                    if (lpMaskItem != nullptr)
+                    if (lpMaskItem != 0)
                     {
                         --nDepth;
                         lpMaskItem->PushRenderDataAbsolute(pCtx);            // vtbl +0x08 (mask pop bracket)
@@ -468,17 +468,17 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
     next_sibling:
         {
             AptRenderItem* lpSibRev = lpNode->mpManagerNextSibling
-                ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : nullptr;
+                ? lpNode->mpManagerNextSibling->Manager_GetRenderRevision(nTick) : 0;
             lpNode->Manager_UpdateNextSibling(lpSibRev);
             lpNode = lpNode->mpManagerNextSibling;   // *(v15+44)
         }
     }
-    while (lpNode != nullptr);
+    while (lpNode != 0);
 
     // A clip span still open at the end of the sibling chain is closed now. X360:
     // `AptDecoupleTreeTraversalClipper(v13, a2, a3, -1, a5 - 1, a6, a7, v14)` -- op ==
     // SUBTRACT (the mask pop), same fix as the in-loop close above (was eOp/Normal).
-    if (lpClipPending != nullptr)
+    if (lpClipPending != 0)
         AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx,
                                         static_cast<AptMaskRenderOperation>(-1), nDepth - 1,
                                         nLayerMask, bTopLevel, lpClipResume);
@@ -502,10 +502,10 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
 static void AptRenderInternal(int nElapsedMs, int nLayerMask)
 {
     AptTarget* lpTarget = gpAptTargetTLS;
-    if (lpTarget == nullptr)
+    if (lpTarget == 0)
         return;
     // The render-enabled gate: the console checks *(off_8324E578 + 0x18) (the animation target).
-    if (lpTarget->mpAnimationTarget == nullptr)
+    if (lpTarget->mpAnimationTarget == 0)
         return;
 
     // Drain the VM deferred-release queue (dword_8324E508 / off_8324E2C8 under unk_8324E728):
@@ -518,7 +518,7 @@ static void AptRenderInternal(int nElapsedMs, int nLayerMask)
         for (int liIndex = 0; liIndex < gAptDeferredReleaseCount; ++liIndex)
         {
             gAptFuncs.pfnFreeTexture(lppQueue[liIndex]);
-            lppQueue[liIndex] = nullptr;
+            lppQueue[liIndex] = 0;
         }
         gAptDeferredReleaseCount = 0;
         AptUnresolveMutex().Unlock();
@@ -526,7 +526,7 @@ static void AptRenderInternal(int nElapsedMs, int nLayerMask)
 
     // Flush the render-manager teardown queue only when it holds deferred cells (the X360
     // gates the Clean call on the dword_8324E7D8 head word).
-    if (gAptRenderManagerQueue.mpHead != nullptr)
+    if (gAptRenderManagerQueue.mpHead != 0)
         gAptRenderManagerQueue.Clean();
 
     // Push a fresh identity/full-screen clip for this pass (X360 ++word_8324E390 then the
@@ -544,13 +544,13 @@ static void AptRenderInternal(int nElapsedMs, int nLayerMask)
 
     // The render-root chain head lives in the target's anchor slot (mppRenderRootAnchor).
     AptRenderTreeManager::_AptRenderItemRootList** ppHead = lpTarget->mppRenderRootAnchor;
-    if (ppHead != nullptr)
+    if (ppHead != 0)
     {
         AptRenderTreeManager* lpMgr =
             reinterpret_cast<AptRenderTreeManager*>(lpTarget->mppRenderRootAnchor);
         AptRenderItem* lpRoot = lpMgr->Render_GetRoot(ppHead, nTick);
 
-        if (lpRoot != nullptr)
+        if (lpRoot != 0)
             AptDecoupleTreeTraversal(lpRoot, nTick, GetRenderContext(), NormalOp(), 0, nLayerMask, 1);
     }
 

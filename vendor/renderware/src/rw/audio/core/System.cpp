@@ -38,7 +38,7 @@
 #include <intrin.h>                     // overflow-safe 128-bit multiply/divide
 
 #include <cstddef> // offsetof
-#include <cstdint> // uintptr_t (the allocation-tail carve)
+#include "types.hpp" // uintptr_t (the allocation-tail carve)
 #include <cstring> // memset (the X360 XMemSet)
 
 // -------------------------------------------------------------------------------------
@@ -116,7 +116,7 @@ static Profiler skProfiler;
 static u8 *AlignUp8(u8 *pAddress)
 {
     return reinterpret_cast<u8 *>(
-        (reinterpret_cast<std::uintptr_t>(pAddress) + 7) & ~static_cast<std::uintptr_t>(7));
+        (reinterpret_cast<uintptr_t>(pAddress) + 7) & ~static_cast<uintptr_t>(7));
 }
 
 // -------------------------------------------------------------------------------------

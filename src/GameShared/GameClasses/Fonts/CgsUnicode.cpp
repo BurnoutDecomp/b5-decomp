@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
-#include <cstdint>
+#include "types.hpp"
 
 // CgsUnicode -- UTF-8 helpers. Faithful ports of the X360 ARTIST bodies:
 //   ConvertUtf8CharToUtf16Char  0x827E6B08
@@ -42,7 +42,7 @@ namespace CgsUnicode
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid UTF8 Character " << static_cast<u32>(*lpUtf8String) << " at "
-                    << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<std::uintptr_t>(lpUtf8String));
+                    << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<uintptr_t>(lpUtf8String));
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 802);
             CgsDev::Assert::EndAssert();
         }

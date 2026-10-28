@@ -13,14 +13,14 @@
 namespace Attrib
 {
     // off_83011BC4 â€” installed by the (separately reconstructed) Database constructor.
-    Database* Database::sThis = nullptr;
+    Database* Database::sThis = 0;
 
     // The GetDatabasePrivate() seam (attribclassprivate.h:94; friend of Database).
     // X360 inline: read off_83011BC4 (sThis) then its +4 mPrivates, asserting the
     // database is initialized first (same assert as Database::Get).
     DatabasePrivate* GetDatabasePrivate()
     {
-        CGS_ASSERT(Database::sThis != nullptr, "Attribute database not initialized.");
+        CGS_ASSERT(Database::sThis != 0, "Attribute database not initialized.");
         return const_cast<DatabasePrivate*>(&Database::sThis->mPrivates);
     }
 
@@ -47,12 +47,12 @@ namespace Attrib
     Database& Attrib::Database::Get()
     {
         // X360: read sThis; assert + return it (the assert path still returns sThis).
-        CGS_ASSERT(sThis != nullptr, "Attribute database not initialized.");
+        CGS_ASSERT(sThis != 0, "Attribute database not initialized.");
         return *sThis;
     }
 
     bool Database::IsInitialized()
     {
-        return sThis != nullptr;
+        return sThis != 0;
     }
 }

@@ -29,7 +29,7 @@
 
 namespace BrnResource { struct VehicleListEntry; }
 namespace BrnPhysics { namespace Deformation { struct StreamedDeformationSpec; } }
-namespace BrnGameState { namespace GameStateModuleIO { enum EPlayerScoringIndex : s32; } }
+namespace BrnGameState { namespace GameStateModuleIO { enum EPlayerScoringIndex ; } }
 namespace BrnWorld { struct RaceCar; }
 
 namespace BrnWorld

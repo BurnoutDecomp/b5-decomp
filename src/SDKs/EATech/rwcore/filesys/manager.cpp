@@ -26,7 +26,7 @@
 #include "SDKs/EATech/rwcore/filesys/device.h"   // Manager / Device / Allocator / FileSystemConfig
 
 #include <cstring>   // memset, strchr
-#include <cstdint>   // intptr_t
+#include "types.hpp"   // intptr_t
 #include <new>       // placement new (Manager construction over allocator storage)
 
 namespace rw
@@ -40,7 +40,7 @@ namespace rw
             static const char KAC_ALLOC_TAG[] = "rw::core::filesystem::Manager::Allocate";
 
             // The global filesys Manager (null until CreateInstance).
-            Manager* gpFileSysManager = nullptr;
+            Manager* gpFileSysManager = 0;
 
             // -----------------------------------------------------------------------------
             // Un-recoverable rodata referenced by Init (device descriptors + default search
@@ -53,9 +53,9 @@ namespace rw
             // -----------------------------------------------------------------------------
             namespace
             {
-                DeviceDriver* const KP_DEFAULT_DEVICE_DESC = nullptr;  // the default driver (UNRECOVERED)
-                DeviceDriver* const KAP_DEVICE_TABLE[1] = { nullptr }; // the static driver table (UNRECOVERED)
-                const char* const KPC_DEFAULT_SEARCH_PATH = nullptr;// &unk_821811B4   (UNRECOVERED)
+                DeviceDriver* const KP_DEFAULT_DEVICE_DESC = 0;  // the default driver (UNRECOVERED)
+                DeviceDriver* const KAP_DEVICE_TABLE[1] = { 0 }; // the static driver table (UNRECOVERED)
+                const char* const KPC_DEFAULT_SEARCH_PATH = 0;// &unk_821811B4   (UNRECOVERED)
             }
 
             // -----------------------------------------------------------------------------
@@ -100,17 +100,17 @@ namespace rw
                 // mDeviceList emptied in the body (a1[0..2] = 0).
                 // mThreadParameters default-constructed here (a1+3); priority bumped below.
                 : miMaxReadSize(-1)            // a1[9] = -1
-                , mpDefaultDevice(nullptr)     // a1[10] = 0
-                , mpScratchBuffer(nullptr)     // a1[11] = 0
-                , mpCurrentDir(nullptr)        // a1[12] = 0
+                , mpDefaultDevice(0)     // a1[10] = 0
+                , mpScratchBuffer(0)     // a1[11] = 0
+                , mpCurrentDir(0)        // a1[12] = 0
                 , muScratchSize(lpConfig->muScratchSize)     // a1[13] = a2[1]
                 , muMaxSearchPaths(lpConfig->muMaxSearchPaths) // a1[14] = a2[0]
-                , mpSearchPathTable(nullptr)   // a1[15] = 0
+                , mpSearchPathTable(0)   // a1[15] = 0
                 , mbSortByPosition(0)          // a1[16] = 0
                 , muReserved44(0)              // a1[17] = 0
             {
-                mDeviceList.mpHead  = nullptr;   // *a1 = 0
-                mDeviceList.mpTail  = nullptr;   // a1[1] = 0
+                mDeviceList.mpHead  = 0;   // *a1 = 0
+                mDeviceList.mpTail  = 0;   // a1[1] = 0
                 mDeviceList.muCount = 0;         // a1[2] = 0
 
                 // a1[5] += 2 -- bump the embedded ThreadParameters' priority by 2.
@@ -165,7 +165,7 @@ namespace rw
                         }
 
                         mpSearchPathTable[luIndex].mpcPath = lpEntryStart;  // *(table + v11) = v10
-                        Device* lpDev = Device::GetInstance(lpEntryStart, nullptr);
+                        Device* lpDev = Device::GetInstance(lpEntryStart, 0);
                         liResult = static_cast<int>(reinterpret_cast<intptr_t>(lpDev));
                         lpEntryStart = lpSeg;
                         mpSearchPathTable[luIndex].mpDevice = lpDev;          // *(v14 + 4) = result
@@ -236,7 +236,7 @@ namespace rw
                 gpFileSysAllocator = lpConfig->mpAllocator;  // off_8327F07C = *(a1+8)
 
                 void* lpRaw = gpFileSysAllocator->Alloc(0x48, KAC_ALLOC_TAG, 0, 4, 0);
-                Manager* lpMgr = lpRaw ? new (lpRaw) Manager(lpConfig) : nullptr;
+                Manager* lpMgr = lpRaw ? new (lpRaw) Manager(lpConfig) : 0;
                 gpFileSysManager = lpMgr;                    // off_8327F078 = v3
 
                 if (gpFileSysManager)
@@ -255,16 +255,16 @@ namespace rw
             Manager::~Manager()
             {
                 gpFileSysAllocator->Free(mpSearchPathTable, 0);  // (*(*alloc+12))(alloc, a1[15], 0)
-                mpSearchPathTable = nullptr;                     // a1[15] = 0
+                mpSearchPathTable = 0;                     // a1[15] = 0
                 gpFileSysAllocator->Free(mpScratchBuffer, 0);    // (*(*alloc+12))(alloc, a1[11], 0)
-                mpScratchBuffer = nullptr;                       // a1[11] = 0
+                mpScratchBuffer = 0;                       // a1[11] = 0
 
                 while (mDeviceList.mpHead)
                     UnregisterDevice(mDeviceList.mpHead);
 
-                mpDefaultDevice     = nullptr;   // a1[10] = 0
-                mDeviceList.mpTail  = nullptr;   // a1[1]  = 0
-                mDeviceList.mpHead  = nullptr;   // *a1    = 0
+                mpDefaultDevice     = 0;   // a1[10] = 0
+                mDeviceList.mpTail  = 0;   // a1[1]  = 0
+                mDeviceList.mpHead  = 0;   // *a1    = 0
                 mDeviceList.muCount = 0;         // a1[2]  = 0
             }
 
@@ -278,7 +278,7 @@ namespace rw
             Device* Manager::RegisterDevice(DeviceDriver* lpDriver, unsigned int luFlags) const
             {
                 void* lpRaw = Allocate(sizeof(Device));
-                Device* lpDevice = lpRaw ? new (lpRaw) Device(lpDriver, luFlags) : nullptr;
+                Device* lpDevice = lpRaw ? new (lpRaw) Device(lpDriver, luFlags) : 0;
                 gpFileSysManager->mDeviceList.Append(lpDevice);
                 return lpDevice;
             }
@@ -291,7 +291,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             bool Manager::UnregisterDevice(Device* lpDevice) const
             {
-                if (!gpFileSysManager->mDeviceList.Remove(lpDevice, nullptr))
+                if (!gpFileSysManager->mDeviceList.Remove(lpDevice, 0))
                     return false;
                 if (lpDevice)
                     DeviceScalarDeletingDtor(lpDevice, 1);
@@ -324,7 +324,7 @@ namespace rw
                 Manager* lpResult = gpFileSysManager;
                 if (gpFileSysManager)
                     lpResult = ManagerScalarDeletingDtor(gpFileSysManager, 1);
-                gpFileSysManager = nullptr;
+                gpFileSysManager = 0;
                 return lpResult;
             }
         }

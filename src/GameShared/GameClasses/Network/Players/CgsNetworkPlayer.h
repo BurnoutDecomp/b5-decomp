@@ -168,7 +168,7 @@ namespace CgsNetwork
         void Destruct()
         {
             miNumberMessagesRegistered = 0;
-            mpPlayerManager            = nullptr;
+            mpPlayerManager            = 0;
             meLocalConsoleFrameRate    = static_cast<CgsSystem::EFrameRate>(-1);
             meRemoteConsoleFrameRate   = static_cast<CgsSystem::EFrameRate>(-1);
         }

@@ -94,7 +94,7 @@ namespace BrnNetwork
         s32   maiQuantisedScore[KI_MAX_UPLOAD_DATA];  // +0xBC
         s32   miNumScores;                            // +0xF8
     };
-    static_assert(sizeof(RoadRulesUploadData) >= 0xFC,
+    CGS_STATIC_ASSERT((sizeof(RoadRulesUploadData) >= 0xFC),
                   "RoadRulesUploadData must cover miNumScores @ +0xF8");
 
     // ------------------------------------------------------------------------
@@ -139,7 +139,7 @@ namespace BrnNetwork
         DownloadData mData;                                  // +0x000
         char         macPattern[KI_DOWNLOAD_DATA_PATTERN_LENGTH]; // +0x3C4
     };
-    static_assert(sizeof(RoadRulesDownloadData) >= 0x3C4 + KI_DOWNLOAD_DATA_PATTERN_LENGTH,
+    CGS_STATIC_ASSERT((sizeof(RoadRulesDownloadData) >= 0x3C4 + KI_DOWNLOAD_DATA_PATTERN_LENGTH),
                   "RoadRulesDownloadData must cover mData (0x3C4) + macPattern (123)");
 
     // ------------------------------------------------------------------------
@@ -181,6 +181,6 @@ namespace BrnNetwork
         u64 mu64RoadRulesID;                       // +0x140
         s32 miNumScores;                           // +0x148
     };
-    static_assert(sizeof(RoadRulesLocalPlayerDownloadedScores) == 0x150,
+    CGS_STATIC_ASSERT((sizeof(RoadRulesLocalPlayerDownloadedScores) == 0x150),
                   "RoadRulesLocalPlayerDownloadedScores layout (miNumScores @ +0x148)");
 }

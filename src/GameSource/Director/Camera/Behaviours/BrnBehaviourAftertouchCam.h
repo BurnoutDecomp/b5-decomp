@@ -144,23 +144,23 @@ public:
 
     // ---- the Behaviour virtual interface -----------------------------------------------------
     // Seed a freshly pooled instance (policy, position lag, random stream, shake).    (slot 0)
-    void Construct() override;
+    void Construct() ;
 
     // Drop the prepared latch (Update re-seeds on its first frame) and start from the block's
     // fast height / distance and minimum blend factor. Always true.                    (slot 1)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;
 
     // Frame the lagged player car away from the chosen target and publish the camera. (slot 2)
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) ;
 
     // The vehicle-attached policy Construct seeded.                                    (slot 5)
-    CollisionPolicy* GetCollisionPolicy() override;
+    CollisionPolicy* GetCollisionPolicy() ;
 
     // Reset the tweaker it is handed; the aftertouch cam maps nothing onto it.        (slot 6)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;
 
     //                                                                                  (slot 7)
-    const char* GetName() const override;
+    const char* GetName() const ;
 
     // Adopt an aftertouch-cam parameter block: assert it carries the aftertouch-cam type tag,
     // store the pointer and take the block's debug name. Declared over the derived Parameters, so
@@ -222,17 +222,17 @@ public:
     static void _AssertLayout()
     {
         typedef BehaviourAftertouchCam T;
-        static_assert(offsetof(T, mCollisionPolicy) < offsetof(T, mCurrentTargetPos) &&
+        CGS_STATIC_ASSERT((offsetof(T, mCollisionPolicy) < offsetof(T, mCurrentTargetPos) &&
                       offsetof(T, mCurrentTargetPos) < offsetof(T, mCrashPoint) &&
                       offsetof(T, mCrashPoint) < offsetof(T, mPositionLag) &&
                       offsetof(T, mPositionLag) < offsetof(T, mRandom) &&
                       offsetof(T, mRandom) < offsetof(T, mShake) &&
                       offsetof(T, mShake) < offsetof(T, mfHeight) &&
                       offsetof(T, mfTimeSinceLastDecision) < offsetof(T, mpParameters) &&
-                      offsetof(T, mpParameters) < offsetof(T, mSourceShot),
+                      offsetof(T, mpParameters) < offsetof(T, mSourceShot)),
                       "BehaviourAftertouchCam: members in console order");
-        static_assert(offsetof(T, mCrashPoint) - offsetof(T, mCurrentTargetPos) == 0x30 &&
-                      offsetof(T, mfHeight) - offsetof(T, mCrashPoint) == 0x80,
+        CGS_STATIC_ASSERT((offsetof(T, mCrashPoint) - offsetof(T, mCurrentTargetPos) == 0x30 &&
+                      offsetof(T, mfHeight) - offsetof(T, mCrashPoint) == 0x80),
                       "BehaviourAftertouchCam: the pointer-free run +0x270..+0x320 keeps the console spacing");
     }
 };

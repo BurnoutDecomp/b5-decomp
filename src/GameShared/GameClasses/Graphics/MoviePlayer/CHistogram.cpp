@@ -11,7 +11,7 @@
 
 void CHistogram::CalcHistogram(const u8* lpauImage, u32 luWidth, u32 luHeight)
 {
-    if (lpauImage == nullptr)
+    if (lpauImage == 0)
     {
         return;
     }

@@ -73,9 +73,9 @@ struct CollisionState : public BrnSound::Logic::BrnState
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
     static CgsSound::Logic::State* CreateObject(u32 auAllocator);
 
-    virtual void Attach(void* apvAttachment) override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual bool Detach() override;
+    virtual void Attach(void* apvAttachment) ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual bool Detach() ;
 
     const CgsSound::Utils::DataPoint<ELifetime>& GetLifetime() const
     {

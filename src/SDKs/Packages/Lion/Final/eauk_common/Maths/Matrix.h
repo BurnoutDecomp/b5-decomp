@@ -115,6 +115,6 @@ struct cMatrix
 // 64 bytes, 16-aligned: the stride cParticleBucket::AllocateParticle @0x82908750 indexes
 // the per-particle matrix array with (`slwi r10,r10,6`), and the span
 // cParticleLocator::GetMat @0x8290E288 leaves before its first keyframe at +0x50.
-static_assert(sizeof(cMatrix) == 64,
+CGS_STATIC_ASSERT((sizeof(cMatrix) == 64),
               "cMatrix is the 64-byte 4x4 (AllocateParticle @0x82908750 slwi r10,r10,6)");
-static_assert(alignof(cMatrix) == 16, "cMatrix rows are VMX lane registers");
+CGS_STATIC_ASSERT((__alignof(cMatrix) == 16), "cMatrix rows are VMX lane registers");

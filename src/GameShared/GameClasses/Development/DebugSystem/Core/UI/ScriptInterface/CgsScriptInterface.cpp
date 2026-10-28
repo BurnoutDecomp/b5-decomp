@@ -58,7 +58,7 @@ namespace CgsDev
             { ScriptCommand_Print,             "PRINT",     "<MESSAGE> - Display a message on the console" },
             { ScriptCommand_Alias,             "ALIAS",     "<ALIAS> <PATH/NAME> - Create a shortcut alias" },
             { ScriptCommand_Bind,              "BIND",      "<Fx> <CMD> - Bind F1-F12 to a command" },
-            { nullptr,                         nullptr,     nullptr },
+            { 0,                         0,     0 },
         };
 
         // ARTIST inlines this initialization into DebugUI::Construct (0x8282FB40..0x8282FB80):
@@ -69,8 +69,8 @@ namespace CgsDev
             for (s32 liIndex = 0; liIndex < KI_MAX_ALIASES; ++liIndex)
             {
                 maAliasTable[liIndex].macAlias[0] = '\0';
-                maAliasTable[liIndex].mpVariable = nullptr;
-                maAliasTable[liIndex].mpFunction = nullptr;
+                maAliasTable[liIndex].mpVariable = 0;
+                maAliasTable[liIndex].mpFunction = 0;
             }
             for (s32 liIndex = 0; liIndex < KI_MAX_BINDINGS; ++liIndex)
                 maBindingTable[liIndex].macBinding[0] = '\0';
@@ -95,7 +95,7 @@ namespace CgsDev
                 if (_stricmp(maAliasTable[liCommandIndex].macAlias, lpcAlias) == 0)
                     return &maAliasTable[liCommandIndex];
             }
-            return nullptr;
+            return 0;
         }
 
         Variable* ScriptInterface::FindVariable(const char* lpcPath, bool lbCheckAliases)
@@ -124,8 +124,8 @@ namespace CgsDev
         {
             lpcBuffer[0] = '\0';
 
-            MenuItem* lpMenuItem = nullptr;
-            const char* lpcName = nullptr;
+            MenuItem* lpMenuItem = 0;
+            const char* lpcName = 0;
             if (lpAlias->mpVariable)
             {
                 lpMenuItem = GetUI().GetVariableManager().FindMenuItem(lpAlias->mpVariable);
@@ -173,8 +173,8 @@ namespace CgsDev
             Alias* lpAlias = FindAlias(lpcAlias);
             if (lpAlias)
             {
-                lpAlias->mpVariable = nullptr;
-                lpAlias->mpFunction = nullptr;
+                lpAlias->mpVariable = 0;
+                lpAlias->mpFunction = 0;
                 lpAlias->macAlias[0] = 0;
             }
             else
@@ -548,7 +548,7 @@ namespace CgsDev
 
             const char* lpcPath = *lppcParameters;
 
-            Function* lpFunction = nullptr;
+            Function* lpFunction = 0;
             Alias* lpAlias = lpThis->FindAlias(lpcPath);
             if (lpAlias)
                 lpFunction = lpAlias->mpFunction;

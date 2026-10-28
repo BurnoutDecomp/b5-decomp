@@ -63,11 +63,11 @@ public:
     };
 
     // ---- the Behaviour virtual interface -----------------------------------------------------
-    void        Construct() override;                                                    // slot 0
-    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1
-    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) override; // slot 2
-    void        SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // slot 6
-    const char* GetName() const override;                                                 // slot 7
+    void        Construct() ;                                                    // slot 0
+    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;        // slot 1
+    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) ; // slot 2
+    void        SetupTweaker(Utils::Tweaker& lrTweaker) ;                         // slot 6
+    const char* GetName() const ;                                                 // slot 7
 
     // ---- this class's own virtuals (slots 8 and 9; the base's non-virtual pair is hidden) ----
     virtual void                         SetParameters(const Behaviour::Parameters* lpParameters);
@@ -124,7 +124,7 @@ public:
     static void _AssertLayout()
     {
         typedef BehaviourRenderMetrics T;
-        static_assert(offsetof(T, mLineTest) < offsetof(T, mCamPosition) &&
+        CGS_STATIC_ASSERT((offsetof(T, mLineTest) < offsetof(T, mCamPosition) &&
                       offsetof(T, mCamPosition) < offsetof(T, mGroundNormal) &&
                       offsetof(T, mGroundNormal) < offsetof(T, mIdlePosition) &&
                       offsetof(T, mIdlePosition) < offsetof(T, mIdleDirection) &&
@@ -136,10 +136,10 @@ public:
                       offsetof(T, meAfterWaitState) < offsetof(T, mfTimeWaited) &&
                       offsetof(T, mfTimeWaited) < offsetof(T, mfTimeToWait) &&
                       offsetof(T, mfTimeToWait) < offsetof(T, muAnglesChecked) &&
-                      offsetof(T, mInitialPosition) > offsetof(T, mbTargetReady),
+                      offsetof(T, mInitialPosition) > offsetof(T, mbTargetReady)),
                       "BehaviourRenderMetrics: members in console order");
-        static_assert(offsetof(T, mbWaitingForLineTest) == offsetof(T, muAnglesChecked) + 1 &&
-                      offsetof(T, mbTargetReady) == offsetof(T, muAnglesChecked) + 2,
+        CGS_STATIC_ASSERT((offsetof(T, mbWaitingForLineTest) == offsetof(T, muAnglesChecked) + 1 &&
+                      offsetof(T, mbTargetReady) == offsetof(T, muAnglesChecked) + 2),
                       "BehaviourRenderMetrics: the three byte flags are adjacent (+0xCC / +0xCD / +0xCE)");
     }
 };

@@ -100,7 +100,7 @@ namespace BrnWorld
         // Identity hooks. The X360 build returns "PVS" / false; GetPath inherits the base "World".
         virtual const char* GetName() const { return "PVS"; }
         // ARTIST vtable 0x820CE8E8, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "World"; }
+        const char* GetPath() const  { return "World"; }
         virtual bool        IsSimple() const { return false; }
 
     private:

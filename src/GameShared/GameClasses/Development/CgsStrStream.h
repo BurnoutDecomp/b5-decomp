@@ -60,7 +60,7 @@ namespace CgsDev
         // (StrStreamBase::AppendFormat) when building the "Reset Player Car" location labels.
         using StrStreamBase::operator<<;
 
-        StrStreamBase& operator<<(const char* lpcText) override;
+        StrStreamBase& operator<<(const char* lpcText) ;
 
         // 0x82815E80 - the buffer sink: append text to mpcBuffer without overflowing it (X360
         // CgsDev::StrStream::Append - walk to the NUL then strncat with the remaining room
@@ -97,7 +97,7 @@ namespace CgsDev
     {
         SimpleStrStream();
 
-        StrStreamBase& operator<<(const char* lpcText) override;
+        StrStreamBase& operator<<(const char* lpcText) ;
         StrStreamBase& operator<<(s32 liValue);
         StrStreamBase& operator<<(f32 lfValue);
 

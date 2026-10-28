@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <algorithm>   // std::sort (ARTIST RadixSortJob::Execute uses std::_Sort)
-#include <cstdint>     // uintptr_t (128-byte alignment of the flat key array)
+#include "types.hpp"     // uintptr_t (128-byte alignment of the flat key array)
 // =============================================================================
 // CgsGraphicsDispatchList.cpp
 //
@@ -167,7 +167,7 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
     const uintptr_t luDelta = luBinOutput - luBinBase;
     if (luDelta != 0)
     {
-        for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != nullptr;)
+        for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != 0;)
         {
             KeyBlock* lpNext = lpBlock->mpNext;
             if (lpBlock->mpKeys)
@@ -192,15 +192,15 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
         }
     }
     muCount = 0;
-    mpBlockListHead = mpBlockListTail = nullptr;
+    mpBlockListHead = mpBlockListTail = 0;
 }
 
 // ARTIST827E9438: concatenate saved chains and recount their keys after joining
 // the conversion jobs. Each chain still contains ordinary 64-key blocks.
 void DispatchList::ReconnectChainBlocks()
 {
-    CGS_ASSERT(mpBlockListHead == nullptr, "mpBlockListHead == NULL");
-    CGS_ASSERT(mpBlockListTail == nullptr, "mpBlockListTail == NULL");
+    CGS_ASSERT(mpBlockListHead == 0, "mpBlockListHead == NULL");
+    CGS_ASSERT(mpBlockListTail == 0, "mpBlockListTail == NULL");
     muCount = 0;
     for (u32 luChain = 0; luChain < muChainBlockCount; ++luChain)
     {
@@ -225,24 +225,24 @@ void DispatchList::ReconnectChainBlocks()
 // ARTIST827E9590..96A0: Append transfers ownership of the source chain.
 void DispatchList::Append(DispatchList* lpOther)
 {
-    CGS_ASSERT(lpOther != nullptr, "lpOther != NULL");
+    CGS_ASSERT(lpOther != 0, "lpOther != NULL");
     CGS_ASSERT(lpOther != this, "lpOther != this");
     if (lpOther->mpBlockListHead)
     {
         if (mpBlockListTail)
         {
-            CGS_ASSERT(mpBlockListTail->mpNext == nullptr, "mpBlockListTail->mpNext == NULL");
+            CGS_ASSERT(mpBlockListTail->mpNext == 0, "mpBlockListTail->mpNext == NULL");
             mpBlockListTail->mpNext = lpOther->mpBlockListHead;
         }
         else
         {
-            CGS_ASSERT(mpBlockListHead == nullptr, "mpBlockListHead == NULL");
+            CGS_ASSERT(mpBlockListHead == 0, "mpBlockListHead == NULL");
             mpBlockListHead = lpOther->mpBlockListHead;
         }
         mpBlockListTail = lpOther->mpBlockListTail;
         muCount += lpOther->muCount;
         lpOther->muCount = 0;
-        lpOther->mpBlockListHead = lpOther->mpBlockListTail = nullptr;
+        lpOther->mpBlockListHead = lpOther->mpBlockListTail = 0;
     }
 }
 

@@ -445,7 +445,7 @@ VecFloat ParamTransform::GetSpeed() const
 
     CGS_ASSERT(lfSpeed == lfSpeed, "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )");
 
-    return VecFloat{ lfSpeed, lfSpeed, lfSpeed, lfSpeed };
+    { const VecFloat lResult = { lfSpeed, lfSpeed, lfSpeed, lfSpeed }; return lResult; }
 }
 
 // 0x82712BA8 -- seed the transform from the spawn basis + speed. Stores (targets/order exact

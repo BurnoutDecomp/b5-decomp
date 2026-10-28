@@ -42,15 +42,15 @@ namespace BrnNetwork
         void          Construct();
         void          PrepareForSend(u16 lu16Frame, CgsID lCollectableID, ECollectableType leType);
         bool          Retrieve(CgsID* lpCollectableID, ECollectableType* lpeType);
-        s32   GetPackedMessageSize() override;
+        s32   GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFBB8 -- bodied in this TU (DWARF BrnCollectableMessage.h:103).
-        const char* GetName() const override;
+        const char* GetName() const ;
 
-        bool  OldMessagesAreValid() const override;
+        bool  OldMessagesAreValid() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         CgsID            mCollectableID;             // DWARF :92 (+0x28, first leaf member)
@@ -65,5 +65,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(CollectableMessage) == 0x38, "sizeof(CollectableMessage) == 0x38");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CollectableMessage) == 0x38), "sizeof(CollectableMessage) == 0x38");
 } // namespace BrnNetwork

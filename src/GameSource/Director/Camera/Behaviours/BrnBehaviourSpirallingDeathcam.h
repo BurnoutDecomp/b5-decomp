@@ -162,11 +162,11 @@ public:
     };
 
     // ---- the Behaviour virtual interface (see the vtable note in the banner) ----
-    void Construct() override;                                                      // @0x8222C088
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;         // @0x821FB3F8
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;      // @0x8224A528
-    CollisionPolicy* GetCollisionPolicy() override;                                 // cpp:225
-    const char* GetName() const override;                                           // @0x821FB600
+    void Construct() ;                                                      // @0x8222C088
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;         // @0x821FB3F8
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;      // @0x8224A528
+    CollisionPolicy* GetCollisionPolicy() ;                                 // cpp:225
+    const char* GetName() const ;                                           // @0x821FB600
 
     // Adopt an authored parameter block. @0x821F5680: assert the block's type tag, then store
     // the pointer (console +0x2D0). Hides Behaviour::SetParameters (no base slot; see banner).

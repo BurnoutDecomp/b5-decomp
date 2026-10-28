@@ -1,7 +1,6 @@
 #include "RwMathVectorTemplates.h"
 
-namespace rw::math::fpu
-{
+namespace rw { namespace math { namespace fpu {
 template <>
 Vector4Template<float>::Vector4Template(float lfX, float lfY, float lfZ, float lfW)
     : mX(lfX),
@@ -10,4 +9,4 @@ Vector4Template<float>::Vector4Template(float lfX, float lfY, float lfZ, float l
       mW(lfW)
 {
 }
-}
+} } }

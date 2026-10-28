@@ -56,7 +56,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetFileEntry/FileHolds
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease drain
 
-#include <cstdint>
+#include "types.hpp"
 
 extern AptValue*          gpUndefinedValue;    // off_8324D814 / xb1 qword_14147A010
 extern AptValueVector* gpValuesToRelease;      // off_8324E51C / xb1 qword_14147A410 (AptGlobals.cpp)
@@ -176,7 +176,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
     const bool bUnresolve = (pConstCtx == 0);
 
     if (bUnresolve)
-        if (gpValuesToRelease != nullptr)
+        if (gpValuesToRelease != 0)
             gpValuesToRelease->ReleaseValues();   // xb1: sub_14083ED90(vector) on entry
 
     unsigned char* pc = pStream;
@@ -383,7 +383,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                         pValue->AddRef();
 
                     if ((i % 16) == 0)
-                        if (gpValuesToRelease != nullptr)
+                        if (gpValuesToRelease != 0)
                             gpValuesToRelease->ReleaseValues();   // the periodic drain
                 }
                 break;
@@ -395,7 +395,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
         }
 
         if (bDrain)
-            if (gpValuesToRelease != nullptr)
+            if (gpValuesToRelease != 0)
                 gpValuesToRelease->ReleaseValues();   // LABEL_69: the per-op resolve drain
 
         nOp = *pc++;

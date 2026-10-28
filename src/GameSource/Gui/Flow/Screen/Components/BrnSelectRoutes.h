@@ -68,7 +68,7 @@ namespace BrnGui
         };
 
         virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                               const char* lpacParentName) override;
+                               const char* lpacParentName) ;
         void Setup(const GuiEventNetworkGameParams* lpGameParams, GuiCache* lpGuiCache);
         void Update();
         void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);

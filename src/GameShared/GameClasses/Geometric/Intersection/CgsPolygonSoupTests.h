@@ -77,7 +77,7 @@ namespace CgsGeometric
     //   (`const LineTestResult *`, a typedef of it) use that name. RENAME-WHEN the SceneManager
     //   readers (CgsSceneManagerModule.cpp, CgsSceneManagerIO_SceneQueryResultsQueue.h -- not this
     //   lane's files) move with it; the host member names are kept until then.
-    struct alignas(16) PolySoupLineNearestResult
+    struct CGS_ALIGN(16) PolySoupLineNearestResult
     {
         Vector3 mVertex0;        // +0x00  winning triangle, in the kernel's (V0,V1,V2) order
         Vector3 mVertex1;        // +0x10
@@ -87,7 +87,7 @@ namespace CgsGeometric
         Vector4 mLineParam;      // +0x50  t, splatted to all four lanes (2.0 == no hit)
         u32     mau32Tag[4];     // +0x60  the poly's surface tag, splatted (material hi16 / group lo16)
     };
-    static_assert(sizeof(PolySoupLineNearestResult) == 112,
+    CGS_STATIC_ASSERT((sizeof(PolySoupLineNearestResult) == 112),
                   "PolySoupLineNearestResult is the 112-byte nearest-hit record (14 qwords copied)");
 
     // IntersectLinePolySoupTriangleSingleSided4 @0x8283B520 (152)

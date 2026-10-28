@@ -93,10 +93,10 @@ namespace Native
 
         constexpr rw::math::vpu::Vector3 ScaledBounciness(f32 lfScale)
         {
-            return rw::math::vpu::Vector3{ KV_DEBRIS_BOUNCINESS.x * lfScale,
+            { const rw::math::vpu::Vector3 lResult = { KV_DEBRIS_BOUNCINESS.x * lfScale,
                                            KV_DEBRIS_BOUNCINESS.y * lfScale,
                                            KV_DEBRIS_BOUNCINESS.z * lfScale,
-                                           KV_DEBRIS_BOUNCINESS.w * lfScale };
+                                           KV_DEBRIS_BOUNCINESS.w * lfScale }; return lResult; }
         }
 
         constexpr rw::math::vpu::Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };

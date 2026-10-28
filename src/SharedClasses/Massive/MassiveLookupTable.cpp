@@ -1,6 +1,6 @@
 #include "SharedClasses/Massive/MassiveLookupTable.h"
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // BrnMassive::MassiveLookupTable relocation pair. The console FixUp/FixDown also call an
 // empty per-item routine on each item's mSceneID (the id needs no relocation); it has no

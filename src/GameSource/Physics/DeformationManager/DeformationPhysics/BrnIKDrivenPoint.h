@@ -82,9 +82,9 @@ namespace Deformation
         Vector3 GetOffsetFromInitialPosition() const
         {
             const Vector3& lrInitial = mpSpec->GetInitialPos();
-            return Vector3{ mPositionPlusDistanceToA.x - lrInitial.x,
+            { const Vector3 lResult = { mPositionPlusDistanceToA.x - lrInitial.x,
                             mPositionPlusDistanceToA.y - lrInitial.y,
-                            mPositionPlusDistanceToA.z - lrInitial.z, 0.0f };
+                            mPositionPlusDistanceToA.z - lrInitial.z, 0.0f }; return lResult; }
         }
         f32     GetScratchAmount() const  { return mfScratchAmount; }
         Vector3 GetOriginalPosition() const { return mpSpec->GetInitialPos(); }

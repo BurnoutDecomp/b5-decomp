@@ -48,7 +48,7 @@ namespace Attrib
     // ------------------------------------------------------------------------
     Collection* Collection_AddRef(Collection* lpCollection, int /*liFlags*/)
     {
-        return lpCollection ? lpCollection->AddRef() : nullptr;
+        return lpCollection ? lpCollection->AddRef() : 0;
     }
 
     int Collection_Release(Collection* lpCollection, int /*liFlags*/)
@@ -63,7 +63,7 @@ namespace Attrib
     {
         return lpRefSpec
             ? const_cast<Collection*>(lpRefSpec->GetCollectionWithDefault())
-            : nullptr;
+            : 0;
     }
 
     // Attrib::Instance (and Collection / AttributeValue) are declared in attribinstance.h.
@@ -87,7 +87,7 @@ namespace Attrib
             }
             else
             {
-                mpAttributeData = nullptr;
+                mpAttributeData = 0;
             }
             Collection_Release(lpOld, 0);
             muFlags &= ~1u;
@@ -112,13 +112,13 @@ namespace Attrib
     }
 
     Instance::Instance(Collection* lpCollection, void* lpOwner)
-        : mpCollection(lpCollection), mpAttributeData(nullptr), mpOwner(lpOwner), muFlags(0)
+        : mpCollection(lpCollection), mpAttributeData(0), mpOwner(lpOwner), muFlags(0)
     {
         if (lpCollection)
         {
             // X360 `lwz r11,0x20(r30); if (!r11) instance[0xC] = 1` -- a collection
             // with NO source vault carries no default layout to fall back on.
-            if (lpCollection->mpSource == nullptr)
+            if (lpCollection->mpSource == 0)
                 muFlags = 1;
             mpAttributeData = lpCollection->mpData;
             CGS_ASSERT(lpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
@@ -224,7 +224,7 @@ namespace Attrib
             {
                 lResult = reinterpret_cast<Collection*>(Collection_AddRef(lpNewCollection, 0));
                 mpAttributeData = mpCollection->mpData;
-                lbHasDefault = (mpCollection->mpSource == nullptr);
+                lbHasDefault = (mpCollection->mpSource == 0);
             }
 
             if (!lbHasDefault)
@@ -272,7 +272,7 @@ namespace Attrib
     void* Instance::GetAttributePointer(u64 luAttributeKey, u32 luIndex) const
     {
         if (!mpCollection)
-            return nullptr;
+            return 0;
         return mpCollection->GetData(luAttributeKey, luIndex);
     }
 

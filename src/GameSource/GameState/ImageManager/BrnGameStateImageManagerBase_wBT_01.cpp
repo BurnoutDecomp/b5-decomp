@@ -12,7 +12,7 @@ namespace BrnGameState
 // Cache the progression manager and clear every slot.
 void GameStateImageManagerBase::Construct(BrnProgression::ProgressionManager* lpProgression)
 {
-    CGS_ASSERT(lpProgression != nullptr, "lpProgression");
+    CGS_ASSERT(lpProgression != 0, "lpProgression");
 
     mpProgression       = lpProgression;        // this+0xB8
     miMugshotToSaveIndex = 0;                    // this+0xAC
@@ -52,7 +52,7 @@ void GameStateImageManagerBase::Destruct()
     mImagesToRenderBitArray.UnSetAll();
     mbLoadInProgress     = false;
     maImageLoadRequests.Clear();
-    mpProgression        = nullptr;
+    mpProgression        = 0;
 }
 
 // Allocate and zero the three 160x120 DXT1 gallery mugshot textures out of the given heap.

@@ -81,11 +81,11 @@ struct Car3DControl : public BrnSound::Logic::Brn3DEffectControl
     Car3DControl();
     virtual ~Car3DControl();
 
-    virtual s32 GetController(s32 aiIndex) override;
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    virtual bool Prepare(CgsSound::Logic::State* apState) override;
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
+    virtual s32 GetController(s32 aiIndex) ;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    virtual bool Prepare(CgsSound::Logic::State* apState) ;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
 
 protected:
     virtual Vector3 GetPositionOffset() const;
@@ -102,7 +102,7 @@ struct Engine3dControl : public Car3DControl
     virtual ~Engine3dControl();
 
 protected:
-    virtual Vector3 GetPositionOffset() const override;
+    virtual Vector3 GetPositionOffset() const ;
 };
 
 // Brn3dCarPosition.h:94 (DWARF). Exhaust3dControl : Car3DControl.
@@ -112,7 +112,7 @@ struct Exhaust3dControl : public Car3DControl
     virtual ~Exhaust3dControl();
 
 protected:
-    virtual Vector3 GetPositionOffset() const override;
+    virtual Vector3 GetPositionOffset() const ;
 };
 
 // Brn3dCarPosition.h:104 (DWARF). LeftSide3dControl : Car3DControl.
@@ -122,7 +122,7 @@ struct LeftSide3dControl : public Car3DControl
     virtual ~LeftSide3dControl();
 
 protected:
-    virtual Vector3 GetPositionOffset() const override;
+    virtual Vector3 GetPositionOffset() const ;
 };
 
 // Brn3dCarPosition.h:114 (DWARF). RightSide3dControl : Car3DControl.
@@ -132,7 +132,7 @@ struct RightSide3dControl : public Car3DControl
     virtual ~RightSide3dControl();
 
 protected:
-    virtual Vector3 GetPositionOffset() const override;
+    virtual Vector3 GetPositionOffset() const ;
 };
 
 } // namespace Vehicles

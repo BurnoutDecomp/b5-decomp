@@ -17,7 +17,7 @@ namespace Gen
     class physicsvehiclebaseattribs : private Instance
     {
     public:
-        explicit physicsvehiclebaseattribs(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit physicsvehiclebaseattribs(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // Re-exposed from the private Instance base (attribs-setup wave, 2026-08-09): the X360
         // consumers (SimpleVehicleAttribs::SetupAttribs @0x825E6778, the tire scatters) read the

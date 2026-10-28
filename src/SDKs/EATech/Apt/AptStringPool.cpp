@@ -131,7 +131,7 @@ extern DOGMA_PoolManager* gpAptPseudoDataPool;
 // a singly-linked chain threaded through AptString::mpNext (the +0xC link).
 namespace
 {
-    void*        gpAptStringPoolBuckets = nullptr;   // off_8324E4F4
+    void*        gpAptStringPoolBuckets = 0;   // off_8324E4F4
     unsigned int gnAptStringPoolCount   = 0;         // dword_8324E4F8
 
     inline AptString** AptStringPoolBuckets()
@@ -187,7 +187,7 @@ void StringPool::Initialize(int nBucketCount)
     // the same proven EAStringC(const char*) pattern the old single __proto__ key
     // used; the console's Initialize-time record assignment collapses to it.)
     gpAptStringPoolBuckets = gpAptPseudoDataPool->Allocate(sizeof(void*) * static_cast<unsigned>(nBucketCount));
-    if (gpAptStringPoolBuckets != nullptr)
+    if (gpAptStringPoolBuckets != 0)
         std::memset(gpAptStringPoolBuckets, 0, sizeof(void*) * static_cast<unsigned>(nBucketCount));
     gnAptStringPoolCount = static_cast<unsigned int>(nBucketCount);
 }
@@ -240,7 +240,7 @@ AptString* StringPool::FindOrCreate(const char* pName)
 // ---------------------------------------------------------------------------
 void StringPool::ReleaseString(AptString* pString)
 {
-    if (pString == nullptr)   // host guard: the engine never unresolves a null slot
+    if (pString == 0)   // host guard: the engine never unresolves a null slot
         return;
     RemoveFromPool(pString);
 }
@@ -327,7 +327,7 @@ AptString* StringPool::GetFromPool(const char* pName)
 
     // Probe the bucket chain: hash short-circuit, then a full string compare.
     AptString* pNode = paBuckets[uIndex];
-    while (pNode != nullptr)
+    while (pNode != 0)
     {
         if (pNode->GetInternalString()->GetHashValue() == uHash
             && std::strcmp(pNode->GetInternalString()->GetBuffer(), pName) == 0)
@@ -335,7 +335,7 @@ AptString* StringPool::GetFromPool(const char* pName)
         pNode = pNode->mpNext;
     }
 
-    if (pNode == nullptr)
+    if (pNode == 0)
     {
         // Miss: build a fresh pooled node holding pName. Create("") hands back an
         // empty node; assign a temp EAStringC built from pName into its embedded
@@ -431,7 +431,7 @@ void StringPool::Teardown()
     for (unsigned int i = 0; i < nCount; ++i)
     {
         bool bReleasedAny = false;
-        for (AptString* pNode = paBuckets[i]; pNode != nullptr; )
+        for (AptString* pNode = paBuckets[i]; pNode != 0; )
         {
             AptString* const pNext = pNode->mpNext;
             pNode->Release();   // X360 vtable slot +4
@@ -439,7 +439,7 @@ void StringPool::Teardown()
             bReleasedAny = true;
         }
         if (bReleasedAny)
-            if (gpValuesToRelease != nullptr)
+            if (gpValuesToRelease != 0)
                 gpValuesToRelease->ReleaseValues();
     }
 

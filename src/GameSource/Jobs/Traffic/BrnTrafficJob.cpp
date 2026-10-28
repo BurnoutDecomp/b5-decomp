@@ -30,7 +30,7 @@ namespace
     // The fixed descriptor slot SetData is handed (0x100 literal @0x82752D84). Host pointer
     // widening grows TrafficJobData, so pin that it still fits.
     const u32 KU_JOB_DESCRIPTOR_BYTES = 256;
-    static_assert(sizeof(TrafficJobData) == KU_JOB_DESCRIPTOR_BYTES,
+    CGS_STATIC_ASSERT((sizeof(TrafficJobData) == KU_JOB_DESCRIPTOR_BYTES),
                   "TrafficJobData must own the entire submitted 256-byte slot");
 }
 

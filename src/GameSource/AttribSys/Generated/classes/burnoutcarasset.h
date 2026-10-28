@@ -66,7 +66,7 @@ namespace Gen
         // Attrib::Database exists.
         explicit burnoutcarasset(u64 luCarCollectionKey, void* lpOwner);
 
-        explicit burnoutcarasset(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit burnoutcarasset(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The base's validity test + layout pointer, re-exported (the generated classes derive
         // Instance PRIVATELY). Both are what the console reads off the stack instance:

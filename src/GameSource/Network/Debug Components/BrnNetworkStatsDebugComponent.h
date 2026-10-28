@@ -51,9 +51,9 @@ namespace BrnNetwork
         void RemoveStats(NetworkPlayerStats* lpStats);   // @ 0x82585398 -- unregister that group
 
     protected:
-        const char* GetName() const override;   // @ 0x82585300
-        const char* GetPath() const override;   // @ 0x82585300-adjacent (DWARF :200)
-        void        OnActivate() override;       // @ 0x82593990
+        const char* GetName() const ;   // @ 0x82585300
+        const char* GetPath() const ;   // @ 0x82585300-adjacent (DWARF :200)
+        void        OnActivate() ;       // @ 0x82593990
 
     private:
         // Static menu callbacks (the void* user-data IS this component).

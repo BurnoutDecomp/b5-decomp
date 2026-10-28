@@ -48,10 +48,10 @@ CQueue::CQueue(s32* lpiResult, s32 liCapacity)
     Node  lScratchNode;
     Node* lpLast = &lScratchNode;
 
-    mpHead     = nullptr;   // stw r30, 0(r31)
-    mpTail     = nullptr;   // stw r30, 4(r31)
-    mpFreeHead = nullptr;   // stw r30, 8(r31)
-    mpFreeTail = nullptr;   // stw r30, 0xC(r31)
+    mpHead     = 0;   // stw r30, 0(r31)
+    mpTail     = 0;   // stw r30, 4(r31)
+    mpFreeHead = 0;   // stw r30, 8(r31)
+    mpFreeTail = 0;   // stw r30, 0xC(r31)
     *lpiResult = 0;         // stw r30, 0(r26)
     miCapacity = liCapacity; // stw r28, 0x14(r31)
     miCount    = 0;         // stw r30, 0x10(r31)
@@ -62,7 +62,7 @@ CQueue::CQueue(s32* lpiResult, s32 liCapacity)
         {
             Node* lpNode = static_cast<Node*>(XMemAlloc(sizeof(Node), KU_QUEUE_XMEM_ATTRIBUTES));
             lpLast = lpNode;
-            if (lpNode == nullptr)
+            if (lpNode == 0)
             {
                 // Allocation failed: free whatever we linked and report -100.
                 DestroyQueue();
@@ -70,7 +70,7 @@ CQueue::CQueue(s32* lpiResult, s32 liCapacity)
                 return;
             }
             ++liAllocated;
-            lpNode->mpElement = nullptr; // stw r30, 4(r11)
+            lpNode->mpElement = 0; // stw r30, 4(r11)
             *lppLink = lpNode;           // stw r11, 0(r27)
             lppLink  = &lpNode->mpNext;  // r27 = r11 (next link target is node->mpNext @ +0)
             if (liAllocated >= liCapacity)
@@ -80,9 +80,9 @@ CQueue::CQueue(s32* lpiResult, s32 liCapacity)
 
     // Shared tail (also reached when liCapacity <= 0, with lpLast == &lScratchNode).
     mpFreeTail     = lpLast;    // stw r11, 0xC(r31)
-    lpLast->mpNext = nullptr;   // stw r30, 0(r11)
-    mpTail         = nullptr;   // stw r30, 4(r31)
-    mpHead         = nullptr;   // stw r30, 0(r31)
+    lpLast->mpNext = 0;   // stw r30, 0(r11)
+    mpTail         = 0;   // stw r30, 4(r31)
+    mpHead         = 0;   // stw r30, 0(r31)
 }
 
 // ---------------------------------------------------------------------------
@@ -90,15 +90,15 @@ CQueue::CQueue(s32* lpiResult, s32 liCapacity)
 // ---------------------------------------------------------------------------
 s32 CQueue::AddElement(void* lpElement, s32 liIndex)
 {
-    if (lpElement != nullptr && liIndex <= miCount)
+    if (lpElement != 0 && liIndex <= miCount)
     {
         // Pop a node off the free list.
         Node* lpNode = mpFreeHead;
-        bool lbFreeListEmptied = (lpNode->mpNext == nullptr);
+        bool lbFreeListEmptied = (lpNode->mpNext == 0);
         mpFreeHead = lpNode->mpNext;
         if (lbFreeListEmptied)
         {
-            mpFreeTail = nullptr;
+            mpFreeTail = 0;
         }
         lpNode->mpElement = lpElement;
 
@@ -107,10 +107,10 @@ s32 CQueue::AddElement(void* lpElement, s32 liIndex)
             if (liIndex == -1)
             {
                 // Append to the tail of the active list.
-                lpNode->mpNext = nullptr;
+                lpNode->mpNext = 0;
                 Node* lpOldHead = mpHead;
                 mpTail = lpNode;
-                if (lpOldHead == nullptr)
+                if (lpOldHead == 0)
                 {
                     mpHead = lpNode;
                     ++miCount;
@@ -134,7 +134,7 @@ s32 CQueue::AddElement(void* lpElement, s32 liIndex)
             }
             lpNode->mpNext = lpCursor->mpNext;
             lpCursor->mpNext = lpNode;
-            if (lpNode->mpNext == nullptr)
+            if (lpNode->mpNext == 0)
             {
                 mpTail = lpNode;
             }
@@ -147,7 +147,7 @@ s32 CQueue::AddElement(void* lpElement, s32 liIndex)
             lpNode->mpNext = mpHead;
             Node* lpOldTail = mpTail;
             mpHead = lpNode;
-            if (lpOldTail == nullptr)
+            if (lpOldTail == 0)
             {
                 mpTail = lpNode;
             }
@@ -167,7 +167,7 @@ s32 CQueue::AddElement(void* lpElement, s32 liIndex)
 // ---------------------------------------------------------------------------
 s32 CQueue::RemoveElement(void** lppElement, s32 liIndex)
 {
-    *lppElement = nullptr;
+    *lppElement = 0;
 
     const s32 liCount = miCount;
     if (liIndex >= liCount)
@@ -181,13 +181,13 @@ s32 CQueue::RemoveElement(void** lppElement, s32 liIndex)
         Node* lpNext = lpRemoved->mpNext;
         mpHead = lpNext;
         if (!lpNext)
-            mpTail = nullptr;
+            mpTail = 0;
     }
     else if (liIndex == -1 && liCount == 1)
     {
         // Removing the only element via the tail path.
         lpRemoved = mpTail;
-        mpHead = nullptr;
+        mpHead = 0;
     }
     else
     {
@@ -232,7 +232,7 @@ s32 CQueue::RemoveElement(void** lppElement, s32 liIndex)
 s32 CQueue::GetElement(void** lppElement, s32 liIndex)
 {
     s32 liSteps = liIndex;
-    if (lppElement == nullptr)
+    if (lppElement == 0)
     {
         return 0;
     }
@@ -266,7 +266,7 @@ void CQueue::DestroyQueue()
 {
     // Free every node on the free list.
     Node* lpNode = mpFreeHead;
-    if (lpNode != nullptr)
+    if (lpNode != 0)
     {
         do
         {
@@ -274,12 +274,12 @@ void CQueue::DestroyQueue()
             XMemFree(lpNode, KU_QUEUE_XMEM_ATTRIBUTES);
             lpNode = lpNext;
         }
-        while (lpNode != nullptr);
+        while (lpNode != 0);
     }
 
     // Free every node still on the active list.
     Node* lpActive = mpHead;
-    if (lpActive != nullptr)
+    if (lpActive != 0)
     {
         do
         {
@@ -287,6 +287,6 @@ void CQueue::DestroyQueue()
             XMemFree(lpActive, KU_QUEUE_XMEM_ATTRIBUTES);
             lpActive = lpNext;
         }
-        while (lpActive != nullptr);
+        while (lpActive != 0);
     }
 }

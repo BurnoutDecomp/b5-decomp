@@ -68,11 +68,11 @@ public:
     // and the four offsets are the four stack offsets SetupOpponentData assembles the record at.
     static void _AssertLayout()
     {
-        static_assert(sizeof(OpponentData) == 112, "BrnGameState::OpponentData is a 112-byte record");
-        static_assert(offsetof(OpponentData, mCarModelId)      == 0x00, "OpponentData::mCarModelId @0x00");
-        static_assert(offsetof(OpponentData, mStartGridSlot)   == 0x08, "OpponentData::mStartGridSlot @0x08");
-        static_assert(offsetof(OpponentData, mRaceBalanceData) == 0x1C, "OpponentData::mRaceBalanceData @0x1C");
-        static_assert(offsetof(OpponentData, mPersonality)     == 0x60, "OpponentData::mPersonality @0x60");
+        CGS_STATIC_ASSERT((sizeof(OpponentData) == 112), "BrnGameState::OpponentData is a 112-byte record");
+        CGS_STATIC_ASSERT((offsetof(OpponentData, mCarModelId)      == 0x00), "OpponentData::mCarModelId @0x00");
+        CGS_STATIC_ASSERT((offsetof(OpponentData, mStartGridSlot)   == 0x08), "OpponentData::mStartGridSlot @0x08");
+        CGS_STATIC_ASSERT((offsetof(OpponentData, mRaceBalanceData) == 0x1C), "OpponentData::mRaceBalanceData @0x1C");
+        CGS_STATIC_ASSERT((offsetof(OpponentData, mPersonality)     == 0x60), "OpponentData::mPersonality @0x60");
     }
 
 private:
@@ -83,7 +83,7 @@ private:
 };
 
 // The stride pin that needs no member access (the member offsets are pinned in _AssertLayout).
-static_assert(sizeof(OpponentData) == 112, "BrnGameState::OpponentData is a 112-byte record");
+CGS_STATIC_ASSERT((sizeof(OpponentData) == 112), "BrnGameState::OpponentData is a 112-byte record");
 }
 
 #endif

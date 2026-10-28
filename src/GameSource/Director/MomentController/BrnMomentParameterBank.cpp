@@ -78,13 +78,13 @@ namespace BrnDirector
 
 // The console bank is 0x48 bytes with the records at the offsets in the banner above. On this
 // host the records are the real ones and the layout is checked by SHAPE, not by displacement.
-static_assert(sizeof(MomentHardStop::Parameters) == 8,
+CGS_STATIC_ASSERT((sizeof(MomentHardStop::Parameters) == 8),
               "MomentHardStop::Parameters layout drift");
-static_assert(sizeof(MomentBystanderSeesAction::Parameters) == 3,
+CGS_STATIC_ASSERT((sizeof(MomentBystanderSeesAction::Parameters) == 3),
               "MomentBystanderSeesAction::Parameters layout drift");
-static_assert(sizeof(MomentTumbling::Parameters) == 8,
+CGS_STATIC_ASSERT((sizeof(MomentTumbling::Parameters) == 8),
               "MomentTumbling::Parameters layout drift");
-static_assert(sizeof(MomentParameterBank) == 72,
+CGS_STATIC_ASSERT((sizeof(MomentParameterBank) == 72),
               "MomentParameterBank layout drift");
 
 // Seed all nine authored records. Store order below is the console's.

@@ -11,7 +11,7 @@ namespace Log
     struct LogNull : public StrStreamBase
     {
         using StrStreamBase::operator<<;
-        StrStreamBase& operator<<(const char*) override { return *this; }
+        StrStreamBase& operator<<(const char*)  { return *this; }
     };
 }
 }

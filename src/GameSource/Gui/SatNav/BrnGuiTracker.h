@@ -343,7 +343,7 @@ namespace BrnGui
     };
 
     // The record stride is load-bearing (it reproduces the X360 48-byte stride).
-    static_assert(sizeof(GuiTracker::TrackerInformation) == 0x30, "GuiTracker record stride");
+    CGS_STATIC_ASSERT((sizeof(GuiTracker::TrackerInformation) == 0x30), "GuiTracker record stride");
 
     // ⭐ 2026-09-07: the event-64 payload, PROMOTED out of BrnGuiTracker.cpp's anonymous
     // namespace so the publisher can build one. It is a single GuiCache pointer: the
@@ -362,9 +362,9 @@ namespace BrnGui
     // [FIX1] The route record's stride is the case-211 memcpy size literal AND
     // GenerateRouteData's per-record walk; pin it the way the tree pins every other
     // measured stride.
-    static_assert(sizeof(GuiTracker::RouteInformation) == 0x1410,
+    CGS_STATIC_ASSERT((sizeof(GuiTracker::RouteInformation) == 0x1410),
                   "GuiTracker::RouteInformation is the 5136-byte record RecEvent memcpy's");
-    static_assert(sizeof(rw::math::vpu::Vector3) == 0x10,
+    CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Vector3) == 0x10),
                   "the route point is the 16-byte VMX register GenerateRouteData Appends");
 
     // ===============================================================================
@@ -410,6 +410,6 @@ namespace BrnGui
     };
 
     // The published byte count is the console's own literal.
-    static_assert(sizeof(GuiEventSetTracker) == 0xC10,
+    CGS_STATIC_ASSERT((sizeof(GuiEventSetTracker) == 0xC10),
                   "GuiEventSetTracker is the 3088-byte record RecEvent is handed");
 }

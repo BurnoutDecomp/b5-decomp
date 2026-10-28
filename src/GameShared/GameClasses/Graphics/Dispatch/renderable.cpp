@@ -11,7 +11,7 @@ bool Renderable::UsesTexture(const renderengine::Texture* lpTexture) const
 {
     // 1) Object-scope textures: a direct hit on any pointer bound at this renderable's scope.
     const ObjectScopeTextureInfo* lpTextureInfo = mpObjectScopeTextureInfo;
-    if (lpTextureInfo != nullptr)
+    if (lpTextureInfo != 0)
     {
         const u32 luNumTextures = lpTextureInfo->mu16NumTextures;
         for (u32 luTextureIndex = 0; luTextureIndex < luNumTextures; ++luTextureIndex)
@@ -26,7 +26,7 @@ bool Renderable::UsesTexture(const renderengine::Texture* lpTexture) const
     {
         const CgsGraphics::MaterialAssembly* lpMaterialAssembly =
             mppMeshes[luMeshIndex]->mpMaterialAssembly;
-        if (lpMaterialAssembly != nullptr && lpMaterialAssembly->UsesTexture(lpTexture))
+        if (lpMaterialAssembly != 0 && lpMaterialAssembly->UsesTexture(lpTexture))
             return true;
     }
 

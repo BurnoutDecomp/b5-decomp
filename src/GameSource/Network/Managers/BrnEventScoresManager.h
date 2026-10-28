@@ -153,9 +153,9 @@ namespace BrnNetwork
 
     inline void EventScoresManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(EventScoresManager, mUploadRetryTimer) == 0x318, "mUploadRetryTimer @ +0x318");
-        static_assert(sizeof(void*) != 4 || offsetof(EventScoresManager, mpNetworkModule) == 0x328, "mpNetworkModule @ +0x328");
-        static_assert(sizeof(void*) != 4 || offsetof(EventScoresManager, mDebugComponent) == 0x330, "mDebugComponent @ +0x330");
-        static_assert(sizeof(void*) != 4 || sizeof(EventScoresManager) == 0x340, "EventScoresManager is 0x340 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(EventScoresManager, mUploadRetryTimer) == 0x318), "mUploadRetryTimer @ +0x318");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(EventScoresManager, mpNetworkModule) == 0x328), "mpNetworkModule @ +0x328");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(EventScoresManager, mDebugComponent) == 0x330), "mDebugComponent @ +0x330");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(EventScoresManager) == 0x340), "EventScoresManager is 0x340 bytes");
     }
 } // namespace BrnNetwork

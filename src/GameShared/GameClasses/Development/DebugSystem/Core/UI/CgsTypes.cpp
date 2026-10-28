@@ -106,7 +106,7 @@ namespace CgsDev
         void Variant::Clear()
         {
             meType = E_TYPE_NONE;
-            mValue.mpValue = nullptr;
+            mValue.mpValue = 0;
         }
 
         void Variant::SetVoidPointerType(void* lpValue)

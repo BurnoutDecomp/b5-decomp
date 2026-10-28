@@ -187,21 +187,21 @@ namespace BrnNetwork
     // and the field run order within the trailing scalars.
     void TeamSelectMessage_AssertLayout()
     {
-        static_assert(sizeof(TeamSelectMessage::PlayerTeamInfo) == 8,
+        CGS_STATIC_ASSERT((sizeof(TeamSelectMessage::PlayerTeamInfo) == 8),
                       "PlayerTeamInfo is an 8-byte {NetworkPlayerID, s32 team} pair");
-        static_assert(offsetof(TeamSelectMessage::PlayerTeamInfo, mPlayerID) == 0,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectMessage::PlayerTeamInfo, mPlayerID) == 0),
                       "PlayerTeamInfo.mPlayerID @ +0x00 (BrnNetworkManager::PackOrUnpack target)");
-        static_assert(offsetof(TeamSelectMessage::PlayerTeamInfo, miTeam) == 4,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectMessage::PlayerTeamInfo, miTeam) == 4),
                       "PlayerTeamInfo.miTeam @ +0x04 (quantised int [1,8])");
-        static_assert(sizeof(TeamSelectMessage::maPlayerTeamInfo) == 0x40,
+        CGS_STATIC_ASSERT((sizeof(TeamSelectMessage::maPlayerTeamInfo) == 0x40),
                       "the player-team table is the 64-byte payload XMemSet/XMemCpy'd");
         // The four trailing scalars run miNumPlayers, miNumTeams, mbAutobalance, mbFinalSelection
         // in that storage order (the asm stores +0x68/+0x6C/+0x70/+0x71 in that sequence).
-        static_assert(offsetof(TeamSelectMessage, miNumTeams) == offsetof(TeamSelectMessage, miNumPlayers) + 4,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectMessage, miNumTeams) == offsetof(TeamSelectMessage, miNumPlayers) + 4),
                       "miNumTeams immediately follows miNumPlayers");
-        static_assert(offsetof(TeamSelectMessage, mbAutobalance) == offsetof(TeamSelectMessage, miNumTeams) + 4,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectMessage, mbAutobalance) == offsetof(TeamSelectMessage, miNumTeams) + 4),
                       "mbAutobalance immediately follows miNumTeams");
-        static_assert(offsetof(TeamSelectMessage, mbFinalSelection) == offsetof(TeamSelectMessage, mbAutobalance) + 1,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectMessage, mbFinalSelection) == offsetof(TeamSelectMessage, mbAutobalance) + 1),
                       "mbFinalSelection immediately follows mbAutobalance");
     }
 } // namespace BrnNetwork

@@ -123,7 +123,7 @@ namespace Gen
         // stack inside Prepare/ApplyUpdate), so no pre-main FindCollection can
         // happen. Do not add a (Collection*, owner) overload without also
         // dropping this default.
-        explicit boostparamsasset(u64 luCollectionKey = 0, void* lpOwner = nullptr);
+        explicit boostparamsasset(u64 luCollectionKey = 0, void* lpOwner = 0);
 
         // ------------------------------------------------------------------
         // THE 34 TUNING PARAMETERS.

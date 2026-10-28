@@ -94,8 +94,8 @@ namespace
         char macLabel[32];
         s32 miLayer;
     };
-    static_assert(sizeof(GuiEventSoundTriggerPayload22) == 100 &&
-                  offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96,
+    CGS_STATIC_ASSERT((sizeof(GuiEventSoundTriggerPayload22) == 100 &&
+                  offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96),
                   "ARTIST event-22 payload reads its layer at byte 96");
 
     // ARTIST file-global Tool.GUI request owners at82FB5060/5088/5089.
@@ -152,12 +152,12 @@ namespace
     // The view's FLApt timeline tree is one linear allocation, reset when the GUI
     // module is rebuilt. ARTIST receives the GUI module's LinearAllocator here;
     // the PC owner supplies an equivalent dedicated region.
-    alignas(16) u8 s_flaptLinearBacking[16u * 1024u * 1024u];
+    CGS_ALIGN(16) u8 s_flaptLinearBacking[16u * 1024u * 1024u];
     CgsMemory::LinearMalloc s_flaptLinear;
 
     u8 s_profileLinearBacking[2u * 1024u * 1024u];
 
-    static_assert(sizeof(BrnNetwork::LiveRevengeProfile) == 30016,
+    CGS_STATIC_ASSERT((sizeof(BrnNetwork::LiveRevengeProfile) == 30016),
                   "the live-revenge block is the 30016-byte segment the profile manager copies");
 
     // The subscription record the states post through StateInterface::RegisterForEvents
@@ -310,8 +310,8 @@ namespace
     bool s_bRuntimeReady     = false;   // the whole bring-up succeeded
    // ran the (idempotent) bring-up at least once
 
-    CgsGui::ViewModule* s_pViewModule = nullptr;
-    CgsMemory::LinearMalloc* s_pFlaptLinear = nullptr;   // the FLApt instance allocator (GuiModule-owned)
+    CgsGui::ViewModule* s_pViewModule = 0;
+    CgsMemory::LinearMalloc* s_pFlaptLinear = 0;   // the FLApt instance allocator (GuiModule-owned)
 
     // Apt render callbacks retain the view's canonical renderer set. Each
     // dispatch publishes the original main-renderer buffers into that set.
@@ -549,7 +549,7 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     bool PrepareAptRuntime()
     {
-        if (s_pViewModule == nullptr)
+        if (s_pViewModule == 0)
             return false;
         if (s_bRuntimeReady)
             return true;
@@ -603,7 +603,7 @@ namespace BrnGui
                 CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: DEFERRED -- AptAux::Construct not done "
                                         "(view construction not complete).\n");
             }
-            else if (GetTarget() != nullptr)
+            else if (GetTarget() != 0)
             {
                 // Already initialised (a prior pass / another caller). Mark up.
                 s_bAllocatorReady   = true;
@@ -625,7 +625,7 @@ namespace BrnGui
                                              static_cast<s32>(sizeof(s_aAptDataHeap)));
                 s_AptLanguageAllocator.Construct(s_aLanguageHeap,
                                                  static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
-                while (!s_pViewModule->Prepare(&s_AptDataAllocator, nullptr,
+                while (!s_pViewModule->Prepare(&s_AptDataAllocator, 0,
                                                &s_AptLanguageAllocator, s_pFlaptLinear))
                 {
                 }
@@ -633,10 +633,10 @@ namespace BrnGui
                 // Reflect the faithful init into the facade's step flags (for the channel-41
                 // readiness gate + the log). InitializeApt wires the pools + interpreter and
                 // publishes the target into GetTarget().
-                s_bAllocatorReady   = (gpAptOperandStackPool != nullptr);
+                s_bAllocatorReady   = (gpAptOperandStackPool != 0);
                 s_bInterpreterReady = s_bAllocatorReady;
                 AptTarget* lpNow    = GetTarget();
-                s_bTargetReady      = (lpNow != nullptr);
+                s_bTargetReady      = (lpNow != 0);
                 char lac[220];
                 std::snprintf(lac, sizeof(lac),
                     "[AptRT] step5 InitializeApt: done. pools=%s GetTarget()=%p%s\n",
@@ -706,7 +706,7 @@ namespace BrnGui
         // linker mounts the flow movie's anim inst onto the level-1 node -- live ==
         // that node exists with a bound character inst (SetCharacterInst ran).
         AptCIH* lpNode = AptFindAnimationAtLevel(1);
-        return lpNode != nullptr && lpNode->GetCharacterInst() != nullptr;
+        return lpNode != 0 && lpNode->GetCharacterInst() != 0;
     }
 
     // True once the movie has COMPOSED: the root clip's first paced tick has run its
@@ -720,14 +720,14 @@ namespace BrnGui
         // movie's first paced tick ran its frame-0 place commands (child display list
         // non-empty). Engine-native read of the same node IsRuntimeMovieLive probes.
         AptCIH* lpRoot = AptFindAnimationAtLevel(1);
-        if (lpRoot == nullptr)
+        if (lpRoot == 0)
             return false;
         AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
-        if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+        if (lpCI == 0 || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
             return false;
         AptDisplayListState* lpState =
             static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
-        return lpState != nullptr && lpState->mpFirst != nullptr;
+        return lpState != 0 && lpState->mpFirst != 0;
     }
 }
 
@@ -3413,18 +3413,18 @@ void GuiModule::Destruct()
                            RendererIO::OutputBuffer* lpRenderOutput)
     {
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiModuleRender);
-        CGS_ASSERT(lpInput != nullptr, "lpInput");
-        CGS_ASSERT(lpRenderOutput != nullptr, "lpRenderOutput");
+        CGS_ASSERT(lpInput != 0, "lpInput");
+        CGS_ASSERT(lpRenderOutput != 0, "lpRenderOutput");
         if (mbPrepared && mDebugComponent.IsGuiRenderingEnabled())
         {
             CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miGuiRender);
             // 0x823B6FE0/7060 carry these non-gating checks around the bridge.
-            CGS_ASSERT(lpViewInput != nullptr, "lpInputBuffer");
-            CGS_ASSERT(lpInput != nullptr, "lpOutputBuffer0");
+            CGS_ASSERT(lpViewInput != 0, "lpInputBuffer");
+            CGS_ASSERT(lpInput != 0, "lpOutputBuffer0");
             CgsModule::LockBuffersForIO(lpViewInput, lpInput);
             lpViewInput->SetImRenderers(lpInput->GetImRenderers());
-            CGS_ASSERT(lpViewInput != nullptr, "lpInputBuffer");
-            CGS_ASSERT(lpInput != nullptr, "lpOutputBuffer0");
+            CGS_ASSERT(lpViewInput != 0, "lpInputBuffer");
+            CGS_ASSERT(lpInput != 0, "lpOutputBuffer0");
             CgsModule::UnlockBuffersForIO(lpViewInput, lpInput);
             mViewModule.Render(lpViewInput);
             CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miGuiRender);

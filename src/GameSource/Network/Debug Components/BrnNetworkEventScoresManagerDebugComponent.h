@@ -26,10 +26,10 @@ namespace BrnNetwork
         void Construct( EventScoresManager* lpEventScoresManager );   // @ 0x82586530
 
     protected:
-        const char* GetName() const override;   // @ 0x82586588 -> "Event Scores"
+        const char* GetName() const ;   // @ 0x82586588 -> "Event Scores"
         // ARTIST vtable 0x820CE1AC, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Network"; }
-        void        OnActivate() override;       // @ 0x82591E98
+        const char* GetPath() const  { return "Network"; }
+        void        OnActivate() ;       // @ 0x82591E98
 
     private:
         // Static debug-menu action callback registered in OnActivate; the void* user-data the

@@ -376,7 +376,7 @@ bool PassbyStateManager::Prepare()
         // fall through
     case E_PREPARE_BEGIN:
         mePrepareState = E_PREPARE_BEGIN;
-        LoadAsset( "sound\\splicer\\PassbyAsset.bundle", nullptr, ResourceRegistrar::E_DATA );
+        LoadAsset( "sound\\splicer\\PassbyAsset.bundle", 0, ResourceRegistrar::E_DATA );
         PassbySoundDiag( "[passby-sound] Prepare: LoadAsset issued for "
                          "sound\\splicer\\PassbyAsset.bundle\n" );
         // fall through

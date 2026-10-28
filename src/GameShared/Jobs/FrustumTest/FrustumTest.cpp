@@ -8,18 +8,18 @@
 // Byte-offset pins: the operator= asm (0x82BDF950) attests these exact region boundaries.
 namespace
 {
-    static_assert(sizeof(CgsGeometric::Frustum) == 0x80, "Frustum must be 128 bytes");
-    static_assert(offsetof(CgsSceneManager::FrustumJobQueryInfo, maViewProjection) == 0x500,
+    CGS_STATIC_ASSERT((sizeof(CgsGeometric::Frustum) == 0x80), "Frustum must be 128 bytes");
+    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumJobQueryInfo, maViewProjection) == 0x500),
                   "maViewProjection must be at +0x500");
-    static_assert(offsetof(CgsSceneManager::FrustumJobQueryInfo, max32EntityTypeFlags) == 0x780,
+    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumJobQueryInfo, max32EntityTypeFlags) == 0x780),
                   "max32EntityTypeFlags must be at +0x780");
-    static_assert(offsetof(CgsSceneManager::FrustumJobQueryInfo, muNumQueries) == 0x7A8,
+    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumJobQueryInfo, muNumQueries) == 0x7A8),
                   "muNumQueries must be at +0x7A8");
 
     // FrustumTestJobData pins (operator= @0x82BDFC48 attests these exact region boundaries).
-    static_assert(offsetof(CgsSceneManager::FrustumTestJobData, mQueryInfo) == 0x20,
+    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumTestJobData, mQueryInfo) == 0x20),
                   "mQueryInfo must be at +0x20");
-    static_assert(offsetof(CgsSceneManager::FrustumTestJobData, mau32Trailer) == 0x7D0,
+    CGS_STATIC_ASSERT((offsetof(CgsSceneManager::FrustumTestJobData, mau32Trailer) == 0x7D0),
                   "mau32Trailer must be at +0x7D0");
 }
 

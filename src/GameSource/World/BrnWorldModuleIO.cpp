@@ -22,14 +22,14 @@ namespace BrnWorldIO
 // X360 SetRaceCarColourIndex stores u16 at this+2+2*idx, the valid flag at this+34+idx, etc.
 void UpdateInputBuffer::_AssertLayout()
 {
-    static_assert(offsetof(UpdateInputBuffer, mau16RaceCarColourIndex)         ==  2, "colour@2");
-    static_assert(offsetof(UpdateInputBuffer, mau16RaceCarPaintFinishIndex)    == 18, "paint@18");
-    static_assert(offsetof(UpdateInputBuffer, mabRaceCarColourIndexValid)      == 34, "colourValid@34");
-    static_assert(offsetof(UpdateInputBuffer, mabRaceCarPaintFinishIndexValid) == 42, "paintValid@42");
-    static_assert(offsetof(UpdateInputBuffer, mabLostContactThisFrame)         == 50, "lostContact@50");
-    static_assert(offsetof(UpdateInputBuffer, mabRegainedContactThisFrame)     == 58, "regained@58");
-    static_assert(offsetof(UpdateInputBuffer, mabCarSelectStatus)              == 66, "carSelect@66");
-    static_assert(offsetof(UpdateInputBuffer, mabCarSelectStatusValid)         == 74, "carSelectValid@74");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mau16RaceCarColourIndex)         ==  2), "colour@2");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mau16RaceCarPaintFinishIndex)    == 18), "paint@18");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mabRaceCarColourIndexValid)      == 34), "colourValid@34");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mabRaceCarPaintFinishIndexValid) == 42), "paintValid@42");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mabLostContactThisFrame)         == 50), "lostContact@50");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mabRegainedContactThisFrame)     == 58), "regained@58");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mabCarSelectStatus)              == 66), "carSelect@66");
+    CGS_STATIC_ASSERT((offsetof(UpdateInputBuffer, mabCarSelectStatusValid)         == 74), "carSelectValid@74");
 }
 
 // ---- lifecycle -----------------------------------------------------------------

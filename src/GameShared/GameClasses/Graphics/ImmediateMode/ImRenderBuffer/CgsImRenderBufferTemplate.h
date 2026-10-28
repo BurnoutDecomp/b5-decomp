@@ -521,8 +521,8 @@ namespace CgsGraphics
     // PushMask signatures). This is the same typed32-byte CPU vertex as
     // BasicColouredTexturedVertex; the immediate renderer packs a distinct24-byte
     // GPU stream rather than copying CPU records at the GPU stride.
-    using Im3dVertex = BasicColouredTexturedVertex;
-    static_assert(sizeof(Im3dVertex) == 32, "Im3dVertex stride is X360-attested at 32 bytes");
+    typedef BasicColouredTexturedVertex Im3dVertex;
+    CGS_STATIC_ASSERT((sizeof(Im3dVertex) == 32), "Im3dVertex stride is X360-attested at 32 bytes");
 
     // The 3D-text immediate buffer (Im3dRenderBuffer) the TextRenderer 3D path reserves runs
     // in via RenderStart @0x827EF548 / RenderEnd. Only RenderStart is X360-attested for this

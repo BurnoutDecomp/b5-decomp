@@ -48,8 +48,8 @@ static void PixCpuAddSmall(u32 uOp)
     // Only these two words of the thread block are touched by this TU; they are
     // owned/initialised by the PIX runtime, so they are modelled here as the
     // calling thread's own cursors rather than fabricated into a foreign layout.
-    static thread_local u32* s_pPut = nullptr;  // r13+0x2B0  next write slot
-    static thread_local u32* s_pEnd = nullptr;  // r13+0x2B4  end of current page
+    static thread_local u32* s_pPut = 0;  // r13+0x2B0  next write slot
+    static thread_local u32* s_pEnd = 0;  // r13+0x2B4  end of current page
 
     // `mtmsree r13` -- disable external interrupts across the cursor update so
     // the append is atomic against the PIX drain interrupt. No-op on the host.
@@ -103,9 +103,9 @@ GPUTimingMarkerSmall::~GPUTimingMarkerSmall()
 // X360-absolute byte offsets (every access above is by name).
 void _GPUTimingMarkerSmallAssertLayout()
 {
-    static_assert(offsetof(GPUTimingMarkerSmall, mpDevice) == 0,
+    CGS_STATIC_ASSERT((offsetof(GPUTimingMarkerSmall, mpDevice) == 0),
                   "owning device is the first word");
-    static_assert(offsetof(GPUTimingMarkerSmall, muOp) > offsetof(GPUTimingMarkerSmall, mpDevice),
+    CGS_STATIC_ASSERT((offsetof(GPUTimingMarkerSmall, muOp) > offsetof(GPUTimingMarkerSmall, mpDevice)),
                   "op token follows the device pointer");
 }
 

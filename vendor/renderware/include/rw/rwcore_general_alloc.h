@@ -23,7 +23,7 @@ namespace core
         // ARTIST 0x82BC0AA8 starts the main heap after that reserve, keeping the
         // requested capacity intact. The host reserve follows sizeof/alignof this type.
         GeneralResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
-        ~GeneralResourceAllocator() override;
+        ~GeneralResourceAllocator() ;
 
         // ARTIST 0x82BC0E28 adds the aligned allocator-object reserve to lane zero.
         // The original object's 2616 bytes widen with its real native EA heap members;
@@ -49,8 +49,8 @@ namespace core
         // DoFree @0x82BC0DA8 performs the inverse operation in reverse lane order: lane 2 is
         // returned to m_physicalAllocator and all other populated lanes to m_mainAllocator.
         ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
-                                  const char* lpcName) override;
-        void DoFree(const ::rw::Resource& lrResource) override;
+                                  const char* lpcName) ;
+        void DoFree(const ::rw::Resource& lrResource) ;
 
         EA::Allocator::GeneralAllocator& GetPhysicalGeneralAllocator() { return m_physicalAllocator; }
 

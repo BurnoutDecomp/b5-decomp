@@ -104,7 +104,7 @@ namespace CgsDev
         Vector2 CalcTextExtent(const char* lpcText, f32 lfScale) const;
 
         void SetRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer);
-        bool HasRenderBuffer() const { return mpRenderBuffer != nullptr; }   // safe to Begin() only once set
+        bool HasRenderBuffer() const { return mpRenderBuffer != 0; }   // safe to Begin() only once set
 
         // The debug-font handoff (X360 0x823B13A8): store the loaded bitmap Font's handle so DrawText
         // switches off the vector-font fallback onto the resource-font path. Driven by

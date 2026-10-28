@@ -135,12 +135,12 @@ public:
                                 //        bit 0x2 = "normal dirty")
 };
 
-static_assert(offsetof(TriangleVolume, maVerts)   == 0x00, "TriangleVolume::maVerts");
-static_assert(offsetof(TriangleVolume, mNormal)   == 0x30, "TriangleVolume::mNormal");
-static_assert(offsetof(TriangleVolume, mInitWord) == 0x40, "TriangleVolume::mInitWord");
-static_assert(offsetof(TriangleVolume, mafEdgeCos)== 0x44, "TriangleVolume::mafEdgeCos");
-static_assert(offsetof(TriangleVolume, mfFatness) == 0x50, "TriangleVolume::mfFatness");
-static_assert(offsetof(TriangleVolume, mFlags)    == 0x5C, "TriangleVolume::mFlags");
+CGS_STATIC_ASSERT((offsetof(TriangleVolume, maVerts)   == 0x00), "TriangleVolume::maVerts");
+CGS_STATIC_ASSERT((offsetof(TriangleVolume, mNormal)   == 0x30), "TriangleVolume::mNormal");
+CGS_STATIC_ASSERT((offsetof(TriangleVolume, mInitWord) == 0x40), "TriangleVolume::mInitWord");
+CGS_STATIC_ASSERT((offsetof(TriangleVolume, mafEdgeCos)== 0x44), "TriangleVolume::mafEdgeCos");
+CGS_STATIC_ASSERT((offsetof(TriangleVolume, mfFatness) == 0x50), "TriangleVolume::mfFatness");
+CGS_STATIC_ASSERT((offsetof(TriangleVolume, mFlags)    == 0x5C), "TriangleVolume::mFlags");
 
 } // namespace collision
 } // namespace rw

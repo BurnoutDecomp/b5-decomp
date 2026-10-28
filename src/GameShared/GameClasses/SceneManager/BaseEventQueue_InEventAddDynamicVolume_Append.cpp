@@ -26,7 +26,7 @@
 // InSceneUpdateInterface::Append.
 //
 // X360-attested element stride (`slwi *3; add` == *9, then `slwi *4` == *16, total *144).
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::InEventAddDynamicVolume) == 144,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::InEventAddDynamicVolume) == 144),
               "InEventAddDynamicVolume stride 144");
 
 template bool

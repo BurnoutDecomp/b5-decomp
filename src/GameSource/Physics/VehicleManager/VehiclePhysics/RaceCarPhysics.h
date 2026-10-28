@@ -293,7 +293,7 @@ namespace Vehicle
         //       gated on PROXIMITY TO THE PLAYER CAMERA by the caller. The zero-argument override is
         //       X360 vtable slot +0x08 (off_820D1034 -> sub_825FFBB0); the bool overload is
         //       @0x825B8A70. DecFIGS supplies the source-level overload shape.
-        void SetCrashing() override;
+        void SetCrashing() ;
         void SetCrashing(bool lbActivateAISlowMo);
 
         // Explicit engine lifecycle entries. Breaker folds Release into the manager's three
@@ -378,7 +378,7 @@ namespace Vehicle
                     const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                     const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                     bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
-                    CgsNumeric::Random& lrRandom) override;
+                    CgsNumeric::Random& lrRandom) ;
 
         // Non-virtual DecFIGS declaration (RaceCarPhysics.h:262). The emitted PS3 body
         // @0x6EE02C is a direct thunk to VehiclePhysics::UpdatePostSimulation; Breaker's
@@ -905,7 +905,7 @@ namespace Vehicle
         //          (flt_82F2A2B8 / flt_82F2A2BC band, both image-read)
         // Capacity matches CarState's sensor pool (KU_MAX_SENSORS == 20):
         // 0x120 + 20*0x20 == 0x3A0, closing before the next known global (unk_82FB8830 @ +0x3B0).
-        struct alignas(16) BounceSensor
+        struct CGS_ALIGN(16) BounceSensor
         {
             Vector3 mWorldScalarVector;   // +0x00  (unk_82FB85A0 + 32*i)
             f32     mfSpecScalar;         // +0x10  (flt_82FB85B0 + 32*i)

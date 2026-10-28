@@ -87,10 +87,10 @@ struct DynamicMixer : public Nicotine::IDynamicMixer
     // matching the @0x8268D050 asm).
     void Construct(Environment* apEnvironment);
 
-    bool ConnectDMixIO(Nicotine::DMixIO* apDMixIO) override;
-    int  GetStateCount(int aiState) override;
-    int  DMixPrintf(const char* apFormat, ...) override;
-    void DMixAssert(bool abCondition, const char* apFormat, ...) override;
+    bool ConnectDMixIO(Nicotine::DMixIO* apDMixIO) ;
+    int  GetStateCount(int aiState) ;
+    int  DMixPrintf(const char* apFormat, ...) ;
+    void DMixAssert(bool abCondition, const char* apFormat, ...) ;
 
     Environment* mpEnvironment;   // DWARF :212 (console mixer +0x20)
 };

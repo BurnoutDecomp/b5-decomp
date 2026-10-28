@@ -22,13 +22,13 @@ namespace Camera
 // derived members start at the end of that head and keep the console spacing among themselves
 // (console offset - 0x08 from mShakeParams).
 typedef BehaviourAftertouchCam::Parameters AftertouchCamParameters;
-static_assert(offsetof(AftertouchCamParameters, mShakeParams) == sizeof(Behaviour::Parameters), "mShakeParams follows the head");
-static_assert(offsetof(AftertouchCamParameters, mLagParams)                    - offsetof(AftertouchCamParameters, mShakeParams) == 0x18 - 0x08, "mLagParams @ console +0x18");
-static_assert(offsetof(AftertouchCamParameters, mfMinDistance)                 - offsetof(AftertouchCamParameters, mShakeParams) == 0x2C - 0x08, "mfMinDistance @ console +0x2C");
-static_assert(offsetof(AftertouchCamParameters, mfPitch)                       - offsetof(AftertouchCamParameters, mShakeParams) == 0x3C - 0x08, "mfPitch @ console +0x3C");
-static_assert(offsetof(AftertouchCamParameters, mfFOV)                         - offsetof(AftertouchCamParameters, mShakeParams) == 0x40 - 0x08, "mfFOV @ console +0x40");
-static_assert(offsetof(AftertouchCamParameters, mfHeightDistanceVelocityRange) - offsetof(AftertouchCamParameters, mShakeParams) == 0x54 - 0x08, "mfHeightDistanceVelocityRange @ console +0x54");
-static_assert(offsetof(AftertouchCamParameters, mfTimeBetweenDecisions)        - offsetof(AftertouchCamParameters, mShakeParams) == 0x68 - 0x08, "mfTimeBetweenDecisions @ console +0x68");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mShakeParams) == sizeof(Behaviour::Parameters)), "mShakeParams follows the head");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mLagParams)                    - offsetof(AftertouchCamParameters, mShakeParams) == 0x18 - 0x08), "mLagParams @ console +0x18");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mfMinDistance)                 - offsetof(AftertouchCamParameters, mShakeParams) == 0x2C - 0x08), "mfMinDistance @ console +0x2C");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mfPitch)                       - offsetof(AftertouchCamParameters, mShakeParams) == 0x3C - 0x08), "mfPitch @ console +0x3C");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mfFOV)                         - offsetof(AftertouchCamParameters, mShakeParams) == 0x40 - 0x08), "mfFOV @ console +0x40");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mfHeightDistanceVelocityRange) - offsetof(AftertouchCamParameters, mShakeParams) == 0x54 - 0x08), "mfHeightDistanceVelocityRange @ console +0x54");
+CGS_STATIC_ASSERT((offsetof(AftertouchCamParameters, mfTimeBetweenDecisions)        - offsetof(AftertouchCamParameters, mShakeParams) == 0x68 - 0x08), "mfTimeBetweenDecisions @ console +0x68");
 
 template<class TSerialiser>
 void BehaviourAftertouchCam::Parameters::Serialise(TSerialiser& lrSerialiser)

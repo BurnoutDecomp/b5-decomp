@@ -183,13 +183,13 @@ Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRunti
 {
     (void)lTransform;
     (void)lpTypeRuntime;
-    return Vector3{ 0.0f, 0.0f, 0.0f };
+    { const Vector3 lResult = { 0.0f, 0.0f, 0.0f }; return lResult; }
 }
 
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)
 {
-    CGS_ASSERT(lpParam != nullptr, "lpParam");
-    CGS_ASSERT(lpapHulls != nullptr, "lpapHulls");
+    CGS_ASSERT(lpParam != 0, "lpParam");
+    CGS_ASSERT(lpapHulls != 0, "lpapHulls");
 
     for (u32 luHistoryIndex = 0;
          luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER - 1;
@@ -234,7 +234,7 @@ void VehicleAxles::SetFromVehicleTransform(Matrix44Affine lTransform,
 
 void Vehicle::Construct(VehicleAxles* lpAxles, Matrix44Affine& lOutMatrix)
 {
-    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
+    CGS_ASSERT(lpAxles != 0, "lpAxles");
 
     lpAxles->mFrontAxle.Initialise();
     lpAxles->mBackAxle.Initialise();
@@ -275,12 +275,12 @@ void Vehicle::InitialiseAsStandard(
     VehicleSoaData& lVehicleSoaData,
     u16 luTrailerIndex)
 {
-    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
-    CGS_ASSERT(lpParam != nullptr, "lpParam");
-    CGS_ASSERT(lpapHulls != nullptr, "lpapHulls");
-    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
-    CGS_ASSERT(lpVehicleTypeUpdate != nullptr, "lpVehicleTypeUpdate");
-    CGS_ASSERT(lpVehicleTraits != nullptr, "lpVehicleTraits");
+    CGS_ASSERT(lpAxles != 0, "lpAxles");
+    CGS_ASSERT(lpParam != 0, "lpParam");
+    CGS_ASSERT(lpapHulls != 0, "lpapHulls");
+    CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");
+    CGS_ASSERT(lpVehicleTypeUpdate != 0, "lpVehicleTypeUpdate");
+    CGS_ASSERT(lpVehicleTraits != 0, "lpVehicleTraits");
     CGS_ASSERT(rw::math::vpu::IsValid(lParamPos), "RwMath::IsValid( lParamPos )");
     CGS_ASSERT(rw::math::vpu::IsValid(lParamDirection), "RwMath::IsValid( lParamDirection )");
     CGS_ASSERT(!lVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle),
@@ -368,9 +368,9 @@ void Vehicle::InitialiseAsStatic(
     u32 luVehicle,
     VehicleSoaData& lVehicleSoaData)
 {
-    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
-    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
-    CGS_ASSERT(lpVehicleTypeUpdate != nullptr, "lpVehicleTypeUpdate");
+    CGS_ASSERT(lpAxles != 0, "lpAxles");
+    CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");
+    CGS_ASSERT(lpVehicleTypeUpdate != 0, "lpVehicleTypeUpdate");
     CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
     CGS_ASSERT(!lVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle),
                "!lVehicleSoaData.mAliveVehicles.IsBitSet( luVehicle )");
@@ -422,14 +422,14 @@ void Vehicle::InitialiseAsTrailer(
     VehicleSoaData& lVehicleSoaData,
     u16 luCabIndex)
 {
-    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
-    CGS_ASSERT(lpParam != nullptr, "lpParam");
-    CGS_ASSERT(lpapHulls != nullptr, "lpapHulls");
-    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
-    CGS_ASSERT(lpVehicleTypeUpdate != nullptr, "lpVehicleTypeUpdate");
-    CGS_ASSERT(lpCabVehicle != nullptr, "lpCabVehicle");
-    CGS_ASSERT(lpCabVehicleTypeUpdate != nullptr, "lpCabVehicleTypeUpdate");
-    CGS_ASSERT(lpCabVehicleTypeRuntime != nullptr, "lpCabVehicleTypeRuntime");
+    CGS_ASSERT(lpAxles != 0, "lpAxles");
+    CGS_ASSERT(lpParam != 0, "lpParam");
+    CGS_ASSERT(lpapHulls != 0, "lpapHulls");
+    CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");
+    CGS_ASSERT(lpVehicleTypeUpdate != 0, "lpVehicleTypeUpdate");
+    CGS_ASSERT(lpCabVehicle != 0, "lpCabVehicle");
+    CGS_ASSERT(lpCabVehicleTypeUpdate != 0, "lpCabVehicleTypeUpdate");
+    CGS_ASSERT(lpCabVehicleTypeRuntime != 0, "lpCabVehicleTypeRuntime");
     // The baked string spells the bound KU_MAX_TRAFFIC; KU_MAX_TOTAL_TRAFFIC is its home name.
     CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TRAFFIC");
     CGS_ASSERT(!lVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle),
@@ -523,7 +523,7 @@ void Vehicle::UpdateMatrix(const VehicleAxles* lpAxles,
                            const VehicleTypeRuntime* lpVehicleTypeRuntime,
                            Vector3 lOldUp)
 {
-    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
+    CGS_ASSERT(lpAxles != 0, "lpAxles");
     CGS_ASSERT(rw::math::vpu::IsValid(lOldUp), "IsValid(lOldUp)");
 
     const Vector3 lFrontAxlePos = lpAxles->mFrontAxle.mPosAndWheelRadius.GetVector3();
@@ -564,7 +564,7 @@ Vector3 Vehicle::CalcFrontAxlePos(Matrix44Affine lTransform,
                                   const VehicleTypeRuntime* lpVehicleTypeRuntime) const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
+    CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");
     CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
 
     const f32 lfReach = lpVehicleTypeRuntime->GetForwardAxleOffset()
@@ -1466,7 +1466,7 @@ u16 Vehicle::GetTrailerIndex() const
 void Vehicle::SetFlashingHeadlights(bool lbOn, CgsNumeric::Random* lpRand)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(lpRand != nullptr, "lpRand");
+    CGS_ASSERT(lpRand != 0, "lpRand");
 
     if (IsFlashingHeadlights() != lbOn)
     {
@@ -1492,7 +1492,7 @@ void Vehicle::CopyEffectsFromCab(const Vehicle* lpCab)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
     CGS_ASSERT(IsOfTrailerSpecies(), "IsOfTrailerSpecies()");
-    CGS_ASSERT(lpCab != nullptr, "lpCab");
+    CGS_ASSERT(lpCab != 0, "lpCab");
 
     mxEffectState = lpCab->mxEffectState;
     miBrakelightState = lpCab->miBrakelightState;
@@ -1517,48 +1517,48 @@ void Vehicle::CopyEffectsFromCab(const Vehicle* lpCab)
 // Vehicle at 128 comes from TrafficEntityModule::Construct's per-type walk stride.
 void Axle::_AssertLayout()
 {
-    static_assert(offsetof(Axle, mPosAndWheelRadius) == 0x00, "Axle::mPosAndWheelRadius");
-    static_assert(offsetof(Axle, mUpAndDebug) == 0x10, "Axle::mUpAndDebug");
-    static_assert(sizeof(Axle) == 32, "sizeof(Axle)");
+    CGS_STATIC_ASSERT((offsetof(Axle, mPosAndWheelRadius) == 0x00), "Axle::mPosAndWheelRadius");
+    CGS_STATIC_ASSERT((offsetof(Axle, mUpAndDebug) == 0x10), "Axle::mUpAndDebug");
+    CGS_STATIC_ASSERT((sizeof(Axle) == 32), "sizeof(Axle)");
 }
 
 void VehicleAxles::_AssertLayout()
 {
-    static_assert(offsetof(VehicleAxles, mFrontAxle) == 0x00, "VehicleAxles::mFrontAxle");
-    static_assert(offsetof(VehicleAxles, mBackAxle) == 0x20, "VehicleAxles::mBackAxle");
-    static_assert(sizeof(VehicleAxles) == 64, "sizeof(VehicleAxles)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAxles, mFrontAxle) == 0x00), "VehicleAxles::mFrontAxle");
+    CGS_STATIC_ASSERT((offsetof(VehicleAxles, mBackAxle) == 0x20), "VehicleAxles::mBackAxle");
+    CGS_STATIC_ASSERT((sizeof(VehicleAxles) == 64), "sizeof(VehicleAxles)");
 }
 
 void Vehicle::_AssertLayout()
 {
-    static_assert(offsetof(Vehicle, muVehicleType) == 0x00, "muVehicleType");
-    static_assert(offsetof(Vehicle, muCrashTrafficType) == 0x01, "muCrashTrafficType");
-    static_assert(offsetof(Vehicle, muOtherHalfIndex) == 0x02, "muOtherHalfIndex");
-    static_assert(offsetof(Vehicle, muSpecies) == 0x04, "muSpecies");
-    static_assert(offsetof(Vehicle, mxFlags) == 0x05, "mxFlags");
-    static_assert(offsetof(Vehicle, miPhysicalPartsIndex) == 0x06, "miPhysicalPartsIndex");
-    static_assert(offsetof(Vehicle, mxEffectState) == 0x07, "mxEffectState");
-    static_assert(offsetof(Vehicle, mfSwerveTime) == 0x08, "mfSwerveTime");
-    static_assert(offsetof(Vehicle, muHeadlightWarmth) == 0x0C, "muHeadlightWarmth");
-    static_assert(offsetof(Vehicle, muIndicatorBulbWarmth) == 0x0D, "muIndicatorBulbWarmth");
-    static_assert(offsetof(Vehicle, muHeadlightFlashPattern) == 0x0E, "muHeadlightFlashPattern");
-    static_assert(offsetof(Vehicle, muHeadlightFlashState) == 0x0F, "muHeadlightFlashState");
-    static_assert(offsetof(Vehicle, mSpeed_DistAcrossLane_SwerveAmount_W) == 0x10, "mSpeed_...");
-    static_assert(offsetof(Vehicle, mPitch_Roll_Steering_WheelRot) == 0x20, "mPitch_...");
-    static_assert(offsetof(Vehicle, mfHeadlightTimeToFlash) == 0x30, "mfHeadlightTimeToFlash");
-    static_assert(offsetof(Vehicle, mfIndicatorTimeToFlash) == 0x34, "mfIndicatorTimeToFlash");
-    static_assert(offsetof(Vehicle, miBrakelightState) == 0x38, "miBrakelightState");
-    static_assert(offsetof(Vehicle, miPhysicalReason) == 0x39, "miPhysicalReason");
-    static_assert(offsetof(Vehicle, miManoeuvre) == 0x3A, "miManoeuvre");
-    static_assert(offsetof(Vehicle, miManoeuvrePhase) == 0x3B, "miManoeuvrePhase");
-    static_assert(offsetof(Vehicle, mfRandomVal) == 0x3C, "mfRandomVal");
-    static_assert(offsetof(Vehicle, mSympCrashTarget) == 0x40, "mSympCrashTarget");
-    static_assert(offsetof(Vehicle, mfPhysicalTime) == 0x44, "mfPhysicalTime");
-    static_assert(offsetof(Vehicle, meSympCrashState) == 0x48, "meSympCrashState");
-    static_assert(offsetof(Vehicle, mfSympCrashTime) == 0x4C, "mfSympCrashTime");
-    static_assert(offsetof(Vehicle, mLinearVelocity) == 0x50, "mLinearVelocity");
-    static_assert(offsetof(Vehicle, mfManoeuvreTime) == 0x60, "mfManoeuvreTime");
-    static_assert(offsetof(Vehicle, mTargetPos) == 0x70, "mTargetPos");
-    static_assert(sizeof(Vehicle) == 128, "sizeof(Vehicle)");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muVehicleType) == 0x00), "muVehicleType");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muCrashTrafficType) == 0x01), "muCrashTrafficType");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muOtherHalfIndex) == 0x02), "muOtherHalfIndex");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muSpecies) == 0x04), "muSpecies");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mxFlags) == 0x05), "mxFlags");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, miPhysicalPartsIndex) == 0x06), "miPhysicalPartsIndex");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mxEffectState) == 0x07), "mxEffectState");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfSwerveTime) == 0x08), "mfSwerveTime");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muHeadlightWarmth) == 0x0C), "muHeadlightWarmth");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muIndicatorBulbWarmth) == 0x0D), "muIndicatorBulbWarmth");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muHeadlightFlashPattern) == 0x0E), "muHeadlightFlashPattern");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, muHeadlightFlashState) == 0x0F), "muHeadlightFlashState");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mSpeed_DistAcrossLane_SwerveAmount_W) == 0x10), "mSpeed_...");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mPitch_Roll_Steering_WheelRot) == 0x20), "mPitch_...");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfHeadlightTimeToFlash) == 0x30), "mfHeadlightTimeToFlash");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfIndicatorTimeToFlash) == 0x34), "mfIndicatorTimeToFlash");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, miBrakelightState) == 0x38), "miBrakelightState");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, miPhysicalReason) == 0x39), "miPhysicalReason");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, miManoeuvre) == 0x3A), "miManoeuvre");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, miManoeuvrePhase) == 0x3B), "miManoeuvrePhase");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfRandomVal) == 0x3C), "mfRandomVal");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mSympCrashTarget) == 0x40), "mSympCrashTarget");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfPhysicalTime) == 0x44), "mfPhysicalTime");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, meSympCrashState) == 0x48), "meSympCrashState");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfSympCrashTime) == 0x4C), "mfSympCrashTime");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mLinearVelocity) == 0x50), "mLinearVelocity");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mfManoeuvreTime) == 0x60), "mfManoeuvreTime");
+    CGS_STATIC_ASSERT((offsetof(Vehicle, mTargetPos) == 0x70), "mTargetPos");
+    CGS_STATIC_ASSERT((sizeof(Vehicle) == 128), "sizeof(Vehicle)");
 }
 }

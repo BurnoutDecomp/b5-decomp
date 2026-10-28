@@ -70,18 +70,18 @@ namespace
     // three still measure the console's own numbers: cParticleLocator's one trailing pointer
     // widens into padding its 16-byte alignment already had, and the other two carry no
     // pointers at all.)
-    static_assert(sizeof(cParticleLocator) >= 0xB0,
+    CGS_STATIC_ASSERT((sizeof(cParticleLocator) >= 0xB0),
                   "the console pool block is 0xB0 -- cParticleSystem::AppInit `li r5, 0xB0`");
-    static_assert(sizeof(cParticleScaler) >= 4,
+    CGS_STATIC_ASSERT((sizeof(cParticleScaler) >= 4),
                   "the console pool block is 4 -- `li r5, 4`");
-    static_assert(sizeof(cParticleTrigger) >= 16,
+    CGS_STATIC_ASSERT((sizeof(cParticleTrigger) >= 16),
                   "the console pool block is 16 -- `li r5, 0x10`");
 
     // ---- the three "no reader found" globals (see the banner) -----------------------------
     // dword_830ED930 <- apAllocator. It sits immediately after cParticleWaveFormTable::
     // mSingleton (0x830EA930 + 6*512*4 == 0x830ED930), which is what places it in the waveform
     // TU; nothing in the image reads it.
-    EA::Allocator::ITaggedAllocator* gpLionWaveFormAllocator = nullptr;
+    EA::Allocator::ITaggedAllocator* gpLionWaveFormAllocator = 0;
 
     // flt_83121C58 / flt_83121C5C <- 1.0f, 1.0f. The two words immediately after
     // gpLionSerialiserAllocator (0x83121C54). Nothing in the image reads either.

@@ -86,5 +86,5 @@ namespace BrnProgression
         u32        mPad14;                          // +0x14 .. +0x17
     };
 
-    static_assert(sizeof(CarData) == 0x18, "CarData must be the 0x18 SplitArray stride");
+    CGS_STATIC_ASSERT((sizeof(CarData) == 0x18), "CarData must be the 0x18 SplitArray stride");
 }

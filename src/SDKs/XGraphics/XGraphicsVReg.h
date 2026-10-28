@@ -92,7 +92,7 @@ struct VRegInfo
 
 // The IR-instruction operand descriptor IS a VRegInfo (identical operand-facing
 // offsets: GetType@+0x20 / GetIndex@+0x0C / GetUsage@+0x10 / miTypeInfoIndex@+0x50).
-using VReg = VRegInfo;
+typedef VRegInfo VReg;
 
 // ---------------------------------------------------------------------------
 // The register-type-info table (X360 rodata @ 0x821B5100, 48 records of 12

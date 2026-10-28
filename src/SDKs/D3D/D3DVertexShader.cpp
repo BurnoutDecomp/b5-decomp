@@ -15,7 +15,7 @@ const void* CVertexShader::GetDebuggerHint()
     u32 uOffset = muDebuggerHintOffset;
 
     if (uOffset == 0) // cmplwi r10,0 ; beq -> r31 = 0
-        return nullptr;
+        return 0;
 
     return pAnchor + uOffset; // add r31, r10, r11 (byte offset from the anchor)
 }

@@ -37,7 +37,7 @@ namespace SceneManagerIO
 
     // EventQueue<InEventTriangleCollisionLineTestNearest, 256> element. 16-byte aligned (two
     // Vector3 lanes), sizeof 0x30 (48). DWARF CgsSceneManagerIO_FineQuery.h:133.
-    struct alignas(16) InEventTriangleCollisionLineTestNearest : public EventBaseTriangleCollisionLineTestNearest
+    struct CGS_ALIGN(16) InEventTriangleCollisionLineTestNearest : public EventBaseTriangleCollisionLineTestNearest
     {
         Vector3      mLineStart; // +0x00 (16B SIMD lane)   DWARF :135
         Vector3      mLineEnd;   // +0x10 (16B SIMD lane)   DWARF :136
@@ -45,7 +45,7 @@ namespace SceneManagerIO
         // +0x24..+0x2F trailing pad to the 16-byte alignment -> sizeof == 0x30.
     };
 
-    static_assert(sizeof(InEventTriangleCollisionLineTestNearest) == 0x30,
+    CGS_STATIC_ASSERT((sizeof(InEventTriangleCollisionLineTestNearest) == 0x30),
                   "InEventTriangleCollisionLineTestNearest must keep the X360-attested 48-byte stride");
 }
 }

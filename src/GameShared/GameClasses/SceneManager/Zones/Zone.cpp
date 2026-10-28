@@ -52,7 +52,7 @@ namespace CgsSceneManager
     // DecFIGS PS3 0xC4D7DC (X360: inlined). Rebase the neighbour's mpZone, only if non-null.
     void Neighbour::FixUp(void* lpBaseAddress)
     {
-        if (mpZone != nullptr)
+        if (mpZone != 0)
         {
             mpZone = reinterpret_cast<Zone*>(
                 reinterpret_cast<usize>(mpZone) + reinterpret_cast<usize>(lpBaseAddress));
@@ -70,7 +70,7 @@ namespace CgsSceneManager
         mpPoints = reinterpret_cast<rw::math::vpu::Vector2*>(
             reinterpret_cast<usize>(mpPoints) + luBase);
 
-        if (mpSafeNeighbours != nullptr)
+        if (mpSafeNeighbours != 0)
         {
             mpSafeNeighbours = reinterpret_cast<Neighbour*>(
                 reinterpret_cast<usize>(mpSafeNeighbours) + luBase);
@@ -80,7 +80,7 @@ namespace CgsSceneManager
             }
         }
 
-        if (mpUnsafeNeighbours != nullptr)
+        if (mpUnsafeNeighbours != 0)
         {
             mpUnsafeNeighbours = reinterpret_cast<Neighbour*>(
                 reinterpret_cast<usize>(mpUnsafeNeighbours) + luBase);
@@ -94,7 +94,7 @@ namespace CgsSceneManager
     // X360 0x828CBAE8. Rebase the zone's absolute pointers to base-relative offsets.
     void Zone::FixDown(void* lpBaseAddress)
     {
-        CGS_ASSERT(mpPoints != nullptr,
+        CGS_ASSERT(mpPoints != 0,
                    "Points have not yet been specified for zone so can't fix it down!\n");
 
         const usize luBase = reinterpret_cast<usize>(lpBaseAddress);
@@ -107,12 +107,12 @@ namespace CgsSceneManager
         mpPoints = reinterpret_cast<rw::math::vpu::Vector2*>(
             reinterpret_cast<usize>(mpPoints) - luBase);
 
-        if (lpSafeNeighbours != nullptr)
+        if (lpSafeNeighbours != 0)
         {
             for (s16 liIndex = 0; liIndex < miNumSafeNeighbours; ++liIndex)
             {
                 Zone* lpZone = lpSafeNeighbours[liIndex].mpZone;
-                if (lpZone != nullptr)
+                if (lpZone != 0)
                 {
                     lpSafeNeighbours[liIndex].mpZone =
                         reinterpret_cast<Zone*>(reinterpret_cast<usize>(lpZone) - luBase);
@@ -122,12 +122,12 @@ namespace CgsSceneManager
                 reinterpret_cast<usize>(mpSafeNeighbours) - luBase);
         }
 
-        if (lpUnsafeNeighbours != nullptr)
+        if (lpUnsafeNeighbours != 0)
         {
             for (s16 liIndex = 0; liIndex < miNumUnsafeNeighbours; ++liIndex)
             {
                 Zone* lpZone = lpUnsafeNeighbours[liIndex].mpZone;
-                if (lpZone != nullptr)
+                if (lpZone != 0)
                 {
                     lpUnsafeNeighbours[liIndex].mpZone =
                         reinterpret_cast<Zone*>(reinterpret_cast<usize>(lpZone) - luBase);

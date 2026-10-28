@@ -12,7 +12,7 @@ struct ShaderConstantHandle
     u8 muValueIndex;
     u8 muNumConstants;
 };
-static_assert(sizeof(ShaderConstantHandle) == 4, "Serialized constant binding");
+CGS_STATIC_ASSERT((sizeof(ShaderConstantHandle) == 4), "Serialized constant binding");
 
 namespace CgsGraphics
 {
@@ -38,8 +38,8 @@ namespace CgsGraphics
         s8 mi8NumExternalSamplers;
         Ptr32<s8> mpai8SamplersIndex;
     };
-    static_assert(sizeof(MaterialTechnique) == 40, "Serialized material technique");
-    static_assert(offsetof(MaterialTechnique, mu16StateFlags) == 8, "Technique flags");
-    static_assert(offsetof(MaterialTechnique, mpaVertexShaderInternalConstantsHandles) == 24,
+    CGS_STATIC_ASSERT((sizeof(MaterialTechnique) == 40), "Serialized material technique");
+    CGS_STATIC_ASSERT((offsetof(MaterialTechnique, mu16StateFlags) == 8), "Technique flags");
+    CGS_STATIC_ASSERT((offsetof(MaterialTechnique, mpaVertexShaderInternalConstantsHandles) == 24),
                   "Technique vertex constant bindings");
 }

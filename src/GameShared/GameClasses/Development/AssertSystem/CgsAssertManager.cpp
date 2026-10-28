@@ -49,18 +49,18 @@ namespace Assert
     static const f32 KF_VECTOR_FONT_SIZE = 14.0f;
 
     Manager::Manager()
-        : mpRender(nullptr)
-        , mpMapFileReader(nullptr)
-        , mpcMapFileName(nullptr)
-        , mpAssertHandlerList(nullptr)
+        : mpRender(0)
+        , mpMapFileReader(0)
+        , mpcMapFileName(0)
+        , mpAssertHandlerList(0)
         , mbInitialised(false)
         , mbGotAssert(false)
         , mbInAssert(false)
         , miDrawPositionY(0)
         , miAssertCount(0)
     {
-        mCurrentAssert.mpMapReader = nullptr;
-        mCurrentAssert.mpcFile = nullptr;
+        mCurrentAssert.mpMapReader = 0;
+        mCurrentAssert.mpcFile = 0;
         mCurrentAssert.miLine = 0;
         mCurrentAssert.macAssertMessage[0] = '\0';
     }
@@ -182,7 +182,7 @@ namespace Assert
     // pending.
     bool Manager::CanRenderAssert() const
     {
-        return mbInitialised && mbGotAssert && mpRender != nullptr && mpRender->HasRenderBuffer();
+        return mbInitialised && mbGotAssert && mpRender != 0 && mpRender->HasRenderBuffer();
     }
 
     // X360 ClearCurrentAssert (CgsAssertManager.h:166): dismiss the pending assert (END pressed -> resume).
@@ -203,7 +203,7 @@ namespace Assert
         // Early asserts with no prepared renderer remain logged-only.
         if (CanRenderAssert())
         {
-            IDirect3DSurface9* lpBackBuffer = nullptr;
+            IDirect3DSurface9* lpBackBuffer = 0;
             if (lpBackBuffer) lpBackBuffer->Release();
             if (!lSavedFrame.IsReady())
             {
@@ -265,7 +265,7 @@ namespace Assert
         const s32 liCount = mCurrentAssert.mStack.GetNumStackAddresses();
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
-            const char* lpcName = mpMapFileReader ? mpMapFileReader->GetStackEntryName(liIndex) : nullptr;
+            const char* lpcName = mpMapFileReader ? mpMapFileReader->GetStackEntryName(liIndex) : 0;
             if (lpcName)
             {
                 DrawLine(lpcName);

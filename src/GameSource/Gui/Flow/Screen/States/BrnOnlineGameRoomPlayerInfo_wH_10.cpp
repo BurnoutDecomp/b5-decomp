@@ -91,7 +91,7 @@ namespace BrnGui
                 muEventType = 457;
             }
         };
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
         const s32 KI_CHANNEL_AUDIO_GUI_OUT = 40;
 
         // The apt clip the pause button prompts transition through (X360 aAptTransition_1,

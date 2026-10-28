@@ -50,8 +50,8 @@ namespace ModelIO
 
     void InputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer, mGuiEvents)    == 0x0004, "mGuiEvents @ +0x0004");
-        static_assert(offsetof(InputBuffer, mLoadRequests) == 0x8014, "mLoadRequests @ +0x8014 (32788)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mGuiEvents)    == 0x0004), "mGuiEvents @ +0x0004");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mLoadRequests) == 0x8014), "mLoadRequests @ +0x8014 (32788)");
     }
 
     // ARTIST8285B210..B2BC. Both typed source overloads use the same

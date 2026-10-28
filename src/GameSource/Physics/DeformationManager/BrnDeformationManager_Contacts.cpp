@@ -142,7 +142,7 @@ namespace Deformation
         // placeholder BrnPhysics::Deformation::IOBufferStack*, whereas the buffer-stack API lives on
         // CgsModule::IOBufferStack (the DWARF type the asm calls CreateIOBuffer/DestroyIOBuffer on).
         // The placeholder must be unified with CgsModule::IOBufferStack; the calls below use that API.
-        PenetrationSolver* lpSolver = nullptr;
+        PenetrationSolver* lpSolver = 0;
         lpIOBufferStack->CreateIOBuffer<PenetrationSolver>(&lpSolver, "PenetrationSolver");
 
         // ---- PHASE 1: add each live model + its stored contacts to the solver. ----
@@ -453,7 +453,7 @@ namespace Deformation
     // ==========================================================================================
     void DeformationManager::UpdateTriangleCache(InputBuffer_Update* lpSimInputUpdate)
     {
-        CGS_ASSERT(lpSimInputUpdate != nullptr, "lpSceneInputBuffer_Update != NULL");
+        CGS_ASSERT(lpSimInputUpdate != 0, "lpSceneInputBuffer_Update != NULL");
 
         // FLAG (cross-TU type-namespace mismatch to reconcile at consolidation): the frozen header
         // types this arg as the local placeholder BrnPhysics::Deformation::InputBuffer_Update*,

@@ -148,7 +148,7 @@ namespace BrnParticle
         LionEffect* lpEffect = &maPlayingEffects[luArrayIndex];
         if (lpEffect->muHandle != luHandle)
         {
-            lpEffect = nullptr;
+            lpEffect = 0;
         }
         return lpEffect;
     }
@@ -539,7 +539,7 @@ namespace BrnParticle
             if (suShots++ >= 512u) return;
             u32 luBoundActive = 0;
             const auto& lrManager = cParticleEmitterManager::Instance();
-            for (cParticleEmitter* lpEmitter = lrManager.GetpUsed(); lpEmitter != nullptr;
+            for (cParticleEmitter* lpEmitter = lrManager.GetpUsed(); lpEmitter != 0;
                  lpEmitter = lpEmitter->GetNextEmitter())
             {
                 if (lpEmitter->IsActive() && &lpEmitter->GetBindings() == lpBindings)
@@ -1773,23 +1773,23 @@ namespace BrnParticle
         #define PM_TAIL_DELTA(member) \
             (offsetof(ParticleModule, member) - offsetof(ParticleModule, miLionBatchCount))
 
-        static_assert(PM_TAIL_DELTA(miLionBatchCount)                 == 0x249C4 - 0x249C4, "-1 sentinel @ +0x249C4");
-        static_assert(PM_TAIL_DELTA(maJob0Placeholder)              == 0x249D0 - 0x249C4, "job 0 @ +0x249D0");
-        static_assert(PM_TAIL_DELTA(miSentinel24FD0)                == 0x24FD0 - 0x249C4, "-1 sentinel @ +0x24FD0");
-        static_assert(PM_TAIL_DELTA(miSentinel25008)                == 0x25008 - 0x249C4, "-1 sentinel @ +0x25008");
-        static_assert(PM_TAIL_DELTA(mSparkFrameDataSetUpdate)        == 0x25030 - 0x249C4, "spark set 0 @ +0x25030");
-        static_assert(PM_TAIL_DELTA(maJob1Placeholder)              == 0x25700 - 0x249C4, "job 1 @ +0x25700");
-        static_assert(PM_TAIL_DELTA(miSentinel25CD0)                == 0x25CD0 - 0x249C4, "-1 sentinel @ +0x25CD0");
-        static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4, "-1 sentinel @ +0x25D08");
-        static_assert(PM_TAIL_DELTA(mSparkFrameDataSetRender)        == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
-        static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
-        static_assert(PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4, "debris job wait count @ +0x27780");
-        static_assert(PM_TAIL_DELTA(mInterThreadEventQueue)         == 0x27784 - 0x249C4, "inter-thread event queue @ +0x27784");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(miLionBatchCount)                 == 0x249C4 - 0x249C4), "-1 sentinel @ +0x249C4");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(maJob0Placeholder)              == 0x249D0 - 0x249C4), "job 0 @ +0x249D0");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(miSentinel24FD0)                == 0x24FD0 - 0x249C4), "-1 sentinel @ +0x24FD0");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(miSentinel25008)                == 0x25008 - 0x249C4), "-1 sentinel @ +0x25008");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(mSparkFrameDataSetUpdate)        == 0x25030 - 0x249C4), "spark set 0 @ +0x25030");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(maJob1Placeholder)              == 0x25700 - 0x249C4), "job 1 @ +0x25700");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(miSentinel25CD0)                == 0x25CD0 - 0x249C4), "-1 sentinel @ +0x25CD0");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4), "-1 sentinel @ +0x25D08");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(mSparkFrameDataSetRender)        == 0x25D30 - 0x249C4), "spark set 1 @ +0x25D30");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4), "frame jobs @ +0x26400");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4), "debris job wait count @ +0x27780");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(mInterThreadEventQueue)         == 0x27784 - 0x249C4), "inter-thread event queue @ +0x27784");
         // The queue is now a REAL VariableEventQueue<16384,16>, so its own size is part of the
         // pin: 1 (mbIsConstructed) + 16384 (macData) + 3 pad + 3*s32 == 0x4010, which is what
         // puts the spawn-buffer pair back on the console's 16-aligned +0x2B7A0.
-        static_assert(PM_TAIL_DELTA(mu16SpawnBufferCount)         == 0x2B7A0 - 0x249C4, "spawn-buffer header @ +0x2B7A0");
-        static_assert(PM_TAIL_DELTA(mpSparkSpawnBuffer)             == 0x2B7B0 - 0x249C4, "spawn buffer ptr @ +0x2B7B0");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(mu16SpawnBufferCount)         == 0x2B7A0 - 0x249C4), "spawn-buffer header @ +0x2B7A0");
+        CGS_STATIC_ASSERT((PM_TAIL_DELTA(mpSparkSpawnBuffer)             == 0x2B7B0 - 0x249C4), "spawn buffer ptr @ +0x2B7B0");
 
         #undef PM_TAIL_DELTA
         (void)&_AssertLayout;  // suppress unused-function diagnostics

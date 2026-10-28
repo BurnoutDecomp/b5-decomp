@@ -40,7 +40,7 @@
 // ---------------------------------------------------------------------------
 AptValue* AptValueVector::PopAndPush(int32_t nCount, AptValueProducer* pProducer)
 {
-    AptValue* result = nullptr;
+    AptValue* result = 0;
 
     if (mnTop >= nCount)
     {
@@ -138,7 +138,7 @@ void AptValueVector::Shutdown()
 
     mnCapacity = 0;
     mnTop = 0;
-    mppItems = nullptr;
+    mppItems = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ void AptValueVector::shutdown()
 
     mnCapacity = 0;
     mnTop = 0;
-    mppItems = nullptr;
+    mppItems = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +238,7 @@ void AptValueVector::SetAt(int32_t nIndex, AptValue* pValue)
 // ---------------------------------------------------------------------------
 AptValue* AptValueVector::ReleaseValues()
 {
-    AptValue* result = nullptr;
+    AptValue* result = 0;
 
     while (mnCapacity != 0)   // [c:+0x04] family-(B) live top
     {
@@ -295,5 +295,5 @@ void AptValueVector::RemoveAt(int32_t nIndex)
     }
 
     // Clear the now-vacated top slot (items[live count]).
-    mppItems[mnCapacity] = nullptr;   // [c:+0x08]
+    mppItems[mnCapacity] = 0;   // [c:+0x08]
 }

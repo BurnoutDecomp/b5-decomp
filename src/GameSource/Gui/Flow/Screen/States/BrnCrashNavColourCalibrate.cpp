@@ -205,10 +205,10 @@ namespace BrnGui
         // Record-size pins. Every payload here is pointer-free, so the X360's AddEvent
         // size immediates (16 / 20 / 112) must survive unchanged on the x64 host; if a
         // host layout ever drifts this is where it is caught rather than on the wire.
-        static_assert(sizeof(GuiCommandWire16<514>) == 16, "card show/hide record is 16 bytes");
-        static_assert(sizeof(GuiBrightnessContrastWire20) == 20, "brightness/contrast record is 20 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
-        static_assert(offsetof(GuiBrightnessContrastWire20, mPayload) == 12,
+        CGS_STATIC_ASSERT((sizeof(GuiCommandWire16<514>) == 16), "card show/hide record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiBrightnessContrastWire20) == 20), "brightness/contrast record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((offsetof(GuiBrightnessContrastWire20, mPayload) == 12),
                       "the 545 payload sits at the record's own header offset word (12)");
 
         // The per-move menu cue. NOT a recovered function: the X360 emits this exact
@@ -519,9 +519,9 @@ namespace BrnGui
         // The one part of the FLAGged option table that IS machine-checked: its length
         // must equal the option count the X360 hands SetupMenuToggle (`li r4, 0x64`).
         // (Inside the member so it may name the private static.)
-        static_assert(sizeof(KAPC_BRIGHTNESS_OPTION_VALUES) /
+        CGS_STATIC_ASSERT((sizeof(KAPC_BRIGHTNESS_OPTION_VALUES) /
                           sizeof(KAPC_BRIGHTNESS_OPTION_VALUES[0]) ==
-                      static_cast<size_t>(KI_NUM_BRIGHTNESS_OPTIONS),
+                      static_cast<size_t>(KI_NUM_BRIGHTNESS_OPTIONS)),
                       "the brightness option table must hold exactly the 100 rows SetupMenuToggle builds");
 
         ShowCalibrationCard(true);

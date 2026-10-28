@@ -263,15 +263,15 @@ bool RaceBalancingRoute::Recalculate(const AISectionsData* lpAISectionsData,
 // asm reads/writes and the compile gate enforces them.
 void RaceBalancingRoute::_AssertLayout()
 {
-    static_assert(offsetof(RaceBalancingRoute, mafTimes) == 0, "mafTimes at +0");
-    static_assert(offsetof(RaceBalancingRoute, miTimeCount) == 0xA00, "miTimeCount @+0xA00");
-    static_assert(offsetof(RaceBalancingRoute, miTakenDownCount) == 0xA04, "miTakenDownCount @+0xA04");
-    static_assert(offsetof(RaceBalancingRoute, miCurrentCheckpointIndex) == 0xA08,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, mafTimes) == 0), "mafTimes at +0");
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, miTimeCount) == 0xA00), "miTimeCount @+0xA00");
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, miTakenDownCount) == 0xA04), "miTakenDownCount @+0xA04");
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, miCurrentCheckpointIndex) == 0xA08),
                   "miCurrentCheckpointIndex @+0xA08");
-    static_assert(offsetof(RaceBalancingRoute, mfDistance) == 0xA0C, "mfDistance @+0xA0C");
-    static_assert(offsetof(RaceBalancingRoute, mfTakenDownTimePenalty) == 0xA10,
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, mfDistance) == 0xA0C), "mfDistance @+0xA0C");
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, mfTakenDownTimePenalty) == 0xA10),
                   "mfTakenDownTimePenalty @+0xA10");
-    static_assert(offsetof(RaceBalancingRoute, mbValid) == 0xA14, "mbValid @+0xA14");
-    static_assert(sizeof(RaceBalancingRoute) == 0xA18, "sizeof RaceBalancingRoute == 0xA18");
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingRoute, mbValid) == 0xA14), "mbValid @+0xA14");
+    CGS_STATIC_ASSERT((sizeof(RaceBalancingRoute) == 0xA18), "sizeof RaceBalancingRoute == 0xA18");
 }
 }

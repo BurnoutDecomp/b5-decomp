@@ -174,8 +174,8 @@ struct HUDEffect : public BrnSound::Logic::BrnEffectObject
     // this virtual dtor (compiler-synthesised; the leaf anchor is @0x826E1BC8).
     virtual ~HUDEffect();
 
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 

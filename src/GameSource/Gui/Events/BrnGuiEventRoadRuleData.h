@@ -16,5 +16,5 @@ struct GuiEventRoadRuleData
     s32 GetEventType() const { return 334; }
     void Construct(const BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction* action);
 };
-static_assert(sizeof(GuiEventRoadRuleData) == 88, "ARTIST road-rule data");
+CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleData) == 88), "ARTIST road-rule data");
 }

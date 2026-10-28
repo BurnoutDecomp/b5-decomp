@@ -138,14 +138,14 @@ namespace
         ::EActiveRaceCarIndex mActiveRaceCarIndex;   // +0x00
         bool                  mbAllowedInRoadRage;   // +0x04  (+0x05..+0x07 not written by the console)
     };
-    static_assert(sizeof(AllowCarToJoinRoadRageActionRecord) == 8, "X360 posts action 129 as 8 bytes (li r6,8)");
+    CGS_STATIC_ASSERT((sizeof(AllowCarToJoinRoadRageActionRecord) == 8), "X360 posts action 129 as 8 bytes (li r6,8)");
 
     struct UpdateRoadRageMadnessActionRecord
     {
         ::EActiveRaceCarIndex mActiveRaceCarID;      // +0x00
         f32                   mRoadRageMadnesss;     // +0x04  (sic -- the DWARF's spelling)
     };
-    static_assert(sizeof(UpdateRoadRageMadnessActionRecord) == 8, "X360 posts action 131 as 8 bytes (li r6,8)");
+    CGS_STATIC_ASSERT((sizeof(UpdateRoadRageMadnessActionRecord) == 8), "X360 posts action 131 as 8 bytes (li r6,8)");
 
     // ---- the one inbound game event (HandleGameEvents @0x82315FF8) --------------------------
     // [!] HEADER REQUEST (interim TU-local mirror). X360 0x8231600C `cmpwi cr6, r5, 0x28` (40).

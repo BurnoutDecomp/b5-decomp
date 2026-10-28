@@ -127,9 +127,9 @@ namespace BrnWorld
         // resolves to the BASE CgsModule::ModuleSingleBuffered::Construct, every tunable below
         // reads ZERO -- including mbClearUpEnabled, which gates TickCrashes -- and no crash ever
         // ends. See the .cpp banner.
-        void Construct() override;   // 0x827CAA28
-        bool Prepare() override;     // 0x827B16D8
-        bool Release() override;     // 0x827B1780
+        void Construct() ;   // 0x827CAA28
+        bool Prepare() ;     // 0x827B16D8
+        bool Release() ;     // 0x827B1780
         void Reset();                // 0x827BF318
 
         // NOTE: the DWARF declares the full ModuleSingleBuffered override set

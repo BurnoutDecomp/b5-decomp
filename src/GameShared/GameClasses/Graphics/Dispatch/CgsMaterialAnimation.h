@@ -24,11 +24,11 @@ protected:
 class UVOffsetAnimationShader : public ICPUShader
 {
 public:
-    u32 GetNumConstantInstances() const override { return 1; } // ICF @82C296C8
+    u32 GetNumConstantInstances() const  { return 1; } // ICF @82C296C8
     void Execute(f32 lfTime, const CgsGraphics::MaterialAssembly* lpMaterial,
-                 CgsGraphics::MaterialTechnique* lpTechnique) const override;
+                 CgsGraphics::MaterialTechnique* lpTechnique) const ;
 protected:
-    void OnAttach(const CgsGraphics::MaterialAssembly*) override {} // ICF @8284CB38
+    void OnAttach(const CgsGraphics::MaterialAssembly*)  {} // ICF @8284CB38
     virtual void OnCalculateOffset(const CgsGraphics::MaterialAssembly* lpMaterial,
                                     f32 lfTime, Vector4& lrOffset) const = 0;
 };
@@ -37,19 +37,19 @@ class SmoothLoopAnimation : public UVOffsetAnimationShader
 {
 protected:
     void OnCalculateOffset(const CgsGraphics::MaterialAssembly* lpMaterial,
-                            f32 lfTime, Vector4& lrOffset) const override;
+                            f32 lfTime, Vector4& lrOffset) const ;
 };
 class SteppedLoopAnimation : public UVOffsetAnimationShader
 {
 protected:
     void OnCalculateOffset(const CgsGraphics::MaterialAssembly* lpMaterial,
-                            f32 lfTime, Vector4& lrOffset) const override;
+                            f32 lfTime, Vector4& lrOffset) const ;
 };
 class SteppedGridLoopAnimation : public UVOffsetAnimationShader
 {
 protected:
     void OnCalculateOffset(const CgsGraphics::MaterialAssembly* lpMaterial,
-                            f32 lfTime, Vector4& lrOffset) const override;
+                            f32 lfTime, Vector4& lrOffset) const ;
 };
 
 class MaterialAnimationFactory

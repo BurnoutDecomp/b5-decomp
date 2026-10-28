@@ -45,8 +45,8 @@ extern "C" System *off_83271928;
 // PlugIn v-table the destructor reinstalls before any free. These are opaque data symbols in
 // the XEX (no exported contents); modelled as honest placeholder storage so the ctor / dtor
 // link without fabricating their contents.
-static void *const KDL_DelayVTable      = nullptr; // off_8217F58C
-static void *const KDL_BasePlugInVTable = nullptr; // off_820AA810
+static void *const KDL_DelayVTable      = 0; // off_8217F58C
+static void *const KDL_BasePlugInVTable = 0; // off_820AA810
 
 // The delay targets the fixed 48 kHz internal rate (flt_820AA808); the latency form uses the
 // shared 5.0 scale (flt_8200426C, grounded == 5.0 across the image); flt_82001CC0 == 0.0.

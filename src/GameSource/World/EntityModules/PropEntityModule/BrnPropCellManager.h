@@ -115,8 +115,8 @@ namespace BrnWorld
     // Pin the asm-attested PropCellRecord interior (stride 0xC, zone id at +8).
     inline void PropCellRecord_AssertLayout()
     {
-        static_assert(sizeof(BrnPhysics::Props::PropCellId) == 4, "PropCellId is two u16");
-        static_assert(sizeof(PropCellRecord) == 12,               "PropCellRecord stride 0xC");
+        CGS_STATIC_ASSERT((sizeof(BrnPhysics::Props::PropCellId) == 4), "PropCellId is two u16");
+        CGS_STATIC_ASSERT((sizeof(PropCellRecord) == 12),               "PropCellRecord stride 0xC");
     }
 
     struct PropCellManager

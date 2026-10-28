@@ -21,14 +21,14 @@ public:
                                  int nRotationType, CMassiveZoneManager* pZone);
     virtual ~CMassiveAdObjectModelDynamic();
 
-    int Tick() override;
-    int Resume() override;
-    int Suspend() override;
-    int SetAssetExpired(int nAssetId) override;
-    int ReportImpressions() override;
-    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) override;
-    int GetNextAssetID() override;
-    int Initialize() override;
+    int Tick() ;
+    int Resume() ;
+    int Suspend() ;
+    int SetAssetExpired(int nAssetId) ;
+    int ReportImpressions() ;
+    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) ;
+    int GetNextAssetID() ;
+    int Initialize() ;
 
     CMassiveAdObject* CreateSlaveM(CMassiveAdObjectSubscriber* pSubscriber);
 

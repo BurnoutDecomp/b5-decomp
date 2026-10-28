@@ -91,9 +91,9 @@ namespace BrnReplays
             return reinterpret_cast<RaceCarSerialiserFrame*>(this);
         }
 
-        if (GetStaticLayout() == nullptr)
+        if (GetStaticLayout() == 0)
         {
-            return nullptr;
+            return 0;
         }
 
         // Clear the live frame first, then the previous frame (asm order 0x82657A84 then
@@ -113,7 +113,7 @@ namespace BrnReplays
     {
         Lock();
         RaceCarEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
-        CGS_ASSERT(lpLayout != nullptr, "lpStatic");
+        CGS_ASSERT(lpLayout != 0, "lpStatic");
 
         if (meMode == E_MODE_PLAYING)
         {
@@ -132,7 +132,7 @@ namespace BrnReplays
         Lock();
         RaceCarEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
 
-        if (lpLayout != nullptr)
+        if (lpLayout != 0)
         {
             if (meMode == E_MODE_RECORDING_PREPARING ||
                 meMode == E_MODE_RECORDING ||

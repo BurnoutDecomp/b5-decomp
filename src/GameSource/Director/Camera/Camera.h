@@ -56,7 +56,7 @@ namespace BrnDirector
         class Behaviour;
 
         // DWARF: Camera.h:40 (struct BrnDirector::Camera::Camera).
-        struct alignas(16) Camera
+        struct CGS_ALIGN(16) Camera
         {
             // ---- near/far-clip distance class constants (DWARF Camera.h:200-202) ----
             // Static data members the camera's near-clip selection reads. GetNearClipDistance
@@ -81,7 +81,7 @@ namespace BrnDirector
 
             // Default-constructible (the camera is brought up via Construct(), and is
             // embedded by value in several owners that zero/Construct it themselves).
-            Camera() = default;
+            Camera() {}
 
             // X360-attested @0x821F3B88. The copy constructor -- a flat memberwise copy of
             // the whole camera (body: Camera.cpp). Declared explicitly so the X360-attested
@@ -97,7 +97,6 @@ namespace BrnDirector
             // the copy constructor by construction (a POD-of-PODs aggregate with no owning
             // resources), so the compiler-generated default is exact parity. Declared explicitly
             // (rather than left implicit) so it has a named, documented home.
-            Camera& operator=(const Camera& lrOther) = default;
 
             // X360-attested @0x8220A850 (DWARF Camera.h:75). Validates the transform
             // (asserts on NaN / unreasonable position) and returns the validated-
@@ -297,7 +296,7 @@ namespace BrnDirector
         // is BY NAMED MEMBER, not by byte offset (the x64-gate rule). The transform stays at
         // +0x00 on both, and the dirty-flags word stays NAMED `mState_uFlags` (== the low
         // word of mState's current-flag set) for the committed ICECamera consumer.
-        static_assert(offsetof(Camera, mTransform) == 0x00,
+        CGS_STATIC_ASSERT((offsetof(Camera, mTransform) == 0x00),
                       "BrnDirector::Camera::Camera transform must be at +0x00");
     }
 }

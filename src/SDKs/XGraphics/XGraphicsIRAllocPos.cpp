@@ -67,7 +67,7 @@ IRAllocPos* IRAllocPos::NewInst(s32 aiOpcode, CFG* apContext)
 
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRAllocPos));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRAllocPos(apContext);
 }

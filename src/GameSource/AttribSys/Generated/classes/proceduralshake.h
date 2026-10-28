@@ -26,7 +26,7 @@ namespace Gen
         // constructs one, so the low word alone is not enough there.
         static const u64 KU_PROCEDURALSHAKE_CLASS_KEY = 0x88C5A4BDB8FDFFFFull;
 
-        explicit proceduralshake(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit proceduralshake(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // ⭐ THE REFSPEC ctor -- and it is the one the console symbol actually IS.
         // ADDITIVE 2026-09-06 (camera-shake lane). `Attrib::Gen::proceduralshake::

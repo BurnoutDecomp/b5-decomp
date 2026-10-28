@@ -28,8 +28,8 @@ namespace core
 // registered run-time descriptor record (its +0x00 label is the string "Gain"). These are
 // opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
 // storage so the bodies below link without fabricating their contents.
-static void *const KGN_GainVTable = nullptr;    // off_8217F3D4
-static void *const KGN_BasePlugInVTable = nullptr; // off_820AA810
+static void *const KGN_GainVTable = 0;    // off_8217F3D4
+static void *const KGN_BasePlugInVTable = 0; // off_820AA810
 // off_82F8CB70 -- the "Gain" runtime descriptor, REAL (descriptor-record wave; the
 // console GetSize is the ICF-folded RawPuller2::GetSize @0x82B97348 -- the host
 // record carries the same shared body). Metadata FLAG'd null.

@@ -45,7 +45,7 @@ namespace
         lAllocDescriptor.m_baseResourceDescriptors[3].m_size      = 0u;
         lAllocDescriptor.m_baseResourceDescriptors[3].m_alignment = 1u;
 
-        rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, nullptr);
+        rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, 0);
         renderengine::DepthStencilState* lpStateHandle =
             static_cast<renderengine::DepthStencilState*>(lResource.m_baseResources[0]);
 
@@ -63,11 +63,11 @@ CgsDepthStencilStateFactory::CgsDepthStencilStateFactory()
 // the comparison function (muFunction) and the depth test/write enable flags differ.
 void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 {
-    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON]   = nullptr;
-    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF] = nullptr;
-    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF]  = nullptr;
-    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON]   = nullptr;
-    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON]  = nullptr;
+    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON]   = 0;
+    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF] = 0;
+    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF]  = 0;
+    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON]   = 0;
+    saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON]  = 0;
 
     // The shared fixed portion of the parameter block (identical for all 5 states; matches
     // the default depth/stencil params renderengine::StateHelper::Initialize builds).

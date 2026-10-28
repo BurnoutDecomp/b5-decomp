@@ -20,7 +20,7 @@ public:
     }
     virtual ~CMassiveAdObjectModel();
 
-    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) override;
+    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) ;
 
 protected:
     unsigned int muMinSize; // +0x60

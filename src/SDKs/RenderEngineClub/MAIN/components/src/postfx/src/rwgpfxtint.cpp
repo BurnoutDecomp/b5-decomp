@@ -32,7 +32,7 @@ namespace
     // [FLAG BLOCKED: the Xenos package at X360 0x82044D30, 344 bytes (pixel), exposing the named
     //  constant "lookupOffset". DATA_DUMP.md:1722 carries only its first 32 bytes. Extractable from
     //  the ARTIST .i64 the same way rwgpfxrendertargetdebugger.cpp already extracted its own pair.]
-    const void* const KP_TINT_PIXEL_PROGRAM_MICROCODE = nullptr;   // X360 &unk_82044D30
+    const void* const KP_TINT_PIXEL_PROGRAM_MICROCODE = 0;   // X360 &unk_82044D30
     const u32         KU_TINT_PIXEL_PROGRAM_SIZE      = 344u;      // X360 var_68 == 0x158
 
     // The packed texture format/usage word the X360 writes into the lookup-texture Parameters
@@ -42,7 +42,7 @@ namespace
     // The shared tint pixel program + its rw resource handle array (X360 dword_82FAEE8C /
     // dword_82FAFF48). InitializePixelProgram fills them; Initialize reads gpTintPixelProgram.
     rw::Resource                     gTintPixelProgramResource;   // X360 dword_82FAFF48
-    renderengine::ProgramBufferData* gpTintPixelProgram = nullptr; // X360 dword_82FAEE8C
+    renderengine::ProgramBufferData* gpTintPixelProgram = 0; // X360 dword_82FAEE8C
 }
 
 namespace rw
@@ -107,13 +107,13 @@ namespace postfx
         lTextureParams.muNumLevels = 1;
         lTextureParams.miFormat    = 21;   // D3DFMT_A8R8G8B8 -- the PC spelling of word6 below
         lTextureParams.muReserved1 = 0;
-        static_assert(KU_TINT_LOOKUP_TEXTURE_FORMAT == 0x18280186u,
+        CGS_STATIC_ASSERT((KU_TINT_LOOKUP_TEXTURE_FORMAT == 0x18280186u),
                       "word6, the console's GPU format for the tint lookup volume");
 
         rw::BaseResourceDescriptors<5> lTextureDescriptor;
         renderengine::Texture::GetResourceDescriptor(reinterpret_cast<u32*>(&lTextureDescriptor), &lTextureParams);
         lpTint->m_textureTintMapResource = lpTint->m_allocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lTextureDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lTextureDescriptor), 0);
         lpTint->m_textureTintMap =
             renderengine::Texture::Initialize(&lpTint->m_textureTintMapResource, &lTextureParams);
 
@@ -159,11 +159,11 @@ namespace postfx
         rw::BaseResourceDescriptors<5> lStateDescriptor;
         renderengine::TextureState::GetResourceDescriptor(reinterpret_cast<u32*>(&lStateDescriptor));
         lpTint->m_textureStateTintMapResource = lpTint->m_allocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), 0);
         lpTint->m_textureStateTintMap =
             renderengine::TextureState::Initialize(&lpTint->m_textureStateTintMapResource, &lStateParams);
 
-        if (gpTintPixelProgram != nullptr)
+        if (gpTintPixelProgram != 0)
         {
             renderengine::ProgramBuffer::GetVariableHandleByName(
                 gpTintPixelProgram, reinterpret_cast<const u8*>("lookupOffset"),

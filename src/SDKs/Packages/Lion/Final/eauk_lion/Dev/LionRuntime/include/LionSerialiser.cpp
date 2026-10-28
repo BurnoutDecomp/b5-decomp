@@ -14,7 +14,7 @@
 // The shared tagged allocator the Lion serialiser draws its backing store from (X360
 // off_83121C54). Declared in LionSerialiser.h; NOT a file-static any more -- its writer is
 // cParticleSystem::AppInit @0x82913810, in another TU, which is proof it never was one.
-EA::Allocator::ITaggedAllocator* gpLionSerialiserAllocator = nullptr;
+EA::Allocator::ITaggedAllocator* gpLionSerialiserAllocator = 0;
 
 namespace
 {
@@ -40,8 +40,8 @@ void cLionSerialiser::Init()
 {
     mStringSize   = 0; // stw 0x10
     mDataSize     = 0; // stw 0x14
-    mpStringBase  = nullptr; // stw 0x00
-    mpDataBase    = nullptr; // stw 0x04
+    mpStringBase  = 0; // stw 0x00
+    mpDataBase    = 0; // stw 0x04
     mStringOffset = 0; // stw 0x08
     mDataOffset   = 0; // stw 0x0C
     mRemapIndex   = 0; // stw 0x18
@@ -80,9 +80,9 @@ void cLionSerialiser::Alloc()
     }
     else
     {
-        mpDataBase = nullptr;
+        mpDataBase = 0;
     }
-    mpStringBase = nullptr;
+    mpStringBase = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -96,9 +96,9 @@ void cLionSerialiser::DeInit()
         if (mpDataBase)
         {
             gpLionSerialiserAllocator->Free(mpDataBase, 0);
-            mpDataBase = nullptr;
+            mpDataBase = 0;
         }
-        mpStringBase = nullptr;
+        mpStringBase = 0;
     }
 }
 
@@ -119,7 +119,7 @@ void cLionSerialiser::DataSizeUpdate(u32 aSize)
 // ----------------------------------------------------------------------------
 u8* cLionSerialiser::DataStore(const void* apData, u32 aSize)
 {
-    u8* lpResult = nullptr;
+    u8* lpResult = 0;
 
     if (mpDataBase)
     {

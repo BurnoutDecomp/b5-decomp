@@ -238,7 +238,7 @@ namespace
         rw::BaseResourceDescriptors<5> lDescriptor;
         renderengine::ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lParameters);
         rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
         return renderengine::ProgramBuffer::Initialize(
             reinterpret_cast<renderengine::ProgramResourceLayout*>(&lResource), &lParameters);
     }
@@ -265,7 +265,7 @@ void BrnRendererMemory::Construct(renderengine::DeviceParameters lParameters,
     // Clear the render-target pool.
     for (u32 luSlot = 0; luSlot < E_RENDER_TARGET_COUNT; ++luSlot)
     {
-        mapRenderTarget[luSlot] = nullptr;
+        mapRenderTarget[luSlot] = 0;
     }
 
     // Build every render target (each helper allocates its CgsRenderTarget into its pool slot).
@@ -311,10 +311,10 @@ void BrnRendererMemory::Construct(renderengine::DeviceParameters lParameters,
     rw::BaseResourceDescriptors<5> lTextureStateDescriptor;
     renderengine::TextureState::GetResourceDescriptor(&lTextureStateDescriptor);
     mBlitTextureStateResource = BrnResource::Allocators::GetGlobalGraphicsAllocator()->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>(lTextureStateDescriptor), nullptr);
+        reinterpret_cast<const rw::ResourceDescriptor&>(lTextureStateDescriptor), 0);
 
     // The blit texture state object pointer is resolved lazily; null until first bound.
-    mpBlitTextureState = nullptr;
+    mpBlitTextureState = 0;
 }
 #endif  // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
 
@@ -391,7 +391,7 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
     lpBackBuffer->Construct(lpAllocator);
 
     // The back buffer borrows the down-sample buffer's depth surface, so that target must exist.
-    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE] != nullptr, "GetDownSampleBuffer() != NULL");
+    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE] != 0, "GetDownSampleBuffer() != NULL");
 
     // Share the down-sample buffer's resolved depth-stencil section (section 4) and bind the engine
     // default render-target state for section 0.
@@ -920,7 +920,7 @@ namespace
     // The shared two-element vertex declaration both program pairs draw through. File-scope because
     // it belongs to the pair of programs, not to a render target, and because the console's own
     // equivalent (the Im2d renderer's declaration) is likewise built once and reused.
-    renderengine::VertexDescriptorData* gpBlitVertexDescriptor = nullptr;
+    renderengine::VertexDescriptorData* gpBlitVertexDescriptor = 0;
 
     // The 20-byte vertex the shared declaration auto-packs to: POSITION0 FLOAT3 at +0, TEXCOORD0
     // FLOAT2 at +12. The layout MUST byte-match what VertexDescriptor::Initialize packs.
@@ -929,7 +929,7 @@ namespace
         f32 mafPosition[3];   // +0x00  POSITION0 -- ALREADY IN NDC
         f32 mafUv[2];         // +0x0C  TEXCOORD0
     };
-    static_assert(sizeof(BlitVertex) == 20, "the blit vertex is the shared 20-byte record");
+    CGS_STATIC_ASSERT((sizeof(BlitVertex) == 20), "the blit vertex is the shared 20-byte record");
 
     // The console's unit-square quad, in the console's own order. BlitComposite builds four
     // Basic2dColouredTexturedVertex records at (0,0) (0,1) (1,0) (1,1) with matching uvs and a
@@ -941,7 +941,7 @@ namespace
         BlitVertex* lpVertex = static_cast<BlitVertex*>(
             D3DDevice_BeginVertices(0, KU_BLIT_PRIMITIVE_TRIANGLESTRIP,
                                     KU_BLIT_QUAD_VERTEX_COUNT, sizeof(BlitVertex)));
-        if (lpVertex != nullptr)
+        if (lpVertex != 0)
         {
             static const f32 kaafQuad[KU_BLIT_QUAD_VERTEX_COUNT][5] =
             {
@@ -997,12 +997,12 @@ namespace
 // =================================================================================================
 void BrnRendererMemory::BlitDepth(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTarget* lpSource)
 {
-    if (lpSource == nullptr || lpSource->GetRenderTarget() == nullptr)
+    if (lpSource == 0 || lpSource->GetRenderTarget() == 0)
         return;
 
     renderengine::TextureState* const lpSourceDepth =
         lpSource->GetRenderTarget()->GetDepthTextureState();
-    if (lpSourceDepth == nullptr)
+    if (lpSourceDepth == 0)
     {
         static bool sbLoggedNoDepth = false;
         if (!sbLoggedNoDepth)
@@ -1067,15 +1067,15 @@ void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTar
                                       CgsRenderTarget* lpSource1, bool /*lbFlag0*/, bool /*lbFlag1*/)
 {
     ++renderengine::guDiagComposites;   // [DIAG] issue #30 per-present counters
-    if (lpSource0 == nullptr || lpSource0->GetRenderTarget() == nullptr
-        || lpSource1 == nullptr || lpSource1->GetRenderTarget() == nullptr)
+    if (lpSource0 == 0 || lpSource0->GetRenderTarget() == 0
+        || lpSource1 == 0 || lpSource1->GetRenderTarget() == 0)
         return;
 
     rw::graphics::postfx::RenderTarget* const lpBase    = lpSource0->GetRenderTarget();
     rw::graphics::postfx::RenderTarget* const lpOverlay = lpSource1->GetRenderTarget();
 
     renderengine::TextureState* const lpOverlayState = lpOverlay->maColourTargets[0].mpTextureState;
-    if (lpOverlayState == nullptr)
+    if (lpOverlayState == 0)
     {
         static bool sbLoggedNoOverlay = false;
         if (!sbLoggedNoOverlay)

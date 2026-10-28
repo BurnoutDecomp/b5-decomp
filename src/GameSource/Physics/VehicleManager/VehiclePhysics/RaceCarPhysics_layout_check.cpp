@@ -63,58 +63,58 @@ namespace Vehicle
         //      alignment padding BEFORE mPropCollisionImpulseSum that this model does not know
         //      about, the relative offsets would still hold; what would break is the sizeof
         //      closure at the bottom, which is why that one is here too.)
-        static_assert(offsetof(T, mPropCollisionImpulseSum) % 16 == 0,
+        CGS_STATIC_ASSERT((offsetof(T, mPropCollisionImpulseSum) % 16 == 0),
                       "RaceCarPhysics own block must start 16-aligned (a Vector3 sits on it)");
-        static_assert(KU_X360_OWN_BLOCK_BASE % 16 == 0,
+        CGS_STATIC_ASSERT((KU_X360_OWN_BLOCK_BASE % 16 == 0),
                       "the X360 seat of mPropCollisionImpulseSum is 16-aligned too");
 
         // ---- the sixteen members, in DWARF declaration order, each against its X360 seat. ----
         // Both terms of every right-hand side are X360 literals.
-        static_assert(offsetof(T, mfTimeSinceTookDownPlayer) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1400 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mfTimeSinceTookDownPlayer) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1400 - 0x13F0),
                       "mfTimeSinceTookDownPlayer @X360 +0x1400 (Update @0x826418E0: lfs/fadds/stfs)");
-        static_assert(offsetof(T, mfSlamSteering) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1404 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mfSlamSteering) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1404 - 0x13F0),
                       "mfSlamSteering @X360 +0x1404 (VehicleManager::CalculateSlamData @0x825C7678)");
-        static_assert(offsetof(T, mfBeachedTime) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1408 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mfBeachedTime) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1408 - 0x13F0),
                       "mfBeachedTime @X360 +0x1408 (Update @0x826419C8; AddTractionPoint @0x825FFB0C)");
-        static_assert(offsetof(T, mbPlayerCarInShowtime) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x140C - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mbPlayerCarInShowtime) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x140C - 0x13F0),
                       "mbPlayerCarInShowtime @X360 +0x140C (IsPlayerVehicleActuallyInShowtime @0x827E42B0)");
-        static_assert(offsetof(T, mbUsingAftertouch) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x140D - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mbUsingAftertouch) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x140D - 0x13F0),
                       "mbUsingAftertouch @X360 +0x140D (IsUsingAftertouch @0x825B8C88)");
-        static_assert(offsetof(T, mu8StrengthStat) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x140E - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mu8StrengthStat) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x140E - 0x13F0),
                       "mu8StrengthStat @X360 +0x140E (PhysicalTrafficVehicle::OnChecked @0x8261E3F0)");
-        static_assert(offsetof(T, mInitialCrashVel) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1410 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mInitialCrashVel) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1410 - 0x13F0),
                       "mInitialCrashVel @X360 +0x1410 (SetCrashing @0x825B8AD0, from this+0x50)");
-        static_assert(offsetof(T, mInitialCrashAngVel) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1420 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mInitialCrashAngVel) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1420 - 0x13F0),
                       "mInitialCrashAngVel @X360 +0x1420 (SetCrashing @0x825B8ACC, from this+0x60)");
-        static_assert(offsetof(T, mfCrashTimer) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1430 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mfCrashTimer) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1430 - 0x13F0),
                       "mfCrashTimer @X360 +0x1430 (SetCrashing @0x825B8AC8; the AI crash slow-mo timer)");
-        static_assert(offsetof(T, mbAISlowMo) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1434 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mbAISlowMo) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1434 - 0x13F0),
                       "mbAISlowMo @X360 +0x1434 (Update @0x82641698/9C/F4)");
-        static_assert(offsetof(T, mbWroteIntoRWInSlowMo) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1435 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mbWroteIntoRWInSlowMo) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1435 - 0x13F0),
                       "mbWroteIntoRWInSlowMo @X360 +0x1435 (VehicleManager::GetUpdatedVehicleBodies)");
-        static_assert(offsetof(T, mbDeformedBeyondDriveTimeLimitsInCrash)
-                          - offsetof(T, mPropCollisionImpulseSum) == 0x1436 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mbDeformedBeyondDriveTimeLimitsInCrash)
+                          - offsetof(T, mPropCollisionImpulseSum) == 0x1436 - 0x13F0),
                       "mbDeformedBeyondDriveTimeLimitsInCrash @X360 +0x1436 "
                       "(DeformableObject::UpdateDeformedBBox @0x825E0EBC)");
-        static_assert(offsetof(T, mCrashNormal) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1440 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mCrashNormal) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1440 - 0x13F0),
                       "mCrashNormal @X360 +0x1440 (GetNormalCausingCrash @0x825B3978)");
-        static_assert(offsetof(T, mEntityCausingCrash) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1450 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mEntityCausingCrash) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1450 - 0x13F0),
                       "mEntityCausingCrash @X360 +0x1450 (VehicleManager::SetRaceCarCrashing @0x82635478)");
-        static_assert(offsetof(T, mbDebugShowTargetAssist) - offsetof(T, mPropCollisionImpulseSum)
-                          == 0x1454 - 0x13F0,
+        CGS_STATIC_ASSERT((offsetof(T, mbDebugShowTargetAssist) - offsetof(T, mPropCollisionImpulseSum)
+                          == 0x1454 - 0x13F0),
                       "mbDebugShowTargetAssist @X360 +0x1454 (UpdateTargetAssist @0x826202F4)");
 
         // ---- THE CLOSURE. This is the assert the whole recovery rests on.
@@ -127,18 +127,18 @@ namespace Vehicle
         //
         // Phrased as (sizeof - offsetof(first own member)) so it stays valid while the ~0x13F0
         // bytes of base state ahead of the block remain unreproduced.
-        static_assert(sizeof(T) - offsetof(T, mPropCollisionImpulseSum)
-                          == KU_X360_RACE_CAR_PHYSICS_SIZE - KU_X360_OWN_BLOCK_BASE,
+        CGS_STATIC_ASSERT((sizeof(T) - offsetof(T, mPropCollisionImpulseSum)
+                          == KU_X360_RACE_CAR_PHYSICS_SIZE - KU_X360_OWN_BLOCK_BASE),
                       "the RaceCarPhysics own block must span exactly 0x1460-0x13F0 == 112 bytes: "
                       "the DWARF member order and the asm offsets close on the 5216 per-car stride");
 
         // ---- the two ingredients of the closure, pinned separately so a failure is diagnosable.
-        static_assert(sizeof(Vector3) == 16 && alignof(Vector3) == 16,
+        CGS_STATIC_ASSERT((sizeof(Vector3) == 16 && __alignof(Vector3) == 16),
                       "the block's four Vector3s are what force the class alignment to 16");
-        static_assert(sizeof(EntityId) == 4,
+        CGS_STATIC_ASSERT((sizeof(EntityId) == 4),
                       "mEntityCausingCrash is a 4-byte packed handle, so mbDebugShowTargetAssist "
                       "lands at +0x1454 and the class ends at +0x1455 before padding");
-        static_assert(alignof(T) == 16,
+        CGS_STATIC_ASSERT((__alignof(T) == 16),
                       "class alignment 16 is what rounds the last data byte (+0x1455) up to 0x1460");
     }
 }

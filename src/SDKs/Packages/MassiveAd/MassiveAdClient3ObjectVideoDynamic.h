@@ -23,14 +23,14 @@ public:
     }
     virtual ~CMassiveAdObjectVideoDynamic();
 
-    int Initialize() override;
-    int SetAssetExpired(int nAssetID) override;
-    int Tick() override;
-    int ReportImpressions() override;
-    int Suspend() override;
-    int Resume() override;
-    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) override;
-    int GetNextAssetID() override;
+    int Initialize() ;
+    int SetAssetExpired(int nAssetID) ;
+    int Tick() ;
+    int ReportImpressions() ;
+    int Suspend() ;
+    int Resume() ;
+    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) ;
+    int GetNextAssetID() ;
 
     CMassiveAdObject* CreateSlaveM(CMassiveAdObjectSubscriber* pSubscriber);
 

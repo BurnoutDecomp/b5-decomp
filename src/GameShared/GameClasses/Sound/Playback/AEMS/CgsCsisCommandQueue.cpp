@@ -29,7 +29,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdint> // std::uintptr_t
+#include "types.hpp" // std::uintptr_t
 
 namespace CgsSound
 {
@@ -44,7 +44,7 @@ template <typename T>
 CsisCommandQueue& operator<<(CsisCommandQueue& arQueue, const T& arCommand)
 {
     const bool lbPosted = arQueue.mQueue.PostCommand(
-        static_cast<unsigned int>(sizeof(T) / sizeof(std::uintptr_t)),
+        static_cast<unsigned int>(sizeof(T) / sizeof(uintptr_t)),
         arCommand.AsCommand());
 
     CGS_ASSERT(lbPosted, "Possibly need to increase CsisCommandQueue::E_QUEUE_LENGTH");

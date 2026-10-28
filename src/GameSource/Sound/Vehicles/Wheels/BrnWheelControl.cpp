@@ -65,11 +65,11 @@ WheelControl::WheelControl()
     : mWheelAttribs()
     , mWheelData()
     , mWheelStatus()
-    , mpPhysicsControl(nullptr)
-    , mpShiftControl(nullptr)
-    , mpEngineControl(nullptr)
-    , mpRight3dControl(nullptr)
-    , mpLeft3dControl(nullptr)
+    , mpPhysicsControl(0)
+    , mpShiftControl(0)
+    , mpEngineControl(0)
+    , mpRight3dControl(0)
+    , mpLeft3dControl(0)
     , meInAirRevState(E_IN_AIR_REV_STATE_NONE)
     , mIsOnGround(false)
     , mfAudioRPM(0.0f)
@@ -148,9 +148,9 @@ bool WheelControl::Attach()
 
 void WheelControl::UpdateWheelStatus(f32)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     const BrnSound::Vehicles::VehicleData* lpRaw = mpPhysicsControl->GetRawPhysicsData();
-    CGS_ASSERT(lpRaw != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(lpRaw != 0, "mpVehiclePhysicsData");
 
     s32 liGroundedWheels = 0;
     s32 liAttachedWheels = 0;
@@ -186,9 +186,9 @@ f32 WheelControl::LerpedNormalise(const Vector2& arSlow, const Vector2& arFast,
 
 void WheelControl::UpdateSkidValues(f32)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     const BrnSound::Vehicles::VehicleData* lpRaw = mpPhysicsControl->GetRawPhysicsData();
-    CGS_ASSERT(lpRaw != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(lpRaw != 0, "mpVehiclePhysicsData");
     const Engines::PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
 
     f32 lfSpeedMPS = lrPhysics.mSpeedMPS.GetCurrent();

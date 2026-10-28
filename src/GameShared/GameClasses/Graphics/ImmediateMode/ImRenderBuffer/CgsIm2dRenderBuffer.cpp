@@ -79,7 +79,7 @@ namespace CgsGraphics
         const u32 luRecord = ImCommandRecord<ImCommandPushMaskTextureState<V> >::KU_BYTES;
 
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        ImCommandPushMaskTextureState<V>* lpCommand = nullptr;
+        ImCommandPushMaskTextureState<V>* lpCommand = 0;
         if (muCommandBufferSize >= luPos + luRecord)
         {
             lpCommand = reinterpret_cast<ImCommandPushMaskTextureState<V>*>(
@@ -99,7 +99,7 @@ namespace CgsGraphics
 
         // Only stamp the payload + copy the corners when both the command slot and the run
         // carved successfully (the guest's `if (v9 && v10)` guard).
-        if (lpCommand != nullptr && lpRun != nullptr)
+        if (lpCommand != 0 && lpRun != 0)
         {
             lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
             lpCommand->mpVertices     = lpRun;
@@ -143,7 +143,7 @@ namespace CgsGraphics
     void ImRenderBuffer<V>::PushBoostBarColours(const rw::math::vpu::Vector4& lrColour0,
                                                 const rw::math::vpu::Vector4& lrColour1)
     {
-        static_assert(ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES == 48u,
+        CGS_STATIC_ASSERT((ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES == 48u),
                       "console record size 48");
         const u32 luRecord = ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES;
 
@@ -171,7 +171,7 @@ namespace CgsGraphics
     void Im2dRenderBuffer::PushBoostBarColours(rw::math::vpu::Vector3 lrColour0,
                                                rw::math::vpu::Vector3 lrColour1)
     {
-        static_assert(sizeof(rw::math::vpu::Vector3) == 16u,
+        CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Vector3) == 16u),
                       "X360 PushBoostBarColours copies one 16-byte VPU register per colour");
         const u32 luRecord = ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES;
         if (!mbInRenderBlock)

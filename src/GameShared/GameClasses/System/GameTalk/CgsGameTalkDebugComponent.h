@@ -20,9 +20,9 @@ namespace CgsGameTalk
     class GameTalkDebugComponent : public CgsDev::DebugComponent
     {
     protected:
-        void OnActivate() override;
-        const char* GetName() const override;
-        const char* GetPath() const override;
+        void OnActivate() ;
+        const char* GetName() const ;
+        const char* GetPath() const ;
     };
 }
 

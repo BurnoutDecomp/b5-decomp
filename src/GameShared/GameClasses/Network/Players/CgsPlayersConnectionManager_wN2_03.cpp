@@ -34,10 +34,10 @@ NetworkPlayerID PlayersConnectionManager::GetIDOfPlayerToKick(NetworkPlayerID lP
     const char* lpcName2 = GetPlayerName(lPlayerID2);
 
     DirtySock::ConnApiRefT* lpConnApi = mpServerInterface->GetConnAPIRef();
-    if (lpConnApi != nullptr)
+    if (lpConnApi != 0)
     {
         const DirtySock::ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
-        if (lpClientList != nullptr && lpcName1 != nullptr && lpcName2 != nullptr)
+        if (lpClientList != 0 && lpcName1 != 0 && lpcName2 != 0)
         {
             for (s32 liIndex = lpClientList->iNumClients - 1; liIndex >= 0; --liIndex)
             {
@@ -78,7 +78,7 @@ void PlayersConnectionManager::ConnApiStatusChangeCallback(DirtySock::ConnApiRef
 
     NetworkPlayer* lpPlayer = lpSelf->mpPlayerManager->GetPlayerByName(
         lpClientList->Clients[lpCbInfo->iClientIndex].UserInfo.strName);
-    if (lpPlayer == nullptr)
+    if (lpPlayer == 0)
     {
         return;
     }
@@ -87,7 +87,7 @@ void PlayersConnectionManager::ConnApiStatusChangeCallback(DirtySock::ConnApiRef
     lConnectionData.Clear();
     lpPlayer->SetConnectionData(lConnectionData);
 
-    if (lpSelf->mpfPlayerDisconnectedCallback != nullptr)
+    if (lpSelf->mpfPlayerDisconnectedCallback != 0)
     {
         lpSelf->mpfPlayerDisconnectedCallback(lpPlayer->GetPlayerID(), lpSelf->mpPlayerDisconnectedCallbackData);
     }

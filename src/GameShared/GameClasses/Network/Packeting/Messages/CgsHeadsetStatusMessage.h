@@ -42,17 +42,17 @@ namespace CgsNetwork
         void        PrepareForSend(u16 lu16CurrentFrame, u8 lu8HeadsetStatus);
         bool        Retrieve(u8* lpu8HeadsetStatus);
         void        Destruct();
-        s32         GetPackedMessageSize() override;
+        s32         GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DBC78 -- inline header-homed accessor.
-        const char* GetName() const override { return "Headset Status Message"; }
+        const char* GetName() const  { return "Headset Status Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         u8 mu8HeadsetStatus;        // DWARF CgsHeadsetStatusMessage.h:73 (after 0x20 base)
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(HeadsetStatusMessage) == 0x24, "sizeof(HeadsetStatusMessage) == 0x24");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(HeadsetStatusMessage) == 0x24), "sizeof(HeadsetStatusMessage) == 0x24");
 
 } // namespace CgsNetwork

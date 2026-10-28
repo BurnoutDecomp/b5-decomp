@@ -38,8 +38,8 @@ namespace core
 // not exposed in the CreateInstance asm (PlugIn::Initialize<VuMeter> installs it inside its
 // own separate TU). Both are opaque data symbols in the XEX; modelled as honest placeholder
 // storage so the ctor/dtor link without fabricating their contents.
-static void *const KVU_VuMeterVTable    = nullptr; // installed by PlugIn::Initialize<VuMeter>
-static void *const KVU_BasePlugInVTable = nullptr; // off_820AA810
+static void *const KVU_VuMeterVTable    = 0; // installed by PlugIn::Initialize<VuMeter>
+static void *const KVU_BasePlugInVTable = 0; // off_820AA810
 
 // Grounded flt_* immediates (well-known constants; from the asm's flt_* loads).
 static const f32 KF_ZERO    = 0.0f;  // flt_82001CC0

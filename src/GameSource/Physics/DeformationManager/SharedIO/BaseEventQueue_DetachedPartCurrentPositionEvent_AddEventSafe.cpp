@@ -18,7 +18,7 @@
 // Matrix44Affine(64) + EntityId(4) + EBodyParts(4) } rounded to 80. Callers (X360 xrefs):
 // Deformation::PhysicalBodyPartPool::OutputEvents.
 // X360-attested element stride (len*80 via *4/*5/*16; 4 SIMD lanes + 2 scalar dwords).
-static_assert(sizeof(BrnPhysics::Deformation::DetachedPartCurrentPositionEvent) == 80,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::DetachedPartCurrentPositionEvent) == 80),
               "DetachedPartCurrentPositionEvent stride 80");
 
 template bool

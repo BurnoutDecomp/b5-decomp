@@ -272,7 +272,7 @@ namespace
 // helper is that vspltw.
 inline VecFloat KVF(f32 lfValue)
 {
-    return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+    { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
 }
 }
 

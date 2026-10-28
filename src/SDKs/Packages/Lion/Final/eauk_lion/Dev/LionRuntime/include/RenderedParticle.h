@@ -85,25 +85,25 @@ struct RenderedParticle
 
 // The array stride LionBlendRenderer::RenderSprites @0x82282608 walks the particle run with
 // (`addi r27, r27, 0x70`), and the sum of the DWARF's seven 16-byte members.
-static_assert(sizeof(RenderedParticle) == 0x70,
+CGS_STATIC_ASSERT((sizeof(RenderedParticle) == 0x70),
               "RenderedParticle is the 112-byte render record (RenderSprites @0x82282608 "
               "asm word 327: addi r27, r27, 0x70)");
-static_assert(alignof(RenderedParticle) == 16,
+CGS_STATIC_ASSERT((__alignof(RenderedParticle) == 16),
               "every member is a VMX lane register (lvx128/stvx128 throughout)");
 
 // Each offset below names the instruction that forms it. Break one and the gate fails here
 // rather than the game drawing a particle with its size in the colour slot.
-static_assert(offsetof(RenderedParticle, mPos)        == 0x00,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mPos)        == 0x00),
               "RenderSprites 0x822829D8 addi r5, r27, -0x40");
-static_assert(offsetof(RenderedParticle, mPos1)       == 0x10,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mPos1)       == 0x10),
               "ParticleBuild 0x82911230 addi r11, r28, 0x10");
-static_assert(offsetof(RenderedParticle, mLocatorVel) == 0x20,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mLocatorVel) == 0x20),
               "ParticleBuild 0x8291026C addi r11, r28, 0x20");
-static_assert(offsetof(RenderedParticle, mvRotPlusFrame) == 0x30,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mvRotPlusFrame) == 0x30),
               "ParticleBuild 0x829112B0 addi r11, r28, 0x30");
-static_assert(offsetof(RenderedParticle, mvSizePlusNextFrame) == 0x40,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mvSizePlusNextFrame) == 0x40),
               "ParticleBuild 0x829112B4 addi r10, r28, 0x40");
-static_assert(offsetof(RenderedParticle, mvColour) == 0x50,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mvColour) == 0x50),
               "BaseColourWithVarianceBehaviour::Process 0x8290D774 stvx128 v0, r29, r10 (r10==0x50)");
-static_assert(offsetof(RenderedParticle, mvTimeScaleAndLifeScale) == 0x60,
+CGS_STATIC_ASSERT((offsetof(RenderedParticle, mvTimeScaleAndLifeScale) == 0x60),
               "AlphaFadeBehaviour::Process 0x8290D800 addi r11, r30, 0x60");

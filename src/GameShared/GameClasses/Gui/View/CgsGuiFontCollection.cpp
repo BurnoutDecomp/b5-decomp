@@ -84,7 +84,7 @@ namespace CgsGui
     const CgsResource::SafeResourceHandle<CgsResource::Font>& FontCollection::FindFont(const char* lpcFontName) const
     {
         // FindFont asserts (CgsGuiFontCollection.cpp:100).
-        CGS_ASSERT(lpcFontName != nullptr, "lpcFontName");
+        CGS_ASSERT(lpcFontName != 0, "lpcFontName");
 
         // String-too-long guard. The X360 walks to the NUL and asserts the length is
         // < 0x80 (CgsStringUtils.h:55), then strncpy's 128 bytes into a local buffer.

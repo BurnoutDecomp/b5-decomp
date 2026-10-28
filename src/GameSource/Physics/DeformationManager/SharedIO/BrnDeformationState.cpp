@@ -3,8 +3,8 @@
 
 // X360-attested shape (CarState::GetSensor): 80-byte per-sensor stride and the count byte
 // at console +0x6A4.
-static_assert(sizeof(BrnPhysics::Deformation::CarSensorState) == 0x50, "CarSensorState stride 80");
-static_assert(offsetof(BrnPhysics::Deformation::CarState, mu8NumSensors) == 0x6A4, "mu8NumSensors @ +0x6A4");
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::CarSensorState) == 0x50), "CarSensorState stride 80");
+CGS_STATIC_ASSERT((offsetof(BrnPhysics::Deformation::CarState, mu8NumSensors) == 0x6A4), "mu8NumSensors @ +0x6A4");
 
 // BrnPhysics::Deformation::CarState::GetSensor @ 0x825B3678
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (asm authoritative). A checked accessor:

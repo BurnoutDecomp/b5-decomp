@@ -42,16 +42,16 @@ TimerManager *TimerManager::TimerManager_ctor(TimerManager *self)
     for (int i = 0; i < 2; ++i)
     {
         Collection *pCollection = &self->maCollections[i];
-        pCollection->mpBlockHead = nullptr;
-        pCollection->mpBlockTail = nullptr;
+        pCollection->mpBlockHead = 0;
+        pCollection->mpBlockTail = 0;
         pCollection->miBlockCount = 0;
-        pCollection->mpFreeHead = nullptr;
-        pCollection->mpUsedHead = nullptr;
+        pCollection->mpFreeHead = 0;
+        pCollection->mpUsedHead = 0;
         pCollection->mSize = 0;
         pCollection->mCapacity = 0;
     }
 
-    self->mpDeferredRemoveNode = nullptr; // +0x44 = 0
+    self->mpDeferredRemoveNode = 0; // +0x44 = 0
     self->mfCallbackTime = -1.0f;         // +0x38 = -1.0
     return self;
 }
@@ -107,20 +107,20 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
         // slot, which is the handle itself (that slot is at handle offset 0).
         TimerHandle *pHandle = reinterpret_cast<TimerHandle *>(pNode->mppOwner);
 
-        self->mpDeferredRemoveNode = nullptr;    // +0x44 = 0
+        self->mpDeferredRemoveNode = 0;    // +0x44 = 0
         f32 fTime = self->mfCallbackTime;        // +0x38
         self->mpCurrentHandle = pHandle;         // +0x3C = current handle
 
         pHandle->mpCallback(pHandle->mpContext, fTime);
 
         Collection::Node *pDeferred = self->mpDeferredRemoveNode; // +0x44 (set by RemoveTimer)
-        self->mpCurrentHandle = nullptr;         // +0x3C = 0
+        self->mpCurrentHandle = 0;         // +0x3C = 0
         pNode = pNode->mpNext;                   // advance before any unlink
 
         if (pDeferred)
         {
             Collection::RemoveNode(&self->maCollections[self->miCurrentCollection], pDeferred);
-            self->mpDeferredRemoveNode = nullptr; // +0x44 = 0
+            self->mpDeferredRemoveNode = 0; // +0x44 = 0
         }
         else
         {
@@ -181,15 +181,15 @@ void TimerManager::RemoveTimer(TimerManager *self, TimerHandle *handle)
         // Deferred self-remove: hand the node off to ExecuteTimers.
         self->miCurrentCollection = stage; // +0x40
         Collection::Node *pNode = reinterpret_cast<Collection::Node *>(handle->mpItemHandleNode);
-        handle->mpItemHandleNode = nullptr;
-        pNode->mppOwner = nullptr;
+        handle->mpItemHandleNode = 0;
+        pNode->mppOwner = 0;
         self->mpDeferredRemoveNode = pNode; // +0x44
     }
     else if (stage != 3)
     {
         Collection::Node *pNode = reinterpret_cast<Collection::Node *>(handle->mpItemHandleNode);
-        handle->mpItemHandleNode = nullptr;
-        pNode->mppOwner = nullptr;
+        handle->mpItemHandleNode = 0;
+        pNode->mppOwner = 0;
         Collection::RemoveNode(&self->maCollections[stage], pNode);
     }
 

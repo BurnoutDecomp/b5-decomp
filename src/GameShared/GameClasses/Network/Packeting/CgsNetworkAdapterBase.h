@@ -72,13 +72,13 @@ namespace CgsNetwork
 
         // SendTo asserts "lConnectionData.IsValid()" on a null link; the receive loop skips
         // a player whose link is null.
-        bool IsValid() const { return mpNetGameLink != nullptr; }
+        bool IsValid() const { return mpNetGameLink != 0; }
 
         // Inlined into NetworkPlayer's Construct / Prepare / Release: no link, both
         // addresses and the client id -1, every port and connection type 0, tail zeroed.
         void Clear()
         {
-            mpNetGameLink        = nullptr;
+            mpNetGameLink        = 0;
             miIPAddress          = -1;
             miLocalIPAddress     = -1;
             muConnApiClientId    = static_cast<u32>(-1);
@@ -137,9 +137,9 @@ namespace CgsNetwork
         void Destruct()
         {
             meServerType     = E_SERVER_TYPE_COUNT;
-            mpNetworkManager = nullptr;
-            mpRecvBuffer     = nullptr;
-            mpHeapMalloc     = nullptr;
+            mpNetworkManager = 0;
+            mpRecvBuffer     = 0;
+            mpHeapMalloc     = 0;
             mbDuplicateLogin = false;
         }
 

@@ -244,6 +244,6 @@ namespace CgsSceneManager
             return lpHeader + 1;
         }
 
-        return nullptr;
+        return 0;
     }
 }

@@ -133,7 +133,7 @@ namespace
 void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 {
 
-    CGS_ASSERT(lpRaceCarEntityModule != nullptr, "lpRaceCarEntityModule != NULL");
+    CGS_ASSERT(lpRaceCarEntityModule != 0, "lpRaceCarEntityModule != NULL");
 
     mpRaceCarEntityModule = lpRaceCarEntityModule;
 
@@ -162,8 +162,8 @@ void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCar
 // ARTIST RaceCarEntityModule::Destruct 822F3E1C..822F3E54 inlines this teardown.
 void RaceCarEntityModuleDebugComponent::Destruct()
 {
-    CGS_ASSERT(mpRaceCarEntityModule != nullptr, "mpRaceCarEntityModule != NULL");
-    mpRaceCarEntityModule = nullptr;
+    CGS_ASSERT(mpRaceCarEntityModule != 0, "mpRaceCarEntityModule != NULL");
+    mpRaceCarEntityModule = 0;
     DebugComponent::Destruct();
 }
 
@@ -355,7 +355,7 @@ void RaceCarEntityModuleDebugComponent::Update()
     ActiveRaceCar* lpPlayerCar =
         mpRaceCarEntityModule->GetActiveRaceCar(mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex());
 
-    if (lpPlayerCar != nullptr)
+    if (lpPlayerCar != 0)
     {
 
         const s32 liFrameCount = miAverageSpeedFrameCount;

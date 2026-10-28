@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstddef>   // offsetof (layout pins)
-#include <cstdint>   // uintptr_t (host-width pointer words)
+#include "types.hpp"   // uintptr_t (host-width pointer words)
 
 #include "types.hpp"
 
@@ -108,20 +108,20 @@ public:
 };
 
 // The stride the query objects index with (`idx << 7`).
-static_assert(sizeof(VolRef) == 0x80, "VolRef on-object stride must be 0x80");
+CGS_STATIC_ASSERT((sizeof(VolRef) == 0x80), "VolRef on-object stride must be 0x80");
 
 // Everything from the transform rows on keeps its console offset after the
 // host-width promotion of the two leading pointer words (the +0x08..+0x0F
 // unwritten slot absorbs the growth exactly).
-static_assert(offsetof(VolRef, muVolumePtr)    == 0x00, "VolRef::muVolumePtr");
-static_assert(offsetof(VolRef, mRow0)          == 0x10, "VolRef::mRow0");
-static_assert(offsetof(VolRef, mRow1)          == 0x20, "VolRef::mRow1");
-static_assert(offsetof(VolRef, mRow2)          == 0x30, "VolRef::mRow2");
-static_assert(offsetof(VolRef, mRow3)          == 0x40, "VolRef::mRow3");
-static_assert(offsetof(VolRef, mu50)           == 0x50, "VolRef::mu50");
-static_assert(offsetof(VolRef, mu68)           == 0x68, "VolRef::mu68");
-static_assert(offsetof(VolRef, muTag)          == 0x70, "VolRef::muTag");
-static_assert(offsetof(VolRef, muNumTagBits)   == 0x74, "VolRef::muNumTagBits");
+CGS_STATIC_ASSERT((offsetof(VolRef, muVolumePtr)    == 0x00), "VolRef::muVolumePtr");
+CGS_STATIC_ASSERT((offsetof(VolRef, mRow0)          == 0x10), "VolRef::mRow0");
+CGS_STATIC_ASSERT((offsetof(VolRef, mRow1)          == 0x20), "VolRef::mRow1");
+CGS_STATIC_ASSERT((offsetof(VolRef, mRow2)          == 0x30), "VolRef::mRow2");
+CGS_STATIC_ASSERT((offsetof(VolRef, mRow3)          == 0x40), "VolRef::mRow3");
+CGS_STATIC_ASSERT((offsetof(VolRef, mu50)           == 0x50), "VolRef::mu50");
+CGS_STATIC_ASSERT((offsetof(VolRef, mu68)           == 0x68), "VolRef::mu68");
+CGS_STATIC_ASSERT((offsetof(VolRef, muTag)          == 0x70), "VolRef::muTag");
+CGS_STATIC_ASSERT((offsetof(VolRef, muNumTagBits)   == 0x74), "VolRef::muNumTagBits");
 
 } // namespace collision
 } // namespace rw

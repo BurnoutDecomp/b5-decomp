@@ -56,6 +56,6 @@ void GraphicsSpecResourceType::FixUp(void* lpResource, const rw::Resource& lrRes
 // The 12-byte descriptor above is the record's own size: three 32-bit slots, no
 // padding. If this ever fails, the two model slots have been widened by mistake
 // (see the header banner -- serialised slots stay 32-bit on x64).
-static_assert(sizeof(GraphicsSpec) == 0x0C, "BrnWheel::GraphicsSpec must be the console's 12-byte serialised record");
+CGS_STATIC_ASSERT((sizeof(GraphicsSpec) == 0x0C), "BrnWheel::GraphicsSpec must be the console's 12-byte serialised record");
 
 }

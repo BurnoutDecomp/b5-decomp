@@ -53,6 +53,6 @@ public:
     u32 muPadding;
 };
 
-static_assert(sizeof(FunctionHandle) == 0x10, "native CSIS function handle");
+CGS_STATIC_ASSERT((sizeof(FunctionHandle) == 0x10), "native CSIS function handle");
 
 } // namespace Csis

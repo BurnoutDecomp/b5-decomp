@@ -57,17 +57,17 @@ struct ParticleDescriptionCollection
 class ParticleDescriptionCollectionResourceType : public CgsResource::Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
+    uint32_t GetTypeID() const ;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const ;
     virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest) const;
 };
 
 class ParticleDescriptionResourceType : public CgsResource::Type
 {
 public:
-    uint32_t GetTypeID() const override;
+    uint32_t GetTypeID() const ;
 
     // ⭐ ADDED 2026-09-03. This override was MISSING, and its absence is why every .lef
     // failed to load: without it the base no-op FixUp runs, the definition slot keeps the
@@ -82,9 +82,9 @@ public:
     // under the name of the class it was folded with, BrnProgression::
     // ProfileUpgradeResourceType::FixUp, and its whole body is `*(result + 4) += result;`
     // -- i.e. rebase the SECOND word, which is exactly the description's blob slot.
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;
 
-    bool     DeSerialise(void* lpResource) const override;
+    bool     DeSerialise(void* lpResource) const ;
     virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest) const;
 };
 }

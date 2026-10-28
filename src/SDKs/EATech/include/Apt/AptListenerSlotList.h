@@ -61,7 +61,7 @@ inline int AptListenerSlotList<T>::add(T* lpListener)
     // Loop: advance *a1 to v3, scan forward until an empty slot (nullptr) is found;
     //       if v3 reaches capacity, wrap to (u32)(-1) then the prefix ++ brings it to 0.
     u32 luNext = muHead + 1u;
-    for (muHead = luNext; mppSlots[luNext] != nullptr; ++luNext)
+    for (muHead = luNext; mppSlots[luNext] != 0; ++luNext)
     {
         if (luNext >= muCapacity)
             luNext = static_cast<u32>(-1);   // wrap; ++ in for-increment → 0
@@ -102,6 +102,6 @@ inline int AptListenerSlotList<T>::remove(T* lpListener)
     // X360: (*(**(v6 + v5) + 4))(*(v6 + v5))  =  mppSlots[luIndex]->release()
     --muHead;
     mppSlots[luIndex]->release();            // vtable[1](self)
-    mppSlots[luIndex] = nullptr;
+    mppSlots[luIndex] = 0;
     return 1;
 }

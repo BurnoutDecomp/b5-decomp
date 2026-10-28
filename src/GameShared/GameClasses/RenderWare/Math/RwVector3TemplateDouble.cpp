@@ -1,7 +1,6 @@
 #include "RwMathVectorTemplates.h"
 
-namespace rw::math::fpu
-{
+namespace rw { namespace math { namespace fpu {
 template <>
 Vector3Template<double>::Vector3Template(double lfX, double lfY, double lfZ)
     : mX(lfX),
@@ -9,4 +8,4 @@ Vector3Template<double>::Vector3Template(double lfX, double lfY, double lfZ)
       mZ(lfZ)
 {
 }
-}
+} } }

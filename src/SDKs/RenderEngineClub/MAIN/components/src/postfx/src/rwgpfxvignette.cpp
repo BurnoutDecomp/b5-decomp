@@ -122,7 +122,7 @@ namespace postfx
                                               const rw::BaseResourceDescriptors<5>& lrDescriptor)
     {
         return lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), 0);
     }
 
     // ============================================================================================
@@ -156,7 +156,7 @@ namespace postfx
     // gate-flip wave; this is the one definition.
     // ============================================================================================
     Vignette::Parameters::Parameters()
-        : m_allocator(nullptr)                                        // stw r9(=0), 0(r3)
+        : m_allocator(0)                                        // stw r9(=0), 0(r3)
     {
         m_state.m_gradientScalars = { KF_ZERO, KF_ZERO, KF_ZERO, KF_ZERO };   // v0
         m_state.m_innerColour     = { KF_ONE,  KF_ONE,  KF_ONE,  KF_ONE  };   // v13
@@ -328,8 +328,8 @@ namespace postfx
         // HONESTLY EMPTY: no program pointer, no bound handle. A ProgramVariableHandle default-
         // constructs to register COUNT 0, which every uploader in this tree treats as "not present",
         // so nothing can be bound and nothing can be uploaded through a program that does not exist.
-        m_vertexProgram        = nullptr;
-        m_pixelProgram         = nullptr;
+        m_vertexProgram        = 0;
+        m_pixelProgram         = 0;
         m_uvOffsetHandle       = renderengine::ProgramVariableHandle();
         m_controlScalarsHandle = renderengine::ProgramVariableHandle();
         m_innerColourHandle    = renderengine::ProgramVariableHandle();
@@ -343,7 +343,7 @@ namespace postfx
 #endif
 
         // DWARF rwgpfxvignette.h:167 -- never written by the X360 constructor.
-        m_textureProgram = nullptr;
+        m_textureProgram = 0;
 
         // Seed the shader constants from the supplied state (`addi r4, r22, 0x10` @0x824041A0).
         SetState(lrParameters.m_state);
@@ -370,7 +370,7 @@ namespace postfx
     // ============================================================================================
     void Vignette::Release()
     {
-        if (m_vertexProgram != nullptr)
+        if (m_vertexProgram != 0)
             renderengine::ProgramBuffer::Release(m_vertexProgram);
 
         m_allocator->DoFree(m_rasterizerStateResource);

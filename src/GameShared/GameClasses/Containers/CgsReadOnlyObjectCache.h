@@ -44,7 +44,7 @@ public:
         (void)liArg2;
         (void)liArg3;
 
-        CGS_ASSERT(lpSourceBuffer != nullptr, "Source data is NULL\n");
+        CGS_ASSERT(lpSourceBuffer != 0, "Source data is NULL\n");
         CGS_ASSERT(liNumSourceEntries >= 0, "Source data count must be positive\n");
 
         mpSourceBuffer     = lpSourceBuffer;

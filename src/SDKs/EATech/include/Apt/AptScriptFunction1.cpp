@@ -105,7 +105,7 @@ AptScriptFunction1* AptScriptFunction1::Duplicate(AptValue* pCIH) const
     void* pMem = AptScriptFunction1::operator new(sizeof(AptScriptFunction1));
     if (pMem)
         return ::new (pMem) AptScriptFunction1(*this, pCIH);   // global placement new (class has its own operator new)
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------

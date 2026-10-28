@@ -78,7 +78,7 @@ namespace SceneManagerIO
     // four `lvx128/stvx128` matrix lanes @+0x10). 16-byte aligned (carries the affine matrix),
     // sizeof 0x50 (80). Capacity 1024 pinned by Construct (offset delta 0x8010 -> 0x1C020).
     struct EventBaseSetVolumeInstanceTransform {};
-    struct alignas(16) InEventSetVolumeInstanceTransform : public EventBaseSetVolumeInstanceTransform
+    struct CGS_ALIGN(16) InEventSetVolumeInstanceTransform : public EventBaseSetVolumeInstanceTransform
     {
         VolumeInstanceId mVolumeInstanceId; // +0x00 (std r4, 8B)
         // +0x08..0x0F pad to the 16-byte alignment forced by the affine matrix lane.
@@ -103,7 +103,7 @@ namespace SceneManagerIO
         s32              meCacheOptions;     // +0x08 (stw r31, 4B; E_*_CACHE_OPTIONS enum word)
     };
 
-    struct alignas(16) InSceneUpdateInterface
+    struct CGS_ALIGN(16) InSceneUpdateInterface
     {
         // ADDITIVE GROW (FLAG -- body owned by InSceneUpdateInterface's own TU): the
         // X360 trigger/prop output-buffer Construct bodies (e.g.

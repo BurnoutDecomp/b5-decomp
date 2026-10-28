@@ -40,9 +40,9 @@ BrnSound::Logic::IResourceRequester* SpeedStreamEffect::Create( int aiFlavour )
 {
     (void)aiFlavour; // only selected the operator-new flavour on the X360.
     SpeedStreamEffect* lpEffect = new SpeedStreamEffect();
-    if ( lpEffect == nullptr )
+    if ( lpEffect == 0 )
     {
-        return nullptr;
+        return 0;
     }
     // X360 `addi r3,r3,4`: return the IResourceRequester sub-object view (this+4).
     return static_cast<BrnSound::Logic::IResourceRequester*>( lpEffect );
@@ -64,7 +64,7 @@ SpeedStreamEffect::SpeedStreamEffect()
     : BrnEffectObject()                         // primary vptr @+0 + IResourceRequester vptr @+4, base zero-init (BY NAME)
     , BrnSound::Logic::Streaming::IStreamUser() // IStreamUser interface vptr @+0x38 (BY NAME)
     , mParams()
-    , mpSpeedStreamControl(nullptr)
+    , mpSpeedStreamControl(0)
 {
 }
 
@@ -75,7 +75,7 @@ s32 SpeedStreamEffect::GetController(s32 aiIndex)
 
 void SpeedStreamEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr && apController->GetEffectID() == 15,
+    CGS_ASSERT(apController != 0 && apController->GetEffectID() == 15,
                "Unexpected control.");
     if (apController && apController->GetEffectID() == 15)
         mpSpeedStreamControl = static_cast<SpeedStreamControl*>(apController);
@@ -92,7 +92,7 @@ void SpeedStreamEffect::AttachController(CgsSound::Logic::EffectBase* apControll
 // ---------------------------------------------------------------------------
 void SpeedStreamEffect::UpdateParams(f32 /*afTimeStep*/)
 {
-    CGS_ASSERT(mpSpeedStreamControl != nullptr, "mpSpeedStreamControl");
+    CGS_ASSERT(mpSpeedStreamControl != 0, "mpSpeedStreamControl");
 
     const CgsSound::Utils::DataPoint<bool>& lrSpeedStream =
         mpSpeedStreamControl->GetSpeedStreamStatus();
@@ -121,7 +121,7 @@ void SpeedStreamEffect::UpdateParams(f32 /*afTimeStep*/)
         BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMan =
             static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
                 lpModule->GetEnvironment().GetStateManager(6));
-        CGS_ASSERT(lpStreamingStateMan != nullptr, "lpStreamingStateMan");
+        CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
         lpStreamingStateMan->PostStreamRequest(
             BrnSound::Logic::Streaming::StreamRequest(this, 1, 0.1f));
 
@@ -132,7 +132,7 @@ void SpeedStreamEffect::UpdateParams(f32 /*afTimeStep*/)
         BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMan =
             static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
                 lpModule->GetEnvironment().GetStateManager(6));
-        CGS_ASSERT(lpStreamingStateMan != nullptr, "lpStreamingStateMan");
+        CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
         lpStreamingStateMan->PostStreamRequest(
             BrnSound::Logic::Streaming::StreamStopRequest(this, 0.0f));
 
@@ -155,7 +155,7 @@ bool SpeedStreamEffect::Detach()
         static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
             static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                 ->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMan != nullptr, "lpStreamingStateMan");
+    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
     lpStreamingStateMan->PostStreamRequest(
         BrnSound::Logic::Streaming::StreamStopRequest(this, 0.25f));
     return true;

@@ -7,7 +7,7 @@ namespace CgsDev
 namespace MapFile
 {
     Reader::Reader()
-        : mpCallstack(nullptr)
+        : mpCallstack(0)
     {
     }
 
@@ -26,7 +26,7 @@ namespace MapFile
 
     const char* Reader::GetStackEntryName(s32 /*liIndex*/)
     {
-        return nullptr;
+        return 0;
     }
 }
 }

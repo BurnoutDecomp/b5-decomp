@@ -120,7 +120,7 @@ namespace CgsGeometric
             {
                 // vmsum3fp128
                 const f32 lfDot = lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
-                return VecFloat{ lfDot, lfDot, lfDot, lfDot };
+                { const VecFloat lResult = { lfDot, lfDot, lfDot, lfDot }; return lResult; }
             }
         }
 

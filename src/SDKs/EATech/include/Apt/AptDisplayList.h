@@ -27,7 +27,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 struct AptCIH;
 struct AptDisplayListState;
@@ -59,7 +59,7 @@ struct AptUint32CXForm;
 // The merge properties ARE the native runtime pseudo snapshot. Use its owning
 // declaration so clip-pointer widening cannot make two overlapping shapes drift.
 #include "SDKs/EATech/include/Apt/AptPseudoData.h"
-using AptFramePlacementProps = AptPseudoData_t;
+typedef AptPseudoData_t AptFramePlacementProps;
 
 struct AptDisplayList
 {

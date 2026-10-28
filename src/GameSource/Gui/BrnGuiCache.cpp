@@ -34,7 +34,7 @@
 #include "GameSource/Gui/BrnGuiWorldDataController.h"   // complete WorldDataController (GetFreeburnChallengeList callee)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // SpecificGameModeEventInterface::Event (GetOnlineLandmarkIndex) + BrnGameState::LandmarkIndex
 #include "GameSource/Replays/BrnReplayStatusInterface.h"        // StatusInterface::GetReel (ReplayConvert...)
-#include <cstdint>
+#include "types.hpp"
 #include "SharedClasses/Trigger/BrnLandmark.h"                 // BrnTrigger::Landmark (COMPLETE: field reads)
 #include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex
 #include "SharedClasses/Progression/BrnRaceEventData.h"      // RaceEventData / CheckpointData
@@ -120,7 +120,7 @@ namespace BrnGui
             "<COLOURCUBE2>", "<COLOURCUBE3>", "<COLOURCUBE4>", "<COLOURCUBE5>",
             "<COLOURCUBE6>", "RoadSigns_0", "Headtif"
         };
-        static_assert(sizeof(gGuiResourceIdentifier) / sizeof(gGuiResourceIdentifier[0]) == 237,
+        CGS_STATIC_ASSERT((sizeof(gGuiResourceIdentifier) / sizeof(gGuiResourceIdentifier[0]) == 237),
                       "ARTIST GUI resource-name table must contain 237 entries");
 
     namespace
@@ -1196,7 +1196,7 @@ namespace BrnGui
             u8  mbModeStartedFromRegion;            // +0x0A
             u8  muPad0B;                            // +0x0B
         };
-        static_assert(sizeof(GuiEventStopModePayload) == 12,
+        CGS_STATIC_ASSERT((sizeof(GuiEventStopModePayload) == 12),
                       "X360 AddGuiEvent<GuiEventStopMode> posts 12 bytes (id 322)");
 
         // The 12-byte payload GUI event 204 carries -- the sat-nav event-filter pair. Producer:
@@ -1211,7 +1211,7 @@ namespace BrnGui
             u8  mu8Show;         // +0x08  -> mbSatNavEventFilterEnabled (+0x8038)
             u8  mau8Pad[3];      // +0x09
         };
-        static_assert(sizeof(GuiEventSatNavEventFilterPayload) == 12,
+        CGS_STATIC_ASSERT((sizeof(GuiEventSatNavEventFilterPayload) == 12),
                       "GUI event 204 rides a 12-byte record (GuiEvent<204>(12, 12) at the producer)");
 
         // The three network roster records BrnGameModule::BridgeNetworkToGui posts every frame
@@ -1232,9 +1232,9 @@ namespace BrnGui
             s32            miNumPlayers;                   // +0xA0
             s32            miTotalNumberPlayers;           // +0xA4
         };
-        static_assert(sizeof(GuiEventNetworkPlayerListPayload::PlayerNameInfo) == 20,
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkPlayerListPayload::PlayerNameInfo) == 20),
                       "the id-243 roster row is 20 bytes");
-        static_assert(sizeof(GuiEventNetworkPlayerListPayload) == 168,
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkPlayerListPayload) == 168),
                       "AddGuiEvent<GuiEventNetworkPlayerList> posts 168 bytes (id 243)");
 
         // GUI 245 GuiEventNetworkPlayerStatus, 2544 bytes: the eight in-game player records,
@@ -1247,13 +1247,13 @@ namespace BrnGui
             bool mbLocalPlayerIsHost;                      // +0x9E8
             u8   mau8Pad[7];                               // +0x9E9
         };
-        static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData) == 312,
+        CGS_STATIC_ASSERT((sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData) == 312),
                       "the in-game player record stride is 312 bytes");
-        static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, miNumPlayers) == 0x9C0,
+        CGS_STATIC_ASSERT((offsetof(GuiEventNetworkPlayerStatusPayload, miNumPlayers) == 0x9C0),
                       "id-245 count @+0x9C0");
-        static_assert(offsetof(GuiEventNetworkPlayerStatusPayload, macGameName) == 0x9C4,
+        CGS_STATIC_ASSERT((offsetof(GuiEventNetworkPlayerStatusPayload, macGameName) == 0x9C4),
                       "id-245 game name @+0x9C4");
-        static_assert(sizeof(GuiEventNetworkPlayerStatusPayload) == 2544,
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkPlayerStatusPayload) == 2544),
                       "AddGuiEvent<GuiEventNetworkPlayerStatus> posts 2544 bytes (id 245)");
 
         // GUI 239 GuiEventRaceDistanceRemaining, 144 bytes (BridgeGameStateToGui). The cache
@@ -1266,9 +1266,9 @@ namespace BrnGui
             bool  mabPlayerEliminated[8];                  // +0x80
             bool  mabValid[8];                             // +0x88
         };
-        static_assert(offsetof(GuiEventRaceDistanceRemainingPayload, mabPlayerEliminated) == 0x80,
+        CGS_STATIC_ASSERT((offsetof(GuiEventRaceDistanceRemainingPayload, mabPlayerEliminated) == 0x80),
                       "id-239 eliminated bytes @+0x80");
-        static_assert(sizeof(GuiEventRaceDistanceRemainingPayload) == 144,
+        CGS_STATIC_ASSERT((sizeof(GuiEventRaceDistanceRemainingPayload) == 144),
                       "AddGuiEvent<GuiEventRaceDistanceRemaining> posts 144 bytes (id 239)");
 
         // The GuiEventNetworkLobbyPlayerList record (id 244) is 456 bytes.
@@ -1769,8 +1769,8 @@ namespace BrnGui
         {
             const Array<BrnProgression::ProfileEvent, 175>* lpEvents =
                 reinterpret_cast<const Array<BrnProgression::ProfileEvent, 175>*>(lpEvent);
-            static_assert(sizeof(*lpEvents) == 1404, "the event-state payload is 1404 bytes");
-            static_assert(sizeof(mProfileEventStateStorage) == 1400, "175 x 8-byte ProfileEvent");
+            CGS_STATIC_ASSERT((sizeof(*lpEvents) == 1404), "the event-state payload is 1404 bytes");
+            CGS_STATIC_ASSERT((sizeof(mProfileEventStateStorage) == 1400), "175 x 8-byte ProfileEvent");
             std::memcpy(mProfileEventStateStorage, lpEvents, sizeof(mProfileEventStateStorage));
             miProfileEventsCount = static_cast<s32>(lpEvents->GetLength());
             break;
@@ -1914,11 +1914,11 @@ namespace BrnGui
         case 244:
         {
             CGS_ASSERT(lpEvent != 0, "lpNetworkPlayerList");
-            static_assert(offsetof(GuiCache, miLobbyNumPlayers) ==
-                              offsetof(GuiCache, maLobbyPlayerInfo) + sizeof(maLobbyPlayerInfo),
+            CGS_STATIC_ASSERT((offsetof(GuiCache, miLobbyNumPlayers) ==
+                              offsetof(GuiCache, maLobbyPlayerInfo) + sizeof(maLobbyPlayerInfo)),
                           "the id-244 count follows the eight lobby rows");
-            static_assert(sizeof(maLobbyPlayerInfo) + sizeof(miLobbyNumPlayers) + sizeof(mPad_B804) ==
-                              KI_NETWORK_LOBBY_PLAYER_LIST_SIZE,
+            CGS_STATIC_ASSERT((sizeof(maLobbyPlayerInfo) + sizeof(miLobbyNumPlayers) + sizeof(mPad_B804) ==
+                              KI_NETWORK_LOBBY_PLAYER_LIST_SIZE),
                           "the id-244 record is 456 bytes");
             std::memcpy(maLobbyPlayerInfo, lpEvent, KI_NETWORK_LOBBY_PLAYER_LIST_SIZE);
             break;
@@ -1991,9 +1991,9 @@ namespace BrnGui
         // GUI 257 GuiEventNetworkGameParams: the whole 480-byte params record lands on the
         // +0xA800 mirror (the round events, then meOnlineGameMode .. mbOnlineRanked).
         case 257:
-            static_assert(offsetof(GuiCache, mbOnlineRanked) + sizeof(mbOnlineRanked) -
+            CGS_STATIC_ASSERT((offsetof(GuiCache, mbOnlineRanked) + sizeof(mbOnlineRanked) -
                               offsetof(GuiCache, maOnlineGameModeOptionsStorage) ==
-                              sizeof(GuiEventNetworkGameParams),
+                              sizeof(GuiEventNetworkGameParams)),
                           "the +0xA800 params mirror is one 480-byte GuiEventNetworkGameParams");
             std::memcpy(maOnlineGameModeOptionsStorage, lpEvent, sizeof(GuiEventNetworkGameParams));
             break;
@@ -2638,7 +2638,7 @@ namespace BrnGui
     // can safely see the profile header.
     OptionsDataProfile* GuiCache::GetOptionsDataProfile()
     {
-        static_assert(sizeof(OptionsDataProfile) <= sizeof(mOptionsDataProfileStorage),
+        CGS_STATIC_ASSERT((sizeof(OptionsDataProfile) <= sizeof(mOptionsDataProfileStorage)),
                       "OptionsDataProfile outgrew the cache's opaque reservation");
         return reinterpret_cast<OptionsDataProfile*>(mOptionsDataProfileStorage);
     }
@@ -2818,7 +2818,7 @@ namespace BrnGui
     // @ 0x8240F168
     const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
     {
-        CGS_ASSERT(mpChallengeManager != nullptr, "mpChallengeManager");
+        CGS_ASSERT(mpChallengeManager != 0, "mpChallengeManager");
         return mpChallengeManager;
     }
 
@@ -2828,21 +2828,21 @@ namespace BrnGui
     // cache+0x406C). Sole writer of the member the accessor above asserts.
     void GuiCache::SetChallengeManager(FreeburnChallengeManager* lpChallengeManager)
     {
-        CGS_ASSERT(lpChallengeManager != nullptr, "lpChallengeManager");   // BrnGuiCache.h:2374
+        CGS_ASSERT(lpChallengeManager != 0, "lpChallengeManager");   // BrnGuiCache.h:2374
         mpChallengeManager = lpChallengeManager;
     }
 
     // @ 0x82472D00
     const BrnResource::HudMessageController* GuiCache::GetHudMessageController() const
     {
-        CGS_ASSERT(mpHudMessageController != nullptr, "mpHudMessageController");
+        CGS_ASSERT(mpHudMessageController != 0, "mpHudMessageController");
         return mpHudMessageController;
     }
 
     // @ 0x82472D58
     const HudMessageDirector* GuiCache::GetHudMessageDirector() const
     {
-        CGS_ASSERT(mpHudMessageDirector != nullptr, "mpHudMessageDirector");
+        CGS_ASSERT(mpHudMessageDirector != 0, "mpHudMessageDirector");
         return mpHudMessageDirector;
     }
 
@@ -2856,7 +2856,7 @@ namespace BrnGui
     // @ 0x8240F110
     WorldDataController* GuiCache::GetWorldDataController() const
     {
-        CGS_ASSERT(mpWorldDataController != nullptr, "mpWorldDataController");
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");
         // The X360 stores the controller as a non-const pointer the GUI mutates through;
         // the cache member is declared const, so cast away for the (non-const) accessor.
         return const_cast<WorldDataController*>(mpWorldDataController);
@@ -2867,7 +2867,7 @@ namespace BrnGui
     // cache (`*(gm + 1021860) = gm + 307836`, i.e. cache+0x4064).
     void GuiCache::SetWorldDataController(WorldDataController* lpController)
     {
-        CGS_ASSERT(lpController != nullptr, "lpController");   // BrnGuiCache.h:2310
+        CGS_ASSERT(lpController != 0, "lpController");   // BrnGuiCache.h:2310
         mpWorldDataController = lpController;
     }
 
@@ -2983,10 +2983,10 @@ namespace BrnGui
     // and the passthrough is a plain forward.
     const BrnResource::ChallengeList* GuiCache::GetFreeburnChallengeList() const
     {
-        CGS_ASSERT(mpWorldDataController != nullptr, "mpWorldDataController");
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");
         const BrnResource::ChallengeList* lpChallengeList =
             mpWorldDataController->GetFreeburnChallengeList();
-        CGS_ASSERT(lpChallengeList != nullptr, "lpChallengeList");
+        CGS_ASSERT(lpChallengeList != 0, "lpChallengeList");
         return lpChallengeList;
     }
 
@@ -3275,7 +3275,7 @@ namespace BrnGui
 
         const OnlineModeEvent* lpOnlineGameModeOptions =
             reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
-        CGS_ASSERT(lpOnlineGameModeOptions != nullptr, "GetOnlineGameModeOptions()");
+        CGS_ASSERT(lpOnlineGameModeOptions != 0, "GetOnlineGameModeOptions()");
 
         CGS_ASSERT(static_cast<u32>(miOnlineRoundIndex) < 10u,
                    "( GetOnlineRoundIndex() >= 0 ) && ( static_cast<uint32_t>( GetOnlineRoundIndex() ) < "
@@ -3362,7 +3362,7 @@ namespace BrnGui
     // mpMapIconManager @0x4060). Asserts the incoming pointer is non-null.
     void GuiCache::SetMapIconManager(MapIconManager* lpMapIconManager)
     {
-        CGS_ASSERT(lpMapIconManager != nullptr, "Invalid map icon manager");
+        CGS_ASSERT(lpMapIconManager != 0, "Invalid map icon manager");
         mpMapIconManager = lpMapIconManager;
     }
 
@@ -3454,7 +3454,7 @@ namespace BrnGui
         {
             CGS_ASSERT(liCarIndex >= 0 && liCarIndex < liCarCount,
                        "liCarIndex >= 0 && liCarIndex < miCarCount");
-            CGS_ASSERT(lpProfileCar != nullptr, "lpProfileCar");
+            CGS_ASSERT(lpProfileCar != 0, "lpProfileCar");
 
             // CarData::mbUnlockSequenceAlreadyShown @+0x0A: 0 == unlock still to be shown.
             if (!lpProfileCar->WasUnlockSequenceAlreadyShown())
@@ -4750,8 +4750,8 @@ namespace BrnGui
 
         // The adopted block is exactly the cache's mEvents pair -- element buffer plus the
         // CgsArray count word that follows it.
-        static_assert(sizeof(PresetEventInterface)
-                          == sizeof(maEventsStorage) + sizeof(mEventsCtorSentinel),
+        CGS_STATIC_ASSERT((sizeof(PresetEventInterface)
+                          == sizeof(maEventsStorage) + sizeof(mEventsCtorSentinel)),
                       "the preset-event payload is the cache's mEvents storage + count");
 
         CGS_ASSERT(lpEvent != 0,

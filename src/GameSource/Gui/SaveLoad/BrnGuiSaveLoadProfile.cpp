@@ -19,7 +19,7 @@ namespace BrnGuiSaveLoad
 {
     // Compile-time pin: the object spans the whole serialised image, so the clear below
     // is a plain object-sized memset rather than an over-length write through a view.
-    static_assert(sizeof(Profile) == Profile::KI_IMAGE_SIZE_BYTES,
+    CGS_STATIC_ASSERT((sizeof(Profile) == Profile::KI_IMAGE_SIZE_BYTES),
                   "BrnGuiSaveLoad::Profile must span the 118064-byte serialised image");
 
     // Outlined from BrnProgression::Profile::Serialise @0x8237C1F0, whose prologue reads:

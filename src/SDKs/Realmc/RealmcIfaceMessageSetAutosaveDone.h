@@ -29,11 +29,11 @@ class MessageSetAutosaveDone : public RealmcCore::Message
 public:
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x18 slot.
-    void Apply(RealmcCore::IMessageProcessor* pProcessor) override;
+    void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
 
     // The deleting destructor restores the vtable and frees the object through
     // the Realmc backend with its size (the class operator delete).
-    ~MessageSetAutosaveDone() override {}
+    ~MessageSetAutosaveDone()  {}
 
     static void operator delete(void* lpBlock, size_t luSize)
     {

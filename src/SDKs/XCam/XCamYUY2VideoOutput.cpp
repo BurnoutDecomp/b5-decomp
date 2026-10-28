@@ -48,7 +48,7 @@ int CYUY2VideoOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
 
             // Lock/unlock once so the descriptor caches the driver's row pitch and
             // backing pointer (the D3DLOCKED_RECT aliases SVideoBuffer {pitch,data}).
-            D3DTexture_LockRect(mpBufferResource[i], 0, &mBuffers[i], nullptr, 0);
+            D3DTexture_LockRect(mpBufferResource[i], 0, &mBuffers[i], 0, 0);
             D3DTexture_UnlockRect(mpBufferResource[i], 0);
         }
     }
@@ -96,11 +96,11 @@ void CYUY2VideoOutput::Render()
     D3DDevice_DrawVertices(pDevice, 6, 0, 4);
 
     // Unbind everything.
-    D3DDevice_SetVertexDeclaration(pDevice, nullptr);
-    D3DDevice_SetVertexShader(pDevice, nullptr);
-    D3DDevice_SetPixelShader(pDevice, nullptr);
-    D3DDevice_SetTexture(pDevice, 0, nullptr, 0x80000000u);
-    D3DDevice_SetStreamSource(pDevice, 0, nullptr, 0, 0, 1);
+    D3DDevice_SetVertexDeclaration(pDevice, 0);
+    D3DDevice_SetVertexShader(pDevice, 0);
+    D3DDevice_SetPixelShader(pDevice, 0);
+    D3DDevice_SetTexture(pDevice, 0, 0, 0x80000000u);
+    D3DDevice_SetStreamSource(pDevice, 0, 0, 0, 0, 1);
 }
 
 // @ 0x82984628

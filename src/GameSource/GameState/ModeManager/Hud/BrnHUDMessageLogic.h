@@ -92,14 +92,14 @@ public:
         EActiveRaceCarIndex meActiveRaceCarIndex; // +0
         s32                 miNumCheckpointsToGo; // +4
     };
-    static_assert(sizeof(BurningHomeRunCheckpointMessage) == 8, "ARTIST action 252 size 8");
+    CGS_STATIC_ASSERT((sizeof(BurningHomeRunCheckpointMessage) == 8), "ARTIST action 252 size 8");
 
     struct BurningHomeRunRunnerCrashedMessage : public CgsModule::Event
     {
         EActiveRaceCarIndex meActiveRaceCarIndex; // +0
         s32                 miNumCrashesToGo;     // +4
     };
-    static_assert(sizeof(BurningHomeRunRunnerCrashedMessage) == 8, "ARTIST action 253 size 8");
+    CGS_STATIC_ASSERT((sizeof(BurningHomeRunRunnerCrashedMessage) == 8), "ARTIST action 253 size 8");
 
     // 12-byte record for the team-eliminated / new-leader / victory notifications.
     struct StuntRunTeamMessage : public CgsModule::Event
@@ -138,7 +138,7 @@ public:
     {
         StuntInfo mStuntInfo;
     };
-    static_assert(sizeof(StuntPerformedMessage) == 24, "X360 action 132 payload size");
+    CGS_STATIC_ASSERT((sizeof(StuntPerformedMessage) == 24), "X360 action 132 payload size");
 
     // 12-byte combo-completed notification. The X360 builds it as the THREE out-params of
     // WasComboRecentlyPerformed in three adjacent stack slots and posts the block from the lowest

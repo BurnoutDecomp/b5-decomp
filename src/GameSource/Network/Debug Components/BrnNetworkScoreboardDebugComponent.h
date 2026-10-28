@@ -73,10 +73,10 @@ namespace BrnNetwork
         void HandleScoreboardEvent(const BrnNetwork::Scoreboard* lpScoreboard);                 // @ 0x8258AE38
 
     protected:
-        const char* GetName() const override;   // @ 0x82585958 -> "Scoreboards"
+        const char* GetName() const ;   // @ 0x82585958 -> "Scoreboards"
         // ARTIST vtable 0x820CE12C, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Network"; }
-        void        OnActivate() override;       // @ 0x8258AE08
+        const char* GetPath() const  { return "Network"; }
+        void        OnActivate() ;       // @ 0x8258AE08
 
     private:
         // Debug-menu change/select callbacks (registered against the three selection variables). They are

@@ -12,7 +12,7 @@ namespace CgsDev
     void Debug2DImmediateRender::Construct(rw::IResourceAllocator* /*lpAllocator*/, f32 lfVirtualScreenWidth, f32 lfVirtualScreenHeight)
     {
         meDrawingMode         = E_DRAWING_COUNT;
-        mpRenderBuffer        = nullptr;
+        mpRenderBuffer        = 0;
         mfVirtualScreenWidth  = lfVirtualScreenWidth;
         mfVirtualScreenHeight = lfVirtualScreenHeight;
         miIm2dVertsHead       = 0;
@@ -25,7 +25,7 @@ namespace CgsDev
 
     void Debug2DImmediateRender::Destruct()
     {
-        mpRenderBuffer = nullptr;
+        mpRenderBuffer = 0;
     }
 
     void Debug2DImmediateRender::SetRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer)
@@ -125,13 +125,13 @@ namespace CgsDev
     // an untextured coloured quad. The full debug state set (depth/raster/sampler) is the follow-on.
     void Debug2DImmediateRender::SetDebugRenderStates()
     {
-        mpRenderBuffer->SetState(static_cast<const renderengine::BlendState*>(nullptr));
+        mpRenderBuffer->SetState(static_cast<const renderengine::BlendState*>(0));
 
         // CRITICAL: the debug prims are solid-coloured, but the Im2d stage modulates texture x diffuse
         // and the loading screen leaves its texture bound - so without unbinding it the boxes sample
         // that texture at UV(0,0) instead of drawing their colour (the squares were invisible). Drop the
         // texture; an unbound D3D stage defaults to white, leaving pure vertex colour.
-        mpRenderBuffer->SetTexture(nullptr);
+        mpRenderBuffer->SetTexture(0);
     }
 
     void Debug2DImmediateRender::DispatchVertices()

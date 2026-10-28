@@ -1,6 +1,6 @@
 #include "SDKs/Packages/Apt/2.00.00/source/AptValue/AptString.h"
 
-#include <cstdint>   // uintptr_t (the wordlist payload is the X360 dword member id)
+#include "types.hpp"   // uintptr_t (the wordlist payload is the X360 dword member id)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x82AD7918
 //   (StringMembersIndex::in_word_set -- gperf perfect-hash recognizer for

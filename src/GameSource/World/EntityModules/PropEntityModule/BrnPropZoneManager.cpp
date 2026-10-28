@@ -61,21 +61,21 @@ namespace BrnWorld
     // the console's 8 -- the old header banner claimed 8, which is why this pin exists.
     void PropZoneManager::_AssertLayout()
     {
-        static_assert(sizeof(((PropZoneManager*)0)->mauStartIndexOfZone)    == 2 * KU_MAX_ZONES, "mauStartIndexOfZone[500] u16");
-        static_assert(sizeof(((PropZoneManager*)0)->mauNumberOfPropsInZone) == 2 * KU_MAX_ZONES, "mauNumberOfPropsInZone[500] u16");
-        static_assert(sizeof(((PropZoneManager*)0)->mauStartIndexOfParts)   == 2 * KU_MAX_ZONES, "mauStartIndexOfParts[500] u16");
-        static_assert(sizeof(((PropZoneManager*)0)->mauNumberOfPartsInZone) == 2 * KU_MAX_ZONES, "mauNumberOfPartsInZone[500] u16");
+        CGS_STATIC_ASSERT((sizeof(((PropZoneManager*)0)->mauStartIndexOfZone)    == 2 * KU_MAX_ZONES), "mauStartIndexOfZone[500] u16");
+        CGS_STATIC_ASSERT((sizeof(((PropZoneManager*)0)->mauNumberOfPropsInZone) == 2 * KU_MAX_ZONES), "mauNumberOfPropsInZone[500] u16");
+        CGS_STATIC_ASSERT((sizeof(((PropZoneManager*)0)->mauStartIndexOfParts)   == 2 * KU_MAX_ZONES), "mauStartIndexOfParts[500] u16");
+        CGS_STATIC_ASSERT((sizeof(((PropZoneManager*)0)->mauNumberOfPartsInZone) == 2 * KU_MAX_ZONES), "mauNumberOfPartsInZone[500] u16");
         // The pools the X360 addresses as `base + 80*index`: the stride must come from the
         // element type, and it does (both records are pinned at 80 by their own home).
-        static_assert(sizeof(PropEntityInstance)     == 80, "prop pool stride 80");
-        static_assert(sizeof(PropPartEntityInstance) == 80, "part pool stride 80");
-        static_assert(sizeof(PropInstanceData)       == 80, "serialised prop record stride 80");
+        CGS_STATIC_ASSERT((sizeof(PropEntityInstance)     == 80), "prop pool stride 80");
+        CGS_STATIC_ASSERT((sizeof(PropPartEntityInstance) == 80), "part pool stride 80");
+        CGS_STATIC_ASSERT((sizeof(PropInstanceData)       == 80), "serialised prop record stride 80");
         // maRotationParams: the X360 strides it by 6 and writes +0/+2/+3/+4. Those four
         // field offsets are pointer-free, so they DO hold on the host.
-        static_assert(offsetof(PropEntityRotationParams, miPropIndex) == 0, "rot params +0");
-        static_assert(offsetof(PropEntityRotationParams, mnRotSpeed)  == 2, "rot params +2");
-        static_assert(offsetof(PropEntityRotationParams, muMinAngle)  == 3, "rot params +3");
-        static_assert(offsetof(PropEntityRotationParams, muMaxAngle)  == 4, "rot params +4");
+        CGS_STATIC_ASSERT((offsetof(PropEntityRotationParams, miPropIndex) == 0), "rot params +0");
+        CGS_STATIC_ASSERT((offsetof(PropEntityRotationParams, mnRotSpeed)  == 2), "rot params +2");
+        CGS_STATIC_ASSERT((offsetof(PropEntityRotationParams, muMinAngle)  == 3), "rot params +3");
+        CGS_STATIC_ASSERT((offsetof(PropEntityRotationParams, muMaxAngle)  == 4), "rot params +4");
     }
 
     void PropGraphicsManager::_AssertLayout()
@@ -85,10 +85,10 @@ namespace BrnWorld
         // indexing goes through maPropGraphicsReferences[type], so this stride is whatever
         // the host compiler picks -- these pins just make that explicit and stop anyone
         // reintroducing the "8-byte slot" console constant.
-        static_assert(offsetof(PropGraphicsReference, mpPropGraphics) == 0,               "graphics ref slot +0");
-        static_assert(offsetof(PropGraphicsReference, mu8RefCount)    == sizeof(void*),   "refcount right after the pointer");
-        static_assert(sizeof(((PropGraphicsManager*)0)->maPropGraphicsReferences)
-                      == KU_MAX_PROP_TYPES * sizeof(PropGraphicsReference), "500 slots");
+        CGS_STATIC_ASSERT((offsetof(PropGraphicsReference, mpPropGraphics) == 0),               "graphics ref slot +0");
+        CGS_STATIC_ASSERT((offsetof(PropGraphicsReference, mu8RefCount)    == sizeof(void*)),   "refcount right after the pointer");
+        CGS_STATIC_ASSERT((sizeof(((PropGraphicsManager*)0)->maPropGraphicsReferences)
+                      == KU_MAX_PROP_TYPES * sizeof(PropGraphicsReference)), "500 slots");
     }
 
     // ---- UpdateInstance displacement / world-floor thresholds ---------------------------
@@ -166,7 +166,7 @@ namespace BrnWorld
     // populated) or installs the pointer with ref count 1. Always returns true.
     bool PropGraphicsManager::Register(const PropGraphics* lpPropGraphics)
     {
-        CGS_ASSERT(lpPropGraphics != nullptr, "lpPropGraphics");
+        CGS_ASSERT(lpPropGraphics != 0, "lpPropGraphics");
 
         // X360 `lwz r30,0(r29)` -- the record's FIRST word is its prop type id. Read BY
         // NAME now that BrnPropGraphicsList.h homes the layout (muTypeId @ +0), replacing
@@ -175,7 +175,7 @@ namespace BrnWorld
         CGS_ASSERT(luType < KU_MAX_PROP_TYPES, "luType < BrnPhysics::Props::KU_MAX_PROP_TYPES");
 
         PropGraphicsReference& lrReference = maPropGraphicsReferences[luType];
-        if (lrReference.mpPropGraphics != nullptr)
+        if (lrReference.mpPropGraphics != 0)
         {
             ++lrReference.mu8RefCount;
         }
@@ -194,7 +194,7 @@ namespace BrnWorld
     // slot with a fresh reference count of one (asm `stw r29,0(r11); li r10,1; stb r10,4(r11)`).
     void PropGraphicsManager::AddPropGraphics(const PropGraphics* lpPropGraphics)
     {
-        CGS_ASSERT(lpPropGraphics != nullptr, "lpPropGraphics");
+        CGS_ASSERT(lpPropGraphics != 0, "lpPropGraphics");
 
         const u32 luType = lpPropGraphics->muTypeId;
         CGS_ASSERT(luType < KU_MAX_PROP_TYPES, "luType < BrnPhysics::Props::KU_MAX_PROP_TYPES");
@@ -235,9 +235,9 @@ namespace BrnWorld
     PropGraphicsManager::GetPropPartGraphics(u32 luPropType, u32 luPropPartType) const
     {
         const PropGraphics* lpPropGraphics = GetPropGraphics(luPropType);
-        if (lpPropGraphics == nullptr)
+        if (lpPropGraphics == 0)
         {
-            return nullptr;
+            return 0;
         }
         return &lpPropGraphics->mpParts[luPropPartType];
     }
@@ -528,7 +528,7 @@ namespace BrnWorld
     // into mCellManager.Clear() when that TU lands it.
     void PropZoneManager::RemoveAllPropsAndParts(PropEntityIO::OutputBuffer_PreScene* lpOutput)
     {
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
 
         maUsedProps.UnSetAll();
         maUsedParts.UnSetAll();
@@ -704,12 +704,12 @@ namespace BrnWorld
     // reproduces the X360's per-pass count reload + the container's inlined constructed-check.
     void PropZoneManager::SendTrafficLightRestoreEvents(PropEntityIO::OutputBuffer_PrePhysics* lpOutput)
     {
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
 
         // Write-lock handle to the prop->traffic hand-off interface (X360 returns this+11296).
         PropEntityIO::PropToTrafficInterface* lpPropToTrafficInterface =
             reinterpret_cast<PropEntityIO::PropToTrafficInterface*>(lpOutput->GetPropToTrafficInterface());
-        CGS_ASSERT(lpPropToTrafficInterface != nullptr, "lpPropToTrafficInterface");
+        CGS_ASSERT(lpPropToTrafficInterface != 0, "lpPropToTrafficInterface");
 
         for (u32 luIndex = 0; luIndex < mauTrafficLightsToRestore.GetLength(); ++luIndex)
         {

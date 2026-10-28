@@ -191,8 +191,8 @@ namespace Deformation
         const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
         const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact)
     {
-        CGS_ASSERT(lpOutPhysicalCarPartContact != nullptr, "lpOutPhysicalCarPartContact != NULL");   // :1960
-        CGS_ASSERT(lpInContact != nullptr, "lpInContact != NULL");                                   // :1961
+        CGS_ASSERT(lpOutPhysicalCarPartContact != 0, "lpOutPhysicalCarPartContact != NULL");   // :1960
+        CGS_ASSERT(lpInContact != 0, "lpInContact != NULL");                                   // :1961
 
         const u32 luSpyOwnerA = static_cast<u32>(lpInContact->mIDA >> 56);
         CGS_ASSERT(luSpyOwnerA == KU_OWNER_DETACHED_RACECAR_WHEEL || luSpyOwnerA == KU_OWNER_DETACHED_TRAFFIC_WHEEL,
@@ -237,8 +237,8 @@ namespace Deformation
         const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
         const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact)
     {
-        CGS_ASSERT(lpOutPhysicalCarPartContact != nullptr, "lpOutPhysicalCarPartContact != NULL");   // :1932
-        CGS_ASSERT(lpInContact != nullptr, "lpInContact != NULL");                                   // :1933
+        CGS_ASSERT(lpOutPhysicalCarPartContact != 0, "lpOutPhysicalCarPartContact != NULL");   // :1932
+        CGS_ASSERT(lpInContact != 0, "lpInContact != NULL");                                   // :1933
 
         const u32 luSpyOwnerA = static_cast<u32>(lpInContact->mIDA >> 56);
         CGS_ASSERT(luSpyOwnerA == KU_OWNER_RACECAR_DEFORMABLE_PART || luSpyOwnerA == KU_OWNER_TRAFFIC_DEFORMABLE_PART,
@@ -252,7 +252,7 @@ namespace Deformation
         // The detached-part pool slot rides the packed handle's low 16 bits.
         const u16 lu16PartSlot = static_cast<u16>(lpInContact->mIDA & 0xFFFFu);
         const PhysicalBodyPart* lpPart = mDetachedPartManager.GetPartFromIndex(lu16PartSlot);
-        CGS_ASSERT(lpPart != nullptr, "lpPart");   // :1947
+        CGS_ASSERT(lpPart != 0, "lpPart");   // :1947
 
         // The event tail.
         lpOutPhysicalCarPartContact->meType =

@@ -51,7 +51,7 @@ namespace Vehicle
     void VehicleManager::ValidateSimulationContacts(
         const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddPotentialContact, 1024>* lpContactQueue )
     {
-        CGS_ASSERT(lpContactQueue != nullptr, "lpContactQueue != NULL");   // :9877
+        CGS_ASSERT(lpContactQueue != 0, "lpContactQueue != NULL");   // :9877
 
         for (s32 liIndex = 0; liIndex < lpContactQueue->GetLength(); ++liIndex)
         {

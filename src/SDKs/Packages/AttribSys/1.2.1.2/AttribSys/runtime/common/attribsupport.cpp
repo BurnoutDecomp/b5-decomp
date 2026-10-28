@@ -20,7 +20,7 @@
 // re-pointed at it, and the body lives below. (The consumer count was 9 generated ctors +
 // one hand-written caller, not the 57 this comment used to estimate.)
 
-#include <cstdint> // uintptr_t
+#include "types.hpp" // uintptr_t
 
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"     // RefSpec, Collection, Collection_AddRef/Release, AssertOnClassCheck
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"        // ITypeHandler
@@ -78,7 +78,7 @@ Collection* FindCollection(u64 luClassKey, u64 luCollectionKey)
     // treats a null collection as "unresolved handle").
     // DELETE-WHEN: the module tree stops being constructed by a pre-main global.
     if (!Database::IsInitialized())
-        return nullptr;
+        return 0;
 
     // ⚠️ FIXED 2026-08-01 (Prepare wave): this used to be
     //     reinterpret_cast<VecHashMap...*>(reinterpret_cast<u8*>(GetDatabasePrivate()) + 8)
@@ -92,7 +92,7 @@ Collection* FindCollection(u64 luClassKey, u64 luCollectionKey)
     // sibling Class::GetCollectionTable already did.
     const Class* lpClass = GetDatabasePrivate()->mClasses.Find(luClassKey);
     if (!lpClass)
-        return nullptr;
+        return 0;
 
     return lpClass->GetCollection(luCollectionKey);
 }
@@ -102,11 +102,11 @@ Collection* FindCollection(u64 luClassKey, u64 luCollectionKey)
 Collection* FindCollectionWithDefault(u64 luClassKey, u64 luCollectionKey)
 {
     if (!Database::IsInitialized())
-        return nullptr;
+        return 0;
 
     const Class* lpClass = GetDatabasePrivate()->mClasses.Find(luClassKey);
     if (!lpClass)
-        return nullptr;
+        return 0;
 
     return lpClass->GetCollectionWithDefault(luCollectionKey);
 }
@@ -122,7 +122,7 @@ RefSpec& RefSpec::operator=(const RefSpec& lrOther)
     if (mpCollectionPtr)
     {
         Collection_Release(const_cast<Collection*>(mpCollectionPtr), -1);
-        mpCollectionPtr = nullptr;
+        mpCollectionPtr = 0;
     }
 
     mClassKey = lrOther.mClassKey;
@@ -147,7 +147,7 @@ void RefSpec::Clean()
     if (mpCollectionPtr)
     {
         Collection_Release(const_cast<Collection*>(mpCollectionPtr), -1);
-        mpCollectionPtr = nullptr;
+        mpCollectionPtr = 0;
     }
 }
 
@@ -164,7 +164,7 @@ const Class* RefSpec::GetClass() const
         return reinterpret_cast<const Class*>(mpCollectionPtr->mpClass);
 
     if (mClassKey == 0)
-        return nullptr;
+        return 0;
 
     // Same x64-gate correction as FindCollection above: `privates + 8` is the CONSOLE
     // offset of mClasses and lands 8 bytes short on the host. Read it by name.
@@ -180,13 +180,13 @@ const Class* RefSpec::GetClass() const
 const Collection* RefSpec::GetCollection()
 {
     if (mCollectionKey == 0)
-        return nullptr;
+        return 0;
 
     if (!mpCollectionPtr)
     {
         const Class* lpClass = GetClass();
         if (!lpClass)
-            return nullptr;
+            return 0;
 
         Collection* lpCollection = lpClass->GetCollection(mCollectionKey);
         mpCollectionPtr = lpCollection;
@@ -209,7 +209,7 @@ const Collection* RefSpec::GetCollectionWithDefault()
     {
         const Class* lpClass = GetClass();
         if (!lpClass)
-            return nullptr;
+            return 0;
 
         Collection* lpCollection = lpClass->GetCollectionWithDefault(mCollectionKey);
         mpCollectionPtr = lpCollection;

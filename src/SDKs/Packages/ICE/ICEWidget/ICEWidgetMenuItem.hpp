@@ -55,9 +55,9 @@ namespace ICE
     // Pin the offsets Prepare touches: it walks the entry buffers at a 40-byte
     // stride from offset 0 and stores the clamped count at +0xA0 (== 4 * 40). The
     // base is empty (EBO), so macItemText must land at offset 0.
-    static_assert(offsetof(ICEWidgetMenuItem, macItemText)  == 0x00, "ICEWidgetMenuItem::macItemText offset");
-    static_assert(offsetof(ICEWidgetMenuItem, miItemCount)  == 0xA0, "ICEWidgetMenuItem::miItemCount offset");
-    static_assert(sizeof(((ICEWidgetMenuItem*)0)->macItemText[0]) == KI_ICE_MENU_ITEM_TEXT_LENGTH,
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenuItem, macItemText)  == 0x00), "ICEWidgetMenuItem::macItemText offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenuItem, miItemCount)  == 0xA0), "ICEWidgetMenuItem::miItemCount offset");
+    CGS_STATIC_ASSERT((sizeof(((ICEWidgetMenuItem*)0)->macItemText[0]) == KI_ICE_MENU_ITEM_TEXT_LENGTH),
                   "ICEWidgetMenuItem entry stride must be 40 bytes");
 }
 

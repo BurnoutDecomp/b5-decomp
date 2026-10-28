@@ -8,7 +8,7 @@ namespace CgsModule
 {
     class ModuleSingleBuffered : public Module
     {
-        enum class EManagerPrepareStage {
+        enum  EManagerPrepareStage {
             E_MANAGERPREPARESTAGE_START = 0,
             E_MANAGERPREPARESTAGE_INPUT = 1,
             E_MANAGERPREPARESTAGE_ALLOCINPUT = 2,
@@ -18,7 +18,7 @@ namespace CgsModule
             E_MANAGERPREPARESTAGE_DONE = 6,
         };
 
-        enum class EManagerReleaseStage {
+        enum  EManagerReleaseStage {
             E_MANAGERRELEASESTAGE_START = 0,
             E_MANAGERRELEASESTAGE_DATASTRUCTURES = 1,
             E_MANAGERRELEASESTAGE_FREEOUTPUT = 2,
@@ -38,27 +38,27 @@ namespace CgsModule
         DataStructure* mpOutputStructure;
 
     public:
-        void Construct() override;
-        bool Prepare() override;
-        bool Release() override;
-        void Destruct() override;
-        void Update() override;
-        void SetMultiThreaded(bool isMultiThreaded) override;
+        void Construct() ;
+        bool Prepare() ;
+        bool Release() ;
+        void Destruct() ;
+        void Update() ;
+        void SetMultiThreaded(bool isMultiThreaded) ;
 
         DataStructure* GetOutputStructure() const;
 
-        void LockForInput() override;
-        void UnlockForInput() override;
-        void LockForOutput() override;
-        void UnlockForOutput() override;
+        void LockForInput() ;
+        void UnlockForInput() ;
+        void LockForOutput() ;
+        void UnlockForOutput() ;
 
     protected:
         virtual DataStructure* CreateInputDataStructure();
         virtual DataStructure* CreateOutputDataStructure();
-        bool DestroyInputDataStructure(DataStructure* pDataStructure) override;
-        bool DestroyOutputDataStructure(DataStructure* pDataStructure) override;
-        bool PrepareDataStructures(DataStructure* pInputDataStructure, DataStructure* pOutputDataStructure) override;
-        bool ReleaseDataStructures(DataStructure* pInputDataStructure, DataStructure* pOutputDataStructure) override;
+        bool DestroyInputDataStructure(DataStructure* pDataStructure) ;
+        bool DestroyOutputDataStructure(DataStructure* pDataStructure) ;
+        bool PrepareDataStructures(DataStructure* pInputDataStructure, DataStructure* pOutputDataStructure) ;
+        bool ReleaseDataStructures(DataStructure* pInputDataStructure, DataStructure* pOutputDataStructure) ;
 
         DataStructure* LockInputForRead();
         void UnlockInputForRead();

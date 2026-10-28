@@ -185,7 +185,7 @@ private:
 
 // The case-79 post site (ProcessGameEvents @0x823A2D3C) queues this record with
 // `li r5, 0xB4 / li r6, 0x160` -- action 180, exactly 352 bytes.
-static_assert(sizeof(GameStats) == 352,
+CGS_STATIC_ASSERT((sizeof(GameStats) == 352),
               "X360 ProcessGameEvents case 79 posts GameStats as 0x160 bytes");
 
 // One landmark's variable info for the GUI: the preset race that starts there and the number of
@@ -207,6 +207,6 @@ private:
     BrnProgression::Race mPresetRace;          // +0x00 (120 bytes)
     s32                  miCustomRaceCount;    // +0x78
 };
-static_assert(sizeof(LandmarkVariableInfo) == 128, "case 89 posts action 185 with size 128");
+CGS_STATIC_ASSERT((sizeof(LandmarkVariableInfo) == 128), "case 89 posts action 185 with size 128");
 }
 }

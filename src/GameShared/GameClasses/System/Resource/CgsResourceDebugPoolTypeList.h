@@ -25,8 +25,8 @@ namespace CgsResource
         static const s32 KI_NUMTYPES = 512;
         DebugPoolTypeList();
         void Reset(const Pool* lpPool, const PoolModule* lpPoolModule, EPoolTypeListMode leMode);
-        void Render(CgsDev::Debug2DImmediateRender* lpRender) override;
-        void Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent) override;
+        void Render(CgsDev::Debug2DImmediateRender* lpRender) ;
+        void Update(f32 lfTimeStep, CgsDev::DebugUI::InputEvent leEvent) ;
         void SetMode(EPoolTypeListMode leMode);
 
     private:

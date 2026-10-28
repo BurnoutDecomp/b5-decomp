@@ -127,11 +127,11 @@ struct SetWayPointDistancesToFinishActionRecord
 
 // The three wire sizes, pinned against the `li r6,<size>` immediates the console hands AddEvent.
 // These are the ONLY hard size facts in this partfile; everything else is by named member.
-static_assert(sizeof(RaceCarReachedCheckpointActionRecord) == 16,
+CGS_STATIC_ASSERT((sizeof(RaceCarReachedCheckpointActionRecord) == 16),
               "RaceCarReachedCheckpointAction wire size (X360 li r6,0x10 @0x823422AC)");
-static_assert(sizeof(RaceCarReachedFinishActionRecord) == 8,
+CGS_STATIC_ASSERT((sizeof(RaceCarReachedFinishActionRecord) == 8),
               "RaceCarReachedFinishAction wire size (X360 li r6,8 @0x823426A4)");
-static_assert(sizeof(SetWayPointDistancesToFinishActionRecord) == 68,
+CGS_STATIC_ASSERT((sizeof(SetWayPointDistancesToFinishActionRecord) == 68),
               "SetWayPointDistancesToFinishAction wire size (X360 li r6,0x44 @0x82342074)");
 
 // DWARF BrnGameActions.h:2308 -- PlayerReachedPenultimateCheckpointAction is an EMPTY struct
@@ -337,7 +337,7 @@ void ModeManager::TransmitAndIncrementFinishReached(GameStateModuleIO::GameActio
     // X360 `lwz r11, 0xD98(r3); cmplwi r11,0; beq -> 0x8234288C`. NOTE the early-out branches
     // PAST the bit-set clear at 0x82342888: with no current mode the set is left INTACT for the
     // next frame. Faithful -- do not hoist the UnSetAll above this test.
-    if (mpCurrentGameMode == nullptr)
+    if (mpCurrentGameMode == 0)
     {
         return;
     }
@@ -373,7 +373,7 @@ void ModeManager::TransmitAndIncrementFinishReached(GameStateModuleIO::GameActio
         // immediate is a literal 8, i.e. last of the eight scoring slots, for a car the
         // ScoringSystem has no record of.
         CarData* lpCarData = mScoringSystem.GetCarData(leActiveRaceCarIndex);
-        if (lpCarData != nullptr)
+        if (lpCarData != 0)
         {
             lReachedFinishAction.miFinishPosition = lpCarData->GetScoreData()->GetFinishPosition();
         }

@@ -71,7 +71,7 @@ IRAllocColor* IRAllocColor::NewInst(s32 aiOpcode, CFG* apContext)
 
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRAllocColor));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRAllocColor(apContext);
 }

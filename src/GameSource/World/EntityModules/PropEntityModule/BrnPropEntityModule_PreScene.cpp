@@ -271,11 +271,11 @@ namespace BrnWorld
         const u32 KU_MAX_LOADED_ZONES = 9;
 
         // ---- value tripwires for the facts this TU relies on -------------------------
-        static_assert( KU_MAX_ZONES == 500,
+        CGS_STATIC_ASSERT(( KU_MAX_ZONES == 500),
                        "the 0x1F4 bound every zone-index tripwire in this TU quotes" );
-        static_assert( KU_NUM_ZONE_SLOTS == KU_MAX_LOADED_ZONES,
+        CGS_STATIC_ASSERT(( KU_NUM_ZONE_SLOTS == KU_MAX_LOADED_ZONES),
                        "one prop-pool slot per simultaneously-loaded zone" );
-        static_assert( KI_CGSID_STRING_LEN == 13,
+        CGS_STATIC_ASSERT(( KI_CGSID_STRING_LEN == 13),
                        "the literal 13 SPrintf's buffer size argument carries (li r4, 0xD)" );
     }
 

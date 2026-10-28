@@ -63,8 +63,8 @@ extern "C" System *off_83271928;
 // registered run-time descriptor record (its label is the string "ReverbModel1"). These are
 // opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
 // storage so the bodies below link without fabricating their contents.
-static void *const KRV_ReverbModel1VTable = nullptr; // off_8217F59C
-static void *const KRV_BasePlugInVTable   = nullptr; // off_820AA810 (base PlugIn v-table the dtor reinstalls)
+static void *const KRV_ReverbModel1VTable = 0; // off_8217F59C
+static void *const KRV_BasePlugInVTable   = 0; // off_820AA810 (base PlugIn v-table the dtor reinstalls)
 // off_82F8FA14 -- the "ReverbModel1" runtime descriptor, REAL (descriptor-record
 // wave). Metadata FLAG'd null.
 static PlugInDescRunTime KRV_ReverbModel1Desc = {

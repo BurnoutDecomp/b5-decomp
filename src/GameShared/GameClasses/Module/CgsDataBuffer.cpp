@@ -8,26 +8,26 @@ void CgsModule::DataBuffer::SetDataStructure(DataStructure *pDataStructure)
 void CgsModule::DataBuffer::Construct()
 {
     mxStatusFlags.Clear();
-    mpDataStructure = nullptr;
+    mpDataStructure = 0;
     mbMultiThreaded = false;
 }
 
 bool CgsModule::DataBuffer::Prepare()
 {
     mxStatusFlags.Clear();
-    mpDataStructure = nullptr;
+    mpDataStructure = 0;
     return true;
 }
 
 bool CgsModule::DataBuffer::Release()
 {
-    mpDataStructure = nullptr;
+    mpDataStructure = 0;
     return true;
 }
 
 void CgsModule::DataBuffer::Destruct()
 {
-    mpDataStructure = nullptr;
+    mpDataStructure = 0;
 }
 
 void CgsModule::DataBuffer::UnlockForWrite()

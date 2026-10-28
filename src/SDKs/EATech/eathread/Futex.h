@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "types.hpp"
 #include "eathread/eathread_atomic.h"   // EA::Thread::AtomicInt<T> (committed vendor type)
 
 // Futex::AtomicUint64 -- the engine's facade name for the EA threading SDK's
@@ -13,5 +13,5 @@
 // vendor/EAThread/include/eathread/eathread_atomic.h).
 namespace Futex
 {
-    typedef EA::Thread::AtomicInt<std::uint64_t> AtomicUint64;
+    typedef EA::Thread::AtomicInt<uint64_t> AtomicUint64;
 }

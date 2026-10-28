@@ -172,13 +172,13 @@ namespace BrnReplays
         // Never called; pins the record layout the console's index arithmetic assumes.
         static void _AssertLayout()
         {
-            static_assert(offsetof(PropLoadedZoneRecord, miZoneId) == 0x00,
+            CGS_STATIC_ASSERT((offsetof(PropLoadedZoneRecord, miZoneId) == 0x00),
                           "PropLoadedZoneRecord::miZoneId is the GetZone search key at +0");
-            static_assert(offsetof(PropLoadedZoneRecord, maPropsAddedToScene) == 0x08,
+            CGS_STATIC_ASSERT((offsetof(PropLoadedZoneRecord, maPropsAddedToScene) == 0x08),
                           "added-to-scene bit run at +0x08 (8*((i>>6)+1))");
-            static_assert(offsetof(PropLoadedZoneRecord, maPropsPreviouslyHit) == 0x58,
+            CGS_STATIC_ASSERT((offsetof(PropLoadedZoneRecord, maPropsPreviouslyHit) == 0x58),
                           "previously-hit bit run at +0x58 (8*((i>>6)+11))");
-            static_assert(sizeof(PropLoadedZoneRecord) == 0xA8,
+            CGS_STATIC_ASSERT((sizeof(PropLoadedZoneRecord) == 0xA8),
                           "168-byte element stride (mulli index,0xA8 @0x822AA058)");
         }
     };
@@ -325,52 +325,52 @@ namespace BrnReplays
         // Nineteen numbers, every one of them read from the X360 asm (see the banner).
         static void _AssertLayout()
         {
-            static_assert(offsetof(PropSerialiserFrame, maLoadedZones) == 0x0000,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maLoadedZones) == 0x0000),
                           "loaded-zone array at the frame base (operator[] @0x822AA058)");
-            static_assert(offsetof(PropSerialiserFrame, maLoadedZones.muLength) == 0x05E8,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maLoadedZones.muLength) == 0x05E8),
                           "loaded-zone count byte at frame +0x5E8 (lbz 0x5E8 in all four bodies)");
 
-            static_assert(offsetof(PropSerialiserFrame, maRecordedCells) == 0x05F0,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maRecordedCells) == 0x05F0),
                           "recorded-cell array at +0x5F0 (IsCellActive `addi r30,r28,0x5F0`)");
-            static_assert(offsetof(PropSerialiserFrame, maRecordedCells.muLength) == 0x0600,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maRecordedCells.muLength) == 0x0600),
                           "recorded-cell count at +0x600 (IsCellActive `lbz r11,0x600`)");
 
-            static_assert(offsetof(PropSerialiserFrame, maPropPositions) == 0x0610,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPropPositions) == 0x0610),
                           "prop positions at +0x610 (WriteProp `addi r3,r30,0x610`)");
-            static_assert(offsetof(PropSerialiserFrame, maPropPositions.muLength) == 0x15F0,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPropPositions.muLength) == 0x15F0),
                           "prop-position count at +0x15F0 (0x610 + 254*16)");
 
-            static_assert(offsetof(PropSerialiserFrame, maPropOrientations) == 0x1600,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPropOrientations) == 0x1600),
                           "prop orientations at +0x1600 (WriteProp `addi r3,r30,0x1600`)");
-            static_assert(offsetof(PropSerialiserFrame, maPropOrientations.muLength) == 0x25E0,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPropOrientations.muLength) == 0x25E0),
                           "prop-orientation count at +0x25E0 (0x1600 + 254*16)");
 
-            static_assert(offsetof(PropSerialiserFrame, maTypes) == 0x25F0,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maTypes) == 0x25F0),
                           "prop type ids at +0x25F0 (WriteProp `addi r3,r30,0x25F0`)");
-            static_assert(offsetof(PropSerialiserFrame, maTypes.muLength) == 0x27EC,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maTypes.muLength) == 0x27EC),
                           "prop type-id count at +0x27EC (0x25F0 + 254*2)");
 
-            static_assert(offsetof(PropSerialiserFrame, maPartPositions) == 0x27F0,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartPositions) == 0x27F0),
                           "part positions at +0x27F0 (WritePart `addi r3,r31,0x27F0`)");
-            static_assert(offsetof(PropSerialiserFrame, maPartPositions.muLength) == 0x2FF0,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartPositions.muLength) == 0x2FF0),
                           "part-position count at +0x2FF0 (0x27F0 + 128*16)");
 
-            static_assert(offsetof(PropSerialiserFrame, maPartOrientations) == 0x3000,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartOrientations) == 0x3000),
                           "part orientations at +0x3000 (WritePart `addi r3,r31,0x3000`)");
-            static_assert(offsetof(PropSerialiserFrame, maPartOrientations.muLength) == 0x3800,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartOrientations.muLength) == 0x3800),
                           "part-orientation count at +0x3800 (0x3000 + 128*16)");
 
-            static_assert(offsetof(PropSerialiserFrame, maPartTypes) == 0x3810,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartTypes) == 0x3810),
                           "part type ids at +0x3810 (WritePart `addi r3,r31,0x3810`)");
-            static_assert(offsetof(PropSerialiserFrame, maPartTypes.muLength) == 0x3910,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartTypes.muLength) == 0x3910),
                           "part type-id count at +0x3910 (0x3810 + 128*2)");
 
-            static_assert(offsetof(PropSerialiserFrame, maPartIds) == 0x3912,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartIds) == 0x3912),
                           "part ids at +0x3912 (WritePart `addi r3,r31,0x3912`)");
-            static_assert(offsetof(PropSerialiserFrame, maPartIds.muLength) == 0x3A12,
+            CGS_STATIC_ASSERT((offsetof(PropSerialiserFrame, maPartIds.muLength) == 0x3A12),
                           "part-id count at +0x3A12 (0x3912 + 128*2)");
 
-            static_assert(sizeof(PropSerialiserFrame) == KU_PROP_FRAME_SIZE,
+            CGS_STATIC_ASSERT((sizeof(PropSerialiserFrame) == KU_PROP_FRAME_SIZE),
                           "one frame is 0x3A20 (static layout 0x7480 holds two)");
         }
     };

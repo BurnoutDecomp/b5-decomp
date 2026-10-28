@@ -23,7 +23,7 @@ namespace BrnGui
     private:
         // Preserve the module's existing const manager getter without a new host API.
         friend class GuiModule;
-        void HandleProfileTaskResult() override;
+        void HandleProfileTaskResult() ;
         ProfileManager mProfileManager;
     };
 }

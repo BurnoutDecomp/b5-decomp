@@ -66,6 +66,6 @@ namespace BrnNetwork
 
     inline void NetworkNotificationManagerX360::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkNotificationManagerX360) == 0xC, "NetworkNotificationManagerX360 is 0xC bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkNotificationManagerX360) == 0xC), "NetworkNotificationManagerX360 is 0xC bytes");
     }
 }

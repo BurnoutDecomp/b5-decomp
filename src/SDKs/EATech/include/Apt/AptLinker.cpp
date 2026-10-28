@@ -108,12 +108,12 @@ void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                     
 // ---------------------------------------------------------------------
 AptLinker::AptLinker()
 {
-    mpThingyListHead          = nullptr;       // v7[0] = 0
+    mpThingyListHead          = 0;       // v7[0] = 0
     mPendingFiles.mnSize      = 0;             // v7[1] = 0
     mPendingFiles.mnCapacity  = 0;             // v7[2] = 0
     mPendingFiles.mpData      = mPendingFiles.mInlineStorage;   // v7[3] = v7 + 4 (-> +0x10)
-    mPendingFiles.mInlineStorage[0].pData = nullptr;            // v7[4] = 0
-    mPendingFiles.mInlineStorage[1].pData = nullptr;            // v7[5] = 0
+    mPendingFiles.mInlineStorage[0].pData = 0;            // v7[4] = 0
+    mPendingFiles.mInlineStorage[1].pData = 0;            // v7[5] = 0
 }
 
 // ---------------------------------------------------------------------
@@ -130,14 +130,14 @@ void* AptLinker::ScalarDeletingDestructor(char flags)
 
     // Drain the singly-linked thingy list: pop_front releases each node's counted
     // thingy ref (and destroys the thingy at count 0).
-    while (mpThingyListHead != nullptr)
+    while (mpThingyListHead != 0)
     {
         AptSingleListNode* pHead = mpThingyListHead;          // result = *a1
         AptSingleListNode* pNext = pHead->mpNext;             // v3 = *(result+4)
         // node dtor (AptSingleL): release node[0] -> at 0, AptLinkerThingy dtor;
         // then free the 8-byte node.
         AptLinkerThingy* pThingy = pHead->mpThingy;
-        if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+        if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
             pThingy->ScalarDeletingDestructor(1);
         gpAptSharedPtrPool->Deallocate(pHead, sizeof(AptSingleListNode));
         mpThingyListHead = pNext;                             // *a1 = v3
@@ -164,8 +164,8 @@ void AptLinker::Notify(AptFilePtr* pFile)
         {
             // Already pending: just release the incoming reference (consume *a2).
             AptFile* pData = pFile->pData;        // result = *a2
-            pFile->pData   = nullptr;             // *a2 = 0
-            if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+            pFile->pData   = 0;             // *a2 = 0
+            if (pData != 0 && AptSharedPtrDecRef(pData) == 0)
                 AptSharedPtrDelete(pData);
             return;
         }
@@ -176,8 +176,8 @@ void AptLinker::Notify(AptFilePtr* pFile)
     // ...then release the caller's now-transferred reference (consume *a2).
     {
         AptFile* pData = pFile->pData;
-        pFile->pData   = nullptr;
-        if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+        pFile->pData   = 0;
+        if (pData != 0 && AptSharedPtrDecRef(pData) == 0)
             AptSharedPtrDelete(pData);
     }
 }
@@ -201,11 +201,11 @@ void GlobalNotificationFunction(AptFilePtr* pFile)
     // Local IncRef copy -- AptLinker::Notify consumes it.
     AptFilePtr local;
     local.pData = pFile->pData;
-    if (local.pData != nullptr)
+    if (local.pData != 0)
         AptSharedPtrIncRef(local.pData);
 
     AptTarget* pTarget = static_cast<AptTarget*>(gAptTargetTls.GetValue());
-    if (pTarget != nullptr && pTarget->mpLinker != nullptr)
+    if (pTarget != 0 && pTarget->mpLinker != 0)
         pTarget->mpLinker->Notify(&local);
 
     if (gpAptSavedInputStream)
@@ -217,8 +217,8 @@ void GlobalNotificationFunction(AptFilePtr* pFile)
 
     // Consume the caller's handle (asm tail: *a1 = 0 + DecRef/delete-at-zero).
     AptFile* pConsumed = pFile->pData;
-    pFile->pData = nullptr;
-    if (pConsumed != nullptr && AptSharedPtrDecRef(pConsumed) == 0)
+    pFile->pData = 0;
+    if (pConsumed != 0 && AptSharedPtrDecRef(pConsumed) == 0)
         AptSharedPtrDelete(pConsumed);
 }
 
@@ -230,10 +230,10 @@ void GlobalNotificationFunction(AptFilePtr* pFile)
 void AptLinker::CancelLoad(AptValue* pValue)
 {
     AptSingleListNode* pNode = mpThingyListHead;                       // i = *result
-    while (pNode != nullptr && pNode->mpThingy->mpValue != pValue)     // *(*i+8) != a2
+    while (pNode != 0 && pNode->mpThingy->mpValue != pValue)     // *(*i+8) != a2
         pNode = pNode->mpNext;                                         // i = i[1]
 
-    if (pNode != nullptr)
+    if (pNode != 0)
         ListErase(&mpThingyListHead, &pNode);   // sub_82AF83A0(result, &v3) -- unlink + release
 }
 
@@ -258,18 +258,18 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
 
     // Find the node keyed on pValue.
     AptSingleListNode* pNode = mpThingyListHead;
-    while (pNode != nullptr && pNode->mpThingy->mpValue != pValue)    // *(*i+8) != a2
+    while (pNode != 0 && pNode->mpThingy->mpValue != pValue)    // *(*i+8) != a2
         pNode = pNode->mpNext;                                        // i = i[1]
     AptLinkerThingy* pThingy = pNode->mpThingy;                       // _R27 = *i
 
     // Pin the thingy across the work (it may be popped below).
-    if (pThingy != nullptr)
+    if (pThingy != 0)
         AptSharedPtrIncRefThingy(pThingy);
 
     // Resolve the owned file: bump+drop its ref (a balanced touch the X360 emits)
     // and read its state.
     AptFile* pFile = pThingy->mpFile.pData;                          // _R30 = *(_R27+4)
-    if (pFile != nullptr)
+    if (pFile != 0)
     {
         AptSharedPtrIncRef(pFile);
         if (AptSharedPtrDecRef(pFile) == 0)
@@ -286,12 +286,12 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
 
     // Build the replacement AptCIH (parent == pValue's parent CIH).
     AptCIH* pParent = pCIH->mpDisplayListParent;                    // *(a2+28)  (== AptCIH[7])
-    AptCIH* pNew    = nullptr;
+    AptCIH* pNew    = 0;
     void* pMem = AptCIH::operator new(40);                          // AptCIH::operator new(0x28)
-    if (pMem != nullptr)
-        pNew = ::new (pMem) AptCIH(nullptr, pParent);                 // AptCIH::AptCIH(mem,0,parent)
+    if (pMem != 0)
+        pNew = ::new (pMem) AptCIH(0, pParent);                 // AptCIH::AptCIH(mem,0,parent)
 
-    if (pParent != nullptr)
+    if (pParent != 0)
     {
         // Swap the new node in for the zombie within the parent's child list.
         pParent->ReplaceZombieChild(pNew, pCIH);                    // (parent, new, zombie)
@@ -319,7 +319,7 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
     ReplaceReferences(pValue, pNew, 0, 0);                          // ReplaceReferences(v25, v20, 0, 0)
 
     // Drop our pin on the thingy; destroy at count 0.
-    if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+    if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
         pThingy->ScalarDeletingDestructor(1);
 
     return pNew;                                                    // result = v20
@@ -336,7 +336,7 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
 void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 {
     AptCIH* pAnim = AptGetAnimationAtLevel(0);                                       // AptGetAnimationAtLevel(0)
-    AptValue* pVar = gAptActionInterpreter.getVariable(pAnim, nullptr, pFileName,
+    AptValue* pVar = gAptActionInterpreter.getVariable(pAnim, 0, pFileName,
                                                        /*allowSelf*/0,
                                                        /*scopeChain*/1,
                                                        /*direct*/1);                 // ...,1,1,0
@@ -345,7 +345,7 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
     // An EMPTY name is the UNMOUNT half (StateInterface::PlayAptMovie("", level)), and
     // it is exactly the arm that silently does nothing when the level variable does not
     // resolve -- so print the resolution, not just the request.
-    if (pValue == nullptr)
+    if (pValue == 0)
         goto done;
 
     // Accept only a DEFINED CIH-handle (type 12), or a CIH-none (37). The console's
@@ -367,8 +367,8 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
     }
 
     {
-        AptFilePtr   filePtr;        filePtr.pData = nullptr;     // v96 (the load result handle)
-        AptFile*     pLinkedFile = nullptr;                       // _R28
+        AptFilePtr   filePtr;        filePtr.pData = 0;     // v96 (the load result handle)
+        AptFile*     pLinkedFile = 0;                       // _R28
         EAStringC    skipName;                                    // v97 scratch
 
         // (skipName is an empty RAII EAStringC; the X360 InitFromBuffer + the
@@ -382,7 +382,7 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             // only names the destination variable resolved above.
             filePtr = gpAptTarget->mpLoader->IsLoaded(*pName);     // AptLoader::IsLoaded(&v98, loader, a2) + operator=
             pLinkedFile = filePtr.pData;
-            if (pLinkedFile != nullptr)
+            if (pLinkedFile != 0)
             {
                 // Pin it and notify (it is ready).
                 AptSharedPtrIncRef(pLinkedFile);
@@ -396,7 +396,7 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                 pLinkedFile = filePtr.pData;
                 // If the request just completed (state 6 -> swap state/field12 to 4),
                 // notify immediately.
-                if (pLinkedFile != nullptr && pLinkedFile->mnState == 6)   // v96[2] == 6
+                if (pLinkedFile != 0 && pLinkedFile->mnState == 6)   // v96[2] == 6
                 {
                     const int32_t nNew = pLinkedFile->mnField12;           // v28 = v96[3]
                     const int32_t nOld = pLinkedFile->mnState;             // v29 = v96[2]
@@ -420,16 +420,16 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
         // Drop any existing thingy keyed on this value (re-load supersedes it).
         {
             AptSingleListNode* pNode = mpThingyListHead;
-            while (pNode != nullptr && pNode->mpThingy->mpValue != pValue) // *(*i+8) == v8
+            while (pNode != 0 && pNode->mpThingy->mpValue != pValue) // *(*i+8) == v8
                 pNode = pNode->mpNext;
-            if (pNode != nullptr)
+            if (pNode != 0)
                 ListErase(&mpThingyListHead, &pNode);                      // sub_82AF83A0(a1, &v97)
         }
 
-        if (pLinkedFile != nullptr)
+        if (pLinkedFile != 0)
         {
             // Create + push a thingy linking pLinkedFile to pValue.
-            AptLinkerThingy* pThingy = nullptr;
+            AptLinkerThingy* pThingy = 0;
             {
                 AptSharedPtrIncRef(pLinkedFile);
                 AptFilePtr held; held.pData = pLinkedFile;
@@ -437,10 +437,10 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                 // Allocate(off_8324D808,16) r3 threads straight into the ctor).
                 pThingy = MakeLinkerThingy(held, pValue);                  // AptLinkerThingy::AptLinkerThingy(&file, value)
             }
-            if (pThingy != nullptr)
+            if (pThingy != 0)
                 AptSharedPtrIncRefThingy(pThingy);
             ListPushFront(&mpThingyListHead, pThingy);                     // AptSingleLis(a1, &v97)
-            if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+            if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
                 pThingy->ScalarDeletingDestructor(1);
         }
         else
@@ -453,7 +453,7 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 
             if (nTypeTag != 9)                                               // non-animation
             {
-                AptFile* pStub = nullptr;
+                AptFile* pStub = 0;
                 // FLAG (x64 widening -- same class as the AptCharacterInst site below):
                 // the console literal 28 is ITS sizeof(AptFile) (refcount + a 4-byte
                 // EAStringC + state + field12 + three 4-byte pointers). The x64 record is
@@ -461,9 +461,9 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                 // block; the paired free (AptSharedPtr.cpp) already uses sizeof. Size from
                 // the type.
                 void* pMem = gpAptSharedPtrPool->Allocate(sizeof(AptFile));   // X360 Allocate(28)
-                if (pMem != nullptr)
+                if (pMem != 0)
                     pStub = MakeAptFile(pMem, pName);                        // AptFile::AptFile(mem, a2)
-                if (pStub != nullptr)
+                if (pStub != 0)
                     AptSharedPtrIncRef(pStub);
                 AptFilePtr stubPtr; stubPtr.pData = pStub;
                 filePtr = stubPtr;                                           // AptFile_::operator=(&v96, &v97)
@@ -472,25 +472,25 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                 pLinkedFile->mnState   = 6;                                  // v96[2] = 6
                 pLinkedFile->mnField12 = nPrev;                              // _R28[3] = v55
 
-                AptLinkerThingy* pThingy = nullptr;
-                if (gpAptSharedPtrPool->Allocate(16) != nullptr)
+                AptLinkerThingy* pThingy = 0;
+                if (gpAptSharedPtrPool->Allocate(16) != 0)
                 {
                     AptSharedPtrIncRef(pLinkedFile);
                     AptFilePtr held; held.pData = pLinkedFile;
                     pThingy = MakeLinkerThingy(held, pValue);
                 }
-                if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+                if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
                 ListPushFront(&mpThingyListHead, pThingy);
-                if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
                     pThingy->ScalarDeletingDestructor(1);
 
-                if (pStub != nullptr && AptSharedPtrDecRef(pStub) == 0)
+                if (pStub != 0 && AptSharedPtrDecRef(pStub) == 0)
                     AptSharedPtrDelete(pStub);
             }
             else
             {
                 // Animation inst: same stub path, slightly different ordering.
-                AptFile* pStub = nullptr;
+                AptFile* pStub = 0;
                 // FLAG (x64 widening -- same class as the AptCharacterInst site below):
                 // the console literal 28 is ITS sizeof(AptFile) (refcount + a 4-byte
                 // EAStringC + state + field12 + three 4-byte pointers). The x64 record is
@@ -498,31 +498,31 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                 // block; the paired free (AptSharedPtr.cpp) already uses sizeof. Size from
                 // the type.
                 void* pMem = gpAptSharedPtrPool->Allocate(sizeof(AptFile));   // X360 Allocate(28)
-                if (pMem != nullptr)
+                if (pMem != 0)
                     pStub = MakeAptFile(pMem, pName);
-                if (pStub != nullptr) AptSharedPtrIncRef(pStub);
+                if (pStub != 0) AptSharedPtrIncRef(pStub);
                 pStub->mnField12 = pStub->mnState;                          // *(_R31+12) = *(_R31+8)
                 pStub->mnState   = 6;                                       // *(_R31+8) = 6
 
-                AptLinkerThingy* pThingy = nullptr;
-                if (gpAptSharedPtrPool->Allocate(16) != nullptr)
+                AptLinkerThingy* pThingy = 0;
+                if (gpAptSharedPtrPool->Allocate(16) != 0)
                 {
                     AptSharedPtrIncRef(pStub);
                     AptFilePtr held; held.pData = pStub;
                     pThingy = MakeLinkerThingy(held, pValue);
                 }
-                if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+                if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
                 ListPushFront(&mpThingyListHead, pThingy);
-                if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
                     pThingy->ScalarDeletingDestructor(1);
 
-                if (pStub != nullptr && AptSharedPtrDecRef(pStub) == 0)
+                if (pStub != 0 && AptSharedPtrDecRef(pStub) == 0)
                     AptSharedPtrDelete(pStub);
             }
         }
 
         // Drop the load handle's reference.
-        if (pLinkedFile != nullptr && AptSharedPtrDecRef(pLinkedFile) == 0)
+        if (pLinkedFile != 0 && AptSharedPtrDecRef(pLinkedFile) == 0)
             AptSharedPtrDelete(pLinkedFile);
     }
 
@@ -554,18 +554,18 @@ void AptLinker::Update()
         return;                                                      // gate: not all pending files ready
 
     // ---- pass 1: resolve thingies whose files just finished loading ----
-    for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; )
+    for (AptSingleListNode* pNode = mpThingyListHead; pNode != 0; )
     {
         AptLinkerThingy* pThingy = pNode->mpThingy;                 // _R28 = *v5
-        if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+        if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
 
         bool bReady = false;
-        if (pThingy->mpValue != nullptr)                            // *(_R28+8) != 0 (active)
+        if (pThingy->mpValue != 0)                            // *(_R28+8) != 0 (active)
         {
             AptFile* pFile = pThingy->mpFile.pData;                 // _R27 = *(_R28+4)
-            if (pFile != nullptr) AptSharedPtrIncRef(pFile);
-            bReady = (pFile != nullptr && pFile->mnState == 6);     // *(_R27+8) == 6
-            if (pFile != nullptr && AptSharedPtrDecRef(pFile) == 0)
+            if (pFile != 0) AptSharedPtrIncRef(pFile);
+            bReady = (pFile != 0 && pFile->mnState == 6);     // *(_R27+8) == 6
+            if (pFile != 0 && AptSharedPtrDecRef(pFile) == 0)
                 AptSharedPtrDelete(pFile);
         }
 
@@ -584,7 +584,7 @@ void AptLinker::Update()
             }
             else
             {
-                AptCharacterInst* pInst = nullptr;
+                AptCharacterInst* pInst = 0;
                 // x64 widening (settled; Phase-0 native-8 rule): the console allocates its literal sizeof
                 // (16 == 4 dwords: vtable / mpRenderItem / mTypeFlags / mpProperties).
                 // On x64 the same record is 32 bytes, so the literal under-allocated by
@@ -598,9 +598,9 @@ void AptLinker::Update()
                 // sizeof, so the literal also returned the block to the wrong free-list
                 // bucket. Size from the type.
                 void* pMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterInst));   // X360 Allocate(16)
-                if (pMem != nullptr)
+                if (pMem != 0)
                 {
-                    pInst = ::new (pMem) AptCharacterInst(nullptr);          // AptCharacterInst::AptCharacterInst(v27,0)
+                    pInst = ::new (pMem) AptCharacterInst(0);          // AptCharacterInst::AptCharacterInst(v27,0)
                     // *v28 = &off_82145FD0 : install the concrete vtable (the
                     // empty-placeholder AptCharacterInst vtable -- modelled by the
                     // placement-new vtable install; see the helper below).
@@ -611,13 +611,13 @@ void AptLinker::Update()
                 ListErase(&mpThingyListHead, &pNode);                     // sub_82AF83A0(a1, &v82) -- v82 == the CURRENT node
             }
             pNode = mpThingyListHead;                                      // v5 = *a1 (the console RELOADS the head after handling; the handled node was just erased)
-            if (pNode == nullptr)
+            if (pNode == 0)
                 break;
         }
 
         // Release + (at 0) destroy this thingy, then advance.
         AptSingleListNode* pNext = pNode->mpNext;                          // v5 = v5[1]
-        if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+        if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
             pThingy->ScalarDeletingDestructor(1);
         pNode = pNext;
     }
@@ -626,19 +626,19 @@ void AptLinker::Update()
     for (AptFilePtr* pEntry = mPendingFiles.begin(); pEntry != mPendingFiles.end(); )
     {
         AptFile* pFile = pEntry->pData;                                    // _R28 = *v8
-        if (pFile != nullptr) AptSharedPtrIncRef(pFile);
+        if (pFile != 0) AptSharedPtrIncRef(pFile);
         bool bAdvance = true;
 
-        for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; pNode = pNode->mpNext)
+        for (AptSingleListNode* pNode = mpThingyListHead; pNode != 0; pNode = pNode->mpNext)
         {
             AptLinkerThingy* pThingy = pNode->mpThingy;                    // _R29 = *i
-            if (pThingy != nullptr) AptSharedPtrIncRefThingy(pThingy);
+            if (pThingy != 0) AptSharedPtrIncRefThingy(pThingy);
 
             AptFile* pThingyFile = pThingy->mpFile.pData;                  // result = *(_R29+4)
-            if (pThingyFile != nullptr) AptSharedPtrIncRef(pThingyFile);
+            if (pThingyFile != 0) AptSharedPtrIncRef(pThingyFile);
             // A thingy matches this pending file iff same file AND not yet linked.
             const bool bMatch = (pThingyFile == pFile) && !pThingy->mbLinked;  // result==_R28 && !*(_R29+12)
-            if (pThingyFile != nullptr && AptSharedPtrDecRef(pThingyFile) == 0)
+            if (pThingyFile != 0 && AptSharedPtrDecRef(pThingyFile) == 0)
                 AptSharedPtrDelete(pThingyFile);
 
             if (bMatch)
@@ -653,7 +653,7 @@ void AptLinker::Update()
 
                 EnsureAnimFrameRateCached(pAnimInst);                      // dword_8324E530 lazy init (the SWF-version cache, homed below)
 
-                if (pCIH->mpCharacterInst->mpProperties != nullptr)        // *(v61[8]+12)
+                if (pCIH->mpCharacterInst->mpProperties != 0)        // *(v61[8]+12)
                 {
                     pCIH->ClearCIH(true);                                  // AptCIH::ClearCIH(v61,1)
                     pCIH->ForceCleanNativeHash();                          // AptCIH::ForceCleanNativeHash(v61)
@@ -689,18 +689,18 @@ void AptLinker::Update()
                 {
                     pEntry = mPendingFiles.begin();                       // v8 = *(a1+12) (bAdvance=false keeps it at begin)
                     bAdvance = false;
-                    if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+                    if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
                         pThingy->ScalarDeletingDestructor(1);
                     break;
                 }
             }
 
-            if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+            if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
                 pThingy->ScalarDeletingDestructor(1);
         }
 
         if (bAdvance) ++pEntry;
-        if (pFile != nullptr && AptSharedPtrDecRef(pFile) == 0)
+        if (pFile != 0 && AptSharedPtrDecRef(pFile) == 0)
             AptSharedPtrDelete(pFile);
     }
 
@@ -712,7 +712,7 @@ void AptLinker::Update()
     {
         PendingFileVector empty;
         empty.mnSize = 0; empty.mnCapacity = 0; empty.mpData = empty.mInlineStorage;
-        empty.mInlineStorage[0].pData = nullptr; empty.mInlineStorage[1].pData = nullptr;
+        empty.mInlineStorage[0].pData = 0; empty.mInlineStorage[1].pData = 0;
         mPendingFiles.Swap(empty);                                        // sub_82AFF018(a1+4, v83)
         gpAptTarget->mpAnimationTarget->RunActions();    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
         // ~empty (Strin(v83)) releases the swapped-out elements.
@@ -736,12 +736,12 @@ void ListPushFront(AptSingleListNode** ppHead, AptLinkerThingy* pThingy)
 {
     AptSingleListNode* pNode =
         static_cast<AptSingleListNode*>(gpAptSharedPtrPool->Allocate(sizeof(AptSingleListNode)));   // Allocate(pool,8)
-    if (pNode != nullptr)
+    if (pNode != 0)
     {
         pNode->mpThingy = pThingy;                 // *result = *a2
-        if (pThingy != nullptr)
+        if (pThingy != 0)
             AptSharedPtrIncRefThingy(pThingy);     // the lwarx/+1/stwcx. AddRef loop
-        pNode->mpNext = nullptr;                   // result[1] = 0
+        pNode->mpNext = 0;                   // result[1] = 0
     }
     pNode->mpNext = *ppHead;                        // v10[1] = *a1   (== old head)
     *ppHead       = pNode;                          // *a1 = v10
@@ -758,7 +758,7 @@ void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode)
 {
     AptSingleListNode* pTarget = *ppNode;          // the node to remove
     AptSingleListNode* pCur    = *ppHead;
-    if (pCur == nullptr)
+    if (pCur == 0)
         return;
 
     if (pCur == pTarget)
@@ -770,17 +770,17 @@ void ListErase(AptSingleListNode** ppHead, AptSingleListNode** ppNode)
     {
         // Walk to the node whose next == pTarget, then splice it out.
         AptSingleListNode* pPrev = pCur;
-        while (pPrev != nullptr && pPrev->mpNext != pTarget)
+        while (pPrev != 0 && pPrev->mpNext != pTarget)
             pPrev = pPrev->mpNext;
-        if (pPrev == nullptr)
+        if (pPrev == 0)
             return;
         pPrev->mpNext = pTarget->mpNext;            // v3[1] = *(v10+4)
     }
 
     // Release the unlinked node's counted thingy (destroy at 0), then free the node.
     AptLinkerThingy* pThingy = pTarget->mpThingy;   // *node
-    pTarget->mpThingy = nullptr;                     // *node = 0
-    if (pThingy != nullptr && AptSharedPtrDecRefThingy(pThingy) == 0)
+    pTarget->mpThingy = 0;                     // *node = 0
+    if (pThingy != 0 && AptSharedPtrDecRefThingy(pThingy) == 0)
         pThingy->ScalarDeletingDestructor(1);        // == PS3 AptSharedPtrDelete(AptLinkerThingy*) @0xF43114 (dispose file + free 16-byte block)
     gpAptSharedPtrPool->Deallocate(pTarget, sizeof(AptSingleListNode));   // Deallocate(pool,node,8)
 }
@@ -828,7 +828,7 @@ void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst)
         const unsigned char* const pHeader =
             static_cast<const unsigned char*>(
                 pInst->mAnimationFilePtr.pData->mpResolveContext);
-        gnAptSwfVersion = (pHeader != nullptr && pHeader[0xA] == 58)
+        gnAptSwfVersion = (pHeader != 0 && pHeader[0xA] == 58)
                               ? (pHeader[0xB] - 48)
                               : 6;
     }
@@ -878,7 +878,7 @@ void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH)
 {
     // gAptFuncs+0x2C -- the console's `if (dword_8324E844)` slot guard is the
     // engine's own optional-callback test (Apt.cpp value-inits the table to 0).
-    if (gAptFuncs.pfnLoadAnimationCompleted != nullptr)
+    if (gAptFuncs.pfnLoadAnimationCompleted != 0)
     {
         gAptFuncs.pfnLoadAnimationCompleted(pFile->mFileName.GetBuffer(),      // r3
                                             pCIH->GetInstanceName().GetBuffer()); // r4
@@ -929,11 +929,11 @@ void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH)
 bool AptLinker::isFileImported(AptFilePtr* ppCandidate)
 {
     bool bImported = false;
-    for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; pNode = pNode->mpNext)
+    for (AptSingleListNode* pNode = mpThingyListHead; pNode != 0; pNode = pNode->mpNext)
     {
         // A fresh counted copy of the candidate for this probe (consumed by the callee).
         AptFile* pLocal = ppCandidate->pData;          // lwz r11, 0(r31)
-        if (pLocal != nullptr)
+        if (pLocal != 0)
             AptSharedPtrIncRef(pLocal);                // the lwarx/stwcx ++ on +0
 
         if (pNode->mpThingy->mpFile.pData->isFileImported(&pLocal))   // r3 = *(thingy+4)
@@ -945,7 +945,7 @@ bool AptLinker::isFileImported(AptFilePtr* ppCandidate)
 
     // Shared tail: consume the original candidate (Dispose + null the slot).
     AptFile* const pOld = ppCandidate->pData;
-    ppCandidate->pData = nullptr;
+    ppCandidate->pData = 0;
     AptFilePtr::Dispose(pOld);                         // bl AptFile___Dispose
     return bImported;
 }
@@ -968,8 +968,8 @@ bool AptLinker::isFileImported(AptFilePtr* ppCandidate)
 // The staging globals the swapped-in callback consumes (X360 .bss
 // dword_8324E554..dword_8324E564; the PS3 external-ELF symbol spellings are kept
 // verbatim, including the 'Refernce' typo).
-static AptValue* gpRefernceValue        = nullptr;   // dword_8324E554 (the value being replaced)
-static AptValue* gpRefernceValueReplace = nullptr;   // off_8324E558  (the replacement; null = drop)
+static AptValue* gpRefernceValue        = 0;   // dword_8324E554 (the value being replaced)
+static AptValue* gpRefernceValueReplace = 0;   // off_8324E558  (the replacement; null = drop)
 static int       pnRefCount             = 0;         // dword_8324E55C (old references still to retarget)
 static int       nTemp1                 = 0;         // dword_8324E560 (pool-walk visit counter)
 static int       nTemp2                 = 0;         // dword_8324E564 (table-walk visit counter)
@@ -1005,13 +1005,13 @@ extern AptNativeHash*         gpAptClassRegistry; // dword_8324E2D4 (AptObject.c
 // ---------------------------------------------------------------------
 void AptRegisterGlobalReferences()
 {
-    for (AptTarget* lpTarget = gpAptTargetCurrent; lpTarget != nullptr;
+    for (AptTarget* lpTarget = gpAptTargetCurrent; lpTarget != 0;
          lpTarget = lpTarget->mpNext)                                   // i = i[9]
     {
         lpTarget->mpAnimationTarget->RegisterReferences();              // (i[6] == +0x18)
     }
-    if (gpAptClassRegistry != nullptr)                                  // dword_8324E2D4
-        gpAptClassRegistry->RegisterReferences(nullptr);
+    if (gpAptClassRegistry != 0)                                  // dword_8324E2D4
+        gpAptClassRegistry->RegisterReferences(0);
 }
 
 // ---------------------------------------------------------------------
@@ -1039,8 +1039,8 @@ static void* ReferenceReplaceCb(const AptValue* pOwner, void* pSlot,
                           || leOldType == AptVFT_CIHNone);
 
     // Is the registering owner a defined script function (type 34..36)?
-    const AptScriptFunctionBase* lpOwnerFn = nullptr;
-    if (pOwner != nullptr
+    const AptScriptFunctionBase* lpOwnerFn = 0;
+    if (pOwner != 0
         && (static_cast<u32>(pOwner->getVtblIndex()) - AptVFT_ScriptFunction1) <= 2u
         && pOwner->getIsDefined())
     {
@@ -1051,14 +1051,14 @@ static void* ReferenceReplaceCb(const AptValue* pOwner, void* pSlot,
 
     if (lbOldIsCIH)
     {
-        if (lpNew == nullptr)
+        if (lpNew == 0)
         {
             // Dropping a CIH reference. A script function whose ParentAnim slot
             // this is balances the animation's zombie count (DecZombieCount reaps
             // at zero -- the console's inline dec + AptUpdateZombieVector(0)); the
             // slot falls back to the pinned EmptyCIH, or -- for a plain non-flag-1
             // holder -- the shared undefined sentinel.
-            if (lpOwnerFn != nullptr)
+            if (lpOwnerFn != 0)
             {
                 if (lpOwnerFn->GetParentAnim() == lpOld)                 // v5[9] == v6
                     static_cast<AptCIH*>(lpOld)->DecZombieCount();
@@ -1079,7 +1079,7 @@ static void* ReferenceReplaceCb(const AptValue* pOwner, void* pSlot,
                 (leNewType == AptVFT_CharacterInstHandle && lpNew->getIsDefined())
                 || leNewType == AptVFT_CIHNone;
 
-            if (lpOwnerFn != nullptr)
+            if (lpOwnerFn != 0)
             {
                 // A script function's CIH reference: only its ParentAnim slot is
                 // retargeted, and never while the old node is zombie-pinned
@@ -1119,7 +1119,7 @@ static void* ReferenceReplaceCb(const AptValue* pOwner, void* pSlot,
     else
     {
         // Non-CIH value: straight swap (or drop to the undefined sentinel).
-        if (lpNew != nullptr)
+        if (lpNew != 0)
         {
             *lppSlot = lpNew;
             lpNew->AddRef();
@@ -1157,9 +1157,9 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
     // null test is the PC pre-init guard only (see the gpGCPoolManager note above); a
     // null pool yields a null head, so the pool-mode loop below simply does not run and
     // needs no further test.
-    AptValue* lpWalk = (gpGCPoolManager != nullptr)
+    AptValue* lpWalk = (gpGCPoolManager != 0)
                            ? gpGCPoolManager->GetFirstAptValue()   // off_8324D834
-                           : nullptr;
+                           : 0;
 
     // Swap in the replace callback (dword_8324E4E8), saving the mark form.
     AptValue::ReferenceRegistrationCb const lpSavedCb = AptValue::sReferenceRegistrationCb;
@@ -1175,13 +1175,13 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
 
     if (pOld->getRefCount() > 1u)                            // console (bits & 0x3FFC000) > 0x4000
     {
-        if (snUseNewWay && ppTable != nullptr)
+        if (snUseNewWay && ppTable != 0)
         {
             // Snapshot-table mode: visit only the captured live values.
             for (int liIndex = 0; liIndex < nCount; ++ppTable)
             {
                 AptValue* const lpEntry = *ppTable;
-                if (lpEntry != nullptr && lpEntry->mValueBitfield.mbIsAllocated)   // v15[1] < 0
+                if (lpEntry != 0 && lpEntry->mValueBitfield.mbIsAllocated)   // v15[1] < 0
                 {
                     lpEntry->RegisterReferences();           // vtbl[13] -> the swapped cb
                     ++nTemp2;
@@ -1189,14 +1189,14 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
                         break;                               // drained
                 }
                 if (lpEntry == pOld)
-                    *ppTable = nullptr;                      // scrub the snapshot's own entry
+                    *ppTable = 0;                      // scrub the snapshot's own entry
                 ++liIndex;
             }
         }
         else
         {
             // Pool mode: walk every live value until the references drain.
-            while (lpWalk != nullptr && pnRefCount > 0)
+            while (lpWalk != 0 && pnRefCount > 0)
             {
                 lpWalk->RegisterReferences();
                 lpWalk = gpGCPoolManager->GetNextAptValue(lpWalk);   // off_8324D834 (reloaded, as the asm does)
@@ -1209,14 +1209,14 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
 
     // The replacement inherits the retargeted references' count
     // (newCount = new - remaining + old).
-    if (pNew != nullptr)
+    if (pNew != 0)
         pNew->setRefCount(pNew->getRefCount()
                           - static_cast<u32>(pnRefCount) + lnOldRefs);
 
     // Restore the mark callback + clear the staging state.
     AptValue::sReferenceRegistrationCb = lpSavedCb;
-    gpRefernceValue        = nullptr;
-    gpRefernceValueReplace = nullptr;
+    gpRefernceValue        = 0;
+    gpRefernceValueReplace = 0;
     pnRefCount             = 0;
     return 0;   // console r3 pass-through; every caller discards it
 }
@@ -1254,13 +1254,13 @@ void AptLinker::PendingFileVector::PushBack(const AptFilePtr& rFile)
         // block; the source slots are then cleared so the old storage owns nothing).
         for (int32_t i = 0; i < mnSize; ++i)
         {
-            pNew[i].pData = nullptr;
+            pNew[i].pData = 0;
             pNew[i] = mpData[i];        // incref new == old, then nothing to decref (new slot was null)
-            mpData[i].pData = nullptr;  // old slot relinquishes (the live ref now lives in pNew)
+            mpData[i].pData = 0;  // old slot relinquishes (the live ref now lives in pNew)
         }
         // Initialise the unused tail of the new block.
         for (int32_t i = mnSize; i < nNewCap; ++i)
-            pNew[i].pData = nullptr;
+            pNew[i].pData = 0;
 
         if (mpData != mInlineStorage)
             gpAptSharedPtrPool->Deallocate(mpData, sizeof(AptFilePtr) * mnCapacity);
@@ -1270,7 +1270,7 @@ void AptLinker::PendingFileVector::PushBack(const AptFilePtr& rFile)
     }
 
     // Place the new element at the end (operator= takes the counted ref) + advance.
-    mpData[mnSize].pData = nullptr;
+    mpData[mnSize].pData = 0;
     mpData[mnSize]       = rFile;
     ++mnSize;
 }
@@ -1307,8 +1307,8 @@ void AptLinker::PendingFileVector::Swap(PendingFileVector& rOther)
     if (bThisInline || bOtherInline)
     {
         AptFilePtr scratch[2];
-        scratch[0].pData = nullptr;
-        scratch[1].pData = nullptr;
+        scratch[0].pData = 0;
+        scratch[1].pData = 0;
 
         // scratch <- this inline
         scratch[0] = mInlineStorage[0];
@@ -1325,8 +1325,8 @@ void AptLinker::PendingFileVector::Swap(PendingFileVector& rOther)
         for (int32_t i = 1; i >= 0; --i)
         {
             AptFile* const pData = scratch[i].pData;
-            scratch[i].pData = nullptr;
-            if (pData != nullptr && AptSharedPtrDecRef(pData) == 0)
+            scratch[i].pData = 0;
+            if (pData != 0 && AptSharedPtrDecRef(pData) == 0)
                 AptSharedPtrDelete(pData);
         }
     }

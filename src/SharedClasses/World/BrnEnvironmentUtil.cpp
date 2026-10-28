@@ -248,10 +248,10 @@ namespace
     // as the X360 emits it at 0x8267C884/0x8267C8BC, 0x8267C8EC/0x8267C900 and 0x8267C918/0x8267C91C.
     Vector4 LerpVector4( Vector4::InParam lFrom, Vector4::InParam lTo, f32 lfBlend )
     {
-        return Vector4{ ((lTo.x - lFrom.x) * lfBlend) + lFrom.x,
+        { const Vector4 lResult = { ((lTo.x - lFrom.x) * lfBlend) + lFrom.x,
                         ((lTo.y - lFrom.y) * lfBlend) + lFrom.y,
                         ((lTo.z - lFrom.z) * lfBlend) + lFrom.z,
-                        ((lTo.w - lFrom.w) * lfBlend) + lFrom.w };
+                        ((lTo.w - lFrom.w) * lfBlend) + lFrom.w }; return lResult; }
     }
 }
 
@@ -315,10 +315,10 @@ Vector3 ComputeSkyColour( Vector4::InParam lTopColourDrk,
 
     // The w lane is the console's incidental by-product of lerping whole registers (see the banner);
     // it is carried, not read.
-    return Vector3{ lColour.x * lfDarkening,
+    { const Vector3 lResult = { lColour.x * lfDarkening,
                     lColour.y * lfDarkening,
                     lColour.z * lfDarkening,
-                    lColour.w * lfDarkening };
+                    lColour.w * lfDarkening }; return lResult; }
 }
 
 }

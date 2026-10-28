@@ -59,7 +59,7 @@ namespace BrnWorld
         // or execution has not been established. Keep a mutable source shadow and do not assert
         // that the original runtime value is zero.
         f32 gaInertiaScaleVector[4];
-        static_assert(sizeof(gaInertiaScaleVector) == 16, "ARTIST inertia scale is one VMX vector");
+        CGS_STATIC_ASSERT((sizeof(gaInertiaScaleVector) == 16), "ARTIST inertia scale is one VMX vector");
 
         // --- de-inlined rwmath helpers (the RwMath:: free functions the X360 folded in) ---
 
@@ -109,7 +109,7 @@ namespace BrnWorld
     void PropEntityDebugComponent::Construct(PropEntityModule* lpPropEntityModule)
     {
 
-        CGS_ASSERT(lpPropEntityModule != nullptr, "lpPropEntityModule != NULL");
+        CGS_ASSERT(lpPropEntityModule != 0, "lpPropEntityModule != NULL");
         mpPropEntityModule = lpPropEntityModule;
 
         mbRenderProps         = false;   // +0x38
@@ -150,7 +150,7 @@ namespace BrnWorld
 
         RegisterVariable(&mbRenderTrafficLights, "Render props marked as Traffic Lights");
 
-        CGS_ASSERT(mpPropEntityModule != nullptr, "mpPropEntityModule != NULL");
+        CGS_ASSERT(mpPropEntityModule != 0, "mpPropEntityModule != NULL");
 
         RegisterVariable(&mpPropEntityModule->mbUseOverrides,          "Overrides...", "Use Overrides");
         RegisterVariable(&mpPropEntityModule->mfOverrideLeanThreshold, "Overrides...", "Override Lean Threshold");
@@ -388,7 +388,7 @@ namespace BrnWorld
             for (u32 luPropIndex = 0; luPropIndex < luPropsInZone; ++luPropIndex)
             {
                 PropEntityInstance* lpProp = lrZoneManager.GetProp(lu16ZoneId, luPropIndex);
-                if (lpProp == nullptr)
+                if (lpProp == 0)
                 {
                     continue;
                 }

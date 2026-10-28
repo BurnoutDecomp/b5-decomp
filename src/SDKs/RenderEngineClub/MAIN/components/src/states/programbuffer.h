@@ -45,7 +45,7 @@ namespace renderengine
 {
     // The microcode "shader parts" header is XGMICROCODE_SHADER_PARTS; Initialize and
     // GetResourceDescriptor copy it verbatim and read its size / part3 words.
-    using ProgramMicrocodeParts = XGMICROCODE_SHADER_PARTS;
+    typedef XGMICROCODE_SHADER_PARTS ProgramMicrocodeParts;
 
     struct ProgramVariableDescriptor
     {
@@ -98,8 +98,8 @@ namespace renderengine
         void*              mpPhysicalBlock; // +0x08
     };
 
-    static_assert(sizeof(ProgramVariableDescriptor) == 8, "ProgramVariableDescriptor must be 8 bytes");
-    static_assert(sizeof(ProgramMicrocodeParts) == 16, "ProgramMicrocodeParts must be 16 bytes");
+    CGS_STATIC_ASSERT((sizeof(ProgramVariableDescriptor) == 8), "ProgramVariableDescriptor must be 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(ProgramMicrocodeParts) == 16), "ProgramMicrocodeParts must be 16 bytes");
 
     class ProgramBuffer
     {

@@ -46,7 +46,7 @@ namespace Log
         // StrStreamBase requires a concrete operator<<(const char*) sink; forward it to Append so the
         // class is instantiable and `stream << "text"` reaches the file (the X360 streams through the
         // virtual char* sink, which this concrete stream points at Append).
-        StrStreamBase& operator<<(const char* lpcText) override
+        StrStreamBase& operator<<(const char* lpcText)
         {
             Append(lpcText);
             return *this;

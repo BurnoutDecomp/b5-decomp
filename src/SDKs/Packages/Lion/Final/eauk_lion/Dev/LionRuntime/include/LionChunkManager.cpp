@@ -30,7 +30,7 @@ void cLionChunk::UnLink()
             lpCur   = lpCur->mpNext;
             if (!lpCur)
             {
-                mpParent = nullptr;
+                mpParent = 0;
                 return;
             }
         }
@@ -38,11 +38,11 @@ void cLionChunk::UnLink()
         if (lpCur)
         {
             *lppSlot     = lpCur->mpNext;
-            lpCur->mpNext = nullptr;
+            lpCur->mpNext = 0;
         }
     }
 
-    mpParent = nullptr;
+    mpParent = 0;
 }
 
 void cLionChunkManager::ChunkGroupDeAlloc(cLionChunk* apChunk)
@@ -57,10 +57,10 @@ void cLionChunkManager::ChunkGroupDeAlloc(cLionChunk* apChunk)
         lpChunk->UnLink();
 
         lpChunk->mType    = 0;
-        lpChunk->mpData   = nullptr;
-        lpChunk->mpParent = nullptr;
-        lpChunk->mpChild  = nullptr;
-        lpChunk->mpNext   = nullptr;
+        lpChunk->mpData   = 0;
+        lpChunk->mpParent = 0;
+        lpChunk->mpChild  = 0;
+        lpChunk->mpNext   = 0;
         mpAllocator->Free(lpChunk, 0);
 
         lpChunk = lpNext;
@@ -93,17 +93,17 @@ void cLionChunkManager::AppDeInit()
                 if (lpCur == lpChunk && lpChunk)
                 {
                     *lppSlot       = lpChunk->mpNext;
-                    lpChunk->mpNext = nullptr;
+                    lpChunk->mpNext = 0;
                 }
             }
-            lpChunk->mpParent = nullptr;
+            lpChunk->mpParent = 0;
         }
 
         lpChunk->mType    = 0;
-        lpChunk->mpData   = nullptr;
-        lpChunk->mpParent = nullptr;
-        lpChunk->mpChild  = nullptr;
-        lpChunk->mpNext   = nullptr;
+        lpChunk->mpData   = 0;
+        lpChunk->mpParent = 0;
+        lpChunk->mpChild  = 0;
+        lpChunk->mpNext   = 0;
         mpAllocator->Free(lpChunk, 0);
 
         lpChunk = lpNext;
@@ -135,5 +135,5 @@ cLionChunkManager* cLionChunkManager::GetMe()
 void cLionChunkManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator)
 {
     mpAllocator = apAllocator;
-    mpChunks    = nullptr;
+    mpChunks    = 0;
 }

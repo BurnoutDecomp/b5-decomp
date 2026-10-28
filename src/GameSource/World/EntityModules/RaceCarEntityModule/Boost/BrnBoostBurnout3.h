@@ -220,22 +220,22 @@ private:
     // asserted 0x130 size).
     static void _AssertLayout()
     {
-        static_assert(sizeof(BoostStrategy) == 0x130,
+        CGS_STATIC_ASSERT((sizeof(BoostStrategy) == 0x130),
                       "BoostBurnout3's own members are placed relative to the base's asserted size");
-        static_assert(offsetof(BoostBurnout3, mfBoostChunkAmount) == 0x130,
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout3, mfBoostChunkAmount) == 0x130),
                       "Prepare @0x822C16F4 stfs f0, 0x130(r31)");
-        static_assert(offsetof(BoostBurnout3, miBoostLevel) == 0x134,
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout3, miBoostLevel) == 0x134),
                       "Prepare @0x822C16C8 stw r10(=2), 0x134(r31); UpdateMaxBoost @0x822C1CA0 lwz");
-        static_assert(offsetof(BoostBurnout3, miOldBoostLevel) == 0x138,
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout3, miOldBoostLevel) == 0x138),
                       "Prepare @0x822C16CC stw r30(=0), 0x138(r31); OnStartCrashPlay @0x822A6AC8");
-        static_assert(offsetof(BoostBurnout3, mfTimeBoosting) == 0x13C,
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout3, mfTimeBoosting) == 0x13C),
                       "Prepare @0x822C16F8 stfs f0, 0x13C(r31); ApplyUpdate @0x822C19A0 lfs");
-        static_assert(sizeof(BoostBurnout3) == 0x140,
+        CGS_STATIC_ASSERT((sizeof(BoostBurnout3) == 0x140),
                       "last member is a 4-byte f32 at +0x13C and alignof is 16 (inherited); "
                       "no offset in any of this TU's 20 asm listings exceeds +0x13C");
-        static_assert(alignof(BoostBurnout3) == 16,
+        CGS_STATIC_ASSERT((__alignof(BoostBurnout3) == 16),
                       "inherited from BoostStrategy's Vector3 member");
-        static_assert(KI_BOOST_LEVELS == 3,
+        CGS_STATIC_ASSERT((KI_BOOST_LEVELS == 3),
                       "OnTakedown @0x822A6650 cmpwi cr6, r11, 3");
     }
 };

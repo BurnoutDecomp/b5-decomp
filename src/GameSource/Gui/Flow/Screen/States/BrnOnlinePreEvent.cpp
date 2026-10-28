@@ -94,7 +94,7 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
     }
 
     // ================================================================================

@@ -101,12 +101,12 @@ namespace CgsFileSystem
         miPendingOperationCount = 0;
         miNextPriority          = miNormalPriority;
         muCacheId               = 0xFFFFFFFFu;   // -1: no disk-cache entry
-        mpDEBUGCacheEntry       = nullptr;
+        mpDEBUGCacheEntry       = 0;
 
         ResetStreamBlocks();
 
         if (lbPrintToLog)
-            CGS_ASSERT(mpFileSystem != nullptr, "mpFileSystem\n");
+            CGS_ASSERT(mpFileSystem != 0, "mpFileSystem\n");
 
         GetDeviceManager()->Open(macFileName, 1, &StreamDeviceDiskRead::OpenCallback, this, miHighPriority);
 
@@ -230,7 +230,7 @@ namespace CgsFileSystem
 
         u32   luBytesRead = 0;
         u32   luRemaining = luAmount;
-        void* lpData      = nullptr;
+        void* lpData      = 0;
         u32   luAvailable = 0;
 
         if (StartAsyncReadInternal(&lpData, &luAvailable))
@@ -440,7 +440,7 @@ namespace CgsFileSystem
         CGS_ASSERT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
         CGS_ASSERT(!mbIsOutputing, "Already reading data\n");
 
-        *lppData   = nullptr;
+        *lppData   = 0;
         *lpuAmount = 0;
 
         if (miBlocksUsed == 0 || mbWaitingToSeek)
@@ -576,7 +576,7 @@ namespace CgsFileSystem
 
             if (muCacheId != 0xFFFFFFFFu)
             {
-                CGS_ASSERT(mpFileSystem != nullptr, "mpFileSystem\n");
+                CGS_ASSERT(mpFileSystem != 0, "mpFileSystem\n");
                 // (X360 debug disk-cache-entry bookkeeping here compiled to dead loads with no
                 // observable store in ARTIST — nothing to reproduce.)
             }
@@ -627,7 +627,7 @@ namespace CgsFileSystem
         {
             meStatus = E_STATUS_CLOSED;
             if (muCacheId != 0xFFFFFFFFu)
-                CGS_ASSERT(mpFileSystem != nullptr, "mpFileSystem\n");
+                CGS_ASSERT(mpFileSystem != 0, "mpFileSystem\n");
         }
 
         --miPendingOperationCount;
@@ -639,7 +639,7 @@ namespace CgsFileSystem
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
         lpStream->OnOpen(liResult, lHandle, luSize, lpContext);
-        CGS_ASSERT(lpContext != nullptr, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, "Invalid stream\n");
     }
 
     // ReadCallback @ 0x82900DA8 — device read-completion trampoline: the context is the block; its
@@ -648,8 +648,8 @@ namespace CgsFileSystem
     {
         ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
 
-        CGS_ASSERT(lpContext != nullptr, "Invalid stream block\n");
-        CGS_ASSERT(lpBlock->mpOwner != nullptr, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, "Invalid stream block\n");
+        CGS_ASSERT(lpBlock->mpOwner != 0, "Invalid stream\n");
 
         lpBlock->mpOwner->OnRead(liResult, lHandle, luSize, lpContext);
     }
@@ -660,7 +660,7 @@ namespace CgsFileSystem
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
 
-        CGS_ASSERT(lpContext != nullptr, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, "Invalid stream\n");
         lpStream->OnClose(liResult, lHandle, luSize, lpContext);
     }
 

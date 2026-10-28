@@ -89,8 +89,8 @@ public:
         GetRandom()->SetSeed(luSeed);
     }
 
-    const GameStateModuleIO::FlybyData* CalculateFlybyRivals() override;        // 0x82391FA8
-    s32  CalculateNumberOfCarsInFlyby() override;                              // 0x82357F08
+    const GameStateModuleIO::FlybyData* CalculateFlybyRivals() ;        // 0x82391FA8
+    s32  CalculateNumberOfCarsInFlyby() ;                              // 0x82357F08
     void CalculateOnlineRivals();                                              // 0x823861C0
 
     void CalculateRivalryRating(FlybyManager::RivalRating* lpRating);          // 0x8236DAE0

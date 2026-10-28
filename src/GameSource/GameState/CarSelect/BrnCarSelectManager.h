@@ -4,7 +4,7 @@
 #include "BrnCommonTypes.h"   // CgsID
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // GameStateModuleIO::EPlayerScoringIndex (committed home)
 
-#include <cstdint>            // uintptr_t
+#include "types.hpp"            // uintptr_t
 
 // Owning header for BrnGameState::CarSelectManager -- the junkyard car-select state machine (the
 // player drove into a junkyard; this runs the car-swap / car-unlock-sequence / car-modification

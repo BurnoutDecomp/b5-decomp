@@ -251,7 +251,7 @@ namespace BrnNetworkModuleIO
     void PostSimulationInputBuffer::SetActiveRaceCarInterface(
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface)
     {
-        CGS_ASSERT(lpInterface != nullptr, "lpInterface");
+        CGS_ASSERT(lpInterface != 0, "lpInterface");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         std::memcpy(static_cast<void*>(&mActiveRaceCarInterface), lpInterface, sizeof(mActiveRaceCarInterface));
     }
@@ -309,7 +309,7 @@ namespace BrnNetworkModuleIO
     void OutputBuffer::Construct()
     {
         // The game-event queue lives in size-exact storage (see the header banner).
-        static_assert(sizeof(BrnGameState::GameStateModuleIO::GameEventQueue) == sizeof(maGameEventQueueStorage),
+        CGS_STATIC_ASSERT((sizeof(BrnGameState::GameStateModuleIO::GameEventQueue) == sizeof(maGameEventQueueStorage)),
                       "GameEventQueue must fill its storage exactly");
         BrnGameState::GameStateModuleIO::GameEventQueue& lGameEventQueue =
             *reinterpret_cast<BrnGameState::GameStateModuleIO::GameEventQueue*>(&maGameEventQueueStorage[0]);

@@ -60,7 +60,7 @@ IRMov* IRMov::MakeIRMov(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRMov));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRMov(aiOpcode, apContext);
 }
@@ -71,7 +71,7 @@ IRMov* IRMov::NewInst(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRMov));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRMov(aiOpcode, apContext);
 }

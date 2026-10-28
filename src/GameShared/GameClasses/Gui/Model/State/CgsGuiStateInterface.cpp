@@ -16,7 +16,7 @@ namespace CgsGui
     // @ 0x8240E3E0
     GuiAccessPointers* StateInterface::GetAccessPointers()
     {
-        CGS_ASSERT(mpAccessPointers != nullptr, "mpAccessPointers != NULL");
+        CGS_ASSERT(mpAccessPointers != 0, "mpAccessPointers != NULL");
         return mpAccessPointers;
     }
 
@@ -26,7 +26,7 @@ namespace CgsGui
     // First out-of-line consumer on this host: the mounted BrnMapManager.cpp.
     rw::IResourceAllocator* StateInterface::GetAllocator()
     {
-        CGS_ASSERT(mpAllocator != nullptr, "mpAllocator != NULL");   // h:337
+        CGS_ASSERT(mpAllocator != 0, "mpAllocator != NULL");   // h:337
         return mpAllocator;
     }
 
@@ -37,7 +37,7 @@ namespace CgsGui
     // exact assert sequence.
     CgsLanguage::LanguageManager* StateInterface::GetLanguageManager()
     {
-        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != nullptr,
+        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != 0,
                    "GetAccessPointers()->mpLanguageManager != NULL");
         return GetAccessPointers()->mpLanguageManager;
     }
@@ -46,8 +46,8 @@ namespace CgsGui
     // through the access pointers.
     bool StateInterface::IsUsingMetricUnits()
     {
-        CGS_ASSERT(mpAccessPointers != nullptr, "mpAccessPointers != NULL");
-        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != nullptr,
+        CGS_ASSERT(mpAccessPointers != 0, "mpAccessPointers != NULL");
+        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != 0,
                    "GetAccessPointers()->mpLanguageManager != NULL");
         return GetAccessPointers()->mpLanguageManager->IsUsingMetricUnits();
     }
@@ -83,7 +83,7 @@ namespace CgsGui
     void StateInterface::RequestResource(const char* lpacFileName, ResourceRequestTypes leType,
                                          s32 liUserData, ResourceRequestLoadUnload leLoadUnload)
     {
-        CGS_ASSERT(lpacFileName != nullptr, "Invalid file to load in StateInterface::RequestResource");
+        CGS_ASSERT(lpacFileName != 0, "Invalid file to load in StateInterface::RequestResource");
 
         GuiEventLoadRequest lEvent;
         lEvent.Construct(leType, leLoadUnload, lpacFileName, static_cast<u32>(liUserData));
@@ -93,7 +93,7 @@ namespace CgsGui
     // @ 0x82846F90 - install the event observer (the X360 asserts on a null pointer).
     void StateInterface::SetEventObserver(CgsGui::EventObserver* lpObserver)
     {
-        CGS_ASSERT(lpObserver != nullptr,
+        CGS_ASSERT(lpObserver != 0,
                    "Invalid event observer pointer in StateInterface::SetEventObserver");
         mpObserver = lpObserver;
     }
@@ -102,9 +102,9 @@ namespace CgsGui
     // VariableEventQueue base so the inline Construct is used, not the GuiEventQueueBase template decl.)
     void StateInterface::Construct()
     {
-        mpObserver = nullptr;
-        mpAccessPointers = nullptr;
-        mpAllocator = nullptr;
+        mpObserver = 0;
+        mpAccessPointers = 0;
+        mpAllocator = 0;
         static_cast<CgsModule::VariableEventQueue<65536, 16>&>(mOutEventQueue).Construct();
     }
 

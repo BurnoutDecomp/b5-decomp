@@ -26,7 +26,7 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     void PrimitivePairListBuilder::Construct()
     {
-        mpaDataStream   = nullptr;   // +0x00  (stw of 0)
+        mpaDataStream   = 0;   // +0x00  (stw of 0)
         mu16UsedData    = 0;         // +0x04  (sth of 0)
         mu16NumTests    = 0;         // +0x06  (sth of 0)
         mu16MaxDataSize = 0;         // +0x08  (sth of 0)
@@ -45,7 +45,7 @@ namespace CgsCollision
         const s32 liRequiredMemory = 96 * lu16NumPrimitives;
 
         u8* lpMemory = static_cast<u8*>(lpMalloc->Malloc(liRequiredMemory));
-        CGS_ASSERT(lpMemory != nullptr, "lpMemory");
+        CGS_ASSERT(lpMemory != 0, "lpMemory");
         CGS_ASSERT(lpMalloc->GetAlignment() >= 16, "lpMalloc->GetAlignment() >= 16");
 
         mpaDataStream   = lpMemory;

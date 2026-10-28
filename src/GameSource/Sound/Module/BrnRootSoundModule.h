@@ -99,7 +99,7 @@ namespace Module
 
         // 0x826AF350 -- bring the module to the constructed state (see the .cpp for the
         // step-by-step X360 mapping).
-        void Construct() override;
+        void Construct() ;
 
         // 0x826FABF8 (vtable +64). The loading-screen load entry -- DWARF-true signature
         // (BrnRootSoundModule.cpp:249):

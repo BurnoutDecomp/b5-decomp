@@ -62,7 +62,7 @@ void BrnTraffic::UpdateVehiclesJobParams::Construct(
     mEffectRand                      = *lpEffectRand;
 
     mfCrashSliderFinalValue          = lfCrashSliderFinalValue;
-    mpOutNewPhysicalRequests         = nullptr;
+    mpOutNewPhysicalRequests         = 0;
 
     miLocalPlayerIndex               = static_cast<s8>(leLocalPlayerIndex);
     // The X360 stores the whole 16-byte VMX register (stvx128 v127 @ +0x80); the source

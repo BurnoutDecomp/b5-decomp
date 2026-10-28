@@ -62,7 +62,7 @@ struct AISection
         f32 x;
         f32 y;
     };
-    static_assert(sizeof(Vector2) == 8, "AISection::Vector2 is the packed 2-float corner type");
+    CGS_STATIC_ASSERT((sizeof(Vector2) == 8), "AISection::Vector2 is the packed 2-float corner type");
 
     // X360 (4-byte pointer) offsets in the comments; the host offsets are pinned by the
     // static_asserts below, and every member is reached BY NAME.
@@ -199,20 +199,20 @@ struct SectionResetPair
 // ---- host layout contract with tools/assets/bundles/lane_transcode.py ---------------
 // (Portal / BoundaryLine are pinned in their own owning headers,
 //  GameSource/World/AI/BrnAIPortal.h and BrnAIBoundaryLine.h.)
-static_assert(offsetof(AISection, mpaCorners)  == 0x10, "AISection::mpaCorners");
-static_assert(offsetof(AISection, mId)         == 0x18, "AISection::mId");
-static_assert(offsetof(AISection, mx8Flags)    == 0x23, "AISection::mx8Flags");
-static_assert(sizeof(SectionResetPair) == 8, "SectionResetPair stride");
-static_assert(offsetof(AISectionsData, mafSectionMinSpeeds) == 0x10, "AISectionsData::mafSectionMinSpeeds");
-static_assert(offsetof(AISectionsData, muNumSections)       == 0x38, "AISectionsData::muNumSections");
+CGS_STATIC_ASSERT((offsetof(AISection, mpaCorners)  == 0x10), "AISection::mpaCorners");
+CGS_STATIC_ASSERT((offsetof(AISection, mId)         == 0x18), "AISection::mId");
+CGS_STATIC_ASSERT((offsetof(AISection, mx8Flags)    == 0x23), "AISection::mx8Flags");
+CGS_STATIC_ASSERT((sizeof(SectionResetPair) == 8), "SectionResetPair stride");
+CGS_STATIC_ASSERT((offsetof(AISectionsData, mafSectionMinSpeeds) == 0x10), "AISectionsData::mafSectionMinSpeeds");
+CGS_STATIC_ASSERT((offsetof(AISectionsData, muNumSections)       == 0x38), "AISectionsData::muNumSections");
 
 class AISectionsResourceType : public CgsResource::Type
 {
 public:
-    uint32_t                        GetTypeID() const override;
-    void                            FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    uint32_t                        GetTypeID() const ;
+    void                            FixDown(void* lpResource, const rw::Resource& lrResource) const ;
+    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
 };
 }
 

@@ -18,7 +18,7 @@ namespace BrnWorld
 
     void BoostDebugComponent::Destruct()
     {
-        if (mpRaceCarEntityModule == nullptr)
+        if (mpRaceCarEntityModule == 0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
@@ -27,7 +27,7 @@ namespace BrnWorld
                 68);
             CgsDev::Assert::EndAssert();
         }
-        mpRaceCarEntityModule = nullptr;
+        mpRaceCarEntityModule = 0;
         // ARTIST822F3E18 calls the empty ICF body8284CB38. The current
         // generic DebugComponent::Destruct also clears mbActive, which this
         // original Boost destruction path does not store.

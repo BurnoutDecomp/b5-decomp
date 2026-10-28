@@ -193,12 +193,12 @@ namespace BrnGraphics
         const f32 GetOverriddenSunBrightness();
 
     protected:
-        const char* GetName() const override;
-        const char* GetPath() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
+        void OnActivate() ;
 
     private:
-        ::BrnRendererModule* mpRendererModule = nullptr;
+        ::BrnRendererModule* mpRendererModule = 0;
         f32 mfSunFlareOverrideBrightness = 0.3f;
         bool mbSunFlareOverrideBrightness = false;
     };
@@ -801,21 +801,21 @@ inline void BrnRendererModule::ConstructRenderSwitches()
 // job. The jobs are NAMED later, by the setup paths that give them their code and data.
 // Job has no default constructor, so each member is listed here in declaration order.
 inline BrnRendererModule::BrnRendererModule()
-    : maObjectToMeshJob{ EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                        EA::Jobs::Job(nullptr) }
-    , maShadowMapSortJob{ EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                          EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr) }
-    , maEnvmapSortJobs{ EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                        EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr) }
-    , mPreZSortJob(nullptr)
-    , mWorldOpaqueSortJob(nullptr)
-    , mCarOpaqueSortJob(nullptr)
-    , mWorldTransparentSortJob(nullptr)
-    , mCarTransparentSortJob(nullptr)
+    : maObjectToMeshJob{ EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                        EA::Jobs::Job(0) }
+    , maShadowMapSortJob{ EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                          EA::Jobs::Job(0), EA::Jobs::Job(0) }
+    , maEnvmapSortJobs{ EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0),
+                        EA::Jobs::Job(0), EA::Jobs::Job(0), EA::Jobs::Job(0) }
+    , mPreZSortJob(0)
+    , mWorldOpaqueSortJob(0)
+    , mCarOpaqueSortJob(0)
+    , mWorldTransparentSortJob(0)
+    , mCarTransparentSortJob(0)
 {
     mePrepareStage = eRendererPrepareStart;
     meReleaseStage = eRendererReleaseStart;

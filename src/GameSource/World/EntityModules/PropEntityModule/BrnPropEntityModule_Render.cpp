@@ -146,9 +146,9 @@ static f32 sfPropCircleDrawDistance = 2000.0f;
 // =============================================================================
 static void _AssertRenderLayout()
 {
-    static_assert( offsetof( PropEntityInstance, mWorldTransform ) == 0,
+    CGS_STATIC_ASSERT(( offsetof( PropEntityInstance, mWorldTransform ) == 0),
                    "PropEntityInstance::mWorldTransform must be the first member" );
-    static_assert( offsetof( PropPartEntityInstance, mWorldTransform ) == 0,
+    CGS_STATIC_ASSERT(( offsetof( PropPartEntityInstance, mWorldTransform ) == 0),
                    "PropPartEntityInstance::mWorldTransform must be the first member" );
 }
 

@@ -42,7 +42,7 @@ typedef struct NetGamePacketT
     u8 trailer[12];                                       // +0x4B8
 } NetGamePacketT;                                         // 0x4C4 (1220) bytes
 
-static_assert(sizeof(NetGamePacketT) == 1220, "NetGamePacketT is the 1220-byte packet block");
+CGS_STATIC_ASSERT((sizeof(NetGamePacketT) == 1220), "NetGamePacketT is the 1220-byte packet block");
 
 // Link statistics (NetGameLinkStatus). The per-second rates are recomputed once a second from
 // the bytes and packets sent since the previous sample.

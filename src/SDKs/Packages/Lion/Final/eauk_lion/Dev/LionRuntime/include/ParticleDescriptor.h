@@ -195,17 +195,17 @@ public:
 // (`*(a2 + 20) += 96`). With 32-bit links the host record is the same 96 bytes, and the
 // eight offsets Relocate @0x8290F488 rebases (asm word indices 14, 16, 17, 19, 20, 21, 22,
 // 23) are checked one by one so a future member insertion fails the gate, not the game.
-static_assert(sizeof(cParticleDescriptor) == 96,
+CGS_STATIC_ASSERT((sizeof(cParticleDescriptor) == 96),
               "cParticleDescriptor is the 96-byte serialised record "
               "(cParticleDescriptor::Serialise @0x8290F640 DataStore(this, 96))");
-static_assert(offsetof(cParticleDescriptor, mFlags)          == 0x20, "Relocate/asm word 8");
-static_assert(offsetof(cParticleDescriptor, mShape)          == 0x2C, "GetRequiredBucketType");
-static_assert(offsetof(cParticleDescriptor, mpName)          == 0x38, "Relocate asm word 14");
-static_assert(offsetof(cParticleDescriptor, mpBehaviours)    == 0x40, "Relocate asm word 16");
-static_assert(offsetof(cParticleDescriptor, mpBehaviourTemp) == 0x44, "Relocate asm word 17");
-static_assert(offsetof(cParticleDescriptor, mpBehaviour)     == 0x48, "Relocate asm word 18");
-static_assert(offsetof(cParticleDescriptor, mpMaterial)      == 0x4C, "Relocate asm word 19");
-static_assert(offsetof(cParticleDescriptor, mpDef)           == 0x50, "Relocate asm word 20");
-static_assert(offsetof(cParticleDescriptor, mpNext)          == 0x54, "Relocate asm word 21");
-static_assert(offsetof(cParticleDescriptor, mpParent)        == 0x58, "Relocate asm word 22");
-static_assert(offsetof(cParticleDescriptor, mpChild)         == 0x5C, "Relocate asm word 23");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mFlags)          == 0x20), "Relocate/asm word 8");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mShape)          == 0x2C), "GetRequiredBucketType");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpName)          == 0x38), "Relocate asm word 14");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpBehaviours)    == 0x40), "Relocate asm word 16");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpBehaviourTemp) == 0x44), "Relocate asm word 17");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpBehaviour)     == 0x48), "Relocate asm word 18");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpMaterial)      == 0x4C), "Relocate asm word 19");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpDef)           == 0x50), "Relocate asm word 20");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpNext)          == 0x54), "Relocate asm word 21");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpParent)        == 0x58), "Relocate asm word 22");
+CGS_STATIC_ASSERT((offsetof(cParticleDescriptor, mpChild)         == 0x5C), "Relocate asm word 23");

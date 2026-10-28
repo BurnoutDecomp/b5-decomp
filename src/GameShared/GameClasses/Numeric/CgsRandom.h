@@ -115,7 +115,7 @@ struct PhysicsControl;
 
 namespace CgsNumeric
 {
-class alignas(16) Random
+class CGS_ALIGN(16) Random
 {
     // Additive grant only -- does not change Random's own layout or method
     // semantics. The randomisers use their own Vector-slot indexing scheme
@@ -228,8 +228,8 @@ private:
     }
 };
 
-static_assert(sizeof(Random) == 0x30, "CgsNumeric::Random layout drift");
-static_assert(alignof(Random) == 16,
+CGS_STATIC_ASSERT((sizeof(Random) == 0x30), "CgsNumeric::Random layout drift");
+CGS_STATIC_ASSERT((__alignof(Random) == 16),
               "CgsNumeric::Random is 16-aligned (the DWARF union's VectorIntrinsic[2] member); "
               "at align 8 an embedder can seat it at +8 and shift everything behind it");
 }

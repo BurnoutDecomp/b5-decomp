@@ -56,7 +56,7 @@ namespace CgsMemory
         // The implicit constructor forwards null to the contained Job in both
         // ARTIST callers: ReplayModule 827E041C..042C and PoolModule
         // 827E08AC..08BC. Execute supplies "Relocator" when the job is submitted.
-        Relocator() : mJob(nullptr) {}
+        Relocator() : mJob(0) {}
 
         // Reset both running latches. Returns this (the console's copy-construct-style return).
         Relocator* Construct();

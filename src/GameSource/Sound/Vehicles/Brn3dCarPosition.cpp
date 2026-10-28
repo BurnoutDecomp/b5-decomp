@@ -38,7 +38,7 @@ namespace Vehicles
 
 Car3DControl::Car3DControl()
     : BrnSound::Logic::Brn3DEffectControl()
-    , mpPhysicsControl(nullptr)
+    , mpPhysicsControl(0)
 {
 }
 
@@ -50,7 +50,7 @@ s32 Car3DControl::GetController(s32 aiIndex)
 
 void Car3DControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr, "lpEffectControl");
+    CGS_ASSERT(apController != 0, "lpEffectControl");
     if (!apController)
         return;
 
@@ -68,7 +68,7 @@ bool Car3DControl::Prepare(CgsSound::Logic::State* apState)
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     CgsSound::Playback::Environment* lpEnvironment =
         lpModule->GetPlaybackModule().GetEnvironment();
-    CGS_ASSERT(lpEnvironment != nullptr, "mpObject");
+    CGS_ASSERT(lpEnvironment != 0, "mpObject");
     mbIsStereo = lpEnvironment &&
         lpEnvironment->GetAudioMode() ==
             CgsSound::Playback::Environment::E_AUDIO_MODE_STEREO;
@@ -85,13 +85,13 @@ bool Car3DControl::Attach()
 
 void Car3DControl::UpdateParams(f32 afDeltaTime)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 
     const BrnSound::Vehicles::VehicleData* lpVehiclePhysicsData =
         mpPhysicsControl->GetRawPhysicsData();
-    CGS_ASSERT(lpVehiclePhysicsData != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(lpVehiclePhysicsData != 0, "mpVehiclePhysicsData");
     if (!lpVehiclePhysicsData)
         return;
 

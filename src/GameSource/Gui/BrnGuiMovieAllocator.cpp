@@ -3,7 +3,7 @@
 
 namespace BrnGui
 {
-    MovieAllocator::~MovieAllocator() = default;
+    MovieAllocator::~MovieAllocator() {}
 
     void MovieAllocator::Construct()
     {
@@ -54,9 +54,9 @@ namespace BrnGui
     // region, including movie texture storage, belongs to the enclosing arena.
     void MovieAllocator::DoFree(const rw::Resource& lrResource)
     {
-        CGS_ASSERT(lrResource.m_baseResources[2] == nullptr,
+        CGS_ASSERT(lrResource.m_baseResources[2] == 0,
                    "lResource.GetPhysicalMemoryResource() == NULL");
-        CGS_ASSERT(lrResource.m_baseResources[0] != nullptr, "lResource.GetMemoryResource()");
+        CGS_ASSERT(lrResource.m_baseResources[0] != 0, "lResource.GetMemoryResource()");
         mMainAllocator.Free(lrResource.m_baseResources[0]);
     }
 

@@ -47,7 +47,7 @@ namespace Gen
         static const u64 KU_JUNKYARDLOCATORS_CLASS_KEY = 0x6BE263B8CE99D5A3ULL;
 
         // Construct over the junkyardlocators collection, optionally owned by lpOwner.
-        explicit junkyardlocators(void* lpOwner = nullptr);
+        explicit junkyardlocators(void* lpOwner = 0);
         // The X360 ctor's r4 IS the collection key (FindCollection(class, key));
         // EffectsModule::Prepare @0x8229E690 hands it StringToKey("601979"). Additive.
         junkyardlocators(u64 luCollectionKey, void* lpOwner);

@@ -102,18 +102,18 @@ public:
     // @ 0x829809B8 -- drop the process-wide active-instance counter (atomic) and
     // shut the camera down. The compiler emits the two vtable restamps (+0 and +4)
     // and the base-dtor chaining around this body.
-    ~CXCamVideo() override;
+    ~CXCamVideo() ;
 
     // @ 0x82980A80 -- forward the interface Release to the CObjectRefCount base
     // subobject (the X360 body is the +4 this-adjusting thunk around
     // CObjectRefCount::Release).
-    int Release() override;
+    int Release() ;
 
     // @ 0x82980BB0 -- issue an asynchronous camera frame read. Gates on camera
     // readiness / capture state / minimum buffer size, grabs an overlap slot and
     // calls XUsbcamReadFrame; writes the resulting status to *lpStatus and returns
     // it (returning the overlap slot unless the read went pending).
-    int ReadFrame(XCamFrameBuffer* lpFrame, int* lpStatus) override;
+    int ReadFrame(XCamFrameBuffer* lpFrame, int* lpStatus) ;
 };
 
 } // namespace XCAM

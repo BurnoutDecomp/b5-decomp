@@ -25,9 +25,9 @@ namespace BrnReplays
         s32 miNumSerialisers;
     };
 
-    static_assert(sizeof(FrunkSerialiserEntry) == 8, "original frunk entry stride");
-    static_assert(sizeof(FrunkHeader) == 32, "ARTIST frunk header size");
-    static_assert(offsetof(FrunkHeader, mxFlags) == 0x10, "flags at +10");
-    static_assert(offsetof(FrunkHeader, mfFrameTime) == 0x14, "time at +14");
-    static_assert(offsetof(FrunkHeader, miNumSerialisers) == 0x18, "count at +18");
+    CGS_STATIC_ASSERT((sizeof(FrunkSerialiserEntry) == 8), "original frunk entry stride");
+    CGS_STATIC_ASSERT((sizeof(FrunkHeader) == 32), "ARTIST frunk header size");
+    CGS_STATIC_ASSERT((offsetof(FrunkHeader, mxFlags) == 0x10), "flags at +10");
+    CGS_STATIC_ASSERT((offsetof(FrunkHeader, mfFrameTime) == 0x14), "time at +14");
+    CGS_STATIC_ASSERT((offsetof(FrunkHeader, miNumSerialisers) == 0x18), "count at +18");
 }

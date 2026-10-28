@@ -23,7 +23,7 @@
 #include "SDKs/EATech/include/Apt/AptTarget.h"             // gpAptTarget->mpLinker (off_8324E574+0x20)
 #include "SDKs/EATech/include/Apt/AptLinker.h"             // AptLinker::Load (the getURL .swf arm)
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
 // mpStack, dword_8324E760 = its mnStackTop). Storage is defined in AptGlobals.cpp;
@@ -89,7 +89,7 @@ bool isNaN(AptValue* pValue)
 
         if (n > 2 && p[0] == '0' && p[1] == 'x')
         {
-            char* pEnd = nullptr;
+            char* pEnd = 0;
             (void)strtol(p, &pEnd, 16);
             return *pEnd != 0;
         }

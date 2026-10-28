@@ -44,7 +44,7 @@ namespace BrnNetwork
     void LiveRevengeManager::Construct(BrnNetworkModule* lpNetworkModule)
     {
         mbAreWeInOnlineGame  = false;
-        mpLiveRevengeProfile = nullptr;
+        mpLiveRevengeProfile = 0;
         miNumberOfTopRivals  = 0;
 
         mTakedownEventQueue.Construct();
@@ -98,9 +98,9 @@ namespace BrnNetwork
         mpLiveRevengeProfile->Clear();
         mpAllocator->Free(mpLiveRevengeProfile);
 
-        mpLiveRevengeProfile = nullptr;
-        mpAllocator          = nullptr;
-        mpNetworkManager     = nullptr;
+        mpLiveRevengeProfile = 0;
+        mpAllocator          = 0;
+        mpNetworkManager     = 0;
         ResetRevengeTableMappings();
 
         miNumberOfTopRivals = 0;
@@ -116,8 +116,8 @@ namespace BrnNetwork
     void LiveRevengeManager::Destruct()
     {
         mbAreWeInOnlineGame  = false;
-        mpLiveRevengeProfile = nullptr;
-        mpAllocator          = nullptr;
+        mpLiveRevengeProfile = 0;
+        mpAllocator          = 0;
 
         miNumberOfTopRivals = 0;
         meLiveRevengeUploadStatus          = E_LIVE_REVENGE_UPLOAD_STATUS_IDLE;
@@ -409,7 +409,7 @@ namespace BrnNetwork
                 }
                 else
                 {
-                    CGS_ASSERT(mpNetworkManager->GetPlayerManager()->GetPlayerByID(lpPlayerMenuData->mMarkedManID) == nullptr,
+                    CGS_ASSERT(mpNetworkManager->GetPlayerManager()->GetPlayerByID(lpPlayerMenuData->mMarkedManID) == 0,
                                "mpNetworkManager->GetPlayerManager()->GetPlayerByID( lpPlayerMenuData->mMarkedManID ) == NULL");
                 }
             }
@@ -651,7 +651,7 @@ namespace BrnNetwork
                 return &maPlayerToTableIndexData[liIndex];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // Claim a free slot for the player, construct its sync messages, and flag the row for
@@ -724,7 +724,7 @@ namespace BrnNetwork
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
             CgsDev::Assert::EndAssert();
-            return nullptr;
+            return 0;
         }
 
         CGS_ASSERT(lpEntry->miRevengeTableIndex >= 0, "lpEntry->miRevengeTableIndex >= 0");

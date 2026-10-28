@@ -129,7 +129,7 @@ namespace BrnStreetData
 // By-value enum param of the declare-only OnPlayerHitsRival. Opaque-enum forward declaration with
 // the committed underlying type (BrnVehicleConstants.h: `enum EImpactType : s32`) so the keystone
 // can name it by value without pulling the physics-constants header in.
-namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
+namespace BrnPhysics { namespace Vehicle { enum EImpactType ; } }
 
 namespace BrnGameState
 {

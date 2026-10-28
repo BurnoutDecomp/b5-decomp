@@ -67,16 +67,16 @@ namespace BrnGui
         // host build yet; keep the typed input path independently reviewable.
         void UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
 
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
         // Return the singleton instance pointer, asserting it is non-null (the assert is
         // non-fatal; the pointer is returned either way).
         static GuiDebugComponent* GetSingletonPtr();
 
     protected:
-        const char* GetName() const override;
-        const char* GetPath() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
+        void OnActivate() ;
 
         void DrawDebugFrame1280(CgsDev::Debug2DImmediateRender* lpRender,
             Vector4 lvFrame, CgsDev::RGBA lColour, f32 lfBorderSize);

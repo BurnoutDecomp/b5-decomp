@@ -25,7 +25,7 @@
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
 #include <cmath>     // std::sqrt / std::fabs (the vrsqrtefp magnitude refinements + the skin self-check)
-#include <cstdint>   // uintptr_t (the console's 16-byte alignment assert on the skin record)
+#include "types.hpp"   // uintptr_t (the console's 16-byte alignment assert on the skin record)
 #include <cstdlib>   // getenv/atoi -- [DIAG] BRN_DEFORM_TRACE only, host-side
 
 // [DIAG] the host-side present counter, for EXACT frame correlation -- the same extern the
@@ -302,7 +302,7 @@ namespace Deformation
         // DeformationJointSpec accessors below; no raw-offset access needed.
 
         // Broadcast a scalar into all four lanes (the vspltw idiom).
-        inline Vector4 Splat(f32 lfValue) { return Vector4{ lfValue, lfValue, lfValue, lfValue }; }
+        inline Vector4 Splat(f32 lfValue) { { const Vector4 lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; } }
 
         // ------------------------------------------------------------------------------------------
         // The sine/cosine pair UpdateJoint's hinge rotation is built from.
@@ -587,7 +587,7 @@ namespace Deformation
         // additionally picks up veh.wAxis.
         const auto lTransformDirection = [&lVehicleTransform](const Vector3& lrLocal) -> Vector3
         {
-            return Vector3{
+            { const Vector3 lResult = {
                 lVehicleTransform.xAxis.x * lrLocal.x + lVehicleTransform.yAxis.x * lrLocal.y
                     + lVehicleTransform.zAxis.x * lrLocal.z,
                 lVehicleTransform.xAxis.y * lrLocal.x + lVehicleTransform.yAxis.y * lrLocal.y
@@ -595,14 +595,14 @@ namespace Deformation
                 lVehicleTransform.xAxis.z * lrLocal.x + lVehicleTransform.yAxis.z * lrLocal.y
                     + lVehicleTransform.zAxis.z * lrLocal.z,
                 0.0f
-            };
+            }; return lResult; }
         };
         const auto lTransformPoint = [&lVehicleTransform, &lTransformDirection](const Vector3& lrLocal) -> Vector3
         {
             const Vector3 lRotated = lTransformDirection(lrLocal);
-            return Vector3{ lRotated.x + lVehicleTransform.wAxis.x,
+            { const Vector3 lResult = { lRotated.x + lVehicleTransform.wAxis.x,
                             lRotated.y + lVehicleTransform.wAxis.y,
-                            lRotated.z + lVehicleTransform.wAxis.z, 0.0f };
+                            lRotated.z + lVehicleTransform.wAxis.z, 0.0f }; return lResult; }
         };
 
         Matrix44Affine lWorldTransform;
@@ -1451,12 +1451,12 @@ namespace Deformation
         // Transform each oriented-basis row + the box centre through the body transform (the vmaddfp
         // cascade with each mBBoxOrientation row's lanes broadcast through the body rows).
         auto lTransformDir = [&](const Vector3& lDir) -> Vector3 {
-            return Vector3{
+            { const Vector3 lResult = {
                 lBodyTransform.xAxis.x * lDir.x + lBodyTransform.yAxis.x * lDir.y + lBodyTransform.zAxis.x * lDir.z,
                 lBodyTransform.xAxis.y * lDir.x + lBodyTransform.yAxis.y * lDir.y + lBodyTransform.zAxis.y * lDir.z,
                 lBodyTransform.xAxis.z * lDir.x + lBodyTransform.yAxis.z * lDir.y + lBodyTransform.zAxis.z * lDir.z,
                 0.0f
-            };
+            }; return lResult; }
         };
         const Vector3 lWorldRight  = lTransformDir(mBBoxOrientation.xAxis);   // v26
         const Vector3 lWorldUp     = lTransformDir(mBBoxOrientation.yAxis);   // v27
@@ -1624,26 +1624,26 @@ namespace Deformation
         // Row-vector convention (the file-wide one, see Prepare): local.x*xAxis + local.y*yAxis + ...
         const auto lVehicleDirection = [&lVehicleTransform](const Vector3& lrLocal) -> Vector3
         {
-            return Vector3{
+            { const Vector3 lResult = {
                 lVehicleTransform.xAxis.x * lrLocal.x + lVehicleTransform.yAxis.x * lrLocal.y
                     + lVehicleTransform.zAxis.x * lrLocal.z,
                 lVehicleTransform.xAxis.y * lrLocal.x + lVehicleTransform.yAxis.y * lrLocal.y
                     + lVehicleTransform.zAxis.y * lrLocal.z,
                 lVehicleTransform.xAxis.z * lrLocal.x + lVehicleTransform.yAxis.z * lrLocal.y
                     + lVehicleTransform.zAxis.z * lrLocal.z,
-                0.0f };
+                0.0f }; return lResult; }
         };
         // The transposed 3x3 (the six vmrgh/vmrglw): {dot(xAxis,p), dot(yAxis,p), dot(zAxis,p)}.
         const auto lVehicleInverseDirection = [&lVehicleTransform](const Vector3& lrWorld) -> Vector3
         {
-            return Vector3{
+            { const Vector3 lResult = {
                 lVehicleTransform.xAxis.x * lrWorld.x + lVehicleTransform.xAxis.y * lrWorld.y
                     + lVehicleTransform.xAxis.z * lrWorld.z,
                 lVehicleTransform.yAxis.x * lrWorld.x + lVehicleTransform.yAxis.y * lrWorld.y
                     + lVehicleTransform.yAxis.z * lrWorld.z,
                 lVehicleTransform.zAxis.x * lrWorld.x + lVehicleTransform.zAxis.y * lrWorld.y
                     + lVehicleTransform.zAxis.z * lrWorld.z,
-                0.0f };
+                0.0f }; return lResult; }
         };
 
         // ---- (3) rebuild the oriented box for the current pose ------------------------------------
@@ -1789,14 +1789,14 @@ namespace Deformation
 
         const auto lJointDirection = [&lJointRotationMatrix](const Vector3& lrLocal) -> Vector3
         {
-            return Vector3{
+            { const Vector3 lResult = {
                 lJointRotationMatrix.xAxis.x * lrLocal.x + lJointRotationMatrix.yAxis.x * lrLocal.y
                     + lJointRotationMatrix.zAxis.x * lrLocal.z,
                 lJointRotationMatrix.xAxis.y * lrLocal.x + lJointRotationMatrix.yAxis.y * lrLocal.y
                     + lJointRotationMatrix.zAxis.y * lrLocal.z,
                 lJointRotationMatrix.xAxis.z * lrLocal.x + lJointRotationMatrix.yAxis.z * lrLocal.y
                     + lJointRotationMatrix.zAxis.z * lrLocal.z,
-                0.0f };
+                0.0f }; return lResult; }
         };
 
         // The COM swung about the anchor: com' = joint - R*(joint - com).

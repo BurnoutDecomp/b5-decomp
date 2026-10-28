@@ -169,11 +169,11 @@ namespace BrnDirector
             if (mReceiverQueue.GetCount() < 1)
                 return false;
 
-            const CgsModule::Event* lpEvent = nullptr;
+            const CgsModule::Event* lpEvent = 0;
             s32                     liSize  = 0;
             mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
 
-            while (lpEvent != nullptr)
+            while (lpEvent != 0)
             {
                 // reinterpret_cast, not static_cast: CgsResource::Events::Event and
                 // CgsModule::Event are unrelated roots, and the receiver queue hands out the
@@ -188,7 +188,7 @@ namespace BrnDirector
                 mpTriggerData = lHandle;
                 sbTriggerResolved = (lHandle.mpResourceMemory != 0);
 
-                const CgsModule::Event* lpNext = nullptr;
+                const CgsModule::Event* lpNext = 0;
                 mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;
             }
@@ -209,11 +209,11 @@ namespace BrnDirector
             if (mReceiverQueue.GetCount() < 1)
                 return false;
 
-            const CgsModule::Event* lpEvent = nullptr;
+            const CgsModule::Event* lpEvent = 0;
             s32                     liSize  = 0;
             mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
 
-            CGS_ASSERT(lpEvent != nullptr, "lpEvent != NULL");
+            CGS_ASSERT(lpEvent != 0, "lpEvent != NULL");
             const BrnResource::GameDataIO::GetGameDataEvent* lpResponse =
                 static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>(lpEvent);
             CGS_ASSERT(lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST,
@@ -239,11 +239,11 @@ namespace BrnDirector
             if (mReceiverQueue.GetCount() < 1)
                 return false;
 
-            const CgsModule::Event* lpEvent = nullptr;
+            const CgsModule::Event* lpEvent = 0;
             s32                     liSize  = 0;
             mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
 
-            CGS_ASSERT(lpEvent != nullptr, "lpEvent != NULL");
+            CGS_ASSERT(lpEvent != 0, "lpEvent != NULL");
             const BrnResource::GameDataIO::GetGameDataEvent* lpResponse =
                 static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>(lpEvent);
             CGS_ASSERT(lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST,
@@ -456,7 +456,7 @@ namespace BrnDirector
             if (luNeighbour == 0xFFFFu)
                 break;
 
-            CGS_ASSERT(lpHull->mpaNeighbourData != nullptr, "mpaNeighbourData");
+            CGS_ASSERT(lpHull->mpaNeighbourData != 0, "mpaNeighbourData");
             CGS_ASSERT(luNeighbour < lpHull->muNumNeighbours, "luIndex < muNumNeighbours");
             const BrnTraffic::Neighbour* lpNeighbour = &lpHull->mpaNeighbourData[luNeighbour];
 
@@ -488,8 +488,8 @@ namespace BrnDirector
                                            Vector3* lpExtentsOut,
                                            Matrix44Affine* lpTransformOut) const
     {
-        CGS_ASSERT(lpExtentsOut  != nullptr, "lpExtentsOut != NULL");
-        CGS_ASSERT(lpTransformOut != nullptr, "lpTransformOut != NULL");
+        CGS_ASSERT(lpExtentsOut  != 0, "lpExtentsOut != NULL");
+        CGS_ASSERT(lpTransformOut != 0, "lpTransformOut != NULL");
 
         const s32 liGenericRegionCount =
             mpTriggerData.operator->()->GetGenericRegionCount();

@@ -48,7 +48,7 @@ namespace BrnTraffic
 namespace BrnTrafficIO
 {
     // BrnTrafficSoundInterfaces.h:46 -- one traffic vehicle handed to the sound system.
-    struct alignas(16) TrafficSoundEntity
+    struct CGS_ALIGN(16) TrafficSoundEntity
     {
         // BrnTrafficSoundInterfaces.h:49 -- alarm flavour for this vehicle.
         enum AlarmType

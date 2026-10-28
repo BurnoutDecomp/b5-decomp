@@ -94,9 +94,9 @@ private:
     // matching the sibling XCAM classes.)
     static void _AssertLayout()
     {
-        static_assert(offsetof(CCameraConnector, muCompletedFrameCount) == 0,
+        CGS_STATIC_ASSERT((offsetof(CCameraConnector, muCompletedFrameCount) == 0),
                       "muCompletedFrameCount must be the interlocked word at this+0");
-        static_assert(KU_XCAM_FRAME_SLOT_COUNT == 5u, "frame ring is 5 requests");
+        CGS_STATIC_ASSERT((KU_XCAM_FRAME_SLOT_COUNT == 5u), "frame ring is 5 requests");
     }
 
     u32        muCompletedFrameCount;              // +0x000

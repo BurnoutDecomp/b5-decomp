@@ -80,7 +80,7 @@ namespace CgsNetwork
         {
             mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
             mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
-            mpPlayerManager               = nullptr;
+            mpPlayerManager               = 0;
             mbDrawBandwidthUsage          = false;
             mbShowUsedRegisteredMessages  = false;
             miAverageType                 = 0;
@@ -97,8 +97,8 @@ namespace CgsNetwork
 
     protected:
         // ARTIST vtable 820CE35C: +0x0C -> 827DBBD0, +0x10 -> 827DBBE0.
-        const char* GetName() const override { return "PlayerManager"; }
-        const char* GetPath() const override { return "Network"; }
+        const char* GetName() const  { return "PlayerManager"; }
+        const char* GetPath() const  { return "Network"; }
         // @0x8287F278 -- register the debug-menu surface (not yet homed).
         virtual void OnActivate();
 

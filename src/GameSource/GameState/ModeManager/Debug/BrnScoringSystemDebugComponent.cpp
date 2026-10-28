@@ -99,8 +99,8 @@ namespace BrnGameState
                                                              char* lpcOutBuffer,
                                                              u32* lpuOutColour)
     {
-        CGS_ASSERT(mpScoringSystem != nullptr, "mpScoringSystem");
-        CGS_ASSERT(lpPlayerStatusInterface != nullptr, "lpPlayerStatusInterface");
+        CGS_ASSERT(mpScoringSystem != 0, "mpScoringSystem");
+        CGS_ASSERT(lpPlayerStatusInterface != 0, "lpPlayerStatusInterface");
 
         // Default: an empty cell drawn in the default (white) colour.
         *lpuOutColour = KU_CELL_DEFAULT_COLOUR;
@@ -123,7 +123,7 @@ namespace BrnGameState
             {
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData =
                     lpPlayerStatusInterface->GetPlayerStatusData(liPlayerIndex);
-                if (lpPlayerData != nullptr)
+                if (lpPlayerData != 0)
                     CgsCore::StrCpy(lpcOutBuffer, 200, lpPlayerData->mPlayerName.macName);
             }
             return;
@@ -135,7 +135,7 @@ namespace BrnGameState
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData =
             lpPlayerStatusInterface->GetPlayerStatusData(liPlayerIndex);
-        if (lpPlayerData == nullptr)
+        if (lpPlayerData == 0)
             return;
 
         // meActiveRaceCarIndex is the BrnNetwork degenerate enum (s32-wide); the ScoringSystem car
@@ -146,7 +146,7 @@ namespace BrnGameState
             return;
 
         CarData* lpCarData = mpScoringSystem->GetCarData(leRaceCarIndex);
-        if (lpCarData == nullptr)
+        if (lpCarData == 0)
             return;
 
         // Gather this car's chainable-multiplier table for the current band, then test the band's bit.
@@ -164,7 +164,7 @@ namespace BrnGameState
 
         const BrnPhysics::Vehicle::RaceCarState* lpLocalPlayersCarState =
             lpActiveCarOutput->GetPlayerRaceCarState();
-        CGS_ASSERT(lpLocalPlayersCarState != nullptr, "lpLocalPlayersCarState");
+        CGS_ASSERT(lpLocalPlayersCarState != 0, "lpLocalPlayersCarState");
 
         if (!lpActiveCarOutput->IsRaceCarActive(leRaceCarIndex))
             return;
@@ -173,7 +173,7 @@ namespace BrnGameState
 
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
             lpActiveCarOutput->GetRaceCarState(leRaceCarIndex);
-        if (lpRaceCarState == nullptr)
+        if (lpRaceCarState == 0)
             return;
 
         // ARTIST loads the two transform positions at RaceCarState+0x220 and the local
@@ -209,7 +209,7 @@ namespace BrnGameState
                                                                  s32 liMaxMultiplier,
                                                                  bool lbSimTimerAt50Hz)
     {
-        CGS_ASSERT(mpScoringSystem != nullptr, "mpScoringSystem");
+        CGS_ASSERT(mpScoringSystem != 0, "mpScoringSystem");
 
         // Only render when the toggle is on AND the mode has at least one car.
         if (!mbShowChainableStunts)

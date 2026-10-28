@@ -76,12 +76,12 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides -------------------------------------------
-        void        Construct() override;
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;
-        void        Destruct() override;
-        const char* GetName() const override;
+        void        Construct() ;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;
+        void        Destruct() ;
+        const char* GetName() const ;
 
         // Is a behaviour or take armed or running.
         bool IsActive() const;
@@ -148,19 +148,19 @@ namespace BrnDirector
     inline void ArbStateTestbed::_AssertLayout()
     {
         typedef ArbStateTestbed T;
-        static_assert(offsetof(T, mAftertouch) < offsetof(T, mRigCam) &&
+        CGS_STATIC_ASSERT((offsetof(T, mAftertouch) < offsetof(T, mRigCam) &&
                       offsetof(T, mRigCam) < offsetof(T, mGyroCam) &&
                       offsetof(T, mGyroCam) < offsetof(T, mIceCam) &&
-                      offsetof(T, mIceCam) < offsetof(T, mRoadRunner),
+                      offsetof(T, mIceCam) < offsetof(T, mRoadRunner)),
                       "ArbStateTestbed: the fifteen handles in console order");
-        static_assert(offsetof(T, mRoadRunner) < offsetof(T, mpShotRef) &&
+        CGS_STATIC_ASSERT((offsetof(T, mRoadRunner) < offsetof(T, mpShotRef) &&
                       offsetof(T, mpShotRef) < offsetof(T, mpParameters) &&
                       offsetof(T, mpParameters) < offsetof(T, mpCamera) &&
                       offsetof(T, mpCamera) < offsetof(T, mfRunningTime) &&
                       offsetof(T, mfRunningTime) < offsetof(T, meState) &&
-                      offsetof(T, meState) < offsetof(T, mbLoopIceMovies),
+                      offsetof(T, meState) < offsetof(T, mbLoopIceMovies)),
                       "ArbStateTestbed: the tail members in console order");
-        static_assert(offsetof(T, mbUseSlomo) == offsetof(T, mbLoopIceMovies) + 1,
+        CGS_STATIC_ASSERT((offsetof(T, mbUseSlomo) == offsetof(T, mbLoopIceMovies) + 1),
                       "ArbStateTestbed: mbUseSlomo is the byte after mbLoopIceMovies (+0x2C0 / +0x2C1)");
     }
 }

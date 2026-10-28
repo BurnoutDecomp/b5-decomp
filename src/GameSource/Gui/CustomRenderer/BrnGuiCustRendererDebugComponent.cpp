@@ -51,7 +51,7 @@ namespace
 // ================================================================================================
 void GuiCustRendererDebugComponent::Construct(CustomRendererManager* lpCustRenderManager)
 {
-    CGS_ASSERT(lpCustRenderManager != nullptr,
+    CGS_ASSERT(lpCustRenderManager != 0,
                " invalid custom render manager passed to custom render debug component");
 
     // The X360 chains the (empty) base DebugComponent::Construct here (ICF-folded to a bare blr).
@@ -81,9 +81,9 @@ void GuiCustRendererDebugComponent::Construct(CustomRendererManager* lpCustRende
 // ================================================================================================
 void GuiCustRendererDebugComponent::Destruct()
 {
-    CGS_ASSERT(mpCustRenderManager != nullptr, " destroying a non constructed object");
+    CGS_ASSERT(mpCustRenderManager != 0, " destroying a non constructed object");
 
-    mpCustRenderManager = nullptr;
+    mpCustRenderManager = 0;
 
     // The X360 chains the (empty) base DebugComponent::Destruct here (ICF-folded to a bare blr).
     DebugComponent::Destruct();
@@ -199,7 +199,7 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
                 continue;
             }
 
-            const char* lpcName = nullptr;
+            const char* lpcName = 0;
             switch (liComponent)
             {
                 case 0:  lpcName = "Player Image";    break;
@@ -261,7 +261,7 @@ void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreen()
 // ================= SetBoostColourDangerCallback  @0x824FC900 =================
 void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_DANGER);
@@ -269,7 +269,7 @@ void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserDat
 
 void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_AGGRESSION);
@@ -277,7 +277,7 @@ void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUse
 
 void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_STUNT);
@@ -290,7 +290,7 @@ void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserDat
 // ================================================================================================
 void GuiCustRendererDebugComponent::SetBoostColourToCustomCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
 
     static_cast<GuiCustRendererDebugComponent*>(lpUserData)->SetBoostColourToCustom();
 }
@@ -304,7 +304,7 @@ void GuiCustRendererDebugComponent::SetBoostColourToCustomCallback(void* lpUserD
 // ================================================================================================
 void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreenCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != nullptr, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
 

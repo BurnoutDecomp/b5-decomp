@@ -55,12 +55,12 @@ namespace CgsNetwork
         void               Destruct();
         bool               Retrieve(StartTime* lpStartTime,
                                     MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs);
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DE0E8 -- inline header-homed accessor.
-        const char*        GetName() const override { return "Start Time Message"; }
+        const char*        GetName() const  { return "Start Time Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         // +0x28 .. (after the 0x28-byte ReliableMessage base).
         StartTime                             mStartTime;            // +0x28 .. +0x33

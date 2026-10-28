@@ -17,12 +17,12 @@ namespace CgsSceneManager
     public:
         void Construct(SceneSweeper* lpSceneSweeper);
         void Destruct();
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ;
 
     protected:
-        void OnActivate() override;
-        const char* GetName() const override { return "Scene sweeper"; }
-        const char* GetPath() const override { return "World"; }
+        void OnActivate() ;
+        const char* GetName() const  { return "Scene sweeper"; }
+        const char* GetPath() const  { return "World"; }
 
     private:
         void RenderIntervalList(CgsDev::Debug3DImmediateRender* lpDisplay,

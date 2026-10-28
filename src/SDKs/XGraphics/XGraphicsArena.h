@@ -102,7 +102,7 @@ inline void* ArenaAllocPrefixed(Arena* apArena, usize auObjectSize)
     void* lpBlock = apArena->Malloc(static_cast<int>(auObjectSize + sizeof(Arena*)));
     *static_cast<Arena**>(lpBlock) = apArena;
     if (reinterpret_cast<intptr_t>(lpBlock) == -static_cast<intptr_t>(sizeof(Arena*)))
-        return nullptr; // X360 OOM sentinel -> null object
+        return 0; // X360 OOM sentinel -> null object
     return static_cast<u8*>(lpBlock) + sizeof(Arena*);
 }
 

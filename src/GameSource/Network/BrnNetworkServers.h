@@ -18,7 +18,7 @@ namespace BrnNetwork
         // and port for it.
         void Construct(BrnNetworkManager* lpNetworkManager)
         {
-            mpcServerIP      = nullptr;
+            mpcServerIP      = 0;
             miServerPort     = 0;
             mpNetworkManager = lpNetworkManager;
             meServerType     = CgsNetwork::E_SERVER_TYPE_DEMO_1;

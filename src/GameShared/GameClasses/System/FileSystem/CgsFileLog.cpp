@@ -13,13 +13,13 @@ namespace CgsFileSystem
 {
     // The one global logger. External linkage; written by the constructor and
     // read by every using TU through the class declaration. (X360 dword_830EA3F8.)
-    FileLog* FileLog::_mpThis = nullptr;
+    FileLog* FileLog::_mpThis = 0;
 
     // @0x828DCE98. Asserts no logger has been created yet, then registers this
     // as the single global file-system logger. No instance members are touched.
     FileLog::FileLog()
     {
-        CGS_ASSERT(_mpThis == nullptr,
+        CGS_ASSERT(_mpThis == 0,
                    "Already created a file system logger - can't create any more!\n");
         _mpThis = this;
     }

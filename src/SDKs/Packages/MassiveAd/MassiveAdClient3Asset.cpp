@@ -3,7 +3,7 @@
 #include <new>      // placement new (raw heap-hook allocation + explicit construction)
 #include <cmath>    // std::cos (attested, result-discarded call in the ctor)
 #include <cstddef>  // std::size_t
-#include <cstdint>  // std::uintptr_t (owning-asset back-pointer stored as int)
+#include "types.hpp"  // std::uintptr_t (owning-asset back-pointer stored as int)
 #include <cstring>  // strlen, strncpy, memcpy
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"            // CMassiveBaseObject, heap/log hooks
@@ -534,7 +534,7 @@ int CMassiveAsset::SendReport(int nRecordField18, int bImpressionSlot,
     // The X360 leaves the pending-update pointer in r3 as the fall-through result
     // (the null-check idiom `(result = zone->update) != 0` reuses the return
     // register); a fired Add*Report overwrites it with the block's own result (0).
-    int lnResult = static_cast<int>(reinterpret_cast<std::uintptr_t>(lpUpdate));
+    int lnResult = static_cast<int>(reinterpret_cast<uintptr_t>(lpUpdate));
 
     if (nMediaBand < 0x400)
     {

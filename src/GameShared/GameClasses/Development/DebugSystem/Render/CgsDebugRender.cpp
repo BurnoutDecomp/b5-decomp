@@ -24,7 +24,7 @@ namespace CgsDev
 
         Vector3 MakeVector3(f32 lfX, f32 lfY, f32 lfZ)
         {
-            return Vector3{ lfX, lfY, lfZ, 0.0f };
+            { const Vector3 lResult = { lfX, lfY, lfZ, 0.0f }; return lResult; }
         }
 
         Matrix44Affine MakeTransform(const Internal::CInEventDrawAxis& lrEvent)
@@ -380,7 +380,7 @@ namespace CgsDev
     void DebugRender::Dispatch3D(Debug3DImmediateRender* lpRenderer, bool lbClear)
     {
         const char* lpcPendingString = "";
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liType = m3DQueue.GetFirstEvent(&lpEvent, &liSize);
 
@@ -716,7 +716,7 @@ namespace CgsDev
             return;
 
         const char*             lpcPendingString = "";
-        const CgsModule::Event* lpEvent          = nullptr;
+        const CgsModule::Event* lpEvent          = 0;
         s32                     liSize           = 0;
         s32                     liType           = m2DQueue.GetFirstEvent(&lpEvent, &liSize);
 

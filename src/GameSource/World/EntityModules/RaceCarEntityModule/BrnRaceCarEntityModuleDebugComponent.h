@@ -49,19 +49,19 @@ namespace BrnWorld
         void Construct(RaceCarEntityModule* lpRaceCarEntityModule);
         void Destruct(); // inlined into ARTIST RaceCarEntityModule::Destruct
 
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) ;
         void RenderTailgateCones(CgsDev::Debug3DImmediateRender* lpRender);
         void RenderSingleDebugCone(CgsDev::Debug3DImmediateRender* lpRender, Matrix44Affine lTransform,
                                    VecFloat lvfHalfAngle, rw::RGBA lColour, s32 liNumSegments) const;
-        void Update() override;
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void Update() ;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
         void RenderEngineState(CgsDev::Debug2DImmediateRender* lpRender);
         void DrawTextWithOffsets(CgsDev::Debug2DImmediateRender* lpRender, CgsDev::StrStream* lpStream,
                                  f32 lfX, f32 lfY);
 
     protected:
-        const char* GetName() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        void OnActivate() ;
 
     private:
         friend class RaceCarEntityModule;

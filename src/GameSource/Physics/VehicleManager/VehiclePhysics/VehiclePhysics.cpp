@@ -101,11 +101,11 @@ namespace Vehicle
                 const f32 lfResidual = TakeoffNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
                 lfEstimate = TakeoffMultiplyAdd(lfHalf, lfResidual, lfEstimate);
             }
-            return Vector3{
+            { const Vector3 lResult = {
                 TakeoffMultiply(TakeoffMultiply(lUp.x, lfEstimate), lfMagnitude),
                 TakeoffMultiply(TakeoffMultiply(lUp.y, lfEstimate), lfMagnitude),
                 TakeoffMultiply(TakeoffMultiply(lUp.z, lfEstimate), lfMagnitude),
-                TakeoffMultiply(TakeoffMultiply(lUp.w, lfEstimate), lfMagnitude)};
+                TakeoffMultiply(TakeoffMultiply(lUp.w, lfEstimate), lfMagnitude)}; return lResult; }
         }
 
         void AssertSuspensionWheelPosition(Vector3 lPosition)
@@ -279,7 +279,7 @@ namespace Vehicle
 
         const f32 lfDownForce = KF_HALF * KF_AERO_RHO * KF_AERO_CDA * lfSpeedSquared * lfCoeff;
 
-        return VecFloat{ lfDownForce, lfDownForce, lfDownForce, lfDownForce };
+        { const VecFloat lResult = { lfDownForce, lfDownForce, lfDownForce, lfDownForce }; return lResult; }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -318,7 +318,7 @@ namespace Vehicle
         f32 lfResult = 1.0f - (1.0f - lfGrip) * lfBlend;
         if (msbInShowtime)
             lfResult *= KF_SHOWTIME_GRIP_SCALE.x;
-        return VecFloat{ lfResult, lfResult, lfResult, lfResult };
+        { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
     }
 
     // @0x825D5328  GetSurfaceRoughness = roughTable[id] * globalRoughScale * blend.z.
@@ -334,7 +334,7 @@ namespace Vehicle
         static const f32 KF_GLOBAL_ROUGHNESS_SCALE = 0.2f;                   // unk_82FB9220
 
         const f32 lfResult = lfRoughness * KF_GLOBAL_ROUGHNESS_SCALE * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.z;
-        return VecFloat{ lfResult, lfResult, lfResult, lfResult };
+        { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
     }
 
     // @0x825D50A8  GetSurfaceLinearDrag = dragTable[id] * blend.w  (single representative contact).
@@ -350,7 +350,7 @@ namespace Vehicle
         const f32 lfDrag = KAVF_SURFACE_LINEAR_DRAG[liSurfaceId].x;
 
         const f32 lfResult = lfDrag * mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.w;
-        return VecFloat{ lfResult, lfResult, lfResult, lfResult };
+        { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
     }
 
     // =======================================================================================
@@ -1400,10 +1400,10 @@ namespace Vehicle
             const Vector3 lvRow2{ std::fmaf(lfTz, lrUp.x, lfSy), lfTz * lrUp.y - lfSx, std::fmaf(lfTz, lrUp.z, lfCos),
                                   0.0f };
 
-            return Vector3{ std::fmaf(lvRow2.x, lrAt.z, std::fmaf(lvRow1.x, lrAt.y, lvRow0.x * lrAt.x)),
+            { const Vector3 lResult = { std::fmaf(lvRow2.x, lrAt.z, std::fmaf(lvRow1.x, lrAt.y, lvRow0.x * lrAt.x)),
                             std::fmaf(lvRow2.y, lrAt.z, std::fmaf(lvRow1.y, lrAt.y, lvRow0.y * lrAt.x)),
                             std::fmaf(lvRow2.z, lrAt.z, std::fmaf(lvRow1.z, lrAt.y, lvRow0.z * lrAt.x)),
-                            0.0f };
+                            0.0f }; return lResult; }
         }
     }
 
@@ -3042,7 +3042,7 @@ namespace Vehicle
 
         // NOT drifting -> the cached value (the asm's LABEL_6 fast path).
         if (mu8DriftState == eDriftState_None)
-            return VecFloat{ lfCached, lfCached, lfCached, lfCached };
+            { const VecFloat lResult = { lfCached, lfCached, lfCached, lfCached }; return lResult; }
 
         // 0x825D4064..0x825D4094 compares every absolute xyz velocity lane with epsilon and takes
         // the cached path only when all three comparisons are false.  It is not a test of y alone.
@@ -3050,7 +3050,7 @@ namespace Vehicle
             std::max(std::fabs(mLinearVelocity.x),
                      std::max(std::fabs(mLinearVelocity.y), std::fabs(mLinearVelocity.z)));
         if (!(lfMaxAbsVelocity > KF_DRIFT_STEER_EPSILON))
-            return VecFloat{ lfCached, lfCached, lfCached, lfCached };
+            { const VecFloat lResult = { lfCached, lfCached, lfCached, lfCached }; return lResult; }
 
         // Recompute the signed world steering angle.
         const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);   // zero-guarded
@@ -3081,7 +3081,7 @@ namespace Vehicle
         // existed only so a flagged zero would not collapse the angle; the clamp is real now.
         if (lfBlended >  KF_STEER_ANGLE_CLAMP) lfBlended =  KF_STEER_ANGLE_CLAMP;
         if (lfBlended < -KF_STEER_ANGLE_CLAMP) lfBlended = -KF_STEER_ANGLE_CLAMP;
-        return VecFloat{ lfBlended, lfBlended, lfBlended, lfBlended };
+        { const VecFloat lResult = { lfBlended, lfBlended, lfBlended, lfBlended }; return lResult; }
     }
 
     // @0x825D34D8  VehiclePhysics::GetMaxSteeringAngleDuringDrift
@@ -9092,7 +9092,7 @@ namespace Vehicle
             }
             for ( s32 li = 0; li < KI_AIR_CARS && liCar < 0; ++li )
             {
-                if ( gaAirTrack[li].mpOwner == nullptr )
+                if ( gaAirTrack[li].mpOwner == 0 )
                 {
                     liCar = li;
                     gaAirTrack[li].mpOwner = lpOwner;

@@ -14,7 +14,7 @@ struct DispatchCommand;
 // ARTIST823F5748 constructs these fields; 823F5670 copies one aligned job record.
 // Declaration names from GameShared/Jobs/ObjectToMesh/ObjectToMesh.h DWARF.
 // Native pointers retain the same 128-byte job-data allocation on x64.
-struct alignas(128) ObjectToMeshJobInfo
+struct CGS_ALIGN(128) ObjectToMeshJobInfo
 {
     u32 muListID;
     CgsGraphics::DispatchPacketInterpreter* mpDispatchInterpreter;
@@ -30,6 +30,6 @@ struct alignas(128) ObjectToMeshJobInfo
     s32 miEndIndex;
     bool mbSoftwareBreakpointOnEntry;
 };
-static_assert(sizeof(ObjectToMeshJobInfo) == 128, "object-to-mesh job data alignment");
+CGS_STATIC_ASSERT((sizeof(ObjectToMeshJobInfo) == 128), "object-to-mesh job data alignment");
 
 void ObjectToMeshEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);

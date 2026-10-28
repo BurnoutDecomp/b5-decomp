@@ -56,7 +56,7 @@ namespace SceneManagerIO
 
     // EventQueue<InEventLineTestNearest, N> element. 16-byte aligned (carries two Vector3
     // lanes), sizeof 0x40 (64). Field set mirrors the Fine/FastDoubleSided line-test events.
-    struct alignas(16) InEventLineTestNearest : public EventBaseLineTestNearest
+    struct CGS_ALIGN(16) InEventLineTestNearest : public EventBaseLineTestNearest
     {
         Vector3              mLineStart;          // +0x00 (16B SIMD lane)
         Vector3              mLineEnd;            // +0x10 (16B SIMD lane)

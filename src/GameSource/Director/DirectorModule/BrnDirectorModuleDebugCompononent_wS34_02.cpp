@@ -164,36 +164,36 @@ void DebugComponent::OnActivate()
 // NEVER CALLED. Pins the byte adjacency the page's registrations rely on.
 void DebugComponent::_AssertLayout()
 {
-    static_assert(offsetof(DebugComponent, mbShowCrashShotInfo) == offsetof(DebugComponent, mbShowCameraPos) + 1,
+    CGS_STATIC_ASSERT((offsetof(DebugComponent, mbShowCrashShotInfo) == offsetof(DebugComponent, mbShowCameraPos) + 1),
                   "DebugComponent: +0x10 / +0x11");
-    static_assert(offsetof(MainDirector::CameraDebugInfo, mfX) == 0x00 &&
+    CGS_STATIC_ASSERT((offsetof(MainDirector::CameraDebugInfo, mfX) == 0x00 &&
                   offsetof(MainDirector::CameraDebugInfo, mfY) == 0x04 &&
                   offsetof(MainDirector::CameraDebugInfo, mfZ) == 0x08 &&
-                  offsetof(MainDirector::CameraDebugInfo, mfFOV) == 0x0C,
+                  offsetof(MainDirector::CameraDebugInfo, mfFOV) == 0x0C),
                   "CameraDebugInfo: X / Y / Z / FOV at +0x00 / +0x04 / +0x08 / +0x0C");
-    static_assert(offsetof(MainDirector, mbShowDebugCameraNames) == offsetof(MainDirector, miForcedCameraCarIndex) + 4 &&
-                  offsetof(MainDirector, mbDebugAssertNoIllegalSlomo) == offsetof(MainDirector, mbShowDebugCameraNames) + 1,
+    CGS_STATIC_ASSERT((offsetof(MainDirector, mbShowDebugCameraNames) == offsetof(MainDirector, miForcedCameraCarIndex) + 4 &&
+                  offsetof(MainDirector, mbDebugAssertNoIllegalSlomo) == offsetof(MainDirector, mbShowDebugCameraNames) + 1),
                   "MainDirector: +0x33100 override index, +0x33104 / +0x33105 camera-name and slomo-assert flags");
-    static_assert(offsetof(MainDirector, mbAllowStuntMoment) == offsetof(MainDirector, mbAllowJumpMoment) + 1 &&
+    CGS_STATIC_ASSERT((offsetof(MainDirector, mbAllowStuntMoment) == offsetof(MainDirector, mbAllowJumpMoment) + 1 &&
                   offsetof(MainDirector, mbAllowHardStopMoment) == offsetof(MainDirector, mbAllowJumpMoment) + 2 &&
                   offsetof(MainDirector, mbShowAllCameraNames) == offsetof(MainDirector, mbAllowJumpMoment) + 3 &&
-                  offsetof(MainDirector, maStateFlagTail) == offsetof(MainDirector, mbAllowJumpMoment) + 4,
+                  offsetof(MainDirector, maStateFlagTail) == offsetof(MainDirector, mbAllowJumpMoment) + 4),
                   "MainDirector: +0x3542C..+0x3542F then the flag tail at +0x35430");
-    static_assert(sizeof(bool) == 1 && sizeof(MainDirector::maStateFlagTail) == 0x20,
+    CGS_STATIC_ASSERT((sizeof(bool) == 1 && sizeof(MainDirector::maStateFlagTail) == 0x20),
                   "MainDirector: the flag tail is 0x20 one-byte flags");
-    static_assert(sizeof(DebugPrinter) == 0x24 && offsetof(DebugPrinter, mbEnabled) == 0x20 &&
+    CGS_STATIC_ASSERT((sizeof(DebugPrinter) == 0x24 && offsetof(DebugPrinter, mbEnabled) == 0x20 &&
                   sizeof(MainDirector::maDebugPrinterA) == sizeof(DebugPrinter) &&
                   sizeof(MainDirector::maDebugPrinterB) == sizeof(DebugPrinter) &&
-                  sizeof(MainDirector::maDebugPrinterMain) >= sizeof(DebugPrinter),
+                  sizeof(MainDirector::maDebugPrinterMain) >= sizeof(DebugPrinter)),
                   "DebugPrinter: 0x24 bytes, mbEnabled at +0x20; each printer span holds one");
-    static_assert(offsetof(Camera::BehaviourGameplayExternal, mbEnableBoostEffects) ==
-                  offsetof(Camera::BehaviourGameplayExternal, mbEnableDebugRender) + 1,
+    CGS_STATIC_ASSERT((offsetof(Camera::BehaviourGameplayExternal, mbEnableBoostEffects) ==
+                  offsetof(Camera::BehaviourGameplayExternal, mbEnableDebugRender) + 1),
                   "BehaviourGameplayExternal: +0xB5E / +0xB5F");
-    static_assert(offsetof(Arbitrator, mbDoRenderMetrics) == offsetof(Arbitrator, mbDoAttractMode) + 1,
+    CGS_STATIC_ASSERT((offsetof(Arbitrator, mbDoRenderMetrics) == offsetof(Arbitrator, mbDoAttractMode) + 1),
                   "Arbitrator: +0x44FD / +0x44FE");
-    static_assert(offsetof(ArbStateRoaming, mbPlayRaceEndEffect) == offsetof(ArbStateRoaming, mbDisablePictureParadise) + 1,
+    CGS_STATIC_ASSERT((offsetof(ArbStateRoaming, mbPlayRaceEndEffect) == offsetof(ArbStateRoaming, mbDisablePictureParadise) + 1),
                   "ArbStateRoaming: +0x39F / +0x3A0");
-    static_assert(offsetof(ArbStateTakedown, mbUseTakedownDebugCam) == offsetof(ArbStateTakedown, mbAlwaysUseShutdownCam) + 1,
+    CGS_STATIC_ASSERT((offsetof(ArbStateTakedown, mbUseTakedownDebugCam) == offsetof(ArbStateTakedown, mbAlwaysUseShutdownCam) + 1),
                   "ArbStateTakedown: +0x62C / +0x62D");
 }
 

@@ -95,7 +95,7 @@ public:
     // muInstanceIndex from the static counter + clear the buffer pointers +
     // construct the message queue + seed the stages (prepare Start / release
     // Done) + mbIsNewModule.
-    void Construct() override;
+    void Construct() ;
 
     // @ 0x826C42A8 (DWARF :82: Prepare(rw::IResourceAllocator*, InputBuffer*,
     // OutputBuffer*, const ModuleParams&)). The stage machine (see the .cpp).

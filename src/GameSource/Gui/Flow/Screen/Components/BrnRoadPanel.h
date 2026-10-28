@@ -103,9 +103,9 @@ namespace BrnGui
         PanelBox mPanels[KI_ROADRULE_COUNT];   // DWARF h:85
     };
 
-    static_assert(sizeof(RoadPanelData::PanelBox) == 0xA2,
+    CGS_STATIC_ASSERT((sizeof(RoadPanelData::PanelBox) == 0xA2),
                   "RoadPanelData::PanelBox is the 0xA2 stride RoadPanelData::Construct walks");
-    static_assert(sizeof(RoadPanelData) == 0x144,
+    CGS_STATIC_ASSERT((sizeof(RoadPanelData) == 0x144),
                   "RoadPanelData is the 0x144 blob CrashNavPanel::SetRoadPanelData memcpy's");
 
     class RoadPanel : public IconComponent

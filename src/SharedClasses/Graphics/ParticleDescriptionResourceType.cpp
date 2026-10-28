@@ -192,4 +192,4 @@ namespace BrnParticle
     }
 }
 
-void* off_820A7F30 = nullptr;
+void* off_820A7F30 = 0;

@@ -71,7 +71,7 @@ s32 SEngineVoiceList::SwapActiveLists()
         {
             const KIRQL luRestoreIrql = lpLock->muSavedIrql;
             lpLock->muSavedIrql   = 0;
-            lpLock->mpOwnerThread = nullptr;
+            lpLock->mpOwnerThread = 0;
             KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
             KfLowerIrql(luRestoreIrql);
         }

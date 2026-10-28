@@ -59,7 +59,7 @@ VRegInfo* VRegTable::FindOrCreate(s32 aiType, s32 aiIndex)
     mpScratch->miType  = aiType;
 
     VRegInfo* lpReg = VRegFromKey(mpMainTable->Lookup(VRegKey(mpScratch)));
-    if (lpReg == nullptr)
+    if (lpReg == 0)
         lpReg = Create(aiType, aiIndex);
     return lpReg;
 }

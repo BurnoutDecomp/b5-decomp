@@ -23,7 +23,7 @@ namespace Gen
     class globalenginedata : private Instance
     {
     public:
-        explicit globalenginedata(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit globalenginedata(Collection* lpCollection = 0, void* lpOwner = 0);
 
         void ChangeWithDefault(const RefSpec& lrRefSpec)
         {

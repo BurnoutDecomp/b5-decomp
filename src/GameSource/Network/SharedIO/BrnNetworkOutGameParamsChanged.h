@@ -50,19 +50,19 @@ namespace BrnNetworkModuleIO
         // Never called.
         static void _AssertLayout()
         {
-            static_assert(sizeof(Event) == 44, "round event stride");
-            static_assert(offsetof(NetworkOutGameParamsChanged, meGameMode) == 0x1B8, "meGameMode @+0x1B8");
-            static_assert(offsetof(NetworkOutGameParamsChanged, mePreviousGameMode) == 0x1BC, "mePreviousGameMode @+0x1BC");
-            static_assert(offsetof(NetworkOutGameParamsChanged, meSecurity) == 0x1C0, "meSecurity @+0x1C0");
-            static_assert(offsetof(NetworkOutGameParamsChanged, meBoostType) == 0x1C4, "meBoostType @+0x1C4");
-            static_assert(offsetof(NetworkOutGameParamsChanged, meVehicleChoice) == 0x1C8, "meVehicleChoice @+0x1C8");
-            static_assert(offsetof(NetworkOutGameParamsChanged, miNumRounds) == 0x1CC, "miNumRounds @+0x1CC");
-            static_assert(offsetof(NetworkOutGameParamsChanged, miVehicleClass) == 0x1D0, "miVehicleClass @+0x1D0");
-            static_assert(offsetof(NetworkOutGameParamsChanged, miNumRunnerCrashes) == 0x1D4, "miNumRunnerCrashes @+0x1D4");
-            static_assert(offsetof(NetworkOutGameParamsChanged, miTimeLimit) == 0x1D8, "miTimeLimit @+0x1D8");
-            static_assert(offsetof(NetworkOutGameParamsChanged, mbRanked) == 0x1DC, "mbRanked @+0x1DC");
-            static_assert(offsetof(NetworkOutGameParamsChanged, mbTrafficCheckingOn) == 0x1DF, "mbTrafficCheckingOn @+0x1DF");
-            static_assert(sizeof(NetworkOutGameParamsChanged) == 480, "tag 15 is queued as 480 bytes");
+            CGS_STATIC_ASSERT((sizeof(Event) == 44), "round event stride");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, meGameMode) == 0x1B8), "meGameMode @+0x1B8");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, mePreviousGameMode) == 0x1BC), "mePreviousGameMode @+0x1BC");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, meSecurity) == 0x1C0), "meSecurity @+0x1C0");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, meBoostType) == 0x1C4), "meBoostType @+0x1C4");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, meVehicleChoice) == 0x1C8), "meVehicleChoice @+0x1C8");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, miNumRounds) == 0x1CC), "miNumRounds @+0x1CC");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, miVehicleClass) == 0x1D0), "miVehicleClass @+0x1D0");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, miNumRunnerCrashes) == 0x1D4), "miNumRunnerCrashes @+0x1D4");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, miTimeLimit) == 0x1D8), "miTimeLimit @+0x1D8");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, mbRanked) == 0x1DC), "mbRanked @+0x1DC");
+            CGS_STATIC_ASSERT((offsetof(NetworkOutGameParamsChanged, mbTrafficCheckingOn) == 0x1DF), "mbTrafficCheckingOn @+0x1DF");
+            CGS_STATIC_ASSERT((sizeof(NetworkOutGameParamsChanged) == 480), "tag 15 is queued as 480 bytes");
         }
     };
 }

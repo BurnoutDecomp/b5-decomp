@@ -20,8 +20,8 @@ namespace CgsDev
         void Construct();
         void SetSize(Vector2 lSize);                       // text size in px; cell-normalised internally
         void SetColour(u32 luColour) { mColour = luColour; }
-        void SetRenderer(Debug2DImmediateRender* lpRenderer) { mp2DRenderer = lpRenderer; mp3DRenderer = nullptr; }
-        void SetRenderer(Debug3DImmediateRender* lpRenderer) { mp2DRenderer = nullptr; mp3DRenderer = lpRenderer; }
+        void SetRenderer(Debug2DImmediateRender* lpRenderer) { mp2DRenderer = lpRenderer; mp3DRenderer = 0; }
+        void SetRenderer(Debug3DImmediateRender* lpRenderer) { mp2DRenderer = 0; mp3DRenderer = lpRenderer; }
 
         // Draw lpcString at (lfX, lfY) in luColour; returns the pen X after the string.
         f32 Print(f32 lfX, f32 lfY, const char* lpcString, u32 luColour);

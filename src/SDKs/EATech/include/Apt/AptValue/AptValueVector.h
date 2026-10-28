@@ -32,7 +32,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager
@@ -74,7 +74,7 @@ public:
         AptValueVector lvVec;
         lvVec.mnTop      = 0;
         lvVec.mnCapacity = nCapacity;
-        lvVec.mppItems   = nullptr;
+        lvVec.mppItems   = 0;
         lvVec.mppItems   = static_cast<AptValue**>(
             gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nCapacity));
         return lvVec;

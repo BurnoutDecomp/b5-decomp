@@ -176,12 +176,12 @@ namespace BrnGui
         // { 2, 251, 12, ranked, freeburn }, channel 40, 16 bytes: the quick-match request.
         typedef CgsGui::GuiEventWrapper<GuiEventNetworkQuickMatch, 40> GuiEventNetworkQuickMatchWire;
 
-        static_assert(sizeof(CustomMatchSearchStopWire) == 16, "search-stop record is 16 bytes");
-        static_assert(sizeof(GuiEvent533Wire) == 16, "id-533 record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiEventNetworkQuickMatchWire) == 16, "quick-match record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(CgsGui::GuiEventNetworkSuspension) == 16, "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CustomMatchSearchStopWire) == 16), "search-stop record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEvent533Wire) == 16), "id-533 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkQuickMatchWire) == 16), "quick-match record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
     }
 
     // ================================================================================

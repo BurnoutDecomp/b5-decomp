@@ -96,7 +96,7 @@ namespace renderengine
         u32              muRaster;  // +0x20 bound raster pointer (X360 32-bit)
     };
 
-    static_assert(sizeof(SamplerStateData) == 0x20, "SamplerStateData must be the 0x20-byte sampler block");
+    CGS_STATIC_ASSERT((sizeof(SamplerStateData) == 0x20), "SamplerStateData must be the 0x20-byte sampler block");
 
     class TextureState
     {

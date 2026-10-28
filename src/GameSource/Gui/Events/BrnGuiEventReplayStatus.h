@@ -23,5 +23,5 @@ namespace BrnGui
 
         s32 GetEventType() const { return 524; }
     };
-    static_assert(sizeof(GuiReplayStatusEvent) == 1560, "replay status record is 1560 bytes (id 524)");
+    CGS_STATIC_ASSERT((sizeof(GuiReplayStatusEvent) == 1560), "replay status record is 1560 bytes (id 524)");
 }

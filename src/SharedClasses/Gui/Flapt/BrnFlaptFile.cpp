@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>
 
 // BrnFlapt::MovieClip member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.

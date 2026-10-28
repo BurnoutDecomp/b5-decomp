@@ -57,17 +57,17 @@ void AptRenderItem::operator delete(void* p, size_t sz)
 AptRenderItem::AptRenderItem(AptCharacter* pCharacter, int nCreatedOnTick)
 {
     mpCharacter          = pCharacter;
-    mpPositionMatrix     = nullptr;
-    mpColorMatrix        = nullptr;
-    mpMaskPositionMatrix = nullptr;
+    mpPositionMatrix     = 0;
+    mpColorMatrix        = 0;
+    mpMaskPositionMatrix = 0;
     mDepth               = -1;
     mClipDepth           = -1;
-    mpMask               = nullptr;
+    mpMask               = 0;
     mCreatedOnTick       = nCreatedOnTick;
     mRefCount            = 0;
-    mpManagerNextRevision = nullptr;
-    mpManagerNextSibling  = nullptr;
-    mpManagerFirstChild   = nullptr;
+    mpManagerNextRevision = 0;
+    mpManagerNextSibling  = 0;
+    mpManagerFirstChild   = 0;
 
     // Flags: set isVisible (bit31), clear the rest. (Console: (flags|0x80000000)
     // rotated through the 19-bit field; the net effect for a fresh item.)
@@ -98,17 +98,17 @@ static AptRenderItem* LatestRevision(AptRenderItem* p)
 AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, bool bCopyExtended)
 {
     mpCharacter           = pSource->mpCharacter;
-    mpPositionMatrix      = nullptr;
-    mpColorMatrix         = nullptr;
-    mpMaskPositionMatrix  = nullptr;
+    mpPositionMatrix      = 0;
+    mpColorMatrix         = 0;
+    mpMaskPositionMatrix  = 0;
     mDepth                = -1;
     mClipDepth            = -1;
-    mpMask                = nullptr;
+    mpMask                = 0;
     mCreatedOnTick        = nCreatedOnTick;
     mRefCount             = 0;
-    mpManagerNextRevision = nullptr;
-    mpManagerNextSibling  = nullptr;
-    mpManagerFirstChild   = nullptr;
+    mpManagerNextRevision = 0;
+    mpManagerNextSibling  = 0;
+    mpManagerFirstChild   = 0;
 
     // isVisible (bit31) set; render-type bits (18..23) cleared for the subtype to
     // stamp; bit27 carried over from the source.
@@ -128,7 +128,7 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
     if (pSource->mpColorMatrix)
     {
         AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
-        mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : nullptr;
+        mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : 0;
     }
 
     // Extended copy: mask, depth, manager links + the source's state-flag bits.
@@ -143,7 +143,7 @@ AptRenderItem::AptRenderItem(const AptRenderItem* pSource, int nCreatedOnTick, b
         mFlags = (mFlags & ~0x8u) | (pSource->mFlags & 0x8u);   // deletion mark (bit28)
 
         mpMask                = LatestRevision(pSource->mpMask);
-        mpManagerNextRevision = nullptr;
+        mpManagerNextRevision = 0;
         mpManagerNextSibling  = LatestRevision(pSource->mpManagerNextSibling);
         mpManagerFirstChild   = LatestRevision(pSource->mpManagerFirstChild);
 
@@ -174,7 +174,7 @@ void AptRenderItem::SetMaskMatrix(const AptMatrix* pMatrix)
         else
         {
             gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
-            mpMaskPositionMatrix = nullptr;
+            mpMaskPositionMatrix = 0;
         }
     }
     else if (pMatrix)
@@ -218,7 +218,7 @@ void AptRenderItem::CopyRenderDataFrom(const AptRenderItem* pSource)
         if (!mpColorMatrix)
         {
             AptCXForm* p = static_cast<AptCXForm*>(gpNonGCPoolManager->Allocate(sizeof(AptCXForm)));
-            mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : nullptr;
+            mpColorMatrix = p ? new (p) AptCXForm(pSource->mpColorMatrix) : 0;
         }
     }
     else if (mpColorMatrix)
@@ -249,14 +249,14 @@ AptRenderItem::~AptRenderItem()
             if (pRev->mRefCount > 1)
                 break;
             AptRenderItem* pNext = pRev->mpManagerNextRevision;   // the link's own [c:0x28]
-            pRev->mpManagerNextRevision = nullptr;
+            pRev->mpManagerNextRevision = 0;
             delete pRev;                                          // (*vtbl)(link, 1)
             mpManagerNextRevision = pNext;
         }
         if (mpManagerNextRevision)
         {
             AptRenderItem* pOld = mpManagerNextRevision;
-            mpManagerNextRevision = nullptr;
+            mpManagerNextRevision = 0;
             pOld->ReleaseReference();
         }
 
@@ -265,14 +265,14 @@ AptRenderItem::~AptRenderItem()
             if (pSib->mRefCount > 1)
                 break;
             AptRenderItem* pNext = pSib->mpManagerNextSibling;    // the link's own [c:0x2C]
-            pSib->mpManagerNextSibling = nullptr;
+            pSib->mpManagerNextSibling = 0;
             delete pSib;
             mpManagerNextSibling = pNext;
         }
         if (mpManagerNextSibling)
         {
             AptRenderItem* pOld = mpManagerNextSibling;
-            mpManagerNextSibling = nullptr;
+            mpManagerNextSibling = 0;
             pOld->ReleaseReference();
         }
 
@@ -281,14 +281,14 @@ AptRenderItem::~AptRenderItem()
             if (pChild->mRefCount > 1)
                 break;
             AptRenderItem* pNext = pChild->mpManagerFirstChild;   // the link's own [c:0x30]
-            pChild->mpManagerFirstChild = nullptr;
+            pChild->mpManagerFirstChild = 0;
             delete pChild;
             mpManagerFirstChild = pNext;
         }
         if (mpManagerFirstChild)
         {
             AptRenderItem* pOld = mpManagerFirstChild;
-            mpManagerFirstChild = nullptr;
+            mpManagerFirstChild = 0;
             pOld->ReleaseReference();
         }
     }
@@ -296,29 +296,29 @@ AptRenderItem::~AptRenderItem()
     if (mpCharacter)
     {
         mpCharacter->ReleaseCharacterReference();
-        mpCharacter = nullptr;
+        mpCharacter = 0;
     }
     if (mpMask)
     {
         AptRenderItem* pMask = mpMask;
-        mpMask = nullptr;
+        mpMask = 0;
         pMask->ReleaseReference();
     }
     if (mpMaskPositionMatrix)
     {
         gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
-        mpMaskPositionMatrix = nullptr;
+        mpMaskPositionMatrix = 0;
     }
     if (mpPositionMatrix)
     {
         gpNonGCPoolManager->Deallocate(mpPositionMatrix, sizeof(AptMatrix));
-        mpPositionMatrix = nullptr;
+        mpPositionMatrix = 0;
     }
     if (mpColorMatrix)
     {
         mpColorMatrix->~AptCXForm();   // resets the AptColorHelper vptrs (console inlined this)
         gpNonGCPoolManager->Deallocate(mpColorMatrix, sizeof(AptCXForm));
-        mpColorMatrix = nullptr;
+        mpColorMatrix = 0;
     }
     --sItemsAllocated;
 }
@@ -376,7 +376,7 @@ void AptRenderItem::SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int1
 // ---- flags ----------------------------------------------------------------
 bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x1u) != 0; }
 bool AptRenderItem::GetIsMask() const    { return (mFlags & 0x2u) != 0; }
-bool AptRenderItem::GetHasMask() const   { return (mFlags & 0x4u) != 0 && mpMask != nullptr; }
+bool AptRenderItem::GetHasMask() const   { return (mFlags & 0x4u) != 0 && mpMask != 0; }
 AptRenderItem* AptRenderItem::GetMask() const { return mpMask; }
 
 // ---- character ------------------------------------------------------------
@@ -450,25 +450,25 @@ void AptRenderItem::Manager_SetDeletionMark(bool bMark)
         if (mpManagerFirstChild)
         {
             AptRenderItem* pOld = mpManagerFirstChild;
-            mpManagerFirstChild = nullptr;
+            mpManagerFirstChild = 0;
             pOld->ReleaseReference();
         }
         if (mpManagerNextSibling)
         {
             AptRenderItem* pOld = mpManagerNextSibling;
-            mpManagerNextSibling = nullptr;
+            mpManagerNextSibling = 0;
             pOld->ReleaseReference();
         }
         if (mpManagerNextRevision)
         {
             AptRenderItem* pOld = mpManagerNextRevision;
-            mpManagerNextRevision = nullptr;
+            mpManagerNextRevision = 0;
             pOld->ReleaseReference();
         }
         if (mpMask)
         {
             AptRenderItem* pOld = mpMask;
-            mpMask = nullptr;
+            mpMask = 0;
             pOld->ReleaseReference();
         }
     }
@@ -561,7 +561,7 @@ AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
                 }
 
                 // If this child has its own mask (bit29) bound, recurse into it.
-                bool bHasOwnMask = ((pChild->mFlags & 0x4u) != 0) && (pChild->mpMask != nullptr);
+                bool bHasOwnMask = ((pChild->mFlags & 0x4u) != 0) && (pChild->mpMask != 0);
                 if (bHasOwnMask)
                 {
                     AptRenderItem* pi = LatestRevision(pChild->mpMask);  // [c:0x1C] -> [c:0x28]
@@ -633,7 +633,7 @@ void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
     if (pRevision && (pRevision->mFlags & 0x8u) != 0)  // [c:0x18] deletion mark
-        v2 = nullptr;
+        v2 = 0;
     if (v2 != mpManagerNextSibling)                           // [c:0x2C]
     {
         if (v2)
@@ -641,7 +641,7 @@ void AptRenderItem::Manager_UpdateNextSibling(AptRenderItem* pRevision)
         if (mpManagerNextSibling)
         {
             AptRenderItem* pOld = mpManagerNextSibling;
-            mpManagerNextSibling = nullptr;
+            mpManagerNextSibling = 0;
             pOld->ReleaseReference();
         }
         mpManagerNextSibling = v2;
@@ -655,7 +655,7 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
     if (pRevision && (pRevision->mFlags & 0x8u) != 0)  // [c:0x18] deletion mark
-        v2 = nullptr;
+        v2 = 0;
     if (v2 != mpMask)                                         // [c:0x1C]
     {
         if (v2)
@@ -663,7 +663,7 @@ void AptRenderItem::Manager_UpdateMask(AptRenderItem* pRevision)
         if (mpMask)
         {
             AptRenderItem* pOld = mpMask;
-            mpMask = nullptr;
+            mpMask = 0;
             pOld->ReleaseReference();
         }
         mpMask = v2;
@@ -680,7 +680,7 @@ void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
 {
     AptRenderItem* v2 = pRevision;
     if (pRevision && (pRevision->mFlags & 0x8u) != 0)  // [c:0x18] deletion mark
-        v2 = nullptr;
+        v2 = 0;
     if (v2 != mpManagerFirstChild)                           // [c:0x30]
     {
         if (v2)
@@ -688,7 +688,7 @@ void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
         if (mpManagerFirstChild)
         {
             AptRenderItem* pOld = mpManagerFirstChild;
-            mpManagerFirstChild = nullptr;
+            mpManagerFirstChild = 0;
             pOld->ReleaseReference();
         }
         mpManagerFirstChild = v2;
@@ -702,7 +702,7 @@ void AptRenderItem::Manager_UpdateFirstChild(AptRenderItem* pRevision)
 // bit arithmetic on the child's mFlags ([c:0x18]).
 AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
 {
-    AptRenderItem* result = nullptr;
+    AptRenderItem* result = 0;
 
     if (pChild)
     {
@@ -758,7 +758,7 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
     result = mpManagerFirstChild;                        // [c:0x30]
     if (result)
     {
-        mpManagerFirstChild = nullptr;
+        mpManagerFirstChild = 0;
         result->ReleaseReference();
     }
     mpManagerFirstChild = pChild;
@@ -770,7 +770,7 @@ AptRenderItem* AptRenderItem::Manager_SetFirstChild(AptRenderItem* pChild)
 // locked link swap, with the visible/invisible branches mirrored as in the console.
 AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
 {
-    AptRenderItem* result = nullptr;
+    AptRenderItem* result = 0;
 
     if (pSibling)
     {
@@ -822,7 +822,7 @@ AptRenderItem* AptRenderItem::Manager_SetNextSibling(AptRenderItem* pSibling)
     result = mpManagerNextSibling;                       // [c:0x2C]
     if (result)
     {
-        mpManagerNextSibling = nullptr;
+        mpManagerNextSibling = 0;
         result->ReleaseReference();
     }
     mpManagerNextSibling = pSibling;
@@ -921,7 +921,7 @@ AptRenderItem* AptRenderItem::SetHasMask(bool bHasMask, AptRenderItem* pMask)
         result = v3->mpMask;                             // [c:0x1C]
         if (result)
         {
-            v3->mpMask = nullptr;
+            v3->mpMask = 0;
             result->ReleaseReference();
         }
         v3->mpMask = pMask;
@@ -953,7 +953,7 @@ AptRenderItem* AptRenderItem::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatr
         {
             if (mpMaskPositionMatrix)                     // [c:0x10]
                 gpNonGCPoolManager->Deallocate(mpMaskPositionMatrix, sizeof(AptMatrix));
-            v3->mpMaskPositionMatrix = nullptr;
+            v3->mpMaskPositionMatrix = 0;
         }
         // bit30 := bIsMask.
         v3->mFlags = ((v4 != 0) ? 0x2u : 0u) | (v3->mFlags & ~0x2u);

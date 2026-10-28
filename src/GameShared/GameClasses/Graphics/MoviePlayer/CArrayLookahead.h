@@ -119,17 +119,17 @@ private:
 // their own headers.)
 inline void _CArrayLookahead_AssertLayout()
 {
-    static_assert(offsetof(CArrayLookahead::SElement, mpImageData)
-                < offsetof(CArrayLookahead::SElement, mpHistogram), "SElement order: data<histogram");
-    static_assert(offsetof(CArrayLookahead::SElement, mpHistogram)
-                < offsetof(CArrayLookahead::SElement, miEventType), "SElement order: histogram<eventType");
-    static_assert(offsetof(CArrayLookahead::SElement, miEventType)
-                < offsetof(CArrayLookahead::SElement, miProcessed), "SElement order: eventType<processed");
+    CGS_STATIC_ASSERT((offsetof(CArrayLookahead::SElement, mpImageData)
+                < offsetof(CArrayLookahead::SElement, mpHistogram)), "SElement order: data<histogram");
+    CGS_STATIC_ASSERT((offsetof(CArrayLookahead::SElement, mpHistogram)
+                < offsetof(CArrayLookahead::SElement, miEventType)), "SElement order: histogram<eventType");
+    CGS_STATIC_ASSERT((offsetof(CArrayLookahead::SElement, miEventType)
+                < offsetof(CArrayLookahead::SElement, miProcessed)), "SElement order: eventType<processed");
 
-    static_assert(offsetof(CArrayLookahead, mpArray)
-                < offsetof(CArrayLookahead, muCapacity), "CArrayLookahead order: array<capacity");
-    static_assert(offsetof(CArrayLookahead, miDissolveEnabled)
-                < offsetof(CArrayLookahead, mDissolveDetector), "CArrayLookahead order: enabled<detector");
-    static_assert(offsetof(CArrayLookahead, mDissolveDetector)
-                < offsetof(CArrayLookahead, mpDissolveDumpFile), "CArrayLookahead order: detector<dumpFile");
+    CGS_STATIC_ASSERT((offsetof(CArrayLookahead, mpArray)
+                < offsetof(CArrayLookahead, muCapacity)), "CArrayLookahead order: array<capacity");
+    CGS_STATIC_ASSERT((offsetof(CArrayLookahead, miDissolveEnabled)
+                < offsetof(CArrayLookahead, mDissolveDetector)), "CArrayLookahead order: enabled<detector");
+    CGS_STATIC_ASSERT((offsetof(CArrayLookahead, mDissolveDetector)
+                < offsetof(CArrayLookahead, mpDissolveDumpFile)), "CArrayLookahead order: detector<dumpFile");
 }

@@ -252,7 +252,7 @@ namespace CgsSceneManager
             TestPolySoupBoxCollision(lpRenderer);
 
         if (mbTestSweptSphere)
-            TestPolySoupSweptSphereCollision(lpRenderer, nullptr);
+            TestPolySoupSweptSphereCollision(lpRenderer, 0);
     }
 
     // ARTIST 0x828BF8C0. The world pass supplies a null 2D renderer; this
@@ -261,7 +261,7 @@ namespace CgsSceneManager
         CgsDev::Debug2DImmediateRender* lpRenderer)
     {
         if (mbTestSweptSphere)
-            TestPolySoupSweptSphereCollision(nullptr, lpRenderer);
+            TestPolySoupSweptSphereCollision(0, lpRenderer);
     }
 
     // ARTIST 0x828C0E20. Extract the six inward clip planes from the renderer's
@@ -626,7 +626,7 @@ namespace CgsSceneManager
                 lExtractionSphere.mPositionRadius.w = KF_EXTRACTIONRADIUS;
                 const s32 liNumTriangle4s =
                     CgsGeometric::ExtractTriangle4ListIntersectingSphere(
-                        lrPolySoup, lExtractionSphere, laTriangle4s, 0x400, nullptr);
+                        lrPolySoup, lExtractionSphere, laTriangle4s, 0x400, 0);
                 for (s32 liTriangle4 = 0; liTriangle4 < liNumTriangle4s; ++liTriangle4)
                 {
                     rw::math::vpu::Vector3 laContactNormals[4];
@@ -833,7 +833,7 @@ namespace CgsSceneManager
                     lBoundingSphere,
                     laTriangles + liNumTriangle4s,
                     liRemainingTriangle4s,
-                    nullptr);
+                    0);
             }
         }
 
@@ -1076,7 +1076,7 @@ namespace CgsSceneManager
                 const s32 liRemainingTriangle4s = 1024 - liNumTriangle4s;
                 liNumTriangle4s += CgsGeometric::ExtractTriangle4ListIntersectingSphere(
                     *lrLeaf.mpPolygonSoup, lBroadPhaseSphere,
-                    laTriangle4s + liNumTriangle4s, liRemainingTriangle4s, nullptr);
+                    laTriangle4s + liNumTriangle4s, liRemainingTriangle4s, 0);
             }
         }
 

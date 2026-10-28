@@ -104,7 +104,7 @@ struct GetZoneRequest
 //    == mPlayerZoneResponse + 0x2D8) back into the next request's miLookupIndex. So
 //    +0x2D8 is the lookup index and +0x000 is the player index -- the two names were
 //    swapped in the previous slice.
-struct alignas(16) GetZoneResponse
+struct CGS_ALIGN(16) GetZoneResponse
 {
     static const s32 KI_MAX_ZONES = 48;
 
@@ -219,7 +219,7 @@ struct InputBuffer : public CgsModule::DataStructure
 // 16 because GetZoneResponse is 16-aligned, so mGameDataRequestInterface naturally
 // lands at +0x1718. Grow ADDITIVELY if a later PVS-module TU attests further
 // output-buffer members.
-struct alignas(16) OutputBuffer : public CgsModule::DataStructure
+struct CGS_ALIGN(16) OutputBuffer : public CgsModule::DataStructure
 {
     void Construct()
     {

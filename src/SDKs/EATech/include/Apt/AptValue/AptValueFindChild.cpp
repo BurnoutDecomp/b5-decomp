@@ -164,7 +164,7 @@ namespace
     // proto-walk loop at loc_82B0139C / loc_82B013DC.)
     AptValue* FindInProtoChain(AptValue* pStart, AptValue* pTargetNode)
     {
-        for (AptValue* pValue = pStart; pValue != nullptr; )
+        for (AptValue* pValue = pStart; pValue != 0; )
         {
             AptNativeHash* pHash = pValue->GetNativeHashVirtual();
             if (!pHash)
@@ -176,7 +176,7 @@ namespace
                 return pTargetNode;
             pValue = pProto;
         }
-        return nullptr;
+        return 0;
     }
 
     // The top entry of the interpreter CIH/target stack (console
@@ -197,7 +197,7 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
     {
     // ----- 1 == _target -----------------------------------------------------
     case 1:
-        return nullptr;   // loc_82B0178C (li r3,0)
+        return 0;   // loc_82B0178C (li r3,0)
 
     // ----- 2 == this --------------------------------------------------------
     case 2:
@@ -238,7 +238,7 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
         if (IsCIHLike(pEffectiveScope))
         {
             AptCIH* pNode = static_cast<AptCIH*>(pEffectiveScope);
-            while (pNode->mpDisplayListParent != nullptr)
+            while (pNode->mpDisplayListParent != 0)
                 pNode = pNode->mpDisplayListParent;
             return pNode;
         }
@@ -249,13 +249,13 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
         AptScriptFunctionBase* pCurFn = gAptActionInterpreter.mpCurrentFunction;   // off_8324E79C
         AptValue* pBound = pCurFn
             ? pCurFn->GetParentAnim()   // console 0x24(r11) == mpParentAnim; x64 +0x48
-            : nullptr;
+            : 0;
         if (!pBound || !IsCIHLike(pBound))
             return AptGetAnimationAtLevel(0);   // loc_82B01488
 
         // loc_82B01498: climb mpDisplayListParent (+0x1C) to the root.
         AptCIH* pNode = static_cast<AptCIH*>(pBound);
-        while (pNode->mpDisplayListParent != nullptr)
+        while (pNode->mpDisplayListParent != 0)
             pNode = pNode->mpDisplayListParent;
         return pNode;
     }
@@ -265,7 +265,7 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
         // loc_82B01750: a CIH-like scope-target hands back its display-list parent.
         if (IsCIHLike(pEffectiveScope))
             return static_cast<AptCIH*>(pEffectiveScope)->mpDisplayListParent;   // 0x1C(r29)
-        return nullptr;   // loc_82B0178C
+        return 0;   // loc_82B0178C
 
     // ----- 18 == super ------------------------------------------------------
     case 18:
@@ -353,6 +353,6 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
         return AptGetAnimationAtLevel(atoi(pName->GetBuffer() + 6));
 
     default:
-        return nullptr;   // loc_82B0178C
+        return 0;   // loc_82B0178C
     }
 }

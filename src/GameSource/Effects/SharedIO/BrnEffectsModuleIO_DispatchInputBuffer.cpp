@@ -35,14 +35,14 @@ void DispatchInputBuffer::Construct()
     mKeyLightColour.SetZero();             // stvx128 v0, this+0x30
     mAverageIrradianceColour.SetZero();    // stvx128 v0, this+0x40
 
-    mpDispatchFrame = nullptr;             // stw 0, 0x10(this)
+    mpDispatchFrame = 0;             // stw 0, 0x10(this)
     mCameraInput.Clear();                  // bl Camera::Clear(this+0x50)
-    mpBaseEffectsFrame = nullptr;          // stw 0, 4(this)
+    mpBaseEffectsFrame = 0;          // stw 0, 4(this)
 
     for (u8 luSlot = 0; luSlot < 2; ++luSlot)   // loop 0x82288174..0x82288190
-        mapFXEventsEffectsFrames[luSlot] = nullptr;   // stwx 0, (slot+2)*4(this)
+        mapFXEventsEffectsFrames[luSlot] = 0;   // stwx 0, (slot+2)*4(this)
 
-    mpEnvironmentMap = nullptr;            // stw 0, 0x1B0(this)
+    mpEnvironmentMap = 0;            // stw 0, 0x1B0(this)
 }
 
 // ============================== getters (read-lock, status bit 4) ==============================

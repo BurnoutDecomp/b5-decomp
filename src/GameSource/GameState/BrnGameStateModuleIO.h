@@ -244,7 +244,7 @@ namespace GameStateModuleIO
     // buffer plus a 16-byte {bool, 3*s32} header), so this is a pure type re-home -- no
     // layout change. Asserted in the .cpp.
     typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
-    using TakedownEventOutputQueueType = CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>;
+    typedef CgsModule::EventQueue<BrnGameState::TakedownEvent, 8> TakedownEventOutputQueueType;
     // GameStateToGuiInterface (OutputBuffer +0x4450) used to be forward-declared here and carried
     // as an opaque span. It is a REAL TYPED MEMBER as of 2026-08-27 -- its complete definition
     // arrives with the BrnGameStateToGuiIOInterfaces.h include at the top of this file, because
@@ -299,7 +299,7 @@ namespace GameStateModuleIO
     // the showtime gate needs the real type, not a 16-byte blob.
     typedef CgsSystem::TimerRequestInterface OutputBufferTimerRequestInterface;
     struct OutputBufferFrameRateTypeReqInterface { u8 maOpaque[12]; };
-    using OutputBufferGuiEventQueue = CgsModule::VariableEventQueue<18432, 16>;
+    typedef CgsModule::VariableEventQueue<18432, 16> OutputBufferGuiEventQueue;
 
     // ========================================================================
     // Minimal member types homed by the class:BrnGameState catch-all TU's remaining
@@ -468,17 +468,17 @@ namespace GameStateModuleIO
         // Compile-time offset guards (private members -> assert from a member-fn context).
         static void _AssertLayout()
         {
-            static_assert(sizeof(ControllerInput) == 0x18, "ControllerInput must be 0x18 bytes");
-            static_assert(sizeof(TimerStatusInterface) == 0x30, "TimerStatusInterface must be 0x30 bytes");
-            static_assert(offsetof(PreWorldInputBuffer, mTimerStatusInterface)          == 0x04,   "mTimerStatusInterface @ +0x04");
-            static_assert(offsetof(PreWorldInputBuffer, mControllerInput)               == 0x34,   "mControllerInput @ +0x34");
+            CGS_STATIC_ASSERT((sizeof(ControllerInput) == 0x18), "ControllerInput must be 0x18 bytes");
+            CGS_STATIC_ASSERT((sizeof(TimerStatusInterface) == 0x30), "TimerStatusInterface must be 0x30 bytes");
+            CGS_STATIC_ASSERT((offsetof(PreWorldInputBuffer, mTimerStatusInterface)          == 0x04),   "mTimerStatusInterface @ +0x04");
+            CGS_STATIC_ASSERT((offsetof(PreWorldInputBuffer, mControllerInput)               == 0x34),   "mControllerInput @ +0x34");
             // [gateui] the promoted seat: pin BOTH its offset and its HOST size, because the pad
             // that follows it is computed from `sizeof(GameEventQueue)` -- if the queue ever grows
             // a pointer, this is the assert that fires instead of silently shifting +0x660.
-            static_assert(offsetof(PreWorldInputBuffer, mGameEventQueue)                == 0x4C,   "GameEventQueue @ +0x4C");
-            static_assert(offsetof(PreWorldInputBuffer, mTakedownEventInputQueue)       == 0x660,  "TakedownEventInputQueue @ +0x660");
-            static_assert(sizeof(TakedownEventInputQueueType)                           == 0x150,  "TakedownEventInputQueue spans +0x660..+0x7B0");
-            static_assert(offsetof(PreWorldInputBuffer, mNetworkToGameStateInterface)   == 0x7B0,  "NetworkToGameStateInterface @ +0x7B0");
+            CGS_STATIC_ASSERT((offsetof(PreWorldInputBuffer, mGameEventQueue)                == 0x4C),   "GameEventQueue @ +0x4C");
+            CGS_STATIC_ASSERT((offsetof(PreWorldInputBuffer, mTakedownEventInputQueue)       == 0x660),  "TakedownEventInputQueue @ +0x660");
+            CGS_STATIC_ASSERT((sizeof(TakedownEventInputQueueType)                           == 0x150),  "TakedownEventInputQueue spans +0x660..+0x7B0");
+            CGS_STATIC_ASSERT((offsetof(PreWorldInputBuffer, mNetworkToGameStateInterface)   == 0x7B0),  "NetworkToGameStateInterface @ +0x7B0");
         }
     };
 
@@ -578,19 +578,19 @@ namespace GameStateModuleIO
         static void _AssertLayout()
         {
             // The pointer-free prefix sits at its console offsets.
-            static_assert(offsetof(PostWorldInputBuffer, mRaceCarCrashEventQueue) == 0x10,   "mRaceCarCrashEventQueue @ +0x10");
-            static_assert(offsetof(PostWorldInputBuffer, mVehicleOutputInterface) == 0x220,  "mVehicleOutputInterface @ +0x220");
-            static_assert(offsetof(PostWorldInputBuffer, mContactSpyInterface)    == 0x6E30, "mContactSpyInterface @ +0x6E30");
+            CGS_STATIC_ASSERT((offsetof(PostWorldInputBuffer, mRaceCarCrashEventQueue) == 0x10),   "mRaceCarCrashEventQueue @ +0x10");
+            CGS_STATIC_ASSERT((offsetof(PostWorldInputBuffer, mVehicleOutputInterface) == 0x220),  "mVehicleOutputInterface @ +0x220");
+            CGS_STATIC_ASSERT((offsetof(PostWorldInputBuffer, mContactSpyInterface)    == 0x6E30), "mContactSpyInterface @ +0x6E30");
             // Members whose host size is the console's. No offset is asserted past
             // mContactSpyInterface: its pointer and the larger active-race-car interface move
             // everything after them on the host.
-            static_assert(sizeof(RaceCarCrashEventQueue)               == 0x210,  "RaceCarCrashEventQueue is 0x210 bytes");
-            static_assert(sizeof(VehicleOutputInterface)               == 0x6C10, "VehicleOutputInterface is 0x6C10 bytes");
-            static_assert(sizeof(TriggerEntityModuleOutputInterface)   == 0x410,  "TriggerEntityModuleOutputInterface is 0x410 bytes");
-            static_assert(sizeof(RCEntityGlobalRaceCarOutputInterface) == 0x970,  "RCEntityGlobalRaceCarOutputInterface is 0x970 bytes");
-            static_assert(sizeof(GameEventQueue)                       == 0x610,  "GameEventQueue is 0x610 bytes");
-            static_assert(sizeof(AICarOutputInterface)                 == 0x14E8, "AICarOutputInterface is 0x14E8 bytes");
-            static_assert(sizeof(TrafficTypeResponseQueue)             == 0x210,  "TrafficTypeResponseQueue is 0x210 bytes");
+            CGS_STATIC_ASSERT((sizeof(RaceCarCrashEventQueue)               == 0x210),  "RaceCarCrashEventQueue is 0x210 bytes");
+            CGS_STATIC_ASSERT((sizeof(VehicleOutputInterface)               == 0x6C10), "VehicleOutputInterface is 0x6C10 bytes");
+            CGS_STATIC_ASSERT((sizeof(TriggerEntityModuleOutputInterface)   == 0x410),  "TriggerEntityModuleOutputInterface is 0x410 bytes");
+            CGS_STATIC_ASSERT((sizeof(RCEntityGlobalRaceCarOutputInterface) == 0x970),  "RCEntityGlobalRaceCarOutputInterface is 0x970 bytes");
+            CGS_STATIC_ASSERT((sizeof(GameEventQueue)                       == 0x610),  "GameEventQueue is 0x610 bytes");
+            CGS_STATIC_ASSERT((sizeof(AICarOutputInterface)                 == 0x14E8), "AICarOutputInterface is 0x14E8 bytes");
+            CGS_STATIC_ASSERT((sizeof(TrafficTypeResponseQueue)             == 0x210),  "TrafficTypeResponseQueue is 0x210 bytes");
         }
     };
 
@@ -894,20 +894,20 @@ namespace GameStateModuleIO
             // were laid out against.
             // The two interfaces are ADJACENT, with nothing between them: the console span
             // between them is exactly one SetUpAllEventStartsInterface wide.
-            static_assert(offsetof(OutputBuffer, mSpecificGameModeEventInterface)
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mSpecificGameModeEventInterface)
                             - offsetof(OutputBuffer, mSetUpAllEventStartsInterface)
-                          == sizeof(SetUpAllEventStartsInterface),
+                          == sizeof(SetUpAllEventStartsInterface)),
                           "the two published interfaces are adjacent (184784 - 176368 == 0x20E0)");
             // And the three flag bytes sit immediately behind the second one, in this order.
-            static_assert(offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid)
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid)
                             - offsetof(OutputBuffer, mSpecificGameModeEventInterface)
-                          == sizeof(SpecificGameModeEventInterface),
+                          == sizeof(SpecificGameModeEventInterface)),
                           "the valid flags sit right behind the second interface (0x1E18 on)");
-            static_assert(offsetof(OutputBuffer, mbSpecificGameModeEventInterfaceIsValid)
-                          == offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid) + 1,
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mbSpecificGameModeEventInterfaceIsValid)
+                          == offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid) + 1),
                           "mbSpecificGameModeEventInterfaceIsValid is the second flag byte");
-            static_assert(offsetof(OutputBuffer, mbControllerActive)
-                          == offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid) + 2,
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mbControllerActive)
+                          == offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid) + 2),
                           "mbControllerActive is the third flag byte");
         }
     };

@@ -134,7 +134,7 @@ namespace BrnStreetData
 
     void ChallengePlayerScoreEntry::Copy(const ChallengePlayerScoreEntry* lpSource)
     {
-        CGS_ASSERT(lpSource != nullptr, "lpPlayerScoreEntry");
+        CGS_ASSERT(lpSource != 0, "lpPlayerScoreEntry");
         ChallengeData::Copy(lpSource);
         maCarIDs[0] = lpSource->maCarIDs[0];
         maCarIDs[1] = lpSource->maCarIDs[1];
@@ -144,7 +144,7 @@ namespace BrnStreetData
     // StreetManager keystone promotion); only its method bodies live here.
     void ChallengeParScoresEntry::Copy(const ChallengeParScoresEntry* lpSource)
     {
-        CGS_ASSERT(lpSource != nullptr, "lpData");
+        CGS_ASSERT(lpSource != 0, "lpData");
         ChallengeData::Copy(lpSource);
         mRivals[0] = lpSource->mRivals[0];
         mRivals[1] = lpSource->mRivals[1];

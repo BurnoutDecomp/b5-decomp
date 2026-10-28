@@ -170,10 +170,10 @@ namespace BrnTraffic
     // holds NO pointers (muRungOffset / muNeighbourOffset / muStopLineOffset are indices
     // into the owning Hull's tables), so its stride is identical on target and host -- and
     // the 48-byte footprint is load-bearing for Hull::GetSection's `&mpaSections[i]`.
-    static_assert(offsetof(Section, mfSpeed)  == 0x24, "Section::mfSpeed");
-    static_assert(offsetof(Section, mfLength) == 0x28, "Section::mfLength");
-    static_assert(sizeof(Section) == 48, "Section stride (Hull::GetSection @0x821F52E0 uses 48)");
-    static_assert(sizeof(LaneRung) == 32, "LaneRung stride");
-    static_assert(sizeof(Neighbour) == 4, "Neighbour stride (Hull::GetNeighbour @0x821F5358)");
+    CGS_STATIC_ASSERT((offsetof(Section, mfSpeed)  == 0x24), "Section::mfSpeed");
+    CGS_STATIC_ASSERT((offsetof(Section, mfLength) == 0x28), "Section::mfLength");
+    CGS_STATIC_ASSERT((sizeof(Section) == 48), "Section stride (Hull::GetSection @0x821F52E0 uses 48)");
+    CGS_STATIC_ASSERT((sizeof(LaneRung) == 32), "LaneRung stride");
+    CGS_STATIC_ASSERT((sizeof(Neighbour) == 4), "Neighbour stride (Hull::GetNeighbour @0x821F5358)");
 #endif
 }

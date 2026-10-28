@@ -103,7 +103,7 @@ AptExtObject::AptExtObject(const int32_t iNumMembers)
     // Allocate the native-member hash from the non-GC Apt pool (size 20 / [c:0x14])
     // and placement-construct it, or leave it null if the pool is exhausted.
     void* lpHashMem = gpNonGCPoolManager->Allocate(sizeof(AptNativeHash));   // [c:0x14]
-    mpNativeHash = lpHashMem ? ::new (lpHashMem) AptNativeHash(iNumMembers) : nullptr;
+    mpNativeHash = lpHashMem ? ::new (lpHashMem) AptNativeHash(iNumMembers) : 0;
 
     // X360 @0x82AE839C: AptValue::SetAllowDelayedDeletion(this, 0).
     SetAllowDelayedDeletion(false);
@@ -131,7 +131,7 @@ AptExtObject::~AptExtObject()
         // (that would tear the GC pointers down twice).
         mpNativeHash->~AptNativeHash();
         gpNonGCPoolManager->Deallocate(mpNativeHash, sizeof(AptNativeHash));   // [c:0x14]
-        mpNativeHash = nullptr;
+        mpNativeHash = 0;
     }
 }
 
@@ -157,7 +157,7 @@ AptNativeFunction* AptExtObject::CreateNewAptFunction(AptExtFunctionPtr pAptExtF
     void* lpMem = AptNativeFunction::operator new(sizeof(AptNativeFunction));   // [c:0x24 == 36]
     if (lpMem)
         return ::new (lpMem) AptNativeFunction(pAptExtFnc);
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ AptValue* AptExtObject::GetParam(int iIndex)
 {
     AptValue* pResult = gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - iIndex - 1];
     if (!pResult || !pResult->getIsDefined())
-        return nullptr;
+        return 0;
     return pResult;
 }
 
@@ -196,7 +196,7 @@ AptValue* AptExtObject::GetVariable(AptValue* pContext, const AptNativeString* c
 {
     AptValue* pResult = gAptActionInterpreter.getVariable(pContext, 0, pVariable, 1, 1, 0);
     if (!pResult || !pResult->getIsDefined())
-        return nullptr;
+        return 0;
     return pResult;
 }
 
@@ -267,7 +267,7 @@ void AptRegisterExtension(AptExtObject* pExtObject)
 
     AptNativeHash* pGlobalHash = gpAptGlobalExtensionObject
         ? gpAptGlobalExtensionObject->GetNativeHashVirtual()   // (off_8324E37C + 8)
-        : nullptr;
+        : 0;
     if (pGlobalHash)
         pGlobalHash->Set(lName, pExtObject);
 }

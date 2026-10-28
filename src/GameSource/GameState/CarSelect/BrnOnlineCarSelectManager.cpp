@@ -43,8 +43,8 @@ void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
     meInternalState = E_INTERNAL_STATE_NONE;
     mpGameStateModule.Set(lpGameStateModule);
     mpProgressionManager.Set(lpProgressionManager);
-    mpVehicleList.Set(nullptr);
-    mpWheelList.Set(nullptr);
+    mpVehicleList.Set(0);
+    mpWheelList.Set(0);
     mbIsInOnlineCarSelect = false;
 
     mSpawnPosition.SetZero();

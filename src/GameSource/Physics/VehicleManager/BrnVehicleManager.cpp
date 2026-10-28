@@ -234,7 +234,7 @@ namespace Vehicle
         EActiveRaceCarIndex meAggressorIndex;
         EActiveRaceCarIndex meVictimIndex;
     };
-    static_assert(sizeof(ImpactIoEventRecord) == 12, "Impact game-event payload");
+    CGS_STATIC_ASSERT((sizeof(ImpactIoEventRecord) == 12), "Impact game-event payload");
 
     // The grind-event record HandleRaceCarRaceCarContact's pre-pass pushes onto the player-driver
     // queue (asm AddEventSafe(..., 31, 12) -- a 12-byte event). The X360 writes a grind type (7 or 8)
@@ -492,7 +492,7 @@ namespace Vehicle
     void VehicleManager::CheckForAllTypesOfImpacts(RaceCarResponseInfo* lpInfo)
     {
 
-        const RaceCarPhysics::TdSlamGateSample* lpWGateB = nullptr;
+        const RaceCarPhysics::TdSlamGateSample* lpWGateB = 0;
         s32 liWGap = -1;
         if (lbWitness)
         {
@@ -501,7 +501,7 @@ namespace Vehicle
             const s32 liWPairB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
             lpWGateA = RaceCarPhysics::FindTdSlamGateSample(lpInfo->mpRaceCarA);
             lpWGateB = RaceCarPhysics::FindTdSlamGateSample(lpInfo->mpRaceCarB);
-            if (lpWGateA != nullptr && lpWGateB != nullptr
+            if (lpWGateA != 0 && lpWGateB != 0
                 && liWPairA >= 0 && liWPairA < 8 && liWPairB >= 0 && liWPairB < 8)
             {
                 const u32 luWLast = suaWPairLastEval[liWPairA][liWPairB];
@@ -518,7 +518,7 @@ namespace Vehicle
             for (s32 liWSide = 0; liWSide < 2; ++liWSide)
             {
                 *CgsDev::Log::gpDebugPrint << (liWSide == 0 ? " gateA=" : " gateB=");
-                if (lapWGate[liWSide] == nullptr)
+                if (lapWGate[liWSide] == 0)
                 {
                     *CgsDev::Log::gpDebugPrint << "?";
                     continue;
@@ -1624,22 +1624,22 @@ namespace Vehicle
     void VehicleManager::_AssertLayout()
     {
         // ---- the class HEAD (re-seated 2026-08-03; see the header banner) --------------------
-        static_assert(offsetof(VehicleManager, mePrepareStage) == 0,  "mePrepareStage (asm stw 0, 0(r31))");
-        static_assert(offsetof(VehicleManager, meReleaseStage) == 4,  "meReleaseStage (asm stw 3, 4(r31))");
-        static_assert(offsetof(VehicleManager, mRandom)        == 16, "mRandom (asm addi r11, r31, 0x10) -- 16-aligned, NOT +8");
-        static_assert(sizeof(VehicleManager::mRandom) == 48, "CgsNumeric::Random is 44 bytes at align 16 -> sizeof 48");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mePrepareStage) == 0),  "mePrepareStage (asm stw 0, 0(r31))");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, meReleaseStage) == 4),  "meReleaseStage (asm stw 3, 4(r31))");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mRandom)        == 16), "mRandom (asm addi r11, r31, 0x10) -- 16-aligned, NOT +8");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mRandom) == 48), "CgsNumeric::Random is 44 bytes at align 16 -> sizeof 48");
 
-        static_assert(sizeof(VehicleDriver)  == 224,  "VehicleDriver stride (asm: addi r25, r25, 0xE0)");
+        CGS_STATIC_ASSERT((sizeof(VehicleDriver)  == 224),  "VehicleDriver stride (asm: addi r25, r25, 0xE0)");
         // The three named bytes are at ABSOLUTE class offsets 224*idx + 123/124/125; with the array
         // correctly seated at +64 that is in-record 59/60/61 (inside VehicleDriver::mControls).
         // RE-NAMED 2026-08-03: the stand-in record retired, so these now pin REAL members.
-        static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbBoost) == 59,
+        CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbBoost) == 59),
                       "mControls.mbBoost -- the boost-eligible byte (asm: 224*idx + 123)");
-        static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToVehicles) == 60,
+        CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToVehicles) == 60),
                       "mControls.mbIsInvulnerableToVehicles (asm: 224*idx + 124)");
-        static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToWorld) == 61,
+        CGS_STATIC_ASSERT((offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToWorld) == 61),
                       "mControls.mbIsInvulnerableToWorld (asm: 224*idx + 125)");
-        static_assert(offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123,
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123),
                       "the re-seat is byte-identical to the old model for every element");
         // THE RECORD IS GONE (2026-08-03, the fold wave). Ten `offsetof(RaceCarVehicleRecord,
         // ...) == <X360 in-record seat>` asserts used to stand here. They cannot survive the fold
@@ -1657,22 +1657,22 @@ namespace Vehicle
         // components are independently derived from two different sizeofs, so they get two
         // constants and TWO asserts, and neither can absorb an error in the other. Mirrors the
         // mounted gate's form (BrnVehicleManager_layout_check.cpp).
-        static_assert(alignof(RaceCarPhysics) == 16 && (1856 % 16) == 0,
+        CGS_STATIC_ASSERT((__alignof(RaceCarPhysics) == 16 && (1856 % 16) == 0),
                       "element 0 keeps the asm-literal +1856 base and every element stays 16-aligned");
-        static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");
+        CGS_STATIC_ASSERT((sizeof(RaceCarCrashData)     == 12),   "RaceCarCrashData stride (asm: 12)");
 
-        static_assert(offsetof(VehicleManager, maRaceCarDrivers)         == 64,     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
-        static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm r29 - 0x140D)");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarDrivers)         == 64),     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarVehicles)        == 1856),   "maRaceCarVehicles (asm r29 - 0x140D)");
         // NO DRIFT TERM ON THIS ONE (corrected 2026-08-11). The +128 of
         // KU_HOST_DRIFT_AFTER_MODEL_HANDLES arises at +43616 -- the head of maRaceCarModelHandles,
         // which sits AFTER this array. Nothing before +43616 moves.
-        static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584,  "maRaceCarEntityIDs (asm base 43584)");
-        static_assert(offsetof(VehicleManager, maRaceCarModelHandles)    == 43616,  "maRaceCarModelHandles (asm 8 * 0x154C; ProcessCreateEvents/ProcessValidationEvents)");
-        static_assert(offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584),  "maRaceCarEntityIDs (asm base 43584)");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarModelHandles)    == 43616),  "maRaceCarModelHandles (asm 8 * 0x154C; ProcessCreateEvents/ProcessValidationEvents)");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
                           == offsetof(VehicleManager, maRaceCarModelHandles)
-                             + sizeof(VehicleManager::maRaceCarModelHandles),
+                             + sizeof(VehicleManager::maRaceCarModelHandles)),
                       "the two handle arrays abut (console 8 * 0x154C then 8 * 0x1554)");
-        static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64,
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64),
                       "RigidBodyId is 8 bytes -- the ctor's `std` + `addi r26, r26, 8`, and 43744 + 64 == 43808");
         // RE-SEATED 2026-08-03: the old `maRaceCarEntityIdRemap` sibling at +148128 is really the
         // embedded traffic manager's maTrafficEntityIDs. Same byte, real owner -- and the sum below
@@ -1697,8 +1697,8 @@ namespace Vehicle
         // The head and tail of the 44-float run, plus the closure that proves it has no gaps.
         // The two seats the committed header modelled as scalar grind thresholds are element 7 of
         // these two per-car arrays -- 171840 + 7*4 == 171868 and 171872 + 7*4 == 171900.
-        static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0, "Matrix44Affine must land 16-aligned with no compiler-inserted padding");
-        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0, "the prediction normal is loaded/stored with lvx128/stvx128 -- it must be 16-aligned");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mCameraMatrix) % 16 == 0), "Matrix44Affine must land 16-aligned with no compiler-inserted padding");
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0), "the prediction normal is loaded/stored with lvx128/stvx128 -- it must be 16-aligned");
         // THESE FOUR WERE STALE, AND NOT BECAUSE OF THIS WAVE (corrected 2026-08-11). They
         // carried KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS for seats that sit PAST the 2026-08-06
         // contact-generation carve, so each was 76 bytes short -- and nothing said so for waves,

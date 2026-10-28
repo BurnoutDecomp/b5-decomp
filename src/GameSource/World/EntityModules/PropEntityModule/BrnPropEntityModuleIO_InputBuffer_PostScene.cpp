@@ -43,10 +43,10 @@ namespace PropEntityIO
     // 4 -> 8), which is precisely why the old 16-byte placeholder could not be cast onto.
     void InputBuffer_PostScene::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PostScene, mRaceCarCrashCompleteEventQueue)
-                          >= sizeof(CgsModule::IOBuffer),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PostScene, mRaceCarCrashCompleteEventQueue)
+                          >= sizeof(CgsModule::IOBuffer)),
                       "mRaceCarCrashCompleteEventQueue follows the IOBuffer base (console +0x08)");
-        static_assert(RaceCarCrashCompleteEventQueue::KI_LENGTH == 10,
+        CGS_STATIC_ASSERT((RaceCarCrashCompleteEventQueue::KI_LENGTH == 10),
                       "EventQueue<RaceCarCrashCompleteEvent,10> -- capacity is in the "
                       "Construct callee symbol at 0x822EFC50");
     }

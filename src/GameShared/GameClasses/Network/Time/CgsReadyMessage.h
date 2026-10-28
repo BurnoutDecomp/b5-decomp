@@ -47,12 +47,12 @@ namespace CgsNetwork
 
         // Ledger func @ 0x827DE0F8 -- identical-code-folded onto
         // TestConnectionMessage::GetPackedMessageSize (same bare-ReliableMessage size).
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
-        const char*        GetName() const override { return "Ready Message"; }
+        const char*        GetName() const  { return "Ready Message"; }
 
         // Ledger func @ 0x827DE100 -- forwards to the ReliableMessage base.
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
     };
 
     // Inline on the console (the start-time manager carries the copies). Construct: both

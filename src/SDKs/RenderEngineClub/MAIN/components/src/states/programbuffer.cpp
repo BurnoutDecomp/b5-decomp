@@ -70,7 +70,7 @@ namespace renderengine
     {
         u32  luTotalSize = 0;
         u32  luCount = 0;
-        void* lpUCodeTable = nullptr;
+        void* lpUCodeTable = 0;
         u32   luUCodeTableSize = 0;
 
         if (XGMicrocodeGetConstantTable(lpFunction, &lpUCodeTable, &luUCodeTableSize) >= 0 && lpUCodeTable)
@@ -153,7 +153,7 @@ namespace renderengine
             ProgramMicrocodeParts lParts;
             XGGetMicrocodeShaderParts(reinterpret_cast<const void*>(lpParams->muFunction), &lParts);
             u32 luTotal = 0;
-            ProgramBuffer::Xbox2CreateConstantTable(reinterpret_cast<const void*>(lpParams->muFunction), nullptr, &luTotal);
+            ProgramBuffer::Xbox2CreateConstantTable(reinterpret_cast<const void*>(lpParams->muFunction), 0, &luTotal);
             luConstTableSize = luTotal;
             luMicrocodeSize  = lParts.muSize;
             luPart3          = lParts.muPart3;
@@ -247,7 +247,7 @@ namespace renderengine
             XGGetMicrocodeShaderParts(reinterpret_cast<const void*>(lpParams->muFunction), &lParts);
             lpData->mu16NumVariables = static_cast<u16>(
                 ProgramBuffer::Xbox2CreateConstantTable(reinterpret_cast<const void*>(lpParams->muFunction),
-                                                        lpVarTable, nullptr));
+                                                        lpVarTable, 0));
         }
 
         return lpData;

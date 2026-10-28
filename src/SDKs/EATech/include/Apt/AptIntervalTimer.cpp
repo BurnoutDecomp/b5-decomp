@@ -5,7 +5,7 @@
 
 // AptIntervalTimer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 
-#include <cstdint>   // intptr_t for the array-cookie byte arithmetic
+#include "types.hpp"   // intptr_t for the array-cookie byte arithmetic
 
 // The shared Apt fixed-size pool (X360 off_8324D808) the timer array is allocated
 // from / freed back to (the same single pool gpAptOperandStackPool aliases). The
@@ -19,8 +19,8 @@ AptIntervalTimer::AptIntervalTimer()
     // int32 stores), zeroes the two floats, then constructs the param stack. It
     // does NOT touch mpContext(+0x10) or miId(+0x20) -- the setInterval setup path
     // fills those.
-    mpActiveValue   = nullptr;   // *a1     = 0
-    mpCBFunction    = nullptr;   // *(a1+4) = 0
+    mpActiveValue   = 0;   // *a1     = 0
+    mpCBFunction    = 0;   // *(a1+4) = 0
     mfInterval      = 0.0f;      // *(a1+8) = 0.0
     mfElapsed       = 0.0f;      // *(a1+12)= 0.0
     mParams         = AptValueVector::ConstructWithCapacity(6);
@@ -46,7 +46,7 @@ AptIntervalTimer::~AptIntervalTimer()
 {
     CleanParams();
 
-    if (mParams.mppItems != nullptr)
+    if (mParams.mppItems != 0)
     {
         gpAptOperandStackPool->Deallocate(mParams.mppItems, 4 * mParams.mnCapacity);
     }
@@ -145,7 +145,7 @@ AptValue* AptActionInterpreter::SetIntervalImpl(AptValue* pCallback, int nArgCou
     AptAnimationTarget* const pDir = gpAptTarget->mpAnimationTarget;
     u32 iSlot = 0;
     for (; iSlot < pDir->mnNumIntervalTimers; ++iSlot)
-        if (pDir->mpIntervalTimers[iSlot].mpActiveValue == nullptr)
+        if (pDir->mpIntervalTimers[iSlot].mpActiveValue == 0)
             break;
     if (iSlot == pDir->mnNumIntervalTimers)
         return gpUndefinedValue;   // table full (the X360 tail check)
@@ -169,7 +169,7 @@ AptValue* AptActionInterpreter::SetIntervalImpl(AptValue* pCallback, int nArgCou
         AptString* const pName =
             static_cast<AptString*>(gppAptNativeArgStack[gnAptNativeArgCount - 2]);
         pInterval = gppAptNativeArgStack[gnAptNativeArgCount - 3];
-        pFn = pCallback->findChild(pName->GetInternalString(), nullptr);
+        pFn = pCallback->findChild(pName->GetInternalString(), 0);
         rTimer.mpContext = pCallback;
         nConsumed = 3;
     }
@@ -208,12 +208,12 @@ void AptActionInterpreter::ClearIntervalImpl(int nId)
     for (u32 i = 0; i < pDir->mnNumIntervalTimers; ++i)
     {
         AptIntervalTimer& rTimer = pDir->mpIntervalTimers[i];
-        if (rTimer.mpActiveValue == nullptr || rTimer.miId != nId)
+        if (rTimer.mpActiveValue == 0 || rTimer.miId != nId)
             continue;
         rTimer.mpCBFunction->Release();
-        if (rTimer.mpContext != nullptr)
+        if (rTimer.mpContext != 0)
             rTimer.mpContext->Release();
-        rTimer.mpActiveValue = nullptr;
+        rTimer.mpActiveValue = 0;
         rTimer.CleanParams();
         rTimer.miId = 0;
     }

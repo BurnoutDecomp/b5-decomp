@@ -75,16 +75,16 @@ private:
 
 inline void _CSeqDissolveDetector_AssertLayout()
 {
-    static_assert(offsetof(CSeqDissolveDetector, miDissolveDetected)  == 0x00, "CSeqDissolveDetector::miDissolveDetected");
-    static_assert(offsetof(CSeqDissolveDetector, miDissolveLength)    == 0x04, "CSeqDissolveDetector::miDissolveLength");
-    static_assert(offsetof(CSeqDissolveDetector, miMaxDissolveLength) == 0x08, "CSeqDissolveDetector::miMaxDissolveLength");
-    static_assert(offsetof(CSeqDissolveDetector, mfReset0C)           == 0x0C, "CSeqDissolveDetector::mfReset0C");
-    static_assert(offsetof(CSeqDissolveDetector, mfReset10)           == 0x10, "CSeqDissolveDetector::mfReset10");
-    static_assert(offsetof(CSeqDissolveDetector, miReset14)           == 0x14, "CSeqDissolveDetector::miReset14");
-    static_assert(offsetof(CSeqDissolveDetector, miReset18)           == 0x18, "CSeqDissolveDetector::miReset18");
-    static_assert(offsetof(CSeqDissolveDetector, miReset1C)           == 0x1C, "CSeqDissolveDetector::miReset1C");
-    static_assert(offsetof(CSeqDissolveDetector, miReset20)           == 0x20, "CSeqDissolveDetector::miReset20");
-    static_assert(offsetof(CSeqDissolveDetector, miReset24)           == 0x24, "CSeqDissolveDetector::miReset24");
-    static_assert(offsetof(CSeqDissolveDetector, maState)             == 0x28, "CSeqDissolveDetector::maState");
-    static_assert(sizeof(CSeqDissolveDetector) == 0x88, "CSeqDissolveDetector size");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miDissolveDetected)  == 0x00), "CSeqDissolveDetector::miDissolveDetected");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miDissolveLength)    == 0x04), "CSeqDissolveDetector::miDissolveLength");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miMaxDissolveLength) == 0x08), "CSeqDissolveDetector::miMaxDissolveLength");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, mfReset0C)           == 0x0C), "CSeqDissolveDetector::mfReset0C");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, mfReset10)           == 0x10), "CSeqDissolveDetector::mfReset10");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miReset14)           == 0x14), "CSeqDissolveDetector::miReset14");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miReset18)           == 0x18), "CSeqDissolveDetector::miReset18");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miReset1C)           == 0x1C), "CSeqDissolveDetector::miReset1C");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miReset20)           == 0x20), "CSeqDissolveDetector::miReset20");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, miReset24)           == 0x24), "CSeqDissolveDetector::miReset24");
+    CGS_STATIC_ASSERT((offsetof(CSeqDissolveDetector, maState)             == 0x28), "CSeqDissolveDetector::maState");
+    CGS_STATIC_ASSERT((sizeof(CSeqDissolveDetector) == 0x88), "CSeqDissolveDetector size");
 }

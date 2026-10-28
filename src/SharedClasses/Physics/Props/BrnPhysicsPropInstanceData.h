@@ -84,7 +84,7 @@ namespace Props
     static const u8 knNoAngularRotation   = 192;
     static const u8 knAngularRotationBits = 192;
 
-    struct alignas(16) PropInstanceData
+    struct CGS_ALIGN(16) PropInstanceData
     {
     public:
         // ---- accessors the X360 folds inline at its call sites ----
@@ -135,15 +135,15 @@ namespace Props
     // Porter contract (world_type_transcode.py `_flip_prop_instance` /
     // PROP_INSTANCE_STRIDE): pointer-free record, so the host layout must reproduce the
     // on-disk platform-4 form byte for byte.
-    static_assert(offsetof(PropInstanceData, mWorldTransform)   == 0x00, "PropInstanceData::mWorldTransform @ +0");
-    static_assert(offsetof(PropInstanceData, muTypeIdAndFlags)  == 0x40, "PropInstanceData::muTypeIdAndFlags @ +0x40");
-    static_assert(offsetof(PropInstanceData, muInstanceID)      == 0x44, "PropInstanceData::muInstanceID @ +0x44");
-    static_assert(offsetof(PropInstanceData, muAlternativeType) == 0x48, "PropInstanceData::muAlternativeType @ +0x48");
-    static_assert(offsetof(PropInstanceData, mn8RotSpeed)       == 0x4A, "PropInstanceData::mn8RotSpeed @ +0x4A");
-    static_assert(offsetof(PropInstanceData, mn8MaxAngle)       == 0x4B, "PropInstanceData::mn8MaxAngle @ +0x4B");
-    static_assert(offsetof(PropInstanceData, mn8MinAngle)       == 0x4C, "PropInstanceData::mn8MinAngle @ +0x4C");
-    static_assert(sizeof(PropInstanceData) == 80, "PropInstanceData stride 80 (porter contract)");
-    static_assert(alignof(PropInstanceData) == 16, "PropInstanceData 16-aligned (embedded Matrix44Affine)");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, mWorldTransform)   == 0x00), "PropInstanceData::mWorldTransform @ +0");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, muTypeIdAndFlags)  == 0x40), "PropInstanceData::muTypeIdAndFlags @ +0x40");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, muInstanceID)      == 0x44), "PropInstanceData::muInstanceID @ +0x44");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, muAlternativeType) == 0x48), "PropInstanceData::muAlternativeType @ +0x48");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, mn8RotSpeed)       == 0x4A), "PropInstanceData::mn8RotSpeed @ +0x4A");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, mn8MaxAngle)       == 0x4B), "PropInstanceData::mn8MaxAngle @ +0x4B");
+    CGS_STATIC_ASSERT((offsetof(PropInstanceData, mn8MinAngle)       == 0x4C), "PropInstanceData::mn8MinAngle @ +0x4C");
+    CGS_STATIC_ASSERT((sizeof(PropInstanceData) == 80), "PropInstanceData stride 80 (porter contract)");
+    CGS_STATIC_ASSERT((__alignof(PropInstanceData) == 16), "PropInstanceData 16-aligned (embedded Matrix44Affine)");
 }
 }
 

@@ -273,7 +273,7 @@ namespace Deformation
 			}
 			static u32 suSweptSelCalls = 0u;
 			++suSweptSelCalls;
-			if ( siSweptSelProbe == 1 && CgsDev::Log::gpDebugPrint != nullptr
+			if ( siSweptSelProbe == 1 && CgsDev::Log::gpDebugPrint != 0
 			     && ( suSweptSelCalls % 300u ) == 0u )
 			{
 				*CgsDev::Log::gpDebugPrint
@@ -792,7 +792,7 @@ namespace Deformation
 		}
 
 		BrnPhysics::Vehicle::VehiclePhysics* lpPhysics = mVehicleBody.GetVehiclePhysics();
-		CGS_ASSERT(lpPhysics != nullptr,
+		CGS_ASSERT(lpPhysics != 0,
 		           "mVehicleBody.GetVehiclePhysics() != NULL");   // BrnDeformableObject.cpp:4075 (non-gating)
 
 		// limits = mpAttribs->mBaseAttribs.mDrivetimeDeformLimits (`*(vehiclePhysics+0x720) + 0x40`).

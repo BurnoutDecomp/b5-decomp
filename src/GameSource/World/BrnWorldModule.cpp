@@ -2836,8 +2836,8 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // WorldBridgeInputToPhysicsModule.cpp and Bridges/WorldBridgeInputToEntityModules.cpp).
     // Retire all three together when BrnWorldIO adopts the canonical type.
     {
-        static_assert( sizeof( BrnWorldIO::TimerStatusInterface )
-                           == sizeof( CgsSystem::TimerStatusInterface ),
+        CGS_STATIC_ASSERT(( sizeof( BrnWorldIO::TimerStatusInterface )
+                           == sizeof( CgsSystem::TimerStatusInterface )),
                        "world timer-status block must be the canonical 48-byte X360 member" );
 
         const CgsSystem::TimerStatusInterface* const lpTimerStatus =
@@ -3178,9 +3178,9 @@ static const f32 KF_LOD_BLEND_SCALE = 0.76923078f;
 // static_asserts in BrnActiveRaceCarRenderParams.cpp). VehicleRenderInfo is a public
 // standard-layout record, so its two touched fields can be pinned right here:
 // `lfs f0, 4(r3)` reads mfDistanceSq and `stw r9, 8(r3)` writes mLOD.
-static_assert( offsetof( BrnTraffic::VehicleRenderInfo, mfDistanceSq ) == 4,
+CGS_STATIC_ASSERT(( offsetof( BrnTraffic::VehicleRenderInfo, mfDistanceSq ) == 4),
                "VehicleRenderInfo::mfDistanceSq @ +0x04 (X360 lfs f0, 4(r3) @0x827C3BF8)" );
-static_assert( offsetof( BrnTraffic::VehicleRenderInfo, mLOD ) == 8,
+CGS_STATIC_ASSERT(( offsetof( BrnTraffic::VehicleRenderInfo, mLOD ) == 8),
                "VehicleRenderInfo::mLOD @ +0x08 (X360 stw r9, 8(r3) @0x827C3C34)" );
 
 // Pick the first band the distance falls short of; LOD 4 (the coarsest) when it is
@@ -5445,7 +5445,7 @@ void BridgeTrafficCarEntityInfoToOutput_PrePhysics(
         lpTrafficOutput_PrePhysics->GetVehicleInputInterface()->GetRemoveTrafficEvents();
 
     Array<short, 25> lCrashedCars;
-    static_assert(sizeof(lCrashedCars) == 56,
+    CGS_STATIC_ASSERT((sizeof(lCrashedCars) == 56),
                   "the GUI record's byte image must match the console's baked event size");
     lCrashedCars.Clear();
 

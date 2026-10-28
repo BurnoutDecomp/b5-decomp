@@ -52,7 +52,7 @@ namespace CgsNetwork
         // connecting latch, then the base tear-down.
         void Destruct()
         {
-            mpEnvironment = nullptr;
+            mpEnvironment = 0;
             mbConnecting  = false;
             NetworkAdapterBase::Destruct();
         }
@@ -72,7 +72,7 @@ namespace CgsNetwork
 
         // On a new server type: drop the connection, shut the stack down and start it again
         // against the new type's environment. The vtable's only slot.
-        virtual void SetServerType(EServerType leServerType) override;
+        virtual void SetServerType(EServerType leServerType) ;
 
         // @ 0x8287F610 -- select the network environment for the current server type and
         // start DirtySock with the matching secure/insecure flags.

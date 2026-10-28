@@ -25,7 +25,7 @@
 #include "rw/audio/core/plugins/ReverbModel1.h"
 
 #include <cstddef> // offsetof, size_t
-#include <cstdint> // uintptr_t
+#include "types.hpp" // uintptr_t
 #include <cstring> // std::memmove
 
 // XMemCpy -- the Xbox 360 platform block copy (defined in the platform CRT; declared here,

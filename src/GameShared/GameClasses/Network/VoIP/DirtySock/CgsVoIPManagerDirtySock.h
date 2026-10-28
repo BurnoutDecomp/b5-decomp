@@ -195,8 +195,8 @@ namespace CgsNetwork
     {
         mpNetworkManager              = lpNetworkManager;
         miControllerPort              = 0;
-        mpTimeManager                 = nullptr;
-        mpPlayerManager               = nullptr;
+        mpTimeManager                 = 0;
+        mpPlayerManager               = 0;
         miVoipVolumePercent           = 100;
         mbGameIsHandlingHeadsetStatus = false;
         ClearData();

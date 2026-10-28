@@ -95,8 +95,8 @@ namespace BrnDirector
             void Tweaker::AddMapping(const char* lpcName, f32* lpfVariableToTweak, f32 lfScale,
                                      EAxis leAxisToMapTo, EMap leMap)
             {
-                CGS_ASSERT(lpcName != nullptr, "lpcName != NULL");
-                CGS_ASSERT(lpfVariableToTweak != nullptr, "lpfVariableToTweak != NULL");
+                CGS_ASSERT(lpcName != 0, "lpcName != NULL");
+                CGS_ASSERT(lpfVariableToTweak != 0, "lpfVariableToTweak != NULL");
                 CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, "leAxisToMapTo < E_AXIS_COUNT");
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 
@@ -115,9 +115,9 @@ namespace BrnDirector
             void Tweaker::AddMapping(const char* lpcName, f32* lpfVariableToTweak, f32* lpfScale,
                                      EAxis leAxisToMapTo, EMap leMap)
             {
-                CGS_ASSERT(lpcName != nullptr, "lpcName != NULL");
-                CGS_ASSERT(lpfVariableToTweak != nullptr, "lpfVariableToTweak != NULL");
-                CGS_ASSERT(lpfScale != nullptr, "lpfScale != NULL");
+                CGS_ASSERT(lpcName != 0, "lpcName != NULL");
+                CGS_ASSERT(lpfVariableToTweak != 0, "lpfVariableToTweak != NULL");
+                CGS_ASSERT(lpfScale != 0, "lpfScale != NULL");
                 CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, "leAxisToMapTo < E_AXIS_COUNT");
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 
@@ -135,8 +135,8 @@ namespace BrnDirector
                                                 void* lpUserData, DebugController::EControl leControl,
                                                 EMap leMap)
             {
-                CGS_ASSERT(lpcName != nullptr, "lpcName != NULL");
-                CGS_ASSERT(lpFunction != nullptr, "lpFunction != NULL");
+                CGS_ASSERT(lpcName != 0, "lpcName != NULL");
+                CGS_ASSERT(lpFunction != 0, "lpFunction != NULL");
                 CGS_ASSERT(leControl < DebugController::E_CONTROL_COUNT, "leControl < E_CONTROL_COUNT");
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 

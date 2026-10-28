@@ -116,22 +116,22 @@ namespace Vehicle
     void GripCurveDebugWindow::Prepare(Wheel* lpLeftWheel, Wheel* lpRightWheel,
                                        const char* lpacWindowCaption)
     {
-        CGS_ASSERT(lpLeftWheel != nullptr, "lpLeftWheel != NULL");
-        CGS_ASSERT(lpRightWheel != nullptr, "lpRightWheel != NULL");
+        CGS_ASSERT(lpLeftWheel != 0, "lpLeftWheel != NULL");
+        CGS_ASSERT(lpRightWheel != 0, "lpRightWheel != NULL");
 
         mpLeftWheel = lpLeftWheel;
         mpRightWheel = lpRightWheel;
 
-        CGS_ASSERT(lpLeftWheel->mpTireAttribs != nullptr, "mpLeftWheel->mpTireAttribs != NULL");
-        CGS_ASSERT(mpLeftWheel->mpTireAttribs != nullptr, "mpLeftWheel->mpTireAttribs != NULL");
+        CGS_ASSERT(lpLeftWheel->mpTireAttribs != 0, "mpLeftWheel->mpTireAttribs != NULL");
+        CGS_ASSERT(mpLeftWheel->mpTireAttribs != 0, "mpLeftWheel->mpTireAttribs != NULL");
 
         const Wheel::TireAttribs* lpTireAttribs = mpLeftWheel->mpTireAttribs;
-        CGS_ASSERT(lpTireAttribs != nullptr, "lpGripCurve != NULL");
+        CGS_ASSERT(lpTireAttribs != 0, "lpGripCurve != NULL");
         const Wheel::TireGripCurve* lpLongGripCurve = &lpTireAttribs->mLongGripCurve;
         mLongGripCurveGraph.Prepare(lpLongGripCurve);
 
         const Wheel::TireGripCurve* lpLatGripCurve = &lpTireAttribs->mLatGripCurve;
-        CGS_ASSERT(lpLatGripCurve != nullptr, "lpGripCurve != NULL");
+        CGS_ASSERT(lpLatGripCurve != 0, "lpGripCurve != NULL");
         mLatGripCurveGraph.Prepare(lpLatGripCurve);
 
         const f32 lfCoefficientRange = GetCoefficientRange();

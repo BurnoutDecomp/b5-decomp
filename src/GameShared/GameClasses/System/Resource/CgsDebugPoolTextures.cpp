@@ -88,7 +88,7 @@ namespace CgsResource
         for (s32 liIndex = 0; liIndex < KI_MAX_TEXTURE_ENTRIES; ++liIndex)
         {
             TextureEntry& lrEntry = mpTextureEntries[liIndex];
-            lrEntry.mpTexture = nullptr;
+            lrEntry.mpTexture = 0;
             lrEntry.muEntryIndex = 0xFFFFu;
             lrEntry.muInstancesThatUseTexture = 0xFFFFu;
             lrEntry.muModelsThatUseTexture = 0xFFFFu;

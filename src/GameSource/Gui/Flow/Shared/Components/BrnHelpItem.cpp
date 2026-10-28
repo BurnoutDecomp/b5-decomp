@@ -22,9 +22,9 @@ namespace BrnGui
                              const char* lpacParentName)
     {
         // asm: cmplwi r21(=a2=lpacName),0 -> assert "Invalid name"               (line 46)
-        CGS_ASSERT(lpacName != nullptr, "Invalid name");
+        CGS_ASSERT(lpacName != 0, "Invalid name");
         // asm: cmplwi r24(=a3=lpStateInterface),0 -> assert "Invalid state interface" (line 47)
-        CGS_ASSERT(lpStateInterface != nullptr, "Invalid state interface");
+        CGS_ASSERT(lpStateInterface != 0, "Invalid state interface");
 
         // bl CgsGui__GuiComponent__Construct(this, name, stateInterface, parentName)
         CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
@@ -42,7 +42,7 @@ namespace BrnGui
                            ButtonIconComponent::EPadButton leButtonRight)
     {
         // if (!lpacText) assert "Invalid text string"                       (line 68)
-        CGS_ASSERT(lpacText != nullptr, "Invalid text string");
+        CGS_ASSERT(lpacText != 0, "Invalid text string");
 
         // if (leButtonLeft < 0 || leButtonRight >= 16) assert "Invalid button state" (line 69)
         CGS_ASSERT(!(leButtonLeft < 0 || leButtonRight >= ButtonIconComponent::E_PADBUTTON_COUNT),

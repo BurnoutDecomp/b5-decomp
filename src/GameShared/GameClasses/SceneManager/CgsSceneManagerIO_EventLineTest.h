@@ -60,7 +60,7 @@ namespace SceneManagerIO
     };
 
     // EventQueue<InEventLineTestFine, N> element. 16-byte aligned (carries two Vector3 lanes).
-    struct alignas(16) InEventLineTestFine : public EventBaseLineTest
+    struct CGS_ALIGN(16) InEventLineTestFine : public EventBaseLineTest
     {
         Vector3        mLineStart;          // +0x00
         Vector3        mLineEnd;            // +0x10
@@ -73,7 +73,7 @@ namespace SceneManagerIO
 
     // EventQueue<InEventLineTestFastDoubleSided, N> element. Identical field set/layout to
     // InEventLineTestFine per the DWARF; 16-byte aligned, sizeof 0x40.
-    struct alignas(16) InEventLineTestFastDoubleSided : public EventBaseLineTest
+    struct CGS_ALIGN(16) InEventLineTestFastDoubleSided : public EventBaseLineTest
     {
         Vector3        mLineStart;          // +0x00
         Vector3        mLineEnd;            // +0x10

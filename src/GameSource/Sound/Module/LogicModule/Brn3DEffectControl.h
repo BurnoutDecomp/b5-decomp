@@ -86,14 +86,14 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
             : mfHeightOffset(0.0f)
             , mfRadius(0.0f)
             , mfDurationVisible(-1.0f)
-            , mpDebugString(nullptr)
+            , mpDebugString(0)
         {
         }
     };
 
-    virtual bool Prepare(CgsSound::Logic::State* apState) override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader) override;
+    virtual bool Prepare(CgsSound::Logic::State* apState) ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader) ;
 
     // Scalar deleting destructor @ 0x826C85F8 — out-of-line; see Brn3DEffectControl.cpp.
     virtual ~Brn3DEffectControl();
@@ -107,7 +107,7 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
 
 // X360-attested payload size (see the DrawSphere FLAG above): the AddEvent<Message<
 // DrawSphere>> thunk @0x826DF9B8 bakes li r6,0x20 (=32) == sizeof(MessageHeader)+16.
-static_assert(sizeof(Brn3DEffectControl::DrawSphere) == 16,
+CGS_STATIC_ASSERT((sizeof(Brn3DEffectControl::DrawSphere) == 16),
               "X360 DrawSphere payload must be 16 bytes");
 
 } // namespace Logic

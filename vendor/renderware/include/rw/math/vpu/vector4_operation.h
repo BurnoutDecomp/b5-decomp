@@ -23,42 +23,42 @@ namespace vpu
     // -- arithmetic (lane-wise; vaddfp / vsubfp / vmulfp) --------------------------------
     inline Vector4 operator+(Vector4 lLhs, Vector4 lRhs)
     {
-        return Vector4{ lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w };
+        { const Vector4 lResult = { lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w }; return lResult; }
     }
     inline Vector4 operator-(Vector4 lLhs, Vector4 lRhs)
     {
-        return Vector4{ lLhs.x - lRhs.x, lLhs.y - lRhs.y, lLhs.z - lRhs.z, lLhs.w - lRhs.w };
+        { const Vector4 lResult = { lLhs.x - lRhs.x, lLhs.y - lRhs.y, lLhs.z - lRhs.z, lLhs.w - lRhs.w }; return lResult; }
     }
     // Per-lane product (vmulfp128). The broadcast-scalar (VecFloat) case falls out of this:
     // a scalar held in every lane multiplies each lane of the other operand.
     inline Vector4 operator*(Vector4 lLhs, Vector4 lRhs)
     {
-        return Vector4{ lLhs.x * lRhs.x, lLhs.y * lRhs.y, lLhs.z * lRhs.z, lLhs.w * lRhs.w };
+        { const Vector4 lResult = { lLhs.x * lRhs.x, lLhs.y * lRhs.y, lLhs.z * lRhs.z, lLhs.w * lRhs.w }; return lResult; }
     }
 
     // -- the all-ones vector (vspltisw v,1 ; vcfsx v,v,0 -> 1.0 per lane) -----------------
-    inline Vector4 GetVector4_One() { return Vector4{ 1.0f, 1.0f, 1.0f, 1.0f }; }
+    inline Vector4 GetVector4_One() { { const Vector4 lResult = { 1.0f, 1.0f, 1.0f, 1.0f }; return lResult; } }
 
     // Broadcast one scalar into all four lanes (the VecFloat construction the SDK spells as
     // `VecFloat(float)` / a vspltw of a loaded scalar). A VecFloat *is* such a Vector4.
-    inline Vector4 Splat(float lfScalar) { return Vector4{ lfScalar, lfScalar, lfScalar, lfScalar }; }
+    inline Vector4 Splat(float lfScalar) { { const Vector4 lResult = { lfScalar, lfScalar, lfScalar, lfScalar }; return lResult; } }
 
     // -- extrema / clamp (vminfp / vmaxfp; Clamp = max-then-min) --------------------------
     inline Vector4 Min(Vector4 lLhs, Vector4 lRhs)
     {
-        return Vector4{
+        { const Vector4 lResult = {
             lLhs.x < lRhs.x ? lLhs.x : lRhs.x,
             lLhs.y < lRhs.y ? lLhs.y : lRhs.y,
             lLhs.z < lRhs.z ? lLhs.z : lRhs.z,
-            lLhs.w < lRhs.w ? lLhs.w : lRhs.w };
+            lLhs.w < lRhs.w ? lLhs.w : lRhs.w }; return lResult; }
     }
     inline Vector4 Max(Vector4 lLhs, Vector4 lRhs)
     {
-        return Vector4{
+        { const Vector4 lResult = {
             lLhs.x > lRhs.x ? lLhs.x : lRhs.x,
             lLhs.y > lRhs.y ? lLhs.y : lRhs.y,
             lLhs.z > lRhs.z ? lLhs.z : lRhs.z,
-            lLhs.w > lRhs.w ? lLhs.w : lRhs.w };
+            lLhs.w > lRhs.w ? lLhs.w : lRhs.w }; return lResult; }
     }
     inline Vector4 Clamp(Vector4 lrValue, Vector4 lrMin, Vector4 lrMax)
     {
@@ -79,11 +79,11 @@ namespace vpu
         // a lane is "true" iff non-zero. The bitwise AND of two broadcast masks is the
         // logical AND of their per-lane truth.
         auto lTrue = [](float f) { return f != 0.0f; };
-        return MaskScalar{
+        { const MaskScalar lResult = {
             (lTrue(lLhs.x) && lTrue(lRhs.x)) ? 1.0f : 0.0f,
             (lTrue(lLhs.y) && lTrue(lRhs.y)) ? 1.0f : 0.0f,
             (lTrue(lLhs.z) && lTrue(lRhs.z)) ? 1.0f : 0.0f,
-            (lTrue(lLhs.w) && lTrue(lRhs.w)) ? 1.0f : 0.0f };
+            (lTrue(lLhs.w) && lTrue(lRhs.w)) ? 1.0f : 0.0f }; return lResult; }
     }
 
     // Select(falseVal, trueVal, mask) = vsel: per-lane mask ? trueVal : falseVal.
@@ -107,11 +107,11 @@ namespace vpu
     //   uses the SDK order, so the two spellings differ until this is done.
     inline Vector4 Select(Vector4 lFalse, Vector4 lTrue, MaskScalar lMask)
     {
-        return Vector4{
+        { const Vector4 lResult = {
             lMask.x != 0.0f ? lTrue.x : lFalse.x,
             lMask.y != 0.0f ? lTrue.y : lFalse.y,
             lMask.z != 0.0f ? lTrue.z : lFalse.z,
-            lMask.w != 0.0f ? lTrue.w : lFalse.w };
+            lMask.w != 0.0f ? lTrue.w : lFalse.w }; return lResult; }
     }
 
     // ===================================================================================
@@ -137,20 +137,20 @@ namespace vpu
     // ===================================================================================
     inline MaskScalar CompLessThan(Vector4 lA, Vector4 lB)
     {
-        return MaskScalar{
+        { const MaskScalar lResult = {
             !(lA.x >= lB.x) ? 1.0f : 0.0f,
             !(lA.y >= lB.y) ? 1.0f : 0.0f,
             !(lA.z >= lB.z) ? 1.0f : 0.0f,
-            !(lA.w >= lB.w) ? 1.0f : 0.0f };
+            !(lA.w >= lB.w) ? 1.0f : 0.0f }; return lResult; }
     }
 
     inline MaskScalar CompGreaterThan(Vector4 lA, Vector4 lB)
     {
-        return MaskScalar{
+        { const MaskScalar lResult = {
             lA.x > lB.x ? 1.0f : 0.0f,
             lA.y > lB.y ? 1.0f : 0.0f,
             lA.z > lB.z ? 1.0f : 0.0f,
-            lA.w > lB.w ? 1.0f : 0.0f };
+            lA.w > lB.w ? 1.0f : 0.0f }; return lResult; }
     }
 
     // Greater-than compare producing a per-lane mask (vcmpgtfp): 1.0 where lLhs>lRhs.

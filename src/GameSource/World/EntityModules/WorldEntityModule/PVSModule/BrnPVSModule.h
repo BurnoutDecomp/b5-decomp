@@ -89,20 +89,20 @@ namespace BrnWorld
         // X360 0x822C3F50. Chains ModuleSingleBuffered::Construct, seeds the two stage
         // machines (prepare START / release DONE), constructs the 512-byte game-data
         // receiver queue and clears the current-zone-only flag.
-        void Construct() override;
+        void Construct() ;
 
         // X360 0x82302E00. Stage machine: base module prepare -> post LoadPVS -> wait for the
         // type-58 reply -> bind the ZoneList resource pointer + publish the total zone count.
-        bool Prepare() override;
+        bool Prepare() ;
 
         // X360 0x822A8AD8. Unwinds the base module and resets the two stage machines.
-        bool Release() override;
+        bool Release() ;
 
         // X360 0x822EE050. THE PVS QUERY: drains the GetZoneRequest queue, resolves each
         // request position to a Zone via the loaded ZoneList, and publishes one
         // GetZoneResponse per request (centre zone + its safe/unsafe neighbours, with the
         // per-zone render/immediate flags and the velocity-weighted zone weights).
-        void Update() override;
+        void Update() ;
 
         // X360 0x822BAF78. Returns the module's input data structure (the GetZoneRequest queue
         // buffer). The base GetInputStructure() is the lpInputBuffer the asm reads; the

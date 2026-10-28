@@ -15,7 +15,7 @@
 #include "types.hpp"                                                          // u32
 #include "rw/math/vpu/types.h"                                                // Vector4 (the colour / lifetime slots)
 #include <cstring>                                                            // std::memcpy (TextAt)
-#include <cstdint>                                                            // uintptr_t  (TextAt)
+#include "types.hpp"                                                            // uintptr_t  (TextAt)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"   // Attrib::FindCollection (canonical)
 
@@ -97,7 +97,7 @@ namespace Gen
         using Instance::IsValid;
 
         // Construct over the sparkeffect collection, optionally owned by lpOwner.
-        explicit sparkeffect(void* lpOwner = nullptr);
+        explicit sparkeffect(void* lpOwner = 0);
         // The X360 ctor's r4 IS the collection key (it is passed straight through to
         // FindCollection(class, key)); EffectsModule::Prepare @0x8229E690 hands it
         // Attrib::StringToKey("376835"/"376836"/"376837"/"554431"). Additive (2026-09-02).

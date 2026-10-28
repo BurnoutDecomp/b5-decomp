@@ -46,7 +46,7 @@ namespace CgsNetwork
     void VersionDisplay::Construct()
     {
 
-        mpcVersion       = nullptr;
+        mpcVersion       = 0;
         muField_04       = 0;
         meServerType     = E_SERVER_TYPE_COUNT;
         mbGameServerGame = false;
@@ -55,7 +55,7 @@ namespace CgsNetwork
     // Teardown, inlined into NetworkManager::Destruct: clear the banner state, then the base.
     void VersionDisplay::Destruct()
     {
-        mpcVersion       = nullptr;
+        mpcVersion       = 0;
         muField_04       = 0;
         meServerType     = E_SERVER_TYPE_COUNT;
         mbGameServerGame = false;

@@ -19,9 +19,9 @@ namespace CgsDev
 
         void Function::Release()
         {
-            mpFunction  = nullptr;
-            mpParameter = nullptr;
-            mpcName     = nullptr;
+            mpFunction  = 0;
+            mpParameter = 0;
+            mpcName     = 0;
         }
 
         Function::DebugCallbackFunction Function::GetFunction() { return mpFunction; }

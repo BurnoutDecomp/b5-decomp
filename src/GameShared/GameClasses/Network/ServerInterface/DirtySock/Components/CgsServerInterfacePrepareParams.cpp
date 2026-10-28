@@ -24,9 +24,9 @@ void ServerInterfacePrepareParams::Construct()
 {
     std::memset(mapComponents, 0, sizeof(mapComponents));   // XMemSet(this, 0, 48)
     mLobbyParams.miLanguage      = 0;
-    mLobbyParams.mpcVersion      = nullptr;
-    mLobbyParams.mpcSKU          = nullptr;
-    mLobbyParams.mpcSLUS         = nullptr;
+    mLobbyParams.mpcVersion      = 0;
+    mLobbyParams.mpcSKU          = 0;
+    mLobbyParams.mpcSLUS         = 0;
     mConnAPIParams.miPort        = 0;
     mConnAPIParams.miMaxPlayers  = 0;
     mConnAPIParams.mbPeerToPeer  = false;

@@ -48,9 +48,9 @@ namespace BrnReplays
         u8 maPad5EF9[3];                     // +0x5EF9 .. +0x5EFB
         u8 maBlock5EFC[4];                   // +0x5EFC (serialised, 4)
     };
-    static_assert(offsetof(DirectorBridgeSerialiserStaticLayout, mGameActionQueue) == 0x2790, "game action queue seat");
-    static_assert(offsetof(DirectorBridgeSerialiserStaticLayout, maCentreOfMassTransforms) == 0x5BD0, "centre-of-mass seat");
-    static_assert(sizeof(DirectorBridgeSerialiserStaticLayout) == 24320, "bridge snapshot size");
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mGameActionQueue) == 0x2790), "game action queue seat");
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, maCentreOfMassTransforms) == 0x5BD0), "centre-of-mass seat");
+    CGS_STATIC_ASSERT((sizeof(DirectorBridgeSerialiserStaticLayout) == 24320), "bridge snapshot size");
 
     class DirectorBridgeSerialiser : public BaseSerialiser
     {

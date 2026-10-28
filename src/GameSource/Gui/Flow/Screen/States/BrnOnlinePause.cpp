@@ -141,9 +141,9 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiByteEventWire<1>) == 16, "byte record is 16 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiByteEventWire<1>) == 16), "byte record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
 
         template <s32 N>
         void PostByteEvent(CgsGui::StateInterface* lpStateInterface, s32 liChannel, u8 lu8Value)

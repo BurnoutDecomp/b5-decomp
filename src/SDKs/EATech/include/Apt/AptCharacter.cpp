@@ -46,7 +46,7 @@ void AptCharacter::ReleaseCharacterReference() const
 void AptCharacter::ReleaseAnimationFile() const
 {
     AptFile* p = mpAnimationFile;
-    const_cast<AptCharacter*>(this)->mpAnimationFile = nullptr;
+    const_cast<AptCharacter*>(this)->mpAnimationFile = 0;
     if (p)
     {
         if (AptSharedPtrDecRef(p) == 0)

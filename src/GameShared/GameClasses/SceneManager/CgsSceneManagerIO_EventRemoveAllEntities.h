@@ -57,7 +57,7 @@ namespace SceneManagerIO
         // 0x822DF038.
         u8 mu8Owner;
     };
-    static_assert(sizeof(InEventRemoveAllEntities) == 1,
+    CGS_STATIC_ASSERT((sizeof(InEventRemoveAllEntities) == 1),
                   "InEventRemoveAllEntities stride 1 (asm: Append strides by count UNSCALED)");
 }
 }

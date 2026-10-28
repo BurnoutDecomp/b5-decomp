@@ -67,7 +67,7 @@ namespace BrnGui
     {
     public:
         ViewModule();
-        ~ViewModule() override {}
+        ~ViewModule()  {}
     private:
         enum BrnPrepareStage : s32 { E_BRN_PREPARESTAGE_START = 0 };
         enum BrnReleaseStage : s32 { E_BRN_RELEASESTAGE_START = 0 };
@@ -81,7 +81,7 @@ namespace BrnGui
     ViewModule::ViewModule()
         : meBrnPrepareStage(E_BRN_PREPARESTAGE_START),
           meBrnReleaseStage(E_BRN_RELEASESTAGE_START),
-          mpGuiModule(nullptr)
+          mpGuiModule(0)
     {
         // mFlaptManager brings up the empty view list and index sentinels in its
         // own constructor (above).

@@ -137,7 +137,7 @@ namespace
     void BindProgramVariable(const renderengine::ProgramBufferData* lpProgram, const char* lpcName,
                              renderengine::ProgramVariableHandle& lrHandle)
     {
-        if (lpProgram == nullptr)
+        if (lpProgram == 0)
         {
             ClearHandle(lrHandle);
             return;
@@ -153,7 +153,7 @@ namespace
     {
         for (u32 luSlot = 0u; luSlot < rw::KU_RESOURCE_LANE_COUNT; ++luSlot)
         {
-            lrResource.m_baseResources[luSlot] = nullptr;
+            lrResource.m_baseResources[luSlot] = 0;
         }
     }
 
@@ -295,7 +295,7 @@ namespace postfx
             rw::BaseResourceDescriptors<5> lDescriptor;
             renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
             m_quadVertexDescriptorResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_quadVertexDescriptor = renderengine::VertexDescriptor::Initialize(
                 &m_quadVertexDescriptorResource, &lParameters);
         }
@@ -308,7 +308,7 @@ namespace postfx
             renderengine::ResourceDescriptor5 lDescriptor;
             renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
             m_quadDepthStencilStateResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_quadDepthStencilState = renderengine::DepthStencilState::Initialize(
                 reinterpret_cast<renderengine::DepthStencilState**>(&m_quadDepthStencilStateResource),
                 &lParameters);
@@ -340,7 +340,7 @@ namespace postfx
             rw::BaseResourceDescriptors<5> lDescriptor;
             renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
             m_scatterVertexDescriptorResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_scatterVertexDescriptor = renderengine::VertexDescriptor::Initialize(
                 &m_scatterVertexDescriptorResource, &lParameters);
         }
@@ -353,7 +353,7 @@ namespace postfx
             renderengine::ResourceDescriptor5 lDescriptor;
             renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
             m_scatterDepthStencilStateResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_scatterDepthStencilState = renderengine::DepthStencilState::Initialize(
                 reinterpret_cast<renderengine::DepthStencilState**>(&m_scatterDepthStencilStateResource),
                 &lParameters);
@@ -450,7 +450,7 @@ namespace postfx
             renderengine::ResourceDescriptor5 lDescriptor;
             renderengine::RasterizerState::GetResourceDescriptor(&lDescriptor, &lParameters);
             m_rasterizerStateResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_rasterizerState = renderengine::RasterizerState::Initialize(
                 reinterpret_cast<renderengine::RasterizerState**>(&m_rasterizerStateResource),
                 &lParameters);

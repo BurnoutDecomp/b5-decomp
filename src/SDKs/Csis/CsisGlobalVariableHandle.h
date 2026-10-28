@@ -60,6 +60,6 @@ public:
     u32 muPadding;
 };
 
-static_assert(sizeof(GlobalVariableHandle) == 0x10, "native CSIS global handle");
+CGS_STATIC_ASSERT((sizeof(GlobalVariableHandle) == 0x10), "native CSIS global handle");
 
 } // namespace Csis

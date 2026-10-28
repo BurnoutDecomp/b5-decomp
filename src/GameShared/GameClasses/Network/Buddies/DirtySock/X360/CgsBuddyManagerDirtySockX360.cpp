@@ -649,33 +649,33 @@ namespace CgsNetwork
         // opaque tail (asm: pResults == this+0x28, key base read at this+0x2C).
         // The raw 32-bit gap is +4; on the 64-bit gate the pointer is widened, so
         // the ABI-stable relationship pinned here is the field *ordering*.
-        static_assert(offsetof(BuddyManagerX360, mpProfileSettings)
-                          > offsetof(BuddyManagerX360, muProfileResultsSettingsLen),
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, mpProfileSettings)
+                          > offsetof(BuddyManagerX360, muProfileResultsSettingsLen)),
                       "pSettings follows the results-buffer length word");
-        static_assert(offsetof(BuddyManagerX360, maProfileReadResults)
-                          > offsetof(BuddyManagerX360, mpProfileSettings),
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, maProfileReadResults)
+                          > offsetof(BuddyManagerX360, mpProfileSettings)),
                       "the opaque results tail follows pSettings");
-        static_assert(offsetof(BuddyManagerX360, miNextProfileToRequest)
-                          == offsetof(BuddyManagerX360, miNumberOfPicturesToDownload) + 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, miNextProfileToRequest)
+                          == offsetof(BuddyManagerX360, miNumberOfPicturesToDownload) + 4),
                       "miNextProfileToRequest immediately follows miNumberOfPicturesToDownload");
-        static_assert(offsetof(BuddyManagerX360, miFirstProfileInThisRequest)
-                          == offsetof(BuddyManagerX360, miNextProfileToRequest) + 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, miFirstProfileInThisRequest)
+                          == offsetof(BuddyManagerX360, miNextProfileToRequest) + 4),
                       "miFirstProfileInThisRequest follows miNextProfileToRequest");
-        static_assert(offsetof(BuddyManagerX360, miCurrentProfile)
-                          == offsetof(BuddyManagerX360, miFirstProfileInThisRequest) + 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, miCurrentProfile)
+                          == offsetof(BuddyManagerX360, miFirstProfileInThisRequest) + 4),
                       "miCurrentProfile follows miFirstProfileInThisRequest");
-        static_assert(offsetof(BuddyManagerX360, mGamerPicOverlapped)
-                          == offsetof(BuddyManagerX360, mInviteOverlapped) + 28,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, mGamerPicOverlapped)
+                          == offsetof(BuddyManagerX360, mInviteOverlapped) + 28),
                       "mGamerPicOverlapped follows the 28-byte mInviteOverlapped");
-        static_assert(offsetof(BuddyManagerX360, maInvitesToBeSent)
-                          == offsetof(BuddyManagerX360, mGamerPicOverlapped) + 28,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, maInvitesToBeSent)
+                          == offsetof(BuddyManagerX360, mGamerPicOverlapped) + 28),
                       "maInvitesToBeSent follows the 28-byte mGamerPicOverlapped");
-        static_assert(offsetof(BuddyManagerX360, miNumberOfInvitesToBeSent)
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, miNumberOfInvitesToBeSent)
                           == offsetof(BuddyManagerX360, maInvitesToBeSent)
-                                 + sizeof(u64) * KI_MAX_INVITES_TO_BUFFER,
+                                 + sizeof(u64) * KI_MAX_INVITES_TO_BUFFER),
                       "miNumberOfInvitesToBeSent follows the 5-entry invite buffer");
-        static_assert(offsetof(BuddyManagerX360, mbSendingInvite)
-                          == offsetof(BuddyManagerX360, miNumberOfInvitesToBeSent) + 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, mbSendingInvite)
+                          == offsetof(BuddyManagerX360, miNumberOfInvitesToBeSent) + 4),
                       "mbSendingInvite follows miNumberOfInvitesToBeSent");
     }
 }

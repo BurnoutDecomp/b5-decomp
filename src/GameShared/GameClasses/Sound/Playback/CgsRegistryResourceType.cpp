@@ -39,7 +39,7 @@ namespace CgsResource
         const CgsSound::Playback::Registry* lpRegistry =
             static_cast<const CgsSound::Playback::Registry*>(lpResource);
         // Verbatim assert (the shipped inline cites CgsRegistryResourceType.h:91).
-        CGS_ASSERT(lpRegistry != nullptr, "lpRegistry");
+        CGS_ASSERT(lpRegistry != 0, "lpRegistry");
 
         // ARTIST's expression is 4*(capacity+7) because that build has 32-bit
         // size_t/pointers.  Platform 4 is the native x64 image: the same named

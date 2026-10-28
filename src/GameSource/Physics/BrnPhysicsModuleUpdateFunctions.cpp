@@ -157,7 +157,7 @@ namespace BrnPhysics
     void PhysicsModule::FixUpVehicleContacts(
         PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface)
     {
-        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL");   // :915
+        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL");   // :915
 
         typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
         typedef CgsSceneManager::SceneManagerIO::PotentialContact                       PotentialContact;

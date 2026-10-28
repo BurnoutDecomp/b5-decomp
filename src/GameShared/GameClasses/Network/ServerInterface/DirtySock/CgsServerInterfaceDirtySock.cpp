@@ -64,7 +64,7 @@ namespace CgsNetwork
 
     char* ServerInterfaceDirtySock::GetMessageBuffer() const
     {
-        CGS_ASSERT(mpacMessageBuffer != nullptr, "mpacMessageBuffer");
+        CGS_ASSERT(mpacMessageBuffer != 0, "mpacMessageBuffer");
         return mpacMessageBuffer;
     }
 }

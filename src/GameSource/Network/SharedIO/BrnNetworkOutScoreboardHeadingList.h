@@ -78,8 +78,8 @@ namespace BrnNetworkModuleIO
         bool IsPerRoad() const               { return mbIsPerRoad; }
         void SetPerRoad(bool lbIsPerRoad)    { mbIsPerRoad = lbIsPerRoad; }
     };
-    static_assert(sizeof(NetworkOutScoreboardHeadingList) == 0x808, "NetworkOutScoreboardHeadingList size (event-type 0x34, 2056 bytes)");
-    static_assert(offsetof(NetworkOutScoreboardHeadingList, mbIsPerRoad) == 0x806, "mbIsPerRoad @+0x806");
-    static_assert(offsetof(NetworkOutScoreboardHeadingList, mb807) == 0x807, "mb807 @+0x807");
+    CGS_STATIC_ASSERT((sizeof(NetworkOutScoreboardHeadingList) == 0x808), "NetworkOutScoreboardHeadingList size (event-type 0x34, 2056 bytes)");
+    CGS_STATIC_ASSERT((offsetof(NetworkOutScoreboardHeadingList, mbIsPerRoad) == 0x806), "mbIsPerRoad @+0x806");
+    CGS_STATIC_ASSERT((offsetof(NetworkOutScoreboardHeadingList, mb807) == 0x807), "mb807 @+0x807");
 }
 }

@@ -24,7 +24,7 @@ namespace BrnTrafficIO
 
     // DWARF :48 -- a traffic vehicle the player could "stomp" (drive over). sizeof == 32
     // (Vector3 SIMD(16) + EntityId(4) + f32(4) -> 24, padded to 32 by the Vector3 16-align).
-    struct alignas(16) VehicleStompingData
+    struct CGS_ALIGN(16) VehicleStompingData
     {
         Vector3  mStompeePosition;   // :50
         EntityId mStompeeEntityId;   // :51

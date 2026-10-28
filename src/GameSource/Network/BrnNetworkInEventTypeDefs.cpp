@@ -13,11 +13,11 @@ namespace BrnNetworkModuleIO
 {
     void NetworkInSelectScoreboardEvent::_AssertLayout()
     {
-        static_assert(offsetof(NetworkInSelectScoreboardEvent, miCategory) == 0x00, "miCategory @+0x00");
-        static_assert(offsetof(NetworkInSelectScoreboardEvent, miIndex) == 0x04, "miIndex @+0x04");
-        static_assert(offsetof(NetworkInSelectScoreboardEvent, miVariation) == 0x08, "miVariation @+0x08");
-        static_assert(offsetof(NetworkInSelectScoreboardEvent, meType) == 0x0C, "meType @+0x0C");
-        static_assert(sizeof(NetworkInSelectScoreboardEvent) == 16, "queued as 16 bytes");
+        CGS_STATIC_ASSERT((offsetof(NetworkInSelectScoreboardEvent, miCategory) == 0x00), "miCategory @+0x00");
+        CGS_STATIC_ASSERT((offsetof(NetworkInSelectScoreboardEvent, miIndex) == 0x04), "miIndex @+0x04");
+        CGS_STATIC_ASSERT((offsetof(NetworkInSelectScoreboardEvent, miVariation) == 0x08), "miVariation @+0x08");
+        CGS_STATIC_ASSERT((offsetof(NetworkInSelectScoreboardEvent, meType) == 0x0C), "meType @+0x0C");
+        CGS_STATIC_ASSERT((sizeof(NetworkInSelectScoreboardEvent) == 16), "queued as 16 bytes");
     }
 
     void NetworkInSelectScoreboardEvent::GetIndexes(s32 liCategory)

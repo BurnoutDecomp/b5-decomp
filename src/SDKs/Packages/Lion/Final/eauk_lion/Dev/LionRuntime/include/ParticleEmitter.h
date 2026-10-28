@@ -457,11 +457,11 @@ private:
     // @0x82913470 allocates with. Break a member and the gate fails here.
     static void _AssertBuildDataLayout()
     {
-        static_assert(sizeof(ParticleBuildData) == 0xB0,
+        CGS_STATIC_ASSERT((sizeof(ParticleBuildData) == 0xB0),
                       "cParticleEmitter::ParticleBuildData is 11 lane registers == 0xB0 "
                       "(cParticleEmitterManager::AppInit @0x82913470 mulli r10,r10,0x2D0, "
                       "with the record's fixed head at 0x220)");
-        static_assert(alignof(ParticleBuildData) == 16,
+        CGS_STATIC_ASSERT((__alignof(ParticleBuildData) == 16),
                       "every ParticleBuildData member is a VMX lane register");
     }
 

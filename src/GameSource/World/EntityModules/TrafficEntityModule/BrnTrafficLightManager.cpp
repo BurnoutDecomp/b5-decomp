@@ -158,11 +158,11 @@ namespace
 // Called by TrafficEntityModule::Reset @0x8272D39C.
 void TrafficLightManager::Construct()
 {
-    static_assert(sizeof(TrafficLightRuntimeState) == sizeof(TrafficLightState),
+    CGS_STATIC_ASSERT((sizeof(TrafficLightRuntimeState) == sizeof(TrafficLightState)),
                   "the attested record and the array's placeholder are the same 8 bytes");
-    static_assert(offsetof(TrafficLightManager, mbCountdownLights) == 0x12C0, "mbCountdownLights @0x12C0");
-    static_assert(offsetof(TrafficLightManager, meCountdownState) == 0x12C4, "meCountdownState @0x12C4");
-    static_assert(offsetof(TrafficLightManager, mfCountdownRemainingTime) == 0x12C8,
+    CGS_STATIC_ASSERT((offsetof(TrafficLightManager, mbCountdownLights) == 0x12C0), "mbCountdownLights @0x12C0");
+    CGS_STATIC_ASSERT((offsetof(TrafficLightManager, meCountdownState) == 0x12C4), "meCountdownState @0x12C4");
+    CGS_STATIC_ASSERT((offsetof(TrafficLightManager, mfCountdownRemainingTime) == 0x12C8),
                   "mfCountdownRemainingTime @0x12C8");
 
     for (u32 luTrafficLight = 0; luTrafficLight < KU_MAX_TRAFFIC_LIGHT_INSTANCES; ++luTrafficLight)
@@ -209,7 +209,7 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
         meCountdownState         = E_TRAFFICLIGHTSTATE_GREEN;
     }
 
-    if (lpDiag != nullptr && giTrafficLightDiagLinesLeft > 0)
+    if (lpDiag != 0 && giTrafficLightDiagLinesLeft > 0)
     {
         --giTrafficLightDiagLinesLeft;
     }
@@ -282,7 +282,7 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
     mbCountdownLights        = false;
     meCountdownState         = E_TRAFFICLIGHTSTATE_COUNT;
 
-    if (lpDiag != nullptr && giTrafficLightDiagLinesLeft > 0)
+    if (lpDiag != 0 && giTrafficLightDiagLinesLeft > 0)
     {
         --giTrafficLightDiagLinesLeft;
     }

@@ -26,8 +26,8 @@ namespace Gen
             f32 mfGrip;
         };
 
-        explicit physicssurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit physicssurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+        explicit physicssurface(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit physicssurface(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         const void* GetAttributeData() const { return GetLayoutPointer(); }
         const f32& Roughness() const

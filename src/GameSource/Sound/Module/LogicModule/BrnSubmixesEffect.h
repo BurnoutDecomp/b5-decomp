@@ -90,8 +90,8 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
         , mbHoldVolumes(false) {}
     virtual ~SubmixesEffect();
 
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
@@ -99,12 +99,12 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
     // Bumps the base attach count, caches the owning GlobalStateManager off mpState,
     // latches the surround flag from the playback Environment's audio mode, and programs
     // the master voice's static plugin parameters.
-    virtual bool Attach() override;
+    virtual bool Attach() ;
 
     // @ 0x826D2E48 -- DWARF BrnSubmixesEffect.cpp:142. Vtable 0x820B2530 slot +0x1C.
     // ⭐ THE TAIL OF THE VOLUME CHAIN: four dynamic-mixer outputs onto the two submix
     // voices and the master voice, every frame.
-    virtual void ProcessUpdate() override;
+    virtual void ProcessUpdate() ;
 
     // @ 0x82687EE8 -- overrides EffectBase::Notify. Type-15 messages carry a single-byte
     // hold-volumes flag in their body at +0x10 (past the 12-byte MessageHeader); Notify
@@ -116,7 +116,7 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
     // reconstruction never wins. GameShared/.../CgsEffectBase.h -- which BrnEffectObject.h
     // includes at the top of the file -- declares Notify, Attach, UpdateParams and
     // ProcessUpdate, and `override` compiles on all four.)
-    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader) override;
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader) ;
 
     // @ 0x826BC6B0 -- DWARF BrnSubmixesEffect.cpp:233, and THE NAME IS THE CONSOLE'S,
     // not ours. Not virtual: no vtable slot in the image holds it. Tail-called by BOTH

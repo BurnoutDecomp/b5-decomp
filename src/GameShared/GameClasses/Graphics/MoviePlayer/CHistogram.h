@@ -83,13 +83,13 @@ public:
 // Wrapped in a never-called friend helper so offsetof can reach the private members.
 inline void _CHistogram_AssertLayout()
 {
-    static_assert(offsetof(CHistogram, mfVariance)           == 0x000, "CHistogram::mfVariance");
-    static_assert(offsetof(CHistogram, mfVarianceDelta)      == 0x004, "CHistogram::mfVarianceDelta");
-    static_assert(offsetof(CHistogram, mfMean)               == 0x008, "CHistogram::mfMean");
-    static_assert(offsetof(CHistogram, mfMeanDelta)          == 0x00C, "CHistogram::mfMeanDelta");
-    static_assert(offsetof(CHistogram, mfHighMoment)         == 0x014, "CHistogram::mfHighMoment");
-    static_assert(offsetof(CHistogram, maHistogram)          == 0x018, "CHistogram::maHistogram");
-    static_assert(offsetof(CHistogram, maHistogramSecondary) == 0x418, "CHistogram::maHistogramSecondary");
-    static_assert(offsetof(CHistogram, miValid)              == 0x818, "CHistogram::miValid");
-    static_assert(sizeof(CHistogram) == 0x81C, "CHistogram size");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, mfVariance)           == 0x000), "CHistogram::mfVariance");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, mfVarianceDelta)      == 0x004), "CHistogram::mfVarianceDelta");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, mfMean)               == 0x008), "CHistogram::mfMean");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, mfMeanDelta)          == 0x00C), "CHistogram::mfMeanDelta");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, mfHighMoment)         == 0x014), "CHistogram::mfHighMoment");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, maHistogram)          == 0x018), "CHistogram::maHistogram");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, maHistogramSecondary) == 0x418), "CHistogram::maHistogramSecondary");
+    CGS_STATIC_ASSERT((offsetof(CHistogram, miValid)              == 0x818), "CHistogram::miValid");
+    CGS_STATIC_ASSERT((sizeof(CHistogram) == 0x81C), "CHistogram size");
 }

@@ -59,7 +59,7 @@
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/GinsuPlayer.h"            // the game-side 'Gns0'
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h"
 
-#include <cstdint> // intptr_t (the RwacPlugInEvent r5 ride-through)
+#include "types.hpp" // intptr_t (the RwacPlugInEvent r5 ride-through)
 #include <new>   // placement new (the in-carve construct)
 
 // The process-wide System singleton the vendor System.cpp publishes from

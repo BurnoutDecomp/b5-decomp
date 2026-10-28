@@ -20,7 +20,7 @@ namespace CgsGeometric
     // Prepare / BuildSpacialPartition before use).
     void PolygonSoupListSpatialMap::Construct()
     {
-        mpaPolySoupListHandles = nullptr;
+        mpaPolySoupListHandles = 0;
         miNumSoupLists         = 0;
     }
 
@@ -46,10 +46,10 @@ namespace CgsGeometric
     // dword feeds the count, since the whole handle is zero).
     void PolygonSoupListSpatialMap::Clear()
     {
-        mpLeafNodes            = nullptr; // result[18]
-        mapQueryBuffers[0]     = nullptr; // result[20]
-        mapQueryBuffers[1]     = nullptr; // result[21]
-        mpOutputQueryBuffer    = nullptr; // result[22]
+        mpLeafNodes            = 0; // result[18]
+        mapQueryBuffers[0]     = 0; // result[20]
+        mapQueryBuffers[1]     = 0; // result[21]
+        mpOutputQueryBuffer    = 0; // result[22]
         miNumLevels            = 0;       // result[23]
         miQueryBufferSize      = 0;       // result[24]
         miLastQueryResultCount = 0;       // result[25]
@@ -57,8 +57,8 @@ namespace CgsGeometric
         for (s32 li = 0; li < miNumSoupLists; ++li)
         {
             // qword_830393E0 == the invalid/zero ResourceHandle {0, 0}.
-            mpaPolySoupListHandles[li].mpResourceMemory = nullptr;
-            mpaPolySoupListHandles[li].mpSourceEntry    = nullptr;
+            mpaPolySoupListHandles[li].mpResourceMemory = 0;
+            mpaPolySoupListHandles[li].mpSourceEntry    = 0;
         }
 
         miNumSoupLists = 0; // = the (zero) invalid-handle dword the X360 copies into the count
@@ -74,13 +74,13 @@ namespace CgsGeometric
                    "liPolySoupListIndex >= 0 && liPolySoupListIndex < miNumSoupLists");
 
         const CgsResource::ResourceHandle& lrHandle = mpaPolySoupListHandles[liPolySoupListIndex];
-        CGS_ASSERT(lrHandle.mpResourceMemory != nullptr,
+        CGS_ASSERT(lrHandle.mpResourceMemory != 0,
                    "lPolySoupListHandle.GetResource() != NULL");
 
         // GetResource() == mpResourceMemory; GetMemoryResource() == the resource's first
         // pointer member (raw deref of the resource memory).
         void* lpMemoryResource = *reinterpret_cast<void* const*>(lrHandle.mpResourceMemory);
-        CGS_ASSERT(lpMemoryResource != nullptr,
+        CGS_ASSERT(lpMemoryResource != 0,
                    "lPolySoupListHandle.GetResource()->GetMemoryResource() != NULL");
 
         return reinterpret_cast<const PolygonSoupList*>(lpMemoryResource);

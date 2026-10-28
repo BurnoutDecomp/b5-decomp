@@ -2385,7 +2385,7 @@ struct RaceCarEntityModule::SetPlayerOpponentsActionRecord
 {
     Array<CgsID, 7u> maOpponents;   // DWARF BrnGameActions.h:726
 };
-static_assert(sizeof(RaceCarEntityModule::SetPlayerOpponentsActionRecord) == 64,
+CGS_STATIC_ASSERT((sizeof(RaceCarEntityModule::SetPlayerOpponentsActionRecord) == 64),
               "X360 posts action 4 with size 64 (li r6, 0x40)");
 
 // ============================================================================
@@ -2449,7 +2449,7 @@ struct RaceCarEntityModule::SetBoostActionRecord
     s32                   miBoostSegments;  // +0x0C  `lwz r4, 0xC(r30)` @0x822A46E0
     bool                  mbInfiniteBoost;  // +0x10  `lbz r4, 0x10(r30)` @0x822A4690
 };
-static_assert(sizeof(RaceCarEntityModule::SetBoostActionRecord) == 20,
+CGS_STATIC_ASSERT((sizeof(RaceCarEntityModule::SetBoostActionRecord) == 20),
               "X360 posts action 170 with size 20 (li r6, 0x14)");
 
 // ============================================================================
@@ -2549,7 +2549,7 @@ namespace
         ::EActiveRaceCarIndex mActiveRaceCarIndex;   // +0x00  (`lwz r4, 0(r27)` @0x8230D06C)
         bool                  mbAllowedInRoadRage;   // +0x04  (`lbz r11, 4(r27)` @0x8230D090)
     };
-    static_assert(sizeof(AllowCarToJoinRoadRageActionRecord) == 8,
+    CGS_STATIC_ASSERT((sizeof(AllowCarToJoinRoadRageActionRecord) == 8),
                   "X360 posts action 129 as 8 bytes (li r6, 8)");
 
     // ---- action 76, DWARF E_ACTION_CAR_SELECT_MODIFICATION_SCREEN (71; +5 car-select band) -------
@@ -2567,7 +2567,7 @@ namespace
         s32  meCarSelectType;   // +0x00  DWARF :2731 (an s32-backed ECarSelectType; not read here)
         bool mbEntering;        // +0x04  DWARF :2732
     };
-    static_assert(sizeof(CarSelectModificationScreenActionRecord) == 8,
+    CGS_STATIC_ASSERT((sizeof(CarSelectModificationScreenActionRecord) == 8),
                   "X360 posts action 76 as 8 bytes (KI_ACTION_CAR_MOD_SCREEN, size 8)");
 
     // ---- flt_82FAD720 == DWARF KF_RESET_ON_TRACK_SPEED (BrnRaceCarEntityModule.cpp:232) ----
@@ -2624,10 +2624,10 @@ namespace
     const s32 KI_ACTION_UPCOMING_ROAD_CHANGE = 276;
     // The console reads the two highlight words at +0x14C / +0x150 (`lwz` @0x8230D8A4 / 0x8230D8A0);
     // pin the PC record to those offsets so the named reads are the console's.
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
-                           miLeftRoadHighlightState) == 0x14C, "UpcomingRoadChangeAction +0x14C");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
-                           miRightRoadHighlightState) == 0x150, "UpcomingRoadChangeAction +0x150");
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
+                           miLeftRoadHighlightState) == 0x14C), "UpcomingRoadChangeAction +0x14C");
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
+                           miRightRoadHighlightState) == 0x150), "UpcomingRoadChangeAction +0x150");
 
     // ---- G68-D11 (crash parity 2026-09-23): the ids and records of the remaining console arms ----
     // [!] HEADER REQUEST -- BrnGameActions.h carries none of these enumerators and none of these
@@ -2662,7 +2662,7 @@ namespace
         ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
         u32                   muColourIndex;          // +0x04
     };
-    static_assert(sizeof(SwitchCarColourActionRecord) == 8, "SwitchCarColourAction is 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(SwitchCarColourActionRecord) == 8), "SwitchCarColourAction is 8 bytes");
 
     // Action 98 (E_ACTION_PAINT_SHOP_DRIVE_THRU, size 144; DWARF PaintShopDriveThruAction). The X360
     // member order differs from the PS3 DWARF's (mbDoPresentation, muColourIndex, muPaletteIndex):
@@ -2677,9 +2677,9 @@ namespace
         u32            muPaletteIndex;      // +0x84
         bool           mbDoPresentation;    // +0x88  (not read by this module)
     };
-    static_assert(offsetof(PaintShopDriveThruActionRecord, muColourIndex) == 0x80 &&
+    CGS_STATIC_ASSERT((offsetof(PaintShopDriveThruActionRecord, muColourIndex) == 0x80 &&
                   offsetof(PaintShopDriveThruActionRecord, muPaletteIndex) == 0x84 &&
-                  sizeof(PaintShopDriveThruActionRecord) == 144, "X360 action 98 record");
+                  sizeof(PaintShopDriveThruActionRecord) == 144), "X360 action 98 record");
 
 }
 
@@ -2754,7 +2754,7 @@ void RaceCarEntityModule::HandleGameActions(
             if (lpAction->mbIsDriveThru)
             {
                 BrnTrigger::BoxRegion lBox;
-                static_assert(sizeof(lBox) == sizeof(lpAction->maDriveThruBoxRegion), "drive-through box payload");
+                CGS_STATIC_ASSERT((sizeof(lBox) == sizeof(lpAction->maDriveThruBoxRegion)), "drive-through box payload");
                 std::memcpy(&lBox, lpAction->maDriveThruBoxRegion, sizeof(lBox));
                 Vector3 lDirection = lBox.ComputeDirection();
                 const Vector3 lVelocity = lpCar->GetVelocity();
@@ -4793,7 +4793,7 @@ void RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene( RaceCarEntityModuleI
         if( lpCar->mbAddedToScene && lpCar->mPhysicsState.mbDeformedThisFrame )
         {
             const CgsSceneManager::VolumeId lVolumeId( lpCar->mHandlingBodyVolumeId.muId );   // ld 0xD0 ; std
-            alignas( 16 ) u8 laVolumeBuffer[128];                                             // r1 + 0x60
+            CGS_ALIGN( 16 ) u8 laVolumeBuffer[128];                                             // r1 + 0x60
             const rw::collision::BoxVolume* lpVolume = lpCar->GetPropCollisionBox( laVolumeBuffer );
             lpSceneInterface->ReplaceDynamicVolume( lVolumeId, lpVolume );
 
@@ -7781,7 +7781,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 void RaceCarEntityModule::StorePlayerRoutePortalPositions(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput)
 {
-    CGS_ASSERT(lpInput != nullptr, "lpInput != NULL");
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");
     mPlayersCurrentRouteNodePosition = lpInput->GetAIRaceCarInterface()->mCurrentNodePosition;
     mPlayersNextRouteNodePosition = lpInput->GetAIRaceCarInterface()->mNextNodePosition;
 }
@@ -7860,7 +7860,7 @@ void RaceCarEntityModule::HandleSelectionRequestStreamingAction(
         labAvailable[liSlot] = false;
         const CgsID lCarId = lpAction->maCars[liCar];
         const s32 liVehicle = mpVehicleList->GetVehicleIndex(lCarId);
-        const auto* lpVehicle = liVehicle < 0 ? nullptr : mpVehicleList->GetVehicleData(liVehicle);
+        const auto* lpVehicle = liVehicle < 0 ? 0 : mpVehicleList->GetVehicleData(liVehicle);
         s32 liWheel = mpWheelList->FindWheelIndexFromName(lpVehicle->GetDefaultWheelName());
         if (liWheel == -1)
         {

@@ -24,7 +24,7 @@ namespace Vehicle
     // the cab CgsID. mCrasherID (out+0x8) is deliberately NOT written -- left as the caller supplied it.
     void CreateArticulatedTrafficEvent::GetCreateCabEvent( CreatePhysicalTrafficEvent* lpCreateCabEvent ) const
     {
-        CGS_ASSERT( lpCreateCabEvent != nullptr, "lpCreateCabEvent != NULL" );
+        CGS_ASSERT( lpCreateCabEvent != 0, "lpCreateCabEvent != NULL" );
 
         lpCreateCabEvent->mVolumeInstanceID  = mVolumeInstanceID_Cab;
         lpCreateCabEvent->mInitialTransform  = mInitialTransform_Cab;
@@ -43,7 +43,7 @@ namespace Vehicle
     // mCrasherID (out+0x8) is again left unwritten.
     void CreateArticulatedTrafficEvent::GetCreateTrailerEvent( CreatePhysicalTrafficEvent* lpCreateTrailerEvent ) const
     {
-        CGS_ASSERT( lpCreateTrailerEvent != nullptr, "lpCreateTrailerEvent != NULL" );
+        CGS_ASSERT( lpCreateTrailerEvent != 0, "lpCreateTrailerEvent != NULL" );
 
         lpCreateTrailerEvent->mVolumeInstanceID  = mVolumeInstanceID_Trailer;
         lpCreateTrailerEvent->mInitialTransform  = mInitialTransform_Trailer;

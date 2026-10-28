@@ -35,10 +35,10 @@ struct XOVERLAPPED
 };
 typedef XOVERLAPPED* PXOVERLAPPED;
 
-static_assert(sizeof(XOVERLAPPED) == 28, "Original X360 overlapped width");
-static_assert(offsetof(XOVERLAPPED, hEvent) == 0x0c, "ARTIST event word");
-static_assert(offsetof(XOVERLAPPED, pCompletionRoutine) == 0x10, "ARTIST callback word");
-static_assert(offsetof(XOVERLAPPED, dwExtendedError) == 0x18, "ARTIST extended error word");
+CGS_STATIC_ASSERT((sizeof(XOVERLAPPED) == 28), "Original X360 overlapped width");
+CGS_STATIC_ASSERT((offsetof(XOVERLAPPED, hEvent) == 0x0c), "ARTIST event word");
+CGS_STATIC_ASSERT((offsetof(XOVERLAPPED, pCompletionRoutine) == 0x10), "ARTIST callback word");
+CGS_STATIC_ASSERT((offsetof(XOVERLAPPED, dwExtendedError) == 0x18), "ARTIST extended error word");
 // Native64 HWND/HANDLE/callback values belong to the PC owner, never these guest32 words.
 
 // XDK entry points (real prototypes live in the Xbox 360 XDK <xapi.h>/<xtl.h>);

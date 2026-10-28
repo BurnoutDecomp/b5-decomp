@@ -28,7 +28,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [DIAG] CgsDev::Log::gpDebugPrint (key-bounds trace)
 
 #include <cstring>                                  // memset (ICETakeData::Construct)
-#include <cstdint>                                  // uintptr_t (SetDataPointers alignment math)
+#include "types.hpp"                                  // uintptr_t (SetDataPointers alignment math)
 
 
 // =============================================================================
@@ -1445,7 +1445,7 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
     // stand-in for a stack ICETake -- no constructor runs, matching that
     // the rebind is self-contained. FLAG: replace with a real `ICETake lTake;` once
     // the ICETake default ctor (and Cubic1D's) are reconstructed into the headers.
-    alignas(ICETake) u8 laTakeStorage[sizeof(ICETake)];
+    CGS_ALIGN(ICETake) u8 laTakeStorage[sizeof(ICETake)];
     ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
     lTake.SetDataPointers(this, false);    // bind live pointers over this take's data
 
@@ -2524,7 +2524,7 @@ void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
     // stack buffer reinterpreted as ICETake is the faithful stand-in.
     // FLAG: replace with a real `ICETake lTake;` once the ICETake (and Cubic1D) default
     // ctors are reconstructed into the headers.
-    alignas(ICETake) u8 laTakeStorage[sizeof(ICETake)];
+    CGS_ALIGN(ICETake) u8 laTakeStorage[sizeof(ICETake)];
     ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
     lTake.SetDataPointers(this, false);   // bind live pointers over this take's data
 

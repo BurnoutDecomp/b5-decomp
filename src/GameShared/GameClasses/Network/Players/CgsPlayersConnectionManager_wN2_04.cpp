@@ -25,7 +25,7 @@ static const s32 KI_LOBBY_STATUS_SELF = 0x73656C66;   // 'self'
 const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) const
 {
     const NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-    if (lpPlayer != nullptr)
+    if (lpPlayer != 0)
     {
         return lpPlayer->GetName();
     }
@@ -43,7 +43,7 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
     }
 
     CGS_ASSERT(false, "Could not find name of player");
-    return nullptr;
+    return 0;
 }
 
 // ---- UpdatePlayerList ----------------------------------------------------------------
@@ -93,9 +93,9 @@ void PlayersConnectionManager::UpdatePlayerList(const DirtySock::ConnApiClientLi
                 continue;
             }
 
-            ConnectionDataEntry* lpEntry = nullptr;
+            ConnectionDataEntry* lpEntry = 0;
             NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByName(lClient.UserInfo.strName);
-            if (lpPlayer != nullptr)
+            if (lpPlayer != 0)
             {
                 lpEntry = GetEntry(lpPlayer->GetPlayerID());
                 CGS_ASSERT(lpEntry, "lpEntry");
@@ -173,7 +173,7 @@ void PlayersConnectionManager::UpdatePlayerList(const DirtySock::ConnApiClientLi
                         lpEntry->mPlayerConnectionData.meConnectionStatus == E_CONNAPI_PROTOMANGLING)
                     {
                         lpEntry->mPlayerConnectionData.meConnectionStatus = E_CONNECTION_FAILURE;
-                        if (mpfConnectionFinalisedCallback != nullptr)
+                        if (mpfConnectionFinalisedCallback != 0)
                         {
                             mpfConnectionFinalisedCallback(false, lpEntry->mPlayerConnectionData.mPlayerID,
                                                            lpEntry->mConnectionData,
@@ -200,7 +200,7 @@ void PlayersConnectionManager::UpdatePlayerList(const DirtySock::ConnApiClientLi
             }
 
             NetworkPlayer* lpPlayer = mpPlayerManager->GetPlayerByName(lClient.UserInfo.strName);
-            if (lpPlayer == nullptr)
+            if (lpPlayer == 0)
             {
                 continue;
             }

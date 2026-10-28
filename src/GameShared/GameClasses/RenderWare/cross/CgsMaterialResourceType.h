@@ -36,9 +36,9 @@ public:
     // X360 getter is a trivial "return 1" that the linker ICF-folded with the
     // other trivial id getters, so it has no distinct export -- the VALUE is
     // attested by the type-id table. Registration needs it (id-keyed lookup).
-    uint32_t GetTypeID() const override;
-    void FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void PostFixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t GetTypeID() const ;
+    void FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void PostFixUp(void* lpResource, const rw::Resource& lrResource) const ;
 
     // Non-virtual helper (X360 0x828A77E8). The ShaderConstantsInternal* argument is
     // DWARF-attested but unused by the body (the block is re-derived from the blob).

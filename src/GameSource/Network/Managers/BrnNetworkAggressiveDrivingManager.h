@@ -133,10 +133,10 @@ namespace BrnNetwork
 
     inline void NetworkAggressiveDrivingManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(AggressiveDrivingData, mAggressiveDrivingMessageSend) == 0x10, "AggressiveDrivingData::mAggressiveDrivingMessageSend @ +0x10");
-        static_assert(sizeof(void*) != 4 || sizeof(AggressiveMoveData) == 0x50, "AggressiveMoveData stride is 0x50");
-        static_assert(sizeof(void*) != 4 || offsetof(AggressiveDrivingData, maBuffer) == 0x10 + 2 * sizeof(AggressiveDrivingMessage), "AggressiveDrivingData::maBuffer follows the messages");
-        static_assert(sizeof(void*) != 4 || sizeof(AggressiveDrivingData) == 0x10 + 2 * sizeof(AggressiveDrivingMessage) + 0x330, "AggressiveDrivingData tail is 0x330 bytes");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkAggressiveDrivingManager) == KI_MAX_NETWORK_PLAYERS * sizeof(AggressiveDrivingData) + 0x20, "NetworkAggressiveDrivingManager tail is 0x20 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(AggressiveDrivingData, mAggressiveDrivingMessageSend) == 0x10), "AggressiveDrivingData::mAggressiveDrivingMessageSend @ +0x10");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(AggressiveMoveData) == 0x50), "AggressiveMoveData stride is 0x50");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(AggressiveDrivingData, maBuffer) == 0x10 + 2 * sizeof(AggressiveDrivingMessage)), "AggressiveDrivingData::maBuffer follows the messages");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(AggressiveDrivingData) == 0x10 + 2 * sizeof(AggressiveDrivingMessage) + 0x330), "AggressiveDrivingData tail is 0x330 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkAggressiveDrivingManager) == KI_MAX_NETWORK_PLAYERS * sizeof(AggressiveDrivingData) + 0x20), "NetworkAggressiveDrivingManager tail is 0x20 bytes");
     }
 } // namespace BrnNetwork

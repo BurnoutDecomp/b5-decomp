@@ -26,7 +26,7 @@ namespace PhysicsModuleIO
     void PotentialContactInterface::Construct()
     {
         CgsModule::IOBuffer::Construct();
-        mpQueue = nullptr;
+        mpQueue = 0;
         for (s32 liQueue = 0; liQueue < KI_CUSTOM_QUEUE_COUNT; ++liQueue)
         {
             maCustomEventQueues[liQueue].Construct();
@@ -38,7 +38,7 @@ namespace PhysicsModuleIO
     void PotentialContactInterface::SetConstQueue(const InPotentialContactQueue* lpQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpQueue != nullptr, "lpQueue != NULL");
+        CGS_ASSERT(lpQueue != 0, "lpQueue != NULL");
         mpQueue = lpQueue;
     }
 
@@ -48,7 +48,7 @@ namespace PhysicsModuleIO
     void PotentialContactInterface::AddEvent(const CgsSceneManager::SceneManagerIO::PotentialContact& lEvent)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(mpQueue != nullptr, "mpQueue != NULL");
+        CGS_ASSERT(mpQueue != 0, "mpQueue != NULL");
         maCustomEventQueues[0].AddEventSafe(lEvent);
     }
 
@@ -78,7 +78,7 @@ namespace PhysicsModuleIO
     s32 PotentialContactInterface::GetLength() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-        CGS_ASSERT(mpQueue != nullptr, "mpQueue != NULL");
+        CGS_ASSERT(mpQueue != 0, "mpQueue != NULL");
         return maCustomEventQueues[0].GetLength() + mpQueue->GetLength();
     }
 
@@ -94,7 +94,7 @@ namespace PhysicsModuleIO
     PotentialContactInterface::GetEvent(s32 liIndex) const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-        CGS_ASSERT(mpQueue != nullptr, "mpQueue != NULL");
+        CGS_ASSERT(mpQueue != 0, "mpQueue != NULL");
         CGS_ASSERT(liIndex < GetLength(), "liIndex < GetLength()");
 
         const s32 liQueueLength = mpQueue->GetLength();
@@ -174,7 +174,7 @@ namespace PhysicsModuleIO
             if (liLength > saiMax[liQueue]) { saiMax[liQueue] = liLength; }
             saiTotal[liQueue] += liLength;
         }
-        if (mpQueue != nullptr)
+        if (mpQueue != 0)
         {
             const s32 liLength = mpQueue->GetLength();
             if (liLength > saiMax[KI_CUSTOM_QUEUE_COUNT]) { saiMax[KI_CUSTOM_QUEUE_COUNT] = liLength; }

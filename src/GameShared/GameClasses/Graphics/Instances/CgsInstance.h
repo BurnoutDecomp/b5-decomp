@@ -46,7 +46,7 @@
 #include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"   // Ptr32<T> (the 32-bit slot)
 
 #include <cstddef>
-#include <cstdint>
+#include "types.hpp"
 
 namespace CgsGraphics
 {
@@ -76,9 +76,9 @@ namespace CgsGraphics
     };
 
     // The console stride/offsets this whole subsystem is walked with.
-    static_assert(sizeof(Instance) == 80, "Instance must be the console's 80-byte on-disc element");
-    static_assert(sizeof(InstanceList) == 16, "InstanceList must be the console's 16-byte on-disc header");
-    static_assert(offsetof(Instance, mTransform) == 0x10, "Instance::mTransform must be at +0x10");
+    CGS_STATIC_ASSERT((sizeof(Instance) == 80), "Instance must be the console's 80-byte on-disc element");
+    CGS_STATIC_ASSERT((sizeof(InstanceList) == 16), "InstanceList must be the console's 16-byte on-disc header");
+    CGS_STATIC_ASSERT((offsetof(Instance, mTransform) == 0x10), "Instance::mTransform must be at +0x10");
 }
 
 #endif // CGS_GRAPHICS_INSTANCES_CGS_INSTANCE_H

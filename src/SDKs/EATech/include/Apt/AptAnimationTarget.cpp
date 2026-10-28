@@ -28,7 +28,7 @@
 #include "SDKs/EATech/include/Apt/Apt.h"   // AptUserFunctions (the gAptFuncs recorder-sink slot)
 
 #include <cstring>   // memset
-#include <cstdint>   // intptr_t (the X360 fastcall `return r3` / array-cookie math)
+#include "types.hpp"   // intptr_t (the X360 fastcall `return r3` / array-cookie math)
 #include <new>       // placement new (inline-construct the queue / timers / display list)
 
 // The shared Apt fixed-size pool (X360 off_8324D808); defined by the Apt pseudo-data
@@ -57,11 +57,11 @@ namespace
     // X360 globals dword_8324E534..dword_8324E550 (the shared static-data layer).
     int   ssMousePosX             = 0;        // dword_8324E534 -- cursor X fed to AS
     int   ssMousePosY             = 0;        // dword_8324E538 -- cursor Y fed to AS
-    void* spStaticBlock           = nullptr;  // dword_8324E53C -- 80-byte scratch block
+    void* spStaticBlock           = 0;  // dword_8324E53C -- 80-byte scratch block
     int   snMaxNewMovieClips      = 0;        // dword_8324E540 -- table element count
-    void* spNewInsts              = nullptr;  // off_8324E544   -- new-instance table (4*count)
+    void* spNewInsts              = 0;  // off_8324E544   -- new-instance table (4*count)
     int   snNewInstSize           = 0;        // dword_8324E548 -- new-instance fill counter
-    void* spDelayedReleaseList    = nullptr;  // off_8324E54C   -- delayed-release table (4*count)
+    void* spDelayedReleaseList    = 0;  // off_8324E54C   -- delayed-release table (4*count)
     int   snDelayedReleaseListSize = 0;       // dword_8324E550 -- delayed-release fill counter
 }
 
@@ -120,7 +120,7 @@ namespace
 
 bool AptAnimationTarget::PushNewInst(void* pNode)
 {
-    if (spNewInsts == nullptr)
+    if (spNewInsts == 0)
         return false;
 
     if (snNewInstSize >= snMaxNewMovieClips)
@@ -278,7 +278,7 @@ void AptAnimationTargetSetConstruct(AptAnimationTargetSet* pSet, u16 nCapacity)
     else
     {
         pSet->mnCount  = 0;
-        pSet->mppSlots = nullptr;
+        pSet->mppSlots = 0;
     }
 }
 // ---------------------------------------------------------------------------
@@ -297,14 +297,14 @@ void AptAnimationTargetSetDestruct(AptAnimationTargetSet* pSet)
         for (u16 i = 0; i < nCapacity; ++i)        // the slot scan (loc_82AE1698)
         {
             AptValue* const pSlot = pSet->mppSlots[i];
-            if (pSlot == nullptr)
+            if (pSlot == 0)
                 continue;
             pSlot->Release();                      // vtbl[1]
             if (--nLive == 0)
                 break;                             // addic. r29,-1; beq exit
         }
     }
-    if (pSet->mppSlots != nullptr)
+    if (pSet->mppSlots != 0)
         gpAptPseudoDataPool->Deallocate(pSet->mppSlots,
                                         sizeof(void*) * pSet->mnCapacity);   // native-8 stride (console 4*cap)
 }
@@ -331,12 +331,12 @@ void AptAnimationTargetSet::add(AptValue* pValue)
     mnCount = nHead;                                       // stored before the probe
     u32 luNext = static_cast<u32>(nHead) % luCap;
     u32 luScanned = 0u;
-    while (luScanned < luCap && mppSlots[luNext] != nullptr)
+    while (luScanned < luCap && mppSlots[luNext] != 0)
     {
         luNext = (luNext + 1u) % luCap;                    // wrap at capacity
         ++luScanned;
     }
-    if (mppSlots[luNext] == nullptr)
+    if (mppSlots[luNext] == 0)
     {
         mppSlots[luNext] = pValue;
         pValue->AddRef();                                  // vtbl[0] tail-call
@@ -362,7 +362,7 @@ bool AptAnimationTargetSet::remove(AptValue* pValue)
 
     mnCount = static_cast<u16>(mnCount - 1);
     mppSlots[luIndex]->Release();                          // vtbl[1]
-    mppSlots[luIndex] = nullptr;
+    mppSlots[luIndex] = 0;
     return true;
 }
 
@@ -389,7 +389,7 @@ void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unr
     if (snDelayedReleaseListSize > 0)
     {
         AptValue** const lppList = static_cast<AptValue**>(spDelayedReleaseList);
-        while (liSlot < snDelayedReleaseListSize && lppList[liSlot] != nullptr)
+        while (liSlot < snDelayedReleaseListSize && lppList[liSlot] != 0)
             ++liSlot;
     }
 
@@ -511,7 +511,7 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     void* lpQueueMem = gpAptPseudoDataPool->Allocate(sizeof(AptActionQueueC));   // Allocate(off_8324D808, 20)
     mpActionQueue = lpQueueMem
                   ? new (lpQueueMem) AptActionQueueC(pParams->mnActionQueueCap)  // a2[5]
-                  : nullptr;
+                  : 0;
 
     // Interval-timer array: one pool block with a leading count cookie (a (36*N + 4)-
     // byte alloc, clamped on overflow), each element placement-ctor'd. The block
@@ -532,7 +532,7 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     *lpBlock = liBlockSize + 4;                      // size cookie = v7 = payload + 4
     if (reinterpret_cast<intptr_t>(lpBlock) == -4)   // Allocate failed (addic. r3,4 == 0)
     {
-        mpIntervalTimers = nullptr;
+        mpIntervalTimers = 0;
     }
     else
     {
@@ -551,7 +551,7 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     mpQueuedInputs      = static_cast<u32*>(
         gpAptPseudoDataPool->Allocate(4 * mnQueuedInputsCap));   // a1[11]
     mnQueuedInputsCount = 0;                                     // a1[10]
-    mpInputMask         = nullptr;                               // *a1 = 0
+    mpInputMask         = 0;                               // *a1 = 0
 
     // Seed the four input-event object slots to the None sentinel (a1[15/12/13/14]).
     mpDragMC             = gpAptNoneValue;   // +0x3C (a1[15])
@@ -584,7 +584,7 @@ AptAnimationTarget::~AptAnimationTarget()
     gpAptPseudoDataPool->Deallocate(mpQueuedInputs, 4 * mnQueuedInputsCap);
 
     // Interval-timer array (the compiler array deleting destructor, array + free).
-    if (mpIntervalTimers != nullptr)
+    if (mpIntervalTimers != 0)
     {
         AptIntervalTimer::_vector_deleting_destructor_(mpIntervalTimers, 3);
     }
@@ -593,7 +593,7 @@ AptAnimationTarget::~AptAnimationTarget()
     // queue ctor made: *mpBegin's preceding dword holds the byte size) then the
     // 20-byte control block itself.
     AptActionQueueC* lpQueue = mpActionQueue;
-    if (lpQueue != nullptr)
+    if (lpQueue != 0)
     {
         // X360: *v3 == mpBegin; Deallocate(pool, *v3 - 4, *(*v3 - 4) + 4).
         s32* lpRingHeader = reinterpret_cast<s32*>(lpQueue->mpBegin) - 1;
@@ -620,10 +620,10 @@ void AptAnimationTarget::PreDestroy()
     for (u32 liTimer = 0; liTimer < mnNumIntervalTimers; ++liTimer)
     {
         AptIntervalTimer& lrTimer = mpIntervalTimers[liTimer];
-        if (lrTimer.mpActiveValue != nullptr)        // *(v3 + mpIntervalTimers) != 0
+        if (lrTimer.mpActiveValue != 0)        // *(v3 + mpIntervalTimers) != 0
         {
             lrTimer.mpCBFunction->Release();         // (*(*v4 + 4))(v4)
-            if (lrTimer.mpContext != nullptr)        // *(v3 + ... + 16)
+            if (lrTimer.mpContext != 0)        // *(v3 + ... + 16)
             {
                 lrTimer.mpContext->Release();
             }
@@ -633,7 +633,7 @@ void AptAnimationTarget::PreDestroy()
             {
                 lrTimer.CleanParams();
             }
-            lrTimer.mpActiveValue = nullptr;         // *(v3 + mpIntervalTimers) = 0
+            lrTimer.mpActiveValue = 0;         // *(v3 + mpIntervalTimers) = 0
         }
     }
 
@@ -641,10 +641,10 @@ void AptAnimationTarget::PreDestroy()
     {
         for (u32 liSlot = 0; liSlot < mListenerSet.mnCapacity; ++liSlot)
         {
-            if (mListenerSet.mppSlots[liSlot] != nullptr)
+            if (mListenerSet.mppSlots[liSlot] != 0)
             {
                 mListenerSet.mppSlots[liSlot]->Release();   // (*(**(...) + 4))(...)
-                mListenerSet.mppSlots[liSlot] = nullptr;
+                mListenerSet.mppSlots[liSlot] = 0;
             }
         }
     }
@@ -688,7 +688,7 @@ int AptAnimationTarget::RemoveTimerFunctions(AptCIH* pContext)
     for (u32 liTimer = 0; liTimer < mnNumIntervalTimers; ++liTimer)
     {
         AptIntervalTimer& lrTimer = mpIntervalTimers[liTimer];
-        if (lrTimer.mpActiveValue == nullptr)
+        if (lrTimer.mpActiveValue == 0)
         {
             continue;                                  // *v6 == 0 -> free slot
         }
@@ -697,7 +697,7 @@ int AptAnimationTarget::RemoveTimerFunctions(AptCIH* pContext)
         // not survive the x64 widening). The body is gated on it, and the function's
         // owner is matched against it (NOT against pContext itself).
         AptCharacterInst* const lpGate = pContext->mpCharacterInst;
-        if (lpGate == nullptr)
+        if (lpGate == 0)
         {
             continue;
         }
@@ -723,18 +723,18 @@ int AptAnimationTarget::RemoveTimerFunctions(AptCIH* pContext)
         AptValue* const lpFnCIH = static_cast<AptScriptFunctionBase*>(lpFunc)->GetCIH();
         AptCharacterInst* const lpFuncOwner =
             static_cast<AptCIH*>(lpFnCIH)->mpCharacterInst;
-        if (lpFuncOwner != nullptr && lpFuncOwner != lpGate)   // funcOwner vs pContext->mpCharacterInst
+        if (lpFuncOwner != 0 && lpFuncOwner != lpGate)   // funcOwner vs pContext->mpCharacterInst
         {
             continue;
         }
 
         lrTimer.mpCBFunction->Release();               // (*(*v13 + 4))(v13)
-        if (lrTimer.mpContext != nullptr)
+        if (lrTimer.mpContext != 0)
         {
             lrTimer.mpContext->Release();
         }
         lrTimer.CleanParams();
-        lrTimer.mpActiveValue = nullptr;
+        lrTimer.mpActiveValue = 0;
     }
     return reinterpret_cast<intptr_t>(this);           // X360 returns r3 (this) unchanged
 }
@@ -750,7 +750,7 @@ void AptAnimationTarget::TickNewInsts()
     for (int liIndex = 0; liIndex < snNewInstSize; ++liIndex)   // dword_8324E548
     {
         AptCIH* lpCIH = reinterpret_cast<AptCIH*>(lpInsts[liIndex]);
-        if (lpCIH == nullptr)
+        if (lpCIH == 0)
         {
             continue;
         }
@@ -761,7 +761,7 @@ void AptAnimationTarget::TickNewInsts()
         // objects -- garbage reads): CIH word[8] == mpCharacterInst, charInst word[2]
         // == mTypeFlags, charInst word[4] == mnCreateDepth.
         AptCharacterInst* lpCharInst = lpCIH->mpCharacterInst;
-        if (lpCharInst == nullptr)
+        if (lpCharInst == 0)
         {
             continue;   // no bound instance: nothing to tick (guard for the x64 gate)
         }
@@ -773,12 +773,12 @@ void AptAnimationTarget::TickNewInsts()
             lpInsts = static_cast<AptValue**>(spNewInsts);     // reload (tick may realloc)
         }
 
-        if (lpInsts[liIndex] != nullptr)
+        if (lpInsts[liIndex] != 0)
         {
             lpInsts[liIndex]->Release();                       // (*(*v9 + 4))(v9)
             lpInsts = static_cast<AptValue**>(spNewInsts);
         }
-        lpInsts[liIndex] = nullptr;
+        lpInsts[liIndex] = 0;
     }
     snNewInstSize = 0;
 }
@@ -798,8 +798,8 @@ void AptAnimationTarget::CleanRemList()
     for (int liIndex = 0; liIndex < snDelayedReleaseListSize; ++liIndex)  // dword_8324E550
     {
         AptValue* lpValue = lpList[liIndex];
-        lpList[liIndex] = nullptr;
-        if (lpValue == nullptr)
+        lpList[liIndex] = 0;
+        if (lpValue == 0)
         {
             continue;
         }
@@ -883,8 +883,8 @@ void AptAnimationTarget::CleanRemList()
         for (int liIndex = 0; liIndex < liSurvivors; ++liIndex)
         {
             AptValue* lpValue = lpList[liIndex];
-            lpList[liIndex] = nullptr;
-            AptReplaceReferences(lpValue, nullptr, lpAllValues, liAllCount);
+            lpList[liIndex] = 0;
+            AptReplaceReferences(lpValue, 0, lpAllValues, liAllCount);
 
             // console `(v16[1] & 0x3FFC000) == 0x4000` == "refcount == 1" (PPC positions).
             if (lpValue->getRefCount() == 1u)
@@ -921,17 +921,17 @@ void AptAnimationTarget::RegisterReferences()
 {
     AptValue::ReferenceRegistrationCb lpCb = AptValue::sReferenceRegistrationCb;
 
-    if (mpInputMask != nullptr)
+    if (mpInputMask != 0)
     {
-        lpCb(nullptr, &mpInputMask, "AptAnimationTarget::mpInputMask", 1);
+        lpCb(0, &mpInputMask, "AptAnimationTarget::mpInputMask", 1);
     }
 
     AptValue** lpNewInsts = static_cast<AptValue**>(spNewInsts);   // off_8324E544
     for (int liIndex = 0; liIndex < snNewInstSize; ++liIndex)      // dword_8324E548
     {
-        if (lpNewInsts[liIndex] != nullptr)
+        if (lpNewInsts[liIndex] != 0)
         {
-            lpCb(nullptr, &lpNewInsts[liIndex], "AptAnimationTarget::mapNewInsts", 1);
+            lpCb(0, &lpNewInsts[liIndex], "AptAnimationTarget::mapNewInsts", 1);
             lpNewInsts = static_cast<AptValue**>(spNewInsts);      // reload (cb may move)
         }
     }
@@ -939,9 +939,9 @@ void AptAnimationTarget::RegisterReferences()
     // mListenerSet entries (count == mnCapacity, the +0x12 halfword).
     for (u32 liSlot = 0; liSlot < mListenerSet.mnCapacity; ++liSlot)
     {
-        if (mListenerSet.mppSlots[liSlot] != nullptr)
+        if (mListenerSet.mppSlots[liSlot] != 0)
         {
-            lpCb(nullptr, &mListenerSet.mppSlots[liSlot],
+            lpCb(0, &mListenerSet.mppSlots[liSlot],
                  "AptAnimationTarget::mListenerSet.aElements", 0);
         }
     }
@@ -949,17 +949,17 @@ void AptAnimationTarget::RegisterReferences()
     // mInputSet entries (count == mnCapacity, the +0x1A halfword).
     for (u32 liSlot = 0; liSlot < mInputSet.mnCapacity; ++liSlot)
     {
-        if (mInputSet.mppSlots[liSlot] != nullptr)
+        if (mInputSet.mppSlots[liSlot] != 0)
         {
-            lpCb(nullptr, &mInputSet.mppSlots[liSlot],
+            lpCb(0, &mInputSet.mppSlots[liSlot],
                  "AptAnimationTarget::inputSet.aElements", 0);
         }
     }
 
     // Root display list (mark each listed CIH) + the deferred-action queue.
-    if (mDisplayList.mpHead != nullptr)
+    if (mDisplayList.mpHead != 0)
     {
-        mDisplayList.AsState()->RegisterReferences(nullptr);   // (*(a1+32), 0)
+        mDisplayList.AsState()->RegisterReferences(0);   // (*(a1+32), 0)
     }
     mpActionQueue->RegisterReferences();
 
@@ -967,13 +967,13 @@ void AptAnimationTarget::RegisterReferences()
     for (u32 liTimer = 0; liTimer < mnNumIntervalTimers; ++liTimer)
     {
         AptIntervalTimer& lrTimer = mpIntervalTimers[liTimer];
-        if (lrTimer.mpActiveValue == nullptr)
+        if (lrTimer.mpActiveValue == 0)
         {
             continue;
         }
-        lpCb(nullptr, &lrTimer.mpCBFunction,
+        lpCb(0, &lrTimer.mpCBFunction,
              "AptAnimationTarget::maIntervalTimers[i].pCBFunction", 0);
-        lpCb(nullptr, &lrTimer.mpContext,
+        lpCb(0, &lrTimer.mpContext,
              "AptAnimationTarget::maIntervalTimers[i].pContext", 0);
 
         const s32 liParamCount = lrTimer.mParams.mnTop;
@@ -983,7 +983,7 @@ void AptAnimationTarget::RegisterReferences()
             // mppItems[count-1-i] (it registers the local's address, not the live
             // slot's -- the param values are re-fetched fresh each pass).
             AptValue* lpParam = lrTimer.mParams.mppItems[liParamCount - liParam - 1];
-            lpCb(nullptr, &lpParam,
+            lpCb(0, &lpParam,
                  "AptAnimationTarget::maIntervalTimers[i].pParams", 0);
         }
     }
@@ -993,9 +993,9 @@ void AptAnimationTarget::RegisterReferences()
     for (int liIndex = 0; liIndex < snDelayedReleaseListSize; ++liIndex)
     {
         AptValue* lpValue = lpRem[liIndex];
-        if (lpValue != nullptr)
+        if (lpValue != 0)
         {
-            lpCb(nullptr, &lpValue, "apDelayedReleaseList[i]", 0);
+            lpCb(0, &lpValue, "apDelayedReleaseList[i]", 0);
             lpRem = static_cast<AptValue**>(spDelayedReleaseList);
         }
     }
@@ -1013,41 +1013,41 @@ void* AptAnimationTarget::RemoveCIHReferences()
     AptValue::ReferenceRegistrationCb lpCb = AptValue::sReferenceRegistrationCb;
     void* lpResult = this;
 
-    if (mpInputMask != nullptr)
+    if (mpInputMask != 0)
     {
-        lpResult = lpCb(nullptr, &mpInputMask, "AptAnimationTarget::mpInputMask", 1);
+        lpResult = lpCb(0, &mpInputMask, "AptAnimationTarget::mpInputMask", 1);
     }
 
     AptValue** lpNewInsts = static_cast<AptValue**>(spNewInsts);
     for (int liIndex = 0; liIndex < snNewInstSize; ++liIndex)
     {
-        if (lpNewInsts[liIndex] != nullptr)
+        if (lpNewInsts[liIndex] != 0)
         {
-            lpResult = lpCb(nullptr, &lpNewInsts[liIndex], "mapNewInsts Element", 0);
+            lpResult = lpCb(0, &lpNewInsts[liIndex], "mapNewInsts Element", 0);
             lpNewInsts = static_cast<AptValue**>(spNewInsts);
         }
     }
 
     for (u32 liSlot = 0; liSlot < mListenerSet.mnCapacity; ++liSlot)
     {
-        if (mListenerSet.mppSlots[liSlot] != nullptr)
+        if (mListenerSet.mppSlots[liSlot] != 0)
         {
-            lpResult = lpCb(nullptr, &mListenerSet.mppSlots[liSlot], "mListenerSet Element", 0);
+            lpResult = lpCb(0, &mListenerSet.mppSlots[liSlot], "mListenerSet Element", 0);
         }
     }
 
     for (u32 liSlot = 0; liSlot < mInputSet.mnCapacity; ++liSlot)
     {
-        if (mInputSet.mppSlots[liSlot] != nullptr)
+        if (mInputSet.mppSlots[liSlot] != 0)
         {
-            lpResult = lpCb(nullptr, &mInputSet.mppSlots[liSlot], "inputSet Element", 0);
+            lpResult = lpCb(0, &mInputSet.mppSlots[liSlot], "inputSet Element", 0);
         }
     }
 
     for (u32 liTimer = 0; liTimer < mnNumIntervalTimers; ++liTimer)
     {
         AptIntervalTimer& lrTimer = mpIntervalTimers[liTimer];
-        if (lrTimer.mpActiveValue == nullptr)
+        if (lrTimer.mpActiveValue == 0)
         {
             continue;
         }
@@ -1068,10 +1068,10 @@ void* AptAnimationTarget::RemoveCIHReferences()
         {
             AptValue** lppSlot = &lrTimer.mParams.mppItems[liParamCount - liParam - 1];
             AptValue*  lpParam = *lppSlot;
-            if (lpParam != nullptr)
+            if (lpParam != 0)
             {
                 AptValue* lpLocal = lpParam;
-                lpResult = lpCb(nullptr, &lpLocal, "IntervalTimerParam", 0);
+                lpResult = lpCb(0, &lpLocal, "IntervalTimerParam", 0);
                 lpParam = lpLocal;
             }
             // If the cb produced a different value, the live slot is repointed to the
@@ -1140,7 +1140,7 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
             lpResult = reinterpret_cast<AptValue*>(
                 static_cast<intptr_t>(
                     reinterpret_cast<AptCIH*>(pListener)->HasEventMember(nEventMask)));
-            lbProceed = (lpResult != nullptr);
+            lbProceed = (lpResult != 0);
         }
     }
 
@@ -1177,7 +1177,7 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
             AptValue* lpNext =
                 *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(lpResolved) + 8);  // result[2]
             lpResult = lpNext;
-            if (lpNext == nullptr)
+            if (lpNext == 0)
             {
                 lbDispatch = true;
             }
@@ -1208,8 +1208,8 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
             continue;
         }
 
-        AptValue* lpChild = pListener->findChild(&gAptASNameTable[lrDesc.nNameIndex], nullptr);
-        if (lpChild == nullptr)
+        AptValue* lpChild = pListener->findChild(&gAptASNameTable[lrDesc.nNameIndex], 0);
+        if (lpChild == 0)
         {
             continue;
         }
@@ -1396,7 +1396,7 @@ int AptAnimationTarget::ProcessInputSet(int nEventId, int nCode, unsigned int nP
         }
 
         AptValue* lpEntry = mInputSet.mppSlots[liSlot];
-        if (lpEntry == nullptr)
+        if (lpEntry == 0)
         {
             continue;
         }
@@ -1405,7 +1405,7 @@ int AptAnimationTarget::ProcessInputSet(int nEventId, int nCode, unsigned int nP
         // eligible (NOT masked out) when the chain reaches the active input mask, or
         // when there is no input mask at all.
         bool lbMasked;
-        if (mpInputMask == nullptr)
+        if (mpInputMask == 0)
         {
             lbMasked = false;
         }
@@ -1420,7 +1420,7 @@ int AptAnimationTarget::ProcessInputSet(int nEventId, int nCode, unsigned int nP
                     break;
                 }
                 lpWalk = lpWalk->GetDisplayListParent();   // value[+0x1C]
-                if (lpWalk == nullptr)
+                if (lpWalk == 0)
                 {
                     lbMasked = true;    // chain ended without the mask -> skip
                     break;
@@ -1498,7 +1498,7 @@ int AptAnimationTarget::ProcessListenerEvents(int nEventId, unsigned int nCode,
         }
 
         AptValue* lpEntry = mListenerSet.mppSlots[liSlot];
-        if (lpEntry != nullptr)
+        if (lpEntry != 0)
         {
             const int liMask = (nCode == 1u) ? 128 : 64;
             liResult = reinterpret_cast<intptr_t>(
@@ -1581,7 +1581,7 @@ int AptAnimationTarget::RunActions()
                 // the "empty" type-15 form (x64 tag = LOW 6 bits of mTypeFlags),
                 // and the CIH state (x64 mFlagsA bits 1-2) must not be dead (3).
                 AptCharacterInst* lpCharInst = lpNode->mpCharacterInst;   // v5 = v4[8]
-                const u32 lnCharType = (lpCharInst != nullptr)
+                const u32 lnCharType = (lpCharInst != 0)
                     ? (lpCharInst->mTypeFlags & 0x3Fu) : 0xFu;
                 const u32 lnCIHState = lpNode->mFlagsA & 0x6u;            // v4[3]
 
@@ -1595,7 +1595,7 @@ int AptAnimationTarget::RunActions()
                     // only while the inst is STILL at that frame (charInst word[4] +0x10).
                     const int liDepth = lpSlot->action.miDepth;   // v6 = *(v3+8)
                     if (liDepth >= 0
-                        || lpCharInst == nullptr
+                        || lpCharInst == 0
                         || -liDepth == static_cast<AptCharacterSpriteInstBase*>(lpCharInst)->mnGotoFrame)   // *(v5+16)
                     {
                         // Push a fresh register-block window for this run (the console
@@ -1604,9 +1604,9 @@ int AptAnimationTarget::RunActions()
 
                         // Resolve the run's timeline scope (the char inst at the nearest
                         // movie-clip(9)/stage(15)-tagged level above the action's CIH).
-                        AptCharacterInst* lpScope = nullptr;                          // v12
+                        AptCharacterInst* lpScope = 0;                          // v12
                         AptValue* lpScopeVal = lpSlot->action.mpCIH;                  // v8 = *(v3+16)
-                        if (lpScopeVal != nullptr
+                        if (lpScopeVal != 0
                             && (reinterpret_cast<AptCIH*>(lpScopeVal)->mnValueData & 0x7Fu) != 3u)  // type tag != None(3)
                         {
                             AptValue* lpLevel = lpScopeVal;                           // AnimationAtLevel
@@ -1625,7 +1625,7 @@ int AptAnimationTarget::RunActions()
                                     reinterpret_cast<AptCIH*>(lpScopeVal)->mpCharacterInst;  // i = *(v8+32)
                                 for (;;)
                                 {
-                                    const int liTag = (lpWalkInst != nullptr)
+                                    const int liTag = (lpWalkInst != 0)
                                         ? static_cast<int>(lpWalkInst->GetTypeTag()) : 9;    // *(i+8)>>26
                                     if (liTag == 9 || liTag == 15)
                                     {
@@ -1633,7 +1633,7 @@ int AptAnimationTarget::RunActions()
                                     }
                                     AptCIH* lpParent =
                                         reinterpret_cast<AptCIH*>(lpLevel)->mpDisplayListParent;   // CIH word[7]
-                                    if (lpParent == nullptr)
+                                    if (lpParent == 0)
                                     {
                                         // Broken/partial parent linkage (the console chain always
                                         // reaches the type-9 root; our bring-up's torn or partially
@@ -1644,8 +1644,8 @@ int AptAnimationTarget::RunActions()
                                     lpWalkInst = lpParent->mpCharacterInst;
                                 }
                             }
-                            lpScope = (lpLevel != nullptr)
-                                ? reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst : nullptr;   // v12 = *(AnimationAtLevel+32)  (null-guarded: the level path may miss)
+                            lpScope = (lpLevel != 0)
+                                ? reinterpret_cast<AptCIH*>(lpLevel)->mpCharacterInst : 0;   // v12 = *(AnimationAtLevel+32)  (null-guarded: the level path may miss)
                         }
 
                         // The queued slot holds the ADDRESS of the command record's
@@ -1690,7 +1690,7 @@ int AptAnimationTarget::RunActions()
             // Push the call context onto the interpreter's CIH/target stack (the X360
             // stamps it then AddRefs it via vtbl[0]). v13 = *(v3+8) == function.mpContext.
             AptValue* lpContext = lpSlot->function.mpContext;                         // *(v3+8)
-            if (lpContext != nullptr)   // FLAG hardening: null context -> skip (see above)
+            if (lpContext != 0)   // FLAG hardening: null context -> skip (see above)
             {
             gAptActionInterpreter.mpCIHStack[gAptActionInterpreter.mnCIHStackTop] =
                 reinterpret_cast<AptCIH*>(lpContext);
@@ -1705,8 +1705,8 @@ int AptAnimationTarget::RunActions()
                 lpSlot->function.mpContext,    // a2 == *(v3+8)  (scope/this)
                 lpSlot->function.mpFuncDef,    // a3 == *(v3+12) (function def)
                 lpSlot->function.miReturnReg,  // a4 == *(v3+16) (arg count / return reg)
-                nullptr,
-                nullptr);
+                0,
+                0);
 
             // Pop the window back to the saved base (the 2-arg console form).
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
@@ -1792,7 +1792,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
     for (u32 liTimer = 0; liTimer < mnNumIntervalTimers; ++liTimer)   // v20 < *(v7+4)
     {
         AptIntervalTimer& lrTimer = mpIntervalTimers[liTimer];        // v10 + *(v7+36)
-        if (lrTimer.mpActiveValue == nullptr)                         // *(v10 + ...) == 0
+        if (lrTimer.mpActiveValue == 0)                         // *(v10 + ...) == 0
         {
             continue;
         }
@@ -1817,14 +1817,14 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
         // x64 widening; same class as the toString CIH-arm fix).
         AptValue* lpBound = lbScriptFn
             ? static_cast<AptScriptFunctionBase*>(lpCB)->GetCIH()   // v17 = *(v13+32)
-            : nullptr;
+            : 0;
 
         // Fire condition: either the callback itself is a defined movie-clip(9) value,
         // or it has a live bound char inst that is defined and not the dead 0x3C form.
         const bool lbCBIsLiveClip =
             (liCBType == 9) && (((lnCBBits >> 27) & 1u) != 0u);   // v18
         bool lbFire = lbCBIsLiveClip;
-        if (!lbFire && lpBound != nullptr)
+        if (!lbFire && lpBound != 0)
         {
             const u32 lnBoundBits = reinterpret_cast<AptCIH*>(lpBound)->mnValueData;   // v17[1]
             if (((lnBoundBits >> 27) & 1u) != 0u)
@@ -1833,7 +1833,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
                 // (named members; tag 15 / 0x3C000000 == the dead level-placeholder form).
                 AptCharacterInst* lpBoundInst =
                     static_cast<AptCIH*>(lpBound)->GetCharacterInst();
-                lbFire = lpBoundInst != nullptr &&
+                lbFire = lpBoundInst != 0 &&
                          (static_cast<u32>(lpBoundInst->mTypeFlags) & 0x3Fu) != 15u;   // x64 low-6-bit tag
             }
         }
@@ -1870,8 +1870,8 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
                 lpBound,                  // a2 == v17 (this/scope)
                 lpCB,                     // a3 == v13 (the callback function)
                 liArgCount,               // a4 == v20 (arg count)
-                nullptr,
-                nullptr);
+                0,
+                0);
 
             // Pop the window back to the saved base (the 2-arg console form).
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
@@ -1890,14 +1890,14 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
             // drain the param stack, and disarm the slot.
             AptValue* lpCb2 = lrTimer.mpCBFunction;             // v24 = *(...+4)
             lpCb2->Release();   // vtbl[1] (+4) Release
-            if (lrTimer.mpContext != nullptr)                   // *(...+16)
+            if (lrTimer.mpContext != 0)                   // *(...+16)
             {
                 AptValue* lpCtx = lrTimer.mpContext;            // v25
                 lpCtx->Release();   // vtbl[1] (+4) Release
             }
             lrTimer.CleanParams();
             liResult = reinterpret_cast<intptr_t>(this);
-            lrTimer.mpActiveValue = nullptr;                    // *(...) = 0
+            lrTimer.mpActiveValue = 0;                    // *(...) = 0
         }
     }
 

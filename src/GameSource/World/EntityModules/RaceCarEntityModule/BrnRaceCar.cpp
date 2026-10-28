@@ -130,7 +130,7 @@ void RaceCar::AddToWorld(ERaceCarType leType,
                          s32 liOpponentIndex)
 {
     CGS_ASSERT(miGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID, "Using unprepared RaceCar");
-    CGS_ASSERT(mpActiveRaceCar == nullptr, "RaceCar in a weird state in AddToWorld");
+    CGS_ASSERT(mpActiveRaceCar == 0, "RaceCar in a weird state in AddToWorld");
 
     if (leType != E_RACE_CAR_TYPE_PLAYER
         && leType != E_RACE_CAR_TYPE_NETWORK
@@ -197,7 +197,7 @@ void RaceCar::AssignActiveRaceCar(ActiveRaceCar* lpActiveRaceCar)
 {
     CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
-    CGS_ASSERT(lpActiveRaceCar != nullptr, "lpActiveRaceCar != NULL");
+    CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveRaceCar != NULL");
 
     mpActiveRaceCar = lpActiveRaceCar;
 
@@ -218,7 +218,7 @@ void RaceCar::RemoveActiveRaceCar()
 {
     CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
-    CGS_ASSERT(mpActiveRaceCar != nullptr, "mpActiveRaceCar != NULL");
+    CGS_ASSERT(mpActiveRaceCar != 0, "mpActiveRaceCar != NULL");
     CGS_ASSERT(mpActiveRaceCar->IsAttached(), "IsAttached()");
     CGS_ASSERT(mpActiveRaceCar->GetGlobalRaceCar() == this, "mpActiveRaceCar->GetGlobalRaceCar() == this");
 
@@ -237,7 +237,7 @@ void RaceCar::RemoveFromWorld()
 {
     CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
-    CGS_ASSERT(mpActiveRaceCar == nullptr,
+    CGS_ASSERT(mpActiveRaceCar == 0,
                "RaceCar being removed from world while it still has an ActiveRaceCar attached");
 
     muType         = E_RACE_CAR_TYPE_INACTIVE;
@@ -356,7 +356,7 @@ void RaceCar::SetInCurrentGameMode(bool lbInGameMode, bool lbCarSelectAllowed)
     mbIsInGameMode               = lbInGameMode;
     mbCarSelectAllowedInGameMode = lbCarSelectAllowed;
 
-    if (!lbInGameMode && mpActiveRaceCar == nullptr)
+    if (!lbInGameMode && mpActiveRaceCar == 0)
     {
         miActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
@@ -408,7 +408,7 @@ bool RaceCar::HasActiveRaceCar() const
 {
     CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
 
-    return muType != E_RACE_CAR_TYPE_INACTIVE && mpActiveRaceCar != nullptr;
+    return muType != E_RACE_CAR_TYPE_INACTIVE && mpActiveRaceCar != 0;
 }
 
 // ----------------------------------------------------------------------------

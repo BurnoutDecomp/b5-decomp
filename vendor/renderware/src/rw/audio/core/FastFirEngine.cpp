@@ -62,9 +62,9 @@ const s32 KI_MAC_BINS_PER_STEP = 16;
 // -------------------------------------------------------------------------------------
 FastFirEngine::FastFirEngine()
 {
-    mpFft = nullptr;    // +0x6C
+    mpFft = 0;    // +0x6C
     miField70 = 0;      // +0x70
-    mpBuffer = nullptr; // +0x00
+    mpBuffer = 0; // +0x00
     miCurPass = 0;      // +0x5C
     miWriteBlock = 0;   // +0x30
     miPingA = 0;        // +0x64
@@ -82,7 +82,7 @@ FastFirEngine::FastFirEngine()
 FastFirEngine::~FastFirEngine()
 {
     if (mpBuffer)
-        System::Free(off_83271928, mpBuffer, nullptr); // allocator->Free(buf, 0)
+        System::Free(off_83271928, mpBuffer, 0); // allocator->Free(buf, 0)
 
     if (mpFft)
         FFT_Free(&mpFft);
@@ -98,13 +98,13 @@ FastFirEngine *FastFirEngine::Reset(FastFirEngine *self)
 
     if (self->mpBuffer)
     {
-        System::Free(off_83271928, self->mpBuffer, nullptr);
-        self->mpBuffer = nullptr;
+        System::Free(off_83271928, self->mpBuffer, 0);
+        self->mpBuffer = 0;
     }
     if (self->mpFft)
     {
         result = FFT_Free(&self->mpFft);
-        self->mpFft = nullptr;
+        self->mpFft = 0;
     }
 
     self->miCurPass = 0;    // +0x5C

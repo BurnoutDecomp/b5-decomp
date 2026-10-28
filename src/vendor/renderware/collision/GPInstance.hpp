@@ -60,7 +60,7 @@ struct Interval
     f32  mPad28[2];    // +0x28  16-byte alignment tail (console aligned(16))
 };
 
-static_assert(sizeof(Interval) == 0x30, "Interval console array stride must be 0x30");
+CGS_STATIC_ASSERT((sizeof(Interval) == 0x30), "Interval console array stride must be 0x30");
 
 // ---------------------------------------------------------------------------
 // rw::collision::GPInstance -- the register-friendly image of one collision
@@ -165,14 +165,14 @@ struct GPInstance
                                       // X360 instance stride is 0xC0)
 };
 
-static_assert(offsetof(GPInstance, mFatness)           == 0x80, "GPInstance::mFatness");
-static_assert(offsetof(GPInstance, mVolumeTag)         == 0x84, "GPInstance::mVolumeTag");
-static_assert(offsetof(GPInstance, mUserTag)           == 0x88, "GPInstance::mUserTag");
-static_assert(offsetof(GPInstance, mNumFaceNormals)    == 0x8C, "GPInstance::mNumFaceNormals");
-static_assert(offsetof(GPInstance, mNumEdgeDirections) == 0x8D, "GPInstance::mNumEdgeDirections");
-static_assert(offsetof(GPInstance, mVolumeType)        == 0x90, "GPInstance::mVolumeType");
-static_assert(offsetof(GPInstance, mFlags)             == 0x94, "GPInstance::mFlags");
-static_assert(offsetof(GPInstance, mEdgeData)          == 0x98, "GPInstance::mEdgeData");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mFatness)           == 0x80), "GPInstance::mFatness");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mVolumeTag)         == 0x84), "GPInstance::mVolumeTag");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mUserTag)           == 0x88), "GPInstance::mUserTag");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mNumFaceNormals)    == 0x8C), "GPInstance::mNumFaceNormals");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mNumEdgeDirections) == 0x8D), "GPInstance::mNumEdgeDirections");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mVolumeType)        == 0x90), "GPInstance::mVolumeType");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mFlags)             == 0x94), "GPInstance::mFlags");
+CGS_STATIC_ASSERT((offsetof(GPInstance, mEdgeData)          == 0x98), "GPInstance::mEdgeData");
 
 // ---------------------------------------------------------------------------
 // GP primitive images (canonical rwccore.h:1182-1266: no extra data members
@@ -347,19 +347,19 @@ struct PrimitivePairIntersectResult
     u8      mPad744[0xC];                // +0x744  pad to the 0x750 stride
 };
 
-static_assert(offsetof(PrimitivePairIntersectResult, f1)        == 0x020, "PPIR::f1");
-static_assert(offsetof(PrimitivePairIntersectResult, f2)        == 0x260, "PPIR::f2");
-static_assert(offsetof(PrimitivePairIntersectResult, sepDir)    == 0x4A0, "PPIR::sepDir");
-static_assert(offsetof(PrimitivePairIntersectResult, sepDist)   == 0x4B0, "PPIR::sepDist");
-static_assert(offsetof(PrimitivePairIntersectResult, normal)    == 0x4C0, "PPIR::normal");
-static_assert(offsetof(PrimitivePairIntersectResult, pointOn1)  == 0x4D0, "PPIR::pointOn1");
-static_assert(offsetof(PrimitivePairIntersectResult, pointOn2)  == 0x4E0, "PPIR::pointOn2");
-static_assert(offsetof(PrimitivePairIntersectResult, distance)  == 0x4F0, "PPIR::distance");
-static_assert(offsetof(PrimitivePairIntersectResult, pointsOn1) == 0x500, "PPIR::pointsOn1");
-static_assert(offsetof(PrimitivePairIntersectResult, pointsOn2) == 0x600, "PPIR::pointsOn2");
-static_assert(offsetof(PrimitivePairIntersectResult, distances) == 0x700, "PPIR::distances");
-static_assert(offsetof(PrimitivePairIntersectResult, numPoints) == 0x740, "PPIR::numPoints");
-static_assert(sizeof(PrimitivePairIntersectResult)              == 0x750, "PPIR stride");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, f1)        == 0x020), "PPIR::f1");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, f2)        == 0x260), "PPIR::f2");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, sepDir)    == 0x4A0), "PPIR::sepDir");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, sepDist)   == 0x4B0), "PPIR::sepDist");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, normal)    == 0x4C0), "PPIR::normal");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, pointOn1)  == 0x4D0), "PPIR::pointOn1");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, pointOn2)  == 0x4E0), "PPIR::pointOn2");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, distance)  == 0x4F0), "PPIR::distance");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, pointsOn1) == 0x500), "PPIR::pointsOn1");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, pointsOn2) == 0x600), "PPIR::pointsOn2");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, distances) == 0x700), "PPIR::distances");
+CGS_STATIC_ASSERT((offsetof(PrimitivePairIntersectResult, numPoints) == 0x740), "PPIR::numPoints");
+CGS_STATIC_ASSERT((sizeof(PrimitivePairIntersectResult)              == 0x750), "PPIR stride");
 
 // ---------------------------------------------------------------------------
 // rwc_FeatureIntersectionPrism -- the Find*Prism family's result block
@@ -377,9 +377,9 @@ struct rwc_FeatureIntersectionPrism
     RwBool normalOverride;                        // +0x214  caller zeroes; worker sets
 };
 
-static_assert(offsetof(rwc_FeatureIntersectionPrism, normal)         == 0x200, "prism::normal");
-static_assert(offsetof(rwc_FeatureIntersectionPrism, m_numpts)       == 0x210, "prism::m_numpts");
-static_assert(offsetof(rwc_FeatureIntersectionPrism, normalOverride) == 0x214, "prism::normalOverride");
+CGS_STATIC_ASSERT((offsetof(rwc_FeatureIntersectionPrism, normal)         == 0x200), "prism::normal");
+CGS_STATIC_ASSERT((offsetof(rwc_FeatureIntersectionPrism, m_numpts)       == 0x210), "prism::m_numpts");
+CGS_STATIC_ASSERT((offsetof(rwc_FeatureIntersectionPrism, normalOverride) == 0x214), "prism::normalOverride");
 
 // ---------------------------------------------------------------------------
 // rw::collision::VolRef1xN -- one variable-length overlap-report group (DWARF

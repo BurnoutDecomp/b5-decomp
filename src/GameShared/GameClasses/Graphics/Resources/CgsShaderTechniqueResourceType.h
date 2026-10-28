@@ -33,11 +33,11 @@ namespace CgsResource
 class ShaderTechniqueResourceType : public Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override; // @0x827F7A68
-    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void     PostFixUp(void* lpResource, const rw::Resource& lrResource) const override; // @0x827EEBF0
+    uint32_t GetTypeID() const ;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ; // @0x827F7A68
+    void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const ;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void     PostFixUp(void* lpResource, const rw::Resource& lrResource) const ; // @0x827EEBF0
 
     // Non-virtual per-sub-block serialised-size helpers used by GetSerialisedResourceDescriptor.
     // The Internal sizer is declared only (no body yet).

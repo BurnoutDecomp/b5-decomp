@@ -186,14 +186,14 @@ namespace BrnGui
         // (never absolute console offsets -- pointers widen on the host).
         void _AssertLayout()
         {
-            static_assert(offsetof(OnlineCustomMatch, miFirstRow)
-                              - offsetof(OnlineCustomMatch, mabPositionHandled) == 8,
+            CGS_STATIC_ASSERT((offsetof(OnlineCustomMatch, miFirstRow)
+                              - offsetof(OnlineCustomMatch, mabPositionHandled) == 8),
                           "mabPositionHandled[8] runs straight into miFirstRow");
-            static_assert(offsetof(OnlineCustomMatch, miLastRow)
-                              - offsetof(OnlineCustomMatch, miFirstRow) == 1,
+            CGS_STATIC_ASSERT((offsetof(OnlineCustomMatch, miLastRow)
+                              - offsetof(OnlineCustomMatch, miFirstRow) == 1),
                           "miLastRow follows miFirstRow");
-            static_assert(offsetof(OnlineCustomMatch, mbHasRecievedSearchResults)
-                              - offsetof(OnlineCustomMatch, miLastRow) == 1,
+            CGS_STATIC_ASSERT((offsetof(OnlineCustomMatch, mbHasRecievedSearchResults)
+                              - offsetof(OnlineCustomMatch, miLastRow) == 1),
                           "mbHasRecievedSearchResults follows miLastRow");
         }
     };

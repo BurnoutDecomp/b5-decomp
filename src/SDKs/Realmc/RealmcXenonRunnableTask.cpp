@@ -168,14 +168,14 @@ int XenonRunnableTask::SelectDevice(int liMode, bool lbKeepActiveCard, int liByt
             {
                 RealmcCore::Trc lTrc(KI_TRC_CARD_GONE_ID, KI_TRC_CARD_GONE_OPTIONS);
 
-                void* const lpMem = RealmcCore::AllocateMem(nullptr, sizeof(RealmcCore::MessageTrc));
+                void* const lpMem = RealmcCore::AllocateMem(0, sizeof(RealmcCore::MessageTrc));
                 RealmcCore::MessageTrc* const lpMessage =
-                    lpMem ? new (lpMem) RealmcCore::MessageTrc(lTrc, KI_TRC_MESSAGE_VALUE) : nullptr;
+                    lpMem ? new (lpMem) RealmcCore::MessageTrc(lTrc, KI_TRC_MESSAGE_VALUE) : 0;
 
                 bool lbCancel;
                 {
                     const RealmcCore::MessagePtr lMessage(lpMessage);
-                    const RealmcCore::ResponsePtr lResponse = SendMessage(lMessage, nullptr);
+                    const RealmcCore::ResponsePtr lResponse = SendMessage(lMessage, 0);
                     lbCancel = (lResponse.GetValue() == KI_TRC_RESPONSE_CANCEL);
                 }   // ~ResponsePtr, then ~MessagePtr
 

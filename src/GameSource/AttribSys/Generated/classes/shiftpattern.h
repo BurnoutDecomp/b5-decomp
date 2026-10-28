@@ -20,7 +20,7 @@ namespace Gen
     class shiftpattern : private Instance
     {
     public:
-        explicit shiftpattern(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit shiftpattern(Collection* lpCollection = 0, void* lpOwner = 0);
 
         void ChangeWithDefault(void* lpRefSpec)
         {

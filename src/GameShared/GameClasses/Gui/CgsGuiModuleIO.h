@@ -39,8 +39,8 @@ namespace CgsGuiModuleIO
     // Original CgsGui::ImRendererSet comes from CgsCustomRenderer.h. Keep the
     // historical IO spelling as an alias so every module/view consumer shares
     // the same five native pointer fields and complete graphics-camera value.
-    using ImRendererSet = CgsGui::ImRendererSet;
-    using CgsGraphicsCameraStorage = CgsGraphics::Camera;
+    typedef CgsGui::ImRendererSet ImRendererSet;
+    typedef CgsGraphics::Camera CgsGraphicsCameraStorage;
 
     struct OutputBuffer : public CgsModule::IOBuffer
     {
@@ -51,8 +51,8 @@ namespace CgsGuiModuleIO
 
         // The same original ResourceRequestQueue<2048> as ModelIO and
         // GuiResourceModuleIO. Preserve the historical spelling as an alias.
-        using GuiResourceRequestQueueStorage = CgsResource::ResourceIO::ResourceRequestQueue<2048>;
-        using GuiEventQueueTiny = CgsGui::GuiEventQueueBase<256, 16>;
+        typedef CgsResource::ResourceIO::ResourceRequestQueue<2048> GuiResourceRequestQueueStorage;
+        typedef CgsGui::GuiEventQueueBase<256, 16> GuiEventQueueTiny;
 
         // BaseGameActionQueue<13312> is a thin typed wrapper around this same queue image.
         // Its event-builder API belongs to the foreign owning home, but the OutputBuffer

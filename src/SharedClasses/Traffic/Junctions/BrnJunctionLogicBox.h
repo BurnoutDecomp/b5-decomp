@@ -117,29 +117,29 @@ public:
     // offsetof would not compile (C2248).
     static void _AssertLayout()
     {
-        static_assert(sizeof(TrafficLightController) == 0x18, "sizeof(TrafficLightController)");
-        static_assert(offsetof(TrafficLightController, mauStopLineIds)   == 0x04, "mauStopLineIds");
-        static_assert(offsetof(TrafficLightController, mauStopLineHulls) == 0x0A, "mauStopLineHulls");
-        static_assert(offsetof(TrafficLightController, muNumStopLines)   == 0x16, "muNumStopLines");
+        CGS_STATIC_ASSERT((sizeof(TrafficLightController) == 0x18), "sizeof(TrafficLightController)");
+        CGS_STATIC_ASSERT((offsetof(TrafficLightController, mauStopLineIds)   == 0x04), "mauStopLineIds");
+        CGS_STATIC_ASSERT((offsetof(TrafficLightController, mauStopLineHulls) == 0x0A), "mauStopLineHulls");
+        CGS_STATIC_ASSERT((offsetof(TrafficLightController, muNumStopLines)   == 0x16), "muNumStopLines");
 
-        static_assert(offsetof(JunctionLogicBox, muID)                  == 0x000, "muID");
-        static_assert(offsetof(JunctionLogicBox, mauStateTimings)       == 0x004, "mauStateTimings");
-        static_assert(offsetof(JunctionLogicBox, mauStoppedLightStates) == 0x024,
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, muID)                  == 0x000), "muID");
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, mauStateTimings)       == 0x004), "mauStateTimings");
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, mauStoppedLightStates) == 0x024),
                       "mauStoppedLightStates");
         // The one offset HullRuntime::Prepare states outright: `lbz r8, 0x34(r8)` @0x82751538.
-        static_assert(offsetof(JunctionLogicBox, muNumStates)           == 0x034, "muNumStates");
-        static_assert(offsetof(JunctionLogicBox, muNumLights)           == 0x035, "muNumLights");
-        static_assert(offsetof(JunctionLogicBox, muEventJunctionID)     == 0x038, "muEventJunctionID");
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, muNumStates)           == 0x034), "muNumStates");
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, muNumLights)           == 0x035), "muNumLights");
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, muEventJunctionID)     == 0x038), "muEventJunctionID");
         // The two offsets Hull::GetLightTriggerStartDataForJunction states outright.
-        static_assert(offsetof(JunctionLogicBox, miOfflineStartDataIndex) == 0x03C,
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, miOfflineStartDataIndex) == 0x03C),
                       "miOfflineStartDataIndex");
-        static_assert(offsetof(JunctionLogicBox, miOnlineStartDataIndex)  == 0x040,
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, miOnlineStartDataIndex)  == 0x040),
                       "miOnlineStartDataIndex");
-        static_assert(offsetof(JunctionLogicBox, maTrafficLightControllers) == 0x044,
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, maTrafficLightControllers) == 0x044),
                       "maTrafficLightControllers");
-        static_assert(offsetof(JunctionLogicBox, mPosition)             == 0x110, "mPosition");
+        CGS_STATIC_ASSERT((offsetof(JunctionLogicBox, mPosition)             == 0x110), "mPosition");
         // The one size HullRuntime::Prepare states outright: `addi r9, r9, 0x120` @0x82751534.
-        static_assert(sizeof(JunctionLogicBox) == 0x120, "sizeof(JunctionLogicBox)");
+        CGS_STATIC_ASSERT((sizeof(JunctionLogicBox) == 0x120), "sizeof(JunctionLogicBox)");
     }
 
 private:

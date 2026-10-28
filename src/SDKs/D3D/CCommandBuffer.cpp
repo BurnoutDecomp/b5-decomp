@@ -2,7 +2,7 @@
 #include "SDKs/D3D/CDevice.h"
 
 #include <cstddef> // offsetof (uncalled _CCommandBufferAssertLayout)
-#include <cstdint> // uintptr_t (X360 address math on the host pointer)
+#include "types.hpp" // uintptr_t (X360 address math on the host pointer)
 
 // ===========================================================================
 // D3D::CCommandBuffer -- reconstructed from BURNOUT_X360_ARTIST.XEX. See
@@ -47,7 +47,7 @@ void CCommandBuffer::FlushCachedAllocation()
 // both cases the buffer is finally unlinked from the device debug list.
 void CCommandBuffer::Destroy()
 {
-    if (mpCachedAllocation != nullptr)
+    if (mpCachedAllocation != 0)
     {
         FlushCachedAllocation();
         XMemFree(mpCachedAllocation, 0xB1800000u); // lis r4,-0x4E80 -> 0xB1800000
@@ -65,7 +65,7 @@ void CCommandBuffer::Destroy()
 // were never on the list, so they early-out.
 void CCommandBuffer::DebugDestroy()
 {
-    if (mpCachedAllocation != nullptr)
+    if (mpCachedAllocation != 0)
         return;
 
     CDevice* pDevice = *VdGlobalDevice;
@@ -104,7 +104,7 @@ void CCommandBuffer::GrowableFree()
     TFreeFn pfnFree  = mpfnFree;
 
     muDebugBlockListPhys = 0;
-    mpDebugBlockTail     = nullptr;
+    mpDebugBlockTail     = 0;
     miDebugAllocCount    = -1;
     muReclaimed          = 0;
 
@@ -171,15 +171,15 @@ s32 CCommandBuffer::GrowableAllocate(s32 iCount, u32* puSize, s32 iAlignment)
 // only checked for ordering / contiguous 4-byte stride.
 void _CCommandBufferAssertLayout()
 {
-    static_assert(offsetof(CCommandBuffer, muCachedSize) > offsetof(CCommandBuffer, mpCachedAllocation),
+    CGS_STATIC_ASSERT((offsetof(CCommandBuffer, muCachedSize) > offsetof(CCommandBuffer, mpCachedAllocation)),
                   "cached size follows the cached-allocation pointer");
-    static_assert(offsetof(CCommandBuffer, muReclaimed) < offsetof(CCommandBuffer, muWord47),
+    CGS_STATIC_ASSERT((offsetof(CCommandBuffer, muReclaimed) < offsetof(CCommandBuffer, muWord47)),
                   "reclaimed flag precedes the reclaim bookkeeping words");
-    static_assert(offsetof(CCommandBuffer, muWord48) - offsetof(CCommandBuffer, muWord47) == 4,
+    CGS_STATIC_ASSERT((offsetof(CCommandBuffer, muWord48) - offsetof(CCommandBuffer, muWord47) == 4),
                   "contiguous debug-reclaim bookkeeping words");
-    static_assert(offsetof(CCommandBuffer, muDebugBlockListPhys) - offsetof(CCommandBuffer, muWord48) == 4,
+    CGS_STATIC_ASSERT((offsetof(CCommandBuffer, muDebugBlockListPhys) - offsetof(CCommandBuffer, muWord48) == 4),
                   "debug-block list-head physical addr follows the bookkeeping words");
-    static_assert(offsetof(CCommandBuffer, miDebugAllocCount) > offsetof(CCommandBuffer, mpDebugBlockTail),
+    CGS_STATIC_ASSERT((offsetof(CCommandBuffer, miDebugAllocCount) > offsetof(CCommandBuffer, mpDebugBlockTail)),
                   "debug alloc count follows the current-block pointer");
 }
 

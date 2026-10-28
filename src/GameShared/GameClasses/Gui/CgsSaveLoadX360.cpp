@@ -87,7 +87,7 @@ namespace CgsGui
     // heap pointer there.)
     void SaveLoadSystem::CopyImageToBuffer(const void* lpImageFile)
     {
-        CGS_ASSERT(lpImageFile != nullptr, "lpImageFile");
+        CGS_ASSERT(lpImageFile != 0, "lpImageFile");
 
         const ImageFileInfo* lpRecord = reinterpret_cast<const ImageFileInfo*>(lpImageFile);
 
@@ -144,7 +144,7 @@ namespace CgsGui
     // (`lwz r11,0x194; lbz r11,0x1C(r11)`), the same byte SignIn sets when XShowSigninUI opened.
     void SaveLoadSystem::WaitForUIClosed(void (SaveLoadSystem::*lpfnUIClosedFunc)())
     {
-        CGS_ASSERT(mpSystemUserProfile != nullptr, "SaveLoadSystem: uninitialised");   // :382
+        CGS_ASSERT(mpSystemUserProfile != 0, "SaveLoadSystem: uninitialised");   // :382
 
         if (!reinterpret_cast<CgsGui::SystemUserProfile*>(mpSystemUserProfile)->mbSignedIn)
         {
@@ -158,10 +158,10 @@ namespace CgsGui
     // continuation is parked, clear the pair first, then call it.
     void SaveLoadSystem::RunPendingUIClosed()
     {
-        if (mpfnPendingUIClosed == nullptr)
+        if (mpfnPendingUIClosed == 0)
             return;
         void (SaveLoadSystem::*lpfnUIClosedFunc)() = mpfnPendingUIClosed;
-        mpfnPendingUIClosed = nullptr;
+        mpfnPendingUIClosed = 0;
         (this->*lpfnUIClosedFunc)();
     }
 

@@ -10,7 +10,7 @@ namespace BrnTraffic
     // Unlike the race-car components it does not assert the pointer first.
     void DebugComponent::Destruct()
     {
-        mpModule = nullptr;
+        mpModule = 0;
         CgsDev::DebugComponent::Destruct();
     }
 }

@@ -23,7 +23,7 @@ PlayersConnectionManager::GetEntry(NetworkPlayerID lPlayerID) const
 
     // The console streams the player id between these two literals.
     CGS_ASSERT(false, "Could not find player  conenction entry\n");
-    return nullptr;
+    return 0;
 }
 
 PlayersConnectionManager::ConnectionDataEntry*
@@ -31,7 +31,7 @@ PlayersConnectionManager::GetEntry(NetworkPlayerID lPlayerID)
 {
     CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
 
-    ConnectionDataEntry* lpEntry = nullptr;
+    ConnectionDataEntry* lpEntry = 0;
     for (s32 liIndex = 0; liIndex < KI_MAX_CONNECTION_ENTRIES; ++liIndex)
     {
         if (maConnectionDataEntry[liIndex].mPlayerConnectionData.mPlayerID == lPlayerID)

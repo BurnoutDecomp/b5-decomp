@@ -98,9 +98,9 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     setGCRoot(1);
     SetAllowDelayedDeletion(false);
 
-    mpDisplayListPrevious = nullptr;
-    mpDisplayListNext     = nullptr;
-    mpAssetString         = nullptr;
+    mpDisplayListPrevious = 0;
+    mpDisplayListNext     = 0;
+    mpAssetString         = 0;
 
     mpCharacterInst = AptCharacterInst::CreateCharacterInst(pCharacter);
 
@@ -118,12 +118,12 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     // propagation pass. (Replaces the deferred hard-set stand-in, which both hard-set
     // the self bit unconditionally and omitted the tick-dirty bit fresh children need.)
     const int32_t nCharType = pCharacter ? pCharacter->mnType : -1;
-    const bool bDirty = (pCharacter == nullptr) ||
+    const bool bDirty = (pCharacter == 0) ||
         nCharType == 5 || nCharType == 4 || nCharType == 8 ||
         nCharType == 9 || nCharType == 16;
     SetDirtyState(bDirty, bDirty);
 
-    const bool bGenDirty = (pCharacter != nullptr) &&
+    const bool bGenDirty = (pCharacter != 0) &&
         (nCharType == 2 || nCharType == 4 || nCharType == 5);
     SetGeneralizedProcessDirtyState(bGenDirty);
 }
@@ -136,7 +136,7 @@ AptCIH::~AptCIH()
     if (mpAssetString)
     {
         gpNonGCPoolManager->Deallocate(mpAssetString, 4);
-        mpAssetString = nullptr;
+        mpAssetString = 0;
     }
 }
 
@@ -147,7 +147,7 @@ void AptCIH::RegisterReferences()
     if (!AptValue::sReferenceRegistrationCb)
         return;   // GC registration callback not installed (the same gate every sibling RegisterReferences body uses)
 
-    AptNativeHash* pCharProps = nullptr;
+    AptNativeHash* pCharProps = 0;
     if (mpCharacterInst)
         pCharProps = mpCharacterInst->mpProperties;
 
@@ -177,11 +177,11 @@ void AptCIH::DestroyGCPointers()
 {
     AptCharacterInst* pCI = mpCharacterInst;
     AptCIH* pParent = mpDisplayListParent;
-    mpCharacterInst = nullptr;
+    mpCharacterInst = 0;
 
     if (pParent)
         pParent->Release();
-    mpDisplayListParent = nullptr;
+    mpDisplayListParent = 0;
 
     if (pCI)
     {
@@ -190,17 +190,17 @@ void AptCIH::DestroyGCPointers()
         // the same retire sequence ClearCIH's immediate-free path runs
         // (AptCIHBehaviour.cpp). The char inst's own destructor then releases
         // its render item.
-        if (pCI->mpRenderItem != nullptr)
+        if (pCI->mpRenderItem != 0)
         {
             if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
                 pManager->Update_ItemRemoved(pCI->GetRenderItemWritable(), gnCurrUpdateTick);
         }
-        if (pCI->mpProperties != nullptr)
+        if (pCI->mpProperties != 0)
         {
             pCI->mpProperties->DestroyGCPointers();
             pCI->mpProperties->~AptNativeHash();
             gpNonGCPoolManager->Deallocate(pCI->mpProperties, sizeof(AptNativeHash));
-            pCI->mpProperties = nullptr;
+            pCI->mpProperties = 0;
         }
         // The console's manual-vtable slot-0 scalar deleting destructor. A direct
         // `pCI->~AptCharacterInst()` runs the BASE dtor only (this family's dtors are
@@ -304,7 +304,7 @@ bool AptCIH::IsNone() const { return static_cast<uint32_t>(getVtblIndex()) == 37
 // ---------------------------------------------------------------------------
 AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
 {
-    return mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
+    return mpCharacterInst ? mpCharacterInst->mpProperties : 0;
 }
 
 // (objectMemberLookup @0x82B0DF70 / objectMemberSet @0x82B09E58 -- the built-in
@@ -437,7 +437,7 @@ int AptCIH::jumpToFrame(int nFrame)
             void* pProperties = pInst->mpProperties;   // dword[3] (the AS property hash)
 
             void* pScratchMem = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoDisplayList));   // [c: 8]
-            AptPseudoDisplayList* pScratch = nullptr;
+            AptPseudoDisplayList* pScratch = 0;
             if (pScratchMem)
                 pScratch = new (pScratchMem) AptPseudoDisplayList(this);
 
@@ -461,7 +461,7 @@ int AptCIH::jumpToFrame(int nFrame)
                 // and r4 (the scratch list); r5/r6 still hold the current replay
                 // frame + trailing args from the loop, so they are passed here
                 // explicitly for the AptMovie::DoTemporaryFrameControls signature.
-                pMovie->DoTemporaryFrameControls(pScratch, pInst->mnGotoFrame, 0, nullptr);
+                pMovie->DoTemporaryFrameControls(pScratch, pInst->mnGotoFrame, 0, 0);
                 ++pInst->mnGotoFrame;
             }
 
@@ -480,7 +480,7 @@ int AptCIH::jumpToFrame(int nFrame)
         // x64 narrowing (resolved): the X360 returns r3 -- the queueFrameActions
         // result pointer -- as the int result the callers ignore. Carried as a
         // non-zero "ran" marker so no 8->4-byte pointer truncation exists on x64.
-        nResult = pMovie->queueFrameActions(this, pInst->mnGotoFrame) != nullptr;
+        nResult = pMovie->queueFrameActions(this, pInst->mnGotoFrame) != 0;
     }
     return nResult;
 }

@@ -157,7 +157,7 @@ namespace BrnNetwork
     void BuddyManagerBase::ProcessDebugEvents()
     {
         BrnNetworkModuleIO::NetworkEventQueue* lpDebugEventQueue = mDebugComponent.GetEventQueue();
-        if (lpDebugEventQueue != nullptr)
+        if (lpDebugEventQueue != 0)
         {
             ProcessNetworkQueue(lpDebugEventQueue, GetEventQueue(mpNetworkModule));
             lpDebugEventQueue->Clear();
@@ -955,38 +955,38 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerBase::_AssertLayout()
     {
-        static_assert(sizeof(CgsNetwork::PlayerName) == 16, "PlayerName is 16 bytes (X360 KI_USERNAME_LENGTH)");
+        CGS_STATIC_ASSERT((sizeof(CgsNetwork::PlayerName) == 16), "PlayerName is 16 bytes (X360 KI_USERNAME_LENGTH)");
 
-        static_assert(offsetof(BuddyManagerBase, maBuddyListAtUpload)
-                      - offsetof(BuddyManagerBase, maServerBuddyList) == 1600,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, maBuddyListAtUpload)
+                      - offsetof(BuddyManagerBase, maServerBuddyList) == 1600),
                       "maServerBuddyList[100] precedes maBuddyListAtUpload");
-        static_assert(offsetof(BuddyManagerBase, maCachedBuddyListAtLastChange)
-                      - offsetof(BuddyManagerBase, maBuddyListAtUpload) == 1600,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, maCachedBuddyListAtLastChange)
+                      - offsetof(BuddyManagerBase, maBuddyListAtUpload) == 1600),
                       "maBuddyListAtUpload[100] precedes maCachedBuddyListAtLastChange");
 
-        static_assert(offsetof(BuddyManagerBase, miNumServerBuddies)
-                      - offsetof(BuddyManagerBase, mTimeUntilRetryAfterFailedBuddyUpload) == 8,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, miNumServerBuddies)
+                      - offsetof(BuddyManagerBase, mTimeUntilRetryAfterFailedBuddyUpload) == 8),
                       "mTimeUntilRetryAfterFailedBuddyUpload (Time, 8B) precedes miNumServerBuddies");
-        static_assert(offsetof(BuddyManagerBase, miNumBuddiesAtUpload)
-                      - offsetof(BuddyManagerBase, miNumServerBuddies) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, miNumBuddiesAtUpload)
+                      - offsetof(BuddyManagerBase, miNumServerBuddies) == 4),
                       "miNumServerBuddies precedes miNumBuddiesAtUpload");
-        static_assert(offsetof(BuddyManagerBase, miCachedNumBuddiesAtLastChange)
-                      - offsetof(BuddyManagerBase, miNumBuddiesAtUpload) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, miCachedNumBuddiesAtLastChange)
+                      - offsetof(BuddyManagerBase, miNumBuddiesAtUpload) == 4),
                       "miNumBuddiesAtUpload precedes miCachedNumBuddiesAtLastChange");
-        static_assert(offsetof(BuddyManagerBase, meState)
-                      - offsetof(BuddyManagerBase, miCachedNumBuddiesAtLastChange) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, meState)
+                      - offsetof(BuddyManagerBase, miCachedNumBuddiesAtLastChange) == 4),
                       "miCachedNumBuddiesAtLastChange precedes meState");
-        static_assert(offsetof(BuddyManagerBase, mfTimeUntilRetryGetServerBuddies)
-                      - offsetof(BuddyManagerBase, meState) >= 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, mfTimeUntilRetryGetServerBuddies)
+                      - offsetof(BuddyManagerBase, meState) >= 4),
                       "meState + mpNetworkModule precede the float timers");
-        static_assert(offsetof(BuddyManagerBase, mfBuddyListChangedTimer)
-                      - offsetof(BuddyManagerBase, mfTimeUntilRetryGetServerBuddies) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, mfBuddyListChangedTimer)
+                      - offsetof(BuddyManagerBase, mfTimeUntilRetryGetServerBuddies) == 4),
                       "mfTimeUntilRetryGetServerBuddies precedes mfBuddyListChangedTimer");
-        static_assert(offsetof(BuddyManagerBase, miNextBuddyToSend)
-                      - offsetof(BuddyManagerBase, mfBuddyListChangedTimer) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, miNextBuddyToSend)
+                      - offsetof(BuddyManagerBase, mfBuddyListChangedTimer) == 4),
                       "mfBuddyListChangedTimer precedes miNextBuddyToSend");
-        static_assert(offsetof(BuddyManagerBase, mbOverwriteFriendsList)
-                      - offsetof(BuddyManagerBase, miNextBuddyToSend) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerBase, mbOverwriteFriendsList)
+                      - offsetof(BuddyManagerBase, miNextBuddyToSend) == 4),
                       "miNextBuddyToSend precedes mbOverwriteFriendsList");
     }
 }

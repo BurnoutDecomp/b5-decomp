@@ -44,7 +44,7 @@ namespace Camera
     // storage passed by value into GetSizeOnScreen. FLAG: a storage-only stand-in -- the
     // committed BrnPlayerInfo.h carries an identical BrnDirector::Camera::AABBox slice; a
     // future consolidation should unify both on the real vendor template.
-    struct alignas(16) AABBox
+    struct CGS_ALIGN(16) AABBox
     {
         Vector3 mMin;   // aabbox.h: m_min
         Vector3 mMax;   // aabbox.h: m_max

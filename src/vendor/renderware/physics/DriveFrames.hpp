@@ -44,20 +44,20 @@ namespace physics
     // the compiler and the linker. See the block at CgsPhysicsSimulationModule.h.
     inline void _rw_physics_DriveFrames_AssertLayout()
     {
-        static_assert(offsetof(DriveFrames, mQuatA) == 0x00, "mQuatA @+0x00 (DriveJacobian::Build lvx128 v0,r0,r27)");
-        static_assert(offsetof(DriveFrames, mPosA)  == 0x10, "mPosA  @+0x10 (Build reads the position through r11)");
-        static_assert(offsetof(DriveFrames, mQuatB) == 0x20, "mQuatB @+0x20 (Build lvx128 v12,r27,r25 with r25 = 0x20)");
-        static_assert(offsetof(DriveFrames, mPosB)  == 0x30, "mPosB  @+0x30 (Build reads the position through r8)");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mQuatA) == 0x00), "mQuatA @+0x00 (DriveJacobian::Build lvx128 v0,r0,r27)");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosA)  == 0x10), "mPosA  @+0x10 (Build reads the position through r11)");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mQuatB) == 0x20), "mQuatB @+0x20 (Build lvx128 v12,r27,r25 with r25 = 0x20)");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosB)  == 0x30), "mPosB  @+0x30 (Build reads the position through r8)");
 
         // Adjacency form -- survives a member WIDENING, which the absolute offsets would too
         // but which the stride check below would not.
-        static_assert(offsetof(DriveFrames, mPosA)  == offsetof(DriveFrames, mQuatA) + sizeof(DriveFrames::mQuatA), "mPosA follows mQuatA");
-        static_assert(offsetof(DriveFrames, mQuatB) == offsetof(DriveFrames, mPosA)  + sizeof(DriveFrames::mPosA),  "mQuatB follows mPosA");
-        static_assert(offsetof(DriveFrames, mPosB)  == offsetof(DriveFrames, mQuatB) + sizeof(DriveFrames::mQuatB), "mPosB follows mQuatB");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosA)  == offsetof(DriveFrames, mQuatA) + sizeof(DriveFrames::mQuatA)), "mPosA follows mQuatA");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mQuatB) == offsetof(DriveFrames, mPosA)  + sizeof(DriveFrames::mPosA)),  "mQuatB follows mPosA");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosB)  == offsetof(DriveFrames, mQuatB) + sizeof(DriveFrames::mQuatB)), "mPosB follows mQuatB");
 
         // The X360-attested ARRAY STRIDE -- ProcessUpdateDriveFramesQueue @0x8289FD18 steps
         // DriveData::maFrames by `liIndex << 6`, and copies exactly four 16-byte lanes.
-        static_assert(sizeof(DriveFrames) == 64, "DriveFrames array stride 64 (drain slwi r10,r31,6 + 4 lvx128 lanes)");
+        CGS_STATIC_ASSERT((sizeof(DriveFrames) == 64), "DriveFrames array stride 64 (drain slwi r10,r31,6 + 4 lvx128 lanes)");
     }
 }
 }

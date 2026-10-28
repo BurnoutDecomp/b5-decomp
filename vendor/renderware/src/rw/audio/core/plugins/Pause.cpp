@@ -36,8 +36,8 @@ static const f32 KF_MINUS_ONE = -1.0f;
 // PlugIn v-table the scalar deleting destructor reinstalls before any free. These are
 // opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
 // storage so the bodies below link without fabricating their contents.
-static void *const KPP_PauseVTable = nullptr;        // off_8217F4C4
-static void *const KPP_BasePlugInVTable = nullptr;   // off_820AA810
+static void *const KPP_PauseVTable = 0;        // off_8217F4C4
+static void *const KPP_BasePlugInVTable = 0;   // off_820AA810
 
 // off_82F8F510 -- the "Pause" runtime descriptor, REAL (descriptor-record wave; record
 // dump progress/scratch_dossiers/plugindesc_layout_codex.md). One of only three registered

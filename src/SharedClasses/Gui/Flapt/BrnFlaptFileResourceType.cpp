@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "rw/rwcore_structs.h"                       // rw::Resource, rw::BaseResourceDescriptors<5>
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // BrnFlapt::FlaptFileResourceType member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX:

@@ -22,7 +22,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"   // mpRenderItem + delegated accessors
 

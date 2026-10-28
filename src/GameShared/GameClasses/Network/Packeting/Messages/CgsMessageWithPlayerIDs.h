@@ -60,10 +60,10 @@ namespace CgsNetwork
         }
         NetworkPlayerID GetRecvingPlayerID() const;
         NetworkPlayerID GetRecvingPlayerIDForNack() const { return mRecvingPlayerID; }
-        s32             GetPackedMessageSize() override;
+        s32             GetPackedMessageSize() ;
     };
 
-    static_assert(sizeof(void*) != 4 || offsetof(MessageWithPlayerIDs, mSendingPlayerID) == 0x20,
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(MessageWithPlayerIDs, mSendingPlayerID) == 0x20),
                   "MessageWithPlayerIDs::mSendingPlayerID @ +0x20");
-    static_assert(sizeof(void*) != 4 || sizeof(MessageWithPlayerIDs) == 0x28, "sizeof(MessageWithPlayerIDs) == 0x28");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(MessageWithPlayerIDs) == 0x28), "sizeof(MessageWithPlayerIDs) == 0x28");
 } // namespace CgsNetwork

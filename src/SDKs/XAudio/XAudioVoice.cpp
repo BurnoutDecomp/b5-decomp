@@ -147,7 +147,7 @@ CVoice::CVoice(void* apAllocator, u8 auVoiceType)
     mListB.mpNext = &mListB;
     mListB.mpPrev = &mListB;
 
-    mpReserved28 = nullptr;
+    mpReserved28 = 0;
 }
 
 // @ 0x82C32278:
@@ -165,7 +165,7 @@ CVoice::~CVoice()
             if (pEffect)
             {
                 pEffect->mpVTable->mpRelease(pEffect);
-                mpEffects[i].mpEffect = nullptr;
+                mpEffects[i].mpEffect = 0;
             }
         }
     }
@@ -173,14 +173,14 @@ CVoice::~CVoice()
     if (mpFrameBuffer)
     {
         XAudioEffectManager_Release(mpFrameBuffer);
-        mpFrameBuffer = nullptr;
+        mpFrameBuffer = 0;
     }
 
     if (mpAllocator)
     {
         IXAudioAllocator* pAllocator = static_cast<IXAudioAllocator*>(mpAllocator);
         pAllocator->mpVTable->mpRelease(pAllocator);
-        mpAllocator = nullptr;
+        mpAllocator = 0;
     }
 }
 
@@ -193,7 +193,7 @@ s32 CVoice::CreateEffect(SVoiceEffect* apEffect, const void* apDesc, u8 auFlag)
 {
     CEffectManager* pManager = gpEngine->mpEffectManager;
 
-    apEffect->mpEffect = nullptr;
+    apEffect->mpEffect = 0;
     s32 result = XAudioEffectManager_CreateEffect(pManager, apDesc, mpAllocator,
                                                   &apEffect->mpEffect);
     if (result >= 0)

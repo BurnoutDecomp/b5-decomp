@@ -132,9 +132,9 @@ namespace BrnGui
 
         // The three response views share the canonical flat wire types with the
         // GameState-to-GUI translator; the queue's type/size header is separate from payload bytes.
-        using ImageInfoPayload      = GuiImageGalleryImageInfoEvent;
-        using CollectedCountPayload = GuiImageGalleryCollectedCountEvent;
-        using CollectedDataPayload  = GuiImageGalleryCollectedDataEvent;
+        typedef GuiImageGalleryImageInfoEvent ImageInfoPayload;
+        typedef GuiImageGalleryCollectedCountEvent CollectedCountPayload;
+        typedef GuiImageGalleryCollectedDataEvent CollectedDataPayload;
 
         // ---- out-queue payloads (boxed by GuiEventWrapper<T, 40>) ---------------------------
         // Id 517: { image index, on-screen slot, request kind, gallery type } (28-byte record).
@@ -166,11 +166,11 @@ namespace BrnGui
             s32 GetEventType() const { return KI_GUI_EVENT_IMAGE_EXPORT_REQUESTED; }
         };
 
-        static_assert(sizeof(ImageGalleryRequestPayload) == 16, "request payload is 16 bytes");
-        static_assert(sizeof(ImageExportRequestedPayload) == 17, "export payload is 17 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<ImageGalleryRequestPayload, 40>) == 28,
+        CGS_STATIC_ASSERT((sizeof(ImageGalleryRequestPayload) == 16), "request payload is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(ImageExportRequestedPayload) == 17), "export payload is 17 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<ImageGalleryRequestPayload, 40>) == 28),
                       "request record is 28 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<ImageExportRequestedPayload, 40>) == 32,
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<ImageExportRequestedPayload, 40>) == 32),
                       "export record is 32 bytes");
 
         // { 1, 148, 12, <show byte> }: 16 bytes.
@@ -200,10 +200,10 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiShowHideHudWire) == 16, "show/hide hud record is 16 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(GuiAudioTriggerEvent) == 112, "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiShowHideHudWire) == 16), "show/hide hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerEvent) == 112), "audio trigger record is 112 bytes");
 
         template <class TPayload>
         void PostWrapped(CgsGui::StateInterface* lpStateInterface, TPayload& lrPayload)
@@ -1104,24 +1104,24 @@ namespace BrnGui
     // the header do not survive the 64-bit host, so nothing here pins a byte offset.
     void ImageGalleryState::_AssertLayout()
     {
-        static_assert(sizeof(((ImageGalleryState*)0)->maCategorySelectable) / sizeof(ImageGallerySelectable)
-                          == E_GUI_IMAGE_CATEGORIES_COUNT,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->maCategorySelectable) / sizeof(ImageGallerySelectable)
+                          == E_GUI_IMAGE_CATEGORIES_COUNT),
                       "one category tab per image category");
-        static_assert(sizeof(((ImageGalleryState*)0)->maiPhotoCountPerCategory) / sizeof(s32)
-                          == E_GUI_IMAGE_CATEGORIES_COUNT,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->maiPhotoCountPerCategory) / sizeof(s32)
+                          == E_GUI_IMAGE_CATEGORIES_COUNT),
                       "one image count per image category");
-        static_assert(sizeof(((ImageGalleryState*)0)->maCarouselOverviewSelectable)
-                              / sizeof(ImageGalleryCarouselSelectable) == 20,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->maCarouselOverviewSelectable)
+                              / sizeof(ImageGalleryCarouselSelectable) == 20),
                       "the console's overview strip holds 20 slots");
-        static_assert(sizeof(((ImageGalleryState*)0)->maCarouselItems) / sizeof(ImageGalleryCarouselItem) == 3,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->maCarouselItems) / sizeof(ImageGalleryCarouselItem) == 3),
                       "left / middle / right carousel items");
-        static_assert(sizeof(((ImageGalleryState*)0)->mauExpectedComponentIds) / sizeof(u32)
-                          == KU_MAX_INIT_COMPONENTS_NUM,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->mauExpectedComponentIds) / sizeof(u32)
+                          == KU_MAX_INIT_COMPONENTS_NUM),
                       "seven expected-component slots");
-        static_assert(sizeof(((ImageGalleryState*)0)->miSnapShotDelayCounter) == 1,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->miSnapShotDelayCounter) == 1),
                       "the snapshot delay is a signed byte (lbz/extsb)");
-        static_assert(sizeof(((ImageGalleryState*)0)->mSelectedPlayerName) == 16,
+        CGS_STATIC_ASSERT((sizeof(((ImageGalleryState*)0)->mSelectedPlayerName) == 16),
                       "the selected player name is the 16-byte copy UpdateRunning exports");
-        static_assert(sizeof(CollectedDataPayload) == 16, "collected-data payload: type + one bit field");
+        CGS_STATIC_ASSERT((sizeof(CollectedDataPayload) == 16), "collected-data payload: type + one bit field");
     }
 }   // namespace BrnGui

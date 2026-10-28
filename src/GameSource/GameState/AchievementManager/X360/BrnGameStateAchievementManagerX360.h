@@ -68,7 +68,7 @@ struct XUSER_ACHIEVEMENT
     u32 dwUserIndex;              // +0x00
     u32 dwAchievementId;          // +0x04
 };
-static_assert(sizeof(XUSER_ACHIEVEMENT) == 8, "XUSER_ACHIEVEMENT is 8 bytes");
+CGS_STATIC_ASSERT((sizeof(XUSER_ACHIEVEMENT) == 8), "XUSER_ACHIEVEMENT is 8 bytes");
 
 namespace BrnGameState
 {
@@ -132,11 +132,11 @@ protected:
 
     // X360 0x82367000 (vtable slot 0). Queue leAchievement into mAchievementsToWrite
     // the first time it is seen; assert if it is already flagged earnt.
-    void AchievementEarnt(EAchievement leAchievement) override;
+    void AchievementEarnt(EAchievement leAchievement) ;
 
     // X360 0x82367240 (vtable slot 1). True iff leAchievement's bit is set in EITHER
     // mAchievementsEarnt or mAchievementsToWrite (i.e. earnt or already queued).
-    bool IsAchievementEarnt(EAchievement leAchievement) override;
+    bool IsAchievementEarnt(EAchievement leAchievement) ;
 
 private:
     CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS> mAchievementsEarnt;   // +0x18
