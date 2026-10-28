@@ -3589,6 +3589,18 @@ namespace BrnDirector
                                               KPC_EVENT_WIN_HOOK, KF_EVENT_WIN_HOOK_BLEND);
             }
 
+            // ARTIST 0x8227455C..0x8227459C: Disable DOF restores the five camera defaults
+            // (0.1, 0.2, 0.3, 0.4, 0.0) by five stores to Camera +0x124..+0x134. The existing
+            // Construct body is that exact default store sequence and has no range assertions.
+            if (maStateFlagTail[E_FLAG_TAIL_DISABLE_DOF] != 0)
+                lCamera.GetDepthOfField().Construct();
+
+            // ARTIST 0x822745A4..0x822745BC: Always anamorphic ORs 0x20 into the local camera's
+            // current state flags. CameraState bit 5 is E_FLAG_SUPER_WIDE; preserve the original
+            // one-way set (the retail code does not clear the camera's bit when the toggle is off).
+            if (maStateFlagTail[E_FLAG_TAIL_ALWAYS_SUPER_WIDE] != 0)
+                lCamera.GetState().SetFlag(Camera::CameraState::E_FLAG_SUPER_WIDE, true);
+
             // ARTIST 0x822745D0..0x82274628: a change of the camera's producing behaviour
             // (Camera +0x50) raises NEW_THIS_FRAME before blending/finalising the camera.
             // dword_82FAAD74 is the process-wide previous behaviour pointer. This also
@@ -3702,6 +3714,11 @@ namespace BrnDirector
                     }
                 }
             }
+
+            // ARTIST 0x82274BDC..0x82274BF4: Force cutscene bars writes the image constant
+            // flt_82CDA5E0 (0.15f) to camera +0x110 == mEffects.mfBlackBarAmount +0xA8.
+            if (maStateFlagTail[E_FLAG_TAIL_FORCE_CUTSCENE_BARS_ON] != 0)
+                lCamera.GetEffects().mfBlackBarAmount = 0.15f;
 
             // X360 0x82274C18..0x82274E40 (Update pseudocode 659..800): Show World Map debug
             // draws the current/next vehicle positions and, if the map finds one, the nearest safe
