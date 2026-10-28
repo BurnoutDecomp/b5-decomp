@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 
 #include "types.hpp"
 // CgsNetwork::NetworkTexture - a network-transmissible texture: a pixel buffer plus its
@@ -9,8 +11,7 @@
 // Layout recovered from the DecFIGS DWARF (CgsNetworkTexture.h, gated on the X360 ledger) and
 // confirmed against the X360 ARTIST member loads in CgsNetworkImageConverter (offsets +0x04
 // miBitsPerPixel, +0x08 miWidth, +0x0C miHeight, +0x10 mFormat, +0x14 mpcTexture). Pointers
-// widen to the x64 target's 8 bytes; the X360 object is 28 bytes (4-byte pointers), the x64
-// object is larger, which is fine under semantic parity (no byte-matching gate).
+// are native four-byte words; the object is28 bytes.
 //
 // The trivial geometry getters (GetWidth/GetHeight/GetFormat/GetTexture/GetTextureSize/
 // GetBitsPerPixel()/IsUncompressedYUV) are NOT in the X360 function set: the compiler inlined
@@ -60,5 +61,13 @@ namespace CgsNetwork
         char*                     mpcTexture;                   // +0x14 pixel buffer
         bool                      mbTextureAllocatedFromHeap;   // +0x18
         bool                      mbIsUncompressedYUV;          // +0x19
+
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT((sizeof(NetworkTexture) == 28), "X360 network texture size");
+            CGS_STATIC_ASSERT((offsetof(NetworkTexture, mFormat) == 0x10), "X360 pixel format");
+            CGS_STATIC_ASSERT((offsetof(NetworkTexture, mpcTexture) == 0x14), "X360 pixel buffer");
+            CGS_STATIC_ASSERT((offsetof(NetworkTexture, mbIsUncompressedYUV) == 0x19), "X360 YUV flag");
+        }
     };
 }

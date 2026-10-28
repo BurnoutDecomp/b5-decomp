@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"

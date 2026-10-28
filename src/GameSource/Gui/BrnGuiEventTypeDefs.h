@@ -35,6 +35,7 @@
 
 #include "GameSource/GameState/BrnGameActions.h"
 #include "types.hpp"                                   // u8/s8/u32 widths, f32
+#include <cstddef>                                     // offsetof
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray
@@ -415,7 +416,7 @@ struct GuiEventUpdateSatNav
     SatNavIconInfo maIconInfo[KI_MAX_SAT_NAV_ICONS]; // @0x000 .. 0x8FF
     s32            miNumIcons;                        // @0x900
     // ARTIST BSS 0x82FB508A; written by GuiDebugComponent::UpdateWorstCaseHUD.
-    static inline bool msbForceWorstCase = false;
+    static bool msbForceWorstCase;
 
     // ADDITIVE GROW (CgsGui::GuiModule::AddGuiEvent<GuiEventUpdateSatNav> @0x823D93A0):
     // the producer queues this event with the compile-time id 199 (inlined GetEventType()).
@@ -711,9 +712,9 @@ private:
     // X360-pinned sub-field guards on the parameter records (the loads/stores that index
     // them: id @+0x08, text @+0x0C, 0x44 stride; the output's text buffer at +0x04).
     CGS_STATIC_ASSERT((sizeof(ParamInfo) == 0x44), "ParamInfo stride 0x44 (GetMessageParam: 0x44*idx)");
-    CGS_STATIC_ASSERT((__builtin_offsetof(ParamInfo, muId) == 0x08), "param id @+0x08");
-    CGS_STATIC_ASSERT((__builtin_offsetof(ParamInfo, macText) == 0x0C), "param text @+0x0C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(ParamOut, macText) == 0x04), "out text @+0x04 (SPrintf out+4)");
+    CGS_STATIC_ASSERT((offsetof(ParamInfo, muId) == 0x08), "param id @+0x08");
+    CGS_STATIC_ASSERT((offsetof(ParamInfo, macText) == 0x0C), "param text @+0x0C");
+    CGS_STATIC_ASSERT((offsetof(ParamOut, macText) == 0x04), "out text @+0x04 (SPrintf out+4)");
 };
 
 // X360-pinned member offsets (the two button records and the count / guard bytes). At
@@ -1406,8 +1407,8 @@ struct GuiEventRoadRuleUpdate
     f32 mfCurrentCrash;         // +0x0C
     s32 miCrashMultiplier;      // +0x10
 
-    static inline bool msbWorstCaseHudActive   = false;
-    static inline f32  msfWorstCaseTimeElapsed = 0.0f;
+    static bool msbWorstCaseHudActive;
+    static f32  msfWorstCaseTimeElapsed;
 
     s32 GetEventType() const { return 338; }
 };
@@ -1435,8 +1436,8 @@ struct GuiEventRoadRuleBatchDataResponse
     s32 GetEventType() const { return 344; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleBatchDataResponse) == 776), "AddGuiEvent<GuiEventRoadRuleBatchDataResponse> size 776 (id 344)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleBatchDataResponse, miRoadCount) == 0x200), "id 344 +0x200");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleBatchDataResponse, mabPlayerBeatenOnlineCrash) == 0x2C4), "id 344 +0x2C4");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleBatchDataResponse, miRoadCount) == 0x200), "id 344 +0x200");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleBatchDataResponse, mabPlayerBeatenOnlineCrash) == 0x2C4), "id 344 +0x2C4");
 
 // id 345, 48 bytes -- one road's ticker line (the answer to the ticker's score request).
 // InGameMessageRenderer::RecvEvent reads the road id +0x00, the index +0x08, the name +0x0C,
@@ -1455,8 +1456,8 @@ struct GuiEventRoadRuleTickerScoreResponse
     s32 GetEventType() const { return 345; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleTickerScoreResponse) == 48), "AddGuiEvent<GuiEventRoadRuleTickerScoreResponse> size 48 (id 345)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleTickerScoreResponse, meActiveRoadRule) == 0x1C), "id 345 +0x1C");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleTickerScoreResponse, mbLocalPlayerRulesRoad) == 0x28), "id 345 +0x28");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleTickerScoreResponse, meActiveRoadRule) == 0x1C), "id 345 +0x1C");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleTickerScoreResponse, mbLocalPlayerRulesRoad) == 0x28), "id 345 +0x28");
 
 // id 346, 8 bytes -- the roads whose ruler changed (the ticker's breaking-news mask).
 struct GuiEventRoadRuleNewRulers
@@ -1666,13 +1667,13 @@ struct GuiSoftTakedownEvent
     s32 GetEventType() const { return 364; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiSoftTakedownEvent) == 32), "AddGuiEvent<GuiSoftTakedownEvent> size 32 (id 364)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, mAggressorCarID)     == 0x00), "soft takedown +0x00");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, mVictimCarID)        == 0x08), "soft takedown +0x08");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, meAggressorIndex)    == 0x10), "soft takedown +0x10");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, meVictimIndex)       == 0x14), "soft takedown +0x14");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, meTakedownType)      == 0x18), "soft takedown +0x18");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, mbMarkedManTakeDown) == 0x1C), "soft takedown +0x1C");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiSoftTakedownEvent, mbSettledScore)      == 0x1D), "soft takedown +0x1D");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, mAggressorCarID)     == 0x00), "soft takedown +0x00");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, mVictimCarID)        == 0x08), "soft takedown +0x08");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, meAggressorIndex)    == 0x10), "soft takedown +0x10");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, meVictimIndex)       == 0x14), "soft takedown +0x14");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, meTakedownType)      == 0x18), "soft takedown +0x18");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, mbMarkedManTakeDown) == 0x1C), "soft takedown +0x1C");
+CGS_STATIC_ASSERT((offsetof(GuiSoftTakedownEvent, mbSettledScore)      == 0x1D), "soft takedown +0x1D");
 
 // (GuiShutdownEvent -- DWARF :3618 {CgsID mVictimCarID} -- KEEPS its
 // BrnGuiDemangledEventTypes.h placeholder, id 373 size 8: HandleShutdown is not part of
@@ -1830,7 +1831,7 @@ struct GuiOvertakeEvent
     s32 GetEventType() const { return 371; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiOvertakeEvent) == 8), "X360 AddGuiEvent size 8 (id 371)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiOvertakeEvent, muNewPosition) == 0x04),
+CGS_STATIC_ASSERT((offsetof(GuiOvertakeEvent, muNewPosition) == 0x04),
               "X360 position byte @+4 (stb @0x823E2044)");
 
 struct GuiFinishRaceEvent
@@ -1841,7 +1842,7 @@ struct GuiFinishRaceEvent
     s32 GetEventType() const { return 372; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiFinishRaceEvent) == 8), "X360 AddGuiEvent size 8 (id 372)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiFinishRaceEvent, meFinishType) == 0x04),
+CGS_STATIC_ASSERT((offsetof(GuiFinishRaceEvent, meFinishType) == 0x04),
               "X360 finish type @+4 (stw @0x823E20FC)");
 
 // DWARF :3908 (PS3 GuiEvent<370>; X360 id 375, record 16 bytes). The analyzer parks a
@@ -2273,13 +2274,13 @@ struct GuiEventRoadRuleNewHighScore
     s32 GetEventType() const { return 342; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleNewHighScore) == 48), "X360 AddGuiEvent size 48 (id 342)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, mRoadId)            == 0x00), "X360 mRoadId @0x00");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, meScoreType)        == 0x08), "X360 meScoreType @0x08");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, miNumScoresLost)    == 0x0C), "X360 miNumScoresLost @0x0C");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, miNumRoadsNowRuled) == 0x10), "X360 miNumRoadsNowRuled @0x10");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, mPlayerName)        == 0x14), "X360 mPlayerName @0x14");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, mbIsLocalPlayer)    == 0x24), "X360 mbIsLocalPlayer @0x24");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventRoadRuleNewHighScore, mbOnlineLossButOfflineWin) == 0x28),
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, mRoadId)            == 0x00), "X360 mRoadId @0x00");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, meScoreType)        == 0x08), "X360 meScoreType @0x08");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, miNumScoresLost)    == 0x0C), "X360 miNumScoresLost @0x0C");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, miNumRoadsNowRuled) == 0x10), "X360 miNumRoadsNowRuled @0x10");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, mPlayerName)        == 0x14), "X360 mPlayerName @0x14");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, mbIsLocalPlayer)    == 0x24), "X360 mbIsLocalPlayer @0x24");
+CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleNewHighScore, mbOnlineLossButOfflineWin) == 0x28),
               "X360 mbOnlineLossButOfflineWin @0x28");
 
 // ---------------------------------------------------------------------------------------
@@ -2374,9 +2375,9 @@ struct GuiInEventDistanceToFinish
 
     s32 GetEventType() const { return 419; }
 };
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventDistanceToFinish, mfDistanceToFinish) == 0x00),
+CGS_STATIC_ASSERT((offsetof(GuiInEventDistanceToFinish, mfDistanceToFinish) == 0x00),
               "X360 mfDistanceToFinish @0x00 (lfs 0(a2) @0x8251E5B0)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventDistanceToFinish, miPlayerPosition) == 0x04),
+CGS_STATIC_ASSERT((offsetof(GuiInEventDistanceToFinish, miPlayerPosition) == 0x04),
               "X360 miPlayerPosition @0x04 (lwz 4(a2) @0x8251E5C8)");
 
 // DWARF :5618 (GuiEvent<415>; X360 id 420). sizeof 24 == the AddEvent literal @0x823D55D0
@@ -2391,10 +2392,10 @@ struct GuiInEventLeaderSplit
     s32 GetEventType() const { return 420; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiInEventLeaderSplit) == 24), "X360 AddGuiEvent size 24 (id 420)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventLeaderSplit, mfLeadTime) == 0x08), "X360 mfLeadTime @0x08");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventLeaderSplit, meLeaderActiveRaceCarIndex) == 0x0C),
+CGS_STATIC_ASSERT((offsetof(GuiInEventLeaderSplit, mfLeadTime) == 0x08), "X360 mfLeadTime @0x08");
+CGS_STATIC_ASSERT((offsetof(GuiInEventLeaderSplit, meLeaderActiveRaceCarIndex) == 0x0C),
               "X360 meLeaderActiveRaceCarIndex @0x0C");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventLeaderSplit, mbLocalPlayerIsLeading) == 0x10),
+CGS_STATIC_ASSERT((offsetof(GuiInEventLeaderSplit, mbLocalPlayerIsLeading) == 0x10),
               "X360 mbLocalPlayerIsLeading @0x10");
 
 // DWARF :5638 / BrnGuiEventTypeDefs.h:4788 (GuiEvent<417>; X360 id 422). sizeof 24 == the AddEvent
@@ -2413,8 +2414,8 @@ struct GuiInEventRivalProgress
     s32 GetEventType() const { return 422; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiInEventRivalProgress) == 24), "X360 AddGuiEvent size 24 (id 422)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventRivalProgress, mLandmarkID) == 0x08), "X360 mLandmarkID @0x08");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiInEventRivalProgress, meRivalActiveRaceCarIndex) == 0x10),
+CGS_STATIC_ASSERT((offsetof(GuiInEventRivalProgress, mLandmarkID) == 0x08), "X360 mLandmarkID @0x08");
+CGS_STATIC_ASSERT((offsetof(GuiInEventRivalProgress, meRivalActiveRaceCarIndex) == 0x10),
               "X360 meRivalActiveRaceCarIndex @0x10");
 
 // DWARF :5690 (GuiEvent<420>; X360 id 425). sizeof 12 == the AddEvent literal @0x823D4B08.
@@ -2498,9 +2499,9 @@ struct GuiNetworkPlayerBattlingEvent
 
     s32 GetEventType() const { return 483; }
 };
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiNetworkPlayerBattlingEvent, meAggressorActiveRaceCarIndex) == 0x00),
+CGS_STATIC_ASSERT((offsetof(GuiNetworkPlayerBattlingEvent, meAggressorActiveRaceCarIndex) == 0x00),
               "X360 aggressor index @0x00 (lwz 0(a2) @0x8251D004)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiNetworkPlayerBattlingEvent, meVictimActiveRaceCarIndex) == 0x04),
+CGS_STATIC_ASSERT((offsetof(GuiNetworkPlayerBattlingEvent, meVictimActiveRaceCarIndex) == 0x04),
               "X360 victim index @0x04 (lwz 4(a2) @0x8251D034)");
 
 // -----------------------------------------------------------------------------------------
@@ -2555,12 +2556,12 @@ struct GuiEventBoostInfo
     s32 GetEventType() const { return 206; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventBoostInfo) == 28), "X360 AddGuiEvent size 28 (id 206)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventBoostInfo, muNumChained)            == 0x00), "X360 muNumChained @0x00");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventBoostInfo, meBoostType)             == 0x0C), "X360 meBoostType @0x0C");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventBoostInfo, mbBoostIsFull)           == 0x10), "X360 mbBoostIsFull @0x10");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventBoostInfo, mbIsBoosting)            == 0x11), "X360 mbIsBoosting @0x11");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventBoostInfo, mbWasChainJustCompleted) == 0x17), "X360 mbWasChainJustCompleted @0x17");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventBoostInfo, mbIsTailgating)          == 0x19), "X360 mbIsTailgating @0x19");
+CGS_STATIC_ASSERT((offsetof(GuiEventBoostInfo, muNumChained)            == 0x00), "X360 muNumChained @0x00");
+CGS_STATIC_ASSERT((offsetof(GuiEventBoostInfo, meBoostType)             == 0x0C), "X360 meBoostType @0x0C");
+CGS_STATIC_ASSERT((offsetof(GuiEventBoostInfo, mbBoostIsFull)           == 0x10), "X360 mbBoostIsFull @0x10");
+CGS_STATIC_ASSERT((offsetof(GuiEventBoostInfo, mbIsBoosting)            == 0x11), "X360 mbIsBoosting @0x11");
+CGS_STATIC_ASSERT((offsetof(GuiEventBoostInfo, mbWasChainJustCompleted) == 0x17), "X360 mbWasChainJustCompleted @0x17");
+CGS_STATIC_ASSERT((offsetof(GuiEventBoostInfo, mbIsTailgating)          == 0x19), "X360 mbIsTailgating @0x19");
 
 
 // =========================================================================================
@@ -2623,10 +2624,10 @@ struct GuiEventCurrentStatus
     s32 GetEventType() const { return 492; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventCurrentStatus) == 120), "X360 AddGuiEvent size 120 (id 492) @0x823D0DF0");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventCurrentStatus, mfDistanceDrivenInCurrentCar) == 0x10 &&
-              __builtin_offsetof(GuiEventCurrentStatus, maePlayerTeam)                == 0x14 &&
-              __builtin_offsetof(GuiEventCurrentStatus, miNumRemainingCheckpoints)    == 0x34 &&
-              __builtin_offsetof(GuiEventCurrentStatus, maiRemainingCheckpointIndexes) == 0x38),
+CGS_STATIC_ASSERT((offsetof(GuiEventCurrentStatus, mfDistanceDrivenInCurrentCar) == 0x10 &&
+              offsetof(GuiEventCurrentStatus, maePlayerTeam)                == 0x14 &&
+              offsetof(GuiEventCurrentStatus, miNumRemainingCheckpoints)    == 0x34 &&
+              offsetof(GuiEventCurrentStatus, maiRemainingCheckpointIndexes) == 0x38),
               "GuiEventCurrentStatus wire drift (RecEvent case 112 @0x82510540/0x825105A0/0x825105B0)");
 
 // =========================================================================================
@@ -2696,9 +2697,9 @@ struct GuiEventScoreUpdate
     s32 GetEventType() const { return 424; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventScoreUpdate) == 20), "X360 AddGuiEvent size 20 (id 424) @0x823D0EA8");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventScoreUpdate, mfModeTime)               == 0x04 &&
-              __builtin_offsetof(GuiEventScoreUpdate, mfDistanceToNextCheckpoint) == 0x0C &&
-              __builtin_offsetof(GuiEventScoreUpdate, mbTimerActive)            == 0x10),
+CGS_STATIC_ASSERT((offsetof(GuiEventScoreUpdate, mfModeTime)               == 0x04 &&
+              offsetof(GuiEventScoreUpdate, mfDistanceToNextCheckpoint) == 0x0C &&
+              offsetof(GuiEventScoreUpdate, mbTimerActive)            == 0x10),
               "GuiEventScoreUpdate wire drift (RecEvent case 44 @0x82510814/0x82510834/0x82510804)");
 
 // [E1 event-status wave 2026-08-26] RECOVERED (was the opaque `GuiEvent<428> + u8[28]`
@@ -2740,9 +2741,9 @@ struct GuiAttackScoreUpdate
     s32 GetEventType() const { return 428; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiAttackScoreUpdate) == 40), "X360 AddGuiEvent size 40 (id 428) @0x823D1188");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiAttackScoreUpdate, mfComboWarningTimeActive) == 0x18 &&
-              __builtin_offsetof(GuiAttackScoreUpdate, meStuntToDisplayType)     == 0x1C &&
-              __builtin_offsetof(GuiAttackScoreUpdate, mbComboWarningActive)     == 0x24),
+CGS_STATIC_ASSERT((offsetof(GuiAttackScoreUpdate, mfComboWarningTimeActive) == 0x18 &&
+              offsetof(GuiAttackScoreUpdate, meStuntToDisplayType)     == 0x1C &&
+              offsetof(GuiAttackScoreUpdate, mbComboWarningActive)     == 0x24),
               "GuiAttackScoreUpdate wire drift (RecEvent case 48 @0x825109E4/0x825109FC/0x825109EC)");
 
 // =========================================================================================
@@ -2792,9 +2793,9 @@ struct GuiCrashScoreUpdate
     s32 GetEventType() const { return 434; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiCrashScoreUpdate) == 16), "X360 AddGuiEvent size 16 (id 434) @0x823D10D0");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiCrashScoreUpdate, miComboMultiplier)   == 0x04 &&
-              __builtin_offsetof(GuiCrashScoreUpdate, miScoreMultiplier)   == 0x08 &&
-              __builtin_offsetof(GuiCrashScoreUpdate, mfDistanceTravelled) == 0x0C),
+CGS_STATIC_ASSERT((offsetof(GuiCrashScoreUpdate, miComboMultiplier)   == 0x04 &&
+              offsetof(GuiCrashScoreUpdate, miScoreMultiplier)   == 0x08 &&
+              offsetof(GuiCrashScoreUpdate, mfDistanceTravelled) == 0x0C),
               "GuiCrashScoreUpdate wire drift (RecEvent case 54 @0x82510AF4/0x82510B10/0x82510B18)");
 
 // =========================================================================================
@@ -2826,7 +2827,7 @@ struct GuiRoadRageScoreUpdate
     s32 GetEventType() const { return 426; }
 };
 CGS_STATIC_ASSERT((sizeof(GuiRoadRageScoreUpdate) == 8), "X360 AddGuiEvent size 8 (id 426) @0x823D0F60");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiRoadRageScoreUpdate, miTargetTakedowns) == 0x04),
+CGS_STATIC_ASSERT((offsetof(GuiRoadRageScoreUpdate, miTargetTakedowns) == 0x04),
               "GuiRoadRageScoreUpdate wire drift (RecEvent case 46 @0x825108D4)");
 
 // =========================================================================================
@@ -2883,12 +2884,12 @@ struct GuiEventPrepareForModeStart
 };
 CGS_STATIC_ASSERT((sizeof(GuiEventPrepareForModeStart) == 152),
               "X360 AddGuiEvent size 152 (id 93) @0x823D27D0");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventPrepareForModeStart, meGameModeType)          == 0x0C &&
-              __builtin_offsetof(GuiEventPrepareForModeStart, mau16CheckpointLandmark) == 0x18 &&
-              __builtin_offsetof(GuiEventPrepareForModeStart, maiCheckpointDistrict)   == 0x38 &&
-              __builtin_offsetof(GuiEventPrepareForModeStart, mfModeTimeLimit)         == 0x84 &&
-              __builtin_offsetof(GuiEventPrepareForModeStart, mu8CheckpointCount)      == 0x8C &&
-              __builtin_offsetof(GuiEventPrepareForModeStart, mbIsOnline)              == 0x90),
+CGS_STATIC_ASSERT((offsetof(GuiEventPrepareForModeStart, meGameModeType)          == 0x0C &&
+              offsetof(GuiEventPrepareForModeStart, mau16CheckpointLandmark) == 0x18 &&
+              offsetof(GuiEventPrepareForModeStart, maiCheckpointDistrict)   == 0x38 &&
+              offsetof(GuiEventPrepareForModeStart, mfModeTimeLimit)         == 0x84 &&
+              offsetof(GuiEventPrepareForModeStart, mu8CheckpointCount)      == 0x8C &&
+              offsetof(GuiEventPrepareForModeStart, mbIsOnline)              == 0x90),
               "GuiEventPrepareForModeStart wire drift (RecEvent case 89 @0x8250E7E4/0x8250E90C/"
               "0x8250E9CC/0x8250E8FC)");
 
@@ -3061,13 +3062,13 @@ CGS_STATIC_ASSERT((sizeof(GuiEventOfflinePostEvent) == 192),
 CGS_STATIC_ASSERT((sizeof(GuiEventOfflinePostEvent::OfflinePostEventData) == 192),
               "OfflinePostEventData is 192 bytes (memcpy @0x824DBAD8 case 64; and "
               "0x2338 - 0x2278 == 192)");
-CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mBeatenRival)           == 0x10 &&
-              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, meFinishedGameModeType) == 0x18 &&
-              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mfTime)                 == 0x20 &&
-              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, maCarsToUnlockFromSpecialEvent) == 0x30 &&
-              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, miPlayerOldRank)        == 0xA0 &&
-              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, miPlayerFinishPosition) == 0xB0 &&
-              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mbHasRankedUp)          == 0xB8),
+CGS_STATIC_ASSERT((offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mBeatenRival)           == 0x10 &&
+              offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, meFinishedGameModeType) == 0x18 &&
+              offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mfTime)                 == 0x20 &&
+              offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, maCarsToUnlockFromSpecialEvent) == 0x30 &&
+              offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, miPlayerOldRank)        == 0xA0 &&
+              offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, miPlayerFinishPosition) == 0xB0 &&
+              offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mbHasRankedUp)          == 0xB8),
               "OfflinePostEventData slot drift vs the X360 loads (0x2278/0x2288/0x2290/0x2298/"
               "0x22A8/0x2318/0x2328/0x2330 with the record based at 0x2278)");
 

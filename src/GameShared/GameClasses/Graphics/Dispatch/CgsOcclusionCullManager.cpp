@@ -155,7 +155,7 @@ namespace CgsGraphics
         const renderengine::VertexDescriptorData* const lpDescriptorData =
             reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
         const u16 luPositionOffset = lpDescriptorData->maElements[0].muOffset;
-        const u8 luPositionStride = lpDescriptorData->mauStreamStride[0];
+        const u8 luPositionStride = lpDescriptorData->GetElementStrides()[0];
 
         renderengine::VertexBuffer::Parameters lVertexBufferParameters;
         lVertexBufferParameters.muFormat = 0u;

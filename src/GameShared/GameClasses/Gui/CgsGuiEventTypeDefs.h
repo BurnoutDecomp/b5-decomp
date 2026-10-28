@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // CgsGui::GuiEvent<N> (12-byte event header)
@@ -208,24 +209,24 @@ namespace CgsGui
     // any event header. Other input wrappers keep their existing adapter seats.
     CGS_STATIC_ASSERT((sizeof(GuiEventSetSku) == 4), "SetSku is a four-byte payload");
     CGS_STATIC_ASSERT((sizeof(GuiEventSetLanguageNotification) == 4), "language notification is a four-byte payload");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventSetSku, meSku) == 0), "SKU enum at payload start");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventSetLanguageNotification, meLanguage) == 0), "language enum at payload start");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventSetLanguage, meLanguage)             == 0x0C), "GuiEventSetLanguage::meLanguage @+0x0C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x0C), "GuiEventActiveUserIndex::miActiveUserIndex @+0x0C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventControllerInputPressed, miPadId)     == 0x0C), "controller pad id @+0x0C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventControllerInputPressed, miButtonId)  == 0x10), "controller button id @+0x10");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventControllerAxis, miAxis)              == 0x0C), "axis id @+0x0C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventControllerAxis, mfXAxis)             == 0x10), "axis x @+0x10");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventControllerAxis, mfYAxis)             == 0x14), "axis y @+0x14");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiControllerDisconnected, miPlayer)         == 0x0C), "disconnect player @+0x0C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiControllerDisconnected, miPort)           == 0x10), "disconnect port @+0x10");
+    CGS_STATIC_ASSERT((offsetof(GuiEventSetSku, meSku) == 0), "SKU enum at payload start");
+    CGS_STATIC_ASSERT((offsetof(GuiEventSetLanguageNotification, meLanguage) == 0), "language enum at payload start");
+    CGS_STATIC_ASSERT((offsetof(GuiEventSetLanguage, meLanguage)             == 0x0C), "GuiEventSetLanguage::meLanguage @+0x0C");
+    CGS_STATIC_ASSERT((offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x0C), "GuiEventActiveUserIndex::miActiveUserIndex @+0x0C");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerInputPressed, miPadId)     == 0x0C), "controller pad id @+0x0C");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerInputPressed, miButtonId)  == 0x10), "controller button id @+0x10");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, miAxis)              == 0x0C), "axis id @+0x0C");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, mfXAxis)             == 0x10), "axis x @+0x10");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, mfYAxis)             == 0x14), "axis y @+0x14");
+    CGS_STATIC_ASSERT((offsetof(GuiControllerDisconnected, miPlayer)         == 0x0C), "disconnect player @+0x0C");
+    CGS_STATIC_ASSERT((offsetof(GuiControllerDisconnected, miPort)           == 0x10), "disconnect port @+0x10");
 
     // The disconnect record is header-free, so its own two fields sit at +0 and +4 and the
     // whole object is the 132-byte record. Every member is a scalar or a char array, so
     // these X360 numbers must survive the x64 host unchanged.
     CGS_STATIC_ASSERT((sizeof(GuiEventNetworkDisconnected)                              == 132),  "disconnect record is 132 bytes (AddEvent size 0x84 @0x82566150)");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventNetworkDisconnected, meLastError)     == 0x00), "disconnect error word @+0x00 (lwz r4, 0(r28) @0x824D89F0)");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiEventNetworkDisconnected, macReason)       == 0x04), "disconnect reason text @+0x04 (addi r30, r28, 4 @0x824D89C0)");
+    CGS_STATIC_ASSERT((offsetof(GuiEventNetworkDisconnected, meLastError)     == 0x00), "disconnect error word @+0x00 (lwz r4, 0(r28) @0x824D89F0)");
+    CGS_STATIC_ASSERT((offsetof(GuiEventNetworkDisconnected, macReason)       == 0x04), "disconnect reason text @+0x04 (addi r30, r28, 4 @0x824D89C0)");
 
     // DWARF CgsGuiEventTypeDefs.h:380 -- which login question the sign-in flow is showing.
     // X360-attested by CrashNavEnterOnlineBase (the show-function dispatch indexes it and

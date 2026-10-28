@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "GameShared/GameClasses/RenderWare/PS3/CgsRwVertexDescResourceTypePS3.h"
 #include "rw/rwcore_structs.h"                   // rw::BaseResourceDescriptors<5>
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
@@ -13,11 +14,8 @@
 // then build the five-entry serialised descriptor. Faithful to the X360 body (0x828A8A28):
 //   Parameters::Parameters(v6); GetParameters(a3, v6); GetResourceDescriptor(a1, v6); return a1.
 //
-// The renderengine sizer / reader live in two committed, mutually-exclusive homes (renderstates.h vs
-// pc/gcm/renderengine/VertexDescriptor.h) that model renderengine::VertexDescriptor differently;
-// including both would clash. This TU uses the renderstates.h Parameters-typed call surface (and
-// owns those two Parameters-typed overload bodies here, store-for-store off the asm); the
-// VertexDescriptorData-typed overloads in the companion home stay independent.
+// The parsed parameters and native variable-length runtime descriptor share the canonical
+// states/vertexdescriptor.h declaration. This TU owns the serialised reader and sizer.
 
 namespace
 {
@@ -77,10 +75,7 @@ namespace renderengine
             lElement.mu8Pad1       = 0xFFu;     // *(v7 + 5) = 255
             lElement.mu8Usage      = 0xFFu;     // *(v7 + 6) = 255
             lElement.mu8UsageIndex = 0u;        // *(v7 + 7) = 0
-            lElement.mu8Enabled    = 0u;        // *(v7 + 8) low byte = 0
-            lElement.maPad2[0]     = 0u;
-            lElement.maPad2[1]     = 0u;
-            lElement.maPad2[2]     = 0u;
+            lElement.muElementClass = 0u;       // stw0 at element+0x0C
         }
     }
 
