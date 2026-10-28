@@ -970,9 +970,8 @@ namespace BrnGame
                 }
                 case NetIO::NetworkOutLiveRevengeProfileData::KI_EVENT_TYPE:                // 29
                 {
-                    // FLAG: the GUI record is a 4-byte opaque slot on the console (one pointer); the
-                    // host pointer is 8 bytes, so only its first 4 bytes reach the GUI until the
-                    // GUI record gets a pointer member.
+                    // X360 sends one 4-byte pointer; the host event has the same single pointer
+                    // member at native width, so copy the full host pointer before queueing it.
                     const NetIO::NetworkOutLiveRevengeProfileData* lpProfileData =
                         reinterpret_cast<const NetIO::NetworkOutLiveRevengeProfileData*>(lpEvent);
                     BrnGui::GuiEventLiveRevengeProfileData lEvent;
