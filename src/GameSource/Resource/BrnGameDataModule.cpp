@@ -553,7 +553,15 @@ namespace BrnResource
             const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_HEAP_ALLOCATORS[li];
             ++miNumAllocatorCreationRequests;
 
-            void* lpMem = LaneAlloc::Carve(lpAllocator, lrDef.mauSize[0], lrDef.mauAlign[0],
+            u32 luHeapBytes = lrDef.mauSize[0];
+            if (lrDef.miBankId == 38)
+            {
+                // FLAG PC-platform leaf: Gui_FSM_Lang owns native Lua objects and language
+                // hash nodes (16->32 bytes on x64). Preserve the ARTIST bank's capacity in
+                // pointer-width units when provisioning its host backing memory.
+                luHeapBytes *= static_cast<u32>(sizeof(void*) / sizeof(u32));
+            }
+            void* lpMem = LaneAlloc::Carve(lpAllocator, luHeapBytes, lrDef.mauAlign[0],
                                            lrDef.mpcName);
             if (lpMem == 0)
             {
@@ -561,7 +569,7 @@ namespace BrnResource
                                           << lrDef.mpcName << "\n";
                 continue;
             }
-            maGeneratedHeapAllocators[li].Construct(lpMem, static_cast<s32>(lrDef.mauSize[0]));
+            maGeneratedHeapAllocators[li].Construct(lpMem, static_cast<s32>(luHeapBytes));
 
             mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
             mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
