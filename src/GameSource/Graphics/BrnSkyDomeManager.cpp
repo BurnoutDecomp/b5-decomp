@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "GameSource/Graphics/BrnSkyDomeManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -455,20 +456,10 @@ namespace
     // 0x10 * (elementCount + 1) -- exactly where renderengine::VertexDescriptor::Initialize
     // writes it ("Per-stream stride table base = +0x10 * (count + 1) bytes into the object").
     //
-    // ⚠ x64: the `0x10 * (count + 1)` cursor is a CONSOLE BYTE OFFSET and is wrong on this
-    // target. renderengine::VertexDescriptorData leads with a POINTER (mpDeclaration), so on
-    // LLP64 its element array starts at +0x14 rather than +0x10 and the packed stride bytes
-    // land at +0x114, not at 0x10*(count+1) -- for the sky's two elements that expression
-    // addresses 0x30, which is inside element 1's record. The table is therefore read BY NAME,
-    // which is also how the only other consumer reads it (shadow::Device::
-    // the descriptor writes it. Element 0 owns stream 0, which is the stream being bound.
+    // Native variable stride table: it follows only the used element records.
     u32 GetVertexStreamStride(const renderengine::VertexDescriptorData* lpDescriptor)
     {
-        if (lpDescriptor == 0 || lpDescriptor->muElementCount == 0u)
-        {
-            return 0u;
-        }
-        return lpDescriptor->mauStreamStride[0];
+        return lpDescriptor->GetElementStrides()[0];
     }
 
     // Build the sky shader's Vector4 "g_domeRanges" from the manager's two cached ray-sphere

@@ -1,4 +1,5 @@
 #pragma once
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"

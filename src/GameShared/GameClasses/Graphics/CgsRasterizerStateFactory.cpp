@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"

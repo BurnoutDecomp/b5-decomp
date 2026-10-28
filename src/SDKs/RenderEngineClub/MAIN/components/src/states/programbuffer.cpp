@@ -70,12 +70,12 @@ namespace renderengine
     {
         u32  luTotalSize = 0;
         u32  luCount = 0;
-        void* lpUCodeTable = 0;
-        u32   luUCodeTableSize = 0;
+        const D3DXSHADER_CONSTANTTABLE* lpUCodeTable = 0;
+        DWORD luUCodeTableSize = 0;
 
         if (XGMicrocodeGetConstantTable(lpFunction, &lpUCodeTable, &luUCodeTableSize) >= 0 && lpUCodeTable)
         {
-            u8* lpTableBase = static_cast<u8*>(lpUCodeTable);
+            const u8* lpTableBase = reinterpret_cast<const u8*>(lpUCodeTable);
             const u32 luNumEntries = *reinterpret_cast<const u32*>(lpTableBase + 0xC);
             if (luNumEntries)
             {
@@ -103,16 +103,15 @@ namespace renderengine
                     if (lpDestTable)
                     {
                         // X360 0x82B60960: entry+0 (muNameOffset) = lpDestTable + runningTotal -- the
-                        // ABSOLUTE address of the name just copied (a 32-bit pointer on X360; the 64-bit
-                        // host truncates it into the u32 field, a documented platform floor, same idiom as
-                        // muPhysicalPart below). The three metadata bytes are the lhz reads at -2/-4/0:
+                        // ABSOLUTE address of the name just copied (a native 32-bit pointer).
+                        // The three metadata bytes are the lhz reads at -2/-4/0:
                         // entry+4 = rec[-1], entry+5 = rec[-2], entry+6 = rec[0] (asm 0x82B60964-6C).
                         lpEntry->muNameOffset     = reinterpret_cast<u32>(static_cast<u8*>(lpDestTable) + luTotalSize);
                         lpEntry->mu8RegisterSet   = static_cast<u8>(lpRecord[-1]);
                         lpEntry->mu8RegisterIndex = static_cast<u8>(lpRecord[-2]);
                         lpEntry->mu8RegisterCount = static_cast<u8>(lpRecord[0]);
                         std::memcpy(static_cast<u8*>(lpDestTable) + luTotalSize, lpName, luNameLen + 1);
-                        lpTableBase = static_cast<u8*>(lpUCodeTable);  // reload (asm re-reads var_50)
+                        lpTableBase = reinterpret_cast<const u8*>(lpUCodeTable);  // reload (asm re-reads var_50)
                     }
 
                     --luRemaining;
@@ -155,8 +154,8 @@ namespace renderengine
             u32 luTotal = 0;
             ProgramBuffer::Xbox2CreateConstantTable(reinterpret_cast<const void*>(lpParams->muFunction), 0, &luTotal);
             luConstTableSize = luTotal;
-            luMicrocodeSize  = lParts.muSize;
-            luPart3          = lParts.muPart3;
+            luMicrocodeSize  = lParts.cbCachedPartSize;
+            luPart3          = lParts.cbPhysicalPartSize;
         }
 
         for (u32 luIndex = 0; luIndex < 5; ++luIndex)
@@ -188,10 +187,10 @@ namespace renderengine
         }
         else
         {
-            lParts.muPart0 = lpParams->muMicrocodePart0;  // a2[3]
-            lParts.muSize  = lpParams->muMicrocodePart1;  // a2[4]
-            lParts.muPart2 = lpParams->muMicrocodePart2;  // a2[5]
-            lParts.muPart3 = lpParams->muMicrocodePart3;  // a2[6]
+            lParts.pCachedPart = reinterpret_cast<void*>(lpParams->muMicrocodePart0);  // a2[3]
+            lParts.cbCachedPartSize  = lpParams->muMicrocodePart1;  // a2[4]
+            lParts.pPhysicalPart = reinterpret_cast<void*>(lpParams->muMicrocodePart2);  // a2[5]
+            lParts.cbPhysicalPartSize = lpParams->muMicrocodePart3;  // a2[6]
         }
 
         ProgramBufferData* lpData = lpLayout->mpData;
@@ -205,30 +204,30 @@ namespace renderengine
         lpData->muPhysicalPart   = 0;
 
         lpData->muShaderType     = lpParams->muShaderType;  // a2[1]
-        lpData->muMicrocodeSize  = lParts.muSize;
-        lpData->muMicrocodePart3 = lParts.muPart3;
+        lpData->muMicrocodeSize  = lParts.cbCachedPartSize;
+        lpData->muMicrocodePart3 = lParts.cbPhysicalPartSize;
         lpData->muPhysicalPart   = reinterpret_cast<u32>(lpPhysical);
 
         // The shader-header dest (lpData+0x14) is used only by the XGSet*/XMemCpy/XGRegister calls below.
         u8* lpHeaderDest = reinterpret_cast<u8*>(lpData) + 0x14;
-        // X360 0x82B62510: memcpy(Dst = lpPhysical /*a1[2]*/, Src = (void*)lParts.muPart2, Size = lParts.muPart3).
+        // X360 0x82B62510: memcpy(Dst = lpPhysical /*a1[2]*/, Src = (void*)lParts.pPhysicalPart, Size = lParts.cbPhysicalPartSize).
         // (The asm computes the +0x14 header dest AFTER this copy; do NOT use it as this memcpy's dest.)
-        std::memcpy(lpPhysical, reinterpret_cast<const void*>(lParts.muPart2), lParts.muPart3);
+        std::memcpy(lpPhysical, reinterpret_cast<const void*>(lParts.pPhysicalPart), lParts.cbPhysicalPartSize);
 
         if (lpParams->muShaderType != 0)
         {
             if (lpParams->muFunction != 0)
-                XGSetPixelShaderHeader(reinterpret_cast<D3DPixelShader*>(lpHeaderDest), lParts.muSize, &lParts);
+                XGSetPixelShaderHeader(reinterpret_cast<D3DPixelShader*>(lpHeaderDest), lParts.cbCachedPartSize, &lParts);
             else
-                XMemCpy(lpHeaderDest, reinterpret_cast<const void*>(lParts.muPart0), lParts.muSize);  // asm Src = (void*)parts.muPart0
+                XMemCpy(lpHeaderDest, reinterpret_cast<const void*>(lParts.pCachedPart), lParts.cbCachedPartSize);  // asm Src = (void*)parts.muPart0
             XGRegisterPixelShader(reinterpret_cast<D3DPixelShader*>(lpHeaderDest), lpPhysical);
         }
         else
         {
             if (lpParams->muFunction != 0)
-                XGSetVertexShaderHeader(reinterpret_cast<D3DVertexShader*>(lpHeaderDest), lParts.muSize, &lParts);
+                XGSetVertexShaderHeader(reinterpret_cast<D3DVertexShader*>(lpHeaderDest), lParts.cbCachedPartSize, &lParts);
             else
-                XMemCpy(lpHeaderDest, reinterpret_cast<const void*>(lParts.muPart0), lParts.muSize);  // asm Src = (void*)parts.muPart0
+                XMemCpy(lpHeaderDest, reinterpret_cast<const void*>(lParts.pCachedPart), lParts.cbCachedPartSize);  // asm Src = (void*)parts.muPart0
             XGRegisterVertexShader(reinterpret_cast<D3DVertexShader*>(lpHeaderDest), lpPhysical);
         }
 

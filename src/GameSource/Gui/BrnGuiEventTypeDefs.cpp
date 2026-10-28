@@ -13,6 +13,8 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // CgsDev::Message::gxMessageFilterFlags
@@ -26,6 +28,16 @@ extern bool gbLogGuiAudioTriggers; // X360 byte_82FB5098, registered by GuiDebug
 
 namespace BrnGui
 {
+
+// Original debug HUD globals, written by UpdateWorstCaseHUD (8250CBC8).
+bool GuiEventUpdateSatNav::msbForceWorstCase = false;          // 82FB508A
+bool GuiRaceCarInfoEvent::msbForceWorstCase = false;           // 82FB508B
+bool GuiEventNetworkPlayerList::msbWorstCaseHudActive = false; // 82FB5090
+bool GuiEventNetworkPlayerStatus::msbWorstCaseHudActive = false; // 82FB5091
+bool GuiEventNetworkPlayerStatus::msbStatusSwitch = false;    // 82FB5092
+bool GuiEventRoadRuleUpdate::msbWorstCaseHudActive = false;    // 82FB5093
+f32 GuiEventRoadRuleUpdate::msfWorstCaseTimeElapsed = 0.0f;    // 82FB5094
+
 
 // File-scope sat-nav "worst case" animation phase (X360 flt_82FB508C). A persistent
 // scalar advanced each DoWorstCase call: clamped-ramp up by 1.5 while <= 100, else reset
@@ -304,8 +316,8 @@ CgsID GuiOverlayRequest::Construct(CgsID lOverlayId)
 s32 GuiOverlayRequest::AddMessageParam(u32 luId, const char* lpcParam)
 {
     CGS_STATIC_ASSERT((sizeof(ParamInfo) == 0x44), "param record stride 0x44 (GetMessageParam: 0x44*idx)");
-    CGS_STATIC_ASSERT((__builtin_offsetof(ParamInfo, muId) == 0x08), "param id @ record+0x08");
-    CGS_STATIC_ASSERT((__builtin_offsetof(ParamInfo, macText) == 0x0C), "param text @ record+0x0C");
+    CGS_STATIC_ASSERT((offsetof(ParamInfo, muId) == 0x08), "param id @ record+0x08");
+    CGS_STATIC_ASSERT((offsetof(ParamInfo, macText) == 0x0C), "param text @ record+0x0C");
     // The console's 64-byte text write from the LAST slot must still land inside the object.
     CGS_STATIC_ASSERT((KI_MAX_MESSAGES * 0x44 - 0x44 + 0x0C + 64 <= sizeof(GuiOverlayRequest)),
                   "the attested 64-byte text write stays within the request object");
@@ -338,11 +350,11 @@ s32 GuiOverlayRequest::GetMessageParam(ParamOut* lpOut, s32 liIndex) const
     // X360-pinned member offsets (validated from a member context where the private
     // members are visible to offsetof): the two button records at +0x88/+0xCC, the count
     // at +0x118 and the two guard bytes at +0x11C/+0x11D.
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mButton1) == 0x88), "button1 record @+0x88");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mButton2) == 0xCC), "button2 record @+0xCC");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, miNumMessages) == 0x118), "count @+0x118");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mbButton1Used) == 0x11C), "button1 guard @+0x11C");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mbButton2Used) == 0x11D), "button2 guard @+0x11D");
+    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mButton1) == 0x88), "button1 record @+0x88");
+    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mButton2) == 0xCC), "button2 record @+0xCC");
+    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, miNumMessages) == 0x118), "count @+0x118");
+    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mbButton1Used) == 0x11C), "button1 guard @+0x11C");
+    CGS_STATIC_ASSERT((offsetof(GuiOverlayRequest, mbButton2Used) == 0x11D), "button2 guard @+0x11D");
 
     CGS_ASSERT( liIndex < miNumMessages, "Index isn't used in Overlay." );
     CGS_ASSERT( liIndex >= 0,            "Index isn't valid." );

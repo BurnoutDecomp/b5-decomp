@@ -1,4 +1,5 @@
 #pragma once
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/Events/BrnGuiEventSetAvailablePresetRaces.h"
 #include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
@@ -143,9 +144,9 @@ namespace BrnGui
         s32 GetEventType() const { return 390; }
     };
     CGS_STATIC_ASSERT((sizeof(GuiCompletedStuntEvent) == 32), "X360 AddGuiEvent size 32 (id 390)");
-    CGS_STATIC_ASSERT((__builtin_offsetof(GuiCompletedStuntEvent, muStuntActionComplete) == 0x00 &&
-                  __builtin_offsetof(GuiCompletedStuntEvent, mfCompletedBarrelRollAngle) == 0x04 &&
-                  __builtin_offsetof(GuiCompletedStuntEvent, miCompletedBarrelRolls) == 0x18),
+    CGS_STATIC_ASSERT((offsetof(GuiCompletedStuntEvent, muStuntActionComplete) == 0x00 &&
+                  offsetof(GuiCompletedStuntEvent, mfCompletedBarrelRollAngle) == 0x04 &&
+                  offsetof(GuiCompletedStuntEvent, miCompletedBarrelRolls) == 0x18),
                   "X360 handler reads @0x82411CC8");
     struct GuiCrashComboEvent { u8 maData[8]; s32 GetEventType() const { return 347; } };  // id 347 size 8 (raw; size not GuiEvent-shaped)
     // [showtime score wave 2026-08-29] GuiCrashScoreUpdate (id 434) has been RECOVERED and now
@@ -279,13 +280,13 @@ namespace BrnGui
     struct GuiEventNetworkPlayerList : public CgsGui::GuiEvent<243>
     {
         u8 maPayload[156];
-        static inline bool msbWorstCaseHudActive = false;
+        static bool msbWorstCaseHudActive;
     };  // id 243 size 168 (12B GuiEvent header + opaque payload)
     struct GuiEventNetworkPlayerStatus : public CgsGui::GuiEvent<245>
     {
         u8 maPayload[2532];
-        static inline bool msbWorstCaseHudActive = false;
-        static inline bool msbStatusSwitch       = false;
+        static bool msbWorstCaseHudActive;
+        static bool msbStatusSwitch;
     };  // id 245 size 2544 (12B GuiEvent header + opaque payload)
     // The roster row the player highlighted (GUI -> network). The network state manager reads
     // the player id at +0 and outputs that player's stats.

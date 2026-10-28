@@ -1,4 +1,5 @@
 #pragma once
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 
 // The DXT compression job: its data block, the per-worker job objects and the job entry point.
 //

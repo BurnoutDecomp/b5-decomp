@@ -507,7 +507,7 @@ namespace shadow
             {
                 const u16 luStream = mpVertexDescriptor->maElements[luElement].muStream;
                 CGS_ASSERT(luStream < 8, "lpElement->stream < 8");
-                lauStreamStride[luStream] = mpVertexDescriptor->mauStreamStride[luElement];
+                lauStreamStride[luStream] = mpVertexDescriptor->GetElementStrides()[luElement];
             }
 
             const StreamArray* lpStreams = static_cast<const StreamArray*>(mpStreamArray);
@@ -535,7 +535,7 @@ namespace shadow
             {
                 const u16 luStream = mpVertexDescriptor->maElements[luElement].muStream;
                 CGS_ASSERT(luStream < 8, "lpElement->stream < 8");
-                lauStreamStride[luStream] = mpVertexDescriptor->mauStreamStride[luElement];
+                lauStreamStride[luStream] = mpVertexDescriptor->GetElementStrides()[luElement];
             }
 
             const IndexStreamArray* lpStreams =

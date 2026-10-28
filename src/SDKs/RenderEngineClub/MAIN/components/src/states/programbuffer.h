@@ -2,6 +2,8 @@
 #define RENDERENGINE_PROGRAMBUFFER_H
 
 #include "types.hpp"
+#include <xtl.h>
+#include <xgraphics.h>
 #include "rw/rwcore_structs.h"  // rw::BaseResourceDescriptors<5>
 
 // renderengine::ProgramBuffer -- the render-engine vendor wrapper around a single compiled Xenos
@@ -13,39 +15,13 @@
 // LAYOUT (X360 asm authoritative; no DWARF/leak source exists for this vendor TU). See
 // programbuffer.cpp for the full per-offset notes; the field comments below are the summary.
 
-// --- Xenon Direct3D microcode SDK (platform externs) ----------------------------------------
-// The canonical Xbox 360 D3D microcode/shader entry points the vendor renderengine links against.
-// No project home models them; declared here as the minimal extern surface the bodies call.
-// Signatures match the XDK xgraphics.h / d3d9 shader API.
-//
-// XGMICROCODE_SHADER_PARTS is the 8-word "shader parts" header XGGetMicrocodeShaderParts fills;
-// only the four leading words this TU reads/copies are named (the rest is opaque padding).
-struct XGMICROCODE_SHADER_PARTS
-{
-    u32 muPart0;  // +0x00
-    u32 muSize;   // +0x04  microcode size (used to bump the descriptor base)
-    u32 muPart2;  // +0x08
-    u32 muPart3;  // +0x0C
-};
-struct D3DVertexShader;                   // opaque XDK shader objects
-struct D3DPixelShader;
-
-extern "C"
-{
-    void* XGGetMicrocodeShaderParts(const void* pFunction, XGMICROCODE_SHADER_PARTS* pParts);
-    s32   XGMicrocodeGetConstantTable(const void* pFunction, void** ppConstantTable, u32* pSize);
-    void  XGSetVertexShaderHeader(D3DVertexShader* pShader, u32 cbShaderSize, const XGMICROCODE_SHADER_PARTS* pParts);
-    void  XGSetPixelShaderHeader(D3DPixelShader* pShader, u32 cbShaderSize, const XGMICROCODE_SHADER_PARTS* pParts);
-    void  XGRegisterVertexShader(D3DVertexShader* pShader, void* pPhysicalPart);
-    void  XGRegisterPixelShader(D3DPixelShader* pShader, void* pPhysicalPart);
-    void* XMemCpy(void* pDest, const void* pSrc, u32 uCount);   // Xenon block-copy intrinsic
-}
+// Use the actual XDK microcode, shader and memory declarations.
 
 namespace renderengine
 {
-    // The microcode "shader parts" header is XGMICROCODE_SHADER_PARTS; Initialize and
+    // The native microcode parts header has two pointers and two DWORD sizes; Initialize and
     // GetResourceDescriptor copy it verbatim and read its size / part3 words.
-    typedef XGMICROCODE_SHADER_PARTS ProgramMicrocodeParts;
+    typedef XGMICROCODESHADERPARTS ProgramMicrocodeParts;
 
     struct ProgramVariableDescriptor
     {

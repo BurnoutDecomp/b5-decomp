@@ -1,4 +1,7 @@
 #pragma once
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 
 #include "types.hpp"
 // renderengine::RasterizerState::CullMode / DepthStencilState::Function / Texture / ResourceDescriptor5

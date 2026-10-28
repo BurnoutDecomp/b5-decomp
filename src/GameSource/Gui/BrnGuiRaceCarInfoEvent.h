@@ -51,7 +51,7 @@ namespace BrnGui
         // Entry count == number of active race cars (BurnoutConstants.h).
         static const s32 KI_NUM_ENTRIES = E_ACTIVE_RACE_CAR_INDEX_COUNT; // 8
         // ARTIST BSS 0x82FB508B; written by GuiDebugComponent::UpdateWorstCaseHUD.
-        static inline bool msbForceWorstCase = false;
+        static bool msbForceWorstCase;
 
         // @ 0x823A7658 -- zero every entry's position, identity and flag bytes, and clear
         // the entry count. Returns `this`.
