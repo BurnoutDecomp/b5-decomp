@@ -40,7 +40,8 @@ struct CGS_ALIGN(16) VecFloat
 {
     f32 maLanes[4];
 
-    VecFloat() { for (int li = 0; li < 4; ++li) maLanes[li] = 0.0f; }
+    // ARTIST 0x822598B4..0x822598D4 leaves embedded vector storage uninitialized.
+    VecFloat() {}
     VecFloat(f32 lfScalar) { for (int li = 0; li < 4; ++li) maLanes[li] = lfScalar; }
 
     // The scalar value the register broadcasts (lane 0).

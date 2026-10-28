@@ -19,52 +19,11 @@
                                                                      //   through its vtable
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"       // Utils::Tweaker (TweakerHelper::mTweaker)
 
-// ============================================================================
-// GameSource/Director/Camera/BrnBehaviourManager.h
-//
-// CANONICAL HOME for BrnDirector::Camera::BehaviourManager -- the owner of every live
-// director camera behaviour and the per-state behaviour-allocation book-keeping. Also
-// homes the namespace-level helpers the manager hands around: BehaviourHelperIndex,
-// BehaviourInterpolate (+ its Parameters), BehaviourHandle<> and BehaviourController-
-// LockInterface.
-//
-// LAYOUT AUTHORITY: the DECFIGS DWARF for this TU (BrnBehaviourManager.cpp). The member
-// list / NAMES / TYPES / ORDER below are reconstructed VERBATIM from that DWARF struct
-// (BrnBehaviourManager.h:89, members at :322..:369). The X360 BrnBehaviourManager.cpp asm
-// pins a handful of absolute CONSOLE byte offsets that anchor the ordering:
-//   * mBehaviourHelperPool         -> console +0xFAB0 (64176)   (CheckNo/DebugDumpToTTY base)
-//   * mBehaviourHelperIndexArray   -> console +0x16348 (90952), count word at +0x16458 (91064)
-//   * a SpeedResponder time word   -> console +0x15870 (88176)  (UpdateAllBehaviours accumulator)
-//                                     -- lands inside the responder/controller region, between
-//                                        mBehaviourHelperPool and mBehaviourHelperIndexArray,
-//                                        confirming the DWARF order.
-// These CONSOLE offsets are 4-byte-pointer; the PC rebuild widens pointers/vptrs so the
-// absolute values shift. Per the LLP64 rule, _BehaviourManagerAssertLayout below pins
-// pointer-invariant RELATIVE ORDERING (offsetof comparisons), NOT the absolute console
-// bytes.
-//
-// SAFETY: NO committed consumer embeds BehaviourManager BY VALUE -- every other use is a
-// forward-declared pointer/reference (BrnMainDirector.h's "embedded" aggregate is itself a
-// not-homed/declaration-only owner; BrnDirectorArbitrator.h / BrnMomentController.h thread it
-// by ref). Growing the full layout here therefore changes NO consumer's object size.
-//
-// METHOD SET: the union of (a) the DWARF-attested manager API and (b) the call surface the
-// already-committed consumers use (the arbitrator states' UnSetBehaviourUsedByHandle(u32) /
-// CheckNoBehavioursAreAllocatedByState / IsBehaviourWaitingToPrepare / NewBehaviour<> family
-// and the ICE movie-player's NewBehaviourInterpolate / ReleaseBehaviour /
-// SetBehaviourUpdatesDuringPause). ALL methods are DECLARATION-ONLY this wave (the layout
-// home); bodies land with the BehaviourManager / BehaviourInterpolate TUs.
-//
-// FLAG (opaque un-homed embedded sub-types): mBehaviourParameterBank,
-//   mTempCameraBoostResponder, mSpeedResponder, mRotationController (Camera2DRotation-
-//   Controller), mSphericalRotationController are heavy Camera-side aggregates with no
-//   reconstructed home and no DWARF byte-offset authority. They are embedded BY VALUE per the
-//   DWARF, so they are modelled as named opaque FLAGGED sub-objects (OpaqueSub<...>) at a
-//   single placeholder size -- their interiors are NEVER fabricated. The asm pins the region
-//   boundaries (helper pool .. helper-index array) but NOT each sub-type's individual byte
-//   size, so the per-sub-type sizes are deliberately NOT asserted absolute; only DWARF
-//   ordering is pinned. Replace each with its real layout when those Camera TUs land.
-// ----------------------------------------------------------------------------
+// Camera behaviour pools, handles and frame dispatch. ARTIST controls behavior
+// and native layout; DecFIGS supplies member names and declaration shape.
+// The two storage pools are AbstractPool<250,8,Vector4> and <100,20,Vector4>.
+// Native pool sizes and offsets are checked below. Remaining member ordering
+// checks do not certify the complete manager layout.
 
 namespace BrnDirector
 {
@@ -113,50 +72,12 @@ namespace Camera
     };
 
     // ------------------------------------------------------------------------
-    // ⛔ RETIRED 2026-08-01 -- THE BehaviourInterpolate SLICE THAT USED TO LIVE HERE IS GONE.
-    //
-    // It was a second, mutually-exclusive definition of BrnDirector::Camera::BehaviourInterpolate
-    // (no base, no members, sizeof == 1, 11 declaration-only methods) and -- because this
-    // header is the one every arbitrator state includes -- it was the definition the whole
-    // tree actually saw, while the REAL home (Behaviours/BrnBehaviourInterpolate.h) sat
-    // unreachable behind a C2011.
-    //
-    // The slice could not be bodied at all: with no members there was nothing for
-    // SetParameters / SetupDuration / Setup / SetupCameraA|BFromHelper / HasFinished to write,
-    // so six symbols stayed permanently unresolved. It was also the reason
-    // BrnBehaviourManager.cpp's `AllocateBehaviour<BehaviourInterpolate>` booked a 1600-byte
-    // pool bucket and placement-new'd a ONE-BYTE object into it.
-    //
-    // Consumers that need the complete type now include the real home directly. A forward
-    // declaration is enough here: this header only ever names the class through the
-    // pointer member of BehaviourHandle<T>.
-    // ------------------------------------------------------------------------
+    // Complete declaration is in Behaviours/BrnBehaviourInterpolate.h.
     class BehaviourInterpolate;
 
     // ------------------------------------------------------------------------
-    // ⭐ THE CONSOLE'S POOL, PER BEHAVIOUR TYPE (2026-09-27, owner's list: "some asserts and crashes").
-    //
-    // BehaviourManager::AllocateBehaviour<TBehaviour> has twenty console instantiations, and each
-    // one's asm names exactly ONE pool: it reads that pool's free count, fires that pool's
-    // out-of-slots assert and hands that pool to AllocateVoid. The console compiler chose the pool
-    // from the CONSOLE sizeof. The x64 widening moves host sizes, so the HOST sizeof cannot choose
-    // it: BehaviourGyroCam is 0x640 == 1600 bytes on the console (`li r7,0x640` @0x822598D8, its
-    // AllocateVoid) -- exactly the small bucket -- and 1632 on this host, so the sizeof rule this
-    // header used sent every gyro rig to the 8-slot LARGE pool. Take-downs, tumbles and crash shots
-    // all allocate GyroCams; the owner's three crash dumps (exe d65db9997047) each hold FOUR of them
-    // in the large pool beside the two gameplay cameras and two ICE takes, and the fifth -- the
-    // take-down's own -- found it empty: "Ran out of slots when trying to allocate a large behaviour",
-    // then the AV in ObjectPool::operator[](-1), while the small pool -- where the console keeps every
-    // GyroCam -- had 15 of its 20 slots free.
-    //
-    // So the pool is written down per type, as each console sibling's asm names it:
-    //   LARGE: `lwz r11,0x7D30(r30)` (the large pool's free count), `mr r4,r30` (the pool at the
-    //          manager's head), "Ran out of slots when trying to allocate a large behaviour" (h:1148)
-    //   SMALL: `lwzx r11,r30,0xFAA0` (the small pool's free count), `addi r4,r30,0x7D40`,
-    //          "Ran out of slots when trying to allocate a small behaviour" (h:1137)
-    // and AllocateBehaviour<> below takes the pool from this table. There is no primary template:
-    // a behaviour nobody has looked up on the console has no pool, and does not compile.
-    // ------------------------------------------------------------------------
+    // Original pool selected by each ARTIST template instantiation. Used below
+    // to check that reconstructed types still fit the same native size class.
     class  BehaviourAftertouchCam;
     class  BehaviourAftertouchCrash;
     class  BehaviourBystanderCam;
@@ -278,8 +199,8 @@ namespace Camera
         //
         static const u32 KU_LARGE_BEHAVIOUR_POOL_UNITS         = 250u;
         static const u32 KU_LARGE_BEHAVIOUR_POOL_SLOTS         = 8u;
-        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE = 100u;
-        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS         = 102u;           static const u32 KU_SMALL_BEHAVIOUR_POOL_SLOTS         = 20u;
+        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS         = 100u;
+        static const u32 KU_SMALL_BEHAVIOUR_POOL_SLOTS         = 20u;
 
         typedef BrnDirector::AbstractPool<KU_LARGE_BEHAVIOUR_POOL_UNITS, KU_LARGE_BEHAVIOUR_POOL_SLOTS,
                                           rw::math::vpu::Vector4> LargeBehaviourPool;
@@ -324,8 +245,6 @@ namespace Camera
         // (the manager only uses it as an owner key). Kept so existing `CheckNo...(this)`
         // call sites that pass a non-ArbitratorState `this` still resolve.
         void CheckNoBehavioursAreAllocatedByState(const void* lpState);
-
-        const LargeBehaviourPool* DebugGetLargePool() const { return &mLargeBehaviourPool; }
 
         void DetachAllTweakers();
         const Camera& GetCameraFromBehaviour(BehaviourHelperIndex lHelper) const;
@@ -442,16 +361,10 @@ namespace Camera
 
     private:
         // ===== LAYOUT (DWARF BrnBehaviourManager.h:322..:369, reconstructed verbatim) =====
-        // Reused-by-name committed containers (auto-sized on PC). FLAGGED opaque sub-objects
-        // for the un-homed embedded Camera-side aggregates (see file header).
-
-        // FLAG: opaque placeholder for an un-homed, un-byte-pinned embedded sub-type. The
-        // interior is NEVER fabricated; only the named slot + DWARF ordering are modelled.
-        template <int tiTag>
-        struct OpaqueSub { u8 maOpaque[4]; /* FLAG: size un-pinned (placeholder) */ };
+        // Original declared order, with recovered component types.
 
         // +console 0x0 / 0x7D40  the two behaviour-storage pools (DWARF :322 / :323; the types and
-        // the small bucket's host widening are at the KU_*_BEHAVIOUR_POOL_* constants above).
+        // capacities are defined by the native constants above).
         LargeBehaviourPool mLargeBehaviourPool;                                            // :322
         SmallBehaviourPool mSmallBehaviourPool;                                            // :323
 
@@ -634,30 +547,19 @@ namespace Camera
     };
 
     // ------------------------------------------------------------------------
-    // BehaviourManager::AllocateBehaviour<TBehaviour> @0x82263370 (and its 19 per-behaviour-type
-    // siblings) -- reserve a pool slot for a fresh TBehaviour and return the four-word type-erased
-    // handle. ONE shared body; each instantiation reads ONE pool, exactly reproducing its sibling's
-    // asm (one pool access, one assert message):
-    //   * ConsoleBehaviourPool<TBehaviour> == SMALL -> mSmallBehaviourPool, "small behaviour"
-    //     out-of-slots message (BrnBehaviourManager.h:1137 on the X360), e.g. GyroCam @0x822634D8;
-    //   * ConsoleBehaviourPool<TBehaviour> == LARGE -> mLargeBehaviourPool, "large behaviour"
-    //     message (:1148), e.g. Failsafe @0x82259100.
-    // The pool is the console's, from the table above the class -- NOT recomputed from the host
-    // sizeof, which the x64 widening has moved (GyroCam: 1600 on the console, 1632 here). What the
-    // host sizeof must still do is FIT: a behaviour larger than its pool's bucket would be
-    // placement-new'd over the next slot (AllocateVoid's own "object is too large" is a non-gating
-    // runtime assert), so that is a compile-time error here instead.
-    // The out-of-slots pre-check reads the pool's free counter, DebugDumpToTTY()s the manager, then
-    // trips the non-gating assert (the X360 falls through into AllocateVoid regardless, matching
-    // CGS_ASSERT). AbstractPool::AllocateVoid<TBehaviour> pops a slot, constructs the behaviour in
-    // it, and returns the (object, free-interface, slot, size) handle.
-    // ------------------------------------------------------------------------
+    // ARTIST instantiations select one native pool by object size. The compiler
+    // folds this constant branch; the evidence table checks reconstructed sizes.
     template <typename TBehaviour>
     inline AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour()
     {
-        if constexpr (ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_SMALL)
+        CGS_STATIC_ASSERT((sizeof(TBehaviour) <= sizeof(LargeBehaviourPool::Bucket)),
+                          "behaviour exceeds the native large bucket");
+        CGS_STATIC_ASSERT((ConsoleBehaviourPool<TBehaviour>::KE_POOL ==
+            (sizeof(TBehaviour) <= sizeof(SmallBehaviourPool::Bucket)
+                ? E_BEHAVIOUR_POOL_SMALL : E_BEHAVIOUR_POOL_LARGE)),
+            "behaviour size differs from its ARTIST pool");
+        if (sizeof(TBehaviour) <= sizeof(SmallBehaviourPool::Bucket))
         {
-
             const s32 liNumFree = mSmallBehaviourPool.GetNumFreeObjects();
             if (liNumFree <= 0)
             {
@@ -668,11 +570,6 @@ namespace Camera
         }
         else
         {
-            CGS_STATIC_ASSERT((ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_LARGE),
-                          "ConsoleBehaviourPool: unknown pool");
-            CGS_STATIC_ASSERT((sizeof(TBehaviour) <= sizeof(LargeBehaviourPool::Bucket)),
-                          "a large behaviour outgrew the large bucket (4000 bytes on the console)");
-
             const s32 liNumFree = mLargeBehaviourPool.GetNumFreeObjects();
             if (liNumFree <= 0)
             {
@@ -955,17 +852,22 @@ namespace Camera
     }
 
     // ------------------------------------------------------------------------
-    // _BehaviourManagerAssertLayout -- NEVER CALLED. Pins the DWARF member ordering. The DWARF
-    // offsets are CONSOLE (4-byte-pointer); the PC rebuild widens pointers, so we assert
-    // pointer-invariant RELATIVE ORDERING (offsetof comparisons in DWARF order), NOT the
-    // absolute console bytes. Any future edit that reorders a member trips a static_assert.
-    // ------------------------------------------------------------------------
+    // Native pool prefix and declaration-order checks. Later component offsets
+    // still require complete native layout recovery.
     inline void _BehaviourManagerAssertLayout()
     {
         typedef BehaviourManager BM;
 
+        CGS_STATIC_ASSERT((sizeof(BM::LargeBehaviourPool::Bucket) == 4000), "ARTIST large bucket");
+        CGS_STATIC_ASSERT((sizeof(BM::SmallBehaviourPool::Bucket) == 1600), "ARTIST small bucket");
+        CGS_STATIC_ASSERT((sizeof(BM::LargeBehaviourPool) == 0x7D40), "ARTIST large pool");
+        CGS_STATIC_ASSERT((sizeof(BM::SmallBehaviourPool) == 0x7D70), "ARTIST small pool");
+        CGS_STATIC_ASSERT((offsetof(BM, mLargeBehaviourPool) == 0), "ARTIST large pool base");
+        CGS_STATIC_ASSERT((offsetof(BM, mSmallBehaviourPool) == 0x7D40), "ARTIST small pool base");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourHelperPool) == 0xFAB0), "ARTIST helper pool base");
+
         // DWARF member order (BrnBehaviourManager.h:322 -> :369), pinned as strictly-increasing
-        // offsets. Relative ordering is pointer-invariant under LLP64 widening.
+        // offsets. These order checks supplement the native pool prefix gates.
         CGS_STATIC_ASSERT((offsetof(BM, mLargeBehaviourPool)            <  offsetof(BM, mSmallBehaviourPool)),            "BM order: large<small pool");
         CGS_STATIC_ASSERT((offsetof(BM, mSmallBehaviourPool)            <  offsetof(BM, mBehaviourHelperPool)),          "BM order: small pool<helper pool");
         CGS_STATIC_ASSERT((offsetof(BM, mBehaviourHelperPool)          <  offsetof(BM, mBehaviourParameterBank)),       "BM order: helper pool<param bank");
