@@ -221,13 +221,17 @@ PropEntityModule::RenderModel(
     }
     const f32 lfAuthoredCullDistance = lfCullDistance;
     const bool lbSmallShadow = lbUseZOnlyRendering && CgsPC::Shadows::IsSmallObject(lpModel);
-    if (lbSmallShadow)
-        lfCullDistance = CgsPC::Shadows::SmallObjects().GetDrawDistance(CgsPC::Shadows::NormalDistance());
     if ( lbRenderingEnvironmentMap )
     {
-        // FLAG PC-platform leaf: extend only the reflection cutoff; preserve the
-        // normal-view and shadow distances, including the original debug overrides.
+        // FLAG PC-platform leaf: extend the original authored/debug cutoff for the
+        // reflection pass. The console chooses its environment-map branch before any
+        // Z-only rendering detail policy.
         lfCullDistance = renderengine::ExtendEnvironmentMapDrawDistancePC( lfCullDistance );
+    }
+    else if ( lbSmallShadow && !mbOverrideLodDistances )
+    {
+        // Keep the console's writable distance override authoritative in shadow passes.
+        lfCullDistance = CgsPC::Shadows::SmallObjects().GetDrawDistance(CgsPC::Shadows::NormalDistance());
     }
     if ( lfScaledDistanceSq >= lfCullDistance * lfCullDistance )
     {
@@ -237,17 +241,7 @@ PropEntityModule::RenderModel(
     // ---- LOD-state selection (@0x822C4A68..0x822C4B58) ----------------------
     CgsGraphics::Model::State leLodState = CgsGraphics::Model::E_STATE_LOD_0;
 
-    if (lbSmallShadow)
-    {
-        f32 lafNormal[2] = {lfAuthoredCullDistance, lfAuthoredCullDistance};
-        for (u32 luLod = 0; luLod < (std::min)(luNumLods, 2u); ++luLod)
-            lafNormal[luLod] = mbOverrideLodDistances
-                ? static_cast<f32>(mauOverrideLodDistances[luLod]) : lpModel->GetLodDistance(luLod);
-        const s32 liLod = CgsPC::Shadows::SmallObjects().SelectLod(lpModel, lfScaledDistanceSq, lafNormal);
-        if (liLod < 0) return false;
-        leLodState = static_cast<CgsGraphics::Model::State>(liLod);
-    }
-    else if ( mbOverrideLod )
+    if ( mbOverrideLod )
     {
         const CgsGraphics::Model::State leOverride =
             static_cast< CgsGraphics::Model::State >( miLodOverrideValue );
@@ -273,6 +267,16 @@ PropEntityModule::RenderModel(
             return false;
         }
         leLodState = leReflectionLod;
+    }
+    else if (lbSmallShadow)
+    {
+        f32 lafNormal[2] = {lfAuthoredCullDistance, lfAuthoredCullDistance};
+        for (u32 luLod = 0; luLod < (std::min)(luNumLods, 2u); ++luLod)
+            lafNormal[luLod] = mbOverrideLodDistances
+                ? static_cast<f32>(mauOverrideLodDistances[luLod]) : lpModel->GetLodDistance(luLod);
+        const s32 liLod = CgsPC::Shadows::SmallObjects().SelectLod(lpModel, lfScaledDistanceSq, lafNormal);
+        if (liLod < 0) return false;
+        leLodState = static_cast<CgsGraphics::Model::State>(liLod);
     }
     else
     {
