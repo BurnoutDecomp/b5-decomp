@@ -67,12 +67,9 @@ enum ESoundMessages
 //     lwz r9,  0x10(msg)   -> the stream ContentSpec / Name  (payload +0x00)
 //     lbz r11, 0x14(msg)   -> "this stream came from a video" (payload +0x04)
 //     lbz r11, 0x15(msg)   -> "play over a custom soundtrack" (payload +0x05)
-// ⚠️ This is NOT CgsGui::GuiEventPlayMusicOnMenuStream: that type is the GUI WIRE
-// record and carries a 12-byte GuiEvent<23> header in front of the same three fields.
-// Posting the wire record as the payload (what this tree did) puts the name 12 bytes
-// too deep, so every message-13 producer that is not a GUI-23 forward -- ProcessGuiEvents
-// case 469 and ProcessGameActionQueue case 99, the one that CLEARS the menu stream --
-// delivered garbage: a run read `name=0x654D3542 isVideo=1` from a clear whose name was 0.
+// GUI raw event23 carries the same fields; its channel40 wrapper owns the12-byte
+// protocol header. That wrapper must never be copied into this sound payload.
+// Keep the GUI and sound domain types separate even when their raw layouts match.
 struct MusicOnMenuStreamData
 {
     u32 muStreamNameHash;              // +0x00

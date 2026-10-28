@@ -504,32 +504,52 @@ namespace BrnGui
         switch (lpInput->miButtonId)
         {
         case KI_ACTION_TOGGLE_PREV:
-            if (meState < E_STATE_MAIN || !mMenuToggleGroup.HighlightPrevious(false))
+        {
+            if (meState < E_STATE_MAIN)
+            {
+                return true;
+            }
+            const bool lbWasSFXVolume =
+                mMenuToggleGroup.GetHighlightedIndex() == E_OPTIONROW_SFX_VOLUME;
+            if (!mMenuToggleGroup.HighlightPrevious(false))
             {
                 return true;
             }
             TriggerSound(lpInput->miButtonId);
-            // [FLAG] The X360 row-move arms also drive the music preview as the cursor
-            // enters/leaves the two volume rows: landing on MUSIC_VOLUME posts
-            // GuiEventAudioTraxPreview { 57, 1 }, leaving it posts { -1, 0 }, and landing
-            // on SFX_VOLUME posts a 112-byte BrnGui::GuiAudioTriggerEvent whose TYPE WORD
-            // IS 457 while this tree's GuiAudioTriggerEvent derives from GuiEvent<201>.
-            // The preview pair needs the meaning of the constant 57 (a track slot? a
-            // preview mode?) and the trigger post needs the type-id discrepancy settled by
-            // the record's consumer. Neither is recoverable from this call site, so both
-            // are REPORTED rather than guessed -- they are audition feedback while the
-            // cursor moves, not part of navigation, applying or saving.
+            // ARTIST824DE418: after the row move, start the SFX audition
+            // on row2; when leaving row2, send the matching stop action.
+            if (mMenuToggleGroup.GetHighlightedIndex() == E_OPTIONROW_SFX_VOLUME)
+                PostAudioTrigger(0, "AdjustGameVolume");
+            else if (lbWasSFXVolume)
+                PostAudioTrigger(1, "AdjustGameVolume");
+            // The separate AudioTrax-preview post is existing unrecovered
+           // behavior. The type457 SFX trigger above is independently attested.
             return true;
 
+        }
         case KI_ACTION_TOGGLE_NEXT:
-            if (meState < E_STATE_MAIN || !mMenuToggleGroup.HighlightNext(false))
+        {
+            if (meState < E_STATE_MAIN)
+            {
+                return true;
+            }
+            const bool lbWasSFXVolume =
+                mMenuToggleGroup.GetHighlightedIndex() == E_OPTIONROW_SFX_VOLUME;
+            if (!mMenuToggleGroup.HighlightNext(false))
             {
                 return true;
             }
             TriggerSound(lpInput->miButtonId);
-            // [FLAG] see the preview/trigger note on the TOGGLE_PREV arm above.
+            // ARTIST824DE418: after the row move, start the SFX audition
+            // on row2; when leaving row2, send the matching stop action.
+            if (mMenuToggleGroup.GetHighlightedIndex() == E_OPTIONROW_SFX_VOLUME)
+                PostAudioTrigger(0, "AdjustGameVolume");
+            else if (lbWasSFXVolume)
+                PostAudioTrigger(1, "AdjustGameVolume");
+            // The separate AudioTrax-preview post remains unrecovered as above.
             return true;
 
+        }
         case KI_ACTION_OPTION_PREV:
             if (meState < E_STATE_MAIN || !mMenuToggleGroup.HighlightPreviousItem())
             {

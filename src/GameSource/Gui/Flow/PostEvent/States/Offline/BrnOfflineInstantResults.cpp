@@ -54,8 +54,9 @@
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 #include <cstdlib>   // getenv (the BRN_LOSE_DIAG witness)
 
-static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20,
-              "X360 channel-40 menu-music record is {8,23,12}+8");
+static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 8 &&
+              sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>) == 20,
+              "X360 channel-40 menu-music is a raw8-byte payload in a20-byte wrapper");
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);

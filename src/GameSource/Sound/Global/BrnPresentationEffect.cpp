@@ -266,9 +266,9 @@ void PresentationEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
 {
     if (!apMessage || apMessage->GetEventId() != 6)
         return;
-    const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>* lpMessage =
-        static_cast<const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>*>(apMessage);
-    const BrnGui::GuiAudioTriggerEvent& lrEvent = lpMessage->mData;
+    const CgsSound::Io::Message<BrnGui::GuiAudioTriggerWirePayload457>* lpMessage =
+        static_cast<const CgsSound::Io::Message<BrnGui::GuiAudioTriggerWirePayload457>*>(apMessage);
+    const BrnGui::GuiAudioTriggerWirePayload457& lrEvent = lpMessage->mData;
     if (KB_SPEW_PRESENTATION_MESSAGES)
     {
         // ARTIST pointer table82F2CFC0:27 action labels, indexed as in the original.

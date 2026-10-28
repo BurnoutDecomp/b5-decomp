@@ -82,16 +82,18 @@ namespace CgsGui
     // { muHeader0 = 8, muEventType = 23, muHeader2 = 12 } + { the sound-name hash,
     // two flag bytes }, channel 40, 20 bytes. (BrnGui::Credits posts it with
     // CgsSound::Playback::Name::MakeHash("Credits") and both flags clear.)
-    struct GuiEventPlayMusicOnMenuStream : public GuiEvent<23>
+    // The event itself is the raw8-byte payload; GuiEventWrapper owns its header.
+    struct GuiEventPlayMusicOnMenuStream : public CgsModule::Event
     {
-        u32  muStreamNameHash;   // +0x0C  (CgsSound::Playback::Name::MakeHash result)
-        bool mbFlagA;            // +0x10  (roles not recovered; Credits passes false/false)
-        bool mbFlagB;            // +0x11
+        u32  muStreamNameHash;   // raw +0x00  (CgsSound::Playback::Name::MakeHash result)
+        bool mbFlagA;            // raw +0x04  (roles not recovered; Credits passes false/false)
+        bool mbFlagB;            // raw +0x05
 
         explicit GuiEventPlayMusicOnMenuStream(u32 luStreamNameHash,
                                                bool lbFlagA = false, bool lbFlagB = false)
-            : GuiEvent<23>(8, 12)
-            , muStreamNameHash(luStreamNameHash), mbFlagA(lbFlagA), mbFlagB(lbFlagB) {}
+            : muStreamNameHash(luStreamNameHash), mbFlagA(lbFlagA), mbFlagB(lbFlagB) {}
+
+        s32 GetEventType() const { return 23; }
     };
 
     // The "suspend / resume network processing" GUI event. X360-attested by the
@@ -188,8 +190,8 @@ namespace CgsGui
         // 40, 20). This body instead passes the event directly with lrEvent.GetEventType() as the
         // channel. It is kept as-is deliberately, because the payload-type population is SPLIT
         // between two encodings (BrnGuiDemangledEventTypes.h alone: 94 GuiEvent<N>-derived vs 152
-        // raw). The GuiEvent<N>-derived ones -- this header's GuiEventPlayMusicOnMenuStream(8,12) /
-        // GuiEventNetworkSuspension(4,12) included -- set
+        // raw). The remaining GuiEvent<N>-derived ones -- including this header's
+        // GuiEventNetworkSuspension(4,12) -- set
         // muHeader0/muHeader2 to the wrapper's own size/offset words, i.e. they bake the wrapper
         // header INTO the type, so direct-pass reproduces the right record bytes for them and
         // switching to the wrapper would emit a DOUBLE header. The raw ones (`u8 maData[N]` +
@@ -296,4 +298,22 @@ namespace CgsGui
     {
         mOutEventQueue.AddEvent(&lrEvent, 40, static_cast<s32>(sizeof(lrEvent)));
     }
+    static_assert(sizeof(GuiEventPlayMusicOnMenuStream) == 8 &&
+                  offsetof(GuiEventPlayMusicOnMenuStream, muStreamNameHash) == 0 &&
+                  offsetof(GuiEventPlayMusicOnMenuStream, mbFlagA) == 4 &&
+                  offsetof(GuiEventPlayMusicOnMenuStream, mbFlagB) == 5,
+                  "ARTIST menu music payload is hash32 followed by two flag bytes");
+
+    // ARTIST82476C00: this recovered instance takes the flat8-byte event,
+    // boxes {8,23,12}, and publishes channel40. Other legacy instances retain
+    // their existing representation until recovered independently.
+    template <>
+    inline void StateInterface::OutputGuiEvent<GuiEventPlayMusicOnMenuStream>(
+        GuiEventPlayMusicOnMenuStream& lrEvent)
+    {
+        GuiEventWrapper<GuiEventPlayMusicOnMenuStream, 40> lWrapper(lrEvent);
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+            40, static_cast<s32>(sizeof(lWrapper)));
+    }
+
 }
