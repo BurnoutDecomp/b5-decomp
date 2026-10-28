@@ -1,9 +1,27 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <WinSock2.h>
+#ifdef SendMessage
+#undef SendMessage
+#endif
+#ifdef DrawText
+#undef DrawText
+#endif
+#include <type_traits>
+
 #include "GameShared/GameClasses/System/GameTalk/X360/CgsGameTalkProtocolX360.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>   // strlen
+#include <new>       // actual package allocation followed by placement construction
 
 // =====================================================================================
 // CgsGameTalk::GameTalkProtocol -- Xbox 360 GameTalk transport backend.
@@ -28,30 +46,21 @@
 // =====================================================================================
 
 // -------------------------------------------------------------------------------------
-// Platform socket / XNet surface. These are Xbox-360 Winsock + XNet externals (declared
-// here so the per-TU compile resolves them); the asm calls them directly. Signatures /
-// constants taken from the asm dereferences + immediate operands.
+// Native Winsock declarations come from the real Windows SDK above.
+// FLAG PC-platform leaf: WSADATA, fd_set, sockaddr_in and SOCKET retain the
+// host API's real storage/alignment/handle width. Engine state and callbacks
+// remain the ARTIST transport. The narrow PC XNet provider owns GameTalk's
+// startup; the following status read never acquires another WSA reference.
 // -------------------------------------------------------------------------------------
+static_assert(std::is_same<CgsGameTalk::SOCKET, ::SOCKET>::value,
+              "GameTalk socket storage must match native WinSock SOCKET");
+struct XNetStartupParams;
 extern "C"
 {
-    int  socket(int liAddressFamily, int liType, int liProtocol);
-    int  bind(CgsGameTalk::SOCKET lSocket, const void* lpAddress, int liAddressLen);
-    int  listen(CgsGameTalk::SOCKET lSocket, int liBacklog);
-    CgsGameTalk::SOCKET accept(CgsGameTalk::SOCKET lSocket, void* lpAddress, int* lpiAddressLen);
-    int  closesocket(CgsGameTalk::SOCKET lSocket);
-    int  recv(CgsGameTalk::SOCKET lSocket, void* lpBuffer, int liLength, int liFlags);
-    int  send(CgsGameTalk::SOCKET lSocket, const void* lpBuffer, int liLength, int liFlags);
-    int  setsockopt(CgsGameTalk::SOCKET lSocket, int liLevel, int liOptName,
-                    const void* lpOptVal, int liOptLen);
-    int  ioctlsocket(CgsGameTalk::SOCKET lSocket, long liCommand, unsigned long* lpuArg);
-    int  select(int liNfds, void* lpReadFds, void* lpWriteFds, void* lpExceptFds,
-                const void* lpTimeout);
-
-    int  WSAStartup(unsigned short luVersionRequested, void* lpWSAData);
-    int  WSAGetLastError();
-
-    int  XNetStartup(const void* lpParams);
-    void XMemCpy(void* lpDest, const void* lpSrc, unsigned int luSize);
+    int __cdecl XNetStartup(XNetStartupParams* lpParams);
+    int __cdecl CgsPcGameTalkWinsockStartupStatus(unsigned short* lpuVersion);
+    // Existing mounted XenonD3D9Shims.cpp provider: exact memcpy implementation.
+    void* XMemCpy(void* lpDest, const void* lpSrc, u32 luSize);
 }
 
 namespace
@@ -65,7 +74,7 @@ namespace
     const int    KI_LISTEN_BACKLOG     = 1;            // listen(s,1)
     const int    KI_SOCKADDR_LEN       = 16;           // accept/bind addr length
     const int    KI_RECV_BUFFER_SIZE   = 4096;         // recv(...,4096,0)
-    const CgsGameTalk::SOCKET KI_INVALID_SOCKET = -1;  // socket()/accept() failure (asm -1)
+    const CgsGameTalk::SOCKET KI_INVALID_SOCKET = INVALID_SOCKET;  // socket()/accept() failure (asm -1)
 
     // WSA error codes the asm tests (cmpwi 0x2746 / 0x2749).
     const int    KI_WSAECONNRESET      = 10054;        // 0x2746
@@ -92,11 +101,8 @@ namespace
     const char* KPAC_PING_RESPONSE_KEY        = "PingResponse";
     const char* KPAC_PING_REQUEST_KEY         = "PingRequest";
 
-    // The debug log stream the X360 streams its status text into (asm &off_82F3300C). A
-    // file-scope StrStream over a shared debug buffer; only its operator<< is exercised
-    // here. Modelled with the engine's debug-print buffer.
-    char gacGameTalkDebugBuffer[256];
-    CgsDev::StrStream gDebugStream(gacGameTalkDebugBuffer, sizeof(gacGameTalkDebugBuffer));
+    // ARTIST82F3300C is mLog inside the existing LogWindow82F32FD4+0x38.
+    // Status text below streams directly through that typed public owner.
 
     // GameTalk-message content-type for a NUL-terminated string payload (the asm passes 0
     // as the type word from SendPingResponseToGameExplorer's AddKeyContent call).
@@ -124,28 +130,42 @@ void GameTalkProtocol::Construct(bool /*lbInitialiseNetwork*/, s32 liPort)
     mrInactivityTimeout = KF_DEFAULT_INACTIVITY_TIMEOUT; // stfs 10.0f,0x4010(this)
 
     // XNetStartup parameters: { sizeofStruct=0x0D, cfgFlags=1, 0, 0, 0 }.
-    unsigned char laXNetParams[2] = { KU_XNET_CFG_SIZEOFSTRUCT, 1 };
-    int liXNetError = XNetStartup(laXNetParams);
+    // ARTIST82836EE4..6F00 clears all thirteen bytes before the size/flag stores.
+    alignas(4) unsigned char laXNetParams[13] = { KU_XNET_CFG_SIZEOFSTRUCT, 1 };
+    int liXNetError = XNetStartup(reinterpret_cast<XNetStartupParams*>(laXNetParams));
     if (liXNetError)
     {
-        gDebugStream << "XNetStartup failed, liError " << liXNetError << "\n";
-        CGS_ASSERT(liXNetError == 0, "XNetStartup failed");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "XNetStartup failed, liError " << static_cast<u32>(liXNetError) << "\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 90);
+        CgsDev::Assert::EndAssert();
     }
 
-    short lsWinsockData[1];
-    int liWsaError = WSAStartup(KU_WINSOCK_VERSION, lsWinsockData);
+    unsigned short luWinsockVersion = 0;
+    int liWsaError = CgsPcGameTalkWinsockStartupStatus(&luWinsockVersion);
     if (liWsaError)
     {
-        gDebugStream << "WSAStartup failed (error " << liWsaError << ").\n";
-        CGS_ASSERT(liWsaError == 0, "WSAStartup failed");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "WSAStartup failed (error " << static_cast<u32>(liWsaError) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 101);
+        CgsDev::Assert::EndAssert();
     }
 
-    if (lsWinsockData[0] != static_cast<short>(KU_WINSOCK_VERSION))
+    if (luWinsockVersion != static_cast<short>(KU_WINSOCK_VERSION))
     {
-        gDebugStream << "Failed to get proper version of Winsock, got "
-                     << (lsWinsockData[0] & 0xFF) << "." << ((lsWinsockData[0] >> 8) & 0xFF) << "\n";
-        CGS_ASSERT(lsWinsockData[0] == static_cast<short>(KU_WINSOCK_VERSION),
-                   "Wrong Winsock version");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Failed to get proper version of Winsock, got " << static_cast<u32>(luWinsockVersion & 0xFFu) << "." << static_cast<u32>((luWinsockVersion >> 8) & 0xFFu) << "\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 107);
+        CgsDev::Assert::EndAssert();
     }
 
     sInactivityTimer.Prepare(KF_DEFAULT_UPDATE_STEP);
@@ -162,61 +182,90 @@ void GameTalkProtocol::SetListeningMode(s32 liPort)
 
     if (meConnectionState == E_CONNECTIONSTATE_OBTAINED_IP && closesocket(mClientSocket))
     {
-        gDebugStream << "Failed to close active client socket (error " << WSAGetLastError() << ").\n";
-        CGS_ASSERT(false, "Failed to close active client socket");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        const s32 liError = WSAGetLastError();
+        lAssertStream << "Failed to close active client socket (error " << static_cast<u32>(liError) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 374);
+        CgsDev::Assert::EndAssert();
     }
 
     sInactivityTimer.Reset();
     sInactivityTimer.SetRunning(false);   // asm 0x82837300: disarm the inactivity timer (mbRunning=0)
 
-    // sockaddr_in laid out on the stack: { family=2, port=liPort, addr=0 }.
-    struct
-    {
-        short          siFamily;
-        unsigned short suPort;
-        int            liAddress;
-        long long      llZero;
-    } lAddress;
-    lAddress.siFamily  = KI_AF_INET;
-    lAddress.suPort    = static_cast<unsigned short>(liPort);
-    lAddress.liAddress = 0;
-    lAddress.llZero    = 0;
+    // FLAG PC-platform leaf: the original big-endian halfword port store
+    // already produced network order; native little-endian Winsock needs htons.
+    const u16 luListenPort = static_cast<u16>(liPort);
+    sockaddr_in lAddress = {};
+    lAddress.sin_family = KI_AF_INET;
+    lAddress.sin_port = htons(luListenPort);
+    lAddress.sin_addr.s_addr = INADDR_ANY;
 
     mListeningSocket = socket(KI_AF_INET, KI_SOCK_STREAM, 0);
     if (mListeningSocket == KI_INVALID_SOCKET)
     {
-        gDebugStream << "Failed to create listening socket (error " << WSAGetLastError() << ").\n";
-        CGS_ASSERT(false, "Failed to create listening socket");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Failed to create listening socket (error " << static_cast<u32>(WSAGetLastError()) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 401);
+        CgsDev::Assert::EndAssert();
     }
 
-    int liReuse = 1;
-    if (setsockopt(mListeningSocket, KI_SOL_SOCKET, KI_SO_REUSEADDR, &liReuse, 1))
+    // FLAG PC-platform leaf: the same true option is a native BOOL value.
+    const BOOL lbReuse = TRUE;
+    if (setsockopt(mListeningSocket, KI_SOL_SOCKET, KI_SO_REUSEADDR,
+                   reinterpret_cast<const char*>(&lbReuse), sizeof(lbReuse)))
     {
-        gDebugStream << "Failed to reuse listening socket address (error " << WSAGetLastError() << ").\n";
-        CGS_ASSERT(false, "Failed to reuse listening socket address");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Failed to reuse listening socket address (error " << static_cast<u32>(WSAGetLastError()) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 410);
+        CgsDev::Assert::EndAssert();
     }
 
-    if (bind(mListeningSocket, &lAddress, KI_SOCKADDR_LEN) == KI_INVALID_SOCKET)
+    if (bind(mListeningSocket, reinterpret_cast<const sockaddr*>(&lAddress),
+             static_cast<int>(sizeof(lAddress))) == SOCKET_ERROR)
     {
-        gDebugStream << "Failed to bind listening socket (error " << WSAGetLastError() << ").\n";
-        CGS_ASSERT(false, "Failed to bind listening socket");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Failed to bind listening socket (error " << static_cast<u32>(WSAGetLastError()) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 417);
+        CgsDev::Assert::EndAssert();
     }
 
-    if (listen(mListeningSocket, KI_LISTEN_BACKLOG) == KI_INVALID_SOCKET)
+    if (listen(mListeningSocket, KI_LISTEN_BACKLOG) == SOCKET_ERROR)
     {
-        gDebugStream << "Listening to client failed.\n";
-        CGS_ASSERT(false, "Listening to client failed");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Listening to client failed.\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 423);
+        CgsDev::Assert::EndAssert();
     }
 
     unsigned long luNonBlocking = 1;
     if (ioctlsocket(mListeningSocket, KI_FIONBIO, &luNonBlocking))
     {
-        gDebugStream << "Failed to set non-blocking listening socket (error " << WSAGetLastError() << ").\n";
-        CGS_ASSERT(false, "Failed to set non-blocking listening socket");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Failed to set non-blocking listening socket (error " << static_cast<u32>(WSAGetLastError()) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 433);
+        CgsDev::Assert::EndAssert();
     }
 
     meConnectionState = E_CONNECTIONSTATE_OBTAINING_IP; // stw 0,0x4014(this)
-    gDebugStream << "Listening on port " << lAddress.suPort << "\n";
+    sLogWindow.mLog << "Listening on port " << luListenPort << "\n";
 }
 
 // -------------------------------------------------------------------------------------
@@ -228,9 +277,9 @@ bool GameTalkProtocol::AcceptIncomingConnection()
     if (meConnectionState != E_CONNECTIONSTATE_OBTAINING_IP)
         return false;
 
-    char lacAddress[16];
-    int liAddressLen = KI_SOCKADDR_LEN;
-    mClientSocket = accept(mListeningSocket, lacAddress, &liAddressLen);
+    sockaddr_in lAddress;
+    int liAddressLen = static_cast<int>(sizeof(lAddress));
+    mClientSocket = accept(mListeningSocket, reinterpret_cast<sockaddr*>(&lAddress), &liAddressLen);
 
     if (mClientSocket != KI_INVALID_SOCKET)
     {
@@ -240,13 +289,18 @@ bool GameTalkProtocol::AcceptIncomingConnection()
 
         if (closesocket(mListeningSocket))
         {
-            gDebugStream << "Failed to close listening socket after establishing connection (error "
-                         << WSAGetLastError() << ").\n";
-            CGS_ASSERT(false, "Failed to close listening socket after connecting");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lAssertBuffer;
+            CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+            const s32 liError = WSAGetLastError();
+            lAssertStream << "Failed to close listening socket after establishing connection (error " << static_cast<u32>(liError) << ").\n";
+            CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 332);
+            CgsDev::Assert::EndAssert();
         }
 
         meConnectionState = E_CONNECTIONSTATE_OBTAINED_IP; // a1[4101] = 1
-        gDebugStream << "Connected to server\n";
+        sLogWindow.mLog << "Connected to server\n";
     }
 
     return meConnectionState == E_CONNECTIONSTATE_OBTAINED_IP;
@@ -274,7 +328,13 @@ bool GameTalkProtocol::Connect()
         }
         else
         {
-            CGS_ASSERT(false, "Invalid connection state");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lAssertBuffer;
+            CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+            lAssertStream << "Invalid connection state";
+            CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 285);
+            CgsDev::Assert::EndAssert();
         }
     }
 
@@ -301,7 +361,7 @@ bool GameTalkProtocol::Send(void* lpaBuffer, s32 liMsgSize)
     for (;;)
     {
         int liSent = send(mClientSocket, lpcBuffer, liMsgSize, 0);
-        if (liSent == KI_INVALID_SOCKET)
+        if (liSent == SOCKET_ERROR)
             break;
 
         liMsgSize  -= liSent;
@@ -310,26 +370,34 @@ bool GameTalkProtocol::Send(void* lpaBuffer, s32 liMsgSize)
             return true; // fully sent.
 
         // Block until the socket is writable again.
-        int laSocketDescriptors[2];
-        laSocketDescriptors[0] = 1;
-        laSocketDescriptors[1] = mClientSocket;
-        if (!select(0, 0, laSocketDescriptors, 0, 0))
+        fd_set lSocketDescriptors;
+        lSocketDescriptors.fd_count = 1;
+        lSocketDescriptors.fd_array[0] = mClientSocket;
+        if (!select(0, 0, &lSocketDescriptors, 0, 0))
         {
-            CGS_ASSERT(false, "select(0, NULL, &lSocketDescriptors, NULL, NULL)");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("select(0, NULL, &lSocketDescriptors, NULL, NULL)",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 524);
+            CgsDev::Assert::EndAssert();
         }
     }
 
     if (WSAGetLastError() == KI_WSAECONNRESET)
     {
         meConnectionState = E_CONNECTIONSTATE_LISTENING;
-        gDebugStream << "Connection reset, returning listening mode\n";
+        sLogWindow.mLog << "Connection reset, returning listening mode\n";
         return false;
     }
 
     if (WSAGetLastError() == KI_WSAENOTCONN)
     {
-        gDebugStream << "Attempted to send data when not connected (error " << WSAGetLastError() << ").\n";
-        CGS_ASSERT(false, "Attempted to send data when not connected");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::MessageBufferPC lAssertBuffer;
+        CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+        lAssertStream << "Attempted to send data when not connected (error " << static_cast<u32>(WSAGetLastError()) << ").\n";
+        CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 509);
+        CgsDev::Assert::EndAssert();
     }
     return false;
 }
@@ -357,31 +425,42 @@ void GameTalkProtocol::Poll()
         if (WSAGetLastError() == KI_WSAECONNRESET)
         {
             meConnectionState = E_CONNECTIONSTATE_LISTENING;
-            gDebugStream << "Connection reset, returning listening mode\n";
+            sLogWindow.mLog << "Connection reset, returning listening mode\n";
         }
         else if (WSAGetLastError() == KI_WSAENOTCONN)
         {
-            gDebugStream << "Attempted to receive data when not connected (error " << WSAGetLastError() << ").\n";
-            CGS_ASSERT(false, "Attempted to receive data when not connected");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lAssertBuffer;
+            CgsDev::StrStream lAssertStream(lAssertBuffer.GetBuffer(), lAssertBuffer.GetSize());
+            const s32 liError = WSAGetLastError();
+            lAssertStream << "Attempted to receive data when not connected (error " << static_cast<u32>(liError) << ").\n";
+            CgsDev::Assert::FireAssert(lAssertBuffer.GetBuffer(),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 571);
+            CgsDev::Assert::EndAssert();
         }
     }
 }
 
 // -------------------------------------------------------------------------------------
 // DigestReceivedData @ 0x82838318 -- append received bytes and dispatch each complete
-// length-prefixed message (4-byte big-endian length + payload) to the handler.
+// length-prefixed message (4-byte little-endian length + payload) to the handler.
 // -------------------------------------------------------------------------------------
 void GameTalkProtocol::DigestReceivedData(const char* lpacReceivedBytes, u32 luNumReceivedBytes)
 {
-    CGS_ASSERT((luNumReceivedBytes + muBufferMsgSize) < static_cast<u32>(KI_GAMETALK_BUFFER_SIZE),
-               "(luNumReceivedBytes + muBufferMsgSize) < KI_GAMETALK_BUFFER_SIZE");
+    if ((luNumReceivedBytes + muBufferMsgSize) >= static_cast<u32>(KI_GAMETALK_BUFFER_SIZE))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("(luNumReceivedBytes + muBufferMsgSize) < KI_GAMETALK_BUFFER_SIZE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 598);
+        CgsDev::Assert::EndAssert();
+    }
 
     XMemCpy(&macReceiveBuffer[muBufferMsgSize], lpacReceivedBytes, luNumReceivedBytes);
     muBufferMsgSize += luNumReceivedBytes;
 
     u32 luCursor = muBufferMsgStart;
 
-    // Peek the first message: a 4-byte big-endian length prefix; the whole message is
+    // Peek the first message: a 4-byte little-endian length prefix; the whole message is
     // (length + 4) bytes. Fewer than 4 buffered bytes means no complete header yet.
     bool lbHasMessage;
     u32  luMsgSize = 0;
@@ -394,10 +473,10 @@ void GameTalkProtocol::DigestReceivedData(const char* lpacReceivedBytes, u32 luN
         lbHasMessage = true;
         const unsigned char* lpucLen =
             reinterpret_cast<const unsigned char*>(&macReceiveBuffer[luCursor]);
-        u32 luLength = (static_cast<u32>(lpucLen[0]) << 24) |
-                       (static_cast<u32>(lpucLen[1]) << 16) |
-                       (static_cast<u32>(lpucLen[2]) << 8)  |
-                        static_cast<u32>(lpucLen[3]);
+        u32 luLength = static_cast<u32>(lpucLen[0]) |
+                       (static_cast<u32>(lpucLen[1]) << 8) |
+                       (static_cast<u32>(lpucLen[2]) << 16) |
+                       (static_cast<u32>(lpucLen[3]) << 24);
         luMsgSize = luLength + 4;
     }
 
@@ -426,10 +505,10 @@ void GameTalkProtocol::DigestReceivedData(const char* lpacReceivedBytes, u32 luN
                 lbHasMessage = true;
                 const unsigned char* lpucLen =
                     reinterpret_cast<const unsigned char*>(&macReceiveBuffer[luNextStart]);
-                u32 luLength = (static_cast<u32>(lpucLen[0]) << 24) |
-                               (static_cast<u32>(lpucLen[1]) << 16) |
-                               (static_cast<u32>(lpucLen[2]) << 8)  |
-                                static_cast<u32>(lpucLen[3]);
+                u32 luLength = static_cast<u32>(lpucLen[0]) |
+                               (static_cast<u32>(lpucLen[1]) << 8) |
+                               (static_cast<u32>(lpucLen[2]) << 16) |
+                               (static_cast<u32>(lpucLen[3]) << 24);
                 luMsgSize = luLength + 4;
             }
         }
@@ -455,29 +534,12 @@ void GameTalkProtocol::DigestReceivedData(const char* lpacReceivedBytes, u32 luN
 // -------------------------------------------------------------------------------------
 void GameTalkProtocol::OnMessageReceived(EA::GameTalk::GameTalkMessage* lpMsg)
 {
-    // The message's key entries are read by offset off the GameTalkMessage; this matches
-    // the asm's *(msg+12) count and *(msg+8) entry array. The GameTalk SDK message layout
-    // is modelled minimally elsewhere; here we mirror the asm's key/value walk.
-    struct KeyEntry
+    // ARTIST82838F50 reads the real message's count, key and content owners.
+    // Existing typed accessors follow their native fields as pointer widths grow.
+    for (s32 liEntry = 0; liEntry < lpMsg->GetNumKeys(); ++liEntry)
     {
-        const char* mpcKey;    // [+0]
-        s32         miPad;     // [+4]
-        const char* mpcValue;  // [+8]
-    };
-    struct MessageLayout
-    {
-        char        macHeader[8];  // [+0]
-        KeyEntry**  mppEntries;    // [+8]
-        s32         miEntryCount;  // [+12]
-    };
-
-    MessageLayout* lpLayout = reinterpret_cast<MessageLayout*>(lpMsg);
-    for (s32 liEntry = 0; liEntry < lpLayout->miEntryCount; ++liEntry)
-    {
-        const KeyEntry* lpEntry = lpLayout->mppEntries[liEntry];
-
         // Case-sensitive C-string compare against the "PingRequest" key.
-        const char* lpcKey  = lpEntry->mpcKey;
+        const char* lpcKey  = lpMsg->GetKey(liEntry);
         const char* lpcWant = KPAC_PING_REQUEST_KEY;
         int liDiff;
         do
@@ -493,7 +555,7 @@ void GameTalkProtocol::OnMessageReceived(EA::GameTalk::GameTalkMessage* lpMsg)
         if (!liDiff)
         {
             sInactivityTimer.Reset();
-            SendPingResponseToGameExplorer(lpEntry->mpcValue);
+            SendPingResponseToGameExplorer(static_cast<const char*>(lpMsg->GetContent(liEntry)));
         }
     }
 }
@@ -507,18 +569,37 @@ void GameTalkProtocol::OnMessageReceived(EA::GameTalk::GameTalkMessage* lpMsg)
 // -------------------------------------------------------------------------------------
 void GameTalkProtocol::SendPingResponseToGameExplorer(const char* lpacPingID)
 {
-    CGS_ASSERT(lpacPingID != 0, "lpacPingID != NULL");
+    if (lpacPingID == nullptr)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpacPingID != NULL",
+            "..\\..\\..\\GameShared\\GameClasses\\System/GameTalk/X360/CgsGameTalkProtocolX360.h",
+            235);
+        CgsDev::Assert::EndAssert();
+    }
 
+    // ARTIST828389F4 allocates the complete message in the GameTalk package.
+    // Its inlined construction creates one entry table; the canonical constructor
+    // performs that same operation using native pointer widths.
     EA::GameTalk::GameTalkMessage* lpMessage =
-        new EA::GameTalk::GameTalkMessage(KPAC_GAME_EXPLORER_CHANNEL_ID);
-    CGS_ASSERT(lpMessage != 0, "lpMessage != NULL");
+        static_cast<EA::GameTalk::GameTalkMessage*>(EA::GameTalk::Alloc(
+            static_cast<s32>(sizeof(EA::GameTalk::GameTalkMessage))));
+    if (lpMessage != nullptr)
+    {
+        new (lpMessage) EA::GameTalk::GameTalkMessage(KPAC_GAME_EXPLORER_CHANNEL_ID);
+    }
+    else
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpMessage != NULL",
+            "..\\..\\..\\GameShared\\GameClasses\\System/GameTalk/X360/CgsGameTalkProtocolX360.h",
+            240);
+        CgsDev::Assert::EndAssert();
+    }
 
-    lpMessage->AllocateDataBuffer();
-
-    // Length is strlen(lpacPingID): the asm walks to the NUL then subtracts one.
-    s32 liLength = static_cast<s32>(std::strlen(lpacPingID));
-    lpMessage->AddKeyContent(KPAC_PING_RESPONSE_KEY, KI_GAMETALK_TYPE_DEFAULT, lpacPingID, liLength);
-
+    const s32 liLength = static_cast<s32>(std::strlen(lpacPingID));
+    lpMessage->AddKeyContent(KPAC_PING_RESPONSE_KEY, KI_GAMETALK_TYPE_DEFAULT,
+                             lpacPingID, liLength);
     EA::GameTalk::GameTalkManager::SendMessage(KPAC_GAME_EXPLORER_TARGET, lpMessage);
 }
 
@@ -529,8 +610,20 @@ void GameTalkProtocol::SendPingResponseToGameExplorer(const char* lpacPingID)
 bool GameTalkProtocol::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep,
                                EA::GameTalk::GameTalkManager* lpGameTalk)
 {
-    CGS_ASSERT(lpGameTalk != 0, "lpGameTalk != NULL");
-    CGS_ASSERT(lrUpdateTimeStep > 0.0f, "lrUpdateTimeStep > 0.0f");
+    if (lpGameTalk == nullptr)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpGameTalk != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 137);
+        CgsDev::Assert::EndAssert();
+    }
+    if (!(lrUpdateTimeStep > 0.0f))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lrUpdateTimeStep > 0.0f",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp", 138);
+        CgsDev::Assert::EndAssert();
+    }
 
     mrInactivityTimeout = lrInactivityTimeout;
     sInactivityTimer.Prepare(lrUpdateTimeStep);

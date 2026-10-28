@@ -60,6 +60,11 @@ namespace GameTalk
         // outgoing message through here.
         virtual bool Send(void* lpaBuffer, s32 liMsgSize) = 0;
 
+        // Actual slot3/+0x0C, called by the inlined manager update82837748.
+        // ARTIST base vtable820CDC0C has destructor then three pure slots.
+        // The existing concrete transport supplies the recovered polling body.
+        virtual void Poll() = 0;
+
         // +0x04: the raw-wire receive callback. GameTalkManager installs its
         // ReceiverCallback trampoline here at construction; the transport backend
         // fans each complete inbound message out through it (a no-op if null). Owned

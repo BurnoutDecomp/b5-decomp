@@ -248,9 +248,31 @@ namespace BrnResource
             }
             // fall through
         }
+        case E_PREPARE_GAMETALK:
+            // ARTIST82674324/433C: after the real AttribSys package heaps/schema.
+            mePrepareStage = E_PREPARE_GAMETALK;
+            if (!mGameTalk.Prepare(10.0f, 1.0f / 60.0f))
+                return false;
+            if (!mDebugGameTalkInterface.Prepare())
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("mDebugGameTalkInterface.Prepare()",
+                    "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 519);
+                CgsDev::Assert::EndAssert();
+            }
+            // FLAG PC-platform witness: observe the actual owner/global, not a
+            // readiness substitute. No factory result or caller state is changed.
+            {
+                char lacStartup[192];
+                std::snprintf(lacStartup, sizeof(lacStartup),
+                    "[GameData] GameTalk ready owner=%p manager=%p\n",
+                    static_cast<void*>(&mGameTalk),
+                    static_cast<void*>(EA::GameTalk::GameTalkManager::GetInstance()));
+                CgsDev::Log::WriteToLog(lacStartup);
+            }
+            // fall through
         case E_PREPARE_VEHICLE_LIST:
-            // X360 stage 9 (LABEL_26): PrepareVehicleList. (Stage 7 GameTalk and stage 8's
-            // module prepare stay deferred between ATTRIBSYS and here.)
+            // Native9 follows GameTalk7; independent LiveUpdate8 remains deferred.
             mePrepareStage = E_PREPARE_VEHICLE_LIST;
             if (!PrepareVehicleList())
                 return false;
@@ -1409,6 +1431,10 @@ namespace BrnResource
         // AttribSysModule (a1+399000) are constructed in the same pass.
         mAttribSysReceiverQueue.Construct();
         mAttribSysModule.Construct();
+        // ARTIST82671CD0/1CE0: real contained transport, then its debug client.
+        // The original bool0 is forwarded, and ARTIST's protocol still starts XNet.
+        mGameTalk.Construct(false);
+        mDebugGameTalkInterface.Construct(&mGameTalk);
 
         // Completion-routing state words (X360 a1+439284 / a1+475936 / a1+475940). [reliable
         // init] zero-start so the counters are coherent from the first Update; the X360
@@ -1736,7 +1762,9 @@ namespace BrnResource
 
         // [deferred] dev slot-usage dump toggles (byte_82FFAD00/01 -> AllocatorList::
         // DebugDumpStats + the "Slot <n> is used" walk over the event-slot free list).
-        // [deferred] CgsGameTalk::GameTalk::Update (X360 a1+399624; module not committed).
+        // ARTIST82674804: the actual prepared GameData owner pumps its transport.
+        // Selected public Update callers run after successful GameData Prepare.
+        mGameTalk.Update();
 
         // The per-frame CgsResource input the pump publishes into. The X360 carves it from
         // the CgsModule::IOBufferStack (CreateIOBuffer<ResourceIO::InputBuffer>("Resource"));

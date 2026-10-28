@@ -31,13 +31,13 @@
 
 namespace CgsGameTalk
 {
+    // The "Core/GameTalk" debug log window: a file-scope static in the X360 build
+    // (the asm's off_82F32FD4). Construct sizes it to 20 lines and prepares it under
+    // the "Core/GameTalk" menu path with the "Log" caption (off_82F32FBC / off_82F32FB8).
+    CgsDev::DebugUI::LogWindow sLogWindow;
+
     namespace
     {
-        // The "Core/GameTalk" debug log window: a file-scope static in the X360 build
-        // (the asm's off_82F32FD4). Construct sizes it to 20 lines and prepares it under
-        // the "Core/GameTalk" menu path with the "Log" caption (off_82F32FBC / off_82F32FB8).
-        CgsDev::DebugUI::LogWindow sLogWindow;
-
         const char* const KAC_LOG_WINDOW_PATH    = "Core/GameTalk"; // off_82F32FBC
         const char* const KAC_LOG_WINDOW_CAPTION = "Log";           // off_82F32FB8
         const s32         KI_LOG_WINDOW_LINES     = 20;             // li r4, 0x14
@@ -62,16 +62,16 @@ namespace CgsGameTalk
     }
 
     // X360 @0x82837648.
-    void GameTalk::Construct()
+    void GameTalk::Construct(bool lbInitialiseNetwork)
     {
         mbPrepared        = false;          // stb 0, 0x4034
         mpGameTalkManager = nullptr;        // stw 0, 0x4030
 
         // Bring up the transport on the GameTalk listen port (asm passes 0x2694 in r5).
-        mProtocol.Construct(true, KI_DEFAULT_GAMETALK_PORT);
+        mProtocol.Construct(lbInitialiseNetwork, KI_DEFAULT_GAMETALK_PORT);
 
-        // Reset the debug component to its clean state (the asm's `...Destruct` symbol on
-        // the +0x4024 subobject is the dedup-shared DebugComponent constructor body).
+        // The +0x4024 component call at 82837674 targets 8284CB38 (blr).
+        // Keep its concrete empty Construct and preserve the existing data.
         mDebugComponent.Construct();
 
         // Bring up the "Core/GameTalk" log window.
@@ -80,7 +80,7 @@ namespace CgsGameTalk
     }
 
     // X360 @0x828394B8.
-    void GameTalk::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep)
+    bool GameTalk::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep)
     {
         // Create the process-wide GameTalk singleton, then point mpGameTalkManager at it.
         EA::GameTalk::GameTalkManager::CreateInstance(this, KI_GAMETALK_MAX_CHANNELS, 0);
@@ -98,7 +98,17 @@ namespace CgsGameTalk
         // Register the debug component with the debug menu.
         mDebugComponent.Register();
 
-        mbPrepared = true;                  // stb 1, 0x4034
+        mbPrepared = true;                  // ARTIST 82839530
+        return true;                        // ARTIST 8283952C: li r3,1
+    }
+
+    // ARTIST GameDataModule::Release82664408..4424 passes the genuine
+    // GameTalk subobject to82C296C8. That two-instruction ICF body is labelled
+    // Content::DoOnPostLoad by IDA, but it only returns true. This is the actual
+    // emitted GameTalk release behavior, not a replacement network provider.
+    bool GameTalk::Release()
+    {
+        return true;
     }
 
     // X360 @0x828248D0 (header-inline in the original CgsGameTalk.h:143-146).

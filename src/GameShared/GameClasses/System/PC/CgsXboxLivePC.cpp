@@ -20,9 +20,13 @@
 #ifdef NOGDI
 #undef NOGDI
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <WinSock2.h>
 #include <Windows.h>
 
 #include "types.hpp"
@@ -884,4 +888,92 @@ extern "C" u32 XNetGetTitleXnAddr(void* lpXnAddr)
         lpAddr[KU_XNADDR_ENET_OFFSET + luByte] = static_cast<u8>(lu64Xuid >> (8u * (5u - luByte)));
     }
     return KU_XNET_ADDR_ETHERNET;
+}
+// [PC platform leaf] ARTIST NetConnStartup sets byte 1 only for its -nosecure/-coop
+// paths and logs insecure mode. GameTalk passes that 13-byte request, then uses raw
+// TCP sockets. The host has no XNet security layer; this maps only that observed
+// insecure request to one native Winsock 2.2 startup for the GameTalk process lifetime.
+namespace
+{
+    std::mutex sGameTalkXNetStartupMutex;
+    bool sbGameTalkWinsockStarted = false;
+    int siGameTalkWinsockStartupResult = WSANOTINITIALISED;
+    unsigned short suGameTalkWinsockVersion = 0;
+}
+
+struct XNetStartupParams;
+
+extern "C" int __cdecl XNetStartup(XNetStartupParams* lpParams)
+{
+    const u32 KU_XNET_STARTUP_PARAMS_SIZE = 13u;
+    const u8 KU_XNET_STARTUP_INSECURE = 1u;
+    int liConfigError = 0;
+    if (lpParams == nullptr)
+        liConfigError = WSAEFAULT;
+    else
+    {
+        const u8* const lpBytes = reinterpret_cast<const u8*>(lpParams);
+        if (lpBytes[0] != KU_XNET_STARTUP_PARAMS_SIZE)
+            liConfigError = WSAEINVAL;
+        else if (lpBytes[1] != KU_XNET_STARTUP_INSECURE)
+            liConfigError = WSAEOPNOTSUPP;
+        else
+        {
+            for (u32 luByte = 2u; luByte < KU_XNET_STARTUP_PARAMS_SIZE; ++luByte)
+            {
+                if (lpBytes[luByte] != 0u)
+                {
+                    liConfigError = WSAEOPNOTSUPP;
+                    break;
+                }
+            }
+        }
+    }
+
+    std::lock_guard<std::mutex> lLock(sGameTalkXNetStartupMutex);
+    if (liConfigError != 0)
+        return liConfigError;
+    if (sbGameTalkWinsockStarted)
+        return siGameTalkWinsockStartupResult;
+
+    const WORD KU_WINSOCK_VERSION = MAKEWORD(2, 2);
+    WSADATA lData = {};
+    const int liStartupError = ::WSAStartup(KU_WINSOCK_VERSION, &lData);
+    if (liStartupError != 0)
+    {
+        siGameTalkWinsockStartupResult = liStartupError;
+        suGameTalkWinsockVersion = 0u;
+        return liStartupError;
+    }
+
+    suGameTalkWinsockVersion = lData.wVersion;
+    if (lData.wVersion != KU_WINSOCK_VERSION)
+    {
+        if (::WSACleanup() == SOCKET_ERROR)
+        {
+            siGameTalkWinsockStartupResult = ::WSAGetLastError();
+            sbGameTalkWinsockStarted = true;
+            return siGameTalkWinsockStartupResult;
+        }
+        siGameTalkWinsockStartupResult = WSAVERNOTSUPPORTED;
+        return siGameTalkWinsockStartupResult;
+    }
+
+    // The direct GameTalk caller has no XNetCleanup/WSACleanup teardown. Keep the
+    // single successful WSA ref for that same process lifetime; repeated startup
+    // calls are idempotent and cannot accumulate another acquisition.
+    sbGameTalkWinsockStarted = true;
+    siGameTalkWinsockStartupResult = 0;
+    return 0;
+}
+
+extern "C" int __cdecl CgsPcGameTalkWinsockStartupStatus(
+    unsigned short* lpuVersion)
+{
+    if (lpuVersion == nullptr)
+        return WSAEFAULT;
+
+    std::lock_guard<std::mutex> lLock(sGameTalkXNetStartupMutex);
+    *lpuVersion = suGameTalkWinsockVersion;
+    return siGameTalkWinsockStartupResult;
 }
