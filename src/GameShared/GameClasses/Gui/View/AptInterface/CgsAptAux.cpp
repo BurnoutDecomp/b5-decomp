@@ -34,7 +34,6 @@
 // callback slots and AptRenderItemDynamicText calls them directly.
 extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
 extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                             // dword_8324E864
-extern void (*gpAptFreeAnimationHook)(void* pDataBlock);                                        // off_1059C66C
 
 // AptLoadAnimation @0x82B07AC8 -- the engine "load a movie onto a target path" public
 // entry (LoadFlashAnimation @0x82849080 calls it with the "_level%d" path). Faithful
@@ -209,7 +208,6 @@ namespace CgsGui
         gAptFuncs.pfnLoadVariablesNULL      = &AptCallbackDeprecated::LoadVariablesNULL;
         gAptFuncs.pfnPointHitTest           = &AptCallbackDeprecated::PointHitTest;
         gAptFuncs.pfnGetRealTimeClock       = &AptCallbackDeprecated::GetRealTimeClock;
-        gpAptFreeAnimationHook              = &AptCallbackFile::FreeAnimation;
 
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
         //   Debug       (pfnAssertFail -- its host body is not in the ARTIST export set)
