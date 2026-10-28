@@ -183,6 +183,16 @@ void RaceBalancingDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lp
     lpDisplay->DrawSphere(lv3Centre, 1.0f /* flt_82001C98 */, rw::RGBA(255, 0, 0, 255));
 }
 
+// ARTIST DrawGraphFrame @0x827747F8 first computes end=(x+width,y-height); sub_8281C3E0
+// then subtracts start, preserving the f32 endpoint-rounding sequence. Its r8 color is 0x40FFFFFF.
+void RaceBalancingDebugComponent::DrawGraphBackground(CgsDev::Debug2DImmediateRender* lpDisplay,
+                                                       f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight)
+{
+    const f32 lfEndX = lfX + lfWidth;
+    const f32 lfEndY = lfY - lfHeight;
+    lpDisplay->DrawBox(lfX, lfY, lfEndX, lfEndY, 0x40FFFFFFu);
+}
+
 // ====================================================================================================
 // DrawGraphFrame  @0x827747F8
 // ----------------------------------------------------------------------------------------------------
