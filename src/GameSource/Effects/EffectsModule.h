@@ -368,7 +368,7 @@ namespace BrnEffects
                                  const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState,
                                  EActiveRaceCarIndex leIndex,
                                  const RwRGBAReal& lrCarColour,
-                                 const Attrib::Gen::debrisparams& lrDebrisParameters);
+                                 Attrib::Gen::debrisparams& lrDebrisParameters);
         // ⭐⭐ THE CONTACT DRAINS. Moved out of the "NOT RECONSTRUCTED" block 2026-09-06; all four
         // are real bodies (ProcessRaceCarContacts and its callee wall landed 2026-09-24,
         // FX-CRASHVFX).
