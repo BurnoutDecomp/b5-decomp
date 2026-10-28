@@ -43,8 +43,9 @@ namespace CgsGameTalk
     // member -- so the buffer is 0x4000 bytes.
     static const s32 KI_GAMETALK_BUFFER_SIZE = 0x4000;
 
-    // A raw Winsock socket descriptor.
-    typedef s32 SOCKET;
+    // FLAG PC-platform leaf: WinSock SOCKET is UINT_PTR on the native host.
+    // Keep both original owned socket fields, using the actual API handle width.
+    typedef std::uintptr_t SOCKET;
 
     // CgsGameTalk::GameTalkProtocol -- X360 GameTalk transport. The polymorphic
     // base (IGameTalkProtocol) supplies the vtable the scalar deleting destructor
@@ -93,7 +94,7 @@ namespace CgsGameTalk
 
         // IGameTalkProtocol override: accept a pending connection then drain any
         // received bytes into the digest buffer. X360 @0x82838690.
-        virtual void Poll();
+        virtual void Poll() override;
 
         // accept() a pending client and close the listening socket. X360 @0x82837120.
         bool AcceptIncomingConnection();

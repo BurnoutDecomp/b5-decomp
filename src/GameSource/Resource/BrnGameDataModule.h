@@ -9,7 +9,9 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"           // GameDataIO::AllocatorList (mAllocatorList)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                   // maGeneratedLinearAllocators / mAudioStreamAllocator
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                     // maGeneratedHeapAllocators
-#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"      // mAttribSysModule (X360 a1+399000)
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
+#include "GameShared/GameClasses/Development/DebugSystem/GameTalk/CgsDebugGameTalkInterface.h"      // mAttribSysModule (X360 a1+399000)
 #include "SharedClasses/DataLists/VehicleList.h"                             // mVehicleList (X360 a1+444336)
 #include "SharedClasses/DataLists/ICEList.h"                                 // mICEList     (X360 a1+457664)
 #include "SharedClasses/DataLists/WheelList.h"                               // mWheelList   (X360 a1+458696)
@@ -71,11 +73,11 @@ namespace BrnResource
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,
             E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_ATTRIBSYS = 6,
-            E_PREPARE_DONE = 7,
+            E_PREPARE_GAMETALK = 7, E_PREPARE_DONE = 19,
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
             // PrepareHudMessages 13, PreparePopups 14). The ones that are live here keep the
-            // console's numbers; the DLC 16-18 / GameTalk 7 stages are still skipped
+            // console's numbers; DLC16..18 and the independent LiveUpdate8 remain skipped
             // between ATTRIBSYS and DONE. (Order of execution comes from the switch's
             // fall-through order below, not from the numeric value.)
             E_PREPARE_VEHICLE_LIST = 9,
@@ -510,6 +512,10 @@ namespace BrnResource
         // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
         // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
         CgsAttribSys::AttribSysModule  mAttribSysModule;
+        // ARTIST82671B90 owns these real subobjects at399624/416064.
+        // Access by name; native pointer/vtable widths determine host layout.
+        CgsGameTalk::GameTalk          mGameTalk;
+        CgsDev::DebugGameTalkInterface mDebugGameTalkInterface;
         // X360 a1+444128: the GameData debug page (Construct initializes +0x0C..+0x20;
         // Prepare registers it after the base module Prepare succeeds).
         BrnResource::DebugComponent    mDebugComponent;

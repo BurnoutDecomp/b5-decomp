@@ -96,10 +96,10 @@ namespace GameTalk
         explicit GameTalkMessage(const char* lpcChannel);
         ~GameTalkMessage();
 
-        // @0x82838D98 -- static factory: decode a big-endian wire buffer into a message.
+        // @0x82838D98 -- static factory: decode a little-endian wire buffer into a message.
         static GameTalkMessage* Create(const char* lpBuffer);
 
-        // @0x82837B50 -- serialize the message into a freshly package-allocated big-endian
+        // @0x82837B50 -- serialize the message into a freshly package-allocated little-endian
         // wire buffer (lpcKey prefixed at the front); *lppOutBuffer receives it. Returns the
         // total buffer size.
         u32 CreateBuffer(const char* lpcKey, void** lppOutBuffer);
@@ -161,7 +161,7 @@ namespace GameTalk
         static s32 KsDataBufferCapacity;
 
     private:
-        // Wire-cursor parse helpers (X360 statics). Each reads a big-endian u32 length
+        // Wire-cursor parse helpers (X360 statics). Each reads a little-endian u32 length
         // prefix off the cursor, advances past it, package-allocates the payload and copies
         // it in, advancing the cursor past the payload.
         //   ReadString @0x82837E88  NUL-terminated string copy (len+1 bytes).
@@ -259,7 +259,7 @@ namespace GameTalk
         virtual ~GameTalkManager();
 
         // X360 @0x82837770. Build a keyword message ([key][value], each length-
-        // prefixed big-endian) in the shared scratch buffer and send it over the
+        // prefixed little-endian) in the shared scratch buffer and send it over the
         // transport. Returns the transport Send result.
         s32 SendKeywordMessage(const char* lpcKey, const char* lpcValue);
 

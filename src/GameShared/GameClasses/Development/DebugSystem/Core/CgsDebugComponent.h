@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"
 
 namespace CgsResource { class DebugComponent; }
+namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -59,6 +60,12 @@ namespace CgsDev
         friend struct BrnGui::GuiDebugComponent;
         struct GuiConstructorTag {};
         explicit DebugComponent(GuiConstructorTag) {}
+
+        // ARTIST 827E32C8..32F8 installs this owner's vptr only; its data
+        // belongs to the original two-phase lifecycle, not the generic reset.
+        friend class CgsGameTalk::GameTalkDebugComponent;
+        struct GameTalkConstructorTag {};
+        explicit DebugComponent(GameTalkConstructorTag) {}
 
     public:
         DebugComponent();

@@ -4,7 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/GameTalk/X360/CgsGameTalkProtocolX360.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalkDebugComponent.h"
 #include "SDKs/EA/GameTalk/GameTalk.h"
 
 // ============================================================================
@@ -35,8 +35,14 @@
 //   +0x4034  mbPrepared         set 1 by Prepare, asserted by Register/Send/Update
 // ============================================================================
 
+namespace CgsDev { namespace DebugUI { struct LogWindow; } }
+
 namespace CgsGameTalk
 {
+    // The existing ARTIST82F32FD4 owner is shared by the split native TUs.
+    // Protocol status text uses this same window's public mLog stream.
+    extern CgsDev::DebugUI::LogWindow sLogWindow;
+
     class GameTalk
     {
     public:
@@ -44,13 +50,17 @@ namespace CgsGameTalk
         // Clears mbPrepared/mpGameTalkManager, constructs the transport on the
         // GameTalk listen port (the asm passes 0x2694 == 9876 in r5), prepares the
         // debug component, and brings up the "Core/GameTalk" log window.
-        void Construct();
+        void Construct(bool lbInitialiseNetwork);
 
         // X360 @0x828394B8. Bring up the GameTalk singleton, point mpGameTalkManager
         // at it, prepare the transport with the inactivity timeout / update step,
         // register the AttribSys GameTalk handler on the "AttribSys.xenon" channel,
         // register the debug component, and mark prepared.
-        void Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep);
+        bool Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep);
+
+        // ARTIST82664418 calls this on the GameTalk owner; target82C296C8
+        // is the emitted li r3,1;blr ICF fold, with no additional cleanup.
+        bool Release();
 
         // X360 @0x828248D0 (header-inline). Forward a handler registration to the
         // GameTalk manager once prepared.
@@ -66,7 +76,7 @@ namespace CgsGameTalk
 
     private:
         GameTalkProtocol            mProtocol;          // +0x0000
-        CgsDev::DebugComponent      mDebugComponent;    // +0x4024
+        GameTalkDebugComponent     mDebugComponent;    // +0x4024
         EA::GameTalk::GameTalkManager* mpGameTalkManager; // +0x4030
         bool                        mbPrepared;         // +0x4034
     };

@@ -8,7 +8,7 @@
 
 #include <cctype>  // tolower
 #include <cstring> // memcpy
-#include <cstdlib> // _byteswap_ulong
+#include <cstdlib>
 #include <new>     // placement new
 
 // ============================================================================
@@ -244,15 +244,15 @@ namespace GameTalk
     }
 
     // @ 0x82837E88 -- parse a length-prefixed string from the wire cursor. Reads a
-    // big-endian u32 length, advances past it, package-allocates len+1 bytes, copies len
+    // little-endian u32 length, advances past it, package-allocates len+1 bytes, copies len
     // bytes and NUL-terminates, advancing the cursor past the len string bytes.
     char* GameTalkMessage::ReadString(const char*& rlpCursor)
     {
         const u8* lpucLen = reinterpret_cast<const u8*>(rlpCursor);
-        u32 luLength = (static_cast<u32>(lpucLen[0]) << 24) |
-                       (static_cast<u32>(lpucLen[1]) << 16) |
-                       (static_cast<u32>(lpucLen[2]) << 8) |
-                        static_cast<u32>(lpucLen[3]);
+        u32 luLength = static_cast<u32>(lpucLen[0]) |
+                       (static_cast<u32>(lpucLen[1]) << 8) |
+                       (static_cast<u32>(lpucLen[2]) << 16) |
+                       (static_cast<u32>(lpucLen[3]) << 24);
         rlpCursor += 4;
 
         char* lpcString = static_cast<char*>(
@@ -265,15 +265,15 @@ namespace GameTalk
     }
 
     // @ 0x82837F40 -- parse a length-prefixed binary blob from the wire cursor. Reads a
-    // big-endian u32 length into *lpuLength, advances the cursor past it, package-allocates
+    // little-endian u32 length into *lpuLength, advances the cursor past it, package-allocates
     // that many bytes, copies the payload in and advances past it.
     void* GameTalkMessage::ReadBinary(const char*& rlpCursor, u32* lpuLength)
     {
         const u8* lpucLen = reinterpret_cast<const u8*>(rlpCursor);
-        u32 luLength = (static_cast<u32>(lpucLen[0]) << 24) |
-                       (static_cast<u32>(lpucLen[1]) << 16) |
-                       (static_cast<u32>(lpucLen[2]) << 8) |
-                        static_cast<u32>(lpucLen[3]);
+        u32 luLength = static_cast<u32>(lpucLen[0]) |
+                       (static_cast<u32>(lpucLen[1]) << 8) |
+                       (static_cast<u32>(lpucLen[2]) << 16) |
+                       (static_cast<u32>(lpucLen[3]) << 24);
         rlpCursor += 4;
         *lpuLength = luLength;
 
@@ -284,16 +284,19 @@ namespace GameTalk
         return lpBlock;
     }
 
-    // @ 0x82838D98 -- static factory: decode a big-endian wire buffer into a message.
+    // @ 0x82838D98 -- static factory: decode a little-endian wire buffer into a message.
     // Layout: [u32 header][channel string][u32 keyCount] then keyCount *
     // ([key string][u32 type][content]); type 0 = NUL string, type 1 = length-prefixed
     // binary, other = empty.
     GameTalkMessage* GameTalkMessage::Create(const char* lpBuffer)
     {
-        u32 luSwap = 0;
+        const u8* lpucHeader = reinterpret_cast<const u8*>(lpBuffer);
+        const u32 luHeader = static_cast<u32>(lpucHeader[0]) |
+                       (static_cast<u32>(lpucHeader[1]) << 8) |
+                       (static_cast<u32>(lpucHeader[2]) << 16) |
+                       (static_cast<u32>(lpucHeader[3]) << 24);
         const char* lpcCursor = lpBuffer + 4;
-        std::memcpy(&luSwap, lpBuffer, 4);
-        if (static_cast<s32>(_byteswap_ulong(luSwap)) <= 0)
+        if (static_cast<s32>(luHeader) <= 0)
             return 0;
 
         CGS_ASSERT(CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator() != 0,
@@ -311,17 +314,22 @@ namespace GameTalk
         // preserved store-for-store.
         lpMessage->mbParsed = 1;
 
-        luSwap = 0;
-        std::memcpy(&luSwap, lpcCursor, 4);
-        s32 liKeyCount = static_cast<s32>(_byteswap_ulong(luSwap));
+        const u8* lpucKeyCount = reinterpret_cast<const u8*>(lpcCursor);
+        const u32 luKeyCount = static_cast<u32>(lpucKeyCount[0]) |
+                       (static_cast<u32>(lpucKeyCount[1]) << 8) |
+                       (static_cast<u32>(lpucKeyCount[2]) << 16) |
+                       (static_cast<u32>(lpucKeyCount[3]) << 24);
+        s32 liKeyCount = static_cast<s32>(luKeyCount);
         lpcCursor += 4;
         while (liKeyCount > 0)
         {
             const char* lpcKey = ReadString(lpcCursor);
 
-            luSwap = 0;
-            std::memcpy(&luSwap, lpcCursor, 4);
-            u32 luType = _byteswap_ulong(luSwap);
+            const u8* lpucType = reinterpret_cast<const u8*>(lpcCursor);
+            const u32 luType = static_cast<u32>(lpucType[0]) |
+                               (static_cast<u32>(lpucType[1]) << 8) |
+                               (static_cast<u32>(lpucType[2]) << 16) |
+                               (static_cast<u32>(lpucType[3]) << 24);
             lpcCursor += 4;
 
             const void* lpContent = 0;
@@ -344,7 +352,7 @@ namespace GameTalk
         return lpMessage;
     }
 
-    // @ 0x82837B50 -- serialize the message into a freshly package-allocated big-endian
+    // @ 0x82837B50 -- serialize the message into a freshly package-allocated little-endian
     // wire buffer. Layout mirrors Create().
     u32 GameTalkMessage::CreateBuffer(const char* lpcKey, void** lppOutBuffer)
     {
@@ -362,63 +370,77 @@ namespace GameTalk
 
         CGS_ASSERT(CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator() != 0,
                    "sbHasLinearAllocator");
-        char* lpcOut = static_cast<char*>(
+        u8* lpuOut = static_cast<u8*>(
             CgsAttribSys::AttribSysMemoryManager::GetGameTalkAllocator()->Malloc(luTotal, 0));
-        *lppOutBuffer = lpcOut;
+        *lppOutBuffer = lpuOut;
 
-        u32 luSwap;
+        lpuOut[0] = static_cast<u8>((luTotal) >> 0);
+        lpuOut[1] = static_cast<u8>((luTotal) >> 8);
+        lpuOut[2] = static_cast<u8>((luTotal) >> 16);
+        lpuOut[3] = static_cast<u8>((luTotal) >> 24);
+        lpuOut += 4;
 
-        luSwap = _byteswap_ulong(luTotal);
-        std::memcpy(lpcOut, &luSwap, 4);
-        lpcOut += 4;
+        lpuOut[0] = static_cast<u8>((luKeyLen) >> 0);
+        lpuOut[1] = static_cast<u8>((luKeyLen) >> 8);
+        lpuOut[2] = static_cast<u8>((luKeyLen) >> 16);
+        lpuOut[3] = static_cast<u8>((luKeyLen) >> 24);
+        lpuOut += 4;
 
-        luSwap = _byteswap_ulong(luKeyLen);
-        std::memcpy(lpcOut, &luSwap, 4);
-        lpcOut += 4;
+        std::memcpy(lpuOut, lpcKey, luKeyLen);
+        lpuOut += luKeyLen;
 
-        std::memcpy(lpcOut, lpcKey, luKeyLen);
-        lpcOut += luKeyLen;
-
-        luSwap = _byteswap_ulong(luBodyLen);
-        std::memcpy(lpcOut, &luSwap, 4);
-        lpcOut += 4;
+        lpuOut[0] = static_cast<u8>((luBodyLen) >> 0);
+        lpuOut[1] = static_cast<u8>((luBodyLen) >> 8);
+        lpuOut[2] = static_cast<u8>((luBodyLen) >> 16);
+        lpuOut[3] = static_cast<u8>((luBodyLen) >> 24);
+        lpuOut += 4;
 
         const u32 luChannelLen =
             static_cast<u32>(rw::core::stdc::StringLength(mpcChannel));
-        luSwap = _byteswap_ulong(luChannelLen);
-        std::memcpy(lpcOut, &luSwap, 4);
-        lpcOut += 4;
+        lpuOut[0] = static_cast<u8>((luChannelLen) >> 0);
+        lpuOut[1] = static_cast<u8>((luChannelLen) >> 8);
+        lpuOut[2] = static_cast<u8>((luChannelLen) >> 16);
+        lpuOut[3] = static_cast<u8>((luChannelLen) >> 24);
+        lpuOut += 4;
 
-        std::memcpy(lpcOut, mpcChannel, luChannelLen);
-        lpcOut += luChannelLen;
+        std::memcpy(lpuOut, mpcChannel, luChannelLen);
+        lpuOut += luChannelLen;
 
         const u32 luNumKeys = static_cast<u32>(miNumKeys);
-        luSwap = _byteswap_ulong(luNumKeys);
-        std::memcpy(lpcOut, &luSwap, 4);
-        lpcOut += 4;
+        lpuOut[0] = static_cast<u8>((luNumKeys) >> 0);
+        lpuOut[1] = static_cast<u8>((luNumKeys) >> 8);
+        lpuOut[2] = static_cast<u8>((luNumKeys) >> 16);
+        lpuOut[3] = static_cast<u8>((luNumKeys) >> 24);
+        lpuOut += 4;
 
         for (s32 liEntry = 0; liEntry < static_cast<s32>(luNumKeys); ++liEntry)
         {
             const u32 luEntryKeyLen =
                 static_cast<u32>(rw::core::stdc::StringLength(mppEntries[liEntry]->mpcKey));
-            luSwap = _byteswap_ulong(luEntryKeyLen);
-            std::memcpy(lpcOut, &luSwap, 4);
-            lpcOut += 4;
+            lpuOut[0] = static_cast<u8>((luEntryKeyLen) >> 0);
+            lpuOut[1] = static_cast<u8>((luEntryKeyLen) >> 8);
+            lpuOut[2] = static_cast<u8>((luEntryKeyLen) >> 16);
+            lpuOut[3] = static_cast<u8>((luEntryKeyLen) >> 24);
+            lpuOut += 4;
 
-            std::memcpy(lpcOut, mppEntries[liEntry]->mpcKey, luEntryKeyLen);
-            lpcOut += luEntryKeyLen;
+            std::memcpy(lpuOut, mppEntries[liEntry]->mpcKey, luEntryKeyLen);
+            lpuOut += luEntryKeyLen;
 
-            luSwap = _byteswap_ulong(static_cast<u32>(mppEntries[liEntry]->miType));
-            std::memcpy(lpcOut, &luSwap, 4);
-            lpcOut += 4;
+            lpuOut[0] = static_cast<u8>((static_cast<u32>(mppEntries[liEntry]->miType)) >> 0);
+            lpuOut[1] = static_cast<u8>((static_cast<u32>(mppEntries[liEntry]->miType)) >> 8);
+            lpuOut[2] = static_cast<u8>((static_cast<u32>(mppEntries[liEntry]->miType)) >> 16);
+            lpuOut[3] = static_cast<u8>((static_cast<u32>(mppEntries[liEntry]->miType)) >> 24);
+            lpuOut += 4;
 
             const u32 luEntrySize = static_cast<u32>(mppEntries[liEntry]->miSize);
-            luSwap = _byteswap_ulong(luEntrySize);
-            std::memcpy(lpcOut, &luSwap, 4);
-            lpcOut += 4;
+            lpuOut[0] = static_cast<u8>((luEntrySize) >> 0);
+            lpuOut[1] = static_cast<u8>((luEntrySize) >> 8);
+            lpuOut[2] = static_cast<u8>((luEntrySize) >> 16);
+            lpuOut[3] = static_cast<u8>((luEntrySize) >> 24);
+            lpuOut += 4;
 
-            std::memcpy(lpcOut, mppEntries[liEntry]->mpContent, luEntrySize);
-            lpcOut += luEntrySize;
+            std::memcpy(lpuOut, mppEntries[liEntry]->mpContent, luEntrySize);
+            lpuOut += luEntrySize;
         }
 
         return luTotal;
@@ -518,7 +540,7 @@ namespace GameTalk
     }
 
     // @ 0x82837770 -- serialize a [key][value] keyword message into the shared scratch
-    // buffer (each field a big-endian u32 length prefix + bytes) and Send it. The
+    // buffer (each field a little-endian u32 length prefix + bytes) and Send it. The
     // total length prefixes the buffer: total = keyLen + valueLen + 12 (three u32
     // prefixes).
     s32 GameTalkManager::SendKeywordMessage(const char* lpcKey, const char* lpcValue)
@@ -528,24 +550,36 @@ namespace GameTalk
         const u32 luTotal    = luKeyLen + luValueLen + 12;
 
         u8* lpuOut = sacKeywordScratch;
-        u32 luSwap;
 
-        // [+0x00] total length (big-endian).
-        luSwap = _byteswap_ulong(luTotal);
-        std::memcpy(lpuOut, &luSwap, 4);
+        // [+0x00] total length (little-endian).
+        lpuOut[0] = static_cast<u8>((luTotal) >> 0);
+        lpuOut[1] = static_cast<u8>((luTotal) >> 8);
+        lpuOut[2] = static_cast<u8>((luTotal) >> 16);
+        lpuOut[3] = static_cast<u8>((luTotal) >> 24);
 
-        // [+0x04] key length (big-endian), [+0x08] key bytes.
-        luSwap = _byteswap_ulong(luKeyLen);
-        std::memcpy(lpuOut + 4, &luSwap, 4);
+        // [+0x04] key length (little-endian), [+0x08] key bytes.
+        (lpuOut + 4)[0] = static_cast<u8>((luKeyLen) >> 0);
+        (lpuOut + 4)[1] = static_cast<u8>((luKeyLen) >> 8);
+        (lpuOut + 4)[2] = static_cast<u8>((luKeyLen) >> 16);
+        (lpuOut + 4)[3] = static_cast<u8>((luKeyLen) >> 24);
         rw::core::stdc::StringnCopy(reinterpret_cast<char*>(lpuOut + 8), lpcKey, luKeyLen);
 
-        // [after the key] value length (big-endian) + value bytes.
+        // [after the key] value length (little-endian) + value bytes.
         u8* lpuValue = lpuOut + 8 + luKeyLen;
-        luSwap = _byteswap_ulong(luValueLen);
-        std::memcpy(lpuValue, &luSwap, 4);
+        lpuValue[0] = static_cast<u8>((luValueLen) >> 0);
+        lpuValue[1] = static_cast<u8>((luValueLen) >> 8);
+        lpuValue[2] = static_cast<u8>((luValueLen) >> 16);
+        lpuValue[3] = static_cast<u8>((luValueLen) >> 24);
         rw::core::stdc::StringnCopy(reinterpret_cast<char*>(lpuValue + 4), lpcValue, luValueLen);
 
         return mpProtocol->Send(lpuOut, static_cast<s32>(luTotal));
+    }
+
+    // Inlined by ARTIST CgsGameTalk::GameTalk::Update82837740..7750:
+    // manager-owned protocol, then its actual Poll virtual at slot3/+0xC.
+    void GameTalkManager::Update()
+    {
+        mpProtocol->Poll();
     }
 
     // @ 0x82838508 -- serialize rMessage under lpcEndpoint and Send it over the
@@ -709,13 +743,13 @@ namespace GameTalk
 
     // The transport receive trampoline the manager installs on its protocol at
     // construction. lpacMessage is a raw run of wire records; each record opens with a
-    // big-endian u32 payload length, so the step to the next record is that length plus
+    // little-endian u32 payload length, so the step to the next record is that length plus
     // the four bytes of the prefix itself. Each record is decoded into a message, routed,
     // and released (dtor + the GameTalk package free -- Create package-allocates it, so
     // this is not an operator-delete). The routing call is made even when Create declined
     // the record and returned NULL, which is what the console does; only the release is
-    // guarded. The record walk compares signed, so a length with the top bit set ends the
-    // loop immediately rather than running away.
+    // guarded. The total luLength argument is compared signed, so a total with
+    // its top bit set skips the walk; each record step retains low32-bit addition.
     void GameTalkManager::ReceiverCallback(const char* lpacMessage, u32 luLength)
     {
         const s32 liLength = static_cast<s32>(luLength);
@@ -725,9 +759,12 @@ namespace GameTalk
         {
             const char* lpcRecord = lpacMessage + liOffset;
 
-            u32 luSwap = 0;
-            std::memcpy(&luSwap, lpcRecord, 4);
-            const s32 liStep = static_cast<s32>(_byteswap_ulong(luSwap)) + 4;
+            const u8* lpucLength = reinterpret_cast<const u8*>(lpcRecord);
+            const u32 luRecordLength = static_cast<u32>(lpucLength[0]) |
+                                       (static_cast<u32>(lpucLength[1]) << 8) |
+                                       (static_cast<u32>(lpucLength[2]) << 16) |
+                                       (static_cast<u32>(lpucLength[3]) << 24);
+            const u32 luStep = luRecordLength + 4u;
 
             GameTalkMessage* lpMessage = GameTalkMessage::Create(lpcRecord);
             ReceiveMessage(lpMessage);
@@ -737,7 +774,8 @@ namespace GameTalk
                 EA::GameTalk::Free(lpMessage);
             }
 
-            liOffset += liStep;
+            // ARTIST82839224 adds the low32 bits, then compares signed.
+            liOffset = static_cast<s32>(static_cast<u32>(liOffset) + luStep);
         }
     }
 }
