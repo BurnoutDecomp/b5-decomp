@@ -1870,8 +1870,8 @@ namespace BrnGui
 //
 // COMPONENT DEFERRALS. Same rule and same idiom as the sibling BrnFBurnMainHudState.cpp: an
 // arm whose method has no declaration yet keeps the console gate and control flow verbatim and
-// logs the gap once instead of inventing a body. Deferred here: HandleMugshotEvent (not
-// declared -- it is in the header's RESIDUE block).
+// logs the gap once instead of inventing a body. Nothing is deferred here any more:
+// HandleMugshotEvent landed with DoMugshot / DoRoadRuleShot.
 
 namespace BrnGui
 {
@@ -2231,12 +2231,7 @@ namespace BrnGui
                 break;
             case 325:
                 if (mbMugShotComponent)
-                {
-                    // FLAG deferred: HandleMugshotEvent @0x82475CD0 is in the header's
-                    // RESIDUE block -- its GuiMugshotControlEvent parameter type is still
-                    // an opaque payload with no named fields, so it has no declaration to call.
-                    LogDeferredComponent("RaceMainHudState::HandleMugshotEvent");
-                }
+                    HandleMugshotEvent(reinterpret_cast<const GuiMugshotControlEvent*>(lpEvent));
                 break;
             case 333:   // GuiEventRoadRuleEnter
                 if (mbRoadRuleComponent)
@@ -3244,5 +3239,167 @@ namespace BrnGui
                            GuiTickerCustomMessagePayload537::E_STRINGTYPE_STRINGID);  // li r5, 2
 
         PostTickerCustomMessage537(mpStateInterface, lMessage);
+    }
+
+    // ------------------------------------------------------------------------
+    // The Payback mugshot / road-rule-shot overlay (event 325, GuiMugshotControlEvent).
+    //
+    // The static tables below were read out of the ARTIST image (0x82F26030 / 0x82F260C0 /
+    // 0x82F260D8); each is indexed by the event's image type (the first also by response).
+    // ------------------------------------------------------------------------
+    namespace
+    {
+        const s32 KI_MUGSHOT_IMAGE_TYPES       = 3;   // 0 TD aggressor, 1 EM aggressor, 2 Payback
+        const s32 KI_MUGSHOT_RESPONSES         = 6;   // GameStateModuleIO::EMugshotResponse count
+        const s32 KI_IMAGE_TYPE_ROAD_RULE_NEW  = 3;   // the road-rule-shot arms of HandleMugshotEvent
+        const s32 KI_IMAGE_TYPE_ROAD_RULE_OLD  = 4;
+
+        enum EMugshotResponseCode
+        {
+            E_RESPONSE_CAPTURE         = 1,
+            E_RESPONSE_TAKE            = 2,
+            E_RESPONSE_SHOW            = 3,
+            E_RESPONSE_STOP_MY_MUGSHOT = 4,
+            E_RESPONSE_STOP_OTHER      = 5
+        };
+
+        // dword_82F26030: the mugshot icon's state name per [image type][response]; NULL = no change.
+        const char* const KAPC_MUGSHOT_STATE[KI_MUGSHOT_IMAGE_TYPES][KI_MUGSHOT_RESPONSES] =
+        {
+            { 0, "TdAggStart", 0, "TdAggClick", "invisible", "invisible" },
+            { 0, "EMAggStart", 0, "EMAggClick", "invisible", "invisible" },
+            { 0, "PbVicStart", "PbVicClick", "PbAggClick", "invisible", "invisible" }
+        };
+        // off_82F260C0: the "receiving from" gamertag line's string id per image type.
+        const char* const KAPC_MUGSHOT_RECEIVING_TEXT[KI_MUGSHOT_IMAGE_TYPES] =
+        {
+            "MUGSHOT_RECEIVING_FROM", "EVENT_MUGSHOT_RECEIVING_FROM", ""
+        };
+        // off_82F260D8: the line shown once the picture is taken (response 3).
+        const char* const KAPC_MUGSHOT_LINEUP_TEXT[KI_MUGSHOT_IMAGE_TYPES] =
+        {
+            "IN_LINEUP", "IN_LINEUP", ""
+        };
+
+        // The scan DoMugshot and DoRoadRuleShot both run: the online player record whose active
+        // race car is the shot's opponent, or NULL (the +276 field of the eight 312-byte records).
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* FindOpponentRecord(
+            const GuiCache* lpCache, s32 liOpponentRaceCarIndex)
+        {
+            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+            {
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
+                    lpCache->GetOnlinePlayerInfo(liPlayer);
+                if (lpInfo->meActiveRaceCarIndex == liOpponentRaceCarIndex)
+                    return lpInfo;
+            }
+            return 0;
+        }
+
+        // The record's online name (+256). FLAG PC guard: the console adds the +256 to the scan's
+        // result unconditionally, so a missed scan hands SetLocalisedText the bare address 0x100,
+        // which would fault; the empty string stands in.
+        const char* OpponentName(const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo)
+        {
+            return lpInfo ? lpInfo->mPlayerName.GetPlayerName() : "";
+        }
+    }
+
+    // @0x82475CD0 -- DWARF .cpp:3890.
+    void RaceMainHudState::HandleMugshotEvent(const GuiMugshotControlEvent* lpEvent)
+    {
+        if (lpEvent->meImageType == KI_IMAGE_TYPE_ROAD_RULE_NEW || lpEvent->meImageType == KI_IMAGE_TYPE_ROAD_RULE_OLD)
+            DoRoadRuleShot(lpEvent);
+        else
+            DoMugshot(lpEvent);
+
+        CGS_ASSERT(mpCache != 0, "mpCache");                                         // :3844 (non-gating)
+
+        // Online free-burn lobby / showtime: a stop response also hides the lot.
+        const bool lbOnlineMode = (mpCache->GetGameMode() == 15 || mpCache->GetGameMode() == 16);
+        if (lbOnlineMode
+            && (lpEvent->meMugshotResponse == E_RESPONSE_STOP_MY_MUGSHOT
+                || lpEvent->meMugshotResponse == E_RESPONSE_STOP_OTHER))
+        {
+            mMugShotComponent.SetState("invisible");
+            mMugshotOpponentGamertag.ClearText();
+            mRoadRuleShotComponent.Hide();
+        }
+    }
+
+    // @0x82474B20 -- DWARF .cpp:3916.
+    void RaceMainHudState::DoMugshot(const GuiMugshotControlEvent* lpEvent)
+    {
+        const s32 liResponse  = lpEvent->meMugshotResponse;
+        const s32 liImageType = lpEvent->meImageType;
+        const char* const lpcState = KAPC_MUGSHOT_STATE[liImageType][liResponse];   // dword_82F26030[6 * type + response]
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "Setting a mugshot state (event hud)\nImage type : " << liImageType
+                                       << "\nMugshot response : " << liResponse << "\n";
+        }
+
+        if (lpcState == 0)
+            return;
+
+        mMugShotComponent.SetState(lpcState);
+
+        switch (liResponse)
+        {
+        case E_RESPONSE_CAPTURE:
+        {
+            mMugshotDIARRHiderComponent.Run("invisible");
+            const char* const lpcName = OpponentName(FindOpponentRecord(mpCache, lpEvent->miOpponentRaceCarIndex));
+            mMugshotOpponentGamertag.SetLocalisedText(KAPC_MUGSHOT_RECEIVING_TEXT[liImageType], 9, 1, lpcName, 0);
+            break;
+        }
+        case E_RESPONSE_SHOW:
+            mMugshotOpponentGamertag.SetLocalisedText(KAPC_MUGSHOT_LINEUP_TEXT[liImageType], 9);
+            break;
+        case E_RESPONSE_STOP_MY_MUGSHOT:
+        case E_RESPONSE_STOP_OTHER:
+            mMugshotDIARRHiderComponent.Run("visible");
+            mMugshotOpponentGamertag.ClearText();
+            break;
+        default:
+            mMugshotOpponentGamertag.ClearText();
+            break;
+        }
+    }
+
+    // @0x82474D10 -- DWARF .cpp:3983.
+    void RaceMainHudState::DoRoadRuleShot(const GuiMugshotControlEvent* lpEvent)
+    {
+        switch (lpEvent->meMugshotResponse)
+        {
+        case E_RESPONSE_CAPTURE:
+        case E_RESPONSE_SHOW:
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpOpponent =
+                FindOpponentRecord(mpCache, lpEvent->miOpponentRaceCarIndex);
+            if (lpOpponent == 0)
+                return;
+            // r6 = the record's online name (+0x100), r7 = the road id (ld 0(event)).
+            mRoadRuleShotComponent.SetupComponent(RoadRuleShotComponent::E_PLAYER_STATE_RACING,
+                                                  !lpEvent->mbLocalAggressor, OpponentName(lpOpponent),
+                                                  lpEvent->muRoadId,
+                                                  lpEvent->meImageType == KI_IMAGE_TYPE_ROAD_RULE_NEW);
+            if (lpEvent->meMugshotResponse == E_RESPONSE_CAPTURE)
+                mRoadRuleShotComponent.Show(false);
+            else
+                mRoadRuleShotComponent.Snap(false);
+            break;
+        }
+        case E_RESPONSE_TAKE:
+            mRoadRuleShotComponent.Snap(false);
+            break;
+        case E_RESPONSE_STOP_MY_MUGSHOT:
+        case E_RESPONSE_STOP_OTHER:
+            mRoadRuleShotComponent.Hide();
+            break;
+        default:
+            break;
+        }
     }
 }

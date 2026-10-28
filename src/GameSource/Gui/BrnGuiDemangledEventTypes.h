@@ -625,7 +625,23 @@ namespace BrnGui
     // { EActiveRaceCarIndex, f32 metres } (DWARF :6136 / :6126).
     struct GuiLeaptVehicleEvent { u8 maData[1]; s32 GetEventType() const { return 393; } };  // id 393 size 1 (raw; size not GuiEvent-shaped)
     struct GuiLocalPlayerEliminatedEvent { u8 maData[1]; s32 GetEventType() const { return 451; } };  // id 451 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiMugshotControlEvent : public CgsGui::GuiEvent<325> { u8 maPayload[12]; };  // id 325 size 24 (12B GuiEvent header + opaque payload)
+    // id 325, 24 bytes. Named from the console's own readers and writers: RaceMainHudState::DoMugshot
+    // @0x82474B20 / DoRoadRuleShot @0x82474D10 read response@+8, image type@+0xC, opponent race-car
+    // index@+0x10 and the local-aggressor byte@+0x14, and the road id (an 8-byte CgsID) is handed to
+    // RoadRuleShotComponent::SetupComponent from +0x00. The producers (the GameState and Network
+    // bridges, case 325) write these offsets byte for byte. The record has no GuiEvent header.
+    struct GuiMugshotControlEvent
+    {
+        CgsID muRoadId;                    // +0x00 road-rule road (response 1/3 with image type 3/4)
+        s32   meMugshotResponse;           // +0x08 GameStateModuleIO::EMugshotResponse
+        s32   meImageType;                 // +0x0C 0 TD agg, 1 EM agg, 2 payback, 3/4 road-rule shot
+        s32   miOpponentRaceCarIndex;      // +0x10 EActiveRaceCarIndex of the shot's opponent
+        bool  mbLocalAggressor;            // +0x14
+        u8    maPad[3];                    // +0x15
+
+        s32 GetEventType() const { return 325; }
+    };
+    static_assert(sizeof(GuiMugshotControlEvent) == 24, "X360 AddGuiEvent size 24 (id 325)");
     // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4392 {miCount,
     // meNearMissType}. The manager's RecvEvent case 384 reads both words and treats
     // NEAR_MISS_TYPE 2/3 (the two crash-escape flavours) as "crash escape" (@0x82420BF0).
