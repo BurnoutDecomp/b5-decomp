@@ -1,6 +1,7 @@
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
 #include <cmath>
+#include <cfloat>
 // Behaviour pools and frame dispatch. ARTIST is the behaviour authority;
 // named member shapes come from DecFIGS. The pre-scene pass advances camera
 // responders and rotation, and the collision pass republishes their current state.
@@ -15,8 +16,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
-#include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
-#include <cstring>   // strncmp (BRN_CAMPOOL_DIAG)
 
 // The behaviour-type homes, pulled in so each AllocateBehaviour<TBehaviour> explicit
 // instantiation (below) sees a COMPLETE TBehaviour (AllocateVoid<T> needs sizeof(T) + a
@@ -73,69 +72,6 @@ namespace BrnDirector
 {
 namespace Camera
 {
-    namespace
-    {
-        // [diag, NOT X360] BRN_CRASHCAM_DIAG (the crash-camera diag family): name the behaviour a
-        // collision-policy failure takes down. Capped; silent without the variable.
-
-        // [diag, NOT X360] BRN_CAMPOOL_DIAG (owner's list 2026-09-27, L1 CAMPOOL): one line per camera
-        // behaviour the manager brings up ('+', PrepareBehaviours) or hands back ('-', ReleaseBehaviours) --
-        // its full debug name, its size, the pool it lives in, both pools' free counts and their
-        // low-water marks over the session. The witness for "the large pool runs dry": the owner's
-        // crash was the eight large slots all taken.
-        //
-        // It also prints what the LARGE pool would hold on the code before 2026-09-27 for the very
-        // same live set (routing never changes which behaviours exist, only where they live):
-        //     old large free = large free
-        //                    - live small-pool behaviours larger than the console's 1600-byte small
-        //                      bucket (the old rule sent those to the large pool: GyroCam, 1632 here)
-        //                    - large behaviours handed back by ArbStateCarSelect (the old build had no
-        //                      ArbStateCarSelect::Release, so it never handed them back; exact for one
-        //                      junkyard visit per session -- on a second visit the old build's Prepare
-        //                      re-used those handles, so it held at most the latest set)
-        // When that reaches 0 and another such behaviour is allocated, the old build asserted "Ran out of
-        // slots when trying to allocate a large behaviour" and read ObjectPool::operator[](-1).
-        // The counters run whenever the variable is set; only the printing is capped.
-
-        s32 siCampoolHostLargeInSmall  = 0;   // live small-pool behaviours over the console's 1600 bytes
-        s32 siCampoolCarSelectLargeHeld = 0;  // large behaviours the old build's car select never released
-
-        void CampoolCount(char lcEvent, const char* lpcFullName, s32 liSizeBytes, bool lbSmall, bool lbLarge)
-        {
-            const s32 liSign = (lcEvent == '+') ? 1 : -1;
-            if (lbSmall && liSizeBytes > static_cast<s32>(BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE
-                                                          * sizeof(rw::math::vpu::Vector4)))
-                siCampoolHostLargeInSmall += liSign;
-            if (lcEvent == '-' && lbLarge && std::strncmp(lpcFullName, "ArbStateCarSelect::", 19) == 0)
-                ++siCampoolCarSelectLargeHeld;
-        }
-
-        void CampoolWitness(char lcEvent, const char* lpcFullName, s32 liSizeBytes, const char* lpcPool,
-                            s32 liLargeFree, s32 liSmallFree, u32 luLiveBehaviours)
-        {
-            static s32 siLargeLow    = 0x7FFFFFFF;
-            static s32 siSmallLow    = 0x7FFFFFFF;
-            static s32 siOldLargeLow = 0x7FFFFFFF;
-            static s32 siLinesLeft   = 3000;
-            const s32 liOldLargeFree = liLargeFree - siCampoolHostLargeInSmall - siCampoolCarSelectLargeHeld;
-            if (liLargeFree < siLargeLow)
-                siLargeLow = liLargeFree;
-            if (liSmallFree < siSmallLow)
-                siSmallLow = liSmallFree;
-            if (liOldLargeFree < siOldLargeLow)
-                siOldLargeLow = liOldLargeFree;
-            if (siLinesLeft <= 0)
-                return;
-            --siLinesLeft;
-            const char lacEvent[2] = { lcEvent, 0 };
-            *CgsDev::Log::gpDebugPrint << "[campool] " << lacEvent << " " << lpcFullName
-                                       << " size " << liSizeBytes << " pool " << lpcPool
-                                       << " | large free " << liLargeFree << " (low " << siLargeLow << ")"
-                                       << " small free " << liSmallFree << " (low " << siSmallLow << ")"
-                                       << " live " << luLiveBehaviours
-                                       << " | old large free " << liOldLargeFree << " (low " << siOldLargeLow << ")\n";
-        }
-    }
 
     // ========================================================================
     // BehaviourManager::Construct  @0x82251778
@@ -191,7 +127,7 @@ namespace Camera
         mBehaviourUsedByHandleFlags.UnSetAll();              // +84680
         mBehaviourUpdateDuringPauseFlags.UnSetAll();         // +84672
 
-        mfLastHandbrakeTime      = 3.4028235e38f;            // +91072 (FLT_MAX)
+        mfLastHandbrakeTime      = FLT_MAX;            // +91072 (FLT_MAX)
         mbDebugDisplayAllCameras = false;                    // +91076
 
         // Every ref count present and zero (the X360 Append-grows the array to full length
@@ -237,7 +173,7 @@ namespace Camera
         mSmallBehaviourPool.Prepare();      // free queue @+64080, count @+64160
         mBehaviourHelperPool.Clear();       // free queue @+74928, count @+75040
 
-        mfLastHandbrakeTime = 3.4028235e38f;   // +91072 (FLT_MAX)
+        mfLastHandbrakeTime = FLT_MAX;   // +91072 (FLT_MAX)
         return true;
     }
 
@@ -852,16 +788,6 @@ namespace Camera
 
             BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
 
-            // [diag, NOT X360] BRN_CAMPOOL_DIAG: the name and pool are taken before the owners are cleared.
-            char lacWitnessName[64] = "";
-            const IAbstractPoolFreeObject* lpWitnessPool = 0;
-            s32 liWitnessSize = 0;
-            if (lbWitness)
-            {
-                lrHelper.GetDebugFullName(lacWitnessName);
-                lpWitnessPool = lrHelper.GetPoolHandle().GetFreeObjectInterface();
-                liWitnessSize = lrHelper.GetPoolHandle().GetSize();
-            }
 
             lLockInterface.SetBehaviourHelperIndex(lHelper);
 
@@ -879,16 +805,6 @@ namespace Camera
 
             mBehaviourNeedsReleasingFlags.UnSetBit(static_cast<u32>(liHelper));
 
-            if (lbWitness)
-            {
-                const bool lbLarge = (lpWitnessPool == &mLargeBehaviourPool);
-                const bool lbSmall = (lpWitnessPool == &mSmallBehaviourPool);
-                CampoolCount('-', lacWitnessName, liWitnessSize, lbSmall, lbLarge);
-                CampoolWitness('-', lacWitnessName, liWitnessSize,
-                               lbLarge ? "LARGE" : (lbSmall ? "SMALL" : "?"),
-                               mLargeBehaviourPool.GetNumFreeObjects(), mSmallBehaviourPool.GetNumFreeObjects(),
-                               mBehaviourHelperIndexArray.GetLength());
-            }
         }
     }
 
@@ -900,7 +816,7 @@ namespace Camera
         info.mCameraModifier = controller.mCameraModifier;
         info.mbUseControlPauseBehaviour = paused;
         info.mbLookback = controller.mbLookback;
-        const auto& velocityJournal = info.mpPlayerTracker->GetLinearVelocityJournal();
+        const VehicleTracker::Vector3Journal& velocityJournal = info.mpPlayerTracker->GetLinearVelocityJournal();
         if (velocityJournal.GetSize() > 0)
         {
             const Vector3 velocity = velocityJournal[0];
@@ -911,22 +827,11 @@ namespace Camera
             info.mbLookback = controller.mbLookback && !crashing;
         }
         // VMX vperm 82CDA350 selects {-x, y, -x, -x}.
-        info.mCarModifier = {-controller.mCarModifier.x, controller.mCarModifier.y,
-                            -controller.mCarModifier.x, -controller.mCarModifier.x};
+        const Vector2 carModifier = {-controller.mCarModifier.x, controller.mCarModifier.y,
+                                     -controller.mCarModifier.x, -controller.mCarModifier.x};
+        info.mCarModifier = carModifier;
 
-        // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. Sits HERE, in
-        // PublishControllerState, because it is the one point BOTH update passes go
-        // through (UpdateAllBehaviours and PostCollisionUpdateAllBehaviours) -- an earlier
-        // placement in UpdateAllBehaviours alone printed ONCE in a 130 s run and said
-        // nothing about the in-game frames, which take the PostCollision path.
-        //
-        // It reads the values as the CONSUMER receives them, so it proves the whole
-        // pad -> BridgeControllerToDirector -> SetControllerInfo -> BehaviourSharedInfo
-        // path, not merely that the bridge ran. Prints on CHANGE only: a held stick or
-        // bumper gives one line down and one up. Before the bridge had a caller at all,
-        // every field below read zero/false for the entire session.
-        {
-        }
+
     }
 
     // ARTIST 82251960: responders, controllers, then every live behaviour.
@@ -935,7 +840,7 @@ namespace Camera
                                                DebugPrinter& lrDebugPrinter)
     {
         (void)lbArg;
-        const auto& player = lrSharedInfo.mPlayerInfo.mRaceCarState;
+        const BrnPhysics::Vehicle::RaceCarState& player = lrSharedInfo.mPlayerInfo.mRaceCarState;
         mTempCameraBoostResponder.Update(player.mfTimeBoosting > 0.0f && player.mfSpeedMPH > 100.0f,
             lrSharedInfo.mTimestep.Get(Timestep::E_WORLD));
         mSpeedResponder.Update(player.mfSpeedMPH, player.mfMaxBoostSpeedMPH);
@@ -952,7 +857,7 @@ namespace Camera
         lrSharedInfo.mfSpeedRatio = mSpeedResponder.GetSpeedRatio();
         if (lrControllerInfo.mbHandbrake)
             mfLastHandbrakeTime = 0.0f;
-        else if (mfLastHandbrakeTime < 3.4028235e38f)
+        else if (mfLastHandbrakeTime < FLT_MAX)
             mfLastHandbrakeTime += lrSharedInfo.mTimestep.Get(Timestep::E_WORLD_NO_SLOMO);
         lrSharedInfo.mfLastHandbrakeTime = mfLastHandbrakeTime;
 
@@ -1211,15 +1116,6 @@ namespace Camera
     // pool its console sibling reads (ConsoleBehaviourPool, BrnBehaviourManager.h):
     //   LARGE pool: Failsafe GameplayBumper GameplayExternal IceAnim.
     //   SMALL pool: all others -- GyroCam included.
-    // ⛔ RETIRED 2026-09-27: the pool used to be chosen HERE from the host sizeof against the
-    // console's 1600-byte bucket. GyroCam fills that bucket exactly on the console (0x640,
-    // `li r7,0x640` @0x822598D8) and measures 1632 here, so every gyro rig went to the 8-slot
-    // large pool. The note that stood here called that "headroom, but not the console's"; the
-    // owner's crash dumps measured the headroom: four GyroCams (three tumbling moments and the
-    // take-down) beside the two gameplay cameras and the car-select's two ICE takes filled all
-    // eight large slots, and the take-down's second rig asserted "Ran out of slots when trying
-    // to allocate a large behaviour" and read ObjectPool::operator[](-1). Now the small bucket
-    // is widened for the host instead (KU_SMALL_BEHAVIOUR_POOL_UNITS) -- pinned just below.
     // IceAnim / RenderMetrics / Rig are instantiated in their own isolated TUs (their headers'
     // shared-slice re-declarations collide with each other and with the real shared headers).
     // ========================================================================

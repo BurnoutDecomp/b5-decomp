@@ -333,13 +333,6 @@ namespace Camera
             using BrnDirector::VehicleRef::IsValid;
         };
 
-        Behaviour()
-            : meTimestepType(BrnDirector::Timestep::E_WORLD),
-              mbIsPrepared(false), mbHasFailed(false), mbTweakerAttached(false),
-              mbCanSwitchToMeNow(false), mbCanSwitchFromMeNow(false),
-              mpcDebugParametersName(0)
-        {}
-
         // ---- the virtual interface (see the vtable table in the file banner) -----------
         virtual void Construct();                                                    // slot 0
         virtual bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo);       // slot 1

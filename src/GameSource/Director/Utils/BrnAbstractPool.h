@@ -16,6 +16,7 @@
 #pragma once
 
 #include "types.hpp"   // s32, bool
+#include <cstddef>
 #include <new>         // placement new (AbstractPool::AllocateVoid constructs in-slot)
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h" // CgsContainers::ObjectPool
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
@@ -29,8 +30,6 @@ namespace BrnDirector
 class IAbstractPoolFreeObject
 {
 public:
-    virtual ~IAbstractPoolFreeObject() {}
-
     // The pool frees the object occupying slot liIndex. Pure virtual: every concrete
     // AbstractPool<N,ALIGN,T> overrides it. (Signature is the minimal shape the handle
     // needs; the concrete arity lives with the pool template.)
@@ -54,8 +53,7 @@ public:
     // BehaviourManager::ReleaseBehaviours @0x8221FDE8, which inlines it as
     //     freeIface = handle.mpFreeObjectInterface;  (*(*freeIface))(freeIface, handle.miIndex)
     // -- i.e. a virtual FreeObject on the owning pool with the slot index. (The console's
-    // interface has FreeObject in vtable slot 0, so it has no virtual destructor there; the
-    // host interface keeps one, which shifts the slot but not the semantics.) The console
+    // interface has FreeObject in vtable slot0, with no virtual destructor.) The console
     // does NOT clear the handle afterwards, so neither does this.
     bool Release()
     {
@@ -72,10 +70,6 @@ public:
     const void* Get() const       { return mpObject; }
     s32         GetSize() const   { return miSize; }
 
-    // The pool that served the object (the +0x04 word). Read by the behaviour manager's
-    // BRN_CAMPOOL_DIAG witness to name which of its two pools a behaviour lives in.
-    const IAbstractPoolFreeObject* GetFreeObjectInterface() const { return mpFreeObjectInterface; }
-
     bool        operator==(const AbstractPoolVoidHandle& lrOther) const;
 
 protected:
@@ -84,6 +78,16 @@ protected:
     IAbstractPoolFreeObject* mpFreeObjectInterface; // +0x04  owning pool (free callback)
     s32                      miIndex;               // +0x08  slot index within the pool
     s32                      miSize;                // +0x0C  slot/object byte size
+
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(IAbstractPoolFreeObject) == 4), "ARTIST pool callback");
+        CGS_STATIC_ASSERT((sizeof(AbstractPoolVoidHandle) == 16), "ARTIST pool handle");
+        CGS_STATIC_ASSERT((offsetof(AbstractPoolVoidHandle, mpObject) == 0), "pool object");
+        CGS_STATIC_ASSERT((offsetof(AbstractPoolVoidHandle, mpFreeObjectInterface) == 4), "pool callback");
+        CGS_STATIC_ASSERT((offsetof(AbstractPoolVoidHandle, miIndex) == 8), "pool index");
+        CGS_STATIC_ASSERT((offsetof(AbstractPoolVoidHandle, miSize) == 12), "pool object size");
+    }
 };
 
 // Fixed-capacity typed object pool, modelled on the Feb-2007 BrnAbstractPool.h template
@@ -97,8 +101,7 @@ protected:
 // DWARF (BrnAbstractPool.h): MomentController's pool is AbstractPool<70,20,Vector4>, i.e.
 // ObjectPool<rw::math::vpu::Vector4[70],20,int32_t>.
 //
-// Layout note: x64 host build -- the vptr/pointer widths differ from the X360, so no
-// absolute member offset is pinned (semantic parity, not byte-matching).
+// The Xbox pool keeps its four-byte callback vptr before the aligned object pool.
 template <u32 units_in_bucket, u32 num_buckets, class unit_type = char>
 class AbstractPool : public IAbstractPoolFreeObject
 {
@@ -149,7 +152,7 @@ public:
         CGS_ASSERT(liIndex >= 0, "AbstractPool : out of space");
 
         void* lpSlot = static_cast<void*>(mObjectPool[liIndex]);
-        T* lpObject = new (lpSlot) T();   // construct a fresh T in the slot (X360 default-init)
+        T* lpObject = new (lpSlot) T;     // native default initialization, no slot-wide zero fill
 
         AbstractPoolVoidHandle lHandle;
         lHandle.Prepare(this, static_cast<void*>(lpObject), liIndex,
