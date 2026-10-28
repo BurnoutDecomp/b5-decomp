@@ -244,12 +244,11 @@ namespace BrnGui
             }
         }
 
-        // The debug menu's "Hook" option list: {index, name} per hook, capped at the list.
-        s32 liListed = 0;
-        for (s32 liHook = 0; liHook < lpBundle->miHookCount && liListed < 100; ++liHook, ++liListed)
+        // The debug menu's "Hook" option list: {index, name} per bundle hook.
+        for (s32 liHook = 0; liHook < lpBundle->miHookCount; ++liHook)
         {
-            maPfxHookList[liListed].miValue = liListed;
-            maPfxHookList[liListed].mpcName = lpBundle->GetHook(liHook)->macName;
+            maPfxHookList[liHook].miValue = liHook;
+            maPfxHookList[liHook].mpcName = lpBundle->GetHook(liHook)->macName;
         }
         CgsDev::DebugInterface lDebugInterface;
         lDebugInterface.SetRange(&miPfxHookIndex, 0, lpBundle->miHookCount - 1);
@@ -1114,7 +1113,8 @@ namespace BrnGui
         EffectsArbitrator* lpArbitrator = static_cast<EffectsArbitrator*>(lpThis);
         GuiPFXHookEvent lEvent;
         lEvent.muGuid = 0;
-        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName), "%s",
+        // ARTIST passes the selected name as SPrintf's format argument in r5, with no varargs.
+        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName),
                          lpArbitrator->maPfxHookList[lpArbitrator->miPfxHookIndex].mpcName);
         const f32 lfWeight = lpArbitrator->mfBackgroundWeight;
         lEvent.mfMaximumBloomWeight        = lfWeight;
@@ -1131,7 +1131,8 @@ namespace BrnGui
         EffectsArbitrator* lpArbitrator = static_cast<EffectsArbitrator*>(lpThis);
         GuiPFXStartBackgroundHookEvent lEvent;
         lEvent.muGuid = 0;
-        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName), "%s",
+        // ARTIST passes the selected name as SPrintf's format argument in r5, with no varargs.
+        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName),
                          lpArbitrator->maPfxHookList[lpArbitrator->miPfxHookIndex].mpcName);
         lEvent.mfMaximumWeight = lpArbitrator->mfBackgroundWeight;
         lpArbitrator->StartBackgroundHook(&lEvent);
