@@ -1547,7 +1547,7 @@ void DebugComponent::DrawPhysicalVehicleState(CgsDev::Debug3DImmediateRender* lp
 namespace BrnTraffic
 {
 
-// ARTIST export hole 0x827553A8..82755844. DecFIGS 0x990D24 confirms const;
+// ARTIST 0x827553A8..0x82755844 (raw image recovery). DecFIGS confirms const;
 // muCurrentVehicleToPick must be mutable (same real u32 member, no new storage).
 void DebugComponent::DrawPickedVehicle(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
@@ -1577,12 +1577,12 @@ void DebugComponent::DrawPickedVehicle(CgsDev::Debug3DImmediateRender* lpDisplay
         const f32 lfRadiusSquared = lfRadius * lfRadius;
         const Vector3 lFromStart = lCentre - lCameraPosition;
         const Vector3 lFromEnd = lCentre - lRayEnd;
-        const f32 lfStartSquared = rw::math::vpu::Dot(lFromStart, lFromStart);
-        const f32 lfEndSquared = rw::math::vpu::Dot(lFromEnd, lFromEnd);
-        const f32 lfAlong = rw::math::vpu::Dot(lDirection, lFromStart);
+        const f32 lfStartSquared = rw::math::vpu::SLerpDetail::Dot3(lFromStart, lFromStart);
+        const f32 lfEndSquared = rw::math::vpu::SLerpDetail::Dot3(lFromEnd, lFromEnd);
+        const f32 lfAlong = rw::math::vpu::SLerpDetail::Dot3(lDirection, lFromStart);
         const VecFloat lAlong = {lfAlong, lfAlong, lfAlong, lfAlong};
         const Vector3 lPerpendicular = lFromStart - lDirection * lAlong;
-        const f32 lfPerpendicularSquared = rw::math::vpu::Dot(lPerpendicular, lPerpendicular);
+        const f32 lfPerpendicularSquared = rw::math::vpu::SLerpDetail::Dot3(lPerpendicular, lPerpendicular);
         // Literal comparison polarity preserves the VMX not-greater branches at NaN.
         const bool lbIntersects = !(lfStartSquared > lfRadiusSquared)
             || !(lfEndSquared > lfRadiusSquared)
@@ -1742,7 +1742,7 @@ void DebugComponent::DrawNearestVehicleId(CgsDev::Debug3DImmediateRender* lpDisp
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
         const Vector3 lPosition = mpModule->maVehicleTransforms[luVehicle].Pos();
         const Vector3 lOffset = lCamera - lPosition;
-        const f32 lfSquared = rw::math::vpu::Dot(lOffset, lOffset);
+        const f32 lfSquared = rw::math::vpu::SLerpDetail::Dot3(lOffset, lOffset);
         if (lfSquared < lfNearestSquared)
         {
             luNearest = luVehicle;
@@ -1771,7 +1771,7 @@ void DebugComponent::DrawVehicleIds(CgsDev::Debug3DImmediateRender* lpDisplay) c
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
         const Vector3 lPosition = mpModule->maVehicleTransforms[luVehicle].Pos();
         const Vector3 lOffset = lCamera - lPosition;
-        if (900.0f >= rw::math::vpu::Dot(lOffset, lOffset))
+        if (900.0f >= rw::math::vpu::SLerpDetail::Dot3(lOffset, lOffset))
         {
             char lacText[128];
             CgsCore::SPrintf(lacText, sizeof(lacText), "ID: %u", luVehicle);
