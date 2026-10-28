@@ -1,4 +1,5 @@
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAIDriver.h" // AIDriver speed-match flag and forced-speed accessors
 #include "GameSource/World/AI/BrnAICar_Constants.h"       // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route, RouteNode, Route::GetNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h" // RaceBalancingManager::ComputeTargetSpeed
@@ -708,6 +709,26 @@ namespace BrnAI
 
         CGS_ASSERT(meCarState == E_AI_CAR_STATE_OUT_OF_RANGE, "AI car in bad state");
         return mfSpeedOutOfRange;
+    }
+
+    // ==================================================================================
+    // IsSpeedMatching / GetSpeedMatchSpeed
+    //
+    // ARTIST RaceBalancingDebugComponent::RenderHUD @0x82796C08 first limits this readout to
+    // IN_RANGE cars, then follows AICar::mpDriver @+0x14B0. It reads AIDriver::mbUseForcedSpeed
+    // @+0x1D66 and, when true, AIDriver::mfForcedSpeed @+0x1D18. DecFIGS names both AIDriver
+    // fields, and the matching X360 offsets are pinned by AIDriver's field assertions.
+    // ==================================================================================
+    bool AICar::IsSpeedMatching() const
+    {
+        const AIDriver* lpDriver = GetDriver();
+        return lpDriver != nullptr && lpDriver->UseForcedSpeed();
+    }
+
+    f32 AICar::GetSpeedMatchSpeed() const
+    {
+        // RenderHUD calls this only after IsSpeedMatching has established a valid driver.
+        return GetDriver()->GetForcedSpeed();
     }
 
     // ==================================================================================

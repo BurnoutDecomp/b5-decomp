@@ -199,14 +199,13 @@ namespace BrnAI
         // Distance the car is ahead of the player along the route (== mfDistanceAheadOfPlayer
         // @+0x14F8). The debug HUD prints it and uses the 80m threshold to label the active graph.
         f32 GetDistanceAheadOfPlayer() const { return mfDistanceAheadOfPlayer; }
-        // Speed-matching read-out for the debug HUD. The X360 reads a sub-controller pointer at
-        // AICar+0x14B0 (only meaningful while IN_RANGE) and, when its "is speed matching" flag is
-        // set (+0x1D66 on the pointee), prints its matched speed (+0x1D18). Exposed as named
-        // accessors here; the bodies (which perform the +0x14B0 deref) live in the AICar TU.
-        // UNCERTAIN: the pointee type and the two field offsets are recovered from the debug-HUD asm
-        // only (not cross-checked against the owning class); see open questions.
-        bool IsSpeedMatching() const;                         // X360: car+0x14B0 -> [+0x1D66] (IN_RANGE only)
-        f32  GetSpeedMatchSpeed() const;                      // X360: car+0x14B0 -> [+0x1D18]
+        // Speed-match read-out for the debug HUD. ARTIST RenderHUD @0x82796C08 reads the
+        // IN_RANGE car's guest mpDriver pointer @AICar+0x14B0; that AIDriver's
+        // mbUseForcedSpeed @+0x1D66 gates the mfForcedSpeed @+0x1D18 read. DecFIGS names both
+        // AIDriver fields, and BrnAIDriver.h pins their exact X360 offsets. These wrappers forward
+        // through the host pointer installed by SetDriver; RenderHUD calls them only IN_RANGE.
+        bool IsSpeedMatching() const;
+        f32  GetSpeedMatchSpeed() const;
 
         // ---- accessors the speed + route-progress core (BrnAICar.cpp, this UNIT) call -------
         // GetDecentSpeed @0x82766030 -- the "decent" floor speed for the car's current route-

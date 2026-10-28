@@ -283,8 +283,8 @@ public:
     AISectionsData* GetAISectionsData() const;            // BrnAI::AIModule::GetAISectionsData(this)
 
     // The current AI difficulty scalar (0..1), read by RaceBalancingDebugComponent::RenderHUD as the
-    // float at this+0x4EBA4 (322404). Declared-only; body lives in the AIModule TU.
-    f32             GetDifficulty() const;                // *(this + 0x4EBA4)
+    // float at this+0x4EB64 (322404). Declared-only; body lives in the AIModule TU.
+    f32             GetDifficulty() const;                // *(this + 0x4EB64)
 
 private:
     // X360 0x82795340 (167 insns) -- stage 2 of Prepare. LoadBundle("AI.dat") then acquire
@@ -448,10 +448,10 @@ private:
     //      (:356) / mfProgressionRankAsRatio (:358) between the cursors above and this member;
     //      identity, not placement, as with everything in this block. ----
     // ---- ADDITIVE (aiwave lane A7, 2026-09-03). DWARF BrnAIModule.h:119, X360 +322404
-    //      (0x4EBA4). AIModule::OnModeStart @0x82791E3C..0x82791E40 latches the mode's own
+    //      (0x4EB64). AIModule::OnModeStart @0x82791E3C..0x82791E40 latches the mode's own
     //      `lfs f0, 4(lpGameModeParams)` -- GameModeParams::mfProgressionRankAsRatio -- into this
     //      seat, name for name. It is the same word the declared-only GetDifficulty() above says
-    //      it returns (`*(this + 0x4EBA4)`), so that accessor's body is `return
+    //      it returns (`*(this + 0x4EB64)`), so that accessor's body is `return
     //      mfProgressionRankAsRatio;` when the AIModule TU lands it. ----
     f32                 mfProgressionRankAsRatio;   // X360 +322404, DWARF :119
 

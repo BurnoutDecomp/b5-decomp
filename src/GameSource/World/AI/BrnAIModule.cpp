@@ -577,4 +577,13 @@ const AISectionsData* AIModule::GetLoadedAISectionsData() const
     return mRouteMapModule.GetAISectionsData();
 }
 
+
+    // X360 AIModule::OnModeStart @0x82791DB8 stores GameModeParams::mfProgressionRankAsRatio
+    // at module+0x4EB64; RaceBalancingDebugComponent::RenderHUD @0x82796C08 reads the same float.
+    // DecFIGS identifies the member as mfProgressionRankAsRatio (float32_t, BrnAIModule.h:119).
+    f32 AIModule::GetDifficulty() const
+    {
+        return mfProgressionRankAsRatio;
+    }
+
 }
