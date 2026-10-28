@@ -17,7 +17,7 @@
 
 namespace CgsResource
 {
-    s32 ID::HashString(const u8* lpString)
+    u64 ID::HashString(const u8* lpString)
     {
         CGS_ASSERT(lpString != 0, "lpcString != NULL");
 
@@ -34,7 +34,9 @@ namespace CgsResource
             for (s32 li = 0; li < 8; ++li)
                 luCrc = (luCrc >> 1) ^ (0xEDB88320u & (0u - (luCrc & 1u)));
         }
-        return static_cast<s32>(~luCrc);
+        // ARTIST828D8550 clears the upper32 bits before the original u64 return.
+        const u32 luHash = ~luCrc;
+        return static_cast<u64>(luHash);
     }
 
     // CgsResource::operator<< -- faithful to X360 0x826801F0. Stream-inserts a resource ID into a

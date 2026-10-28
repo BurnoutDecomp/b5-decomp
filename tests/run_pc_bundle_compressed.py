@@ -21,7 +21,7 @@ if args.drop_carry:
 driver=tree.read(resource+'CgsResourceBundleLoaderModule.cpp')
 adapter='namespace CgsResource {\n'+definition(driver,'void BundleLoaderModule::Construct()')+'\n}\n'
 hash_code='#include "GameShared/GameClasses/Core/CgsAssert.h"\n#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"\nnamespace CgsResource {\n'
-hash_code+=definition(tree.read(resource+'CgsResourceID.cpp'),'s32 ID::HashString(')+'\n}\n'
+hash_code+=definition(tree.read(resource+'CgsResourceID.cpp'),'u64 ID::HashString(')+'\n}\n'
 payload=random.Random(371).randbytes(700000)
 arrays=''
 for name,data in [('Payload',payload),('Packed',zlib.compress(payload)),('SmallPacked',zlib.compress(payload[:64]))]:
