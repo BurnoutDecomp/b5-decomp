@@ -127,8 +127,7 @@ private:
     //   +252 (0xFC) mfProgressionRankAsRatio        Start `stfs f0, 0xFC(r30)`; UpdateMaxActiveCars `addi r10, r3, 0xFC` (lvlx)
     // The console OfflineGameMode ends at +188 (its last member is miDebugDesignIndexOfLandmark-
     // ToAlwaysRaceTo @+184, BrnOfflineGameMode.h), so +188 is exactly where the DWARF's first
-    // RoadRageMode member lands -- the base and the derived agree, no padding is needed. Host
-    // offsets differ (x64 widening of the base); parity is by NAME, pinned order-only below.
+    // RoadRageMode member lands -- the base and the derived agree without padding.
 public:
     // Debug read-only accessors (BrnModeManagerDebugComponent's road-rage HUD line).
     f32 GetRoadRageMadness() const      { return mfRoadRageMadness; }
@@ -149,29 +148,23 @@ private:
     f32  mfMadnessBroadcastLevel;
     f32  mfProgressionRankAsRatio;
 
-    // ---- LAYOUT TRIPWIRE (order-only, the BrnModeManager_AssertLayout.cpp recipe) ---------------
-    // Never an absolute offset (the x64 base is wider than the console's 188 bytes); every line is a
-    // `<` so it survives the widening while still catching a re-sort of the DWARF run above, plus
-    // the two facts the asm relies on: mfHiddenTime is eight consecutive f32 (the `(idx+53)*4`
-    // index and the `mtctr 8` fill loops) and the two latch bytes are adjacent (0xF4/0xF5).
-    // Private members are only reachable from inside the class, hence the member function.
+    // Actual native offsets, attested by the ARTIST loads/stores cited above.
     static void AssertLayout()
     {
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfTransmittedRivals) >= sizeof(OfflineGameMode)),
-                      "RoadRageMode's members must follow the complete OfflineGameMode base (console +188)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfTransmittedRivals)     < offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals)), "order (console +188 < +192)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals) < offsetof(RoadRageMode, miNumberOfRivals)),                "order (console +192 < +196)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfRivals)                < offsetof(RoadRageMode, mAddCarPreDelay)),                 "order (console +196 < +200)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mAddCarPreDelay)                 < offsetof(RoadRageMode, mfRoadRageMadness)),               "order (console +200 < +204)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfRoadRageMadness)               < offsetof(RoadRageMode, mfRoadRageMadnessRatio)),          "order (console +204 < +208)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfRoadRageMadnessRatio)          < offsetof(RoadRageMode, mfHiddenTime)),                    "order (console +208 < +212)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfHiddenTime)                    < offsetof(RoadRageMode, mbUpdateRivals)),                  "order (console +212 < +244)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateRivals)                  < offsetof(RoadRageMode, mbUpdateMadnessLevel)),            "order (console +244 < +245)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateMadnessLevel)            < offsetof(RoadRageMode, mfMadnessBroadcastLevel)),         "order (console +245 < +248)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfMadnessBroadcastLevel)         < offsetof(RoadRageMode, mfProgressionRankAsRatio)),        "order (console +248 < +252)");
-        CGS_STATIC_ASSERT((sizeof(mfHiddenTime) == 8 * sizeof(f32)), "mfHiddenTime is f32[8] (console +212..+243)");
-        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateMadnessLevel) == offsetof(RoadRageMode, mbUpdateRivals) + 1),
-                      "mbUpdateRivals / mbUpdateMadnessLevel are adjacent bytes (console 0xF4 / 0xF5)");
+        CGS_STATIC_ASSERT((sizeof(OfflineGameMode) == 188), "X360 offline mode base");
+        CGS_STATIC_ASSERT((sizeof(RoadRageMode) == 256), "X360 road rage mode");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfTransmittedRivals) == 188), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals) == 192), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfRivals) == 196), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mAddCarPreDelay) == 200), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfRoadRageMadness) == 204), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfRoadRageMadnessRatio) == 208), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfHiddenTime) == 212), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateRivals) == 244), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateMadnessLevel) == 245), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfMadnessBroadcastLevel) == 248), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfProgressionRankAsRatio) == 252), "ARTIST road rage member");
+        CGS_STATIC_ASSERT((sizeof(((RoadRageMode*)0)->mfHiddenTime) == 8 * sizeof(f32)), "eight hidden-time slots");
     }
 };
 

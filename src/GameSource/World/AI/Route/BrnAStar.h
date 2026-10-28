@@ -191,7 +191,7 @@ private:
     static f32  DiagonalDistance(const AStarVector2& lA, const AStarVector2& lB);
 
     // One-axis-amplified Euclidean bias factor (rodata flt_820C478C == 500.0f).
-    static constexpr f32 KF_EUCLIDEAN_BIAS = 500.0f;
+    static const f32 KF_EUCLIDEAN_BIAS;
 
     // ---- search tuning tables / constants ----------------------------------------
     // Distance-function pointer type stored in mpDistanceFunction / the dispatch table.
@@ -216,7 +216,7 @@ private:
     // read from the image 2026-09-03; the `lvlx ; vspltw ..,0` splats lane 0 and the
     // `vandc ; vcmpgtfp` pair is |d| > eps per lane). The gate is "skip a zero-length portal
     // offset", NOT a reachability extent -- see BuildRoute.
-    static constexpr f32 KF_BUILDROUTE_DOT_SEED    = -2.0f;
+    static const f32 KF_BUILDROUTE_DOT_SEED;
     static const f32     KF_ZERO_EPSILON;
 
     AStarNodePool        mAStarNodePool;       // :280

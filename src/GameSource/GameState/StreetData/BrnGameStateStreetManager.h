@@ -648,9 +648,9 @@ namespace BrnGameState
         CgsResource::ResourcePtr<BrnAI::AISectionsData>     mpAISectionData;                   // +0x1CE8
         CgsResource::ResourceHandle              mDistrictMapResourceHandle;                   // +0x1D08
 
-                     // +0x1D10
-        GameStateModule*                         mpGameStateModule    = 0;                     // +0x1D14
-        RoadRulesManager*                        mpRoadRulesManager   = 0;                     // +0x1D18
+        BrnProgression::ProgressionManager*      mpProgressionManager;                        // +0x1D10
+        GameStateModule*                         mpGameStateModule;                           // +0x1D14
+        RoadRulesManager*                        mpRoadRulesManager;                          // +0x1D18
 
         BrnStreetData::RoadIndex                 miCurrentPlayerRoadIndex;                     // +0x1D1C (-1 init)
         BrnStreetData::RoadIndex                 miLastPlayerRoadIndex;                        // +0x1D20 (-1)
@@ -690,9 +690,9 @@ namespace BrnGameState
         bool                                     mbLockLeftSign;                               // +0x1DCE
         bool                                     mbPlayerIsInAShortcut;                        // +0x1DCF
 
-            // +0x1DD0
-        AILoadStage                              meAILoadStage          = E_AI_DATA_LOAD_NOT_STARTED;    // +0x1DD4
-        DistrictMapLoadStage                     meDistrictMapLoadStage = E_DISTRICT_MAP_LOAD_REQUEST;   // +0x1DD8
+        LoadStage                                meLoadStage;                                 // +0x1DD0
+        AILoadStage                              meAILoadStage;                               // +0x1DD4
+        DistrictMapLoadStage                     meDistrictMapLoadStage;                      // +0x1DD8
 
         s32                                      miUpcomingRoadsPM;                            // +0x1DDC ("UpcomingRoads")
         s32                                      miUpcomingRoadsSentMessagePM;                 // +0x1DE0 ("UpcomingRoadsSendMessage")
@@ -722,8 +722,18 @@ namespace BrnGameState
             CGS_STATIC_ASSERT(( offsetof(StreetManager, mbFirstDownload)             == 0x1CC5), "first download @ +0x1CC5" );
             CGS_STATIC_ASSERT(( offsetof(StreetManager, mpStreetData)                == 0x1CC8), "street data ptr @ +0x1CC8" );
 
-            // pointer-free tail run -- relative anchors (base: miCurrentPlayerRoadIndex,
-            // X360 +0x1D1C). Deltas hold on any LP/LLP model.
+            // Native pointer and stage anchors: Construct82335978 writes these fields.
+            CGS_STATIC_ASSERT((sizeof(StreetManager) == 0x1E08), "X360 street manager size");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, mpProgressionManager) == 0x1D10), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, mpGameStateModule) == 0x1D14), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, mpRoadRulesManager) == 0x1D18), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x1D1C), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, meLoadStage) == 0x1DD0), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, meAILoadStage) == 0x1DD4), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, meDistrictMapLoadStage) == 0x1DD8), "ARTIST street manager member");
+            CGS_STATIC_ASSERT((offsetof(StreetManager, mStreetManagerDebugComponent) == 0x1DF0), "ARTIST street manager member");
+
+            // Relative anchors retain the contiguous pointer-free tail checks.
             CGS_STATIC_ASSERT(( offsetof(StreetManager, miOriginalInterStateRoadIndex) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x20), "nine RoadIndex run" );
             CGS_STATIC_ASSERT(( offsetof(StreetManager, mCurrentPlayerSectionExitRight) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x24), "vectors follow the road indices" );
             CGS_STATIC_ASSERT(( offsetof(StreetManager, mLastNode)              - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x3C), "12-byte Vector3 stride" );
