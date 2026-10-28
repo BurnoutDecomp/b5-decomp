@@ -41,7 +41,7 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
     if (muState == E_STATE_COUNTDOWN)
     {
         mfTimer = mfTimer - lfTimeDelta;
-        if (mfTimer <= 0.0f)
+        if (!(mfTimer > 0.0f)) // ARTIST 0x827516D4 bgt returns; unordered expires too.
         {
             mfTimer = 0.0f;
             muState = E_STATE_IDLE;
@@ -72,9 +72,8 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
 //
 // Caller: TrafficEntityModule::UpdateJunctions @0x82723EA0, once per active hull after its junction loop, with
 // mfSimTimeSinceLastDecision (0x827244A4 `lfs f1, 0(r16)`, r16 == +0x713F8): an AMBER light runs down to RED.
-// NOTE: Update above keeps the PC's `mfTimer <= 0.0f` test, where the console's `bgt` (0x827516D4) lets a NaN
-// timer fall through to RED. That line is Niaz's; its fix is a HANDOFF entry (scratch/CRASHPARITY_0922/fixes/
-// FX-NET.wip/HANDOFF.md, FX-TRAFFICLIGHTS), so this caller inherits the PC polarity until it lands.
+// Update above preserves the console's strict bgt-return polarity: an unordered timer falls through to RED.
+// The earlier handoff noted this distinction but the <= source condition remained until this recovery.
 // ============================================================================
 void TrafficLightManager::UpdateHull(const Hull* lpHull, f32 lfTimeDelta)
 {
