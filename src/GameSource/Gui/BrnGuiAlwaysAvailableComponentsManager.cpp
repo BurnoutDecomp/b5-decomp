@@ -33,9 +33,9 @@
 // cache+0xB878 IS GetOptionsDataProfile() (BrnGuiCache.h:1001/:2116), and profile+0x7344 is
 // miLastPlayedSongIndex. Cases 26 and 502 are now written from the asm; see each in place.
 //
-// STILL DEFERRED: case 503 (the
-// CLASSICAL chyron -- a different overlay, DWARF GuiClassicalChyronEvent, carrying two
-// 48-char text ids and writing cache+0x12BC0 == the profile's picture-paradise index).
+// ARTIST case 503 is restored below: it consumes the classical chyron's two 48-byte
+// text IDs, copies them into manager-owned storage, gates the display call on the
+// container movie, and records the piece index through OptionsDataProfile.
 // ===================================================================================
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"
 
@@ -43,6 +43,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                        // BrnFlapt::FileRef
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"            // original streamed string-size assertions
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the in-queue Update walks
 #include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache (event 64 connect)
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                  // event105 buddy notification payload
@@ -53,6 +54,7 @@
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"        // Io::EaTraxHelper (case 502)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [DIAG] gpDebugPrint witness
 #include <cstdlib>                                                       // [DIAG] getenv
+#include <cstring>                                                       // strlen / strcpy in event 503
 
 namespace BrnGui
 {
@@ -419,11 +421,70 @@ namespace BrnGui
                 break;
             }
 
-            // Explicitly out of scope for this invite delta: ARTIST 0x82509338 case503
-            // displays two 48-byte localized text IDs and writes the picture-paradise index
-            // to GuiCache +0x12BC0. This original consumer remains unimplemented here.
+            // Event 503 -- the Picture Paradise classical chyron.
+            // ARTIST 0x82509A20 scans the composer string, asserts at length >= 48 with
+            // CgsStringUtils.h:65's streamed diagnostic, then copies through the NUL into
+            // this manager's +0x10154 buffer. 0x82509B70..0x82509CBC does the same for the
+            // work string at +0x10184. The assertions do not gate either copy.
             case 503:
+            {
+                const GuiClassicalChyronEvent* lpChyron =
+                    reinterpret_cast<const GuiClassicalChyronEvent*>(lpEvent);
+
+                const u32 luComposerLength =
+                    static_cast<u32>(std::strlen(lpChyron->macComposerTextId));
+                if (luComposerLength >= sizeof(macComposerTextId))
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::SimpleStrStream lMessage;
+                    lMessage << "String " << lpChyron->macComposerTextId
+                             << " is too long. Buffer size = "
+                             << static_cast<s32>(sizeof(macComposerTextId))
+                             << ", string length = " << static_cast<s32>(luComposerLength)
+                             << "\n";
+                    CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                    CgsDev::Assert::EndAssert();
+                }
+                std::strcpy(macComposerTextId, lpChyron->macComposerTextId);
+
+                const u32 luWorkLength =
+                    static_cast<u32>(std::strlen(lpChyron->macWorkTextId));
+                if (luWorkLength >= sizeof(macWorkTextId))
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::SimpleStrStream lMessage;
+                    lMessage << "String " << lpChyron->macWorkTextId
+                             << " is too long. Buffer size = "
+                             << static_cast<s32>(sizeof(macWorkTextId))
+                             << ", string length = " << static_cast<s32>(luWorkLength)
+                             << "\n";
+                    CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                    CgsDev::Assert::EndAssert();
+                }
+                std::strcpy(macWorkTextId, lpChyron->macWorkTextId);
+
+                // ARTIST passes persistent manager buffers in r4/r5, the literal
+                // "BLANK_TEMP_STRING" in r6, and localized=true in r7. It skips only
+                // this display call when the container clip is not playing.
+                if (mbContainerMovieClipPlaying)
+                    mEATraxInGameComponent.DisplayNewTrackNotification(
+                        macComposerTextId, macWorkTextId, "BLANK_TEMP_STRING", true);
+
+                // 0x82509D24 stores the piece index at GuiCache+0x12BC0. The named path is
+                // GuiCache::GetOptionsDataProfile() (+0xB878) then the profile field +0x7348.
+                if (mpGuiCache == 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("mpGuiCache",
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 517);
+                    CgsDev::Assert::EndAssert();
+                }
+                mpGuiCache->GetOptionsDataProfile()->SetLastPlayedPictureParadiseMusicIndex(
+                    lpChyron->miPieceIndex);
                 break;
+            }
 
             default:
                 break;
