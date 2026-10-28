@@ -33,8 +33,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"          // Draw2DText
 #include "GameShared/GameClasses/Network/StartTime/CgsStartTimeManager.h"                   // AreWeSyncingTime
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                             // CgsDev::StrStream (streamed assert)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                             // WitnessTag ([nettraf] lines)
-
 namespace BrnNetwork
 {
     namespace
@@ -575,11 +573,6 @@ namespace BrnNetwork
                     sizeof(lRestartMessage.mau16ActiveHulls));
         BufferRestartTrafficMessage(lRestartMessage);
 
-        BrnNetHarnessPC::WitnessTag("nettraf", "restart-send",
-            "fr=%u hulls=%04x,%04x,%04x,%04x,%04x,%04x,%04x,%04x", static_cast<u32>(lu16RestartFrame),
-            lau16ActiveHulls[0], lau16ActiveHulls[1], lau16ActiveHulls[2], lau16ActiveHulls[3],
-            lau16ActiveHulls[4], lau16ActiveHulls[5], lau16ActiveHulls[6], lau16ActiveHulls[7]);
-
         mbRestartNetworkTraffic = false;
         mPendingTrafficResetBitArray.UnSetAll();
     }
@@ -1076,8 +1069,6 @@ namespace BrnNetwork
 
         if (sbWitnessTrafficRestartApplied && (lu16Update10HzFrame % KU_WITNESS_HASH_UPDATE_STRIDE) == 0u)
         {
-            BrnNetHarnessPC::WitnessTag("nettraf", "hash", "upd=%u h=%04x",
-                                        static_cast<u32>(lu16Update10HzFrame), static_cast<u32>(lu16TrafficHash));
         }
     }
 
@@ -1167,9 +1158,6 @@ namespace BrnNetwork
                     // frame ..., our hash=..., their hash=...".
                     mbHasTrafficDiverged = true;
 
-                    BrnNetHarnessPC::WitnessTag("nettraf", "DIVERGED", "upd=%u ours=%04x theirs=%04x",
-                                                static_cast<u32>(lu16Update10HzFrame),
-                                                static_cast<u32>(lu16OurHash), static_cast<u32>(lu16TheirHash));
                 }
             }
         }
@@ -1282,12 +1270,6 @@ namespace BrnNetwork
                 OnTrafficRestarted();
 
                 sbWitnessTrafficRestartApplied = true;
-                BrnNetHarnessPC::WitnessTag("nettraf", "restart-apply",
-                    "fr=%u hulls=%04x,%04x,%04x,%04x,%04x,%04x,%04x,%04x", static_cast<u32>(lu16RestartFrame),
-                    lRestartEvent.mau16ActveHulls[0], lRestartEvent.mau16ActveHulls[1],
-                    lRestartEvent.mau16ActveHulls[2], lRestartEvent.mau16ActveHulls[3],
-                    lRestartEvent.mau16ActveHulls[4], lRestartEvent.mau16ActveHulls[5],
-                    lRestartEvent.mau16ActveHulls[6], lRestartEvent.mau16ActveHulls[7]);
             }
         }
     }

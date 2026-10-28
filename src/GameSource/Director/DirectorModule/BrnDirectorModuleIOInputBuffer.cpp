@@ -258,15 +258,7 @@ namespace DirectorIO
         // MainDirector::ProcessInputQueue @0x822373B0, asks for the killer only inside its
         // "mbPlayerTakenDown" arm, so this line is the director CONSUMING a taken-down frame the
         // bridge published (BridgeGameStateToDirector's [takedown-cam] line is the producer side).
-        static const bool sbTakenDownDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
         static s32 siTakenDownReadsLeft = 30;
-        if (sbTakenDownDiag && siTakenDownReadsLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siTakenDownReadsLeft;
-            *CgsDev::Log::gpDebugPrint << "[takedown-cam] director read: mbPlayerTakenDown "
-                                       << (mbPlayerTakenDown ? 1 : 0) << " killer slot "
-                                       << static_cast<s32>(mePlayerKillerCarIndex) << "\n";
-        }
         return mePlayerKillerCarIndex;
     }
 

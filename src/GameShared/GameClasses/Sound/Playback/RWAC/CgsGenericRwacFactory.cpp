@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsGenericRwacFactory.cpp
 //
@@ -29,8 +28,6 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacMasterVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
-#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/audio/core/PlugIn.h"   // the complete System (Lock/Unlock members; phase B5)
 
@@ -592,18 +589,6 @@ bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& akrSpec,
 void GenericRwacFactory::HandlePluginEvent(
     u32 au32CommandCount, const uintptr_t* apuCommandWords)
 {
-    // FLAG PC-platform witness: attribute decoder and final per-voice send PCM.
-    const auto TracePlayer = [](rw::audio::core::PlugIn* player, const void* sample,
-                                unsigned id, const char* family, const char* mixFamily) {
-        if (!CgsSound::PcmTrace::File()) return;
-        CgsSound::PcmTrace::Register(player, sample, id, family);
-        auto* voice = player->mpVoice;
-        for (unsigned i = 0; i < voice->mucNumStages; ++i) {
-            auto* stage = voice->mpPlugIns[i];
-            if (stage->mpPlugInDescRunTime->muId == 0x53656E30u) // Send 'Sen0'
-                CgsSound::PcmTrace::Register(stage, sample, id, mixFamily);
-        }
-    };
     CGS_ASSERT(au32CommandCount == 4u,
                "Plugin-event command word count");
     const RwacCommandPluginEvent& lrEvent =
@@ -656,13 +641,6 @@ void GenericRwacFactory::HandlePluginEvent(
         lPlayParams.expelMode = 0.0f;
         lPlayParams.requestHandle = 0.0f;
 
-        // FLAG PC-platform witness: content identity/path -> real player output.
-        TracePlayer(lpPlugin, lParameters.mpWaveContent,
-            static_cast<unsigned>(lParameters.mpWaveContent->GetContentSpec().GetName().GetValue()), "wave", "wave-mix");
-        CgsSound::PcmTrace::Log("wave-source player=%p sample=%p spec=%llu path=%s\n",
-            lpPlugin, lParameters.mpWaveContent,
-            static_cast<unsigned long long>(lParameters.mpWaveContent->GetContentSpec().GetName().GetValue()),
-            lpcStreamPath ? lpcStreamPath : "RAM");
         rw::audio::core::PlugIn::Event(lpPlugin, liEvent, &lPlayParams);
         *lParameters.mpRequestHandle = lPlayParams.requestHandle;
         break;
@@ -744,18 +722,6 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
             // and Splice's ctor reports "There's no sub mix plugin" for the same null. Both
             // stormed (46 asserts in one run) the moment a NON-DEFAULT car was selected. So
             // print what CreateInstance actually handed back, per voice.
-            if (getenv("BRN_RWAC_VOICE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[rwacv] type " << static_cast<s32>(lpConfig->GetVoiceType())
-                    << " stage " << static_cast<s32>(lpConfig->GetProcessingStage())
-                    << " plugins " << static_cast<s32>(lpConfig->GetPluginCount())
-                    << " rwVoice " << ((*lppRwacVoice != 0) ? 1 : 0)
-                    << " pluginArray " << ((*lpppPlugin != 0) ? 1 : 0)
-                    << " wantsSubmix " << ((lppSubmix != 0) ? 1 : 0)
-                    << " submixSet "
-                    << ((lppSubmix != 0 && *lppSubmix != 0) ? 1 : 0) << "\n";
-            }
 
             if (lpConfig->GetVoiceType() == E_MASTER_VOICE &&
                 *lppRwacVoice != 0 && lpConfig->GetPluginCount() != 0)
@@ -763,7 +729,6 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
                 rw::audio::core::PlugIn* lpDac =
                     (*lpppPlugin)[lpConfig->GetPluginCount() - 1u];
                 mEnvironment.SetDacPlugin(lpDac);
-                DacOutputPC::Attach(static_cast<rw::audio::core::Dac*>(lpDac));
                 rw::audio::core::PlugIn::Event(lpDac, 3, 0);
             }
             lpConfig->Release();

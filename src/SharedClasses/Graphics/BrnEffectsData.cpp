@@ -253,16 +253,6 @@ void VignetteData::Construct(const u64& lruAssetKey)
 
     const u8* const lpLayout = static_cast<const u8*>(lAsset.GetLayoutPointer());
     {   // [diag] BRN_PFX_DIAG: did the vault collection resolve, and what did it say?
-        static const bool sbDiag = (getenv("BRN_PFX_DIAG") != 0);
-        if (sbDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const f32* lpF = reinterpret_cast<const f32*>(lpLayout);
-            *CgsDev::Log::gpDebugPrint << "[pfx-data] VignetteData::Construct key " << static_cast<u32>(lruAssetKey)
-                                       << " valid " << (lAsset.IsValid() ? 1 : 0) << " layout";
-            for (u32 lu = 0; lu < 18; ++lu)
-                *CgsDev::Log::gpDebugPrint << " " << lpF[lu];
-            *CgsDev::Log::gpDebugPrint << "\n";
-        }
     }
 
     // Lane by lane, NOT by casting the block to a Vector2/Vector4. rw::math::vpu::VectorIntrinsic

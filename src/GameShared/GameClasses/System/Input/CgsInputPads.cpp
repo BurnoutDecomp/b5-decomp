@@ -613,22 +613,8 @@ namespace CgsInput
         // test -- so a run on a box with no pad still shows the jolt arriving here. The PC motor leaf
         // (CgsInputPadsPC.cpp XInputSetState) adds its own line when a pad takes it.
         {
-            static const bool sbPadDiag = (std::getenv("BRN_RUMBLE_DIAG") != 0);
             static s32        siPadDiagLines = 0;
             const s32         KI_PAD_DIAG_MAX_LINES = 96;
-            if (sbPadDiag && !lbStopMotors && siPadDiagLines < KI_PAD_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siPadDiagLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[rumble] pad-request port=" << liPort
-                    << " left=" << lfLeftMotorValue << " right=" << lfRightMotorValue
-                    << " jolt{prio=" << maiJoltEffectPriorities[liPort][0] << "," << maiJoltEffectPriorities[liPort][1]
-                    << " t=" << mafJoltTime[liPort][0] << "," << mafJoltTime[liPort][1]
-                    << "} rumble{prio=" << maiRumbleEffectPriorities[liPort][0] << "," << maiRumbleEffectPriorities[liPort][1]
-                    << "} enabled=" << static_cast<s32>(mbRumbleEnabled ? 1 : 0)
-                    << " connected=" << static_cast<s32>(maPads[liPort].IsConnected() ? 1 : 0)
-                    << " type=" << static_cast<s32>(maPads[liPort].GetDeviceType()) << "\n";
-            }
         }
 
         if (!maPads[liPort].IsConnected())

@@ -137,12 +137,6 @@ namespace
     // NaN test, NOT a finiteness test (an infinity passes it). Spelled exactly that way.
     inline bool IsNotNaN(f32 lfValue) { return !(lfValue != lfValue); }
 
-    // [FLAG PC witness] first-8 witnesses, one per HANDLED management-event type and one per
-    // handled game-action type. Bounded by construction (8 ids x 8 lines, 16 ids x 8 lines) and
-    // silent once the counters saturate, so this can never become a per-frame flood.
-    // DELETE-WHEN a Road Rage run shows rivals driving and the ledger closes AIModule::Update.
-    s32 saiManagementWitness[AIModuleIO::E_EVENT_COUNT] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
     inline bool WitnessManagementEvent(s32 liType)
     {
         if (liType < 0 || liType >= AIModuleIO::E_EVENT_COUNT) { return false; }
@@ -1486,10 +1480,6 @@ void AIModule::OnRaceCarReachedCheckpoint(
             lpAICar, lpRaceCarReachedCheckpointAction->miCheckPointIndex);                       // 0x8278A700
     }
 
-    // [FLAG PC witness] the first 16 hand-offs, so a live run proves this body ran and shows what
-    // it aimed the car at. Bounded by construction. DELETE-WHEN a multi-checkpoint race run shows
-    // the opponents re-routing to the next checkpoint.
-    static s32 siCheckpointWitness = 0;
     if (siCheckpointWitness < 16 && CgsDev::Log::gpDebugPrint != 0)
     {
         ++siCheckpointWitness;

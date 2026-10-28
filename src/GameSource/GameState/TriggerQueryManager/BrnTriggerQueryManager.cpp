@@ -54,7 +54,6 @@ static void RegisterTriggerQueryMonitors()
     gsiSpikeTrigger2     = CgsDev::PerfMonCpu::AddMonitor("Spike Trigger 2",               CgsDev::E_PMP_5, false, 1.0f, true);
 }
 
-
 // One-shot guard: the road-limit-region validation sweep runs only once for the loaded
 // TriggerData (X360 byte_82FAE278). File-scope to match the binary.
 static bool gsbRoadLimitRegionsValidated = false;
@@ -350,7 +349,6 @@ void TriggerQueryManager::UpdateTriggers(
             // ladder hangs off (PropEntityModule_wQ_04.cpp).
             // -----------------------------------------------------------------------------
             {
-                static const bool sbDiag              = (getenv("BRN_PROP_DIAG") != 0);
                 static s32        siRebuildCount      = 0;
                 static bool       sbFirstSmashLogged  = false;
                 static s32        siPostSmashLinesLeft = 0;
@@ -364,60 +362,6 @@ void TriggerQueryManager::UpdateTriggers(
                     || !sbFirstSmashLogged
                     || (siPostSmashLinesLeft > 0);
 
-                if (sbDiag && lbCensusStillWanted && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    const u32 luArmedCount = maActiveTriggers.GetLength();
-                    s32 liSmash     = 0;
-                    s32 liBillboard = 0;
-                    for (u32 luArmed = 0; luArmed < luArmedCount; ++luArmed)
-                    {
-                        const BrnTrigger::TriggerRegion* lpArmedRegion =
-                            lpTriggerData->GetRegion(maActiveTriggers[luArmed]);
-                        if (lpArmedRegion->GetType() != BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
-                        {
-                            continue;
-                        }
-                        const BrnTrigger::GenericRegion* lpArmedGeneric =
-                            static_cast<const BrnTrigger::GenericRegion*>(lpArmedRegion);
-                        if (lpArmedGeneric->GetType() == BrnTrigger::GenericRegion::E_TYPE_SMASH)
-                        {
-                            ++liSmash;
-                        }
-                        else if (lpArmedGeneric->GetType() == BrnTrigger::GenericRegion::E_TYPE_OVERDRIVE_BOOST)
-                        {
-                            ++liBillboard;
-                        }
-                    }
-
-                    const bool lbFirstSmashNow = (!sbFirstSmashLogged && liSmash > 0);
-                    if (lbFirstSmashNow)
-                    {
-                        sbFirstSmashLogged   = true;
-                        siPostSmashLinesLeft = KI_UI_GATE_REBUILD_DIAG_AFTER_SMASH;
-                    }
-
-                    bool lbPrintLine = (siRebuildCount < KI_UI_GATE_REBUILD_DIAG_FIRST_N)
-                                       || lbFirstSmashNow;
-                    if (!lbPrintLine && siPostSmashLinesLeft > 0)
-                    {
-                        --siPostSmashLinesLeft;
-                        lbPrintLine = true;
-                    }
-
-                    if (lbPrintLine)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[UI-gate] trig rebuild #" << siRebuildCount
-                            << " pos=(" << lPlayerPosition.x
-                            << "," << lPlayerPosition.y
-                            << "," << lPlayerPosition.z
-                            << ") armed=" << static_cast<s32>(luArmedCount)
-                            << " smash=" << liSmash
-                            << " billboard=" << liBillboard
-                            << (lbFirstSmashNow ? " FIRST-SMASH-ARMED\n" : "\n");
-                    }
-                    ++siRebuildCount;
-                }
             }
         }
     }
@@ -429,14 +373,7 @@ void TriggerQueryManager::UpdateTriggers(
         // corrected an off-by-one-instruction citation here and at the gate above),
         // so a log with no `trig rebuild` lines at all is answered here -- "the pump ran, the
         // player car was never active" -- rather than by silence. One line per process.
-        static const bool sbDiag             = (getenv("BRN_PROP_DIAG") != 0);
         static bool       sbInactiveLogged   = false;
-        if (sbDiag && !sbInactiveLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbInactiveLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] trig update SKIPPED: player car inactive (no rebuild)\n";
-        }
     }
 
     mbTriggersUpdated = true;
@@ -605,42 +542,6 @@ void TriggerQueryManager::PreWorldUpdate(
     // stunt-run test target is 0x7a08 == hull 122, trigger 8, junction 480897 / event 558269).
     // Capped so a car parked on a box boundary cannot spam the log.
     {
-        static const bool sbJunctionDiag = (getenv("BRN_JUNCTION_DIAG") != 0);
-        if (sbJunctionDiag)
-        {
-            static bool sbWasInRegion   = false;
-            static u32  suLastTriggerId = static_cast<u32>(-1);
-            static s32  siJunctionLines = 0;
-            const s32   KI_JUNCTION_DIAG_MAX_LINES = 64;
-
-            const u32 luCurrentId = static_cast<u32>(mPlayerCurrentTrafficLightId);
-            if ((mbPlayerInTrafficLightRegion != sbWasInRegion || luCurrentId != suLastTriggerId)
-                && siJunctionLines < KI_JUNCTION_DIAG_MAX_LINES
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siJunctionLines;
-                // The log stream has no hex manipulator, so the handle is printed as its two
-                // decoded halves (which is what dump_lighttriggers.py's hex column means) plus
-                // the raw packed word in decimal. hull 122 / trigger 8 == 0x7a08 == the target.
-                if (mbPlayerInTrafficLightRegion)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] [junction] ENTER light region: hull="
-                        << static_cast<s32>((luCurrentId >> 8) & 0xFFFFu)
-                        << " trigger=" << static_cast<s32>(luCurrentId & 0xFFu)
-                        << " packedId(dec)=" << static_cast<s32>(luCurrentId) << "\n";
-                }
-                else
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] [junction] LEAVE light region (was hull="
-                        << static_cast<s32>((suLastTriggerId >> 8) & 0xFFFFu)
-                        << " trigger=" << static_cast<s32>(suLastTriggerId & 0xFFu) << ")\n";
-                }
-            }
-            sbWasInRegion   = mbPlayerInTrafficLightRegion;
-            suLastTriggerId = luCurrentId;
-        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -694,9 +595,6 @@ void TriggerQueryManager::PreWorldUpdate(
         if (siFanOutLines < KI_FANOUT_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
         {
             ++siFanOutLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] [jump-ladder] player-trigger fan-out: hits="
-                << static_cast<s32>(luPlayerTriggerCount) << " genericTypes=";
             for (u32 luDiag = 0; luDiag < luPlayerTriggerCount; ++luDiag)
             {
                 const BrnTrigger::TriggerRegion* lpDiagRegion =

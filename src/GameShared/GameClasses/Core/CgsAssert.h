@@ -29,23 +29,6 @@ namespace Assert
     extern char* gpcMessageBuffer;
     extern s32 giMessageBufferSize;
 
-    // FLAG PC-platform leaf: construct after BeginAssert. Keep the original shared buffer for
-    // synchronous assertions, but own worker text until FireAssert has captured the deferred request.
-    class MessageBufferPC
-    {
-    public:
-        MessageBufferPC();
-        MessageBufferPC(const MessageBufferPC&) = delete;
-        MessageBufferPC& operator=(const MessageBufferPC&) = delete;
-        char* GetBuffer() const { return mpcBuffer; }
-        s32 GetSize() const { return miSize; }
-
-    private:
-        char macBuffer[KI_MESSAGEBUFFERSIZE];
-        char* mpcBuffer;
-        s32 miSize;
-    };
-
     // X360 @0x82820758 — the once-guarded assert-system bring-up (the FIRST call
     // DebugManager::Construct @0x828332C0 makes): Create gAssertMutex + initialise the
     // assert-screen state. (The X360 body also sets the assert overlay's vector-font size
@@ -59,15 +42,6 @@ namespace Assert
     void* EndAssert();
     void  PrintStringed(const char* lpcFile, const char* lpcFunction, const int liLine, const char* lpcMessage);
 
-    // FLAG PC-platform leaf: assertions coordinate before taking the assert
-    // mutex. Foreign workers publish captured failures for the joined owner.
-    using FrameFencePC = void (*)(void*);
-    void AttachFrameOwnerPC(void* lpOwner, FrameFencePC lpFence);
-    void DetachFrameOwnerPC(void* lpOwner);
-    void SetDispatchThreadPC(bool lbDispatch);
-    void DispatchPendingAssertsPC(bool lbAllowDisplay = true);
-    void ServiceWorkerAssertsWhileWaitingPC();
-    int WaitForWorkerPC(EA::Thread::Semaphore& lrCompletion);
 }
 }
 

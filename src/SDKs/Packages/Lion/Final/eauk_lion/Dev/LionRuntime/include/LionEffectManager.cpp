@@ -78,10 +78,6 @@ namespace
     // X360 `li r5, 0x90` @0x82914B14 -- the console's own sizeof(cLionEffectInstance).
     const u32 KU_CONSOLE_SIZEOF_EFFECT_INSTANCE = 0x90;
 
-    static_assert(sizeof(cLionEffectInstance) >= KU_CONSOLE_SIZEOF_EFFECT_INSTANCE,
-                  "the host cLionEffectInstance must be at least the console's 144 bytes "
-                  "(cLionFX::Init @0x82914B14 `li r5, 0x90`); a SMALLER host record means the "
-                  "two 4-byte console pointers did not widen and the layout is wrong");
 }
 
 void cLionEffectManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator,

@@ -768,8 +768,6 @@ namespace BrnGui
 
         if (mePrepareStage != E_PREPARESTAGE_DONE)
         {
-            if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[cnav-diag] panel input dropped: stage " << static_cast<s32>(mePrepareStage) << "\n";
             return false;
         }
 
@@ -783,9 +781,6 @@ namespace BrnGui
         const s32 liAction =
             reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpControllerEvent) + 4)[0];
         // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every controller press the panel sees.
-        if (getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] panel input action " << liAction
-                << " row " << mFilterToggles.miHighlightedIndex << " panelType " << static_cast<s32>(mePanelType) << "\n";
 
         switch (liAction)
         {

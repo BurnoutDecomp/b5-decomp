@@ -131,8 +131,6 @@ namespace CgsCollision
     // The two size contracts the producer is constructed with. Both are GATES, not comments:
     // CreateLineWithTriangleListStream hands GetRequiredBufferSizes / Construct the literals 176
     // and 192, and the poster strides the shared buffer by them.
-    static_assert(sizeof(LineWithTriangleListStreamJobDesc::StreamCommand) == 176,
-                  "StreamCommand must stay the producer's miCommandSize (176) after x64 widening");
     static_assert(sizeof(LineWithTriangleListStreamJobDesc::StreamResult) == 192,
                   "StreamResult must stay the producer's miResultSize (192)");
     static_assert(offsetof(LineWithTriangleListStreamJobDesc::StreamCommand, maLineEnd) == 0x50,

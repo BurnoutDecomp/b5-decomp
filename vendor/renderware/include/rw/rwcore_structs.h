@@ -219,9 +219,6 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     // capacity. Host storage is derived from this type, rather than the original 148 bytes.
     static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn);
     static LinearResourceAllocator* Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
-    // FLAG PC-platform leaf: an existing native object adopts exactly these pools,
-    // without an in-pool object reserve. Native lazy arenas use this separate API.
-    void AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     // Native lane convenience entry; delegates to the same DoAllocate transaction.
     void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
     void  Free(void* lpBlock);

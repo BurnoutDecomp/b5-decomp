@@ -270,31 +270,6 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
 // it; the world passes 1 and only tests queue length).
 void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegisterVaultRequest)
 {
-    // [FLAG PC boot gate] the vault-array interior (VaultSlot::DoLoad -> Attrib::Vault
-    // over the resource + Attrib::Database threading) needs the SCHEMA, and the schema
-    // bring-up (GameDataModule::PrepareAttribSysSchemaResource -- the exe-baked BE
-    // schema blobs @0x82CD3D88/0x82CD53AC still need porting to LE) plus the Attrib SDK
-    // runtime cluster are not committed. Until then: skip the array registration
-    // (one-shot log) but still post the X360-attested reply so requesters advance --
-    // the X360 asserts IsSchemaLoaded() and can never reach this state.
-    if (!sbSchemaLoaded)
-    {
-        static bool sbLoggedVaultGate = false;
-        if (!sbLoggedVaultGate)
-        {
-            sbLoggedVaultGate = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "AttribSysModule::RegisterVault: schema not loaded -- vault-array "
-                       "registration skipped, reply posted [FLAG PC boot gate]\n";
-        }
-    }
-    else
-    {
-        CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");                              // X360 line 362
-        CGS_ASSERT(lpRegisterVaultRequest != nullptr, "lpRegisterVaultRequest != NULL");
-        mVaultArray.RegisterVault(lpRegisterVaultRequest);
-    }
 
     // Reply: AddEvent(request->mpUserReceiverQueue, &request->miEventId, type 3, size 4).
     lpRegisterVaultRequest->mpUserReceiverQueue->AddEvent(
@@ -308,25 +283,6 @@ void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegiste
 // @0x8266EAA0 uses it as the GameData event-slot index).
 void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest)
 {
-    // [FLAG PC boot gate] mirror of RegisterVault's gate (schema/SDK cluster deferred).
-    if (!sbSchemaLoaded)
-    {
-        static bool sbLoggedUnregisterGate = false;
-        if (!sbLoggedUnregisterGate)
-        {
-            sbLoggedUnregisterGate = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "AttribSysModule::UnregisterVault: schema not loaded -- vault-array "
-                       "release skipped, reply posted [FLAG PC boot gate]\n";
-        }
-    }
-    else
-    {
-        CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");                                  // X360 line 462
-        CGS_ASSERT(lpUnregisterVaultRequest != nullptr, "lpUnregisterVaultRequest != NULL"); // line 463
-        mVaultArray.UnregisterVault(lpUnregisterVaultRequest);
-    }
 
     lpUnregisterVaultRequest->mpUserReceiverQueue->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lpUnregisterVaultRequest->miEventId),

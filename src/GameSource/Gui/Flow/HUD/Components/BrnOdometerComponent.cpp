@@ -30,32 +30,6 @@ namespace BrnGui
     const f32 KF_SHOW_NEWEVENTFOUND_TIME    = 5.0f;
     const f32 KF_SHOW_NEWDRIVETHRUFOUND_TIME = 5.0f;
 
-    // [FLAG PC witness] the `[odometer] hud=<metres>` line (see OdometerComponent::Update).
-    // Fires on the first MILEAGE frame and then only when the HUD value has moved by >= 10 m
-    // (or gone backwards, e.g. a car change), at most 400 lines a run.
-    void OdometerWitness(f32 lfDistanceDriven)
-    {
-        static const bool sbDiag = (getenv("BRN_ODOMETER_DIAG") != 0);
-        if (!sbDiag || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
-        static bool sbPrinted     = false;
-        static s32  siPrintedLines = 0;
-        static f32  sfLastPrinted = 0.0f;
-        const bool lbMoved = !sbPrinted
-                          || (lfDistanceDriven - sfLastPrinted >= 10.0f)
-                          || (lfDistanceDriven < sfLastPrinted);
-        if (!lbMoved || siPrintedLines >= 400)
-        {
-            return;
-        }
-        sbPrinted     = true;
-        sfLastPrinted = lfDistanceDriven;
-        ++siPrintedLines;
-        *CgsDev::Log::gpDebugPrint << "[odometer] hud=" << lfDistanceDriven << "\n";
-    }
-
     // @0x82F27868 -- per-gamemode "plural" event-name localisation string-id table, indexed
     // by GuiEventJunctionInfo::meGameModeType (asserted 0..E_MODE_OFFLINE_COUNT==10 by
     // SetupAptVariables). Contents RECOVERED from the image 2026-08-25 (headless idat read of
@@ -255,14 +229,6 @@ namespace BrnGui
             const f32 lfDistanceDriven = mpGuiCache->GetDistanceDriven();
             mMileageTextField.SetLocalisedText(
                 "STAT_LABEL_DIST_OFFLINE", 9, lfDistanceDriven, 19);
-            // [FLAG PC witness] [odometer] -- NOT IN THE X360 BINARY. The number the readout is
-            // formatting THIS frame, i.e. the tail of the whole distance chain (issue #10:
-            // ProgressionManager::AddDistanceDriven -> LiveryData::mfDistanceDriven ->
-            // ScoringOutputInterface::mfDistanceDrivenInCurrentCar -> GuiEventCurrentStatus 492
-            // -> GuiCache::mfDistanceDriven -> here). Opt-in (BRN_ODOMETER_DIAG), first sight +
-            // every 10 m of movement, capped -- never per-frame. tools/tests/cases/
-            // progression_odometer.ps1 reads it.
-            OdometerWitness(lfDistanceDriven);
             break;
         }
 

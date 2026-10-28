@@ -49,13 +49,6 @@
 
 namespace
 {
-    // DIAG. NOT IN THE X360 BINARY, OFF BY DEFAULT -- the same BRN_TRAFFIC_DIAG switch the sibling
-    // partfiles (BrnPhysicalTrafficManager_CrashResponse.cpp:64) already use. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     // [T3-uncrash] budget: at most this many witness lines per run, so a soak that removes traffic
     // every few frames cannot flood the log.
@@ -73,11 +66,6 @@ namespace
     void UncrashWitness(u16 lu16Slot, u64 lu64BodyId, bool lbModelActive,
                         s32 liDeactivateQueueLength, s32 liRemoveQueueLength)
     {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0
-            || giUncrashWitnessLinesLeft <= 0)
-        {
-            return;
-        }
         --giUncrashWitnessLinesLeft;
         *CgsDev::Log::gpDebugPrint
             << "[T3-uncrash] slot=" << static_cast<s32>(lu16Slot)
@@ -112,10 +100,6 @@ namespace
     const f32 KF_TRAFFIC_MAX_ANGULAR_VELOCITY = 5.0f;     // flt_8200426C   (the race car's is 30)
     const f32 KF_TRAFFIC_DRAG          = 0.0f;      // flt_82001CC0, linear AND angular
 }
-
-#define BRN_T3_REMOVE_GATE(TAG)                                                              \
-    do { static bool s_bLogged = false;                                                      \
-         TrafficRemoveLogOnce(s_bLogged, "conductor gate: " TAG " inert [FLAG PC boot gate]\n"); } while (0)
 
 namespace BrnPhysics
 {
@@ -697,22 +681,6 @@ namespace Vehicle
                 if ((lGlobalEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE)
                 {
                     lGlobalEntityId = maTrafficEntityIDs[(lGlobalEntityId.muValue >> 10) & 0x3FFFu];
-                }
-
-                // [FLAG PC bring-up] NULL-mpAttribs TRIPWIRE -- the SAME one
-                // BrnVehicleManager_MaintenanceEvents.cpp's AddRaceCarDeformationModel carries, for
-                // the same reason. The console reads mpAttribs unconditionally here
-                // (`lwz r9, 0x720(r11)` @0x825F2D44), but VehiclePhysics::Construct seeds it NULL
-                // and only PhysicalTrafficVehicle::PreparePhysical's TrafficPhysics delegation
-                // fills it -- and that delegation is `(void)`-INERT until cluster C3 wires it. On
-                // the console the read survives; here it is a frame-one AV at +0x20 that would be
-                // misread as a create-drain failure. DELETE-WHEN C3 lands the delegation.
-                if (lpFullTrafficPhysics->GetAttribs() == 0)
-                {
-                    CGS_ASSERT(lpFullTrafficPhysics->GetAttribs() != 0,
-                               "SendCreateRemoveTrafficEvents: mpAttribs != NULL "
-                               "(TrafficPhysics::PreparePhysical delegation still inert?)");
-                    continue;
                 }
 
                 // NOT the race car's argument set: the traffic post carries the body's REAL

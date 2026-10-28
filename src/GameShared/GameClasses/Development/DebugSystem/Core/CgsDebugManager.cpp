@@ -1,10 +1,5 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include "pc/debug/DebugIni.h"
-#include "pc/debug/ComponentActivation.h"
-#include "pc/debug/ComponentCapabilities.h"
-#include "pc/debug/IniComponentLifecycle.h"
-
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // DebugComponent (mbActive/OnRegister/DebugUISectionCallback/RenderHUD)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"      // GetUI().GetVariableManager()/GetFunctionManager()
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"        // Variant
@@ -182,7 +177,7 @@ namespace CgsDev
             mpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
         mComponentList.Clear();
-        CgsPC::Debug::ResetIniComponents(); // PC startup sidecar follows the component-list lifetime.
+ // PC startup sidecar follows the component-list lifetime.
         gDebugManagerSection.Create();
 
         mp3dRender = nullptr;
@@ -239,77 +234,10 @@ namespace CgsDev
         Assert::gAssertManager.SetRenderer(mp2dRender);
     }
 
-    // Faithful port of X360 CalculateBuildDate @0x828224B8: derive the running executable's path
-    // from the command line ("D:\%s", quotes stripped - the console's disc root), read its file
-    // timestamp, and SPrintf "Build Date: hh:mm:ss dd/mm/yyyy" into macBuildDate (0x24 bytes). When
-    // the file can't be opened the fallback is the compile date/time - the X360 image carries its
-    // own baked "Jan 30 2008" / "18:46:29" literals here, i.e. __DATE__/__TIME__. (On PC the
-    // "D:\<command line>" path never resolves, so the fallback branch is the live one - same code,
-    // console-identical behaviour up to the CreateFileA result.)
-    void DebugManager::CalculateBuildDate()
-    {
-        const char* lpcCommandLine = GetCommandLineA();
-        if (*lpcCommandLine == '"')
-            ++lpcCommandLine;
-
-        char lacFileName[0x104];
-        CgsCore::SPrintf(lacFileName, 0x104, "D:\\%s", lpcCommandLine);
-
-        // Strip a trailing quote (the closing half of a quoted module path).
-        u32 luLength = 0;
-        while (lacFileName[luLength] != '\0')
-            ++luLength;
-        if (luLength > 0 && lacFileName[luLength - 1] == '"')
-            lacFileName[luLength - 1] = '\0';
-
-        HANDLE lhFile = CreateFileA(lacFileName, GENERIC_READ, FILE_SHARE_READ, nullptr,
-                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        // [PC] The console's "D:\<command line>" is its disc-root path to the running image; on
-        // this host that never opens, which sent every build to the __DATE__/__TIME__ fallback
-        // -- the compile stamp of THIS translation unit, i.e. whenever this file last changed,
-        // not when the executable was linked (the owner saw a nine-day-old date on a fresh
-        // build). The host names the running image directly; the timestamp read below is the
-        // console's own logic, on the console's own intended file.
-        if (lhFile == INVALID_HANDLE_VALUE)
-        {
-            char lacModuleName[0x104];
-            if (GetModuleFileNameA(nullptr, lacModuleName, 0x104) != 0)
-            {
-                lhFile = CreateFileA(lacModuleName, GENERIC_READ, FILE_SHARE_READ, nullptr,
-                                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-            }
-        }
-        if (lhFile == INVALID_HANDLE_VALUE)
-        {
-            CgsCore::SPrintf(macBuildDate, 0x24, "Build Date: %s %s", __DATE__, __TIME__);
-            return;
-        }
-
-        FILETIME lLastWriteTime;
-        const bool lbGetTimeSuccess = GetFileTime(lhFile, nullptr, nullptr, &lLastWriteTime) != 0;
-        CGS_ASSERT(lbGetTimeSuccess, "lbGetTimeSuccess");
-        CloseHandle(lhFile);
-
-        FILETIME   lLocalFileTime;
-        SYSTEMTIME lSystemTime;
-        FileTimeToLocalFileTime(&lLastWriteTime, &lLocalFileTime);
-        FileTimeToSystemTime(&lLocalFileTime, &lSystemTime);
-
-        CgsCore::SPrintf(macBuildDate, 0x24, "Build Date: %02d:%02d:%02d %02d/%02d/%02d",
-                         lSystemTime.wHour, lSystemTime.wMinute, lSystemTime.wSecond,
-                         lSystemTime.wDay, lSystemTime.wMonth, lSystemTime.wYear);
-    }
 
     // X360 0x82834390. Active components tick first, then the UI consumes this frame's input.
     void DebugManager::Update(f32 lfDeltaTime)
     {
-        // FLAG PC-platform leaf: registrations outside a DebugInterface scope
-        // are complete by the next debug update. Keep menu edits authoritative.
-        if (DebugUI::PendingDebugIniCountPC(&GetUI().GetVariableManager()) != 0u)
-        {
-            DebugManager* lpManager = ThreadSafeAquire();
-            ThreadSafeRelease(lpManager);
-        }
         for (DebugComponent* lpComponent = mComponentList.GetFirst();
              lpComponent;
              lpComponent = mComponentList.GetNext(lpComponent))
@@ -327,7 +255,6 @@ namespace CgsDev
     {
         CGS_ASSERT(mpInstance, "mpInstance");
         gDebugManagerSection.Enter();
-        ++DebugUI::DebugIniRegistrationDepthPC();
         return mpInstance;
     }
 
@@ -335,11 +262,6 @@ namespace CgsDev
     // calls Leave before the assert), then assert the released pointer is the live singleton.
     void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
     {
-        // FLAG PC-platform leaf: the outer scope owns the complete registration
-        // batch, including options, ranges and callbacks attached after the value.
-        u32& lruDepth = DebugUI::DebugIniRegistrationDepthPC();
-        if (lruDepth == 1u && lpDebugManager == mpInstance && mpInstance->mpUI)
-            mpInstance->GetUI().GetVariableManager().ApplyIniOverridesPC();
         if (lruDepth != 0u) --lruDepth;
         gDebugManagerSection.Leave();
         CGS_ASSERT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance");
@@ -421,12 +343,7 @@ namespace CgsDev
 
         lpComponent->OnRegister();
 
-        // FLAG PC-platform leaf: materialize a lazy component only when the INI
-        // names one of its controls. No debug action/function is executed.
-        char lacIniPath[256];
         lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
-        const bool lbIniComponent = DebugUI::DebugIniNeedsComponentPC(lacIniPath);
-        CgsPC::Debug::SetIniComponent(lpComponent, lbIniComponent);
         if (lbIniComponent) ActivateComponent(lpComponent);
     }
 
@@ -464,12 +381,7 @@ namespace CgsDev
         GetUI().GetVariableManager().RegisterVariable(DebugUI::Variant(&lpComponent->mbActive), lpcPath, lpcName);
 
         lpComponent->OnRegister();
-        // FLAG PC-platform leaf: simple components may register child controls
-        // on activation too; use the same configured-prefix rule as full pages.
-        char lacIniPath[256];
         lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
-        const bool lbIniComponent = DebugUI::DebugIniNeedsComponentPC(lacIniPath);
-        CgsPC::Debug::SetIniComponent(lpComponent, lbIniComponent);
         if (lbIniComponent) ActivateComponent(lpComponent);
     }
 
@@ -481,17 +393,10 @@ namespace CgsDev
         CGS_ASSERT(lpComponent, "lpComponent");
         if (!lpComponent)
             return;
-        // FLAG PC-platform leaf: an explicit menu request takes ownership from
-        // startup INI activation, including a page already materialized by it.
-        if (CgsPC::Debug::sbComponentMenuRequest)
-            CgsPC::Debug::SetIniComponent(lpComponent, false);
         // FLAG: ARTIST 0x8283213C-0x82832160 guards the whole activation on "if (mbActive == 0)" --
         // re-activating an already-active component is a no-op (it must NOT fire OnActivate again).
         if (lpComponent->IsActive())
             return;
-        // FLAG PC-platform leaf: defer initial values until OnActivate has
-        // attached every variable's metadata, including its change callback.
-        DebugInterface lIniRegistration;
         lpComponent->mbActive = true;
         lpComponent->OnActivate();
 
@@ -499,28 +404,6 @@ namespace CgsDev
         lpComponent->GetComponentPath(lacCompletePath, sizeof(lacCompletePath));
         DebugUI::Menu* lpComponentVariablePath =
             GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, nullptr);
-        CgsPC::Debug::BindIniComponentMenu(lpComponent, lpComponentVariablePath);
-        // FLAG PC-platform leaf: passive, opt-in witness shared with the UI-key harness.
-        if (std::getenv("BRN_DEBUG_UI_TRACE"))
-        {
-            char lacTrace[384];
-            std::snprintf(lacTrace, sizeof(lacTrace),
-                "[debug-component] path=\"%s\" request=%s controls=%d\n", lacCompletePath,
-                CgsPC::Debug::sbComponentMenuRequest ? "menu" : "engine",
-                lpComponentVariablePath ? 1 : 0);
-            Log::WriteToLog(lacTrace);
-        }
-        // FLAG PC-platform leaf: explain an unavailable page only for an explicit
-        // menu/command request. A valid HUD-only component (Network Version Display)
-        // has no menu controls; engine activation must retain ARTIST's active state
-        // and one-shot action retirement without opening a modal during gameplay.
-        if (!lpComponentVariablePath && CgsPC::Debug::sbComponentMenuRequest
-            && !CgsPC::Debug::HasHudWithoutMenu(lpComponent))
-        {
-            lpComponent->mbActive = false;
-            GetUI().ShowErrorMessage("This debug section has no available controls in this build.");
-            return;
-        }
         if (lpComponentVariablePath)
         {
             DebugUI::Function* lpFunction = GetUI().GetFunctionManager().FindFunction(
@@ -693,26 +576,6 @@ namespace CgsDev
     void DebugManager::RenderAssert(const Assert::AssertData* lpData)
     {
         QueueAssertText(mBufferedRenderer, lpData);
-    }
-
-    void DebugManager::RenderAssertToBufferPC(const Assert::AssertData* lpData,
-                                             CgsGraphics::Im2dRenderBuffer* lpBuffer)
-    {
-        if (!lpData || !lpBuffer || !lpBuffer->IsPreparedPC())
-            return;
-        Debug2DImmediateRender lRenderer;
-        lRenderer.Construct(mpAllocator, 1280.0f, 720.0f);
-        if (mp2dRender)
-            lRenderer.SetDebugFont(mp2dRender->GetDebugFontPC());
-        lRenderer.SetRenderBuffer(lpBuffer);
-        DebugRender lPrimitives;
-        lPrimitives.Construct();
-        QueueAssertText(lPrimitives, lpData);
-        lRenderer.Begin();
-        lPrimitives.Dispatch2D(&lRenderer, true);
-        lRenderer.End();
-        lPrimitives.Destruct();
-        lRenderer.Destruct();
     }
 
     // Faithful port of X360 Render @0x8282F770: assert both renderers exist, point them at this

@@ -66,7 +66,6 @@
 
 // The XDK sign-in query the profile row gates on (X360 `lwz r3, 0x4B38(cache) ; bl
 // XUserGetSigninState`). Declared locally, exactly as the sibling consumers do
-// (CgsGuideIntegration.cpp:18, CgsBuddyManagerDirtySockX360.cpp:34); the PC leaf lives
 // in GameShared/GameClasses/System/PC/CgsXboxLivePC.cpp (1 == local user offline, 2 on LAN).
 extern "C" u32 XUserGetSigninState(u32 luUserIndex);
 
@@ -224,16 +223,6 @@ namespace BrnGui
         static_assert(sizeof(GuiOverlayRequestWire184) == 304,
                       "ARTIST overlay request output record size");
 
-        // The one-shot gap log the two PARKED platform sites share: a gap that is invisible
-        // at runtime reads exactly like working code.
-        void LogParkedPlatformLeaf(const char* lpacSite, const char* lpacMissingLeaf)
-        {
-            char lac[192];
-            std::snprintf(lac, sizeof(lac),
-                          "[CrashNavSettings] %s PARKED -- no PC leaf for %s (FLAG).\n",
-                          lpacSite, lpacMissingLeaf);
-            CgsDev::Log::WriteToLog(lac);
-        }
     }
 
     // ---- static data ---------------------------------------------------------------
@@ -379,7 +368,6 @@ namespace BrnGui
     }
 
     // ---- SteelWheelsSponsorCode @0x824B76B8 ---------------------------- [PARKED] ---
-    // ⛔ PARKED on CgsSystem::HardwareSku::GetSku(), which has no PC leaf -- see the file
     // banner (a). The X360 body is fully recovered and is a two-branch validator over the
     // 19-character mask "L##L #L#L LL#L ##L#" (L == A-Z, # == 0-9): SKU 1/2 compare the
     // code against the literal "Z891 4K88 IN25 79AA", SKU 0 runs the mask, SKU >= 3 always
@@ -395,8 +383,6 @@ namespace BrnGui
         if (!sbLogged)
         {
             sbLogged = true;
-            LogParkedPlatformLeaf("SteelWheelsSponsorCode",
-                                  "CgsSystem::HardwareSku::GetSku");
         }
         return false;
     }
@@ -429,8 +415,6 @@ namespace BrnGui
         if (!sbLogged)
         {
             sbLogged = true;
-            LogParkedPlatformLeaf("OnInputSponsorProductCode",
-                                  "CgsSystem::HardwareSku::GetSku (+ the SKU-gated sponsor table)");
         }
 
         // The console's LABEL_65 "no code matched" arm, verbatim (0x824CD6D8 onward):

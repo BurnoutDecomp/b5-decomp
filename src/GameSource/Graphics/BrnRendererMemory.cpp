@@ -1,20 +1,12 @@
-#include "pc/gcm/renderengine/WindowPresentation.h"
-#include "pc/gcm/renderengine/reflections/Resolution.h"
 #include "GameSource/Graphics/BrnRendererMemory.h"
 
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"  // CgsRenderTarget (+ serialise-side setters)
 #include "GameSource/Graphics/BrnAntiAliasTiling.h"         // BrnGraphics::AntiAliasTilingPlan + the two plans
-#include "pc/gcm/renderengine/device.h"                     // renderengine::gDisplayWidth/gDisplayHeight (PC bring-up extent)
 namespace renderengine { extern u32 guDiagComposites; }   // [DIAG] issue #30 per-present counters (device.cpp)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // postfx::RenderTarget + gpDefaultRenderTargetState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
 #include "GameSource/Resource/BrnResourceAllocator.h"          // BrnResource::Allocators::GetGlobalGraphicsAllocator
-#include "pc/gcm/renderengine/ShadowPass.h"              // renderengine::PCBringUpClearRenderTargetState
-#include "pc/gcm/renderengine/ShadowQuality.h"
-#include "pc/gcm/renderengine/Im2dBlitProgramsPC.h"           // the four authored PC blit program images
-#include "pc/gcm/renderengine/VertexDescriptor.h"             // renderengine::VertexDescriptor(+Data)
-#include "pc/gcm/renderengine/renderstates.h"                 // renderengine::TextureState
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log::WriteToLog ([qres] lines)
 #include <cstdio>    // snprintf (the one-shot bring-up lines)
@@ -184,7 +176,6 @@ namespace
     const u32 KU_SUN_CORONA_BUFFER_EXTENT     = 1u;     // li r10,1 @0x823F7420 -- width, height AND
                                                         // mip count all take that one register
 
-    // --- EDRAM tile arithmetic (CONSOLE FACT; the PC leaf drops all of it) --------------------------
     // The Xenos renders into 10 MB of on-die EDRAM addressed in TILES of 80x16 samples at 4 bytes each
     // = 5120 bytes, i.e. 2048 tiles. A surface's footprint is its extent rounded up to whole tiles, and
     // a target's depth surface is placed immediately AFTER its colour surface -- which is what
@@ -327,65 +318,6 @@ void BrnRendererMemory::Construct(renderengine::DeviceParameters lParameters,
 }
 #endif  // BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE
 
-// FLAG PC bring-up scope (2026-08-12): NOT an X360 function -- see the
-// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner above for why Construct() cannot be linked yet.
-// This builds the shadow-map slice of the pool and nothing else: the same pool clear Construct
-// does, then the shadow-map target. No other pool slot is touched (they stay null, which is what
-// the pool's own null-checks expect).
-//
-// IT IS NOT A CALL TO CreateShadowmapBuffer, and the difference is deliberate. The console
-// describes the shadow target as THREE sections of 1280x640, because on the Xenos each cascade is
-// rendered into one 1280x640 tiled EDRAM surface and RESOLVED into its own band of a 1280x1920
-// texture. PC Direct3D 9 has neither the EDRAM surface nor the resolve: the depth TEXTURE is the
-// surface that gets rendered into, so the surface is the full combined 1280x1920 and the per-
-// cascade band is selected by the VIEWPORT.
-//
-// Describing that truthfully -- ONE section at the combined 1280x1920 -- has a second payoff: it
-// makes BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap take its own SINGLE-section
-// branch, which is console code that already packs the faces into vertical thirds
-// (offsetY = index * height/3). So cascade n lands on rows [n*640, (n+1)*640) of one texture,
-// which is exactly the 1x3 vertical-strip atlas the recovered ShadowMap_WorldToLight /
-// ShadowMap_Constants matrices encode (Y scaled 1/3, offsets 0 / 1/3 / 2/3). Nothing in the
-// console path is bent to fit; the PC surface is simply described as what it is.
-//
-// Every other store below is CreateShadowmapBuffer's, value for value.
-void BrnRendererMemory::PCBringUpCreateShadowMapBufferOnly(rw::IResourceAllocator* lpAllocator)
-{
-    for (u32 luSlot = 0; luSlot < E_RENDER_TARGET_COUNT; ++luSlot)
-    {
-        mapRenderTarget[luSlot] = nullptr;
-    }
-
-    CgsRenderTarget* lpShadowMap = new CgsRenderTarget();
-    mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] = lpShadowMap;
-
-    // Depth-only: no colour section is in use, so the post-fx colour mode comes out NONE.
-    lpShadowMap->ClearColourTargetInUse();
-
-    // FLAG PC bring-up: the COMBINED extent + one section (see above). The console's
-    // CreateShadowmapBuffer @0x823F6D98 sets (1280, 1920/3) and three sections.
-    const auto lSize = renderengine::ChooseShadowAtlasSizePC(renderengine::gDevice,
-        static_cast<u32>(renderengine::GetGraphicsSettingsPC().miShadowResolutionScale));
-    renderengine::ShadowAtlasScalePC().store(lSize.muScale, std::memory_order_relaxed);
-    lpShadowMap->SetDimensions(lSize.muWidth, lSize.muHeight);
-    lpShadowMap->SetNumSections(1);
-
-    lpShadowMap->SetNumMipMaps(1);
-    lpShadowMap->SetMultisampleFormat(0);
-    lpShadowMap->SetUseDepthStencilAsTexture(true);
-
-    lpShadowMap->SetDepthTargetInUse(true);
-    lpShadowMap->SetDepthTargetBufferFormat(KU_DEPTH_SURFACE_FORMAT);
-    lpShadowMap->SetDepthTargetTextureFormat(KU_DEPTH_SURFACE_FORMAT);
-    lpShadowMap->SetDepthTargetBaseEDRAM(0);
-    lpShadowMap->SetDepthTargetTileIndex(0);
-
-    // Realise the post-fx render target (CgsRenderTarget::Construct, the first virtual). On PC that
-    // reaches rw::graphics::postfx::RenderTarget::Initialize in
-    // pc/gcm/renderengine/PostFxRenderTarget.cpp, which creates the D3D9 depth texture.
-    lpShadowMap->Construct(lpAllocator);
-}
-
 // 0x823F6D98 -- build the shadow-map render target: ONE combined depth-only surface carrying all
 // three cascades, stored in pool slot 1 (E_RENDER_TARGET_SHADOW_MAP_0, the slot GetShadowMapBuffer(0)
 // hands back). Every colour section is switched off and only the depth/stencil record is described,
@@ -482,263 +414,6 @@ CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
     return mapRenderTarget[liIndex + 1];
 }
 
-// FLAG PC-platform leaf: apply the current client size between frames. On a GPU
-// allocation failure retain the entire old frame and let presentation scale it.
-void BrnRendererMemory::PCResizeDisplay()
-{
-    if (!renderengine::gDevice || IsIconic(renderengine::hWnd)) return;
-    RECT lClient = {};
-    if (!GetClientRect(renderengine::hWnd, &lClient)) return;
-    const RECT lView = renderengine::FitDisplay16By9(lClient.right, lClient.bottom);
-    const u32 luWidth = static_cast<u32>(lView.right - lView.left);
-    const u32 luHeight = static_cast<u32>(lView.bottom - lView.top);
-    if (luWidth < 2 || luHeight < 2) return;
-    static u32 suFailedWidth = 0, suFailedHeight = 0;
-    if (luWidth != suFailedWidth || luHeight != suFailedHeight)
-        suFailedWidth = suFailedHeight = 0;
-    if (luWidth == static_cast<u32>(renderengine::gDisplayWidth)
-        && luHeight == static_cast<u32>(renderengine::gDisplayHeight)) return;
-    if (luWidth == suFailedWidth && luHeight == suFailedHeight) return;
-    auto lpTarget = [](CgsRenderTarget* lpBuffer) {
-        return lpBuffer ? lpBuffer->GetRenderTarget() : nullptr;
-    };
-    CgsRenderTarget* const lapBuffers[] = {GetAntiAliasBuffer(), GetDownSampleBuffer(),
-        GetBackBuffer(), GetParticleBuffer(), GetBloomBuffer(), GetDepthOfFieldBuffer(), GetWorkBuffer()};
-    const u32 lauDivisors[] = {1u, 1u, 1u, 2u, 4u, 4u, 4u};
-    for (auto* lpBuffer : lapBuffers)
-        if (lpBuffer && !lpBuffer->GetRenderTarget()) return;
-    if (!renderengine::PCResizeDisplayTargets(lpTarget(GetAntiAliasBuffer()),
-        lpTarget(GetDownSampleBuffer()), lpTarget(GetParticleBuffer()), luWidth, luHeight,
-        lpTarget(GetBloomBuffer()), lpTarget(GetDepthOfFieldBuffer()), lpTarget(GetWorkBuffer())))
-    {
-        suFailedWidth = luWidth;
-        suFailedHeight = luHeight;
-        CgsDev::Log::WriteToLog("[display] resize allocation failed; retaining previous render resolution\n");
-        return;
-    }
-    suFailedWidth = suFailedHeight = 0;
-    mu32ScreenWidth = luWidth;
-    mu32ScreenHeight = luHeight;
-    for (u32 luIndex = 0; luIndex < 7; ++luIndex)
-    {
-        CgsRenderTarget* lpBuffer = lapBuffers[luIndex];
-        if (!lpBuffer) continue;
-        const u32 luDivisor = lauDivisors[luIndex];
-        lpBuffer->SetDimensions(luWidth / luDivisor, luHeight / luDivisor);
-        if (auto* lpRenderTarget = lpBuffer->GetRenderTarget())
-        {
-            lpRenderTarget->muWidth = luWidth / luDivisor;
-            lpRenderTarget->muHeight = luHeight / luDivisor;
-        }
-    }
-}
-
-
-// [PC bring-up] Create the post-fx spine's two render targets. NOT a console function -- the console
-// builds the whole pool in Construct @0x823FCA38, which is still gated out (see the
-// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner and the EnsurePostFxSceneTargets banner in
-// BrnRendererModule.cpp for the two remaining blockers). This exists only so the spine can use the REAL
-// creators without un-gating Construct, and it does nothing they do not do.
-//
-// ⚠️ MUST RUN AFTER PCBringUpCreateShadowMapBufferOnly, which nulls every pool slot. The caller
-// enforces that; this asserts it, because reversing the order would overwrite the shadow target's pool slot.
-//
-// DELETE WITH THE BRING-UP, together with PCBringUpCreateShadowMapBufferOnly.
-void BrnRendererMemory::PCBringUpCreatePostFxSceneTargets(rw::IResourceAllocator* lpAllocator,
-                                                          bool lbEnableMSAA)
-{
-    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
-               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
-
-    // ⚠️ SEED THE SCREEN EXTENT FIRST. mu32ScreenWidth / mu32ScreenHeight are written in exactly ONE
-    // place -- Construct @0x823FCA38, from renderengine::DeviceParameters::muFrontBufferWidth/Height --
-    // and Construct is the function that is gated out. So on this build they are still ZERO here, and
-    // the anti-alias and down-sample buffers both size themselves from them. The first boot of this
-    // wave duly logged "[postfx-rt] target 0x0 ... colourTexture=NULL": a 0x0 CreateTexture fails, the
-    // scene target owns no surface, and NOTHING reports an error. That is the placeholder-zero failure
-    // mode this project keeps paying for, caught this time only because the log line prints the extent.
-    //
-    // The PC front buffer's real extent is renderengine::gDisplayWidth/gDisplayHeight -- the values
-    // device.cpp hands D3DPRESENT_PARAMETERS::BackBufferWidth/Height, i.e. the actual swap chain.
-    mu32ScreenWidth  = static_cast<u32>(renderengine::gDisplayWidth);
-    mu32ScreenHeight = static_cast<u32>(renderengine::gDisplayHeight);
-
-    // And REFUSE to build a degenerate target rather than logging one. A zero extent here means the
-    // device is not up yet; the caller is value-latched, so returning leaves it to retry next frame.
-    if (mu32ScreenWidth == 0u || mu32ScreenHeight == 0u)
-    {
-        return;
-    }
-
-    // THE ORDER HERE IS THE BRING-UP'S, NOT Construct's, and the comment that used to claim
-    // otherwise was wrong (verify round, 2026-08-16). BrnRendererMemory::Construct @0x823FCA38 calls
-    // CreateAntiAliasBuffer FIRST (`bl BrnRendererMemory__CreateAntiAliasBuffer` @0x823FCAB4, with
-    // lbEnableMSAA already in r5 @0x823FCAAC) and CreateDownSampleBuffer SECOND (@0x823FCAC0) -- the
-    // order the gated Construct in this file reproduces at :257-258. The inversion is harmless
-    // (neither creator reads a slot the other writes; only CreateBackBuffer has an ordering
-    // requirement and it runs after both either way), but it is a DEVIATION and is recorded as one.
-    CreateDownSampleBuffer(lpAllocator);
-
-    // THE ANTI-ALIAS (SCENE) BUFFER, at the console's own MSAA setting (anti-aliasing wave,
-    // 2026-08-16). This call used to be `CreateAntiAliasBuffer(lpAllocator, false)` under a banner
-    // reading "MSAA OFF. The console reads this from its display-mode setting". BOTH HALVES OF THAT
-    // WERE WRONG, and the correction is the whole point of this wave:
-    //
-    //   * THE CONSOLE DOES NOT READ A DISPLAY-MODE SETTING. BrnRendererModule::Construct @0x8240A778
-    //     stores a literal 1 into mbMultisampledBackbuffer (`li r28, 1` @0x8240A7B4 /
-    //     `stb r28, 0(r29)` @0x8240A7C4, r29 = this+0xC400) and forwards that same byte into this
-    //     pool's Construct as lbEnableMSAA (`lbz r11, 0(r29)` @0x8240A8BC -> sp+0x97 == `arg_97`).
-    //     There is no branch and no settings read anywhere on that path. The shipped X360 build is
-    //     MSAA ON, format 1 (Xenos 2x), always.
-    //   * D3D9 DOES HAVE THE MACHINERY THAT MATTERS. What it lacks is PREDICATED TILING, which is an
-    //     EDRAM budgeting device, not anti-aliasing: the two 1280x384/1280x336 rectangles of
-    //     KMSAA_TILING_PLAN exist because a 2-sample 1280x720 colour+depth pair does not fit in the
-    //     Xenos' 10 MB of EDRAM (BrnAntiAliasTiling.h). On PC the surface is whole, the two
-    //     rectangles partition it exactly, and every per-tile call degrades correctly: BeginTiling
-    //     clears both rects, SetPredication/EndTiling are honest no-ops, and each per-tile
-    //     D3DDevice_Resolve is a StretchRect over its own band -- which, from a MULTISAMPLED source,
-    //     IS D3D9's MSAA resolve.
-    //
-    // So the flag is threaded from the module rather than chosen here, and the PC sample COUNT (a
-    // knob, defaulting to the console's own format) is decided one layer down, in the leaf's
-    // RenderTarget::Initialize -- see renderengine::gAntiAliasing in Xbox2SurfaceShims.h.
-    CreateAntiAliasBuffer(lpAllocator, lbEnableMSAA);
-
-    // ---- the three targets the post-fx COMPOSITE reads or writes (gate-flip wave, 2026-08-15) ----
-    // BrnPostFx::Render @0x8240A468 dereferences the BLOOM and DEPTH-OF-FIELD slots unconditionally
-    // (`GetBloomBuffer()->GetRenderTarget()->GetTexture(0)` for SamplerBloom / SamplerDof -- the
-    // X360 asm at 0x8240A560-0x8240A5E8 has no null test, and that is FAITHFUL: the console pool
-    // cannot fail), and it composites INTO the BACK_BUFFER slot (`lpDestinationRenderTarget->
-    // Begin(0)`), whose colour mode is USE_DEVICE_FOR_WRITE -- the swap chain, through
-    // gpDefaultRenderTargetState (installed by Device::Start on this build too, see
-    // PCInstallDefaultRenderTargetState). Same three console creators, same relative order as
-    // Construct @0x823FCA38 (bloom, depth-of-field, ..., back buffer LAST -- CreateBackBuffer asserts
-    // the down-sample buffer exists because it borrows its section-4 depth state). The bloom target's
-    // texture MUST exist even while bloom is off: permutation 0's pixel program samples SamplerBloom
-    // unconditionally and is neutral through BloomColour == 0, not through an empty binding.
-    CreateBloomBuffer(lpAllocator);
-    CreateDepthOfFieldBuffer(lpAllocator);
-    // The WORK buffer (CreateWorkBuffer @0x823F7148, 320 wide): the console Construct's sixth creator. It
-    // is the ping-pong target of every bloom / depth-of-field pass -- BrnPostFx::PrepareDownSampleBuffers
-    // hands GetWorkBuffer()->GetRenderTarget() to BrnPostFxBloom::Render and DepthOfField::
-    // DownSampleAndGaussianBlur -- so it was harmless to omit only while every effect bit was clear.
-    // The first bloom-lit boot (rung 5, 2026-08-15) crashed at BrnPostFx::Render+0xE1 reading
-    // null->+0x160 (== CgsRenderTarget::GetRenderTarget on a null pool slot) the frame E_FX_BLOOM
-    // came on. Same allocator, same order as the console.
-    CreateWorkBuffer(lpAllocator);
-    CreateBackBuffer(lpAllocator, mu32ScreenWidth, mu32ScreenHeight);
-
-    // ⚠️ FLAG PC bring-up INITIALISATION -- give both targets DEFINED contents before the first
-    // frame renders into one. NOT a console behaviour: the Xenos clears its EDRAM scene surface
-    // from the TILING PASS at the TOP of every frame (first frame included), whereas the PC
-    // bracket's only clear is the resolve's, at the BOTTOM. Both surfaces above are
-    // D3DPOOL_DEFAULT D3D9 objects, which D3D9 leaves UNDEFINED at creation, so without this the
-    // first bracket frame renders the world into undefined colour over undefined depth -- and
-    // that frame is copied and presented. Undefined depth can reject the whole world, which
-    // looks like the bracket failing rather than like one bad frame.
-    //
-    // The DOWN-SAMPLE buffer is cleared as well as the anti-alias buffer because it is what the
-    // present blit reads: its colour is rewritten every frame by the resolve's copy, but only
-    // over the rectangle that copy is handed, and its depth is never written at all.
-    //
-    // DELETE WITH THE BRING-UP, when a frame-top clear exists again -- see the banner on
-    // renderengine::PCBringUpClearRenderTargetState in pc/gcm/renderengine/ShadowPass.h,
-    // which also carries the attestation for every value the clear writes.
-    CgsRenderTarget* const lpDownSampleBuffer = GetDownSampleBuffer();
-    CgsRenderTarget* const lpAntiAliasBuffer  = GetAntiAliasBuffer();
-    rw::graphics::postfx::RenderTarget* const lpDownSampleTarget =
-        (lpDownSampleBuffer != nullptr) ? lpDownSampleBuffer->GetRenderTarget() : nullptr;
-    rw::graphics::postfx::RenderTarget* const lpAntiAliasTarget =
-        (lpAntiAliasBuffer != nullptr) ? lpAntiAliasBuffer->GetRenderTarget() : nullptr;
-    if (lpDownSampleTarget != nullptr)
-    {
-        renderengine::PCBringUpClearRenderTargetState(
-            lpDownSampleTarget->GetSectionRenderTargetState(0));
-    }
-    if (lpAntiAliasTarget != nullptr)
-    {
-        renderengine::PCBringUpClearRenderTargetState(
-            lpAntiAliasTarget->GetSectionRenderTargetState(0));
-    }
-
-    // The BLOOM and DEPTH-OF-FIELD targets are SAMPLED by the composite every frame, and nothing
-    // writes them while their effects are off -- so their D3DPOOL_DEFAULT contents would otherwise
-    // be undefined FOREVER, not just on the first frame. Bloom's neutral is `tap * BloomColour(0)`;
-    // an undefined tap that happens to hold NaN bits makes that NaN, and NaN survives the screen
-    // blend into the presented pixel. Cleared once, same helper. (The back buffer is the swap chain
-    // -- FrameBegin clears it every frame -- so it is not on this list.)
-    CgsRenderTarget* const lpBloomBuffer        = GetBloomBuffer();
-    CgsRenderTarget* const lpDepthOfFieldBuffer = GetDepthOfFieldBuffer();
-    if (lpBloomBuffer != nullptr && lpBloomBuffer->GetRenderTarget() != nullptr)
-    {
-        renderengine::PCBringUpClearRenderTargetState(
-            lpBloomBuffer->GetRenderTarget()->GetSectionRenderTargetState(0));
-    }
-    if (lpDepthOfFieldBuffer != nullptr && lpDepthOfFieldBuffer->GetRenderTarget() != nullptr)
-    {
-        renderengine::PCBringUpClearRenderTargetState(
-            lpDepthOfFieldBuffer->GetRenderTarget()->GetSectionRenderTargetState(0));
-    }
-}
-
-
-// [PC bring-up] Create the ENVIRONMENT-MAP render target. NOT a console function -- the console
-// builds it inside Construct @0x823FCA38 (`bl BrnRendererMemory__CreateEnvmapBuffer`), which is
-// still gated out for the two reasons the BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names.
-// This is the same one-slot bring-up entry point PCBringUpCreatePostFxSceneTargets is, and it does
-// nothing CreateEnvmapBuffer does not do.
-//
-// THREE ORDERING FACTS, all of them checked rather than assumed:
-//  (1) It must run AFTER PCBringUpCreateShadowMapBufferOnly, which NULLS EVERY POOL SLOT. The assert
-//      below is that precondition; the caller (BrnRendererModule::EnsureEnvMapTarget) enforces it by
-//      refusing until the shadow target exists.
-//  (2) It must NOT run twice. CreateEnvmapBuffer `new`s a CgsRenderTarget and publishes it into the
-//      slot BEFORE describing it, so a second call would leak the first target AND hand the renderer
-//      a different object than the one sampler 13 was bound to. The early return is that guard.
-//  (3) It does NOT disturb the shadow-map latch in PostFxRenderTarget.cpp. That leaf picks the
-//      COMPARE depth ladder only for a target whose colour mode is NONE (its own banner, ~:225: "the
-//      SHADOW MAP is the only pool target with colour mode NONE that still resolves its depth to a
-//      texture"). CreateEnvmapBuffer marks colour section 0 in use, so this target's colour mode is
-//      CREATE and it takes the RAW ladder, exactly like the down-sample and particle buffers.
-//
-// DELETE WITH THE BRING-UP, together with its two siblings.
-void BrnRendererMemory::PCBringUpCreateEnvMapBuffer(rw::IResourceAllocator* lpAllocator)
-{
-    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
-               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
-
-    if (mapRenderTarget[E_RENDER_TARGET_ENV_MAP] != nullptr)
-    {
-        return;
-    }
-
-    CreateEnvmapBuffer(lpAllocator);
-}
-
-// [PC bring-up] Create the SUN-CORONA render target (coronas step 2). NOT a console function --
-// the console builds it inside Construct @0x823FCA38 (`bl BrnRendererMemory__CreateSunCoronaBuffer`
-// @0x823FCB0C), which is still gated out for the two reasons the
-// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names. This is the same one-slot bring-up entry
-// point PCBringUpCreateEnvMapBuffer is, and it does nothing CreateSunCoronaBuffer does not do.
-//
-// It is NOT sized from the screen and does not care about the device's extent: the target is 1x1
-// (CreateSunCoronaBuffer's single `li r10, 1` feeds width, height AND the mip count), so unlike
-// PCBringUpCreatePostFxSceneTargets it has no mu32ScreenWidth precondition.
-//
-// DELETE WITH THE BRING-UP, together with its three siblings.
-void BrnRendererMemory::PCBringUpCreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocator)
-{
-    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
-               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
-
-    if (mapRenderTarget[E_RENDER_TARGET_SUN_CORONA] != nullptr)
-    {
-        return;
-    }
-
-    CreateSunCoronaBuffer(lpAllocator);
-}
-
 // =================================================================================================
 // THE REST OF THE RENDER-TARGET POOL (post-fx spine wave, 2026-08-13).
 //
@@ -823,7 +498,6 @@ void BrnRendererMemory::CreateAntiAliasBuffer(rw::IResourceAllocator* lpAllocato
     const BrnGraphics::AntiAliasTilingPlan& lrPlan = lbEnableMSAA ? BrnGraphics::KMSAA_TILING_PLAN : BrnGraphics::KNO_MSAA_TILING_PLAN;
     lpAntiAlias->SetMultisampleFormat(lrPlan.mn32MultiSampleFormat);
 
-    // CONSOLE EDRAM FACT (dropped by the PC leaf -- see the CountEDRAMTiles banner): the depth surface
     // is placed immediately after the colour surface, so its base is the colour surface's tile count.
     // The footprint is ONE rectangle of the plan, because predicated tiling holds a single tile in
     // EDRAM at a time. The multisample format is log2(sample count), and sample expansion costs EDRAM
@@ -886,7 +560,6 @@ void BrnRendererMemory::CreateDownSampleBuffer(rw::IResourceAllocator* lpAllocat
     lpDownSample->SetDepthTargetBufferFormat(KU_DEPTH_SURFACE_FORMAT);
     lpDownSample->SetDepthTargetTextureFormat(KU_DEPTH_SURFACE_FORMAT);
 
-    // CONSOLE EDRAM FACT (dropped by the PC leaf): the depth surface starts immediately after the
     // colour surface. Unlike the anti-alias buffer there is no tiling plan and no sample expansion --
     // the footprint is the whole screen (lwz 0x5C / 0x60 of this, re-read at 0x823F6F04-0x823F6F18).
     lpDownSample->SetDepthTargetBaseEDRAM(CountEDRAMTiles(mu32ScreenWidth, mu32ScreenHeight, KU_EDRAM_TILE_HEIGHT));
@@ -912,12 +585,7 @@ void BrnRendererMemory::CreateWorkBuffer(rw::IResourceAllocator* lpAllocator)
     // one no-argument method -- see the split-setter banner in CgsRenderTarget.h).
     lpWorkBuffer->ClearColourTargetInUse();
 
-#if defined(_WIN32)
-    // FLAG PC-platform leaf: TUB work allocation 0x54479C..0x5447AB uses screen/4.
-    lpWorkBuffer->SetDimensions(mu32ScreenWidth / 4u, mu32ScreenHeight / 4u);
-#else
     lpWorkBuffer->SetDimensions(KU_WORK_BUFFER_WIDTH, KU_WORK_BUFFER_HEIGHT);
-#endif
     lpWorkBuffer->SetNumMipMaps(1);
     lpWorkBuffer->SetMultisampleFormat(0);
     lpWorkBuffer->SetUseDepthStencilAsTexture(false);
@@ -985,9 +653,6 @@ void BrnRendererMemory::CreateEnvmapBuffer(rw::IResourceAllocator* lpAllocator)
 
     lpEnvMap->ClearColourTargetInUse();
 
-    // FLAG PC-platform leaf: describe cube, scratch colour and depth at the same
-    // optional native extent. The unconfigured default remains the original 128.
-    const u32 luFaceSize = CgsPC::Reflections::CreationResolution();
     lpEnvMap->SetDimensions(luFaceSize, luFaceSize);
     lpEnvMap->SetNumMipMaps(1);
     lpEnvMap->SetMultisampleFormat(KI_ENV_MAP_MULTISAMPLE_FORMAT);
@@ -1040,12 +705,7 @@ void BrnRendererMemory::CreateBloomBuffer(rw::IResourceAllocator* lpAllocator)
     // one no-argument method -- see the split-setter banner in CgsRenderTarget.h).
     lpBloom->ClearColourTargetInUse();
 
-#if defined(_WIN32)
-    // FLAG PC-platform leaf: TUB bloom allocation 0x54461C..0x54462B uses screen/4.
-    lpBloom->SetDimensions(mu32ScreenWidth / 4u, mu32ScreenHeight / 4u);
-#else
     lpBloom->SetDimensions(KU_BLOOM_BUFFER_WIDTH, KU_BLOOM_BUFFER_HEIGHT);
-#endif
     lpBloom->SetNumMipMaps(1);
     lpBloom->SetMultisampleFormat(0);
     lpBloom->SetUseDepthStencilAsTexture(false);
@@ -1090,12 +750,7 @@ void BrnRendererMemory::CreateDepthOfFieldBuffer(rw::IResourceAllocator* lpAlloc
 
     lpDepthOfField->ClearColourTargetInUse();
 
-#if defined(_WIN32)
-    // FLAG PC-platform leaf: independently attested TUB DoF 0x54481C..0x54482B uses screen/4.
-    lpDepthOfField->SetDimensions(mu32ScreenWidth / 4u, mu32ScreenHeight / 4u);
-#else
     lpDepthOfField->SetDimensions(KU_DEPTH_OF_FIELD_BUFFER_WIDTH, KU_DEPTH_OF_FIELD_BUFFER_HEIGHT);
-#endif
     lpDepthOfField->SetNumMipMaps(1);
     lpDepthOfField->SetMultisampleFormat(0);
     lpDepthOfField->SetUseDepthStencilAsTexture(false);
@@ -1310,161 +965,6 @@ namespace
 }
 
 // =================================================================================================
-// THE QUARTER-RES PARTICLE COMPOSITE CHAIN (2026-09-05).
-//
-// The console draws Lion particles into a CLEARED, SEPARATE half-by-half buffer and composites
-// that buffer OVER the scene with a (1 - accumulatedAlpha) term; this build drew them straight
-// onto the scene with no such term, so a saturating plume ADDED its background instead of
-// REPLACING it -- which is what left the boost flame with a white core after the white-level fix
-// in a4c7670b. The chain is five console functions:
-//     BrnRendererMemory::CreateParticleBuffer        @0x823F72B8  (already in this file)
-//     BrnRendererModule::BeginQuarterResBuffer       @0x82408C38  (BrnRendererModule.cpp)
-//     ParticleModule::RenderQuarterResParticles      @0x82294A20  (ParticleModule.cpp)
-//     BrnRendererModule::EndRenderAntiAliased        @0x82408B00  (BrnRendererModule.cpp)
-//     BrnRendererMemory::BlitComposite               @0x82406A68  (here)
-// plus BrnRendererMemory::BlitDepth @0x82406EA8 (here), which is what keeps the particles
-// depth-tested once they leave the scene target's own depth buffer.
-// =================================================================================================
-
-// [PC bring-up] Build pool slot 9 and the four blit programs. NOT a console function -- both halves
-// are Construct @0x823FCA38's, which is gated out for the two reasons the
-// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names.
-//
-// The RENDER TARGET half calls the real CreateParticleBuffer, exactly as its three sibling
-// bring-ups call theirs. The PROGRAM half is the one thing Construct does that has no console body
-// available on PC: its four gacIm2d*BlitProgram blobs are Xenos microcode inside the guest image.
-// They are ADOPTED from the authored D3D9 recompiles instead (pc/gcm/renderengine/
-// Im2dBlitProgramsPC.cpp, generated from tools/assets/shaders/brn_im2dblit.fx) -- the identical
-// route BrnSunCorona::Construct takes for its own four executable-embedded programs, and the reason
-// this cannot simply be `CreateBlitProgram(gacIm2dDepthBlitVertexProgram, ...)`.
-//
-// Also NOT done here: mBlitTextureStateResource / mpBlitTextureState. The console's BlitDepth
-// Initialize's that state per call over the source's depth texture; on PC the source render target
-// already owns a depth TextureState carrying the same texture, so BlitDepth reads that instead and
-// nothing has to be carved. See BlitDepth's banner.
-//
-// IDEMPOTENT, and it must be: CreateParticleBuffer `new`s a CgsRenderTarget and publishes it into
-// the slot, so a second call would leak the first AND hand the composite a different object than
-// the particle pass rendered into (the same hazard PCBringUpCreateSunCoronaBuffer's early return
-// exists for). DELETE WITH THE BRING-UP, together with its three siblings.
-bool BrnRendererMemory::PCBringUpCreateParticleCompositeChain(rw::IResourceAllocator* lpAllocator)
-{
-    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
-               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
-
-    // The pool sizes this target from mu32ScreenWidth/mu32ScreenHeight >> 1, so it needs the same
-    // precondition PCBringUpCreatePostFxSceneTargets has: the screen extent must be seeded.
-    if (mu32ScreenWidth == 0u || mu32ScreenHeight == 0u)
-    {
-        return false;
-    }
-
-    if (mapRenderTarget[E_RENDER_TARGET_PARTICLE] == nullptr)
-    {
-        CreateParticleBuffer(lpAllocator);
-
-        CgsRenderTarget* const lpParticle = mapRenderTarget[E_RENDER_TARGET_PARTICLE];
-        char lacMessage[224];
-        std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[qres] particle buffer created: %ux%u rt=%d colourState=%d depthState=%d\n",
-                      (unsigned)(lpParticle != nullptr ? lpParticle->GetWidth() : 0u),
-                      (unsigned)(lpParticle != nullptr ? lpParticle->GetHeight() : 0u),
-                      (int)(lpParticle != nullptr && lpParticle->GetRenderTarget() != nullptr),
-                      (int)(lpParticle != nullptr && lpParticle->GetRenderTarget() != nullptr
-                            && lpParticle->GetRenderTarget()->maColourTargets[0].mpTextureState != nullptr),
-                      (int)(lpParticle != nullptr && lpParticle->GetRenderTarget() != nullptr
-                            && lpParticle->GetRenderTarget()->GetDepthTextureState() != nullptr));
-        CgsDev::Log::WriteToLog(lacMessage);
-    }
-
-    if (mpCompositeBlitVertexProgramBuffer == nullptr)
-    {
-        mpDepthBlitVertexProgramBuffer = renderengine::ProgramBufferPC_Adopt(
-            renderengine::gauIm2dDepthBlitVertexProgramPC,
-            renderengine::guIm2dDepthBlitVertexProgramPCSize, 0u);
-        mpDepthBlitPixelProgramBuffer = renderengine::ProgramBufferPC_Adopt(
-            renderengine::gauIm2dDepthBlitPixelProgramPC,
-            renderengine::guIm2dDepthBlitPixelProgramPCSize, 1u);
-        mpCompositeBlitVertexProgramBuffer = renderengine::ProgramBufferPC_Adopt(
-            renderengine::gauIm2dCompositeBlitVertexProgramPC,
-            renderengine::guIm2dCompositeBlitVertexProgramPCSize, 0u);
-        mpCompositeBlitPixelProgramBuffer = renderengine::ProgramBufferPC_Adopt(
-            renderengine::gauIm2dCompositeBlitPixelProgramPC,
-            renderengine::guIm2dCompositeBlitPixelProgramPCSize, 1u);
-
-        // The shared two-element declaration both pairs draw through (the sun corona's, value for
-        // value -- see brn_im2dblit.fx's VERTEX INPUT note). The offset lane is left at the ctor's
-        // 0xFFFF, which is the auto-pack request that produces 0 / 12.
-        renderengine::VertexDescriptor::Parameters lVertexDecl;
-        lVertexDecl.maElements[0].mu16Stream    = 0;
-        lVertexDecl.maElements[0].miOffset      = static_cast<s32>(KU_BLIT_ELEMENT_FORMAT_FLOAT3);
-        lVertexDecl.maElements[0].mu8UsageIndex = KU8_BLIT_ELEMENT_TYPE_POSITION;
-        lVertexDecl.maElements[1].mu16Stream    = 0;
-        lVertexDecl.maElements[1].miOffset      = static_cast<s32>(KU_BLIT_ELEMENT_FORMAT_FLOAT2);
-        lVertexDecl.maElements[1].mu8UsageIndex = KU8_BLIT_ELEMENT_TYPE_TEXCOORD0;
-        gpBlitVertexDescriptor = renderengine::VertexDescriptor::Initialize(0, &lVertexDecl);
-
-        // [FLAG PC bring-up gate] A resolved-but-not-found handle reads mu8RegisterCount == 0 and
-        // RenderEngineDeviceBeginShaderStates routes its row to the discard row -- the constant
-        // never reaches the shader, the composite samples uv (0,0) forever, and NOTHING errors.
-        // Refuse the whole chain instead, exactly as BrnSunCorona::Construct refuses its own.
-        renderengine::ProgramVariableHandle lUvOffsets;
-        renderengine::ProgramVariableHandle lUvScales;
-        if (mpCompositeBlitVertexProgramBuffer != nullptr)
-        {
-            renderengine::ProgramBuffer::GetVariableHandleByName(
-                mpCompositeBlitVertexProgramBuffer, gszBlitUVOffsets, &lUvOffsets);
-            renderengine::ProgramBuffer::GetVariableHandleByName(
-                mpCompositeBlitVertexProgramBuffer, gszBlitUVScales, &lUvScales);
-        }
-
-        char lacMessage[256];
-        std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[qres] blit programs adopted: depthVs=%d depthPs=%d compVs=%d compPs=%d"
-                      " decl=%d gUVOffsets{reg=%u,count=%u} gUVScales{reg=%u,count=%u}\n",
-                      (int)(mpDepthBlitVertexProgramBuffer != nullptr),
-                      (int)(mpDepthBlitPixelProgramBuffer != nullptr),
-                      (int)(mpCompositeBlitVertexProgramBuffer != nullptr),
-                      (int)(mpCompositeBlitPixelProgramBuffer != nullptr),
-                      (int)(gpBlitVertexDescriptor != nullptr),
-                      (unsigned)lUvOffsets.mu8RegisterIndex, (unsigned)lUvOffsets.mu8RegisterCount,
-                      (unsigned)lUvScales.mu8RegisterIndex, (unsigned)lUvScales.mu8RegisterCount);
-        CgsDev::Log::WriteToLog(lacMessage);
-
-        if (lUvOffsets.mu8RegisterCount == 0u || lUvScales.mu8RegisterCount == 0u)
-        {
-            CgsDev::Log::WriteToLog(
-                "[qres] the authored composite vertex program does NOT declare gUVOffsets /"
-                " gUVScales by those exact names -- the quarter-res particle chain stays off\n");
-            mpDepthBlitVertexProgramBuffer     = nullptr;
-            mpDepthBlitPixelProgramBuffer      = nullptr;
-            mpCompositeBlitVertexProgramBuffer = nullptr;
-            mpCompositeBlitPixelProgramBuffer  = nullptr;
-        }
-    }
-
-    return PCBringUpParticleCompositeChainReady();
-}
-
-// A pure query -- see the declaration. Every surface and program the two blits dereference without
-// a test of their own is checked here, ONCE, so the renderer's routing decision and the blits agree
-// about what "live" means.
-bool BrnRendererMemory::PCBringUpParticleCompositeChainReady() const
-{
-    CgsRenderTarget* const lpParticle = mapRenderTarget[E_RENDER_TARGET_PARTICLE];
-    if (lpParticle == nullptr || lpParticle->GetRenderTarget() == nullptr)
-        return false;
-    if (lpParticle->GetRenderTarget()->maColourTargets[0].mpTextureState == nullptr)
-        return false;
-
-    return mpDepthBlitVertexProgramBuffer     != nullptr
-        && mpDepthBlitPixelProgramBuffer      != nullptr
-        && mpCompositeBlitVertexProgramBuffer != nullptr
-        && mpCompositeBlitPixelProgramBuffer  != nullptr
-        && gpBlitVertexDescriptor             != nullptr;
-}
-
-// =================================================================================================
 // BrnRendererMemory::BlitDepth -- X360 @0x82406EA8.
 //
 // Console body, in order: read the source's postfx RenderTarget; SetShaderGPRAllocation; load the
@@ -1635,12 +1135,8 @@ void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTar
     // NOT bound -- see the deviation note above; binding the scene there while it is the render
     // target is the undefined case this whole re-association exists to avoid.
     shadow::Device::SetState(lpOverlayState, KU_BLIT_OVERLAY_SAMPLER_UNIT);
-    renderengine::PostFxSourceSampler_ApplyState(KU_BLIT_OVERLAY_SAMPLER_UNIT,
-                                                 KU_BLIT_SAMPLER_FILTER_LINEAR, 1u);
     shadow::Device::SetVertexDescriptor(gpBlitVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
-
-    renderengine::Im2dCompositeBlit_ApplyRopState();
 
     DrawBlitQuad();
 

@@ -61,16 +61,6 @@ namespace
 
     const s32 KI_FAIL_DIAG_LINES = 400;
 
-    bool FailDiagLine()
-    {
-        static const bool sbOn = (std::getenv("BRN_CRASHCAM_DIAG") != 0);
-        static s32 siLinesLeft = KI_FAIL_DIAG_LINES;
-        if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
-            return false;
-        --siLinesLeft;
-        return true;
-    }
-
     // The ValidityAccount EFailedFlag names (DWARF BrnCameraValidityAccount.h:8..:24).
     const char* FailedFlagName(s32 leFlag)
     {
@@ -97,14 +87,6 @@ void CollisionPolicy::Fail(Camera& lrCamera, s32 leFailedFlag)
     lrCamera.GetState().ClearFlag(1u);
     mbFailed = true;
 
-    if (FailDiagLine())
-    {
-        char lacPolicy[32];
-        std::snprintf(lacPolicy, sizeof(lacPolicy), "%p", static_cast<const void*>(this));
-        *CgsDev::Log::gpDebugPrint
-            << "[scenequery] policy " << lacPolicy
-            << " fail " << leFailedFlag << " (" << FailedFlagName(leFailedFlag) << ")\n";
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -307,20 +289,6 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
     {
         Fail(lrCamera, 9);   // E_FAILED_STARTED_TOO_NEAR_GEOMETRY
 
-        if (FailDiagLine())  // [diag, NOT X360] the prediction that failed it
-        {
-            const rw::math::vpu::Vector3& lrCameraPosition = lrCamera.mTransform.wAxis;
-            char lacLine[224];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[scenequery] policy %p reason 9: cam (%.3f, %.3f, %.3f) vel (%.3f, %.3f, %.3f) tHit %.4f\n",
-                          static_cast<const void*>(this),
-                          static_cast<double>(lrCameraPosition.x), static_cast<double>(lrCameraPosition.y),
-                          static_cast<double>(lrCameraPosition.z),
-                          static_cast<double>(mVelocity.x), static_cast<double>(mVelocity.y),
-                          static_cast<double>(mVelocity.z),
-                          static_cast<double>(mGeometryCollisionPredictor.GetTimeUntilCollision()));
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
     }
 
     if (mVehicleCollisionPredictor.HasPredictedCollision()

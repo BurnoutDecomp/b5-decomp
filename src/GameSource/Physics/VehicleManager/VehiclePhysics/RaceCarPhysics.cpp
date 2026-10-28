@@ -130,11 +130,6 @@ namespace Vehicle
         // OnChecked @0x8261E3F4 gates the checked car's crash on `> 8`. DELETE-WHEN the harness
         // can pick a car.
         {
-            const char* lpcOverride = getenv("BRN_STRENGTH_STAT_OVERRIDE");
-            if (lpcOverride != 0)
-            {
-                mu8StrengthStat = static_cast<u8>(atoi(lpcOverride));
-            }
         }
 
         SetTransformFromPositionOnRoad(lOnRoadTransform);
@@ -267,12 +262,6 @@ namespace Vehicle
             u32 muLeverPitch;         // lever impulse 2 (pitch / camera-Z arm) actually issued
         };
         AtGateCensus gsAtGate = { 0, 0, { 0 }, 0, false, 0, { 0 }, { 0 }, { 0 }, 0, 0, 0, 0, 0 };
-
-        bool AtGateArmed()
-        {
-            static const bool sbArmed = (std::getenv("BRN_AT_GATE_DIAG") != 0);
-            return sbArmed;
-        }
 
         void AtGatePrint(const char* lpcWhy, u32 luWinFrom, u32 luWinTo)
         {
@@ -446,16 +435,8 @@ namespace Vehicle
         mAssistStrength = Vector3{ 0.01f, 0.01f, 0.01f, 0.01f };   // +0x100 splat(flt_82002138)
     }
 
-    // [td-slamgate] PC WITNESS, NOT X360 -- see RaceCarPhysics::TdSlamGateSample. BRN_TD_DIAG only.
-    // Eight slots, one per race-car object (VehicleManager::maRaceCarVehicles[8] never moves).
-    // [FLAG PC witness] DELETE-WHEN the FX-LADDER miNumCollisions timing question is closed.
     namespace
     {
-        bool TdSlamGateArmed()
-        {
-            static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
-            return sbOn;
-        }
 
         RaceCarPhysics::TdSlamGateSample gaTdSlamGate[8] = {};
 
@@ -488,8 +469,6 @@ namespace Vehicle
         return nullptr;
     }
 
-    // [td-react] PC WITNESS, NOT X360 -- see RaceCarPhysics::TdReactWatch. BRN_TD_DIAG only.
-    // [FLAG PC witness] DELETE-WHEN the FX-LADDER hit-reaction question is closed.
     namespace
     {
         struct TdReactWatchSlot
@@ -539,30 +518,6 @@ namespace Vehicle
                                         lvV.z - lvUp.z * lfUpDot, 0.0f };
                 const Vector3Plus& lvShunt = mShuntEffect.mDirectionPlusDesiredSpeed;
                 const f32 lfAlong = lvShunt.x * lvPlanar.x + lvShunt.y * lvPlanar.y + lvShunt.z * lvPlanar.z;
-                *CgsDev::Log::gpDebugPrint
-                    << "[td-react-step] id=" << lrSlot.miImpactId
-                    << (lrSlot.miRole == 0 ? " victim" : " aggressor")
-                    << " k=" << lrSlot.miStep
-                    << " crashing=" << (mbCrashing ? 1 : 0)
-                    << " fwd=" << vpu::Dot(lvV, mTransform.zAxis)
-                    << " lat=" << vpu::Dot(lvV, mTransform.xAxis)
-                    << " up=" << lfUpDot
-                    << " yaw=" << vpu::Dot(mAngularVelocity, lvUp)
-                    << " | slam life=" << mSlamEffect.mfSlamLife
-                    << " total=" << mSlamEffect.mfTotalSlamTime
-                    << " orig=" << mSlamEffect.mfOriginalSteering
-                    << " steer=" << mSlamEffect.mfSteering
-                    << " rec=" << mSlamEffect.mfRecoveryTime
-                    << " num=" << static_cast<s32>(mSlamEffect.mi8SlamNumber)
-                    << " | shunt desired=" << lvShunt.w
-                    << " life=" << mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x
-                    << " sitq=" << mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y
-                    << " along=" << lfAlong
-                    << " | ctl steer=" << lpControls->GetSteer()
-                    << " gas=" << lpControls->mfGas
-                    << " type=" << static_cast<s32>(lpControls->GetType())
-                    << " nColl=" << miNumCollisions
-                    << " [FLAG PC witness]\n";
             }
             if (++lrSlot.miStep >= KI_TD_REACT_STEPS)
                 lrSlot.mpCar = nullptr;
@@ -683,53 +638,9 @@ namespace Vehicle
                                 CgsNumeric::Random& lrRandom)
     {
         {
-            static const bool sbWatch = (std::getenv("BRN_SHOWTIME_WATCH") != 0);
             static bool       sbWasInShowtime = false;
             static s32        siFrameMod      = 0;
 
-            if (sbWatch && CgsDev::Log::gpDebugPrint != 0)
-            {
-                const bool lbIn = mbPlayerCarInShowtime;
-                if (lbIn != sbWasInShowtime)
-                {
-                    sbWasInShowtime = lbIn;
-                    siFrameMod = 0;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[showtime-watch] mbPlayerCarInShowtime -> " << (lbIn ? 1 : 0)
-                        << " (reached through the console chain, not injected)\n";
-                }
-                // ⭐⭐⭐ [bounce wave] ASK WHAT THIS PROBE CANNOT SEE. The 30-frame period is
-                // HALF A SECOND at 60 fps, and mfTimeUntilPush is seeded to 0.4 -- so the push
-                // window is SHORTER THAN ONE SAMPLE. At period 30 this witness can only ever
-                // print the seed and then a zero, and it is structurally incapable of showing the
-                // decrement in between. That is exactly how a body that ran ONCE with a huge
-                // timestep and a body that ticked properly at 60 Hz would look identical here.
-                // So while the timer is live, sample EVERY frame. Costs a handful of lines (the
-                // window is ~24 frames) and turns "pushT changed" into "pushT decremented, at
-                // this rate, over this many frames" -- a VALUE instead of a fact.
-                const bool lbPushWindow = (msPlayerParams.mfTimeUntilPush > 0.0f);
-                if (lbIn && (lbPushWindow || (siFrameMod++ % 30) == 0))
-                {
-                    const Vector3 lvVel = GetLinearVelocity();
-                    const Vector3 lvAng = GetAngularVelocity();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[showtime-watch] crashing=" << (IsCrashing() ? 1 : 0)
-                        << " hasAir=" << (mbHasAir ? 1 : 0)
-                        << " usingAftertouch=" << (mbUsingAftertouch ? 1 : 0)
-                        << " | disable=" << (msPlayerParams.mbDisableShowtime ? 1 : 0)
-                        << " launch=" << (msPlayerParams.mbLaunchActive ? 1 : 0)
-                        << " pushT=" << msPlayerParams.mfTimeUntilPush
-                        // THE BOUNCE CHAIN, which is the question this witness exists to answer:
-                        << " | justBounced=" << (msPlayerParams.mbJustBounced ? 1 : 0)
-                        << " bouncedThisFrame=" << (msPlayerParams.mbBouncedThisFrame ? 1 : 0)
-                        << " chain=" << static_cast<s32>(msPlayerParams.muBounceChainCount)
-                        << " boosting=" << (msPlayerParams.mbBounceBoosting ? 1 : 0)
-                        << " boostPending=" << (msPlayerParams.mbBounceBoostPending ? 1 : 0)
-                        << " | speed=" << std::sqrt(vpu::MagnitudeSquared(lvVel))
-                        << " velY=" << lvVel.y
-                        << " angMag=" << std::sqrt(vpu::MagnitudeSquared(lvAng)) << "\n";
-                }
-            }
         }
 
         if (TdSlamGateArmed())   // [td-react] PC witness, not X360: the hit-reaction step trace
@@ -1571,15 +1482,6 @@ namespace Vehicle
         CapShowtimeVelocities();
     }
 
-    // [tassist] PC WITNESS, NOT X360 -- BRN_TASSIST_DIAG only, capped at 64 lines (2026-09-25, crash
-    // parity FX-FOLLOWUPS item 3). It reads UpdateTargetAssist's own decision and changes none of it:
-    // one line per call that arrives with targets (the stompees RaceCarEntityModule handed to
-    // AddTargetAssist, adopted by Append and published by UpdateDrivers) and either passes the airtime
-    // gate, or is the first call with targets, or flips the gate. Fields: the target count, the
-    // time-without-traction (+0x1060.z) against the 0.5 s gate, the stick aim, the best dot any
-    // candidate reached, the chosen index / id / dot / distance / weight, and whether the > 2 m assist
-    // force fired and its magnitude.
-    // [FLAG PC witness] DELETE-WHEN the stomp -> target-assist chain is signed off live.
     namespace
     {
         struct TargetAssistWitness
@@ -1629,12 +1531,6 @@ namespace Vehicle
                                      * ((lpaIds[liT] == lrW.miPrevTargetId) ? lfStickiness : 1.0f);
                 }
             }
-        }
-
-        bool TargetAssistWitnessArmed()
-        {
-            static const bool sbOn = (std::getenv("BRN_TASSIST_DIAG") != 0);
-            return sbOn;
         }
 
         void NoteTargetAssist(const TargetAssistWitness& lrW)
@@ -1709,7 +1605,6 @@ namespace Vehicle
 
         // [tassist] witness record (NOT X360; filled as the decision is made, printed at the exits).
         TargetAssistWitness lWitness = {};
-        const bool lbWitness = TargetAssistWitnessArmed();
         if (lbWitness)
         {
             lWitness.miNumTargets = MS.miNumTargets;
@@ -1932,33 +1827,6 @@ namespace Vehicle
             || std::fabs(lrImpulse.z) > lfEpsilon;
     }
 
-    // FLAG PC-platform leaf: bounded observation of the real Showtime control
-    // inputs and already-calculated forces; no game state consumes this cache.
-    static bool ShowtimeControlProbeChanged(const BrnPlayerDriverControls* lpControls)
-    {
-        static const bool sbEnabled = std::getenv("BRN_SHOWTIME_CONTROL_DIAG") != nullptr;
-        if (!sbEnabled || !CgsDev::Log::gpDebugPrint) return false;
-        static s32 siLines = 0;
-        if (siLines >= 96) return false;
-        const f32 lafValues[] = {lpControls->mfSteering,lpControls->mfForwardSteering,
-            lpControls->mfSpin,lpControls->mfRequestedGas,lpControls->mfBrake,
-            lpControls->mfAftertouchLevel,
-            lpControls->mbIsSteeringWheel ? 1.0f : 0.0f,
-            lpControls->mbBoostBounce ? 1.0f : 0.0f};
-        static f32 safPrevious[8] = {};
-        static bool sbHavePrevious = false;
-        bool lbChanged = !sbHavePrevious;
-        for (s32 liValue=0;liValue<8;++liValue)
-        {
-            lbChanged = lbChanged || lafValues[liValue] != safPrevious[liValue];
-            safPrevious[liValue] = lafValues[liValue];
-        }
-        sbHavePrevious = true;
-        if (lbChanged && ++siLines == 96)
-            CgsDev::Log::WriteToLog("[showtime-control] observation cap 96 reached\n");
-        return lbChanged;
-    }
-
     void RaceCarPhysics::UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
                                           const Matrix44Affine* lpCameraMatrix,
                                           VecFloat lvfTimeStep,
@@ -2075,7 +1943,6 @@ namespace Vehicle
                 }
             }
 
-            const bool lbTraceControls = ShowtimeControlProbeChanged(lpControls);
             if (lbTraceControls)
             {
                 char lacControlLine[1024];

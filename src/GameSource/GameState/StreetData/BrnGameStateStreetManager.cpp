@@ -542,29 +542,6 @@ const CgsResource::ResourceHandle* StreetManager::GetDistrictMapResourceHandle()
     return &mDistrictMapResourceHandle;
 }
 
-// ⚠️ [FLAG PC bring-up] NOT AN X360 ACCESSOR -- and the deviation is the OWNER, not the data.
-// SendSetUpAllEventStartsMessage reads the AI-section resource through the PROGRESSION manager's
-// own copy (`sub_82367718(gameStateModule + 181300)` @0x82375A44/@0x82375C60 ==
-// ResourcePtr<AISectionsData>::operator-> on mProgressionManager + 133380, since
-// mProgressionManager sits at GameStateModule + 47920 and 47920 + 133380 == 181300 exactly).
-// ProgressionManager::mpAISectionData HAS NO BINDER ANYWHERE IN THIS TREE -- grep it: the only
-// two hits are comments, and ProgressionManager::LoadProgressionData binds mpProgressionData and
-// nothing else. Calling operator-> on it would fire the ResourcePtr's own "Can not instance
-// resource pointer - it has no main memory resource" assert and hand back a null the console's
-// shape then dereferences inside BuildAISectionPointMap.
-// THIS manager's mpAISectionData is the SAME resource (both are the AI-lanes acquire) and IS
-// bound, by LoadAIData in this very file. So the producer reads it from here instead, and says so.
-// DELETE-WHEN ProgressionManager::mpAISectionData gets its console binder (the same
-// ComputeLandmarkAISectionIndices @0x82370008 frontier BrnProgressionManager.cpp:601 names).
-const BrnAI::AISectionsData* StreetManager::GetAISectionData() const
-{
-    if (!mpAISectionData.HasMemoryResource())
-    {
-        return 0;
-    }
-    return mpAISectionData.operator->();
-}
-
 } // namespace BrnGameState
 
 #include "SharedClasses/AI/AISectionsResourceType.h"
@@ -636,7 +613,6 @@ BrnStreetData::RoadIndex StreetManager::GetCurrentPlayerRoadIndex() { return miC
 //   * `(_cntlzw(HasPlayerBeaten...Score(...) - 1) & 0x20) != 0` is the compiler's
 //     "== 1" test, i.e. == E_ROAD_RULE_COMPLETION_STATUS_BEATEN.
 // ===========================================================================
-
 
 namespace BrnGameState
 {
@@ -746,7 +722,6 @@ s32 StreetManager::GetNumberOfCompleteRoadsRuledByLocalPlayer()
 // the loop condition and is not hoisted into a local.
 // ===========================================================================
 
-
 namespace BrnGameState
 {
 
@@ -850,7 +825,6 @@ s32 StreetManager::GetNumberOfParTimeTrialRoadsRuledByLocalPlayer()
 // (`addi r3, this, 0x1CC8` + ResourcePtr operator-> + StreetData::GetChallengeParScore, then
 // ChallengeParScoresEntry::Copy onto a stack local), which is why no call to it appears.
 // ===========================================================================
-
 
 namespace BrnGameState
 {
@@ -1061,7 +1035,6 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
 // named fields (BrnGameStateStreetManager.h), never raw-offset casts.
 // ===========================================================================
 
-
 namespace BrnGameState
 {
     // -----------------------------------------------------------------------
@@ -1234,7 +1207,6 @@ namespace BrnGameState
 // == the DWARF :393/:396/:399 declaration order; the dotted vector is the
 // direction, the reference-position vector is the player position).
 // ===========================================================================
-
 
 // The scalar (fpu) vector-similarity helper the X360 walk calls out-of-line
 // (rw::math::fpu::IsSimilar<float> @ the EATech reconstruction; the frozen
@@ -1832,7 +1804,6 @@ bool StreetManager::CanContinueWalking() { return miNextFreeSectionSlot < KI_MAX
 // immediates are the values attested in the image rodata.
 // ===========================================================================
 
-
 // ---------------------------------------------------------------------------
 // Forward declarations for the two rw::math::fpu scalar-vector helpers the
 // route walk calls in its dev asserts. The frozen RwMathVectorTemplates.h homes
@@ -1933,34 +1904,6 @@ namespace BrnGameState
             const u16 luRaceCarAISection = lpActiveRaceCarInterface->GetRaceCarAISection( lePlayerActiveRaceCarIndex );
             const BrnStreetData::RoadIndex liRoadIndex = GetRoadIndexFromAISectionIndex( luRaceCarAISection );
             miCurrentPlayerRoadIndex = liRoadIndex;
-
-            // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG): the player's AI
-            // section, the span it carries, whether it is a shortcut and the road it resolves to,
-            // each time the section changes; first 48 lines. A shortcut or junction section has
-            // no street span, so the road is -1 there by design.
-            {
-                static const bool sbDiag        = ( std::getenv( "BRN_ROADRULES_DIAG" ) != 0 );
-                static s32        siLeft        = 48;
-                static u32        suLastSection = 0xFFFFFFFFu;
-                if ( sbDiag && siLeft > 0 && luRaceCarAISection != suLastSection && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    suLastSection = luRaceCarAISection;
-                    --siLeft;
-                    s32  liSpanIndex = -1;
-                    bool lbShortcut  = false;
-                    if ( luRaceCarAISection != 0x7FFF && luRaceCarAISection < mpAISectionData->muNumSections )
-                    {
-                        const BrnAI::AISection* lpDiagSection = mpAISectionData->GetAISection( luRaceCarAISection );
-                        liSpanIndex = lpDiagSection->miSpanIndex;
-                        lbShortcut  = lpDiagSection->IsShortcut();
-                    }
-                    *CgsDev::Log::gpDebugPrint
-                        << "[roadrules] player section " << static_cast<s32>( luRaceCarAISection )
-                        << " span " << liSpanIndex
-                        << " shortcut " << static_cast<s32>( lbShortcut )
-                        << " road " << liRoadIndex << "\n";
-                }
-            }
 
             if ( liRoadIndex == BrnStreetData::KI_INVALID_ROAD_INDEX )
             {
@@ -2318,7 +2261,6 @@ namespace BrnGameState
     }
 }
 
-
 // ============================================================================
 // FOLDED FROM BrnGameStateStreetManager_wC_01.cpp (wave C) on 2026-09-15 by tools/work/fold_partfiles.py.
 // The partfile's own header follows verbatim (its address annotations are the
@@ -2340,7 +2282,6 @@ namespace BrnGameState
 // Every store / branch / early-out has an asm counterpart; members are the
 // frozen-header named fields (never raw-offset casts).
 // ===========================================================================
-
 
 namespace
 {
@@ -2603,35 +2544,6 @@ namespace BrnGameState
 
         CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
         lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lMessage ), 276, 368 );
-
-        // FLAG PC-platform leaf: opt-in route/indicator witness at guidance changes.
-        if ( std::getenv("BRN_ROADRULES_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static s32 siLinesLeft = 96;
-            static s32 siLastCurrent = -999, siLastLeft = -999, siLastRight = -999;
-            static s32 siLastState = -999;
-            const s32 liState = lMessage.miLeftRoadHighlightState * 4 + lMessage.miRightRoadHighlightState;
-            if ( siLinesLeft > 0 && (siLastCurrent != miCurrentPlayerRoadIndex || siLastLeft != mLeftRoadIndex
-                 || siLastRight != mRightRoadIndex || siLastState != liState) )
-            {
-                --siLinesLeft;
-                siLastCurrent = miCurrentPlayerRoadIndex; siLastLeft = mLeftRoadIndex;
-                siLastRight = mRightRoadIndex; siLastState = liState;
-                const Vector3 lPosition = lpActiveRaceCarInterface->GetPlayerPosition();
-                const BrnAI::Route* lpRoute = reinterpret_cast<const BrnAI::Route*>(lpLastAICarOutputInterface->GetPlayerRoute());
-                const s32 liCurrentNode = lpLastAICarOutputInterface->GetPlayerRouteNodeIndex();
-                *CgsDev::Log::gpDebugPrint << "[route-guidance] pos=(" << lPosition.x << "," << lPosition.y << "," << lPosition.z
-                    << ") current=" << miCurrentPlayerRoadIndex << " left=" << mLeftRoadIndex << " right=" << mRightRoadIndex
-                    << " highlight=" << lMessage.miLeftRoadHighlightState << "," << lMessage.miRightRoadHighlightState
-                    << " node=" << liCurrentNode << "/" << lpRoute->GetNodeCount() << "\n";
-                for ( s32 liNode = liCurrentNode; liNode >= 0 && liNode < lpRoute->GetNodeCount() && liNode < liCurrentNode + 13; ++liNode )
-                {
-                    const BrnAI::RouteNode* lpNode = lpRoute->GetNode(liNode);
-                    *CgsDev::Log::gpDebugPrint << "[route-guidance-node] i=" << liNode << " section=" << static_cast<u32>(lpNode->GetSectionIndex())
-                        << " road=" << GetRoadIndexFromAISectionIndex(lpNode->GetSectionIndex()) << " pos=(" << lpNode->GetX() << "," << lpNode->GetY() << ")\n";
-                }
-            }
-        }
 
         CgsDev::PerfMonCpu::StopMonitor( miUpcomingRoadsSentMessagePM );
     }

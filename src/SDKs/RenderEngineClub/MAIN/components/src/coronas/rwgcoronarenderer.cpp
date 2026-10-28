@@ -9,7 +9,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"      // shadow::Device
-#include "pc/gcm/renderengine/renderstates.h"                              // TextureState / DepthStencilState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"   // BlendMaterialState
 
 // =================================================================================================
@@ -100,12 +99,6 @@
 // ADDITIVE, NO ALPHA TEST, DEPTH-TESTED LEQ, NO DEPTH WRITE.
 // =================================================================================================
 
-// ⚠ A RE-DECLARATION OF TWO EXISTING GLOBALS, NOT NEW ONES. The PC back-buffer extent is declared
-// at pc/gcm/renderengine/device.h:12-13 and DEFINED at device.cpp, where its semantics live; that
-// header pulls <Windows.h>, so it is declared here instead -- the same one-definition/two-
-// declaration shape pc/gcm/renderengine/Xbox2SurfaceShims.h:129 already uses for gAntiAliasing.
-// READ ONLY, and read ONLY by the [FLAG PC bring-up] screen-placement line: nothing in the pass
-// itself depends on the display extent (the console's own quad is built entirely in clip space).
 namespace renderengine
 {
     extern s32 gDisplayWidth;
@@ -170,43 +163,7 @@ namespace
     // The Xenos immediate-vertex stride the console passes to D3DDevice_BeginVertices.
     const u32 KU_CORONA_VERTEX_STRIDE = 48u;
 
-    // ---------------------------------------------------------------------------------------------
-    // [FLAG PC-platform leaf] THE QUADLIST TRANSLATION.
-    //
-    // The console emits `D3DDevice_BeginVertices(dev, 13, 4 * n, 48)` -- Xenos primitive type 13 is
-    // QUADLIST, four vertices per quad, which the GPU splits into (0,1,2) + (0,2,3). D3D9 HAS NO
-    // QUADLIST, and this backend's own translation table refuses it by name:
-    //     XenonD3D9Shims.cpp:117-131 MapPrimitive -- "Types MapPrimitive refuses -- Xenos RECTLIST
-    //     (8) and QUADLIST (13) -- have no DrawPrimitiveUP form".
-    // So the PC pass emits the SAME FOUR CORNERS as SIX vertices in the QUADLIST's own triangle
-    // order (0,1,2, 0,2,3) and asks for Xenos type 4 == D3DPT_TRIANGLELIST. The vertex CONTENT is
-    // byte-identical to the console's; only the count changes, and the two duplicated corners are
-    // the QUADLIST expansion the Xenos does in hardware.
-    //
-    // DELETE-WHEN: never -- this is a permanent platform difference, not a bring-up shim. It is
-    // flagged so a reader does not "restore" the 13.
-    // ---------------------------------------------------------------------------------------------
-    const u32 KU_XENOS_PRIMITIVE_TRIANGLELIST = 4u;
     const u32 KU_VERTICES_PER_CORONA          = 6u;
-
-    // ---------------------------------------------------------------------------------------------
-    // [FLAG PC-platform leaf] THE BATCH CAP.
-    //
-    // The console computes it from the immediate ring's byte size:
-    //     v14 = (dword_82F87B40 >> 2) / 0x30;  if (v14 > 0xFFFF) v14 = 0xFFFF;  v15 = v14 >> 2;
-    // i.e. (ringBytes/4) / stride, clamped, / 4 vertices per corona. dword_82F87B40 is the CONSOLE
-    // ring's size and is not recovered -- and it is the wrong number here anyway: on PC the run goes
-    // into XenonD3D9Shims' own 1 MiB immediate scratch, and BeginVertices REFUSES (returns nullptr)
-    // any run bigger than that rather than overrunning.
-    //
-    // The cap below is the corona buffer's own capacity (BrnCoronaManager::BrnSubmissionInterface::
-    // KI_MAX_CORONAS == 512, DWARF-attested, and the size Construct passes to
-    // CoronaBuffer::Parameters::SetNumCoronas @0x823FCE1C `li r11, 0x200`), which needs
-    // 512 * 6 * 48 == 147,456 bytes -- comfortably inside the 1 MiB scratch. The chunking LOOP is
-    // kept (it is the console's shape and it is what makes a future larger buffer safe); with this
-    // cap it simply runs once.
-    // ---------------------------------------------------------------------------------------------
-    const u32 KU_MAX_CORONAS_PER_BATCH = 512u;
 
     // ---------------------------------------------------------------------------------------------
     // [DIAG corona-calib -- coronas step 2] THE CALIBRATION CAPTURE.
@@ -221,18 +178,6 @@ namespace
     f32 gfCalibViewXyScaleX = 0.0f;
     f32 gfCalibViewXyScaleY = 0.0f;
 
-    // ---------------------------------------------------------------------------------------------
-    // [FLAG PC bring-up] THE SCREEN-PLACEMENT CAPTURE (bug wave 2026-08-23).
-    //
-    // Begin also parks the camera position and the view-projection matrix it publishes, so the
-    // `[corona] first draws` line below can mirror the VERTEX PROGRAM on the CPU and print, per
-    // corona, WHERE ON SCREEN it lands and HOW BIG it is in pixels. Those two numbers are the only
-    // ones a screenshot can be checked against, and neither is derivable from the world-space
-    // numbers the pass already printed.
-    //
-    // DELETE-WHEN the corona bring-up is signed off (with the `[corona-calib]` block above it).
-    // ---------------------------------------------------------------------------------------------
-    Vector4  gvCalibCameraPosition;
     Matrix44 gCalibViewProjectionMatrix;
     bool     gbCalibCameraValid = false;
 
@@ -245,9 +190,6 @@ namespace
         CgsDev::Log::WriteToLog(lpcMessage);
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // [FLAG PC bring-up] CalibProjectCorona -- a CPU MIRROR of mainCoronaVS, for the diagnostic
-    // line only. Nothing in the pass consumes it and no vertex is built from it.
     //
     // It reproduces, in order, exactly what tools/assets/shaders/brn_corona.fx's vertex program
     // does with the constants Begin published (instructions 8-12 = the bias pull toward the camera,
@@ -330,10 +272,7 @@ extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 
 namespace renderengine
 {
-    // SEAM S1 -- see the anonymous-namespace banner above.
-    extern const u8  gauCoronaVertexProgramPC[];
     extern const u32 guCoronaVertexProgramPCSize;
-    extern const u8  gauCoronaPixelProgramPC[];
     extern const u32 guCoronaPixelProgramPCSize;
 
     // ---- the DWARF-named private statics --------------------------------------------------------
@@ -376,12 +315,8 @@ namespace renderengine
     void CoronaRenderer::Initialize(rw::IResourceAllocator& /*lrAllocator*/)
     {
         // --- pixel program (built FIRST on the console -- shaderType 1) ---------------------------
-        s_pixelProgram = ProgramBufferPC_Adopt(gauCoronaPixelProgramPC,
-                                               guCoronaPixelProgramPCSize, 1u);
 
         // --- vertex program (built SECOND -- shaderType 0) ----------------------------------------
-        s_vertexProgram = ProgramBufferPC_Adopt(gauCoronaVertexProgramPC,
-                                                guCoronaVertexProgramPCSize, 0u);
 
         if (s_vertexProgram == 0 || s_pixelProgram == 0)
         {
@@ -427,7 +362,6 @@ namespace renderengine
         lVertexDecl.maElements[3].miOffset      = static_cast<s32>(KU_ELEMENT_FORMAT_COLOUR);
         lVertexDecl.maElements[3].mu8UsageIndex = KU8_ELEMENT_TYPE_COLOUR0;
 
-        // The console sizes the descriptor and carves it from the allocator; the PC leaf's
         // Initialize ignores the resource and uses its own arena (its banner explains why the
         // console sizer cannot be used on x64), so the GetResourceDescriptor/Create pair is not run.
         s_vertexDescriptor = VertexDescriptor::Initialize(0, &lVertexDecl);
@@ -491,7 +425,6 @@ namespace renderengine
         s_atlasUVs      = lpAtlasUVs;
     }
 
-    // [FLAG PC bring-up gate] -- see the header. Not an X360 function.
     bool CoronaRenderer::IsReady()
     {
         return s_vertexProgram != 0 && s_pixelProgram != 0 && s_vertexDescriptor != 0
@@ -529,12 +462,6 @@ namespace renderengine
     // =============================================================================================
     void CoronaRenderer::Begin(const RenderParameters& lrParameters)
     {
-        // [FLAG PC bring-up gate] Initialize refuses the pass (nulls s_vertexProgram/s_pixelProgram)
-        // when the authored pair or a named constant is missing; the console cannot be in that
-        // state. Do not touch the device (SetVertexProgram(nullptr) / SetPixelProgram(nullptr))
-        // from a refused pass -- Dispatch is gated on the same predicate.
-        if (!IsReady())
-            return;
 
         s_beginLock = true;                                             // byte_82FAB695 = 1
 
@@ -574,7 +501,6 @@ namespace renderengine
         gfCalibViewXyScaleX = lrParameters.mvViewXyScale.x;
         gfCalibViewXyScaleY = lrParameters.mvViewXyScale.y;
 
-        // [FLAG PC bring-up] the screen-placement capture (see the globals' banner).
         gvCalibCameraPosition     = lrParameters.mvCameraPositionPlusWhiteLevel;
         gCalibViewProjectionMatrix = lrParameters.mViewProjectionMatrix;
         gbCalibCameraValid        = true;
@@ -707,19 +633,6 @@ namespace renderengine
         const Corona* lpCorona      = lpBuffer->GetCoronas();
         if (lpCorona == 0)
             return;
-
-        // [FLAG PC bring-up diagnostic] the first KU_CALIB_LOGGED_CORONAS coronas the pass actually
-        // emits, one line each, the first time it emits geometry. It prints
-        //   * the EXTENT of the draw and the record's atlas row -- the two ways this pass can fail
-        //     silently are (a) a zeroed atlas UV table (every quad samples one texel and the frame
-        //     still "looks fine") and (b) a wrong colour lane;
-        //   * and, added by the 2026-08-23 "rectangular artifact" bug wave, WHERE ON SCREEN each
-        //     corona lands and HOW BIG it is in PIXELS -- CalibProjectCorona mirrors the vertex
-        //     program on the CPU (see its banner). Those are the only two numbers a screenshot can
-        //     be checked against, and they are what separates "that rectangle is a corona" from
-        //     "that rectangle is not a corona" without another boot.
-        // DELETE with the bring-up.
-        static u32 suCoronasLogged = 0u;
 
         while (luCoronasLeft != 0u)
         {

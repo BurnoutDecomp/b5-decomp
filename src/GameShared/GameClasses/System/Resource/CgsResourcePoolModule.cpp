@@ -1,5 +1,4 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
-#include "GameShared/GameClasses/System/PC/CgsResourcePoolBindingsPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original formatted pool assertions
 #include "rw/rwcore_structs.h"                        // rw::IResourceAllocator / Resource (CreatePool test driver)
@@ -12,8 +11,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"       // ResourcePtr<ResourceIdList>
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"
 #include <new>
-#include "pc/gcm/renderengine/FrameProfile.h"
-
 // Original pool manager lifecycle and native storage. The resource-list
 // dispatch is integrated separately from construction of its working state.
 namespace CgsResource
@@ -33,7 +30,6 @@ namespace CgsResource
         void FireInvalidPoolIdAssert(s32 liPoolId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Pool id " << liPoolId << " is invalid\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -44,7 +40,6 @@ namespace CgsResource
         void FireDuplicatePoolIdAssert(s32 liPoolId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Pool id " << liPoolId << "is already in use\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -55,7 +50,6 @@ namespace CgsResource
         void FireMissingDependencyAssert(s32 liDependencyId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Failed to find dependency pool with id " << liDependencyId << "\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -86,8 +80,6 @@ namespace CgsResource
         }
         return 0;
     }
-
-
 
     // ARTIST 0x82904B20. The original API returns void; a created Pool* is not part of the
     // caller contract. Assertions continue into the same slot search and filtered diagnostic.
@@ -298,19 +290,6 @@ namespace CgsResource
         }
         mAllocListSet.ClearCountsAndResults();
 
-        // ARTIST 828FC0B8: request arrays, relocation/source arrays, a linear
-        // heap with eight look-ahead records, and shared distribution/job storage.
-        // FLAG PC-platform leaf: allocation counts are original; native records
-        // widen their pointers and therefore require host sizeof/alignment.
-        const auto lAllocateWorkingMemory = [lpResourceAllocator](size_t luSize, u32 luAlignment) -> void*
-        {
-            rw::ResourceDescriptor lDescriptor;
-            lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-            void* lpMemory = lpResourceAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0];
-            CGS_ASSERT(lpMemory != nullptr, "Out of memory\n");
-            return lpMemory;
-        };
         mpAddressedAllocRequests = static_cast<AllocRequestAddressed*>(lAllocateWorkingMemory(
             sizeof(AllocRequestAddressed) * KI_MAX_ALLOCATION_REQUESTS, alignof(AllocRequestAddressed)));
         mpRelocateRequests = static_cast<RelocateRequest*>(lAllocateWorkingMemory(
@@ -336,7 +315,6 @@ namespace CgsResource
         mEmergencyFragState.Construct(this);
         mPendingAllocationRequests.Construct();
 
-
     }
     // The existing host update transport now drives the original typed request and
     // receiver processors, then the same state machines and owned maPools sweep.
@@ -346,7 +324,6 @@ namespace CgsResource
         PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
 
         {
-            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_REQUESTS);
             lpOut->LockForWrite();
             lpIn->LockForRead();
             ProcessInputBuffer(static_cast<const PoolIO::InputBuffer*>(lpIn), lpOut);
@@ -360,7 +337,6 @@ namespace CgsResource
             }
         }
         {
-            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_STATES);
             switch (mProcessState)
             {
             case E_UPDATESTATE_ALLOCATING_LIST: UpdateAllocating(lpOut); break;
@@ -374,7 +350,6 @@ namespace CgsResource
             lpOut->UnlockForWrite();
         }
         {
-            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::POOL_RETIRE);
             for (s32 li = 0; li < KI_MAX_POOLS; ++li)
                 if (maPools[li].GetId() != -1)
                     maPools[li].Update();
@@ -382,19 +357,9 @@ namespace CgsResource
         return mProcessState == E_UPDATESTATE_EMERGENCYFRAG;
     }
 
-
-
-
-
-
-
     // Look up a created pool by id (null if absent).
     Pool* PoolModule::GetPool(s32 liPoolId)
     {
-        // FLAG PC-platform leaf: module-scheduled requests must see resources
-        // loaded by the synchronous GUI transport under their original pool id.
-        if (Pool* lpPool = PCPoolBindings::Find(liPoolId))
-            return lpPool;
         const s32 li = GetPoolIndex(liPoolId);
         return (li >= 0) ? &maPools[li] : 0;
     }
@@ -504,10 +469,6 @@ namespace CgsResource
                                                  static_cast<s32>(sizeof(lResponse)));
     }
 
-
-
-
-
     // ARTIST 0x82906FD0. Dispatch each response with the output buffer that the completion
     // handlers use, then clear the queue after draining it. Invalid ids assert and continue.
     void PoolModule::ProcessReceiverQueue(PoolIO::OutputBuffer* lpOutputBuffer)
@@ -606,10 +567,6 @@ namespace CgsResource
 
         rw::ResourceDescriptor lDescriptor;
         GetRequiredResourceDescriptor(lpRequest, &lDescriptor);
-        // FLAG PC-platform leaf: native-pointer management records use the exact
-        // shared layout that InitPool actually carves, rather than console byte
-        // constants. Heap budgets and RW0/2 lane ownership remain the request's.
-        Pool::InitOptions lHostOptions;
         ConvertPoolRequestOptions(lpRequest, &lHostOptions);
         lDescriptor.m_baseResourceDescriptors[0].m_size =
             lHostOptions.maHeapInfo[0].muHeapMemorySize + Pool::GetOverheadMemoryRequired(&lHostOptions);
@@ -651,10 +608,6 @@ namespace CgsResource
 
         Pool::InitOptions lOptions;
         ConvertPoolRequestOptions(&lPendingRequest, &lOptions);
-        // FLAG PC-platform leaf: retain the actual completed allocation's bank
-        // identity in the existing host InitPool provider. No default bank or
-        // alternate owner is synthesized; MemoryModule allocated this exact id.
-        lOptions.miBankId = lPendingRequest.miBankId;
         for (s32 li = 0; li < lOptions.miNumDependencies; ++li)
         {
             const s32 liDependencyId = lPendingRequest.maiDependencyIds[li];

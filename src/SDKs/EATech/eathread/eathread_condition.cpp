@@ -8,7 +8,7 @@
 
 #include "SDKs/EATech/eathread/eathread_condition.h"
 
-#include <windows.h>  // CRITICAL_SECTION, Initialize/Enter/LeaveCriticalSection
+#include <xtl.h>  // CRITICAL_SECTION, Initialize/Enter/LeaveCriticalSection
 #include <intrin.h>   // _InterlockedIncrement / _InterlockedExchange / _InterlockedExchangeAdd
 
 namespace EA

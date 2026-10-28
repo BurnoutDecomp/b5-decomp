@@ -61,23 +61,12 @@
 
 namespace
 {
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     // ⭐ THE ONE-LINE CONTROL. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     // Restores the pre-2026-08-29 behaviour of this file EXACTLY -- ProcessTrafficEvents returns
     // without dispatching, which is what the named gate did -- so the control and the treatment
     // come out of ONE binary and differ in one branch. Without it a "traffic now crashes" claim
     // rests on comparing two different builds.
-    bool TrafficEventsControl()
-    {
-        static const bool sbControl = (getenv("BRN_TRAFFIC_EVENTS_CONTROL") != 0);
-        return sbControl;
-    }
 
     // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     void LogOnce(bool& lrbLogged, const char* lpcMessage)
@@ -90,14 +79,6 @@ namespace
         }
     }
 
-    // FLAG PC witness (crash parity FX-NETCRASH; NOT in the X360 binary). BRN_NETCRASH_DIAG, default
-    // off: the network crashing-traffic chain's [netcrash] lines (UpdateNetworkTrafficVehicle,
-    // ClearSnappedNetworkTrafficContacts), each hard-capped.
-    bool NetCrashDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_NETCRASH_DIAG") != 0);
-        return sbEnabled;
-    }
     const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
 }
 
@@ -241,14 +222,6 @@ void PhysicalTrafficManager::ProcessSetTrafficCrashingEvents(
 
         // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line per drained event, so a
         // zero here is distinguishable from "the drain never ran" (the [T6-tevt] armed line).
-        if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[T6-tevt] drained crashing=" << (lrEvent.mbCrashing ? 1 : 0)
-                << " globalIdx=" << static_cast<s32>(luGlobalIndex)
-                << " physSlot=" << static_cast<s32>(lu8PhysicalIndex)
-                << " [DELETE-WHEN-STABLE]\n";
-        }
     }
 }
 
@@ -279,30 +252,6 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
     const VehicleInputInterface::UpdateNetworkTrafficEventQueue* const lpQueue =
         lpInputInterface->GetUpdateNetworkTrafficEvents();
 
-    // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): once per frame that carried
-    // network-traffic updates, how many of them named a vehicle that is physical here.
-    if (NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 && lpQueue->GetLength() > 0)
-    {
-        static s32 siSummaryLines = 0;
-        if (siSummaryLines < KI_NETCRASH_DIAG_MAX_LINES)
-        {
-            ++siSummaryLines;
-            s32 liMapped = 0;
-            for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
-            {
-                const u32 luIndex = static_cast<u32>(lpQueue->GetEvent(liEvent).mVolumeInstanceID.muId
-                                                     >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
-                const u32 luGlobal = (luIndex >> 10) & 0x3FFFu;
-                if (luGlobal < sizeof(mu8GlobalToPhysicalEntityIndexMap)
-                    && mu8GlobalToPhysicalEntityIndexMap[luGlobal] != KU8_INVALID_MAP)
-                    ++liMapped;
-            }
-            *CgsDev::Log::gpDebugPrint
-                << "[netcrash] ProcessUpdateNetworkTrafficEvents events=" << lpQueue->GetLength()
-                << " physical=" << liMapped << " [FLAG PC witness]\n";
-        }
-    }
-
     for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
     {
         const UpdateNetworkTrafficEvent& lrEvent = lpQueue->GetEvent(liEvent);
@@ -331,44 +280,11 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
         lPhysicsId.muValue =
             (static_cast<u32>(lu8PhysicalIndex) << 10) | (KU_ENTITYTYPE_TRAFFIC_VEHICLE << 24);
 
-        // FLAG PC witness input (BRN_NETCRASH_DIAG; NOT console code): the FULL body's position
-        // before this event's catch-up is armed.
-        static s32 siWitnessLines = 0;
         PhysicalTrafficVehicle* lpWitnessVehicle = 0;
         Vector3 lvBefore = { 0.0f, 0.0f, 0.0f, 0.0f };
-        if (NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 && siWitnessLines < KI_NETCRASH_DIAG_MAX_LINES)
-        {
-            lpWitnessVehicle = GetTrafficVehicle(static_cast<s32>(lu8PhysicalIndex));
-            if (lpWitnessVehicle->mu8PhysicalType
-                    != static_cast<u8>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL))
-                lpWitnessVehicle = 0;
-            else
-                lvBefore = lpWitnessVehicle->GetFullTrafficPhysics()->GetTransform().wAxis;
-        }
 
         UpdateNetworkTrafficVehicle(&lrEvent, lPhysicsId);
 
-        // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code, crash parity FX-NETCRASH): the
-        // network traffic car's body position before and after UpdateNetworkTrafficVehicle armed its
-        // catch-up. A snap (> 10 m, KF_MAX_VEHICLE_INTERP_DIST_SQ) moves it here; otherwise the armed
-        // slerp steps move it over the next frames (VehicleDriver::UpdateVehicle), which the next
-        // line's `before` shows.
-        if (lpWitnessVehicle != 0)
-        {
-            ++siWitnessLines;
-            const VehicleDriver* const lpDriver = GetTrafficDriver(static_cast<s32>(lu8PhysicalIndex));
-            const Vector3 lvAfter = lpWitnessVehicle->GetFullTrafficPhysics()->GetTransform().wAxis;
-            *CgsDev::Log::gpDebugPrint
-                << "[netcrash] UpdateNetworkTrafficVehicle slot=" << static_cast<s32>(lu8PhysicalIndex)
-                << " global=" << static_cast<s32>(luGlobalIndex)
-                << " before=(" << lvBefore.x << ", " << lvBefore.y << ", " << lvBefore.z << ")"
-                << " target=(" << lrEvent.mTransform.wAxis.x << ", " << lrEvent.mTransform.wAxis.y
-                << ", " << lrEvent.mTransform.wAxis.z << ")"
-                << " after=(" << lvAfter.x << ", " << lvAfter.y << ", " << lvAfter.z << ")"
-                << " snapped=" << (lpDriver->SnappedThisFrame() ? 1 : 0)
-                << " steps=" << static_cast<s32>(lpDriver->GetNumInterpSteps())
-                << " [FLAG PC witness]\n";
-        }
     }
 }
 
@@ -421,10 +337,6 @@ void PhysicalTrafficManager::UpdateNetworkTrafficVehicle(const UpdateNetworkTraf
     }
 }
 
-// =================================================================================================
-// ClearSnappedNetworkTrafficContacts @0x825F37F0 (220) -- DWARF h:391. BODIED 2026-09-24 (G45-D1,
-// crash parity FX-NETCRASH); it had no declaration and no body, and its one caller's tail call
-// (VehicleManager::ClearSnappedNetworkCarContacts 0x8261AC28) was a [FLAG PC bring-up] comment.
 //
 // The traffic twin of the race-car loop in ClearSnappedNetworkCarContacts. A car snapped by the
 // network catch-up (VehicleDriver::StartCatchupInterpolation's snap arm is the image's only store
@@ -466,18 +378,6 @@ void PhysicalTrafficManager::ClearSnappedNetworkTrafficContacts(
         if (liModelIndex != -1)
             lpDeformationManager->GetDeformableObject(liModelIndex)->ClearStoredContacts();   // 0x825F3984
 
-        // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code).
-        if (NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siLines = 0;
-            if (siLines < KI_NETCRASH_DIAG_MAX_LINES)
-            {
-                ++siLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[netcrash] ClearSnappedNetworkTrafficContacts slot=" << liVehicle
-                    << " model=" << liModelIndex << " [FLAG PC witness]\n";
-            }
-        }
     }
 }
 
@@ -529,12 +429,6 @@ void PhysicalTrafficManager::SetTrafficVehicleNotCrashing(EntityId lTrafficPhysi
     lpBody->ClearCrashing();                                          // vtable +4
 
     // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[T6-tevt] UNCRASH slot=" << static_cast<s32>(lu16TrafficIndex)
-            << " [DELETE-WHEN-STABLE]\n";
-    }
 }
 
 }   // namespace Vehicle

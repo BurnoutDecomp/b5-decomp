@@ -6,7 +6,7 @@
 #include "SDKs/EATech/eathread/eathread_condition.h"  // EA::Thread::Condition (the two homed conditions)
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"      // EA::Thread::RWMutexParameters / ThreadId / GetThreadId
 
-#include <windows.h>  // CRITICAL_SECTION (the embedded mMutex)
+#include <xtl.h>  // CRITICAL_SECTION (the embedded mMutex)
 
 // ===========================================================================
 // SDKs/EATech/eathread/eathread_rwmutex.h

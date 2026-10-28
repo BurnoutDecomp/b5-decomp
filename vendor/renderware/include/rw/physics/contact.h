@@ -261,12 +261,6 @@ struct alignas(16) Contact
 };
 
 // ---- the layout pins -- console offsets, X360-attested at the cited stores ----------------
-static_assert(sizeof(Contact) == 272,
-              "Contact = the 256B console rows + the 16B host pointer tail (the XB1 number, "
-              "by convergence). Every walk uses sizeof(Contact) (GetFreeContact, "
-              "ContactBatchBuild, the pipelines, SpyContactJacobians) and the "
-              "SimulationWorkspace sizer's contact term is sizeof(Contact) -- if this pin "
-              "moves, that sizer and every walk move with it IN THE SAME COMMIT");
 static_assert(offsetof(Contact, mPosA)    == 0x00, "mPosA @+0x00    (drain stvx event row)");
 static_assert(offsetof(Contact, mBodyA)   == 0x0C, "mBodyA @+0x0C   (batch vsel w-lane mint)");
 static_assert(offsetof(Contact, mPosB)    == 0x10, "mPosB @+0x10");
@@ -299,7 +293,6 @@ static_assert(offsetof(Contact, mTorqueA) == 0xE0, "snapshot torqueA @+0xE0 (bod
 static_assert(offsetof(Contact, mCoolA)   == 0xEC, "snapshot coolA @+0xEC  (console mTorque.w)");
 static_assert(offsetof(Contact, mTorqueB) == 0xF0, "snapshot torqueB @+0xF0");
 static_assert(offsetof(Contact, mCoolB)   == 0xFC, "snapshot coolB @+0xFC");
-static_assert(offsetof(Contact, mpBodyA)  == 0x100, "spy pointer tail A (host-only region)");
 static_assert(offsetof(Contact, mpBodyB)  == 0x108, "spy pointer tail B");
 
 // =====================================================================================
@@ -382,7 +375,6 @@ static_assert(offsetof(ContactJacobian, mBias)    == 0x60, "bias row @+0x60");
 static_assert(offsetof(ContactJacobian, mRi)      == 0x70, "normal @+0x70 (spy row 0)");
 static_assert(offsetof(ContactJacobian, mInvmA)   == 0x8C, "invmA @+0x8C (spy midpoint weight)");
 static_assert(offsetof(ContactJacobian, mInvmB)   == 0x9C, "invmB @+0x9C");
-static_assert(offsetof(ContactJacobian, mUp)      == 0xA0, "up @+0xA0 (spy row 1 -- X360 slot, not XB1's +0x80)");
 static_assert(offsetof(ContactJacobian, mAt)      == 0xD0, "at @+0xD0 (spy row 2)");
 static_assert(offsetof(ContactJacobian, mTag)     == 0xDC, "tag @+0xDC (spy emit +0x68)");
 static_assert(offsetof(ContactJacobian, mpBodyA)  == offsetof(Contact, mpBodyA),

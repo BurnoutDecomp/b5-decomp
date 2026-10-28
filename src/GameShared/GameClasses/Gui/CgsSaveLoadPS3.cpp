@@ -30,7 +30,6 @@
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"       // CgsGui::ConvertAsciiToWideCharSafe, MessageDisplay
-#include "GameShared/GameClasses/Gui/PC/CgsSaveLoadPC.h"   // the PC profile-container storage backend
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log (storage-edge diagnostics)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (Prepare mugshot buffer)
@@ -46,7 +45,7 @@
 #include <unordered_map>
 #include <exception>
 
-#include <Windows.h> // CreateFileA, GetFileSize, CloseHandle, XGetOverlappedResult shim
+#include <xtl.h> // CreateFileA, GetFileSize, CloseHandle, XGetOverlappedResult shim
 
 // Xenon (X360) overlapped-result query. Not part of the host Win32 <Windows.h>; declared here as
 // the X360 shim the Update pump calls (returns the overlapped extended error, e.g. ERROR_IO_PENDING).
@@ -55,47 +54,6 @@ extern "C" DWORD XGetOverlappedResult(void* lpOverlapped, DWORD* lpdwResult, BOO
 
 namespace
 {
-    // FLAG PC-platform leaf: tickets preserve the console class layout. Only the
-    // game thread touches this table; the file worker owns byte snapshots only.
-    struct PendingSavePC
-    {
-        CgsGui::SaveLoadPC::WriteTicket muTicket = 0;
-        CgsGui::SaveLoadTaskResultHandler* mpHandler = nullptr;
-    };
-    std::unordered_map<CgsGui::SaveLoadSystem*, PendingSavePC> sPendingSavesPC;
-
-    // FLAG PC-platform leaf: native reads complete synchronously, whereas the
-    // Realmc request reports completion through Update. Keep that scheduling
-    // contract so profile notifications precede the screen's return to game.
-    struct PendingLoadResultPC
-    {
-        CgsGui::SaveLoadTaskResultHandler* mpHandler;
-        CgsGui::ESaveLoadTaskResult meResult;
-    };
-    std::unordered_map<CgsGui::SaveLoadSystem*, PendingLoadResultPC> sPendingLoadResultsPC;
-
-    void FinishPendingSavePC(CgsGui::SaveLoadSystem* lpSystem)
-    {
-        sPendingLoadResultsPC.erase(lpSystem);
-        const auto lIt = sPendingSavesPC.find(lpSystem);
-        if (lIt == sPendingSavesPC.end()) return;
-        CgsGui::SaveLoadPC::FinishWriteContainer(lIt->second.muTicket);
-        sPendingSavesPC.erase(lIt);
-    }
-    void ReportSavePC(CgsGui::SaveLoadTaskResultHandler* lpHandler,
-                      CgsGui::SaveLoadPC::EWriteStatus leStatus,
-                      const CgsGui::SaveLoadPC::WriteReport& lrReport)
-    {
-        const bool lbSucceeded = leStatus == CgsGui::SaveLoadPC::E_WRITE_SUCCEEDED;
-        if (CgsDev::Log::gpDebugPrint)
-            *CgsDev::Log::gpDebugPrint << "[SaveLoadPC] profile container "
-                << (lbSucceeded ? "WRITTEN" : "write FAILED") << " name='" << lrReport.macName
-                << "' image=" << lrReport.muImageSize << " mugshots=" << lrReport.muMugshotsSize
-                << " io_ms=" << static_cast<f32>(lrReport.mfWriteMilliseconds) << "\n";
-        if (lpHandler)
-            lpHandler->HandleSaveLoadTaskResult(lbSucceeded ? CgsGui::E_SAVELOADTASKRESULT_SUCCESS
-                                                            : CgsGui::E_SAVELOADTASKRESULT_FAILURE);
-    }
 
     // ---- File-scope state (X360 off_8305A6F8) ---------------------------------------------------
     // The shared ContentInformation provider the save/load system publishes in Prepare and uses in
@@ -112,60 +70,7 @@ namespace
 
     ContentInfoProvider* gpContentInfoProvider = nullptr;   // X360 off_8305A6F8
 
-    // ---- RealmcIface memory-card SDK boundary (PC) ----------------------------------------------
-    // The Realmc ("real memcard") interface layer is the console storage backend: its X360
-    // bodies (RealmcIface::GameInfo/SaveCheckParams/LoadEntryInfo/TitleInfo/EntryContentName
-    // ctors @0x82B519E8..0x82B51C10 + the MemcardInterface implementation) are an unrecovered
-    // SDK with no PC storage backend behind it. Each helper below keeps the X360 call-site
-    // signature (argument counts/order from the ASM) but fails/no-ops SAFELY: records are
-    // zeroed, the created interface is an inert no-op object, and no I/O ever starts -- so the
-    // save/load task machine runs its no-save path without crashing.
-
-    // FLAG PC-platform leaf: inert stand-in for the RealmcIface::MemcardInterface
-    // implementation (unrecovered SDK; no PC storage backend). Every operation no-ops.
-    // The slot set mirrors the SDK base (SDKs/Realmc/RealmcMemcardInterface.h).
-    class NoOpMemcardInterface : public RealmcIface::MemcardInterface
-    {
-    public:
-        virtual void Reserved01() {}
-        virtual int  Update(int /*liArg*/) { return 0; }
-        virtual void Reserved03() {}
-        virtual void UserSignedIn() {}
-        virtual void MessageChoice(int /*liChoice*/) {}
-        // FLAG PC-platform leaf: the host has no console memory-card UI to silence.
-        virtual void SetSilent(int /*liSilent*/, int /*liArg*/) {}
-        virtual void Reserved07() {}
-        virtual void Reserved08() {}
-        virtual void Bootup(void* /*lpSaveInfo*/, int /*liNumEntries*/, void* /*lpEntries*/,
-                            void* /*lpTitleInfo*/) {}
-        virtual void Reserved10() {}
-        virtual void WriteSave(void* /*lpSaveInfo*/, int /*liCount*/, void* /*lpEntries*/,
-                               int /*liFlags*/, void* /*lpTitleInfo*/) {}
-        virtual void CheckSave(int /*liArg*/, void* /*lpCheckParams*/) {}
-        virtual void SetActive(int /*liActive*/) {}
-        virtual void ReadSave(void* /*lpEntryContentName*/, int /*liNumEntries*/,
-                              void* /*lpEntries*/, int /*liFlags*/, void* /*lpTitleInfo*/) {}
-    };
-
     NoOpMemcardInterface gNoOpMemcardInterface;
-
-    // FLAG PC-platform leaf: RealmcIface::GameInfo::GameInfo (X360 stack record, 144 bytes at
-    // the Prepare call site) -- zero the record; nothing consumes it on PC.
-    void RealmcGameInfo_Construct(void* lpGameInfo, const wchar_t* /*lpwTitle*/)
-    {
-        std::memset(lpGameInfo, 0, 144);
-    }
-
-    // FLAG PC-platform leaf: RealmcIface::MemcardInterface::CreateInstance -- return the inert
-    // no-op interface. Deliberately NON-NULL: Prepare immediately calls SetActive(1) on the
-    // result (no null-check in the X360 body), so a null return would crash where the no-op
-    // object keeps every downstream memcard call a safe no-op.
-    RealmcIface::MemcardInterface* RealmcMemcard_CreateInstance(const void* /*lpCallbacks*/,
-                                                                const void* /*lpAllocator*/,
-                                                                const void* /*lpGameInfo*/)
-    {
-        return &gNoOpMemcardInterface;
-    }
 
     // (The SaveCheckParams / LoadEntryInfo / TitleInfo / entry-record stand-ins that used to
     // live here were console-width byte-blob forks -- 16- and 48-byte arrays -- of types that
@@ -176,17 +81,6 @@ namespace
 
     // The save/load locale-string callback the memory-card interface is given.
     void* gpfnLocaleGetStrCallback = nullptr;   // CgsGui::SaveLoadSystem::LocaleGetStrCallback
-
-    // FLAG PC-platform leaf: file-local stand-in for the SaveInfo build the X360 Save runs
-    // (the real member SaveLoadSystem::CreateRealmcSaveInfo @0x8284C818 -- bodied in
-    // CgsSaveLoadX360_wB_04.cpp -- goes through the still-un-homed RealmcIface::SaveInfo SDK
-    // ctor) -- return the caller's out slot untouched (Save passes a 1-byte slot; only the
-    // no-op WriteSave consumes the result, so nothing may be written through it). Named
-    // ...PC so it cannot shadow, or be shadowed by, the real member declaration.
-    void* CreateRealmcSaveInfoPC(void* lpOut, void* /*lpSystem*/)
-    {
-        return lpOut;
-    }
 
     // Pending message-display option DISPATCH THUNKS. The X360 stores each handler as a
     // member-function pointer ({func @+0x198, delta @+0x19C}) and HandleOption dispatches it as
@@ -233,7 +127,7 @@ namespace CgsGui
                                    const char* lpcSaveFilePath, s32 liNumberOfMugshotTypes,
                                    s32 liNumberOfMugshotsPerType, u32 luExtraFilesSizeBytes)
     {
-        FinishPendingSavePC(this); // drain an earlier native task before reusing this owner
+ // drain an earlier native task before reusing this owner
         CGS_ASSERT(lpMessageDisplay != nullptr, "lpMessageDisplay != NULL");
         CGS_ASSERT(lpLanguageManager != nullptr, "lpLanguageManager != NULL");
 
@@ -322,8 +216,7 @@ namespace CgsGui
                                                           reinterpret_cast<u8*>(this) + 4,
                                                           laGameInfo);  // +0x184
         mpMemcardInterface->SetActive(1);                    // (*(*Instance+52))(Instance,1)
-        SaveLoadPC::InitializeAsyncWrites(); // start the native writer during preparation
-
+ // start the native writer during preparation
 
         // Mugshot buffer = per-mugshot size * mugshots-per-type * type count.
         const s32 liMugshotBytes = miExtraFilesSizeBytes * miNumberOfMugshotsPerType * miNumberOfMugshotTypes;
@@ -358,7 +251,7 @@ namespace CgsGui
     // X360 0x8284C158. Free the content-information file buffer through the shared provider.
     bool SaveLoadSystem::Release()
     {
-        FinishPendingSavePC(this); // snapshots finish before storage/owner teardown
+ // snapshots finish before storage/owner teardown
         gpContentInfoProvider->mpVtbl->mpfnFree(gpContentInfoProvider,
                                                 mpContentInfoFileBuffer, miContentInfoFileSize);
         miContentInfoFileSize   = 0;     // +0x208
@@ -370,15 +263,6 @@ namespace CgsGui
     // interface if present.
     void SaveLoadSystem::Update()
     {
-        const auto lLoad = sPendingLoadResultsPC.find(this);
-        if (lLoad != sPendingLoadResultsPC.end())
-        {
-            const PendingLoadResultPC lResult = lLoad->second;
-            sPendingLoadResultsPC.erase(lLoad);
-            // The callback may start another task or release this owner.
-            lResult.mpHandler->HandleSaveLoadTaskResult(lResult.meResult);
-            return;
-        }
         if (mbAsyncOpState == 1)
         {
             const DWORD luResult = ::XGetOverlappedResult(maOverlapped, nullptr, FALSE);
@@ -397,20 +281,6 @@ namespace CgsGui
 
         // Match the original completion boundary: callbacks run from Update,
         // never from the IO worker or before the atomic container write finishes.
-        const auto lPending = sPendingSavesPC.find(this);
-        if (lPending != sPendingSavesPC.end() && lPending->second.muTicket)
-        {
-            SaveLoadPC::WriteReport lReport;
-            const auto leResult = SaveLoadPC::PollWriteContainer(lPending->second.muTicket, lReport);
-            if (leResult != SaveLoadPC::E_WRITE_PENDING)
-            {
-                auto* lpHandler = lPending->second.mpHandler;
-                lPending->second = PendingSavePC{};
-                ReportSavePC(lpHandler, leResult, lReport);
-                // The callback can immediately submit a buffered save or release
-                // this owner. Do not use lPending or member state after it.
-            }
-        }
     }
 
     // X360 0x82859B70. Begin a load: bind the active display, set the metadata, and prompt the user
@@ -456,7 +326,6 @@ namespace CgsGui
     // result handler, push the boot-up metadata, then show the SAVELOAD_AUTOSAVE_WARNING prompt --
     // BootupShowAutosaveWarning stores &BootupStart as the pending CONTINUE handler and renders the
     // one-option prompt through the message display. The boot-up therefore BLOCKS on the prompt
-    // (the console behaviour) until the user answers CONTINUE; the prior PC leaf finished the task
     // synchronously here, which is why the prompt never appeared.
     void SaveLoadSystem::Bootup(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata,
                                 bool lbAutoLoad)
@@ -556,51 +425,25 @@ namespace CgsGui
         // TitleInfo::Empty() is fetched before the save-info is built, matching the X360 order.
         RealmcIface::TitleInfo& lTitleInfo = RealmcIface::TitleInfo::Empty();
         u8    lSaveInfo;
-        void* lpSaveInfo = CreateRealmcSaveInfoPC(&lSaveInfo, this);
         mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries, 0, &lTitleInfo);
 
-        // FLAG PC-platform leaf: the console WriteSave above owns asynchronous
-        // storage. Its host stand-in is inert; the native container worker supplies
-        // the same pending/completion behavior with owned snapshots.
         auto* lpHandler = reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay);
         CGS_ASSERT(lpHandler, "Save task requires a result handler");
         if (!lpHandler) return;
-        // FLAG PC-platform leaf: no storage without the boot-up's storage stage (see
-        // mbStorageReadyPC). The console's WriteSave fails there; so does the container.
-        if (!mbStorageReadyPC)
-        {
-            SaveLoadPC::WriteReport lReport;
-            std::strncpy(lReport.macName, macTitle, sizeof(lReport.macName) - 1);
-            lReport.muImageSize = mStoredDataView.miSize;
-            lReport.muMugshotsSize = GetMugshotBufferSizeBytes();
-            if (CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[SaveLoadPC] no storage selected (boot-up continued "
-                                              "without saving) -- write refused\n";
-            ReportSavePC(lpHandler, SaveLoadPC::E_WRITE_FAILED, lReport);
-            return;
-        }
         bool lbQueued = false;
         try
         {
-            auto& lrPending = sPendingSavesPC[this];
             CGS_ASSERT(!lrPending.muTicket, "Save task already pending");
             if (lrPending.muTicket) return;
             lrPending.mpHandler = lpHandler;
-            lrPending.muTicket = SaveLoadPC::BeginWriteContainer(
-                macTitle, mStoredDataView.mpData, mStoredDataView.miSize,
-                mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()),
-                macSaveInfoComment, macSaveInfoDescription);
             lbQueued = lrPending.muTicket != 0;
-            if (!lbQueued) lrPending = PendingSavePC{};
         }
         catch (const std::exception&) {}
         if (!lbQueued)
         {
-            SaveLoadPC::WriteReport lReport;
             std::strncpy(lReport.macName, macTitle, sizeof(lReport.macName) - 1);
             lReport.muImageSize = mStoredDataView.miSize;
             lReport.muMugshotsSize = GetMugshotBufferSizeBytes();
-            ReportSavePC(lpHandler, SaveLoadPC::E_WRITE_FAILED, lReport);
             return;
         }
         Update();
@@ -613,10 +456,6 @@ namespace CgsGui
     void SaveLoadSystem::Save(SaveLoadTaskResultHandler* lpResultHandler,
                               const SaveLoadMetadata& lrMetadata, const SaveInfo& lrSaveInfo)
     {
-        const auto lPending = sPendingSavesPC.find(this);
-        CGS_ASSERT(lPending == sPendingSavesPC.end() || !lPending->second.muTicket,
-                   "Save task already pending");
-        if (lPending != sPendingSavesPC.end() && lPending->second.muTicket) return;
         mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);
         SetMetadata(&lrMetadata, &lrSaveInfo);
         CaptureStoredDataView(lrMetadata);
@@ -646,13 +485,6 @@ namespace CgsGui
         }
 
         Save(lpResultHandler, lrMetadata, lrSaveInfo);
-    }
-
-    // True when a saved profile container exists for lrMetadata's save name. Purely a
-    // query -- no task state, no I/O task started.
-    bool SaveLoadSystem::SaveFileExists(const SaveLoadMetadata& lrMetadata) const
-    {
-        return SaveLoadPC::ContainerExists(lrMetadata.macFilename);
     }
 
     // X360 0x828521E0. Copy each requested image's mugshot buffer OUT into the caller's
@@ -880,24 +712,9 @@ namespace CgsGui
         //   clear -> dispatch the SAME slot with count 0 and a null entry array.
         // Both arms then `bl SaveLoadSystem::Update` (@0x82855B74).
         //
-        // FLAG PC-platform leaf (the storage edge only -- the branch above is the console's):
-        // the Realmc SDK is the unrecovered console memory-card backend and the PC interface is
-        // the inert no-op boundary, so the +0x24 dispatch cannot read anything and its ASYNC
-        // completion never arrives at the bound handler (+0x130). On PC the storage edge is the
-        // CgsSaveLoadPC container, so the AUTO-LOAD arm reads it synchronously into exactly the
-        // two destinations the console's two entries name -- the metadata's stored-data view
-        // (mStoredDataView, the +0x200/+0x204 pair) and the mugshot blob -- and reports the real
-        // I/O outcome here, in the console's read-then-Update-then-complete order. This is the
-        // same substitution LoadHandleConfirmLoad's confirm arm already makes for the Load task.
         bool lbOk = true;
         if (mbAutoLoad)
         {
-            const SaveLoadPC::EContainerReadResult leResult =
-                mStoredDataView.mpData != nullptr
-                    ? SaveLoadPC::ReadContainer(macTitle, mStoredDataView.mpData,
-                                                mStoredDataView.miSize, mpMugshotBufferData,
-                                                static_cast<u32>(GetMugshotBufferSizeBytes()))
-                    : SaveLoadPC::E_CONTAINERREAD_MISSING;
 
             // MISSING is the first-ever-boot case and is NOT a failure: the console's memory-card
             // boot-up creates/uses an empty container and reports success, and the manager's own
@@ -909,22 +726,11 @@ namespace CgsGui
             // CORRUPT/MISMATCH is a real failure: the container exists and is not this build's, so
             // report FAILURE -- BootupResult then leaves miSaveLoadResult at INVALID and
             // ReportTaskCompleted never deserialises the half-read image over the live profile.
-            lbOk = leResult == SaveLoadPC::E_CONTAINERREAD_OK ||
-                   leResult == SaveLoadPC::E_CONTAINERREAD_MISSING;
 
             // [DIAG] NOT IN THE X360 BINARY -- the byte counts the read actually moved, so a
             // boot-up load is measured and not inferred from the result code alone.
             if (CgsDev::Log::gpDebugPrint != 0)
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "[SaveLoadPC] bootup read: "
-                    << (leResult == SaveLoadPC::E_CONTAINERREAD_OK        ? "OK"
-                        : leResult == SaveLoadPC::E_CONTAINERREAD_MISSING ? "MISSING (fresh profile)"
-                        : leResult == SaveLoadPC::E_CONTAINERREAD_CORRUPT ? "CORRUPT"
-                                                                          : "layout MISMATCH")
-                    << " name='" << macTitle
-                    << "' image=" << mStoredDataView.miSize
-                    << " mugshots=" << GetMugshotBufferSizeBytes() << "\n";
             }
         }
         else
@@ -933,7 +739,6 @@ namespace CgsGui
         }
 
         // The storage stage ran: from here the container stands for the selected device.
-        mbStorageReadyPC = true;
 
         Update();
         reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
@@ -949,27 +754,8 @@ namespace CgsGui
     {
         if (luOption == 1)
         {
-            // FLAG PC-platform leaf: the X360 confirm arm builds the RealmcIface load-entry
-            // records (sub_82B51A08 + CreateRealmcMugshotLoadEntryInfo + EntryContentName) and
-            // starts the memory-card read (mpMemcardInterface vtable +0x38), whose ASYNC
-            // completion later reports the result. On PC the storage edge is the
-            // CgsSaveLoadPC container: read it synchronously into the stored-data view the
-            // Load starter captured (plus the mugshot blob into the mugshot buffer, the
-            // console's second load entry) and report the outcome from the next Update. A missing,
-            // corrupt, or other-build container reports FAILURE -- the manager's no-save
-            // path, exactly what the console's failed read reported.
-            bool lbOk = false;
             if (mStoredDataView.mpData != nullptr)
             {
-                const SaveLoadPC::EContainerReadResult leResult = SaveLoadPC::ReadContainer(
-                    macTitle, mStoredDataView.mpData, mStoredDataView.miSize,
-                    mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()));
-                lbOk = leResult == SaveLoadPC::E_CONTAINERREAD_OK;
-                CgsDev::Log::WriteToLog(
-                    leResult == SaveLoadPC::E_CONTAINERREAD_OK      ? "[SaveLoadPC] profile container READ\n"
-                    : leResult == SaveLoadPC::E_CONTAINERREAD_MISSING ? "[SaveLoadPC] profile container read: MISSING\n"
-                    : leResult == SaveLoadPC::E_CONTAINERREAD_CORRUPT ? "[SaveLoadPC] profile container read: CORRUPT\n"
-                                                                      : "[SaveLoadPC] profile container read: layout MISMATCH\n");
             }
 
             // The X360 confirm arm ends with `mr r3,r31; bl SaveLoadSystem::Update` right after
@@ -977,9 +763,6 @@ namespace CgsGui
             // completion -- as the sibling BootupStart leaf above does.
             Update();
 
-            sPendingLoadResultsPC[this] = {
-                reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay),
-                lbOk ? E_SAVELOADTASKRESULT_SUCCESS : E_SAVELOADTASKRESULT_FAILURE };
             return;
         }
 
@@ -988,41 +771,4 @@ namespace CgsGui
             ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_FAILURE);
     }
 
-    // ---- ContentInformationFileInterface overrides (PC boundary) ------------------------------
-    // No named X360 ARTIST body exists for any of the four (the CIF vocabulary is the PS3 save
-    // container's; grep of the export set finds no IsSavingCif/GetCifFile*/LoadCifFile), and the
-    // PC build has no memcard layer to query them. Each reports the canonical "no CIF data"
-    // answer so any caller takes its missing-file branch.
-
-    // FLAG PC-platform leaf: no CIF save is ever in flight without a storage backend.
-    bool SaveLoadSystem::IsSavingCif(ESaveLoadCif /*leCif*/)
-    {
-        return false;
-    }
-
-    // FLAG PC-platform leaf: no CIF file type without a storage backend.
-    int SaveLoadSystem::GetCifFileType(ESaveLoadCif /*leCif*/)
-    {
-        return 0;
-    }
-
-    // FLAG PC-platform leaf: no CIF file name without a storage backend (null == "no file").
-    const char* SaveLoadSystem::GetCifFileName(ESaveLoadCif /*leCif*/)
-    {
-        return 0;
-    }
-
-    // FLAG PC-platform leaf: CIF load always takes the missing-file branch (no data, size 0).
-    bool SaveLoadSystem::LoadCifFile(ESaveLoadCif /*leCif*/, void** lppData, s32* lpiSize)
-    {
-        if (lppData != 0)
-        {
-            *lppData = 0;
-        }
-        if (lpiSize != 0)
-        {
-            *lpiSize = 0;
-        }
-        return false;
-    }
 }

@@ -295,9 +295,6 @@ namespace Deformation
     struct DeformationManager
     {
     public:
-        // FLAG PC-platform leaf: opt-in playtest callback in GameMain's original
-        // debug-update phase; its post-physics observations remain in Update.
-        static void RunMaxPresetProbePCDebugUpdate(f32 lfTimeStep);
 
         // ====================================================================
         // Public API (DWARF :80-383). DECLARE-ONLY -- bodies are owned by the

@@ -212,7 +212,6 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
         lpList->muCount         = 0;
         lpList->mpDispatchBin   = &m_Bin;
         lpList->muChainBlockCount = 0;
-        lpList->mpRelocatedChainTailPC = nullptr;
         lpList->muWord00        = 0;
         lpList->mpBlockListHead = 0;
         lpList->mpBlockListTail = 0;
@@ -238,7 +237,6 @@ void DispatchFrame::Reset()
         lpList->mpBlockListTail = 0;
         lpList->muCount         = 0;
         lpList->muChainBlockCount = 0;
-        lpList->mpRelocatedChainTailPC = nullptr;
         lpList->mpSortedKeys    = 0;
         lpList->AllocateKeyBlock();
     }
@@ -296,7 +294,6 @@ void DispatchFrame::Release()
 // object-to-mesh jobs. The bin/frame back-pointers and block addresses are native
 // pointers, with the original 16 KiB atomic block claim and callback contract.
 // =============================================================================
-
 
 namespace CgsGraphics
 {

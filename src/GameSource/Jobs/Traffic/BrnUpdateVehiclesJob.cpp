@@ -47,18 +47,6 @@ SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, -1, 0u, 0u, 0u,
 
 namespace
 {
-    // [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT. The same BRN_TRAFFIC_DIAG switch the
-    // traffic module's [T5-*] rungs use, so one variable turns the whole decision-to-pixels
-    // trail on at once. DELETE-WHEN-STABLE.
-    CgsDev::StrStreamBase* TrafficDiagStream()
-    {
-        static const bool skbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
 
     // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(std::atomic<bool>& lrbAlreadyLogged, const char* lpcLegNameAndReason)
@@ -71,9 +59,6 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T2-job-leg] UpdateVehiclesJob leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 
@@ -474,42 +459,6 @@ void UpdateVehiclesJob::UpdateVehicle()
     // GetObjectEstimatedDistanceToLaneCenterAccordingToParam applied to the CAR ITSELF, i.e.
     // how far it is from the lane centre its own param says it should be on. A swerve is that
     // value walking away from zero and coming back. DELETE-WHEN-STABLE.
-    if (TrafficDiagStream() != 0 && gSwerveWatch.muCameraLatched != 0u &&
-        static_cast<s32>(muCurrentVehicle) == gSwerveWatch.miVehicle)
-    {
-        static u32 suTracked = 0u;
-        const u32 KU_TRACK_CAP = 1500u;
-        if (suTracked < KU_TRACK_CAP)
-        {
-            ++suTracked;
-            const Matrix44Affine lTrackTransform = GetCurrentVehicleTransform();
-            const Vector3 lTrackPos = lTrackTransform.Pos();
-            const Vector3 lTrackAt  = lTrackTransform.At();
-
-            // The lane-centre estimate walks the param's hull/section rungs, so it is only
-            // meaningful while the car is still param-driven. A promoted (physical) car reports
-            // -999 rather than a number nobody can interpret.
-            f32 lfLaneOffset = -999.0f;
-            if (!lpVehicle->IsPhysical())
-            {
-                Vector3 lTrackPredicted = ZeroV3();
-                lfLaneOffset =
-                    GetObjectEstimatedDistanceToLaneCenterAccordingToParam(lTrackPos,
-                                                                          lTrackPredicted).x;
-            }
-
-            *TrafficDiagStream()
-                << "[T5-track] frame=" << static_cast<s32>(renderengine::guPresentCount)
-                << " veh=" << static_cast<s32>(muCurrentVehicle)
-                << " pos=" << lTrackPos.x << "," << lTrackPos.y << "," << lTrackPos.z
-                << " at=" << lTrackAt.x << "," << lTrackAt.z
-                << " laneOffset=" << lfLaneOffset
-                << " physical=" << (lpVehicle->IsPhysical() ? 1 : 0)
-                << " behaviour=" << static_cast<s32>(lpParam->miBehaviour)
-                << " manoeuvre=" << static_cast<s32>(lpVehicle->GetCurrentManoeuvre())
-                << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
 
     if (!lpVehicle->IsPhysical())
     {
@@ -581,7 +530,6 @@ void UpdateVehiclesJob::UpdateVehicle()
             // measured against the car's OWN right vector -- which is the number "the car
             // altered course" means. It also publishes the position for the camera hook (see
             // BrnTrafficSwerveWatch.h). DELETE-WHEN-STABLE.
-            const bool lbWitness = (TrafficDiagStream() != 0) && lbSwerveActive;
             const Vector3 lPosBefore = lbWitness ? GetCurrentVehicleTransform().Pos() : ZeroV3();
 
             MoveToTarget(lTargetPos, lbPartialUpdate);
@@ -611,17 +559,6 @@ void UpdateVehiclesJob::UpdateVehicle()
                 if (suSwerveLogged < KU_SWERVE_LOG_CAP)
                 {
                     ++suSwerveLogged;
-                    *TrafficDiagStream()
-                        << "[T5-swerve] veh=" << static_cast<s32>(muCurrentVehicle)
-                        << " behaviour=" << static_cast<s32>(GetCurrentParam()->miBehaviour)
-                        << " swerve=" << lfSwerveAmount
-                        << " normalPhys=" << (lbIsNormalPhysical ? 1 : 0)
-                        << " extreme=" << (lbIsExtreme ? 1 : 0)
-                        << " pos=" << lPosAfter.x << "," << lPosAfter.y << "," << lPosAfter.z
-                        << " lateral=" << rw::math::vpu::Dot(lStep, lRightAfter)
-                        << " target=" << lTargetPos.x << "," << lTargetPos.y << "," << lTargetPos.z
-                        << " toPlayer=" << rw::math::vpu::Magnitude(lToPlayer)
-                        << " [DELETE-WHEN-STABLE]\n";
                 }
             }
 

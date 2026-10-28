@@ -47,20 +47,6 @@ namespace
     const f32 KF_START_GRID_CONE_LENGTH    = 100.0f;
     const f32 KF_START_GRID_CONE_RECIP_Y   = 1.0f;
 
-    // [FLAG PC witness] NOT console code. BRN_STARTGRID_DIAG, default off, read once. The wholesale
-    // grid kill prints its first firing and then every firing that removed a car, capped.
-    CgsDev::StrStreamBase* StartGridDiagStream_PC()
-    {
-        static const bool sbEnabled = (getenv("BRN_STARTGRID_DIAG") != 0);
-        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-    s32 giStartGridDiagLinesLeft_PC = 24;
-    u32 guStartGridDiagFires_PC     = 0;
-    u32 guStartGridDiagRemoved_PC   = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -76,35 +62,6 @@ void TrafficEntityModule::KillTrafficOnStartGridWholeSale(Vector3 lPlayerPositio
         && meState == E_STATE_RUNNING
         && IsDecisionFrame())
     {
-        // [FLAG PC witness] NOT console code. Counts, before the kill, the cars KillAllTrafficInCylinder
-        // is about to hand to RemoveVehicle (its own predicate, read only). The count is taken first
-        // because an offline standard car is only flagged should-be-removed there and stays alive
-        // until the pool sweep, so an alive count after the call would miss it.
-        CgsDev::StrStreamBase* const lpDiag_PC = StartGridDiagStream_PC();
-        u32 luVictims_PC = 0;
-        if (lpDiag_PC != 0 && giStartGridDiagLinesLeft_PC > 0)
-        {
-            const f32 lfRadiusSquared_PC = KF_START_GRID_WHOLESALE_CLEAR_RADIUS * KF_START_GRID_WHOLESALE_CLEAR_RADIUS;
-            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
-            {
-                if (!GetVehicle(luVehicle)->IsAlive())
-                {
-                    continue;
-                }
-                const Vector3 lvPosition = GetVehicleTransform(luVehicle).Pos();
-                const f32 lfDeltaX = lvPosition.x - lPlayerPosition.x;
-                const f32 lfDeltaZ = lvPosition.z - lPlayerPosition.z;
-                if (lfDeltaX * lfDeltaX + lfDeltaZ * lfDeltaZ > lfRadiusSquared_PC)
-                {
-                    continue;
-                }
-                if (fabsf(lvPosition.y - lPlayerPosition.y) >= KF_START_GRID_WHOLESALE_CLEAR_HEIGHT)
-                {
-                    continue;
-                }
-                ++luVictims_PC;
-            }
-        }
 
         {
             const TrafficRemoveReasonTag lTag("start-grid-wholesale");
@@ -112,24 +69,6 @@ void TrafficEntityModule::KillTrafficOnStartGridWholeSale(Vector3 lPlayerPositio
                                      KF_START_GRID_WHOLESALE_CLEAR_HEIGHT, true);
         }
 
-        // [FLAG PC witness] NOT console code.
-        if (lpDiag_PC != 0)
-        {
-            ++guStartGridDiagFires_PC;
-            guStartGridDiagRemoved_PC += luVictims_PC;
-            if (giStartGridDiagLinesLeft_PC > 0 && (guStartGridDiagFires_PC == 1 || luVictims_PC != 0))
-            {
-                --giStartGridDiagLinesLeft_PC;
-                *lpDiag_PC << "[startgrid] wholesale kill fired #" << guStartGridDiagFires_PC
-                           << " removed=" << luVictims_PC
-                           << " total=" << guStartGridDiagRemoved_PC
-                           << " at=(" << lPlayerPosition.x << ", " << lPlayerPosition.y << ", "
-                           << lPlayerPosition.z << ")"
-                           << " radius=" << KF_START_GRID_WHOLESALE_CLEAR_RADIUS
-                           << " height=" << KF_START_GRID_WHOLESALE_CLEAR_HEIGHT
-                           << " [FLAG PC witness]\n";
-            }
-        }
     }
 }
 

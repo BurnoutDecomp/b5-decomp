@@ -372,24 +372,6 @@ namespace BrnDirector
             // (first ACTIVE frame, then every 30th, capped): the time scale this state asked the
             // camera for, next to the GameState inputs it came from, so "Showtime crawls" and
             // "the close-up never starts" can each be read off one line.
-            if (getenv("BRN_DIRECTOR_ACTION_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static u32 suActiveFrames = 0u;
-                if ((suActiveFrames % 30u) == 0u && suActiveFrames < 30u * 200u)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crashmode] hb frame " << suActiveFrames
-                        << " requestedSimScale " << lrCamera.GetEffects().mfSimTimeScale
-                        << " impactTimeActive " << (lrGameState.mbImpactTimeActive ? 1 : 0)
-                        << " impactFactor " << lrGameState.mfImpactTimeSloMoFactor
-                        << " closeup " << (mbDoingCloseup ? 1 : 0)
-                        << " super " << (mbSuperSloMoCloseUp ? 1 : 0)
-                        << " closeupTime " << mfCloseupTime
-                        << " comboLevel " << lrGameState.mShowTimeInfo.miComboLevel
-                        << "\n";
-                }
-                ++suActiveFrames;
-            }
 
             // ---- choose the blur "mode" for this frame ----------------------------------
             // 0x8223570C / 0x82235734: ShowTimeInfo::mbVehicleImpactThisFrame (+0x1E9, raised by

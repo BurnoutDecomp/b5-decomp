@@ -124,16 +124,6 @@ namespace Vehicle
         // locally because the two are different rodata homes on the console.
         const f32 KF_AI_CRASH_SLOWMO_FACTOR = 100.0f;
 
-        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_PROP_DIAG) one-shot witnesses so a
-        // boot-drive can prove the proxies are being fed: the first race-car publish and the
-        // first traffic publish, once each, then silence. The getenv latch is a function-local
-        // static; the shipped path pays one predicted branch per call.
-        // DELETE-WHEN the high-speed prop reaction is confirmed on screen.
-        bool PropDiagEnabled()
-        {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            return sbPropDiag && CgsDev::Log::gpDebugPrint != 0;
-        }
     }
 
     // ========================================================================================
@@ -194,19 +184,6 @@ namespace Vehicle
             // [DIAG] NOT IN THE X360 BINARY -- see PropDiagEnabled.
             {
                 static bool sbLoggedFirst = false;
-                if ( !sbLoggedFirst && PropDiagEnabled() )
-                {
-                    sbLoggedFirst = true;
-                    const Vector3 lPos = lUpdateEvent.mTransform.wAxis;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[extbody] FIRST race-car proxy publish: car " << i
-                        << " proxy entity " << CgsDev::E_PRINTMODE_HEXONCE
-                        << static_cast<u32>( lDummyRaceCarEntityId )
-                        << " pos (" << lPos.x << ", " << lPos.y << ", " << lPos.z << ")"
-                        << " |v|=" << vpu::Magnitude( lUpdateEvent.mVel )
-                        << " slowMo=" << ( lrRaceCar.IsInAICrashSlowMo() ? 1 : 0 )
-                        << "\n";
-                }
             }
 
             lpUpdatedBodyQueue->AddEvent( lUpdateEvent );                      // 0x8261981C
@@ -265,18 +242,6 @@ namespace Vehicle
             // [DIAG] NOT IN THE X360 BINARY -- see PropDiagEnabled.
             {
                 static bool sbLoggedFirst = false;
-                if ( !sbLoggedFirst && PropDiagEnabled() )
-                {
-                    sbLoggedFirst = true;
-                    const Vector3 lPos = lUpdateEvent.mTransform.wAxis;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[extbody] FIRST traffic proxy publish: slot " << liUsedVehicle
-                        << " proxy entity " << CgsDev::E_PRINTMODE_HEXONCE
-                        << static_cast<u32>( lDummyRaceCarEntityId )
-                        << " pos (" << lPos.x << ", " << lPos.y << ", " << lPos.z << ")"
-                        << " |v|=" << vpu::Magnitude( lUpdateEvent.mVel )
-                        << "\n";
-                }
             }
 
             lpUpdatedBodyQueue->AddEvent( lUpdateEvent );                      // 0x825EF410

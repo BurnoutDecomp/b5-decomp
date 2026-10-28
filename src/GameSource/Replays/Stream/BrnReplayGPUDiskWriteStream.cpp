@@ -1,7 +1,7 @@
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"
 
 #include <cstring> // memcpy / memset
-#include <windows.h> // native ntdll critical-section storage contract
+#include <xtl.h> // native ntdll critical-section storage contract
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager

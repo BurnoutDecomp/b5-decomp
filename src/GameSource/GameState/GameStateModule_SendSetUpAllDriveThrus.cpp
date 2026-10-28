@@ -38,14 +38,6 @@
 //   rebuilds the icon lane as {x, 0, z, 0}. The region position is the BoxRegion's own (the first
 //   member of the region), i.e. GetBoxRegion()->GetPosition().
 //
-// ⚠️ [FLAG PC bring-up] ONE NULL GUARD the console does not have: the trigger data is reached
-//   through TriggerQueryManager::GetTriggerData() (the same acquire SendSetupPlayerCarEvent uses;
-//   the console dereferences its resource pointer raw), and on PC it can still be unbound on the
-//   first PreWorldUpdate of a boot -- by which time the caller has already cleared the dirty
-//   byte. So a null here RE-RAISES the byte (SetDriveThrusDirtyFlag) and skips the post; the next
-//   frame retries. One-shot logged. DELETE-WHEN the module's resource binding precedes its first
-//   PreWorldUpdate the way the console's does.
-// ============================================================================
 
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"        // GameActionQueue / E_ACTION_SET_UP_ALL_DRIVE_THRUS
@@ -72,7 +64,6 @@ void GameStateModule::SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActio
     const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
     if (lpTriggerData == 0)
     {
-        // [FLAG PC bring-up] see the banner -- re-arm and retry next frame.
         mProgressionManager.SetDriveThrusDirtyFlag();
         static bool sbLogged = false;
         if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)

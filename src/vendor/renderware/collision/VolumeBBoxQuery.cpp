@@ -1,6 +1,4 @@
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"
-#include "vendor/renderware/collision/VolumeQueryHostLayout.hpp"   // NOT X360: the host carve sizes
-
 #include "vendor/renderware/collision/Aggregate.hpp"
 #include "vendor/renderware/collision/CollisionVolume.hpp"
 

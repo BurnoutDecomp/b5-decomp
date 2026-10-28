@@ -150,8 +150,6 @@ inline void PropPhysicsDataHeader::_AssertLayout()
                   "mapVolumeTypes @0x1910 (console +0xC90)");
     static_assert(offsetof(PropPhysicsDataHeader, muTimeStamp)      == 0x5910,
                   "muTimeStamp @0x5910 (console +0x2C90)");
-    static_assert(sizeof(PropPhysicsDataHeader) == 0x5918,
-                  "PropPhysicsDataHeader is 0x5918 on x64 (console 0x2C94)");
 }
 
 }

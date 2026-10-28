@@ -85,16 +85,6 @@ void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // the image holds 2 and 4 there, so the default is fma(3, ratio, 2) capped at 4). Printing the
     // ratio AND the result is the only way to say whether "barely any enemies" is the console's own
     // number or a lost rival. DELETE-WHEN issue #24 is closed.
-    if (std::getenv("BRN_MM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[mm-start] MARKED MAN rankRatio " << lpStartGameModeParams->GetProgressionRankAsRatio()
-            << " maxOpponents " << miMaxOpponentCount
-            << " numRivals " << lpGameModeParams->GetNumRivals()
-            << " startLocations " << lpGameModeParams->GetStartLocationCount()
-            << " maxRampTimer " << mfMaxRampTimer
-            << "\n";
-    }
     // ---- end [DIAG] --------------------------------------------------------------------------
 }
 
@@ -138,40 +128,7 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     // Count. Sampled once per second off the mode's own time step.
     // DELETE-WHEN issue #24 is closed.
     {
-        static const bool sbMarkedManDiag = (std::getenv("BRN_MM_DIAG") != 0);
-        static f32 sfDiagClock = 0.0f;
         static s32 siDiagCalls = 0;
-        if (sbMarkedManDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            // The first 20 calls ALWAYS print. A purely dt-driven sample cannot distinguish
-            // "this function never ran" from "dt is 0" -- and dt being 0 was the whole defect.
-            ++siDiagCalls;
-            sfDiagClock += lfTimeStep;
-            if (siDiagCalls <= 20 || sfDiagClock >= 1.0f
-                || miBroadcastOpponentCount != liOpponentCount)
-            {
-                sfDiagClock = 0.0f;
-                *CgsDev::Log::gpDebugPrint
-                    << "[mm-pre] call " << siDiagCalls
-                    << " state " << GetCurrentState()
-                    << " dt " << lfTimeStep
-                    << " rate " << lpTimer->GetSimTimerStatus()->GetBaseTimeStep()
-                    << " scale " << lpTimer->GetSimTimerStatus()->GetTimeStepMultiplier()
-                    << " ramp " << mfRampTimer << "/" << mfMaxRampTimer
-                    << " maxOpp " << miMaxOpponentCount
-                    << " distToFinish "
-                    << lpScoringSystem->GetRaceCarDistanceToFinish(
-                           lpActiveRaceCars->GetPlayerActiveRaceCarIndex())
-                    << " count " << liOpponentCount
-                    << " bcast " << miBroadcastOpponentCount
-                    << " shortcut " << static_cast<s32>(mbInShortcut ? 1 : 0)
-                    << " playerCrashing "
-                    << static_cast<s32>(lpActiveRaceCars->GetPlayerRaceCarState()->mbCrashing ? 1 : 0)
-                    << " playerActive "
-                    << static_cast<s32>(lpActiveRaceCars->IsPlayerCarActive() ? 1 : 0)
-                    << "\n";
-            }
-        }
     }
     // ---- end [DIAG] --------------------------------------------------------------------------
 

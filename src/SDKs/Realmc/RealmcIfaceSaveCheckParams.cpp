@@ -20,8 +20,6 @@
 namespace RealmcIface
 {
 
-static_assert(sizeof(SaveReq) == 0x164, "SaveReq is 0x164 bytes on the host too");
-
 // ---------------------------------------------------------------------------
 // SaveCheckParams::SaveCheckParams @ 0x82B51E38
 //

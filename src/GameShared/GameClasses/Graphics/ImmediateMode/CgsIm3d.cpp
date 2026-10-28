@@ -34,7 +34,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -50,9 +49,7 @@ extern "C" u32 D3DDevice_InsertFence(void*);
 // the recipe and tools/assets/shaders/brn_im3d.fx for the Xenos listing they came from).
 namespace renderengine
 {
-    extern const u8  gauIm3dVertexProgramPC[];
     extern const u32 guIm3dVertexProgramPCSize;
-    extern const u8  gauIm3dPixelProgramPC[];
     extern const u32 guIm3dPixelProgramPCSize;
 }
 
@@ -147,37 +144,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image --------------------
-    // The SAME defect BrnSkidVertex.cpp carried until 2026-09-03 and its banner describes in
-    // full: the console route below (GetResourceDescriptor -> allocator Create -> Initialize)
-    // cannot run on this backend, because both renderengine::ProgramBuffer bodies call
-    // XGGetMicrocodeShaderParts, whose PC stub returns 0 WITHOUT writing *lpParts, and then read
-    // that uninitialised block for the microcode size. It does not crash here -- it produces a
-    // program buffer reporting ZERO VARIABLES, and this TU measured exactly that on its first
-    // run with the newly mounted Im3d:
-    //     [im3d] program 0 worldViewProj{set=0 idx=0 type=0 count=0} vars=0
-    // while the skid renderer, three lines earlier in the same log, reported vars=3. A zero-count
-    // handle goes to the PC leaf DISCARD row, so the view-projection would never have reached
-    // c0..c3 and every spark ribbon would have been transformed by whatever the previous draw
-    // left there. The image is not at fault: Im3dProgramsPC.cpp declares 1 variable at its +0x04
-    // and names it "worldViewProj" in its interned table. Nothing was adopting it.
-    //
-    // A non-PC binary returns null here and falls through to the console path unchanged.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -364,7 +330,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;
@@ -433,8 +398,6 @@ void ImRenderer<V>::BeginRendering()
     mgpActiveRenderer = static_cast<ImRendererBase*>(this);
     shadow::Device::ResetShadowing();
     mi8CurrentProgram = 0;
-    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
-    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
     shadow::Device::SetVertexDescriptor(
         reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
 }
@@ -557,8 +520,6 @@ void Im3d::Construct(rw::IResourceAllocator* lpAllocator)
         mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
     }
 
-    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dVertexProgramPC };
-    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dPixelProgramPC };
     const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dVertexProgramPCSize };
     const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dPixelProgramPCSize };
     const s8    KI8_PROGRAMS_BUILT        = 1;   // the console builds 2 -- see the FLAG above
@@ -588,7 +549,6 @@ void Im3d::Construct(rw::IResourceAllocator* lpAllocator)
             reinterpret_cast<renderengine::ProgramVariableHandle*>(&maShaderStateBlocks[li8Program]));
 
         // [DIAG] DID worldViewProj RESOLVE? mu8RegisterCount == 0 is GetVariableHandleByName
-        // "not found" answer and the PC leaf sends a zero-count handle to a DISCARD row -- so an
         // unresolved handle means SetTransform writes the view-projection into a bin and every
         // spark ribbon transforms by whatever c0..c3 happen to hold. Invisible in the log AND in
         // the picture, which is why it is worth one line -- the same witness the skid path took.

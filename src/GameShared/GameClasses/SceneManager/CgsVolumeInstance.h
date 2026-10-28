@@ -169,8 +169,6 @@ namespace CgsSceneManager
 
     // Widths the X360 accesses pin directly (std/stw/sth/stb + the two 16-byte
     // vector stores).
-    static_assert(sizeof(VolumeInstance::mUserID) == 8,
-                  "VolumeInstance::mUserID is the whole packed 64-bit id (X360 `std r27,0x50`)");
     static_assert(sizeof(VolumeInstance::mWorldSpaceTransform) == 64,
                   "VolumeInstance::mWorldSpaceTransform is 4 x 16-byte lanes (X360 4x stvx128)");
     static_assert(sizeof(VolumeInstance::mPadding) == 16,

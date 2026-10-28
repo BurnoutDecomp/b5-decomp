@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (flagged substitute for the StrStream assert path)
 
 #include <cstring>     // (strlen replaced by the X360's inline NUL-walk below)
-#include <windows.h>   // CreateFileA / WriteFile / CloseHandle / SetFilePointer
+#include <xtl.h>   // CreateFileA / WriteFile / CloseHandle / SetFilePointer
 
 // CgsDev::Log::LogFile member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // This TU bodies the three X360-emitted LogFile functions:

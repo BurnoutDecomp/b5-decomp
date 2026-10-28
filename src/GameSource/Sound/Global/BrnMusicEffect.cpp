@@ -110,21 +110,6 @@ namespace
         "00Race_End_RANK_03", "00Race_End_RANK_04", "00Race_End_RANK_05"
     };
 
-    // [DIAG] NOT IN THE X360 BINARY -- opt-in music witness (BRN_MUSIC_DIAG=1).
-    // Names exactly what it prints: the music messages this effect receives, the music
-    // type it computes each frame (only when it CHANGES), the song it selects, and the
-    // stream Queue it posts. Rate limited by construction (type changes + selections are
-    // rare); the per-message line is capped.
-    bool MusicDiagEnabled()
-    {
-        static int siEnabled = -1;
-        if (siEnabled < 0)
-        {
-            const char* lpcEnv = std::getenv("BRN_MUSIC_DIAG");
-            siEnabled = (lpcEnv && lpcEnv[0] && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        return siEnabled != 0;
-    }
     u32 guMusicDiagMessages = 0;
     const u32 KU_MUSIC_DIAG_MESSAGE_CAP = 400;
 
@@ -139,16 +124,6 @@ namespace
     // BrnModeManager_WorldTick.cpp:719), so the interface reads mode 0 / state 0 for
     // the whole run and the music type can never leave 2. Named for what it does: it
     // forces the TYPE, and nothing else.
-    s32 MusicDiagForcedType()
-    {
-        static s32 siForced = -2;
-        if (siForced == -2)
-        {
-            const char* lpcEnv = std::getenv("BRN_MUSIC_FORCE_TYPE");
-            siForced = (lpcEnv && lpcEnv[0]) ? std::atoi(lpcEnv) : -1;
-        }
-        return siForced;
-    }
 
     // [DIAG] NOT IN THE X360 BINARY. std::printf does NOT reach BrnGame.log on this
     // build; CgsDev::Log::WriteToLog is the sink the harness reads (the same one the
@@ -521,9 +496,6 @@ u32 MusicEffect::GetStreamFromVideoName(u32 auName) const
     // (The console's second assert, Num_ContentSpecs() == eLanguage::Count (6), is the
     // bound ContentSpec() applies itself: an out-of-range index reads the zeroed default.)
     const u32 luContentSpec = lLanguageStream.ContentSpec(static_cast<u32>(meLanguage));
-    if (MusicDiagEnabled())
-        MusicDiagPrintf("[music]   video name 0x%08X -> language %d stream 0x%08X\n",
-                        auName, meLanguage, luContentSpec);
     if (!luContentSpec)
         return auName;
     return luContentSpec;
@@ -605,9 +577,6 @@ void MusicEffect::UpdateSongs()
             !lrEnabled.IsBitSet(luCurrent))
         {
             mEATraxStream.StopAndUnqueue(2.0f);
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] playlist dropped current song %d -> stop EATrax\n",
-                            mEaTraxData.miCurrentSong);
         }
     }
     mEaTraxData.mRemainingSongs.UnSetBit(luCurrent);
@@ -693,12 +662,6 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
 
         // [DIAG] NOT IN THE X360 BINARY -- opt-in witness (BRN_MUSIC_DIAG=1) that the EA
         // Trax menu's audition reached the stream, which is the whole point of this body.
-        if (MusicDiagEnabled())
-        {
-            MusicDiagPrintf("[music] PREVIEW track %d stream='%s' spec=0x%08X -> Queue(MenuStream, "
-                            "slot %d)\n", liPreviewSong, lpcStream ? lpcStream : "<null>",
-                            luContentSpec, mbPreviewActive ? 1 : 10);
-        }
 
         // Tell the GUI what is auditioning: 24 bytes on the module's GuiOut queue as event
         // 502 -- the "now playing" chyron BrnGuiAlwaysAvailableComponentsManager's case 502
@@ -728,7 +691,6 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
     mEaTraxData.miPreviewSong         = liPreviewSong;
     mEaTraxData.miPreviousPreviewSong = liOld;
 }
-
 
 // X360 0x8269CFC0.
 u32 MusicEffect::GetEventStartContentSpec(const void* apGameModeInterface)
@@ -798,23 +760,8 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
 
     mePrevMusicType = meMusicType;
     meMusicType = GetMusicType(lpGameMode);
-    if (MusicDiagForcedType() >= 0)   // [DIAG] NOT IN THE X360 BINARY -- positive control
-        meMusicType = MusicDiagForcedType();
 
     static bool sbFirstUpdateParams = true;
-    if (MusicDiagEnabled() && (sbFirstUpdateParams || meMusicType != mePrevMusicType))
-    {
-        sbFirstUpdateParams = false;
-        s32 liGameMode = -1, liPhase = 0;
-        if (lpGameMode)
-        {
-            std::memcpy(&liGameMode, static_cast<const u8*>(lpGameMode) + 8, 4);
-            std::memcpy(&liPhase, static_cast<const u8*>(lpGameMode) + 12, 4);
-        }
-        MusicDiagPrintf("[music] type %d -> %d (gamemode=%d phase=%d pending=%d junkyard=%d)\n",
-                    mePrevMusicType, meMusicType, liGameMode, liPhase,
-                    mePendingMusicType, meJunkyardAmbience);
-    }
 
     // X360 0x826FE6D8..0x826FE778: a crash closes the jump filter, then it ticks.
     //   idx = iface+0x2858 (mePlayerActiveRaceCarIndex)
@@ -963,16 +910,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                         reinterpret_cast<const CgsModule::Event*>(&lNewTrack), 502, 24);
                 }
 
-                if (MusicDiagEnabled())
-                    MusicDiagPrintf("[music] select song %d/%d type=%d stream='%s' spec=0x%08X "
-                                "-> Queue(EATrax, slot 1) + GUI 502 now-playing\n",
-                                liTrack, liNumSongs, meMusicType,
-                                lpcStream ? lpcStream : "<null>", luContentSpec);
-            }
-            else if (MusicDiagEnabled())
-            {
-                MusicDiagPrintf("[music] NO SONG SELECTABLE (numsongs=%d type=%d) -- the "
-                            "playlist masks are empty\n", liNumSongs, meMusicType);
             }
         }
         break;
@@ -984,9 +921,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             mEATraxStream.PauseWithFade(0.1f);
             const u32 luSpec = GetEventStartContentSpec(lpGameMode);
             mSecondaryStream.Queue(luSpec, 2);
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] event start sting spec=0x%08X -> Queue(Secondary, slot 2)\n",
-                            luSpec);
         }
         break;
 
@@ -1003,10 +937,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                 luSpec = GetEventEndContentSpec(lpGameMode);
             mSecondaryStream.Queue(luSpec, 3);
             mbEventEndPending = false;
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] event end sting rank=%d won=%d spec=0x%08X "
-                            "-> Queue(Secondary, slot 3)\n",
-                            meEventEndResult, mbEventWon ? 1 : 0, luSpec);
         }
         break;
 
@@ -1021,9 +951,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             CGS_ASSERT(mCarUnlockName != KU_NULL_NAME,
                        "mCarUnlockName != CgsSound::Playback::K_NULL_NAME");
             mSecondaryStream.Queue(mCarUnlockName, 5);
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] car-unlocked sting spec=0x%08X -> Queue(Secondary, slot 5)\n",
-                            mCarUnlockName);
             mCarUnlockName = KU_NULL_NAME;
         }
         mePendingMusicType = E_MUSIC_TYPE_NONE;
@@ -1068,10 +995,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                     lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
             lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
                                503, sizeof(lEvent));
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] picture paradise '%s' (%s / %s) -> Queue(Secondary, slot 6)\n",
-                            lrTrack.mpcStream, lrTrack.mpcComposerTextId,
-                            lrTrack.mpcWorkTextId);
             miPicParadiseMusic = (miPicParadiseMusic + 1) % KI_NUM_PICTURE_PARADISE_NAMES;
         }
         break;
@@ -1083,8 +1006,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             mEATraxStream.PauseWithFade(0.1f);
             mSecondaryStream.Queue(
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash("ShowtimeStart")), 11);
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] showtime start -> Queue(Secondary, slot 11)\n");
         }
         mePendingMusicType = E_MUSIC_TYPE_NONE;
         break;
@@ -1101,9 +1022,6 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             // preview cursors are ZEROED here (Notify's clear arm is the one that writes -1).
             mEaTraxData.miPreviewSong = 0;
             mEaTraxData.miPreviousPreviewSong = 0;
-            if (MusicDiagEnabled())
-                MusicDiagPrintf("[music] menu stream spec=0x%08X -> Queue(Menu, slot 12)\n",
-                            mMenuStreamName);
         }
         // X360 @0x826FF694..6D0:
         //     if (menu.prevVoiceStage != menu.voiceStage && menu.voiceStage == 6)
@@ -1227,13 +1145,6 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     const u8* lpuPayload =
         reinterpret_cast<const u8*>(apMessage) + sizeof(CgsSound::Io::MessageHeader);
 
-    if (MusicDiagEnabled() && guMusicDiagMessages < KU_MUSIC_DIAG_MESSAGE_CAP)
-    {
-        ++guMusicDiagMessages;
-        MusicDiagPrintf("[music] msg id=%d (type=%d prev=%d pending=%d)\n",
-                    li16Event, meMusicType, mePrevMusicType, mePendingMusicType);
-    }
-
     switch (li16Event)
     {
     case 7:   // E_SOUNDMESSAGE_EATRAX -- the playlist masks (GUI 458).
@@ -1246,17 +1157,6 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
                     sizeof(mEaTraxData.mEnabledSongsNoGameMode));
         mEaTraxData.mRemainingSongs.SetAll();
         mbPlaylistChanged = true;
-        if (MusicDiagEnabled())
-        {
-            s32 liInGame = 0, liFreeBurn = 0;
-            for (u32 luBit = 0; luBit < 128; ++luBit)
-            {
-                if (mEaTraxData.mEnabledSongs.IsBitSet(luBit)) ++liInGame;
-                if (mEaTraxData.mEnabledSongsNoGameMode.IsBitSet(luBit)) ++liFreeBurn;
-            }
-            MusicDiagPrintf("[music]   playlist masks updated (%d songs enabled in game, "
-                        "%d enabled free burn)\n", liInGame, liFreeBurn);
-        }
         break;
     }
     case 8:   // E_SOUNDMESSAGE_EATRAX_LAST_PLAYED_INDEXES (GUI 459) -- restore state.
@@ -1294,12 +1194,6 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         const u32 luName = lrData.muStreamNameHash;
         const bool lbIsVideo = (lrData.mbFromVideo != 0);
         const bool lbOverCustom = (lrData.mbPlayOverCustomSoundtrack != 0);
-        if (MusicDiagEnabled())
-            MusicDiagPrintf("[music]   id 13 name=0x%08X isVideo=%d overCustom=%d "
-                            "(mbMenuStreamIsVideo=%d) -> %s\n",
-                            luName, lbIsVideo ? 1 : 0, lbOverCustom ? 1 : 0,
-                            mbMenuStreamIsVideo ? 1 : 0,
-                            (!mbMenuStreamIsVideo || lbIsVideo) ? "accepted" : "IGNORED");
         if (!mbMenuStreamIsVideo || lbIsVideo)
         {
             if (luName == KU_NULL_NAME)
@@ -1364,9 +1258,6 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
             CGS_ASSERT(lbReleased, "mJumpHpf.Release(KF_JUMP_HPF_CLOSE_TIME)");
             (void)lbReleased;
         }
-        if (MusicDiagEnabled())
-            MusicDiagPrintf("[music]   id 14 (jump filter) open=%d -> hpf %.1f Hz\n",
-                        lpuPayload[0] != 0, mJumpHpf.GetFrequency());
         break;
     }
 
@@ -1417,8 +1308,6 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         s32 liCgsLanguage = 0;
         std::memcpy(&liCgsLanguage, lpuPayload, sizeof(liCgsLanguage));
         meLanguage = SpeechEffect::GetLanguage(liCgsLanguage);
-        if (MusicDiagEnabled())
-            MusicDiagPrintf("[music]   id 33 set language cgs=%d -> %d\n", liCgsLanguage, meLanguage);
         break;
     }
 

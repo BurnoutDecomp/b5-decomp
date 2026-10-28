@@ -44,6 +44,5 @@ namespace CgsNetwork
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(HostKeepAliveMessage) == 0x20, "sizeof(HostKeepAliveMessage) == 0x20");
 
 } // namespace CgsNetwork

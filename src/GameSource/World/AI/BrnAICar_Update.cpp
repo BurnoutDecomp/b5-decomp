@@ -898,11 +898,6 @@ namespace BrnAI
         // BRN_FORCE_TAKEDOWN (GameStateModule_gTD_00.cpp). DELETE-WHEN the harness grows a proper
         // debug-menu equivalent of the console's aggression sliders.
         {
-            static const char* spcForcedMadness = getenv("BRN_AI_MADNESS");
-            if (spcForcedMadness != 0)
-            {
-                lfMadness = static_cast<f32>(atof(spcForcedMadness));
-            }
         }
         mAggressiveness.SetAggression(lfMadness * 0.6f);                                    // stfs 0x140C ; stb 1,0x1410
         mAggressiveness.SetProximityToSpeedMatch(0.5f);
@@ -1253,7 +1248,7 @@ namespace BrnAI
     void Aggressiveness::SetRelativeSpeedForMatch(f32 lfValue)
     {
         mfRelativeSpeedForSpeedMatch = lfValue;   // stfs +0x10
-    
+
 }
 
     // ==================================================================================
@@ -1265,7 +1260,6 @@ namespace BrnAI
     s8          AICar::GetOpponentIndex() const      { return miOpponentIndex; }
     EAICarState AICar::GetState() const              { return meCarState; }
     bool        AICar::IsPlayerCar() const           { return mbIsPlayer; }
-
 
     // ---- three more declared-only accessors (DWARF :182 / :287 / :332), RaceBalancingManager links against them.
     // GetNextRouteNode: Route::GetNode(miNextRouteNodeIndex), null when out of range (the console's

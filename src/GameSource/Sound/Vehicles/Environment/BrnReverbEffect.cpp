@@ -3,7 +3,6 @@
 #include "GameSource/AttribSys/Generated/classes/reverbparams.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnReverbEffect.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnEnclosureControl.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/AttribSys/Enums/eImpactTime.h"
@@ -83,8 +82,6 @@ bool ReverbEffect::Attach()
     mReverbType.Flush(AttribSys::Enums::eReverbTypes::ReverbTypeCount);
 
     static s32 siDiagAttach = 0;
-    if (SndEnvDiagBudget(siDiagAttach))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] reverb attach [FLAG PC witness]\n";
     return true;
 }
 
@@ -207,10 +204,6 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
         meReverbState = E_REVERB_STATE_NONE;
 
         static s32 siDiagPreset = 0;
-        if (SndEnvDiagBudget(siDiagPreset))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] reverb preset=" << static_cast<s32>(leReverb)
-                << " time=" << mfTime << " space=" << mfSpaceSize
-                << " brightness=" << mfBrightness << " gain=" << mfGain << " [FLAG PC witness]\n";
     }
 
     if (KB_DEBUG_REVERB_ZONE)
@@ -248,10 +241,6 @@ void ReverbEffect::ProcessUpdate()
     lrVoice.SetGain(0, lfGain, &K_DefaultSendName);
 
     static s32 siDiagProcess = 0;
-    if (meReverbState == E_REVERB_STATE_NONE && SndEnvDiagBudget(siDiagProcess))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] reverb applied ready=" << static_cast<s32>(lrVoice.IsReady())
-            << " preset=" << static_cast<s32>(mReverbType.GetCurrent()) << " gain=" << lfGain
-            << " [FLAG PC witness]\n";
 }
 
 // ---------------------------------------------------------------------------

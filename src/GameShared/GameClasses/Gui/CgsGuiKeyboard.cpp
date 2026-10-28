@@ -1,9 +1,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <type_traits>
-#if defined(_WIN32) && !defined(_XBOX)
-#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
-#endif
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   CgsGui::GuiKeyboard::Show   @ 0x8284CFD8
@@ -34,14 +31,6 @@ static_assert(sizeof(CgsSystem::CgsXOverlapped) == sizeof(XOVERLAPPED),
 
 namespace CgsGui
 {
-#if defined(_WIN32) && !defined(_XBOX)
-    void GuiKeyboard::AbandonPlatformOperation()
-    {
-        // FLAG PC-platform policy: no callback after this keyboard owner's release.
-        CgsSystem::KeyboardPC::Forget(reinterpret_cast<PXOVERLAPPED>(&mOverlapped));
-        mpListener = nullptr;
-    }
-#endif
     void GuiKeyboard::Construct()
     {
         mpListener = 0;

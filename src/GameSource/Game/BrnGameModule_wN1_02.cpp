@@ -37,8 +37,6 @@
 #include "GameSource/Network/BrnNetworkModuleIO.h"                   // Pre/PostSimulationInputBuffer, OutputBuffer
 #include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"           // the network OUT-event records the world translator reads
 #include "GameSource/GameState/BrnGameActions.h"                     // LocalPlayer*Action / RestartTrafficAction
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"        // BrnNetHarnessPC::Update (the LAN test harness hook)
-
 #include <cstring>   // std::memcpy (the restart-traffic hull copy)
 
 // BrnGameModule.cpp:137 (DecFIGS), byte_82FAE28D (ARTIST): the one online latch
@@ -134,7 +132,6 @@ namespace BrnGame
         lpNetworkInput->GetGuiEventQueue()->Append(*lpGuiOutputBuffer->GetOutEventQueue());
         // [PC HARNESS, not console code] the two-instance LAN test harness posts its next GUI event into
         // the same queue; inert unless BRN_NET_HOST or BRN_NET_JOIN is set.
-        BrnNetHarnessPC::Update(lpNetworkInput->GetGuiEventQueue());
         TranslateGuiEventsToNetworkEvents(lpNetworkInput->GetNetworkEventQueue(),
                                           lpGuiOutputBuffer->GetOutEventQueue());
 

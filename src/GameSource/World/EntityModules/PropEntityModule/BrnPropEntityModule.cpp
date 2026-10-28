@@ -24,8 +24,6 @@
 // ============================================================================
 
 #include "BrnPropEntityModule.h"
-#include "pc/gcm/renderengine/reflections/PropReflection.h"
-#include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
@@ -307,13 +305,6 @@ namespace BrnWorld
                 lDebugInterface.RegisterVariable(&mauOverrideLodDistances[liLod], "World/LODs", kapcDistances[liLod]);
                 lDebugInterface.SetRange(&mauOverrideLodDistances[liLod], 1, 10000);
             }
-            // FLAG PC-platform leaf: expose prop capture detail through the same
-            // registry, without adding another dedicated INI field or state copy.
-            lDebugInterface.RegisterVariable(&renderengine::PropEnvironmentMapLodPC(),
-                "World/LODs", "Prop Environment Map LOD");
-            lDebugInterface.SetRange(&renderengine::PropEnvironmentMapLodPC(), 0, 2);
-            renderengine::RegisterEnvironmentMapLodSettingsPC(lDebugInterface,
-                renderengine::PropEnvironmentMapLodSettingsPC(), "World/Reflections/Props");
         }
 
         // ⭐ UNPARKED 2026-08-12 (conductor). `stb r21(1), 4(r31)` -- the one-byte flag at
@@ -769,7 +760,6 @@ namespace BrnWorld
 // any of the three functions -- no fcmpu, no fsel, no FPR is touched.
 // ============================================================================
 
-
 namespace BrnWorld
 {
     namespace
@@ -1052,7 +1042,6 @@ namespace BrnWorld
 // GROUND TRUTH: the RAW assembly of each per-address ARTIST export (the Hex-Rays
 // pseudocode for all three renders the parameter lists as `int` blobs and is not used).
 // ============================================================================
-
 
 namespace BrnWorld
 {
@@ -1545,7 +1534,6 @@ namespace BrnWorld
 // spelling. (Writing `!(Y <= FLOOR)` would be the WRONG polarity: it would pass on NaN.)
 // ============================================================================
 
-
 namespace BrnWorld
 {
     // ------------------------------------------------------------------
@@ -1654,29 +1642,8 @@ namespace BrnWorld
         // therefore a complete diagnosis on its own.
         // Rate-limited first-N; the getenv latch is a function-local static.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siStateLinesLeft = 32;
 
-            if ( sbPropDiag && siStateLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siStateLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-diag] STATE prop=" << lPropEntityId.GetValue()
-                    << " old="      << static_cast<s32>( leOldState )
-                    << " new="      << static_cast<s32>( leNewState )
-                    << " extraCom=" << ( lbAddExtraComOffset ? 1 : 0 )
-                    << " leg="      << ( ( leOldState == E_STATIC || leOldState == E_LEANING ) ? "A" : "B" )
-                    // ⚠️ RENAMED 2026-08-23. This read happens BEFORE leg B brokers a slot,
-                    // so on leg B it is the prop's PREVIOUS mu8PhysicsIndex (0 for a prop
-                    // that has never been physical) -- NOT the slot it is about to get.
-                    // Spelled `physIdx` it read as "the allocator handed out slot 0 again",
-                    // and a whole bug-wave finding was raised off four such lines. The slot
-                    // actually granted is printed by the legB-SLOT rung below and by the
-                    // COMMIT rung (PropEntityModule_wQ_05.cpp); in that same drive they read
-                    // 0 / 0 / 1 / 0, i.e. the pool behaved.
-                    << " physIdxBefore=" << static_cast<s32>( lpProp->mu8PhysicsIndex )
-                    << "\n";
-            }
         }
 
         if (leOldState == E_STATIC || leOldState == E_LEANING)
@@ -1717,18 +1684,8 @@ namespace BrnWorld
             // the log says so. This line is the only way a boot-drive can tell "the promotion
             // never happened" from "the promotion happened and the sim did nothing".
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
                 static s32        siNoSlotLinesLeft = 16;
 
-                if ( sbPropDiag && siNoSlotLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siNoSlotLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[prop-diag] STATE legB-NOSLOT prop=" << lPropEntityId.GetValue()
-                        << " old=" << static_cast<s32>( leOldState )
-                        << " new=" << static_cast<s32>( leNewState )
-                        << "\n";
-                }
             }
 
             // 0x822EF73C -- no slot available: the prop keeps its old state entirely.
@@ -1774,19 +1731,8 @@ namespace BrnWorld
         // evict a resident, so "slot 0 every time" can be told from "slot 0 because the
         // previous tenant was released" without cross-reading the COMMIT rung.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siSlotLinesLeft = 32;
 
-            if ( sbPropDiag && siSlotLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siSlotLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-diag] STATE legB-SLOT prop=" << lPropEntityId.GetValue()
-                    << " grantedSlot=" << liPhysicsSlot
-                    << " evicted="     << ( lbEvicted ? 1 : 0 )
-                    << " evictedProp=" << lEvictedId.GetValue()
-                    << "\n";
-            }
         }
 
         lpPropManagerInterface->AddPropInstance(lPropEntityId,
@@ -1883,15 +1829,6 @@ namespace BrnWorld
         // and after SetState(E_SMASHED) so a line here means the state change is committed.
         // The latch is evaluated ONCE (a static bool), not per call.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-diag] BREAK prop=" << lPropEntityId.GetValue()
-                    << " type=" << lpProp->muTypeId
-                    << " parts=" << lpType->GetNumberOfParts()
-                    << "\n";
-            }
         }
 
         // 0x822FB12C..0x822FB144. `li r11,3; sldi r11,r11,56; std r11, var_E0` is the
@@ -2251,22 +2188,8 @@ namespace BrnWorld
             // [prop-diag] STATE rung in PropEntityModule_wQ_04.cpp names which of its two legs
             // dropped it (the physical-slot broker is the silent one).
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
                 static s32        siCommitLinesLeft = KI_DIAG_MAX_COMMIT_LINES;
 
-                if ( sbPropDiag && siCommitLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0
-                     && leNextState != leState )
-                {
-                    --siCommitLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[prop-diag] COMMIT prop=" << lPropEntityId.GetValue()
-                        << " state="      << static_cast<s32>( leState )
-                        << " next="       << static_cast<s32>( leNextState )
-                        << " canChange="  << ( lbCanChange ? 1 : 0 )
-                        << " stateAfter=" << static_cast<s32>( lpProp->GetState() )
-                        << " physIdx="    << static_cast<s32>( lpProp->mu8PhysicsIndex )
-                        << "\n";
-                }
             }
 
             // Whatever happened, the pending state is retired to the state the prop is
@@ -2444,32 +2367,8 @@ namespace BrnWorld
         // latch is a function-local static, so the shipped path pays one predicted branch. Every
         // value printed is a member/accessor read with no side effect.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siClassifyLinesLeft = KI_DIAG_MAX_CLASSIFY_LINES;
 
-            if ( sbPropDiag && siClassifyLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0
-                 && lContactEntityId.GetOwner() == E_ENTITYTYPE_RACECAR )
-            {
-                --siClassifyLinesLeft;
-
-                const s32 liCarIndex = static_cast<s32>( lContactEntityId.GetEntityIndex() );
-
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-diag] CLASSIFY prop="  << lPropEntityId.GetValue()
-                    << " type="        << static_cast<u32>( lpProp->GetTypeId() )
-                    << " car="         << liCarIndex
-                    << " carSpeedMph=" << GetRaceCarSpeed( liCarIndex )
-                    << " lean="        << lpType->GetLeanThreshold()
-                    << " move="        << lpType->GetMoveThreshold()
-                    << " smash="       << lpType->GetSmashThreshold()
-                    << " jointType="   << static_cast<s32>( lpType->GetJointType() )
-                    << " state="       << static_cast<s32>( lpProp->GetState() )
-                    << " next="        << static_cast<s32>( leNextState )
-                    << " desired="     << static_cast<s32>( leDesiredState )
-                    << " latched="     << ( lbLatched ? 1 : 0 )
-                    << " easySmash="   << ( mbEasySmashProps ? 1 : 0 )
-                    << "\n";
-            }
         }
 
         if ( lbLatched )
@@ -2577,105 +2476,6 @@ namespace BrnWorld
         // one line: the first non-empty batch can legitimately be all whole-prop events, and
         // the part line is the one the wave is actually about.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                const s32 liQueueLength = lpUpdatePropEventQueue->GetLength();
-
-                static bool sbLoggedFirstBatch = false;
-                if ( !sbLoggedFirstBatch && liQueueLength > 0 )
-                {
-                    sbLoggedFirstBatch = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[Q6-world] first " << liQueueLength << " updated props\n";
-                }
-
-                static bool sbLoggedFirstPart = false;
-                if ( !sbLoggedFirstPart )
-                {
-                    for ( s32 liScan = 0; liScan < liQueueLength; ++liScan )
-                    {
-                        const BrnPhysics::Props::UpdatePropEvent& lrScanEvent =
-                            lpUpdatePropEventQueue->GetEvent( liScan );
-                        if ( lrScanEvent.mEntityId.GetPartIndex() != 0 )
-                        {
-                            const Vector3& lScanPosition = lrScanEvent.mTransform.Pos();
-                            sbLoggedFirstPart = true;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[Q6-world] first part " << lrScanEvent.mEntityId.GetValue()
-                                << " pos (" << lScanPosition.x
-                                << ", "     << lScanPosition.y
-                                << ", "     << lScanPosition.z << ")\n";
-                            break;
-                        }
-                    }
-                }
-
-                // ---- ADDED 2026-09-06 (props lane, bug #2): the PART arm ----------------
-                // The one-shot above proves a part ARRIVED once; it says nothing about where
-                // a shed part goes. Bug #2 ("props sent flying way too much at medium/high
-                // speed") is a report about what leaves the scene, and the debris of a
-                // smashed gate/fence is most of what a player sees leave -- so it has to be
-                // measurable too. Same shape as the whole-prop rung below: budgeted first-N,
-                // opt-in, one line per part per update. DELETE-WHEN bug #2 is closed.
-                static s32 siPartLinesLeft = 6000;
-                for ( s32 liScan = 0; siPartLinesLeft > 0 && liScan < liQueueLength; ++liScan )
-                {
-                    const BrnPhysics::Props::UpdatePropEvent& lrScanEvent =
-                        lpUpdatePropEventQueue->GetEvent( liScan );
-                    if ( lrScanEvent.mEntityId.GetPartIndex() != 0 )
-                    {
-                        --siPartLinesLeft;
-                        const Vector3& lScanPosition = lrScanEvent.mTransform.Pos();
-                        *CgsDev::Log::gpDebugPrint
-                            << "[Q6-world] part " << lrScanEvent.mEntityId.GetValue()
-                            << " pos (" << lScanPosition.x
-                            << ", "     << lScanPosition.y
-                            << ", "     << lScanPosition.z
-                            << ") |linVel|="
-                            << rw::math::vpu::Magnitude( lrScanEvent.mLinearVelocity )
-                            << " frozen=" << ( lrScanEvent.mbFrozen ? 1 : 0 )
-                            << "\n";
-                    }
-                }
-
-                // ---- ADDED 2026-08-23 (bug-wave round 2): the WHOLE-PROP arm -------------
-                // The two rungs above witness the batch and the first PART. Neither can
-                // answer the question the "reacts slow, nothing fast" report actually turns
-                // on: a prop promoted to E_PHYSICAL gets NO direct response -- every
-                // millimetre of its motion has to arrive here as a whole-prop
-                // UpdatePropEvent. `[Q6-read] props=N` upstream only proves the event was
-                // QUEUED; this proves a POSE arrived and, across consecutive lines, whether
-                // it is actually changing. Budgeted, opt-in, whole props only (part index 0).
-                static s32 siWholePropLinesLeft = 6000;  // 24 -> 200, 2026-09-02 (props-at-speed);
-                                                         // 200 -> 6000, 2026-09-06 (props lane,
-                                                         // bug #2): 200 lines is <1 s of updates
-                                                         // with five props live, so a prop's whole
-                                                         // flight fell outside the window.
-                for ( s32 liScan = 0; siWholePropLinesLeft > 0 && liScan < liQueueLength;
-                      ++liScan )
-                {
-                    const BrnPhysics::Props::UpdatePropEvent& lrScanEvent =
-                        lpUpdatePropEventQueue->GetEvent( liScan );
-                    if ( lrScanEvent.mEntityId.GetPartIndex() == 0 )
-                    {
-                        --siWholePropLinesLeft;
-                        const Vector3& lScanPosition = lrScanEvent.mTransform.Pos();
-                        *CgsDev::Log::gpDebugPrint
-                            << "[Q6-world] whole prop " << lrScanEvent.mEntityId.GetValue()
-                            << " pos (" << lScanPosition.x
-                            << ", "     << lScanPosition.y
-                            << ", "     << lScanPosition.z
-                            << ") |linVel|="
-                            << rw::math::vpu::Magnitude( lrScanEvent.mLinearVelocity )
-                            << " v=(" << lrScanEvent.mLinearVelocity.x << ","
-                            << lrScanEvent.mLinearVelocity.y << ","
-                            << lrScanEvent.mLinearVelocity.z << ")"
-                            << " frozen=" << ( lrScanEvent.mbFrozen ? 1 : 0 )
-                            << "\n";
-                    }
-                }
-            }
         }
 
         for ( s32 liEvent = 0; liEvent < lpUpdatePropEventQueue->GetLength(); ++liEvent )
@@ -3096,7 +2896,6 @@ namespace BrnWorld
 // needed because the branch is NOT.)
 // ============================================================================
 
-
 namespace BrnWorld
 {
     namespace
@@ -3403,13 +3202,6 @@ namespace BrnWorld
             // "the event was acted on" are different failures and the log must separate them.
             // The latch is evaluated ONCE (a static bool), not per iteration.
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-                if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[prop-diag] broken-event prop=" << lPropEntityId.GetValue()
-                        << "\n";
-                }
             }
 
             // 0x822EF150 `sub_822CDA28` == PropZoneManager::GetProp(PropEntityID) -- the
@@ -4037,43 +3829,6 @@ namespace BrnWorld
 //     BrnReplayArray<Vector3,128> (frame +0x27F0, count +0x2FF0). "Replay full" means
 //     literally full. Rewritten at the constants below.
 //
-// ============================================================================
-// LINK-LEVEL FACTS THE CONDUCTOR NEEDS (gate-green != link-green, gotcha 12)
-// ============================================================================
-//  * MOUNTED, together with the set this file needs: wQ2_03 (ProcessContacts), wQ_06
-//    (UpdateProps) and wQ_01 (PrepareForReplay / RestoreFromReplay).
-//  * CALLEES: EVERY ONE IS BODY-PRESENT IN THE TREE:
-//      ProcessContacts                     PropEntityModule_wQ2_03.cpp:169
-//      UpdateProps                         PropEntityModule_wQ_06.cpp:117
-//      PrepareForReplay / RestoreFromReplay PropEntityModule_wQ_01.cpp:126 / :190
-//      PropZoneManager::RecordPropPositions BrnPropZoneManager.cpp:889
-//      PropZoneManager::GetHitPropsFromZone BrnPropZoneManager.cpp:665
-//      PropSerialiserFrame::WriteProp/WritePart
-//                                          BrnReplayPropSerialiserFrame_wQ2_owner.cpp:165/:185
-//      PropSerialiserFrame::GetZone        BrnReplayPropSerialiserFrame.cpp:80
-//      PropEntitySerialiser::GetStaticLayout / Write
-//                                          BrnReplayPropEntitySerialiser.cpp:43 / :119
-//      BaseSerialiser::IsPlaying / IsRecording
-//                                          BrnReplayBaseSerialiser.cpp:30 / :39
-//      RequestInterface::RegisterSerialiser BrnReplayRequestInterface.cpp:57
-//      OutputBuffer_PostPhysics::GetReplayRequestInterface
-//                                          BrnPropEntityModuleIO_OutputBuffer_PostPhysics.cpp:219
-//      InputBuffer_PostPhysics::GetUpdatedPropQueue
-//                                          BrnPropEntityModuleIO_InputBuffer_PostPhysics.cpp:87
-//    (SetDataReady / SetDataRestored / GetMode / SkipModuleSerialise / RequestPropProgression /
-//     PropPhysicsDataHeader::GetType / PropTypeData::GetNumberOfParts are header inlines.)
-//  * GetStaticLayout() RETURNS NULL ON THIS BUILD, and both bodies here dereference it
-//    UNCONDITIONALLY -- console-faithfully, so the fix is NOT to add a guard. BaseSerialiser
-//    ::Construct sets `mpStaticBuffer = 0` (BrnReplayBaseSerialiser.cpp:196, the only
-//    assignment in the tree) and nothing ever fills it; BrnReplayPropEntitySerialiser.cpp:52-89
-//    documents this as a [FLAG PC boot gate] and records the 2026-08-12 access violation when
-//    the identical pattern read frame+0x5E8 off a null base (== 0x4008), which is why the four
-//    record-side serialiser ENTRY POINTS there carry `if (!HasStaticLayout()) return;`.
-//    NOT REACHABLE TODAY: every dereference here sits behind IsRecording()/IsPlaying()/GetMode()
-//    and nothing in the tree calls BaseSerialiser::SetMode, so meMode stays E_MODE_IDLE and
-//    all those legs are dead. WHEN the replay manager's buffer hand-off lands, or when anything
-//    starts driving the prop serialiser's mode, RE-CHECK THIS TU FIRST -- if a guard is ever
-//    needed it belongs at the serialiser entry points, where the tree already puts it.
 //
 // ============================================================================
 // CONSOLE-LITERAL DISCIPLINE (gotcha 1)
@@ -4097,7 +3852,6 @@ namespace BrnWorld
 // through PropZoneManager::RecordPropPositions (the committed forwarder,
 // BrnPropZoneManager.cpp:888) and not through a raw cast.
 // ============================================================================
-
 
 namespace BrnWorld
 {
@@ -4535,7 +4289,6 @@ namespace BrnWorld
 //      `stb`). Written faithfully below and flagged at the site.
 // ============================================================================
 
-
 namespace BrnWorld
 {
     namespace
@@ -4687,34 +4440,8 @@ namespace BrnWorld
             // velocity slot is being read". Both operands are printed now so nobody has to
             // re-litigate it from the scalar alone.
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
                 static s32        siContactDiagLinesLeft = KI_DIAG_MAX_CONTACT_LINES;
 
-                if ( sbPropDiag && siContactDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siContactDiagLinesLeft;
-
-                    const s32     liStrikingCar =
-                        static_cast<s32>( lOtherEntityId.GetEntityIndex() );
-                    const Vector3 lDiagCarVelocity = GetRaceCarVelocity( liStrikingCar );
-                    const Vector3 lDiagNormal      = lrContact.mNormal;
-                    const f32     lfDiagDotMps     =
-                        rw::math::vpu::Dot( lDiagCarVelocity, lDiagNormal );
-
-                    *CgsDev::Log::gpDebugPrint
-                        << "[prop-diag] contact prop=" << lPropEntityId.GetValue()
-                        << " type=" << lpInstance->muTypeId
-                        << " car=" << liStrikingCar
-                        << " speed=" << ( fabsf( lfDiagDotMps ) * KF_MPS_TO_MPH )
-                        << " carSpeedMph=" << GetRaceCarSpeed( liStrikingCar )
-                        << " dotMps=" << lfDiagDotMps
-                        << " n=(" << lDiagNormal.x << "," << lDiagNormal.y
-                        << "," << lDiagNormal.z << ")"
-                        << " |n|=" << rw::math::vpu::Magnitude( lDiagNormal )
-                        << " v=(" << lDiagCarVelocity.x << "," << lDiagCarVelocity.y
-                        << "," << lDiagCarVelocity.z << ")"
-                        << "\n";
-                }
             }
 
             // -------------------------------------------------------------------------------
@@ -4759,36 +4486,8 @@ namespace BrnWorld
             // this rung would fail to answer the question it was added for. The full mu8Flags
             // decode is not printed -- the two bits that matter are printed by name.
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
                 static s32 siLeg1DiagLinesLeft = 16;
 
-                if ( sbPropDiag && siLeg1DiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0
-                     && ( lpInstance->mu8Flags & KU_SMASHABLE_BIT ) != 0 )
-                {
-                    const BrnPhysics::Props::eRespawnType leDiagRespawnType =
-                        mZoneManager.GetRespawnType( PropEntityID( lrContact.mEntityIdA.muValue ) );
-
-                    const bool lbLeg1Records =
-                        lbPlayerCarStruckIt && lbPropNotMoved && lbProgressionAllowed
-                        && lbPlayerNotCrashing
-                        && leDiagRespawnType != BrnPhysics::Props::E_RESPAWN;
-
-                    if ( !lbLeg1Records )
-                    {
-                        --siLeg1DiagLinesLeft;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[prop-diag] LEG1 REJECT prop=" << lPropEntityId.GetValue()
-                            << " playerCarId="     << static_cast<u32>( lPlayerCarEntityId )
-                            << " contactEntityB="  << lrContact.mEntityIdB.muValue
-                            << " isPlayerCar="     << ( lbPlayerCarStruckIt ? 1 : 0 )
-                            << " movedBit="        << static_cast<s32>( lpInstance->mu8Flags
-                                                                       & KU_MOVED_BIT )
-                            << " allowProgression="<< ( lbProgressionAllowed ? 1 : 0 )
-                            << " playerCrashing="  << ( mbPlayerCrashing ? 1 : 0 )
-                            << " respawnType="     << static_cast<s32>( leDiagRespawnType )
-                            << "\n";
-                    }
-                }
             }
 
             if ( lbPlayerCarStruckIt
@@ -4957,54 +4656,10 @@ namespace BrnWorld
             //   dup=1         -> already recorded this frame, which is not a failure.
             // Rate-limited first-N and printed only for a REJECT, so a working smash is silent.
             {
-                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
                 static s32        siLeg2DiagLinesLeft = 16;
 
                 // Computed INSIDE the latch so the shipped path never pays for the Contains
                 // scan; the real gate below still evaluates them in the console's own order.
-                if ( sbPropDiag && siLeg2DiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    const bool lbFull = maRecentlyBrokenProps.IsFull();
-                    const bool lbDup  = maRecentlyBrokenProps.Contains( lPropEntityId );
-                    const bool lbLeg2Breaks =
-                        !lbFull && ( lbHitHardEnough || lbEasySmashType ) && !lbDup;
-
-                    if ( !lbLeg2Breaks )
-                    {
-                        --siLeg2DiagLinesLeft;
-
-                        // ADDED 2026-08-23: BOTH OPERANDS of the impact-speed dot, plus the
-                        // car's scalar speed, on the SAME line. `impactMph` is |v.n| and
-                        // `carSpeedMph` is |v|; printing only the first is what let a
-                        // near-vertical contact normal be read as "the wrong quantity is
-                        // being read" instead of "the car is riding over the prop".
-                        const s32     liDiagCar =
-                            static_cast<s32>( lOtherEntityId.GetEntityIndex() );
-                        const Vector3 lDiagCarVelocity = GetRaceCarVelocity( liDiagCar );
-                        const Vector3 lDiagNormal      = lrContact.mNormal;
-
-                        *CgsDev::Log::gpDebugPrint
-                            << "[prop-diag] LEG2 REJECT prop=" << lPropEntityId.GetValue()
-                            << " type="       << lpInstance->muTypeId
-                            << " state="      << static_cast<s32>( lpInstance->GetState() )
-                            << " impactMph="  << lfImpactSpeedMph
-                            << " carSpeedMph="<< GetRaceCarSpeed( liDiagCar )
-                            << " car="        << liDiagCar
-                            << " n=("         << lDiagNormal.x << "," << lDiagNormal.y
-                            << "," << lDiagNormal.z << ")"
-                            << " |n|="        << rw::math::vpu::Magnitude( lDiagNormal )
-                            << " v=("         << lDiagCarVelocity.x << ","
-                            << lDiagCarVelocity.y << "," << lDiagCarVelocity.z << ")"
-                            << " smashThr="   << lfSmashThreshold
-                            << " typeSmash="  << lpType->GetSmashThreshold()
-                            << " typeMove="   << lpType->GetMoveThreshold()
-                            << " hard="       << ( lbHitHardEnough ? 1 : 0 )
-                            << " easy="       << ( lbEasySmashType ? 1 : 0 )
-                            << " full="       << ( lbFull ? 1 : 0 )
-                            << " dup="        << ( lbDup ? 1 : 0 )
-                            << "\n";
-                    }
-                }
             }
 
             // Evaluation ORDER is the console's: IsFull first (0x822FAEB8), then the OR of the
@@ -5553,7 +5208,6 @@ namespace BrnWorld
                                                                  lpPropTypeData->GetBoundingRadius() );
         }
     }
-
 
 // ---- (from the parts park file's banner) ----------------------------------------
 // ============================================================================

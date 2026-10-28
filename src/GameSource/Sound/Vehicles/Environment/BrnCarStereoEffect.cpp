@@ -3,7 +3,6 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
@@ -134,10 +133,6 @@ bool CarStereoEffect::Attach()
     mVoice.SetParameter(5, 0.0f, &luLfeLevel);
 
     static s32 siDiagAttach = 0;
-    if (SndEnvDiagBudget(siDiagAttach))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] car-stereo play content="
-                                   << static_cast<u32>(lParams.mContentSpecName)
-                                   << " stereos=" << siNumStereos << " [FLAG PC witness]\n";
     return true;
 }
 
@@ -156,9 +151,6 @@ void CarStereoEffect::UpdateParams(f32 /*afTimeStep*/)
         mbHasStereo = false;
 
         static s32 siDiagStop = 0;
-        if (SndEnvDiagBudget(siDiagStop))
-            *CgsDev::Log::gpDebugPrint << "[sndenv] car-stereo stop stereos=" << siNumStereos
-                                       << " [FLAG PC witness]\n";
     }
 }
 

@@ -123,92 +123,6 @@ namespace BrnDirector
             return liValue;
         }
 
-        // [DIAG BRN_CAMERA_TRACE] [FLAG PC witness] -- NOT IN THE X360 BINARY.
-        //
-        // WHY IT EXISTS. The console's shake chain is producer -> Camera::mEffects
-        // (mfShakeAmplitude / mu8ShakeType) -> CameraFinaliser steps 2-4 ->
-        // KeyAnimShakeController -> the authored SHAKE-ANIM SHOT the type indexes. On this
-        // build steps 2-4 are gated, so nothing has ever read the shake request and nothing
-        // has ever looked at the authored data behind it. These two one-shot dumps answer, in
-        // ONE boot and before any behaviour change:
-        //   (a) does the shake-anim shot group resolve at all, how many shots does it have,
-        //       and is each shot an `iceanim` take or a `proceduralshake` record?
-        //   (b) what base shake does the cameradefaults record carry (type / amplitude /
-        //       per-frame decay -- the three fields step 3 reads at data +0x28/+0x2C/+0x34)?
-        // Off unless BRN_CAMERA_TRACE is set. DELETE-WHEN: the camera-shake bring-up closes.
-        void BrnDiag_DumpShakeData(const DirectorResourceManager* lpResourceManager)
-        {
-            static const bool sbOn = (getenv("BRN_CAMERA_TRACE") != 0);
-            static bool sbDone  = false;
-            static s32  siCalls = 0;
-            if (!sbOn || sbDone || CgsDev::Log::gpDebugPrint == 0 || lpResourceManager == 0)
-                return;
-
-            const Attrib::Gen::shotgroup& lrGroup = lpResourceManager->GetShakeAnimGroup();
-
-            // The director resource manager Prepares its 65 collections over several frames,
-            // so the FIRST finalise call is too early to read them. Wait for the group to
-            // resolve; report the failure anyway after ~20 s so a never-resolving group is a
-            // measurement rather than a silence.
-            ++siCalls;
-            if (!lrGroup.IsValid() && siCalls < 1200)
-                return;
-            sbDone = true;
-            const u32 luNumShots = lrGroup.IsValid() ? lrGroup.Num_ShotList() : 0u;
-            *CgsDev::Log::gpDebugPrint
-                << "[cam-shotlist] shakeAnimGroup valid=" << (lrGroup.IsValid() ? 1 : 0)
-                << " numShots=" << luNumShots << "\n";
-
-            for (u32 luShot = 0; luShot < luNumShots && luShot < 32u; ++luShot)
-            {
-                const Attrib::RefSpec* lpRef = lrGroup.ShotList(luShot);
-                const u64 luClassKey = (lpRef != 0) ? lpRef->GetClassKey() : 0ull;
-                *CgsDev::Log::gpDebugPrint
-                    << "[cam-shotlist]  [" << luShot << "] classKeyHi="
-                    << static_cast<u32>(luClassKey >> 32)
-                    << " classKeyLo=" << static_cast<u32>(luClassKey & 0xFFFFFFFFull) << "\n";
-            }
-
-            const u8* const lpDefaults =
-                static_cast<const u8*>(lpResourceManager->GetCameraDefaults().GetLayoutPointer());
-            if (lpDefaults == 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[cam-defaults] cameradefaults layout NULL\n";
-                return;
-            }
-            f32 lfBaseAmplitude = 0.0f;
-            f32 lfDecay         = 0.0f;
-            s32 liBaseType      = 0;
-            std::memcpy(&liBaseType,      lpDefaults + 0x28, sizeof(s32));
-            std::memcpy(&lfBaseAmplitude, lpDefaults + 0x2C, sizeof(f32));
-            std::memcpy(&lfDecay,         lpDefaults + 0x34, sizeof(f32));
-            *CgsDev::Log::gpDebugPrint
-                << "[cam-defaults] baseShakeType=" << liBaseType
-                << " baseShakeAmplitude=" << lfBaseAmplitude
-                << " shakeScaleDecay=" << lfDecay << "\n";
-        }
-
-        // [DIAG BRN_CAMERA_TRACE] the SMASH edge -- GameState::miThisFramesActionFlags bit
-        // 0x10, which MainDirector::ProcessInputQueue's game-action-58 arm raises when a
-        // stunt element of type 1 (SMASH) completes. It is the one shake PRODUCER that is
-        // demonstrably live on this build (the gate-UI wave measured the whole
-        // OnPropHit -> action 58 ladder firing on the junkyard-exit route), so it is the
-        // event the shake test anchors on.
-        void BrnDiag_ReportSmash(const GameState* lpGameState)
-        {
-            static const bool sbOn = (getenv("BRN_CAMERA_TRACE") != 0);
-            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || lpGameState == 0)
-                return;
-            if ((lpGameState->miThisFramesActionFlags & 0x10) == 0)
-                return;
-            static s32 siCount = 0;
-            if (siCount >= 64)
-                return;
-            ++siCount;
-            *CgsDev::Log::gpDebugPrint
-                << "[cam] smash n=" << siCount
-                << " actionFlags=" << lpGameState->miThisFramesActionFlags << "\n";
-        }
     }
 
     void CameraFinaliser::Update(const DirectorIO::InputBuffer* lpInputBuffer,
@@ -230,8 +144,6 @@ namespace BrnDirector
         mInertiaController.Update(lpCameraInOut, lfTimeStep);
 
         // [diag] BRN_CAMERA_TRACE -- see the two helpers above.
-        BrnDiag_DumpShakeData(lpResourceManager);
-        BrnDiag_ReportSmash(lpGameState);
 
         // ---- Step 2 @0x82250484 / @0x822504B8 -- the shake SCALE accumulator --------------
         if (lpCameraInOut->GetState().IsFlagSet(KU_CAMERA_FLAG_CUT_THIS_FRAME))

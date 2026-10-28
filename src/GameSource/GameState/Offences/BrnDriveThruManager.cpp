@@ -419,24 +419,6 @@ bool DriveThruManager::Prepare(const BrnTrigger::TriggerData* lpTriggerData,
     // (see the authored-extent banner in BrnTriggerQueryManager.cpp). Every drive-thru type is
     // dumped now, with its authored box DIMENSIONS next to its centre, so a log alone is enough to
     // decide inside/outside for any recorded car position.
-    if (getenv("BRN_DRIVETHRU_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        for (s32 liIndex = 0; liIndex < miTotalDriveThrus; ++liIndex)
-        {
-            const DriveThruTriggerData& lrEntry = maDriveThruTriggerData[liIndex];
-            if (lrEntry.mpGenericRegion == 0)
-                continue;
-            const BrnTrigger::GenericRegion::Type leType = lrEntry.mpGenericRegion->GetType();
-            const BrnTrigger::BoxRegion* lpBox = lrEntry.mpGenericRegion->GetBoxRegion();
-            *CgsDev::Log::gpDebugPrint
-                << "[drivethru] region type=" << static_cast<s32>(leType)
-                << " id=" << static_cast<u64>(lrEntry.mpGenericRegion->GetId())
-                << " pos=(" << lrEntry.mPosition.x << "," << lrEntry.mPosition.y
-                << "," << lrEntry.mPosition.z << ")"
-                << " dims=(" << lpBox->GetDimensionX() << "," << lpBox->GetDimensionY()
-                << "," << lpBox->GetDimensionZ() << ")\n";
-        }
-    }
 
     mRepairedCarID = static_cast<CgsID>(-1);   // *(this+2360)
     mbIsClosed     = false;                     // *(this+2336)
@@ -1203,10 +1185,6 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
     if (!lpProfileEvent->IsFound())   // ProfileEvent flag bit 0 (X360 lhz +4, bit0)
     {
         lpProfileEvent->SetFound(true);
-        // FLAG PC-platform witness: the original repair/discovery edge.
-        if (std::getenv("BRN_DRIVETHRU_DIAG") && CgsDev::Log::gpDebugPrint)
-            *CgsDev::Log::gpDebugPrint << "[burn-route] repair discovered event="
-                << lpEventJunction->GetID() << " car=" << static_cast<u64>(lRepairedCarID) << "\n";
 
         // ⭐⭐ THE OBJECT IS THE MANAGER, NOT THE PROFILE. @0x82386A40 `lwz r10, 0x950(r22)`
         // reloads mpProgressionManager and @0x82386A48..A50 does `lwz/addi/stw 0x244(r10)` --

@@ -529,10 +529,6 @@ namespace BrnGui
                 lpInQueue->Clear();
                 break;
             }
-            // FLAG PC-timing: the boot-up task validates the loaded save against the
-            // progression data that GUI event 350 binds into the profile manager. On PC the
-            // progression load can finish after the Apt components, and validating first
-            // dereferences a null table; hold here until the binding has arrived.
             if (!mbCheckDiskSpace && mpProfileManager != 0
                 && mpProfileManager->GetProgressionData() == 0)
             {

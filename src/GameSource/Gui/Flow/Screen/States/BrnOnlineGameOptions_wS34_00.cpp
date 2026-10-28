@@ -12,8 +12,6 @@
 // Reconstructed from the console image; the assembly arbitrates over the decompiler.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
-#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: optional slot-only receipts
-
 #include <cstddef>                                                        // offsetof
 #include "GameShared/GameClasses/Containers/CgsArray.h"                   // Array<CgsID, N>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
@@ -661,8 +659,6 @@ namespace BrnGui
 
         if (meSubState > E_SUBSTATE_LOADING_COMPONENTS)
         {
-            // FLAG PC diagnostic: restrict HelpBar receipts to this real options call.
-            CreateMatchTracePC::HelpBarScope lTraceScope(&mHelpBar, static_cast<s32>(meSubState));
             mHelpBar.Update(mpGuiCache->GetTime());
         }
     }

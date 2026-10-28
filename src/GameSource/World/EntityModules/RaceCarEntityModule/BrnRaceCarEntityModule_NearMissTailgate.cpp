@@ -23,7 +23,6 @@
 // remembered crashes against.
 // =================================================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "pc/math/VmxFloat.h"
 #include "SDKs/XboxMath/XMVectorCos.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"  // InputBuffer_PostPhysics / OutputBuffer_PostPhysics accessors
@@ -49,28 +48,10 @@ namespace
     // An ordinary rodata zero: a crashing player loses the chain timeout outright.
     const f32 KF_NEAR_MISS_TIMEOUT_WHEN_CRASHING = 0.0f;
 
-    // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
     // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. A BUDGET rather than a single
     // latch: the drain runs every post-scene tick, so one line would only prove the first
     // non-empty batch, while unbounded printing would flood a lane drive.
     s32 s_iNearMissDrainBudget = 24;
-
-    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE ORIGINAL BINARY (crash parity FX-SCENEMGR item 4,
-    // 2026-09-24). UpdatePowerParking's witness: the scorer's own state transitions across one
-    // PowerParkingManager::Update -- a park starting, a park ending (with the outcome
-    // DetermineOutcome gave it) and the result countdown running out -- plus how many game events
-    // the step appended (1 == the E_EVENT_POWER_PARK_RESULT post). Capped.
-    bool PowerParkDiagEnabled()
-    {
-        static const bool sbEnabled = ( getenv( "BRN_POWER_PARK_DIAG" ) != 0 );
-        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
-    }
 
     void PowerParkDiagReport( const PowerParkingManager& lrManager, bool lbWasParking,
                               f32 lfCountdownBefore, s32 liEventsAppended, f32 lfHandBrake )
@@ -165,28 +146,11 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         const Vector3 lOtherPosition  = lpOtherCar->GetPosition();
 
         const Vector3 lReversedHeading = -lOtherDirection;
-        const Vector3 lReferencePoint = CgsPC::VmxFloat::MultiplyAdd(
-                lOtherDirection, KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX, lOtherPosition);
-        const Vector3 lSeparation = CgsPC::VmxFloat::Subtract(lPlayerPosition, lReferencePoint);
 
         // Written as the same `>` the console's skip branch is, so an unordered compare falls
         // through instead of skipping. Do not rewrite this as a negated `<=`.
-        const f32 lfAlongHeading = CgsPC::VmxFloat::Dot3(lReversedHeading, lSeparation);
-        if( CgsPC::VmxFloat::Multiply(lfAlongHeading, lfAlongHeading)
-                > KF_TAILGATING_CONE_DEPTH * KF_TAILGATING_CONE_DEPTH )
-        {
-            continue;
-        }
 
         // 822CE3BC..410 has no zero fallback after either refinement.
-        const f32 lfConeCosine = CgsPC::VmxFloat::Dot3(
-                CgsPC::VmxFloat::Normalize3Unconditional(lSeparation, 2), lReversedHeading);
-
-        if( CgsPC::VmxFloat::Flush(XboxMath::XMVectorCos(KF_TAILGATING_CONE_HALF_ANGLE_RADS))
-                > CgsPC::VmxFloat::Flush(lfConeCosine) )
-        {
-            continue;
-        }
 
         const BrnPhysics::Vehicle::RaceCarState* lpOtherPhysicsState =
                 lpOtherCar->GetPhysicsState();
@@ -195,11 +159,6 @@ bool RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(
         {
             continue;
         }
-
-        const Vector3 lVelocityDifference = CgsPC::VmxFloat::Subtract(
-                lpOtherPhysicsState->mLinearVelocity, lPlayerVelocity);
-        const f32 lfVelocityDifferenceSquared =
-                CgsPC::VmxFloat::Dot3(lVelocityDifference, lVelocityDifference);
 
         // ARTIST 822CE48C: ble also takes the unordered arm of fcmpu.
         if( !( lfVelocityDifferenceSquared
@@ -326,7 +285,6 @@ void RaceCarEntityModule::UpdatePowerParking(
 
     // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE ORIGINAL BINARY: the pre-step state the witness
     // compares against (see PowerParkDiagReport).
-    const bool lbDiag            = PowerParkDiagEnabled();
     const bool lbDiagWasParking  = mPowerParkingManager.IsPowerParking();
     const f32  lfDiagCountdown   = mPowerParkingManager.mfTimeUntilDisplayOutcome;
     const s32  liDiagEventsFirst = lbDiag ? lpOutput->GetGameEventQueue()->GetLength() : 0;
@@ -408,20 +366,6 @@ void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
     // [T9-nm] DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE. The bridge witness: the two
     // published collection lengths for this drain. Both GetLength() reads sit INSIDE the gate,
     // so an unset BRN_TRAFFIC_DIAG costs one static bool test and nothing else.
-    if( s_iNearMissDrainBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        const u32 luTrafficLength = lpNearMissTrafficCollection->GetLength();
-        const u32 luRaceCarLength = lpNearMissRaceCarCollection->GetLength();
-
-        if( luTrafficLength != 0 || luRaceCarLength != 0 )
-        {
-            --s_iNearMissDrainBudget;
-            *CgsDev::Log::gpDebugPrint
-                << "[T9-nm] drain traffic=" << static_cast<s32>( luTrafficLength )
-                << " racecar=" << static_cast<s32>( luRaceCarLength )
-                << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
 }
 
 }   // namespace BrnWorld

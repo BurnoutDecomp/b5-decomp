@@ -1,7 +1,4 @@
 #include "types.hpp"
-#if defined(_M_X64) || defined(_M_IX86)
-#include <emmintrin.h>
-#endif
 
 #include <cstdio>   // std::snprintf (the one-shot diagnostics)
 
@@ -80,32 +77,6 @@ namespace
     const u32 KU_DEST_BYTES_PER_TEXEL   = 4u;   // `addi r11, r11, 0x40` per 16 texels
     const u32 KU_TEXELS_PER_BLOCK       = 16u;  // `srwi r27, r11, 4`
 
-    // ============================================================================================
-    // [FLAG PC-platform leaf] THE DESTINATION CHANNEL ORDER.
-    //
-    // The console writes its four destination bytes through vperm control vectors held at
-    // unk_82143260-0xB0.. (SetColour) and unk_82143220-0x80.. (the blend kernels); those tables
-    // encode the XENOS surface's byte order for GPU format 0x18280186, and they are meaningless on
-    // D3D9. The PC lookup volume is created D3DFMT_A8R8G8B8 (rwgpfxtint.cpp), whose in-memory byte
-    // order on this little-endian target is B, G, R, A -- so the mapping below is fixed by the
-    // FORMAT THIS TREE CHOSE, not guessed from the console.
-    //
-    // WHICH SOURCE BYTE IS WHICH CHANNEL is not a guess either. It is measured off the shipped
-    // IDENTITY cube, "rgb_colourcube.tga" (POSTFX/COLOURCUBEDICTIONARY.BIN resource 0x1331EC9D):
-    // decoding every one of its 32,768 cells as (cell[0], cell[1], cell[2]) * 31/255 yields a
-    // PERFECT BIJECTION onto the 32^3 coordinate grid, and the composite's own tint fetch is
-    // `tex3D(Sampler3dTint, lComposite).rgb` (tools/assets/shaders/brn_postfx_composite.fx:334) with
-    // lComposite.x == red -> u == the volume's WIDTH axis. Cell byte 0 is therefore RED, byte 1
-    // GREEN, byte 2 BLUE. Independently corroborated by the shipped "Black_White.psd" cube
-    // (0x4873FB1D), which after the untile below is pure grey and responds IDENTICALLY to all three
-    // axes (0 -> 0, 8 -> 27, 16 -> 92, 31 -> 126, (31,31,31) -> 255) -- a symmetry that any wrong
-    // axis or channel assignment destroys.
-    //
-    // The alpha byte: on the console it comes from a constant vector at unk_821431B0 that is NOT in
-    // the dump set (see the CONDUCTOR DUMP REQUEST in this wave's report). It is unobservable --
-    // the composite samples `.rgb` only -- so it is written opaque here.
-    // ============================================================================================
-    const u32 KU_DEST_BYTE_B = 0u;
     const u32 KU_DEST_BYTE_G = 1u;
     const u32 KU_DEST_BYTE_R = 2u;
     const u32 KU_DEST_BYTE_A = 3u;
@@ -148,17 +119,9 @@ namespace
             lafFactor[luSource] = lrParameters.factor[luSource];
             if (lapSource[luSource] == 0)
             {
-                return;   // [FLAG PC bring-up] a cube that never resolved; see TintBlend below
-            }
+                return;               }
         }
 
-#if defined(_M_X64) || defined(_M_IX86)
-        __m128 lavWeight[luSourceCount];
-        for (u32 luSource = 0; luSource < luSourceCount; ++luSource)
-            lavWeight[luSource] = _mm_set1_ps(lafFactor[luSource]);
-        const __m128i lvZero = _mm_setzero_si128();
-        const __m128 lvMaximum = _mm_set1_ps(255.0f);
-#endif
         u8* lpDestSlice = lrParameters.dst;
         for (u32 luZ = 0u; luZ < luSize; ++luZ)
         {
@@ -166,53 +129,6 @@ namespace
             for (u32 luY = 0u; luY < luSize; ++luY)
             {
                 u8* lpDestTexel = lpDestRow;
-#if defined(_M_X64) || defined(_M_IX86)
-                // FLAG PC-platform leaf: the VMX job works on sixteen RGB texels
-                // at a time (48 source bytes). SSE2 widens/mixes sixteen component
-                // bytes per pass, then packs with the existing PC clamp/truncate
-                // policy. Every load stays inside the same 48-byte block.
-                for (u32 luBlock = 0; luBlock < luBlocks; ++luBlock)
-                {
-                    alignas(16) u8 laRGB[48];
-                    for (u32 luPart = 0; luPart < 3; ++luPart)
-                    {
-                        __m128 laSum[4] = {_mm_setzero_ps(), _mm_setzero_ps(),
-                                          _mm_setzero_ps(), _mm_setzero_ps()};
-                        for (u32 luSource = 0; luSource < luSourceCount; ++luSource)
-                        {
-                            const __m128i lvBytes = _mm_loadu_si128(
-                                reinterpret_cast<const __m128i*>(lapSource[luSource] + luPart * 16));
-                            const __m128i lvLow = _mm_unpacklo_epi8(lvBytes, lvZero);
-                            const __m128i lvHigh = _mm_unpackhi_epi8(lvBytes, lvZero);
-                            const __m128 laValue[4] = {
-                                _mm_cvtepi32_ps(_mm_unpacklo_epi16(lvLow, lvZero)),
-                                _mm_cvtepi32_ps(_mm_unpackhi_epi16(lvLow, lvZero)),
-                                _mm_cvtepi32_ps(_mm_unpacklo_epi16(lvHigh, lvZero)),
-                                _mm_cvtepi32_ps(_mm_unpackhi_epi16(lvHigh, lvZero))};
-                            for (u32 luLane = 0; luLane < 4; ++luLane)
-                                laSum[luLane] = _mm_add_ps(laSum[luLane],
-                                    _mm_mul_ps(laValue[luLane], lavWeight[luSource]));
-                        }
-                        __m128i laInteger[4];
-                        for (u32 luLane = 0; luLane < 4; ++luLane)
-                            laInteger[luLane] = _mm_cvttps_epi32(_mm_min_ps(lvMaximum,
-                                _mm_max_ps(_mm_setzero_ps(), laSum[luLane])));
-                        _mm_store_si128(reinterpret_cast<__m128i*>(laRGB + luPart * 16),
-                            _mm_packus_epi16(_mm_packs_epi32(laInteger[0], laInteger[1]),
-                                             _mm_packs_epi32(laInteger[2], laInteger[3])));
-                    }
-                    for (u32 luTexel = 0; luTexel < 16; ++luTexel)
-                    {
-                        lpDestTexel[0] = laRGB[luTexel * 3 + 2];
-                        lpDestTexel[1] = laRGB[luTexel * 3 + 1];
-                        lpDestTexel[2] = laRGB[luTexel * 3];
-                        lpDestTexel[3] = KU_DEST_ALPHA;
-                        lpDestTexel += KU_DEST_BYTES_PER_TEXEL;
-                    }
-                    for (u32 luSource = 0; luSource < luSourceCount; ++luSource)
-                        lapSource[luSource] += 48;
-                }
-#else
                 for (u32 luTexel = 0u; luTexel < luBlocks * KU_TEXELS_PER_BLOCK; ++luTexel)
                 {
                     f32 lafChannel[3] = { 0.0f, 0.0f, 0.0f };
@@ -228,7 +144,6 @@ namespace
                     StoreTexel(lpDestTexel, lafChannel[0], lafChannel[1], lafChannel[2]);
                     lpDestTexel += KU_DEST_BYTES_PER_TEXEL;
                 }
-#endif
                 lpDestRow += lrParameters.dstStride;
             }
             lpDestSlice += lrParameters.dstSliceStride;
@@ -309,13 +224,6 @@ namespace
     // Seven entries, and slot 0 really is a null: the console would `bctr` to address 0 on a
     // zero-source blend.
     //
-    // [FLAG PC bring-up] THE NULL SLOT IS TESTED HERE, and only that. BrnPostFx::BeginTintBlend
-    // schedules this job whenever the tint bit is set, without testing m_numCubesToBlend first, so a
-    // frame in which the arbitrator produced no cube reaches the table with index 0. Jumping to
-    // address 0 is not behaviour worth reproducing; the report names the condition instead. The
-    // upper bound is tested for the same reason -- the console's own assert
-    // ("m_numCubesToBlend <= 5", BrnPostFx.cpp:266) fires one call earlier and then indexes anyway.
-    // ============================================================================================
     typedef void (*TintBlendVariant)(TintBlendParameters&);
 
     TintBlendVariant const gapTintBlendVariants[7] =
@@ -339,10 +247,6 @@ namespace
             {
                 sbReportedBadSourceCount = true;
                 char lacMsg[160];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                              "[postfx-tint] blend skipped: numSources=%u has no variant"
-                              " (X360 dword_82F7238C holds 1..6) [FLAG PC bring-up]\n",
-                              static_cast<unsigned>(luSources));
                 CgsDev::Log::WriteToLog(lacMsg);
             }
             return;

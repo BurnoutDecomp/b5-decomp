@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"   // CgsGui::ESaveLoadCif, ContentInformationFileInterface, MessageDisplay, SaveLoadTaskResultHandler, SaveLoadMetadata, SaveInfo
 #include "GameShared/GameClasses/Gui/CgsImageFileInfo.h"   // CgsGui::ImageFileInfo (Autosave records)
 
-#include <Windows.h>   // HANDLE / OVERLAPPED (the X360 stream/async ops wrap Win32; host Win32 on PC)
+#include <xtl.h>   // HANDLE / OVERLAPPED (the X360 stream/async ops wrap Win32; host Win32 on PC)
 
 namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
 class LanguageManager;
@@ -565,14 +565,6 @@ namespace CgsGui
         // (Load / the 3-arg Save / Autosave) capture the same view here full-width via
         // CaptureStoredDataView; the storage edge reads/writes through it.
         OpaqueBuffer mStoredDataView;
-
-        // FLAG PC-platform leaf (storage edge): true once the boot-up's storage stage ran
-        // (BootupStart). On the console that stage is where the Realmc memory-card layer picks
-        // the signed-in user's storage device; without it a write has nowhere to go and fails.
-        // A boot-up that took the not-signed-in "continue without saving" exit never reaches
-        // it, so the PC container must refuse writes the same way -- a later mid-game sign-in
-        // must not let an autosave of that session replace the player's real profile.
-        bool mbStorageReadyPC = false;
 
         // Capture lrMetadata.mStoredData into mStoredDataView (the host-width form of
         // the X360 SetMetadata +0x30/+0x34 capture -- see mStoredDataView).

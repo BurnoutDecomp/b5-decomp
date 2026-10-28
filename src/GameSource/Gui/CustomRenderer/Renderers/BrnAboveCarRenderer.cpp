@@ -601,9 +601,6 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                 }
             }
         }
-        // FLAG PC witness: opt-in (BRN_SHOWTIME_DIAG) observation of the Showtime cash labels
-        // and banked scores around the two render calls, first 96 lines; nothing reads it back.
-        static const bool sbWitness = std::getenv("BRN_SHOWTIME_DIAG") != nullptr;
         static s32 siWitnessLines = 96;
         static s32 siWitnessFrames = 0;
         static u32 suWitnessCountAfter = 0;

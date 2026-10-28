@@ -39,7 +39,6 @@
 //   `Simulation::GetReactionForces() + mId*64` (Xbox One 0x1409B31ED: `mov edi,[rcx+1Ch]`,
 //   32-bit, then `shl rdi,6 ; add rdi,[rax+18h]`). X360 caches the ALREADY-RESOLVED address
 //   in the same slot, which is only possible because console pointers are 4 bytes. Same
-//   semantics, different representation; the PC leaf resolves through the index.
 //   ⇒ "the gap grew 4->8, so it is a pointer" is necessary but NOT sufficient: this slot is
 //   a pointer on the console and stays 4 bytes on x64.
 // =====================================================================================

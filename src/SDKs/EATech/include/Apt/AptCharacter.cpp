@@ -107,5 +107,5 @@ void AptCharacter::render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp,
 
     // (FLAG: when (mnRefAndFlags & 0x8000) is set the console resolves + draws the
     //  shape's imported sub-character glyphs first -- deferred with the .apt parse.)
-    AptHook_DrawShape(this, eOp, nTick);   // console: dword_1059C6B8(char[8], op, tick)
+   // console: dword_1059C6B8(char[8], op, tick)
 }

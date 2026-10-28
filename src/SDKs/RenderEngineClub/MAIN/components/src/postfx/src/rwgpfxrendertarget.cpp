@@ -4,9 +4,6 @@
 
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // RenderTarget / Target
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                     // CGS_ASSERT
-#include "pc/gcm/renderengine/device.h"                                               // renderengine::Device::SetState
-#include "pc/gcm/renderengine/texture.h"                                              // Texture / PixelBuffer
-#include "pc/gcm/renderengine/renderstates.h"                                         // TextureState
 #include "rw/rwcore_structs.h"                                                        // rw::IResourceAllocator / Resource
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -279,6 +276,7 @@ namespace postfx
     // ============================================================================================
     void RenderTarget::Begin(u32 luDestSliceOrFace)
     {
+
         // Select the section's render-target state: the device-default global when the colour mode is
         // USE_DEVICE_FOR_WRITE (== 2), else the per-section state at +0x1C + luDestSliceOrFace.
         const renderengine::RenderTargetState* lpState;

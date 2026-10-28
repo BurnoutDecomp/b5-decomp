@@ -7,7 +7,6 @@
 #include "GameSource/Gui/BrnGuiCache.h"                   // GuiCache (resources, time, loaded textures)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple (the load table)
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"      // rw::math::fpu::Vector4Template
-#include "pc/gcm/renderengine/renderstates.h"             // renderengine::TextureState (Initialize/GetResourceDescriptor)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // the 2D command buffer (SetState/SetTransform/Render/PushMask)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"    // CgsGuiModuleIO::ImRendererSet (complete type for the render handler)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptIm2dRenderBuffer (the set's slot-0 buffer)
@@ -402,13 +401,6 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
             // The 28-byte payload copied whole (the console's 7-dword loop into +132).
             mGuiEventBoostInfo = *reinterpret_cast<const GuiEventBoostInfo*>(lpEvent);
 
-            // [FLAG PC diag 2026-08-27, NOT in the X360 binary] One-shot witness for the
-            // invisible-boost-bar question: distinguishes "206 never arrives" (this line
-            // absent) from "206 arrives saying not-allowed" (allowed=0 -- then the fix is
-            // the mode-arming action 34 chain, not this renderer). The not-allowed path
-            // draws nothing AND asserts nothing by design, so without this line both
-            // failure modes are the same silence.
-            static bool sbFirst206Logged = false;
             if (!sbFirst206Logged && CgsDev::Log::gpDebugPrint != 0)
             {
                 sbFirst206Logged = true;
@@ -422,22 +414,8 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
             // plus the bar's eased value, so a film of the bar can be read against what the
             // game-state actually sent it (owner report 2026-09-15: "the boost bar is broken").
             {
-                static const bool sbWanted = (std::getenv("BRN_BOOST_TICKER_DIAG") != 0);
                 static u32 suCount = 0;
-                if (sbWanted && CgsDev::Log::gpDebugPrint != 0 && (suCount++ % 30u) == 0u)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[boost-bar] 206 #" << suCount
-                        << " max=" << mGuiEventBoostInfo.mfMaxBoost
-                        << " amt=" << mGuiEventBoostInfo.mfBoostAmount
-                        << " allowed=" << (mGuiEventBoostInfo.mbAllowedToBoost ? 1 : 0)
-                        << " type=" << static_cast<s32>(mGuiEventBoostInfo.meBoostType)
-                        << " eased=" << mBoostAmountInterpolator.GetCurrentValue(mpGuiCache ? mpGuiCache->GetTime() : 0.0f)
-                        << " status=" << static_cast<s32>(meBoostBarStatus)
-                        << " mult=" << static_cast<s32>(meBoostBarMultiplier) << "\n";
-                }
             }
-
 
             if (mGuiEventBoostInfo.mfMaxBoost <= 0.0f)
             {
@@ -566,43 +544,6 @@ Vector3 BoostBarRenderer::GetOuterBoostBarColour()
     return mav3BoostOuterColours[meCurrentBoostType];
 }
 
-// ---------------------------------------------------------------------------------------------
-// InitResources -- faithful port of X360 @0x8244A508 (PS3 0x403D3C). Builds the thirteen
-// renderengine texture states over textures fetched from the GuiCache (the twelve
-// maResourcesToLoad entries Prepare waited on, by cache id) plus the shared white texture.
-// Per texture: fill a TextureState::Parameters block (the constant sampler config below, with
-// the U-address mode the only per-texture variation -- 0 = wrap for the tiling background /
-// end-cap / fire-body / fire-overlay / multiplier strips, 2 = clamp for the rest), carve the
-// state's backing Resource through the heap allocator, and TextureState::Initialize it.
-// Console block order (ptr slot <- source, addressU):
-//   mpWhiteTextureState         <- the white texture global      U=2   (asserted, :726)
-//   mpMaskTextureState          <- cache id 1                    U=2   (:741)
-//   mpBackgroundTextureState    <- cache id 3                    U=0   (:756)
-//   mpBackgroundEndCapTextureState <- cache id 4                 U=0
-//   mpFireBodyTextureState      <- cache id 2                    U=0
-//   mpFireOverTextureState      <- cache id 5                    U=0
-//   mpEndCapTextureState        <- cache id 6                    U=2
-//   mpEndGlowTextureState       <- cache id 7                    U=2
-//   mpEarnFlameTextureState     <- cache id 8                    U=2
-//   mpBoostingFlameTextureState <- cache id 9                    U=2
-//   mpGrowFireballTextureState  <- cache id 10                   U=2
-//   mpMultiplierTextureState    <- cache id 11                   U=0
-//   mpGlowTextureState          <- cache id 12                   U=2
-// [FLAG PC fold] the white texture: the console reads the immediate-mode state library's
-// white texture global (X360 dword_83010F58 == mgStateLibrary.mpTexture_White). That library
-// is a documented no-op on this backend (ImmediateMode.cpp ConstructOnceOnly), so the
-// white slot initialises over a null texture.
-// ⚠️ CORRECTED 2026-08-28. The old justification here -- "the render paths guard it (the PC
-// Apt dispatch draws untextured records as solid colour, which IS what a white-texture quad
-// produces)" -- was an ARGUMENT, and it was wrong: every use of this slot in this TU is a
-// SetMaskRect(mpWhiteTextureState, ...) MASK push, and in the PC Im2d dispatch a mask whose
-// raster is null used to skip the whole mask-binding block, which does not mean "no mask", it
-// means "keep the PREVIOUS mask bound". Measured consequence in a real drive: the fire END CAP
-// was the only part of the bar that drew at all, and it drew with no clip. The dispatch now
-// substitutes a 1x1 opaque-white raster for a null mask push (DispatchWhiteMaskTexture in
-// CgsImRenderBufferTemplate.cpp), which under the same border-black addressing is exactly what
-// the console's white mask does: clip to the pushed rect, shape nothing.
-// ---------------------------------------------------------------------------------------------
 namespace
 {
     // One console texture-state build: parameters block + resource carve + Initialize.
@@ -649,7 +590,6 @@ void BoostBarRenderer::InitResources()
 {
     CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-    // [FLAG PC fold -- see the banner] the state-library white texture global has no PC backing.
     const renderengine::Texture* lpWhiteTexture = 0;
 
     struct SlotBuild

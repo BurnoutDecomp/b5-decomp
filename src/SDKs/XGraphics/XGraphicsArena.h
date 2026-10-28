@@ -56,17 +56,6 @@ struct ArenaBlock
     u32         muBlockSize; // +0x04 total bytes in this block (header + payload)
 };
 
-// FLAG PC-platform leaf: the parent heap object is a large foreign allocator
-// (the class:<global> heap) owned by another TU; only its block-alloc callback
-// @+0x5A0 and the context @+0x5A4 that Arena::Grow invokes are attested, so it
-// is modelled as opaque padding up to those two fields.
-struct ArenaHeap
-{
-    u8    maPad000[0x5A0];                            // +0x000 opaque (owned elsewhere)
-    void* (*mpfnAllocBlock)(void* apContext, int aiSize); // +0x5A0 block allocator
-    void* mpAllocContext;                            // +0x5A4 first arg to the allocator
-};
-
 class Arena
 {
 public:

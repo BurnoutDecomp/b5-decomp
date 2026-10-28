@@ -27,7 +27,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -145,30 +144,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
-    // The console route below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run
-    // on the PC backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts,
-    // whose PC stub returns 0 WITHOUT writing *lpParts, and then read that uninitialised
-    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
-    // into the u32 muFunction to Xbox2CreateConstantTable. When the supplied binary is already a
-    // converted platform-4 ShaderProgramBuffer (which is what the PC sky-dome programs are), the
-    // leaf adopts it directly -- there is nothing for Initialize to build. A non-PC binary returns
-    // null here and falls through to the console path unchanged.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -328,17 +303,6 @@ void ImRenderer<V>::BeginRendering()
 
     mi8CurrentProgram = 0;
 
-    // (the compare against the last-bound vertex program is the device's -- see the note above)
-    shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-    shadow::DeviceSetPixelProgram(lpPixelProgram);
-
-    // Shadow this renderer's vertex descriptor; mark the vertex-program state dirty when it changed.
-    // (X360 off_83010958 / byte_83010A34 == shadow::Device::mpVertexDescriptor and
-    // mbVertexProgramStateDirty -- the compare-then-set + dirty flag IS Device::
-    // SetVertexDescriptor, so the shadow is kept where the flush reads it.)
-    shadow::DeviceSetVertexDescriptor(
-        const_cast<renderengine::VertexDescriptorData*>(
-            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor)));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -364,7 +328,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;

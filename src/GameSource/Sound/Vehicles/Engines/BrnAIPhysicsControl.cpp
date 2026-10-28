@@ -12,8 +12,6 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameSource/Sound/Vehicles/BrnAISoundDiag.h"   // [DIAG] NOT IN THE X360 BINARY
-
 #include <cmath>
 #include <cstring>
 

@@ -5,8 +5,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameSource/Sound/Vehicles/BrnAISoundDiag.h"   // [DIAG] NOT IN THE X360 BINARY
-
 #include <cstring>
 
 // =============================================================================

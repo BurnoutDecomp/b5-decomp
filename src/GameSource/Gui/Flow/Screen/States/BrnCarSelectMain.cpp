@@ -42,25 +42,10 @@ namespace BrnGui
 {
     namespace
     {
-        // [FLAG PC witness] BRN_CARSEL_DIAG=1 traces the car-select screen's input and its
-        // car-selection trigger (first 80 lines). Read once.
-        bool IsCarSelGuiDiagEnabled()
-        {
-            static const bool sbEnabled = []()
-            {
-                const char* lpcValue = std::getenv("BRN_CARSEL_DIAG");
-                return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
-            }();
-            return sbEnabled;
-        }
 
         bool TakeCarSelGuiDiagLine()
         {
             static s32 siLines = 0;
-            if (!IsCarSelGuiDiagEnabled() || CgsDev::Log::gpDebugPrint == 0 || siLines >= 80)
-            {
-                return false;
-            }
             ++siLines;
             return true;
         }
@@ -130,8 +115,6 @@ namespace BrnGui
         {
             // The input payload's leading words: pad id, then the game input action id.
             const s32* lpaiWords = reinterpret_cast<const s32*>(lpEvent);
-            *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] gui input kind=" << liController
-                                       << " pad=" << lpaiWords[0] << " action=" << lpaiWords[1] << "\n";
         }
     }
 
@@ -226,8 +209,6 @@ namespace BrnGui
 
             if (TakeCarSelGuiDiagLine())
             {
-                *CgsDev::Log::gpDebugPrint << "[FLAG PC witness] [carsel] gui 415 select car="
-                                           << static_cast<u64>(mCurrentSetupInfo.mCarId) << "\n";
             }
         }
     }
@@ -334,7 +315,6 @@ namespace BrnGui
 //
 // The sibling bodies live in BrnCarSelectMain.cpp and the other wave-G partfiles.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -603,7 +583,6 @@ namespace BrnGui
 // class static declared in the header and defined in BrnCarSelectMain_wG_01.cpp.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -807,7 +786,6 @@ namespace BrnGui
 // The x64 build lays out its own vtable; every call below is a plain by-name (virtual)
 // call and the slot map only records WHICH member each X360 displacement resolved to.
 // ===================================================================================
-
 
 // NOTE on the event records: the canonical payload homes for events 93/406 are
 // GameSource/Gui/BrnGuiDemangledEventTypes.h, but that header and

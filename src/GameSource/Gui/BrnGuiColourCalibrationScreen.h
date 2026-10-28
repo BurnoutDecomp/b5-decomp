@@ -43,28 +43,6 @@ namespace BrnGui
         // @0x824471C0 (this TU, DWARF h:68).
         void Destruct();
 
-        // @0x8246AA28 (this TU, DWARF h:76) -- the per-frame state machine. The console
-        // call site is BrnGui::GuiModule::Update @0x82529AE0-B04, which passes, in order:
-        //   r4 = the GameData IO INPUT buffer   (the acquire request goes on its request queue)
-        //   r5 = the GameData IO OUTPUT buffer  (never read by the body -- r5 is untouched
-        //        from the prologue on; kept for signature parity)
-        //   r6 = the GUI module's CgsGuiModuleIO::OutputBuffer (the 546 publish target)
-        //   r7 = *(guiModule + 311932) == mGuiConfig.mpTextureAllocator, i.e.
-        //        AllocatorList::GetRWLinearResourceAllocator(42) ("Network Image Allocator"),
-        //        cached by GuiModule::Prepare @0x82518DE0 (DWARF CgsGuiModule.h:73 types it
-        //        rw::IResourceAllocator*).
-        // FLAG PC-ABI adapter (3rd parameter only): the PC GUI module has no live
-        // CgsGuiModuleIO::OutputBuffer; its stand-in for that buffer's mOutEvents member is
-        // BrnGui::GuiModule::mGuiOutQueue -- the VariableEventQueue<18432,16> that
-        // BrnGameModule::BridgeGuiToGame and ::BridgeGuiToDirector drain (BrnGuiModule.h:115).
-        // The queue is therefore passed directly and the publish reproduces
-        // CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<T>'s own body (see the .cpp).
-        // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
-        void Update(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
-                    const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
-                    CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents,
-                    rw::IResourceAllocator* lpAllocator);
-
         // @0x824471D0 (this TU, DWARF h:82) -- show/hide requests routed from
         // GuiModule::HandleEventsPostBaseModuleUpdate.
         void RecvEvent(const CgsModule::Event* lpEvent, s32 liId);

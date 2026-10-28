@@ -3,7 +3,6 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"  // GetGlobalData().StreamSettings()
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lpState / IsAttached tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (FindStreamSettings' own miss print)
-#include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"  // CgsSound::Utils::Curve (Detach's equal-power fade)
 #include "rw/math/fpu/scalar_operation.h"                // rw::math::fpu::Clamp (Detach's fsel clamp)
 #include <algorithm>
@@ -212,57 +211,6 @@ bool StreamingEffect::Attach()
     // binary search sees it: is ContentSpecs ascending (the search's precondition),
     // and does a LINEAR scan find this spec where the search did not? Printed once
     // per session for the shape, once per attach for the scan.
-    if (CgsSound::Diag::StreamDiagEnabled())
-    {
-        const u32 luCount = mStreamSettings.Num_ContentSpecs();
-        static bool sbShapePrinted = false;
-        if (!sbShapePrinted && luCount)
-        {
-            sbShapePrinted = true;
-            u32 luDescents = 0, luZeroSpecs = 0, luNotUnity = 0;
-            f32 lfMin = mStreamSettings.Volumes(0), lfMax = lfMin;
-            u32 luFirstNotUnity = 0;
-            for (u32 i = 0; i < luCount; ++i)
-            {
-                if (i && mStreamSettings.ContentSpecs(i) < mStreamSettings.ContentSpecs(i - 1))
-                    ++luDescents;
-                if (mStreamSettings.ContentSpecs(i) == 0)
-                    ++luZeroSpecs;
-                const f32 lfVol = mStreamSettings.Volumes(i);
-                if (lfVol != 1.0f)
-                {
-                    if (!luNotUnity)
-                        luFirstNotUnity = i;
-                    ++luNotUnity;
-                }
-                lfMin = lfVol < lfMin ? lfVol : lfMin;
-                lfMax = lfVol > lfMax ? lfVol : lfMax;
-            }
-            CgsSound::Diag::StreamDiagPrintf(
-                "[sndstream] settings-table n=%u volumes=%u descents=%u zeros=%u "
-                "spec[0]=0x%08X vol[0]=%.4f spec[1]=0x%08X spec[n-1]=0x%08X vol[n-1]=%.4f "
-                "notUnity=%u first=%u(0x%08X %.4f) min=%.4f max=%.4f\n",
-                luCount, mStreamSettings.Num_Volumes(), luDescents, luZeroSpecs,
-                mStreamSettings.ContentSpecs(0), mStreamSettings.Volumes(0),
-                luCount > 1 ? mStreamSettings.ContentSpecs(1) : 0u,
-                mStreamSettings.ContentSpecs(luCount - 1), mStreamSettings.Volumes(luCount - 1),
-                luNotUnity, luFirstNotUnity, mStreamSettings.ContentSpecs(luFirstNotUnity),
-                mStreamSettings.Volumes(luFirstNotUnity), lfMin, lfMax);
-        }
-        s32 liLinearHit = -1;
-        for (u32 i = 0; i < luCount; ++i)
-        {
-            if (mStreamSettings.ContentSpecs(i) == static_cast<u32>(mCreateParams.mContentSpecName))
-            {
-                liLinearHit = static_cast<s32>(i);
-                break;
-            }
-        }
-        CgsSound::Diag::StreamDiagPrintf(
-            "[sndstream] settings-scan spec=0x%08X linearHit=%d vol=%.4f\n",
-            static_cast<u32>(mCreateParams.mContentSpecName), liLinearHit,
-            liLinearHit >= 0 ? mStreamSettings.Volumes(static_cast<u32>(liLinearHit)) : -1.0f);
-    }
     return true;
 }
 
@@ -371,14 +319,6 @@ bool StreamingEffect::Detach()
         // written to the send, so a live run can re-derive the console's curve from f and the pre-fade
         // gain. Capped at 96 lines per run.
         static u32 su32FadeLines = 0;
-        if (CgsSound::Diag::StreamDiagEnabled() && su32FadeLines < 96u)
-        {
-            ++su32FadeLines;
-            CgsSound::Diag::StreamDiagPrintf(
-                "[sndstream] fade spec=0x%08X t=%.6f fade=%.6f f=%.6f pre=%.6f gain=%.6f\n",
-                static_cast<u32>(mCreateParams.mContentSpecName), mfTimeThroughFade, lfFadeOut,
-                lfFraction, mfGainPreFade, lfGain);
-        }
 
         if (mfTimeThroughFade < GetFadeOut())                                        // 0x826EEBD4
             return false;

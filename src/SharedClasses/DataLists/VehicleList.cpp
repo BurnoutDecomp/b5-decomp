@@ -131,21 +131,6 @@ void VehicleList::Construct()
     // AddListResource lookup. Cheap and keeps the lazy init off the streaming path.
     GetSponsorCarTable();
 
-    // [FLAG PC leaf -- SKU sponsor-car availability, DELIBERATELY NOT RUN]
-    // The X360 tail is `switch (CgsSystem::HardwareSku::GetSku())`, marking a per-territory
-    // subset of KAPC_SPONSOR_CAR available via SetSponserVehicleAvailable:
-    //     sku 0 : PSPBEST, PSPCIR, PSPGAS, PSPMETL, PSPWAL
-    //     sku 1 : PSPMETL, PSPGAS
-    //     sku 3 : PSPBZ, PSPMETL
-    //     sku 6 : PSPBEST, PSPBZ, PSPCIR, PSPGAS, PSPMETL, PSPMICR, PSPWAL
-    //     sku 2 / 4 / 5 : none
-    //     default : assert "Unrecognised SKU code" (VehicleList.cpp:127)
-    // CgsSystem::HardwareSku::GetSku() has NO PC leaf (CgsHardwareSkuPC.cpp defines only
-    // FindLanguage), and picking a SKU number for the PC build would be inventing the
-    // platform's identity. Every sponsor slot therefore stays mbAvailable == false, which is
-    // exactly the sku 2/4/5 behaviour. miSponsorVehicleCount is UNAFFECTED (AddListResource
-    // counts membership of the table, not availability). RESTORE this switch verbatim the
-    // moment HardwareSku::GetSku() lands on PC.
 }
 
 // VehicleList::Destruct @ 0x82677CC0

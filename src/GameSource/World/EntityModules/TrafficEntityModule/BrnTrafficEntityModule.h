@@ -1,7 +1,5 @@
 #pragma once
 
-#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficRenderPosePC.h"
-
 // =============================================================================
 // BrnTrafficEntityModule.h -- owning header for BrnTraffic::TrafficEntityModule and the
 // small per-frame record types it keeps in fixed-capacity containers.
@@ -106,9 +104,6 @@ namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeActi
 // BrnCrashModuleTrafficIOInterfaces.h; BrnTrafficEntityModuleIO.h already includes it for the
 // buffers, so every .cpp that calls the two sees the complete type.
 namespace BrnWorld { namespace CrashIO { struct TrafficInputInterface; } }
-
-namespace CgsPC::Reflections { struct TrafficCapture; }
-namespace CgsPC::Debug { struct TrafficControls; }
 
 namespace BrnTraffic
 {
@@ -428,8 +423,6 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
     // sub-object sits at offset 0.
     class TrafficEntityModule : public CgsModule::ModuleSingleBuffered
     {
-        friend struct CgsPC::Reflections::TrafficCapture;
-    friend struct CgsPC::Debug::TrafficControls;
     public:
         // --- DWARF-attested nested enums (:486-:559) ------------------------------------
 
@@ -591,9 +584,6 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                 BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                 BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
-
-        // FLAG PC-platform leaf: snapshot traffic once after all tick producers.
-        void LatchRenderPosesPC();
 
         // ---- the render trio (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
         // Bodies in BrnTrafficEntityModule_Render.cpp. Each signature is the DecFIGS DWARF's
@@ -2001,8 +1991,5 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // X360-ATTESTED: Prepare stage 4 seeds eight 136-byte records from this+0x79388.
         StoredAITrafficData   maStoredAITrafficData[E_ACTIVE_RACE_CAR_INDEX_COUNT];       // :944
 
-        // FLAG PC-platform leaf: appended host presentation state, never sent
-        // to physics or serialized as a console TrafficEntityModule member.
-        RenderPosePC          maRenderPosesPC[KU_MAX_TOTAL_TRAFFIC];
     };
 }

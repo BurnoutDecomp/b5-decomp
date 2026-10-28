@@ -6,8 +6,6 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
-
 #include <cstring>
 
 // =============================================================================

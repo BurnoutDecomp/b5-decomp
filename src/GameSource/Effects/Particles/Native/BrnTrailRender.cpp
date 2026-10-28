@@ -35,10 +35,6 @@
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [diag] CgsDev::Log::WriteToLog
-#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"       // [diag] BrnDiag::gFilmLatch (frames.csv NDC columns)
-#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"     // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
-#include "pc/gcm/renderengine/TrailPausedDiagPC.h"                     // default-off paused camera witness
-
 #include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
 #include <cstdlib>  // [diag] getenv / atoi (the BRN_SKID_LOUD discriminator)
 #include "rw/math/vpu/vector3_operation.h"                             // rw::math::vpu::{operator+,operator*}
@@ -55,7 +51,6 @@
 // gpSkyDomeRasterizerState IS dword_83010F3C) plus the standard alpha blend
 // (gpImStandardAlphaBlendState IS dword_83010F20) -- all three defined by
 // ImmediateMode.cpp and declared `extern void*` here exactly as BrnSkyDomeManager.cpp
-// does, bound through the same three PC leaf appliers.
 extern void* gpSkyDomeDepthStencilState;   // dword_83010F4C
 extern void* gpImStandardAlphaBlendState;  // dword_83010F20
 extern void* gpSkyDomeRasterizerState;     // dword_83010F3C
@@ -154,8 +149,6 @@ namespace Native
             static s32 siMask = -1;
             if (siMask < 0)
             {
-                const char* lpcValue = std::getenv("BRN_SKID_LOUD");
-                siMask = (lpcValue != 0) ? std::atoi(lpcValue) : 0;
                 if (siMask < 0)
                     siMask = 0;
                 if (siMask != 0)
@@ -212,8 +205,6 @@ namespace Native
             static f32 sfLift = -1.0f;
             if (sfLift < 0.0f)
             {
-                const char* lpcValue = std::getenv("BRN_SKID_LIFT");
-                sfLift = (lpcValue != 0) ? static_cast<f32>(std::atof(lpcValue)) : 0.0f;
                 if (sfLift < 0.0f)
                     sfLift = 0.0f;
                 if (sfLift > 0.0f)
@@ -248,7 +239,6 @@ namespace Native
     // =========================================================================================
     void TrailRenderer::BeginRender(renderengine::Texture* lpTexture)
     {
-        renderengine::TrailPausedDiag_ExpectedPC(mfCurrentTime, &mViewProjectionMatrix.xAxis.x);
         mpRenderer->BeginRendering();                        // ImRenderer<SkidVertex>::BeginRendering @0x8227C1E8
         mpRenderer->SetTransform(mViewProjectionMatrix);     // BeginShaderStates(this+88) + 4 x stvx128
 
@@ -321,8 +311,6 @@ namespace Native
         // DELETE-WHEN-STABLE.
         static u32 suQuadDiagCall = 0u;
         const u32  KU_QUAD_DIAG_PERIOD = 120u;
-        const bool lbQuadDiag = BrnDiag::TrailHeightDiagEnabled()
-                                && ((++suQuadDiagCall % KU_QUAD_DIAG_PERIOD) == 0u);
         bool lbQuadDiagSpent = false;
 
         for (s32 lnEmitter = 0; lnEmitter < lnEmitterCount; ++lnEmitter)
@@ -467,15 +455,9 @@ namespace Native
             // proves only that old marks fade. The freshest segment is the one whose alpha is
             // at its highest, so it is the honest place to aim.
             {
-                const f32 lfSX = BrnDiag::gFilmLatch.mfLastSegX;
-                const f32 lfSY = BrnDiag::gFilmLatch.mfLastSegY;
-                const f32 lfSZ = BrnDiag::gFilmLatch.mfLastSegZ;
                 const f32 lfSClipX = lfSX * lpM[0] + lfSY * lpM[4] + lfSZ * lpM[8]  + lpM[12];
                 const f32 lfSClipY = lfSX * lpM[1] + lfSY * lpM[5] + lfSZ * lpM[9]  + lpM[13];
                 const f32 lfSClipW = lfSX * lpM[3] + lfSY * lpM[7] + lfSZ * lpM[11] + lpM[15];
-                BrnDiag::gFilmLatch.mfSegNdcX  = (lfSClipW != 0.0f) ? (lfSClipX / lfSClipW) : 0.0f;
-                BrnDiag::gFilmLatch.mfSegNdcY  = (lfSClipW != 0.0f) ? (lfSClipY / lfSClipW) : 0.0f;
-                BrnDiag::gFilmLatch.mfSegClipW = lfSClipW;
             }
             (void)lfZ;
 

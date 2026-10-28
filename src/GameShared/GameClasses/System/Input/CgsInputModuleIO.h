@@ -14,7 +14,7 @@
 
 namespace CgsInput
 {
-    class InputPadsPC;   // PC pad-fill platform leaf (System/Input/PC/CgsInputPadsPC.h)
+   // PC pad-fill platform leaf (System/Input/PC/CgsInputPadsPC.h)
 
 namespace InputIO
 {
@@ -247,11 +247,6 @@ namespace InputIO
         const PadOutputInformation* GetPadInfo(s32 iPort) const;     // 0x823B1230
 
     private:
-        // FLAG PC-platform leaf access: InputPadsPC (System/Input/PC/CgsInputPadsPC.cpp) is
-        // the host stand-in for the unreconstructed console pad fill (CgsInput::InputPads::
-        // Update -> binding tables -> maPadOutputInformation); it writes the player-0 record
-        // directly, so it is granted the module-internal access the console fill has.
-        friend class CgsInput::InputPadsPC;
 
         BindResultQueue      mBindResultQueue;          // @ +4   .. +112
         UnBindResultQueue    mUnBindResultQueue;        // @ +112 .. +220

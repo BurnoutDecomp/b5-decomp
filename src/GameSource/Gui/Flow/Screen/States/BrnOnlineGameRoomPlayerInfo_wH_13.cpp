@@ -65,8 +65,6 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // GuiCache::GetOptionsDataProfile
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile volume getters
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest / GuiAudioTriggerEvent
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [netui] witness lines (LAN / harness only)
-
 namespace BrnGui
 {
     namespace
@@ -351,8 +349,6 @@ namespace BrnGui
                     reinterpret_cast<const CgsModule::Event*>(&lLeaveGame), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lLeaveGame)));
 
-                BrnNetHarnessPC::WitnessTag("netui", "leave", "post 52 method=%d",
-                                            lpOverlayCompleteEvent->miLeaveMethod);
             }
         }
         else if (mpGuiCache != 0)

@@ -169,8 +169,6 @@ namespace Deformation
             static s32 siArriveProbe = -1;
             if ( siArriveProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
-                siArriveProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             // ⚠️ TWO WINDOWS, because one flat cap cannot see both things. The chain delivers ~60
             // arrivals per frame while the car simply RESTS on the ground (+Y floor support), so a
@@ -239,8 +237,6 @@ namespace Deformation
                 static s32 siCrashRespProbe = -1;
                 if ( siCrashRespProbe < 0 )
                 {
-                    const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
-                    siCrashRespProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                 }
                 // ⚠️⚠️ THE CAP WAS 1500 AND IT WAS SPENT INSIDE SHOT 0. fdfda858's two-shot run
                 // recorded 129 + 1371 == 1500 arrivals in its FIRST crash, so the run carried no

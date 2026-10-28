@@ -105,7 +105,6 @@ namespace Vehicle
                     bool lbHandBrake, VecFloat lvfSteering, VecFloat lvfRearWheelRadius,
                     bool lbAllowReverseDrive, VecFloat lvfForwardSpeed, VecFloat lvfTimeStep);
 
-        // [PC-leaf accessor] ApplyEngineForcesOntoWheels @0x825FB000 reads the engine's drive-force
         // lane directly off the embedded engine (`lvx128 v0, this+0xFA0 ; vspltw v0,v0,0` == mEngine
         // (+0xF00) + 0xA0 lane0). Engine::Update (the powertrain core, bodied) writes it. Exposed as
         // a named getter so the host reads the named member instead of an offset cast.
@@ -122,7 +121,6 @@ namespace Vehicle
         // instrs so it ends exactly at 0x825CF130, and the next indexed symbol is 0x825CF278.
         void Reset(VecFloat lvfWheelAngularVelocity);
 
-        // [PC-leaf accessor] The console's UpdateDriving @0x82638248 pokes the two allow-change
         // bytes of the embedded engine directly (`stb rX, 0xFC4(r31) ; stb rX, 0xFC5(r31)` --
         // always the SAME value, 1 on the ground / 0 in the air). Exposed as one named setter
         // so the host write stays on the named members instead of an offset cast.
@@ -132,7 +130,6 @@ namespace Vehicle
             mbAllowToChangeDownGear = lbAllow;   // +0xC5
         }
 
-        // [PC-leaf accessor] The sound side's AI engine simulation (AIPhysicsControl::
         // UpdateParams @0x826CE8D8, 0x826CE9B4..0x826CE9D4) forces the clutch-factor lane
         // of the embedded engine to 1.0 before every Update:
         //     lvx128 v13, engine+0xB0 ; vrlimi128 v13, splat(1.0), 8, 0 ; stvx128
@@ -142,7 +139,6 @@ namespace Vehicle
             mvClutchFactor_RPM_CurrentGearChangeTime.x = lfClutchFactor;   // +0xB0 lane 0
         }
 
-        // [PC-leaf accessor] The console's wheel cluster reads the embedded engine's gear word
         // directly off the owner (`lwz rX, 0xFC0(r31)` in UpdateWheels @0x8261E7B4 /
         // UpdateWheelInertia @0x825F67xx / UpdateBrakesAndGetBrakingFactor @0x825D02xx --
         // VehiclePhysics base +0xF00 == mEngine, +0xC0 == mu8CurrentGear). Gear 0 is

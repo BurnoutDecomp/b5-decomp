@@ -84,15 +84,7 @@ void MainGameFlowStateInGame::Update()
 
     // Sound pre-update precedes the world; its post-update runs after the
     // director/GUI/effects legs in GameMain, as in ARTIST DoUpdate.
-    auto* lpSoundPreUpdateOutput = lpGameModule->BeginInGameSoundFramePC();
 
-    // Drive the world module per frame while in-game. DoUpdate above is a PC-platform leaf
-    // (the host loop owns the module walk) and its world leg, DoUpdate_World @0x823E8BD0, is
-    // reached from nowhere -- so without this the world module, its PVS query and the streamer
-    // all stop the moment the flow leaves the loading screen, leaving the query frozen at the
-    // world-space (0,0,0) it was last taken from during loading. The sound pre-update buffer
-    // threads through to the BridgeSoundToWorld staging (phase C4b), the same seam the
-    // console's DoUpdate_World carries.
     DriveInGameWorldUpdate(lpSoundPreUpdateOutput);
 
     if (!BrnGameMainFlowController::gBrnReturnToFrontEndRequested)

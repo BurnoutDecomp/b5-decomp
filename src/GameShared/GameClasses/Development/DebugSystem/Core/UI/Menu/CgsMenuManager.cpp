@@ -1,6 +1,4 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenuManager.h"
-#include "pc/debug/IniComponentLifecycle.h"
-
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"      // DebugManagerConstructParameters (pool sizes + allocator)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Menu/CgsMenu.h"      // Menu (Prepare/AddMenuItem/GetParent/GetCaption)
@@ -147,10 +145,6 @@ namespace CgsDev
 
         Window* MenuManager::Open(Menu* lpMenu)
         {
-            // FLAG PC-platform leaf: ordinary navigation into an INI-materialized
-            // component (or a child page) is an explicit user activation too.
-            for (Menu* lpOwner = lpMenu; lpOwner; lpOwner = lpOwner->GetParent())
-                CgsPC::Debug::OpenIniComponentMenu(lpOwner);
             MenuWindow* lpWindow = FindMenuWindow(lpMenu);
             if (!lpWindow)
                 return CreateMenuWindow(lpMenu);

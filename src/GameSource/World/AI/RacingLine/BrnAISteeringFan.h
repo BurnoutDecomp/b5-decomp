@@ -106,15 +106,7 @@ namespace BrnAI
         s32   GetBestIndex();                              // @0x82768D48
         f32   GetSpeedRatio();                             // @0x82779B90
 
-        // ---- bodied in BrnAISteeringFan_Target.cpp / _Weightings.cpp (aiwave R6) -----------
-        // The fan target machinery. Signatures are the DecFIGS DWARF's
-        // (dwarfdump/.../BrnAISteeringFan.cpp), each gated on the X360 register map in the
-        // reconstructing .cpp. Members that still have NO body carry a [FLAG PC bring-up] park in
-        // BrnAISteeringFan_Weightings.cpp -- they are never silently absent.
-        Vector2 GetDrivingTarget(AICar* lpCar, RacingLine* lpRacingLine,
-                                 RacingLineGenerator* lpRacingLineGenerator,
-                                 const NearbyVehicles* lpNearbyVehicles,
-                                 bool lbFlag);                                    // @0x82779C30 (DWARF :112)
+                                    // @0x82779C30 (DWARF :112)
         void  UpdateWeightings(AICar* lpCar, RacingLine* lpRacingLine,
                                RacingLineGenerator* lpRacingLineGenerator,
                                const NearbyVehicles* lpNearbyVehicles,

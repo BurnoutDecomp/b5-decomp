@@ -1,7 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::RasterizerState
 #include "rw/rwcore_structs.h"                  // rw::IResourceAllocator
 
 // =============================================================================

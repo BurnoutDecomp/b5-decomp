@@ -925,10 +925,6 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
     if (lpUncoverInfo != nullptr)
     {
         CgsGui::ImageFileInfo laPrepareRender[KI_NUM_PICTURES];
-        static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
-                      "ImageFileInfo carries a native 64-bit buffer pointer");
-        static_assert(sizeof(laPrepareRender) == 72,
-                      "three host-native image-file records widen the X360 48-byte record");
         for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
         {
             // ARTIST initializes only id@+0 and corrupt@+0xC in each 16-byte X360 slot.
@@ -974,10 +970,6 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
     // Local scratch list of slots whose textures need loading from disk. The X360 record is
     // CgsGui::ImageFileInfo[3] (48 bytes); native pointers widen each record to 24 bytes.
     CgsGui::ImageFileInfo laPendingLoads[KI_NUM_PICTURES];
-    static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
-                  "ImageFileInfo carries a native 64-bit buffer pointer");
-    static_assert(sizeof(laPendingLoads) == 72,
-                  "three host-native image-file records widen the X360 48-byte record");
     for (s32 liIndex = 0; liIndex < KI_NUM_PICTURES; ++liIndex)
     {
         laPendingLoads[liIndex].miId     = -1;

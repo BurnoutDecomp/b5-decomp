@@ -116,7 +116,6 @@ LinearResourceAllocator* GetGraphicsAllocator();
 void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
 
 // The GameData general resource allocator the loading-screen module loads carve from (SoundModule
-// etc.). [PC-LEAF / allocator gate] The X360 builds one allocator per bank in GameDataModule::
 // CreateAllocators (memory-map-driven) and vends it via GameDataIO::OutputBuffer::GetAllocator;
 // pending that per-bank population, this returns a single real rw::core::GeneralResourceAllocator
 // lazily Initialize'd over a region carved from the debug heap. (The full per-bank CreateAllocators

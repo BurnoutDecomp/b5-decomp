@@ -1,7 +1,4 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/FrameProfile.h"
-#include "pc/gcm/renderengine/InstancedDraw.h"
-#include "pc/gcm/renderengine/DepthOnly.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 
 #include <cstddef>
@@ -13,8 +10,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // the quiet one-shot gates
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"        // RenderableMesh (mesh-dispatch seam)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // MaterialTechniqueView
-#include "pc/gcm/renderengine/Device.h"
-#include "pc/gcm/renderengine/renderstates.h"                              // MaterialState / DepthStencilState / RasterizerState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"    // BlendMaterialState
 
 struct IDirect3DDevice9;
@@ -112,9 +107,6 @@ extern "C" void* SetSamplerStateLowLevel(void* lpState, u32 luSamplerId, bool lb
 // the shim TU owns the D3D9 objects (shader cache, vertex-declaration cache, draw stash).
 namespace renderengine
 {
-    // Clear the PC translator's current-state association when the engine shadow resets.
-    // The separately cached raw MaxMip request remains available to the bind shim.
-    void InvalidateSamplerStateSnapshotPC();
 
     // Bind the FLAGGED fallback world shader (compiled once at first use); returns false when the
     // device/compiler is unavailable (the draw is skipped rather than issued undefined).
@@ -155,7 +147,6 @@ namespace renderengine
     // lpSamplerBlock is that TextureState's own 32-byte sampler block (the object's +0x00, which
     // the console's sub_827E8950 reads field by field); null when the caller has no state.
     bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster, const void* lpSamplerBlock);
-    // [PC leaf, pc/gcm/renderengine/ImmediateMode.cpp] Drain the immediate-mode
     // shader-constant rows staged by RenderEngineDeviceBeginShaderStates.
     void  ImShaderConstants_Flush();
     // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
@@ -263,6 +254,7 @@ namespace shadow
     bool Device::Initialize()
     {
         const bool lbInitialised = renderengine::Device::Initialize();
+
         // @0x827ED6E0: the slot is reset to { &mVertexProgramState, 0, 0, 0, 0 }.
         mapVertexProgramStateSlot[0] = &mVertexProgramState;
         mapVertexProgramStateSlot[1] = nullptr;
@@ -310,7 +302,6 @@ namespace shadow
     // @0x82276970: clear the whole shadow cache.
     void Device::ResetShadowing()
     {
-        renderengine::InvalidateSamplerStateSnapshotPC();
         mpStreamArray = nullptr;
         mpIndexStreamArray = nullptr;
         mpVertexDescriptor = nullptr;
@@ -476,11 +467,6 @@ namespace shadow
     // @0x827E7A10: rebind the dirty vertex-program state + the active stream sources to D3D.
     void Device::FlushVertexProgramState()
     {
-        // [PC leaf] Push the immediate-mode shader-constant rows staged since the last
-        // flush. The X360's renderengine::Device::BeginShaderStates opens rows straight
-        // in the command buffer, so they become visible to the GPU exactly here; D3D9
-        // has no such window, so the leaf stages them and this is the drain.
-        renderengine::ImShaderConstants_Flush();
 
         // A flush with nothing bound has nothing to rebind -- and the block below
         // dereferences BOTH shadows unconditionally (mpVertexDescriptor->mpDeclaration,
@@ -637,22 +623,6 @@ namespace shadow
     // bound only when its shadowed value differs.
     void* Device::Xbox2SetStateLowLevelShadowed(void* lpState, bool lbWasUnset)
     {
-        // FLAG PC-platform: the console body has NO null check here (its depth/stencil twin returns
-        // early at the top of Xbox2SetDepthStencilStateLowLevelShadowed and its rasteriser twin at
-        // shadowingdevice.cpp:728, but this one dereferences lpu[0] immediately), and it does not need
-        // one -- on the console CgsBlendStateFactory::Construct @0x827EB2D8 runs before any pass, so
-        // saBlendStates never reads null. On this build NOTHING CALLS THAT CONSTRUCT
-        // (BrnRendererModule::Construct does not reach mBlendStateFactory.Construct), so the nine-slot
-        // table reads null even though the Construct body is now reconstructed -- and a caller can
-        // legitimately ask to bind a null blend state while the immediate-mode path has left a real
-        // one in the cache, which passes the compare and reaches here. The guard goes HERE and not in
-        // SetState, because a guard in the setter would swallow the cache write-back the console
-        // performs unconditionally -- that store IS the invalidation.
-        // RETIRE THIS the day BrnRendererModule::Construct calls mBlendStateFactory.Construct. Not the
-        // day 0x827EB2D8 is dumped (it is: scratch/postfx_wave1_dossiers/BLENDFACTORY_DUMP.md) and not
-        // the day its body lands (it has, in this wave) -- only a CALLER fills the table.
-        if (lpState == nullptr)
-            return lpState;
 
         const u32* const lpu = static_cast<const u32*>(lpState);
         IDirect3DDevice9* const lpDevice = gpD3DDevice;
@@ -861,11 +831,6 @@ namespace shadow
         if (lpRs->muPrimitiveResetEnable)
             D3DDevice_SetRenderState_PrimitiveResetIndex(lpDevice, lpRs->muPrimitiveResetIndex);
 
-        // FLAG PC-platform leaf: primitive reset is a Xenos index-assembler feature with no
-        // Direct3D 9 counterpart, so the world draw path re-cuts the strip runs itself. This
-        // is where its two words reach that path.
-        renderengine::WorldDraw_SetPrimitiveReset(lpRs->muPrimitiveResetEnable != 0,
-                                                  lpRs->muPrimitiveResetIndex);
         return lpState;
     }
 
@@ -999,28 +964,11 @@ namespace shadow
     // @0x827F2EF0 / `stw r31, 0xD8(r27)` @0x827F2F10, and the 0x14 / 0xDC twins at 0x827F2F24 /
     // 0x827F2F44 and 0x827F2F58 / 0x827F2F78). The console caches the triple ACROSS walk boundaries.
     //
-    // FLAG PC-platform leaf -- the four stores below the two console ones. They are a PC-ONLY
-    // RE-SYNCHRONISATION, and the writer they re-synchronise against is named:
-    // renderengine::Device::SetWorldPassDefaultStates (XenonD3D9Shims.cpp:652). Render calls it five
-    // times a frame, each time immediately before a walk (BrnRendererModule.cpp:922 / :928 / :968 /
-    // :974 / :993), and it pushes ZENABLE / ZWRITEENABLE / ALPHABLENDENABLE / SRCBLEND / DESTBLEND /
-    // LIGHTING / ALPHATESTENABLE / SCISSORTESTENABLE / COLORWRITEENABLE / STENCILENABLE / FILLMODE /
-    // BLENDOP / SEPARATEALPHABLENDENABLE straight through IDirect3DDevice9::SetRenderState, touching
-    // neither mauLowLevelStateShadow nor this triple. After it runs, the device no longer holds what
-    // the triple says it holds -- so a walk whose first technique reuses the previous walk's
-    // MaterialState would pass all three pointer compares in SetMaterialRenderStatesPC (:973 / :978 /
-    // :1017) and draw under the shim's pass defaults instead of the technique's states. Nulling the
-    // triple here is what forces that first bind. The console needs none of this because nothing
-    // there writes render states from outside the shadow.
-    // The cost is one redundant full-block push per walk (lbWasUnset == true on the first bind).
-    // RETIRE THESE FOUR STORES the day SetWorldPassDefaultStates is retired -- not before.
     void Device::ResetProgramShadows()
     {
         mpVertexProgramShadow = nullptr;
         mpPixelProgramShadow  = reinterpret_cast<const renderengine::ProgramBufferData*>(
             static_cast<uintptr_t>(~0u));
-        mpBlendState        = nullptr;
-        mpDepthStencilState = nullptr;
         mpRasterizerState   = nullptr;
     }
 
@@ -1041,13 +989,6 @@ namespace shadow
     // The scratch pointer table the constants come from was gathered at AddToBin time by
     // AddShaderTechniqueConstantsToDispatchBin in the order [A][C][B][D].
     //
-    // FLAG PC-platform leaf: Xenos constant-memory writes go through the shared
-    // ShaderConstantCache before Set{Vertex,Pixel}ShaderConstantF. Every
-    // listed constant is offered here, but unchanged register values are skipped
-    // at the native boundary. Value comparison also catches PC sources mutated
-    // in place, unlike the console's latest-push-buffer-pointer comparison.
-    // SetMaterialRenderStatesPC below applies the technique's state triple.
-    // =====================================================================================
     namespace
     {
         // Quiet one-shot gates (never traps) for the two per-draw conditions the console
@@ -1058,10 +999,6 @@ namespace shadow
             if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
             {
                 sbLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "lpShaderConstantsToApply is NULL. This is probably due to an external"
-                       " constant not getting set -- constant skipped [FLAG PC bring-up:"
-                       " the world producer does not publish the whole engine constant set]\n";
             }
         }
 
@@ -1071,9 +1008,6 @@ namespace shadow
             if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
             {
                 sbLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "SetMeshTechniquePC: no usable technique programs -- the flagged bring-up"
-                       " fallback shader drew this technique [FLAG PC bring-up]\n";
             }
         }
 
@@ -1105,7 +1039,6 @@ namespace shadow
                     LogUnsetShaderConstantOnce();
                     continue;
                 }
-                renderengine::WorldShaderConstants_Set(lbPixel, lpHandle[0], lpSource, lpHandle[3]);
             }
         }
 
@@ -1140,264 +1073,7 @@ namespace shadow
                     LogUnsetShaderConstantOnce();
                     continue;
                 }
-                renderengine::WorldShaderConstants_Set(lbPixel, lu16Register, lpSource, luNumRegisters);
             }
-        }
-    }
-
-    // The technique's render-state TRIPLE. The X360 reaches
-    // MaterialState { mpBlendState, mpDepthStencilState, mpRasterizerState } through the
-    // technique's +0x04 slot (CgsDispatcherCommands.cpp:2268..2270 assert all three) and
-    // pushes each object through its own shadowed applier when the OBJECT POINTER differs
-    // from the one the dispatch state last bound.
-    //
-    // FLAG PC-platform leaf, one deliberate divergence: the console's appliers have an
-    // incremental branch that re-binds only the words whose shadowed value changed. That is
-    // safe there because nothing else touches the D3D state between draws; on the PC
-    // bring-up the per-pass defaults, the immediate-mode 2D renderer and the fallback shader
-    // path all write render states outside this seam, so a per-word shadow would go stale and
-    // skip a re-bind it needed to make. Each applier is therefore always called on its
-    // FULL-SET branch (the console's lbWasUnset == true path), which is identical in effect,
-    // only chattier.
-    void Device::SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
-                                           bool lbZOnly)
-    {
-        const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
-        if (lpTech == 0)
-            return;
-
-        u32 luMaterialStateSlot;
-        std::memcpy(&luMaterialStateSlot, lpTech + 0x04, 4);
-        renderengine::MaterialState* const lpMaterialState =
-            reinterpret_cast<renderengine::MaterialState*>(
-                static_cast<uintptr_t>(luMaterialStateSlot));
-        if (lpMaterialState == 0)
-        {
-            // The console asserts this (the technique's material-state import always
-            // resolves); on the bring-up an unresolved world bundle can still reach here, in
-            // which case the previous technique's states stand. Quiet one-shot, never a trap.
-            static bool sbLogged = false;
-            if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                sbLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "SetMaterialRenderStatesPC: technique has no material state -- the"
-                       " previous technique's render states stand [FLAG PC bring-up]\n";
-            }
-            return;
-        }
-
-        {
-            // [DIAG one-shot x16] the distinct state triples the world walk actually binds,
-            // tagged with the pass that bound them (Z = the depth-only pre-pass / shadow walk).
-            static const void* sapSeen[16] = {};
-            static bool sabSeenZOnly[16] = {};
-            static u32 suSeen = 0;
-            bool lbNew = (suSeen < 16u);
-            for (u32 lu = 0; lu < suSeen && lbNew; ++lu)
-                if (sapSeen[lu] == lpMaterialState && sabSeenZOnly[lu] == lbZOnly) lbNew = false;
-            if (lbNew && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                sabSeenZOnly[suSeen] = lbZOnly;
-                sapSeen[suSeen++] = lpMaterialState;
-                const renderengine::BlendMaterialState* lpB = lpMaterialState->mpBlendState;
-                const renderengine::DepthStencilState*  lpD = lpMaterialState->mpDepthStencilState;
-                const renderengine::RasterizerState*    lpR = lpMaterialState->mpRasterizerState;
-                *CgsDev::Log::gpDebugPrint
-                    << "[WorldState] pass=" << (lbZOnly ? "PREZ" : "COLOUR")
-                    << " ms=" << lpMaterialState
-                    << " blend0=" << (lpB ? lpB->maState[0] : 0u)
-                    << " cwe=" << (lpB ? lpB->maState[4] : 0u)
-                    << " atest=" << (lpB ? lpB->maState[16] : 0u)
-                    << " afunc=" << (lpB ? lpB->maState[15] : 0u)
-                    << " aref=" << (lpB ? lpB->maState[17] : 0u)
-                    << " zfunc=" << (lpD ? lpD->muZFunc : 0u)
-                    << " zen=" << (lpD ? lpD->muZEnable : 0u)
-                    << " zwr=" << (lpD ? lpD->muZWriteEnable : 0u)
-                    << " cull=" << (lpR ? lpR->muCullMode : 0u)
-                    << " fill=" << (lpR ? lpR->muFillMode : 0u)
-                    << " reset=" << (lpR ? lpR->muPrimitiveResetEnable : 0u)
-                    << "\n";
-            }
-        }
-
-        if (!mbDepthStencilStateLocked && lpMaterialState->mpDepthStencilState != mpDepthStencilState)
-        {
-            mpDepthStencilState = lpMaterialState->mpDepthStencilState;
-            Xbox2SetDepthStencilStateLowLevelShadowed(
-                const_cast<renderengine::DepthStencilState*>(mpDepthStencilState), true);
-        }
-        // ARTIST 827F5DE4..5E80 selects factory slots 7/8 by technique bit3.
-        // Construct 827EB2D8 fills those slots (stores at 827EBA84/827EBB70),
-        // and the renderer initializes the factory before dispatching meshes.
-        // Cache the actual selected state, so different opaque materials share
-        // the same depth-only blend and alpha-tested techniques select slot8.
-        const renderengine::BlendMaterialState* lpWantedBlend = lpMaterialState->mpBlendState;
-        if (lbZOnly)
-            lpWantedBlend = CgsBlendStateFactory::GetState((lpTechnique->mu16Flags & 8u)
-                ? E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST
-                : E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST);
-        if (lpWantedBlend != mpBlendState)
-        {
-            mpBlendState = lpWantedBlend;
-            Xbox2SetStateLowLevelShadowed(
-                const_cast<renderengine::BlendMaterialState*>(mpBlendState), true);
-        }
-        if (!mbRasteriserStateLocked && lpMaterialState->mpRasterizerState != mpRasterizerState)
-        {
-            mpRasterizerState = lpMaterialState->mpRasterizerState;
-            Xbox2SetRasterizerStateLowLevelShadowed(
-                const_cast<renderengine::RasterizerState*>(mpRasterizerState), true);
-        }
-    }
-
-    void Device::SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
-                                    const void* lpMaterialAssembly,
-                                    void* const* lppConstScratch, bool lbZOnly)
-    {
-    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::MESH_TECHNIQUE);
-        const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
-        const u32 luShaderTechnique = (lpTech != 0) ? *reinterpret_cast<const u32*>(lpTech) : 0u;
-        const u8* const lpST =
-            reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
-
-        const renderengine::ProgramBufferData* lpVertexProgram = 0;
-        const renderengine::ProgramBufferData* lpPixelProgram  = 0;
-        if (lpST != 0)
-        {
-            // X360 asserts both (CgsDispatcherCommands.cpp:2257 / :2258).
-            lpVertexProgram = reinterpret_cast<const renderengine::ProgramBufferData*>(
-                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 0)));   // serialised blob
-            lpPixelProgram = reinterpret_cast<const renderengine::ProgramBufferData*>(
-                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 4)));   // serialised blob
-        }
-
-        // ---- render states -------------------------------------------------------------
-        SetMaterialRenderStatesPC(lpTechnique, lbZOnly);
-
-        // ---- programs ------------------------------------------------------------------
-        // The program payload is ProgramBufferData + 0x14 (VertexProgramState::
-        // GetD3DVertexShader / SetPixelProgram use the same expression).
-        // [DIAG] the technique NAME (ShaderTechnique blob +148, a console u32 slot -> char*),
-        // for the leaf's per-technique fallback survey. NOTE that
-        // CgsResource::ShaderTechniqueResourceType::PostFixUp overwrites this string's FIRST
-        // character with the shader-profile digit -- the console's own behaviour -- so a
-        // logged name reads "0ehicle_1Bit_Tyre_Textured_Default".
-        const char* const lpcTechniqueName = (lpST != 0)
-            ? reinterpret_cast<const char*>(
-                  static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 148)))   // serialised blob
-            : 0;
-
-        const bool lbMaterialPixel = renderengine::DepthOnlyPC::NeedsMaterialPixelShader(
-            lbZOnly, lpTechnique ? lpTechnique->mu16Flags : 0u);
-        const bool lbVertexProgramChanged = SetVertexProgram(lpVertexProgram);
-        const bool lbPixelProgramChanged = SetPixelProgram(lbMaterialPixel ? lpPixelProgram : nullptr);
-
-        bool lbRealBound = false;
-        if (lpVertexProgram != 0 && lpPixelProgram != 0)
-        {
-            lbRealBound = renderengine::WorldPrograms_Bind(
-                reinterpret_cast<const u8*>(lpVertexProgram) + 0x14,
-                reinterpret_cast<const u8*>(lpPixelProgram) + 0x14,
-                lpcTechniqueName, !lbMaterialPixel && renderengine::DepthOnlyPC::Enabled());
-        }
-        else
-        {
-            renderengine::WorldShader_ReportTechniqueHasNoPrograms(lpcTechniqueName);
-        }
-
-        if (!lbRealBound)
-        {
-            // FLAG PC bring-up: no usable technique programs (SHADERS.BNDL absent, an
-            // unresolved import, or a payload that is not D3D9 bytecode) -> the documented
-            // last-resort fallback shader. DELETE-when: every technique resolves.
-            renderengine::WorldShader_ClearRealPrograms();
-            renderengine::WorldFallbackShader_Bind();
-            renderengine::WorldMaterialSamplers_Bind(lpMaterialAssembly);
-            LogFallbackTechniqueOnce();
-            return;
-        }
-
-        // ---- the technique's GLOBAL constant blocks + the material's internal ones ------
-        const u32* const lpBlockA = reinterpret_cast<const u32*>(lpST + 0x1C);
-        const u32* const lpBlockB = reinterpret_cast<const u32*>(lpST + 0x2C);
-        const u32* const lpBlockC = reinterpret_cast<const u32*>(lpST + 0x50);
-        const u32* const lpBlockD = reinterpret_cast<const u32*>(lpST + 0x60);
-
-        // Scratch order [A][C][B][D]; the pixel halves are absent on the z-only walk.
-        void* const* lppB = lppConstScratch + lpBlockA[0] + (lbZOnly ? 0u : lpBlockC[0]);
-        void* const* lppD = lppB + lpBlockB[0];
-
-        if (lbVertexProgramChanged && lppConstScratch != 0)
-        {
-            DispatchExternalBlock(lpBlockB, lppB, false);
-        }
-
-        const u8* const lpAssembly = static_cast<const u8*>(lpMaterialAssembly);
-        if (lpAssembly != 0)
-        {
-            const u8* const lpVertexList = reinterpret_cast<const u8*>(
-                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpTech + 0x18)));      // serialised blob
-            const u32* const lpVertexBlock = reinterpret_cast<const u32*>(
-                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpAssembly + 0x10)));  // serialised blob
-            DispatchInternalBlock(lpVertexList, lpTech[0x20], lpVertexBlock, false);
-        }
-
-        if (!lbZOnly)
-        {
-            if (lbPixelProgramChanged && lppConstScratch != 0)
-            {
-                DispatchExternalBlock(lpBlockD, lppD, true);
-            }
-            if (lpAssembly != 0)
-            {
-                const u8* const lpPixelList = reinterpret_cast<const u8*>(
-                    static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpTech + 0x1C)));      // serialised blob
-                const u32* const lpPixelBlock = reinterpret_cast<const u32*>(
-                    static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpAssembly + 0x14)));  // serialised blob
-                DispatchInternalBlock(lpPixelList, lpTech[0x21], lpPixelBlock, true);
-            }
-        }
-
-        // ---- samplers ------------------------------------------------------------------
-        // X360: `for i < technique[0x22]: sampler = &materialSamplers[20 * indexList[i]]`,
-        // where the index list (technique+0x24) was built by MaterialResourceType::PostFixUp
-        // by matching each material sampler's id against the SHADER TECHNIQUE's own sampler
-        // table. Only the samplers this technique actually names are bound -- unlike the
-        // bring-up path, which binds every material-scope sampler because the fallback
-        // pixel shader only has s0.
-        //
-        // ARTIST 827F6948..6A7C keeps material samplers only for alpha-tested
-        // depth geometry. Opaque depth uses the input-free native SM3 shader.
-        if (lbMaterialPixel)
-        {
-            BindTechniqueSamplers(lpTech, lpAssembly);
-        }
-    }
-
-    // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two
-    // OBJECT-scope external constant blocks (the world matrix and whatever else is per
-    // draw). Their sources are the head of the scratch table, [A] then [C].
-    void Device::SetMeshObjectConstantsPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
-                                          void* const* lppConstScratch, bool lbZOnly)
-    {
-    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::MESH_CONSTANTS);
-        if (!renderengine::WorldShader_RealProgramsBound())
-            return;
-        const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
-        const u32 luShaderTechnique = (lpTech != 0) ? *reinterpret_cast<const u32*>(lpTech) : 0u;
-        if (luShaderTechnique == 0 || lppConstScratch == 0)
-            return;
-        const u8* const lpST =
-            reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
-
-        const u32* const lpBlockA = reinterpret_cast<const u32*>(lpST + 0x1C);
-        const u32* const lpBlockC = reinterpret_cast<const u32*>(lpST + 0x50);
-
-        DispatchExternalBlock(lpBlockA, lppConstScratch, false);
-        if (!lbZOnly)
-        {
-            DispatchExternalBlock(lpBlockC, lppConstScratch + lpBlockA[0], true);
         }
     }
 
@@ -1450,18 +1126,6 @@ namespace shadow
                 continue;
             }
 
-            // lpState IS the TextureState object, so its +0x00 is the 32-byte sampler block --
-            // the address modes and mip LOD bias the console applies for this material.
-            if (renderengine::WorldShader_BindTextureUnit(
-                    lu16Unit, reinterpret_cast<const void*>(static_cast<uintptr_t>(luRasterSlot)),
-                    lpState))
-            {
-                if (lbTally) ++suBound;
-            }
-            else if (lbTally)
-            {
-                ++suNoTexture;
-            }
         }
 
         if (suSeen >= 4096u && suSeen != 0xFFFFFFFFu)
@@ -1480,208 +1144,4 @@ namespace shadow
         }
     }
 
-    // [PC bring-up shim] Per-object WVP for the fallback shader.
-    void Device::SetObjectTransformPC(const f32* lpWvpRows16)
-    {
-        renderengine::WorldFallbackShader_SetWvp(lpWvpRows16);
-    }
-
-    // [PC leaf] Bind the mesh geometry: index buffer, stream-0 vertex buffer and
-    // the technique's vertex declaration. The mesh buffer table (renderablemesh.h
-    // maBuffers, widened x64 image) holds [0] = IndexBufferHeader*,
-    // [1..numVB] = VertexBufferHeader*s, then the per-technique serialised
-    // vertex-descriptor pointers. The Xenon stream-shadow dance collapses into
-    // direct binds through the D3DDevice_* seam (single-stream world data --
-    // the converter hard-fails multi-stream descriptors upstream).
-    void Device::SetMeshBuffersPC(const RenderableMesh* lpMesh, u32 luTechniqueIndex)
-    {
-    renderengine::FrameProfile::DetailScope lDetailProfile(renderengine::FrameProfile::MESH_BUFFERS);
-        const void* const* lppBuffers = lpMesh->maBuffers;
-        const u32 luNumVb = lpMesh->mu8NumVertexBuffers;
-
-        // The technique's vertex descriptor (32-bit serialised image).
-        const void* lpVdImage = lppBuffers[1u + luNumVb + luTechniqueIndex];
-        u32 luStride = 0;
-        void* lpDeclaration = renderengine::WorldVd32_GetDeclaration(lpVdImage, &luStride);
-        D3DDevice_SetVertexDeclaration(gpD3DDevice, lpDeclaration);
-
-        renderengine::WorldDraw_SetIndexSource(lppBuffers[0]);
-        renderengine::WorldDraw_SetVertexSource(luNumVb != 0 ? lppBuffers[1] : 0, luStride);
-
-        // A console-instanced mesh needs a per-instance object matrix its technique's own
-        // program can read. The recompiled PC programs declare neither InstancingMatrixArray
-        // nor InstancingIndexArray -- they are the NON-instanced twins and take the same two
-        // data as `world` / `g_wheelConstants` -- so the publish is rerouted onto those
-        // registers (CgsShaderConstants.cpp's substitute table) and the expansion points the
-        // two console constants at this draw's own entry (DrawRenderable::Interpret). All this
-        // mark does is tell the leaf to CHECK: it keeps the real programs when the bound
-        // vertex program declares `world`, and only then falls back to the flagged pair (whose
-        // c240..c243 WVP SetObjectTransformPC just published) when it does not.
-        if (lpMesh->mu8InstanceCount > 1u)
-            renderengine::WorldFallbackShader_MarkInstancedMesh();
-
-        // [PC bring-up shim] The fallback pair can only be chosen once this mesh's
-        // declaration is known (a vs_3_0 input the declaration does not supply makes the
-        // draw fail on D3D9), so the technique bind above leaves the choice to here.
-        renderengine::WorldFallbackShader_SelectForMesh();
-    }
-
-    // [PC leaf] Issue the indexed draw from the mesh's DrawIndexedParameters
-    // (X360: FlushVertexProgramState + D3DDevice_DrawIndexedVertices, whose four arguments
-    // are exactly mDrawIndexedParameters -- {PrimitiveType, BaseVertexIndex, StartIndex,
-    // IndexCount}; note muMinVertexIndex is the console's StartIndex, not a min-index bound).
-    //
-    // ========================================================================
-    // ⭐ THE INSTANCED SLICE (mesh mu8InstanceCount > 1).
-    //
-    // A console-instanced mesh does NOT hold one drawable index run. MEASURED over the
-    // retail X360 wheel bundle and over our port (24/24 meshes agree in both):
-    //
-    //   * the VERTEX buffer holds ONE copy of the geometry (mesh 0: 240 vertices, stride 24);
-    //   * the INDEX buffer holds mu8InstanceCount CONSECUTIVE SLICES of
-    //         (muNumVertices + 1) / mu8InstanceCount
-    //     indices, and slice i is slice 0 with (i << 12) added to every non-reset index:
-    //         slice 0 -> 0..239   slice 1 -> 4096..4335   slice 2 -> 8192..8431   ...
-    //   * i.e. the baked index is  (instance << 12) | vertexIndex.  The Xenos instancing
-    //     vertex shader fetches with (index & 0xFFF) and picks its InstancingMatrixArray row
-    //     (shader constant 6, published by Model::SetupShaderConstantsForInstancing) with
-    //     (index >> 12). THAT is how the console tells the five copies apart -- there is no
-    //     instance-index element in the vertex declaration (POSITION/NORMAL/TANGENT/TEXCOORD,
-    //     stride 24) because it does not need one.
-    //
-    // shadow::Device::DrawInstancedIndexedPrimitive_Custom @0x827ED808 is the console leaf:
-    //     count = (muNumVertices + 1) * N / mu8InstanceCount;
-    //     if (N == mu8InstanceCount) count = muNumVertices;   // drop the final pad index
-    //     D3DDevice_DrawIndexedVertices(dev, prim, base, StartIndex, count);
-    // -- one draw over the FIRST N slices. (The `-1` in the all-instances case is not a
-    // quirk: the last element of the last slice is a 0 pad where every other slice ends in a
-    // 0xFFFF strip reset. Measured, in every mesh.)
-    //
-    // ⛔ THE PC PATH CANNOT REPLAY THAT. D3D9 has no manual vertex fetch, so index values
-    // 4096.. are simply out of range of a 240-vertex buffer -- which is precisely the
-    // "distorted spike through the roof" this build has been drawing: submitting the full
-    // muNumVertices range means 4/5 of the index values point outside the vertex buffer
-    // altogether. It was never "5x too many indices".
-    //
-    // So a single-instance draw takes SLICE 0 -- the console's own N == 1 arithmetic, and the
-    // only slice whose index values are in range. DrawRenderable::Interpret already unrolls an
-    // N-instance object command into N single-instance mesh commands each carrying instance
-    // i's own world matrix, and every slice is byte-identical geometry, so slice 0 under
-    // instance i's WVP is exactly the copy the console's shader would have produced.
-    // ⛔ Do NOT give unrolled draw i the StartIndex of slice i: that is what feeds the
-    // out-of-range values and reproduces the spike.
-    //
-    // DELETE the slice when a real instanced draw path (manual fetch / SV_InstanceID) exists
-    // on the D3D9 back end.
-    // ========================================================================
-    // FLAG PC-platform leaf: retain the original one-command instance group.
-    // Unsupported native shader/stream combinations still draw every instance
-    // with its original per-instance constants and the same first index slice.
-    void Device::DrawInstancedMeshPC(const RenderableMesh* lpMesh,
-        const renderengine::WorldInstanceDrawPC* lpInstances,
-        const CgsGraphics::MaterialTechniqueView* lpTechnique,
-        void* const* lppConstScratch, bool lbZOnly)
-    {
-        // Original DrawInstancedIndexedPrimitive_Custom827ED808 bounds.
-        if (lpInstances->muCount == 0) return;
-        CGS_ASSERT(lpInstances->muCount >= 1, "luInstanceCount >= 1");
-        CGS_ASSERT(lpInstances->muCount <= lpMesh->mu8InstanceCount, "luInstanceCount <= luInstanceMax");
-        if (lpInstances->muCount > lpMesh->mu8InstanceCount) return;
-        const auto* lpTech = reinterpret_cast<const u8*>(lpTechnique);
-        u32 luShaderTechnique;
-        std::memcpy(&luShaderTechnique, lpTech, sizeof(luShaderTechnique));
-        const auto* lpShader = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
-        const auto* lpVertexBlock = lpShader ? reinterpret_cast<const u32*>(lpShader + 0x1C) : nullptr;
-        const auto* lpPixelBlock = lpShader ? reinterpret_cast<const u32*>(lpShader + 0x50) : nullptr;
-        bool lbPixelInstances = false;
-        if (!lbZOnly && lpPixelBlock && lpPixelBlock[0])
-        {
-            const auto* lpSlots = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpPixelBlock[1]));
-            for (u32 li = 0; lpSlots && li < lpPixelBlock[0]; ++li)
-                if (lpSlots[li] == 0 || lpSlots[li] == 6 || lpSlots[li] == 7) lbPixelInstances = true;
-        }
-        const ::DrawIndexedParameters& lrDraw = lpMesh->mDrawIndexedParameters;
-        const u32 luTotal = lrDraw.muNumVertices + 1u;
-        if (!lbPixelInstances && lpMesh->mu8InstanceCount > 1
-            && luTotal % lpMesh->mu8InstanceCount == 0
-            && renderengine::WorldDraw_TryInstancedPC(lrDraw.mePrimitiveType,
-                lrDraw.muBaseVertexIndex, lrDraw.muMinVertexIndex,
-                luTotal / lpMesh->mu8InstanceCount, *lpInstances)) return;
-
-        const auto lApply = [](const u32* lpBlock, void* const* lpSources,
-            const float* lpWorld, const float* lpIndex, bool lbPixel)
-        {
-            if (!lpBlock) return;
-            const auto* lpSlots = reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpBlock[1]));
-            const auto* lpHandles = reinterpret_cast<const u8*>(static_cast<uintptr_t>(lpBlock[3]));
-            if (!lpSlots || !lpHandles || !lpSources) return;
-            for (u32 li = 0; li < lpBlock[0]; ++li)
-            {
-                const void* lpSource = lpSources[li];
-                if (lpSlots[li] == 0 || lpSlots[li] == 6) lpSource = lpWorld;
-                else if (lpSlots[li] == 7 && lpIndex) lpSource = lpIndex;
-                if (lpSource && lpHandles[li * 4 + 3])
-                    renderengine::WorldShaderConstants_Set(lbPixel, lpHandles[li * 4],
-                        lpSource, lpHandles[li * 4 + 3]);
-            }
-        };
-        for (u32 li = 0; li < lpInstances->muCount; ++li)
-        {
-            const float* lpWorld = lpInstances->Matrix(li);
-            CGS_ASSERT(lpWorld, "Invalid instancing matrix index");
-            if (!lpWorld) continue;
-            const float* lpIndex = lpInstances->mpIndices ? lpInstances->mpIndices + li * 4 : nullptr;
-            lApply(lpVertexBlock, lppConstScratch, lpWorld, lpIndex, false);
-            if (!lbZOnly && lpVertexBlock && lppConstScratch)
-                lApply(lpPixelBlock, lppConstScratch + lpVertexBlock[0], lpWorld, lpIndex, true);
-            float laWvp[16];
-            renderengine::WorldInstanceWvpPC(lpWorld, lpInstances->mpViewProjection, laWvp);
-            SetObjectTransformPC(laWvp);
-            DrawIndexedMeshPC(lpMesh);
-        }
-    }
-
-    void Device::DrawIndexedMeshPC(const RenderableMesh* lpMesh)
-    {
-        // NOTE the global qualification: shadow::Device declares its OWN nested
-        // DrawIndexedParameters (shadowingdevice.h:16) which would shadow the mesh's.
-        const ::DrawIndexedParameters& lrDip = lpMesh->mDrawIndexedParameters;
-
-        u32 luStartIndex = lrDip.muMinVertexIndex;   // the console's StartIndex
-        u32 luIndexCount = lrDip.muNumVertices;      // the console's IndexCount
-
-        const u32 luInstanceMax = lpMesh->mu8InstanceCount;
-        if (luInstanceMax > 1u)
-        {
-            const u32 luTotal = lrDip.muNumVertices + 1u;
-            if ((luTotal % luInstanceMax) == 0u)
-            {
-                luIndexCount = luTotal / luInstanceMax;   // (muNumVertices + 1) * 1 / max
-            }
-            else
-            {
-                // The console's own arithmetic does not divide -- this mesh is not drawable
-                // by the instanced path at all. Report it once and draw the raw range rather
-                // than invent a slice length.
-                static bool sbLoggedRagged = false;
-                if (!sbLoggedRagged && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbLoggedRagged = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[instancing] mesh with mu8InstanceCount " << luInstanceMax
-                        << " but (muNumVertices + 1) = " << luTotal
-                        << " does not divide -- drawing the unsliced range"
-                           " [FLAG PC data gap]\n";
-                }
-            }
-        }
-
-        if (luInstanceMax > 1u)
-            renderengine::WorldDraw_MarkInstanced();   // [DIAG wheels]
-
-        renderengine::WorldDraw_IndexedUP(lrDip.mePrimitiveType,
-                                          lrDip.muBaseVertexIndex,
-                                          luStartIndex,
-                                          luIndexCount);
-    }
 }

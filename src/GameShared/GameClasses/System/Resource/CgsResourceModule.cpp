@@ -6,7 +6,6 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // receiver-queue forward target
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // ResolveResourceType (bundle FixUp resolver)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
-#include "pc/gcm/renderengine/FrameProfile.h"
 #include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule: native module lifetime and staged request shuttles.
@@ -77,7 +76,6 @@ namespace CgsResource
         switch (meReleaseStage)
         {
         case E_RELEASE_START:
-            mBundleLoaderModule.CancelStreamPC();
             // fall through
         case E_RELEASE_POOL:
             meReleaseStage = E_RELEASE_POOL;
@@ -135,9 +133,6 @@ namespace CgsResource
     // ARTIST828EC6B0, with retirement of native pending-response allocations.
     void ResourceModule::Destruct()
     {
-        // FLAG PC-platform leaf: temporary native response records are owned
-        // by this shuttle. Release has closed the stream slots before teardown.
-        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
         const s32 liCount = mPendingFileResponses.Get(lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
         for (s32 li = 0; li < liCount; ++li)
         {
@@ -355,30 +350,6 @@ namespace CgsResource
                 Events::OpenReadStreamResponse* lpResponse =
                     static_cast<Events::OpenReadStreamResponse*>(
                         lpPending->mpResponse);
-                // FLAG PC-platform leaf: finish a failed open only after its
-                // stream slot has closed. The invalid response handle carries
-                // failure without changing the original response record shape.
-                if (lpPending->muFileId != 0xFFFFFFFFu)
-                {
-                    lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
-                }
-                else if (mFileSystem.HasReadStreamFailedPC(lpResponse->GetStream()))
-                {
-                    const auto lStream = lpResponse->GetStream();
-                    if (lStream.IsValid())
-                    {
-                        lpPending->muFileId = mFileSystem.GetReadStreamIndex(lStream);
-                        mFileSystem.CloseReadStream(lStream);
-                        lbComplete = mFileSystem.IsReadStreamClosed(lpPending->muFileId);
-                    }
-                    else
-                        lbComplete = true;
-                    CgsFileSystem::ReadStream lInvalid;
-                    lInvalid.Construct(nullptr);
-                    lpResponse->Construct(lpResponse->GetUser(), lpResponse->GetEventId(), lInvalid);
-                }
-                else
-                    lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
                 lpUser = lpResponse->GetUser();
                 liResponseSize = sizeof(*lpResponse);
             }
@@ -461,10 +432,6 @@ namespace CgsResource
         auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
         if (!lpResIn) return false;
 
-        // FLAG PC-platform leaf: the current module adapter receives no IO stacks.
-        // Reuse its serialized scratch buffers; Construct resets queue metadata,
-        // not the backing event arrays. Stage ordering is ARTIST82907948.
-        static PoolIO::InputBuffer s_poolIn;
         static PoolIO::OutputBuffer s_poolOut;
         static CgsMemory::MemoryIO::InputBuffer s_memIn;
         static CgsMemory::MemoryIO::OutputBuffer s_memOut;
@@ -484,7 +451,6 @@ namespace CgsResource
         lpResIn->LockForWrite(); lpResIn->GetResourceQueue()->Clear(); lpResIn->UnlockForWrite();
 
         {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_LOAD);
             mBundleLoaderModule.Update(&s_loaderIn, &s_loaderOut);
             s_loaderOut.LockForRead();
             ProcessBundleLoaderStreamRequests(&s_loaderOut);
@@ -496,7 +462,6 @@ namespace CgsResource
         s_loaderOut.UnlockForRead(); s_poolIn.UnlockForWrite();
         bool lbBusy;
         {
-            renderengine::FrameProfile::CycleScope lProfile(renderengine::FrameProfile::RESOURCE_POOL);
             lbBusy = mPoolModule.Update(&s_poolIn, &s_poolOut);
         }
         // Retain pool replies for the NEXT loader update. Its current source
@@ -511,7 +476,6 @@ namespace CgsResource
         ProcessPoolResourceRequests(&s_memIn, &s_poolOut);
         s_poolOut.UnlockForRead(); s_memIn.UnlockForWrite();
         {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_MEMORY);
             mMemoryModule.Update(nullptr, nullptr, &s_memIn, &s_memOut);
         }
         s_memOut.LockForRead(); ProcessMemoryResponses(&s_memOut); s_memOut.UnlockForRead();

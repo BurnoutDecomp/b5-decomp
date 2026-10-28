@@ -1,28 +1,19 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
-#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalPC.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // CgsFileSystem::FileSystem - see the header. The async device engine bring-up lives in
 // EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
 namespace CgsFileSystem
 {
-    // Marked PC sentinel allocator. The X360 passed the GameData allocator to
-    // InitializeDeviceManager (which only stores it; DeviceManager::operator new mallocs on PC),
-    // so any non-null value satisfies the "Allocator required" assert. Routing the manager through
-    // the real GameData allocator is deferred.
-    static char gcPcAllocatorSentinel;
 
     // The single PC physical device. A process-static (rather than a FileSystem member) so its
     // lifetime spans the whole run and the worker thread that references it never dangles, and so
     // a lazy bring-up from the bundle loader (before the FileSystem object prepares) has a device
     // to register.
-    static DevicePhysicalPC gPhysicalDevice;
 
     void EnsureDeviceManagerUp()
     {
-        if (!DeviceManager::GetIfInitialized())
-            DeviceManager::InitializeDeviceManager(&gcPcAllocatorSentinel);
 
         DeviceManager* lpManager = GetDeviceManager();
         if (lpManager && !lpManager->FindDevice("p_dvd"))
@@ -179,17 +170,6 @@ namespace CgsFileSystem
                StreamDeviceDiskRead::E_STATUS_OPEN;
     }
 
-    // FLAG PC-platform leaf: ARTIST leaves failed opens closed (OnOpen82900740)
-    // while its resource poll waits only for OPEN. Preserve native load-failure
-    // replies rather than retaining a pending record and stream buffer forever.
-    bool FileSystem::HasReadStreamFailedPC(ReadStream lStream) const
-    {
-        if (!lStream.mpStreamDevice) return true;
-        const auto leStatus = GetEffectiveStreamStatus(lStream.mpStreamDevice);
-        return leStatus == StreamDeviceDiskRead::E_STATUS_CLOSED
-            || leStatus == StreamDeviceDiskRead::E_STATUS_ERROR;
-    }
-
     // @0x828D6708. Receives the slot index; resolves it to the stream engine, then tests CLOSED.
     bool FileSystem::IsReadStreamClosed(s32 liIndex)
     {
@@ -220,16 +200,6 @@ namespace CgsFileSystem
 
     bool FileSystem::Release()
     {
-        // FLAG PC-platform leaf: the native async device retains pointers into
-        // these rings. Request close once, and let callbacks finish before the
-        // owning resource arena can be retired.
-        if (!mbReleasing)
-        {
-            for (auto& lrStream : maReadStreams)
-                if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
-                    lrStream.Close();
-            mbReleasing = true;
-        }
         for (const auto& lrStream : maReadStreams)
             if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
                 return false;

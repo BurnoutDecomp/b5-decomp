@@ -2,7 +2,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetTransform/SetProgram/SetTextureState/SetTexture/RenderFromStaticVertexBuffer)
-#include "pc/gcm/renderengine/renderstates.h"        // renderengine::TextureState (Initialize + GetResourceDescriptor)
 #include "rw/rwcore_structs.h"                        // rw::ResourceAllocatorRegistry::GetDefaultAllocator + rw::Resource
 
 #include <cmath>   // std::fabs
@@ -118,95 +117,6 @@ namespace CgsGui
             mabUnusedAptStrings[luIndex]    = 1;
             maacAptStringChars[luIndex][0]  = 0;
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Construct - PS3 0x5C472C. The parametrised render-state bring-up AptAux::Construct
-    // delegates to (called on the AptAux's embedded handler at a1+0x420). It seeds every field
-    // the render-callback family + the text path read, builds the 256-slot AptString pool against
-    // the alternate-colour table, and brings both per-shape texture-state caches up empty.
-    //
-    // The guest's body is heavily VMX (it computes the per-batch transform reciprocals + the
-    // aspect-folded stage-resolution vector with a vperm/vmaddfp chain off the constant
-    // 0x44A0000044340000 == {1280.0f, 720.0f}). The OBSERVABLE outputs the in-scope methods read
-    // are the two stage-resolution lanes (GetStageHeight == mAptResolution.x, GetStageWidth ==
-    // mAptResolution.y) and the seeded pointers; those are reproduced here. The intermediate
-    // reciprocal vectors the transform uses are recomputed at draw time by the Im2d path, so the
-    // SIMD scratch is not retained. FLAG PC-platform leaf (VMX bit-exactness): the stage-resolution aspect-fold is reconstructed from
-    // the {1280,720} base + the display aspect (height lane 720 exact; width lane == height*aspect);
-    // the bit-exact VMX reciprocal-estimate sequence that produces the width is the platform leaf.
-    // -------------------------------------------------------------------------
-    void AptRenderHandler::Construct(::CgsGuiModuleIO::ImRendererSet* lpImRenderers,
-                                     CgsGraphics::TextRenderer* lpTextRenderer,
-                                     CgsLanguage::LanguageManager* lpLanguageManager,
-                                     const FontCollection* lpFonts,
-                                     f32 lfAspectRatio,
-                                     const rw::RGBA* lpAlternateTextColours,
-                                     s32 liNumAlternateColours)
-    {
-        // ---- the renderer set + glyph batcher + language manager + font collection ----------
-        // (guest _R27[27147]/[27148]/[24944]/*_R27). The committed mpImRenderers is the AptIm2d
-        // render-set model; the incoming ImRendererSet's leading slot is the 2D renderer base, so
-        // the set pointer is held directly (re-typed to the committed set model).
-        mpImRenderers     = reinterpret_cast<AptImRendererSet*>(lpImRenderers);
-        mpTextRenderer    = lpTextRenderer;
-        mpLanguageManager = reinterpret_cast<const void*>(lpLanguageManager);
-        mpFontCollection  = reinterpret_cast<const void*>(lpFonts);
-
-        // ---- the stage resolution (guest this+80) -------------------------------------------
-        // Base stage is 1280x720 (the 0x44A0000044340000 constant: 1280.0 / 720.0). The two lanes
-        // the callbacks read are mAptResolution.x == stage HEIGHT (720, fixed) and mAptResolution.y
-        // == stage WIDTH, derived as height * the DISPLAY aspect ratio (square-pixel correction): a
-        // 16:9 display passes aspect 1.7777..., giving width 720 * 1.7777 == 1280 (the base width);
-        // a wider/narrower display rescales the width about that base. lfAspectRatio is the true
-        // display W/H the caller forwards (NOT 1.0 for 16:9).
-        // FLAG PC-platform leaf (VMX bit-exactness): the aspect-fold SEMANTICS (width = height * displayAspect) is reconstructed from the
-        // {1280,720} base; the guest computes it with a bit-exact VMX reciprocal-estimate chain
-        // (vrefp/vnmsubfp/vmaddfp) that is the platform leaf and is not reproduced bit-for-bit. The
-        // height lane (720, read by GetStageHeight) is exact; the width lane tracks the passed aspect.
-        const f32 lfBaseWidth  = 1280.0f;
-        const f32 lfBaseHeight = 720.0f;
-        mAptResolution.SetZero();
-        mAptResolution.x = lfBaseHeight;                                  // stage HEIGHT lane (exact)
-        mAptResolution.y = (lfAspectRatio > 0.0f)
-                               ? (lfBaseHeight * lfAspectRatio)          // width = height * displayAspect
-                               : lfBaseWidth;                            // (guard: degenerate aspect)
-
-        // ---- the text-layout scalar inputs (guest stores 1.0 @ +0x1A828, 0 @ +0x1A824) -------
-        miTextEffect    = 0;       // CgsAptString::E_EFFECT_NONE
-        mfFontSizeScale = 1.0f;
-
-        // ---- the per-shape texture-state caches start empty ---------------------------------
-        mWrapTextureCache.Init();
-        mClampTextureCache.Init();
-
-        // ---- the per-batch transform starts cleared -----------------------------------------
-        mVertexTransform.mOriginXYZ.SetZero();
-        mVertexTransform.mRightUp.SetZero();
-        mVertexTransform.mColourShift.SetZero();
-        mVertexTransform.mColourScale.SetZero();
-
-        // ---- the stage clear colour starts cleared ------------------------------------------
-        mBackgroundColour.m_rgba = 0;
-
-        // ---- build the 256-slot AptString pool against the alt-colour table -----------------
-        // ARTIST 0x82854430 constructs every text object with the shared colour table.
-        mpAlternateTextColours = lpAlternateTextColours;
-        miNumAlternateColours  = liNumAlternateColours;
-        for (u32 luIndex = 0; luIndex < KU_NUM_APT_STRINGS; ++luIndex)
-        {
-            mabUnusedAptStrings[luIndex]    = 1;
-            maAptStrings[luIndex].Construct(
-                reinterpret_cast<const ::RGBA*>(lpAlternateTextColours), liNumAlternateColours);
-            maacAptStringChars[luIndex][0]  = 0;   // x64: inline per-slot text storage (header note)
-        }
-
-        // ---- the white fallback texture (guest _R27[32] = mgStateLibrary.mpTexture_White) ----
-        // The Im-renderer state-library global is not modelled in this slice, so the white texture
-        // is supplied by SetWhiteTexture during boot rather than pulled here. Start it null.
-        // FLAG: white-texture seed deferred to SetWhiteTexture (the state-library global is out of
-        // this slice's scope).
-        mpWhiteTexture = nullptr;
     }
 
     // -------------------------------------------------------------------------
@@ -377,18 +287,6 @@ namespace CgsGui
         // Bind the shader program for this batch (sub_4F6DB4 == ImRenderBuffer<V>::SetProgram).
         lpBuffer->SetProgram(static_cast<s8>(liShaderIndex));
 
-        // Walk the geometry's meshes. mppGeometryMeshes is a pointer table (one entry per mesh);
-        // each entry points at a GuiGeometryMesh header {miMeshType, miTextureMode, miTextureId/
-        // mpTexture, mpTexturePtr, muNumberOfVerticies, mppVerticies}. (The console reads the table
-        // as 32-bit words; on the x64 host the resource fix-up has already rebased them into real
-        // pointers, so they are read through the typed table.)
-        // The mesh pointer table. FLAG PC-platform leaf (.apt native-8 blob): the table is 8-byte-strided (each entry a
-        // GuiGeometryPtrTableEntry -- a rebased pointer in the low 8 bytes), and mppGeometryMeshes is an
-        // 8-byte field (rebased offset->pointer by AptFixupGeometryFileNative8 at resolve time). Indexed
-        // as uintptr_t entries -- NOT the console's 4-byte u32 table.
-        const uintptr_t* lpMeshTable =
-            reinterpret_cast<const uintptr_t*>(lpGeometry->mppGeometryMeshes);
-
         // The per-mesh primitive topology (X360 v37 @ [sp+50h]). The guest initialises it to 4
         // (0x82859548: `li r10, 4; stw r10, var_250`) BEFORE the loop and carries it across
         // iterations, only restoring it where the meshtype dispatch stores -- so a meshtype that
@@ -432,10 +330,6 @@ namespace CgsGui
             //   >= 3 -> invalid. (X360 routes mode 1/2 through SetState(TextureState*), mode 0
             //   through SetTexture(white).)
             const s32 liTextureMode = lpMesh->miTextureMode;
-            // FLAG PC-platform leaf (.apt native-8 blob): mpTexture is the 8-byte GuiTexture pointer (mesh+0x10), already
-            // resolved by the converter (not the console's 4-byte id at mesh+0xC). The texture-state
-            // cache is keyed by this value (id/raster key); carried as uintptr_t.
-            const uintptr_t luTextureId = lpMesh->mpTexture;
 
             if (liTextureMode == 1 || liTextureMode == 2)
             {
@@ -462,14 +356,6 @@ namespace CgsGui
                 CGS_ASSERT(liTextureMode < 3, "Unexpected texturemode in AptRenderHandler::Render");
             }
 
-            // Draw the mesh's static vertex run (the vertices already live in the resource's vertex
-            // buffer, so RenderFromStaticVertexBuffer points straight at them -- no copy). FLAG
-            // PC-platform leaf (.apt native-8 blob): the vertex pointer TABLE (mesh+0x20, mppVerticies, now a live pointer via
-            // AptFixupGeometryFileNative8) is 8-byte-strided; its FIRST entry (rebased) is the contiguous
-            // vertex run. muNumberOfVerticies (mesh+0x18) is the count. The vertex format is the 20-byte
-            // Basic2dColouredTexturedVertex (pos8 + rgba8_4 + uv8), matching the native run stride.
-            const uintptr_t* lppVertexTable =
-                reinterpret_cast<const uintptr_t*>(lpMesh->mppVerticies);
             const CgsGraphics::Basic2dColouredTexturedVertex* lpVertices =
                 reinterpret_cast<const CgsGraphics::Basic2dColouredTexturedVertex*>(lppVertexTable[0]);
             lpBuffer->RenderFromStaticVertexBuffer(lePrimitiveType, lpVertices,

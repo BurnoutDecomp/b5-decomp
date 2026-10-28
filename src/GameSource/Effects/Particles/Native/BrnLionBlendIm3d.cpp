@@ -32,7 +32,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -43,13 +42,9 @@
 // BrnIm3dSkidsRenderer.cpp declares the skid pair.
 namespace renderengine
 {
-    extern const u8  gauLionBlendVertexProgramPC[];
     extern const u32 guLionBlendVertexProgramPCSize;
-    extern const u8  gauLionBlendPixelProgramPC[];
     extern const u32 guLionBlendPixelProgramPCSize;
-    extern const u8  gauLionBlendZFadeVertexProgramPC[];
     extern const u32 guLionBlendZFadeVertexProgramPCSize;
-    extern const u8  gauLionBlendZFadePixelProgramPC[];
     extern const u32 guLionBlendZFadePixelProgramPCSize;
 }
 
@@ -112,7 +107,6 @@ namespace
     // the kind: those three addresses are shadow::Device's OWN static members, mpVertexProgramShadow
     // / mpVertexDescriptor / mbVertexProgramStateDirty, all three inside the off_83010950 block
     // (shadowingdevice.h:234/:242/:245). CgsIm3dSkyDome.cpp made exactly this mistake and the sky
-    // PC leaf already recorded the correction and the binder for it
     // (ImmediateMode.cpp -- "This is the missing binder").
     //
     // WHAT IT COST, MEASURED. Duplicating them meant this renderer compared against ITS copy and
@@ -179,50 +173,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
-    // ⭐⭐ THE SAME MISSING ARM THE SKID PATH HAD, AND MEASURED THE SAME WAY. The console route
-    // below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run on the PC
-    // backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts, whose PC
-    // stub returns 0 WITHOUT writing *lpParts, then read that uninitialised
-    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
-    // into the u32 muFunction to Xbox2CreateConstantTable. CgsIm3dSkyDome.cpp and
-    // BrnSkidVertex.cpp both carry this adopt path; this TU was left on the console route.
-    //
-    // MEASURED, on the first run that reached the new Im3dBlend::Construct: the descriptor built
-    // fine ("[ImLeaf] vertex descriptor built: elements=3 stride0=36 decl=ok") but NO
-    // "[ImLeaf] adopted PC program buffer" line followed, and Construct reported
-    //     [lionblend] p0{wvp=0 cs=0} p1{wvp=0 cs=0 off=0 scl=0 dconv=0 dfade=0}
-    // -- all eight handles with mu8RegisterCount == 0. The PC leaf's BeginShaderStates routes a
-    // zero-count handle to a DISCARD row, so worldViewProj and colourScale would never have been
-    // uploaded and every particle would have been transformed by whatever c0..c3 the previous
-    // draw left behind. LionBlendProgramsPC.cpp's four images are not at fault -- their
-    // tables declare 2 / 1 / 4 / 4 variables. Nothing was adopting them.
-    //
-    // ⭐ AND MEASURED AGAIN WITH THE ARM IN, same session, same load:
-    //     [ImLeaf] adopted PC program buffer: stage=0 bytes=464 microcode=388 vars=2
-    //     [ImLeaf] adopted PC program buffer: stage=1 bytes=304 microcode=260 vars=1
-    //     [ImLeaf] adopted PC program buffer: stage=0 bytes=640 microcode=532 vars=4
-    //     [ImLeaf] adopted PC program buffer: stage=1 bytes=736 microcode=604 vars=4
-    //     [lionblend] Im3dBlend::Construct: p0{wvp=4 cs=1} p1{wvp=4 cs=1 off=1 scl=1 dconv=1 dfade=1}
-    // Four programs adopted at exactly the emitted sizes, and all EIGHT handles resolved --
-    // worldViewProj four registers wide (the float4x4) and the other six one each.
-    //
-    // A non-PC binary returns null here and falls through to the console path unchanged.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -309,8 +259,6 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
     // The shadow device performs the identical compare-and-dirty on its own field.
     shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
-
-    shadow::DeviceSetPixelProgram(lpPixelProgram);
 
     // Shadow this renderer's vertex descriptor (X360 reads this+0x10 = mpVertexDescriptor); mark the
     // vertex-program state dirty when it changed.
@@ -470,7 +418,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;
@@ -620,20 +567,10 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
     memcpy(mauTransform, KAF_IDENTITY, sizeof(mauTransform));
 
     // asm words 13..44 -- the two program pairs, in slot order.
-    const void* lapVertexProgramBinary[2] =
-    {
-        renderengine::gauLionBlendVertexProgramPC,       // slot 0  <- unk_8200DD58
-        renderengine::gauLionBlendZFadeVertexProgramPC,  // slot 1  <- unk_8200E010
-    };
     const u32 lauVertexProgramSize[2] =
     {
         renderengine::guLionBlendVertexProgramPCSize,       // console 0x1A4
         renderengine::guLionBlendZFadeVertexProgramPCSize,  // console 0x220
-    };
-    const void* lapPixelProgramBinary[2] =
-    {
-        renderengine::gauLionBlendPixelProgramPC,        // slot 0  <- unk_8200DF00
-        renderengine::gauLionBlendZFadePixelProgramPC,   // slot 1  <- unk_8200E230
     };
     const u32 lauPixelProgramSize[2] =
     {
@@ -699,7 +636,6 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
     }
 
     // [DIAG] DID THE EIGHT CONSTANTS RESOLVE? mu8RegisterCount == 0 is GetVariableHandleByName's
-    // "not found" answer, and the PC leaf's BeginShaderStates routes a zero-count handle to a
     // DISCARD row -- so an unresolved worldViewProj means BeginRendering writes the matrix into a
     // bin and every particle transforms by whatever c0..c3 happen to hold. That is invisible both
     // in the log and in the picture, which is why it is worth one line. Same shape, and the same

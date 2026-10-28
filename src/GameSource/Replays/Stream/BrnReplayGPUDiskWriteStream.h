@@ -182,10 +182,7 @@ namespace BrnReplays
         CgsMemory::Relocator   mRelocator;                            // +0x2180
         CgsMemory::RelocateOp  maRelocatorOps[KI_NUM_GLOBAL_BLOCKS];  // +0x2580
 
-        // FLAG PC-platform leaf: these calls link to native ntdll.lib, whose
-        // Win64 CRITICAL_SECTION occupies 40 bytes and needs pointer alignment.
-        // The CPP checks the host type; the console's 32-byte storage is too small.
-        alignas(void*) u8 maLock[40];       // X360 +0x3180
+       // X360 +0x3180
 
         char        macFileName[256];      // +0x31A0  the stream file name (for asserts)
         s32         maGlobalBlockFreeList[KI_NUM_GLOBAL_BLOCKS]; // +0x32A0

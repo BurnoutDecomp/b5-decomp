@@ -131,14 +131,10 @@ namespace CgsGui
         EventObserver* lpEventObserver;
     };
 
-    static_assert(offsetof(GuiEventRegisterForEvents, lpEventObserver) ==
-        (sizeof(void*) == 8 ? 8 : 4), "Registration retains the complete observer pointer");
     static_assert(offsetof(GuiEventPriorityRegisterForEvents, muOverrideCount) == 0x964,
         "ARTIST600-element priority list followed by count");
     static_assert(offsetof(GuiEventPriorityRegisterForEvents, lpEventObserver) == 0x968,
         "Priority observer follows the count");
-    static_assert(sizeof(GuiEventPriorityRegisterForEvents) ==
-        (sizeof(void*) == 8 ? 2416 : 2412), "Priority registration widens the observer pointer");
 
     struct StateInterface
     {

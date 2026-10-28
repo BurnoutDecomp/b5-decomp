@@ -57,7 +57,6 @@ static const char* const KAC_PROGMGR_FILE =
 // TWO significant figures, which is why shipped stunt-race targets are values like 34,000.
 static const f32 KF_STUNT_TARGET_SIGNIFICANT_FIGURES = 2.0f;
 
-
 // ------------------------------------------------------------------------------------
 // ProgressionManager::ProgressionManager  @ 0x827DEA50  (EXECUTED in the boot trace)
 //
@@ -556,17 +555,6 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
         // dump. Land it with that drive behind it. [[gates-are-stale-not-dead]]
         if (CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank(0): profile "
-                   "event list populated -- "
-                << mProfile.GetEventCount()
-                << " records from " << luJunctionCount
-                << " authored junctions; starting garage now holds "
-                << mProfile.GetCarCount()
-                << " cars. STILL PARKED on this path: ONLY the "
-                   "starting-body-shop drive-thru registration (CgsID 0x6C72D -> "
-                   "mBodyShopsDriveThruSet, @0x8239DF48), which is UNBLOCKED but unverified -- "
-                   "see the note at this call site.\n";
         }
     }
     else
@@ -1566,7 +1554,6 @@ void ProgressionManager::OnLoadProfile()
         mProfile.SetSeenEliteCompletionSequence();   // Profile::SetSeenEliteCompletionSequence @0x8235A150 is this store
     }
 }
-
 
 // --------------------------------------------------------------------------------------------
 // GetCarColourAndPalette (X360 0x8237C0D8).

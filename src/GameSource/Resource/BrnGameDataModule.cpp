@@ -36,15 +36,10 @@
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
 // bring-up (CreateBanks/CreatePools/CreateAllocators), the DLC/AttribSys/HUD/popup prepare
 // stages, Construct, Update, Destruct and the ProcessXxxRequest handlers are DEFERRED.
-#include "pc/gcm/renderengine/FrameProfile.h"
-
 namespace BrnResource
 {
     namespace
     {
-        // FLAG PC-platform leaf: this is the existing root allocation granule,
-        // shared by its allocation owner and the typed bank-capacity projection.
-        const u32 KU_GAMEDATA_ROOT_BLOCK_SIZE = 0x00010000u;
 
         void ApplyHostPoolHeapAllowance(CgsResource::Events::CreatePoolRequest& lrRequest)
         {
@@ -81,52 +76,6 @@ namespace BrnResource
             return lpParams->mauBankSize[0] / lpParams->mauBankBlocks[0];
         }
 
-        // FLAG PC-platform leaf: preserve every original bank budget and block
-        // size, adding only the increased allocations caused by native-pointer
-        // management storage and the retained pool-5 heap allowance. The actual
-        // original parent ids propagate each child's growth to its owner.
-        u32 GetHostMainBankSize(const CgsMemory::MemoryMap& lrMap,
-            const CgsMemory::MemoryBank::Params& lrParams)
-        {
-            const u32 luBlockSize = GetMapMainBlockSize(lrMap, lrParams.mnBankId);
-            u64 luGrowth = 0;
-            for (s32 liPool = 0; liPool < lrMap.GetNumPools(); ++liPool)
-            {
-                const CgsResource::Events::CreatePoolRequest* lpRaw = lrMap.GetPool(liPool)->GetRequest();
-                if (lpRaw->miParentBankId != lrParams.mnBankId)
-                    continue;
-                rw::ResourceDescriptor lConsoleDescriptor;
-                CgsResource::PoolModule::GetRequiredResourceDescriptor(lpRaw, &lConsoleDescriptor);
-                CgsResource::Events::CreatePoolRequest lHostRequest = *lpRaw;
-                ApplyHostPoolHeapAllowance(lHostRequest);
-                CgsResource::Pool::InitOptions lHostOptions;
-                CgsResource::PoolModule::ConvertPoolRequestOptions(&lHostRequest, &lHostOptions);
-                const u64 luHostRequired = static_cast<u64>(lHostOptions.maHeapInfo[0].muHeapMemorySize)
-                    + CgsResource::Pool::GetOverheadMemoryRequired(&lHostOptions);
-                const u64 luOriginalAllocation = RoundMemoryBankSize(
-                    lConsoleDescriptor.m_baseResourceDescriptors[0].m_size, luBlockSize);
-                const u64 luHostAllocation = RoundMemoryBankSize(luHostRequired, luBlockSize);
-                if (luHostAllocation > luOriginalAllocation)
-                    luGrowth += luHostAllocation - luOriginalAllocation;
-            }
-            for (s32 liBank = 0; liBank < lrMap.GetNumBanks(); ++liBank)
-            {
-                const CgsMemory::MemoryBank::Params& lrChild = *lrMap.GetBank(liBank)->GetParams();
-                if (lrChild.mnParentBankId == lrParams.mnBankId)
-                    luGrowth += GetHostMainBankSize(lrMap, lrChild) - lrChild.mauBankSize[0];
-            }
-            const u32 luParentBlockSize = GetMapMainBlockSize(lrMap, lrParams.mnParentBankId);
-            const u64 luCommonGranule = std::lcm(static_cast<u64>(luBlockSize),
-                static_cast<u64>(luParentBlockSize));
-            const u64 luRequired = RoundMemoryBankSize(
-                static_cast<u64>(lrParams.mauBankSize[0]) + luGrowth, luCommonGranule);
-            CGS_ASSERT(luRequired <= 0xFFFFFFFFull, "Native memory bank size exceeds its size field");
-            CGS_ASSERT(luRequired / luBlockSize <= 0xFFFFu,
-                "Native memory bank exceeds its block-count field");
-            CGS_ASSERT(luRequired / luParentBlockSize <= 0xFFFFu,
-                "Native memory bank exceeds its parent allocation-count field");
-            return static_cast<u32>(luRequired);
-        }
     }
 
     // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
@@ -135,43 +84,6 @@ namespace BrnResource
     GameDataModule::GameDataModule()
     {
         mbIsNewModule = true;
-    }
-
-    // @ 0x82673F38 - resumable bring-up: base module, then the ResourceModule (memory/pool/
-    // bundle/filesystem), then carve banks/pools/allocators. Re-enters at the current stage if
-    // a sub-step is not yet ready. (The X360 then runs DLC stages 16-18+ and the AttribSys/HUD/
-    // popup prepares - DEFERRED here; the machine completes after the allocator stage.)
-    // FLAG PC-platform leaf: validate the existing native prepare/publication owner.
-    // The caller holds this output's read lock. No allocator is created or substituted.
-    const GameDataIO::AllocatorList* GameDataModule::GetPreparedRendererAllocatorsPC(
-        const GameDataIO::OutputBuffer* lpOutput) const
-    {
-        if (!lpOutput)
-            return nullptr;
-        const GameDataIO::AllocatorList* const lpPublished = lpOutput->GetAllocatorList();
-        const s32 liSlot = mAllocatorList.maiAllocatorMap[31];
-        const s32 liSlotCount = static_cast<s32>(
-            sizeof(mAllocatorList.mapRWGeneralAllocators) /
-            sizeof(mAllocatorList.mapRWGeneralAllocators[0]));
-        const bool lbValid = mePrepareStage == E_PREPARE_DONE
-            && lpPublished == &mAllocatorList
-            && liSlot >= 0 && liSlot < liSlotCount
-            && mAllocatorList.maeAllocatorType[31] == CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP
-            && mAllocatorList.mapRWGeneralAllocators[liSlot] != nullptr
-            && mAllocatorList.mapRWGeneralAllocators[liSlot] == mapGeneratedRWGeneralAllocators[liSlot];
-        if (std::getenv("BRN_RENDER_PREPARE_DIAG"))
-        {
-            char lacLine[384];
-            std::snprintf(lacLine, sizeof(lacLine),
-                "[renderer-prepare] GameData=%p output=%p memberList=%p publishedList=%p stage=%d bank31Slot=%d allocator=%p valid=%d\n",
-                static_cast<const void*>(this), static_cast<const void*>(lpOutput),
-                static_cast<const void*>(&mAllocatorList), static_cast<const void*>(lpPublished),
-                static_cast<int>(mePrepareStage), liSlot,
-                lbValid ? static_cast<const void*>(mAllocatorList.mapRWGeneralAllocators[liSlot]) : nullptr,
-                lbValid ? 1 : 0);
-            CgsDev::Log::WriteToLog(lacLine);
-        }
-        return lbValid ? lpPublished : nullptr;
     }
 
     bool GameDataModule::Prepare(void* lpInputBuffer, void* lpOutputBuffer)
@@ -228,24 +140,6 @@ namespace BrnResource
                                           lpEastlHeap, 80))
                 return false;
 
-            // The schema registration ([FLAG PC boot gate] inside the helper: the exe-baked
-            // schema blobs are big-endian and not yet ported, so the PC helper logs and
-            // completes without a live schema; the AttribSysModule's vault-array interior
-            // stays gated on sbSchemaLoaded).
-            {
-                static CgsAttribSys::AttribSysIO::InputBuffer s_AttribPrepareInput;
-                static bool s_bAttribPrepareInputConstructed = false;
-                if (!s_bAttribPrepareInputConstructed)
-                {
-                    s_bAttribPrepareInputConstructed = true;
-                    s_AttribPrepareInput.CgsModule::IOBuffer::Construct();
-                    s_AttribPrepareInput.LockForWrite();
-                    s_AttribPrepareInput.GetVaultRequestInterface()->mRequestQueue.Construct();
-                    s_AttribPrepareInput.UnlockForWrite();
-                }
-                if (!PrepareAttribSysSchemaResource(&s_AttribPrepareInput))
-                    return false;   // still registering -- re-enter next frame
-            }
             // fall through
         }
         case E_PREPARE_VEHICLE_LIST:
@@ -309,10 +203,6 @@ namespace BrnResource
     // transport is a PC adaptation; map rows, request identities and waits are original.
     bool GameDataModule::CreateBanks(void*, void*)
     {
-        // FLAG PC-platform leaf: this host's serialized Prepare(0,0) caller has no
-        // IOBufferStack. Own the real per-call input buffer locally instead of
-        // fabricating a successful bank phase or a second bank representation.
-        CgsResource::ResourceIO::InputBuffer lResourceInput;
         lResourceInput.Construct();
         if (miNumBankCreationRequests == 0)
         {
@@ -325,9 +215,6 @@ namespace BrnResource
                 const s32 liEventId = miNumBankCreationRequests++;
                 lRequest.Construct(&mReceiverQueue, liEventId);
                 CgsMemory::MemoryBank::Params lParams = *mpMemoryMap->GetBank(liBank)->GetParams();
-                // FLAG PC-platform leaf: retain the original main block size
-                // while reserving the exact extra pool/child allocations.
-                const u32 luMainBlockSize = GetMapMainBlockSize(*mpMemoryMap, lParams.mnBankId);
                 lParams.mauBankSize[0] = GetHostMainBankSize(*mpMemoryMap, lParams);
                 lParams.mauBankBlocks[0] = lParams.mauBankSize[0] / luMainBlockSize;
                 lRequest.SetParams(&lParams);
@@ -353,8 +240,6 @@ namespace BrnResource
     // memory map already contains each bank, parent, dependency and heap record.
     bool GameDataModule::CreatePools(void*, void*)
     {
-        // FLAG PC-platform leaf: same per-call transport boundary as CreateBanks.
-        CgsResource::ResourceIO::InputBuffer lResourceInput;
         lResourceInput.Construct();
         if (miNumPoolCreationRequests == 0)
         {
@@ -369,9 +254,6 @@ namespace BrnResource
                     lRequest.mbAllowDefragmentation = true;
                 lRequest.mpUser = &mReceiverQueue;
                 lRequest.miEventId = miNumPoolCreationRequests++;
-                // FLAG PC-platform leaf: share the retained allowance with the
-                // parent-bank sizing producer; all other map heap budgets stay intact.
-                ApplyHostPoolHeapAllowance(lRequest);
                 lRequests.AddEvent(&lRequest, 0);
             }
             lResourceInput.LockForWrite();
@@ -387,7 +269,6 @@ namespace BrnResource
         mResourceModule.Update(&lResourceInput, 0);
         return false;
     }
-
 
     // ------------------------------------------------------------------------------------------
     // The rw allocator OBJECTS the registry's pointer rows reference. On the X360 the create
@@ -669,15 +550,6 @@ namespace BrnResource
     //            Clear + stage = 2 (still returns false through the tail).
     //   stage 2: return true (complete). stage >= 3 asserts "Invalid resource prepare stage.\n".
     //
-    // [FLAG PC boot gate] the schema blobs are X360 BIG-ENDIAN rodata; their LE port (the
-    // schema-vault chunk container flips like attribsys_transcode.py's data vaults, but the
-    // BIN payload is the SDK ClassLoadData record set) and the Attrib SDK runtime cluster
-    // are not committed. Until then the PC stage 0 logs one-shot and jumps straight to
-    // stage 2 WITHOUT registering a schema -- AttribSysModule::sbSchemaLoaded stays false
-    // and its vault-array interior stays gated (see CgsAttribSysModule.cpp).
-    // Forward declaration: the shared list-prepare resource input carve, defined in the
-    // anonymous namespace below. The schema prepare's X360 tail pumps the resource module
-    // through it too (boot audit F-P7-17), and that tail comes first in this file.
     namespace { CgsResource::ResourceIO::InputBuffer* GetListPrepareResourceInput(); }
 
     bool GameDataModule::PrepareAttribSysSchemaResource(
@@ -701,41 +573,12 @@ namespace BrnResource
             static void* s_pSchemaBin = 0;
             static s32   s_iSchemaVltSize = 0;
             static s32   s_iSchemaBinSize = 0;
-            if (CgsAttribSys::KB_PC_ATTRIB_SCHEMA_FILES && s_pSchemaVlt == 0)
-            {
-                static const char* s_apcSchemaFiles[2] = { "schema.vlt", "schema.bin" };
-                void* lapBlobs[2] = { 0, 0 };
-                s32 laiSizes[2] = { 0, 0 };
-                for (int liFile = 0; liFile < 2; ++liFile)
-                {
-                    FILE* lpFile = fopen(s_apcSchemaFiles[liFile], "rb");
-                    CGS_ASSERT(lpFile != 0, "PC schema file missing (run attribsys_schema_port.py)");
-                    if (lpFile == 0)
-                        break;
-                    fseek(lpFile, 0, SEEK_END);
-                    laiSizes[liFile] = static_cast<s32>(ftell(lpFile));
-                    fseek(lpFile, 0, SEEK_SET);
-                    lapBlobs[liFile] =
-                        CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator()->Malloc(
-                            static_cast<size_t>(laiSizes[liFile]), 0);
-                    fread(lapBlobs[liFile], 1, static_cast<size_t>(laiSizes[liFile]), lpFile);
-                    fclose(lpFile);
-                }
-                s_pSchemaVlt = lapBlobs[0];
-                s_iSchemaVltSize = laiSizes[0];
-                s_pSchemaBin = lapBlobs[1];
-                s_iSchemaBinSize = laiSizes[1];
-            }
 
-            if (!CgsAttribSys::KB_PC_ATTRIB_SCHEMA_FILES || s_pSchemaVlt == 0 || s_pSchemaBin == 0)
             {
                 static bool s_bLoggedSchemaGate = false;
                 if (!s_bLoggedSchemaGate)
                 {
                     s_bLoggedSchemaGate = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "GameDataModule::PrepareAttribSysSchemaResource: Attrib SDK "
-                           "runtime not mounted -- RegisterSchema skipped [FLAG PC boot gate]\n";
                 }
                 // X360: RegisterSchema(&mReceiverQueue, schemaVlt, 5664, schemaBin, 20352);
                 // mReceiverQueue.Clear(); miResourcePrepareStage = 1; + the ProcessInputs tail.
@@ -1311,13 +1154,6 @@ namespace BrnResource
             // empty table (unregistered type 44 / skipped FixUp) is visible here rather than
             // as an "Unable to find message" line 400 frames later.
             {
-                static const bool sbUiGateDiag = (getenv("BRN_PROP_DIAG") != 0);
-                if (sbUiGateDiag && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] hud controller bound msgs="
-                        << mHudMessageController.GetMessageLoadedCount() << "\n";
-                }
             }
         }
         else
@@ -1370,11 +1206,6 @@ namespace BrnResource
         }
         else
         {
-            // [FLAG PC] the console has no null path here (mbAllowFailiure is 0, so a missing
-            // bundle asserts inside the loader). Report instead of binding a null resource.
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PreparePopups: Popups.pup did not resolve -- the popup table is"
-                   " EMPTY (every overlay request will assert in PopupController::GetPopup)\n";
         }
 
         *CgsDev::Log::gpDebugPrint
@@ -1393,7 +1224,6 @@ namespace BrnResource
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
         miNumBankCreationRequests = 0;
         miNumPoolCreationRequests = 0;
-
 
         // X360 0x82671B90: wire the in-flight event-slot pool -- capacity 96
         // (`*(a1+439324) = 96`), the module-embedded element array (a1+439328) and
@@ -1475,11 +1305,6 @@ namespace BrnResource
             lrMem.maResourceSets[liType].muNumBlocks = 0;
         }
 
-        // FLAG PC-platform leaf: keep the existing low-address root allocation
-        // owner and 160/224 MiB budgets. The typed map reserves its original
-        // parent banks before pool leaves. Their host-width growth fits these
-        // budgets; graphics is RW lane 2, as CreateResource/SmallResource require.
-        const u32 KU_BLOCK    = KU_GAMEDATA_ROOT_BLOCK_SIZE;
         const u32 KU_TYPE0    = 0x0A000000u;   // 160 MB main  (2560 blocks)
         const u32 KU_TYPE1    = 0x0E000000u;   // 224 MB gfx   (3584 blocks)
         rw::ResourceDescriptor lRegionDesc;
@@ -1582,10 +1407,6 @@ namespace BrnResource
             const u32 luLane = lauScratchLanes[lu];
             lrPoolOptions.mDefragBufferDescriptor.m_baseResourceDescriptors[luLane].m_size = lauScratchSizes[lu];
             lrPoolOptions.mDefragBufferDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 128;
-            // FLAG PC-platform leaf: both resource domains are host buffers on
-            // D3D9. Carve through the same low-4GB allocator as GameDataRoot1,
-            // retaining valid legacy PointerFromU32 imports during staging.
-            rw::ResourceDescriptor lScratchDescriptor;
             lScratchDescriptor.m_baseResourceDescriptors[0].m_size = lauScratchSizes[lu];
             lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
             lrPoolOptions.mDefragBufferResource.m_baseResources[luLane] =
@@ -1885,7 +1706,6 @@ namespace BrnResource
         // request received\n" line 1946). Handlers that need the resource input re-lock it
         // themselves (the X360 passes it unlocked here too). ------------------------------
         {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_ATTRIB);
             mAttribSysModule.Update(&s_AttribInput);
         }
         // [PC placement] the X360 destroys the per-frame "Attrib" carve at the end of
@@ -2302,7 +2122,6 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 8);
 }
 
-
     // @ 0x8266F5C8 -- service a LOAD world-unit request: post the LoadBundle for the unit's
     // per-asset-set bundle ("<TRK_UNITn>_<GR|PH|SO|DA|AT>.bndl"). The reply lands on
     // mReceiverQueue and ProcessInternalLoadBundleResponse's case 31 then dispatches the
@@ -2338,9 +2157,6 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
-        if (std::getenv("BRN_ENGINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)   // [DIAG] NOT IN THE X360 BINARY
-            *CgsDev::Log::gpDebugPrint << "[car-audio] gamedata LOAD vehicle '" << lacVehicleID
-                                       << "' type=" << static_cast<s32>(lpEvent->meType) << " slot=" << liSlotIndex << "\n";
 
         CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
@@ -2433,10 +2249,6 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
-        if (std::getenv("BRN_ENGINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)   // [DIAG] NOT IN THE X360 BINARY
-            *CgsDev::Log::gpDebugPrint << "[car-audio] gamedata UNLOAD vehicle '" << lacVehicleID
-                                       << "' type=" << static_cast<s32>(lpEvent->meType) << " slot=" << liSlotIndex
-                                       << " loadedSoundBundles=" << muLoadedSoundBundlesCount << "\n";
         CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
                        || lpEvent->meType == E_ASSETSET_SOUND

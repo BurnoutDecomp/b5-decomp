@@ -46,8 +46,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint ([traction] probe)
-#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h" // [diag] issue #21 mark-height latch
-
 #include <cstddef>                                                 // offsetof (the layout gates)
 #include <cstdlib>                                                 // getenv/atoi ([traction] opt-in)
 #include <cmath>                                                   // sqrtf ([traction] line length)
@@ -130,40 +128,11 @@ namespace
     u32  s_uTractionProbeFrame  = 0u;
     bool s_bTractionProbeSample = false;   // this frame is a sample frame (set in Add, read in Read)
 
-    bool TractionProbeArmed()
-    {
-        static s32 siArmed = -1;
-        if (siArmed < 0)
-        {
-            const char* lpcEnv = getenv("BRN_TRACTION_PROBE");
-            siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
-    }
-
     // The sampling PERIOD in frames. BRN_TRACTION_PROBE=<n> with n >= 1 is the period, so `1` is
     // EVERY frame. ⚠️ Until 2026-09-02 this treated `<= 1` as "use the default 60": a switch the
     // harness documents as "-TractionProbe 1 = every frame" silently sampled every 60th frame,
     // which is 29 m at top speed -- one wave lost a kerb crossing to it. Only a non-numeric or
     // zero value (the bare "on" spelling) falls back to the default.
-    u32 TractionProbePeriod()
-    {
-        static u32 suPeriod = 0u;
-        if (suPeriod == 0u)
-        {
-            suPeriod = 60u;
-            const char* lpcEnv = getenv("BRN_TRACTION_PROBE");
-            if (lpcEnv != NULL)
-            {
-                const int liValue = atoi(lpcEnv);
-                if (liValue >= 1)
-                {
-                    suPeriod = static_cast<u32>(liValue);
-                }
-            }
-        }
-        return suPeriod;
-    }
 }
 
     // =============================================================================================
@@ -310,25 +279,6 @@ namespace
             const VehicleAttribs* const lpDiagAttribs = lrCar.mpAttribs;
             const s32 liDiagCarId = (lpDiagAttribs != 0)
                                     ? lpDiagAttribs->mBaseAttribs.miRaceCarID : -1;
-            if (BrnDiag::TrailHeightDiagEnabled()
-                && liCar >= 0 && liCar < BrnDiag::KI_TRAIL_HEIGHT_MAX_CARS)
-            {
-                ++BrnDiag::guTrailHeightStamp;
-                for (s32 liW = 0; liW < eNumDrivenWheels; ++liW)
-                {
-                    BrnDiag::TrailHeightHit& lrHit = BrnDiag::gaTrailHeightHits[liCar][liW];
-                    lrHit.miCarId = liDiagCarId;
-                    lrHit.muHit   = (lpResult->mau8HitFlags[liW] != 0) ? 1u : 0u;
-                    lrHit.muStamp = BrnDiag::guTrailHeightStamp;
-                    if (lrHit.muHit != 0u)
-                    {
-                        lrHit.mfX       = lpResult->mafHitPosition[liW][0];
-                        lrHit.mfY       = lpResult->mafHitPosition[liW][1];
-                        lrHit.mfZ       = lpResult->mafHitPosition[liW][2];
-                        lrHit.mfNormalY = lpResult->mafHitNormal[liW][1];
-                    }
-                }
-            }
             // ---- end the mark-height latch ---------------------------------------------------
 
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
@@ -423,8 +373,6 @@ namespace
 
         // ---- [traction] one sample decision per frame; Add is the frame's first half ----------
         ++s_uTractionProbeFrame;
-        s_bTractionProbeSample =
-            ((s_uTractionProbeFrame % TractionProbePeriod()) == 0u) && TractionProbeArmed();
         // ---- end [traction] -------------------------------------------------------------------
 
         for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();

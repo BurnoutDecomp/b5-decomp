@@ -111,17 +111,6 @@ namespace Deformation
     // env var BrnDeformableObject_Detach.cpp / BrnPhysicalBodyPart.cpp already gate their detach
     // probes on, read as a sampling PERIOD in frames. DELETE-WHEN the detached-part collision
     // question is closed and banked.
-    static s32 PartRestProbePeriod()
-    {
-        static s32 siPeriod = -1;
-        if ( siPeriod < 0 )
-        {
-            const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-            const s32 liValue = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
-            siPeriod = (liValue > 0 && CgsDev::Log::gpDebugPrint != 0) ? liValue : 0;
-        }
-        return siPeriod;
-    }
 
     // ------------------------------------------------------------------------------------------
     // MakePartPhysical (X360 "MakePar") @ 0x82626E30
@@ -254,8 +243,6 @@ namespace Deformation
             static s32 siOn = -1;
             if ( siOn < 0 )
             {
-                const char* lpcEnv = getenv("BRN_JB_EXIT_DIAG");
-                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
             }
             return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
         }
@@ -677,102 +664,6 @@ namespace Deformation
         // with the road settles to a constant Y with vy -> 0; a part that is passing through it
         // shows Y falling without bound. DELETE-WHEN the detached-part collision question is banked.
         // -----------------------------------------------------------------------------------------
-        if ( PartRestProbePeriod() > 0 )
-        {
-            static u32 sluRestFrames = 0;
-            ++sluRestFrames;
-            if ( (sluRestFrames % static_cast<u32>(PartRestProbePeriod())) == 0u )
-            {
-                for ( s32 liProbe = 0; liProbe < 50; ++liProbe )
-                {
-                    if ( !mPartPool.IsPartIndexUsed(liProbe) )
-                    {
-                        continue;
-                    }
-                    const PhysicalBodyPart* lpProbePart = mPartPool.GetPart(static_cast<s16>(liProbe));
-                    const Vector3 lvProbePos = lpProbePart->GetRigidBodyTransform().wAxis;
-                    const Vector3 lvProbeVel = lpProbePart->GetLinearVelocity();
-
-                    // ⭐ ADDED 2026-09-05 (crash wave 2). THE OWNER'S ACTUAL COMPLAINT IS AN
-                    // ORIENTATION, not a height: detached panels came to rest STANDING ON EDGE like
-                    // headstones. Read it through the console's own GetBoundingBox, which hands back
-                    // the box's WORLD basis plus its half-dimensions: take the axis with the SMALLEST
-                    // half-extent (the panel's thickness direction) and dot it with world up.
-                    //   flat ~ 1.0  the thin axis points up  -> the panel is lying down
-                    //   flat ~ 0.0  the thin axis is level   -> the panel is standing on its edge
-                    // Before CalculateSkinnedPoint landed this could not be asked at all: every box
-                    // was the isotropic 0.05 floor, so there was no "thin axis" to speak of.
-                    CgsGeometric::Box lProbeBox;
-                    lpProbePart->GetBoundingBox(&lProbeBox);
-                    const Vector3 lvBoxHalf = lProbeBox.GetDimensions();
-                    s32 liThinAxis = 0;
-                    f32 lfThinHalf = lvBoxHalf.x;
-                    if ( lvBoxHalf.y < lfThinHalf ) { lfThinHalf = lvBoxHalf.y; liThinAxis = 1; }
-                    if ( lvBoxHalf.z < lfThinHalf ) { lfThinHalf = lvBoxHalf.z; liThinAxis = 2; }
-                    const Matrix44Affine lProbeBoxFrame = lProbeBox.GetTransform();
-                    const Vector3& lrThinWorldAxis = (liThinAxis == 0) ? lProbeBoxFrame.xAxis
-                                                   : (liThinAxis == 1) ? lProbeBoxFrame.yAxis
-                                                                       : lProbeBoxFrame.zAxis;
-                    const f32 lfFlatness = (lrThinWorldAxis.y < 0.0f) ? -lrThinWorldAxis.y : lrThinWorldAxis.y;
-
-                    // ⭐ ADDED 2026-09-07 (part-rest wave). `flat` ALONE IS NOT ENOUGH AND WAS BEING
-                    // OVER-READ. Two measured reasons:
-                    //  (1) NOT EVERY POOLED PART IS A PANEL. The pool holds bumper BARS
-                    //      (half 0.797,0.162,0.150 -> a 1.59 x 0.32 x 0.30 m box) and RODS
-                    //      (half 0.050,0.067,0.92 -> two lanes on the console's own 0.05 half floor).
-                    //      For those the two smallest half-extents differ by ~10-30%, so `thinAxis`
-                    //      is a near-tie and `flat` is the tie-break, not an orientation. A rod lying
-                    //      flat on the road reads flat ~ 0 -- indistinguishable, on that number alone,
-                    //      from a panel standing on edge. Reading it as the latter would MANUFACTURE
-                    //      a defect.
-                    //  (2) "Standing on edge" for a chunky box is really "the LONGEST axis is
-                    //      vertical", which `flat` cannot express at all.
-                    // So print the world-Y component of all three box axes plus the half-extent
-                    // ordering. `up` = |longestAxis.y| (1 = standing on end); `mid` = the middle one.
-                    // ⭐ AND IT SELF-CHECKS: for an orthonormal box basis flat^2 + mid^2 + up^2 == 1,
-                    // so a basis that is scaled or stale is visible in the log rather than silently
-                    // biasing every number (a `flat` of 1.0027 was seen before this went in).
-                    const f32 lfAxY0 = (lProbeBoxFrame.xAxis.y < 0.0f) ? -lProbeBoxFrame.xAxis.y : lProbeBoxFrame.xAxis.y;
-                    const f32 lfAxY1 = (lProbeBoxFrame.yAxis.y < 0.0f) ? -lProbeBoxFrame.yAxis.y : lProbeBoxFrame.yAxis.y;
-                    const f32 lfAxY2 = (lProbeBoxFrame.zAxis.y < 0.0f) ? -lProbeBoxFrame.zAxis.y : lProbeBoxFrame.zAxis.y;
-                    s32 liLongAxis = 0;
-                    f32 lfLongHalf = lvBoxHalf.x;
-                    if ( lvBoxHalf.y > lfLongHalf ) { lfLongHalf = lvBoxHalf.y; liLongAxis = 1; }
-                    if ( lvBoxHalf.z > lfLongHalf ) { lfLongHalf = lvBoxHalf.z; liLongAxis = 2; }
-                    const s32 liMidAxis = 3 - liThinAxis - liLongAxis;
-                    const f32 lafAxisY[3] = { lfAxY0, lfAxY1, lfAxY2 };
-                    const f32 lfUpright = lafAxisY[liLongAxis];
-                    const f32 lfMidUp   = (liMidAxis >= 0 && liMidAxis <= 2) ? lafAxisY[liMidAxis] : 0.0f;
-                    const f32 lfBasisSq = lfFlatness * lfFlatness + lfMidUp * lfMidUp + lfUpright * lfUpright;
-
-                    *CgsDev::Log::gpDebugPrint
-                        // ⭐ ADDED 2026-09-07 (part-box witness wave). The PART TYPE and IK INDEX,
-                        // so a row joins to the AUTHORED per-type table (tools/re/part_bbox_dump.py)
-                        // WITHOUT inferring the type from [detach-part] line order. Pool slots are
-                        // reused, so that inference is order-dependent and silently wrong the moment
-                        // a log is truncated or two entities interleave -- and the plate-tail
-                        // question this run exists to settle is a PER-TYPE question.
-                        << "[part-rest] f " << static_cast<s32>(sluRestFrames)
-                        << " slot " << liProbe
-                        << " type " << static_cast<s32>(lpProbePart->GetIKPart()->GetPartType())
-                        << " ik " << lpProbePart->GetIKPartIndex()
-                        << " inScene " << (lpProbePart->IsAddedToScene() ? 1 : 0)
-                        << " joined "  << (lpProbePart->IsJoinedToVehicle() ? 1 : 0)
-                        << " frozen "  << (lpProbePart->IsFrozen() ? 1 : 0)
-                        << " y " << lvProbePos.y
-                        << " vy " << lvProbeVel.y
-                        << " r " << lpProbePart->GetSphereRadius()
-                        << " half (" << lvBoxHalf.x << ", " << lvBoxHalf.y << ", " << lvBoxHalf.z << ")"
-                        << " thinAxis " << liThinAxis
-                        << " flat " << lfFlatness
-                        << " longAxis " << liLongAxis
-                        << " up " << lfUpright
-                        << " mid " << lfMidUp
-                        << " basisSq " << lfBasisSq
-                        << "\n";
-                }
-            }
-        }
 
         const s32 liNumDetachedParts = static_cast<s32>(mPartPool.GetNumDetachedParts());
         for ( s32 liPart = 0; liPart < liNumDetachedParts; ++liPart )
@@ -812,7 +703,6 @@ namespace Deformation
                                                                lfSphereRadius);
         }
     }
-
 
     // =============================================================================================
     // Update / AddPartsToScene -- ⭐ 2026-08-14 (walls leg 4): pool forwards. The X360 emits no

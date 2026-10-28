@@ -6,8 +6,6 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameSource/Sound/Collision/BrnCollisionStateManager.h" // Notify case 8: the collision splice bank
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
-#include "GameSource/Sound/Global/BrnHudSoundDiag.h"            // [DIAG] NOT IN THE X360 BINARY
-
 // =============================================================================
 // BrnSound::Logic::FxEffect - out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnFxEffect.h for the dual-base
@@ -124,7 +122,6 @@ FxEffect::~FxEffect()
 // `virtual ~FxEffect()` plus the inheritance graph. No source body is emitted.
 // (Same precedent as the committed BrnEffectObject.cpp adjustor{4} @ 0x826967E0.)
 // ---------------------------------------------------------------------------
-
 
 // =============================================================================
 // THE FX-STING LANE -- Attach / Detach / ProcessUpdate / Notify.
@@ -482,7 +479,6 @@ void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     mVoiceWrappers[liSlot].Play(static_cast<u32>(lTag.miSampleIndex));
     mafVolumes[liSlot] = lTag.mfVolume;
 }
-
 
 // ---------------------------------------------------------------------------
 // FxEffect::UpdateParams  @ 0x826BC338   (vtable 0x820B37CC slot +0x18)

@@ -665,16 +665,6 @@ namespace BrnGui
         // ---- the in-queue walk ------------------------------------------------------
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        // ⛔⛔ PC BRING-UP ESCAPE HATCH -- NOT CONSOLE BEHAVIOUR. See the file banner: the
-        // console's own exit (HandleSelect's stage-0 arm) is gated on the tracker going
-        // active, which needs a preset-race producer this tree does not have yet, so
-        // without this the "MAP_EVENT" key is a one-way trap. It only records an action;
-        // the send happens after the console's own Clear(), so the walk below is
-        // byte-for-byte the console's. DELETE THIS AND ITS TWO SIBLING BLOCKS the moment
-        // GuiCache::HandleSpecificPreSetRacesEvent (or any other miNumPresetRaces
-        // producer) lands.
-        s32 liBringUpExitAction = 0;
-
         const CgsModule::Event* lpEvent = 0;                               // cpp:140
         s32 liEventSize = 0;                                               // cpp:141
         for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);  // cpp:142
@@ -727,12 +717,6 @@ namespace BrnGui
                 // vtable slot, so the base's empty one runs. Delete with the other two.
                 const GuiControllerInputPressedPayload* lpInput =
                     static_cast<const GuiControllerInputPressedPayload*>(lpEvent);
-                if (liBringUpExitAction == 0 &&
-                    (lpInput->miAction == KI_ACTION_GUI_START ||
-                     lpInput->miAction == KI_ACTION_GUI_CANCEL))
-                {
-                    liBringUpExitAction = lpInput->miAction;
-                }
             }
         }
 
@@ -779,10 +763,6 @@ namespace BrnGui
         // exit (HandleSelect) is reachable, this block must not fire beside it (it would
         // double the GO_BACK and let Start/Back abort an in-progress authoring stage).
         // Delete with the other two blocks.
-        if (!lbTrackingActive && liBringUpExitAction != 0)
-        {
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK);
-        }
     }
 
     // =================================================================================

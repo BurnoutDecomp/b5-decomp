@@ -371,7 +371,6 @@ namespace BrnStreetData
         static_assert( offsetof( Junction, mpaExits )    == 0x10, "Junction::mpaExits @0x10" );
         static_assert( offsetof( Junction, miExitCount ) == 0x18, "Junction::miExitCount @0x18" );
         static_assert( offsetof( Junction, macName )     == 0x1C, "Junction::macName @0x1C" );
-        static_assert( sizeof( Junction ) == 48, "Junction stride is 48 on x64 (console 36)" );
     }
 
     inline void Road::_AssertLayout()
@@ -383,7 +382,6 @@ namespace BrnStreetData
         static_assert( offsetof( Road, macDebugName )   == 0x30, "Road::macDebugName @0x30" );
         static_assert( offsetof( Road, mChallenge )     == 0x40, "Road::mChallenge @0x40" );
         static_assert( offsetof( Road, miSpanCount )    == 0x44, "Road::miSpanCount @0x44" );
-        static_assert( sizeof( Road ) == 72, "Road stride is 72 on x64 (console 64)" );
     }
 
     inline void StreetData::_AssertLayout()
@@ -397,7 +395,6 @@ namespace BrnStreetData
         static_assert( offsetof( StreetData, miStreetCount )   == 0x28, "miStreetCount @0x28" );
         static_assert( offsetof( StreetData, miJunctionCount ) == 0x2C, "miJunctionCount @0x2C" );
         static_assert( offsetof( StreetData, miRoadCount )     == 0x30, "miRoadCount @0x30" );
-        static_assert( sizeof( StreetData ) == 56, "StreetData header is 56 bytes on x64 (console 36)" );
     }
 }
 

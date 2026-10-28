@@ -28,29 +28,6 @@
 // positionally (the loaded-shape layout is owned by the .apt parse, not this slice).
 static const std::uintptr_t KU_SHAPE_GEOMETRY_OFFSET = 0x20;
 
-// AptHook_DrawShape -- console dword_1059C6B8(v6[8], op, tick). Reads the shape's geometry
-// handle (the AptAssetRenderingUnit at +0x20) and dispatches it through the installed
-// gAptFuncs.pfnDrawRenderingUnit slot (CgsGui::AptAux::ConstructApt installs it to
-// CgsGui::AptCallbackRender::DrawRenderingUnit -> AptRenderHandler::Render).
-// FLAG PC-platform leaf: this IS the console's host render-callback boundary (the indirect
-// dword_1059C6B8 slot), not an engine Class::method.
-void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick)
-{
-    if (!pShape)
-        return;
-
-    // The shape's geometry sub-field (console v6[8] == *(this + 0x20)).
-    AptAssetRenderingUnit lpRenderingUnit =
-        *reinterpret_cast<AptAssetRenderingUnit*>(
-            reinterpret_cast<char*>(pShape) + KU_SHAPE_GEOMETRY_OFFSET);
-
-    // Dispatch through the installed host slot. CgsGui::AptAux::ConstructApt points this at
-    // CgsGui::AptCallbackRender::DrawRenderingUnit; if the table has not been installed yet
-    // (boot-order safety) the slot is null and there is nothing to draw.
-    if (gAptFuncs.pfnDrawRenderingUnit)
-        gAptFuncs.pfnDrawRenderingUnit(lpRenderingUnit, eOp, nTick);
-}
-
 // The former AptHookDrawImportGlyph / AptHookResolveImport no-op shims are DELETED
 // (2026-08-07): no caller references them anywhere in the tree, and the real
 // import-id resolution is the homed member AptCharacterAnimation::GetIDFromImportFile

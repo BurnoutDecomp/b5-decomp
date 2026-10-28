@@ -409,28 +409,6 @@ bool CollisionEffect::Attach()
     // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the voice start -- the inputs
     // CalculateIntensity reads (pipeline, action, the two owner bytes, the impulse) and what it
     // sends the mixer (duck = input 1), so a log line alone re-derives the console's value.
-    if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suPrintCount = 0;
-        if (suPrintCount++ < 64u)
-        {
-            char lacLine[256];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[collision-audio] voice attached sample=%d pipeline=%d action=%d owners=%u/%u "
-                          "impulse=%.9g fatality=%d mixer=%d volume=%g pitch=%g duck=%d azimuth=%d\n",
-                          lrCollision.miSampleID, static_cast<s32>(lrCollision.mePipeline),
-                          static_cast<s32>(lrCollision.meAction),
-                          static_cast<u32>(lrCollision.maEntityID[0].muValue >> 24),
-                          static_cast<u32>(lrCollision.maEntityID[1].muValue >> 24),
-                          static_cast<double>(lrCollision.mNormalizedImpulse.x),
-                          static_cast<s32>(lrCollision.meFatality),
-                          static_cast<s32>(meNicotineVolumeSlider),
-                          static_cast<double>(mSizeSettings.mfVolume),
-                          static_cast<double>(mSizeSettings.mfPitch),
-                          static_cast<s32>(lfDucking), mbUseAzimuth ? 1 : 0);
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
-    }
     return true;
 }
 
@@ -487,24 +465,6 @@ void CollisionEffect::ProcessUpdate()
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the crash voice ended (its
         // splice ran every sample to the end of its envelope) -- the control releases the state
         // on its next UpdateParams. pitch / gain are this frame's GetPitch() / GetGain().
-        if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
-        {
-            static u32 suFinishedPrintCount = 0;
-            const CollisionState* lpState = mpCollisionControl->GetCollisionState();
-            if (lpState && suFinishedPrintCount++ < 256u)
-            {
-                char lacLine[192];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] voice finished sample=%d bin=%d attached=%.3f now=%.3f "
-                              "pitch=%g gain=%g\n",
-                              lpState->GetOutputCollision().miSampleID,
-                              static_cast<s32>(lpState->GetOutputCollision().miBinIndex),
-                              static_cast<double>(lpState->GetTimeWeAttached()),
-                              static_cast<double>(lpState->GetCurrentTime()),
-                              static_cast<double>(lfPitch), static_cast<double>(lfGain));
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
         mpCollisionControl->SetCollisionFinished(true);
         return;
     }

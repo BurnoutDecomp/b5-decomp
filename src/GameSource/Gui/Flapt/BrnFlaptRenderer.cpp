@@ -5,7 +5,6 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"     // CgsGraphics::TextRenderer / TextObject (RenderTextField submission)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                     // BrnFlapt::Mesh / FlaptFile / FlaptFile::GuiTexture / GuiVertex
-#include "pc/gcm/renderengine/texture.h"                              // renderengine::Texture2D create path (interim white "no texture")
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [gateui r6] gpDebugPrint (the mask/text placement probes)
 #include <stdlib.h>                                                   // [gateui r6] getenv (BRN_PROP_DIAG)
 #include <cmath>
@@ -47,7 +46,6 @@ namespace BrnFlapt
 // two flag values are pinned here against the DWARF rather than reaching into it.
 const u8 KU_BATCH_FLAG_SETTEXTURE = 1;
 const u8 KU_BATCH_FLAG_SETBLEND   = 2;
-
 
 // The immediate renderer's two default render-state singletons RenderMesh binds. On the
 // console these are members of the shared CgsGraphics::ImRendererBase::StateLibrary
@@ -121,10 +119,6 @@ void FlaptRenderer::StartRenderingFrame()
     mpCurrentTexture = 0;
     mpCurrentBlendState = 0;
 
-    // FLAG PC-platform leaf: the console appends explicit CullNone and ZBufferOff
-    // state commands after BeginRendering. The PC Im2d backend applies those same
-    // D3D9 states inside BeginRendering and has no console StateLibrary object.
-    mpImRenderSet->mpIm2dRenderBuffer->BeginRendering();
 }
 
 // ---- SetShader @ 0x82470718 ----------------------------------------------
@@ -275,19 +269,7 @@ void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
     // of each other in the screen's top-left corner (both boxes author top-left (-2,-2)).
     // Printed in NDC, so a non-degenerate basis and an origin away from (-1,+1) is proof.
     {
-        static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static s32        siDiagPrinted = 0;
-        if ( sbUiGateDiag && siDiagPrinted < 12 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++siDiagPrinted;
-            *CgsDev::Log::gpDebugPrint
-                << "[UI-gate] flapt text ndcOrigin=(" << lrTransform.mOriginXYZ.x
-                << "," << lrTransform.mOriginXYZ.y
-                << ") basis=(" << lrTransform.mRightUp.x << "," << lrTransform.mRightUp.y
-                << "," << lrTransform.mRightUp.z << "," << lrTransform.mRightUp.w
-                << ") alpha=" << (lrTransform.mColourScale.w + lrTransform.mColourShift.w)
-                << "\n";
-        }
     }
 
     if (miShaderProgram != 0)
@@ -422,11 +404,6 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
     }
 
     const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
-
-    // FLAG PC-platform leaf: express the original NDC scale/origin in the
-    // shared command consumer's logical1280x720 coordinates, exactly once.
-    const CgsGraphics::Im2dTransform lLogical =
-        CgsGraphics::Im2dTransformToLogicalPC(lrTransform);
 
     CgsGraphics::Basic2dColouredTexturedVertex laMaskVerts[2];
 

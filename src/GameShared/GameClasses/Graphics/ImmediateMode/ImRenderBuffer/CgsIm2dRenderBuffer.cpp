@@ -42,47 +42,12 @@
 
 namespace CgsGraphics
 {
-    Im2dTransform Im2dTransformToLogicalPC(const Im2dTransform& lrTransform)
-    {
-        Im2dTransform lLogical = lrTransform;
-        lLogical.mOriginXYZ.x = (lrTransform.mOriginXYZ.x + 1.0f) * 640.0f;
-        lLogical.mOriginXYZ.y = (1.0f - lrTransform.mOriginXYZ.y) * 360.0f;
-        lLogical.mRightUp.x *= 640.0f;
-        lLogical.mRightUp.y *= -360.0f;
-        lLogical.mRightUp.z *= 640.0f;
-        lLogical.mRightUp.w *= -360.0f;
-        lLogical.mColourScale.x *= 255.0f;
-        lLogical.mColourScale.y *= 255.0f;
-        lLogical.mColourScale.z *= 255.0f;
-        lLogical.mColourScale.w *= 255.0f;
-        lLogical.mColourShift.x *= 255.0f;
-        lLogical.mColourShift.y *= 255.0f;
-        lLogical.mColourShift.z *= 255.0f;
-        lLogical.mColourShift.w *= 255.0f;
-        return lLogical;
-    }
-
-    // FLAG PC-platform leaf: replay the shared native command representation.
-    // ARTIST's virtual Dispatch(Im2d*) const consumes the same frozen bank.
-    void Im2dRenderBuffer::Dispatch(Im2d* /*lpRenderer*/) const
-    {
-        Im2dColouredTexturedRenderBuffer::Dispatch();
-    }
-
-    // FLAG PC-platform leaf: native transform units at the shared writer boundary.
-    void Im2dRenderBuffer::SetTransform(const Im2dTransform& lrTransform)
-    {
-        Im2dColouredTexturedRenderBuffer::SetTransform(Im2dTransformToLogicalPC(lrTransform));
-    }
 
     void Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic(
         const Im2dTransform& lrTransform, renderengine::Texture* lpTexture,
         const renderengine::BlendState* lpBlendState, renderengine::PrimitiveType lePrimitiveType,
         const Basic2dColouredTexturedVertex* lpVertices, u32 luNumVertices, u8 lu8Flags)
     {
-        Im2dColouredTexturedRenderBuffer::BatchTransformTextureBlendRenderStatic(
-            Im2dTransformToLogicalPC(lrTransform), lpTexture, lpBlendState,
-            lePrimitiveType, lpVertices, luNumVertices, lu8Flags);
     }
 
     void Im2dRenderBuffer::PushMask(renderengine::Texture* lpTexture,

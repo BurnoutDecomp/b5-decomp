@@ -456,28 +456,6 @@ void OverlapGenerationModule::OutputCollidingPairs(OverlapGenerationIO::OutputBu
     // the shipped path pays one predictable branch when the probe is off.
     // ---------------------------------------------------------------------------------
     {
-        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-        if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static bool sbFirstPairReported = false;
-            static u32  suDiagCallCount     = 0;
-
-            ++suDiagCallCount;
-
-            if ( !sbFirstPairReported && liNumCollidingPairs > 0 )
-            {
-                sbFirstPairReported = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q5-sweep] first colliding pair(s): " << liNumCollidingPairs << "\n";
-            }
-
-            if ( ( suDiagCallCount % 60u ) == 0u )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q5-sweep] colliding pairs this frame: " << liNumCollidingPairs
-                    << " (GenerateOverlaps call " << suDiagCallCount << ")\n";
-            }
-        }
     }
 
     for (s32 liPair = 0; liPair < liNumCollidingPairs; ++liPair)

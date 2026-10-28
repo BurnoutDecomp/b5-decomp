@@ -586,8 +586,6 @@ bool RacingLineGenerator::GetPointFarAhead(RacingLine* lpRacingLine, f32 lfDista
     return true;
 }
 
-// =================================================================================================
-// [FLAG PC bring-up] PARKS -- nothing here bodies these, and nothing invents them.
 //
 //   RenderHardNoGoMap @0x82790278 (DWARF :190), DrawCentreLine (:203), RenderSectionDetails (:208)
 //     -- debug render. Presentation-only on this host (COMMON_BRIEF rule 11): they draw the map

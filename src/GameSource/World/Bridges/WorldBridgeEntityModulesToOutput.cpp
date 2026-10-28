@@ -394,34 +394,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
     lpOutputBuffer->AppendTrafficTypeResponseQueue(
         lpTrafficOutput_PostPhysics->GetTrafficTypeResponseQueue());
 
-    // [td-type] PC witness (BRN_TD_DIAG), NOT in the X360 binary: proves the leg RUNS and what
-    // it carried. It prints the first N armed frames INCLUDING the empty ones, for the same
-    // reason the prop witness below does -- a rung that only speaks when a count is non-zero
-    // cannot tell "no traffic takedown happened" from "the leg never executed".
-    // [FLAG PC witness]  DELETE-WHEN: "takedown bus" has been seen in a real run.
-    {
-        static const bool sbTdDiag = ( getenv( "BRN_TD_DIAG" ) != 0 );
-        static s32 siLinesLeft  = 12;
-        static s32 siCarried    = 0;
-
-        if ( sbTdDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            const s32 liLength = lpTrafficOutput_PostPhysics->GetTrafficTypeResponseQueue()->GetLength();
-            siCarried += liLength;
-            if ( liLength != 0 || siLinesLeft > 0 )
-            {
-                if ( siLinesLeft > 0 )
-                {
-                    --siLinesLeft;
-                }
-                *CgsDev::Log::gpDebugPrint
-                    << "[td-type] leg7 traffic->world responses=" << liLength
-                    << " carriedTotal=" << siCarried
-                    << " [FLAG PC witness]\n";
-            }
-        }
-    }
-
     // ================================================================================
     // ⭐⭐ THE RECORD-PROP-HIT TRANSFER -- console leg 10, @0x827AF064..0x827AF07C.
     //   0x827AF064  mr r3, r28                 ; r28 == lpPropOutput_PostPhysics
@@ -514,35 +486,10 @@ void BridgeEntityModulesToOutput_PostPhysics(
         // the transfer, from the SOURCE queue, because the destination setter Clear()s first
         // and a destination read would report the same number by construction.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32 siLegDiagLinesLeft = 24;
             static s32 siVfxCarried       = 0;      // running total across the whole run
             static s32 siPhysCarried      = 0;
 
-            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                const s32 liVfx  = lpPropOutput_PostPhysics->GetPropVFXLocatorQueue()->GetLength();
-                const s32 liPhys = lpPropOutput_PostPhysics->GetPropBecamePhysicalEventQueue()->GetLength();
-                siVfxCarried  += liVfx;
-                siPhysCarried += liPhys;
-
-                // First N frames unconditionally (proves the leg runs at all), then only the
-                // frames that actually carry something (so a long drive still reports every
-                // smash without flooding).
-                if ( siLegDiagLinesLeft > 0 || liVfx > 0 || liPhys > 0 )
-                {
-                    if ( siLegDiagLinesLeft > 0 )
-                    {
-                        --siLegDiagLinesLeft;
-                    }
-                    *CgsDev::Log::gpDebugPrint
-                        << "[propvfx] leg8/9 vfx=" << liVfx
-                        << " phys=" << liPhys
-                        << " | totalVfx=" << siVfxCarried
-                        << " totalPhys=" << siPhysCarried
-                        << "\n";
-                }
-            }
         }
 
         const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics::RecordHitPropQueue* lpRecordHitPropQueue =
@@ -565,7 +512,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
         // fired; its absence with a "[prop-diag] BREAK" above it localises the break to
         // ProcessContacts' lbRecord gate rather than to this bridge.
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             // ⭐ [gateui] ROUND 8: 8 -> 64. Run 9 produced exactly 8 of these lines across a
             // 158 s drive, i.e. the budget was spent, so a long boot-drive lost the
             // bridged/OnPropHit correlation for every smash after the eighth -- which is the
@@ -580,12 +526,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
             static s32 siDiagLinesLeft = 64;
 
             const s32 liQueued = lpRecordHitPropQueue->GetLength();
-            if ( sbPropDiag && liQueued > 0 && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] bridged prop-hit n=" << liQueued << "\n";
-            }
         }
 
         // ================================================================================
@@ -676,62 +616,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
     lpOutputBuffer->SetTrafficSoundOutputInterface(lpTrafficOutput_PostPhysics->GetTrafficSoundOutputInterface());
     lpOutputBuffer->SetTrafficDirectorOutputInterface(lpTrafficOutput_PostPhysics->GetTrafficDirectorOutputInterface());
 
-    // [FLAG PC witness] (crash parity FX-NETCRASH; NOT console code). BRN_TRAFFIC_BRIDGE_DIAG, capped,
-    // reads only: one line the first time leg 13 carries any record, then one line per frame on which
-    // a CRASHED traffic car rides the sound records -- the record CollisionStateManager::FindEntity
-    // finds for that car's scrapes, glass and hinges.
-    {
-        static const bool sbTrafficBridgeDiag = ( getenv( "BRN_TRAFFIC_BRIDGE_DIAG" ) != 0 );
-        static bool       sbFirstRecordsLogged = false;
-        static s32        siCrashedLinesLeft   = 24;
-
-        if ( sbTrafficBridgeDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            const BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface* lpSound =
-                lpTrafficOutput_PostPhysics->GetTrafficSoundOutputInterface();
-            const u32 luSound    = lpSound->GetTrafficEntityCount();
-            const u32 luDirector = lpTrafficOutput_PostPhysics->GetTrafficDirectorOutputInterface()
-                                       ->GetTrafficDirectorEntityArray().GetLength();
-            u32 luCrashed      = 0;
-            s32 liFirstCrashed = -1;
-            for ( u32 luEntity = 0; luEntity < luSound; ++luEntity )
-            {
-                if ( lpSound->maActiveEntityList[luEntity].mbIsCrashed )
-                {
-                    if ( liFirstCrashed < 0 )
-                    {
-                        liFirstCrashed = static_cast<s32>( luEntity );
-                    }
-                    ++luCrashed;
-                }
-            }
-
-            const bool lbFirstRecords = !sbFirstRecordsLogged && ( luSound != 0 || luDirector != 0 );
-            const bool lbCrashedLine  = luCrashed != 0 && siCrashedLinesLeft > 0;
-            if ( lbFirstRecords || lbCrashedLine )
-            {
-                sbFirstRecordsLogged = true;
-                if ( lbCrashedLine )
-                {
-                    --siCrashedLinesLeft;
-                }
-                *CgsDev::Log::gpDebugPrint << "[traffic-bridge] leg13 sound=" << luSound
-                                           << " crashed=" << luCrashed;
-                if ( liFirstCrashed >= 0 )
-                {
-                    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity& lrCrashed =
-                        lpSound->maActiveEntityList[liFirstCrashed];
-                    *CgsDev::Log::gpDebugPrint
-                        << " first-crashed=" << static_cast<u32>( lrCrashed.mu16EntityIndex )
-                        << " class=" << static_cast<u32>( lrCrashed.muVehicleClass )
-                        << " physical=" << ( lrCrashed.mbIsPhysical ? 1 : 0 )
-                        << " speed=" << lrCrashed.mfSpeed;
-                }
-                *CgsDev::Log::gpDebugPrint << " director=" << luDirector << " [FLAG PC witness]\n";
-            }
-        }
-    }
-
     // X360 leg 15 @0x827AF174. The caller holds the destination for writing and this
     // per-frame WorldEntity output for reading; use its const/read-lock accessor. The
     // public setter copies all five status bytes by value before the source buffer is
@@ -760,16 +644,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
 // position/speed latch, the scoring system, and BrnGameModule::BridgeWorldToDirector's
 // per-car VehicleInfo publish -- reads the world update-output copy this writes.
 //
-// [FLAG PC bring-up] the REPLAY GLOBAL interface has no destination: the world update-output
-// buffer has no replay-global member and the console's own leg is the three above plus the
-// game-event append (it never forwards the replay global one either).
-// [FLAG RETIRED 2026-08-24, tut-ticker wave] the game-event queue append used to be dropped
-// ("the race-car module's game-event producers are un-homed"). RaceCarEntityModule::
-// SendGameEvents is bodied now (the training-request drain; its event-9 arm stays parked in
-// ITS banner) and the transfer is live below.
-// [FLAG] the console's CPU monitor (worldModule + 6167720) is not modelled on this leg --
-// the sibling bridges in this file take the same disposition.
-// ----------------------------------------------------------------------------
 void BridgeRaceCarEntityInfoToOutput_PostPhysics(
     void* lpWorldModule,
     BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
@@ -840,7 +714,6 @@ void BridgeRaceCarEntityInfoToOutput_PreScene(
     lpOutputBuffer->GetAudioCarLoadedDataQueue()->Append(
         *lpRaceCarOutput_PreScene->GetAudioCarLoadedDataQueue());
 }
-
 
 // ----------------------------------------------------------------------------
 // BridgeWorldResourceRequestsToOutput_Prepare  @ 0x827ADA28

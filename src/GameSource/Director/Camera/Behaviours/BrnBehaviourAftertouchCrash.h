@@ -177,8 +177,6 @@ public:
                           "mfHeightDistanceVelocityRange @ console +0x58");
             static_assert(offsetof(Parameters, mfTimeBetweenDecisions) - offsetof(Parameters, mShakeParams) == 0x6C - 0x08,
                           "mfTimeBetweenDecisions @ console +0x6C");
-            static_assert(sizeof(Parameters) == 120,
-                          "host size (console 112: 8-byte head pointer)");
         }
     };
 

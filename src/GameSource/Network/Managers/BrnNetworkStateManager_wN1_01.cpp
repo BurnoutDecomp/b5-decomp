@@ -20,7 +20,6 @@
 #include "GameSource/Network/BrnNetworkModuleIO.h"                                         // PostSimulationInputBuffer / NetworkEventQueue
 #include "GameSource/Network/BrnServerInterface.h"                                          // GetGameComponent / GetPlayerInfoComponent / GetTelemetryComponent
 #include "GameSource/Network/BrnNetworkGameParams.h"                                        // BrnNetwork::GameParams
-#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameSource/Network/BrnNetworkPlayerMenuData.h"                                    // BrnNetwork::PlayerMenuData
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h"                      // BrnNetwork::PlayerParams
 #include "GameSource/Network/Components/BrnServerInterfaceTelemetry.h"                      // EnableTemetry
@@ -592,7 +591,6 @@ namespace BrnNetwork
             {
                 const auto leModifyStatus = mpNetworkManager->GetServerInterface()
                     ->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES);
-                BrnGui::CreateMatchTracePC::ModifyResult(static_cast<s32>(leModifyStatus));
                 if (leModifyStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
                 {
                     mpNetworkManager->GetServerInterface()->CgsNetwork::ServerInterfaceDirtySock::ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);

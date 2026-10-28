@@ -1,7 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/PS3/CgsRwVertexDescResourceTypePS3.h"
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::VertexDescriptor[::Parameters]
 #include "rw/rwcore_structs.h"                   // rw::BaseResourceDescriptors<5>
-#include "pc/gcm/renderengine/WorldGeometry.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -134,9 +132,6 @@ namespace CgsResource
     {
         // ARTIST828A80F8 marks initialized then creates the GPU declaration.
         static_cast<SerialisedVertexDescriptor*>(lpResource)->muField0A = 1;
-        // FLAG PC-platform leaf: the native COM declaration is retained by the
-        // existing descriptor cache, not written into the serialized u32 slot.
-        renderengine::WorldVd32_PrepareResource(lpResource);
     }
 
     // X360 0x828A8A28: construct the parsed-element parameter block, fill it from the serialised

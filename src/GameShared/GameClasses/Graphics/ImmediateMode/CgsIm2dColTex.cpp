@@ -37,7 +37,6 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"

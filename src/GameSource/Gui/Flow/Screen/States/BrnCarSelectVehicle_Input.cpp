@@ -76,20 +76,6 @@ namespace BrnGui
         // The GuiAudioTriggerEvent action word TriggerSound posts (X360 `li r4, 7`).
         const s32 KI_AUDIO_ACTION_CAROUSEL = 7;
 
-        // [FLAG PC harness lever] BRN_CARSEL_TAPSTEP=1: a harness menu tap is ONE input update,
-        // and it reaches this screen as DOWN + RELEASED with no PRESSED in between, so the
-        // carousel never steps. With the lever on, a GUI_LEFT / GUI_RIGHT release that saw no
-        // press is replayed as the press, followed by the reset a d-pad release makes. Read once.
-        bool IsCarSelTapStepLever()
-        {
-            static const bool sbEnabled = []()
-            {
-                const char* lpcValue = std::getenv("BRN_CARSEL_TAPSTEP");
-                return lpcValue != 0 && lpcValue[0] != '\0' && lpcValue[0] != '0';
-            }();
-            return sbEnabled;
-        }
-
         // The audio trigger record's queued event id. ⓘ The committed
         // BrnGui::GuiAudioTriggerEvent models this SAME 100-byte record under id 201 (its
         // presentation-action producer); this screen posts it under 457. The record the X360
@@ -248,7 +234,6 @@ namespace BrnGui
 
         CarSelectMain::HandleControllerInput(lpEvent, liEventKind);
 
-        // [FLAG PC harness lever] see IsCarSelTapStepLever.
         if (liEventKind == KI_EVENT_CONTROLLER_RELEASED && IsCarSelTapStepLever())
         {
             const ControllerButtonPayload* lpTap = reinterpret_cast<const ControllerButtonPayload*>(lpEvent);
@@ -658,44 +643,6 @@ namespace BrnGui
 
                 CGS_ASSERT(mpHostStatusData != 0, "mpHostStatusData");   // cpp:1417
 
-                // The console reloads the pointer and reads its mbLocalPlayer byte (row+0x30)
-                // straight after that non-gating assert -- the assert is a report, not a gate.
-                // [FLAG PC bring-up guard] a roster with no host row leaves the pointer null,
-                // and this build's asserts do not stop execution, so the extra `!= 0` term
-                // keeps a reported miss from becoming a null deref. It is NOT in the X360 body.
-                // It is spelled so a null falls through to the row refresh below rather than
-                // firing an ACCEPT nobody asked for -- the smaller of the two divergences.
-                // DELETE-WHEN asserts gate.
-                if (mpHostStatusData != 0 && !mpHostStatusData->mbLocalPlayer)
-                {
-                    // The X360 posts this through
-                    // StateInterface::OutputGuiEvent<GuiEventActivateCarSelect>, whose console
-                    // body wraps the 8-byte payload as { 8, 192, 12, <payload> } and queues 20
-                    // bytes on channel 40. The in-tree OutputGuiEvent template does NOT wrap
-                    // (see its FLAG in CgsGuiStateInterface.h), so the exact wire record is
-                    // built here and posted through the output queue -- the same standing
-                    // accommodation CarSelectMain::ExitCarSelection uses for this very id.
-                    // The two payload words are (ACTION, TYPE); the console writes 2 into
-                    // both (`li r11, 2` stored twice). TYPE 2 is E_CAR_SELECT_TYPE_ONLINE_EVENT;
-                    // ACTION 2 is NOT in the recovered action legend (0 start / 1 modify /
-                    // 4 exit-junkyard) and the consumer, GameStateModule::ProcessGameEvents
-                    // case 94, returns early for every non-junkyard car-select type anyway --
-                    // so the literal is carried through as the console's, unnamed.
-                    GuiEventActivateCarSelect20 lActivateEvent(2, 2);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lActivateEvent),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lActivateEvent)));   // X360 record size 20
-
-                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
-                        && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint << "RG :: CSV : SendStateEvent( \"ACCEPT\" )\n";
-                    }
-
-                    SendStateEvent("ACCEPT");
-                    return;
-                }
             }
         }
         else

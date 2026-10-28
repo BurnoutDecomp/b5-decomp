@@ -144,9 +144,6 @@ namespace BrnGui
     // boundary discipline as BrnBootLegalBoundary.cpp) --------------------------------
     namespace
     {
-        // X360 *(cache+19285) = 1 -- the "post-title phase" flag the cache carries.
-        // FLAG PC-platform leaf: no named accessor on the committed GuiCache yet; a
-        // no-op until the cache member is recovered (nothing on the PC boot reads it).
         void CacheSetPostTitlePhase(GuiCache* /*lpCache*/) {}
 
         // ⭐⭐ [profile-save 2026-08-27] X360 `lbz r11, 0x4B78(r11)` @0x8247E408 --

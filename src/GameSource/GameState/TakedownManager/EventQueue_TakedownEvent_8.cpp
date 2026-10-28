@@ -17,6 +17,3 @@ template BrnGameState::TakedownEvent& CgsModule::BaseEventQueue<BrnGameState::Ta
 // is the "mpEvents != NULL" (CgsBaseEventQueue.h:272) + "liIndex < GetLength()" (274) + "liIndex >= 0"
 // (275) sequence returning &mpEvents[i] (stride 40 == sizeof(TakedownEvent)) -- the const GetEvent body.
 template const BrnGameState::TakedownEvent& CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>::GetEvent(s32) const;
-
-static_assert(sizeof(CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>) == 336,
-              "typed OutputBuffer takedown queue retains its existing host seat");

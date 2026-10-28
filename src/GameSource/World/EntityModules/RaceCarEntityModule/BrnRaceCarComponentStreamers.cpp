@@ -83,14 +83,6 @@ void RaceCarAudioStreamer::Construct( RaceCarStreamer* lpStreamer )
 // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG: the car-audio streaming slot machine's
 // witness (owner report 2026-09-15: the engine note stays at idle on every car but the first;
 // the swapped car's ENGINES bundles were never re-streamed).
-namespace
-{
-    bool CarAudioDiag()
-    {
-        static const bool sbOn = (std::getenv("BRN_ENGINE_DIAG") != 0);
-        return sbOn && CgsDev::Log::gpDebugPrint != 0;
-    }
-}
 
 // ---------------------------------------------------------------------------
 // @ 0x822A5730. Register the desired streaming-sound asset luAssetID for car luUserId.
@@ -240,9 +232,6 @@ bool RaceCarAudioStreamer::SendLoadRequest( RaceCarStreamingSound* lpEntry )
     lEvent.mAssetID              = lModelId;
     lEvent.miActiveRaceCarIndex  = static_cast<u8>( lpEntry->miUserID );
     lEvent.mbIsPlayer            = lpEntry->mbDesiredIsPlayer;
-    if( CarAudioDiag() )
-        *CgsDev::Log::gpDebugPrint << "[car-audio] post REQUEST_LOAD car=" << static_cast<s32>( lpEntry->miUserID )
-                                   << " asset=" << lModelId << " isPlayer=" << ( lpEntry->mbDesiredIsPlayer ? 1 : 0 ) << "\n";
 
     if( KI_PRINT_CAR_LOADING_STATES )
     {
@@ -292,9 +281,6 @@ bool RaceCarAudioStreamer::SendUnLoadRequest( RaceCarStreamingSound* lpEntry )
                                    << " Asset:" << lpEntry->mLoadedBundleId << "\n";
     }
 
-    if( CarAudioDiag() )
-        *CgsDev::Log::gpDebugPrint << "[car-audio] post REQUEST_UNLOAD car=" << static_cast<s32>( lpEntry->miUserID )
-                                   << " loaded=" << lpEntry->mLoadedBundleId << " isPlayer=" << ( lpEntry->mbLoadedIsPlayer ? 1 : 0 ) << "\n";
     return mAudioCarLoadedDataQueue.AddEvent( lEvent );
 }
 
@@ -322,13 +308,6 @@ void RaceCarAudioStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreS
         CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
 
         RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
-
-        if( CarAudioDiag() )
-            *CgsDev::Log::gpDebugPrint << "[car-audio] reply type=" << static_cast<s32>( lEvent.meMessageType )
-                                       << " car=" << liActiveRaceCar << " asset=" << lEvent.mAssetID
-                                       << " isPlayer=" << ( lEvent.mbIsPlayer ? 1 : 0 )
-                                       << " slotState=" << static_cast<s32>( lEntry.meState )
-                                       << " loadedIsPlayer=" << ( lEntry.mbLoadedIsPlayer ? 1 : 0 ) << "\n";
 
         if( lEvent.meMessageType == RaceCarEntityModuleIO::AudioCarDataLoadedEvent::E_DATA_IS_LOADED )
         {
@@ -465,12 +444,6 @@ void RaceCarAudioStreamer::Update( const RaceCarEntityModuleIO::InputBuffer_PreS
             break;
         }
 
-        if( CarAudioDiag() && liDiagPrevState != static_cast<s32>( lEntry.meState ) )
-            *CgsDev::Log::gpDebugPrint << "[car-audio] slot " << liActiveRaceCar << " state " << liDiagPrevState
-                                       << " -> " << static_cast<s32>( lEntry.meState )
-                                       << " desired=" << lEntry.mDesiredId << " loaded=" << lEntry.mLoadedBundleId
-                                       << " desiredIsPlayer=" << ( lEntry.mbDesiredIsPlayer ? 1 : 0 )
-                                       << " loadedIsPlayer=" << ( lEntry.mbLoadedIsPlayer ? 1 : 0 ) << "\n";
     }
 
     // ---- 4. flush this frame's outgoing (un)load requests onto the output buffer -------

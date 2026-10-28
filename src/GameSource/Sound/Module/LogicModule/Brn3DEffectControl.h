@@ -107,10 +107,8 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
 
 // X360-attested payload size (see the DrawSphere FLAG above): the AddEvent<Message<
 // DrawSphere>> thunk @0x826DF9B8 bakes li r6,0x20 (=32) == sizeof(MessageHeader)+16.
-#if !defined(_WIN64)
 static_assert(sizeof(Brn3DEffectControl::DrawSphere) == 16,
               "X360 DrawSphere payload must be 16 bytes");
-#endif
 
 } // namespace Logic
 } // namespace BrnSound

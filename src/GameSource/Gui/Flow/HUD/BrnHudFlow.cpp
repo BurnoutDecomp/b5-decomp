@@ -152,10 +152,6 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     }
     else
     {
-        // FLAG PC defensive fallback: the X360 Prepare always receives a live manager;
-        // a config that passes none falls back to the shared 2-arg Construct and
-        // BootProfile's null-manager accept shortcut drives the phase.
-        mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine);
     }
     mpLoading->Construct(CgsIDCompress("BF_LOADING"), &lStateMachine);
     mpRaceMain->Construct(CgsIDCompress("RACE_MAIN"), &lStateMachine);

@@ -10,23 +10,9 @@
 
 AptFloat* AptFloat::spFirstFree = 0;
 
-// The free-list spin lock (the X360 lwarx/stwcx. idiom around spFirstFree).
-// FLAG PC-platform leaf: spin lock modelled as a host-portable interlocked TAS
-// (threading primitive, not an engine method; uncontended on the single-thread
-// bring-up path).
 namespace
 {
     volatile long gAptFloatFreeListLock = 0;
-    // FLAG PC-platform leaf: threading primitive (host interlocked TAS).
-    inline void AptFloatFreeListLock_Acquire()
-    {
-        while (_InterlockedExchange(&gAptFloatFreeListLock, 1) != 0) {}
-    }
-    // FLAG PC-platform leaf: threading primitive (host interlocked TAS).
-    inline void AptFloatFreeListLock_Release()
-    {
-        _InterlockedExchange(&gAptFloatFreeListLock, 0);
-    }
 }
 
 // @ 0x82AE7C08 -- pop a recycled value, else pool-allocate, then construct with fValue.
@@ -34,15 +20,12 @@ namespace
 // arm -- see AptInteger.cpp; the placement-new ctor reproduces it.)
 AptFloat* AptFloat::Create(const float fValue)
 {
-    AptFloatFreeListLock_Acquire();
     AptFloat* lpValue = spFirstFree;
     if (lpValue != 0)
     {
         spFirstFree = lpValue->mpNextFree;
-        AptFloatFreeListLock_Release();
         return ::new (lpValue) AptFloat(fValue);
     }
-    AptFloatFreeListLock_Release();
 
     void* lpMem = (gpNonGCPoolManager != 0) ? gpNonGCPoolManager->Allocate(sizeof(AptFloat)) : 0;
     if (lpMem == 0)
@@ -52,10 +35,8 @@ AptFloat* AptFloat::Create(const float fValue)
 
 void AptFloat::Destroy()
 {
-    AptFloatFreeListLock_Acquire();
     mpNextFree  = spFirstFree;
     spFirstFree = this;
-    AptFloatFreeListLock_Release();
 }
 
 void AptFloat::ClearPool()

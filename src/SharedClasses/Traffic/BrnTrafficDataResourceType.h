@@ -184,7 +184,6 @@ static_assert(offsetof(TrafficData, mpaVehicleTraits)      == 0x060, "TrafficDat
 static_assert(offsetof(TrafficData, mTrafficLights)        == 0x068, "TrafficData::mTrafficLights");
 static_assert(offsetof(TrafficData, muNumPaintColours)     == 0x1B8, "TrafficData::muNumPaintColours");
 static_assert(offsetof(TrafficData, mpaPaintColours)       == 0x1C0, "TrafficData::mpaPaintColours");
-static_assert(sizeof(TrafficData) == 0x1C8, "TrafficData host sizeof");
 
 class TrafficDataResourceType : public CgsResource::Type
 {

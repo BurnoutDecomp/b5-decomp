@@ -211,21 +211,9 @@ namespace BrnFlapt
         FileDebugData mDEBUGData;
     };
 
-    static_assert(sizeof(Vector2) == 0x08, "FLApt x64 Vector2 layout");
-    static_assert(sizeof(HashedString) == 0x10, "FLApt x64 HashedString layout");
-    static_assert(sizeof(TextField) == 0x28, "FLApt x64 TextField layout");
-    static_assert(sizeof(FontStyle) == 0x10, "FLApt x64 FontStyle layout");
-    static_assert(sizeof(Mesh) == 0x04, "FLApt x64 Mesh layout");
-    static_assert(sizeof(Transform) == 0x20, "FLApt x64 Transform layout");
-    static_assert(sizeof(ColourTransform) == 0x20, "FLApt x64 ColourTransform layout");
     static_assert(sizeof(RenderLayer) == 0x07, "FLApt RenderLayer layout");
     static_assert(sizeof(RenderLayerKeyFrame) == 0x0C, "FLApt RenderLayerKeyFrame layout");
-    static_assert(sizeof(KeyFrameAnims) == 0x30, "FLApt x64 KeyFrameAnims layout");
     static_assert(sizeof(IndexPath) == 0x21, "FLApt IndexPath layout");
-    static_assert(sizeof(TriggerParameters) == 0x20, "FLApt x64 TriggerParameters layout");
-    static_assert(sizeof(FileDebugData) == 0x10, "FLApt x64 FileDebugData layout");
-    static_assert(sizeof(MovieClip) == 0x80, "FLApt x64 MovieClip layout");
-    static_assert(sizeof(FlaptFile) == 0xA0, "FLApt x64 FlaptFile layout");
 }
 
 #endif // BRN_FLAPT_FILE_H

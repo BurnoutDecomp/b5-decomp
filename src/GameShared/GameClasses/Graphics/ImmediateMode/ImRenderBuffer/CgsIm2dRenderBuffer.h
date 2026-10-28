@@ -30,9 +30,4 @@ namespace CgsGraphics
                                  rw::math::vpu::Vector3 lrColour1);
     };
 
-    // FLAG PC-platform leaf: the existing APT fixed-function command consumer
-    // uses logical 1280x720 positions and byte-range colour constants. Translate
-    // the native Im2d interface's NDC / unit colour constants at this boundary;
-    // both producers then share the same ordered stream without a format tag.
-    Im2dTransform Im2dTransformToLogicalPC(const Im2dTransform& lrTransform);
 }

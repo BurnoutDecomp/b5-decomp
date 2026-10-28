@@ -106,16 +106,6 @@ namespace Deformation
         // mirrored iff that bit changed across the call -- this measures the shipped body, it does
         // not re-derive its predicate. One line per FixUp: "[handedness] FixUp ikParts N mirrored M".
         // DELETE-WHEN a left-handed record is found (or the zero-cost measurement is banked).
-        inline bool HandednessWitnessOn()
-        {
-            static s32 siWitness = -1;
-            if ( siWitness < 0 )
-            {
-                const char* lpcEnv = getenv( "BRN_DEFORM_TRACE" );
-                siWitness = ( lpcEnv != 0 && atoi( lpcEnv ) > 0 ) ? 1 : 0;
-            }
-            return ( siWitness == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
-        }
         inline u32 Row0SignBit(const BodyPartBBoxSpec& lrSpec)
         {
             return static_cast<u32>( std::signbit( lrSpec.mOrientation.xAxis.x ) ? 1 : 0 );
@@ -323,8 +313,6 @@ namespace Deformation
             static s32 siComProbe = -1;
             if ( siComProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_SPHERE_PROBE" );
-                siComProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static u32 suLogged = 0;
             if ( siComProbe == 1 && suLogged < 6u && CgsDev::Log::gpDebugPrint != 0 )
@@ -594,11 +582,6 @@ namespace Deformation
             }
             while ( liIndex < miNumberOfIKParts );
 
-            if ( HandednessWitnessOn() )
-            {
-                *CgsDev::Log::gpDebugPrint << "[handedness] FixUp ikParts " << liIndex
-                                           << " mirrored " << liMirrored << "\n";
-            }
         }
 
         // Bounds-check every locator's IK-part index against miNumberOfIKParts. The three checks are

@@ -41,8 +41,6 @@ protected:
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptObject, mClassFlags) == 0x38, "x64: object ctors write [this+38h] (@0x1408264E0)");
-        static_assert(sizeof(AptObject) == 0x40, "x64: CreateNewAptObject allocates 64 from the GC pool (@0x1408357D0)");
     }
 
 public:

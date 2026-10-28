@@ -24,7 +24,6 @@
 // console-only XAudio callbacks and are not ported.
 // =====================================================================================
 
-#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"
 #include "rw/audio/core/plugins/Dac.h"
 #include "rw/audio/core/Mixer.h"           // Mixer / MixerExecuteParams / SampleBuffer
 #include "rw/audio/core/CpuLoadBalancer.h" // the CPU-load governor the Dac drives
@@ -74,12 +73,6 @@ namespace
     // set/cleared at the same sites, read by the external fill as its "engine up" gate).
     u8 sThreadRunning = 0;
 
-    // dword_8327EE58 -- the console's external-DAC flag: nonzero skips every XAudio /
-    // worker-thread site. FLAG PC-platform leaf: the PC IS the external configuration
-    // (CgsSystem::AudioOutputPC is the device), so the flag is DEFINED 1 here where the
-    // console image boots it 0 -- every guarded site below is otherwise store-for-store.
-    const int sExternalDacMode = 1;
-
     // dword_8327EE04 -- the supported-mode list (capacity 6; entry 0 = mode 3 == 5.1).
     int sCapModes[6] = { 0, 0, 0, 0, 0, 0 };
 
@@ -100,10 +93,6 @@ namespace
     // unk_8215D010 -- the rate candidate table CreateInstance compacts (only 48 kHz is
     // populated on the ARTIST image; XEX-recovered).
     const f32 SKAF_RATE_CANDIDATES[7] = { 48000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    // off_82F8C664 -> 0x8215D044.. -- the mode-name table event 0 indexes.
-    const char *const SKPPC_MODE_NAMES[6] =
-        { "Mono", "Stereo", "Quad", "5.1", "7.1", "Dolby Pro Logic II" };
 
     // byte_8215D078 -- mode index -> channel count (XEX-recovered {1,2,4,6,8,2}).
     const u8 SKAU8_MODE_CHANNELS[6] = { 1, 2, 4, 6, 8, 2 };
@@ -298,12 +287,6 @@ int Dac::CreateInstance(Dac *self)
     self->mpMixer = static_cast<Mixer *>(lpMixerBlock);
     if (lpMixerBlock)
     {
-        // FLAG PC-platform parity: the console block comes from freshly-mapped
-        // physical pages, which the kernel hands over ZEROED -- the sample regions
-        // start silent, and an interleave before any producer writes them emits
-        // silence. The host allocator gives no such guarantee, so the zero is made
-        // explicit here (same observable state, not an invented store).
-        std::memset(lpMixerBlock, 0, sizeof(Mixer));
         self->mpMixer = Mixer::Mixer_ctor(static_cast<Mixer *>(lpMixerBlock));
     }
     if (!self->mpMixer)
@@ -374,7 +357,7 @@ int Dac::Event(int aiEventId, void *apParam)
         DacModeQuery *lpQuery = static_cast<DacModeQuery *>(apParam);
         int liMode = static_cast<int>(lpQuery->mfModeIndex);   // fctiwz
         lpQuery->mfSupported = 0.0f;
-        lpQuery->mpcName = SKPPC_MODE_NAMES[liMode];   // no bounds check -- console
+   // no bounds check -- console
         for (u32 luEntry = 0; luEntry < sCapNumModes; ++luEntry)
         {
             if (liMode == sCapModes[luEntry])
@@ -608,8 +591,6 @@ int Dac::Mix(Dac *self)
 // =====================================================================================
 Dac::~Dac()
 {
-    // FLAG PC-platform leaf: retire the external producer before freeing its mixer.
-    CgsSound::Playback::DacOutputPC::Detach(this);
     sThreadRunning = 0;
     if (!sExternalDacMode)
     {

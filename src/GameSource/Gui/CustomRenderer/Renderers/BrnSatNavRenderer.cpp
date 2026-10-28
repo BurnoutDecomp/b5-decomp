@@ -34,7 +34,6 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the Apt 2D command buffer)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptIm2dRenderBuffer (set slot 0)
 #include "GameSource/Gui/BrnCustomRendererManager.h"    // BrnGui::SetMaskRect (the mask push helper)
-#include "pc/gcm/renderengine/renderstates.h"           // renderengine::TextureState (+Parameters) / Texture
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // vertex
 
 #include <cstring> // memcpy
@@ -211,13 +210,7 @@ SatNavRenderer::SatNavRenderer()
     for (u32 luWord = 0; luWord < 5; ++luWord)
         maIconResources[1][luWord] = 0;
 
-    // The two members neither the console ctor nor Construct() stores to: mpGuiCache (event 64
-    // fills it) and mpMapBlendState (RenderComponent creates it on its own null test). The X360
-    // gets them zero from the pool the CustomRendererManager aggregate is carved out of; this
-    // host has no such guarantee, and Prepare()/RenderComponent both READ them, so they are
-    // zeroed here. FLAG PC-platform leaf: reproduces the console's zeroed backing store, not a
-    // console instruction -- there is no store to +0x90 or +0xC4 anywhere in either function.
-    mpGuiCache       = 0;   // +0x90
+   // +0x90
     mpMapBlendState  = 0;   // +0xC4
 }
 
@@ -537,18 +530,6 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
         lpInfo->mv3Position = lpDisplay->mv3Position;
         lpInfo->miEventId   = static_cast<s32>(luEventId);
 
-        // [FLAG PC bring-up guard, 2026-08-26] The WDC's mpProgressionData binding is not yet
-        // staged on this build, so GetEventInfoFromEventId can legitimately answer NULL here
-        // (its own no-match contract). The console never sees that (the controller is READY
-        // with data before icons draw). Default icon row + not-attempted; boot-proven AV in
-        // the first live event start otherwise. DELETE-WHEN the WDC data binding lands.
-        if (lpEventInfo == 0)
-        {
-            lpInfo->muEventTypeIndex = 0;
-            lpInfo->meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
-            return;
-        }
-
         const u32 luIconRow = KAU_EVENTTYPE_TO_ICONROW[lpEventInfo->GetEventTypeByte()];
         lpInfo->muEventTypeIndex = luIconRow;
 
@@ -587,11 +568,6 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
 
         lpInfo->mv3Position      = lpDisplay->mv3Position;
         lpInfo->miEventId        = static_cast<s32>(lpPresetEvent->GetEventId());     // presetEvent[+0x28]
-        // [FLAG PC bring-up guard, 2026-08-26] same unstaged-WDC-binding null as the offline
-        // arm above; default row on null. DELETE-WHEN the WDC data binding lands.
-        lpInfo->muEventTypeIndex = (lpEventInfo != 0)
-            ? static_cast<u32>(lpEventInfo->GetIconFrameBase()) + 6
-            : 6u;
         lpInfo->meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
         break;
     }
@@ -785,10 +761,6 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
     if (luIconIndex >= KU_MAX_SATNAV_ICONS)
         FireSatNavAssert("luIconIndex < KU_MAX_SATNAV_ICONS", 1308);
 
-    // [FLAG PC bring-up guard, 2026-08-26; RESHAPED 2026-08-27 -- see below]
-    // The console fires the asserts above and then does the append UNCONDITIONALLY (its WDC is
-    // always bound + display info always resolves before this runs). Only the OUT-OF-BOUNDS case
-    // is a real memory fault for us, so only it still returns.
     //
     // ⭐⭐ WHY THE OLD `lpDisplay == 0 || lpRaceEventData == 0` EARLY-RETURN WAS A DEFECT, NOT A
     // GUARD -- measured 2026-08-27. It skipped the SLOT CLAIM and the COUNT INCREMENT as well as
@@ -845,15 +817,6 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
     lIcon.miEventId        = liEventId;                      // X360: stored before any deref
     lIcon.meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
 
-    // [FLAG PC bring-up guard] Only the two stores that DEREFERENCE the looked-up records stay
-    // conditional. Leaving muEventTypeIndex at 0 alongside meSatNavIconType == 0 is not an
-    // invented value: that pair IS this renderer's own encoding of an unfilled slot --
-    // RenderIconsForSatNav tests exactly `muEventTypeIndex == 0 && meSatNavIconType == 0`
-    // (X360 @0x8245FB40, two loads off +0x5C4/+0x5C8) and skips drawing such a slot.
-    // DELETE-WHEN the WDC data binding + the event-start producer land.
-    lIcon.muEventTypeIndex = (lpRaceEventData != 0)
-        ? KAU_EVENTTYPE_TO_ICONROW[lpRaceEventData->GetEventTypeByte()]
-        : 0u;
     if (lpDisplay != 0)
     {
         lIcon.mv3Position = lpDisplay->mv3Position;
@@ -868,11 +831,6 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
     if (lIcon.muEventTypeIndex == 2 && lpRaceEventData != 0 &&
         lpRaceEventData->GetSpecialEventCarId() == mpGuiCache->GetLocalPlayerOriginalCarId())
         lIcon.muEventTypeIndex = 0;
-
-    // FLAG PC-platform witness: the row selected for a newly discovered route.
-    if (std::getenv("BRN_SATNAV_DIAG") && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[burn-route] refresh event=" << liEventId
-            << " row=" << lIcon.muEventTypeIndex << "\n";
 
     ++muNumberOfSatNavIcons;
 }
@@ -1070,17 +1028,6 @@ void SatNavRenderer::RenderIconsForSatNav(
     lfEventStartY = lfEventStartY < KF_ICON_CLAMP_MIN ? KF_ICON_CLAMP_MIN
                   : (lfEventStartY > KF_ICON_CLAMP_MAX ? KF_ICON_CLAMP_MAX : lfEventStartY);
 
-    // FLAG PC-platform witness: bounded output of the actual edge-marker selection.
-    if (std::getenv("BRN_SATNAV_DIAG") && lClosest.muEventTypeIndex == 0
-        && CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suRouteEdgeWitnesses = 0;
-        if (suRouteEdgeWitnesses++ < 8)
-            *CgsDev::Log::gpDebugPrint << "[burn-route] edge event=" << lClosest.miEventId
-                << " row=" << lClosest.muEventTypeIndex << " x=" << lfEventStartX
-                << " y=" << lfEventStartY << "\n";
-    }
-
     if (lfEventStartX >= KF_VISIBLE_MAX || lfEventStartX <= KF_VISIBLE_MIN ||
         lfEventStartY >= KF_VISIBLE_MAX || lfEventStartY <= KF_VISIBLE_MIN)
     {
@@ -1193,20 +1140,7 @@ void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfH
     // the four device-space corners the caller computed and the four atlas UV corners the
     // tables answered. Opt-in via BRN_SATNAV_DIAG. Named for exactly what it prints.
     {
-        static const bool sbQuadDiag = (getenv("BRN_SATNAV_DIAG") != 0);
         static s32 siQuadsLogged = 0;
-        if (sbQuadDiag && siQuadsLogged < 8 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siQuadsLogged;
-            *CgsDev::Log::gpDebugPrint
-                << "[satnav-quad] mini=" << static_cast<s32>(lbMiniIcons)
-                << " row=" << static_cast<s32>(luRow)
-                << " tix=" << static_cast<s32>(luEventTypeIndex)
-                << " pos=(" << lfLeft << "," << lfTop << ")-(" << lfRight << "," << lfBottom
-                << ") uvTL=(" << lv2UvTopLeft.x << "," << lv2UvTopLeft.y
-                << ") uvBR=(" << lv2UvBottomRight.x << "," << lv2UvBottomRight.y
-                << ") texState=" << static_cast<s32>(mapIconTextureStates[luRow] != 0) << "\n";
-        }
     }
 
     lpRenderBuffer->SetState(mapIconTextureStates[luRow]);

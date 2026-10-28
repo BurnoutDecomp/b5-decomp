@@ -83,19 +83,6 @@ namespace
     static_assert(sizeof(AllEventsDiscoveredWire312) == 1, "id 312 size 1");
     static_assert(sizeof(BrnGui::GuiEventMustFixCarFirst) == 1,         "id 552 size 1");
 
-    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_FREEROAM_DIAG), one line per translated
-    // action, capped per arm by the caller's counter.
-    void FreeRoamGuiWitness(s32 liActionType, s32 liGuiEventId, s32 liDetail, s32& riLinesLeft)
-    {
-        static const bool sbDiag = (getenv("BRN_FREEROAM_DIAG") != 0);
-        if (sbDiag && riLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --riLinesLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[freeroam-gui] action " << liActionType << " -> gui " << liGuiEventId
-                << " (" << liDetail << ")\n";
-        }
-    }
 }   // anonymous namespace
 
 bool TranslateFreeRoamGameActionToGuiEvent(

@@ -41,20 +41,6 @@ namespace CgsModule { struct Event; }                                        // 
 // @a1+640, CgsAttribSys::AttribSysModule @a1+399000, 9x EA::Allocator::GeneralAllocator @a1+427416
 // (stride 1312), the DLCManager + per-type IndexedLinkLists + HUD/popup controllers, etc.
 //
-// DEFER STATUS: reconstructed so far -- the rw-INDEPENDENT lifecycle spine (Prepare's base ->
-// ResourceModule::Prepare core, 0x82673F38 stages 1-2) and, THIS BATCH, the world-request service
-// path: the Update request pump (0x82674670, the GameDataIO input drain -> ProcessGameDataEvent
-// routing), the request dispatchers (ProcessGameDataEvent 0x826744F0, ProcessLoadGameDataEvent
-// 0x82671EA0, ProcessGetGameDataEvent 0x82672268, GetGameDataEventSlot 0x826664A0) and the FOUR
-// world handlers (GetWorldUnit 0x826705D0, LoadPVS 0x8266F9C0, LoadSurfaceList 0x8266F718,
-// LoadPropInstances 0x8266F178). The rw-allocator-gated stages (CreateBanks/CreatePools/
-// CreateAllocators) are inert/bring-up stand-ins; the DLC / AttribSys / HUD / popup prepare
-// stages, Destruct and the non-world ProcessXxxRequest handlers are DEFERRED. The
-// ProcessInternal*Response completion routing (0x82672630 / 0x826736D8 / 0x8266E3F0 /
-// 0x8266E5D8 / 0x8266E858) + the world GET acquire builders (GetPVS 0x82670880,
-// GetSurfaceList 0x8266FBF8, GetPropInstances 0x8266FB68) are now REAL; the AttribSys
-// vault-registration legs inside them are FLAG PC boot gates pending the AttribSysModule.
-// The many embedded subsystems beyond ResourceModule are added with their own passes.
 namespace BrnResource
 {
     namespace GameDataIO { struct GameDataAssetEvent; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
@@ -102,9 +88,6 @@ namespace BrnResource
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
         bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
-        // FLAG PC-platform leaf: caller holds the actual published output's read lock.
-        const GameDataIO::AllocatorList* GetPreparedRendererAllocatorsPC(
-            const GameDataIO::OutputBuffer* lpOutput) const;
         bool Release();                               // deferred
         void Destruct();                              // deferred
 

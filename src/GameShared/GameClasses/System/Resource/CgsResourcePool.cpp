@@ -7,16 +7,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
 #include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
-#include "pc/gcm/renderengine/TextureResource.h"
-#include "pc/gcm/renderengine/MeshPreparation.h"
-
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
-#include <cstddef>   // size_t (the PC-leaf free notification below)
-
-// FLAG PC-platform leaf (HOST-SIDE NOTIFICATION, console body otherwise unchanged).
-// Homed in pc/gcm/renderengine/WorldGeometry.cpp; declared here rather than
-// #included so a console TU does not pull a d3d9 header in (the same pattern
-// BrnRendererModule.cpp uses for the other renderengine leaf hooks).
+#include <cstddef>
 //
 // The console frees GPU-VISIBLE memory in FreeMemoryForResource: the bundle's
 // IndexBuffer/VertexBuffer bytes ARE what the Xenos fetches from, so handing the
@@ -42,7 +34,6 @@ namespace CgsResource
 {
     namespace
     {
-        // [FLAG PC diagnostic] one heap-FULL report per pool id (see the report site below).
         bool sabLoggedPoolFull[64] = { false };
 
         // ARTIST 820F7024 contains exactly the two populated X360 mappings.
@@ -52,34 +43,6 @@ namespace CgsResource
             CGS_ASSERT(liMemType >= 0 && liMemType < 2, "Invalid resource relocation memory type\n");
             static const s32 saiMemoryTypes[] = { 0, 2 };
             return saiMemoryTypes[liMemType];
-        }
-
-        // FLAG PC-platform leaf: native D3D buffers mirror host resource bytes.
-        // A move retires the old range even though its heap is not freed here.
-        void RetireRelocatedResourcePC(const Entry& lrEntry, s32 liMemType, const void* lpDestination)
-        {
-            renderengine::MeshPreparationPC::ResourceChanged();
-            const void* lpSource = lrEntry.mResource.m_baseResources[liMemType];
-            if (lpSource != lpDestination)
-                renderengine::WorldGeometry_OnResourceMemoryFreed(lpSource,
-                    lrEntry.mResourceDescriptor.m_baseResourceDescriptors[liMemType].m_size);
-        }
-
-        // FLAG PC-platform leaf: retain the existing native bundle import-width
-        // contract (legacy world graphs use low-4GB pointers; widened graphs may
-        // use full native addresses). Runtime staging must preserve that contract.
-        void WriteScratchImportPC(void* lpMainMemory, u32 luOffset, void* lpTarget)
-        {
-            renderengine::MeshPreparationPC::ResourceChanged();
-            u8* lpSlot = static_cast<u8*>(lpMainMemory) + luOffset;
-            const uintptr_t luTarget = reinterpret_cast<uintptr_t>(lpTarget);
-            if ((luTarget >> 32) != 0)
-                std::memcpy(lpSlot, &lpTarget, sizeof(lpTarget));
-            else
-            {
-                const u32 luNarrowTarget = static_cast<u32>(luTarget);
-                std::memcpy(lpSlot, &luNarrowTarget, sizeof(luNarrowTarget));
-            }
         }
 
         // Console debug frame counter at 830EA924; one relocation is driven by
@@ -400,24 +363,6 @@ namespace CgsResource
     {
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // CgsResourcePool.cpp:573
 
-        // [FLAG PC boot gate] On the console every type id a bundle can carry has a
-        // registered handler, so the X360 dereferences lpResourceType unguarded. Here an
-        // UNREGISTERED type id leaves CgsResource::BundleLoader::LoadBundle's resolve
-        // callback returning 0, and this read becomes an access violation deep inside the
-        // load -- a very expensive way to learn a handler is missing. Report the gap once
-        // (the loader already skips FixUp/imports for a null type) and allocate bottom-up.
-        // DELETE when every shipped type id is registered.
-        if (lpResourceType == 0)
-        {
-            static bool sbLoggedNullType = false;
-            if (!sbLoggedNullType && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                sbLoggedNullType = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "CgsResource::Pool: resource has NO registered type handler --"
-                       " allocating raw, FixUp will be skipped [FLAG PC boot gate]\n";
-            }
-        }
         const bool lbAllocateFromTop =
             (lpResourceType != 0) ? lpResourceType->GetCachedCanDefrag() : false;   // Type+4 flag
 
@@ -445,34 +390,6 @@ namespace CgsResource
                 {
                     if (lpEntry->mResource.m_baseResources[luFreeType] != 0)
                         maHeaps[luFreeType].Free(lpEntry->mResource.m_baseResources[luFreeType]);
-                }
-                // [FLAG PC boot gate] Console-real assert, but it can fire here for a PC-only
-                // reason: without the (deferred) relocating defragmenter a long streaming run
-                // can fragment a heap until an allocation fails. Report once and hand the
-                // caller the out-of-memory result it already handles; downstream consumers of
-                // a degraded bundle must tolerate refused resources (see the null-model gate in
-                // BrnWorldEntityModule::OnWorldGraphicsLoadComplete). RESTORE the plain
-                // CGS_ASSERT when the defragmenter lands.
-                {
-                    // ⭐ 2026-08-25 (aimodule wave): the message now NAMES THE POOL AND THE
-                    // NUMBERS. It used to say only "heap full", once, for the whole process --
-                    // which is a diagnostic that reports something other than its name: it
-                    // cannot distinguish "this pool's budget is too small for the PORTED data"
-                    // from "a long run fragmented a heap", and those want opposite fixes. It
-                    // cost this wave one full boot to find out which one AI.dat had hit.
-                    // Budgeted per pool (once each) so a streaming run cannot flood the log.
-                    if (miId >= 0 && miId < 64 && !sabLoggedPoolFull[miId] &&
-                        (CgsDev::Message::gxMessageFilterFlags & 1))
-                    {
-                        sabLoggedPoolFull[miId] = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "CgsResource::Pool: heap FULL, pool " << miId << " '"
-                            << macName << "' type " << static_cast<s32>(luMemType)
-                            << ": wanted " << static_cast<s32>(luSize)
-                            << " B, free " << static_cast<s32>(maHeaps[luMemType].GetAmountFreeBytes()) << " B of " << static_cast<s32>(maHeaps[luMemType].GetTotalSizeBytes())
-                            << " B -- further resources in this pool are refused"
-                               " [FLAG PC boot gate]\n";
-                    }
                 }
                 return false;
             }
@@ -503,9 +420,6 @@ namespace CgsResource
         }
         else if (!AllocateMemoryForResource(lpEntry, "", liSlot, lpNewResource->mpResourceType))
         {
-            // [FLAG PC boot gate] paired with the heap-full gate above -- the console never
-            // reaches this because it never overcommits a pool. RESTORE the plain CGS_ASSERT
-            // together with that one.
             FreeResourceEntry(static_cast<s16>(liSlot));
             return CREATERESULT_OUTOFMEMORY;
         }
@@ -560,22 +474,11 @@ namespace CgsResource
     // the resource pointer + heap node index.
     void Pool::FreeMemoryForResource(Entry* lpEntry)
     {
-        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :687
-        renderengine::TextureResource_OnEntryFreed(lpEntry, lpEntry->mResource.m_baseResources[0]);
         for (s32 lt = 0; lt < E_MEMTYPE_NUMTYPES; ++lt)
         {
             if (lpEntry->mResource.m_baseResources[lt] != 0)
             {
-                // [FLAG PC-platform leaf notification] see the banner at the top of this file.
-                // The block's byte count is the entry's OWN descriptor for this memory type --
-                // the very number AllocateMemoryForResource passed to Heap::Malloc
-                // (mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_size), so it
-                // covers exactly the bytes the resource occupies. Nothing about the console
-                // control flow below changes.
-                renderengine::WorldGeometry_OnResourceMemoryFreed(
-                    lpEntry->mResource.m_baseResources[lt],
-                    lpEntry->mResourceDescriptor.m_baseResourceDescriptors[lt].m_size);
 
                 maHeaps[lt].Free(lpEntry->mauHeapIndices[lt]);
                 lpEntry->mResource.m_baseResources[lt] = 0;
@@ -664,13 +567,6 @@ namespace CgsResource
         const size_t luHeapEnd = lpOptions->maHeapInfo[E_MEMTYPE_MAINMEMORY].muHeapMemorySize;
         const size_t luStorageStart = (luHeapEnd + lLayout.mAlignment - 1u) & ~(lLayout.mAlignment - 1u);
         return static_cast<u32>((luStorageStart - luHeapEnd) + lLayout.mSize);
-    }
-
-    // FLAG PC-platform leaf: expose the same native alignment used by InitPool
-    // so its real memory-request producer can allocate that management block.
-    u32 Pool::GetOverheadMemoryAlignment(const InitOptions* lpOptions)
-    {
-        return static_cast<u32>(CalculatePoolManagementStorageLayout(*lpOptions).mAlignment);
     }
 
     // 0x828E0BB8 - report the original X360 management estimate and its three heap-node
@@ -838,21 +734,15 @@ namespace CgsResource
     // rw::Resource view of its per-pool memory) then deserialise it (Type::DeSerialise).
     void Pool::FixUpEntry(Entry* lpEntry)
     {
-        renderengine::MeshPreparationPC::ResourceChanged();
         rw::Resource lrwResource = rw::Resource();
         lpEntry->mResource.ConvertToRWResource(lrwResource);
         lpEntry->mpResourceType->FixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
         lpEntry->mpResourceType->DeSerialise(lpEntry->mResource.m_baseResources[0]);
-        // FLAG PC-platform leaf: remember only a realized native raster, never
-        // interpret an unfixed serialized header during later rollback/free.
-        if (lpEntry->mpResourceType->GetTypeID() == E_RESOURCETYPE_TEXTURE)
-            renderengine::TextureResource_OnEntryFixedUp(lpEntry, lpEntry->mResource.m_baseResources[0]);
     }
 
     // 0x828EB920 - the post-fixup pass (Type::PostFixUp), run after imports are resolved.
     void Pool::PostFixUpEntry(Entry* lpEntry)
     {
-        renderengine::MeshPreparationPC::ResourceChanged();
         rw::Resource lrwResource = rw::Resource();
         lpEntry->mResource.ConvertToRWResource(lrwResource);
         lpEntry->mpResourceType->PostFixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
@@ -863,7 +753,6 @@ namespace CgsResource
     // resource at the import's byte offset. Returns false (and writes null) if unresolved.
     bool Pool::ResolveImportForEntry(Entry* lpEntry, BundleV2::ImportEntry* lpImport)
     {
-        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(lpImport->muOffset < lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size,
                    "Import offset out of range\n");   // :1730
 
@@ -902,25 +791,6 @@ namespace CgsResource
         // Unresolved: null the slot. Narrow store only -- a widened slot's high half is
         // already zero and a 4-byte slot must not be overrun.
         *reinterpret_cast<u32*>(lpSlot) = 0;
-        // [FLAG PC boot gate] The console always has every dependency bundle resident, so this
-        // is an assert there. On this build the world bundles are being brought up one at a
-        // time (COMMONDATA/SHADERS staging is still in flight), so a cross-bundle import can
-        // legitimately be missing -- and an assert here stops the simulation on the first
-        // TRK_UNIT load. Report the first few unresolved ids (that is the actionable data:
-        // which bundle still has to be staged) and carry on with the null the X360 also
-        // writes. RESTORE the plain CGS_ASSERT once every world bundle is staged.
-        {
-            static s32 siUnresolvedLogged = 0;
-            if (siUnresolvedLogged < 8 && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                ++siUnresolvedLogged;
-                *CgsDev::Log::gpDebugPrint << "CgsResource::Pool: unresolved import ";
-                *CgsDev::Log::gpDebugPrint << lpImport->mResourceId;
-                *CgsDev::Log::gpDebugPrint << " needed by ";
-                *CgsDev::Log::gpDebugPrint << lpEntry->mID;
-                *CgsDev::Log::gpDebugPrint << " [FLAG PC boot gate]\n";
-            }
-        }
         return false;
     }
 
@@ -1043,20 +913,16 @@ namespace CgsResource
     // 828FEE68: keep the entry and its intrusive pointer ring during live replacement.
     void Pool::DeleteMemoryForEntry(ID lId)
     {
-        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
         CGS_ASSERT(lpEntry != nullptr, "Failed to find entry to delete memory for\n");
-        renderengine::TextureResource_OnEntryFreed(lpEntry, lpEntry->mResource.m_baseResources[0]);
         for (s32 t = 0; t < 3; ++t)
         {
             void* lpMemory = lpEntry->mResource.m_baseResources[t];
             if (lpMemory)
             {
                 const u32 luSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[t].m_size;
-                // FLAG PC-platform leaf: retire D3D mirrors before reusing host heap memory.
-                renderengine::WorldGeometry_OnResourceMemoryFreed(lpMemory, luSize);
                 maHeaps[t].Free(lpMemory);
                 std::memset(lpMemory, 0xCD, luSize);
             }
@@ -1067,7 +933,6 @@ namespace CgsResource
     bool Pool::ReAllocateMemoryForEntry(ID lId, Entry::ResourceDescriptor* lpDescriptor,
                                         s32 liNumImports, SmallResource* lpResource)
     {
-        renderengine::MeshPreparationPC::ResourceChanged();
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");
         s32 liSlot;
         Entry* lpEntry = FindResource(lId, false, 2, &liSlot);
@@ -1378,7 +1243,6 @@ namespace CgsResource
         lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
         const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
         lDest.m_baseResources[liRWMemType] = lpScratch->mpTempLocation;
-        RetireRelocatedResourcePC(*lpEntry, miDefragMemType, lpScratch->mpTempLocation);
         lpEntry->mResource.CreateFromRWResource(lDest);
         reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
         lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
@@ -1398,7 +1262,6 @@ namespace CgsResource
         lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
         const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
         lDest.m_baseResources[liRWMemType] = lpScratch->mpDestLocation;
-        RetireRelocatedResourcePC(*lpEntry, miDefragMemType, lpScratch->mpDestLocation);
         lpEntry->mResource.CreateFromRWResource(lDest);
         reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
         lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
@@ -1456,8 +1319,6 @@ namespace CgsResource
             for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
             {
                 void* lpTarget = mpCurrentScratchPool->GetTempAddress(lpImports[liImport].mResourceId);
-                if (lpTarget != nullptr)
-                    WriteScratchImportPC(lrEntry.mResource.m_baseResources[0], lpImports[liImport].muOffset, lpTarget);
             }
         }
     }
@@ -1477,8 +1338,6 @@ namespace CgsResource
             for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
             {
                 void* lpTarget = mpCurrentScratchPool->GetDestAddress(lpImports[liImport].mResourceId);
-                if (lpTarget != nullptr)
-                    WriteScratchImportPC(lrEntry.mResource.m_baseResources[0], lpImports[liImport].muOffset, lpTarget);
             }
         }
     }
@@ -1585,7 +1444,6 @@ namespace CgsResource
             lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
             void* lpDestination = lpBase + mpRelocateRequests[lu].muDestOffset;
             lDest.m_baseResources[liRWMemType] = lpDestination;
-            RetireRelocatedResourcePC(*lpEntry, miDefragMemType, lpDestination);
             lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
             lpEntry->mResource.CreateFromRWResource(lDest);
             reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();

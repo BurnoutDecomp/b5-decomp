@@ -240,11 +240,6 @@ namespace BrnPhysics
         // named on the host. Trivial inline, no console address of its own.
         VecFloat GetMass() const { return mfMass; }
 
-        // [carcar-dv] PC WITNESS READ ACCESSORS, NOT X360 (2026-09-25, crash parity FX-LADDER).
-        // Read-only views of the protected world inverse-inertia tensor and the four accumulators,
-        // for the opt-in [carcar-dv] line in DeformableObject::UpdateContacts (BRN_CARCAR_DV). No
-        // console counterpart and no console path calls them.
-        // [FLAG PC witness] DELETE-WHEN the car-car contact-impulse chain is signed off live.
         const Matrix33& DiagWorldInverseInertia() const { return mWorldInverseInertia; }
         const Vector3&  DiagTotalLinearImpulse() const  { return mTotalLinearImpulse; }
         const Vector3&  DiagTotalAngularImpulse() const { return mTotalAngularImpulse; }

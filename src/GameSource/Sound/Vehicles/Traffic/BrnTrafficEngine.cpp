@@ -1,7 +1,6 @@
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficEngine.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficControl.h"
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"
-#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficSoundDiag.h"
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
@@ -212,14 +211,6 @@ bool TrafficEngine::Attach()
         mu16AemsPatchTrafficIndex = static_cast<u16>(
             TrafficStateManager::TrafficClassToSize( mpTrafficControl->GetTrafficEntity()->muVehicleClass ) );
 
-        // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-        if ( TrafficSoundDiagTake( guEngineVoiceWitnesses, 16 ) )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[trafficsnd] voice started type=engine entity="
-                << static_cast<s32>( lpState->GetTrafficEntity()->mu16EntityIndex )
-                << " size=" << static_cast<s32>( mu16AemsPatchTrafficIndex ) << "\n";
-        }
     }
     return true;
 }
@@ -247,9 +238,6 @@ void TrafficEngine::ProcessUpdate()
     const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStageBefore = mTrafficEngineVoice.GetUpdateStage();
     mTrafficEngineVoice.Update();
 
-    // [FLAG PC witness] BRN_TRAFFICSND_DIAG: the engine voice reached PLAYING, or left it
-    // on its own while the car is still attached (a looping engine never does).
-    const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStageAfter = mTrafficEngineVoice.GetUpdateStage();
     if ( leStageBefore != leStageAfter && leStageAfter == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING
          && TrafficSoundDiagTake( guEnginePlayingWitnesses, 16 ) )
     {
@@ -308,14 +296,6 @@ bool TrafficEngine::Detach()
 {
     if ( !BrnSound::Logic::BrnEffectObject::Detach() )
         return false;
-
-    // [FLAG PC witness] BRN_TRAFFICSND_DIAG
-    if ( TrafficSoundDiagTake( guEngineReleaseWitnesses, 64 ) )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[trafficsnd] voice released type=engine stage="
-            << static_cast<s32>( mTrafficEngineVoice.GetUpdateStage() ) << "\n";
-    }
 
     mTrafficEngineVoice.Release();
     return true;

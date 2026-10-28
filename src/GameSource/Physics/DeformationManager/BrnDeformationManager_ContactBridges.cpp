@@ -579,16 +579,7 @@ namespace Deformation
         // until AddRaceCarWheelPair landed (crash parity G22-D1). First 20 non-empty frames, then
         // every 50th. DELETE-WHEN-STABLE.
         {
-            static const bool sbWitness = (getenv("BRN_DEFORM_TRACE") != 0);
             static u32 suFrames = 0u, suContacts = 0u;
-            if (sbWitness && liQueueLength > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++suFrames;
-                suContacts += static_cast<u32>(liQueueLength);
-                if (suFrames <= 20u || (suFrames % 50u) == 0u)
-                    *CgsDev::Log::gpDebugPrint << "[wheel-car] frame contacts " << liQueueLength
-                                               << " total " << suContacts << " frames " << suFrames << "\n";
-            }
         }
 
         for (s32 liEventIndex = 0; liEventIndex < liQueueLength; ++liEventIndex)

@@ -156,24 +156,6 @@ namespace CgsResource
         SerialisedMaterialTechnique* const lpTechnique =
             static_cast<SerialisedMaterialTechnique*>(lpResource);
 
-        // [FLAG PC boot gate] mpShader and mpMaterialState are cross-bundle IMPORTS out of
-        // SHADERS.BNDL. That bundle IS staged now, so this normally resolves; the gate stays
-        // for the world bundles whose technique imports still come back null (the console
-        // never sees a null here and would dereference it). DELETE when every world bundle
-        // resolves its shader imports.
-        if (lpTechnique->muShader == 0 || lpTechnique->muMaterialState == 0)
-        {
-            static bool sbLoggedUnresolved = false;
-            if (!sbLoggedUnresolved && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                sbLoggedUnresolved = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "MaterialTechniqueResourceType::PostFixUp: shader/material-state import"
-                       " unresolved -- technique left as serialised [FLAG PC boot gate]\n";
-            }
-            return;
-        }
-
         CGS_ASSERT(lpTechnique->muMaterialState != 0, "lpMaterial->mpMaterialState");
         const u32* lpuMaterialState = PointerFromU32<const u32>(lpTechnique->muMaterialState);
         CGS_ASSERT(lpuMaterialState[0] != 0, "lpMaterial->mpMaterialState->mpBlendState"); // u32 slot @+0

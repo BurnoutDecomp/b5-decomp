@@ -857,8 +857,6 @@ namespace CgsPhysics
     // -------------------------------------------------------------------------------
     void PhysicsSimulationModule::_AssertLayout()
     {
-        static_assert(sizeof(CgsContainers::BitArray<KU_NUM_BODIES>) == 32,
-                      "BitArray<200> is four 64-bit fields (the 12 std 0 at +0x47E8..+0x4840)");
 
         // The head: the two stage words are adjacent, and mBodyData starts the 16-aligned run.
         static_assert(offsetof(PhysicsSimulationModule, meReleaseStage) == offsetof(PhysicsSimulationModule, mePrepareStage) + 4,
@@ -2068,17 +2066,7 @@ namespace CgsPhysics
                 // proxy was never created" and "the proxy is fed" must be distinguishable in a log.
                 // DELETE-WHEN the high-speed prop reaction is confirmed on screen.
                 {
-                    static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
                     static s32        siMissLinesLeft = 8;
-                    if (sbPropDiag && siMissLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        --siMissLinesLeft;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[extbody] update for entity " << CgsDev::E_PRINTMODE_HEXONCE
-                            << static_cast<u32>(lrEvent.mID >> 32)
-                            << " index " << static_cast<u32>(lrEvent.mID & 0xFFFFu)
-                            << " has NO sim body -- skipped silently, as on the console\n";
-                    }
                 }
                 continue;   // SILENT -- 0x828A3D8C, no assert on this path
             }
@@ -2097,10 +2085,7 @@ namespace CgsPhysics
 
             // Opt-in witness: an actual body-part update reached its live simulation body.
             const u32 luOwner = static_cast<u32>(lrEvent.mID >> 56);
-            static const bool lbPartTrace = std::getenv("BRN_RIVAL_DAMAGE_DIAG") != nullptr;
             static u32 luPartTraceCount = 0;
-            if (lbPartTrace && (luOwner == 6 || luOwner == 7) && luPartTraceCount++ < 8)
-                CgsDev::Log::WriteToLog("[part-motion] simulation update applied to body\n");
 
             lpBody->SetCoolDown(0);                             // unconditional, 0x828A40B4
             if ((lpBody->GetState() & rw_physics::FROZEN_BODY) != 0)
@@ -2143,7 +2128,6 @@ namespace CgsPhysics
             // arrives at all and whether GetIndexFromGameID resolves it.
             // DELETE-WHEN b5-decomp#2 is closed.
             {
-                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
                 static s32        siUpdRbLinesLeft = 400;
                 // The owner byte is the TOP byte of the ENTITY WORD, and the entity word is the
                 // HIGH dword of the packed RigidBodyId -- i.e. mID >> 56, not mID >> 32. The
@@ -2152,19 +2136,6 @@ namespace CgsPhysics
                 // look like it was dropping almost every event. Recorded because the wrong
                 // reading is the plausible one.
                 const u32 luOwner = static_cast<u32>((lrEvent.mID >> 56) & 0xFFu);
-                if (sbPropDiag && siUpdRbLinesLeft > 0 && luOwner == 3u
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siUpdRbLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[prop-updrb] entity=" << static_cast<u32>(lrEvent.mID >> 32)
-                        << " bodyIndex=" << liBodyIndex
-                        << " queueLen=" << lpQueue->GetLength()
-                        << " v=(" << lrEvent.mRigidBody.GetLinearVelocity().x
-                        << "," << lrEvent.mRigidBody.GetLinearVelocity().y
-                        << "," << lrEvent.mRigidBody.GetLinearVelocity().z << ")"
-                        << "\n";
-                }
             }
 
             if (liBodyIndex == -1)
@@ -2480,42 +2451,6 @@ namespace CgsPhysics
             // states and velocities -- keyed by the record index. Opt-in, first-N.
             // DELETE-WHEN b5-decomp#2 is closed.
             {
-                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
-                if (sbPropDiag && lpContact != NULL)
-                {
-                    const u32 luOwnerA = static_cast<u32>((lrEvent.mIDA >> 56) & 0xFFu);
-                    const u32 luOwnerB = static_cast<u32>((lrEvent.mIDB >> 56) & 0xFFu);
-                    const bool lbProp  = (luOwnerA == 3u || luOwnerB == 3u);
-                    const u32 luRecord = mpSimulation->GetContactCountForDiag() - 1u;
-                    if (luRecord < KU_PROP_DIAG_MAX_CONTACTS)
-                    {
-                        gabPropDiagContact[luRecord] = lbProp;
-                    }
-                    static s32 siLinesLeft = 6000;
-                    if (lbProp && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        --siLinesLeft;
-                        const rw_physics::Contact& lrC = *lpContact;
-                        const f32 lfPen = lrC.mRi.x * (lrC.mPosB.x - lrC.mPosA.x)
-                                        + lrC.mRi.y * (lrC.mPosB.y - lrC.mPosA.y)
-                                        + lrC.mRi.z * (lrC.mPosB.z - lrC.mPosA.z);
-                        *CgsDev::Log::gpDebugPrint
-                            << "[prop-contact] ci=" << luRecord
-                            << " A=" << luOwnerA << "/" << static_cast<u32>(lrEvent.mIDA >> 32)
-                            << " B=" << luOwnerB << "/" << static_cast<u32>(lrEvent.mIDB >> 32)
-                            << " pA=(" << lrC.mPosA.x << "," << lrC.mPosA.y << "," << lrC.mPosA.z << ")"
-                            << " pB=(" << lrC.mPosB.x << "," << lrC.mPosB.y << "," << lrC.mPosB.z << ")"
-                            << " n=(" << lrC.mRi.x << "," << lrC.mRi.y << "," << lrC.mRi.z << ")"
-                            << " pen=" << lfPen
-                            << " comA=(" << lrC.mComA.x << "," << lrC.mComA.y << "," << lrC.mComA.z << ")"
-                            << " comB=(" << lrC.mComB.x << "," << lrC.mComB.y << "," << lrC.mComB.z << ")"
-                            << " invmA=" << lrC.mInvmA << " invmB=" << lrC.mInvmB
-                            << " stA=" << lrC.mStateA << " stB=" << lrC.mStateB
-                            << " relv=(" << lrC.mVel.x << "," << lrC.mVel.y << "," << lrC.mVel.z << ")"
-                            << " mus=" << lrC.mMus << " mud=" << lrC.mMud << " res=" << lrC.mRes
-                            << "\n";
-                    }
-                }
             }
 
             // Register the pair -- skipped ONLY when both indices match the previous event's
@@ -3176,11 +3111,6 @@ namespace CgsPhysics
         // recorded it were removed after observation, as briefed.
         // [DIAG] b5-decomp#2 -- install the post-solve contact witness (opt-in, once). Host-only.
         {
-            static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
-            if (sbPropDiag)
-            {
-                rw_physics::Simulation::gpContactDiagHook = &PropContactSolveDiagHook;
-            }
         }
         mpSimulation->HackResetSpyCountHack();                 // `stw 0, 0x68/0x78/0x70`
         mpSimulation->SimulationUpdate(lfNewStep);

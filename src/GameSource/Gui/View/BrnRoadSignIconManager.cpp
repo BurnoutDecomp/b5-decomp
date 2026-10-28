@@ -21,12 +21,6 @@ namespace BrnGui
 {
 namespace
 {
-    // [FLAG PC witness] BRN_MAPICON_DIAG: the road-sign pool prepare / publish counts, first-N.
-    bool IsMapIconDiagOn()
-    {
-        static const bool sbDiag = (getenv("BRN_MAPICON_DIAG") != 0);
-        return sbDiag;
-    }
     const s32 KI_MAPICON_DIAG_MAX_LINES = 8;
 
     // The output GUI-event channel (the AddEvent channel OutputGuiEvent posts on).
@@ -251,14 +245,6 @@ namespace
         mbIconsTransformed = false;
         mbComponentVisible = false;
 
-        // [FLAG PC witness] BRN_MAPICON_DIAG, first-N.
-        static s32 siPrepareLines = 0;
-        if (IsMapIconDiagOn() && siPrepareLines < KI_MAPICON_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siPrepareLines;
-            *CgsDev::Log::gpDebugPrint << "[mapicon] road signs prepared: " << static_cast<s32>(KU_NUM_SIGN_ICONS)
-                                       << " components, controllers registered\n";
-        }
     }
 
     // The controllers are unregistered and dropped; the console never deletes them here.
@@ -385,14 +371,6 @@ namespace
                 reinterpret_cast<const CgsModule::Event*>(&lRecord),
                 lRecord.GetChannel(), static_cast<s32>(sizeof(lRecord)));
 
-            // [FLAG PC witness] BRN_MAPICON_DIAG, first-N.
-            static s32 siUpdateLines = 0;
-            if (IsMapIconDiagOn() && siUpdateLines < KI_MAPICON_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siUpdateLines;
-                *CgsDev::Log::gpDebugPrint << "[mapicon] road signs published: " << static_cast<s32>(KU_NUM_SIGN_ICONS)
-                                           << " scale=" << lRoadSignStatus.mfScaleFactor << "\n";
-            }
         }
     }
 
@@ -415,13 +393,6 @@ namespace
             lacRoadNameString[31] = '\0';
 
             const ERoadIcon leRoadIcon = mIcons[0].FindRoadFromName(lacRoadNameString);
-
-            // FLAG PC safety: a road outside the 64-name table comes back as the count; the
-            // console writes one icon past the array into the controller pointers that follow.
-            if (static_cast<u32>(leRoadIcon) >= KU_NUM_SIGN_ICONS)
-            {
-                continue;
-            }
 
             RoadSignIcon& lrIcon = mIcons[leRoadIcon];
             lrIcon.mbOfflineTimeRuled  = lpRoadRules->mabPlayerBeatenOfflineTime[liRoadRuleIndex];
@@ -461,11 +432,6 @@ namespace
     void RoadSignIconManager::SetupComponent()
     {
         Vector4 lv4StageRect;
-        // FLAG PC data correction: intentional ARTIST divergence. The retained
-        // RoadIconComponent coordinates and map artwork use different rectangles.
-        // Convert from the corrected authoring rectangle before caching world
-        // positions, keeping sign rendering and icon navigation aligned.
-        lv4StageRect.x = 154.4f;
         lv4StageRect.y = -141.8f;
         lv4StageRect.z = 2425.3f;
         lv4StageRect.w = 2115.5f;
@@ -499,15 +465,6 @@ namespace
         mbComponentVisible = true;
         mbIconsTransformed = true;
 
-        // [FLAG PC witness] BRN_MAPICON_DIAG, first-N: the first sign's world lanes.
-        static s32 siSetupLines = 0;
-        if (IsMapIconDiagOn() && siSetupLines < KI_MAPICON_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siSetupLines;
-            *CgsDev::Log::gpDebugPrint << "[mapicon] road signs set up: " << GetNumIcons()
-                                       << " sign0 world=" << mIcons[0].mv4WorldPosition.x
-                                       << "," << mIcons[0].mv4WorldPosition.y << "\n";
-        }
     }
 
     // Register the 64 sign names as expected screen components and queue each controller to

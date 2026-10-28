@@ -37,17 +37,6 @@ namespace CgsResource
 
     static const uint32_t KU_PFX_HOOK_BUNDLE_RESOURCE_TYPE_ID = 49;
 
-    // ---- the console relocation, kept for the record --------------------------------------
-    //   FixUpBundle   @0x8250B038: hooks/groups tables += base; each hook slot += base, then
-    //                 PFXHook::FixUp; each group slot += base.
-    //   FixDownBundle @0x8250B128: the exact inverse, in the inverse order.
-    // [FLAG PC bring-up] NEITHER RUNS ON THE x64 HOST. The slots are 32-bit and the GUI
-    // resource bank sits above 4 GB (measured 2026-09-17: base 0x1668CD23AE0; the truncated
-    // rebase wrote through 0x00000000423AB2D0 and the first registered boot crashed here),
-    // so the blob keeps the file-relative offsets the converter wrote and PFXHookBundle's
-    // accessors add the bundle's own address at read time -- see the banner in
-    // GameSource/Gui/PFX/BrnGuiPFXHooks.h. What is left of FixUp on PC is the console's
-    // implicit contract, checked: the tables and the recorded size lie inside the blob.
     static void ValidateBundleOffsets(const PFXHookBundle* lpBundle)
     {
         CGS_ASSERT(lpBundle->mpaHooks + 4u * static_cast<u32>(lpBundle->miHookCount) <= lpBundle->mSizeOfBundle,

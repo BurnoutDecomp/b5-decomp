@@ -46,32 +46,6 @@
 // REPRODUCED HERE: 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 and 8 on 2026-09-24;
 //                   4 on 2026-09-25.)
 //
-// [FLAG PC bring-up] dropped rather than paraphrased, each for a NAMED reason:
-//   1/15 + the whole state-4..6 replay arm -- BrnGameModule has no mDirectorBridgeSerialiser
-//        member (the console's is at gm+0x9A1070, inside this layout's omitted range) and
-//        DirectorBridgeSerialiser::GetStaticLayout is declaration-only. The PC has no replay
-//        path at all, so the live arm is the only one that can run.
-//   5 -- its DESTINATION (the world StatusInterface span before mContacts) is honest-opaque
-//        in BrnDirectorModuleIO.h. Writing into it by console byte offset is exactly the
-//        offset-poke this project forbids; it lands when that interface home does.
-//   (4 IS NO LONGER DROPPED -- restored 2026-09-25, crash parity FX-DIRECTOR2. Its destination
-//        is typed now: InputBuffer::mTrafficOutputInterface @0x6AC0, the TrafficDirectorOutputInterface
-//        the world output already carries; the x64 sizeof is the console's 0xE20.)
-//   (8 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-DIRECTOR. Its destination is
-//        typed now: InputBuffer::mGlobalRaceCarInterface at +16, exactly as the finding that stood
-//        here said -- 16 + 2416 == 2432 == mUsedRaceCars, and the x64 sizeof is 2416 too.)
-//   (6 IS NO LONGER DROPPED -- restored 2026-08-02, see the step in the body.)
-//   (13 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-BRIDGES CC-6. Both of its
-//        reasons had expired: Camera::PlayerCrashInfo is homed (SharedIO/BrnPlayerInfo.h) and so is
-//        its source, VehicleManagerOutputInterface::GetRaceCarCrashEventQueue (+0x3A0).)
-//   14 -- reads world-entity-status byte +217668, inside an opaque span.
-//   (the per-car HARDEST-IMPACT leg of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
-//        parity FX-BRIDGES CC-5. Its "not homed" reason had expired: BaseContact is homed in
-//        Physics/ContactSpies/BrnContactSpyEvents.h (mNormalStress +0x20 / mNormal +0x30 of the
-//        96-byte record) and RumbleManager::UpdateImpacts already walks the same run by name.)
-//   (the per-car DEFORMED AABB arm of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
-//        parity FX-BRIDGES CC-7. DeformationOutputInterface::mpDeformationState is homed and written
-//        every frame, and DeformationState::GetCarStateF / CarState::mDeformedBBoxMin/Max are named.)
 //
 // ⚠️ CONSOLE ODDITIES REPRODUCED, NOT FIXED:
 //   * step 10 clears mbHasCrashingCenterOfMass in the staged VehicleInfo and step 11 then
@@ -195,20 +169,7 @@ namespace BrnGame
         // 0 -> 1 EDGE only, so it proves the crash state reached the WORLD->DIRECTOR bridge --
         // i.e. that the commit is not physics-local the way the [showtime-probe] path is.
         {
-            static const char* const kspW = getenv("BRN_CRASH_PLAYER");
             static bool sbSeen = false;
-            if (kspW != 0 && mbPlayerCarCrashing && !sbSeen)
-            {
-                sbSeen = true;
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crash-probe] BridgeWorldToDirector: mbPlayerCarCrashing=1"
-                        << " (IsPlayerCarActive=" << (lpActiveRaceCars->IsPlayerCarActive() ? 1 : 0)
-                        << " IsPlayerCarCrashing=" << (lpActiveRaceCars->IsPlayerCarCrashing() ? 1 : 0)
-                        << ")\n";
-                }
-            }
         }
 
         if (!lpActiveRaceCars->IsPlayerCarActive())
@@ -449,27 +410,8 @@ namespace BrnGame
             // sqrt(impact) * 0.0001 is the chase camera's raw shake request
             // (BehaviourGameplayExternal::Update, before its 40 MPH ramp and 0.8 clamp).
             {
-                static const bool sbImpactDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
                 static u32 suNonZeroImpacts = 0;
                 static s32 siImpactLinesLeft = 60;
-                if (sbImpactDiag && lVehicleInfo.mfHardestImpact > 0.0f
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++suNonZeroImpacts;
-                    if (siImpactLinesLeft > 0 && (suNonZeroImpacts <= 40u || (suNonZeroImpacts % 200u) == 0u))
-                    {
-                        --siImpactLinesLeft;
-                        const Vector3& lN = lVehicleInfo.mHardestNormalStressNormal;
-                        const Vector3& lS = lVehicleInfo.mHardestNormalStress;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[cam-impact] #" << static_cast<s32>(suNonZeroImpacts)
-                            << " slot " << liSlot << (leSlot == lePlayerIndex ? " (player)" : "")
-                            << " mfHardestImpact " << lVehicleInfo.mfHardestImpact
-                            << " shake-request " << std::sqrt(lVehicleInfo.mfHardestImpact) * 0.0001f
-                            << " normal (" << lN.x << ", " << lN.y << ", " << lN.z
-                            << ") stress (" << lS.x << ", " << lS.y << ", " << lS.z << ")\n";
-                    }
-                }
             }
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The camera box as published when
@@ -478,37 +420,8 @@ namespace BrnGame
             // with the pristine half-extent box beside it and the largest per-axis difference
             // between the two.
             {
-                static const bool sbBoxDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
                 static u32 suDeformedBoxes = 0;
                 static s32 siBoxLinesLeft = 24;
-                if (sbBoxDiag && CgsDev::Log::gpDebugPrint != 0
-                    && lpDeformationOutputInterface->mpDeformationState != 0
-                    && lpDeformationOutputInterface->mpDeformationState->GetCarStateF(lpState->mEntityId.muValue) != 0)
-                {
-                    ++suDeformedBoxes;
-                    if (siBoxLinesLeft > 0 && (suDeformedBoxes <= 12u || (suDeformedBoxes % 400u) == 0u))
-                    {
-                        --siBoxLinesLeft;
-                        const Vector3& lMin = lVehicleInfo.mAABB.mMin;
-                        const Vector3& lMax = lVehicleInfo.mAABB.mMax;
-                        const Vector3& lHalf = lpState->mHalfExtent;
-                        f32 lfWorst = 0.0f;
-                        const f32 lafDelta[6] = { lMax.x - lHalf.x, lMax.y - lHalf.y, lMax.z - lHalf.z,
-                                                  lMin.x + lHalf.x, lMin.y + lHalf.y, lMin.z + lHalf.z };
-                        for (s32 liAxis = 0; liAxis < 6; ++liAxis)
-                        {
-                            const f32 lfAbs = lafDelta[liAxis] < 0.0f ? -lafDelta[liAxis] : lafDelta[liAxis];
-                            if (lfAbs > lfWorst) lfWorst = lfAbs;
-                        }
-                        *CgsDev::Log::gpDebugPrint
-                            << "[cam-aabb] #" << static_cast<s32>(suDeformedBoxes)
-                            << " slot " << liSlot << (leSlot == lePlayerIndex ? " (player)" : "")
-                            << " deformed box min (" << lMin.x << ", " << lMin.y << ", " << lMin.z
-                            << ") max (" << lMax.x << ", " << lMax.y << ", " << lMax.z
-                            << ") halfExtent (" << lHalf.x << ", " << lHalf.y << ", " << lHalf.z
-                            << ") worst-axis delta " << lfWorst << "\n";
-                    }
-                }
             }
 
             // [DIAG] NOT IN THE X360 BINARY -- bring-up diagnostic: print the pose the cameras will
@@ -519,27 +432,7 @@ namespace BrnGame
             // default-off camera-input switch, and capped at 20 lines: an ungated periodic print is
             // not console behaviour. (Remove when the whole world->director staging is routine.)
             ++suRaceCarInfoPublishCount;
-            static const bool sbPublishDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
             static s32 siPublishLinesLeft = 20;
-            if (sbPublishDiag && siPublishLinesLeft > 0 &&
-                (suRaceCarInfoPublishCount == 1u || (suRaceCarInfoPublishCount % 3000u) == 0u))
-            {
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siPublishLinesLeft;
-                    const Vector3& lPos = lVehicleInfo.mRaceCarState.mTransform.Pos();
-                    // [BRING-UP MEASUREMENT, physics wave 1] the WRITE end of the half-extent
-                    // transfer; BehaviourRotateAboutVehicle::Update prints the READ end.
-                    *CgsDev::Log::gpDebugPrint
-                        << "[world->director] publish #" << static_cast<s32>(suRaceCarInfoPublishCount)
-                        << ": player index "
-                        << static_cast<s32>(lePlayerIndex) << ", slot " << liSlot
-                        << " at (" << lPos.x << ", " << lPos.y << ", " << lPos.z
-                        << "), halfExtent (" << lpState->mHalfExtent.x << ", " << lpState->mHalfExtent.y
-                        << ", " << lpState->mHalfExtent.z
-                        << "), engine " << (lVehicleInfo.mbEngineOn ? "on" : "off") << "\n";
-                }
-            }
 
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                        "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
@@ -642,7 +535,6 @@ namespace BrnGame
             // most 60 lines): the witness that ArbStateCrashing / the moment selector / the water
             // fade now receive what the world says instead of a zeroed slot.
             {
-                static const bool sbCrashInfoDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
                 static s32 siLinesLeft = 60;
                 static u32 suLastKey = 0;
                 const u32 luKey = (lPlayerCrashInfo.mbHardstopVsWall ? 1u : 0u)
@@ -650,22 +542,6 @@ namespace BrnGame
                                 | (lPlayerCrashInfo.mbWrecked        ? 4u : 0u)
                                 | (lPlayerCrashInfo.mbHitWater       ? 8u : 0u)
                                 | (lPlayerCrashInfo.mfSpeedMPH != 0.0f ? 16u : 0u);
-                if (sbCrashInfoDiag && luKey != suLastKey && siLinesLeft > 0
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crash-info] player slot " << static_cast<s32>(lePlayerIndex)
-                        << " wrecked " << (lPlayerCrashInfo.mbWrecked ? 1 : 0)
-                        << " hitWater " << (lPlayerCrashInfo.mbHitWater ? 1 : 0)
-                        << " hardstopVsWall " << (lPlayerCrashInfo.mbHardstopVsWall ? 1 : 0)
-                        << " hardStopVsAI " << (lPlayerCrashInfo.mbHardStopVsAI ? 1 : 0)
-                        << " speedMPH " << lPlayerCrashInfo.mfSpeedMPH
-                        << " normal (" << lPlayerCrashInfo.mvCollisionNormal.x << ", "
-                        << lPlayerCrashInfo.mvCollisionNormal.y << ", "
-                        << lPlayerCrashInfo.mvCollisionNormal.z << ")"
-                        << " crash events " << static_cast<s32>(luNumCrashEvents) << "\n";
-                }
                 suLastKey = luKey;
             }
         }
@@ -751,8 +627,6 @@ namespace BrnGame
                     static_cast<s32>(BrnGameState::GameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO),
                     static_cast<s32>(sizeof(lRouteInfoEvent)));   // console size 8
 
-                // [FLAG PC witness] BRN_ROUTE_INFO_DIAG: every forwarded answer (first 40).
-                static const bool sbRouteDiag = (getenv("BRN_ROUTE_INFO_DIAG") != 0);
                 static s32 siRouteLinesLeft = 40;
                 if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
                 {
@@ -765,22 +639,6 @@ namespace BrnGame
             }
         }
 
-        // [FLAG PC witness] BRN_PROP_DIAG: the `[UI-gate]` ladder's GameState-transport rung, same
-        // guard and first-N latch as PropEntityModule_wQ_04.cpp's "[prop-diag] BREAK" line. The
-        // count is read after the Append because Append does not drain its source.
-        {
-            static const bool sbPropDiag     = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            static s32        siDiagLinesLeft = 8;
-
-            const s32 liQueued = lpWorldOutput->GetGameEventQueue()->GetLength();
-            if ( sbPropDiag && liQueued > 0 && siDiagLinesLeft > 0
-                 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siDiagLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[UI-gate] world->gamestate events n=" << liQueued << "\n";
-            }
-        }
     }
     // @ 0x823CD580 (bodied 2026-08-25, faithful-audio-engine phase C3b). The
     // world -> sound input bridge, console step-for-step (the caller holds the

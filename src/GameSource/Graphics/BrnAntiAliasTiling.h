@@ -87,9 +87,6 @@ namespace BrnGraphics
         0, 1, { { 0, 0, 1280, 720 } }
     };
 
-    // FLAG PC-platform leaf: the console rectangles partition a 720p EDRAM
-    // surface. Scale shared edges identically so clears and colour/depth
-    // resolves cover the whole PC target, including odd pixel dimensions.
     inline AntiAliasTilingPlan ScaleTilingPlan(const AntiAliasTilingPlan& lrPlan,
                                               u32 luWidth, u32 luHeight)
     {

@@ -192,34 +192,6 @@ void StringPool::Initialize(int nBucketCount)
     gnAptStringPoolCount = static_cast<unsigned int>(nBucketCount);
 }
 
-// AptStringPool_Initialize -- the free wrapper AptCommonInitialize calls (so AptInit.cpp
-// need not include the full StringPool.h alongside the interpreter headers, which carry
-// AptNativeHash.h's incompatible mini `class StringPool`).
-// PC-only header-decoupling forwarder: the console calls StringPool::Initialize @0x82AE3630
-// directly; this wrapper only keeps AptNativeHash.h's incompatible mini `class StringPool`
-// out of AptInit.cpp.
-// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
-void AptStringPool_Initialize(int nBucketCount)
-{
-    StringPool::Initialize(nBucketCount);
-}
-
-// AptStringPool_Teardown / AptStringPool_ClearTemporaryPool -- the free wrappers the Apt
-// shutdown (AptInit.cpp AptCommonShutdown) reaches StringPool::Teardown @0x82AE3720 /
-// StringPool::ClearTemporaryPool @0x82AD8E20 through, for the same reason as
-// AptStringPool_Initialize above (AptInit.cpp cannot pull in the full StringPool.h).
-// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
-void AptStringPool_Teardown()
-{
-    StringPool::Teardown();
-}
-
-// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
-void AptStringPool_ClearTemporaryPool()
-{
-    StringPool::ClearTemporaryPool();
-}
-
 // ---------------------------------------------------------------------------
 // FindOrCreate -- the pool-string INTERNER (XB1 sub_140838AE0; the x64-primary
 // Apt rung). Every serialized constant-pool string resolves through here (the
@@ -252,14 +224,6 @@ AptString* StringPool::FindOrCreate(const char* pName)
     return GetFromPool(pName);
 }
 
-// The free forwarder the _parseStream TU calls (same header-decoupling pattern as
-// AptStringPool_Initialize above).
-// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
-AptString* AptStringPool_FindOrCreate(const char* pName)
-{
-    return StringPool::FindOrCreate(pName);
-}
-
 // ---------------------------------------------------------------------------
 // ReleaseString (XB1 sub_14083F2A0) -- HOMED 2026-07-10 (retiring the {} stub):
 // the INVERSE of FindOrCreate's hit path, called by _parseStream's unresolve
@@ -279,14 +243,6 @@ void StringPool::ReleaseString(AptString* pString)
     if (pString == nullptr)   // host guard: the engine never unresolves a null slot
         return;
     RemoveFromPool(pString);
-}
-
-// The free forwarder the _parseStream TU calls (the same header-decoupling
-// pattern as the pair above).
-// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
-void AptStringPoolReleaseString(AptString* pString)
-{
-    StringPool::ReleaseString(pString);
 }
 
 // ---------------------------------------------------------------------------

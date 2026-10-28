@@ -24,7 +24,6 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                                      // the network GUI payload types
 #include "GameSource/Gui/Events/BrnGuiEventNetworkCreateGame.h"                            // BrnGui::GuiEventNetworkCreateGame
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"                            // BrnGui::GuiEventNetworkGameParams
-#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameSource/Gui/Events/BrnGuiEventNetworkPlayerStats.h"                           // BrnGui::GuiEventNetworkPlayerStats
 #include "GameSource/Network/BrnNetworkGameParams.h"                                       // BrnNetwork::GameParams
 #include "GameSource/Network/BrnNetworkManager.h"
@@ -904,12 +903,6 @@ namespace BrnNetwork
     // player options, stats and picture requests, news and terms-of-service, the splash
     // screen and the connect request.
     //
-    // FLAG PC-ABI adapter (the GameBridgeGUIToX one): the PC GUI module leaves some records
-    // on channel 40 with the event id in the record's second word and the payload offset in
-    // its third; a record posted directly carries its own id. Types that carry the GUI event
-    // header (GuiEvent<N>-derived) are read from the record, the bare payload types from the
-    // payload.
-    // ------------------------------------------------------------------------------------
     void StateManager::ProcessGuiEvents(const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
     {
         const CgsModule::Event* lpEvent     = nullptr;
@@ -1439,8 +1432,6 @@ namespace BrnNetwork
             case KI_GUI_EVENT_NETWORK_GAME_PARAMS:
                 CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame(),
                            "mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame()");
-                BrnGui::CreateMatchTracePC::Parameters(BrnGui::CreateMatchTracePC::E_PARAMS_CONSUMED,
-                    *static_cast<const BrnGui::GuiEventNetworkGameParams*>(lpPayload));
                 ModifyGame(static_cast<const BrnGui::GuiEventNetworkGameParams*>(lpPayload));
                 break;
 

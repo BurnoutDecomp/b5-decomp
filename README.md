@@ -1,95 +1,27 @@
-# Burnout 5 Decomp
+# Burnout Paradise: Xbox 360 byte matching experiment
 
-This submodule is the recovered C++ project. The parent repository
-`BP-Decomp_Workflow` owns orchestration, references, exports, and the work ledger;
-this submodule owns the source that is being reconstructed.
+Branch: `codex/experimental-x360-byte-match`.
 
-## Report bugs and contribute
+This experiment removes the PC port from the reconstructed source so work can
+move toward byte matching `BURNOUT_X360_ARTIST.XEX`: 32-bit PowerPC, big-endian.
+`main` and `dev` continue to carry the PC project.
 
-Found a crash, visual problem or behavior that seems wrong?
-[Open an issue](https://github.com/BurnoutDecomp/b5-decomp/issues/new/choose).
-The [reporting guide](CONTRIBUTING.md) shows how to report with whatever details
-you have. Screenshots, build details and reproduction steps are helpful but optional.
-No coding knowledge is needed.
+PC platform sources, desktop entry point, renderer hooks, input/audio/storage
+adapters, FFmpeg playback, test harnesses, diagnostics, frame interpolation and
+native-8 Apt conversion paths are removed from the shared code. Existing Xbox
+branches are selected directly. `src/pc/` stays as an unbuilt reference; shared
+sources must not include it.
 
-Browse the [issue list](https://github.com/BurnoutDecomp/b5-decomp/issues) for known
-problems and [milestones](https://github.com/BurnoutDecomp/b5-decomp/milestones) for
-public acceptance targets. Detailed TU progress remains in the workflow ledger.
-For known tooling or converter failures, use the
-[workflow tracker](https://github.com/BurnoutDecomp/BP-Decomp_Workflow/issues/new/choose).
+This is an incomplete source experiment. It does not build or boot yet and has
+not produced a byte match. The Xbox 360 toolchain/project, missing platform and
+middleware implementations, original class layouts, VMX code and compiler/codegen
+recovery still need work. Missing implementations are left unresolved. Mixed methods that depend on PC
+infrastructure are removed as whole definitions when their console implementation
+is still missing; the base commit is `209fb3b94f7266506dff4ffd569e8553f1b3af93`.
 
-The [original optimization backlog](docs/ORIGINAL_OPTIMIZATIONS.md) tracks missing
-worker/SIMD mechanisms and the evidence required to finish their reconstruction.
-Previous PC measurements and validation are in
-[PC rendering performance](tests/PCPerformance.md).
+The parent workflow's desktop build and existing PC runtime tests do not apply.
+Use ARTIST assembly as the authority for all future work, including Apt; DecFIGS
+can corroborate declarations. Do not import Xbox One pointer widths or file layouts.
 
-## Controllers
-
-The PC build uses SDL3 for Xbox, DualShock 4, DualSense and other SDL gamepads.
-The first connected controller drives player 0; keyboard controls still work.
-SDL3.dll is included with packaged builds. See [controller setup and testing](docs/CONTROLLERS.md).
-
-## Layout
-
-| Path | Purpose |
-| --- | --- |
-| `src/` | Recovered game/engine C++ and project headers. Translation units from the workflow land here under mirrored original paths. |
-| `src/types.hpp` | Shared baseline type aliases and common includes used by generated/recovered code. |
-| `vendor/` | EA open-source libraries and RenderWare support used by the PC compile target. |
-| `CMakeLists.txt` | Top-level CMake entry point for the recovered project. |
-
-## Workflow Contract
-
-Agents do not pick files in this submodule directly. They claim a TU from the parent
-ledger:
-
-```powershell
-work claim
-work show <tu> --full
-```
-
-Then they write the recovered source under `src/<mirrored original path>` and submit:
-
-```powershell
-work submit <tu>
-work review <tu> --verdict pass|fail
-```
-
-The compile gate is per TU (`cl /c`, no link) and is configured in the parent repo at
-`progress/verify.config.json`.
-
-## Parent Repo Tools
-
-The parent workflow repo owns the tools. The important entry points for this submodule
-are:
-
-| Need | Tool |
-| --- | --- |
-| Claim or inspect a translation unit | `work claim`, `work show <tu> --full` |
-| Find required declarations/stubs | `work stubs <tu> --list` |
-| Compile and package a TU for review | `work submit <tu>` |
-| Record the review result | `work review <tu> --verdict pass|fail` |
-| Check vendor SDK bodies before decompiling | `python tools/work/check_vendor_lib.py <tu>` |
-| Look up wiki type names | `python tools/work/wiki_index.py --lookup <Type>` |
-| Regenerate RenderWare type headers | `python tools/renderware/generate_headers.py` |
-
-See the parent [`tools/README.md`](../tools/README.md) and
-[`progress/README.md`](../progress/README.md) for the full inventory.
-
-## Code Rules
-
-- Reconstruct source-like C++, not raw decompiler output.
-- Put shared types in their real owning headers and include them.
-- Do not locally redefine types that have a reconstructable header.
-- Do not use raw offset casts for member access.
-- Use explicit padding fields only inside the owning class/struct when layout gaps are
-  still unknown.
-- Follow `../references/CXX_NAMING_CONVENTIONS.md` for owned code.
-- Keep vendor code in `vendor/`; check vendor TUs with
-  `python tools/work/check_vendor_lib.py <tu>` from the parent repo before decompiling.
-
-## Build Notes
-
-The project currently builds through CMake and links against vendored EA libraries plus
-the imported RenderWare support where available. The decomp workflow normally uses the
-lighter per-TU compile gate first; full-program link/runtime work is a later milestone.
+The parent `BP-Decomp_Workflow` repository retains the references, exports and
+ledger. Do not publish experimental coverage to the shared production ledger.

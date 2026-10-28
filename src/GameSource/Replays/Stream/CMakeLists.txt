@@ -5,7 +5,6 @@ target_sources(${PROJECT_NAME}
         BrnReplayReadStream.cpp
         BrnReplayStreamHeader.cpp
         BrnReplayWriteStream.cpp
-        BrnReplayWriteStream_embed_check.cpp
 
     PUBLIC
         BrnReplayDiskReadStream.h

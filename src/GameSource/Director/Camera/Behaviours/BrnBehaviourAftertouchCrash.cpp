@@ -767,31 +767,11 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     // CAP 2026-09-24, crash-parity diag hygiene: the rate limit alone grew with every crash
     // camera a long drive raised). Prints only.
     {
-        static const bool sbRigDiag = (getenv("BRN_CAMRIG_DIAG") != 0);
         static s32 siDiagFrame = 0;
         static s32 siDiagLinesLeft = 240;
         if (lbDiagFirstFrame)
         {
             siDiagFrame = 0;
-        }
-        if (sbRigDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 &&
-            (siDiagFrame < 10 || siDiagFrame % 15 == 0))
-        {
-            --siDiagLinesLeft;
-            const Vector3& lrPublished = lrCamera.GetTransform().wAxis;
-            *CgsDev::Log::gpDebugPrint
-                << "[camrig] Update frame " << siDiagFrame
-                << " first " << (lbDiagFirstFrame ? 1 : 0)
-                << " tempDebug " << (mbIsTempDebugCrashCamera ? 1 : 0)
-                << " manual " << (mbManualCameraControl ? 1 : 0)
-                << " car " << lCarPosition.x << " " << lCarPosition.y << " " << lCarPosition.z
-                << " cam " << lrPublished.x << " " << lrPublished.y << " " << lrPublished.z
-                << " dir " << mWorldSpaceNormalizedVectorFromCar.x << " "
-                << mWorldSpaceNormalizedVectorFromCar.y << " " << mWorldSpaceNormalizedVectorFromCar.z
-                << " dist " << mfDistance << " height " << mfHeight << " blend " << mfBlendFactor
-                << " impact " << mImpactEffect.GetImpactFactor()
-                << " roll " << mfRollAngleRads << " closeup " << mfCloseupAmount0To1
-                << " fov " << lrCamera.GetFOV() << "\n";
         }
         ++siDiagFrame;
     }

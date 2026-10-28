@@ -292,22 +292,6 @@ public:
         u8                                  muPixelShaderRegisterCountOriginal;     // DWARF :179
         u8                                  muPixelShaderRegisterCountModified;     // DWARF :180
 
-        // [FLAG PC-platform leaf: program-buffer ownership] NOT A CONSOLE MEMBER, and it is not
-        // pretending to be one -- the DWARF ends the struct at :180 and the guest object is 15 dwords.
-        // It records WHICH OF THE TWO ROUTES built this slot's programs, because the two have
-        // incompatible ownership and Destruct has no other way to tell them apart:
-        //   false -> the console route (ProgramBuffer::GetResourceDescriptor -> allocator Create ->
-        //            Initialize). The program pointer IS an allocator block and Destruct hands it back
-        //            through IResourceAllocator::DoFree, exactly as the X360 does.
-        //   true  -> renderengine::ProgramBufferPC_Adopt. The image lives in the PC leaf's bump arena
-        //            (ImmediateMode.cpp ArenaAlloc, which has no free), so the allocator never
-        //            issued it and DoFree MUST NOT see it -- a concrete rw::LinearResourceAllocator
-        //            would free a block it never carved. Documented leak-on-destruct of a boot-lifetime
-        //            object; the full ownership story is the banner on Shader::Destruct.
-        // The host layout of this struct already differs from the guest one (both program pointers
-        // widen to 8 bytes), and nothing anywhere indexes a Shader by a guest stride, so adding a byte
-        // here changes nothing that was ever console-shaped.
-        bool                                mbAdoptedPC;
     };
 
     // X360 0x82401538 -- zero the five {resource, state pointer} pairs and the two motion-blur

@@ -20,7 +20,6 @@
 #include "GameShared/GameClasses/Core/CgsID.h"           // CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"   // GetHull / GetHullRuntime / maaRaceCarHulls
-#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPvsDiag.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"      // traffic capacities / sentinels
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"          // Param, transforms, history and slow data
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"        // Vehicle, Axle and VehicleAxles
@@ -1933,8 +1932,6 @@ void DebugComponent::DrawAxles(CgsDev::Debug3DImmediateRender* lpDisplay) const
 }
 
 } // namespace BrnTraffic
-
-
 
 namespace BrnTraffic
 {

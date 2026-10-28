@@ -15,8 +15,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
-#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h" // private pre-overwrite diagnostic
-
 #include <cstring>
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -392,7 +390,6 @@ namespace Module
         CGS_ASSERT(lpSoundModuleOutputBuffer != 0, "lpSoundModuleOutputBuffer != NULL");
 
         // Sample the optional diagnostic switch before creating the System/device callbacks.
-        CgsSystem::RwacCommandTracePC::ConfigureFromEnvironment();
 
         // Per-call scratch IO buffers -- all three REAL since phase B5:
         //   Io::LogicOutputBuffer                        on the OUTPUT stack ("SoundLogic")
@@ -457,9 +454,6 @@ namespace Module
             //   byte_82FFBF89 = 1 == the testbed's rwac-locked test toggle.
             mpSystem = rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 196608);
             CGS_ASSERT(mpSystem != 0, "mpSystem");
-            if (CgsSystem::RwacCommandTracePC::Enabled() && mpSystem)
-                CgsSystem::RwacCommandTracePC::BeginSystemEpoch(
-                    mpSystem, mpSystem->mpDeferredRingBase, mpSystem->muCommandBufferSize);
             gRwacTestBedAlloc.EnableRwacLockedTest(true);
 
             // Bring-up trace (host log line; the console has no equivalent print).
@@ -702,7 +696,6 @@ namespace Module
                                  Io::RootOutputBuffer* lpSoundModuleOutputBuffer,
                                  BrnUpdateSet leUpdateSet)
     {
-        CgsSystem::RwacCommandTracePC::MarkProducerFrame(mpSystem);
         CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
         CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
         CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");

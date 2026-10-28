@@ -129,7 +129,6 @@ void LoadingScriptedState::RenderGUI(
         CgsGraphics::Camera lGuiCamera = CgsGui::GetGuiCamera();
         lpGuiInput->SetCamera(lGuiCamera);
         lpGuiInput->UnlockForWrite();
-        lpGameModule->GetGuiModule().CaptureRenderInputPC(lpGuiInput);
         lpRendererOutput->LockForRead();
         lpGameModule->GetGuiModule().Render(lpGuiViewInput, lpGuiInput, lpRendererOutput);
         lpRendererOutput->UnlockForRead();
@@ -137,8 +136,6 @@ void LoadingScriptedState::RenderGUI(
 
     lpInputStack->DestroyIOBuffer(&lpRendererInput);
     lpOutputStack->DestroyIOBuffer(&lpRendererOutput);
-    lpGameModule->GetRenderModule().CompleteCommandFramePC(lpDispatchInput,
-        BrnRendererModule::E_COMMAND_PRODUCER_GUI);
 }
 // @ 0x823C6AB0 -- the base FinishLoading is a tail-call into the flow controller's
 // SendEvent(STATEEND); it is vtable-only (no static callers on either side). The PC body
@@ -453,76 +450,8 @@ bool LoadingScriptedState::LoadGameState2(
     return lbPrepared;
 }
 
-// The per-frame world UPDATE leg of the scripted-load spine (X360 0x823F22D8, the
-// `dword_82FAE4B0 > 5` block). Split out of Update() for readability; the X360 inlines it.
-//
-//   * the world update IO pair: the X360 spine creates BrnWorldIO::UpdateInputBuffer and
-//     UpdateOutputBuffer on the update stacks near the top of the frame (v40/v39) and
-//     threads them through every world bridge; this slice creates the pair here, drives the
-//     world, forwards the requests and destroys it -- the same lifetime, narrower scope
-//     (no other consumer of the pair is wired on the PC yet).
-//   * the frame allocator: X360 gm+10094128, published by GamePrepare @0x823EFBD0 as the
-//     RENDERER's reusable loading-screen allocator (RendererIO::OutputBuffer::
-//     GetReusableLoadingScreenAllocator @0x823B4088). The PC renderer never publishes it
-//     (GamePrepare is gated), so this slice owns an equivalent bump allocator --
-//     FLAG PC-platform leaf: the region SIZE is a PC choice (the X360 size belongs to the
-//     renderer's loading-screen allocator and is not recovered); WorldModule::Update makes
-//     exactly ONE 336896-byte carve per frame and the FreeAll below resets it every frame,
-//     so 512 KiB covers the frame with headroom. Swap for the renderer's allocator when
-//     GamePrepare lands.
-//   * BridgeWorldToResource @0x823E5300: append the world output's resource-request
-//     interface (RequestInterface<4096>) into the GameData input, then bulk-append its
-//     AttribSys vault request queue (<2048> into VariableEventQueue<32768,16>) -- the same
-//     pair LoadWorldModule runs during the prepare stages, now running per frame.
-void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-                                             BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput)
-{
-    // ⭐ CORRECTED 2026-08-16 (boot audit F-P3-5 / F-P6-13). The update set was the
-    // hard-coded constant KU_LOADING_UPDATE_SET (0x80) for the whole boot. The console
-    // derives it per frame from the flow state (ConstructUpdateSetFromFsm @0x823BD420 --
-    // one of its four call sites is this very spine, @0x823F26D8) and then GUARDS the world
-    // leg on it: @0x823F282C-44 tests !(set & 0x20) && !(set & 0x40), i.e. the world module
-    // is NOT driven at all while a video phase or the save-load phase is up. The boot
-    // progression is 0x80 (initial load) -> 0xA0 (marketing/title) -> 0xE1 (memory card)
-    // -> 0xA0 (complete loading) -> 0x88 (in game).
-    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
-    const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
-
-    // Dev trace: one line per distinct set the boot walks through. The console progression
-    // is 0x80 -> 0xA0 -> 0xE1 -> 0xA0 -> 0x88; seeing it here is the proof that the flow
-    // states' save-load/video/in-game bytes are being written at all.
-    {
-        static u32 s_uLastUpdateSet = 0xFFFFFFFFu;
-        if ((u32)lUpdateSet != s_uLastUpdateSet)
-        {
-            s_uLastUpdateSet = (u32)lUpdateSet;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "[flow] update set -> "
-                                           << CgsDev::E_PRINTMODE_HEXONCE << (u32)lUpdateSet << "\n";
-        }
-    }
-
-    // On 0x20/0x40 frames the console still runs BridgeSoundToWorld (@0x823F2818 sits
-    // BEFORE the bit test @0x823F282C) -- but into a worldIn nothing then reads: the world
-    // vcall is suppressed and the frame-spanned buffer dies unread at the teardown batch.
-    // Skipping the whole drive here is therefore behaviourally identical, not a divergence.
-    if ((lUpdateSet & 0x20) != 0 || (lUpdateSet & 0x40) != 0)
-        return;
-
-    DriveWorldUpdateFrame(lpGameDataInputBuffer, lUpdateSet, lpSoundPreUpdateOutput);
-}
-
 // The same leg, callable from ANY flow state.
 //
-// WHY THIS EXISTS: the world was only ever driven from the scripted-load spine, so it stopped
-// updating the instant the flow left the loading screen. WorldModule::Update had exactly one
-// reachable caller (LoadingScriptedState::UpdateWorldModule above), and the in-game state's
-// whole per-frame body is BrnGameModule::DoUpdate(), a PC-platform leaf returning 0; the
-// console's in-game world leg (BrnGameModule::DoUpdate_World @0x823E8BD0) is reconstructed
-// but reached from nowhere. Net effect: the PVS query ran ONCE, from world-space (0,0,0),
-// during the loading screen, and its answer -- zone 174 plus 24 neighbours, 25 of the 396
-// track units -- stayed frozen for the whole session, so driving the camera across the city
-// streamed nothing new in or out.
 //
 // This is the narrow fix: drive the WORLD leg per frame from the in-game state as well. It
 // deliberately does NOT re-run the rest of DoUpdate's cascade -- the PC host loop
@@ -584,18 +513,6 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
             lpGameModule->GetTimerStatusInterface()));
     lpWorldInput->UnlockForWrite();
 
-    // ⭐⭐ THE CONTROLLER -> WORLD BRIDGE (X360 BridgeControllerToWorld @0x823CD890), first of
-    // DoUpdate_World's five source bridges and the ONLY producer of the world input's
-    // PlayerVehicleControls -- the block BridgeInputToEntityModules hands the race car as
-    // the player's steering/throttle. Until this line (driving-input wave 2026-08-11) the
-    // block stayed Construct-cleared every frame and the player car was deaf to input.
-    // FLAG PC placement: staged here for exactly the reason the game-state block below
-    // gives -- DoUpdate_World is reconstructed but reached from nowhere; this function is
-    // the live world drive, and both sites carry the same call and move together. The pad
-    // fill (InputPadsPC::UpdatePlayer0) ran earlier this sub-step under GameMain's GUI
-    // staging, so the buffer carries this frame's controls; the console's DoUpdate locks
-    // all five sources in one LockBuffersForIO, reproduced here as the per-source bracket
-    // this file already uses for the game-state leg.
     {
         CgsInput::InputIO::OutputBuffer* lpInputOutput = lpGameModule->GetPcInputOutputBuffer();
         lpInputOutput->LockForRead();
@@ -637,29 +554,6 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     if (lbOwnsOutputBuffer)
     {
         lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
-    }
-
-    // ⭐⭐ THE GAME-STATE -> WORLD BRIDGE (X360 BridgeGameStateToWorld @0x823E1890), staged into
-    // the input buffer before the world drive reads it -- the console's own order inside
-    // DoUpdate_World @0x823E8BD0 (which is where this call ALSO lives; see the note there).
-    // Its game-action Append is the ONLY producer of the queue WorldModule::HandleGameActions
-    // and WorldModule::BridgeInputToEntityModules drain, so before this the world could not see
-    // a single game action -- including ResetPlayerCarAction, the record that places the
-    // player's car at a junkyard spawn.
-    // FLAG PC placement: this leg lives here rather than in DoUpdate_World for exactly the
-    // reason the banner above gives -- DoUpdate is a PC-platform leaf, so this function is the
-    // live world drive. Both sites carry the same call and move together.
-    {
-        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-            lpGameModule->GetGameStateModule().GetOutputBuffer();
-        if (lpGameStateOutput != 0)
-        {
-            lpGameStateOutput->LockForRead();
-            lpWorldInput->LockForWrite();
-            lpGameModule->BridgeGameStateToWorld(lpWorldInput, lpGameStateOutput);
-            lpWorldInput->UnlockForWrite();
-            lpGameStateOutput->UnlockForRead();
-        }
     }
 
     // ⭐⭐ THE SOUND -> WORLD BRIDGE (X360 BridgeSoundToWorld @0x823CDC98, staged from the
@@ -1085,10 +979,6 @@ void LoadingScriptedState::Update()
         lInputOutput->UnlockForRead();
         lpGuiInput->UnlockForWrite();
 
-        // FLAG PC-platform leaf: the existing GUI port executes through its no-arg
-        // owner API, using its internal Model/View IO. Copy the current produced
-        // GUI queue into this frame's output before any Sound/resource consumers.
-        BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
         lrGui.GetGuiOutQueue()->Clear();
         lrGui.SetFrameUpdateSet(lUpdateSet);
         lrGui.SetGuiEventInputBuffer(lpGuiInput);
@@ -1150,8 +1040,6 @@ void LoadingScriptedState::Update()
         // ARTIST uses normal DoUpdate at entry-stage8. Reuse the PC in-game
         // world/sound owner boundary: Sound remains alive until Main's post-GUI
         // FinishInGameSoundFramePC, so it consumes this frame's actual GUI output.
-        BrnSound::Module::Io::RootPreUpdateOutputBuffer* const lpSoundPreOutput =
-            lpGameModule->BeginInGameSoundFramePC();
         DriveWorldUpdateFrame(&s_GameDataInput,
             lpGameModule->ConstructUpdateSetFromFsm(), lpSoundPreOutput);
     }
@@ -1581,9 +1469,6 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         lpGameModule->BridgeGameToGui(lpGuiInput);
         lpGuiInput->UnlockForWrite();
 
-        // FLAG PC-platform leaf: execute the GUI port with this caller-owned
-        // GameData pair, then publish its current output before consumers.
-        BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
         lrGui.SetGuiEventInputBuffer(lpGuiInput);
         lrGui.SetFrameUpdateSet(static_cast<BrnUpdateSet>(0x40));
         lrGui.Update(lpGameDataInput, lpGameDataOutput);

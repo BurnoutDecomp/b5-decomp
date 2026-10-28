@@ -683,37 +683,6 @@ namespace CgsGraphics
     // then rebuild mViewProjection (tail-call UpdateViewProjectionMatrix).
     // Expression shapes transcribed operand-for-operand from the asm.
     //
-    // ================================================================================
-    // [FLAG PC-platform leaf] THE DEPTH ROW, AND ONLY THE DEPTH ROW.
-    //
-    // The two console expressions above are the RenderWare/OpenGL depth mapping: they
-    // send the view volume [n, f] to z' in [-1, +1] (at z == n, (An+B)/n == -1; at
-    // z == f, (Af+B)/f == +1). Xenos can be put in OpenGL clip space and the shipped
-    // title does exactly that. Direct3D 9 on PC cannot: it clips z' to [0, w] and
-    // stores z'/w in a [0, 1] depth buffer, so this matrix hands D3D a depth that is
-    // 2d - 1 where d is the D3D depth for the same point -- everything nearer than the
-    // harmonic midpoint 2nf/(n+f) is clipped away, and everything else is written
-    // roughly half the depth range too far.
-    //
-    // WHAT THIS COST, measured 2026-09-03 and the reason this leaf exists: the tyre-mark
-    // trail is the one pass that used this matrix RAW. BrnWorldModule's PC bring-up
-    // camera had already installed the D3D row by hand (BrnWorldModule.cpp, the same
-    // FLAG and the same paragraph), so the WORLD wrote D3D depth while the TRAIL tested
-    // OpenGL depth. Every one of the trail's fragments therefore came out ~0.05 of the
-    // depth range BEHIND the road it was drawn 3 cm above -- an occlusion census over
-    // eight samples of a drift read lt=0, eq=0, gt=coverage, every time -- and a mark
-    // that was geometrically perfect, correctly coloured, correctly textured and
-    // reported hr == S_OK changed not one pixel. Both halves of that mismatch are fixed
-    // together: the row moves HERE, where every consumer of the camera gets it (the
-    // trail, the coronas, the frustum), and BrnWorldModule's hand-installed copy is
-    // deleted along with the near-plane override that made the two cameras differ again.
-    //
-    // The view volume is UNCHANGED: same n, same f, same x/y cot-half-fov scalars. Only
-    // the mapping of [n, f] onto the depth range differs, which is precisely the
-    // platform's own convention and not a behaviour of the game.
-    //   console (OpenGL, [-1,1]):  zAxis.z = (n+f)/(f-n)   wAxis.z = -2nf/(f-n)
-    //   PC      (D3D,    [ 0,1]):  zAxis.z =     f/(f-n)   wAxis.z =  -nf/(f-n)
-    // ================================================================================
     void Camera::UpdatePerspectiveProjectionMatrix()
     {
         const f32 lfNear = maProjectionScalars[7];   // a1[87]
@@ -723,9 +692,9 @@ namespace CgsGraphics
         mProjection.xAxis = Vector4{ maProjectionScalars[1], 0.0f, 0.0f, 0.0f };  // v15
         mProjection.yAxis = Vector4{ 0.0f, maProjectionScalars[4], 0.0f, 0.0f };  // v14
         mProjection.zAxis = Vector4{ 0.0f, 0.0f,
-                                     lfFar / (lfFar - lfNear), 1.0f };            // v17, D3D row
+                                     (lfNear + lfFar) / (lfFar - lfNear), 1.0f }; // v17
         mProjection.wAxis = Vector4{ 0.0f, 0.0f,
-                                     -lfNearTimesFar / (lfFar - lfNear), 0.0f };  // v16, D3D row
+                                     (-2.0f * lfNearTimesFar) / (lfFar - lfNear), 0.0f }; // v16
 
         UpdateViewProjectionMatrix();
     }
@@ -840,13 +809,6 @@ namespace CgsGraphics
             if ( !s_bLoggedOffAxis && CgsDev::Log::gpDebugPrint != 0 )
             {
                 s_bLoggedOffAxis = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[camera] projection has off-axis z/w terms in its x/y rows -- "
-                       "[0][2]=" << mProjection.xAxis.z
-                    << " [1][2]=" << mProjection.yAxis.z
-                    << " [0][3]=" << mProjection.xAxis.w
-                    << " (epsilon 1.52587891e-05). Suspect the shadow TSM/bounding-box "
-                       "post-multiply, BrnShadowMap.cpp:1241/1249. [FLAG PC boot gate]\n";
             }
         }
 

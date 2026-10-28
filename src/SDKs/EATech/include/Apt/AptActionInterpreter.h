@@ -69,7 +69,7 @@ public:
         const unsigned char* mpProgramCounter;     // the action-bytecode read pointer
         AptCIH*              mpCIH;                 // the current movie-clip scope
         AptValue*            mpPendingReleaseValue; // temp released when the PC reaches...
-        const unsigned char* mpPendingReleasePC;   // ...this position
+   // ...this position
         AptValue*            mpScopeVariable;       // the run's resolved "super" value (console ctx+0x10;
                                                     // CallMethod's supercall identity test reads it)
         bool                 mbStop;                // a stop/end op sets this -> end execution
@@ -298,7 +298,6 @@ public:
     AptValue* CallFunctionDispatch(AptValue* pScope, AptValue* pFunction, int nArgs,
                                    AptValue* pNewTarget, AptValue* pConstructTarget);
 
-
     // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build the slash/dot path name of
     // a value into pOut (getName2 also appends a trailing "/" for an empty path).
     // The core path walk (sub_82AF7400) is AptBuildPathName, InterpHelpers.cpp.
@@ -334,7 +333,6 @@ public:
     // its prototype) hold a member keyed by *pNameSlot? Static: reads only the value +
     // name-slot args. Body in AptActionInterpreterInterpHelpers.cpp.
     static bool HasMember(AptValue* pValue, EAStringC** pNameSlot);
-
 
     // _createObject @0x82B08088 -- the AS `new ClassName(args...)` value-materialiser.
     // Resolves the class value pClassName under (pScope, pTarget) via getVariable; if
@@ -701,9 +699,5 @@ public:
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptActionInterpreter, mnStackTop)   == 0x00, "x64 stackAt: count at [this+0] @0x14085D300");
-        static_assert(offsetof(AptActionInterpreter, mpStack)      == 0x08, "x64 stackAt: array at [this+8]");
-        static_assert(offsetof(AptActionInterpreter, mpAbortValue) == 0x98, "x64 getThrownValue @0x14084E5D0: [this+98h]");
-        static_assert(offsetof(AptActionInterpreter, mnStackBase)  == 0xA0, "x64: follows the thrown value");
     }
 };

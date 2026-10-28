@@ -8,7 +8,6 @@
 // scan lines at a time and hands each band to the fdxt block compressor.
 
 #include "types.hpp"
-#include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (mePixelFormat)
 #include "SDKs/EATech/eajobs/job_types.h"      // EA::Jobs::Param
 
 // The data block the compression job reads (+0x700 inside NetworkTextureDXTCompress, handed to

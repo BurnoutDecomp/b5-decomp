@@ -9,7 +9,7 @@
 // On the MSVC/Windows host the X360 kernel critical-section primitive maps to a
 // Win32 CRITICAL_SECTION; pull it in so the embedded mUnblockLock has its real host
 // layout (the X360 lays a 28-byte CRITICAL_SECTION + a lock-count int into +0x30).
-#include <windows.h>  // CRITICAL_SECTION
+#include <xtl.h>  // CRITICAL_SECTION
 
 // ===========================================================================
 // SDKs/EATech/eathread/eathread_condition.h

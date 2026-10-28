@@ -20,8 +20,6 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (the cached records)
 #include "SharedClasses/DataLists/ChallengeListEntry.h"                    // ChallengeListEntryAction (the coop type)
 #include <cstdlib>   // qsort
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"  // BrnNetHarnessPC::WitnessTag (the [netui] table line)
-
 // BrnGui::PlayerPositionTableComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 // Six asm-attested functions land here so far (ClearStoredData / AddInvisibleTeamLine /
 // FunctionSortTeamHighToLow / SetCache / SetupGameMode, plus the compiler-inlined
@@ -429,9 +427,6 @@ namespace BrnGui
             {
                 siLastBarsUsed = miCurrentBarsUsed;
                 siLastGameMode = static_cast<s32>(meGameMode);
-                BrnNetHarnessPC::WitnessTag("netui", "position-table", "rows=%d mode=%d first=%.16s",
-                                            miCurrentBarsUsed, siLastGameMode,
-                                            maPlayerSingleData[0].mPlayerName.macName);
             }
         }
 

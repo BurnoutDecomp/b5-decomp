@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // =====================================================================================
 // rw::audio::core::GinsuPlayer / GinsuSynthData bodies -- the granular engine-sound
 // synthesizer ("Gns0"), the heart of Burnout's car-engine audio.
@@ -149,13 +148,6 @@ namespace
     // AdjustEndianness @0x8268B1D0 -- byte-reverse the header's six numeric fields and both
     // index tables IN PLACE, then set the "already done" flag at +0x06 so it happens once.
     //
-    // FLAG PC-platform note: on the big-endian console this converts the file's LITTLE-endian
-    // authored data to native. The tool-side authoring order is what the bytes are, so on the
-    // little-endian host the same reversal would UN-swap correct data. The swap is therefore
-    // performed only when the blob still carries the not-yet-adjusted marker, exactly as the
-    // console gates it -- content authored for this build arrives already native and simply
-    // never enters here. The body is reproduced faithfully so console-order content is still
-    // handled if it appears.
     void *AdjustEndianness(void *apGinFile)
     {
         u8 *lpBytes = static_cast<u8 *>(apGinFile);
@@ -893,8 +885,6 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
             static int siGinsuDiag = -1;
             if (siGinsuDiag < 0)
             {
-                const char* lpcEnv = std::getenv("BRN_GINSU_DIAG");
-                siGinsuDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
             }
             if (siGinsuDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
             {
@@ -949,9 +939,6 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
     SampleBuffer *lpTemp = ctx->mpSrcBuffer;
     ctx->mpSrcBuffer = ctx->mpDstBuffer;
     ctx->mpDstBuffer = lpTemp;
-    // FLAG PC-platform witness: synthesized engine output, read-only.
-    CgsSound::PcmTrace::Measure(self, ctx->mpSrcBuffer->mpSamples,
-        ctx->mNumSamples, ctx->mbChannelCount, ctx->mpSrcBuffer->muStride);
     return 1;   // BUFFERSTATUS_AVAILABLE
 }
 

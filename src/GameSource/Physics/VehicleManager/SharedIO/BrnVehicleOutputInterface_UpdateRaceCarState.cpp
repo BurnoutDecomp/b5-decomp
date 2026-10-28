@@ -448,8 +448,6 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
         static s32 siDrivableDiag = -1;
         if (siDrivableDiag < 0)
         {
-            const char* lpcEnv = getenv("BRN_DRIVABLE_DIAG");
-            siDrivableDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? ((atoi(lpcEnv) > 0) ? atoi(lpcEnv) : 1) : 0;
         }
         if (siDrivableDiag > 0 && lrState.mbCrashing && CgsDev::Log::gpDebugPrint != 0)
         {
@@ -518,122 +516,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     // COST WHEN OFF: one already-initialised bool test per published car per frame.
     // ================================================================================================
     {
-        static const bool sbVfxFeedProbe = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
 
-        if ( sbVfxFeedProbe && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static const s32 KI_VFXFEED_REPORT_PERIOD = 600;   // publishes between report lines
-
-            static bool sbArmedLinePrinted = false;
-            static s32  siPublishes        = 0;
-            // Per-slot previous air time, for the RISING-EDGE count (the jump machine's entry).
-            static f32  safPrevTimeInAir[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-            static s32  siAirFrames        = 0;
-            static s32  siAirEdges         = 0;
-            static f32  sfAirPeak          = 0.0f;
-            static s32  siSkidGateFrames   = 0;   // >= 1 wheel attached && traction && on ground
-            static s32  siSkidGateWheels   = 0;   // and the wheel-granular count
-            static f32  sfSkidFactorPeak   = 0.0f;
-            static f32  sfRoadLatPeak      = 0.0f;
-            static u64  su64SurfaceIdMask  = 0;
-            // ⭐⭐ WHEN, not just HOW MANY (2026-09-06, contact-census wave). Three runs were read
-            // as "the harness stops making progress mid-run" because `air frames`, `edges` and
-            // `peak` all stopped changing partway through while `pub=` kept climbing. THEY WERE
-            // NOT MEASURING PROGRESS. `peak` is a MAX -- monotone, so it can only ever freeze --
-            // and `air frames`/`edges` are EVENT counters whose event is "the car is off the
-            // ground", which stops the moment the car lands and stays landed. The counters that
-            // do track the sim (`pub`, `gateFrames`, `gateWheels`) advanced at a constant rate to
-            // the last line of all three logs: 15,600 / 15,600 / 15,000 publishes over 245.6 /
-            // 245.8 / 245.0 s of driving == 63.5 / 63.5 / 61.2 Hz, i.e. FULL RATE THROUGHOUT, and
-            // the same three runs' own [boostloc] car= traces cover 0.9 km, 2.5 km and 4.1 km.
-            // [[diagnostics-that-lie]] -- a max statistic read as a progress indicator.
-            // These two make the freeze SELF-EXPLAINING instead of inferable: the line now says
-            // which publish last saw air, so "frozen since pub 10800 of 15000" is printed rather
-            // than reconstructed from the fact that a number stopped moving.
-            static s32  siLastAirPub       = -1;
-            static s32  siLastEdgePub      = -1;
-
-            if ( !sbArmedLinePrinted )
-            {
-                sbArmedLinePrinted = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[vfxfeed] ARMED -- VehicleOutputInterface::UpdateRaceCarState is publishing;"
-                       " reporting every " << KI_VFXFEED_REPORT_PERIOD << " publishes.\n";
-            }
-
-            ++siPublishes;
-
-            const f32 lfTimeInAir = lrState.mfTimeInAir;
-            if ( lfTimeInAir > 0.0f )
-            {
-                ++siAirFrames;
-                siLastAirPub = siPublishes;
-                if ( lfTimeInAir > sfAirPeak )
-                {
-                    sfAirPeak = lfTimeInAir;
-                }
-            }
-            if ( liRaceCarIndex >= 0 && liRaceCarIndex < 8 )
-            {
-                if ( lfTimeInAir > 0.0f && safPrevTimeInAir[liRaceCarIndex] <= 0.0f )
-                {
-                    ++siAirEdges;
-                    siLastEdgePub = siPublishes;
-                }
-                safPrevTimeInAir[liRaceCarIndex] = lfTimeInAir;
-            }
-
-            bool lbAnyWheelPastSkidGate = false;
-            for ( s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel )
-            {
-                const WheelLite& lrWheelLite = lrState.maWheels[liWheel];
-
-                // WheelStateMachine::Update's own three early-outs, in its own order.
-                if ( !lrWheelLite.mbAttached )                 { continue; }
-                if ( !lrWheelLite.mbHasTraction )              { continue; }
-                if ( !lrWheelLite.mRoadContact.mbIsOnGround )  { continue; }
-
-                lbAnyWheelPastSkidGate = true;
-                ++siSkidGateWheels;
-
-                if ( lrWheelLite.mfSkidFactor > sfSkidFactorPeak )
-                {
-                    sfSkidFactorPeak = lrWheelLite.mfSkidFactor;
-                }
-                const f32 lfAbsLat = std::fabs( lrWheelLite.mfRoadLatSpeed );
-                if ( lfAbsLat > sfRoadLatPeak )
-                {
-                    sfRoadLatPeak = lfAbsLat;
-                }
-
-                // The exact expression WheelStateMachine::Update indexes surfacelist with.
-                const u32 luSurfaceId =
-                    ( lrWheelLite.mRoadContact.mCollisionTag.muValue >> 4 ) & 0x3Fu;
-                su64SurfaceIdMask |= ( static_cast<u64>( 1 ) << luSurfaceId );
-            }
-            if ( lbAnyWheelPastSkidGate )
-            {
-                ++siSkidGateFrames;
-            }
-
-            if ( ( siPublishes % KI_VFXFEED_REPORT_PERIOD ) == 0 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[vfxfeed] pub=" << siPublishes
-                    << " | air frames=" << siAirFrames
-                    << " edges="        << siAirEdges
-                    << " peak="         << sfAirPeak
-                    << " lastAirPub="   << siLastAirPub
-                    << " lastEdgePub="  << siLastEdgePub
-                    << " | skid gateFrames=" << siSkidGateFrames
-                    << " gateWheels="        << siSkidGateWheels
-                    << " peakSkidFactor="    << sfSkidFactorPeak
-                    << " peakRoadLat="       << sfRoadLatPeak
-                    << " surfMaskHi="        << static_cast<u32>( su64SurfaceIdMask >> 32 )
-                    << " surfMaskLo="        << static_cast<u32>( su64SurfaceIdMask & 0xFFFFFFFFu )
-                    << "\n";
-            }
-        }
     }
 }
 

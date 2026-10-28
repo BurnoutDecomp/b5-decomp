@@ -12,16 +12,6 @@
 // values, matching the X360 32-bit pointer width and the relocation arithmetic in
 // the asm (member access stays by name; the value is the relocated address).
 //
-// [FLAG PC bring-up] ON THE x64 HOST THE LINKS STAY FILE-RELATIVE OFFSETS. The console's
-// FixUp adds the resource's load base to every slot because its heap is below 4 GB and a
-// slot is a full pointer there. The PC's GUI resource bank is NOT below 4 GB (measured
-// 2026-09-17: the bank base was 0x1668CD23AE0, and the truncated rebase wrote through
-// 0x00000000423AB2D0 -- the first boot with the type registered crashed inside
-// PFXHookBundleResourceType::FixUp). A 32-bit slot cannot hold that address, and the
-// record strides are fixed by the shipped data, so the slots are left as the offsets the
-// converter wrote and every reader resolves them against the bundle's own address through
-// the accessors below. Same rule as [[serialized-slots-stay-32-bit]]; the relocation
-// arithmetic is simply deferred from load time to read time.
 //
 // Layout / method set from the DecFIGS DWARF (BrnGuiPFXHooks.h). FixDown body
 // recovered from BURNOUT_X360_ARTIST.XEX @ 0x8250AFD8, FixUp @ 0x8250B038.
@@ -100,10 +90,6 @@ namespace BrnGui
         u32 mpaGroups;       // BrnGuiPFXHooks.h:272 - relocatable PFXGroup*[] (an OFFSET on PC)
         u32 mSizeOfBundle;   // BrnGuiPFXHooks.h:274
 
-        // ---- [FLAG PC bring-up] the read-time relocation (see the banner) ----------------
-        // Every slot in the blob is an offset from THIS record's first byte -- the same
-        // quantity the console's FixUp added its load base to. The console's readers write
-        // `mpaHooks[i]->...`; these are that dereference with the base applied.
         const u8* BlobBase() const { return reinterpret_cast<const u8*>(this); }
         const u32* HookTable() const  { return reinterpret_cast<const u32*>(BlobBase() + mpaHooks); }
         const u32* GroupTable() const { return reinterpret_cast<const u32*>(BlobBase() + mpaGroups); }

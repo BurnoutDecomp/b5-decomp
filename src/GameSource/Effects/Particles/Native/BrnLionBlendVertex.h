@@ -47,7 +47,6 @@
 #include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"
 // renderengine::VertexDescriptor::Parameters is named (by reference) in the declaration
 // of FillVertexDescriptorParameters below, so the full descriptor type must be visible.
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "GameSource/Effects/Particles/EffectsVertexBuffer.h"  // EffectsVertexBufferIterator -- the ONE definition
 
 namespace renderengine { struct RGBA8; }

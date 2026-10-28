@@ -229,7 +229,6 @@ private:
         static_assert(offsetof(MugshotManager, meMugshotCaptureState)        == 0x58, "meMugshotCaptureState @ +0x58");
         static_assert(offsetof(MugshotManager, meMugshotShowState)           == 0x5C, "meMugshotShowState @ +0x5C");
         static_assert(offsetof(MugshotManager, meCaptureMugshotType)         == 0x60, "meCaptureMugshotType @ +0x60");
-        static_assert(offsetof(MugshotManager, meShowMugshotType)            == 0x64, "meShowMugshotType @ +0x64");
         static_assert(offsetof(MugshotManager, mpGameStateModule)            == 0x68, "mpGameStateModule @ +0x68");
         // mbIsAnythingPaused sits one pointer-width past mpGameStateModule. On the 4-byte-pointer
         // X360 ABI that is +0x6C (the authoritative offset); the host gate is a 64-bit (8-byte

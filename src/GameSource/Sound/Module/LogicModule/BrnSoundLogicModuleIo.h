@@ -69,18 +69,6 @@ namespace Io
     // sound logic module fills for the root module. DWARF shape (request interfaces).
     struct LogicOutputBuffer : public CgsModule::IOBuffer
     {
-        // BrnSoundLogicModuleIo.h:60 (DWARF). X360 body @0x826C9A28, reached from the
-        // CreateIOBuffer<LogicOutputBuffer> instantiation @0x826DCD30 (Alloc size 6224):
-        //     *a1 = 1;                                              -- IOBuffer::Construct
-        //     VariableEventQueue<4096,16>::Construct(a1 + 2068); Clear(a1 + 2068);
-        //     VariableEventQueue<2048,16>::Construct(a1 + 4);    Clear(a1 + 4);
-        //     for (11 words at a1 + 6180) *w++ = 0;
-        // 2068 == 0x814 == mResourceRequestInterface, 4 == mAttribSysRequestInterface (note the
-        // reversed call order vs RootOutputBuffer -- reproduced), 6180 == 0x1824 == the trailing
-        // state run below. The two request interfaces derive from those queues, so the
-        // Construct+Clear pair is the queue's own, reached through the members' named storage.
-        // FLAG PC: homed inline here (the console emits it out-of-line) so the symbol exists for
-        // every CreateIOBuffer<LogicOutputBuffer> instantiation regardless of build-list state.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();

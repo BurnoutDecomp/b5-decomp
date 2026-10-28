@@ -234,29 +234,6 @@ void RoadRulesManager::Update(const GameStateModuleIO::ControllerInput*         
     CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
-    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG): the rule state whenever
-    // the road, the rule or the rule's road changes, and every 300th update; 80 lines in all.
-    {
-        static const bool sbDiag     = (std::getenv("BRN_ROADRULES_DIAG") != 0);
-        static s32        siFrame    = 0;
-        static s32        siLeft     = 80;
-        static s32        siLastKey  = -2;
-        const s32         liKey      = (liCurrentRoadIndex & 0xFFF) | (static_cast<s32>(meActiveRoadRule) << 12) |
-                                       ((maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_TIME] & 0xFFF) << 16);
-        const bool        lbChanged  = (liKey != siLastKey);
-        siLastKey = liKey;
-        if (sbDiag && siLeft > 0 && (lbChanged || (++siFrame % 300) == 0) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[roadrules] update road " << liCurrentRoadIndex << " last " << miLastRoadIndex
-                << " rule " << static_cast<s32>(meActiveRoadRule)
-                << " timeRoad " << maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_TIME]
-                << " t " << mfTime << " timeout " << mfTimeScoreTimeout
-                << " inRoad " << mfInRoadTimeout << " noInput " << lfPlayerNoInputTime << "\n";
-        }
-    }
-
     // Showtime is over: score the crash rule.
     if (IsCrashRuleActive() && !lbShowtimeActive)
     {

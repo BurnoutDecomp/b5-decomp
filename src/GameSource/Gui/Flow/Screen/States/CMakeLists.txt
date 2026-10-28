@@ -28,26 +28,18 @@ target_sources(${PROJECT_NAME}
         BrnCrashNavMapMain.cpp
         BrnCrashNavMapSoundData.cpp
         BrnCrashNavOptions.cpp
-        BrnCrashNavOptions_embed_check.cpp
         BrnCrashNavProfile.cpp
         BrnCrashNavSettings.cpp
-        BrnCrashNavStates_embed_check.cpp
         BrnCrashNavStats.cpp
         BrnCrashNavTrax.cpp
         BrnCredits.cpp
         BrnGenericForwardState.cpp
-        BrnGuiA_embed_check.cpp
-        BrnGuiLastStates_embed_check.cpp
         BrnImageGallery.cpp
         BrnInGame.cpp
         BrnIntro.cpp
         BrnOnlineCreateFreeburn.cpp
         BrnOnlineCustomMatch.cpp
         BrnOnlineFBurnQuickCustomCreate.cpp
-        BrnOnlineFlowStates_embed_check.cpp
-        BrnOnlineFlowStatesB_embed_check.cpp
-        BrnOnlineFlowStatesC_embed_check.cpp
-        BrnOnlineFlowStatesF_embed_check.cpp
         BrnOnlineGameOptions.cpp
         BrnOnlineGameOptions_wI_01.cpp
         BrnOnlineGameOptions_wI_02.cpp
@@ -104,7 +96,6 @@ target_sources(${PROJECT_NAME}
         BrnOnlineScoreboards_wI_07.cpp
         BrnOnlineScoreboards_wS34_00.cpp
         BrnOnlineSelectRoute.cpp
-        BrnOnlineStates_embed_check.cpp
         BrnOnlineStats.cpp
         BrnOnlineTeamSelection.cpp
         BrnOnlineViewChallenges.cpp
@@ -112,7 +103,6 @@ target_sources(${PROJECT_NAME}
         BrnReplayLoading.cpp
         BrnReplayMain.cpp
         BrnReplayOutro.cpp
-        BrnScreenFlowStates_embed_check.cpp
         BrnScreenLoading.cpp
         BrnVideo.cpp
         OnlineYouWin.cpp

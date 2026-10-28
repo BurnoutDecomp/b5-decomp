@@ -29,13 +29,7 @@
 //              blocked, to be bodied once their sub-module/IO deps are homed.
 // ============================================================================
 #include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
-#include "pc/gcm/renderengine/GraphicsDiagnostics.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include "pc/gcm/renderengine/reflections/EnvironmentMap.h"
-#include "pc/gcm/renderengine/reflections/SceneCapture.h"
-#include "pc/gcm/renderengine/reflections/SceneSettings.h"
-#include "pc/gcm/renderengine/reflections/SceneRender.h"
-#include "pc/scene/FrustumResults.h"
 #include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
@@ -76,8 +70,6 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
-#include "pc/math/VmxFloat.h"
-
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatus{,Interface} -- WorldModule::Update stages the environment frame delta
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
@@ -89,8 +81,7 @@
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::operator- / Magnitude (CalculateVehicleLODs)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h" // Utils::GetZoomFromFOVDegs (the bring-up LOD zoom)
 #include "GameSource/Director/Camera/Camera.h"      // BrnDirector::Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE
-#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: GetFrameSeconds (the tour camera's advance)
-#include <cmath>    // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera) + std::sqrt (vehicle LODs)
+#include <cmath>
 #include <cstddef>  // offsetof (the VehicleRenderInfo layout pins)
 
 // includes folded in from the BrnWorldModule_w*.cpp partfiles (2026-09-15)
@@ -100,7 +91,6 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"                       // BrnWorld::CrashIO::OutputBuffer_PostPhysics
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                   // Array<short,25> (the GUI record's byte image)
-#include "GameSource/World/AI/BrnAIHarnessPad.h"                                          // [PC HARNESS] BRN_AI_PAD_PLAYER (gHarnessAIPad)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"     // [PC HARNESS] the AI record queue (HarnessStashAIPadControls)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"           // [PC HARNESS] BrnAIDriverControls
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // [PC HARNESS] BrnWorld::PlayerVehicleControls
@@ -110,23 +100,13 @@
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 
-// [FLAG PC bring-up] the PC back-buffer extent (pc/gcm/renderengine/device.h). Declared
-// here rather than included: that header pulls <windows.h>/<d3d9.h>, which must not enter
-// this TU. Only the aspect ratio of the bring-up dispatch camera reads them.
 namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
-// [FLAG PC bring-up] the config.ini [Settings] EnvironmentMap knob (pc/gcm/renderengine/
-// device.h, reflections step 1). Declared for the same <windows.h> reason. It is the PC seed
-// of the console's RendererIO::RenderSwitches::mbRenderEnvironmentMap, which gates BOTH the
-// renderer's face pass and this producer's env-map arm (::GenerateDispatchLists :4003) --
-// so the producer reads the same seed the renderer does; verify finding F5 (envproducer):
-// with the knob off, the six queries and dispatch legs must not run either.
 namespace renderengine { extern s32 gEnvironmentMap; }
 
 namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 (device.cpp)
 
 namespace BrnWorld
 {
-
 
 // qword_8300E9B8: X360 static initializer @0x82C6A9D8 hashes this exact text;
 // WorldModule::Prepare loads the resulting 64-bit key at @0x827D5B6C.
@@ -161,8 +141,6 @@ static CgsGraphics::Camera gFrustumQueryCamera;
 // The dispatch-pass camera (X360 file static at 0x8300FB40).
 static CgsGraphics::Camera gDispatchCamera;
 
-
-
 // ARTIST GenerateDispatchLists @827D28C8..28F4: r9=11 (object list),
 // r10=11 (opaque mesh list), stack=15 (transparent), stack=21 (pre-Z).
 // Object list 2 belongs to near traffic casters. Sharing it with the main
@@ -192,12 +170,10 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
     }
 }
 
-
     // ------------------------------------------------------------------------
     // (The interim cpp-local UpdateOutputBuffer accessor slice was retired 2026-07-24:
     // the real BrnWorldIO::UpdateOutputBuffer home (BrnWorldModuleIO.h, done TU) now
     // provides GetResourceRequestResourceInterface / GetAttribSysVaultRequestInterface.)
-
 
     // ========================================================================
     // WorldModule::LoadDistrictMap  @ X360 0x827D11D8   [BODIED]
@@ -551,7 +527,6 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     // is NOT touched by the X360 Construct.
     mShaderLodInfo.Construct();
 
-
     mbIsInJunkyard = false;                         // X360 +6175808
 
     { mbIsNewModule = true; }
@@ -620,7 +595,6 @@ WorldModule::UpdatePhysicsNetworkCatchup(
     // null-checked here).
     mPhysicsModule.UpdateNetworkCatchup( lpPhysicsModuleInputBuffer, lUpdateSet );
 }
-
 
 // ============================================================================
 // LoadAttribSysVault  @ 0x827D3D08
@@ -691,27 +665,6 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             const CgsResource::Events::AcquireResourceResponse* lpResponse =
                 reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>( lpEventData );
 
-            // [FLAG PC boot gate] the world vault bundle is still X360 big-endian data on
-            // PC (the loader refuses it), so the acquire legitimately resolves to a null
-            // handle here -- a state the X360 can never reach (its vault always loads).
-            // Registering a null vault would fire RegisterVault's handle assert; hold this
-            // stage (one-shot log) until the vault bundle is ported to platform 4.
-            if ( lpResponse == 0 || lpResponse->mpSourceEntry == 0 )
-            {
-                static bool s_bLoggedVaultHold = false;
-                if ( !s_bLoggedVaultHold )
-                {
-                    s_bLoggedVaultHold = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "WorldModule::LoadAttribSysVault: ACQUIRING_VAULT holding -- "
-                               "'WorldVault' resource absent (vault bundle not PC-converted) "
-                               "[FLAG PC boot gate]\n";
-                }
-                mReceiverQueue.Clear();
-                break;
-            }
-
             mAttribSysVaultResourceHandle.mpResourceMemory = lpResponse->mpResourceMemory;
             mAttribSysVaultResourceHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
 
@@ -762,7 +715,6 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
     lpOutput->UnlockForWrite();
     return false;
 }
-
 
 // ============================================================================
 // Prepare  @ 0x827D53B0
@@ -825,30 +777,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             lParams.mfLooseness = 0.30000001f;
             lParams.muAdaptiveNodeSplitThreshold = 32;
             lParams.muAdaptiveMaxDepth           = 10;
-
-            // [FLAG PC boot gate] GameDataModule::CreateAllocators (0x8266DD00) is still an
-            // inert stand-in, so the allocator registry cannot serve the scene (49) /
-            // physics (23) / triangle-collision (61) allocators yet. On the X360 these are
-            // always live by world-prepare time; a null here would fail the asserts below
-            // and then fault inside SceneManagerModule::Prepare. Hold the stage (resumable
-            // "not ready yet" -- the spine keeps re-driving) with a one-shot log instead of
-            // inventing allocators. Remove this gate when CreateAllocators lands.
-            if ( lpAllocatorList == 0 ||
-                 lpAllocatorList->GetRWLinearResourceAllocator( 49 ) == 0 ||
-                 lpAllocatorList->GetRWLinearResourceAllocator( 23 ) == 0 ||
-                 lpAllocatorList->GetLinearAllocator( 61 ) == 0 )
-            {
-                static bool s_bLoggedAllocatorHold = false;
-                if ( !s_bLoggedAllocatorHold )
-                {
-                    s_bLoggedAllocatorHold = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "WorldModule::Prepare: SCENE stage holding -- allocator registry "
-                               "empty (CreateAllocators deferred) [FLAG PC boot gate]\n";
-                }
-                return false;
-            }
 
             rw::IResourceAllocator* lpSceneAllocator =
                 lpAllocatorList->GetRWLinearResourceAllocator( 49 );
@@ -1221,7 +1149,6 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
     return false;
 }
 
-
 // ============================================================================
 // PrepareWorldCollision  @ 0x827C9478
 //
@@ -1306,7 +1233,6 @@ WorldModule::PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack
 
     return lbPrepared;
 }
-
 
 // ============================================================================
 // Release  @ 0x827BCE58  (the this-only virtual slot)
@@ -1662,7 +1588,6 @@ WorldModule::HandleGameActions(
     }
 }
 
-
 // ============================================================================
 // EntityModulePrePhysicsUpdate  @ 0x827BD5B8
 //
@@ -1784,7 +1709,6 @@ WorldModule::EntityModulePrePhysicsUpdate(
                                            lpTriggerModuleOutputBuffer_PrePhysics, lUpdateSet );
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Triggers );
 }
-
 
 // ============================================================================
 // EntityModulePostSceneUpdate  @ 0x827C3C58
@@ -1992,8 +1916,6 @@ WorldModule::EntityModulePostSceneUpdate(
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Triggers );
 }
 
-
-
 // ============================================================================
 // EntityModulePreSceneUpdate  @ 0x827BD1F0   (DWARF BrnWorldModule.h:398)
 //
@@ -2131,7 +2053,6 @@ WorldModule::EntityModulePreSceneUpdate(
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Triggers );
 }
 
-
 // ============================================================================
 // EntityModulePostPhysicsUpdate  @ 0x827D3F10   (DWARF BrnWorldModule.h:407)
 //
@@ -2245,7 +2166,6 @@ WorldModule::EntityModulePostPhysicsUpdate(
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_CrashManager );
 }
 
-
 // ============================================================================
 // UpdateForBootUpVideo  @ 0x827CFDE0   (DWARF BrnWorldModule.h:361)
 //
@@ -2313,14 +2233,6 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
         *lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface());
     lpUpdateOutputBuffer->SetWorldEntityStatusInterface(
         lpWorldEntityOutput_PostPhysics->GetStatusInterface());
-    // [FLAG PC boot gate] the traffic GUI-event forward
-    // (VariableEventQueue<32768,16>::Append of the traffic post-physics output's
-    // GUI queue into the update output's GUI queue) is deferred with the traffic
-    // module: the traffic OutputBuffer_PostPhysics slice has no GUI-event queue
-    // accessor committed yet, and the gated traffic PostPhysicsUpdate stages
-    // nothing into it. Restore with the traffic post-physics IO pass.
-
-    lpUpdateOutputBuffer->UnlockForWrite();
     lpTrafficOutput_PostPhysics->UnlockForWrite();
     lpWorldEntityOutput_PostPhysics->UnlockForWrite();
 
@@ -2328,7 +2240,6 @@ WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
     lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PostPhysics );
     lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput_PostPhysics );
 }
-
 
 // ============================================================================
 // Update  @ 0x827D63E8   (DWARF BrnWorldModule.h:358 -- the X360 vtable+76 slot)
@@ -2472,21 +2383,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_EachUpdate );
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_TotalUpdate );
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
-
-    // ---- player vehicle controls copy ---------------------------------------
-    // [FLAG PC] The null guard is host-only and now dead: UpdateInputBuffer::
-    // GetPlayerVehicleControls (BrnWorldModuleIO.cpp) returns the buffer's own member,
-    // never NULL. The console's setter is an unguarded 60-byte memcpy.
-    {
-        const BrnWorldIO::PlayerVehicleControls* lpControls =
-            lpUpdateInputBuffer->GetPlayerVehicleControls();
-        if ( lpControls != 0 )
-        {
-            lpUpdateOutputBuffer->LockForWrite();
-            lpUpdateOutputBuffer->SetPlayerVehicleControls( lpControls );
-            lpUpdateOutputBuffer->UnlockForWrite();
-        }
-    }
 
     // ---- input bridges ------------------------------------------------------
     CGS_ASSERT( lpPhysicsInput != 0, "lpInputBuffer" );   // X360 CgsModuleUtils.h:238
@@ -2688,15 +2584,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     lpInputBufferStack->DestroyIOBuffer( &lpSceneInput_Update );
 
-    // ---- post-scene buffers --------------------------------------------------
-    // [FLAG PC boot gate] the WORLD-ENTITY post-scene IO pair: the X360 creates
-    // WorldEntityIO::InputBuffer_PostScene / OutputBuffer_PostScene around the
-    // post-scene spine and destroys them straight after -- the spine itself never
-    // reads or writes them (they are not in its parameter list). Neither type is
-    // committed in BrnWorldEntityModuleIO.h yet, so the pair is omitted here; the
-    // observable frame is unchanged. Restore both with the world-entity post-scene
-    // IO pass.
-    BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene* lpTrafficOutput_PostScene = 0;
     RaceCarEntityModuleIO::OutputBuffer_PostScene*    lpRaceCarOutput_PostScene = 0;
     PropEntityIO::OutputBuffer_PostScene*             lpPropOutput_PostScene    = 0;
     lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostScene, "TrafficPostScene" );
@@ -2759,7 +2646,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER -- see HarnessArmAIDrivesPlayer (end of file).
     // Placed BEFORE the refresh below so the frame that arms it already runs the AI-owned path.
-    HarnessArmAIDrivesPlayer();
     // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the AI PAD seat's standing policy for THIS frame's AI
     // update (gHarnessAIPad); the control word is never touched. See HarnessArmAIPadPlayer (end of file).
     HarnessArmAIPadPlayer();
@@ -2942,99 +2828,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // X360: (*vtbl(mSkyDebugComponent))[0] -- the sky debug component's per-frame
     // virtual Update (the environment-settings tuning page).
     mSkyDebugComponent.Update();
-
-    // [FLAG PC boot gate -- FRAME DELTA + TIME-OF-DAY OVERRIDE RESTORED; post-fx step 9
-    //  (group envblend) then DMV look-dev wave 2026-08-20 (group timeofday)]
-    // X360 WorldModule::Update @0x827D63E8, 0x827D7CEC-0x827D7D78.
-    //
-    // RESTORED -- the environment frame delta. `stfsx f0, r31, 0x1E8124` is
-    // mEnvironmentManager + 0x11C4 == EnvironmentManager::mrTimeStep (DWARF
-    // BrnEnvironmentManager.h:425; the console inlines the setter DWARF :107 names
-    // SetCurrentTimeStep). Source: the world input's SIM timer status --
-    //     if (status[+0x24]) mrTimeStep = status[+0x20] * status[+0x1C]; else mrTimeStep = 0
-    // and +0x18 is where the 48-byte block's SECOND CgsSystem::TimerStatus starts, so
-    // +0x1C/+0x20/+0x24 are its mfBaseTimeStep / mfTimeStepMultiplier / mbRunning --
-    // i.e. `IsRunning() ? GetCurrentTimeStep() : 0`, reached BY NAME below.
-    //
-    // WHY IT IS LOAD-BEARING: mrTimeStep is the ONLY frame delta the environment manager
-    // has. EnvironmentManager::SetupTimeOfDayBlend @0x827D35C0 advances the time of day by
-    // `mfTimeOfDayDelta * mrTimeStep` and Update @0x827D6060 scrolls the cloud UVs by it.
-    // Left at its zero-initialised value the whole environment chain is arithmetically
-    // inert -- the sky would sit at Construct's 13:00 for ever, which reads on screen as
-    // "the time of day never moves" rather than as a crash.
-    //
-    // ⭐ RESTORED 2026-08-20 (DMV look-dev wave, group timeofday) -- THE DIRECTOR-CAMERA
-    // TIME-OF-DAY OVERRIDE. The old park here said "the committed Director camera slice
-    // still has no named home for those two fields". That was STALE: BrnCameraEffects.h
-    // carved mfTimeOfDay (+0x98) on 2026-07-31 and mbSetTimeOfDay (+0xB9) beside it, both
-    // DWARF-named (BrnCameraEffects.h:311 / :329). The arm is the console's, verbatim:
-    //
-    //   0x827D7CEC  lbzx  r11, r31, 0x5E1DE1        ; mLastCameraInput.mEffects.mbSetTimeOfDay
-    //   0x827D7CFC  beq   -> skip
-    //   0x827D7D10  lfsx  f13, r31, 0x5E1DC0        ; ...mEffects.mfTimeOfDay  (HOURS)
-    //   0x827D7D18  lfs   f0, flt_82004C6C          ; 60.0  (image bytes 42 70 00 00, dumped
-    //                                               ;        headless from ARTIST, .rdata)
-    //   0x827D7D1C  fmuls f13, f13, f0              ; hours * 60          -> minutes
-    //   0x827D7D20  fmuls f0,  f13, f0              ; minutes * 60        -> SECONDS
-    //   0x827D7D24  stfsx f0,  r31, 0x1E7464        ; mEnvironmentManager.mfTimeOfDay
-    //
-    // NOTE THE SHAPE: two separate `fmuls` by the SAME 60.0 constant, i.e. the source wrote
-    // `* 60.0f * 60.0f`, not `* 3600.0f` -- reproduced literally below so the rounding is
-    // identical. mLastCameraInput sits at WorldModule +0x5E1CC0 (pinned by the
-    // `lvx128 v1, r31, 0x5E1CF0` at 0x827D7D94 = camera +0x30 = GetPosition(), the third
-    // argument of the EnvironmentManager::Update call just below), so +0x5E1DC0/+0x5E1DE1
-    // are camera +0x100/+0x121 == mEffects +0x98/+0xB9. Reached BY NAME here, because those
-    // console offsets do not survive the x64 pointer widening in Camera (three 4->8 byte
-    // pointer members precede mEffects).
-    //
-    // THERE IS NO CLAMP. The store is a bare `stfsx` -- no fsel, no compare against
-    // mfTimeOfDayLowerBound/UpperBound (28800/61200, flt_820CC768/flt_820CAB98). The bounds
-    // are applied one step later, by SetupTimeOfDayBlend inside EnvironmentManager::Update.
-    //
-    // ORDER IS LOAD-BEARING and is the console's: AFTER mSkyDebugComponent.Update() (the
-    // `bctrl` at 0x827D7CE8), BEFORE the SetCurrentTimeStep block below (0x827D7D28) and
-    // before EnvironmentManager::Update (0x827D7DA0) -- so the override lands in the same
-    // frame it is requested, and SetupTimeOfDayBlend advances from the overridden value.
-    //
-    // WHY IT MATTERS FOR THE DMV BUG. Construct seeds KF_DEF_TIME_OF_DAY = 46800 s
-    // (flt_820CA580, image bytes 47 36 D0 00 == 46800.0 -- the default is NOT misdecoded)
-    // and only two console mechanisms ever move mfTimeOfDay off it: THIS override, and the
-    // junkyard-lighting latch (EnableJunkyardLightingSetup pins 18:00 = flt_82F307F0 and
-    // EnvironmentManager::Update re-pins it every frame while latched, asm 0x827D6358 --
-    // and that re-pin runs AFTER this override, so the latch wins when both are live).
-    // The one console producer of THIS request, BrnDirector::ArbStateCarSelect::Update
-    // @0x8226F5D0, raises it only in E_STATE_GAME_INTRO_PART_ONE: `stb r28(=1), 0x131(r31)`
-    // + `stfs flt_8200CA28, 0x110(r31)` at 0x8226FC94/0x8226FC9C -- camera(r31+0x10)
-    // +0x121/+0x100 -- with flt_8200CA28 = 0x41840000 = 16.5 h, and 12.5 h (flt_8200CA00 =
-    // 0x41480000) for the outro arms at 0x82270C10 and 0x82270C38. 16.5 * 60 * 60 = 59400 s
-    // = 16:30, late-afternoon golden hour. The ordinary DMV BROWSE state raises nothing --
-    // its console look is the 18:00 junkyard latch, which never fires on this build yet
-    // (no `[env] junkyard` line in the boot log; see the wave findings). The producer's
-    // three writes are ALREADY committed (BrnArbStateCarSelect.cpp:827/905/1255,
-    // KF_JUNKYARD_TIME_OF_DAY / KF_OUTRO_TIME_OF_DAY); with no consumer they went nowhere
-    // and the backdrop sat at 13:00 (`[env] tod=46800.9s (13:00)` in build/game/BrnGame.log).
-    if ( mLastCameraInput.GetEffects().IsTimeOfDaySet() )
-    {
-        // flt_82004C6C == 60.0f, loaded ONCE and used for both multiplies (see above).
-        const f32 KF_MINUTES_PER_HOUR   = 60.0f;
-        const f32 KF_SECONDS_PER_MINUTE = 60.0f;
-        mEnvironmentManager.SetTimeOfDay_Seconds(
-            mLastCameraInput.GetEffects().GetTimeOfDay()
-                * KF_MINUTES_PER_HOUR * KF_SECONDS_PER_MINUTE );
-
-        // [FLAG PC bring-up diagnostic] one-shot proof line, NOT console code. Delete when
-        // the override is signed off. Pairs with the existing `[env] tod=...` line.
-        static bool sbLoggedTimeOfDayOverride = false;
-        if ( !sbLoggedTimeOfDayOverride && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedTimeOfDayOverride = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[env-tod] director camera override ACTIVE: "
-                << mLastCameraInput.GetEffects().GetTimeOfDay() << " h -> "
-                << ( mLastCameraInput.GetEffects().GetTimeOfDay() * 60.0f * 60.0f )
-                << " s\n";
-        }
-    }
 
     // FLAG cross-home cast: BrnWorldIO models the world buffer's timer block as its own
     // 48-byte pointer-free POD while the canonical type is CgsSystem::TimerStatusInterface.
@@ -3222,11 +3015,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
             // Env-map refresh around the player car; latch its position.
             mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() );
-            // [FLAG PC bring-up] ...and record that the six face cameras now carry a real
-            // LookAt basis, which is the gate GenerateDispatchListsBringUp's env-map arm
-            // uses in place of the dispatch input buffer's RenderSwitches (see
-            // BrnWorldModule.h). Not a console store. DELETE with that producer.
-            const Vector3 lPlayerPosition = lpPlayerState->mTransform.Pos();
             mPlayerCarPosition =
                 Vector4{ lPlayerPosition.x, lPlayerPosition.y, lPlayerPosition.z, 0.0f };
 
@@ -3489,9 +3277,6 @@ WorldModule::CalculateVehicleLODs(
         const Vector3& lVehiclePosition =
             lpRaceCar->GetRenderParams()->GetBodyTransform().Pos();
 
-        const f32 lfDistance =
-            CgsPC::VmxFloat::Magnitude3(CgsPC::VmxFloat::Subtract(lCameraPos, lVehiclePosition));
-
         lafRaceCarDistances[ liRaceCarIndex ] = lfDistance;
         lfRenderingCostEstimate += 1.0f / lfDistance;
     }
@@ -3522,12 +3307,8 @@ WorldModule::CalculateVehicleLODs(
         const f32 lfQuality    = KA_VEHICLE_QUALITY_LOD_DISTANCE[ luIndex ];
         const f32 lfAggressive = KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[ luIndex ];
         // VMX subtract/fused lerp, then a distinct scalar fmuls zoom stage.
-        const f32 lfBand = CgsPC::VmxFloat::MultiplyAdd(
-            CgsPC::VmxFloat::Subtract(lfAggressive, lfQuality), lfAlpha, lfQuality);
         lafLODDistances[ luIndex ] = lfBand * lfZoomFactor;
     }
-
-    CgsPC::Reflections::SetVehicleLodDistances(lafLODDistances);
 
     // ---- publish ------------------------------------------------------------
     if ( sbUseFixedLods )
@@ -3733,7 +3514,6 @@ WorldModule::GenerateFrustumQueries(
             CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
             CgsGraphics::Camera lProjectedCamera;
             lFaceCamera.Clone( &lProjectedCamera );
-            renderengine::SetEnvironmentMapProjectionPC(lProjectedCamera);
 
             // ⭐ CORRECTED 2026-08-17 (reflections step 1): lbNegateNearFar is TRUE for the
             // env-map faces. This leg used to call the no-arg PC bridge
@@ -3862,7 +3642,6 @@ WorldModule::GenerateFrustumQueries(
     mbFirstRenderFrame = false;
 }
 
-
 // ============================================================================
 // GenerateDispatchLists  @ 0x827D1CE8
 //
@@ -3888,7 +3667,6 @@ WorldModule::GenerateDispatchLists(
     const BrnUpdateSet* lpUpdateSet )
 {
     using namespace CgsDev;
-    renderengine::BeginGraphicsDiagnosticsPC();
 
     CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );
     CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" );
@@ -3937,11 +3715,6 @@ WorldModule::GenerateDispatchLists(
 
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderMainScreen );
 
-    // FLAG PC-platform leaf: transient debug text must be queued once per rendered
-    // frame, including presentations with no physics tick. Read the completed car
-    // snapshot here; do not advance simulation to refresh the overlay.
-    mRaceCarEntityModule.DebugRenderPosition();
-
     // ---- the dispatch-pass IO buffer set -----------------------------------
     WorldEntityIO::InputBuffer_GenerateDispatchLists* lpWorldDispatchInput = 0;
     BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch* lpTrafficDispatchInput = 0;
@@ -3953,7 +3726,6 @@ WorldModule::GenerateDispatchLists(
     BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch* lpTrafficPreDispatchInput = 0;
     BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch* lpTrafficRenderInfos = 0;
 
-    CgsPC::Reflections::BeginSceneFrame();
     lpInputBufferStack->CreateIOBuffer( &lpWorldDispatchInput, "WorldEntity" );
     lpInputBufferStack->CreateIOBuffer( &lpTrafficDispatchInput, "TrafficDispatch" );
     lpInputBufferStack->CreateIOBuffer( &lpPropDispatchInput, "PropDispatch" );
@@ -3972,7 +3744,6 @@ WorldModule::GenerateDispatchLists(
     // @0x8284CB38 -- see the CgsCamera.cpp banner).
     gDispatchCamera.Construct();
     lpCameraInput->CopyToCgsCamera( &gDispatchCamera );
-    CgsPC::Reflections::sfParticleNormalDistance = gDispatchCamera.maProjectionScalars[8];
     lpDispatchThreadInputBuffer->SetCameraViewProjection(
         gDispatchCamera.GetViewProjectionMatrix() );
 
@@ -4045,7 +3816,6 @@ WorldModule::GenerateDispatchLists(
 
     const CgsModule::Event* lpFrustumTestResult = 0;
     s32 liResultSize = 0;
-    s32 liResultType = CgsPC::Scene::FirstFrustumResult(lpResultsQueue, &lpFrustumTestResult, &liResultSize);
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_FrustumTesting );
 
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderMainScreen );
@@ -4062,34 +3832,20 @@ WorldModule::GenerateDispatchLists(
                               &lpFilteredEntityData->maPropEntityIds );
     PerfMonCpu::StopMonitor( miFrustumTestFilterPM );
 
-    // FLAG PC-platform leaf: ordinary results retain the console record. Large
-    // combined results forward only the relevant owner's already-filtered ids
-    // so the unchanged 32 KB module input queues cannot overflow.
-    lpWorldDispatchInput->LockForWrite();
     lpWorldDispatchInput->GetSceneResultQueue()->Clear();
-    CgsPC::Scene::ForwardFrustumResult(lpWorldDispatchInput->GetSceneResultQueue(),
-        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maWorldEntityIds);
     lpWorldDispatchInput->UnlockForWrite();
 
     lpRaceCarDispatchInput->LockForWrite();
     lpRaceCarDispatchInput->GetSceneResultQueue()->Clear();
-    CgsPC::Scene::ForwardFrustumResult(lpRaceCarDispatchInput->GetSceneResultQueue(),
-        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maRaceCarEntityIds);
     lpRaceCarDispatchInput->UnlockForWrite();
 
     lpTrafficDispatchInput->LockForWrite();
     lpTrafficDispatchInput->GetSceneResultQueue()->Clear();
-    CgsPC::Scene::ForwardFrustumResult(lpTrafficDispatchInput->GetSceneResultQueue(),
-        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maTrafficEntityIds);
     lpTrafficDispatchInput->UnlockForWrite();
 
     lpPropDispatchInput->LockForWrite();
     lpPropDispatchInput->GetSceneResultQueue()->Clear();
-    CgsPC::Scene::ForwardFrustumResult(lpPropDispatchInput->GetSceneResultQueue(),
-        lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maPropEntityIds);
     lpPropDispatchInput->UnlockForWrite();
-
-    liResultType = CgsPC::Scene::NextFrustumResult(lpResultsQueue, lpFrustumTestResult, &lpFrustumTestResult, &liResultSize);
 
     // ---- traffic pre-dispatch + the vehicle LOD policy ---------------------
     lpTrafficPreDispatchInput->Construct();
@@ -4247,7 +4003,6 @@ WorldModule::GenerateDispatchLists(
             lpFilteredEntityData->Clear();
 
             CgsGraphics::Camera lFaceCamera = mEnvironmentMap.maEnvMapCameras[ liFace ];
-            CgsPC::Reflections::LightCapture::BeginFace(static_cast<u32>(liFace), lFaceCamera);
 
             PerfMonCpu::StartMonitor( miFrustumTestFilterPM );
             FilterFrustumTestResults( lpFrustumTestResult,
@@ -4259,8 +4014,6 @@ WorldModule::GenerateDispatchLists(
 
             lpWorldDispatchInput->LockForWrite();
             lpWorldDispatchInput->GetSceneResultQueue()->Clear();
-            CgsPC::Scene::ForwardFrustumResult(lpWorldDispatchInput->GetSceneResultQueue(),
-                lpFrustumTestResult, liResultType, liResultSize, lpFilteredEntityData->maWorldEntityIds);
             lpWorldDispatchInput->UnlockForWrite();
 
             lpWorldDispatchInput->LockForWrite();
@@ -4279,8 +4032,6 @@ WorldModule::GenerateDispatchLists(
                 lpWorldDispatchInput, lpFilteredEntityData->maWorldEntityIds,
                 lFaceCamera.GetViewProjectionMatrix(), gDispatchCamera.GetPosition(),
                 &mShaderLodInfo, 5 + liFace, 5 + liFace, 5 + liFace );
-            CgsPC::Reflections::WorldCapture::SubmitBackdrops(mWorldEntityModule,
-                lpDispatchInputBuffer->GetDispatchFrame(), lFaceCamera, mShaderLodInfo, 5 + liFace);
             PerfMonCpu::StopMonitor( miGenerateDispatchListsPM );
 
             PerfMonCpu::StartMonitor( miPropGenerateDispListClearPM );
@@ -4292,38 +4043,11 @@ WorldModule::GenerateDispatchLists(
                 1.0f, &mShaderLodInfo, 5 + liFace, 5 + liFace, 5 + liFace, true, false );
             PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
 
-            // FLAG PC-platform leaf: optional vehicle feeds use this face's view
-            // and query results; they never mutate the main-camera LOD/history.
-            if ((CgsPC::Reflections::Rivals().mbEnabled || CgsPC::Reflections::PlayerWheels().mbEnabled)
-                && lpDispatchInputBuffer->GetRenderSwitches()->mbRenderRaceCars)
-            {
-                CgsPC::Reflections::VehicleScope lScope(CgsPC::Reflections::E_CAPTURE_RIVALS, 5 + liFace);
-                mRaceCarEntityModule.GenerateDispatchLists(lpRaceCarDispatchInput,
-                    lpFilteredEntityData->maRaceCarEntityIds, 5 + liFace, 5 + liFace, 5 + liFace,
-                    true, lvFogScattering, lvFogColourPlusWhiteLevel, lFaceCamera.GetPosition());
-            }
-            if (lpDispatchInputBuffer->GetRenderSwitches()->mbRenderTraffic)
-                CgsPC::Reflections::TrafficCapture::Submit(mTrafficEntityModule,
-                    lpFilteredEntityData->maTrafficEntityIds, lpTrafficDispatchInput,
-                    lFaceCamera, lvFogScattering, lvFogColourPlusWhiteLevel, 5 + liFace);
-            CgsPC::Reflections::LightCapture::SubmitRaceCars(static_cast<u32>(liFace), mRaceCarEntityModule);
-            CgsPC::Reflections::LightCapture::SubmitTrafficSignals(static_cast<u32>(liFace), mTrafficEntityModule);
-
-            // Refresh the face camera's projection for the renderer (far 10000)
-            // and record its view-projection for the env-map resolve -- ON THE
-            // LOCAL COPY (X360 v219): the member maEnvMapCameras[face] is never
-            // mutated by the dispatch pass.
-            // FLAG PC-platform leaf: far-clip setters rebuild the ordinary
-            // projection. Reapply the native cube orientation before publishing
-            // the sky matrix, matching the world/prop face projection above.
-            lFaceCamera.SetFarClipPlane( 10000.0f );   // the store + the D3D rebuild, one member
-            renderengine::SetEnvironmentMapProjectionPC(lFaceCamera);
+   // the store + the D3D rebuild, one member
             lpShaderConstantsFrame->SetEnvMapViewProjectionMatrix(
                 static_cast<BrnGraphics::EEnvironmentMapFace>( liFace ),
                 lFaceCamera.GetViewProjectionMatrix() );
 
-            liResultType = CgsPC::Scene::NextFrustumResult(lpResultsQueue,
-                lpFrustumTestResult, &lpFrustumTestResult, &liResultSize);
         }
 
         PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RenderEnvMap );
@@ -4361,9 +4085,7 @@ WorldModule::GenerateDispatchLists(
     lpDispatchThreadInputBuffer->UnlockForWrite();
 
     lpInputBufferStack->DestroyIOBuffer( &lpWorldDispatchInput );
-    renderengine::EndGraphicsDiagnosticsPC();
 }
-
 
 // ============================================================================
 // GenerateShadowMapDispatchLists  @ 0x827C96D8
@@ -4428,16 +4150,6 @@ WorldModule::GenerateShadowMapDispatchLists(
         const bool lbWorld    = mShadowMap.GetRenderWorldIntoShadowMap() &&
                                 lpSwitches->mbRenderWorld;
 
-        // FLAG PC-platform leaf: a missing result must never become a null
-        // dereference, including when a frame's render switches change live.
-        if (!lpFrustumTestResult)
-        {
-            static u32 suMissingQueryLogs = 0;
-            if (suMissingQueryLogs++ < 8 && CgsDev::Log::gpDebugPrint)
-                *CgsDev::Log::gpDebugPrint << "[frustum-results] missing shadow cascade " << luCascade << "\n";
-            break;
-        }
-        CgsPC::Reflections::SetShadowCamera(luCascade, *lpCascadeCamera);
         CGS_ASSERT( lpFrustumTestResult, "lpEvent" );
         CGS_ASSERT( reinterpret_cast<const CgsSceneManager::SceneQueryId*>( lpFrustumTestResult )->mId
                         == KA_FRUSTUM_QUERY_IDS[ 8 + luCascade ].mId,
@@ -4464,32 +4176,21 @@ WorldModule::GenerateShadowMapDispatchLists(
 
         if ( lbWorld )
         {
-            CgsPC::Scene::ForwardFrustumResult(lpWorldDispatchInput->GetSceneResultQueue(),
-                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maWorldEntityIds);
         }
         if ( lbRaceCars )
         {
-            CgsPC::Scene::ForwardFrustumResult(lpRaceCarDispatchInput->GetSceneResultQueue(),
-                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maRaceCarEntityIds);
         }
         if ( lbTraffic )
         {
-            CgsPC::Scene::ForwardFrustumResult(lpTrafficDispatchInput->GetSceneResultQueue(),
-                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maTrafficEntityIds);
         }
         if ( lbProps )
         {
-            CgsPC::Scene::ForwardFrustumResult(lpPropDispatchInput->GetSceneResultQueue(),
-                lpFrustumTestResult, liEventType, liResultSize, lpFilteredEntityData->maPropEntityIds);
         }
 
         lpPropDispatchInput->UnlockForWrite();
         lpTrafficDispatchInput->UnlockForWrite();
         lpRaceCarDispatchInput->UnlockForWrite();
         lpWorldDispatchInput->UnlockForWrite();
-
-        liEventType = CgsPC::Scene::NextFrustumResult(lpResultsQueue,
-            lpFrustumTestResult, &lpFrustumTestResult, &liResultSize);
 
         // The render bridge for this cascade.
         lpWorldDispatchInput->LockForWrite();
@@ -4571,7 +4272,6 @@ WorldModule::GenerateShadowMapDispatchLists(
         mShadowMap.SetRenderingShadowMap( false );
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // Lane accessors for the two rw::math::vpu idioms this file's new bodies need and the PC
@@ -5063,9 +4763,6 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 //  The other documented delta is IrradianceQuadricB row 3: the bring-up carried (0,0,0,0),
 //  the console writes (0,0,0,1). Nothing consumes that row.)
 
-
-
-
 // =================================================================================================
 // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER=1 -- hand the player car to the game's OWN AI.
 //
@@ -5096,52 +4793,6 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 // are dropped by the bridge while the word is 2 -- by the console's own gate, not by anything here.
 // DELETE-WHEN the debug menu is drivable from the harness.
 // =================================================================================================
-void WorldModule::HarnessArmAIDrivesPlayer()
-{
-    static const bool skbWanted = ( std::getenv( "BRN_AI_DRIVES_PLAYER" ) != 0 );
-    static s32        siArmCount = 0;
-    if ( !skbWanted )
-    {
-        return;
-    }
-    if ( meLocalPlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
-    {
-        return;
-    }
-    if ( maeCarControls[ meLocalPlayerActiveRaceCarIndex ] == E_CAR_CONTROL_AI_MODULE )
-    {
-        return;   // already the AI's -- nothing to re-apply
-    }
-    const BrnAI::AIDriver* lpPlayerDriver = mAIModule.GetAIDriver( meLocalPlayerActiveRaceCarIndex );
-    if ( lpPlayerDriver == 0 || !lpPlayerDriver->IsActive() )
-    {
-        return;
-    }
-
-    const s32 liPreviousControl = maeCarControls[ meLocalPlayerActiveRaceCarIndex ];
-    ++siArmCount;
-    mDebugComponent.HarnessSetAIDrivesPlayer( true );
-
-    if ( CgsDev::Log::gpDebugPrint != 0 )
-    {
-        if ( siArmCount == 1 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[ai-drive] ***** HARNESS-ONLY (BRN_AI_DRIVES_PLAYER=1): the game's own AI now drives the "
-                << "player car -- WorldDebugComponent::AIDrivesPlayerChanged @0x827B1FC0 stored maeCarControls["
-                << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "]=2 and mbAIPlayerInvulnerable=0. "
-                << "The pad record is no longer forwarded to physics; the AI record for this slot is. "
-                << "Standing: re-applied whenever the game hands the car back. *****\n";
-        }
-        else
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[ai-drive] re-armed #" << siArmCount << ": the game had set maeCarControls["
-                << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "]=" << liPreviousControl
-                << "; back to 2 (AI) via the same @0x827B1FC0 callback\n";
-        }
-    }
-}
 
 // =================================================================================================
 // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=cruise|race|pursuit -- the "AI PAD" seat, world half.
@@ -5196,9 +4847,6 @@ namespace
     };
     HarnessAIPadStash sHarnessAIPadStash = { false, 0.0f, 0.0f, 0.0f, 0.0f, false, false };
 
-    // [FLAG PC witness] the pad trace: one line per KI_HARNESS_AI_PAD_TRACE_PERIOD applied frames (60 ==
-    // one second of the fixed 1/60 sim step), at most KI_HARNESS_AI_PAD_TRACE_LINES lines.
-    const s32 KI_HARNESS_AI_PAD_TRACE_PERIOD = 60;
     const s32 KI_HARNESS_AI_PAD_TRACE_LINES  = 1200;
     s32       siHarnessAIPadApplied          = 0;
     s32       siHarnessAIPadTraceLines       = 0;
@@ -5218,39 +4866,10 @@ namespace
 
     // BRN_AI_PAD_PLAYER's value: cruise | race | pursuit ("1", what -DiagEnv passes for a bare name, is
     // cruise). Anything else is REFUSED loudly and the seat stays off.
-    BrnAI::EHarnessAIPadMode HarnessAIPadModeFromEnvironment()
-    {
-        const char* lpcSpec = std::getenv( "BRN_AI_PAD_PLAYER" );
-        if ( lpcSpec == 0 || lpcSpec[ 0 ] == '\0' )
-        {
-            return BrnAI::E_HARNESS_AI_PAD_OFF;
-        }
-        if ( std::strcmp( lpcSpec, "cruise" ) == 0 || std::strcmp( lpcSpec, "1" ) == 0 )
-        {
-            return BrnAI::E_HARNESS_AI_PAD_CRUISE;
-        }
-        if ( std::strcmp( lpcSpec, "race" ) == 0 )
-        {
-            return BrnAI::E_HARNESS_AI_PAD_RACE;
-        }
-        if ( std::strcmp( lpcSpec, "pursuit" ) == 0 )
-        {
-            return BrnAI::E_HARNESS_AI_PAD_PURSUIT;
-        }
-        if ( std::strcmp( lpcSpec, "combat" ) == 0 )
-            return BrnAI::E_HARNESS_AI_PAD_COMBAT;
-        if ( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint << "[ai-pad] REFUSED: BRN_AI_PAD_PLAYER='" << lpcSpec
-                                       << "' is not cruise | race | pursuit | combat -- the seat stays OFF [PC HARNESS]\n";
-        }
-        return BrnAI::E_HARNESS_AI_PAD_OFF;
-    }
 }
 
 void WorldModule::HarnessArmAIPadPlayer()
 {
-    static const BrnAI::EHarnessAIPadMode seMode = HarnessAIPadModeFromEnvironment();
     static s32         siArmCount    = 0;
     static s32         siNoteLines   = 0;
     static const char* spcLastReason = 0;
@@ -5454,7 +5073,6 @@ void WorldModule::HarnessApplyAIPad( RaceCarEntityModuleIO::InputBuffer_PreScene
 // not modelled, the standing disposition of every landed sibling in Bridges/.
 // ===========================================================================
 
-
 namespace WorldModule
 {
 
@@ -5610,7 +5228,6 @@ void BridgeTriggerModuleToSceneModule_PostScene(
 // not modelled, the standing disposition of every landed sibling in Bridges/.
 // ===========================================================================
 
-
 namespace WorldModule
 {
 
@@ -5688,7 +5305,6 @@ void BridgeCrashModuleToOutput(
 // context, which arrives here as an untyped pointer; the monitors are not modelled,
 // the standing disposition of every landed sibling in Bridges/.
 // ===========================================================================
-
 
 namespace WorldModule
 {

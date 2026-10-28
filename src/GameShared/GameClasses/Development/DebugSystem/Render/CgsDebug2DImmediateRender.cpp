@@ -5,26 +5,7 @@
 #include <math.h>
 #include <cstring>
 
-// X360 0x82824048. Shared screen-space text wrapper used throughout the game debug HUDs.
-// ARTIST builds a Vector2 and disables screen checking (82824068..8282406C).
-// FLAG PC-platform leaf: retain the existing extra native compatibility argument;
-// the original wrapper has no caller-selected screen-check flag.
-int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool /*lbCheckScreen*/)
-{
-    Vector2 lv2Position;
-    lv2Position.x = lfX;
-    lv2Position.y = lfY;
-    lv2Position.z = 0.0f;
-    lv2Position.w = 0.0f;
-    lpDisplay->DrawText(lpcText, lv2Position, lfScale, lColour, false);
-    return 0;
-}
 #include <cstdio>
-
-// Queued 2D debug primitives and original resource/vector-font text paths.
-// FLAG PC-platform leaf: native D3D9 quads use one four-vertex triangle strip.
-// Other batches retain their selected line-list or triangle-list topology.
 
 namespace CgsDev
 {
@@ -40,8 +21,6 @@ namespace CgsDev
         mVectorFont.SetSize(Vector2{10.0f,10.0f,0.0f,0.0f});
         mVectorFont.SetRenderer(this);   // glyph strokes draw through this renderer's DrawLine
         mTextRenderer.Construct(); // ARTIST 8281A304
-        // FLAG PC-platform leaf: initial native strip topology; each draw mode selects its own.
-        mePrimitiveType       = static_cast<renderengine::PrimitiveType>(6);
     }
 
     void Debug2DImmediateRender::Destruct()
@@ -163,7 +142,6 @@ namespace CgsDev
             {
                 // ARTIST 8281B718..8281B740: restore the shared untextured state
                 // before copying the batch; preserve the selected drawing mode.
-                mpRenderBuffer->SetState(CgsGraphics::GetIm3dTextureStateUntexturedPC());
                 mpRenderBuffer->Render(mePrimitiveType, maIm2dVertsArray, static_cast<u32>(miIm2dVertsHead));
             }
             miIm2dVertsHead = 0;
@@ -187,8 +165,6 @@ namespace CgsDev
     void Debug2DImmediateRender::EmitQuad(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour)
     {
         DispatchVertices();   // each quad is its own triangle strip
-        // FLAG PC-platform leaf: the original quad uses one D3D9 triangle strip.
-        meDrawingMode = E_DRAWING_QUADS;
         mePrimitiveType = static_cast<renderengine::PrimitiveType>(6);
         AddVertex(lfX0, lfY0, lColour);   // TL
         AddVertex(lfX1, lfY0, lColour);   // TR

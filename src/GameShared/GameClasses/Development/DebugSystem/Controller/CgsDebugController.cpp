@@ -2,37 +2,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#if !defined(D_PLATFORM_X360)
-#include <cstdlib>
-#include <cstdio>
-#include "GameShared/GameClasses/System/CgsHarnessSlot.h"
-#include "GameShared/GameClasses/System/Input/PC/CgsDebugKeyboardPC.h"
-#include "GameShared/GameClasses/System/PC/CgsKeyboardPC.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
-
-// FLAG PC-platform leaf: host keyboard polling in place of the X360 keystroke API. The resulting
-// DebugController state and its event translation remain the original platform-independent path.
-#include "pc/input/Gamepad.h"
-extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
-extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow(void);
-extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessId(void* hWnd, unsigned long* lpdwProcessId);
-extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
-extern "C" __declspec(dllimport) void* __stdcall OpenEventA(unsigned long, int, const char*);
-extern "C" __declspec(dllimport) unsigned long __stdcall WaitForSingleObject(void*, unsigned long);
-struct HWND__;
-namespace renderengine { extern HWND__* hWnd; }
-#endif
-
 namespace CgsDev
 {
-#if !defined(D_PLATFORM_X360)
-    bool IsDebugKeyboardCapturedPC()
-    {
-        DebugManager* lpDebug = DebugManager::GetInstance();
-        return lpDebug && lpDebug->GetUI().GetController().IsPCKeyboardCaptured();
-    }
-#endif
     namespace
     {
         const DebugUI::InputEvent KAE_BUTTON_MAP_TABLE[DebugController::KI_MAX_BUTTONS] =
@@ -65,34 +36,6 @@ namespace CgsDev
 
         const f32 KF_CONTROLLER_DEAD_ZONE = 0.001f;
 
-#if !defined(D_PLATFORM_X360)
-        bool IsProcessForeground()
-        {
-            void* lpForeground = GetForegroundWindow();
-            if (!lpForeground)
-                return false;
-            if (renderengine::hWnd)
-                return lpForeground == static_cast<void*>(renderengine::hWnd);
-            unsigned long luPid = 0;
-            GetWindowThreadProcessId(lpForeground, &luPid);
-            return luPid == GetCurrentProcessId();
-        }
-
-        // FLAG PC-platform leaf: debug keystrokes use the same named-event harness as gameplay.
-        // Manual-reset events support modifier chords/holds; auto-reset events supply taps.
-        bool HarnessKeyDown(s32 liVirtualKey)
-        {
-            static void* sapEvents[256] = {};
-            if (!sapEvents[liVirtualKey])
-            {
-                char lacName[96];
-                std::snprintf(lacName, sizeof(lacName), "Local\\BurnoutPC_DebugKey_%02X%s",
-                              liVirtualKey, CgsSystem::HarnessSlot::Suffix());
-                sapEvents[liVirtualKey] = OpenEventA(0x00100000, 0, lacName);
-            }
-            return sapEvents[liVirtualKey] && WaitForSingleObject(sapEvents[liVirtualKey], 0) == 0;
-        }
-#endif
     }
 
     const f32 DebugController::KF_KEY_REPEAT_TIME = 1.0f;
@@ -108,12 +51,6 @@ namespace CgsDev
         mbKeyboardPresent = InitKeyboard();
         mbKeyboardLocked = false;
         mfKeyRepeatDelay = KF_KEY_REPEAT_TIME;
-#if !defined(D_PLATFORM_X360)
-        for (s32 liKey = 0; liKey < 256; ++liKey)
-            mabPCKeysDown[liKey] = mabPCKeysPressed[liKey] = false;
-        mbPCKeyboardCaptured = false;
-        mfRepeatTimeScalePC = 1.0f;
-#endif
     }
 
     void DebugController::Destruct() {}
@@ -141,7 +78,6 @@ namespace CgsDev
 
     void DebugController::UpdatePad()
     {
-#if defined(D_PLATFORM_X360)
         if (!mpDebugManagerPad || !mpDebugManagerPad->IsConnected())
         {
             ClearPad();
@@ -163,11 +99,6 @@ namespace CgsDev
             mfX = -1.0f;
         else if (mpDebugManagerPad->IsButtonPressed(3))
             mfX = 1.0f;
-#else
-        // FLAG PC-platform leaf: the PC debug menu is keyboard-driven; the gameplay input module
-        // publishes action state rather than an X360 DeviceX360Pad record to this subsystem.
-        ClearPad();
-#endif
     }
 
     f32 DebugController::TranslateAxis(s32 liAxisValue)
@@ -194,110 +125,11 @@ namespace CgsDev
         ClearKeyboard();
         if (!mbKeyboardPresent)
             return;
-#if defined(D_PLATFORM_X360)
         ReadKey(lfTimeStep);
-#else
-        CgsInput::PCGamepad::UpdateKeyboardMappings();
-        // Snapshot high-bit state once. GetAsyncKeyState's low bit is shared with other
-        // pollers, so it cannot reliably represent this controller's key-down edges.
-        const bool lbHarness = std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr;
-        const bool lbNativeCapture = CgsSystem::KeyboardPC::IsCapturingInput();
-        const bool lbPhysical = (!lbHarness || std::getenv("BRN_INPUT_KEEP_KEYBOARD"))
-                                && (lbNativeCapture || IsProcessForeground());
-        bool lbAnyKeyDown = false;
-        bool lbControlsNeutral = true;
-        for (s32 liKey = 0; liKey < 256; ++liKey)
-        {
-            const bool lbPhysicalDown = (lbPhysical && (GetAsyncKeyState(liKey) & 0x8000) != 0)
-                                        || CgsInput::PCGamepad::MappedKeyDown(liKey);
-            // While captured, drain harness taps even when a physical key masks the same key.
-            // Outside capture the original physical-first short circuit is unchanged.
-            const bool lbHarnessDown = lbHarness && (lbNativeCapture || !lbPhysicalDown) && HarnessKeyDown(liKey);
-            const bool lbDown = lbPhysicalDown || lbHarnessDown;
-            mabPCKeysPressed[liKey] = lbDown && !mabPCKeysDown[liKey];
-            mabPCKeysDown[liKey] = lbDown;
-            if (liKey >= 8) lbAnyKeyDown = lbAnyKeyDown || lbDown;
-            if (lbDown) lbControlsNeutral = false;
-        }
-
-        // FLAG PC-platform leaf: native keyboard ownership covers this separate input owner.
-        // Keep actual held history, discard pressed edges/repeats, and report manual harness
-        // holds to the same release latch as gameplay. The release sample stays consumed.
-        if (CgsSystem::KeyboardPC::BlockDebugInput(lbControlsNeutral))
-        {
-            for (s32 liKey = 0; liKey < 256; ++liKey) mabPCKeysPressed[liKey] = false;
-            ClearEvent();
-            return; // ClearKeyboard/PC UpdatePad already cleared all public debug output.
-        }
-
-        mbShiftPressed = IsKeyDown(0x10);
-        mbCtrlPressed = IsKeyDown(0x11);
-        mbAltPressed = IsKeyDown(0x12);
-
-        if (IsKeyDown(0x25)) meSpecialKeyPress = E_KEY_LEFT;
-        else if (IsKeyDown(0x27)) meSpecialKeyPress = E_KEY_RIGHT;
-        else if (IsKeyDown(0x26)) meSpecialKeyPress = E_KEY_UP;
-        else if (IsKeyDown(0x28)) meSpecialKeyPress = E_KEY_DOWN;
-        else
-        {
-            for (s32 liKey = 0; liKey < 12; ++liKey)
-                if (WasKeyPressed(0x70 + liKey))
-                {
-                    meSpecialKeyPress = static_cast<SpecialKey>(E_KEY_F1 + liKey);
-                    break;
-                }
-        }
-        ReadKey(lfTimeStep);
-
-        const bool lbVisible = DebugManager::GetInstance()->GetUI().IsVisible();
-        const bool lbOpenMenu = mcKeyPress == ' ' && mbCtrlPressed;
-        const bool lbOpenConsole = mcKeyPress == '`';
-        mbPCKeyboardCaptured = lbVisible || lbOpenMenu || lbOpenConsole
-                               || (mbPCKeyboardCaptured && lbAnyKeyDown);
-        // FLAG PC-platform leaf: Ctrl+Space opens the menu without stealing Space/Enter/Esc
-        // from the game's screens. Once open, the original menu bindings apply unchanged.
-        if (!lbVisible)
-        {
-            if (!lbOpenMenu && !lbOpenConsole) mcKeyPress = 0;
-            if (meSpecialKeyPress < E_KEY_F1) meSpecialKeyPress = E_KEY_NONE;
-        }
-#endif
     }
 
     void DebugController::ReadKey(f32 /*lfTimeStep*/)
     {
-#if !defined(D_PLATFORM_X360)
-        if (WasKeyPressed(0x08)) { mcKeyPress = 8; return; }
-        if (WasKeyPressed(0x09)) { mcKeyPress = 9; return; }
-        if (WasKeyPressed(0x0D)) { mcKeyPress = 10; return; }
-        if (WasKeyPressed(0x1B)) { mcKeyPress = 27; return; }
-        if (WasKeyPressed(0x20)) { mcKeyPress = 32; return; }
-        if (WasKeyPressed(0xBF)) { mcKeyPress = mbShiftPressed ? '?' : '/'; return; }
-        if (WasKeyPressed(0xC0)) { mcKeyPress = mbShiftPressed ? '~' : '`'; return; }
-        if (WasKeyPressed(0xBD)) { mcKeyPress = mbShiftPressed ? '_' : '-'; return; }
-        if (WasKeyPressed(0xBB)) { mcKeyPress = mbShiftPressed ? '+' : '='; return; }
-        if (WasKeyPressed(0xBC)) { mcKeyPress = mbShiftPressed ? '<' : ','; return; }
-        if (WasKeyPressed(0xBE)) { mcKeyPress = mbShiftPressed ? '>' : '.'; return; }
-        if (WasKeyPressed(0xBA)) { mcKeyPress = mbShiftPressed ? ':' : ';'; return; }
-        if (WasKeyPressed(0xDE)) { mcKeyPress = mbShiftPressed ? '"' : '\''; return; }
-        if (WasKeyPressed(0xDB)) { mcKeyPress = mbShiftPressed ? '{' : '['; return; }
-        if (WasKeyPressed(0xDD)) { mcKeyPress = mbShiftPressed ? '}' : ']'; return; }
-        if (WasKeyPressed(0xDC)) { mcKeyPress = mbShiftPressed ? '|' : '\\'; return; }
-
-        static const char KAC_SHIFT_DIGITS[10] = { ')', '!', '@', '#', '$', '%', '^', '&', '*', '(' };
-        for (s32 liKey = '0'; liKey <= '9'; ++liKey)
-            if (WasKeyPressed(liKey))
-            {
-                mcKeyPress = mbShiftPressed ? KAC_SHIFT_DIGITS[liKey - '0'] : static_cast<char>(liKey);
-                return;
-            }
-        for (s32 liKey = 'A'; liKey <= 'Z'; ++liKey)
-            if (WasKeyPressed(liKey))
-            {
-                mcKeyPress = static_cast<char>(mbShiftPressed ? liKey : liKey + ('a' - 'A'));
-                return;
-            }
-#endif
     }
 
     char DebugController::SimpleLocaliseKey(char lcKey) { return lcKey; }
@@ -375,27 +207,15 @@ namespace CgsDev
         }
         else
         {
-            // FLAG PC-platform leaf: input is polled per presentation. Carry
-            // fractional repeat time and retain the console's 60 Hz acceleration
-            // sample and maximum repeat rate at independent render rates.
-            f32 lfRepeatTickPC = 1.0f / 60.0f;
-#if !defined(D_PLATFORM_X360)
-            lfRepeatTickPC *= mfRepeatTimeScalePC;
-#endif
             if (!(lfTimeStep > 0.0f))
                 return DebugUI::E_INPUTEVENT_NONE;
             mfEventRepeatDelay -= lfTimeStep;
             if (mfEventRepeatDelay > 0.0f)
                 return DebugUI::E_INPUTEVENT_NONE;
-            if (mfEventRepeatDelayMax < lfRepeatTickPC)
-                mfEventRepeatDelayMax = lfRepeatTickPC;
             mfEventRepeatDelay += mfEventRepeatDelayMax;
             // Do not queue a burst of navigation events after a stalled frame.
             if (mfEventRepeatDelay < 0.0f)
                 mfEventRepeatDelay = mfEventRepeatDelayMax;
-            mfEventRepeatDelayMax -= mpMetrics->mfAutoRepeatAcceleration * lfRepeatTickPC;
-            if (mfEventRepeatDelayMax < lfRepeatTickPC)
-                mfEventRepeatDelayMax = lfRepeatTickPC;
         }
         return leInputEvent;
     }

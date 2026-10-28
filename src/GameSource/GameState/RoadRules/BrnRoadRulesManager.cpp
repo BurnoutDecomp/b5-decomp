@@ -131,8 +131,6 @@ void RoadRulesManager::OnEnterRoad(GameStateModuleIO::GameActionQueue* queue, Br
     CGS_ASSERT(mpModeManager != 0, "mpModeManager");
     if (const auto* mode = mpModeManager->GetCurrentGameMode())
         const_cast<GameMode*>(mode)->OnEnterRoad(road);
-    if (std::getenv("BRN_STREET_UI_TRACE") && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[street-ui] entered road " << road << "\n";
 }
 
 // ARTIST 0x82348320.

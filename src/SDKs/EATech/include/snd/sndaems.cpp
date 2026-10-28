@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // SDKs/EATech/include/snd/sndaems.cpp
 //
@@ -225,8 +224,6 @@ bool ApplyCsisRelocations(ModuleBank* apBank, const ModuleBank* apSource)
             reinterpret_cast<Csis::ClassHandle*>(lpBase + luTarget)->SetFast(&lId);
         else
             reinterpret_cast<Csis::FunctionHandle*>(lpBase + luTarget)->SetFast(&lId);
-
-        CgsSound::PcmTrace::Log("aems-class bank=%d kind=%u name=%s\n", apBank->miBankHandle, luKind, lId.mpName);
 
         // XB1 sub_14096C510 dispatches each relocation and deliberately ignores
         // the resolver's return value.  CSIS content and AEMS banks are streamed
@@ -953,8 +950,6 @@ IAemsSamplePlayer* CreateSamplePlayer(AemsPlayerBlock* apBlock,
                                ((luEncodedOffset & 0x0000FF00u) << 8)  |
                                ((luEncodedOffset & 0x00FF0000u) >> 8)  |
                                ((luEncodedOffset & 0xFF000000u) >> 24);
-
-    CgsSound::PcmTrace::Log("aems-select bank=%d sample=%p index=%u\n", apBlock->mpBank->miBankHandle, lpSampleBank + luSampleOffset, luSampleIndex);
 
     int laiOutputs[6];
     for (u32 luOutput = 0; luOutput < 6; ++luOutput)

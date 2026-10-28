@@ -5,8 +5,6 @@
 #include "vendor/renderware/collision/GPInstance.hpp"        // VolRef1xN / PPIR / PrimitiveBatchIntersect
 #include "vendor/renderware/collision/VolRef.hpp"
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"   // the embedded sub-queries
-#include "vendor/renderware/collision/VolumeQueryHostLayout.hpp"   // NOT X360: the host carve sizes
-
 #include <cstring>  // memset
 #include <cstdio>   // snprintf ([vvq] / [vlq] DIAG, the [vlq] traps)
 #include <cstdlib>  // getenv   ([vvq] / [vlq] DIAG only)
@@ -44,8 +42,6 @@ namespace collision
 // handles back and derives nothing). The constant, and the two report-region sizes that widen the
 // same way (the 1xN staging, the instancing scratch), live in VolumeQueryHostLayout.hpp.
 // ===========================================================================
-static_assert(VolumeVolumeQueryResourceSize(100u) == KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100,
-              "VolumeQuery.hpp's compile-time host size for 100/100 is the total GetResourceDescriptor returns");
 
 // ===========================================================================
 // rw::collision::VolumeVolumeQuery::Construct  @ 0x82BB38F0
@@ -581,22 +577,6 @@ int VolumeVolumeQuery::GetPrimitiveBBoxOverlaps()
 // ===========================================================================
 namespace
 {
-    // [DIAG] NOT IN THE X360 BINARY (2026-09-25, crash parity FX-FOLLOWUPS). Opt-in BRN_VVQ_DIAG=1: one
-    // `[vvq]` line per GetPrimitiveIntersections call (capped at 96) plus one `[vvq] max` line whenever a
-    // per-call high-water mark rises (capped at 32). It proves which callers dispatch the query and measures
-    // how close a live batch comes to the staging / result capacity: the staged pairs and 1xN groups
-    // against the pair budget (console units 12 per group + 4 per pair out of 8 * m_volRefPairBufferSize;
-    // host bytes 16 per group + 8 per pair out of the host region, 16 * m_volRefPairBufferSize), and the
-    // intersections against m_intersectionBufferMaxSize.
-    // Reads only; with the variable unset the cost is one static bool test.
-    bool VolumeVolumeQueryDiagEnabled()
-    {
-        static const bool sbEnabled = []() {
-            const char* lpcValue = std::getenv("BRN_VVQ_DIAG");
-            return lpcValue != 0 && lpcValue[0] == '1';
-        }();
-        return sbEnabled;
-    }
 
     void NoteVolumeVolumeQuery(const VolumeVolumeQuery& lrQuery, int liIntersections)
     {
@@ -644,9 +624,6 @@ namespace
 // rw::collision::VolumeLineQuery -- the two construction entry points (2026-09-25, crash parity FX-FOLLOWUPS).
 // Their one caller is FineIntersectionTestModule::Construct @0x828B0BF0 (0x828B0CC8 / 0x828B0D28).
 // ===========================================================================
-
-static_assert(VolumeLineQueryResourceSize(100u, 100u) == KU_VOLUME_LINE_QUERY_HOST_SIZE_R100,
-              "KU_VOLUME_LINE_QUERY_HOST_SIZE_R100 is GetResourceDescriptor's host total for 100 volumes / 100 results");
 
 // @ 0x82BB3838 -- the five descriptor entries {0, 1} (the `addic. r8, r8, -1 ; bge` loop), then entry 0 =
 // {0x1B0 * results + 0x80 * volumes + 0x110 + 0x2880, 16} (the `std` of the staged pair).
@@ -761,21 +738,6 @@ namespace
             CgsDev::Log::WriteToLog(lpcAnnouncement);
         }
         CGS_ASSERT(false, lpcAssert);
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY (2026-09-25, crash parity FX-FOLLOWUPS stage (b)). Opt-in BRN_VLQ_DIAG=1: the
-    // live witness that the test loop below DISPATCHES the descriptor's lineSegIntersect slot, and what the kernel
-    // answers. Per volume type, one `[vlq] kernel` line at its 1st, 10th, 100th, ... call and at its first hit: the
-    // running call and hit counts, and for a hit the segment, the fatness, lineParam, volParam, position, normal
-    // and |normal|^2. Capped at 64 lines; written with WriteToLog, as the traps are. Reads only; with the variable
-    // unset the cost is one static bool test.
-    bool VolumeLineQueryDiagEnabled()
-    {
-        static const bool sbEnabled = []() {
-            const char* lpcValue = std::getenv("BRN_VLQ_DIAG");
-            return lpcValue != 0 && lpcValue[0] == '1';
-        }();
-        return sbEnabled;
     }
 
     void NoteLineSegIntersect(const Volume* lpPrimitive, RwBool lbHit, const Vec4& arPt1, const Vec4& arPt2,
@@ -1035,11 +997,6 @@ u32 VolumeLineQuery::GetIntersections()
             const RwBool lbHit = lpfnLineSegIntersect(lpPrimitive, reinterpret_cast<const Vec4&>(m_pt1),
                                                       reinterpret_cast<const Vec4&>(m_pt2),
                                                       reinterpret_cast<const Vec4*>(lpTransform), lrResult, m_fatness);
-            if (VolumeLineQueryDiagEnabled())                    // [DIAG] NOT IN THE X360 BINARY
-            {
-                NoteLineSegIntersect(lpPrimitive, lbHit, reinterpret_cast<const Vec4&>(m_pt1),
-                                     reinterpret_cast<const Vec4&>(m_pt2), m_fatness, lrResult);
-            }
             if (lbHit == 0)
             {
                 continue;
@@ -1091,10 +1048,6 @@ int VolumeVolumeQuery::GetPrimitiveIntersections()
         static_cast<s32>(m_volRef1xNCount),                     // r7 <- lwz 0x28(r31)
         m_padding);                                             // f1 <- lfs 0x14(r31)
 
-    if (VolumeVolumeQueryDiagEnabled())                          // [DIAG] NOT IN THE X360 BINARY
-    {
-        NoteVolumeVolumeQuery(*this, liIntersections);
-    }
     return liIntersections;
 }
 

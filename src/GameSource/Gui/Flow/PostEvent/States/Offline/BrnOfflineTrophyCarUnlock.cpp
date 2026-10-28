@@ -126,18 +126,6 @@ namespace
         CgsDev::Assert::EndAssert();
     }
 
-    // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_TROPHY_DIAG), first 16 lines: which
-    // presentation step the screen reached.
-    void TrophyScreenWitness(const char* lpacStep, s32 liValue)
-    {
-        static const bool sbDiag = (getenv("BRN_TROPHY_DIAG") != 0);
-        static s32 siLinesLeft = 16;
-        if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siLinesLeft;
-            *CgsDev::Log::gpDebugPrint << "[trophy] screen " << lpacStep << " " << liValue << "\n";
-        }
-    }
 }
 
 // ---- observed events ----------------------------------------------------------------------

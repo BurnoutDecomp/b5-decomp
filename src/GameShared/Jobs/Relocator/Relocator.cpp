@@ -18,11 +18,5 @@ void RelocatorEntry(EA::Jobs::Param laParam0,
     (void)laParam2;
     (void)laParam3;
 
-    // FLAG PC-platform leaf: ARTIST 82AD28D0..29E8 resolves a private
-    // RelocatorJob context from the current EAThread id, using the console's
-    // six-id numbering. Windows thread ids do not have that numbering. Each
-    // native thread owns the same typed context through TLS, so concurrently
-    // submitted jobs never share the former hard-coded context 0.
-    static thread_local RelocatorJob sThreadJob;
     sThreadJob.Execute(laParam1.mpValue);
 }

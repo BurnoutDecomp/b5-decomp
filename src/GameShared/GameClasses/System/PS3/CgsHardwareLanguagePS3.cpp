@@ -1,8 +1,6 @@
 #include "GameShared/GameClasses/System/CgsHardwareLanguage.h"
 
 // The Windows raw input is provided in CgsHardwareSkuPC.cpp. Keep the existing
-// Xbox-backed provider for non-Windows targets without defining a second PC leaf.
-#if !defined(_WIN32)
 
 extern "C" int XTLGetLanguage();
 extern "C" int XGetGameRegion();
@@ -36,4 +34,3 @@ const CgsLanguage::ELanguage HardwareLanguage::GetHardwareLanguage()
     }
 }
 }
-#endif

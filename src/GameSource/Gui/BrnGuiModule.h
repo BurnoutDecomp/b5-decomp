@@ -160,12 +160,6 @@ namespace BrnGui
                             CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
                             CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer) override;
 
-        // FLAG PC-platform leaf: borrow this caller's already write/read-locked
-        // GameData pair. This is the selected GUI port's ownership boundary,
-        // not the complete original native GuiModule::Update signature.
-        void Update(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
-                    const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput);
-
         // The frame's simulation update set. X360 GuiModule::Update @0x82527A58 receives it as
         // its second argument from the module scheduler (`a2`) and reads ONE bit of it: bit 8
         // (0x08, set while the main flow FSM is in an in-game state -- see
@@ -194,11 +188,6 @@ namespace BrnGui
                     CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
                     RendererIO::OutputBuffer* lpRenderOutput);
         CgsGui::ViewIO::InputBuffer* GetViewInputBuffer() { return &mViewInputBuffer; }
-        // FLAG PC-platform leaf: keep the completed input after its sub-step IO
-        // stack is reclaimed. The owner runs BridgeRendererToGui on the selected
-        // input every dispatch, so all five current renderer pointers are refreshed.
-        void CaptureRenderInputPC(const CgsGui::CgsGuiModuleIO::InputBuffer* lpInput);
-        CgsGui::CgsGuiModuleIO::InputBuffer* GetCompletedRenderInputPC();
 
         // ⭐⭐ THE GUI END-OF-FRAME NOTIFY. X360 BrnGui::GuiModule::EndOfFrame @0x824F1008 is
         // three instructions -- `addis r3,r3,5 ; addi r3,r3,-0x3D70 ; b CustomRendererManager::
@@ -261,7 +250,6 @@ namespace BrnGui
         {
             mEffectsArbitrator.GenerateEffectFrameEvents(lpRenderOutput);
         }
-        // [FLAG PC bring-up] the frame-pointer form BrnGameModule::DoDispatch drives.
         void GenerateEffectFrameEvents(BrnEffectsFrame* lpFrame1, BrnEffectsFrame* lpFrame2)
         {
             mEffectsArbitrator.GenerateEffectFrameEvents(lpFrame1, lpFrame2);
@@ -274,18 +262,6 @@ namespace BrnGui
         // GuiModule::Update itself, so no accessor is emitted there.
         ProfileManager&       GetProfileManager()       { return mProfileHost.GetProfileManager(); }
         const ProfileManager& GetProfileManager() const { return mProfileHost.mProfileManager; }
-
-        // X360 GuiModule::Prepare @0x82518D68 STAGE 14: `if (!WorldDataController::Prepare(
-        // guiModule + 307836, gameDataInputBuffer)) return 0;`. The controller is a GuiModule
-        // member (Construct binds it into the cache) and its acquire machine talks to the
-        // GAME DATA request queue, so it can only be pumped where that buffer pair is live.
-        // FLAG PC drive point: the console's module scheduler hands GuiModule::Prepare the
-        // GameData input/output pair; on PC the only place that pair exists and is pumped is
-        // BrnGameModule::ResourceUpdateThread (the single-threaded stand-in for the console's
-        // resource thread), which calls this immediately before GameDataModule::Update -- the
-        // same "stage the request, then pump" order the console's Prepare has. Returns the
-        // machine's own done flag.
-        bool PrepareWorldData(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
 
         // ⭐ [event-starts wave 2026-08-27] X360 GuiModule::Prepare2 @0x825194B8's
         // WorldDataController leg -- WorldDataController::Prepare2 @0x82516CB8, the only writer of
@@ -303,13 +279,6 @@ namespace BrnGui
         // it the route replies.
         GuiTracker* GetGuiTracker() { return &mGuiTracker; }
 
-        // Is the SCREEN flow's live state currently subscribed to liEventId? The observer
-        // table is the module's own record of the type-34/35 registration records each state
-        // posts from OnEnter (RegisterForEvents), so this is the exact "a state is listening
-        // for this event right now" signal -- and it goes false again when that state leaves.
-        // Read by the game module's GameState->GUI car-select stand-in, which must not publish
-        // into a queue nobody is draining. FLAG PC bring-up: on the console the producers are
-        // driven by the game-state side, which never needs to ask.
         bool IsScreenFlowObserving(s32 liEventId) const
         {
             return liEventId >= 0 && liEventId < KI_MAX_OBSERVED_EVENT_ID
@@ -482,8 +451,6 @@ namespace BrnGui
         // the console fills these through the module scheduler's IO stacks.
         CgsGui::ViewIO::InputBuffer  mViewInputBuffer;
         CgsGui::ViewIO::OutputBuffer mViewOutputBuffer;
-        CgsGui::CgsGuiModuleIO::InputBuffer mCompletedRenderInputPC;
-        bool mbRenderInputCompletedPC = false;
         s64 miLastViewFrameMs;        // PC frame clock for the time-step event (FLAG: wall clock)
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
 
@@ -659,13 +626,6 @@ namespace BrnGui
         ::InputBuffer::GuiEventQueue mHudInQueue;
         ::InputBuffer::GuiEventQueue mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
-        // [FLAG PC seam] the console's GUI out-event loop-back (CgsGui::GuiModule +111644):
-        // CgsGui::GuiModule::Update appends the frame's out-events there and the next
-        // BrnGui::GuiModule::Update appends them into the GUI input queue, where the overlays
-        // director reads the flows' 184/186/188/189/190. This build fans flow output to the
-        // flows at the drain instead (RouteEventToFlow), so only the director's ids are kept
-        // here and handed to it. DELETE-WHEN the input-queue loop-back is modelled whole.
-        CgsModule::VariableEventQueue<18432, 16> mOverlayLoopBackQueue;
         // The always-available components manager's in-queue: the subscription filter
         // (RouteEventToObserver) delivers the events the manager registered for (its real
         // 19-id table: save-icon 355, connect 64, showtime, ...) into it, then the module

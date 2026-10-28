@@ -12,5 +12,3 @@ target_sources(DirtySDK INTERFACE
     plat-time.cpp
     protomangle.cpp
 )
-
-add_subdirectory(pc)

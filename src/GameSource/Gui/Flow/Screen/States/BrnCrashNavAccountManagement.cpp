@@ -228,10 +228,6 @@ namespace BrnGui
         typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_ACCTMAN_DIAG=1.
-        bool AcctDiagOn()
-        {
-            return getenv("BRN_ACCTMAN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0;
-        }
     }
 
     // ---- the static load table (X360 .rdata @0x82F26FDC / @0x82F26FE4) --------------
@@ -296,8 +292,6 @@ namespace BrnGui
             mpStateInterface->GetOutputEventQueue()->AddEvent(&lRequest, KI_CHANNEL_GUI_OUT, 16);
         }
 
-        if (AcctDiagOn())
-            *CgsDev::Log::gpDebugPrint << "[acct] OnEnter -- registered 9 events, asked for TOS (266) and settings (124)\n";
     }
 
     // ---- OnLeave @0x824CE228 -------------------------------------------------------
@@ -366,12 +360,6 @@ namespace BrnGui
         // [DIAG] NOT IN THE X360 BINARY -- [acct] the ladder stage, once per change.
         {
             static s32 siDiagLastStage = -1;
-            if (static_cast<s32>(meState) != siDiagLastStage && AcctDiagOn())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[acct] stage " << siDiagLastStage << " -> " << static_cast<s32>(meState)
-                    << " (0 initsetup 1 loading 2 wfinit 3 main 4 saving 5 leaving)\n";
-            }
             siDiagLastStage = static_cast<s32>(meState);
         }
 
@@ -671,11 +659,6 @@ namespace BrnGui
         mbShareInfo2 = lpSettings->mbShareInfo2 != 0;
         mbTelemetry  = lpSettings->mbTelemetry != 0;
 
-        if (AcctDiagOn())
-            *CgsDev::Log::gpDebugPrint
-                << "[acct] settings in: share1=" << (mbShareInfo1 ? 1 : 0)
-                << " share2=" << (mbShareInfo2 ? 1 : 0)
-                << " telemetry=" << (mbTelemetry ? 1 : 0) << "\n";
     }
 
     // ---- HandleNewsAndTOSEvent @0x824BCFB0 -----------------------------------------
@@ -699,10 +682,6 @@ namespace BrnGui
 
         RefreshTOSText();
 
-        if (AcctDiagOn())
-            *CgsDev::Log::gpDebugPrint
-                << "[acct] news/TOS status " << lpNews->miStatus
-                << " -> text state " << static_cast<s32>(meTOSTextState) << "\n";
     }
 
     // ---- HandleAccountUpdateComplete @0x824CE3D0 -----------------------------------
@@ -721,8 +700,6 @@ namespace BrnGui
         mMenuToggleGroup.Unloaded();
         SendStateEvent("GO_BACK");
 
-        if (AcctDiagOn())
-            *CgsDev::Log::gpDebugPrint << "[acct] account update complete -- leaving\n";
     }
 
     // ---- ApplyAndSaveSettings @0x824CE4C8 ------------------------------------------
@@ -762,12 +739,6 @@ namespace BrnGui
 
         meState = E_STATE_SAVING;
 
-        if (AcctDiagOn())
-            *CgsDev::Log::gpDebugPrint
-                << "[acct] SAVE share1=" << (labAnswers[0] ? 1 : 0)
-                << " share2=" << (labAnswers[1] ? 1 : 0)
-                << " telemetry=" << (labAnswers[2] ? 1 : 0)
-                << " -- published 126, raised CNOnlAcctMan, waiting on 127\n";
     }
 
     // ---- TriggerSound @0x824CE698 --------------------------------------------------

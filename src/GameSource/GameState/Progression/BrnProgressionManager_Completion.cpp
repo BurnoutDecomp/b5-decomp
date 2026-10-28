@@ -493,7 +493,6 @@ void ProgressionManager::SendGameCompletionResults(CgsModule::VariableEventQueue
                                 static_cast<s32>(sizeof(lRecord)));
 }
 
-
 // ############################################################################################
 // ############################################################################################
 // [progression wave 2026-09-06, lane "completion"] THE THREE COMPLETION-REWARD LEGS whose
@@ -541,18 +540,7 @@ static const char* const KAC_COMPLETION_FILE =
 
 namespace
 {
-    // [FLAG PC witness] `[completion] ...` -- NOT IN THE X360 BINARY. Opt-in
-    // (BRN_PROGRESSION_COMPLETION), bounded to the first KI_WITNESS_LINE_BUDGET lines a run.
-    // Read by tools/tests/cases/progression_completion.ps1.
-    const s32 KI_WITNESS_LINE_BUDGET = 16;
     s32       giWitnessLinesPrinted  = 0;
-
-    bool CompletionWitnessEnabled()
-    {
-        static const bool sbDiag = (getenv("BRN_PROGRESSION_COMPLETION") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0 &&
-               giWitnessLinesPrinted < KI_WITNESS_LINE_BUDGET;
-    }
 
 }
 
@@ -718,15 +706,6 @@ void ProgressionManager::CheckForAllModeTypeCompletion(
 
     mProfile.SetSeenAllEventTypeWonMessage(leModeType);
 
-    if (CompletionWitnessEnabled())
-    {
-        ++giWitnessLinesPrinted;
-        *CgsDev::Log::gpDebugPrint
-            << "[completion] all-mode-type won: mode=" << leModeType
-            << " authored="   << luEventCountForType
-            << " uniqueWins=" << luEventTypeUniqueWinCount
-            << " action206="  << static_cast<s32>(lAllEventTypeWonAction.leGameEventType) << "\n";
-    }
 }
 
 // ===================================================================================
@@ -825,14 +804,6 @@ void ProgressionManager::SendTrophyUnlockUpdate(GsmIO::GameActionQueue* lpGameAc
 
     mQueueOfTrophyCarUnLocks.Erase(luTrophyUnlockToSend);
 
-    if (CompletionWitnessEnabled())
-    {
-        ++giWitnessLinesPrinted;
-        *CgsDev::Log::gpDebugPrint
-            << "[completion] trophy posted id=" << static_cast<u32>(lPostedCarId)
-            << " type="      << liPostedType
-            << " queueLeft=" << mQueueOfTrophyCarUnLocks.GetLength() << "\n";
-    }
 }
 
 // ===================================================================================
@@ -919,16 +890,6 @@ void ProgressionManager::UnlockDerivedCarCollection(const DerivedCarArray& lrDer
         }
     }
 
-    if (CompletionWitnessEnabled())
-    {
-        ++giWitnessLinesPrinted;
-        *CgsDev::Log::gpDebugPrint
-            << "[completion] derived: base="
-            << ((luInitialLength > 0) ? static_cast<u32>(lrDerivedCarArray.GetItem(0)) : 0u)
-            << " entries="  << luInitialLength
-            << " unlocked=" << luUnlocked
-            << " owned="    << luAlreadyOwned << "\n";
-    }
 }
 
 // ===================================================================================
@@ -954,16 +915,6 @@ void ProgressionManager::UnlockDerivedCarCollection(const DerivedCarArray& lrDer
 //      i.e. the inlining is RequestTraining specialised for 37, and it is reversed into the real
 //      call, whose body (BrnTrainingManager.cpp:507) carries every one of those steps.
 //
-// ⛔ NO SEAT ON PC. GameStateModule::ProcessGameEvents @0x823A0A18 is this function's only
-// console caller: the power-park arm reads the game event, calls OnPowerParkResult, then
-// AchievementManagerBase::OnPowerParking, then posts PowerParkResultAction (game action 147,
-// 8 B, `li r5, 0x93` @0x823A3EBC). That ARM DOES NOT EXIST in the tree -- the extracted
-// ProcessGameEvents*BringUp family in GameStateModule_g*_00.cpp covers cases 27/33/35/36/79/80/
-// 93/111/115 and nothing else -- so the body below is landed and unreached today.
-// [FLAG PC bring-up] the missing seat is the E_EVENT_POWER_PARK_RESULT (BrnGameEvents.h == 54)
-// arm of GameStateModule::ProcessGameEvents @0x823A0A18. DELETE-WHEN that arm is extracted; it
-// is then a three-call arm (this, OnPowerParking, the action-147 post) with every callee bodied.
-// ===================================================================================
 void ProgressionManager::OnPowerParkResult(s32 liResult, bool lbBetweenOtherPlayers)
 {
     mProfile.RecordPowerParkingRating(liResult, lbBetweenOtherPlayers);
@@ -982,101 +933,6 @@ void ProgressionManager::OnPowerParkResult(s32 liResult, bool lbBetweenOtherPlay
         // Same hole OnEventFinishUpdateProfile's tip leg already reports: nothing in the mounted
         // set calls ProgressionManager::SetTrainingManager, so this back-pointer reads NULL.
         // DELETE-WHEN the outer ProgressionManager Construct/Prepare pair installs it.
-        *CgsDev::Log::gpDebugPrint
-            << "[FLAG PC bring-up] ProgressionManager::OnPowerParkResult: mpTrainingManager "
-               "(X360 +133440) is NULL, so the POWER_PARK training tip was not requested.\n";
-    }
-}
-
-// ===================================================================================
-// [FLAG PC harness stimulus -- NOT IN THE X360 BINARY]
-// ProgressionManager::DEBUG_HarnessSeedTrophyQueue
-//
-// Append ONE TrophyUnlockAction to mQueueOfTrophyCarUnLocks, once per run, behind
-// BRN_PROGRESSION_COMPLETION_SEEDTROPHY=1 (default off, and flow_run.ps1 clears every BRN_*
-// before a run, so it is off unless a case's DiagEnv asks for it).
-//
-// WHY IT EXISTS: SendTrophyUnlockUpdate above is the drain, and the only console producer is
-// OnTrophyUnlock -> UnlockCarFromTrophy, which needs a COMPLETED TROPHY CATEGORY (all smashes,
-// all drive-thrus, N medals ...). Nothing a 60-second harness scenario can do earns one, so
-// without a stimulus tools/tests/cases/progression_completion.ps1 could not tell a working drain
-// from a missing one -- and "the queue is empty" is exactly the state the bug also produces.
-//
-// The default seed changes only the transient queue and awards no car. The explicit
-// "freeroam:jumps", "freeroam:smashes" and "freeroam:billboards" modes instead invoke
-// the original debug completion action, award the real car and update the profile.
-// Run those modes with a pinned test profile (tests/CollectibleRewardResume.ps1).
-//
-// WHEN IT FIRES: the freeroam modes wait until the player car has been active outside
-// the junkyard for KF_FREEROAM_HOLD seconds of sim time: the GUI 375 the drain raises only
-// arms the award countdown if the screen flow's INGAME state is live, and on the first
-// PreWorldUpdate the screen flow has not even loaded yet.
-// DELETE-WHEN a harness scenario can complete a trophy category on its own.
-// ===================================================================================
-void ProgressionManager::DEBUG_HarnessSeedTrophyQueue(f32 lfSimTimeStep,
-                                                      bool lbPlayerCarActiveOutsideJunkyard)
-{
-    static const char* const spcSeedMode   = getenv("BRN_PROGRESSION_COMPLETION_SEEDTROPHY");
-    static const bool        sbSeedEnabled = (spcSeedMode != 0);
-    static const bool        sbSeedFreeRoam =
-        sbSeedEnabled && (std::strcmp(spcSeedMode, "freeroam") == 0
-                          || std::strncmp(spcSeedMode, "freeroam:", 9) == 0);
-    static bool              sbSeeded      = false;
-    static f32               sfFreeRoamTime = 0.0f;
-    const f32                KF_FREEROAM_HOLD = 8.0f;   // PC harness hold, not a console value
-
-    if (!sbSeedEnabled || sbSeeded)
-    {
-        return;
-    }
-    if (sbSeedFreeRoam)
-    {
-        if (!lbPlayerCarActiveOutsideJunkyard)
-        {
-            sfFreeRoamTime = 0.0f;
-            return;
-        }
-        sfFreeRoamTime += lfSimTimeStep;
-        if (sfFreeRoamTime < KF_FREEROAM_HOLD)
-        {
-            return;
-        }
-    }
-    sbSeeded = true;
-
-    // FLAG PC harness stimulus: exercise the original collectible completion path,
-    // including the real car award, rather than only seeding its presentation queue.
-    // The caller's pinned test profile receives the same change as the debug menu.
-    BrnGameState::StuntElementType leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT;
-    if (std::strcmp(spcSeedMode, "freeroam:jumps") == 0)
-        leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_JUMP;
-    else if (std::strcmp(spcSeedMode, "freeroam:billboards") == 0)
-        leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_BILLBOARD;
-    else if (std::strcmp(spcSeedMode, "freeroam:smashes") == 0)
-        leCompleteType = BrnGameState::E_STUNT_ELEMENT_TYPE_SMASH;
-    if (leCompleteType != BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT)
-    {
-        mpStuntManager->SetDebugCompletedUnlockType(leCompleteType);
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint << "[completion] HARNESS STIMULUS ("
-                << spcSeedMode << "): original debug complete-all type="
-                << static_cast<s32>(leCompleteType) << "\n";
-        }
-        return;
-    }
-
-    GsmIO::TrophyUnlockAction lUnlock;
-    lUnlock.mCarToUnlock = CgsIDCompress("CARBEAGT");
-    lUnlock.meUnlockType = TrophyUnlockData::E_UNLOCKTYPE_NUM_MEDELS;
-    mQueueOfTrophyCarUnLocks.Append(lUnlock);
-
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[completion] HARNESS STIMULUS (BRN_PROGRESSION_COMPLETION_SEEDTROPHY="
-            << spcSeedMode << "): one "
-               "TrophyUnlockAction seeded onto mQueueOfTrophyCarUnLocks; no car was awarded.\n";
     }
 }
 

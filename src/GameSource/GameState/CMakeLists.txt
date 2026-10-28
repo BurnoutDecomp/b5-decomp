@@ -45,7 +45,6 @@ target_sources(${PROJECT_NAME}
         GameStateModule_Showtime.cpp
         GameStateModule_wW_01.cpp
         Interface_SetUpAllEventStarts.cpp
-        SpecificGameModeEventInterface_embed_check.cpp
 
     PUBLIC
         BrnCgsPlayerName.h

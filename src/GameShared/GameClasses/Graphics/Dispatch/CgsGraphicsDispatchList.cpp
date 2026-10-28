@@ -2,8 +2,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <algorithm>   // std::sort (ARTIST RadixSortJob::Execute uses std::_Sort)
 #include <cstdint>     // uintptr_t (128-byte alignment of the flat key array)
-#include "pc/gcm/renderengine/FrameProfile.h"
-
 // =============================================================================
 // CgsGraphicsDispatchList.cpp
 //
@@ -145,7 +143,6 @@ DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
     return this;
 }
 
-// [PC leaf] The X360 sorts each prepared list on a RadixSort job (RadixSortEntry
 // @0x82AD2020, packaged by BrnRendererModule sub_823F5EA0). This remains the
 // fallback when native sort jobs are disabled. Despite the
 // job name, ARTIST RadixSortJob::Execute @0x82AD2818 calls std::_Sort<u64*,int>.
@@ -153,7 +150,6 @@ DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
 // identical records refer to the same packet and require no stable-sort storage.
 void DispatchList::SortForDispatch()
 {
-    renderengine::FrameProfile::Scope lSortProfile(renderengine::FrameProfile::DISPATCH_SORT);
     SortJobInfo lJobInfo;
     PrepareSortJobInfo(&lJobInfo);
     if (mpSortedKeys != 0 && muCount > 1)
@@ -193,17 +189,7 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
         }
         else
         {
-            // FLAG PC-platform leaf: the original 64-head array is too small
-            // for extended-detail PC scenes. Coalesce additional chains into
-            // its last entry. The previous block is already copied to shared
-            // memory; do not dereference this block's relocated tail until its
-            // own FlushBlockToSharedMemory copy has completed. The consumer
-            // still traverses ordinary KeyBlocks, after all jobs have joined.
-            CGS_ASSERT(muChainBlockCount == KU_MAX_BLOCKS_PER_CHAIN && mpRelocatedChainTailPC,
-                       "Full saved chain array has a relocated tail");
-            mpRelocatedChainTailPC->mpNext = mpBlockListHead;
         }
-        mpRelocatedChainTailPC = mpBlockListTail;
     }
     muCount = 0;
     mpBlockListHead = mpBlockListTail = nullptr;

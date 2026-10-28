@@ -18,15 +18,12 @@
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"   // GetTexture, the diag counters
 #include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"  // canonical packed GPU stride
 #include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"
-#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"    // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"      // shadow::Device
-#include "pc/gcm/renderengine/ShadowPass.h"                           // LionParticleSampler_ApplyState
-
 #include <cstdio>    // [diag] snprintf
 #include <cstdlib>   // malloc
 
@@ -99,19 +96,6 @@ namespace Native
             lrParameters.mbState16 = 0u;
         }
 
-        // The three templates Construct reads are the immediate-mode library's first three blend
-        // states, built by ImRendererBase::ConstructOnceOnly @0x827F1C20 as
-        //     dword_83010F20 = ConstructBlendState(6, 7, 0)   Standard     SRCALPHA / INVSRCALPHA, ADD
-        //     dword_83010F24 = ConstructBlendState(6, 1, 0)   Additive     SRCALPHA / ONE,         ADD
-        //     dword_83010F28 = ConstructBlendState(6, 7, 1)   Subtractive  SRCALPHA / INVSRCALPHA, op 1
-        // (0x827F1C34..0x827F1C80). FLAG PC-platform: that library is not built on this backend
-        // (ImRendererBase::ConstructOnceOnly is an empty PC leaf -- the same fact LionParticleRender's
-        // CreateInternalMaterial works around for dword_83010F20), so a template word reads null and
-        // the console's unconditional GetParameters would fault. Where the template is absent this
-        // writes what GetParameters would have read back out of it: ConstructBlendState's own block
-        // (CgsImRendererBlendState.cpp @0x827ED118 -- word 0 = src | op << 5 | dst << 8 | 0x07060000,
-        // custom factors ON, everything else the defaults above). DELETE-WHEN a caller fills the
-        // render-state library.
         void ReadTemplateParameters(const renderengine::BlendMaterialState* lpTemplate,
                                     u32 luSourceFactor, u32 luDestinationFactor, u32 luBlendOp,
                                     renderengine::BlendStateParameters& lrParameters)
@@ -239,23 +223,8 @@ namespace Native
         shadow::Device::ResetShadowing();
         ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);     // dword_83010F3C (cull none)
         ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState); // dword_83010F4C (test on, write off)
-        renderengine::LionParticleSampler_ApplyState(0);          // dword_83010F60 on unit 0
+          // dword_83010F60 on unit 0
 
-        // THE Z-FADE ARM IS NOT DRAWN ON THIS BUILD -- FLAG PC-platform, stated rather than faked.
-        // With the flag set the console binds program 0 (the soft-particle pair), puts the depth
-        // target's resolved texture state on sampler 1 (`lwz r10, 0x108(r28) ; lwz r4, 0x8C(r10)` into
-        // ImRendererBase::SetState(TextureState*, 1) @0x8227D228), and calls
-        // Im3dSmokeRenderer::SetConstants(GetHalfPixelOffset(target), near, far, KF_ZFADE_DISTANCE)
-        // (0x8228CB64..0x8228CBAC). Three things that arm reads do not exist here: the target itself
-        // (ParticleModule::RenderQuarterResParticles is reached from BrnRendererModule::Render WITHOUT
-        // the `*(renderer + 0x25C)` the console passes in r5), the post-fx target's +0x8C texture
-        // state, and rw::graphics::postfx::RenderTarget::GetHalfPixelOffset @0x823FE668 (inlined on
-        // every other PC call site). Binding program 0 over an unbound depth sampler would draw
-        // garbage, so the SansZFade pair draws either way and the request is reported once.
-        // SetConstants is reconstructed (BrnIm3dSmokeRenderer.cpp) and waits for that plumbing. On
-        // this build the flag is (muFlags & 0x40) || mbZFadeEnabled: only a REDUCED frame rate or the
-        // debug toggle sets it. DELETE-WHEN the depth target reaches this call.
-        (void)lpDepthTarget;
         (void)lfNearPlane;
         (void)lfFarPlane;
         (void)KF_ZFADE_DISTANCE;

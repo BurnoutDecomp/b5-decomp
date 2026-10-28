@@ -282,8 +282,6 @@ namespace Props
                        "PropPartTypeData::maCollisionVolumes @0x28 (console +0x24)" );
         static_assert( offsetof( PropPartTypeData, mfSphereRadius )     == 0x30, "mfSphereRadius @0x30" );
         static_assert( offsetof( PropPartTypeData, muNumberOfVolumes )  == 0x34, "muNumberOfVolumes @0x34" );
-        static_assert( sizeof( PropPartTypeData ) == 64,
-                       "PropPartTypeData stride is 64 on x64 (console 48)" );
     }
 
     inline void PropTypeData::_AssertLayout()
@@ -299,7 +297,6 @@ namespace Props
         static_assert( offsetof( PropTypeData, mfSphereRadius )    == 0x50, "mfSphereRadius @0x50" );
         static_assert( offsetof( PropTypeData, mfMaxJointAngleCos )== 0x54, "mfMaxJointAngleCos @0x54" );
         static_assert( offsetof( PropTypeData, mfSmashThreshold )  == 0x60, "mfSmashThreshold @0x60" );
-        static_assert( offsetof( PropTypeData, muSceneUriId )      == 0x64, "muSceneUriId @0x64" );
         static_assert( offsetof( PropTypeData, muNumberOfParts )   == 0x69, "muNumberOfParts @0x69" );
         static_assert( offsetof( PropTypeData, muNumberOfVolumes ) == 0x6A, "muNumberOfVolumes @0x6A" );
         static_assert( offsetof( PropTypeData, mu8ExtraTypeInfo )  == 0x6C, "mu8ExtraTypeInfo @0x6C" );

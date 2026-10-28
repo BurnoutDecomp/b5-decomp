@@ -88,63 +88,6 @@ namespace
         return reinterpret_cast<const char*>(static_cast<uintptr_t>(luSlot));
     }
 
-    // ============================================================================================
-    // [FLAG PC data gap] THE INSTANCING SUBSTITUTE TABLE.
-    //
-    // The PC programs are RE-COMPILED (tools/assets/shaders/convert_shaders_bundle.py) from the
-    // TUB HLSL, and for 19 of the 110 techniques the TUB source is the NON-instanced variant of
-    // the shader the console shipped. Their technique records still list the console's two
-    // per-instance constants, so both lookups below fail and the object matrix never reaches the
-    // program -- the "real programs bound, zero pixels" measurement the wheel bring-up recorded.
-    //
-    // The substitution is not a guess; both halves are decoded from the shipped data:
-    //
-    //   InstancingMatrixArray -> world
-    //       The console wheel VS (X360 SHADERS.BNDL resource AB4DE44C, disassembled with
-    //       tools/assets/shaders/xenos.py) builds its world position from
-    //           c[a0+4..a0+7],  a0 = 4 * InstancingIndexArray[instance].w
-    //       i.e. InstancingMatrixArray IS the per-draw object matrix, four registers of it.
-    //       The PC twin does `mad r1.xyz, v0.x, c20, r1` ... `add r0.xyz, r1, c23` with
-    //       `world` at c20, count 4 (fxc /dumpbin) -- the same four registers under the
-    //       engine's other name for the same datum.
-    //
-    //   InstancingIndexArray  -> g_wheelConstants
-    //       The console VS exports `c[a0+24].x` (a0 = instance) on interpolator 2 lane z, and
-    //       Model::SetupShaderConstantsForInstancing fills those xyz lanes from the CALLER --
-    //       for the wheels, RenderRaceCar's per-wheel spin-blur factor. The PC twin ends with
-    //       `mov o3.z, c31.x`, c31 = `g_wheelConstants`, and its pixel shader consumes that lane
-    //       as `lrp r4, v2.z, <blurred texture>, <sharp texture>`. Same value, same lane, same
-    //       consumer; only the register moved.
-    //
-    // The SOURCE stays the console's own constant (table slot 6 / 7) -- only the destination
-    // register moves -- so nothing about how the data is produced changes. For an expanded
-    // console-instanced draw, DrawRenderable::Interpret points those two slots at the entry the
-    // draw belongs to (see its "PER-INSTANCE CONSTANT CHANNELS" block).
-    //
-    // A technique that lists an instancing constant lists NOTHING ELSE in its vertex OBJECT
-    // block -- measured over the whole shipped bundle: 19 blocks are exactly
-    // [InstancingIndexArray, InstancingMatrixArray], 75 are [world], 16 are [.., world] -- so
-    // this can never collide with a technique that binds `world` for real.
-    //
-    // DELETE-WHEN the PC program set is compiled from sources that implement the console
-    // instancing scheme (they need manual vertex fetch, i.e. not D3D9 SM3).
-    // ============================================================================================
-    const char* PCInstancingSubstituteName(const char* lpcConsoleName)
-    {
-        if (lpcConsoleName == 0)
-        {
-            return 0;
-        }
-        if (std::strcmp(lpcConsoleName, "InstancingMatrixArray") == 0)
-        {
-            return "world";
-        }
-        if (std::strcmp(lpcConsoleName, "InstancingIndexArray") == 0)
-        {
-            return "g_wheelConstants";
-        }
-        return 0;
-    }
 }
 
 // CgsShaderConstants.cpp:54-56
@@ -302,66 +245,13 @@ u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexPr
                     lpaIndices[luConstant] = luIndex;
                     luNumRegisters += luRegisterCount;
                 }
-                else if (const char* const lpcSubstitute =
-                             PCInstancingSubstituteName(lrTable.mapConstantNames[luIndex]))
-                {
-                    // [FLAG PC data gap] see the substitute table's banner at the top of this TU.
-                    // NOTE what is deliberately NOT done here: the array-size override above.
-                    // That override exists because the console's InstancingMatrixArray really is
-                    // a 5-entry (20-register) array; the PC program's `world` is a single
-                    // 4-register matrix and `g_wheelConstants` a single register, so the count
-                    // must stay the one the PROGRAM reports.
-                    if (renderengine::ProgramBuffer::GetVariableHandleByName(
-                            lpProgramData,
-                            reinterpret_cast<const u8*>(lpcSubstitute),
-                            &lpaHandles[luConstant]) != 0)
-                    {
-                        lbBound = true;
-                        lpaIndices[luConstant] = luIndex;
-                        luNumRegisters += lpaHandles[luConstant].mu8RegisterCount;
-
-                        if (CgsDev::Message::gxMessageFilterFlags & 1)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << "Shader constant " << lrTable.mapConstantNames[luIndex]
-                                << " is absent from the recompiled program; bound to its"
-                                   " non-instanced twin " << lpcSubstitute << " at register "
-                                << static_cast<u32>(lpaHandles[luConstant].mu8RegisterSet)
-                                << " x" << static_cast<u32>(lpaHandles[luConstant].mu8RegisterCount)
-                                << " [FLAG PC data gap]\n";
-                        }
-                    }
-                }
             }
         }
 
         if (!lbBound)
         {
-            // X360 CgsShaderConstants.cpp:1022 streams "Missing shader constant from table " +
-            // name + "\n" into the assert buffer and FIRES. It cannot fire on the console: the
-            // shipped microcode was compiled from the same .fx the technique was authored from,
-            // so every constant a technique lists exists in its program's variable table.
-            //
-            // FLAG PC-platform leaf (DATA gap, not an engine deviation): the PC program buffers
-            // are RE-COMPILED by tools/assets/shaders/convert_shaders_bundle.py from the TUB
-            // HLSL, and two groups of constants are absent from that source:
-            //   * InstancingMatrixArray / InstancingIndexArray on the 19 `*_Instanced`
-            //     techniques -- the TUB `_Instanced.fx` files are the Remastered port, whose
-            //     instancing was reworked; they never mention either constant. Harmless today:
-            //     instanced world draws are asserted off upstream (WorldEntityModule
-            //     "Instancing not supported") and DispatchAllMeshes traps on them.
-            //   * whatever fallback_world.fx does not declare, for the two techniques with no
-            //     TUB source at all (CarStudio / Godray).
-            // A fired assert here would be a false alarm on every boot, so this is a quiet log.
-            // DELETE (restore the console assert) when the PC shader set is compiled from
-            // sources that declare the full constant list.
-            const char* const lpcName = SlotString(lpaNames[luConstant]);
             if (CgsDev::Message::gxMessageFilterFlags & 1)
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "Missing shader constant from table "
-                    << (lpcName != 0 ? lpcName : "<NULLSTRING>")
-                    << " [FLAG PC data gap: constant absent from the recompiled program]\n";
             }
         }
     }

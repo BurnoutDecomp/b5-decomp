@@ -379,8 +379,6 @@ namespace CgsGui
         static s32 siAddBudget = -1;
         if (siAddBudget < 0)
         {
-            const char* lpacEnv = std::getenv("BRN_APT_COMPUPD");
-            siAddBudget = (lpacEnv != 0 && lpacEnv[0] != 0) ? 2000 : 40;
         }
         static s32 siAddLogs = 0;
         if (siAddLogs < siAddBudget)
@@ -397,39 +395,6 @@ namespace CgsGui
         // and the question is whether repeated pause cycles ratchet toward it or settle.
         // This prints only when the count reaches a NEW maximum, so a stable cycle is a
         // handful of lines and a leaking one is a visible staircase.
-        if (AptLifeDiagEnabled())
-        {
-            static u32 suHighWater = 0;
-            if (muNumActivecomponents > suHighWater)
-            {
-                suHighWater = muNumActivecomponents;
-                // ⭐ The one question the count alone cannot answer: are the rows we are
-                // NOT dropping still pointing at LIVE AptValues, or at pool memory the
-                // value was freed from without its unload hook firing? A dead row is the
-                // "valid pointer, invalid object" shape -- the registration outlives the
-                // clip, the pool recycles the block, and the next mount registers a NEW
-                // row for the SAME address. Counts rows whose AptValue no longer carries
-                // mbIsAllocated (bit 0 of the +8 bitfield). Diagnostic only.
-                s32 liDead = 0;
-                s32 liSelf = 0;
-                for (s32 liRow = 0; liRow < liNew; ++liRow)
-                {
-                    const AptValue* lpRef = mAptComponentList.GetAptValue(liRow);
-                    if (lpRef == 0)
-                        continue;
-                    if ((lpRef->mnValueData & 1u) == 0u)
-                        ++liDead;
-                    if (lpRef == lpMovieClip)
-                        ++liSelf;   // this address is ALREADY registered under another row
-                }
-                char lac[200];
-                CgsCore::SnPrintf(lac, sizeof(lac),
-                    "[aptlife] component high-water %u/%d: '%s' (rows: %d dead, %d dup-addr)\n",
-                    suHighWater, static_cast<int>(AptComponentList::KU_MAX_COMPONENTS),
-                    lpacName ? lpacName : "<null>", liDead, liSelf);
-                CgsDev::Log::WriteToLog(lac);
-            }
-        }
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
@@ -605,20 +570,6 @@ namespace CgsGui
                 // the table actually falls. Rate-limited (the unload hook fires for every
                 // destroyed clip, not just registered ones), so it prints the first few
                 // and then only every 32nd.
-                if (AptLifeDiagEnabled())
-                {
-                    // ⭐ 2026-08-28: the rate limit was hiding the answer. Measured over a
-                    // boot + two Driver Details entries, this drain fires FOUR times in the
-                    // whole run while 261 registrations go in -- so every line matters and
-                    // the volume is not a risk. Prints every removal.
-                    static u32 suRemoved = 0;
-                    ++suRemoved;
-                    char lac[112];
-                    CgsCore::SnPrintf(lac, sizeof(lac),
-                        "[aptlife] component removed #%u -> %u active\n",
-                        suRemoved, muNumActivecomponents);
-                    CgsDev::Log::WriteToLog(lac);
-                }
                 return;
             }
         }
@@ -664,17 +615,6 @@ namespace CgsGui
         static s32         siUpdPrefixLen = -1;
         if (siUpdPrefixLen < 0)
         {
-            const char* lpacEnv = std::getenv("BRN_APT_COMPUPD");
-            if (lpacEnv != 0 && lpacEnv[0] != 0)
-            {
-                spacUpdPrefix  = lpacEnv;
-                siUpdPrefixLen = (lpacEnv[0] == '*') ? 0 : static_cast<s32>(std::strlen(lpacEnv));
-            }
-            else
-            {
-                spacUpdPrefix  = 0;
-                siUpdPrefixLen = 0;
-            }
         }
         if (spacUpdPrefix != 0)
         {
@@ -1068,12 +1008,6 @@ namespace CgsGui
                  siEventHudGetLogs < 200);
             if (lbEventHudProbe)
                 ++siEventHudGetLogs;
-            // FLAG PC-platform leaf: observe late map/prompt queries independently
-            // of the boot budget, under the same opt-in as the AS variable probe.
-            static const bool sbPromptProbe = []() {
-                const char* pEnv = std::getenv("BRN_APT_PROMPT_DIAG");
-                return pEnv != nullptr && pEnv[0] == '1';
-            }();
             static s32 siPromptGetLogs = 0;
             const bool lbPromptProbe = sbPromptProbe && lpacCompName != nullptr &&
                 // Map button animators have their own budget. Boot car-selection
@@ -1173,8 +1107,7 @@ namespace CgsGui
                    "Event id sent to AptCommunicator::SendAptEvent is out of range");
 
         AptValue* lpMovieClip = 0;
-        bool lbTableFull = false;   // [FLAG PC bring-up] see the overflow arm below
-        if (liEventId == GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
+        bool lbTableFull = false;           if (liEventId == GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {
             lpMovieClip = AptExtObject::GetParam(3);
 
@@ -1213,39 +1146,6 @@ namespace CgsGui
                 CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
                 CgsDev::Assert::EndAssert();
 
-                // [FLAG PC bring-up] The console FALLS THROUGH this assert into
-                // AddNewAptComponent, which then writes slot 256 of every fixed 256-entry
-                // array in mAptComponentList -- i.e. the console can only continue past
-                // here by corrupting the statics that follow those arrays
-                // (muNumActivecomponents and miNumUsedKeyValues among them). The shipped
-                // build therefore PROVABLY never reaches this state, and there is no
-                // console gate to reproduce: the assert IS the console's answer, and
-                // falling through it is undefined on both machines.
-                //
-                // UPSTREAM LEAK CLOSED 2026-08-29 (AptCharacterInst::
-                // DestroyCharacterInst): AptCIH::ClearCIH / SetCharacterInst /
-                // ClearInst were destroying the outgoing character instance through a
-                // NON-VIRTUAL ~AptCharacterInst() instead of the console's vtable-slot-0
-                // scalar deleting destructor, so ~AptCharacterSpriteInstBase never ran and
-                // the embedded mDisplayList was never torn down -- no child clip ever
-                // reached pfnOnUnload. MEASURED before: 511 OnUnload calls / 0 matched
-                // removals / table saturated by the 5th screen. After: 1696 OnUnload calls,
-                // 135 matched removals, peak 195 of 256 slots at the crash-nav map, and the
-                // whole boot fires ZERO asserts. The guard below is now INERT on every
-                // known path; it is kept only as a damage bound. The historical measurement
-                // it was written against: 243 of the
-                // 256 occupied slots at the crash-nav map belong to the title / ESRB /
-                // licence / photo-booth / car-select screens, only 13 to map icons), refuse
-                // the registration instead of overrunning the table. Dropping it lands the
-                // component in a state the console's own code already tolerates everywhere:
-                // FindAptComponent returns -1 for it and UpdateComponent /
-                // UpdateComponentReserved early-out on that -1 (the "component not
-                // registered" path they take for every non-component clip). The assert above
-                // still fires on every occurrence, so this hides nothing.
-                //
-                // REMOVE THIS GUARD once the registrations are released again -- it is a
-                // bring-up bound on the damage, not the fix.
-                lbTableFull = true;
             }
 
             CGS_ASSERT(lpMovieClip != 0, "Invalid movieclip sent to AptCommunicator::SendAptEvent");

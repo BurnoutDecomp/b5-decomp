@@ -140,19 +140,6 @@ namespace
     // ---- dword_8324E4F0 (the common-init gAptFuncs self-registration slot) -
     void* gpAptCommonFuncsSlot = nullptr;   // dword_8324E4F0
 
-    // (the string-pool bucket array off_8324E4F4 / count dword_8324E4F8 are owned by
-    //  AptStringPool.cpp, where StringPool::Initialize lives.)
-
-    // ---- the shared thread-id spin lock (unk_8324E724) ---------------------
-    // FLAG PC-platform leaf: single-threaded thread-id spin lock -- the console's interrupt-masked lwarx/stwcx. TAS elided (threading primitive, not an engine method).
-    inline void AptThreadIdLock_Acquire() {}
-    inline void AptThreadIdLock_Release() {}
-
-    // ---- the Apt update/render shared mutex (unk_8324E7E0) ------------------
-    // Vendor EA::Thread::Mutex (default recursive). FLAG PC-platform leaf: the
-    // console passes the raw MutexParameters name (unk_82143270); a default-
-    // constructed recursive vendor mutex is the same lock (threading primitive,
-    // not an engine method). Function-local static -> init-order safe.
     EA::Thread::Mutex& AptUpdateRenderMutex()
     {
         static EA::Thread::Mutex s_mutex;   // unk_8324E7E0
@@ -312,33 +299,10 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
     return s_pGCPool;
 }
 
-// ===========================================================================
-// AptSetSimulationThreadID @0x82AD8F90 / AptSetRenderThreadID @0x82AD8EF0
-//
-// X360: interrupt-masked TAS on unk_8324E724; id = EA::Thread::GetThreadId(a1);
-// store into the sim (dword_8324E500) / render (dword_8324E504) slot; unlock.
-//
-// FLAG PC-platform leaf: thread-id plumbing -- the console's GetThreadId(a1) takes
-// a thread-handle arg; the vendor EA::Thread::GetThreadId() is the no-arg "current
-// thread" form (the value the console yields here -- these are called on the main
-// thread with a1 that resolves to the caller). `a1` is accepted for signature
-// parity but unused (the vendor has no by-handle GetThreadId on this build).
-// ===========================================================================
-int AptSetSimulationThreadID(int /*a1*/)
-{
-    AptThreadIdLock_Acquire();                 // FLAG PC-platform leaf: interrupt-masked TAS elided (single-threaded)
-    EA::Thread::ThreadId id = EA::Thread::GetThreadId();
-    gAptSimThreadId = id;                       // dword_8324E500 = result
-    AptThreadIdLock_Release();
-    return static_cast<int>(reinterpret_cast<intptr_t>(id));
-}
-
 int AptSetRenderThreadID(int /*a1*/)
 {
-    AptThreadIdLock_Acquire();                 // FLAG PC-platform leaf: interrupt-masked TAS elided (single-threaded)
     EA::Thread::ThreadId id = EA::Thread::GetThreadId();
     gAptRenderThreadId = id;                    // dword_8324E504 = result
-    AptThreadIdLock_Release();
     return static_cast<int>(reinterpret_cast<intptr_t>(id));
 }
 
@@ -357,10 +321,6 @@ int AptSetRenderThreadID(int /*a1*/)
 void* AptCommonInitialize(void* pConfig)
 {
     unsigned int* lpCfg = static_cast<unsigned int*>(pConfig);
-
-    // FLAG PC-platform leaf: the console's interrupt-masked TAS on dword_8324E6E0 is
-    // elided (single-threaded). Setting the guard (=1) is the faithful visible result.
-    gbAptCommonInitDone = 1;
 
     // AptAnimationTarget::SetupStaticData(pConfig) -- count == pConfig word[6] (+0x18).
     AptAnimationTarget::SetupStaticData(static_cast<int>(lpCfg[6]));
@@ -742,112 +702,6 @@ int AptValueShutdownRemaining()
     return 0;
 }
 
-// ===========================================================================
-// AptValueShutdown @0x82AF2BE0 -- tear down the AS value singletons + natives.
-//
-// The teardown mirror of AptValueInitialize: drop the AS class-registry hash, then
-// walk the process-wide value singletons -- for each, run the value's GC-pointer
-// teardown (vtbl DestroyGCPointers @+0x28) then the boot-AddRef Release (vtbl Release
-// @+0x04) and null the slot. The rendering context (a pooled AptRenderingContext, not
-// an AptValue) is torn down via its scalar-deleting destructor and its slot is left
-// as-is (the console does NOT null dword_8324E2AC here). Called by AptUpdateShutdown.
-//
-// FLAG PC-platform leaf: the two interrupt-masked lwarx/stwcx. TAS spin locks on
-// unk_8324E71C bracketing the walk (the same one-shot latch AptValueInitialize uses)
-// are elided single-threaded (threading primitive, not an engine method). No null
-// guards are added: the console's per-singleton dispatch is unconditional (only
-// dword_8324E2D4 and dword_8324E2AC are guarded), transcribed verbatim.
-//
-// The seven AS native-function singletons (off_8324D828/D81C/D824/E1FC/D80C/D74C/
-// E378) are the teardown side of the SAME singletons AptValueInitialize builds
-// above: the first six live in AptGlobals.cpp (AptCIH::objectMemberLookup resolves
-// the global names through them), the seventh (ASSetPropFlags) is file-local above.
-// ===========================================================================
-
-int AptValueShutdown()
-{
-    // dword_8324E2D4 (gpAptClassRegistry) -- the AS export-name class-registry hash.
-    // Guarded (the console null-checks it): destroy its held GC pointers, then run its
-    // scalar-deleting destructor -- dtor + pool free back to the non-GC DOGMA pool it
-    // was placement-new'd from (AptObject.cpp) -- then null the slot.
-    if (gpAptClassRegistry != nullptr)
-    {
-        gpAptClassRegistry->DestroyGCPointers();
-        if (gpAptClassRegistry != nullptr)
-        {
-            gpAptClassRegistry->~AptNativeHash();
-            if (gpNonGCPoolManager != nullptr)
-                gpNonGCPoolManager->Deallocate(gpAptClassRegistry, sizeof(AptNativeHash));
-        }
-        gpAptClassRegistry = nullptr;
-    }
-
-    // FLAG PC-platform leaf: first interrupt-masked TAS on unk_8324E71C elided (single-threaded).
-
-    // off_8324E37C -- the _global extension object.
-    gpAptGlobalExtensionObject->DestroyGCPointers();   // vtbl +0x28
-    gpAptGlobalExtensionObject->Release();             // vtbl +0x04 (drops the boot AddRef)
-    gpAptGlobalExtensionObject = nullptr;
-
-    // FLAG PC-platform leaf: second interrupt-masked TAS on unk_8324E71C elided (single-threaded).
-
-    // off_8324E380 -- the _global fallback scope.
-    gpAptGlobalFallback->DestroyGCPointers();
-    gpAptGlobalFallback->Release();
-    gpAptGlobalFallback = nullptr;
-
-    // off_8324E2A8 -- the Key manager singleton.
-    gpAptKeyObject->DestroyGCPointers();
-    gpAptKeyObject->Release();
-    gpAptKeyObject = nullptr;
-
-    // off_8324D82C -- the shared empty AptString.
-    gpAptStringObject->DestroyGCPointers();
-    gpAptStringObject->Release();
-    gpAptStringObject = nullptr;
-
-    // dword_8324E2AC -- the shared AptRenderingContext (a pooled non-AptValue); guarded
-    // scalar-deleting destructor (dtor + pool free). The slot is NOT nulled (asm).
-    if (gpAptRenderingContext != nullptr)
-        static_cast<AptRenderingContext*>(gpAptRenderingContext)->ScalarDeletingDestructor(1);
-
-    // The seven AS global native-function singletons (built by AptValueInitialize).
-    gpAptFnSetInterval->DestroyGCPointers();
-    gpAptFnSetInterval->Release();
-    gpAptFnSetInterval = nullptr;
-
-    gpAptFnClearInterval->DestroyGCPointers();
-    gpAptFnClearInterval->Release();
-    gpAptFnClearInterval = nullptr;
-
-    gpAptFnIsNaN->DestroyGCPointers();
-    gpAptFnIsNaN->Release();
-    gpAptFnIsNaN = nullptr;
-
-    gpAptFnUnescape->DestroyGCPointers();
-    gpAptFnUnescape->Release();
-    gpAptFnUnescape = nullptr;
-
-    gpAptFnEscape->DestroyGCPointers();
-    gpAptFnEscape->Release();
-    gpAptFnEscape = nullptr;
-
-    gpAptFnBoolean->DestroyGCPointers();
-    gpAptFnBoolean->Release();
-    gpAptFnBoolean = nullptr;
-
-    gpAptFnASSetPropFlags->DestroyGCPointers();
-    gpAptFnASSetPropFlags->Release();
-    gpAptFnASSetPropFlags = nullptr;
-
-    // off_8324D748 -- the Object.registerClass native. The console tail-returns this
-    // last Release's r3; AptValue::Release is void here, so 0 (the vendor-path result).
-    gpObjRegistrationFunc->DestroyGCPointers();
-    gpObjRegistrationFunc->Release();
-    gpObjRegistrationFunc = nullptr;
-    return 0;
-}
-
 // ---------------------------------------------------------------------------
 // Un-homed siblings/globals the shutdown paths (AptCommonShutdown +
 // AptUpdateShutdown) reach; declared here at the call site (the codebase pattern).
@@ -865,97 +719,6 @@ extern unsigned char gbAptInShutdown;   // byte_8324E7C9
 // AptUpdateZombieVector @0x82B0.. (homed in AptGC.cpp) -- reap the per-target zombie
 // vector, retiring the entries flagged this pass. Canonical void* return.
 extern void* AptUpdateZombieVector(char bClear);
-
-// The AptAnimationTarget lifecycle shims (homed in AptAnimationTarget.cpp; the same
-// free wrappers AptTarget::Shutdown uses): PreDestroy releases the director's owned
-// state, CleanRemList drains the shared delayed-release list (a static op -- the pAnim
-// arg is accepted for call parity, matching the console's r3).
-// (The AptAnimationTarget_PreDestroy / _CleanRemList free-function shims are RETIRED --
-// AptTarget.cpp calls the real members directly; the shutdown below does the same.)
-
-// ===========================================================================
-// AptCommonShutdown @0x82B0AC08 -- the once-only shared static-data teardown
-// (counterpart of AptCommonInitialize @0x82AE91F0). Records the sim/render thread ids,
-// drops the render latch, tears down the animation-target static data + the active
-// target instance, clears the three context globals + the TLS mirror, runs the AS
-// value-singleton teardown (AptValueShutdownRemaining), resets the config-default string
-// + tears down the string pool, drains + frees the shared deferred-release vector, clears
-// the integer/float free pools + the temporary string pool, then clears the common-init
-// self-registration slot + the once-only init guard.
-//
-// FLAG PC-platform leaf: AptSetRenderThreadID/AptSetSimulationThreadID take an int the
-// vendor GetThreadId ignores (the console threads r3 through them -- dead plumbing); the
-// two interrupt-masked TAS spin locks (reached via the sub-calls, and the final
-// unk_8324E6E0 latch clear) are single-threaded no-ops (threading primitives, not engine
-// methods). The return is StringPool::ClearTemporaryPool's r3, void here -> 0.
-// ===========================================================================
-int AptCommonShutdown()
-{
-    // Record the sim/render thread ids (the console threads r3 through both; the arg is
-    // unused on the vendor GetThreadId -- see AptSetRenderThreadID's PC-platform leaf).
-    AptSetRenderThreadID(0);
-    AptSetSimulationThreadID(0);
-
-    gbAptRenderInitDone = 0;   // dword_8324E510 = 0
-
-    AptAnimationTarget::CleanupStaticData();
-
-    // Tear down + free the active target instance (list head off_8324E570).
-    AptTarget* lpCurrent = gpAptTargetCurrent;   // v2 = off_8324E570
-    if (lpCurrent != nullptr)
-    {
-        lpCurrent->Shutdown();                                          // AptTarget::Shutdown
-        gpAptPseudoDataPool->Deallocate(lpCurrent, sizeof(AptTarget));  // Deallocate(pool, v2, 48)
-    }
-
-    // Clear the three context globals + the per-thread TLS mirror.
-    gpAptTarget        = nullptr;      // off_8324E574 = 0
-    gpAptTargetCurrent = nullptr;      // off_8324E570 = 0
-    gpAptTargetTLS     = nullptr;      // off_8324E578 = 0
-    gAptTargetTls.SetValue(nullptr);   // TLS(unk_8324E814) = 0
-
-    // The AS value-singleton teardown (undefined / boolean / lookup / register /
-    // character-helper / extern-interface).
-    AptValueShutdownRemaining();
-
-    // off_82F733B0 (gpAptConfigDefault): the console releases the config-default EAStringC's
-    // buffer (EAStringC::DecreaseInternalRefCount) then resets its m_pData to the shared
-    // empty StringDataC (unk_82F72FF8). This reconstruction models gpAptConfigDefault as the
-    // opaque sentinel pointer AptUpdateInitialize only ever points at gAptEmptyDefaultSentinel
-    // (the shared empty StringDataC, whose refcount is pinned), so the release is inert; the
-    // reset to the sentinel is the faithful visible effect. (DecreaseInternalRefCount +
-    // StringDataC are EAStringC-private, so the release is not callable here; the modeled
-    // pinned sentinel makes it a no-op, avoiding an EAStringC befriend.)
-    gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];   // off_82F733B0 = &unk_82F72FF8
-    AptStringPool_Teardown();                            // StringPool::Teardown
-
-    // Drain + free the shared common-init deferred-release vector (off_8324E51C). The console
-    // calls ReleaseValues unconditionally (the pointer is non-null on the live init path),
-    // then frees the item array (4*capacity) + the 12-byte header when present.
-    gpValuesToRelease->ReleaseValues();          // AptValueVector::ReleaseValues(off_8324E51C)
-    AptValueVector* lpVec = gpValuesToRelease;   // v5 = off_8324E51C
-    if (lpVec != nullptr)
-    {
-        // Family-(B) vector (AptValueVector.h): the +0 word (mnTop member) holds the
-        // capacity; the item array is 4*capacity, the header is the 12-byte block.
-        gpAptPseudoDataPool->Deallocate(lpVec->mppItems, sizeof(AptValue*) * lpVec->mnTop);  // 4 * *v5
-        gpAptPseudoDataPool->Deallocate(lpVec, sizeof(AptValueVector));                       // 12
-    }
-    gpValuesToRelease = nullptr;   // off_8324E51C = 0
-
-    // Clear the integer/float free pools (befriended) + the temporary string pool. The
-    // console threads r3 through the two ClearPool calls (both void) into ClearTemporaryPool.
-    AptInteger::ClearPool();
-    AptFloat::ClearPool();
-    AptStringPool_ClearTemporaryPool();   // StringPool::ClearTemporaryPool (its r3 -> result)
-
-    gpAptCommonFuncsSlot = nullptr;   // dword_8324E4F0 = 0
-    // FLAG PC-platform leaf: the final interrupt-masked TAS clearing the once-only init
-    // guard (dword_8324E6E0) is a single-threaded no-op; the guard store is the visible reset.
-    gbAptCommonInitDone = 0;          // dword_8324E6E0 = 0
-
-    return 0;   // console r3 == StringPool::ClearTemporaryPool result (void here -> 0)
-}
 
 // ===========================================================================
 // AptRenderInitialize @0x82AEDE90 -- bring up the Apt render side.

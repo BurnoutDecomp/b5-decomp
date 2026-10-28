@@ -143,15 +143,9 @@ namespace BrnDirector
         // steady state costs one line, not sixty a second (this simulation is frame-coupled;
         // per-frame logging perturbs the thing being measured).
         // ------------------------------------------------------------------------------------
-        bool CrashCamDiagOn()
-        {
-            static const bool sbOn = (getenv("BRN_CRASHCAM_DIAG") != 0);
-            return sbOn;
-        }
 
         void ReportState(const char* lpcWhere, s32 leState)
         {
-            if (!CrashCamDiagOn() || CgsDev::Log::gpDebugPrint == 0) { return; }
             static s32 siLast = -99;
             if (leState == siLast) { return; }
             siLast = leState;
@@ -166,7 +160,6 @@ namespace BrnDirector
         // camera is the edge CameraControl::UpdateParams posts the reset-on-track sting on.
         void ReportCrashCamera(const Moment* lpMoment, u32 luValidMoments, const Camera::Camera& lrCamera)
         {
-            if (!CrashCamDiagOn() || CgsDev::Log::gpDebugPrint == 0) { return; }
             static s32 siLastType = -99;
             const s32 liType = (lpMoment != 0) ? static_cast<s32>(lpMoment->GetType()) : -1;
             if (liType == siLastType) { return; }
@@ -287,11 +280,6 @@ namespace BrnDirector
             // [harness lever, PC only] BRN_DEBUG_DEATHCAM=1 takes the totalled branch on EVERY
             // crash, so a free-burn -CrashPlayer run exercises BehaviourSpirallingDeathcam
             // (the retail path needs a Road Rage / Marked Man wreck the harness cannot stage).
-            static const bool sbForceDeathcam = (std::getenv("BRN_DEBUG_DEATHCAM") != 0);
-            if (sbForceDeathcam)
-            {
-                mbShouldUseDeathcam = true;
-            }
         }
 
         // The tracker classified this crash's energy band last frame (tracker +0x298).
@@ -322,22 +310,6 @@ namespace BrnDirector
         // [diag] BRN_CRASHCAM_DIAG -- Prepare is the door: if this never prints, the arbitrator
         // never offered the state a frame and the bug is upstream (mbCrashActive / roaming's
         // crash edge), not here.
-        if (CrashCamDiagOn() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static bool sbFirst = true;
-            static bool sbLast  = false;
-            if (sbFirst || lbPrepared != sbLast)
-            {
-                sbFirst = false;
-                sbLast  = lbPrepared;
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] Prepare -> " << (lbPrepared ? 1 : 0)
-                    << " (framesActive=" << mMomentSelector.GetFramesActive()
-                    << " validMoments=" << static_cast<s32>(mMomentSelector.GetNumValidMoments())
-                    << " deathcam=" << (mbShouldUseDeathcam ? 1 : 0)
-                    << " crashType=" << static_cast<s32>(meCrashType) << ")\n";
-            }
-        }
 
         return lbPrepared;
     }
@@ -421,23 +393,6 @@ namespace BrnDirector
             // [diag] BRN_CRASHCAM_DIAG -- the slow motion's own read-out: the velocity journal
             // sample the entry gate actually saw, and the time scale the controller left behind.
             // Edge-triggered on the requested scale, so a steady real-time frame costs nothing.
-            if (CrashCamDiagOn() && CgsDev::Log::gpDebugPrint != 0)
-            {
-                static f32 sfLastScale = -1.0f;
-                const f32  lfScale = GetCamera().GetEffects().mfSimTimeScale;
-                if (lfScale != sfLastScale)
-                {
-                    sfLastScale = lfScale;
-                    const rw::math::vpu::Vector3 lVel =
-                        lrSharedInfo.mpPlayerTracker->GetLinearVelocityJournal().GetCurrent();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crashcam] slomo requested scale=" << lfScale
-                        << " velMagSq=" << rw::math::vpu::MagnitudeSquared(lVel)
-                        << " vel.y=" << lVel.y
-                        << " firstFrame=" << (mImpactSlomoController.IsFirstFrameOfSlomo() ? 1 : 0)
-                        << "\n";
-                }
-            }
         }
 
         if (lbSuppressShake)
@@ -875,24 +830,6 @@ namespace BrnDirector
         // what ImpactSlomoController::Update's entry test measures (it needs > 30 MPH, i.e.
         // magSq > 179.86 m^2/s^2). Deliberately periodic rather than edge-triggered -- the
         // question is "what were the numbers WHILE the crash ran", and an edge cannot answer it.
-        if (CrashCamDiagOn() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static u32 suHeartbeat = 0u;
-            if ((suHeartbeat++ % 60u) == 0u)
-            {
-                const VehicleTracker::Vector3Journal& lrJournal =
-                    lrSharedInfo.mpPlayerTracker->GetLinearVelocityJournal();
-                const rw::math::vpu::Vector3 lCur = lrJournal.GetCurrent();
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] hb meState=" << static_cast<s32>(meState)
-                    << " crashActive=" << (lrGameState.mbCrashActive ? 1 : 0)
-                    << " velMagSq=" << rw::math::vpu::MagnitudeSquared(lCur)
-                    << " vel.y=" << lCur.y
-                    << " journalSize=" << lrJournal.GetSize()
-                    << " simScale=" << GetCamera().GetEffects().mfSimTimeScale
-                    << "\n";
-            }
-        }
 
         // Every arm ends here: mark the produced camera as the crash camera's
         // (`ld / ori 0x400 / std` at camera +0x140).
@@ -959,17 +896,6 @@ namespace BrnDirector
             // started with -- the killer it anchors on, the shot group's size and whether the
             // handle really holds a behaviour.
             static s32 siTakenDownCamLinesLeft = 20;
-            if (CrashCamDiagOn() && siTakenDownCamLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siTakenDownCamLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[takedown-cam] ArbStateCrashing: taken-down ICE camera started on killer slot "
-                    << static_cast<s32>(mePlayerKillerIndex)
-                    << " allocated " << (mTakenDownCam.IsAllocated() ? 1 : 0)
-                    << " takendown shots " << static_cast<s32>(lrTakendown.Num_ShotList())
-                    << " shot " << static_cast<s32>(KU_TAKENDOWN_SHOT_INDEX)
-                    << " meState " << static_cast<s32>(meState) << "\n";
-            }
         }
 
         // GameState +0xFC: how much crash is left. Under a second and the director stops cutting.

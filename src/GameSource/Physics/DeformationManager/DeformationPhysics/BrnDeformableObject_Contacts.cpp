@@ -244,8 +244,6 @@ namespace Deformation
             static s32 siArmed = -1;
             if (siArmed < 0)
             {
-                const char* lpcEnv = getenv("BRN_ROLL_PROBE");
-                siArmed = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
             }
             if (siArmed == 1)
             {
@@ -565,8 +563,6 @@ namespace Deformation
                 static s32 siPadProbe = -1;
                 if ( siPadProbe < 0 )
                 {
-                    const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                    siPadProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
                 }
                 static s8  saPadLastFat[64];        // -1 unseen, 0 thin, 1 fat
                 static u32 saPadLastPart[64];       // the ENTITY WORD that state belongs to
@@ -690,8 +686,6 @@ namespace Deformation
                 static s32 siHingeProbe = -1;
                 if ( siHingeProbe < 0 )
                 {
-                    const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                    siHingeProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
                 }
                 static u32 suHingeLines = 0u;
                 if ( siHingeProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suHingeLines < 400u )
@@ -800,13 +794,8 @@ namespace Deformation
         // wheel detached" from "the probe never armed". [[diagnostics-that-lie]]
         // COST WHEN OFF: one bool test per call. DELETE-WHEN the wheel bucket is proven to fill.
         // ============================================================================================
-        static const bool sbWheelSpy = ( getenv( "BRN_VFXFEED_PROBE" ) != 0 );
         static s32 siWsCalls = 0, siWsDetached = 0, siWsNullLookup = 0, siWsFrozen = 0;
         static s32 siWsNoTris = 0, siWsEntries = 0, siWsLines = 0, siWsFirstOwner = -1;
-        if ( sbWheelSpy )
-        {
-            ++siWsCalls;
-        }
 
         for (s32 liWheel = 0; liWheel < KI_NUM_DETACHABLE_WHEELS; ++liWheel)
         {
@@ -817,7 +806,6 @@ namespace Deformation
             {
                 continue;
             }
-            if ( sbWheelSpy ) { ++siWsDetached; }
 
             // sub_825E8308 == DetachedWheelManager::GetWheel(EntityId, s32).
             // ⛔⛔ 2026-09-05 (hinge-geometry wave): THE KEY WAS mGlobalEntityId AND THE CONSOLE'S IS
@@ -842,7 +830,6 @@ namespace Deformation
             const PhysicalWheel* lpWheel = lpWheelMgr->GetWheel(lWheelLookupEntityId, liWheel);
             if (lpWheel == nullptr)
             {
-                if ( sbWheelSpy ) { ++siWsNullLookup; }
                 continue;
             }
 
@@ -850,7 +837,6 @@ namespace Deformation
             // +0x1E6. (Both are byte reads the pseudocode renders as an anonymous offset.)
             if (lpWheel->IsFrozen())
             {
-                if ( sbWheelSpy ) { ++siWsFrozen; }
                 continue;
             }
 
@@ -859,7 +845,6 @@ namespace Deformation
             const s32 liNumCachedBatches = lpTriCache->GetNumCachedTriangleBatches(liCacheSlot);
             if (liNumCachedBatches <= 0)
             {
-                if ( sbWheelSpy ) { ++siWsNoTris; }
                 continue;
             }
 
@@ -903,34 +888,8 @@ namespace Deformation
             // Keyed (WHEEL, WORLD) -- `ld 112(wheel)`, the whole 8-byte mWheelBodyId.
             lpGenList->AddEntry(lpWheel->GetVolumeInstanceId(), lWorldVolumeInstanceId, 0u, 0u);
 
-            if ( sbWheelSpy )
-            {
-                ++siWsEntries;
-                if ( siWsFirstOwner < 0 )
-                {
-                    // The owner byte of the key this entry is filed under -- 9 (player wheel) or
-                    // 10 (traffic wheel) if BurnoutWheelBodyID::Set's rewrite reached here. Read
-                    // BY NAME off the packed handle, not by shifting the widened composite.
-                    siWsFirstOwner = static_cast<s32>(
-                        lpWheel->GetWheelBodyId().muEntityWord >> 24 );
-                }
-            }
         }
 
-        if ( sbWheelSpy && CgsDev::Log::gpDebugPrint != 0 && siWsLines < 40 &&
-             ( siWsCalls == 1 || ( siWsCalls % 600 ) == 0 ) )
-        {
-            ++siWsLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[wheelspy] calls=" << siWsCalls
-                << " detached="  << siWsDetached
-                << " nullLookup=" << siWsNullLookup
-                << " frozen="    << siWsFrozen
-                << " noTris="    << siWsNoTris
-                << " entries="   << siWsEntries
-                << " firstKeyOwner=" << siWsFirstOwner
-                << "\n";
-        }
     }
 }
 }

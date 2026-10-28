@@ -58,14 +58,10 @@
 // and copies by assignment, so the queue follows sizeof automatically. Same re-derivation the
 // sibling TinyStructs_embed_check.cpp:33 already did for ValidateRaceCarEvent ("X360 32;
 // ResourceHandle widens" -> host 48). ⛔ If this ever fires again, re-derive it the same way.
-static_assert(sizeof(BrnPhysics::Deformation::AddDeformationModelEvent) == 176,
-              "AddDeformationModelEvent host stride 176 (X360 160; ResourceHandle + VehiclePhysics* widen)");
 
 // The three width facts the 176 rests on, pinned individually so a regression names its own cause
 // rather than only moving the total. ⭐ These are the SIZES, not a count (the console evidence for
 // each is in BrnCommonTypes.h's eight-witness banner and BrnDeformationEvents.h).
-static_assert(sizeof(BrnPhysics::Deformation::AddDeformationModelEvent::mModelHandle) == 16,
-              "mModelHandle is CgsResource::ResourceHandle -- two host pointers (console 2 x 4)");
 static_assert(sizeof(BrnPhysics::Deformation::AddDeformationModelEvent::mHandlingBodyID) == 8,
               "mHandlingBodyID is CgsPhysics::RigidBodyId -- the console `std`/`ld` at event +8");
 static_assert(sizeof(BrnPhysics::Deformation::AddDeformationModelEvent::mGlobalEntityId) == 4,

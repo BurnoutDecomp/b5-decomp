@@ -21,11 +21,9 @@
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"        // Utils::ConsoleVpu (the fused VMX forms)
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"       // Utils::CameraShake::Update
 #include "SDKs/XboxMath/XMVectorSinCos.h"                          // XboxMath::XMVectorSinCos
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // [FLAG PC witness] BRN_CAMBODY_DIAG
-
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>     // std::fabs / std::sqrt
-#include <cstdlib>   // getenv ([FLAG PC witness] BRN_CAMBODY_DIAG)
-
+#include <cstdlib>
 namespace
 {
     using rw::math::vpu::Matrix44Affine;
@@ -95,14 +93,6 @@ namespace
         return lResult;
     }
 
-    // [FLAG PC witness] BRN_CAMBODY_DIAG -- NOT IN THE CONSOLE BUILD. One line per Construct /
-    // Prepare and the first frames of every Update run, capped per session. Prints only.
-    bool CamBodyDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_CAMBODY_DIAG") != 0);
-        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
-    }
-
     s32 siCamBodyDiagLinesLeft = 64;
     s32 siCamBodyDiagFrame     = 0;
 }
@@ -129,11 +119,6 @@ void BehaviourAftertouchCam::Construct()
     mRandom.Construct();
     mShake.Construct();
 
-    if (CamBodyDiagEnabled() && siCamBodyDiagLinesLeft > 0)
-    {
-        --siCamBodyDiagLinesLeft;
-        *CgsDev::Log::gpDebugPrint << "[cambody] AftertouchCam Construct [FLAG PC witness]\n";
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -151,14 +136,6 @@ bool BehaviourAftertouchCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*
     mfHeight      = mpParameters->mfMaxHeight;
     mfDistance    = mpParameters->mfMaxDistance;
 
-    if (CamBodyDiagEnabled() && siCamBodyDiagLinesLeft > 0)
-    {
-        --siCamBodyDiagLinesLeft;
-        siCamBodyDiagFrame = 0;
-        *CgsDev::Log::gpDebugPrint << "[cambody] AftertouchCam Prepare height " << mfHeight
-                                   << " distance " << mfDistance << " blend " << mfBlendFactor
-                                   << " [FLAG PC witness]\n";
-    }
     return true;
 }
 
@@ -204,9 +181,6 @@ void BehaviourAftertouchCam::AssignIfBetterRival(const BehaviourSharedInfo& lrSh
     const f32 lfImpactWindow = mpParameters->mfTimeToRivalImpactUncertaintyPadding
                              + lrSharedInfo.mfCrashTimeRemaining;
 
-    // FLAG PC-platform: the console leaves this unwritten when the points do not close; it is
-    // stored into the rival either way but only read back where mbWillPass holds.
-    f32 lfTimeToPassing = 0.0f;
     const bool lbPointsWillPassEachOther =
         Utils::PointsWillPassEachOther(lPlayerPos, lPlayerVel, lRivalPos, lRivalVel, lfTimeToPassing);
     const bool lbWillPass = lbPointsWillPassEachOther && lfTimeToPassing < lfImpactWindow;
@@ -349,8 +323,6 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     mPositionLag.Update(mpParameters->mLagParams, lfTimestep, lPlayerTransform);
     const Vector3 lCarPosition = lPlayerTransform.wAxis;
 
-    const bool lbDiagFirstFrame = !IsPrepared();   // [FLAG PC witness] BRN_CAMBODY_DIAG only
-
     if (!IsPrepared())
     {
         mDesiredWorldSpaceNormalizedVectorFromCar = lPlayerTransform.zAxis;
@@ -480,25 +452,6 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     lrCamera.SetFOV(mSourceShot.FOV());
     lrCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 
-    if (CamBodyDiagEnabled() && siCamBodyDiagLinesLeft > 0)
-    {
-        if (siCamBodyDiagFrame < 8 || siCamBodyDiagFrame % 60 == 0)
-        {
-            --siCamBodyDiagLinesLeft;
-            const Vector3& lrPublished = lrCamera.GetTransform().wAxis;
-            *CgsDev::Log::gpDebugPrint
-                << "[cambody] AftertouchCam Update frame " << siCamBodyDiagFrame
-                << " first " << (lbDiagFirstFrame ? 1 : 0)
-                << " car " << lCarPosition.x << " " << lCarPosition.y << " " << lCarPosition.z
-                << " target " << mCurrentTargetPos.x << " " << mCurrentTargetPos.y << " " << mCurrentTargetPos.z
-                << " cam " << lrPublished.x << " " << lrPublished.y << " " << lrPublished.z
-                << " dir " << mWorldSpaceNormalizedVectorFromCar.x << " " << mWorldSpaceNormalizedVectorFromCar.y
-                << " " << mWorldSpaceNormalizedVectorFromCar.z
-                << " dist " << mfDistance << " height " << mfHeight << " blend " << mfBlendFactor
-                << " pitch " << mSourceShot.Pitch() << " fov " << lrCamera.GetFOV() << " [FLAG PC witness]\n";
-        }
-        ++siCamBodyDiagFrame;
-    }
     return true;
 }
 

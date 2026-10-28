@@ -238,14 +238,6 @@ namespace BrnDirector
         meState = E_STATE_PREPARING;   // +0x878 = 1
 
         // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per entry edge.
-        if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[pause-cam] ArbStateCrashNav::Prepare INACTIVE -> PREPARING (movie player playing "
-                << (mICEMoviePlayer.IsPlaying() ? 1 : 0) << ", pause playlist "
-                << lrSharedInfo.mpStateContainer->GetSharedPlaylists().GetPausePlaylist().GetMovieCount()
-                << " takes, fly-by allocated " << (mRoadRunnerCam.IsAllocated() ? 1 : 0) << ")\n";
-        }
 
         // The movie player is only set up once; a re-entry while it is still playing keeps the
         // take that is already running (X360 `lbz r11, 0x830` -> mICEMoviePlayer.IsPlaying()).
@@ -409,23 +401,6 @@ namespace BrnDirector
             // drives the pause camera, the ICE take's playback position, and where the ICE camera is.
             {
                 static s32 siPauseCamDiagFrame = 0;
-                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0 &&
-                    (siPauseCamDiagFrame++ % 30) == 0)
-                {
-                    const ICEPlayingMovie lMovie = lrSharedInfo.mpICEWrapper->GetCurrentMovie();
-                    const Camera::Camera* lpIceCamera = lrSharedInfo.mpICEWrapper->GetCamera();
-                    const rw::math::vpu::Vector3 lIceEye = lpIceCamera->GetTransform().wAxis;
-                    const rw::math::vpu::Vector3 lStateEye = lrCamera.GetTransform().wAxis;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[pause-cam] sample t " << mfTimeInState << " flyby " << (lbDriveFlyByCamera ? 1 : 0)
-                        << " inInterp " << (mICEMoviePlayer.mInInterpolator.IsAllocated() ? 1 : 0)
-                        << " outInterp " << (mICEMoviePlayer.mOutInterpolator.IsAllocated() ? 1 : 0)
-                        << " wrapperPlaying " << (lrSharedInfo.mpICEWrapper->IsPlayingMovie() ? 1 : 0)
-                        << " movieValid " << (lMovie.mbIsValid ? 1 : 0) << " pos " << lMovie.mfPlaybackPositionParameter
-                        << " iceEye (" << lIceEye.x << ", " << lIceEye.y << ", " << lIceEye.z << ")"
-                        << " stateEye (" << lStateEye.x << ", " << lStateEye.y << ", " << lStateEye.z << ")"
-                        << " carDist " << std::sqrt(PlayerToCameraDistanceSquared(lrSharedInfo, lrCamera)) << "\n";
-                }
             }
 
             // Fade IN of black while the take wants it, OUT otherwise.
@@ -582,18 +557,6 @@ namespace BrnDirector
         // fly-by / movie-player camera choice and the fade hook the camera now carries.
         {
             static EState seLastState = E_STATE_INACTIVE;
-            if (meState != seLastState && getenv("BRN_CRASHCAM_DIAG") != 0 &&
-                CgsDev::Log::gpDebugPrint != 0)
-            {
-                const Camera::CameraEffects& lrEffects = GetNonConstCamera().GetEffects();
-                *CgsDev::Log::gpDebugPrint
-                    << "[pause-cam] ArbStateCrashNav state " << static_cast<s32>(seLastState) << " -> "
-                    << static_cast<s32>(meState) << " (time " << mfTimeInState << ", fly-by finished "
-                    << ((mRoadRunnerCam.IsAllocated() && mRoadRunnerCam.GetBehaviour()->HasFinished()) ? 1 : 0)
-                    << ", movie playing " << (mICEMoviePlayer.IsPlaying() ? 1 : 0) << ", start hook '"
-                    << (lrEffects.mbHasStartHookNameString ? lrEffects.mStartHookNameString.mHookNameString : "")
-                    << "')\n";
-            }
             seLastState = meState;
         }
     }

@@ -234,7 +234,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // the host facade DEFERS calling this factory until the converter fix (see
     // BrnGuiAptRuntime: the movie-root instantiation is held off with the tick). The
     // body here stays the faithful, un-gated console decompile.
-    AptLifeLog("MakeInst   ", pFile->mFileName.GetBuffer(), pFile);   // [aptlife] opt-in witness
+   // [aptlife] opt-in witness
 
     AptFilePtr laIncArg;
     laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3

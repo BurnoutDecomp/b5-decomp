@@ -20,7 +20,6 @@ target_sources(${PROJECT_NAME}
         BrnNetworkMatchMakingManager.cpp
         BrnNetworkMatchMakingManager_wN2_01.cpp
         BrnNetworkNotificationManagerBase.cpp
-        BrnNetworkNotificationManagerBase_embed_check.cpp
         BrnNetworkPlayerStats.cpp
         BrnNetworkPlayerStatsManager.cpp
         BrnNetworkPlayerStatsResults.cpp
@@ -32,7 +31,6 @@ target_sources(${PROJECT_NAME}
         BrnNetworkScoreboardManager.cpp
         BrnNetworkScoreboard_wS34_00.cpp
         BrnNetworkSelectedRoutesManager.cpp
-        BrnNetworkSelectedRoutesManager_embed_check.cpp
         BrnNetworkStandingsManager.cpp
         BrnNetworkStateManager.cpp
         BrnNetworkStateManager_wN1_01.cpp

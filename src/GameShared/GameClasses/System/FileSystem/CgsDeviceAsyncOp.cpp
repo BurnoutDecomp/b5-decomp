@@ -45,7 +45,6 @@ namespace CgsFileSystem
     void AsyncOp::Wait()
     {
         CGS_ASSERT(mbOperating, "No operation\n");
-        CgsDev::Assert::WaitForWorkerPC(mSemaphore);
         mbOperating = false;
     }
 

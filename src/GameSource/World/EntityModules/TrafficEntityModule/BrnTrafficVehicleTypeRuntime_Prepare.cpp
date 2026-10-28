@@ -66,9 +66,6 @@ namespace
 
         if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-traffic-leg] VehicleTypeRuntime::Prepare leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 }

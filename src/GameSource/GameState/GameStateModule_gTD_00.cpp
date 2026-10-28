@@ -3,26 +3,6 @@
 //
 // [takedown wave 2026-09-02, conductor] THE TAKEDOWN MANAGER'S PLUMBING INTO GameStateModule.
 //
-// On X360 the manager is embedded at gsm+568 and fed by two pieces of per-frame state the module
-// keeps beside it:
-//   gsm+249936  EventQueue<TakedownEvent,8>          the module's COPY of the output buffer's
-//                                                    takedown-event queue (Clear + Append each tick)
-//   gsm+250272  EventQueue<RaceCarCrashEvent,8>      the post-world crash queue, cached by
-//                                                    CacheTakedownManagerPostWorldInputData @0x82375E70
-//   gsm+250816  VehicleOutputInterface               the module's cached copy of the post-world
-//                                                    vehicle output -- used-cars head at +0, the
-//                                                    eight RaceCarStates at +0x10 (the console's
-//                                                    8960-byte memcpy span). The frame's
-//                                                    CrashingRaceCarInterface is built FROM it by
-//                                                    SetFromVehicleOutputInterface into a STACK
-//                                                    local of PreWorldUpdate (var_6D8).
-// This build has no per-frame output buffer (mpOutputBuffer is new'd once), and the state lives in
-// a heap-allocated TakedownPostWorldCache (mpTakedownCache)
-// and the manager itself is heap-allocated (mpTakedownManager) -- the mpTrainingManager precedent.
-// FLAG PC deviation: pointers where the console embeds; the bodies below are the console's.
-//   Embedding would need the complete TakedownManager (BrnTakedownManager.h) by value, which
-//   changes GameStateModule's layout and its Construct/Destruct lifetime -- a change this lane
-//   did not take. BrnGameStateModule.h keeps only the forward declarations.
 //
 // Console positions reproduced here (GameStateModule::PreWorldUpdate @0x823A5328, !IsSimPaused arm,
 // ): SetFromVehicleOutputInterface(stack, cachedVehicleOutput == r24 ==
@@ -48,60 +28,6 @@
 
 namespace BrnGameState
 {
-
-// X360 GameStateModule::Construct @0x82380388: the inlined TakedownManager::Construct (the two
-// manager pointers; `*(gsm+1256) = gsm+568` is the embedded debug component's mpTakedownManager,
-// written by TakedownManager::Construct -- agent T1's finding) and the three
-// per-frame queues' Constructs (`RaceCarCrashEvent_8_::Construct(gsm+250272)`,
-// `TakedownEvent_8_::Construct(gsm+249936)`, ContactSpyInterface::Construct(gsm+250800) ...).
-void GameStateModule::ConstructTakedownBringUp()
-{
-    if (mpTakedownManager == 0)
-    {
-        mpTakedownManager = new TakedownManager();
-    }
-    mpTakedownManager->Construct(&mModeManager, &mProgressionManager);
-
-    if (mpTakedownCache == 0)
-    {
-        mpTakedownCache = new TakedownPostWorldCache();
-    }
-    mpTakedownCache->Construct();
-
-    // The two managers the module Constructs immediately after the TakedownManager, in the console's
-    // order: MugshotManager::Construct(gsm +0x500, gsm) then PaybackManager::Construct(gsm +0x570,
-    // gsm). Each takes the owning module as its single argument and registers its own debug
-    // component. Held by pointer here for the reason recorded on the members -- BrnMugshotManager.h
-    // includes BrnGameStateModule.h, so a by-value member is a genuine include cycle; the allocation
-    // site moves, nothing else does.
-    //
-    // THE never-Constructed-QUEUE TRAP, PAID HERE BECAUSE THIS LANDING ARMS IT. Both managers
-    // publish their HUD records onto GetOutputGuiEventQueue()'s VariableEventQueue<18432,16>
-    // (mOutputGuiEventQueue), and until now NOTHING in this tree ever wrote to it, so nothing
-    // noticed that it is never Constructed -- the module is heap-allocated, so its write cursor and
-    // length are garbage and the first AddEvent would walk off the buffer. The console's own
-    // Construct carries `VariableEventQueue<18432,16>::Construct(gsm +0x2E580)`; that call belongs
-    // in GameStateModule::Construct, which is not this file. DELETE-WHEN it lands there.
-    mOutputGuiEventQueue.Construct();
-
-    if (mpMugshotManager == 0)
-    {
-        mpMugshotManager = new MugshotManager();
-    }
-    mpMugshotManager->Construct(this);
-
-    if (mpPaybackManager == 0)
-    {
-        mpPaybackManager = new PaybackManager();
-    }
-    mpPaybackManager->Construct(this);
-}
-
-// X360 GameStateModule::Prepare @0x8239E578, stage 14: `if (TakedownManager::Prepare(gsm+568))`.
-bool GameStateModule::PrepareTakedownBringUp()
-{
-    return mpTakedownManager->Prepare();
-}
 
 // ==============================================================================================
 // GameStateModule::CacheTakedownManagerPostWorldInputData  (, post-world `bl` #18)
@@ -185,14 +111,6 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
         reinterpret_cast<CgsModule::EventQueue<TakedownEvent, 8>*>(
             mpOutputBuffer->GetTakedownEventOutputQueue());
 
-    // [FLAG PC bring-up] THE OUTPUT BUFFER IS PERSISTENT ON THIS BUILD. The console gets a fresh
-    // OutputBuffer every frame (CreateIOBuffer in DoUpdate_GameStatePreWorld), so its takedown
-    // queue starts empty; here it would accumulate, and every past takedown would be re-scored each
-    // frame. Cleared at the top of the leg -- before Update posts this frame's events and before the
-    // world bridge (BrnGameModule.cpp GetTakedownEventOutputQueue) copies them out later in the frame.
-    // DELETE-WHEN the per-frame output buffer lands.
-    lpOutputTakedownQueue->Clear();
-
     // Console PreWorldUpdate line 276: `*(gsm+249944) = 0` -- the module copy is cleared BEFORE the
     // IsSimPaused branch, so a paused frame never re-drains last frame's events (verify V3).
     mpTakedownCache->mTakedownEventQueue.Clear();
@@ -215,21 +133,6 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // scripted ram can be relied on.
     {
         static bool sbForced = false;
-        static const char* spcForce = getenv("BRN_FORCE_TAKEDOWN");
-        if (!sbForced && spcForce != 0 && mpTakedownManager != 0)
-        {
-            const GameMode* lpMode = mModeManager.GetCurrentGameMode();
-            if (lpMode != 0 && lpMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS &&
-                mModeManager.GetTimeInMode() >= static_cast<f32>(atof(spcForce)))
-            {
-                sbForced = true;
-                mpTakedownManager->HarnessForceTakedown();
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[td] HARNESS force-takedown fired (car 0 -> car 1) [FLAG PC harness]\n";
-                }
-            }
-        }
     }
 
     // [PC HARNESS, NOT X360] BRN_FORCE_PLAYER_TAKEN_DOWN=<seconds> (FX-BRIDGES CC-8 witness): the SAME
@@ -241,35 +144,7 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // crashed or slowed below KF_MIN_TAKEDOWN_SPEED). Off unless the variable is set.
     // DELETE-WHEN a scripted rival ram on the player can be relied on.
     {
-        static const char* spcForceTakenDown = getenv("BRN_FORCE_PLAYER_TAKEN_DOWN");
         static s32         siTakenDownShots  = 0;
-        if (spcForceTakenDown != 0 && siTakenDownShots < 3 && mpTakedownManager != 0)
-        {
-            const GameMode* lpMode = mModeManager.GetCurrentGameMode();
-            if (lpMode != 0 && lpMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS &&
-                mModeManager.GetTimeInMode() >= static_cast<f32>(atof(spcForceTakenDown)) + 10.0f * static_cast<f32>(siTakenDownShots))
-            {
-                const EActiveRaceCarIndex lePlayer = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
-                for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
-                {
-                    const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
-                    if (leSlot == lePlayer || !mLastActiveRaceCarInterface.IsRaceCarActive(leSlot) ||
-                        mLastActiveRaceCarInterface.GetRaceCarState(leSlot)->mbCrashing)
-                    {
-                        continue;
-                    }
-                    ++siTakenDownShots;
-                    mpTakedownManager->HarnessForceTakenDown(leSlot, lePlayer);
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint << "[td] HARNESS force-taken-down fired (car " << liSlot
-                                                   << " -> player car " << static_cast<s32>(lePlayer)
-                                                   << ", shot " << siTakenDownShots << ") [FLAG PC harness]\n";
-                    }
-                    break;
-                }
-            }
-        }
     }
 
     // [PC HARNESS, not console code] BRN_FORCE_RIVAL_TAKEDOWN=<seconds>: the free-roam rival hunt.
@@ -287,72 +162,10 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // rival state change (197); the drive script must get the player above that speed while the
     // rival is in range. Off unless the variable is set. DELETE-WHEN a scripted ram on a roaming
     // rival can be relied on.
-    static const char* spcForceRival      = getenv("BRN_FORCE_RIVAL_TAKEDOWN");
     static f32         sfRivalSeenTime    = 0.0f;
     static s32         siRivalHuntShots   = 0;
     static s32         siRivalHuntWitness = 0;
-    if (spcForceRival != 0 && siRivalHuntShots < 40 && mModeManager.GetCurrentGameMode() == 0)
-    {
-        const EActiveRaceCarIndex lePlayer = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
-        EActiveRaceCarIndex leRival = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-        if (lePlayer != E_ACTIVE_RACE_CAR_INDEX_INVALID)
-        {
-            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
-            {
-                const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
-                if (leSlot == lePlayer || !mLastActiveRaceCarInterface.IsRaceCarActive(leSlot) ||
-                    !mLastActiveRaceCarInterface.IsRaceCarRival(leSlot) ||
-                    !mLastActiveRaceCarInterface.IsRaceCarLoaded(leSlot) ||
-                    mLastActiveRaceCarInterface.GetRaceCarState(leSlot)->mbCrashing)
-                {
-                    continue;
-                }
-                leRival = leSlot;
-                break;
-            }
-        }
 
-        if (leRival != E_ACTIVE_RACE_CAR_INDEX_INVALID)
-        {
-            if (sfRivalSeenTime == 0.0f && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[rival-hunt] rival active in slot " << static_cast<s32>(leRival)
-                                           << " rivalId=" << static_cast<u64>(mLastActiveRaceCarInterface.GetRivalId(leRival))
-                                           << " (player slot " << static_cast<s32>(lePlayer) << ") [FLAG PC harness]\n";
-            }
-            sfRivalSeenTime += lfGameTimestep;
-
-            if (sfRivalSeenTime >= static_cast<f32>(atof(spcForceRival)) + static_cast<f32>(siRivalHuntShots))
-            {
-                ++siRivalHuntShots;
-                siRivalHuntWitness = 16;
-                mpTakedownManager->HarnessForceTakenDown(lePlayer, leRival);
-                TakedownEvent& lrPending = mpTakedownManager->GetRaceCarData(lePlayer)->mPendingTakedownEvent;
-                lrPending.mAggressorCarID = mLastActiveRaceCarInterface.GetCarModelId(lePlayer);
-                lrPending.mVictimCarID    = mLastActiveRaceCarInterface.GetCarModelId(leRival);
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[rival-hunt] HARNESS force-takedown fired (player car "
-                                               << static_cast<s32>(lePlayer) << " -> rival car " << static_cast<s32>(leRival)
-                                               << ", rivalId=" << static_cast<u64>(mLastActiveRaceCarInterface.GetRivalId(leRival))
-                                               << ", player " << mLastActiveRaceCarInterface.GetRaceCarState(lePlayer)->mfSpeedMPH
-                                               << " mph, shot " << siRivalHuntShots << ") [FLAG PC harness]\n";
-                }
-            }
-        }
-    }
-
-    // 0x823A59D4..0x823A59F4: the manager's tick. The console runs PreWorldUpdate under
-    // LockBuffersForIO (DoUpdate_GameStatePreWorld), so the pre-world buffer's const accessors
-    // (GetTakedownEventInputQueue asserts "Not locked for reading", BrnGameStateModuleIO.cpp:147)
-    // see a read lock; the module's stand-in buffer is never locked by the seam, so the lock is
-    // taken here for the duration of the tick. [FLAG PC bring-up: the lock is the console's, the
-    // place it is taken is not.] The lock spans the two manager ticks below as well: both reach the
-    // pre-world buffer through its read-locked accessors (the in-game player-status interface and
-    // the network-to-game-state interface), exactly as they do inside the console's own lock.
-    // `addi r3, r31, 0x238 ; bl TakedownManager::Update` @0x823A59F0 -- the embedded manager, no
-    // test (the `!= 0` guard this call carried is gone, FX-TAILS-A 2026-09-24; Construct sets it).
-    const s32 liActionsBeforeTick = lpActionQueue->GetLength();
     mpPreWorldInputBuffer->LockForRead();
     mpTakedownManager->Update(&mLastActiveRaceCarInterface,
                               lfGameTimestep,
@@ -378,8 +191,6 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
         {
             if (liIndex >= liActionsBeforeTick)
             {
-                *CgsDev::Log::gpDebugPrint << "[rival-hunt] takedown tick posted action " << liAction
-                                           << " (size " << liSize << ") [FLAG PC harness]\n";
                 if (liAction == GameStateModuleIO::E_ACTION_RIVAL_STATE_CHANGED)
                 {
                     siRivalHuntShots = 40;   // the pursuit is won: stop re-arming
@@ -431,8 +242,6 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
 
     if (mpTakedownCache->mTakedownEventQueue.GetLength() > 0 && CgsDev::Log::gpDebugPrint != 0)
     {
-        *CgsDev::Log::gpDebugPrint << "[td] " << mpTakedownCache->mTakedownEventQueue.GetLength()
-                                   << " takedown event(s) this frame [FLAG PC witness]\n";
     }
 
     // The legacy adapter stages its existing caller's timer for the original signature.
@@ -460,7 +269,6 @@ void GameStateModule::ClearTakedownRaceCarData()
 {
     mpTakedownManager->ClearRaceCarData();
 }
-
 
 // ==============================================================================================
 // GameStateModule::OnModeFinish  (X360 0x82390EE0) -- FinishCurrentMode @0x8234B978's last call.
@@ -527,12 +335,6 @@ void GameStateModule::OnModeEnd(bool lbResetState)
     mpPaybackManager->OnRoundEnd(lbResetState);
 
     // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY: the round-end hand-off.
-    if (getenv("BRN_MODEMGR_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[payback] OnModeEnd(resetState " << (lbResetState ? 1 : 0)
-            << ") -> MugshotManager / PaybackManager::OnRoundEnd\n";
-    }
 
     ClearTakedownRaceCarData();
 
@@ -575,17 +377,9 @@ void GameStateModule::CopyInputDataToPaybackManager(
 
     // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY. One line, the first time a running game
     // timer arrives: the witness that the copy is dispatched and carries a live frame count.
-    static const bool sbPaybackDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
     static bool       sbReported    = false;
     const CgsSystem::TimerStatus* const lpGameTimer =
         lpPreWorldInputBuffer->GetTimerStatusInterface()->GetGameTimerStatus();
-    if (sbPaybackDiag && !sbReported && lpGameTimer->GetFrameCount() != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        sbReported = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[payback] CopyInputDataToPaybackManager: game timer frame " << lpGameTimer->GetFrameCount()
-            << " step " << lpGameTimer->GetCurrentTimeStep() << " -> PaybackManager\n";
-    }
 }
 
 }

@@ -31,9 +31,6 @@
 #include <type_traits>                                      // std::is_polymorphic (uncalled _AssertLayout)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
-#include "pc/gcm/renderengine/device.h"                     // renderengine::Device::SetState + gpD3DDevice
-#include "pc/gcm/renderengine/ShadowPass.h"          // renderengine::gpLastRenderTargetState (the shared X360 dword_83010A30)
-
 // X360 (Xenon) D3D9 viewport / scissor entry points. These are platform externals (XDK intrinsics);
 // declared with their X360 ABI so the body compiles store-for-store against the same calls the image
 // makes. On a non-X360 build they resolve to the platform shim layer.
@@ -290,6 +287,7 @@ renderengine::Texture* CgsRenderTarget::GetDepthTexture()
 // selects the conceptual section but the bound state is always slot 0).
 void CgsRenderTarget::SetRenderTargetState(u32 luSection)
 {
+
     (void)luSection;
 
     const renderengine::RenderTargetState* lpState = mpRenderTarget->GetRenderTargetState(0);
@@ -335,6 +333,7 @@ void CgsRenderTarget::SetRenderTargetState(u32 luSection)
 // / MaxZ). Called by BrnRendererModule::BeginRenderEnvironmentMapFace.
 void CgsRenderTarget::SetRenderTargetStateInvertDepth(u32 luSection)
 {
+
     (void)luSection;
 
     const renderengine::RenderTargetState* lpState = mpRenderTarget->GetRenderTargetState(0);

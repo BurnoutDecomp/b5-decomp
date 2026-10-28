@@ -1,10 +1,8 @@
 #include "GameSource/Effects/EffectsModule.h"
-#include "pc/math/VmxFloat.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameSource/Effects/ParticleEffectHelper.h"                               // ParticleEffectHelper / RaceCarParticleEffectHelper
 #include "GameSource/Effects/BrnEffectsUtils.h"
-#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG                                  // Utils::Vector3Randomiser / Vector4Randomiser (the crash dust)
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_InputBuffer.h"            // EffectsIO::InputBuffer
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"           // EffectsIO::OutputBuffer
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.h"    // EffectsIO::DispatchInputBuffer
@@ -35,8 +33,6 @@
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                          // BrnGame::DispatchThreadInputBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::WriteToLog
-#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                   // [diag] BRN_FRAME_DUMP_ARM=skid
-#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"                 // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"                             // rw::math::vpu::VecFloat (Random::RandomVecFloat)
 
@@ -134,10 +130,6 @@ namespace
     typedef ::EActiveRaceCarIndex                                                EActiveRaceCarIndex;
     typedef BrnPhysics::Vehicle::RaceCarState                                    RaceCarState;
     typedef BrnPhysics::Vehicle::WheelLite                                       WheelLite;
-
-    // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceiling for the opt-in witnesses in
-    // this TU, so an armed knob still cannot flood the log. DELETE-WHEN those witnesses go.
-    const u32 KU_EFFECTS_DIAG_MAX_LINES = 128u;
 
     // ---- the X360 data cells this TU owns -------------------------------------------
     EffectsModule* gpEffectsModule = 0;          // off_82FAB594 (Construct stores `this`)
@@ -608,16 +600,6 @@ namespace
     //   t               ParticleModule::mRenderData.mfCurrentTime (+0x8E08), AddTrailSegment's
     //                   lrCurrentTime argument
     // =========================================================================================
-    bool SkidProbeEnabled()
-    {
-        static int siEnabled = -1;
-        if (siEnabled < 0)
-        {
-            const char* lpcValue = std::getenv("BRN_SKID_PROBE");
-            siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
-        }
-        return siEnabled != 0;
-    }
 
     // [skid-gate] WHICH EXIT OF EffectsModule::Update FIRED -- one line per DISTINCT reason,
     // once each. Run 7 measured zero [skid] lines with the flow in DRIVING and the trail
@@ -626,8 +608,6 @@ namespace
     // measurement. DELETE with the tyre-mark bring-up.
     void SkidGateExit(const char* lpcWhere)
     {
-        if (!SkidProbeEnabled())
-            return;
         static const char* sapcSeen[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
         for (int li = 0; li < 8; ++li)
         {
@@ -644,7 +624,6 @@ namespace
             }
         }
     }
-
 
     u32 gauSkidProbeFrame = 0;
 
@@ -885,22 +864,6 @@ bool EffectsModule::PrepareResources(EffectsIO::OutputBuffer* lpOutputBuffer)
             mSchemaResourceHandle.mpResourceMemory = lpVaultReply->mpResourceMemory;
             mSchemaResourceHandle.mpSourceEntry    = lpVaultReply->mpSourceEntry;
 
-            // ⚠ FLAG PC null-tolerance (2026-09-02, tyre-mark wave -- MEASURED, not defensive
-            // dressing). On the console this reply always carries a resource: the vault bundle
-            // loads. On this build it does not --
-            //     [bundle] 'PostFx/postfxvault.bin' via async-FS (5504 bytes)
-            //     [stream] LoadBundle 'PostFx/postfxvault.bin' -> pool 7: -1 resources
-            // -- BundleLoader::LoadBundle REJECTS that bundle (negative == failed), so the
-            // acquire reply comes back with a null resource. Handing that null on to
-            // RegisterVault faults inside CgsAttribSys::VaultArray::GetFreeSlotIndex ->
-            // ResourceHandle::GetResourceId (measured: an access violation on the first
-            // effects prepare that got this far). The vault is the POST-FX schema and has
-            // nothing to do with the trail system, so the ladder says so once and walks on
-            // rather than taking the whole boot down with it.
-            // DELETE-WHEN 'PostFx/postfxvault.bin' loads: this is an ASSET/LOADER defect, not
-            // an effects one, and the guard is here only so it stops blocking everything
-            // behind it.
-            const bool lbVaultResourceValid = (lpVaultReply->mpResourceMemory != 0);
             if (lbVaultResourceValid)
             {
                 CgsResource::ResourceHandle lVaultHandle;
@@ -1125,33 +1088,6 @@ void EffectsModule::PushSparkParams()
     // so "resolved" is checkable against the vault's own bytes rather than asserted.
     {
         static u32 suLastSparkValidity = 0xFFFFFFFFu;
-        const char* const lpcEnv = std::getenv("BRN_SPARK_DIAG");
-        if (lpcEnv != 0 && lpcEnv[0] != '0')
-        {
-            u32 luValidity = 0;
-            for (u32 luSlot = 0; luSlot < KU_NUM_SPARK_PARAMS; ++luSlot)
-                luValidity |= (mSparkParams[luSlot].IsValid() ? 1u : 0u) << luSlot;
-            if (luValidity != suLastSparkValidity)
-            {
-                suLastSparkValidity = luValidity;
-                char lacMsg[320];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[spark] sparkeffect collections: %s=%d %s=%d %s=%d %s=%d "
-                    "(1 == the collection resolved; 0 == DefaultDataArea zeros)"
-                    " | 376835 grav=%.3f rad=%.4f blur=%.4f life0=%.3f tex=%s\n",
-                    "376835", (luValidity & 1u) != 0 ? 1 : 0,
-                    "376836", (luValidity & 2u) != 0 ? 1 : 0,
-                    "376837", (luValidity & 4u) != 0 ? 1 : 0,
-                    "554431", (luValidity & 8u) != 0 ? 1 : 0,
-                    static_cast<double>(mSparkParams[0].GravityStrength()),
-                    static_cast<double>(mSparkParams[0].SparkRadius()),
-                    static_cast<double>(mSparkParams[0].MotionBlurTime()),
-                    static_cast<double>(mSparkParams[0].Lifetimes().x),
-                    (mSparkParams[0].SparkTextureName() != 0)
-                        ? mSparkParams[0].SparkTextureName() : "(null)");
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
     }
 
     for (u32 luArray = 0; luArray < KU_NUM_SPARK_PARAMS; ++luArray)
@@ -1195,8 +1131,6 @@ void EffectsModule::PushSparkParams()
         if (!sbProbed)
         {
             sbProbed = true;
-            const char* const lpcEnv = std::getenv("BRN_SPARK_FORCE");
-            sbForce = (lpcEnv != 0 && lpcEnv[0] != '0');
             if (sbForce)
                 CgsDev::Log::WriteToLog("[spark] PARAMETER FORCE ARMED (BRN_SPARK_FORCE) -- "
                                         "the values below are the INSTRUMENT'S, not the console's\n");
@@ -1244,12 +1178,6 @@ void EffectsModule::LoadNativeParticleParams()
         {  9, "561870" }, { 10, "561869" }, { 11, "561872" }, { 12, "561871" },
     };
 
-    // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only, printed on the first call with
-    // BRN_SIMPLEFX_DIAG=1 (default OFF). Which of the twelve collections RESOLVED (a
-    // DefaultDataArea fallback reads as a perfectly plausible all-zero parameter block, not as a
-    // failure) and what the resolved texture names are -- the names are what LoadFXBundle stage
-    // 12 must match. DELETE-WHEN-STABLE.
-    static bool sbWitnessed = false;
     const bool lbWitness = !sbWitnessed && BrnParticle::Native::SimpleFxDiagArmed();
     u32 luValidMask = 0;
 
@@ -1615,10 +1543,6 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
         lbRunStep = (siEffectsSuspendState == 0);
         break;
     case 3:
-        // FLAG PC-platform leaf: this rare reset clears dispatch-owned Lion
-        // instances. Finish their published frame before changing the array.
-        if (BrnGame::BrnGameModule* lpGame = BrnGame::GetMainGameModule())
-            lpGame->SynchronizeDispatchPC();
         mParticleModule.SuspendPlayingEffects();
         siEffectsSuspendState = 1;
         break;
@@ -1643,22 +1567,6 @@ void EffectsModule::Update(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
     // [skid-gate] the POSITIVE witness: no exit fired, the per-system enables are about to be
     // copied. Prints once with the values, because mbTrailsEnabled is what puts
     // eRenderDataFlagRenderTrails (0x20) into the render-data flag word.
-    if (SkidProbeEnabled())
-    {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[skid-gate] Update REACHED the per-system enables: trails=%d sparks=%d "
-                "debris=%d simple=%d lion=%d\n",
-                mDebugComponent.TrailsEnabled() ? 1 : 0, mDebugComponent.SparksEnabled() ? 1 : 0,
-                mDebugComponent.DebrisEnabled() ? 1 : 0, mDebugComponent.SimpleEnabled() ? 1 : 0,
-                mDebugComponent.LionEnabled() ? 1 : 0);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
     mParticleModule.mbSparksEnabled = mDebugComponent.SparksEnabled();   // +0x2C341 -> +0x23BB0
     mParticleModule.mbTrailsEnabled = mDebugComponent.TrailsEnabled();   // +0x2C342 -> +0x23BB1
     mParticleModule.mbDebrisEnabled = mDebugComponent.DebrisEnabled();   // +0x2C343 -> +0x23BB2
@@ -1848,239 +1756,6 @@ void EffectsModule::ProcessActiveRaceCars(const EffectsModuleParams& lrParams,
 // =============================================================================
 // UpdateActiveRaceCars  @0x8229DB30  (DWARF :3069) -- the per-car pipeline.
 // =============================================================================
-void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
-                                         const EffectsModuleParams& lrParams,
-                                         const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
-                                         const BoostOutputInfo* lpBoostInfos,
-                                         const DeformationOutputInterface* lpDeformation,
-                                         const AudioEffectsMessageQueue* lpAudioEffects,
-                                         bool lbBumperCam)
-{
-    // The audio module's exhaust-pop messages for this step (event type 1 == POP).
-    bool labExhaustPopThisFrame[KU_NUM_ACTIVE_RACE_CARS];
-    f32  lafExhaustPopIntensity[KU_NUM_ACTIVE_RACE_CARS];
-    for (u32 lu = 0; lu < KU_NUM_ACTIVE_RACE_CARS; ++lu)
-    {
-        labExhaustPopThisFrame[lu] = false;
-        lafExhaustPopIntensity[lu] = 0.0f;
-    }
-    {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liType = lpAudioEffects->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != 0)
-        {
-            if (liType == BrnSound::Module::Io::E_EFFECTS_MESSAGE_TYPES_POP)
-            {
-                const BrnSound::Module::Io::PopEffectsMessage* lpPop =
-                    reinterpret_cast<const BrnSound::Module::Io::PopEffectsMessage*>(lpEvent);
-                const u32 luRaceCarId = lpPop->muRaceCarID;
-                CGS_ASSERT(luRaceCarId < KU_NUM_ACTIVE_RACE_CARS, "luRaceCarId < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // :3378
-                lafExhaustPopIntensity[luRaceCarId] = lpPop->mfIntensity;
-                labExhaustPopThisFrame[luRaceCarId] = true;
-            }
-            const CgsModule::Event* lpNext = 0;
-            liType = lpAudioEffects->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent = lpNext;
-        }
-    }
-
-    const BrnReplays::EffectsSerialiser::EMode leMode = mEffectsSerialiser.GetMode();
-    const bool lbPlaying   = (leMode == BrnReplays::EffectsSerialiser::E_MODE_PLAYING_PREPARING)
-                          || (leMode == BrnReplays::EffectsSerialiser::E_MODE_PLAYING)
-                          || (leMode == BrnReplays::EffectsSerialiser::E_MODE_PLAYING_STALLED);
-    const bool lbRecording = (leMode == BrnReplays::EffectsSerialiser::E_MODE_RECORDING_PREPARING)
-                          || (leMode == BrnReplays::EffectsSerialiser::E_MODE_RECORDING)
-                          || (leMode == BrnReplays::EffectsSerialiser::E_MODE_RECORDING_STALLED);
-
-    for (u32 luCar = 0; luCar < KU_NUM_ACTIVE_RACE_CARS; ++luCar)
-    {
-        const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(luCar);
-        ActiveRaceCarData& lrData = maActiveRaceCarData[luCar];
-
-        const CgsID lModelId = lpActiveRaceCars->GetCarModelId(leIndex);
-        const bool lbModelChanged = (lrData.GetID() != lModelId);
-        const bool lbLoaded = lpActiveRaceCars->IsRaceCarLoaded(leIndex);   // flags bit 4
-
-        // The two burst timers count down and clamp at zero (fsel).
-        mafTimeUntilNextDebrisBurst[luCar] -= lrParams.mDt;
-        if (mafTimeUntilNextDebrisBurst[luCar] < 0.0f) mafTimeUntilNextDebrisBurst[luCar] = 0.0f;
-        mafTimeUntilNextSparksBurst[luCar] -= lrParams.mDt;
-        if (mafTimeUntilNextSparksBurst[luCar] < 0.0f) mafTimeUntilNextSparksBurst[luCar] = 0.0f;
-
-        if (lbModelChanged)
-        {
-            // [DIAG] Log the real removed-car transition; observe the original
-            // Reset below rather than forcing an effects kill from the harness.
-            static const bool sbRetireWitness = []() {
-                const char* value = std::getenv("BRN_EFFECT_RETIRE_DIAG");
-                return value && value[0] == '1';
-            }();
-            static u32 suRetireWitness = 0;
-            const bool lbObserveRemoval = sbRetireWitness && lrData.GetID() != 0
-                && lModelId == 0 && suRetireWitness++ < 64u;
-            if (lbObserveRemoval)
-            {
-                char lacRetire[224];
-                std::snprintf(lacRetire, sizeof(lacRetire),
-                    "[effects-retire] model car=%u old=%016llX new=0000000000000000 loaded=%d t=%.6f\n",
-                    luCar, static_cast<unsigned long long>(lrData.GetID()), lbLoaded ? 1 : 0,
-                    static_cast<double>(mParticleModule.mRenderData.mfCurrentTime));
-                CgsDev::Log::WriteToLog(lacRetire);
-            }
-            ParticleEffectHelper lResetHelper(mParticleModule);
-            lrData.Reset(lResetHelper);
-            if (lbObserveRemoval)
-            {
-                char lacRetire[96];
-                std::snprintf(lacRetire, sizeof(lacRetire),
-                              "[effects-retire] reset-end car=%u\n", luCar);
-                CgsDev::Log::WriteToLog(lacRetire);
-            }
-            if (!lbLoaded)
-                continue;
-        }
-
-        if (!lpActiveRaceCars->IsRaceCarActive(leIndex))   // flags bit 0
-            continue;
-        if (!lpActiveRaceCars->IsRaceCarLoaded(leIndex))   // flags bit 4
-            continue;
-
-        const RaceCarState* lpState = lpActiveRaceCars->GetRaceCarState(leIndex);
-        CGS_ASSERT(lpState != 0, "lpActiveRaceCarState != NULL");   // EffectsModule.cpp:3434
-        const RwRGBAReal& lrColour = lpActiveRaceCars->GetRaceCarColour(leIndex);
-
-        const u32 luWorldIndex = (leIndex == lePlayerIndex && lbBumperCam) ? 1u : 0u;
-
-        // The car's deformation locators: the deformation output's table entry whose entity
-        // id is this race car (owner 1, entity index == the slot).
-        const BrnPhysics::Deformation::VehicleLocatorOutput* lpLocators = 0;
-        {
-            CgsSceneManager::EntityId lEntityId;
-            lEntityId.Set(1u, luCar, 0u);
-            for (s32 li = 0; li < lpDeformation->miNumLocatorOutputs; ++li)
-            {
-                // VehicleLocatorOutput::mEntityId is the plain `struct EntityId { u32 muValue; }`
-                // (BrnCommonTypes.h), not CgsSceneManager::EntityId -- the console compares the
-                // two packed words, so compare the words.
-                if (lpDeformation->maLocatorData[li].mEntityId.muValue == static_cast<u32>(lEntityId))
-                {
-                    lpLocators = &lpDeformation->maLocatorData[li];
-                    break;
-                }
-            }
-        }
-
-        // ---- [deformloc] witness. NOT console behaviour: ours, latched, log-only. ---------------
-        // MEASURED 2026-09-05 (boost-exhaust wave): every Lion emitter sits at the world ORIGIN,
-        // and BoostStateMachine::OnTick -- the ONLY thing that ever gives a boost effect a world
-        // transform -- returns before doing anything, because lHelper.VehicleLocators() is null and
-        // the replay serialiser is not playing. That pointer is THIS lookup's result. So the line
-        // below says whether the deformation output published any locator table at all and whether
-        // this car's entity id is among the ones it did publish. DELETE-WHEN-STABLE.
-        // [FLAG PC witness] OPT-IN (BRN_DEFORMLOC_DIAG=1) + hard first-N cap: the key carries the
-        // car index, so a field of cars cycles it every frame and the "latched" line printed
-        // 44,810 lines in a 140 s run. DELETE-WHEN the boost-locator path is signed off.
-        {
-            static const bool sbDeformLocDiag = (std::getenv("BRN_DEFORMLOC_DIAG") != 0);
-            static u32 suDeformLocLines = 0u;
-            static u32 suLastKey = 0xFFFFFFFFu;
-            const u32 luKey = (static_cast<u32>(lpDeformation->miNumLocatorOutputs) << 8)
-                            | (lpLocators != 0 ? 1u : 0u) | (luCar << 16);
-            if (sbDeformLocDiag && suDeformLocLines < KU_EFFECTS_DIAG_MAX_LINES && luKey != suLastKey)
-            {
-                ++suDeformLocLines;
-                suLastKey = luKey;
-                CgsSceneManager::EntityId lWantId;
-                lWantId.Set(1u, luCar, 0u);
-                char lacMsg[288];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[deformloc] car=%u want=%08X locatorOutputs=%d found=%d first=%08X"
-                    "  (null -> BoostStateMachine::OnTick never positions the boost effects)\n",
-                    luCar, static_cast<u32>(lWantId), (int)lpDeformation->miNumLocatorOutputs,
-                    (int)(lpLocators != 0),
-                    (lpDeformation->miNumLocatorOutputs > 0)
-                        ? lpDeformation->maLocatorData[0].mEntityId.muValue : 0u);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-
-        RaceCarParticleEffectHelper lHelper(*this, lrData, lpState, mParticleModule, &mDebugComponent,
-                                            luWorldIndex, lrColour, meCurrentGameMode, lpLocators);
-
-        if (lbModelChanged)
-        {
-            const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec> lPhysicsResource =
-                lpActiveRaceCars->GetDeformationModelResourcePtr(leIndex);
-            lrData.Initialise(lModelId, lPhysicsResource, lHelper);
-        }
-
-        // ---- the CarState record (v104 @sp+0x90) ---------------------------------------
-        const BoostOutputInfo& lrBoost = lpBoostInfos[luCar];
-        CarState lCarState;
-        lCarState.muRaceCarIndex = luCar;
-        for (u32 lu = 0; lu < 0x0C; ++lu) lCarState.mPad04[lu] = 0;
-        lCarState.mEffectsModuleParams  = lrParams;
-        lCarState.mpEffectsSerialiser   = &mEffectsSerialiser;
-        lCarState.mbIsBoosting          = lrBoost.mbIsBoosting;                 // info +0
-        lCarState.mPad35[0] = lCarState.mPad35[1] = lCarState.mPad35[2] = 0;
-        lCarState.meBoostType           = static_cast<s32>(lrBoost.meBoostType); // info +32
-        lCarState.mfBoostAmount         = lrBoost.mfBoostAmount;                 // info +16
-        lCarState.mpCarState            = lpState;
-        lCarState.mfSpeedMPH            = lpState->mfSpeedMPH;                   // +972
-        lCarState.mfExhaustPopIntensity = lafExhaustPopIntensity[luCar];
-        lCarState.mbExhaustPopThisFrame = labExhaustPopThisFrame[luCar];
-        lCarState.mbCrashing            = lpState->mbCrashing;                   // +1098
-        lCarState.mbJumping             = !lpState->mbCrashing && lpState->mfTimeInAir > 0.0f;   // +1028
-        lCarState.mbEngineRunning       = lpActiveRaceCars->IsRaceCarEngineOn(leIndex);
-
-        // The replay round-trip of the boost triple.
-        if (lbPlaying)
-        {
-            u8  lu8Active = 0; f32 lfValue = 0.0f; s32 liType = 0;
-            mEffectsSerialiser.GetStaticLayout()->GetBoostData(luCar, lu8Active, lfValue, liType);
-            lCarState.mbIsBoosting  = (lu8Active != 0);
-            lCarState.mfBoostAmount = lfValue;
-            lCarState.meBoostType   = liType;
-        }
-        if (lbRecording)
-        {
-            mEffectsSerialiser.GetStaticLayout()->WriteBoostData(
-                luCar, lCarState.mbIsBoosting ? 1 : 0, lCarState.mfBoostAmount, lCarState.meBoostType);
-        }
-
-        lrData.Tick(lCarState, *lpState, lHelper, mbEventIntroActive, leIndex == lePlayerIndex);
-
-        // Just started crashing (IsCrashing && !WasCrashing): zero the crash / tyre
-        // accumulators and the debris timer, latch the transform.
-        if (lrData.JustStartedCrashing())
-        {
-            mafAccumulatedParticleCountCrash[luCar] = 0.0f;
-            mafAccumulatedParticleCountTyres[luCar] = 0.0f;
-            mafTimeUntilNextDebrisBurst[luCar]      = 0.0f;
-            maRaceCarPreviousTransforms[luCar]      = lpState->mTransform;   // +496
-        }
-
-        HandleWheels(lCarState, lHelper);
-
-        if (!mbEventIntroActive || leIndex == lePlayerIndex)
-            HandleJumpAndLandingEffects(lCarState, lHelper, lrParams.mDt, lrParams.mTime,
-                                        lrData.GetGroundPositionY());
-
-        const RaceCarState* lpStateAgain = lpActiveRaceCars->GetRaceCarState(leIndex);
-        if (lpState->mbCrashing)
-        {
-            // The trail's debrisparams: the player's crash debris for the player's car, the AI trail debris for the
-            // others (`cmpw r30(player), r26(car)` -> this + 0x2D388 / this + 0x2D3A8, 0x8229E2E4..0x8229E300), and
-            // the car colour GetRaceCarColour returns (r9).
-            const Attrib::Gen::debrisparams& lrTrailDebris =
-                (leIndex == lePlayerIndex) ? mCrashingDebrisParams : mAIRaceCarCrashingTrailDebris;
-            HandleCrashingTrail(lrData, lrParams.mDt, lrParams.mTime, lpStateAgain, leIndex,
-                                lpActiveRaceCars->GetRaceCarColour(leIndex), lrTrailDebris);
-        }
-        maRaceCarPreviousTransforms[luCar] = lpStateAgain->mTransform;
-    }
-}
 
 // =============================================================================
 // HandleWheels  @0x82296C80  (DWARF :1743) -- the skid smoke, then THE TYRE MARK.
@@ -2122,18 +1797,6 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
             // sees an 18 m segment bridge a placement cannot tell "the flag never arrived"
             // from "the flag arrived and the gate swallowed it" without this line, and those
             // two have completely different fixes. One line per (wheel, frame) the flag is up.
-            if (SkidProbeEnabled())
-            {
-                char lacRst[160];
-                std::snprintf(lacRst, sizeof(lacRst),
-                    "[skid] f=%u w=%u RESETXFORM mrLastTrailTime<-(-1) t=%.3f pos=%.2f,%.2f,%.2f\n",
-                    gauSkidProbeFrame, luWheel,
-                    static_cast<double>(mParticleModule.mRenderData.mfCurrentTime),
-                    static_cast<double>(lrWheel.mRoadContact.mPosition.x),
-                    static_cast<double>(lrWheel.mRoadContact.mPosition.y),
-                    static_cast<double>(lrWheel.mRoadContact.mPosition.z));
-                CgsDev::Log::WriteToLog(lacRst);
-            }
         }
 
         bool lbTrailEnded = true;
@@ -2183,8 +1846,6 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                     static int siSkidDisabled = -1;
                     if (siSkidDisabled < 0)
                     {
-                        const char* lpcValue = std::getenv("BRN_SKID_DISABLE");
-                        siSkidDisabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
                         if (siSkidDisabled == 1)
                             CgsDev::Log::WriteToLog("[skid] BRN_SKID_DISABLE=1 CONTROL ARMED:"
                                                     " SkidMarksEnabled forced false\n");
@@ -2210,11 +1871,6 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                     // one place that can arm a capture on it and the one place that knows where
                     // the segment went. Five stores; read only by the back-buffer writer under
                     // BRN_FRAME_DUMP_ARM=skid and by frames.csv. DELETE-WHEN-STABLE.
-                    BrnDiag::gFilmLatch.muSkidLatched = 1u;
-                    ++BrnDiag::gFilmLatch.muTrailSegments;
-                    BrnDiag::gFilmLatch.mfLastSegX = lrWheel.mRoadContact.mPosition.x;
-                    BrnDiag::gFilmLatch.mfLastSegY = lrWheel.mRoadContact.mPosition.y;
-                    BrnDiag::gFilmLatch.mfLastSegZ = lrWheel.mRoadContact.mPosition.z;
 
                     // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAIL_HEIGHT_DIAG, issue #21's ONE
                     // NUMBER: how far above the road the mark this call lays actually sits.
@@ -2228,56 +1884,6 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                     // carried contact point and the raw hit are not the same place at all, and
                     // then dy is not a height above "the road under the mark".
                     // DELETE-WHEN-STABLE.
-                    if (BrnDiag::TrailHeightDiagEnabled())
-                    {
-                        const s32 liCarId = lpState->miRaceCarID;
-                        // SEARCH, do not index: the latch is indexed by VehicleManager SLOT and
-                        // this side only has the attribute id. See BrnDiagTrailHeight.h --
-                        // keying one on the other differenced the player's mark against another
-                        // car's road hit. slot == -1 means no entry claims this id.
-                        s32 liSlot = -1;
-                        for (s32 liS = 0; liS < BrnDiag::KI_TRAIL_HEIGHT_MAX_CARS; ++liS)
-                        {
-                            const BrnDiag::TrailHeightHit& lrCand =
-                                BrnDiag::gaTrailHeightHits[liS][luWheel & 3u];
-                            if (lrCand.muStamp != 0u && lrCand.miCarId == liCarId
-                                && (liSlot < 0
-                                    || lrCand.muStamp
-                                       > BrnDiag::gaTrailHeightHits[liSlot][luWheel & 3u].muStamp))
-                            {
-                                liSlot = liS;
-                            }
-                        }
-                        if (liSlot >= 0)
-                        {
-                            const BrnDiag::TrailHeightHit& lrHit =
-                                BrnDiag::gaTrailHeightHits[liSlot][luWheel & 3u];
-                            const f32 lfMarkY = lrWheel.mRoadContact.mPosition.y + 0.03f;
-                            const f32 lfDx    = lrWheel.mRoadContact.mPosition.x - lrHit.mfX;
-                            const f32 lfDz    = lrWheel.mRoadContact.mPosition.z - lrHit.mfZ;
-                            char lacHt[400];
-                            std::snprintf(lacHt, sizeof(lacHt),
-                                "[trailht] f=%u car=%d slot=%d w=%u t=%.3f mark=%.4f,%.4f,%.4f "
-                                "road=%.4f,%.4f,%.4f dy=%.4f dxz=%.4f n=%.4f,%.4f,%.4f "
-                                "roadNy=%.4f lineDist=%.4f stamp=%u hit=%u\n",
-                                gauSkidProbeFrame, liCarId, liSlot, luWheel,
-                                static_cast<double>(mParticleModule.mRenderData.mfCurrentTime),
-                                static_cast<double>(lrWheel.mRoadContact.mPosition.x),
-                                static_cast<double>(lfMarkY),
-                                static_cast<double>(lrWheel.mRoadContact.mPosition.z),
-                                static_cast<double>(lrHit.mfX), static_cast<double>(lrHit.mfY),
-                                static_cast<double>(lrHit.mfZ),
-                                static_cast<double>(lfMarkY - lrHit.mfY),
-                                static_cast<double>(std::sqrt(lfDx * lfDx + lfDz * lfDz)),
-                                static_cast<double>(lrWheel.mRoadContact.mNormal.x),
-                                static_cast<double>(lrWheel.mRoadContact.mNormal.y),
-                                static_cast<double>(lrWheel.mRoadContact.mNormal.z),
-                                static_cast<double>(lrHit.mfNormalY),
-                                static_cast<double>(lrWheel.mRoadContact.mfLineDistanceToRoad),
-                                lrHit.muStamp, lrHit.muHit);
-                            CgsDev::Log::WriteToLog(lacHt);
-                        }
-                    }
                 }
 
                 // [skid] SURFACE-CHANGE EDGE. The periodic sample below can drive across a
@@ -2285,89 +1891,9 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                 // with SkidMarksEnabled needs every distinct surface the wheels touch, with
                 // the place it was touched -- so a later run can be teleported there. One
                 // line per (wheel, new surface id), not per frame.
-                if (SkidProbeEnabled())
-                {
-                    static u32 sauLastSurface[ActiveRaceCarData::KU_NUM_WHEELS] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
-                    if (sauLastSurface[luWheel] != luSurfaceId)
-                    {
-                        sauLastSurface[luWheel] = luSurfaceId;
-                        char lacChg[240];
-                        std::snprintf(lacChg, sizeof(lacChg),
-                            "[skid] f=%u w=%u SURFCHG surf=%u en=%d thr=%.4f type=%d "
-                            "pos=%.2f,%.2f,%.2f\n",
-                            gauSkidProbeFrame, luWheel, luSurfaceId,
-                            ReadBool(lpVfxData, KU_VFX_SKID_MARKS_ENABLED) ? 1 : 0,
-                            static_cast<double>(ReadF32(lpVfxData, KU_VFX_SKID_MARK_THRESHOLD)),
-                            static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)),
-                            static_cast<double>(lrWheel.mRoadContact.mPosition.x),
-                            static_cast<double>(lrWheel.mRoadContact.mPosition.y),
-                            static_cast<double>(lrWheel.mRoadContact.mPosition.z));
-                        CgsDev::Log::WriteToLog(lacChg);
-                    }
-                }
 
                 // [skid] both sides of the gate, on the frames it matters.
-                if (SkidProbeEnabled())
-                {
-                    // NOT `lrEmitter.mrLastTrailTime >= 0.0f` -- see gabSkidProbeWasLaying's
-                    // banner: AddTrailSegment has already written that field this frame, so
-                    // reading it here made a START unreachable.
-                    const bool lbWasLaying = gabSkidProbeWasLaying[luWheel & 3u];
-                    const bool lbNowLaying = !lbTrailEnded;
-                    const bool lbEdge      = (lbWasLaying != lbNowLaying);
-                    if (lbEdge || (gauSkidProbeFrame % 30u) == 0u)
-                    {
-                        char lacMsg[400];
-                        std::snprintf(lacMsg, sizeof(lacMsg),
-                            "[skid] f=%u w=%u %s grnd=%d trac=%d att=%d |drift|=%.5f<=%.5f "
-                            "surf=%u/%d ref=%d en=%d skid=%.4f %s thr=%.4f type=%d ready=%d t=%.3f "
-                            "pos=%.2f,%.2f,%.2f\n",
-                            gauSkidProbeFrame, luWheel,
-                            lbEdge ? (lbNowLaying ? "START" : "STOP ") : "     ",
-                            lrWheel.mRoadContact.mbIsOnGround ? 1 : 0,
-                            lrWheel.mbHasTraction ? 1 : 0,
-                            lrWheel.mbAttached ? 1 : 0,
-                            static_cast<double>(std::fabs(lfNormalDrift)),
-                            static_cast<double>(KF_TRAIL_NORMAL_DRIFT_MAX),
-                            luSurfaceId, mSurfaceList.Num_Surfaces(),
-                            lbSurfaceResolved ? 1 : 0,
-                            lbSkidMarksEnabled ? 1 : 0,
-                            static_cast<double>(lfSkidFactor),
-                            (lfSkidFactor > lfSkidThreshold) ? ">" : "<=",
-                            static_cast<double>(lfSkidThreshold),
-                            static_cast<int>(ReadS16(lpVfxData, KU_VFX_SKID_MARK_TYPE_ID)),
-                            mParticleModule.TrailSystem().IsReady() ? 1 : 0,
-                            static_cast<double>(mParticleModule.mRenderData.mfCurrentTime),
-                            static_cast<double>(lrWheel.mRoadContact.mPosition.x),
-                            static_cast<double>(lrWheel.mRoadContact.mPosition.y),
-                            static_cast<double>(lrWheel.mRoadContact.mPosition.z));
-                        CgsDev::Log::WriteToLog(lacMsg);
-                    }
-                }
             }
-            else if (SkidProbeEnabled() && (gauSkidProbeFrame % 30u) == 0u)
-            {
-                // The wheel is on the ground with traction, but it LEFT ITS CONTACT PLANE --
-                // the |dot| <= 0.02 test failed, so no surface is even looked up.
-                char lacMsg[240];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[skid] f=%u w=%u DRIFTOUT |drift|=%.5f > %.5f (grnd/trac/att all set)\n",
-                    gauSkidProbeFrame, luWheel,
-                    static_cast<double>(std::fabs(lfNormalDrift)),
-                    static_cast<double>(KF_TRAIL_NORMAL_DRIFT_MAX));
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-        else if (SkidProbeEnabled() && (gauSkidProbeFrame % 30u) == 0u)
-        {
-            char lacMsg[240];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[skid] f=%u w=%u OFFGATE grnd=%d trac=%d att=%d (no surface lookup)\n",
-                gauSkidProbeFrame, luWheel,
-                lrWheel.mRoadContact.mbIsOnGround ? 1 : 0,
-                lrWheel.mbHasTraction ? 1 : 0,
-                lrWheel.mbAttached ? 1 : 0);
-            CgsDev::Log::WriteToLog(lacMsg);
         }
         if (lbTrailEnded)
             lrEmitter.mrLastTrailTime = -1.0f;
@@ -2593,7 +2119,6 @@ void EffectsModule::GenerateDispatchLists(CgsModule::IOBufferStack* lpInputBuffe
     CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");   // CgsModuleIOHelper.h:52
     (void)lbCreated;
 
-
         lpParticleInput->SetDispatchFrame(lpDispatchInputBuffer->GetDispatchFrame());         // +0x10 -> +0x04
         lpParticleInput->SetKeyLightDirection(lpDispatchInputBuffer->GetKeyLightDirection());   // +0x20 -> +0x10
         lpParticleInput->SetKeyLightColour(lpDispatchInputBuffer->GetKeyLightColour());         // +0x30 -> +0x20
@@ -2634,7 +2159,6 @@ void EffectsModule::DispatchThreadUpdate(const BrnGame::DispatchThreadInputBuffe
     lpDispatchThreadInputBuffer->UnlockForRead();
 }
 
-
 // =============================================================================
 // GenerateRenderRequests @0x8227FF10 (DWARF :1197). DoDispatch holds the
 // input read lock. This is the original base-effects producer; the renderer
@@ -2647,7 +2171,6 @@ void EffectsModule::GenerateRenderRequests(const EffectsIO::DispatchInputBuffer*
     const BrnDirector::Camera::CameraEffects& lrCameraFx = lrCamera.GetEffects();
     const BrnDirector::Camera::MotionBlurData& lrCameraBlur = lrCameraFx.mMotionBlurData;
     const BrnDirector::Camera::DepthOfField& lrCameraDof = lrCamera.GetDepthOfField();
-    const EffectsDebugPostFxSettingsPC lDebug = mDebugComponent.GetPostFxSettingsPC();
 
     const bool lbUseBlur = lrCameraBlur.IsActive()
         || (lDebug.mbMotionBlurEnableUserSettings && lDebug.mbMotionBlur);
@@ -2845,29 +2368,6 @@ void EffectsModule::HandleSparkContacts(const BrnPhysics::ContactSpy::BaseContac
     // which lane carried the stress on the contacts that used to trip the assert above, and
     // whether any contact reaches here with a genuinely all-zero stress.
     {
-        static const bool sbEffectsDiag = (std::getenv("BRN_EFFECTS_DIAG") != 0);
-        if (sbEffectsDiag
-            && std::fabs(lrContact.mNormalStress.x) <= KF_RWMATH_IS_ZERO_EPSILON
-            && std::fabs(lrContact.mNormalStress.y) <= KF_RWMATH_IS_ZERO_EPSILON)
-        {
-            char lacMsg[320];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[spark-iszero] type=%d ownerA=%u normalStress=(%g,%g,%g) frictionStress=(%g,%g,%g)"
-                " normal=(%g,%g,%g) allZero=%d\n",
-                static_cast<int>(leSparkType),
-                static_cast<unsigned>(lrContact.mEntityIdA.muValue >> 24),
-                static_cast<double>(lrContact.mNormalStress.x),
-                static_cast<double>(lrContact.mNormalStress.y),
-                static_cast<double>(lrContact.mNormalStress.z),
-                static_cast<double>(lrFriction.x),
-                static_cast<double>(lrFriction.y),
-                static_cast<double>(lrFriction.z),
-                static_cast<double>(lrContact.mNormal.x),
-                static_cast<double>(lrContact.mNormal.y),
-                static_cast<double>(lrContact.mNormal.z),
-                lbNormalIsZero ? 1 : 0);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
     }
 
     CGS_ASSERT(!lbFrictionIsZero, "RwMathVPU::IsZero( lContact.mFrictionStress ) == false");
@@ -3722,9 +3222,7 @@ void EffectsModule::FireJumpSparks(f32 lfCurrentTimeStep,
 {
     // [DIAG] BRN_JUMP_DIAG=1 -- NOT IN THE X360 BINARY, 32 lines. DELETE-WHEN-STABLE. The live witness of the
     // jump-landing sparks (FX-CRASHVFX C2): each call's verdict -- the surface gate, the speed gate or the shower.
-    static const bool sbDiag = (std::getenv("BRN_JUMP_DIAG") != 0);
     static u32 suDiagLines = 0;
-    const bool lbDiag = sbDiag && suDiagLines < 32u;
 
     const u8 lSurfaceID = static_cast<u8>(
         (static_cast<u16>(lCollisionTag.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK);
@@ -4114,31 +3612,6 @@ namespace
     // [DIAG] BRN_GLASS_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One capped line per glass event
     // the drain reads (cracked panes included), naming the pane's car, its state and what the drain did with
     // it: the debris burst (emit) and the number of shatter effects.
-    void GlassSmashWitness(s32 liEvent, s32 liNumEvents, const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lrEvent,
-                           bool lbPlayback, bool lbHandled, bool lbEmit, f32 lfNumEffects, f32 lfTime)
-    {
-        static const bool sbArmed = []() {
-            const char* const lpcValue = std::getenv("BRN_GLASS_DIAG");
-            return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
-        }();
-        static u32 suLines = 0;
-        if (!sbArmed || suLines >= 200u)
-            return;
-        ++suLines;
-        char lacMsg[320];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-            "[glass] event %d/%d%s id=0x%08X owner=%u state=%d dont=%d handled=%d emit=%d shatters=%.0f "
-            "normal=(%.3f,%.3f,%.3f) vel=(%.2f,%.2f,%.2f) t=%.3f\n",
-            liEvent, liNumEvents, lbPlayback ? " (replay)" : "", static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue),
-            static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue >> 24),
-            lbPlayback ? -1 : static_cast<int>(lrEvent.meNewState), lbPlayback ? -1 : (lrEvent.mbDontPlaySmashEffect ? 1 : 0),
-            lbHandled ? 1 : 0, lbEmit ? 1 : 0, static_cast<double>(lfNumEffects),
-            static_cast<double>(lrEvent.mNormal.x), static_cast<double>(lrEvent.mNormal.y),
-            static_cast<double>(lrEvent.mNormal.z), static_cast<double>(lrEvent.mLinearVelocity.x),
-            static_cast<double>(lrEvent.mLinearVelocity.y), static_cast<double>(lrEvent.mLinearVelocity.z),
-            static_cast<double>(lfTime));
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -4277,7 +3750,7 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
             lEvent = lrQueue.GetEvent(liEvent);
             if (lEvent.meNewState != BrnPhysics::Deformation::E_GLASS_STATE_SMASHED || lEvent.mbDontPlaySmashEffect)
             {
-                GlassSmashWitness(liEvent, liNumEvents, lEvent, false, false, false, 0.0f, lfTime);   // [DIAG]
+   // [DIAG]
                 continue;
             }
             if (IsReplayRecording(mEffectsSerialiser.GetMode()))
@@ -4315,7 +3788,7 @@ void EffectsModule::HandleGlassSmashEventsForAllCars(const EffectsIO::InputBuffe
         const f32 lfScaled = lfArea * KF_GLASS_SHATTER_PER_AREA;
         const f32 lfCapped = (lfScaled > KF_GLASS_SHATTER_MAX) ? KF_GLASS_SHATTER_MAX : lfScaled;
         f32 lfNumEffects = std::floor(lfCapped + 0.5f);                           // vrfim128
-        GlassSmashWitness(liEvent, liNumEvents, lEvent, lbPlayback, true, lbEmit, lfNumEffects, lfTime);   // [DIAG]
+   // [DIAG]
         if (!(lfNumEffects >= 1.0f))                                              // vcmpgefp128.
             continue;
 
@@ -4402,9 +3875,6 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
         lrEffectTransform.zAxis = lrCarTransform.zAxis;
 
         Vector3 lvPosition = lrCarTransform.wAxis;
-        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.xAxis, lrPoint.x, lvPosition);
-        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.yAxis, lrPoint.y, lvPosition);
-        lvPosition = CgsPC::VmxFloat::MultiplyAdd(lrCarTransform.zAxis, lrPoint.z, lvPosition);
         lrEffectTransform.wAxis = lvPosition;
         lpInstanceEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
     }
@@ -4423,7 +3893,6 @@ void EffectsModule::HandleQADebugTests(f32 /*lfDt*/, f32 /*lfTime*/, const RaceC
             lpQAEffect->mTransform.yAxis = lpRaceCarState->mTransform.yAxis;
             lpQAEffect->mTransform.zAxis = lpRaceCarState->mTransform.zAxis;
             lpQAEffect->mTransform.wAxis = lpRaceCarState->mTransform.wAxis;
-            lpQAEffect->mTransform.wAxis.y = CgsPC::VmxFloat::Add(lpRaceCarState->mTransform.wAxis.y, 0.75f);
             lpQAEffect->muFlags |= BrnParticle::LionEffect::EPPE_FLAG_CHANGED;
         }
     }
@@ -4526,26 +3995,6 @@ namespace
     // [DIAG] BRN_CRASH_TRAIL_DIAG=1 -- NOT IN THE X360 BINARY, capped at KU_EFFECTS_DIAG_MAX_LINES. One line per call
     // that emitted anything: the car, the distance it slid this step, the speed factor, the pieces per type
     // (Coloured / Shiny / Dark / HighDetail / Glass / smoke) and the first piece's spot.
-    void CrashTrailWitness(u32 luCar, f32 lfDistance, f32 lfFactor, const u32 (&lauPieces)[6], const Vector3& lrFirst)
-    {
-        static const bool sbArmed = []() {
-            const char* const lpcValue = std::getenv("BRN_CRASH_TRAIL_DIAG");
-            return lpcValue != 0 && lpcValue[0] == '1';
-        }();
-        static u32 suLines = 0;
-        if (!sbArmed || suLines >= KU_EFFECTS_DIAG_MAX_LINES)
-            return;
-        if ((lauPieces[0] | lauPieces[1] | lauPieces[2] | lauPieces[3] | lauPieces[4] | lauPieces[5]) == 0u)
-            return;
-        ++suLines;
-        char lacMsg[256];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[crash-trail] car=%u dist=%.3f factor=%.3f pieces=%u/%u/%u/%u/%u smoke=%u first=(%.3f,%.3f,%.3f)\n",
-                      luCar, static_cast<double>(lfDistance), static_cast<double>(lfFactor), lauPieces[0], lauPieces[1],
-                      lauPieces[2], lauPieces[3], lauPieces[4], lauPieces[5], static_cast<double>(lrFirst.x),
-                      static_cast<double>(lrFirst.y), static_cast<double>(lrFirst.z));
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 }
 
 void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, f32 lfCurrentTimeStep, f32 lfCurrentTime,
@@ -4675,7 +4124,7 @@ void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, 
         }
     }
 
-    CrashTrailWitness(luCar, lfDistanceTravelled, lfEmissionRateFactor, lauDiagPieces, lvDiagFirst);   // [DIAG]
+   // [DIAG]
 }
 
 // =================================================================================================
@@ -4728,20 +4177,10 @@ namespace
     // the time and the last one, the record's mbOnCar / mbGoodImpact (-1 without a record), the replay mode, and the
     // verdict -- `too-soon`, `no-vehicle-impact`, or `fired` with the contact point, the angle, the spark count and
     // the LION slot, its handle and whether it resolved.
-    bool BounceVfxDiagArmed()
-    {
-        static const bool sbArmed = []() {
-            const char* const lpcValue = std::getenv("BRN_BOUNCE_VFX_DIAG");
-            return lpcValue != 0 && lpcValue[0] == '1';
-        }();
-        return sbArmed;
-    }
 
     void BounceVfxDiagLine(const char* lpcLine)
     {
         static u32 suLines = 0;
-        if (!BounceVfxDiagArmed() || suLines >= KU_EFFECTS_DIAG_MAX_LINES)
-            return;
         ++suLines;
         CgsDev::Log::WriteToLog(lpcLine);
     }
@@ -4775,14 +4214,6 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     // `fabs ; fcmpu ; blt` to the exit (0x82292984..0x82292990): only a gap BELOW 0.5 s skips, so a NaN gap goes on.
     if (std::fabs(lfCurrentTime - mfLastShowtimeBounceEffectTime) < KF_SHOWTIME_BOUNCE_MIN_INTERVAL)
     {
-        if (BounceVfxDiagArmed())   // [DIAG]
-        {
-            char lacLine[200];
-            std::snprintf(lacLine, sizeof(lacLine), "[bounce-vfx] t=%.3f last=%.3f onCar=%d good=%d playing=%d -> too-soon\n",
-                          static_cast<double>(lfCurrentTime), static_cast<double>(mfLastShowtimeBounceEffectTime),
-                          liDiagOnCar, liDiagGood, lbPlaying ? 1 : 0);
-            BounceVfxDiagLine(lacLine);
-        }
         return;
     }
 
@@ -4791,15 +4222,6 @@ void EffectsModule::HandleShowtimeTrafficBounce(
                               || (lpJustBouncedAction->mbOnCar && lpJustBouncedAction->mu8EventByte7 != 0);
     if (!lbVehicleImpact)
     {
-        if (BounceVfxDiagArmed())   // [DIAG]
-        {
-            char lacLine[200];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[bounce-vfx] t=%.3f last=%.3f onCar=%d good=%d playing=%d -> no-vehicle-impact\n",
-                          static_cast<double>(lfCurrentTime), static_cast<double>(mfLastShowtimeBounceEffectTime),
-                          liDiagOnCar, liDiagGood, lbPlaying ? 1 : 0);
-            BounceVfxDiagLine(lacLine);
-        }
         return;
     }
 
@@ -4897,20 +4319,6 @@ void EffectsModule::HandleShowtimeTrafficBounce(
         lpNewLionEffect->SetVelocity(lrVelocity);                     // +0x50 / +0x54 / +0x58, then muFlags |= 0x24
         lpNewLionEffect->SetStateBlendFactor(mRandom.RandomFloat());  // +0x0C, then muFlags |= 4
         muNextShowtimeBounceEffect = (muNextShowtimeBounceEffect + 1u) % KU_MAX_SHOWTIME_BOUNCE_EFFECTS;   // `% 3`
-    }
-
-    if (BounceVfxDiagArmed())   // [DIAG]
-    {
-        char lacLine[320];
-        std::snprintf(lacLine, sizeof(lacLine),
-                      "[bounce-vfx] t=%.3f last=%.3f onCar=%d good=%d playing=%d -> fired contact=(%.3f,%.3f,%.3f) "
-                      "angle=%.4f sparks=%u lion slot=%u handle=0x%08X %s\n",
-                      static_cast<double>(lfCurrentTime), static_cast<double>(mfLastShowtimeBounceEffectTime),
-                      liDiagOnCar, liDiagGood, lbPlaying ? 1 : 0, static_cast<double>(lContactPosition.x),
-                      static_cast<double>(lContactPosition.y), static_cast<double>(lContactPosition.z),
-                      static_cast<double>(lAngle.x), luNumToSpawn, luSlot, maShowtimeBounceEffectHandles[luSlot],
-                      (lpNewLionEffect != 0) ? "resolved" : "unresolved");
-        BounceVfxDiagLine(lacLine);
     }
 
     mfLastShowtimeBounceEffectTime = lfCurrentTime;                   // `stfs f31, 0(r20)` 0x82292F80

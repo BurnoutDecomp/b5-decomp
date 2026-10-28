@@ -12,7 +12,6 @@
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"                                     // rw::collision::Volume
 #include "rw/rwcore_structs.h"                                                               // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                            // TransformPoint / operator*
-#include "pc/math/VmxFloat.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
 #include <cmath>
@@ -220,9 +219,7 @@ namespace CgsSceneManager
 
         if (mbDrawPadding)
         {
-            lpRender->DrawSphere(lSphereWorldPosition,
-                CgsPC::VmxFloat::Add(lSpherePositionAndRadius.w, mfPadding),
-                rw::RGBA(0x00u, 0xFFu, 0xFFu, 0x63u)); // ARTIST r5 = 0x63FFFF00
+ // ARTIST r5 = 0x63FFFF00
         }
 
         const Vector3 lTriangleVertex0 = { lfTriX, lfTriY, lfTriZ, lfTriX };
@@ -320,7 +317,6 @@ namespace CgsSceneManager
                                                           Vector3 lVertex0, Vector3 lVertex1,
                                                           Vector3 lVertex2, rw::RGBA lColour)
     {
-        namespace vmx = CgsPC::VmxFloat;
         const Vector3 lEdge0 = vmx::Subtract(lVertex0, lVertex1);
         const Vector3 lEdge1 = vmx::Subtract(lVertex0, lVertex2);
         // 828ABA84..94: rounded product, fused negative subtract, then YZXW.

@@ -9,8 +9,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"
-#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
-
 #include <cstdio>
 #include <cstring>
 

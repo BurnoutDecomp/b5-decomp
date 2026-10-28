@@ -7,8 +7,6 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<16384,16> (mReceiverQueue)
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::SafeResourceHandle<T>
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (mRandom, BY VALUE)
-#include "GameSource/Effects/Particles/Native/ParticleFramePC.h"
-#include "GameSource/Effects/Particles/Native/TrailFramePC.h"
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h" // EA::Allocator::ITaggedAllocator (IInternalAllocator's base)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (ParticleRenderData::mCgsCamera, BY VALUE)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"         // BrnParticle::TextureNameMap (mTextureNameMap handle target)
@@ -413,11 +411,6 @@ namespace BrnParticle
             u16                           muFlags;               // DWARF :604 (guest +0x200)
             const renderengine::Texture*  mpEnvironmentMap;      // DWARF :605 (guest +0x204)
             f32                           mfWhiteLevel;          // DWARF :606 (guest +0x208)
-            // FLAG PC-platform leaf: keep all render passes on one published
-            // state while the next update changes junkyard/suspend/debug flags.
-            bool                          mbInJunkyardPC;
-            bool                          mbPlayingEffectsSuspendedPC;
-            bool                          mbZFadeEnabledPC;
         };
 
         ParticleModule();
@@ -444,9 +437,6 @@ namespace BrnParticle
         void Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier, const BrnDirector::Camera::Camera* lpCamera);
         // X360 0x82294C30 -- the frame's end: latch mbStalled, then the trail system's buffer flip.
         void EndOfFrame(bool lbStalled);
-        // FLAG PC-platform leaf: immutable native draw snapshots publish at
-        // the same joined boundary as the renderer's completed command bank.
-        void PublishRenderCommandsPC(const ParticleRenderData& lrRenderData);
         // DWARF ParticleModule.h:309 `void StartOfFrame();` -- INLINE, with no body of its own in the image:
         // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0 inlines it through EffectsModule::StartOfFrame as ONE
         // store, `lfs f0, flt_82001CC0 (0.0) ; stfsx f0, r11, r9` with r9 = 0x88194C = the particle module's
@@ -476,19 +466,6 @@ namespace BrnParticle
         // differs. Its two BrnSimpleParticleRenderer::Dispatch calls (the debris halves either side
         // of the Lion dispatch) reach the same asm-sized placeholders the full-res arm's do.
         void RenderQuarterResParticles(const ParticleRenderData* lpRenderData);
-
-        // [FLAG PC bring-up] IS THE QUARTER-RES ARM REACHABLE THIS FRAME? Not a console function
-        // and not a console member: on the X360 both arms always exist, so mbIsInJunkyard alone
-        // decides. On PC the particle buffer + the two blit program pairs are built lazily by
-        // BrnRendererMemory::PCBringUpCreateParticleCompositeChain and can legitimately be absent
-        // (no device yet, an unseeded screen extent, a driver that refused the target), and with
-        // the console's gate restored an absent buffer would mean the Lion pass draws NOWHERE --
-        // the plume would simply vanish outside the junkyard. BrnRendererModule::Render publishes
-        // the answer here once per frame, before either arm runs, so the two arms cannot both draw
-        // and cannot both skip. Static + file-scope storage, so no layout moves.
-        // DELETE-WHEN the pool is built by BrnRendererMemory::Construct: the gate is then just
-        // mbIsInJunkyard, as the console has it.
-        static void PCBringUpSetQuarterResRouting(bool lbLive);
 
         // ⭐⭐ THE TWO HALVES OF THE EFFECT HAND-OFF, and between them the ONLY route in the whole
         // program from a stamped maPlayingEffects slot to a live Lion emitter. Everything else on
@@ -956,15 +933,6 @@ namespace BrnParticle
         u8    maSpawnBufferHeaderTail[0x2B7B0 - 0x2B7A2];
         void* mpSparkSpawnBuffer;                      // +0x2B7B0 (178096)
 
-        Native::SimpleParticleFramePC mSimpleParticleFramePC;
-        Native::TrailFramePC mTrailFramePC;
-        u32 muTrailSystemUpdateFramePC = 0;
-        f32 mfTrailSystemTimeStepPC = 0.0f;
-        Native::ParticleRandomAccessPC mRandomAccessPC;
-        template<class Draw> decltype(auto) DrawRandomPC(Draw lfDraw)
-        {
-            return mRandomAccessPC.Execute(mRandom, lfDraw);
-        }
     };
 
 }

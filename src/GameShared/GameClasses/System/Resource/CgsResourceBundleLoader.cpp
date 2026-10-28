@@ -7,17 +7,12 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"     // EnsureDeviceManagerUp
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint (read trace)
 
-#include "GameShared/GameClasses/Gui/PC/CgsAptResourceOwnerPC.h"
-
 #include <cstdlib>   // malloc / free
 #include <cstring>   // memcpy
-
-#include "pc/gcm/renderengine/FrameProfile.h"
 
 namespace CgsResource
 {
     // Read a whole bundle file through the LIVE async file-system engine (the DeviceManager worker
-    // thread + OperationPool + Win32 DevicePhysicalPC leaf). EnsureDeviceManagerUp brings the
     // engine up if it is not already, so EVERY bundle load goes through it — including the early
     // movie/debug-font bootstrapping that runs before FileSystem::Prepare (no CRT fallback).
     // Returns a malloc'd buffer (caller free()s) + its size, or null on failure.
@@ -32,7 +27,6 @@ namespace CgsResource
         u32   luSize = 0;
         void* lpBuf = nullptr;
         {
-            renderengine::FrameProfile::Scope lProfile(renderengine::FrameProfile::RESOURCE_FILE);
             lpBuf = lpManager->ReadWholeFile(lpcFileName, &luSize);
         }
         if (!lpBuf)
@@ -64,65 +58,6 @@ namespace CgsResource
         return lId;
     }
 
-    // FLAG PC-platform leaf: the synchronous native loader owns its allocation transaction.
-    // The console allocation state retries a whole batch before publishing it. Here a failed
-    // allocation must undo every reference acquired by this attempt, including a revived entry's
-    // exact previous count. No FixUp/PostFixUp runs until all allocations have succeeded.
-    struct BundleReferencePC
-    {
-        Pool* mpPool;
-        s32 miSlot;
-        s16 miPreviousCount;
-        bool mbCreated;
-    };
-
-    class BundleReferencesPC
-    {
-    public:
-        explicit BundleReferencesPC(u32 luCount)
-            : mpReferences(static_cast<BundleReferencePC*>(calloc(luCount, sizeof(BundleReferencePC)))),
-              muCount(luCount), mbCommitted(false) {}
-        ~BundleReferencesPC()
-        {
-            if (mpReferences && !mbCommitted)
-            {
-                for (u32 i = muCount; i != 0; --i)
-                {
-                    const BundleReferencePC& lrRef = mpReferences[i - 1];
-                    if (!lrRef.mpPool) continue;
-                    if (lrRef.mbCreated)
-                        lrRef.mpPool->RemoveReference(static_cast<u32>(lrRef.miSlot));
-                    else
-                        lrRef.mpPool->SetEntryRefCount(lrRef.miSlot, lrRef.miPreviousCount);
-                }
-            }
-            free(mpReferences);
-        }
-        bool IsValid() const { return mpReferences != nullptr; }
-        const BundleReferencePC& operator[](u32 i) const { return mpReferences[i]; }
-        void Acquire(u32 i, Pool* lpPool, s32 liSlot, bool lbCreated)
-        {
-            BundleReferencePC& lrRef = mpReferences[i];
-            lrRef.mpPool = lpPool;
-            lrRef.miSlot = liSlot;
-            lrRef.mbCreated = lbCreated;
-            lrRef.miPreviousCount = lpPool->GetEntryRefCount(liSlot);
-            if (!lbCreated)
-            {
-                if (lrRef.miPreviousCount > 0) lpPool->IncEntryRefCount(liSlot);
-                else lpPool->SetEntryRefCount(liSlot, 1);
-            }
-        }
-        void Commit() { mbCommitted = true; }
-
-    private:
-        BundleReferencePC* mpReferences;
-        u32 muCount;
-        bool mbCommitted;
-        BundleReferencesPC(const BundleReferencesPC&) = delete;
-        BundleReferencesPC& operator=(const BundleReferencesPC&) = delete;
-    };
-
     static const EntryListResource* GetBundleList(const Entry* lpEntry)
     {
         if (!lpEntry || !lpEntry->mpResourceType || lpEntry->mpResourceType->GetTypeID() != 29)
@@ -136,202 +71,13 @@ namespace CgsResource
         return lpList;
     }
 
-    // FLAG PC-platform leaf: one bundle acquisition per loaded AptFile, released
-    // after its native Unresolve -> FreeAnimation callback. Pin the resident list
-    // AND every member, including geometry/texture dependencies, without file IO.
-    namespace PCAptOwnership
-    {
-        static constexpr u32 KU_MAX_BUNDLES = 128;
-        static constexpr u32 KU_MAX_FILES = 128;
-        struct Bundle
-        {
-            Pool* mpPool;
-            char macPath[160];
-            u32 muLoads;
-            u32 muFiles;
-        };
-        struct Lease
-        {
-            const void* mpFile;
-            const void* mpHeader;
-            Bundle* mpBundle;
-        };
-        static Bundle saBundles[KU_MAX_BUNDLES] = {};
-        static Lease saLeases[KU_MAX_FILES] = {};
-
-        static Bundle* Find(Pool* lpPool, const char* lpacPath)
-        {
-            if (!lpPool || !lpacPath) return nullptr;
-            for (Bundle& lrBundle : saBundles)
-                if (lrBundle.mpPool == lpPool && _stricmp(lrBundle.macPath, lpacPath) == 0)
-                    return &lrBundle;
-            return nullptr;
-        }
-        static const EntryListResource* List(const Bundle& lrBundle, s32* lpiSlot)
-        {
-            return GetBundleList(lrBundle.mpPool->FindResource(
-                BundleListId(lrBundle.macPath), true, 3, lpiSlot));
-        }
-        static bool Loaded(Pool* lpPool, const char* lpacPath)
-        {
-            Bundle* lpBundle = Find(lpPool, lpacPath);
-            if (!lpBundle)
-            {
-                for (Bundle& lrBundle : saBundles)
-                    if (!lrBundle.mpPool) { lpBundle = &lrBundle; break; }
-            }
-            if (!lpBundle || std::strlen(lpacPath) >= sizeof(lpBundle->macPath))
-                return false;
-            if (!lpBundle->mpPool)
-            {
-                lpBundle->mpPool = lpPool;
-                std::strcpy(lpBundle->macPath, lpacPath);
-            }
-            ++lpBundle->muLoads;
-            return true;
-        }
-        static void ForgetUnused(Bundle* lpBundle)
-        {
-            if (lpBundle && !lpBundle->muLoads && !lpBundle->muFiles)
-                *lpBundle = {};
-        }
-        static Entry* Member(Pool* lpPool, ID lId, Pool** lppPool, s32* lpiSlot)
-        {
-            *lpiSlot = lpPool->FindResourceIndexWithDependencies(lId, lppPool, true, 0xFF);
-            return *lpiSlot < 0 || !*lppPool ? nullptr
-                : const_cast<Entry*>((*lppPool)->GetEntryDirect(*lpiSlot));
-        }
-        static s32 RetainBundle(Bundle& lrBundle)
-        {
-            s32 liListSlot = -1;
-            const EntryListResource* lpList = List(lrBundle, &liListSlot);
-            if (!lpList) return BundleLoader::KI_LOAD_FAILED;
-            BundleReferencesPC lReferences(lpList->muNumEntries + 1);
-            if (!lReferences.IsValid()) return BundleLoader::KI_LOAD_FAILED;
-            for (u32 i = 0; i < lpList->muNumEntries; ++i)
-            {
-                Pool* lpMemberPool = nullptr;
-                s32 liMemberSlot = -1;
-                if (!Member(lrBundle.mpPool, lpList->mIds[i], &lpMemberPool, &liMemberSlot))
-                    return BundleLoader::KI_LOAD_FAILED;
-                lReferences.Acquire(i, lpMemberPool, liMemberSlot, false);
-            }
-            lReferences.Acquire(lpList->muNumEntries, lrBundle.mpPool, liListSlot, false);
-            lReferences.Commit();
-            return static_cast<s32>(lpList->muNumEntries);
-        }
-        static s32 ReleaseBundle(Pool* lpPool, const char* lpacPath)
-        {
-            s32 liListSlot = -1;
-            const EntryListResource* lpList = GetBundleList(lpPool->FindResource(
-                BundleListId(lpacPath), true, 3, &liListSlot));
-            if (!lpList) return BundleLoader::KI_LOAD_FAILED;
-            s32 liFreed = 0;
-            for (u32 i = 0; i < lpList->muNumEntries; ++i)
-            {
-                Pool* lpMemberPool = nullptr;
-                s32 liMemberSlot = -1;
-                if (Member(lpPool, lpList->mIds[i], &lpMemberPool, &liMemberSlot)
-                    && lpMemberPool->RemoveReference(static_cast<u32>(liMemberSlot)))
-                    ++liFreed;
-            }
-            lpPool->RemoveReference(static_cast<u32>(liListSlot));
-            return liFreed;
-        }
-        bool IsBundleLoaded(Pool* lpPool, const char* lpacPath)
-        {
-            Bundle* lpBundle = Find(lpPool, lpacPath);
-            s32 liSlot = -1;
-            return lpBundle && lpBundle->muLoads && List(*lpBundle, &liSlot);
-        }
-        Entry* FindBundleLead(Pool* lpPool, const char* lpacPath)
-        {
-            Bundle* lpBundle = Find(lpPool, lpacPath);
-            if (!lpBundle || !lpBundle->muLoads) return nullptr;
-            s32 liSlot = -1;
-            const EntryListResource* lpList = List(*lpBundle, &liSlot);
-            if (!lpList) return nullptr;
-            for (u32 i = 0; i < lpList->muNumEntries; ++i)
-            {
-                Pool* lpMemberPool = nullptr;
-                Entry* lpEntry = Member(lpPool, lpList->mIds[i], &lpMemberPool, &liSlot);
-                if (lpEntry && lpEntry->mpResourceType && lpEntry->mpResourceType->GetTypeID() == 30)
-                    return lpEntry;
-            }
-            return nullptr;
-        }
-        // FLAG PC-platform leaf: enumerate the synchronous loader's resident bundle
-        // list, including shared entries, without walking unrelated resources in its pool.
-        void VisitBundleEntries(Pool* lpPool, const char* lpacPath,
-                                void (*lpVisitor)(Entry*, void*), void* lpContext)
-        {
-            Bundle* lpBundle = Find(lpPool, lpacPath);
-            if (!lpBundle || !lpBundle->muLoads || !lpVisitor) return;
-            s32 liSlot = -1;
-            const EntryListResource* lpList = List(*lpBundle, &liSlot);
-            if (!lpList) return;
-            for (u32 i = 0; i < lpList->muNumEntries; ++i)
-            {
-                Pool* lpMemberPool = nullptr;
-                Entry* lpEntry = Member(lpPool, lpList->mIds[i], &lpMemberPool, &liSlot);
-                if (lpEntry) lpVisitor(lpEntry, lpContext);
-            }
-        }
-        RetainResult Retain(const void* lpHeader, const void* lpFile)
-        {
-            if (!lpHeader || !lpFile) return RetainResult::Failed;
-            Lease* lpFree = nullptr;
-            for (Lease& lrLease : saLeases)
-            {
-                if (lrLease.mpFile == lpFile)
-                    return lrLease.mpHeader == lpHeader ? RetainResult::AlreadyHeld : RetainResult::Failed;
-                if (!lrLease.mpFile && !lpFree) lpFree = &lrLease;
-            }
-            if (!lpFree) return RetainResult::Failed;
-            for (Bundle& lrBundle : saBundles)
-            {
-                if (!lrBundle.mpPool || !lrBundle.muLoads) continue;
-                s32 liSlot = -1;
-                const EntryListResource* lpList = List(lrBundle, &liSlot);
-                if (!lpList) continue;
-                for (u32 i = 0; i < lpList->muNumEntries; ++i)
-                {
-                    Pool* lpMemberPool = nullptr;
-                    Entry* lpEntry = Member(lrBundle.mpPool, lpList->mIds[i], &lpMemberPool, &liSlot);
-                    if (!lpEntry || lpEntry->mResource.m_baseResources[0] != lpHeader) continue;
-                    if (RetainBundle(lrBundle) < 0) return RetainResult::Failed;
-                    *lpFree = {lpFile, lpHeader, &lrBundle};
-                    ++lrBundle.muFiles;
-                    return RetainResult::Acquired;
-                }
-            }
-            return RetainResult::MissingOwner;
-        }
-        bool Release(const void* lpFile)
-        {
-            if (!lpFile) return false;
-            for (Lease& lrLease : saLeases)
-            {
-                if (lrLease.mpFile != lpFile) continue;
-                Bundle* lpBundle = lrLease.mpBundle;
-                lrLease = {};
-                --lpBundle->muFiles;
-                const bool lbReleased = ReleaseBundle(lpBundle->mpPool, lpBundle->macPath) >= 0;
-                ForgetUnused(lpBundle);
-                return lbReleased;
-            }
-            return false;
-        }
-    }
-
     s32 BundleLoader::LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType)
     {
         // ---- read the whole bundle file (through the live async FS engine; CRT leaf early) --
         long  llFileSize = 0;
         char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
         if (lpcBundle == 0)
-            return KI_LOAD_FILE_MISSING;   // [FLAG PC bring-up] -- see the header
-        if (llFileSize < static_cast<long>(sizeof(BundleV2)))
+            return KI_LOAD_FILE_MISSING;           if (llFileSize < static_cast<long>(sizeof(BundleV2)))
         {
             free(lpcBundle);
             return -1;
@@ -379,7 +125,6 @@ namespace CgsResource
             }
         }
 
-        BundleReferencesPC lReferences(luEntryCount + 1);
         if (!lReferences.IsValid())
         {
             free(lpcBundle);
@@ -519,25 +264,6 @@ namespace CgsResource
             lNewResource.miNumImports        = static_cast<s32>(lrEntry.muImportCount);
             lNewResource.muImportTableOffset = lrEntry.muImportOffset;
             lNewResource.mpResourceType      = (lpfnResolveType != 0) ? lpfnResolveType(lrEntry.muResourceTypeId) : 0;
-            // [FLAG PC boot gate] Name the unregistered type ids as they appear -- a type
-            // with no registered handler bypasses FixUp/imports without a word and shows up
-            // much later as a half-built resource graph. DELETE once every shipped type id
-            // is registered.
-            if (lNewResource.mpResourceType == 0 && (CgsDev::Message::gxMessageFilterFlags & 1))
-            {
-                static u32 sauReported[16] = { 0 };
-                static u32 suReportedCount = 0;
-                bool lbSeen = false;
-                for (u32 luSeen = 0; luSeen < suReportedCount; ++luSeen)
-                    lbSeen = lbSeen || (sauReported[luSeen] == lrEntry.muResourceTypeId);
-                if (!lbSeen && suReportedCount < 16)
-                {
-                    sauReported[suReportedCount++] = lrEntry.muResourceTypeId;
-                    *CgsDev::Log::gpDebugPrint << "[bundle] UNREGISTERED resource type id "
-                        << static_cast<s32>(lrEntry.muResourceTypeId) << " in '" << lpcFileName
-                        << "' [FLAG PC boot gate]\n";
-                }
-            }
             for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
             {
                 lNewResource.mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_size      = lrEntry.GetUncompressedSize(luMemType);
@@ -608,11 +334,6 @@ namespace CgsResource
         bool lbHasAptData = false;
         for (u32 i = 0; i < luEntryCount; ++i)
             lbHasAptData |= lpEntries[i].muResourceTypeId == 30;
-        if (lbHasAptData && !PCAptOwnership::Loaded(lpPool, lpcFileName))
-        {
-            free(lpcBundle);
-            return KI_LOAD_FAILED;
-        }
         lReferences.Commit();
 
         if (liShared != 0 && (CgsDev::Message::gxMessageFilterFlags & 1))
@@ -629,14 +350,11 @@ namespace CgsResource
     // logical bundle refcounts and asynchronous DeAllocate scheduling remain the module's job.
     s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool)
     {
-        PCAptOwnership::Bundle* lpBundle = PCAptOwnership::Find(lpPool, lpcFileName);
         if (lpBundle && !lpBundle->muLoads)
             return KI_LOAD_FAILED; // detached logical load cannot consume an AptFile's pin
-        const s32 liFreed = PCAptOwnership::ReleaseBundle(lpPool, lpcFileName);
         if (liFreed >= 0 && lpBundle)
         {
             --lpBundle->muLoads;
-            PCAptOwnership::ForgetUnused(lpBundle);
         }
         return liFreed;
     }

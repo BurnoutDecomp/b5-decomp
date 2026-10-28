@@ -67,11 +67,6 @@
 // LoadAIData), so it is read from there, through the accessor that names the swap.
 // DELETE-WHEN ProgressionManager::mpAISectionData gets its console binder.
 //
-// ⚠️ [FLAG PC bring-up] TWO NULL GUARDS THE CONSOLE DOES NOT HAVE, both on the boot path and both
-// one-shot-logged rather than silent -- see the bodies. The console can afford the raw
-// dereference because its TrafficData / AI / district resources are all resident long before the
-// one-shot latch fires; on PC any of the three can still be unbound at that moment, and a null
-// here is a boot-critical AV rather than a degraded table.
 //
 // ⛔ WHAT THIS DOES **NOT** FIX, stated so nobody quotes this TU as closing the whole storm:
 // the sat-nav's OTHER two asserts on the same frame ("E_WORLDDATACONTROLLERSTATE_READY <= meState"
@@ -136,27 +131,6 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
     // The console's `GetMemor(this + 43920)` -- TriggerQueryManager::GetTrafficData(), inlined.
     const BrnTraffic::TrafficData* const lpTrafficData = mTriggerQueryManager.GetTrafficData();
 
-    // ⚠️ [FLAG PC bring-up] NOT IN THE X360 BINARY. The console dereferences the answer directly
-    // (`lhz r10, 2(r21)` @0x82375A98) because B5TRAFFIC.BNDL is resident long before this latch;
-    // on PC the acquire can still be outstanding. Publishing an EMPTY-but-valid table here would
-    // be the silent-drop shape -- the GUI would then resolve nothing and never be told why -- so
-    // the message is not sent at all and the valid flag stays false, exactly as it is before the
-    // latch fires. The one-shot log names the missing resource.
-    // DELETE-WHEN the traffic-data acquire is proven complete at the one-shot latch on PC.
-    if (lpOutput == 0 || lpTrafficData == 0)
-    {
-        static bool sbNoTrafficDataLogged = false;
-        if (!sbNoTrafficDataLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbNoTrafficDataLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[event-starts] SKIPPED: SendSetUpAllEventStartsMessage has no TrafficData "
-                   "(TriggerQueryManager::GetTrafficData() == NULL); the GUI event-start table "
-                   "stays empty this boot.\n";
-        }
-        return;
-    }
-
     // ---- the AI-section point map (0x82375A14..0x82375A50) ---------------------------------
     // See the banner's ⛔ for why this reads the StreetManager's copy of the resource.
     const BrnAI::AISectionsData* const lpAISectionsData = mStreetManager.GetAISectionData();
@@ -166,12 +140,6 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
     lArena.Construct();
     lArena.Create(lpArena, KN_AI_POINT_MAP_ARENA_BYTES);
 
-    // ⚠️ [FLAG PC bring-up] The console has no null arm here either (its `sub_82367718` asserts
-    // and returns the pointer regardless). A record with no AI-section index is still a USEFUL
-    // record -- the sat-nav lookups key on the event id, not on the section -- so the table is
-    // still published; only this one field falls back to the tree's own invalid sentinel.
-    // DELETE-WHEN the AI-lanes acquire is proven complete at the one-shot latch.
-    BrnAI::AISectionPointMap* lpAISectionPointMap = 0;
     if (lpAISectionsData != 0)
     {
         lpAISectionPointMap = lpAISectionsData->BuildAISectionPointMap(&lArena);

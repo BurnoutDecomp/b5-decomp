@@ -19,9 +19,3 @@ void MixerAllocator::Free(void* lpPtr, int /*liFlag*/)
 {
     _aligned_free(lpPtr);
 }
-
-// The global singleton. FLAG: the X360 installs the real mixer system here via
-// Nicotine::IDynamicMixer::CreateInstance @0x82B44AD0; the PC build uses this leaf
-// allocator instance directly.
-static MixerAllocator g_MixerAllocatorPC;
-MixerAllocator* g_pMixerAllocator = &g_MixerAllocatorPC;

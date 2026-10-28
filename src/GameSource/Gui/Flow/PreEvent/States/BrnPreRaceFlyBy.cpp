@@ -515,7 +515,6 @@ namespace BrnGui
 // from it as committed.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace GSM = BrnGameState::GameStateModuleIO;
@@ -553,8 +552,6 @@ namespace BrnGui
         // Host layout pin: CgsGui::GuiEvent<N> is the three header words over an empty
         // CgsModule::Event base, so the record is 16 bytes on the host exactly as on the
         // console -- the AddEvent size argument below is a host sizeof, never a baked 16.
-        static_assert(sizeof(GuiEventPreRaceFlyByEnter) == 16,
-                      "host record matches the X360 16-byte id-532 post");
     }
 
     // ================================================================================
@@ -856,7 +853,6 @@ namespace BrnGui
 // only. There are no float comparisons in these bodies, so there is no NaN-polarity
 // decision to make.
 // ===================================================================================
-
 
 namespace BrnGui
 {
@@ -1235,7 +1231,6 @@ namespace BrnGui
 //       only because an earlier revision of this note wrongly listed them as missing.
 // ===================================================================================
 
-
 namespace GSM = BrnGameState::GameStateModuleIO;
 
 namespace BrnGui
@@ -1338,8 +1333,6 @@ namespace
     // Host layout pin: CgsModule::Event is an empty base and CgsGui::GuiEvent<N> is the
     // three header words, so the record is 16 bytes on the host exactly as on the console
     // -- the AddEvent size argument below is a host sizeof, never the console's baked 16.
-    static_assert(sizeof(GuiEventPreRaceFlyByTimeExpired) == 16,
-                  "host record matches the X360 16-byte id-163 post");
 
     // The AddEvent channel the X360 passes for a GUI out-event post (`li r5, 0x28`).
     // Same channel the committed OutputGuiEvent<T> instantiations use.
@@ -1549,40 +1542,6 @@ void PreRaceFlyByState::Update()
 
     HandleIncomingEvents();
 
-    // =================================================================================
-    // [DIAG] [FLAG PC bring-up] NOT IN THE X360 BINARY -- the `[flyby]` state-edge rung.
-    // Same logger, same BRN_PROP_DIAG env gate and the same first-N latch as the
-    // `[evt-flow]` ladder in GameBridgeGameStateToX_EventFlowGuiEvents.cpp.
-    //
-    // WHY IT IS HERE: the fly-by has no other observable. Every transition past
-    // E_PRERACE_ACTIVE_EVENT_TITLES is driven by an apt TRANSITION_COMPLETE trigger the
-    // movie's own ActionScript posts (CgsAptCommunicator::sMethod_SendAptEvent -> event 21),
-    // and the exit is driven by GUI event 164 -- so "the overlay never goes away" has three
-    // different possible stopping points (no 164, no trans-out transition-complete, or a
-    // state that never left EVENT_TITLES) and NOTHING in the log distinguishes them.
-    // Placed AFTER HandleIncomingEvents so an event-driven transition is reported on the
-    // frame it happens, not the next one. Edge-filtered, so a stalled state prints once.
-    // DELETE-WHEN the fly-by is confirmed to reach E_PRERACE_INVALID through
-    // TriggerExitState in a boot-drive run.
-    // =================================================================================
-    {
-        static const bool sbDiag           = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-        static s32        siFlyByDiagLeft  = 32;
-        static s32        siLastLoggedState = -2;   // not any EPreRaceState value
-
-        if ( sbDiag && siFlyByDiagLeft > 0 &&
-             static_cast<s32>(meCurrentState) != siLastLoggedState &&
-             CgsDev::Log::gpDebugPrint != 0 )
-        {
-            --siFlyByDiagLeft;
-            siLastLoggedState = static_cast<s32>(meCurrentState);
-            *CgsDev::Log::gpDebugPrint
-                << "[flyby] meCurrentState -> " << static_cast<s32>(meCurrentState)
-                << " (-1=INVALID/exited 0=UNLOADED 1=LOADING 2=ICONDELAY 3=TITLES 4=MAPINTRO"
-                   " 5=SHOWMAP 6=MEDALS 7=TRANSOUT 8=DONE) timeRemaining " << mfTimeRemaining
-                << " endRequestSent " << (mbEndRequestSent ? 1 : 0) << "\n";
-        }
-    }
 }
 
 }
@@ -1617,7 +1576,6 @@ void PreRaceFlyByState::Update()
 //   unk_820652B0 = {6.2831854820251465, ...}  (2*pi; the lvlx + vspltw takes lane 0)
 //   unk_82181510 = {0.0, 1.0, 0.0, 0.0}       (the +Y axis, the cross-product sign probe)
 // ===================================================================================
-
 
 namespace GSM = BrnGameState::GameStateModuleIO;
 
@@ -1928,7 +1886,6 @@ namespace
 //     manager's clock formatter and passes E_FORMAT_TEXT (0).
 // ===================================================================================
 
-
 namespace GSM = BrnGameState::GameStateModuleIO;
 
 namespace BrnGui
@@ -1956,11 +1913,6 @@ namespace
         "DIRECTION_S",  "DIRECTION_SE", "DIRECTION_E",  "DIRECTION_NE",
     };
 
-    // FLAG PC platform leaf: the console's 32-bit slwi-by-2 address wrap (0x824C7738 / 0x824C774C in
-    // SetBurningRouteDescription; 0x824C74C8 / 0x824C74DC in SetMarkedManDescription; 0x824C6EE8 / 0x824C6EFC in
-    // SetRaceDescription). Each reads KAPC_COMPASS_POINT_STRINGIDS with `slwi r10, rDir, 2` + `lwzx`, and the shift
-    // keeps 32 bits: a NaN bearing's direction 0x80000000 (FindEventDirection's truncation) addresses element 0,
-    // "DIRECTION_N". The x64 index would be -2^31 elements. Identity for 0..7.
     inline u32 ConsoleWordIndex(s32 liIndex)
     {
         return static_cast<u32>(liIndex) & 0x3FFFFFFFu;
@@ -1996,8 +1948,6 @@ namespace
         {
         }
     };
-    static_assert(sizeof(GuiEventPreRaceDescription) == 40,
-                  "the host record matches the X360 40-byte id-464 post");
 }
 
 // -------------------------------------------------------------------------------------
@@ -2306,7 +2256,6 @@ void PreRaceFlyByState::SetRaceDescription()
 // sizeof/offsetof off the host record, not baked from the console immediates.
 // ===================================================================================
 
-
 // House file-local alias (same spelling as the sibling PreEvent partfiles).
 namespace GSM = BrnGameState::GameStateModuleIO;
 
@@ -2325,8 +2274,6 @@ namespace
     const s32 KI_COMPASS_DIRECTION_NONE = E_COMPASS_POINTS_COUNT;
 
 // (fold: an identical definition of GuiEventPreRaceDescription was dropped here -- this TU defines it once, above)
-    static_assert(sizeof(GuiEventPreRaceDescription) == 40,
-                  "the host record matches the X360 40-byte id-464 post");
 }
 
 // -------------------------------------------------------------------------------

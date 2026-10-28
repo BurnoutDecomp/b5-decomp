@@ -9,11 +9,6 @@
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
 namespace CgsResource
 {
-    // FLAG PC-platform leaf: resource destinations must outlive native workers.
-    void BundleLoaderModule::CancelStreamPC()
-    {
-        mDecompressionJobInterface.CancelStreamPC();
-    }
     // @ 0x828E2678 - resumable prepare stage machine: free every stream slot, clear the
     // receiver + load/unload queues, then bring up the base module.
     bool BundleLoaderModule::Prepare()
@@ -195,17 +190,6 @@ namespace CgsResource
     // deferred remainder; the request/response machinery + the per-resource pool create/fixup are faithful.]
     void BundleLoaderModule::ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType)
     {
-        // FLAG PC-platform leaf: ONE BUNDLE PER UPDATE.
-        // The console's bundle loader is a DMA/async engine -- a LoadBundle request posted
-        // this frame replies on a LATER frame, so every requester sees at most one completion
-        // per Update. This PC loader is synchronous (ReadWholeFile + an in-place fix-up), so
-        // draining the whole queue in one pass delivered N replies in the same frame and broke
-        // that invariant: BrnWorld::InternalBaseStreamer::UpdateLoading pipelines two world-unit
-        // loads and asserts `mGDReceiverQueue.GetLength() == 1` in its WAIT stage, then stalls
-        // because its state machine only consumes one reply per visit. Servicing exactly one
-        // request per Update restores the console pacing (and bounds the per-frame hitch); the
-        // rest stay queued for the next Update, which is what the hardware queue does anyway.
-        const s32 liCount = (mLoadRequests.GetLength() > 0) ? 1 : 0;
         for (s32 li = 0; li < liCount; ++li)
         {
             const Events::LoadBundleRequest& lrRequest = mLoadRequests.GetEvent(li);
@@ -232,23 +216,9 @@ namespace CgsResource
                                           << ": " << (s32)liLoaded << " resources\n";
                 if (liLoaded == BundleLoader::KI_LOAD_FILE_MISSING)
                 {
-                    // [FLAG PC bring-up] NOT A DEFECT IN THE GAME: this bundle was never
-                    // converted into build/game. Asserting here HALTS the process on a dialog
-                    // (Assert::Manager::DoAssert waits for END), which on a player's machine
-                    // turns a missing sound into a frozen game -- e.g. every car class whose
-                    // soundems\Boost_Bank_<class>.bundle is unported (7 of the retail 17
-                    // AEMS banks are in build/game; aems_native64_port.py needs the Xbox One
-                    // bank bodies and [inputs].xb1_root is unset here). The failure reply below
-                    // is unchanged, so the requester still runs its own error path.
-                    // DELETE-WHEN the asset set is complete.
-                    static bool sbSaidIt = false;
                     if (!sbSaidIt && CgsDev::Log::gpDebugPrint != 0)
                     {
                         sbSaidIt = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[FLAG PC bring-up] bundle '" << lrRequest.macFileName
-                            << "' is not present in this port -- continuing without it "
-                               "(further missing bundles show only as a [stream] line)\n";
                     }
                     lResponse.meResult = Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY;
                 }

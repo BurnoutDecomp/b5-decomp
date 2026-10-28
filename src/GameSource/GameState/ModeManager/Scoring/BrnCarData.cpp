@@ -179,17 +179,6 @@ namespace BrnGameState
     // per-entry Construct() over the KI_MAX_CHALLENGES (== 64) table.
     void CarData::ResetRoadRulesScores()
     {
-        // [FLAG PC bring-up guard, 2026-08-26] On the console this runs only after
-        // CarData::Prepare allocated the table from the network heap; on this build the
-        // ScoringSystem Prepare chain is not yet staged, so the table can legitimately be
-        // NULL here (Release's own asm carries the same null-tolerance: "skip the free when
-        // the table was never allocated"). A null table == road-rule high scores inert;
-        // boot-proven crash in the first live ScoringSystem::AddPlayer otherwise.
-        // DELETE-WHEN the ScoringSystem/CarData Prepare staging (network heap) lands.
-        if (mpaOnlineGameRoadRuleHighScores == 0)
-        {
-            return;
-        }
         for (s32 liChallenge = 0; liChallenge < 0x40; ++liChallenge)
         {
             mpaOnlineGameRoadRuleHighScores[liChallenge].Construct();

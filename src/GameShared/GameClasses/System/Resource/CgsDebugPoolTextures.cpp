@@ -10,10 +10,7 @@
 #include "GameShared/GameClasses/Graphics/Instances/CgsInstance.h"               // serialized InstanceList / Instance / Ptr32
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"      // CgsDev::DebugUI::Metrics
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // Debug2DImmediateRender, RGBA
-#include "pc/gcm/renderengine/texture.h"                                          // renderengine::Texture::GetWidth/GetHeight
 #include "rw/rwcore_structs.h"                                                    // rw::IResourceAllocator / Resource / ResourceDescriptor
-#include "pc/math/VmxFloat.h"
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Semantic parity, not byte-match. Source-of-truth is the
 // X360 pseudocode/asm for behaviour + calling convention; the DecFIGS DWARF for declaration shape.
 //
@@ -61,7 +58,6 @@ namespace
 // sibling DebugComponent reconstructions: (display, text, x, y, scale, colour, centred).
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
 
 namespace CgsResource
 {
@@ -463,34 +459,12 @@ namespace CgsResource
         // stride/half-cell products and subtraction at 828E6230..6264, rather
         // than replacing the rounded inset calculation with a fixed constant.
         const f32 lfInvGrid = (liGridSize != 0) ? (1.0f / static_cast<f32>(liGridSize)) : 0.0f;
-        const Vector2 lv2CellStride =
-        {
-            CgsPC::VmxFloat::Multiply(lv2FrameSize.x, lfInvGrid),
-            CgsPC::VmxFloat::Multiply(lv2FrameSize.y, lfInvGrid),
-            0.0f, 0.0f,
-        };
-        const Vector2 lv2CellSize =
-        {
-            CgsPC::VmxFloat::Subtract(lv2CellStride.x, 3.0f),
-            CgsPC::VmxFloat::Subtract(lv2CellStride.y, 3.0f),
-            0.0f, 0.0f,
-        };
         // The original refines vrefp(2) twice. The host seed is correctly rounded;
         // exact hardware estimate bits/status retain the shared VMX model limits.
         f32 lfHalfStrideScale = 1.0f / 2.0f;
         for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
         {
-            const f32 lfError = CgsPC::VmxFloat::NegativeMultiplySubtract(lfHalfStrideScale, 2.0f, 1.0f);
-            lfHalfStrideScale = CgsPC::VmxFloat::MultiplyAdd(lfHalfStrideScale, lfError, lfHalfStrideScale);
         }
-        const Vector2 lv2CellInset =
-        {
-            CgsPC::VmxFloat::Subtract(CgsPC::VmxFloat::Multiply(lfHalfStrideScale, lv2CellStride.x),
-                                      CgsPC::VmxFloat::Multiply(0.5f, lv2CellSize.x)),
-            CgsPC::VmxFloat::Subtract(CgsPC::VmxFloat::Multiply(lfHalfStrideScale, lv2CellStride.y),
-                                      CgsPC::VmxFloat::Multiply(0.5f, lv2CellSize.y)),
-            0.0f, 0.0f,
-        };
 
         // Background frame for the whole grid (the X360's first RenderTexture call before the loop):
         // position = Position+{4,4}, size = Size-{8,8}, flags (true,false).

@@ -47,7 +47,6 @@
 #include "SDKs/XboxMath/XMVectorACos.h"                       // XboxMath::XMVectorACos (X360 0x821F0980)
 #include <cstdlib>                                           // [DIAG] getenv (BRN_TRAFFICGUI_DIAG)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
-#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [DIAG] gFilmLatch.mfLiveBoostFraction
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"     // RouteResponse / RouteResponseQueue / E_OWNER_GUI
 #include "GameSource/World/AI/Route/BrnRoute.h"                // Route / RouteNode
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"               // GuiTracker::RecEvent / RouteInformation
@@ -68,7 +67,6 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer)
 {
     using BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface;
-
 
     const RCEntityActiveRaceCarOutputInterface* lpActiveInterface =
         lpWorldOutputBuffer->GetActiveRaceCarOutputInterface();
@@ -343,7 +341,6 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     lBoostEvent.mbAllowedToBoost        = lpBoostInfo->mbAllowedToBoost;
     lBoostEvent.mbIsTailgating          = lpBoostInfo->mbIsTailgating;
 
-
     // ================================================================================
     // ⭐⭐ THE SHOWTIME OVERRIDE -- THE BOOST BAR *IS* THE SHOWTIME METER, AND THIS IS THE
     // ONLY PLACE THE CONSOLE TREATS IT DIFFERENTLY IN SHOWTIME (landed 2026-08-29).
@@ -409,10 +406,6 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     // published, so a frame dump beside it is SELF-LABELLING and "does the bar move with the
     // value" stops needing a guessed frame rate to answer. One store to a file-scope float; no
     // branch, no allocation, no I/O, and the reader is gated on BRN_FRAME_DUMP.
-    BrnDiag::gFilmLatch.mfLiveBoostFraction =
-        (lBoostEvent.mfMaxBoost > 0.0f)
-            ? (lBoostEvent.mfBoostAmount / lBoostEvent.mfMaxBoost)
-            : -1.0f;
 
     // ⚠️ NOT through the static CgsGui::GuiModule::AddGuiEvent(T&,...) helper: that overload
     // strips a 12-byte GuiEvent<N> header, and GuiEventBoostInfo is a BARE 28-byte payload
@@ -845,22 +838,6 @@ void BrnGameModule::BridgeWorldRouteInformationToGui(const BrnWorldIO::UpdateOut
                                KI_GUI_EVENT_ROUTE_INFORMATION,
                                static_cast<s32>(sizeof(lGuiRouteInfoEvent)));   // console size 5136
 
-        // [FLAG PC witness] BRN_SATNAV_DIAG, first 32: one line per route record handed to the
-        // tracker, with the tracker's route state after it.
-        {
-            static const bool sbDiag      = (getenv("BRN_SATNAV_DIAG") != 0);
-            static s32        siLinesLeft = 32;
-            if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[satnav] route reply 211 leg " << lGuiRouteInfoEvent.miEventId
-                    << " points " << lGuiRouteInfoEvent.miNumPoints
-                    << " distance " << lGuiRouteInfoEvent.mfRouteDistance
-                    << " routeInfoAvailable " << (lpGuiTracker->IsRouteInfoAvailable() ? 1 : 0)
-                    << "\n";
-            }
-        }
     }
 }
 
@@ -899,7 +876,6 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
     // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFICGUI_DIAG: the first few forwards of each id and
     // every removed-traffic record that named a car, with the scorer's recent-crash count around
     // DealWithRemovedTraffic.
-    static const bool sbDiag       = (getenv("BRN_TRAFFICGUI_DIAG") != 0);
     static s32        siLinesLeft  = 32;
     static s32        siFirstLeft[5] = { 2, 2, 2, 2, 2 };   // 512 / 208 / 209 / 210 / 592
 
@@ -919,14 +895,6 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
                 lpGuiInput->GetGuiEvents()->AddEvent(
                     lpEvent, lpTrafficPoolEmptiedEvent->GetEventType(),
                     static_cast<s32>(sizeof(*lpTrafficPoolEmptiedEvent)));
-                if (sbDiag && siLinesLeft > 0 && siFirstLeft[0] > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siLinesLeft;
-                    --siFirstLeft[0];
-                    *CgsDev::Log::gpDebugPrint
-                        << "[traffic-gui] 512 traffic pool emptied "
-                        << (lpTrafficPoolEmptiedEvent->mbTrafficPoolEmpty ? 1 : 0) << " -> GUI\n";
-                }
                 break;
             }
 
@@ -949,15 +917,6 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
                         reinterpret_cast<const CgsModule::Event*>(&lEmptyEvent),
                         lEmptyEvent.GetEventType(), static_cast<s32>(sizeof(lEmptyEvent)));
                 }
-                if (sbDiag && siLinesLeft > 0 && siFirstLeft[1] > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siLinesLeft;
-                    --siFirstLeft[1];
-                    *CgsDev::Log::gpDebugPrint
-                        << "[traffic-gui] 208 score targets "
-                        << reinterpret_cast<const BrnGui::GuiTrafficCarInfoEvent*>(lpEvent)->mScoreTargets.GetCount()
-                        << " (mode in progress " << (lbInProgress ? 1 : 0) << ") -> GUI\n";
-                }
                 break;
             }
 
@@ -971,20 +930,8 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
 
                 BrnGameState::CrashModeScoring* const lpCrashScorer =
                     mGameStateModule.GetModeManager()->GetScoringSystem()->GetCrashScorer();
-                const s32 liRecentBefore = sbDiag ? lpCrashScorer->maRecentCrashes.GetCount() : 0;   // [DIAG]
+   // [DIAG]
                 lpCrashScorer->DealWithRemovedTraffic(lpRemovedTrafficEvent);
-                if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 &&
-                    (lpRemovedTrafficEvent->mRemovedTrafficArray.GetCount() > 0 || siFirstLeft[2] > 0))
-                {
-                    const s32 liRemoved = lpRemovedTrafficEvent->mRemovedTrafficArray.GetCount();
-                    --siLinesLeft;
-                    if (siFirstLeft[2] > 0)
-                        --siFirstLeft[2];
-                    *CgsDev::Log::gpDebugPrint
-                        << "[traffic-gui] 209 removed traffic " << liRemoved
-                        << " car(s) -> GUI + CrashModeScoring::DealWithRemovedTraffic (recent crashes "
-                        << liRecentBefore << " -> " << lpCrashScorer->maRecentCrashes.GetCount() << ")\n";
-                }
                 break;
             }
 
@@ -1007,26 +954,11 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
                         reinterpret_cast<const CgsModule::Event*>(&lEmptyEvent),
                         lEmptyEvent.GetEventType(), static_cast<s32>(sizeof(lEmptyEvent)));
                 }
-                if (sbDiag && siLinesLeft > 0 && siFirstLeft[3] > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siLinesLeft;
-                    --siFirstLeft[3];
-                    *CgsDev::Log::gpDebugPrint
-                        << "[traffic-gui] 210 overhead signs (mode in progress "
-                        << (lbInProgress ? 1 : 0) << ") -> GUI\n";
-                }
                 break;
             }
 
             case 592:   // 0x250 -- X360-only; the one active race car index word
                 lpGuiInput->GetGuiEvents()->AddEvent(lpEvent, 592, 4);   // `li r5, 0x250 ; li r6, 4`
-                if (sbDiag && siLinesLeft > 0 && siFirstLeft[4] > 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    --siLinesLeft;
-                    --siFirstLeft[4];
-                    *CgsDev::Log::gpDebugPrint
-                        << "[traffic-gui] 592 race car " << *reinterpret_cast<const s32*>(lpEvent) << " -> GUI\n";
-                }
                 break;
 
             default:

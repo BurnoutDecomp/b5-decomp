@@ -2,7 +2,6 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 
 // The post-fx render target the bloom chain draws through. Pointer-only here (the documented

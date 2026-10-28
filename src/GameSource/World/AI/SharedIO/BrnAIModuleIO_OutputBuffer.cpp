@@ -23,25 +23,6 @@ namespace AIModuleIO
     // queue member's own Construct in member order (see the attested expansion quoted in
     // CgsIOBufferStack.h: `*p = 1` IS IOBuffer::Construct, followed by the members').
     //
-    // COMPLETED 2026-09-03 (aiwave lane A4) against the console's own body @0x8278ACB8, which
-    // the earlier note guessed was inlined into CreateIOBuffer -- it is a real out-of-line
-    // function. Its order (offsets this-relative, documentation only):
-    //   0x8278ACD0  stb 1                                            IOBuffer::Construct
-    //   0x8278ACDC..0x8278AD04  PerfMonCpu::AddMonitor("AI Output buffer construct A") once + StartMonitor
-    //   0x8278AD10  VariableEventQueue<4096,16>::Construct(+0x4) ; Clear     mAIResourceRequestInterface
-    //   0x8278AD20  RouteResponse,16>::Construct(+0x1014)                    mRouteResponseQueue
-    //   0x8278AD2C  Vehicle::VehicleDriverInputInterface::Construct(+0x15120) mVehicleDriverInterface
-    //   0x8278AD48  std 0 @+0x165D0+0x460 ; std 0 @+0x165D0+0x468            mAIRaceCarInterface.mSetRaceCars /
-    //                                                                        .mCanPassThroughTraffic (BitArray<35>::Prepare inlined)
-    //   0x8278AD64..0x8278AD7C  35x { stfs FLT_MAX @+0x16A60+0x140C ; sth 0x7FFF @+0x16A60+0x1498 }
-    //                                                                        AICarOutputInterface::Construct inlined
-    //   0x8278AD8C  ResetOnTrackResult,128>::Construct(+0x17F50)             } mAIModuleResultInterface
-    //   0x8278AD94  PlaceOnTrackRequest,128>::Construct(+0x17F50+0x1810)     }
-    //   0x8278ADA0  VariableEventQueue<1536,16>::Construct(+0x1AF30)         mGameEventQueue
-    //   0x8278ADA8  PerfMonCpu::StopMonitor
-    // [FLAG PC bring-up] the "AI Output buffer construct A" CPU monitor (a file-static id at
-    // 0x82F3016C) is not modelled -- instrumentation only. DELETE-WHEN a PerfMonCpu id home for
-    // the IO-buffer constructs exists.
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();

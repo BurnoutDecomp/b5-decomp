@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // =====================================================================================
 // rw::audio::core::ReverbModel1 bodies -- the "ReverbModel1" reverb plug-in.
 //
@@ -950,7 +949,6 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
             memset(pSrc->mpSamples + pSrc->muStride * channel, 0, 0x400); // XMemSet
     }
 
-    CgsSound::PcmTrace::MeasureEffect("reverb", self, pSrc->mpSamples, 256, self->mBase.mbChannelCount, pSrc->muStride);
     ppScratchTable[3] = pScratchTop; // restore the scratch cursor
     return 1;
 }

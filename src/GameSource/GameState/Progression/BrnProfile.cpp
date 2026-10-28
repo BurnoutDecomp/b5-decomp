@@ -13,7 +13,6 @@
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
-#include "pc/gcm/renderengine/pixelformat.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([profile] selftest witness)
 
 #include <string.h>   // memset / memcpy
@@ -24,13 +23,6 @@ namespace BrnProgression
 
 // The alias the original source (and every assert string) uses for the game-state IO namespace.
 namespace GsmIO = BrnGameState::GameStateModuleIO;
-
-namespace
-{
-    // [FLAG PC witness] declared here, defined at the foot of this TU beside the six bodies it
-    // exercises. NOT IN THE X360 BINARY.
-    void RunProfileSelfTest(Profile& lrProfile);
-}
 
 // ------------------------------------------------------------------------------------
 // ProfileEvent -- trivial record accessors (the X360 inlines all of these at their call
@@ -318,11 +310,6 @@ void Profile::Construct()
     maEventScoresToUpload.Clear();             // X360 stw 0 @ +120824
     mDeveloperChallengesCompleted.Construct(); // X360 8-byte zero @ +120832
 
-    // [FLAG PC witness] NOT IN THE X360 BINARY -- see RunProfileSelfTest above. Opt-in
-    // (BRN_PROGRESSION_PROFILE_SELFTEST=1), once, on the freshly-constructed profile, and it
-    // leaves the profile exactly as it found it apart from one synthetic freeburn-challenge id.
-    // DELETE-WHEN the ChallengeManager / GameStateImageManagerBase TUs are mounted, because then
-    // the real callers reach these six bodies and a scenario can measure them instead.
     RunProfileSelfTest(*this);
 }
 
@@ -800,16 +787,6 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
     Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
 
-    // ⛔ [FLAG PC bring-up] the console's AddMugshot takes the WHOLE 24-byte UniquePlayerID
-    // (r5/r6/r7) and a whole 8-byte WorldRegion (r10); the PC signature this TU inherited takes
-    // only the 16-byte name block and the district ordinal, because the ImageManager's
-    // ImageToSaveEvent models the XUID slot at +0x10 as `maPad0x10` and passes
-    // `lrRegion.GetDistrict()`. The district DOES reconstruct the whole region (WorldRegion::
-    // Construct derives the county from it), so only the gamercard XUID is genuinely lost.
-    // DELETE-WHEN BrnGameStateImageManagerBase widens ImageToSaveEvent to the real 24-byte id and
-    // passes the WorldRegion by value: then this signature becomes the DWARF's
-    // (UniquePlayerID, DateAndTime, WorldRegion) and these two lines go away.
-    MugshotInfo::UniquePlayerID lPlayerID;
     memcpy(&lPlayerID.macName[0], &lUniqueID, sizeof(lPlayerID.macName));
     lPlayerID.mqXuid = 0;
     BrnWorld::WorldRegion lRegion;
@@ -2047,122 +2024,6 @@ s32 Profile::GetGameModeTypeCompletedAmountSinceTheStart(GsmIO::EGameModeType lE
     return maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
 }
 
-namespace
-{
-// ====================================================================================
-// [FLAG PC witness] RunProfileSelfTest -- NOT IN THE X360 BINARY.
-//
-// The six Profile services above have live CONSOLE callers, but the PC translation units that
-// hold those callers (BrnGameState::ChallengeManager* and GameStateImageManagerBase) are not in
-// tools/build/build_game_exe.bat's mount list, and the sixth one's caller only runs when an
-// event is WON -- so no 60 s harness scenario can reach any of them. This exercises them once,
-// at the profile boot seam (ProgressionManager::Prepare2 -> Profile::Construct), on the freshly
-// constructed profile, and prints the result of every step: it is the lane's RED->GREEN oracle
-// (tools/tests/cases/progression_profile.ps1).
-//
-// It is default-OFF (BRN_PROGRESSION_PROFILE_SELFTEST=1), runs at most once per process, and
-// LEAVES THE PROFILE AS IT FOUND IT except for one synthetic freeburn-challenge id that no real
-// challenge can collide with (Array<CgsID,2000> has no remove). The mugshot half round-trips:
-// Add -> Get -> Lock -> Unlock -> Delete -> Add(again, to prove the freed file id went back into
-// the available-id bit array) -> Delete.
-//
-// DELETE-WHEN the ChallengeManager / GameStateImageManagerBase TUs are mounted -- then the real
-// callers reach these bodies and a scenario measures them instead of a selftest.
-// ====================================================================================
-void RunProfileSelfTest(Profile& lrProfile)
-{
-    static bool sbAlreadyRun = false;
-    if (sbAlreadyRun || getenv("BRN_PROGRESSION_PROFILE_SELFTEST") == 0
-        || CgsDev::Log::gpDebugPrint == 0)
-    {
-        return;
-    }
-    sbAlreadyRun = true;
-
-    // ---- the freeburn-challenge pair -------------------------------------------------
-    // A synthetic id: no CHALLENGE resource carries it, so completing it changes no gameplay.
-    const CgsID lSelfTestChallengeID = static_cast<CgsID>(0x5E1F7E57C0DE0001ull);
-
-    const s32 liHasBefore = lrProfile.HasPlayerCompletedFreeburnChallenge(lSelfTestChallengeID) ? 1 : 0;
-    const u32 luCount     = lrProfile.CompleteFreeburnChallenge(lSelfTestChallengeID);
-    const s32 liHasAfter  = lrProfile.HasPlayerCompletedFreeburnChallenge(lSelfTestChallengeID) ? 1 : 0;
-    const bool lbChallengeOk = (liHasBefore == 0) && (luCount == 1u) && (liHasAfter == 1);
-
-    // ---- the mugshot chain (gallery 0) -----------------------------------------------
-    const s32 KI_SELFTEST_GALLERY = 0;
-
-    // The 16 bytes AddMugshot copies into MugshotInfo::mUniquePlayerID's PlayerName base. Any
-    // value does; this one is the ASCII of "SELFTEST" packed into a qword, so the record is
-    // recognisable in a memory dump (byte order is the host's, which is not the console's).
-    Profile::MugshotUniqueIdArg lUniqueID;
-    lUniqueID.mu64Lo = 0x53454C4654455354ull;   // 'S','E','L','F','T','E','S','T'
-    lUniqueID.mu64Hi = 0;
-
-    CgsSystem::DateAndTime lNow;
-    lNow.SetLocal(true);
-    lNow.Update();
-
-    const s32 liNumBefore = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
-    const s32 liFileID    = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, 0);
-    const s32 liNumAdded  = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
-
-    s32 liLock0 = -1, liLock1 = -1, liLock2 = -1, liDeleted = -1, liNumAfter = -1, liReclaimed = 0;
-    bool lbGotRecord = false, lbFileIDMatches = false, lbPastEndIsNull = false;
-
-    if (liFileID >= 0 && liNumAdded == liNumBefore + 1)
-    {
-        const s32 liIndex = liNumAdded - 1;
-        MugshotInfo* lpInfo = lrProfile.GetMugshotInfo(KI_SELFTEST_GALLERY, liIndex);
-        lbGotRecord     = (lpInfo != 0);
-        lbFileIDMatches = lbGotRecord && (lpInfo->GetFileID() == liFileID);
-        lbPastEndIsNull = (lrProfile.GetMugshotInfo(KI_SELFTEST_GALLERY, liNumAdded) == 0);
-
-        if (lbGotRecord)
-        {
-            liLock0 = lpInfo->GetLockedFlag();
-            lrProfile.LockOrUnlockMugshot(KI_SELFTEST_GALLERY, liIndex);
-            liLock1 = lpInfo->GetLockedFlag();
-            lrProfile.LockOrUnlockMugshot(KI_SELFTEST_GALLERY, liIndex);   // back to unlocked
-            liLock2 = lpInfo->GetLockedFlag();
-
-            liDeleted  = lrProfile.DeleteMugshot(KI_SELFTEST_GALLERY, liIndex);
-            liNumAfter = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
-
-            // The freed file id must be available again: re-adding must hand back the SAME id.
-            const s32 liFileIDAgain = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, 0);
-            liReclaimed = (liFileIDAgain == liFileID) ? 1 : 0;
-            if (liFileIDAgain >= 0)
-            {
-                lrProfile.DeleteMugshot(KI_SELFTEST_GALLERY,
-                                        lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY) - 1);
-            }
-        }
-    }
-
-    const bool lbMugshotOk = (liFileID >= 0) && lbGotRecord && lbFileIDMatches && lbPastEndIsNull
-                          && (liLock0 == 0) && (liLock1 == 1) && (liLock2 == 0)
-                          && (liDeleted == liFileID) && (liNumAfter == liNumBefore)
-                          && (liReclaimed == 1);
-
-    *CgsDev::Log::gpDebugPrint << "[profile] selftest challenge="
-                               << (lbChallengeOk ? "ok" : "FAIL")
-                               << " mugshot=" << (lbMugshotOk ? "ok" : "FAIL") << "\n";
-    *CgsDev::Log::gpDebugPrint << "[profile] selftest detail has0=" << liHasBefore
-                               << " count=" << luCount
-                               << " has1="  << liHasAfter
-                               << " | file=" << liFileID
-                               << " num=" << liNumAdded
-                               << " rec=" << (lbGotRecord ? 1 : 0)
-                               << " idmatch=" << (lbFileIDMatches ? 1 : 0)
-                               << " pastend=" << (lbPastEndIsNull ? 1 : 0)
-                               << " lock0=" << liLock0
-                               << " lock1=" << liLock1
-                               << " lock2=" << liLock2
-                               << " del=" << liDeleted
-                               << " numAfter=" << liNumAfter
-                               << " avail=" << liReclaimed
-                               << "\n";
-}
-}   // anonymous namespace
+   // anonymous namespace
 
 } // namespace BrnProgression

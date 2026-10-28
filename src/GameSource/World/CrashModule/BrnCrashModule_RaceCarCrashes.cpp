@@ -37,8 +37,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"   // BrnNetworkDriverControls, E_DRIVER_TYPE_NETWORK
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h" // BrnTraffic::MakeTrafficVolumeInstanceId
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                      // [nettraf] crash-own witness
-
 namespace BrnWorld
 {
 
@@ -53,14 +51,6 @@ namespace
     // Refreshed by RaceCarCrash / TrafficCrash::ResetNetworkTimeout below.
     const f32 KF_NETWORK_CRASH_TIMEOUT = 20.0f;
 
-    // FLAG PC witness (BRN_NETCRASH_DIAG, default off; NOT console code). Hard-capped so an online
-    // session cannot flood the log. Read by GenerateOwnedTrafficUpdates (the owner publishing)
-    // and HandleNetworkCrashingTraffic (the other machine consuming).
-    bool NetCrashDiagEnabled()
-    {
-        static const bool sbEnabled = ( std::getenv( "BRN_NETCRASH_DIAG" ) != 0 );
-        return sbEnabled;
-    }
     const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
 
 }
@@ -347,8 +337,6 @@ void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
             lpOutput->GetTrafficOutputInterface()->GetCleanupTrafficEventQueue().AddEvent(event);
             OnTrafficCarRemovedFromCrash(vehicle, owner);
             mTrafficCrashes.EraseFast(i);
-            if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
-                *CgsDev::Log::gpDebugPrint << "[traffic-crash] cleanup vehicle=" << vehicle << " owner=" << static_cast<s32>(owner) << "\n";
         }
         else { crash.MarkVehicleAsOnscreen(); ++i; }
     }
@@ -617,34 +605,9 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
         if( lInitialisedTransforms.IsBitSet( luVehicle ) )
         {
             lpNetworkInterface->AddOwnedTrafficUpdate( luVehicle, laTrafficTransforms[luVehicle] );
-            BrnNetHarnessPC::WitnessTag( "nettraf", "crash-own", "veh=%u pos=(%.1f, %.1f, %.1f)", luVehicle,
-                                         laTrafficTransforms[luVehicle].wAxis.x,
-                                         laTrafficTransforms[luVehicle].wAxis.y,
-                                         laTrafficTransforms[luVehicle].wAxis.z );
         }
     }
 
-    // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): the owner side of the online
-    // crashing-traffic chain -- what this frame queued for the network TrafficManager to send.
-    // Reads the queue the loop above filled; changes nothing.
-    if( NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint )
-    {
-        const CrashIO::NetworkOutputInterface::CrashingTrafficUpdateQueue* lpPublished =
-            lpNetworkInterface->GetCrashingTrafficUpdateQueue();
-        static s32 siLines = 0;
-        if( lpPublished->GetLength() > 0 && siLines < KI_NETCRASH_DIAG_MAX_LINES )
-        {
-            ++siLines;
-            const CrashIO::CrashingTrafficUpdateEvent& lrFirst = lpPublished->GetEvent( 0 );
-            *CgsDev::Log::gpDebugPrint
-                << "[netcrash] GenerateOwnedTrafficUpdates owner=" << static_cast<s32>( meLocalActiveRaceCarIndex )
-                << " published=" << lpPublished->GetLength()
-                << " crashes=" << mTrafficCrashes.GetLength()
-                << " first=" << static_cast<s32>( lrFirst.muVehicleId )
-                << " pos=(" << lrFirst.mTransform.wAxis.x << ", " << lrFirst.mTransform.wAxis.y
-                << ", " << lrFirst.mTransform.wAxis.z << ") [FLAG PC witness]\n";
-        }
-    }
 }
 
 // =================================================================================================
@@ -765,11 +728,6 @@ void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreSc
                 lpOutput->GetVehicleInputInterface()->UpdateNetworkTraffic( lVolumeInstanceId, lEvent.mTransform );
                 lCrashingTrafficForPlayer.Insert( luVehicle );
 
-                BrnNetHarnessPC::WitnessTag( "nettraf", "crash-in", "veh=%u owner=%d pos=(%.1f, %.1f, %.1f)",
-                                             static_cast<u32>( luVehicle ),
-                                             static_cast<s32>( leActiveRaceCarIndex ),
-                                             lEvent.mTransform.wAxis.x, lEvent.mTransform.wAxis.y,
-                                             lEvent.mTransform.wAxis.z );
             }
         }
 
@@ -838,34 +796,6 @@ void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreSc
             CGS_ASSERT( mCrashingNetworkTraffic.IsBitSet( luVehicle ),
                         "mCrashingNetworkTraffic.IsBitSet( luVehicle ) is false" );                     // :1239
             lpTrafficCrash->SetNetworkVehicleClearedUp();
-        }
-
-        // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): proves this body ran on a
-        // frame that carried the other player's crashing traffic, and what it did with it.
-        // Two budgets of KI_NETCRASH_DIAG_MAX_LINES each: frames that posted at least one update, and
-        // frames whose updates were ALL contentious (posted=0 -- e.g. each machine's own lockstep
-        // swerve crash, which both halves own locally). With one shared budget the contentious
-        // frames used up every line before the first posted one (fxnetcrash_pair/20260925_131154:
-        // 40 posted=0 lines, the cap).
-        if( NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint && lpCrashingTrafficQueue->GetLength() > 0 )
-        {
-            static s32 siPostedLines = 0;
-            static s32 siContentiousLines = 0;
-            s32& lriLines = ( lCrashingTrafficForPlayer.GetLength() > 0 ) ? siPostedLines : siContentiousLines;
-            if( lriLines < KI_NETCRASH_DIAG_MAX_LINES )
-            {
-                ++lriLines;
-                const CrashIO::CrashingTrafficUpdateEvent& lrFirst = lpCrashingTrafficQueue->GetEvent( 0 );
-                *CgsDev::Log::gpDebugPrint
-                    << "[netcrash] HandleNetworkCrashingTraffic player=" << static_cast<s32>( leActiveRaceCarIndex )
-                    << " updates=" << lpCrashingTrafficQueue->GetLength()
-                    << " posted=" << lCrashingTrafficForPlayer.GetLength()
-                    << " new=" << lNewCrashingTraffic.GetLength()
-                    << " cleared=" << lClearedUpTraffic.GetLength()
-                    << " first=" << static_cast<s32>( lrFirst.muVehicleId )
-                    << " pos=(" << lrFirst.mTransform.wAxis.x << ", " << lrFirst.mTransform.wAxis.y
-                    << ", " << lrFirst.mTransform.wAxis.z << ") [FLAG PC witness]\n";
-            }
         }
 
         OnContactFromNetworkPlayer( leActiveRaceCarIndex );
@@ -985,8 +915,6 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
             lpOutput->GetGameEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lEvent),
                 BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING, sizeof(lEvent));
-            if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
-                *CgsDev::Log::gpDebugPrint << "[crash-ending] event 42 posted\n";
             mbNeedToSendEndingMessage = false;
         }
     }

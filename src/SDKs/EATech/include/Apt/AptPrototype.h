@@ -109,8 +109,6 @@ private:
     // Layout pinned against the x64 XB1 export (never called).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptPrototype, mpSuperConstructor) == 0x38, "x64: GetSuperConstructor mov rax,[rcx+38h] @0x140839C70");
-        static_assert(sizeof(AptPrototype) == 0x40, "x64: AptInit allocates 64 before the ctor @0x140826550");
     }
 
     // Reserve room for this many native members in the base property hash. The

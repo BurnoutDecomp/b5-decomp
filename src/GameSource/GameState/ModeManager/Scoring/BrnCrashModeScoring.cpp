@@ -370,20 +370,7 @@ namespace BrnGameState
         // one, because that word is written by the same attach the fault proved was missing.
         // DELETE-WHEN the event-finish bring-up is done.
         {
-            static const bool sbPropDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
             static s32        siCalls    = 0;
-            if (sbPropDiag && CgsDev::Log::gpDebugPrint != 0 && siCalls < 3)
-            {
-                ++siCalls;
-                *CgsDev::Log::gpDebugPrint
-                    << "[evt-prop] DealWithHitProp call " << siCalls
-                    << " prop " << static_cast<s32>(luPropIndex)
-                    << " flags " << static_cast<s32>(luPropFlags)
-                    << " ringMaxLength " << mRecentlyHitPropSet.GetMaxLength()
-                    << " (0 == the ring was never attached; 8 == Construct ran)"
-                    << " propsDestroyed " << miNumPropsDestroyed
-                    << "\n";
-            }
         }
 
         const s32 liLength = mRecentlyHitPropSet.GetLength();
@@ -510,21 +497,7 @@ namespace BrnGameState
         // sites themselves, so nothing here can drift out of step with the predicate -- the
         // trap a duplicated copy of the test would walk straight into.
         {
-            static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
             static s32        siCalls = 0;
-            if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siCalls++ % 120) == 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-end] poll=" << siCalls
-                    << " infinite=" << (mbInfiniteCrashMode ? 1 : 0)
-                    << " crashing="  << (mbPlayerIsCrashing ? 1 : 0)
-                    << " boost%="    << mfPlayerBoostPercentage
-                    << " tMoved="    << mfTimeSincePlayerCarMoved
-                    << " tEvent="    << mfTimeSinceLastEvent
-                    << " tMode="     << mfTimeSinceModeStart
-                    << " pad="       << lfPadding
-                    << "\n";
-            }
         }
 
         if (mbInfiniteCrashMode)
@@ -535,19 +508,7 @@ namespace BrnGameState
         {
             // [DIAG] NOT IN THE X360 BINARY. One-shot: the FIRST of the two exits.
             {
-                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
                 static bool       sbReported = false;
-                if (sbWatch && !sbReported && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbReported = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[crash-end] ENDED via !mbPlayerIsCrashing"
-                        << "  tMode=" << mfTimeSinceModeStart
-                        << " boost%=" << mfPlayerBoostPercentage
-                        << " tMoved=" << mfTimeSincePlayerCarMoved
-                        << " tEvent=" << mfTimeSinceLastEvent
-                        << "\n";
-                }
             }
             return true;
         }
@@ -571,19 +532,7 @@ namespace BrnGameState
 
         // [DIAG] NOT IN THE X360 BINARY. One-shot: the SECOND exit -- the idle ladder.
         {
-            static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
             static bool       sbReported = false;
-            if (sbWatch && !sbReported && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbReported = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-end] ENDED via the IDLE LADDER (boost settled + both 3 s timers)"
-                    << "  tMode=" << mfTimeSinceModeStart
-                    << " boost%=" << mfPlayerBoostPercentage
-                    << " tMoved=" << mfTimeSincePlayerCarMoved
-                    << " tEvent=" << mfTimeSinceLastEvent
-                    << "\n";
-            }
         }
         return true;
     }
@@ -1032,21 +981,8 @@ namespace BrnGameState
         // [[diagnostics-that-lie]] -- a false that means "no car" reads exactly like a false that
         // means "not crashing". One-shot on the 1->0 edge, so it cannot flood.
         {
-            static const bool sbWatch     = (getenv("BRN_SHOWTIME_WATCH") != 0);
             static bool       sbReported  = false;
             const bool        lbNowCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();
-            if (sbWatch && !sbReported && mbPlayerIsCrashing && !lbNowCrashing &&
-                CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbReported = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-latch] mbPlayerIsCrashing 1 -> 0 at tMode=" << mfTimeSinceModeStart
-                    << "  playerIdx="   << static_cast<s32>(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
-                    << " playerActive=" << (lpActiveRaceCarInterface->IsPlayerCarActive() ? 1 : 0)
-                    << " rawState.mbCrashing=" << (lpPlayerState->mbCrashing ? 1 : 0)
-                    << " (raw 1 => the -1 sentinel or a stale snapshot; raw 0 => the car really"
-                       " stopped crashing)\n";
-            }
         }
 
         mbPlayerIsCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();   // +0x54

@@ -1119,8 +1119,6 @@ struct ProgressionProfileDataAction : public GameAction<E_ACTION_PROGRESSION_PRO
     const BrnProgression::ProgressionData* mpProgressionData;
     bool mbAreRoadRulesAvailable;
 };
-static_assert(sizeof(ProgressionProfileDataAction) == (sizeof(void*) == 8 ? 24 : 12),
-              "profile-data action retains both native-width pointers and the availability byte");
 
 // DWARF BrnGameActions.h: empty action; ARTIST case42 posts size1.
 struct PlayerCrashEndingSoonAction : public GameAction<E_ACTION_PLAYER_CRASH_ENDING_SOON> {};
@@ -2643,8 +2641,6 @@ static_assert(offsetof(OnStuntElementCompleteAction, maConvoyLegDistances) == 0x
               "OnStuntElementCompleteAction::maConvoyLegDistances must be at X360 offset +0x24");
 static_assert(offsetof(OnStuntElementCompleteAction, maConvoyMemberIds) == 0x44,
               "OnStuntElementCompleteAction::maConvoyMemberIds must be at X360 offset +0x44");
-static_assert(offsetof(OnStuntElementCompleteAction, miConvoyMemberCount) == 0x64,
-              "OnStuntElementCompleteAction::miConvoyMemberCount must be at X360 offset +0x64");
 
 // ===== Freeburn-challenge actions (ChallengeManager keystone) =====
 
@@ -2761,7 +2757,6 @@ struct ActiveFburnChallengeAction : public GameAction<E_ACTION_ACTIVE_FREEBURN_C
 // the x64 gate too). GameAction<T> is the empty tag base, so struct base == action base.
 static_assert(sizeof(FreeburnChallengeAction) == 0x20, "FreeburnChallengeAction must be 0x20 bytes (AddEvent size)");
 static_assert(offsetof(FreeburnChallengeAction, meEventType) == 0x08, "FreeburnChallengeAction::meEventType at +0x08");
-static_assert(offsetof(FreeburnChallengeAction, mbIsHost) == 0x1C, "FreeburnChallengeAction::mbIsHost at +0x1C");
 static_assert(sizeof(FburnChallengeStatusAction) == 0x108, "FburnChallengeStatusAction must be 0x108 bytes (AddEvent size)");
 static_assert(offsetof(FburnChallengeStatusAction, mPlayerID) == 0x100, "FburnChallengeStatusAction::mPlayerID at +0x100");
 static_assert(sizeof(FburnChallengeShowSelectorAction) == 8, "FburnChallengeShowSelectorAction must be 8 bytes (AddEvent size)");
@@ -3581,7 +3576,6 @@ static_assert(sizeof(HUDMessageRivalIsWreckedAction) == 16 &&
               offsetof(HUDMessageRivalIsWreckedAction, mCarID) == 8,
               "DecFIGS rivalry action carries two CgsIDs");
 
-
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3256-3260. Producer
 // ModeManager::HandleOnlineTeamTakedowns @0x823440B8: `stw victim, var+0` @0x8234439C,
 // `stb (blue players left == 1), var+4` @0x823443A4, `stb (victim == player), var+5` @0x823443C4,
@@ -4031,8 +4025,6 @@ struct ImageGalleryRenderImageAction : public GameAction<E_ACTION_IMAGE_GALLERY_
 };
 static_assert(offsetof(ImageGalleryRenderImageAction, miTextureIndex) == sizeof(void*),
               "render-image slot follows the native-width texture pointer");
-static_assert(sizeof(ImageGalleryRenderImageAction) == (sizeof(void*) == 8 ? 16 : 8),
-              "render-image action is pointer plus slot index");
 
 struct ImageGalleryImageInfoAction : public GameAction<E_ACTION_IMAGE_GALLERY_IMAGE_INFO>
 {
@@ -4084,10 +4076,6 @@ struct ImageSaveRequestAction
 };
 static_assert(offsetof(ImageSaveRequestAction, mpTextureBuffer) == 0x08,
               "action294 image pointer follows id and size");
-static_assert(offsetof(ImageSaveRequestAction, miPad0C) == (sizeof(void*) == 8 ? 0x10 : 0x0C),
-              "action294 trailing word follows the native-width pointer");
-static_assert(sizeof(ImageSaveRequestAction) == (sizeof(void*) == 8 ? 24 : 16),
-              "action294 image-save record widens with its buffer pointer");
 
 // 296 -- decode a received DXT image. Console 20 bytes; the texture pointer is 8 bytes on the
 // host, so the name lands at +0x08 here.

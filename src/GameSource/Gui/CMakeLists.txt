@@ -1,11 +1,8 @@
 target_sources(${PROJECT_NAME}
     PRIVATE
-        _embed_check_brngui_misc.cpp
         Array_OverheadSignScore_32.cpp
         BrnChallengeListComponent.cpp
-        BrnChallengeListComponent_embed_check.cpp
         BrnCustomRendererManager.cpp
-        BrnCustomRendererManager_embed_check.cpp
         BrnGuiAlwaysAvailableComponentsManager.cpp
         BrnGuiBurnoutSkillsManager.cpp
         BrnGuiCache.cpp
@@ -38,7 +35,6 @@ target_sources(${PROJECT_NAME}
         BrnGuiOptionsDataProfile_wS34_00.cpp
         BrnGuiOptionsDataProfile_wS34_01.cpp
         BrnGuiOptionsDataProfileDLC1.cpp
-        BrnGuiOptionsDataProfileDLC1_embed_check.cpp
         BrnGuiOverlaysDirector.cpp
         BrnGuiPerfmons.cpp
         BrnGuiProfile.cpp
@@ -90,7 +86,6 @@ add_subdirectory(CustomRenderer)
 add_subdirectory(Events)
 add_subdirectory(Flapt)
 add_subdirectory(Flow)
-add_subdirectory(PC)
 add_subdirectory(PFX)
 add_subdirectory(SatNav)
 add_subdirectory(SaveLoad)

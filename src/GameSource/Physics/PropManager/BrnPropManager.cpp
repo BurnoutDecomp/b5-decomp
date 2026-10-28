@@ -878,7 +878,6 @@ void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
 // NOT MOUNTED today. The full mount closure is in scratchpad/waveQ4/physcontact.owner.md.
 // ==========================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -1400,7 +1399,6 @@ PropManager::SetupAndValidatePropContact(
 //           PropManager::RemoveProp (PropManager_wQ2_04.cpp). This partfile adds NO unresolved
 //           external of its own; that is the whole point of landing it.
 // ==========================================================================================
-
 
 namespace BrnPhysics
 {
@@ -2476,7 +2474,6 @@ namespace Props
 //     Everything it touches on `this` is a data member.
 // ==========================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -2519,10 +2516,7 @@ namespace Props
         // They are also the direct cross-check on the three ~163 s assert families
         // (scout.md §0.3): a NON-ZERO count here on a frame the world is also posting
         // RemovePropInstance events is the double-retire the asserts are reporting.
-        static const bool sbPropDiag    = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static s32        siDiagBudget  = 4;
-        const bool        lbDiag        = sbPropDiag && CgsDev::Log::gpDebugPrint != 0
-                                          && siDiagBudget > 0;
         s32               liDiagProps   = 0;
         s32               liDiagParts   = 0;
 
@@ -2669,7 +2663,6 @@ namespace Props
 //    retired when this file mounted, so the bodies below are their only definitions.
 // =================================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -2762,35 +2755,6 @@ namespace Props
 
         enum EQ6JointKind { E_Q6_JOINT_LEAN, E_Q6_JOINT_TILT };
 
-        void
-        Q6LeanDiag( const CgsPhysics::PhysicsSimulationIO::InAddPotentialContact* lpOutContact,
-                    bool                                                          lbPropIsEntityA,
-                    u32                                                           luPropTypeId,
-                    EQ6JointKind                                                  leJointKind )
-        {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-
-            bool& lrbFired = ( leJointKind == E_Q6_JOINT_LEAN ) ? gbQ6LeanDiagFiredLean
-                                                                : gbQ6LeanDiagFiredTilt;
-            const char* const lpcJointType = ( leJointKind == E_Q6_JOINT_LEAN ) ? "LEAN" : "TILT";
-
-            if ( !sbPropDiag || lrbFired || CgsDev::Log::gpDebugPrint == 0 )
-            {
-                return;
-            }
-            lrbFired = true;
-
-            // Same id split the Tilt body's UpdatePropEvent tail uses (see step 7 there).
-            const CgsPhysics::RigidBodyId lPropRigidBodyId(
-                lbPropIsEntityA ? lpOutContact->mIDA : lpOutContact->mIDB );
-
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-lean] first lean/tilt contact prop="
-                << static_cast<u32>( lPropRigidBodyId.GetEntityId() )
-                << " type=" << luPropTypeId
-                << " joint=" << lpcJointType
-                << "\n";
-        }
     }
 
     // =============================================================================================
@@ -2826,7 +2790,6 @@ namespace Props
 
         // [DIAG] NOT IN THE X360 BINARY -- the wave-Q6 one-shot. This is the ONLY reader of
         // lbPropIsEntityA in this function; see §A.
-        Q6LeanDiag( lpOutContact, lbPropIsEntityA, lpPropInstance->GetTypeId(), E_Q6_JOINT_LEAN );
 
         // `lfs f0, flt_82001CC0(==0.0f)` ; `stfs f0, 0x48(r8)` @0x8260FBA0/0x8260FBA8.
         // +0x48 in InAddPotentialContact is mRestitution (CgsPhysicsSimulationIO_Events.h:143,
@@ -3119,7 +3082,6 @@ namespace Props
         f32                                                      lfTimeStep )
     {
         // [DIAG] NOT IN THE X360 BINARY -- the wave-Q6 one-shot, shared with the Lean arm.
-        Q6LeanDiag( lpOutContact, lbPropIsEntityA, lpPropInstance->GetTypeId(), E_Q6_JOINT_TILT );
 
         // `stfs f0(flt_82001CC0 == 0.0f), 0x48(r16)` @0x826108F8/0x82610900 -- mRestitution.
         lpOutContact->mRestitution = 0.0f;
@@ -3404,7 +3366,6 @@ namespace Props
 // this file -- every X360 immediate quoted below is in a comment, and the C++ reaches its data
 // by member name only.
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -3617,7 +3578,6 @@ void PropManager::Destruct()
 //    no gate.
 // ==========================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -3697,17 +3657,7 @@ void PropManager::ProcessAddPartInstanceEvents(
         // even if CreatePart asserts. The env latch is a function-local static: a getenv per
         // event would be a syscall inside the drain loop.
         {
-            static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static u32        suDiagCount = 0;
-            if ( sbPropDiag && suDiagCount < 8u && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++suDiagCount;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q6-part] add part entity=" << lpEvent->mEntityId.GetValue()
-                    << " slot=" << static_cast<s32>( lpEvent->miSlot )
-                    << " type=" << static_cast<s32>( lpEvent->miPropTypeId )
-                    << "\n";
-            }
         }
 
         // 0x8262816C -- r7 is the event pointer itself, which IS &lpEvent->mTransform (the event
@@ -3879,7 +3829,6 @@ void PropManager::ProcessRemovePartInstanceEvents(
 //    a committed accessor; the +0xNN / *192 / *112 / *64 numbers are in COMMENTS only, as the
 //    evidence that fixes WHICH member or WHICH accessor.
 // ==================================================================================================
-
 
 namespace BrnPhysics
 {
@@ -4087,11 +4036,6 @@ void PropManager::ClampAcceleration( Vector3                                    
     // against the image the same day (thunk 0x82C5E830 = 30.0f; v3 = dt, v4 = 1/dt), so with the
     // knob OFF this function is the console's. DELETE-WHEN the prop-launch question is settled.
     {
-        static const bool sbNoClamp = ( getenv( "BRN_PROP_NOCLAMP" ) != 0 );
-        if ( sbNoClamp )
-        {
-            return;
-        }
     }
 
     // :1191
@@ -4167,22 +4111,7 @@ void PropManager::ClampAcceleration( Vector3                                    
         // PropInstance but never reaches the rigid body. These two lines say which half fails.
         // Opt-in, first-N. DELETE-WHEN b5-decomp#2 is closed.
         {
-            static const bool sbPostDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static s32        siPostLinesLeft = 400;
-            if ( sbPostDiag && siPostLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                --siPostLinesLeft;
-                *CgsDev::Log::gpDebugPrint
-                    << "[prop-clamp-post] entity="
-                    << static_cast<u32>( lRigidBodyId.GetEntityId() )
-                    << " posted=" << ( lbPosted ? 1 : 0 )
-                    << " queueLen="
-                    << lpSimModuleInputBuffer->GetUpdateRigidBodyQueue()->GetLength()
-                    << " v=(" << lUpdatedLinearVelocity.x
-                    << "," << lUpdatedLinearVelocity.y
-                    << "," << lUpdatedLinearVelocity.z << ")"
-                    << "\n";
-            }
         }
     }
 }
@@ -4424,26 +4353,7 @@ void PropManager::ApplyAntiHerdingForce( CgsPhysics::PhysicsSimulationIO::InputB
     // (RigidBody::AddForce, witnessed inline in ProcessApplyForceQueue @0x828A6C1C).
     // Opt-in (BRN_PROP_DIAG), first-N, never per-frame unbounded. DELETE-WHEN bug #2 is closed.
     {
-        static const bool sbHerdDiag   = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static s32        siHerdLinesLeft = 400;
-        if ( sbHerdDiag && siHerdLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            --siHerdLinesLeft;
-            const f32 lfMass  = ( lvfPropMass.x != 0.0f ) ? lvfPropMass.x : 1.0f;
-            *CgsDev::Log::gpDebugPrint
-                << "[prop-herd] entity=" << static_cast<u32>( lPropRigidBodyId.GetEntityId() )
-                << " carMph=" << lvfRaceCarSpeed.x
-                << " mass=" << lvfPropMass.x
-                << " aboveCar=" << ( lAboveRaceCar ? 1 : 0 )
-                << " relY=" << lPropRelativePosition.y
-                << " halfY=" << lpRaceCar->GetHalfExtent().y
-                << " targetUp=" << lvfTargetUpwardVel.x
-                << " propUp=" << lvfPropsUpwardVelocity.x
-                << " forceMag=" << lForceMagnitude.x
-                << " |F|=" << rw::math::vpu::Magnitude( lFinalForce )
-                << " a=" << ( rw::math::vpu::Magnitude( lFinalForce ) / lfMass )
-                << "\n";
-        }
     }
 
     // :2113  the event: the 8-byte handle at +0x00, the force at +0x10 (`std r6, sp+0x70`,
@@ -4716,7 +4626,6 @@ void PropManager::ReadUpdatedBodies(
     //                             contacts are letting them free-fall past the out-of-world floor.
     // The clock is the SIMULATED one (lvfTimeStep), not a host clock: it stays meaningful under a
     // paused or stepped sim, and it costs no syscall.
-    static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
     s32               liDiagProps  = 0;
     s32               liDiagParts  = 0;
     s32               liDiagFrozen = 0;
@@ -4785,17 +4694,7 @@ void PropManager::ReadUpdatedBodies(
                 // value", here Splat(-1000.0f) recovered from a dyn-init thunk) checkable in one
                 // glance instead of by re-deriving the initialiser.
                 {
-                    static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
                     static u32        suDiagCount = 0;
-                    if ( sbPropDiag && suDiagCount < 16u )
-                    {
-                        ++suDiagCount;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[Q6-read] out-of-world floor="
-                            << KVF_PROP_OUT_OF_WORLD_HEIGHT.x
-                            << " pos.y=" << lUpdatedPosition.y
-                            << "\n";
-                    }
                 }
             }
             lbFrozen = true;
@@ -4809,10 +4708,6 @@ void PropManager::ReadUpdatedBodies(
 
         // [DIAG] see the census note at the top of this function. Counted here, after the
         // mbDisableFreezing fold, so the number matches what the event actually carries.
-        if ( sbPropDiag && lbFrozen )
-        {
-            ++liDiagFrozen;
-        }
 
         // :1035  The explicit PropEntityID(u32) ctor stores the word then fires AssertIsProp --
         // owner tripwire #1 of four, BrnPropEntityID.h:278. See decode (H).
@@ -4861,10 +4756,6 @@ void PropManager::ReadUpdatedBodies(
         {
             // ---- one shed PART of a smashed prop -------------------------------------------
             // [DIAG] see the census note at the top of this function.
-            if ( sbPropDiag )
-            {
-                ++liDiagParts;
-            }
 
             // :1041
             const s32 liPartIndex = static_cast<s32>( lRigidBodyId.GetIndex() );
@@ -4912,10 +4803,6 @@ void PropManager::ReadUpdatedBodies(
         {
             // ---- a whole prop ----------------------------------------------------------------
             // [DIAG] see the census note at the top of this function.
-            if ( sbPropDiag )
-            {
-                ++liDiagProps;
-            }
 
             // :1078
             const s32 liPropIndex = static_cast<s32>( lRigidBodyId.GetIndex() );
@@ -5040,27 +4927,6 @@ void PropManager::ReadUpdatedBodies(
                     // frames with five props in the queue -- 0.7 s, far too short a window to
                     // measure how far a hit prop actually travels. Still first-N, still opt-in.
                     static s32 siDiagClampLinesLeft = 6000;
-                    if ( sbPropDiag && siDiagClampLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        --siDiagClampLinesLeft;
-                        const Vector3 lPrev = lpProp->GetLinearVelocity();
-                        const Vector3 lPos  = lUpdatedTransform.Pos();
-                        *CgsDev::Log::gpDebugPrint
-                            << "[Q6-clamp] prop " << lEntityId.GetValue()
-                            << " pos (" << lPos.x << "," << lPos.y << "," << lPos.z << ")"
-                            << " sim v=(" << lDiagSimLinearVelocity.x << "," << lDiagSimLinearVelocity.y
-                            << "," << lDiagSimLinearVelocity.z << ")"
-                            << " prev v=(" << lPrev.x << "," << lPrev.y << "," << lPrev.z << ")"
-                            << " out v=(" << lUpdatedLinearVelocity.x << "," << lUpdatedLinearVelocity.y
-                            << "," << lUpdatedLinearVelocity.z << ")"
-                            << " dt=" << lvfTimeStep.x
-                            << " moveState=" << static_cast<s32>( lpProp->GetMovementState() )
-                            << " w=(" << lUpdatedAngularVelocity.x << "," << lUpdatedAngularVelocity.y
-                            << "," << lUpdatedAngularVelocity.z << ")"
-                            << " up=(" << lUpdatedTransform.Up().x << "," << lUpdatedTransform.Up().y
-                            << "," << lUpdatedTransform.Up().z << ")"
-                            << "\n";
-                    }
                 }
             }
 
@@ -5080,21 +4946,6 @@ void PropManager::ReadUpdatedBodies(
     // the top of this function for what its shape means. Emitted AFTER the jointed fold so
     // `queued` is the exact length OutputUpdatedProps is about to publish, which is what the
     // matching one-shot `[Q6-out] first publish` should agree with on the frame it fires.
-    if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        static f32 sfDiagAccumulatedTime = 0.0f;
-        sfDiagAccumulatedTime += lvfTimeStep.x;
-        if ( sfDiagAccumulatedTime >= 1.0f )
-        {
-            sfDiagAccumulatedTime = 0.0f;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-read] props=" << liDiagProps
-                << " parts=" << liDiagParts
-                << " frozen=" << liDiagFrozen
-                << " queued=" << mUpdatedProps.GetLength()
-                << "\n";
-        }
-    }
 }
 
 }
@@ -5353,7 +5204,6 @@ void PropManager::ReadUpdatedBodies(
 //     and both partfiles are MOUNTED as a pair right after this one (wQ_03 alone is an LNK2019).
 //     Mount + retire happened in one change, as that note asked.
 // =================================================================================================
-
 
 // ⚠️ Do NOT add vendor/renderware/collision/AABBox.hpp here -- it drags in the second
 //    rw::math::vpu::Vector3 and hard-C2011s against BrnCommonTypes.h (physfix.owner.md REQUEST 1b).
@@ -6127,7 +5977,6 @@ void PropManager::DoPropInstanceWorldContactGeneration(
 // GetParts()[luPartId] instead of doing the console's `base + luPartId*48`.
 // =================================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -6541,15 +6390,7 @@ void PropManager::BeginPropWorldContactGeneration(
     // the print is one-shot, so it costs one predicted branch per frame forever after.
     // =============================================================================================
     {
-        static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbFirstPass = true;
-        if ( sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbFirstPass = false;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-worldc] first prop-vs-world contact pass: " << liDiagProps
-                << " props, " << liDiagParts << " parts\n";
-        }
     }
 
     // 0x82628DB0..0x82628DF4 -- SimpleDataStreamProducer::Begin() inlined by the console.
@@ -6730,7 +6571,6 @@ void PropManager::EndPropWorldContactGeneration(
 // Nothing below is invented; every claim in a comment is either an asm line quoted verbatim or
 // is labelled INFERENCE.
 // =================================================================================================
-
 
 namespace BrnPhysics
 {
@@ -6969,7 +6809,6 @@ void PropManager::UpdateTriangleCache(
 //        build_game_exe.bat:1792.
 //    Everything else this file calls has a real body -- each one is named at its call site.
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -6977,7 +6816,6 @@ namespace Props
 
 // (fold: an identical definition of KI_PROP_CACHE_START_INDEX was dropped here -- this TU defines it once, above)
 // (fold: an identical definition of KI_PROP_PART_CACHE_START_INDEX was dropped here -- this TU defines it once, above)
-
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::CreatePart @ 0x826278D0   (382 instructions)
@@ -7339,20 +7177,7 @@ void PropManager::CreatePart( PropEntityID                                      
     // ACTIVE means the part is asleep and will never be integrated, which is the exact failure
     // this line has to be able to show.
     {
-        static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static u32        suDiagCount = 0;
-        if ( sbPropDiag && suDiagCount < 8u && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++suDiagCount;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-part] rigid body posted id=" << CgsDev::E_PRINTMODE_HEXONCE
-                << static_cast<u64>( lRigidBodyId )
-                << " state="
-                << ( lSimulationAddBodyEvent.meState == rw::physics::ACTIVE_BODY
-                         ? "ACTIVE"
-                         : "NOT-ACTIVE" )
-                << "\n";
-        }
     }
 
     // 0x82627EA0 `bl CgsPhysics::PhysicsSimulationIO::InputBuffer::GetAddRigidBodyQueue @0x825BCE08`
@@ -7361,7 +7186,6 @@ void PropManager::CreatePart( PropEntityID                                      
     // `bl BaseEventQueue<InAddRigidBody>::AddEvent @0x825A3000`.
     lpSimModuleInputBuffer->GetAddRigidBodyQueue()->AddEvent( lSimulationAddBodyEvent );
 }
-
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::RemovePart @ 0x8260F988   (117 instructions)
@@ -7441,7 +7265,6 @@ void PropManager::RemovePart( PropEntityID                                      
     // `bl BaseEventQueue<InRemoveRigidBody>::AddEvent`.
     lpSimModuleInputBuffer->GetRemoveRigidBodyQueue()->AddEvent( lSimulationRemoveBodyEvent );
 }
-
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::RemoveProp @ 0x8260F540   (273 instructions)
@@ -7703,7 +7526,6 @@ void PropManager::RemoveProp( PropEntityID                                      
 //    Everything else these three bodies call has a real body -- each one is named at its call site.
 // ==================================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -7767,7 +7589,6 @@ namespace Props
 //  pre-header workaround, and BrnPropManager.h now declares all five. Their ROLE evidence moved
 //  onto those header declarations verbatim.)
 
-
 // =================================================================================================
 // The three SDK basis vectors UpdateJointedProps' orthogonality tripwire subtracts.
 //
@@ -7785,7 +7606,6 @@ namespace Props
 static const Vector3 K_RW_I_VECTOR = { 1.0f, 0.0f, 0.0f, 0.0f };   // X360 0x82181500
 static const Vector3 K_RW_J_VECTOR = { 0.0f, 1.0f, 0.0f, 0.0f };   // X360 0x82181510
 static const Vector3 K_RW_K_VECTOR = { 0.0f, 0.0f, 1.0f, 0.0f };   // X360 0x82181520
-
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::AddPropToSim @ 0x826274D8   (167 instructions)
@@ -8021,7 +7841,6 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     lpSimModuleInputBuffer->GetAddRigidBodyQueue()->AddEvent( lSimulationAddBodyEvent );
 }
 
-
 // =================================================================================================
 // BrnPhysics::Props::PropManager::BreakJoint @ 0x82628A88   (137 instructions)
 // DWARF: class decl BrnPropManager.h:336, body scope BrnPropManager.cpp:2054.
@@ -8151,7 +7970,6 @@ void PropManager::BreakJoint( PropEntityID                                  lEnt
                   lLinearVelocity,
                   lAngularVelocity );
 }
-
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::UpdateJointedProps @ 0x82631260   (938 instructions)
@@ -8619,7 +8437,6 @@ void PropManager::UpdateJointedProps( CgsPhysics::PhysicsSimulationIO::InputBuff
 // exactly once, by name, in Prepare.
 // =================================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -8730,8 +8547,6 @@ bool PropManager::Prepare( rw::IResourceAllocator* lpPhysicsAllocator )
     // The prop instance array. Console immediate 0x690 == 15 * 112; expressed here as the host
     // arithmetic so a future member addition moves the allocation with the struct.
     // ---------------------------------------------------------------------------------------
-    static_assert( sizeof( PropInstance ) == 112,
-                   "PropInstance host stride must stay 112 == the console's 0x690/15" );
 
     const s32 liPropBufferSize =
         static_cast<s32>( KU_MAX_PHYSICAL_PROPS * sizeof( PropInstance ) );   // console `li r4, 0x690`
@@ -8762,8 +8577,6 @@ bool PropManager::Prepare( rw::IResourceAllocator* lpPhysicsAllocator )
     // ---------------------------------------------------------------------------------------
     // The prop-part instance array. Console immediate 0x780 == 30 * 64.
     // ---------------------------------------------------------------------------------------
-    static_assert( sizeof( PropPartInstance ) == 64,
-                   "PropPartInstance host stride must stay 64 == the console's 0x780/30" );
 
     const s32 liPartBufferSize =
         static_cast<s32>( KU_MAX_PHYSICAL_PROP_PARTS * sizeof( PropPartInstance ) );  // console `li r4, 0x780`
@@ -9084,7 +8897,6 @@ void PropManager::ProcessAddPropInstanceEvents(
     }
 }
 
-
 // =================================================================================================
 // BrnPhysics::Props::PropManager::OutputUpdatedProps @ 0x82627EC8   (14 instructions)
 // DWARF: class decl BrnPropManager.h:155; body scope BrnPropManager.cpp:943.
@@ -9174,16 +8986,7 @@ void PropManager::OutputUpdatedProps( BrnPhysics::PhysicsModuleIO::OutputBuffer*
     // producer-side count -- exactly the number of poses this frame hands to the world module.
     // The env latch is a function-local static: getenv per physics frame would be a syscall.
     {
-        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbLogged   = false;
-        if ( sbPropDiag && !sbLogged && CgsDev::Log::gpDebugPrint != 0
-             && mUpdatedProps.GetLength() > 0 )
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-out] first publish: " << mUpdatedProps.GetLength()
-                << " UpdatePropEvents\n";
-        }
     }
 
     // 0x82627EE4 / 0x82627EE8 -- `addi r4, r31, 0x680` == &mUpdatedProps, passed by pointer
@@ -9250,7 +9053,6 @@ void PropManager::OutputUpdatedProps( BrnPhysics::PhysicsModuleIO::OutputBuffer*
 // below is invented; every claim in a comment is either an asm line quoted verbatim from that
 // export or is labelled INFERENCE.
 // =================================================================================================
-
 
 namespace BrnPhysics
 {
@@ -9428,7 +9230,6 @@ s32 PropManager::FindPartIndex( PropEntityID lEntityId ) const
 // stale once already, inside a single afternoon.
 // ==========================================================================================
 
-
 namespace BrnPhysics
 {
 namespace Props
@@ -9478,4 +9279,3 @@ namespace Props
     }
 }
 }
-

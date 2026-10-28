@@ -3,7 +3,6 @@ target_sources(${PROJECT_NAME}
         Array_MomentControllerMomentHandle_10.cpp
         Array_MomentDescription_10.cpp
         BrnMoment.cpp
-        BrnMoment_embed_check.cpp
         BrnMomentController.cpp
         BrnMomentParameterBank.cpp
         BrnMomentSelector.cpp

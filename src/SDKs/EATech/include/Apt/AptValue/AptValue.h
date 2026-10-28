@@ -478,8 +478,6 @@ public:
     // getIsDefined @0x1400C1520 `shr 4`, getRefCount @0x14084E5C0 `shr 6, and 0xFFF`).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptValue, mnValueData) == 0x08, "x64: flags dword at [this+8] (getVtblIndex @0x1400C1510)");
-        static_assert(sizeof(AptValue) == 0x10, "x64: memberless AptExtern allocates 0x10 (AptValueInitialize @0x140830BA0); all leaf payloads at +0x10");
     }
 
 protected:

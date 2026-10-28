@@ -2,8 +2,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h" // CgsResource::ResourceDescriptor
-#include "pc/gcm/renderengine/VertexBuffer.h"                       // renderengine::VertexBuffer
-#include "pc/gcm/renderengine/Xbox2VertexBufferShims.h"            // D3DVertexBuffer_Lock/Unlock, Xbox2UnSet
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator, rw::Resource
 
 // EffectsVertexBufferManager::GetVertexBuffer  X360 0x82278320

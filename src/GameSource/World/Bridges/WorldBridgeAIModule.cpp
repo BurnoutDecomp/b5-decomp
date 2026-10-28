@@ -59,15 +59,6 @@
 // bridge layer as free functions taking that r3 as `void* lpWorldModule`; the two members are
 // reached BY NAME through the WorldModule doors (GetLocalPlayerActiveRaceCarIndex, GetCarControl).
 //
-// The console's per-bridge CPU monitor: BridgeAIToEntityModules_PostPhysics brackets its body
-// with PerfMonCpu::Start/StopMonitor(*(this + 0x5E1CA8)) -- +6167720 == mGlobalCpuMonitors
-// (+6167576) + 144 == miUT_AI_Bridge -- and WorldModule::Update @0x827D8078/0x827D80A8 ALSO
-// brackets the call with `lwz r3, 0(r15)` (the same id), i.e. the console nests the monitor.
-// The host call site in BrnWorldModule.cpp keeps the outer bracket; the inner one is
-// [FLAG PC bring-up] not modelled here (mGlobalCpuMonitors is private to WorldModule and the
-// nested start/stop is instrumentation only) -- the same disposition as the _PrePhysics
-// sibling in WorldBridgePropModule.cpp. DELETE-WHEN a GetGlobalCpuMonitors door lands.
-// ============================================================================
 
 namespace WorldModule
 {

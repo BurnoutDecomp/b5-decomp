@@ -213,15 +213,8 @@ int gAptTargetInstanceCount = 0;   // dword_8324E57C
 // off_8324E570 is null set it to result, else walk the +0x24 next-chain to the tail and
 // append (tail->+0x24 = result; result->+0x28 = tail); unlock; return result.
 //
-// FLAG PC-platform leaf (threading): the unk_8324E7D0 spin-lock is a NO-OP on the
-// single-threaded PC boot path (the Apt context is created once, on the main
-// thread); omitted. The 48-byte allocation +
-// the ctor + the list splice are reproduced faithfully against the named AptTarget layout
-// (the console sub_82B002A0 IS the AptTarget::AptTarget ctor already homed above).
-// ---------------------------------------------------------------------
 AptTarget* AptCreateTargetInstance(const u32* pParams)
 {
-    // FLAG PC-platform leaf (threading): spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
 
     ++gAptTargetInstanceCount;   // ++dword_8324E57C
 
@@ -247,7 +240,6 @@ AptTarget* AptCreateTargetInstance(const u32* pParams)
         pResult->mpPrevious  = pTail;                   // result->+0x28 = tail (link PREV)
     }
 
-    // FLAG PC-platform leaf (threading): spin-unlock unk_8324E7D0 elided.
     return pResult;
 }
 
@@ -258,14 +250,6 @@ AptTarget* AptCreateTargetInstance(const u32* pParams)
 // unlock; return result. i.e. it stores the target into gpAptTarget (the canonical
 // "current context" every Apt subsystem dereferences) + gpAptTargetTLS.
 //
-// FLAG PC-platform leaf (threading/TLS): the X360 sets only the two GLOBAL pointers
-// here; the per-thread EA TLS mirror (unk_8324E814 == gAptTargetTls) that GetTarget()
-// reads is published by the per-thread setup around AptUpdateInitialize (HOMED in
-// AptInit.cpp). On the single-threaded PC port we ALSO publish into that TLS mirror
-// here (exactly as AptTarget::Shutdown does) so GetTarget() returns the live context
-// -- otherwise GetTarget() (which reads the TLS slot) would stay null. The spin-lock
-// is elided (single-threaded bring-up).
-// ---------------------------------------------------------------------
 AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
 {
     gpAptTarget    = pTarget;   // off_8324E574 = result (the canonical current context)
@@ -288,16 +272,8 @@ AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
 // if (PREV) PREV->+0x24 = NEXT; if (NEXT) NEXT->+0x28 = PREV; AptTarget::Shutdown(a1);
 // result = Deallocate(off_8324D808, a1, 48); unlock; return result.
 //
-// FLAG PC-platform leaf (threading): the unk_8324E7D0 spin-lock (acquire at top,
-// release at bottom) is a NO-OP on the single-threaded PC bring-up (the Apt context
-// list is edited only on the main thread);
-// both are elided -- matching AptCreateTargetInstance above. The unlink + the 48-byte
-// Deallocate are reproduced faithfully against the named AptTarget list slots
-// (mpNext == NEXT / mpPrevious == PREV, per the list note above).
-// ---------------------------------------------------------------------
 bool AptDestroyTargetInstance(AptTarget* pTarget)
 {
-    // FLAG PC-platform leaf (threading): spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
 
     --gAptTargetInstanceCount;   // --dword_8324E57C
 
@@ -322,7 +298,6 @@ bool AptDestroyTargetInstance(AptTarget* pTarget)
     pTarget->Shutdown();                // AptTarget::Shutdown(a1)
     bool bResult = gpAptPseudoDataPool->Deallocate(pTarget, sizeof(AptTarget));   // Deallocate(pool, a1, 48)
 
-    // FLAG PC-platform leaf (threading): spin-unlock unk_8324E7D0 elided.
     return bResult;
 }
 
@@ -438,4 +413,3 @@ AptLoader* AptTarget::GetLoader()
 {
     return mpLoader;   // *(this + 7) == +0x1C
 }
-

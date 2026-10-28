@@ -78,8 +78,6 @@ namespace Deformation
             static s32 siSeedProbe = -1;
             if ( siSeedProbe < 0 )
             {
-                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                siSeedProbe = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
             }
             static u32 suConstructs = 0u;
             ++suConstructs;

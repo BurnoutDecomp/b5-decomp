@@ -45,33 +45,14 @@
 // The mask value and the constant name agree independently.
 // =============================================================================
 
-// The two converted sky-dome program images (pc/gcm/renderengine/SkyDomeProgramsPC.cpp --
-// a generated PC-platform leaf). Declared here as the minimal external surface, the same
-// convention the other PC-leaf seams in this tree use.
 namespace renderengine
 {
-    extern const u8  gauSkyDomeVertexProgramPC[];
     extern const u32 guSkyDomeVertexProgramPCSize;
-    extern const u8  gauSkyDomePixelProgramPC[];
     extern const u32 guSkyDomePixelProgramPCSize;
 }
 
 namespace
 {
-    // ---- the two sky-dome program binaries --------------------------------------------
-    // The X360 Construct passes &unk_8203D278 / 1312 bytes as the vertex program and
-    // &unk_8203D798 / 780 bytes as the pixel program -- guest .data Xenos microcode with
-    // no PC counterpart, so BOTH the addresses and the sizes are console-only.
-    //
-    // FLAG PC-platform leaf: the PC build supplies the SAME TWO TECHNIQUES, recompiled
-    // from their TUB HLSL (nushaders/Reference/TUB/Executable/28.fx and 29.fx -- pinned
-    // to this renderer by an exact 10 + 7 match against the seventeen constant names
-    // resolved below) with the shader converter's own fxc line, then wrapped into
-    // platform-4 ShaderProgramBuffer images. They are module data, not bundle
-    // resources, exactly as on the console. Sizes are the WRAPPED image sizes, not the
-    // console's microcode sizes: ImRenderer<V>::AddProgram's PC seam adopts the image
-    // whole (see CgsIm3dSkyDome.cpp).
-    const u32 KU_SKYDOME_VERTEX_PROGRAM_SIZE = renderengine::guSkyDomeVertexProgramPCSize;
     const u32 KU_SKYDOME_PIXEL_PROGRAM_SIZE  = renderengine::guSkyDomePixelProgramPCSize;
 
     // ---- the clouds sampler-state parameter block (X360 Construct tail, store-for-store)
@@ -135,21 +116,6 @@ namespace
         }
     }
 
-    // The renderengine sampler-state construction surface. Mirrors the BrnSunCorona.cpp
-    // convention: the two committed renderengine state homes declare mutually exclusive models,
-    // so the one call this TU needs is expressed locally against the opaque object pointer. The
-    // X360 sequence is SamplerState::GetResourceDescriptor -> the allocator's vtable slot +0x10
-    // -> SamplerState::Initialize, and the result is stored at this+0x100. The parameter block is
-    // built store-for-store above and handed to this seam; the renderengine SamplerState resource
-    // pipeline itself is out of scope (blocked class:renderengine::Device).
-    // FLAG PC-platform leaf: renderengine SamplerState resource pipeline not reconstructed yet.
-    const renderengine::SamplerState* BuildSamplerState(rw::IResourceAllocator* lpAllocator,
-                                                        const SamplerStateParameters* lpParameters)
-    {
-        (void)lpAllocator;
-        (void)lpParameters;
-        return nullptr;
-    }
 }
 
 namespace BrnGraphics
@@ -170,8 +136,6 @@ void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
 {
     // The one program pair (X360: the two guest .data microcode blobs; PC: the two
     // converted ShaderProgramBuffer images -- see the KU_SKYDOME_*_PROGRAM_SIZE note).
-    const void* lapVertexProgramBinary[1] = { renderengine::gauSkyDomeVertexProgramPC };
-    const void* lapPixelProgramBinary[1]  = { renderengine::gauSkyDomePixelProgramPC };
     const u32   lauVertexProgramSize[1]   = { KU_SKYDOME_VERTEX_PROGRAM_SIZE };
     const u32   lauPixelProgramSize[1]    = { KU_SKYDOME_PIXEL_PROGRAM_SIZE };
 

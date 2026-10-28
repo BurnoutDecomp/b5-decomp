@@ -82,10 +82,6 @@ namespace BrnGameState
         static u32 suPreviousGeometryCount = 0;
         static s32 siPreviousPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
         static bool sbPreviousPlayerCarActive = false;
-        const char* lpcTraceSetting = std::getenv("BRN_TAKEDOWN_DEBUG_TRACE");
-        const bool lbTraceThisCall = lpcTraceSetting != 0 && lpcTraceSetting[0] != '\0' &&
-                                     lpcTraceSetting[0] != '0' &&
-                                     CgsDev::Log::gpDebugPrint != 0;
         u32 luActiveCarMask = 0;
         u32 luVulnerabilityShuntOrSlamMask = 0;
         u32 luVulnerabilityRecentContactMask = 0;

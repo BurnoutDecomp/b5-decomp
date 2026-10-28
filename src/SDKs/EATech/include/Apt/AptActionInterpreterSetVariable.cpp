@@ -23,7 +23,6 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
-#include "SDKs/EATech/include/Apt/AptPromptDiagnosticsPC.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
@@ -39,7 +38,6 @@ extern AptValue* gpAptRootTargetMC;   // dword_8324D830 (AptGlobals.cpp; the roo
 int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect)
 {
-    AptPromptDiagnosticsPC promptDiag("SET", pScope, pTarget, pName, pValue);
     EAStringC name;            // the resolved leaf name (v43)
     AptValue* pContext = pScope;
 

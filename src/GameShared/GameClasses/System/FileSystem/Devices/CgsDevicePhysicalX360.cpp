@@ -20,7 +20,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>   // CreateFileA / ReadFile / SetFilePointerEx / FindFirstFileA / CloseHandle
+#include <xtl.h>   // CreateFileA / ReadFile / SetFilePointerEx / FindFirstFileA / CloseHandle
 
 // CgsDev debug-trace facade (Init prints a one-line trace when the message filter allows). Matches
 // the RemapDevice sibling's local declaration; bodies live in Development/Log/CgsLog.cpp.

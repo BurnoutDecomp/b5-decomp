@@ -1,5 +1,4 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"
-#include "pc/input/EngineFeedback.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([powertrain] probe)
 
@@ -279,8 +278,6 @@ namespace
     // ---------------------------------------------------------------------------------------
     void Engine::Reset(VecFloat lvfWheelAngularVelocity)
     {
-        // FLAG PC-platform leaf: clear the optional limiter observation on reset.
-        CgsInput::AdaptiveTriggers::EngineFeedback::Record(reinterpret_cast<std::uintptr_t>(this), false);
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.x = 0.0f;   // EngineDrive
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.y = 0.0f;   // ReactionTorque
         mvEngineDrive_ReactionTorque_FlyWheelAngularVelocity_ClutchDelay.w = 0.0f;   // ClutchDelay
@@ -501,9 +498,6 @@ namespace
                                    mAttribs.GetFlyWheelFriction() * lfSgn * lfTimeStep);
         }
         const f32 lfMaxFlyWheel = mAttribs.GetMaxRPM() * KF_RPM_TO_RADIANS_PER_SEC;
-        // FLAG PC-platform leaf: observe the actual upper clamp, before it changes
-        // the value. This never changes torque, gearing, timing or the clamp.
-        CgsInput::AdaptiveTriggers::EngineFeedback::Record(reinterpret_cast<std::uintptr_t>(this), lfFlyWheel > lfMaxFlyWheel);
         lfFlyWheel = std::min(lfMaxFlyWheel,
                               std::max(KF_IDLE_FLYWHEEL_ANGULAR_VELOCITY, lfFlyWheel));
         const f32 lfRPM = lfFlyWheel * KF_RADIANS_PER_SEC_TO_RPM;
@@ -605,8 +599,6 @@ namespace
             static s32 siPowertrainPeriod = -1;
             if (siPowertrainPeriod < 0)
             {
-                const char* lpcEnv = getenv("BRN_ENGINE_PROBE");
-                siPowertrainPeriod = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
                 if (siPowertrainPeriod < 0) { siPowertrainPeriod = 0; }
             }
             // Sample on a counter that only advances for PEDALLED calls. A single global

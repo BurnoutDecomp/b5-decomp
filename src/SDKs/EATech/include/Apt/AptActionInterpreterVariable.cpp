@@ -32,7 +32,6 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
-#include "SDKs/EATech/include/Apt/AptPromptDiagnosticsPC.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
@@ -56,7 +55,6 @@ extern AptVarNotFoundCb gpAptVarNotFoundCb;
 AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, int nAllowSelf, int nSearchScopeChain, int nDirect)
 {
-    AptPromptDiagnosticsPC promptDiag("GET", pScope, pTarget, pName);
 
     // The scope is the pinned EmptyCIH placeholder -> the variable is undefined.
     // (console getVariable @0x82B03430 head: a2 == dword_8324D700. The old

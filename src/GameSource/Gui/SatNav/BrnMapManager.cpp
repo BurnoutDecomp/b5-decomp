@@ -4,7 +4,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (RecvEvent resource load)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple / ResourceRequestTypes
-#include "pc/gcm/renderengine/renderstates.h"        // renderengine::TextureState (Initialize + GetResourceDescriptor)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAllocator (Construct)
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"    // BrnGui::MapTransform (Construct's world box)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG-TEMP] the map-lowres probe

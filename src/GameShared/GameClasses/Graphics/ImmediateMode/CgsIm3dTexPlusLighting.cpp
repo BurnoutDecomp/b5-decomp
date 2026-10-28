@@ -12,7 +12,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -87,41 +86,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     }
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
-    // The console route below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run
-    // on the PC backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts,
-    // whose PC stub returns 0 WITHOUT writing *lpParts, and then read that uninitialised
-    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
-    // into the u32 muFunction to Xbox2CreateConstantTable. When the supplied binary is already a
-    // converted platform-4 ShaderProgramBuffer (which is what the PC world-textured programs are),
-    // the leaf adopts it directly -- there is nothing for Initialize to build. A non-PC binary
-    // returns null here and falls through to the console path unchanged.
-    //
-    // This TU was written before the adopt path existed and was never mounted, so it kept the
-    // console route while every sibling was corrected. MEASURED CONSEQUENCE, first mount:
-    //     [debrispass] worldtex constants: transforms{cnt=0} vp{cnt=0} eye{cnt=0}
-    //                                      lightdir{cnt=0} lightcol{cnt=0} shiny{cnt=0}
-    // with no "[ImLeaf] adopted PC program buffer" line before it, while the skid and Lion
-    // renderers on the same run printed theirs and resolved every constant. Nothing was adopting
-    // the two converted images, so GetVariableHandleByName walked an empty variable table and
-    // left all six handles at register count 0 -- which the leaf's BeginShaderStates routes to a
-    // DISCARD row, i.e. the transform array, view-projection, eye and the three lighting
-    // constants would never have been uploaded.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -243,17 +207,6 @@ void ImRenderer<V>::BeginRendering()
     renderengine::ProgramBuffer* lpPixelProgram  = mapPixelProgramBuffer[0];
     mi8CurrentProgram = 0;
 
-    // The compare against the last-bound vertex program is the DEVICE's: ResetShadowing has just
-    // nulled its shadow, so the console's compare is always a miss and the bind always happens.
-    shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-    shadow::DeviceSetPixelProgram(lpPixelProgram);
-
-    // Shadow this renderer's vertex descriptor and raise the vertex-program-state dirty flag where
-    // FlushVertexProgramState reads it -- the compare-then-set + dirty flag IS the device's
-    // SetVertexDescriptor, not a private pair.
-    shadow::DeviceSetVertexDescriptor(
-        const_cast<renderengine::VertexDescriptorData*>(
-            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor)));
 }
 
 // SetProgram
@@ -273,7 +226,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;

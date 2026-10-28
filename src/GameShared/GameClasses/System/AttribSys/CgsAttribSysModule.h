@@ -75,12 +75,6 @@ private:
     s32 miTotalFreedSoFar;   // CgsAttribSysModule.h:99
 };
 
-// [PC mount switch] Gates GameDataModule::PrepareAttribSysSchemaResource's load of the
-// LE schema pair (build/game/schema.vlt + schema.bin,
-// tools/assets/bundles/attribsys_schema_port.py). True: the Attrib SDK runtime cluster
-// is linked into the exe.
-const bool KB_PC_ATTRIB_SCHEMA_FILES = true;
-
 class AttribSysModule : public CgsModule::ModuleSingleBuffered
 {
 public:

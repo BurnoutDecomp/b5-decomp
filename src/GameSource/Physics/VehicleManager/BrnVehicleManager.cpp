@@ -1,4 +1,4 @@
-﻿#include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // RaceCarPhysics::SetCrashing (declare-only callee)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N> (crash-data free-list + taken-down bitset)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"     // CgsDev::PerfMonCpu::AddMonitor -- Construct's thirty monitors
@@ -149,7 +149,6 @@ namespace Vehicle
             { 0.1f, 0.3f, 0.1f, 0.1f, 2.0f, 4.0f, 2.0f, 0.0f };   // flt_82F2A218 (image-read)
     }
 
-
     // The minimum combined closing speed below which a contact is too gentle to be any kind of
     // takedown/shunt (X360 reads the rodata float at flt_82FB8290 for the `>=` gate).
     // ⭐ RECOVERED 2026-08-24 (deform-land wave, P5/P9; physics11 audit, static-init writer
@@ -157,30 +156,10 @@ namespace Vehicle
     // = 0.44704 * 50.0 == 50 MPH in m/s. The old 0.0 made the gate a pass-through.
     static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.44704f * 50.0f;   // flt_82FB8290 <- init 0x82C5BB18 (22.352 m/s)
 
-    // --------------------------------------------------------------------------------------
-    // [td-contact] / [td-crash] PC witness helpers (NOT in the console): enum -> name, so the
-    // witness lines below read as verdicts instead of bare integers. [FLAG PC witness]
-    // DELETE-WHEN: the two witnesses below are deleted (organic takedown case green).
-    // --------------------------------------------------------------------------------------
-    // [PC HARNESS, NOT X360] BRN_TD_DIAG=1 turns on the takedown-classification trace
-    // ([td-ladder] / [td-vert] / [td-tbone] / [td-instant] here, [td-detect] in the takedown
-    // manager, [td-gui] in the game->gui bridge, [td-msg] in the HUD message analyzer). Off for
-    // every run that does not set it. DELETE-WHEN every takedown type is proven on film.
-    static bool TakedownDiagEnabled()
-    {
-        static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
-        return sbOn;
-    }
-
     // [PC HARNESS, NOT X360] BRN_TD_REPLAY=1 (with BRN_TD_DIAG=1) adds the [td-replay] line: every
     // input the impact ladder reads for a player-involved evaluation, as raw IEEE bits, so
     // tests/FxLadderReplay.cpp can feed a recorded contact through the extracted production ladder
     // bit for bit. DELETE-WHEN the FX-LADDER replay fixture no longer needs fresh recordings.
-    static bool TakedownReplayEnabled()
-    {
-        static const bool sbOn = (std::getenv("BRN_TD_REPLAY") != 0);
-        return sbOn;
-    }
 
     static const char* WitnessImpactTypeName(s32 liImpactType)
     {
@@ -320,12 +299,6 @@ namespace Vehicle
             // the player arrives, otherwise those contacts exhaust the diagnostic.
             static s32 saiWitnessed[2] = {};
             s32& siWitnessed = saiWitnessed[liIndexA == mePlayerActiveRaceCarIndex || liIndexB == mePlayerActiveRaceCarIndex];
-            if (std::getenv("BRN_CRASHCAM_DIAG") && siWitnessed < 16 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siWitnessed;
-                *CgsDev::Log::gpDebugPrint << "[td-contact] entry race car " << liIndexA << " vs " << liIndexB
-                                           << " [FLAG PC witness]\n";
-            }
         }
         if (!mbSlamsAndShuntsOn)
             return;
@@ -404,20 +377,6 @@ namespace Vehicle
         {
             static s32 saiVerdicts[2] = {};
             s32& siVerdicts = saiVerdicts[lbPlayerInvolved];
-            if (std::getenv("BRN_CRASHCAM_DIAG") && siVerdicts < 16 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siVerdicts;
-                *CgsDev::Log::gpDebugPrint << "[td-contact] verdict " << liIndexA << " vs " << liIndexB
-                                           << " impact=" << WitnessImpactTypeName(static_cast<s32>(lInfo.meImpactType))
-                                           << "(" << static_cast<s32>(lInfo.meImpactType) << ")"
-                                           << " situation=" << static_cast<s32>(lInfo.meImpactSitutation)
-                                           << " crashA=" << (lInfo.mbCrashRaceCarA ? 1 : 0)
-                                           << " crashB=" << (lInfo.mbCrashRaceCarB ? 1 : 0)
-                                           << " closingSpeed=" << lInfo.mfClosingSpeed
-                                           << " aggressor=" << static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex)
-                                           << " victim=" << static_cast<s32>(lInfo.meVictimActiveRaceCarIndex)
-                                           << " [FLAG PC witness]\n";
-            }
         }
         if (lInfo.mbCrashRaceCarA)
             SetRaceCarCrashing(lContact.mEntityIdA, lContact.mEntityIdB,
@@ -462,12 +421,6 @@ namespace Vehicle
             }
             GenerateContactSituation(&lInfo);
 
-            // [td-react] PC witness, BRN_TD_DIAG only [FLAG PC witness]: the inputs
-            // CalculateSlamData / CalculateShuntData read that ApplySlam / ApplyShunt overwrite
-            // (the victim's slam steering is cleared by ApplySlam), snapshotted before the commit.
-            const bool lbWReact = lbPlayerInvolved && TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0
-                && static_cast<s32>(lInfo.meVictimActiveRaceCarIndex) >= 0 && static_cast<s32>(lInfo.meVictimActiveRaceCarIndex) < 8
-                && static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex) >= 0 && static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex) < 8;
             f32 lfWPreSlamVictim = 0.0f;
             f32 lfWPreSlamAggressor = 0.0f;
             s32 liWPreSlamNumber = 0;
@@ -490,62 +443,6 @@ namespace Vehicle
                 }
             }
 
-            // [td-react] COMMIT -- what ApplySlam / ApplyShunt just committed to the two cars, with
-            // every input their Calculate*Data read, then the per-step trace of both cars
-            // (RaceCarPhysics::TdReactWatch / TdReactStep). Pure reads. [FLAG PC witness]
-            if (lbWReact)
-            {
-                static s32 siWReactId = 0;
-                ++siWReactId;
-                const s32 liWV  = static_cast<s32>(lInfo.meVictimActiveRaceCarIndex);
-                const s32 liWAg = static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex);
-                const RaceCarPhysics& lrWV  = maRaceCarVehicles[liWV];
-                const RaceCarPhysics& lrWAg = maRaceCarVehicles[liWAg];
-                CgsDev::StrStreamBase& lrWOut = *CgsDev::Log::gpDebugPrint;
-                auto lWV3 = [&](const char* lpcName, const Vector3& lrV)
-                {
-                    lrWOut << lpcName << "=(" << lrV.x << "," << lrV.y << "," << lrV.z << ")";
-                };
-                lrWOut << "[td-react] COMMIT id=" << siWReactId
-                       << " type=" << WitnessImpactTypeName(static_cast<s32>(lInfo.meImpactType))
-                       << "(" << static_cast<s32>(lInfo.meImpactType) << ")"
-                       << " aggr=" << liWAg << " victim=" << liWV
-                       << " sit=" << static_cast<s32>(lInfo.meImpactSitutation)
-                       << " closing=" << lInfo.mfClosingSpeed
-                       << " mode=" << meCurrentGameModeType << " online=" << (mbIsOnlineGameMode ? 1 : 0)
-                       << " typeA=" << static_cast<s32>(maeRaceCarTypes[liWAg]) << " typeV=" << static_cast<s32>(maeRaceCarTypes[liWV])
-                       << " netA=" << (lInfo.mbRaceCarAIsNetworkCar ? 1 : 0) << " netB=" << (lInfo.mbRaceCarBIsNetworkCar ? 1 : 0)
-                       << " | in: slamAg=" << lfWPreSlamAggressor << " slamV=" << lfWPreSlamVictim
-                       << " slamNumV=" << liWPreSlamNumber
-                       << " massAg=" << lrWAg.GetMass().x << " massV=" << lrWV.GetMass().x << " ";
-                lWV3("n", lInfo.mpContact->mNormal); lrWOut << " ";
-                lWV3("posAg", lrWAg.mTransform.wAxis); lrWOut << " ";
-                lWV3("posV", lrWV.mTransform.wAxis); lrWOut << " ";
-                lWV3("rightV", lrWV.mTransform.xAxis); lrWOut << " ";
-                lWV3("upV", lrWV.mTransform.yAxis); lrWOut << " ";
-                lWV3("velAg", lrWAg.mLinearVelocity); lrWOut << " ";
-                lWV3("velV", lrWV.mLinearVelocity);
-                lrWOut << " | victim slam life=" << lrWV.mSlamEffect.mfSlamLife
-                       << " total=" << lrWV.mSlamEffect.mfTotalSlamTime
-                       << " orig=" << lrWV.mSlamEffect.mfOriginalSteering
-                       << " rec=" << lrWV.mSlamEffect.mfRecoveryTime
-                       << " num=" << static_cast<s32>(lrWV.mSlamEffect.mi8SlamNumber)
-                       << " attacker=" << static_cast<s32>(lrWV.mi8LastAttackersRaceCarIndex)
-                       << " shunt dir=(" << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.x
-                       << "," << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.y
-                       << "," << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.z << ")"
-                       << " desired=" << lrWV.mShuntEffect.mDirectionPlusDesiredSpeed.w
-                       << " life=" << lrWV.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x
-                       << " sitq=" << lrWV.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y
-                       << " vuln=" << mafVulnerableTimeSeconds[liWV]
-                       << " | aggressor slam life=" << lrWAg.mSlamEffect.mfSlamLife
-                       << " total=" << lrWAg.mSlamEffect.mfTotalSlamTime
-                       << " orig=" << lrWAg.mSlamEffect.mfOriginalSteering
-                       << " rec=" << lrWAg.mSlamEffect.mfRecoveryTime
-                       << " [FLAG PC witness]\n";
-                RaceCarPhysics::TdReactWatch(&lrWV, siWReactId, 0);
-                RaceCarPhysics::TdReactWatch(&lrWAg, siWReactId, 1);
-            }
             if (lbPlayerInvolved)
             {
                 lrCarA.SetWheelVelocities(lrCarA.mLinearVelocity);
@@ -594,19 +491,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::CheckForAllTypesOfImpacts(RaceCarResponseInfo* lpInfo)
     {
-        const bool lbWitness = TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
 
-        // [td-ladder] EPISODE + SLAM-GATE witness -- PC only, BRN_TD_DIAG only [FLAG PC witness].
-        // `gap` counts car A's physics steps since this pair was last evaluated: 0 = another spy
-        // of the same step (ProcessContactSpy stores every contact twice, A/B and B/A), 1 = the
-        // contact continues from the previous step, >1 or -1 (never) = the FIRST step of a new
-        // contact episode. `gateA/gateB` are what RaceCarPhysics::Update's slam-steering gate
-        // (0x82641814) read this step -- see RaceCarPhysics::TdSlamGateSample: n = miNumCollisions
-        // (+0x1354, every contact impulse since the previous step's reset at 0x826415A0), w = the
-        // world share (+0x1353), ctl = the control steer, pre = mfSlamSteering before the gate.
-        // `now` is this step's count so far (the impulses this step's DeformationManager::Update
-        // banked, i.e. what zeroes NEXT step's slam steering). Pure reads.
-        const RaceCarPhysics::TdSlamGateSample* lpWGateA = nullptr;
         const RaceCarPhysics::TdSlamGateSample* lpWGateB = nullptr;
         s32 liWGap = -1;
         if (lbWitness)
@@ -649,130 +534,17 @@ namespace Vehicle
             }
         };
 
-        // [td-replay] -- PC only, BRN_TD_DIAG + BRN_TD_REPLAY [FLAG PC witness]. Every input the
-        // ladder below reads, BEFORE any rung writes the response info, as raw IEEE bits (hex).
-        // Layout "v1" (tests/run_fxladder_replay.py parses it; keep the two in step):
-        //   idxA idxB | flags(crashA,crashB,playerA,playerB,netA,netB,otherAI = bits 0..6)
-        //   entityA entityB closing speedA speedB stressSq angle closingVel(4) transformA(16)
-        //   transformB(16) | contact entityA entityB normal(4) pointOnA(4) pointOnB(4)
-        //   | playerIndex online | per car A then B: type noImpact vulnerability pgo ogp boost
-        //   | per car A then B: crashing slamSteering lastAttacker slamLife shuntW shuntLife
-        //     lastContacted timeSinceContact airTime timeCrashing mass crashSpeedMPS
-        //     lastLinearVelocity(4) deformableMin(4) deformableMax(4) transform(16)
-        // The next [td-ladder] line of the same evaluation (REJECT energy / -> rung) is its result.
-        if (lbWitness && TakedownReplayEnabled()
-            && (lpInfo->mbRaceCarAIsPlayer || lpInfo->mbRaceCarBIsPlayer))
-        {
-            CgsDev::StrStreamBase& lrWOut = *CgsDev::Log::gpDebugPrint;
-            auto lWWord = [&](u32 luValue) { lrWOut.AppendFormat(" %08X", luValue); };
-            auto lWBits = [&](f32 lfValue)
-            {
-                u32 luBits = 0;
-                std::memcpy(&luBits, &lfValue, sizeof(luBits));
-                lWWord(luBits);
-            };
-            auto lWVec = [&](f32 lfX, f32 lfY, f32 lfZ, f32 lfW) { lWBits(lfX); lWBits(lfY); lWBits(lfZ); lWBits(lfW); };
-            auto lWMat = [&](const Matrix44Affine& lrM)
-            {
-                lWVec(lrM.xAxis.x, lrM.xAxis.y, lrM.xAxis.z, lrM.xAxis.w);
-                lWVec(lrM.yAxis.x, lrM.yAxis.y, lrM.yAxis.z, lrM.yAxis.w);
-                lWVec(lrM.zAxis.x, lrM.zAxis.y, lrM.zAxis.z, lrM.zAxis.w);
-                lWVec(lrM.wAxis.x, lrM.wAxis.y, lrM.wAxis.z, lrM.wAxis.w);
-            };
-            const s32 laWIdx[2] = { static_cast<s32>(lpInfo->meActiveRaceCarIndexA),
-                                    static_cast<s32>(lpInfo->meActiveRaceCarIndexB) };
-            lrWOut << "[td-replay] v1 " << laWIdx[0] << " " << laWIdx[1];
-            lWWord((lpInfo->mbRaceCarAIsCrashing ? 1u : 0u) | (lpInfo->mbRaceCarBIsCrashing ? 2u : 0u)
-                   | (lpInfo->mbRaceCarAIsPlayer ? 4u : 0u) | (lpInfo->mbRaceCarBIsPlayer ? 8u : 0u)
-                   | (lpInfo->mbRaceCarAIsNetworkCar ? 16u : 0u) | (lpInfo->mbRaceCarBIsNetworkCar ? 32u : 0u)
-                   | (lpInfo->mbOtherCarIsAI ? 64u : 0u));
-            lWWord(lpInfo->mRaceCarAEntityID.muValue);
-            lWWord(lpInfo->mRaceCarBEntityID.muValue);
-            lWBits(lpInfo->mfClosingSpeed);
-            lWBits(lpInfo->mfRaceCarASpeed);
-            lWBits(lpInfo->mfRaceCarBSpeed);
-            lWBits(lpInfo->mfNormalStressSq);
-            lWBits(lpInfo->mfAngleBetweenCars);
-            lWVec(lpInfo->mClosingVelocityAtoB.x, lpInfo->mClosingVelocityAtoB.y,
-                  lpInfo->mClosingVelocityAtoB.z, lpInfo->mClosingVelocityAtoB.w);
-            lWMat(lpInfo->mRaceCarATransform);
-            lWMat(lpInfo->mRaceCarBTransform);
-            const BrnPhysics::ContactSpy::RaceCarContact& lrWContact = *lpInfo->mpContact;
-            lWWord(lrWContact.mEntityIdA.muValue);
-            lWWord(lrWContact.mEntityIdB.muValue);
-            lWVec(lrWContact.mNormal.x, lrWContact.mNormal.y, lrWContact.mNormal.z, lrWContact.mNormal.w);
-            lWVec(lrWContact.mPointOnA.x, lrWContact.mPointOnA.y, lrWContact.mPointOnA.z, lrWContact.mPointOnA.w);
-            lWVec(lrWContact.mPointOnB.x, lrWContact.mPointOnB.y, lrWContact.mPointOnB.z, lrWContact.mPointOnB.w);
-            lWWord(static_cast<u32>(mePlayerActiveRaceCarIndex));
-            lWWord(mbIsOnlineGameMode ? 1u : 0u);
-            for (s32 liWSide = 0; liWSide < 2; ++liWSide)
-            {
-                const s32 liWCar = laWIdx[liWSide];
-                lWWord(static_cast<u32>(maeRaceCarTypes[liWCar]));
-                lWBits(mafNoImpactTimeSeconds[liWCar]);
-                lWBits(mafVulnerabilityFactor[liWCar]);
-                lWWord(static_cast<u32>(mau8FramesSincePlayerGrindingOther[liWCar]));
-                lWWord(static_cast<u32>(mau8FramesSinceOtherGrindingPlayer[liWCar]));
-                lWWord(maRaceCarDrivers[liWCar].mControls.mbBoost ? 1u : 0u);
-            }
-            for (s32 liWSide = 0; liWSide < 2; ++liWSide)
-            {
-                const RaceCarPhysics& lrWCar = maRaceCarVehicles[laWIdx[liWSide]];
-                lWWord(lrWCar.mbCrashing ? 1u : 0u);
-                lWBits(lrWCar.mfSlamSteering);
-                lWWord(static_cast<u32>(static_cast<s32>(lrWCar.mi8LastAttackersRaceCarIndex)));
-                lWBits(lrWCar.mSlamEffect.mfSlamLife);
-                lWBits(lrWCar.mShuntEffect.mDirectionPlusDesiredSpeed.w);
-                lWBits(lrWCar.mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x);
-                lWWord(static_cast<u32>(static_cast<s32>(lrWCar.mi8LastContactedRaceCar)));
-                lWBits(lrWCar.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z);
-                lWBits(lrWCar.mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z);
-                lWBits(lrWCar.mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y);
-                lWBits(lrWCar.GetMass().x);
-                lWBits(lrWCar.GetAttribs()->mCollisionAttribs.GetCrashSpeedMPS().x);
-                lWVec(lrWCar.mLastLinearVelocity.x, lrWCar.mLastLinearVelocity.y,
-                      lrWCar.mLastLinearVelocity.z, lrWCar.mLastLinearVelocity.w);
-                const CgsGeometric::AxisAlignedBox& lrWBox = lrWCar.GetDeformableAABB();
-                lWVec(lrWBox.mMin.x, lrWBox.mMin.y, lrWBox.mMin.z, lrWBox.mMin.w);
-                lWVec(lrWBox.mMax.x, lrWBox.mMax.y, lrWBox.mMax.z, lrWBox.mMax.w);
-                lWMat(lrWCar.mTransform);
-            }
-            lrWOut << " [FLAG PC witness]\n";
-        }
-
         // Energy gate: ignore contacts whose combined closing speed is below the threshold.
         const f32 lfWitnessSpeedSum =
             std::fabs(lpInfo->mfRaceCarBSpeed) + std::fabs(lpInfo->mfRaceCarASpeed);
         if (lfWitnessSpeedSum < KF_MIN_IMPACT_SPEED_SUM)
         {
-            // [td-ladder] PC witness, BRN_TD_DIAG only [FLAG PC witness]
-            if (lbWitness)
-            {
-                *CgsDev::Log::gpDebugPrint << "[td-ladder] " << static_cast<s32>(lpInfo->meActiveRaceCarIndexA)
-                                           << " vs " << static_cast<s32>(lpInfo->meActiveRaceCarIndexB)
-                                           << " REJECT energy speedSum=" << lfWitnessSpeedSum
-                                           << " need=" << KF_MIN_IMPACT_SPEED_SUM;
-                lWitnessEpisode();
-                *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
-            }
             return;
         }
 
         if (lbWitness)
         {
-            *CgsDev::Log::gpDebugPrint << "[td-ladder] " << static_cast<s32>(lpInfo->meActiveRaceCarIndexA)
-                                       << " vs " << static_cast<s32>(lpInfo->meActiveRaceCarIndexB)
-                                       << " ENTER speedSum=" << lfWitnessSpeedSum
-                                       << " crashA=" << (lpInfo->mbRaceCarAIsCrashing ? 1 : 0)
-                                       << " crashB=" << (lpInfo->mbRaceCarBIsCrashing ? 1 : 0)
-                                       << " playerA=" << (lpInfo->mbRaceCarAIsPlayer ? 1 : 0)
-                                       << " playerB=" << (lpInfo->mbRaceCarBIsPlayer ? 1 : 0)
-                                       << " angle=" << lpInfo->mfAngleBetweenCars << " [FLAG PC witness]\n";
 
-            // [td-ladder] GATES -- the INPUTS of the two force rungs (ShuntAndNudge @0x8261A3A0,
-            // SlamAndTradingPaint @0x82619F30), read BEFORE the ladder runs, with the same
-            // operands those bodies read, so a rejection can be named gate by gate. Pure reads:
-            // every call below is a const query. [FLAG PC witness, BRN_TD_DIAG only]
             const s32 liWA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
             const s32 liWB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
             const Vector3& lvWN = lpInfo->mpContact->mNormal;
@@ -807,21 +579,7 @@ namespace Vehicle
                 << " pgoA=" << static_cast<s32>(mau8FramesSincePlayerGrindingOther[liWA])
                 << " ogpB=" << static_cast<s32>(mau8FramesSinceOtherGrindingPlayer[liWB]);
             lWitnessEpisode();
-            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
         }
-        // The rung that ended the ladder and the classification it left in the response info.
-        // [FLAG PC witness, BRN_TD_DIAG only]
-        auto lWitnessResult = [&](const char* lpcRung)
-        {
-            *CgsDev::Log::gpDebugPrint << "[td-ladder] -> " << lpcRung
-                                       << " impact=" << WitnessImpactTypeName(static_cast<s32>(lpInfo->meImpactType))
-                                       << "(" << static_cast<s32>(lpInfo->meImpactType) << ")"
-                                       << " aggr=" << static_cast<s32>(lpInfo->meAggressorActiveRaceCarIndex)
-                                       << " victim=" << static_cast<s32>(lpInfo->meVictimActiveRaceCarIndex)
-                                       << " crashFlagA=" << (lpInfo->mbCrashRaceCarA ? 1 : 0)
-                                       << " crashFlagB=" << (lpInfo->mbCrashRaceCarB ? 1 : 0)
-                                       << " closing=" << lpInfo->mfClosingSpeed << " [FLAG PC witness]\n";
-        };
 
         // Highest priority: a player shunting an AI into a third AI, and re-hits on a car that is
         // already crashing -- these run even if a car is mid-crash.
@@ -1262,57 +1020,6 @@ namespace Vehicle
         maRaceCarCrashes[liSlot].mRaceCarEntityID  = lVictimEntityId;
         mUsedRaceCarCrashesList.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)
 
-        // [td-crash] PC witness (NOT the console), first 16 only: this sink is the ONLY road from a
-        // contact to a crash record, so a run with [td-contact] verdicts but no [td-crash] line was
-        // suppressed or de-duplicated above, and a run with [td-crash] lines but nothing scored is a
-        // fault further down the chain. Prints the two car indices, the takedown type the caller
-        // classified, the slot just written, and how many crash records are live.
-        //
-        // ⭐ THE ATTACKER IS AN ENTITY ID, NOT A SLOT INDEX (re-read against the export this wave).
-        // There is NO "-1 attacker" sentinel anywhere on this path: every caller passes a real
-        // causing entity -- the world entity word for a wall hit, the traffic slot's global id for
-        // a traffic hit, the other car's id for a car-on-car pair, and the victim's OWN id for the
-        // self-inflicted arm. "No attacker" is carried by the OWNER byte, which is exactly what the
-        // one consumer that reads this seat without a takedown type tests (the standard-takedown
-        // classifier compares the owner against the traffic type and names the aggressor from the
-        // victim's shunt state instead). So the earlier reading of "attacker 0 -> victim N" as the
-        // player being credited for every rival's own crash was the WITNESS dropping the owner
-        // byte: owner 0 is the WORLD, and its entity field is 0. Both owners are printed now.
-        // [FLAG PC witness]  DELETE-WHEN: the organic takedown case goes green.
-        {
-            static s32 siCrashWitnessed = 0;
-            if (siCrashWitnessed < 16 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siCrashWitnessed;
-
-                const u32 luAggressorWitnessOwner = (lAggressorEntityId.muValue >> 24) & 0xFF;
-                const s32 liAggressorWitnessIndex =
-                    static_cast<s32>((lAggressorEntityId.muValue >> 10) & 0x3FFF);
-                s32 liLiveCrashRecords = 0;
-                for (s32 liScan = 0; liScan < 32; ++liScan)
-                {
-                    if (mUsedRaceCarCrashesList.IsBitSet(static_cast<u32>(liScan)))
-                    {
-                        ++liLiveCrashRecords;
-                    }
-                }
-
-                *CgsDev::Log::gpDebugPrint << "[td-crash] attacker "
-                                           << WitnessEntityOwnerName(luAggressorWitnessOwner)
-                                           << "(" << static_cast<s32>(luAggressorWitnessOwner) << ")"
-                                           << ":" << liAggressorWitnessIndex
-                                           << " -> victim "
-                                           << WitnessEntityOwnerName(luVictimOwner)
-                                           << "(" << static_cast<s32>(luVictimOwner) << ")"
-                                           << ":" << liVictimIndex
-                                           << " takedownType=" << WitnessTakedownTypeName(static_cast<s32>(leTakedownType))
-                                           << "(" << static_cast<s32>(leTakedownType) << ")"
-                                           << " slot=" << liSlot
-                                           << " records=" << liLiveCrashRecords
-                                           << " [FLAG PC witness]\n";
-            }
-        }
-
         // ---- Step 5: secondary remapped-entity event ----
         // Fired only when the AGGRESSOR id is traffic-owned: the sub-event republishes the entity
         // index of that traffic slot's global id onto the manager's traffic-type request queue.
@@ -1397,18 +1104,6 @@ namespace Vehicle
         const f32 lfPiOver2  = 1.5707964f;
         const f32 lfDegToRad = 0.017453292f;
         // [td-tbone] PC witness: the perpendicularity term and the two lateral-speed terms.
-        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const RaceCarPhysics& lrWA = maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
-            const RaceCarPhysics& lrWB = maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexB)];
-            *CgsDev::Log::gpDebugPrint
-                << "[td-tbone] |angle-pi/2|=" << std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
-                << " band=" << (mfTBoneTakedownMaxAngle * lfDegToRad)
-                << " latA=" << std::fabs(vpu::Dot(lrWB.mTransform.xAxis, lrWA.mLastLinearVelocity))
-                << " latB=" << std::fabs(vpu::Dot(lrWA.mTransform.xAxis, lrWB.mLastLinearVelocity))
-                << " minLat=" << (mfTBoneTakedownSpeed * KF_SPEED_UNIT_SCALE)
-                << " [FLAG PC witness]\n";
-        }
         if (std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
             < mfTBoneTakedownMaxAngle * lfDegToRad)
         {
@@ -1762,8 +1457,6 @@ namespace Vehicle
         if (HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexB))
             && HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexA)))
         {
-            if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << "[td-vert] REJECT both-recent [FLAG PC witness]\n";
             return false;
         }
 
@@ -1771,17 +1464,6 @@ namespace Vehicle
         RaceCarPhysics* const lpVehA = &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
 
         // [td-vert] PC witness: every gate of both arms, so a rejection names its own term.
-        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[td-vert] armA(B victim) footprint=" << (CheckForVerticalTakedownSituation(lpVehB, lpInfo->mpContact->mPointOnB) ? 1 : 0)
-                << " aggrInAir=" << (lpVehA->IsReallyInAir() ? 1 : 0)
-                << " victimGroundedLane=" << lpVehB->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
-                << " | armB(A victim) footprint=" << (CheckForVerticalTakedownSituation(lpVehA, lpInfo->mpContact->mPointOnA) ? 1 : 0)
-                << " aggrInAir=" << (lpVehB->IsReallyInAir() ? 1 : 0)
-                << " victimGroundedLane=" << lpVehA->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
-                << " [FLAG PC witness]\n";
-        }
 
         bool lbFired = false;
         EntityId lVictimId{};
@@ -1970,26 +1652,11 @@ namespace Vehicle
         // What CAN still be asserted here is the part that is a claim about THIS class: that the
         // element type is the real one and that its host size is the number the drift term carries.
         // If either changes without the drift term changing, this fails.
-        static_assert(sizeof(RaceCarPhysics) == 5216,
-                      "host sizeof(RaceCarPhysics) == the console's 0x1460 stride (width-identical "
-                      "since the 240-byte SimpleVehicleAttribs landed, 2026-08-09) -- the number "
-                      "KU_HOST_DRIFT_AFTER_RACECAR_ARRAY (now 0) is derived from");
         // RE-STATED 2026-08-11 (create-drain wave), and RE-SEATED at the merge of the two waves.
         // The +128 the model-handle split costs is NOT part of the race-car array's term: the two
         // components are independently derived from two different sizeofs, so they get two
         // constants and TWO asserts, and neither can absorb an error in the other. Mirrors the
         // mounted gate's form (BrnVehicleManager_layout_check.cpp).
-        static_assert(8 * (static_cast<std::ptrdiff_t>(sizeof(RaceCarPhysics)) - 5216)
-                          == KU_HOST_DRIFT_AFTER_RACECAR_ARRAY,
-                      "the race-car array's own term must BE 8 * (host sizeof RaceCarPhysics - the "
-                      "console's 0x1460 stride) -- zero today, and this is what says so if the "
-                      "class ever changes size again");
-        static_assert(KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
-                          + 2 * 8 * (static_cast<std::ptrdiff_t>(sizeof(CgsResource::ResourceHandle)) - 8)
-                          == KU_HOST_DRIFT_AFTER_MODEL_HANDLES,
-                      "the handle term must BE the race-car term plus the two ResourceHandle arrays' "
-                      "host/console width difference -- if the handle changes width and the constant "
-                      "is not updated, every seat past +43744 moves and this line is what says so");
         static_assert(alignof(RaceCarPhysics) == 16 && (1856 % 16) == 0,
                       "element 0 keeps the asm-literal +1856 base and every element stays 16-aligned");
         static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");
@@ -2005,23 +1672,11 @@ namespace Vehicle
                           == offsetof(VehicleManager, maRaceCarModelHandles)
                              + sizeof(VehicleManager::maRaceCarModelHandles),
                       "the two handle arrays abut (console 8 * 0x154C then 8 * 0x1554)");
-        static_assert(offsetof(VehicleManager, maRaceCarHandlingBodyIDs) == 43744 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "maRaceCarHandlingBodyIDs (asm addi r26,r26,-0x5520)");
         static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64,
                       "RigidBodyId is 8 bytes -- the ctor's `std` + `addi r26, r26, 8`, and 43744 + 64 == 43808");
-        static_assert(offsetof(VehicleManager, maRaceCarCrashes)         == 43808 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "maRaceCarCrashes (asm base 43808)");
-        static_assert(offsetof(VehicleManager, maeRaceCarTypes)          == 44192 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "maeRaceCarTypes (asm base 44192; ctor seeds 3 == E_RACE_CAR_TYPE_INACTIVE)");
-        static_assert(sizeof(CgsContainers::BitArray<8>)  == 8, "BitArray<8> single 64-bit field (8 bytes)");
-        static_assert(sizeof(CgsContainers::BitArray<32>) == 8, "BitArray<32> single 64-bit field (8 bytes)");
-        static_assert(offsetof(VehicleManager, mUsedRaceCars)            == 44224 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mUsedRaceCars (asm +44224)");
-        static_assert(offsetof(VehicleManager, mUsedRaceCarCrashesList)  == 44232 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mUsedRaceCarCrashesList (asm +44232)");
-        static_assert(offsetof(VehicleManager, mStuntOffencesManager)    == 44240 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mStuntOffencesManager (asm StuntOffencesManager::Construct(this + 44240))");
-        static_assert(offsetof(VehicleManager, mRaceCarsAddedForCollision)             == 44712 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mRaceCarsAddedForCollision (asm +44712)");
-        static_assert(offsetof(VehicleManager, mNetworkCarsAddedForCollisionThisFrame) == 44720 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mNetworkCarsAddedForCollisionThisFrame (asm +44720)");
-        static_assert(offsetof(VehicleManager, mNetworkCarsRecievedFirstUpdate)        == 44728 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mNetworkCarsRecievedFirstUpdate (asm +44728)");
         // RE-SEATED 2026-08-03: the old `maRaceCarEntityIdRemap` sibling at +148128 is really the
         // embedded traffic manager's maTrafficEntityIDs. Same byte, real owner -- and the sum below
         // is a STRONGER assert than the old one, because it also pins the manager's own head.
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768))");
         // AND IT HAD BEEN FAILING SINCE task #112.
         // This line used to read `== 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY`, i.e. it applied
         // only the race-car array's drift to a seat that also sits behind maFullTrafficPhysics[20].
@@ -2036,95 +1691,20 @@ namespace Vehicle
         // host-minus-console difference, so this stays true if that class is ever re-measured again.
         // The absolute value is independently asserted (== 99200) in BrnVehicleManager_layout_check.cpp,
         // which IS mounted -- that is the pair that makes this a gate rather than a restatement.
-        static_assert(offsetof(VehicleManager, mPhysicalTrafficManager)
-                          + offsetof(PhysicalTrafficManager, maTrafficEntityIDs)
-                      == 148128 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES
-                               + (static_cast<std::ptrdiff_t>(20 * sizeof(TrafficPhysics)) - 103360),
-                      "44768 + 103360 == 148128 -- the seat SetRaceCarCrashing's owner==2 branch loads");
-        static_assert(offsetof(VehicleManager, mDiscardedContacts)       == 160672 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDiscardedContacts (asm addi r29,r29,0x73A0)");
-        static_assert(offsetof(VehicleManager, mDebugComponent)          == 161968 + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER, "mDebugComponent (asm VehicleManagerDebugComponent::Construct(this + 161968, this))");
-        static_assert(offsetof(VehicleManager, maRaceCarDebugComponent)  == 163264 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "maRaceCarDebugComponent (asm addi r27,r27,0x7DC0; stride 0x400)");
-        static_assert(offsetof(VehicleManager, mabRaceCarDebugComponentRegistered) == 171456 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
-                      "163264 + 8*1024 == 171456, and +8 lands exactly on the asm-proven gate byte at 171464");
         // ---- the tuning bank, pinned member by member (2026-08-03). Every offset below is an
         //      asm seat from VehicleManager::Construct @0x8263B7C8, cross-checked against the PS3
         //      DecFIGS build at Δ=672. The padding runs between them are what these asserts test.
-        static_assert(offsetof(VehicleManager, mbSlamsAndShuntsOn)       == 171464 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbSlamsAndShuntsOn (asm +171464)");
-        static_assert(offsetof(VehicleManager, mbAllowSlamsAndShuntsEffectsForRivals) == 171465 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbAllowSlamsAndShuntsEffectsForRivals (asm +171465)");
         // The head and tail of the 44-float run, plus the closure that proves it has no gaps.
-        static_assert(offsetof(VehicleManager, mfFrontRaySensorLength)   == 171468 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfFrontRaySensorLength (asm +171468)");
-        static_assert(offsetof(VehicleManager, mfMaxSlamClosingXSpeed)   == 171536 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfMaxSlamClosingXSpeed (asm +171536)");
-        static_assert(offsetof(VehicleManager, mfMinSecondsBetweenImpacts) == 171540 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfMinSecondsBetweenImpacts (asm +171540) -- was mis-typed s32 miAttackerToRecord");
-        static_assert(offsetof(VehicleManager, mfTailgatingVunerabilityTime) == 171552 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfTailgatingVunerabilityTime (asm +171552; value recovered from the sibling build)");
-        static_assert(offsetof(VehicleManager, mfTBoneTakedownMaxAngle)  == 171564 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfTBoneTakedownMaxAngle (asm +171564)");
-        static_assert(offsetof(VehicleManager, mfTBoneTakedownSpeed)     == 171568 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfTBoneTakedownSpeed (asm +171568)");
-        static_assert(offsetof(VehicleManager, mfMinShuntSpeed)          == 171580 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfMinShuntSpeed (asm +171580)");
-        static_assert(offsetof(VehicleManager, mfFatalShuntSpeed)        == 171584 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfFatalShuntSpeed (asm +171584)");
-        static_assert(offsetof(VehicleManager, mfMinTradingPaintSpeed)   == 171616 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfMinTradingPaintSpeed (asm +171616)");
-        static_assert(offsetof(VehicleManager, mfFatalSlamSpeed)         == 171620 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfFatalSlamSpeed (asm +171620)");
-        static_assert(offsetof(VehicleManager, mfMaxHeadToHeadAngle)     == 171628 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfMaxHeadToHeadAngle (asm +171628)");
-        static_assert(offsetof(VehicleManager, mfMinHeadToHeadIndividualSpeed) == 171636 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfMinHeadToHeadIndividualSpeed (asm +171636)");
-        static_assert(offsetof(VehicleManager, mfAngleForVerticleTakedown) == 171640 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfAngleForVerticleTakedown (asm +171640) -- last of the 44-float run");
-        static_assert(offsetof(VehicleManager, maeImpactType) == 171644 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
-                      "171468 + 44*4 == 171644: the 44-float tuning run closes exactly onto maeImpactType with no gaps");
-        static_assert(offsetof(VehicleManager, mauImpactScore)  == 171676 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mauImpactScore (asm base 171676)");
-        static_assert(offsetof(VehicleManager, mafNoImpactTimeSeconds)    == 171684 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mafNoImpactTimeSeconds (asm base 171684) -- was mis-typed s32[8]");
-        static_assert(offsetof(VehicleManager, maiPhysicsSlamIndex) == 171716 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "maiPhysicsSlamIndex");
-        static_assert(offsetof(VehicleManager, mPlayerWonImpact) == 171736 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mPlayerWonImpact (asm +171736)");
         // The two seats the committed header modelled as scalar grind thresholds are element 7 of
         // these two per-car arrays -- 171840 + 7*4 == 171868 and 171872 + 7*4 == 171900.
-        static_assert(offsetof(VehicleManager, mafVulnerableTimeSeconds) == 171744 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mafVulnerableTimeSeconds");
-        static_assert(offsetof(VehicleManager, mafPlayerGrindingOtherDurationSeconds) == 171840 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
-                      "mafPlayerGrindingOtherDurationSeconds base; [7] == the old mfGrindingThresholdA seat 171868");
-        static_assert(offsetof(VehicleManager, mafOtherGrindingPlayerDurationSeconds) == 171872 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
-                      "mafOtherGrindingPlayerDurationSeconds base; [7] == the old mfGrindingThresholdB seat 171900");
-        static_assert(offsetof(VehicleManager, mabRubbingThisUpdate) == 171952 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mabRubbingThisUpdate");
-        static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mPlayerAiDriver (asm VehicleDriver::Construct(this + 171968))");
-        static_assert(offsetof(VehicleManager, mbPlayerAiDriverValid)    == 172192 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbPlayerAiDriverValid");
-        static_assert(offsetof(VehicleManager, mfSteeringUpdateRemainder) == 172200 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfSteeringUpdateRemainder");
-        static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mePlayerActiveRaceCarIndex (asm +172204)");
-        static_assert(offsetof(VehicleManager, mfCrashingAICollisionCrashThresholdMPH) == 172208 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfCrashingAICollisionCrashThresholdMPH (asm +172208)");
-        static_assert(offsetof(VehicleManager, mfVerticalTakedownAngleDeg) == 172228 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfVerticalTakedownAngleDeg (asm +172228; last of the six-float run)");
-        static_assert(offsetof(VehicleManager, mCameraMatrix)            == 172240 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mCameraMatrix (asm addi r11,r11,-0x5F30; 4 x stvx128)");
         static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0, "Matrix44Affine must land 16-aligned with no compiler-inserted padding");
-        static_assert(offsetof(VehicleManager, mbImpactTime)            == 172304 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbImpactTime (asm +172304)");
-        static_assert(offsetof(VehicleManager, mbStopPlayerCrashing)    == 172306 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbStopPlayerCrashing (asm +172306)");
-        static_assert(offsetof(VehicleManager, mbStopAICrashing) == 172307 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbStopAICrashing (asm +172307)");
-        static_assert(offsetof(VehicleManager, DEBUG_mbHornTakedownEnabled)    == 172311 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "DEBUG_mbHornTakedownEnabled (asm +172311)");
-        static_assert(offsetof(VehicleManager, mbTrafficCheckingAllowed) == 172313 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbTrafficCheckingAllowed (asm +172313; the one bool Construct seeds TRUE)");
-        static_assert(offsetof(VehicleManager, mbIsOnlineGameMode) == 172315 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbIsOnlineGameMode (asm +172315)");
-        static_assert(offsetof(VehicleManager, mbPlayerCarInJunkYard) == 172319 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbPlayerCarInJunkYard (asm +172319)");
-        static_assert(offsetof(VehicleManager, mfPlayerStatStrength)  == 172320 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfPlayerStatStrength (asm +172320; stfsx => f32)");
-        static_assert(offsetof(VehicleManager, miCarSpeed)            == 172328 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "miCarSpeed (asm +172328; stwx => s32)");
-        static_assert(offsetof(VehicleManager, meCarType)             == 172344 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "meCarType (asm +172344; stwx, seeded 3)");
-        static_assert(offsetof(VehicleManager, miPlayerBoost)         == 172360 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "miPlayerBoost");
-        static_assert(offsetof(VehicleManager, meCurrentGameModeType) == 172380 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "meCurrentGameModeType (asm +172380; seeded -1)");
-        static_assert(offsetof(VehicleManager, mfCarStatStrengthSlamMax) == 172384 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfCarStatStrengthSlamMax (asm +172384)");
-        static_assert(offsetof(VehicleManager, mfCarrStatStrengthBeingShuntedMin) == 172412 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mfCarrStatStrengthBeingShuntedMin (asm +172412; last of the eight)");
-        static_assert(offsetof(VehicleManager, muCachedCarASlot)      == 172416 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "muCachedCarASlot (asm +172416)");
-        static_assert(offsetof(VehicleManager, mbCachedCarCarPredictionResult) == 172424 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbCachedCarCarPredictionResult (asm +172424)");
-        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) == 172432 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mCachedCarCarPredictionNormal (asm stvx128 v0,r31,r9 with r9 == 172432)");
         static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0, "the prediction normal is loaded/stored with lvx128/stvx128 -- it must be 16-aligned");
-        static_assert(offsetof(VehicleManager, meStationaryPlayerWheelAngle) == 172448 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "meStationaryPlayerWheelAngle (asm +172448; seeded 2)");
-        static_assert(offsetof(VehicleManager, mbCrashRaceCarWhenFatal) == 172452 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "mbCrashRaceCarWhenFatal (asm +172452; seeded true)");
-        static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS, "meShowtimeBehaviour (asm +172456; seeded 2)");
-        static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS,
-                      "miRaceCarWorldContactValidationPM (asm +172460; named by the console's own assert at BrnVehicleManager.cpp:778)");
         // THESE FOUR WERE STALE, AND NOT BECAUSE OF THIS WAVE (corrected 2026-08-11). They
         // carried KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS for seats that sit PAST the 2026-08-06
         // contact-generation carve, so each was 76 bytes short -- and nothing said so for waves,
         // because this whole TU was UNMOUNTED then (that is exactly the hole
         // BrnVehicleManager_layout_check.cpp was created to close; this TU is mounted today and its
         // asserts compile). Conformed to the mounted gate's expressions, verbatim.
-        static_assert(offsetof(VehicleManager, miNumTrafficSphereWorldTests)
-                          == 172580 + KU_HOST_DRIFT_AFTER_RACECAR_DEBUG_COMPONENTS + 68,
-                      "console +172580; +68 = the growth ACCUMULATED BY THIS SEAT (the block's full "
-                      "+76 lands only after the tail's own 4-byte alignment pad)");
-        static_assert(offsetof(VehicleManager, mpTractionLineStreamProducer) > offsetof(VehicleManager, miNumTrafficSphereWorldTests), "renamed at the 2026-08-06 carve (console +172584 pointer; host seat via the mounted gate)");
-        static_assert(offsetof(VehicleManager, mStuckInCollisionTestCacheSphere) == 172592 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK, "mStuckInCollisionTestCacheSphere (asm stvx128 v127,r31,r11 with r11 == 172592)");
-        static_assert(offsetof(VehicleManager, mbPlayerCarStuckInCollision) == 172608 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK,
-                      "172592 + 16 == 172608: the Sphere/bool pair (DWARF :1087/:1088) closes to the byte");
-        static_assert(offsetof(VehicleManager, muTakedownEventsThisFrame) == 172612 + KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK, "muTakedownEventsThisFrame (asm +172612)");
     }
 }
 }
@@ -2146,7 +1726,6 @@ namespace Vehicle
 // (build_game_data.py --only "SURFACELIST.BIN" --force): a stale SURFACELIST.BIN dies inside
 // Attrib::Collection::GetData and then AVs.
 // =================================================================================================
-
 
 namespace BrnPhysics
 {
@@ -2171,31 +1750,6 @@ void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
 {
     Attrib::Gen::surfacelist lSurfaceList;
     lSurfaceList.ChangeWithDefault(luSurfaceListKey);
-
-    // [FLAG PC bring-up guard -- NOT in the console body.] The console's database is always up
-    // by the time this runs; on the PC a failed resolve (database not initialised, or the class
-    // / collection absent from a stale vault) leaves the instance with no collection, and the
-    // element walk below then dies in Attrib::Collection::GetData and AVs -- taking the boot
-    // with it. Bail loudly instead and leave gbReadSurfaceProperties FALSE, so the consumers'
-    // own "before properties have been loaded" asserts are what names the failure.
-    // DELETE-WHEN the attrib database bring-up guarantees the surfacelist collection resolves at
-    // WorldModule::Prepare time.
-    if (!lSurfaceList.IsValid())
-    {
-        static bool sbReported = false;
-        if (!sbReported)
-        {
-            sbReported = true;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[surface-bank] ReadSurfaceProperties: surfacelist did not resolve "
-                       "(no collection bound by ChangeWithDefault) -- the grip/roughness/drag "
-                       "bank stays at its static zeros [FLAG PC bring-up guard]\n";
-            }
-        }
-        return;
-    }
 
     // ---- the corruption check on element 1 -----------------------------------------------
     {
@@ -2222,13 +1776,6 @@ void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
     // ---- the count, then the per-surface walk ---------------------------------------------
     KI_NUM_USED_SURFACES = lSurfaceList.Num_Surfaces();
 
-    // [FLAG PC host guard -- NOT in the console body.] The console loops to Num_Surfaces with no
-    // upper bound because its four banks and the shipped list were sized together. On the host
-    // the banks are KI_MAX_NUM_SURFACES long and a longer list would walk off the end of three
-    // 16-byte-strided globals. Same shape of guard the reset pump already applies to
-    // KAB_SURFACE_IS_WATER at its own read site.
-    CGS_ASSERT(KI_NUM_USED_SURFACES <= KI_MAX_NUM_SURFACES,
-               "KI_NUM_USED_SURFACES <= KI_MAX_NUM_SURFACES");
     const s32 liSurfaceCount = (KI_NUM_USED_SURFACES < KI_MAX_NUM_SURFACES)
                                    ? KI_NUM_USED_SURFACES
                                    : KI_MAX_NUM_SURFACES;

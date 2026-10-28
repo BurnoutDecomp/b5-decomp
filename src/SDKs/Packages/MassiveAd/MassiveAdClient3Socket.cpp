@@ -158,13 +158,6 @@ int CMassiveSocket::Disconnect()
 // ---------------------------------------------------------------------------
 // CMassiveSocket::Connect
 //
-// Records the peer, opens a non-blocking TCP socket with the requested buffer
-// sizes and starts the connect. 1 when the connect is under way (or done), 0
-// when a socket is already open, socket creation failed, or the connect failed
-// with a hard error. FLAG PC-platform: the peer address and port are host-order
-// values; Winsock takes them in network order, which the big-endian console
-// stored them in natively.
-// ---------------------------------------------------------------------------
 int CMassiveSocket::Connect(unsigned int nAddress, unsigned short nPort, int nSendBufferSize,
                             int nReceiveBufferSize)
 {

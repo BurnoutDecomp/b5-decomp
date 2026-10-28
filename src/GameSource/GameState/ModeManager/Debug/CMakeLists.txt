@@ -3,7 +3,6 @@ target_sources(${PROJECT_NAME}
         BrnCrashScoreDebugComponent.cpp
         BrnModeManagerDebugComponent.cpp
         BrnScoringSystemDebugComponent.cpp
-        BrnScoringSystemDebugComponent_embed_check.cpp
 
     PUBLIC
         BrnCrashScoreDebugComponent.h

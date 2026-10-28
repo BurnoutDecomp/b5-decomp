@@ -8,7 +8,7 @@
 
 #include "SDKs/EATech/eathread/eathread_rwmutex.h"
 
-#include <windows.h>  // CRITICAL_SECTION, Initialize/Enter/LeaveCriticalSection
+#include <xtl.h>  // CRITICAL_SECTION, Initialize/Enter/LeaveCriticalSection
 
 namespace EA
 {

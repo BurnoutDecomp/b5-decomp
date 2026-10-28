@@ -7,9 +7,7 @@ target_sources(${PROJECT_NAME}
         BrnGuiModuleAboveCarObjectLayout.cpp
         BrnReplayArray.cpp
         BrnReplayBaseSerialiser.cpp
-        BrnReplayBaseSerialiser_embed_check.cpp
         BrnReplayDebugComponent.cpp
-        BrnReplayDebugComponent_embed_check.cpp
         BrnReplayGuiModuleStaticLayout.cpp
         BrnReplayModule.cpp
         BrnReplayModule_Prepare.cpp
@@ -17,9 +15,7 @@ target_sources(${PROJECT_NAME}
         BrnReplayQuantisedQuatPos.cpp
         BrnReplayQuantisedVector4.cpp
         BrnReplayRequestInterface.cpp
-        BrnReplayRequestInterface_embed_check.cpp
         BrnReplayStatusInterface.cpp
-        BrnReplayStatusInterface_embed_check.cpp
         RingBuffer_float.cpp
 
     PUBLIC

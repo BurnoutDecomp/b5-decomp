@@ -308,13 +308,7 @@ void BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render(
     // WorldModule::GenerateDispatchLists @0x827D1CE8 (BrnWorldModule.cpp:3748, no callers).
     // The getenv latch is evaluated once; a per-frame getenv would be a syscall.
     {
-        static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
         static bool       sbLoggedSeeded = false;
-        if (sbPropDiag && !sbLoggedSeeded && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedSeeded = true;
-            *CgsDev::Log::gpDebugPrint << "[Q6-dispatch] prop dispatch input seeded\n";
-        }
     }
 
     // ---- the race-car module (@0x827ABEEC..@0x827ABF34) --------------------

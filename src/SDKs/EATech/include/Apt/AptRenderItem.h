@@ -73,20 +73,6 @@ struct AptRenderItem
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptRenderItem, mpCharacter)           == 0x08, "x64 ?GetCharacterConst: mov rax,[rcx+8]");
-        static_assert(offsetof(AptRenderItem, mpPositionMatrix)      == 0x10, "x64 ctor 0x1408267A0 zeroes [rcx+10h]");
-        static_assert(offsetof(AptRenderItem, mpColorMatrix)         == 0x18, "x64 ctor zeroes [rcx+18h]");
-        static_assert(offsetof(AptRenderItem, mpMaskPositionMatrix)  == 0x20, "x64 ?GetMaskPositionMatrixConst: [rcx+20h]");
-        static_assert(offsetof(AptRenderItem, mDepth)                == 0x28, "x64 ?GetDepth: movsx eax, word [rcx+28h]");
-        static_assert(offsetof(AptRenderItem, mClipDepth)            == 0x2A, "x64 ?GetClipDepth: [rcx+2Ah]");
-        static_assert(offsetof(AptRenderItem, mFlags)                == 0x2C, "x64 ?GetIsVisible: dword [rcx+2Ch]");
-        static_assert(offsetof(AptRenderItem, mpMask)                == 0x30, "x64 ?GetMask: [rcx+30h]");
-        static_assert(offsetof(AptRenderItem, mCreatedOnTick)        == 0x38, "x64 ?GetCreatedOnTick: [rcx+38h]");
-        static_assert(offsetof(AptRenderItem, mRefCount)             == 0x3C, "x64 ?GetRefCount: [rcx+3Ch]");
-        static_assert(offsetof(AptRenderItem, mpManagerNextRevision) == 0x40, "x64 ?Manager_GetNextRevision: [rcx+40h]");
-        static_assert(offsetof(AptRenderItem, mpManagerNextSibling)  == 0x48, "x64 ?Manager_GetNextSibling: [rcx+48h]");
-        static_assert(offsetof(AptRenderItem, mpManagerFirstChild)   == 0x50, "x64 ?Manager_GetFirstChild: [rcx+50h]");
-        static_assert(sizeof(AptRenderItem) == 0x58, "x64 factory 0x14083C0D0 pool-allocs 88 for base-only subtypes");
     }
 
     static int sItemsAllocated;

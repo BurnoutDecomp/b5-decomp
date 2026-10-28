@@ -47,9 +47,6 @@ namespace
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[T-recycle] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
-                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
     }
 

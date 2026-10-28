@@ -89,15 +89,6 @@ namespace
         GsmIO::E_MODE_MARKED_MAN      // 8 -> [8],                              rank record +0x63
     };
 
-    // [FLAG PC witness] the `[medals] ...` lines -- NOT IN THE X360 BINARY. Opt-in behind
-    // BRN_PROGRESSION_MEDALS, capped, printed on every call of two functions that run a handful
-    // of times per boot. tools/tests/cases/progression_medals.ps1 is the only consumer.
-    bool MedalsDiagEnabled()
-    {
-        static const bool sbDiag = (getenv("BRN_PROGRESSION_MEDALS") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
-
     // One-shot park reporter (campaign house rule: a park must be visible, not silent).
     void ParkOnce(bool& lrbAlreadySaid, const char* lpcMessage)
     {
@@ -328,22 +319,6 @@ void ProgressionManager::FixGameModeRanks()
         }
     }
 
-    // [FLAG PC witness] see MedalsDiagEnabled.
-    if (MedalsDiagEnabled())
-    {
-        static s32 siPrintedFixRanks = 0;
-        if (siPrintedFixRanks < 16)
-        {
-            ++siPrintedFixRanks;
-            *CgsDev::Log::gpDebugPrint
-                << "[medals] fixranks rank="  << static_cast<s32>(mProfile.GetCurrentProgressionRank())
-                << " race="                   << static_cast<s32>(lai8ModeRanks[0])
-                << " roadrage="               << static_cast<s32>(lai8ModeRanks[1])
-                << " stunt="                  << static_cast<s32>(lai8ModeRanks[2])
-                << " markedman="              << static_cast<s32>(lai8ModeRanks[3])
-                << "\n";
-        }
-    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -478,25 +453,6 @@ void ProgressionManager::UpdatePlayerMedals(GsmIO::GameActionQueue* lpGameAction
 
     mbPlayerMedalsUpdateRequired = false;                               // stbx 0 -> +0x20973
 
-    // [FLAG PC witness] see MedalsDiagEnabled. `events=` is the profile's event-record count --
-    // the number UnlockToProgressionRank(0)'s population produces and the number the
-    // progression_medals case pins so the retired Prepare2 seam cannot have changed it.
-    if (MedalsDiagEnabled())
-    {
-        static s32 siPrintedMedals = 0;
-        if (siPrintedMedals < 16)
-        {
-            ++siPrintedMedals;
-            *CgsDev::Log::gpDebugPrint
-                << "[medals] total="   << static_cast<s32>(luTotalWinsForCurrentRank)
-                << " rank="            << static_cast<s32>(mi8ProgressionRank)
-                << " profileRank="     << static_cast<s32>(mProfile.GetCurrentProgressionRank())
-                << " winsToNext="      << static_cast<s32>(li16WinsForNextRank)
-                << " action200=1"
-                << " events="          << static_cast<s32>(mProfile.GetEventCount())
-                << "\n";
-        }
-    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -634,13 +590,6 @@ void ProgressionManager::UnlockToProgressionRankLicenceUpgrade(
     }
     else
     {
-        // [FLAG PC bring-up] the console dereferences +0x20938 unguarded; Prepare2 installs it,
-        // and a null one on a PC boot path would be an access violation rather than a missing
-        // achievement. DELETE-WHEN ProgressionManager::Construct/Prepare2 always run first.
-        ParkOnce(gbSaidNoAchievementManager,
-                 "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank(N): "
-                 "mpAchievementManager (X360 +133432) is NULL -- the licence-upgrade achievement "
-                 "was not awarded.\n");
     }
 
     if (lpGameActionQueue == 0)

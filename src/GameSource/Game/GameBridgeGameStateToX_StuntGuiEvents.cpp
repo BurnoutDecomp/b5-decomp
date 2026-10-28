@@ -44,7 +44,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint
 #include "GameSource/Gui/Events/BrnGuiChallengeEvents.h"           // GUI 574 / 576 / 577 (free-burn challenge arms)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"           // CgsSystem::Time (the action-152 record)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"      // bounded [netui] witness lines
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                          // ModeManager::GetScoringSystem (case 279)
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                // ScoringSystem::GetCrashScorer (case 279)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring (case 279)
@@ -225,18 +224,6 @@ namespace
     // [DIAG] NOT IN THE X360 BINARY -- the race-mode HUD message rung (BRN_MODEMGR_DIAG, first 24
     // lines): which HUDMessageLogic action became which GUI event, with its car slot and value
     // (the split seconds for 245, the finish place for 247).
-    void RaceHudBridgeDiag(s32 liAction, s32 liGuiEvent, s32 liCarIndex, f32 lfValue)
-    {
-        static const bool sbDiag      = (getenv("BRN_MODEMGR_DIAG") != 0);
-        static s32        siLinesLeft = 24;
-        if (!sbDiag || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
-        {
-            return;
-        }
-        --siLinesLeft;
-        *CgsDev::Log::gpDebugPrint << "[race-hud] action " << liAction << " -> gui " << liGuiEvent
-                                   << " (car slot " << liCarIndex << ", value " << lfValue << ")\n";
-    }
 
     // The free-burn challenge GUI records the 152..160 arms post, TU-local (their canonical
     // opaque homes are in BrnGuiDemangledEventTypes.h). Member
@@ -350,7 +337,6 @@ namespace
 
         // [DIAG] the `[UI-gate]` ladder's Gui-event rung. NOT IN THE X360 BINARY. Same logger,
         // same env guard (BRN_PROP_DIAG) and same first-N latch as the rest of the ladder.
-        static const bool sbPropDiag      = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static s32        siDiagLinesLeft = 8;
 
         // ⭐ [minimap blips, issue #9, 2026-09-07] THE PENDING SAT-NAV RECORD. The console keeps ONE
@@ -1425,8 +1411,6 @@ namespace
                     PushGuiEvent(lAutosaveRequest, lpGuiInput);
                 }
 
-                // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_DISCO_DIAG), first 16 lines.
-                static const bool sbDiscoDiag      = (getenv("BRN_DISCO_DIAG") != 0);
                 static s32        siDiscoLinesLeft = 16;
                 if (sbDiscoDiag && siDiscoLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
                 {
@@ -1437,15 +1421,6 @@ namespace
                         << " count " << lpStunt->miCurrentCount << "/" << lpStunt->miTotalCount << ")\n";
                 }
 
-                if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siDiagLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] gui-event id=" << liPostedGuiEventId
-                        << " type=" << static_cast<s32>(leGuiStuntType)
-                        << " count=" << lpStunt->miCurrentCount
-                        << "/" << lpStunt->miTotalCount << "\n";
-                }
                 break;
             }
 
@@ -1594,14 +1569,6 @@ namespace
                 lEvent.meCounty           = lpAreaDone->meCounty;
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siDiagLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] gui-event id=" << lEvent.GetEventType()
-                        << " type=" << static_cast<s32>(lEvent.meStuntElementType)
-                        << " county=" << static_cast<s32>(lEvent.meCounty) << "\n";
-                }
                 break;
             }
 
@@ -1618,13 +1585,6 @@ namespace
                     MapStuntEnumsFromGameplayToGui(static_cast<u32>(lpAllDone->meStuntElementType));
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siDiagLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[UI-gate] gui-event id=" << lEvent.GetEventType()
-                        << " type=" << static_cast<s32>(lEvent.meStuntElementType) << "\n";
-                }
                 break;
             }
 
@@ -1649,13 +1609,6 @@ namespace
                 lEvent.maData[0] = *reinterpret_cast<const u8*>(lpAction);   // the action's own byte
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    --siDiagLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[profile-save] action 55 -> gui 356 (flag "
-                        << static_cast<s32>(lEvent.maData[0]) << ")\n";
-                }
                 break;
             }
 
@@ -1726,13 +1679,6 @@ namespace
                 PushGuiEvent(lEvent, lpGuiInput);
 
                 // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY.
-                static const bool sbTdShutdownDiag = (getenv("BRN_TD_DIAG") != 0);
-                if (sbTdShutdownDiag && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[td-gui] action 120 -> gui 373 (victim car id "
-                                               << static_cast<u32>(lEvent.mVictimCarID >> 32) << ":"
-                                               << static_cast<u32>(lEvent.mVictimCarID) << ")\n";
-                }
                 break;
             }
 
@@ -1755,11 +1701,6 @@ namespace
                 PushGuiEvent(lEvent, lpGuiInput);
 
                 // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY.
-                static const bool sbTdDiag = (getenv("BRN_TD_DIAG") != 0);
-                if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[td-gui] action 121 -> gui 374 (1 byte)\n";
-                }
                 break;
             }
 
@@ -1823,7 +1764,6 @@ namespace
                 lEvent.meLeadActiveRaceCarIndex = lpTookLeadAction->meActiveRaceCarIndex;   // `lwz 8`
                 lEvent.mOfflineRivalCarID       = lpTookLeadAction->mCarId;                 // `ld 0`
                 PushGuiEvent(lEvent, lpGuiInput);
-                RaceHudBridgeDiag(242, 484, static_cast<s32>(lEvent.meLeadActiveRaceCarIndex), 0.0f);
                 break;
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_LEADING:   // 245
@@ -1836,7 +1776,6 @@ namespace
                 lEvent.mbLocalPlayerIsLeading     = lpLeadingAction->mbLocalPlayerIsLeading;   // `lbz 0x10`
                 lEvent.meLeaderActiveRaceCarIndex = lpLeadingAction->meLeadingCarIndex;        // `lwz 0xC`
                 PushGuiEvent(lEvent, lpGuiInput);
-                RaceHudBridgeDiag(245, 420, static_cast<s32>(lEvent.meLeaderActiveRaceCarIndex), lEvent.mfLeadTime);
                 break;
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_NECK_AND_NECK:   // 246
@@ -1844,7 +1783,6 @@ namespace
                 NeckAndNeckEventWire421 lEvent;
                 lEvent.mu8Unwritten = 0;
                 PushGuiEvent(lEvent, lpGuiInput);
-                RaceHudBridgeDiag(246, 421, -1, 0.0f);
                 break;
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_FINISHES:   // 247
@@ -1855,8 +1793,6 @@ namespace
                 lEvent.meActiveRaceCarIndex = lpFinishesAction->meRivalRaceCarIndex;   // `lwz 0`
                 lEvent.miFinishPosition     = lpFinishesAction->miFinishPosition;      // `lwz 4`
                 PushGuiEvent(lEvent, lpGuiInput);
-                RaceHudBridgeDiag(247, 423, static_cast<s32>(lEvent.meActiveRaceCarIndex),
-                                  static_cast<f32>(lEvent.miFinishPosition));
                 break;
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT:   // 248
@@ -1868,7 +1804,6 @@ namespace
                 lEvent.mRivalID                   = lpCheckpointAction->mRivalID;               // `ld 0`
                 lEvent.meRivalActiveRaceCarIndex  = lpCheckpointAction->meRivalRaceCarIndex;    // `lwz 0x10`
                 PushGuiEvent(lEvent, lpGuiInput);
-                RaceHudBridgeDiag(248, 422, static_cast<s32>(lEvent.meRivalActiveRaceCarIndex), 0.0f);
                 break;
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES:   // 250
@@ -1879,7 +1814,6 @@ namespace
                 lEvent.mRivalCarID                        = lpCrashesAction->mRivalID;               // `ld 0`
                 lEvent.meNetworkPlayerActiveRaceCarIndex  = lpCrashesAction->meRivalRaceCarIndex;    // `lwz 8`
                 PushGuiEvent(lEvent, lpGuiInput);
-                RaceHudBridgeDiag(250, 482, static_cast<s32>(lEvent.meNetworkPlayerActiveRaceCarIndex), 0.0f);
                 break;
             }
 
@@ -2621,16 +2555,7 @@ namespace
                 // cut of this instrument printed only inside the arms and returned a zero that
                 // meant nothing.
                 {
-                    static const bool sbGateDiag  = ( getenv( "BRN_SHOWTIME_SCORE_DIAG" ) != 0 );
                     static s32        siGateLines = 16;
-                    if ( sbGateDiag && siGateLines > 0 && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        --siGateLines;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[showtime-gate] action " << liActionType
-                            << " scoringOut.meGameModeType=" << liGameModeType
-                            << (lbShowtime ? " -> TRANSLATE\n" : " -> refused (not showtime)\n");
-                    }
                 }
 
                 if (lbShowtime)
@@ -2684,11 +2609,6 @@ namespace
                 CGS_ASSERT(lpAction != 0, "lpChallengeAction");
                 const BrnGameState::GameStateModuleIO::FreeburnChallengeAction* lpChallengeAction =
                     reinterpret_cast<const BrnGameState::GameStateModuleIO::FreeburnChallengeAction*>(lpAction);
-
-                BrnNetHarnessPC::WitnessTag("netui", "fburn-gui", "action 153 type=%d id=%016llx host=%d",
-                                            lpChallengeAction->meEventType,
-                                            static_cast<unsigned long long>(lpChallengeAction->mChallengeID),
-                                            lpChallengeAction->mbIsHost ? 1 : 0);
 
                 switch (lpChallengeAction->meEventType)
                 {
@@ -2821,9 +2741,6 @@ namespace
                 }
                 PushGuiEvent(lEvent, lpGuiInput);
 
-                // [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_ROADRULES_DIAG): the first 8
-                // frames, then every 60th, 48 lines in all -- this action posts every frame.
-                static const bool sbRoadRulesDiag      = (getenv("BRN_ROADRULES_DIAG") != 0);
                 static s32        siRoadRulesDiagLeft  = 48;
                 static s32        siRoadRulesDiagFrame = 0;
                 ++siRoadRulesDiagFrame;

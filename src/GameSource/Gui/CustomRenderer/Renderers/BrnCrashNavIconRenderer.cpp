@@ -39,8 +39,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                   // CgsID
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"       // CgsDev::Log / CgsDev::Message
-#include "pc/gcm/renderengine/renderstates.h"                    // renderengine::TextureState (+Parameters) / Texture
-
 #include <cstring>   // _strnicmp / strlen
 
 // includes folded in from the BrnCrashNavIconRenderer_w*.cpp partfiles (2026-09-15)
@@ -453,28 +451,9 @@ CgsID CrashNavIconRenderer::GetID() const
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::Update()
 {
-    // FLAG PC-platform leaf: the original empty update is the host's boundary
-    // between a newly published GUI frame and repeated presentations of it.
-    // The manager calls this after dispatching all this update's view events.
-    mFrameInputPC.mHoveredEventIcon = mHoveredEventIcon;
-    mFrameInputPC.mCursorStatus = mGuiEventMapCursorStatus;
-    mFrameInputPC.mIconStatus = mGuiEventMapIconStatus;
     // The original Construct seeds only this record's pointer. Copy its object
     // representation; the scale is read only when a real bank has been published.
-    std::memcpy(&mFrameInputPC.mRoadSignStatus, &mRoadSignIconStatus, sizeof(mRoadSignIconStatus));
     mbFrameInputPCValid = true;
-}
-
-// FLAG PC-platform leaf: replay the same completed GUI input on render-only
-// presentations. The working records keep their original consume/clear stores.
-void CrashNavIconRenderer::RestoreFrameInputPC()
-{
-    if (!mbFrameInputPCValid)
-        return;
-    mHoveredEventIcon = mFrameInputPC.mHoveredEventIcon;
-    mGuiEventMapCursorStatus = mFrameInputPC.mCursorStatus;
-    mGuiEventMapIconStatus = mFrameInputPC.mIconStatus;
-    std::memcpy(&mRoadSignIconStatus, &mFrameInputPC.mRoadSignStatus, sizeof(mRoadSignIconStatus));
 }
 
 // ---------------------------------------------------------------------------
@@ -674,7 +653,6 @@ void CrashNavIconRenderer::InitEventTypeUvs()
 void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
     {
-        static const bool sbCnavDiag = (getenv("BRN_SATNAV_DIAG") != 0);
         static s32 saiSeen[8] = { 0 };
         s32 liSlot = -1;
         switch (liEventType)
@@ -687,11 +665,6 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
         case KI_EVENT_ROAD_SIGN_ICON_STATUS: liSlot = 5; break;
         case KI_EVENT_SET_CACHE:             liSlot = 6; break;
         default: break;
-        }
-        if (sbCnavDiag && liSlot >= 0 && saiSeen[liSlot] < 3 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++saiSeen[liSlot];
-            *CgsDev::Log::gpDebugPrint << "[cnav-diag] RecvEvent id=" << liEventType << "\n";
         }
     }
     switch (liEventType)
@@ -935,7 +908,6 @@ void CrashNavIconRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEven
 // BrnCrashNavIconRenderer.cpp line number rides in a trailing comment (CGS_ASSERT stamps
 // __FILE__/__LINE__ of THIS file).
 // ============================================================================
-
 
 namespace BrnGui
 {
@@ -1581,21 +1553,6 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
     {
         const BrnProgression::ProfileEvent* lpProfileEvent = mpGuiCache->GetProfileEvent(luIndex);
 
-        // [FLAG PC bring-up guard] the console derefs straight through; on this build the
-        // WorldDataController's progression binding can still be staging, exactly as
-        // BrnSatNavRenderer.cpp's RenderIconsForSatNav already documents and guards.
-        // DELETE-WHEN the WDC data binding lands.
-        if (lpProfileEvent == 0)
-        {
-            *lpbFiltered       = true;
-            *lpbUseMiniIcon    = false;
-            *lpuEventID        = 0;
-            *lpeIconType       = E_CRASHNAVICON_EVENT_NOTATTEMPTED;
-            *lpuEventTypeIndex = 0;
-            lrv3Position.SetZero();
-            return;
-        }
-
         const u32 luEventId = lpProfileEvent->GetID();
 
         const SatNavEventDisplayInfo* lpDisplayInfo =
@@ -2064,9 +2021,6 @@ void CrashNavIconRenderer::RenderRoadSigns(Im2dCommandBuffer* lpRenderBuffer)
 // ---------------------------------------------------------------------------
 void CrashNavIconRenderer::RenderStartFinish(Im2dCommandBuffer* lpRenderBuffer)
 {
-    // FLAG PC diagnostic: observe the original endpoint bank and exact quad
-    // coordinates, without changing selection, viewport, geometry or drawing.
-    static const bool sbEndpointDiag = (getenv("BRN_SATNAV_DIAG") != 0);
     static u32 suEndpointTick = 0;
     static u32 suEndpointSamples = 0;
     const bool lbEndpointSample = sbEndpointDiag && CgsDev::Log::gpDebugPrint != 0 &&
@@ -2628,51 +2582,6 @@ void CrashNavIconRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     Im2dCommandBuffer* lpRenderBuffer = ResolveCrashNavBuffer(lpRendererSet);
     CGS_ASSERT(lpRenderBuffer != 0, "lpImRenderers->mpIm2dRenderBuffer");   // console line 556
 
-    // [FLAG PC bring-up] the console derefs straight through these asserts. On this build
-    // the component can be pumped before its stage machine has finished (the crash-nav
-    // state's resource pump is still being wired -- see s1 §1.5), so the three console
-    // preconditions get a real early-out here rather than an AV.
-    if (lpRenderBuffer == 0 || mePrepareStage != E_PREPARESTAGE_DONE)
-        return;
-
-    RestoreFrameInputPC();
-
-    // [FLAG PC bring-up] THE NOT-YET-LATCHED WINDOW. The map screen can render one frame
-    // before any GuiEventRenderMainMap (id 223) has reached RecvEvent, so mRenderMainMapEvent
-    // is still the all-zero ctor record -- and RenderIcons' console assert
-    // `mRenderMainMapEvent.mfZoomLevel != 0.0f` (line 1122) fires, timing-dependently, roughly
-    // one boot in a few. UNREACHABLE ON CONSOLE: the map state publishes 223 to every seated
-    // renderer before the screen's first render pump, so an all-zero record is not a state the
-    // console's ordering can produce; on this build the seating/pump order is still being wired
-    // (s1 §1.5), which is what opens the window. MainMapRenderer::RenderComponent already rides
-    // it out with its four-way guard (mpActiveTextures / mpGuiCache / the two mask states, all
-    // of which stay null-or-unset until the same event + InitResources have run), so slot 3
-    // takes the IDENTICAL early-out -- the two halves of the map screen must appear on the same
-    // frame or neither, and matching the guards is what guarantees that.
-    // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the gate report: which of the early-outs
-    // above / below is holding the crash-nav furniture off the screen. BRN_SATNAV_DIAG only,
-    // every 120th call.
-    {
-        static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
-        static s32 siTick = 0;
-        if (sbDiag && CgsDev::Log::gpDebugPrint != 0 && (siTick++ % 120) == 0)
-            *CgsDev::Log::gpDebugPrint
-                << "[cnav-diag] RenderComponent: buffer=" << (lpRenderBuffer != 0)
-                << " stage=" << static_cast<s32>(mePrepareStage)
-                << " textures=" << (mRenderMainMapEvent.mpActiveTextures != 0)
-                << " cache=" << (mpGuiCache != 0)
-                << " masks=" << (mpBackgroundMaskTextureState != 0) << "/" << (mpPreRaceMaskTextureState != 0)
-                << " maptype=" << static_cast<s32>(mRenderMainMapEvent.meMapType)
-                << " zoom=" << mRenderMainMapEvent.mfZoomLevel
-                << " active=" << (mRenderMainMapEvent.mbIsActive ? 1 : 0)
-                << " drawEvents=" << (mbRenderEventStarts ? 1 : 0)
-                << " displayType=" << static_cast<s32>(meIconDisplayType)
-                << " numIcons=" << (mpGuiCache != 0 && meIconDisplayType < GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT ? static_cast<s32>(GetNumIcons()) : -1)
-                << " bank=" << mGuiEventMapIconStatus.liNumberOfIcons << "/" << (mGuiEventMapIconStatus.lpSatNavIcons != 0)
-                << " cursor=" << mGuiEventMapCursorStatus.miDisplayState << "/" << mGuiEventMapCursorStatus.miAnimationState
-                << "\n";
-    }
-
     if (mRenderMainMapEvent.mpActiveTextures == 0 ||
         mpGuiCache                           == 0 ||
         mpBackgroundMaskTextureState         == 0 ||
@@ -2736,8 +2645,6 @@ void CrashNavIconRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
 void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32 liIndex)
 {
     CGS_ASSERT(mpTextRenderer != 0, "Text renderer not set!");   // console line 1884
-    if (mpTextRenderer == 0 || mRoadSignIconStatus.mpRoadSignIcons == 0)
-        return;   // [FLAG PC bring-up] the console derefs straight through both
 
     const RoadSign& lrSign = mRoadSignList.maRoadSigns[liIndex];
 
@@ -2876,7 +2783,6 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
         liSignColour < 0 ||
         liSignColour >= static_cast<s32>(RoadSignIcon::KU_NUM_SIGN_COLOURS))
     {
-        return;   // [FLAG PC bring-up] the console's asserts are fatal; here they early-out
     }
 
     const CgsGraphics::Vector2& lrv2HalfExtents = KAV2_SIGN_HALF_EXTENTS[liSignSize];
@@ -2904,11 +2810,6 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     // v13, 1.0 / vmulfp v0, v127, unk_8305A950`) is exactly PackVertexColour's fold, and
     // unk_8305A950 is the same all-255 vector that helper already documents.
     const CgsGraphics::RGBA8 lTextRgba = PackVertexColour(lrv4SignColour);
-    const CgsGraphics::RGBA   lTextColour =
-        // FLAG PC-platform leaf: TextRenderer stores this native word into RGBA8.
-        // Preserve ARTIST's byte order r,g,b,a on little-endian host memory.
-        (static_cast<u32>(lTextRgba.a) << 24) | (static_cast<u32>(lTextRgba.b) << 16) |
-        (static_cast<u32>(lTextRgba.g) << 8)  |  static_cast<u32>(lTextRgba.r);
 
     const f32 lfTextAnchorX = lv2Device.x + lfScale * lrSign.mvTextOffset.x;
     const f32 lfTextAnchorY = lv2Device.y + lfScale * lrSign.mvTextOffset.y;
@@ -2940,9 +2841,6 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
     if (mTextObject.mbAutosize)
         mTextObject.CalculateAutosizing();
 
-    // FLAG PC-platform leaf: this pointer is the shared base command stream,
-    // so explicitly cross its existing native NDC -> logical pixel boundary.
-    lpRenderBuffer->SetTransform(CgsGraphics::Im2dTransformToLogicalPC(mTextTransform));
     mpTextRenderer->RenderStringBuffered(lpRenderBuffer, mTextObject);
 
     // Line 1 -- LEFT-aligned at a bare anchor point. The console writes the SAME point into

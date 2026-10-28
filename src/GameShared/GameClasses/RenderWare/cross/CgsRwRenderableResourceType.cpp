@@ -5,9 +5,6 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"     // Renderable / ObjectScopeTextureInfo
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h" // RenderableMesh
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"      // CgsGraphics::MaterialAssembly
-#include "pc/gcm/renderengine/IndexBuffer.h"                          // renderengine::IndexBuffer
-#include "pc/gcm/renderengine/VertexBuffer.h"                         // renderengine::VertexBuffer
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::RwRenderableResourceType::GetTypeID        @ 0x828A7D58  (executed)
 //   CgsResource::RwRenderableResourceType::FixDown          @ 0x828A7D60

@@ -161,12 +161,6 @@ namespace
     const u32 KU_SYMP_PERCENT_MODULUS      = 101u;
     const s32 KI_SYMP_HANDBRAKE_PERCENT    = 50;
 
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 }
 
 // =================================================================================================
@@ -241,13 +235,6 @@ void TrafficEntityModule::CrashVehicleForSympatheticCrashState(
     // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The chain's payoff line: if this never
     // prints, no traffic car ever chain-crashed and the [T6-tevt] drain below it has nothing to
     // drain -- which is exactly the state this file was written to end.
-    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[T6-symp] CHAIN CRASH committed vehicle=" << static_cast<s32>(luVehicle)
-            << " globalId=" << static_cast<s32>(lGlobalTrafficId.muValue)
-            << " [DELETE-WHEN-STABLE]\n";
-    }
 }
 
 // =================================================================================================
@@ -319,11 +306,6 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
 
     // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Where the crasher is, THIS frame --
     // published before the give-up arm so a give-up frame is stamped too.
-    if (TrafficDiagEnabled())
-    {
-        PublishSympCrasher(luVehicle, static_cast<s32>(lpVehicle->GetSympCrashState()),
-                           lvVehiclePos, false);
-    }
 
     // ---- 3. the GIVE-UP arm (0x8273D5AC..0x8273D634) ------------------------------------------
     // Threshold RECOVERED 2026-08-30 from its dyn-init thunk (banner): 2 MPH in m/s. The
@@ -345,22 +327,6 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
         // printed AFTER the store, so a reader can see the exit actually taken: 3 -> 5 means
         // IsSympatheticallyCrashing() goes false next frame and the car is handed to
         // UpdateNormalPhysical. A SECOND line for the same vehicle would mean the latch is back.
-        if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siGiveUpLogged = 0;
-            if (siGiveUpLogged < 24)
-            {
-                ++siGiveUpLogged;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T6-symp] GIVE-UP vehicle=" << static_cast<s32>(luVehicle)
-                    << " speed=" << lpVehicle->GetSpeed().x
-                    << " threshold=" << KF_SYMP_GIVE_UP_SPEED
-                    << " state=" << static_cast<s32>(lpVehicle->GetSympCrashState())
-                    << " reasonAfter=" << static_cast<s32>(lpVehicle->GetPhysicalReason())
-                    << " sympTime=" << lpVehicle->GetSympCrashTime()
-                    << " [DELETE-WHEN-STABLE]\n";
-            }
-        }
         return;
     }
 
@@ -389,22 +355,6 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
 
     // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line the FIRST time each state is
     // entered, so "the arm never ran" and "the arm ran and did nothing" are distinguishable.
-    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        static bool sbaStateLogged[5] = { false, false, false, false, false };
-        const s32 liState = static_cast<s32>(lpVehicle->GetSympCrashState());
-        if (liState >= 0 && liState < 5 && !sbaStateLogged[liState])
-        {
-            sbaStateLogged[liState] = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[T6-symp] state=" << liState
-                << " (1 HEADON 2 ACCEL 3 HANDBRAKE 4 LOCKUP) vehicle="
-                << static_cast<s32>(luVehicle)
-                << " fwdDist=" << lfForwardDistance
-                << " speed=" << lpVehicle->GetSpeed().x
-                << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
 
     switch (lpVehicle->GetSympCrashState())
     {
@@ -425,12 +375,6 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
                 // has no lead time at all (the car is already nose-first into the wreck), so a
                 // camera latched here films the aftermath rather than the approach -- still an
                 // impact on film, just a later one than the ACCELERATE tail gives.
-                if (TrafficDiagEnabled())
-                {
-                    PublishSympCrasher(luVehicle,
-                                       static_cast<s32>(Vehicle::E_SYMPATHETIC_HEADON),
-                                       lvVehiclePos, true);
-                }
                 CrashVehicleForSympatheticCrashState(luVehicle, lpOutput);
             }
             return;
@@ -469,20 +413,6 @@ void TrafficEntityModule::UpdateSympatheticCrashing(
         // the car crashes in 0.1 s (HANDBRAKE) or 1.1 s (LOCKUP) with no further test that can
         // call it off. This is the last instant a camera can be staged for the impact, so it is
         // where BRN_WORLD_CAMTRAFFIC=3 latches.
-        if (TrafficDiagEnabled())
-        {
-            PublishSympCrasher(luVehicle, static_cast<s32>(lpVehicle->GetSympCrashState()),
-                               lvVehiclePos, true);
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[T6-symp] COMMIT-BOUND vehicle=" << static_cast<s32>(luVehicle)
-                    << " -> state=" << static_cast<s32>(lpVehicle->GetSympCrashState())
-                    << " (3 HANDBRAKE 4 LOCKUP) fwdDist=" << lfForwardDistance
-                    << " pos=(" << lvVehiclePos.x << "," << lvVehiclePos.y << ","
-                    << lvVehiclePos.z << ") [DELETE-WHEN-STABLE]\n";
-            }
-        }
         return;
     }
 

@@ -1640,7 +1640,6 @@ namespace
     }
 }
 
-
 void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
 // ---- the free-burn lobby panel (mode 15) ------------------------------------------
 namespace
@@ -1818,8 +1817,6 @@ void EventInfoComponent::ShowFreeburnWithTitleText(GuiCache* lpCache)
                                     KAPC_ONLINE_GAME_SECURITY_STRINGS[lpCache->meOnlineSecurity],
                                     KI_FORMAT_STRING_ID);
 }
-
-
 
 // ARTIST0x82412F20: the destination label is shared by checkpoint event panels.
 void EventInfoComponent::UpdateDestinationText(GuiCache* lpCache)
@@ -2040,10 +2037,6 @@ void EventInfoComponent::UpdateBurningRoute(GuiCache* lpCache)
 // (HudMessageAnalyzer::HandleTakedown @0x8251C3C0 -> HandleCrashedEvent @0x8251C7C0
 // state 2) and the above-car banking score (AboveCarRenderer @0x824544D8).
 //
-// WITNESS: `[hud-rr] takedowns text <cur>/<target>` is logged after the two Apt text
-// writes, on change only, first 8 occurrences ([FLAG PC witness]; delete when the HUD
-// readout has been screenshot-verified against a console capture).
-// ============================================================================
 
 namespace BrnGui
 {
@@ -2127,22 +2120,6 @@ void EventInfoComponent::UpdateRoadRage(GuiCache* lpCache)
         miTargetTakedowns = lpCache->GetTargetTakedownsInEvent();
         maTextField[3].SetLocalisedText(miTargetTakedowns, KI_FORMAT_INTEGER);
         lbTakedownTextWritten = true;
-    }
-
-    // [FLAG PC witness] the final Apt text write of the takedown readout. Fires only on
-    // the frames the console itself rewrites a field (the two change tests above), and
-    // at most 8 times per process. No console counterpart. DELETE-WHEN: the road-rage HUD
-    // has been screenshot-verified against a console capture.
-    if (lbTakedownTextWritten)
-    {
-        static s32 siWitnessLeft = 8;
-        if (siWitnessLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            --siWitnessLeft;
-            *CgsDev::Log::gpDebugPrint
-                << "[hud-rr] takedowns text " << miCurrentTakedowns
-                << "/" << miTargetTakedowns << " [FLAG PC witness]\n";
-        }
     }
 
     // ---- 4. the two animator states, every frame @0x82429BF0-0x82429BFC --

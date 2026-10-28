@@ -1,4 +1,3 @@
-#include "GameShared/GameClasses/Sound/Playback/CgsSoundPcmTrace.h"
 // ============================================================================
 // CgsSplicerContent.cpp -- CgsSound::Playback splicer TTY dumps + slot teardown.
 //
@@ -88,11 +87,6 @@ bool SplicerContent::DoOnPostLoad()
     CGS_ASSERT(lbLoaded, "Splicer Bank failed to Load");
     if (!lbLoaded)
         return false;
-
-    // FLAG PC-platform witness: bank slots are assigned dynamically on load.
-    CgsSound::PcmTrace::Log("splicer-bank bank=%d name=%llu passby=%d\n", liBank,
-        static_cast<unsigned long long>(GetContentSpec().GetName().GetValue()),
-        GetContentSpec().GetName().GetValue() == Name::MakeHash("PassbyAsset"));
 
     mStatistics.~SpliceBankStatistics();
     ::new (&mStatistics) SpliceBankStatistics(
@@ -202,22 +196,6 @@ bool SplicerContentSlot::DoPlay(const Slot& /*arSlot*/, PlayerVoice& arVoice,
 
     if (lrVoice.mpSplice)
     {
-        // FLAG PC-platform witness: observe the final voice Send, after the
-        // collision/FX controller gain, and attribute it to its authored event.
-        if (CgsSound::PcmTrace::File())
-        {
-            CgsSound::PcmTrace::Log("splice-output-source sample=%p bank=%u event=%u spec=%llu\n",
-                lpData, static_cast<unsigned>(lrContent.GetSpliceType()), au32Param,
-                static_cast<unsigned long long>(lrContent.GetContentSpec().GetName().GetValue()));
-            auto* lpRwacVoice = lrVoice.mpInternalSubmix->mpVoice;
-            for (u32 i = 0; i < lpRwacVoice->mucNumStages; ++i)
-            {
-                auto* lpStage = lpRwacVoice->mpPlugIns[i];
-                if (lpStage->mpPlugInDescRunTime->muId == 0x53656E30u) // Send 'Sen0'
-                    CgsSound::PcmTrace::Register(lpStage, lpData,
-                        arVoice.GetIdent(), "splice-output");
-            }
-        }
         const f32 lfSpread = lrVoice.GetParameter(
             Name("~SplicerPlayerVoice::Spread~"));
         const f32 lfAzimuth = lrVoice.GetParameter(

@@ -110,7 +110,6 @@ public:
         // unchanged (the current matrix half lives at this+0x00, so &GetCurrent() == this).
         const rw::math::vpu::Matrix44Affine& GetMicrophoneMatrix() const;
 
-        // [PC-leaf accessor] The console reads the microphone's velocity straight off
         // the environment (`lvx128 v10, module+0x2AF0, 0x90` in AIPhysicsControl::
         // UpdateAIPassbys @0x826B4A98 == mic[E_MIC_PLAYER][E_PLAYER_1].mVelocity, env
         // +0x230). Exposed by name so that read stays on the named member.

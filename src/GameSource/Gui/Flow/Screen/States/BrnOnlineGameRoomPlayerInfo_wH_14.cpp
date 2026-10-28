@@ -59,8 +59,6 @@
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"            // BrnNetwork::NetworkPlayerStats
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"      // InGamePlayerStatusData
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [netui] witness lines (LAN / harness only)
-
 // The canonical homes for the three in-queue payload shapes below are
 // GameSource/Gui/BrnGuiDemangledEventTypes.h, but that header and BrnGuiEventTypeDefs.h
 // are MUTUALLY EXCLUSIVE by construction (both define GuiAudioTriggerEvent and three
@@ -222,8 +220,6 @@ namespace BrnGui
             mbKicked = true;
         }
 
-        BrnNetHarnessPC::WitnessTag("netui", "game-room", "left game (GUI 273) reason=%d -> GO_BACK",
-                                    lpPayload->miReason);
         SendStateEvent(KAC_STATE_EVENT_GO_BACK);
 
         if (mpGuiCache != 0 &&

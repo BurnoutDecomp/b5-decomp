@@ -36,8 +36,6 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h"           // VehicleManagerDebugComponent (mbRenderWallContacts / mbRenderGroundContacts)
 
 #include "rw/math/vpu/vector3_operation.h"                                               // vpu::{Dot, Subtract, Normalize}
-#include "pc/math/VmxFloat.h"
-
 #include <cstdlib>                                                                       // getenv -- the [kerb] probe's opt-in latch
 
 namespace BrnPhysics
@@ -374,17 +372,6 @@ namespace Vehicle
     // ==============================================================================================
     u32 guKerbProbeFrame = 0u;
 
-    bool KerbProbeArmed()
-    {
-        static s32 siArmed = -1;
-        if (siArmed < 0)
-        {
-            const char* lpcEnv = getenv("BRN_KERB_PROBE");
-            siArmed = (lpcEnv != nullptr && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        return siArmed == 1 && CgsDev::Log::gpDebugPrint != nullptr;
-    }
-
     // One budget per tag; the (budget+1)th call prints the exhaustion notice, later calls are silent.
     bool KerbProbeTake(u32& lruUsed, const char* lpcTag)
     {
@@ -505,9 +492,6 @@ namespace Vehicle
         {
             CgsDev::DebugInterface lDebugInterface;
             CgsDev::DebugRender& lrRender = lDebugInterface.GetRender();
-            const Vector3 lvVertex0 = CgsPC::VmxFloat::MultiplyAdd(lTriangle.mNormal, 0.05f, lTriangle.mVertex0);
-            const Vector3 lvVertex1 = CgsPC::VmxFloat::MultiplyAdd(lTriangle.mNormal, 0.05f, lTriangle.mVertex1);
-            const Vector3 lvVertex2 = CgsPC::VmxFloat::MultiplyAdd(lTriangle.mNormal, 0.05f, lTriangle.mVertex2);
             lrRender.DrawTriangle(lvVertex0, lvVertex1, lvVertex2, luColour);
             lrRender.DrawSolidSphere(lTriangle.mVertex0, 0.3f, luColour);
             lrRender.DrawSolidSphere(lTriangle.mVertex1, 0.3f, luColour);
@@ -534,18 +518,6 @@ namespace Vehicle
                 // [kerb] the fast path is a verdict too -- say so rather than vanish. Filtered to a
                 // MOVING car (>= 3 mph): a parked car's body shell posts ~24 ground contacts a frame
                 // (measured, junkyard, kerb run r1), which ate the whole budget before the drive.
-                if (lfSpeedMph >= 3.0f && KerbProbeArmed() && KerbProbeTake(suKerbLines, "[kerb]"))
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[kerb] f " << guKerbProbeFrame << " car " << luRaceCarIndex
-                        << " SUB10 mph " << lfSpeedMph << " min " << KVF_GROUND_CLEARANCE_MIN_SPEED_MPH
-                        << " nIn " << lKerbNormalIn.x << " " << lKerbNormalIn.y << " " << lKerbNormalIn.z
-                        << " pB " << lPointOnWorld.x << " " << lPointOnWorld.y << " " << lPointOnWorld.z
-                        << " tri " << static_cast<s32>(lu16TriangleIndex)
-                        << " h " << lfHeight0 << " " << lfHeight1 << " " << lfHeight2
-                        << " curb " << (lbIsCurb ? 1 : 0) << " wall " << (lbIsWall ? 1 : 0)
-                        << " accept 1 (every contact accepted below 10 mph, unrewritten)\n";
-                }
                 return true;   // below 10 mph EVERY contact is accepted (li r3,1 fast path)
             }
             // 10..25 mph: scale the cull height by (speed-10)/15 (vrefp + 2 Newton reciprocal).
@@ -716,48 +688,6 @@ namespace Vehicle
         }
 
         // ---- [kerb] the per-contact witness: every gate above, both sides (TU-scope banner) ------
-        if (KerbProbeArmed() && KerbProbeTake(suKerbLines, "[kerb]"))
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[kerb] f " << guKerbProbeFrame << " car " << luRaceCarIndex
-                << " mph " << lfSpeedMph
-                << " nIn " << lKerbNormalIn.x << " " << lKerbNormalIn.y << " " << lKerbNormalIn.z
-                << " pA " << lPointOnCar.x << " " << lPointOnCar.y << " " << lPointOnCar.z
-                << " pB " << lPointOnWorld.x << " " << lPointOnWorld.y << " " << lPointOnWorld.z
-                // sphA == mu16PrimitiveIndexA, the CAR-side primitive the narrow phase hit
-                // (ContactGeneratorJob::ExecuteSphereListWithTriangleList writes muPrimitive1Index
-                // = the sphere index; SwapEntityOrder moved it to the A slot). The car's world
-                // sphere list is GetWorldSpaceSpheres() == GetNumSensors() == the deformation
-                // spec's sensor count PLUS FOUR APPENDED WHEEL SPHERES, so sphA >= nSens means
-                // "a WHEEL sphere generated this contact". Pair with [kerb-wsph], which prints
-                // nSens and the four wheel spheres' geometry for the same frame.
-                << " sphA " << static_cast<s32>(lpInOutContact->mu16PrimitiveIndexA)
-                << " tri " << static_cast<s32>(lu16TriangleIndex)
-                << " triN " << lTriangle.mNormal.x << " " << lTriangle.mNormal.y << " " << lTriangle.mNormal.z
-                << " vy " << lTriangle.mVertex0.y << " " << lTriangle.mVertex1.y << " " << lTriangle.mVertex2.y
-                << " h " << lfHeight0 << " " << lfHeight1 << " " << lfHeight2 << " maxCurb " << kvfMaxCurbHeight
-                << " curb " << (lbIsCurb ? 1 : 0) << " wall " << (lbIsWall ? 1 : 0)
-                << " cullH " << lfCullHeight
-                << " mwdv " << (lrCar.mbMinWheelDistValid ? 1 : 0)
-                << " wpH " << lrCar.mWheelPlanePosAndHeight.w
-                << " dA " << lfKerbDistA << " cullA " << (lbKerbCullA ? 1 : 0)
-                << " agValid " << (lrAboveGround.mbValid ? 1 : 0)
-                << " agN " << lrAboveGround.mIntersectionNormal.x << " "
-                << lrAboveGround.mIntersectionNormal.y << " " << lrAboveGround.mIntersectionNormal.z
-                << " agPy " << lrAboveGround.mIntersectionPosition.y
-                << " upDotAg " << lfKerbUpDotAg << " min " << KF_UP_DOT_GROUND_NORMAL_MIN
-                << " dB " << lfKerbDistB << " cullB " << (lbKerbCullB ? 1 : 0)
-                << " repointed " << (lbCullToPlane ? 1 : 0)
-                << " nOut " << lpInOutContact->mNormal.x << " " << lpInOutContact->mNormal.y << " "
-                << lpInOutContact->mNormal.z
-                << " pAout " << lpInOutContact->mPointOnA.x << " " << lpInOutContact->mPointOnA.y << " "
-                << lpInOutContact->mPointOnA.z
-                << " hAbovePlane " << lfKerbHeightAbovePlane
-                << " local " << lfLocalX << " " << lfLocalY << " " << lfLocalZ
-                << " aabb " << (lbInsideAabb ? 1 : 0)
-                << " hasAir " << (lrCar.mbHasAir ? 1 : 0)
-                << " accept " << (lbAccept ? 1 : 0) << "\n";
-        }
         // ---- end [kerb] ------------------------------------------------------------------------
 
         return lbAccept;

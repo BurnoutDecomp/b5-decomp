@@ -923,24 +923,6 @@ namespace BrnGameState
             if (mpGameStateModule->GetPlayerActiveRaceCarIndex() != leTakedownVictimRaceCarIndex)
                 continue;
 
-            // [payback] PC witness (NOT in the console), first 8 only: the point where this
-            // manager REGISTERS a takedown -- the marked-man and local-victim filters have both
-            // passed and the aggressor FSM is about to be armed. [FLAG PC witness]
-            // DELETE-WHEN: the organic takedown case goes green and the payback registration is
-            // confirmed from a scenario run.
-            {
-                static s32 siPaybackWitnessed = 0;
-                if (siPaybackWitnessed < 8 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++siPaybackWitnessed;
-                    *CgsDev::Log::gpDebugPrint << "[payback] takedown registered attacker "
-                                               << static_cast<s32>(leTakedownAggressorRaceCarIndex)
-                                               << " -> victim " << static_cast<s32>(leTakedownVictimRaceCarIndex)
-                                               << " markedMan=" << (lTakedownEvent.mbMarkedManTakeDown ? 1 : 0)
-                                               << " [FLAG PC witness]\n";
-                }
-            }
-
             mfPaybackAggTimer              = -1.0f;
             mePaybackAggressorRaceCarIndex = leTakedownVictimRaceCarIndex;
             mePaybackVictimRaceCarIndex    = leTakedownAggressorRaceCarIndex;

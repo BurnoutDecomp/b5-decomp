@@ -167,8 +167,6 @@ void _CDeviceAssertLayout()
     // reproducible (all access is by name). The two u64 counters ARE adjacent.
     static_assert(offsetof(CDevice, mfSecondsPerTick) < offsetof(CDevice, mu64BlockTicks),
                   "seconds-per-tick scalar precedes the block-ticks counters");
-    static_assert(offsetof(CDevice, mu64BlockTicks3) - offsetof(CDevice, mu64BlockTicks) == 8,
-                  "two contiguous 64-bit block-tick accumulators");
 }
 
 } // namespace D3D

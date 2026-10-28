@@ -5,9 +5,7 @@
 #include <cstring>
 #include <malloc.h>
 #include <new>
-#if defined(D_PLATFORM_X360)
 #include <xtl.h>
-#endif
 
 // ARTIST 0x82F91A10: one global object, initially pointing at the lazy CRT entries.
 RwMemoryFunctions rwMemoryFunctions = {
@@ -42,7 +40,6 @@ void RwFreeMemStub(void* lpMemory)
 }
 
 // rw::LinearResourceAllocator - the resource-memory linear (bump) allocator the game-data
-// resource system carves module/bank memory through. [PC-LEAF, user-approved 2026-06-20]:
 // faithful Paradise structure and bump semantics over the same fixed pools.
 namespace rw
 {
@@ -63,7 +60,6 @@ namespace rw
                 & ~(luAlignment - 1u);
         }
     }
-#if defined(D_PLATFORM_X360)
     namespace
     {
         uint32_t CountLeadingZeros(uint32_t luValue)
@@ -82,18 +78,6 @@ namespace rw
             7, 6, 5, 4, 3, 2, 2, 2
         };
     }
-#else
-    namespace
-    {
-        size_t GetHostAlignment(uint32_t luAlignment)
-        {
-            size_t luHostAlignment = luAlignment;
-            if (luHostAlignment < sizeof(void*))
-                luHostAlignment = sizeof(void*);
-            return luHostAlignment;
-        }
-    }
-#endif
 
     // ARTIST @0x8266AC50. The extended helper builds a lane-zero descriptor from
     // size/alignment, dispatches the allocator's DoAllocate slot, and returns lane zero.
@@ -154,7 +138,6 @@ namespace rw
 
     // ARTIST @0x82BBCA38 / 0x82BBCAE8. Every populated resource lane is
     // independently allocated and freed. Lane two uses XMem physical memory.
-#if defined(D_PLATFORM_X360)
     Resource Xbox2NativeSystemAllocator::DoAllocate(
         const ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
     {
@@ -194,47 +177,6 @@ namespace rw
                 _aligned_free(lrResource.m_baseResources[luLane]);
         }
     }
-#else
-    // FLAG PC-platform leaf: the PC native allocator preserves Paradise's five-lane
-    // interface and uses the host aligned-allocation service for each populated lane.
-    Resource SystemAllocatorGeneric::DoAllocate(
-        const ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
-    {
-        Resource lResult;
-        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
-        {
-            const BaseResourceDescriptor& lrLane =
-                lrDescriptor.m_baseResourceDescriptors[luLane];
-            if (lrLane.m_size != 0)
-            {
-                lResult.m_baseResources[luLane] =
-                    _aligned_malloc(lrLane.m_size, GetHostAlignment(lrLane.m_alignment));
-            }
-        }
-        return lResult;
-    }
-
-    void SystemAllocatorGeneric::DoFree(const Resource& lrResource)
-    {
-        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
-            _aligned_free(lrResource.m_baseResources[luLane]);
-    }
-
-    Resource ZeroingSystemAllocatorGeneric::DoAllocate(
-        const ResourceDescriptor& lrDescriptor, const char* lpcName)
-    {
-        Resource lResult = SystemAllocatorGeneric::DoAllocate(lrDescriptor, lpcName);
-        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
-        {
-            if (lResult.m_baseResources[luLane])
-            {
-                std::memset(lResult.m_baseResources[luLane], 0,
-                            lrDescriptor.m_baseResourceDescriptors[luLane].m_size);
-            }
-        }
-        return lResult;
-    }
-#endif
 
     // ARTIST 0x82BBCD90. The backing includes the placement object before lane-zero
     // payload. Only its native sizeof/alignment differs from the console's 148 bytes.
@@ -270,34 +212,6 @@ namespace rw
         const Resource& lrResource, const ResourceDescriptor& lrCapacity)
     {
         AdoptMemory(lrResource, lrCapacity);
-    }
-
-    // FLAG PC-platform leaf: native out-of-region objects adopt the exact pool
-    // extents. Reserving a second allocator object here would reduce those extents.
-    void LinearResourceAllocator::AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
-    {
-        m_heapResource = lrResource;
-        m_heapCapacity = lrCapacity;
-        for (uint32_t lu = 0; lu < KU_RESOURCE_LANE_COUNT; ++lu)
-        {
-            m_currentUsage.m_baseResourceDescriptors[lu].m_size      = 0;
-            m_currentUsage.m_baseResourceDescriptors[lu].m_alignment = 1;
-            m_paddingUsed.m_baseResourceDescriptors[lu].m_size       = 0;
-            m_paddingUsed.m_baseResourceDescriptors[lu].m_alignment  = 1;
-        }
-        m_numAllocations = 0;
-    }
-
-    // FLAG PC-platform leaf: native lane convenience API, absent from the ARTIST
-    // symbol family. Delegate to the same resource transaction as the game wrapper.
-    void* LinearResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)
-    {
-        if (luType >= KU_RESOURCE_LANE_COUNT)
-            return nullptr;
-        ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[luType].m_size = luSize;
-        lDescriptor.m_baseResourceDescriptors[luType].m_alignment = luAlignment;
-        return DoAllocate(lDescriptor, nullptr).m_baseResources[luType];
     }
 
     // ARTIST 0x82BBCF50, with five-lane padding differences from 0x82B63FF8 and
@@ -429,28 +343,6 @@ namespace core
         void* const lpStorage = lrResource.m_baseResources[0];
         return lpStorage != nullptr
             ? new (lpStorage) GeneralResourceAllocator(lrResource, lrCapacity) : nullptr;
-    }
-
-    // FLAG PC-platform leaf: existing host objects adopt exactly the supplied
-    // capacities. Their object storage lives elsewhere, so no console header is
-    // skipped. In particular an exact 64 MiB backing stays within that 64 MiB.
-    void GeneralResourceAllocator::AdoptMemory(const Resource& lrResource, const ResourceDescriptor& lrCapacity)
-    {
-        m_mainAllocator.SetOption(EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
-        m_mainAllocator.Init(lrResource.m_baseResources[0], lrCapacity.m_baseResourceDescriptors[0].m_size,
-                             /*bShouldFreeInitialCore=*/false, /*bShouldTrace=*/false, 0, 0);
-
-        m_hasPhysical = (lrCapacity.m_baseResourceDescriptors[2].m_size != 0);
-        if (m_hasPhysical)
-        {
-            m_physicalAllocator.SetOption(EA::Allocator::GeneralAllocator::kOptionEnableSystemAlloc, 0);
-            m_physicalAllocator.Init(lrResource.m_baseResources[2], lrCapacity.m_baseResourceDescriptors[2].m_size,
-                                      /*bShouldFreeInitialCore=*/false, /*bShouldTrace=*/false, 0, 0);
-        }
-        else
-        {
-            m_physicalAllocator.Shutdown();
-        }
     }
 
     void* GeneralResourceAllocator::Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment)

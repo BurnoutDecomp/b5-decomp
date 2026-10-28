@@ -9,7 +9,7 @@
 // On the MSVC/Windows host the X360 EA::Thread::Mutex maps to a Win32
 // CRITICAL_SECTION (the same convention as eathread_condition.h's mUnblockLock and
 // device.h's mLock): EA::Thread::Mutex::Mutex(p,0,1) -> InitializeCriticalSection.
-#include <windows.h>  // CRITICAL_SECTION
+#include <xtl.h>  // CRITICAL_SECTION
 
 // ===========================================================================
 // SDKs/EATech/eathread/eathread_rwmutex_data.h

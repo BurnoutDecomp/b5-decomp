@@ -177,12 +177,7 @@ namespace CgsResource
         // acquire access-violates.
         static IdListResourceType          sIdList;            // 0x25 (37) IdList (zone-collision lists)
         TypeRegistry::Register(&sIdList, "IdList");
-        // [FLAG PC bring-up] THE PFX HOOK BUNDLE (PostFx\PFXHOOKS.PFX, resource type 0x31 == 49).
-        // The type class has existed since the PFX resource TU landed, but nothing registered it,
-        // so every boot logged "[bundle] UNREGISTERED resource type id 49" and the bundle loaded
-        // with ZERO resources -- BrnGui::EffectsArbitrator::ResourceUpdate never saw request 228
-        // and no screen filter could ever start. The console registers it with the game types.
-        static PFXHookBundleResourceType   sPfxHookBundle;     // 0x31 (49) PFXHookBundle (screen-filter hooks)
+     // 0x31 (49) PFXHookBundle (screen-filter hooks)
         TypeRegistry::Register(&sPfxHookBundle, "PFXHookBundle");
         // The four world-prop/sound types. The console registers all four, PropPhysics
         // immediately before PropGraphicsList; id-keyed lookup is order-independent.
@@ -398,7 +393,6 @@ namespace CgsResource
         // the five debris arrays, and BrnDebrisRenderer::RenderDebrisArray draws them.
         // GameDataModule::RegisterResourceTypes @0x82667EA8 registers "BrnVFXMeshCollectionResourceType"
         // between TextureNameMap and VFXPropCollection, the order kept here. A PARTICLES.BUNDLE converted
-        // before that port is refused by the handler's PC leaf (IsUnconvertedPC), not crashed on.
         static BrnParticle::TextureNameMapResourceType                sTextureNameMap;      // 0x1000B
         TypeRegistry::Register(&sTextureNameMap, "TextureNameMap");
         static BrnParticle::BrnVFXMeshCollectionResourceType          sVFXMeshCollection;   // 0x10019

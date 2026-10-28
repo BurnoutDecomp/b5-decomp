@@ -2,7 +2,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include <windows.h>
+#include <xtl.h>
 
 // CgsSystem::DateAndTime - X360 ARTIST build, Win32-subset time API.
 //

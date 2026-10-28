@@ -463,8 +463,6 @@ namespace BrnParticle
                     // so re-ordering them changes every spark. The console draws the inheritance
                     // first (inline, before the RandomiseXYZ call it then makes), then the spread,
                     // then -- only for non-body-part types -- the position jitter, then the size.
-                    const Vector3 lvInherited = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lVelocityInheritance.RandomInterpolate(lrRandom); });
-                    const Vector3 lvSpread    = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lVelocitySpread.RandomiseXYZ(lrRandom); });
 
                     Vector3 lvVelocity;
                     lvVelocity.x = lvSpread.x + lvInherited.x;
@@ -475,7 +473,6 @@ namespace BrnParticle
                     Vector3 lvSpawnPosition = lvPoint;
                     if (!lbIsBodyPartContact)
                     {
-                        const Vector3 lvJitter = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lPositionJitter.RandomiseXYZ(lrRandom); });
                         lvSpawnPosition.x += lvJitter.x;
                         lvSpawnPosition.y += lvJitter.y;
                         lvSpawnPosition.z += lvJitter.z;
@@ -490,8 +487,6 @@ namespace BrnParticle
                     const s32 liMonitor = lrMonitors.miSpawnSpark;
 
                     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
-
-                    const f32 lfSize = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(KF_SPARK_SIZE_MIN, KF_SPARK_SIZE_MAX); });
 
                     lrArray.SpawnSpark(lvSpawnPosition,
                                        lvVelocity,
@@ -624,8 +619,8 @@ namespace BrnParticle
 
         for (u32 luRemaining = luNumToSpawn; luRemaining != 0u; --luRemaining)
         {
-            const Vector4 lvDirectionDraw = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lDirectionRandomiser.RandomiseXYZW(lrRandom); });   // var_80
-            const Vector4 lvOffsetDraw    = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lOffsetRandomiser.RandomiseXYZW(lrRandom); });      // var_70
+   // var_80
+      // var_70
 
             // (sinL, cosL, sinF, cosF): vmrghw (lat, lat, fwd, fwd) against the phase splat.
             const f32 lfSinLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_SIN_PHASE);
@@ -767,28 +762,6 @@ namespace BrnParticle
         // [DIAG] BRN_DEBRIS_BURST_DIAG=1 -- NOT IN THE X360 BINARY, capped at 40 lines. DELETE-WHEN-STABLE.
         // One line per burst record: the pieces spawned into each array (Coloured / Shiny / Dark / HighDetail), how
         // many were thrown at the camera, and the first piece's position and velocity.
-        void DebrisBurstWitness(const FireDebrisBurstEvent* lpEvent, const u32 (&lauPerType)[4], u32 luAtCamera,
-                                const Vector3& lrFirstPosition, const Vector3& lrFirstVelocity)
-        {
-            static const bool sbArmed = []() {
-                const char* const lpcValue = std::getenv("BRN_DEBRIS_BURST_DIAG");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
-            static u32 suLines = 0;
-            if (!sbArmed || suLines >= 40u)
-                return;
-            ++suLines;
-            char lacMsg[320];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[debris-burst] t=%.3f scale=%.3f pieces=%u/%u/%u/%u atCamera=%u first pos=(%.3f,%.3f,%.3f) "
-                "vel=(%.3f,%.3f,%.3f)\n",
-                static_cast<double>(lpEvent->mfCurrentTime), static_cast<double>(lpEvent->mfScaleFactor),
-                lauPerType[0], lauPerType[1], lauPerType[2], lauPerType[3], luAtCamera,
-                static_cast<double>(lrFirstPosition.x), static_cast<double>(lrFirstPosition.y),
-                static_cast<double>(lrFirstPosition.z), static_cast<double>(lrFirstVelocity.x),
-                static_cast<double>(lrFirstVelocity.y), static_cast<double>(lrFirstVelocity.z));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
 
         // CgsNumeric::Random::RandomUnitVector, inlined by the console (0x8229AE44..0x8229AF50): a point of the
         // unit disc by rejection -- two RandomFloat() a try, x first, each `fmsubs r, 2.0, 1.0`, the squared
@@ -894,9 +867,6 @@ namespace BrnParticle
             {
                 // The spot in the emitter box: RandomFloat(-h, h) per axis, z drawn first, then y, then x
                 // (the range `h - (-h)`, the negation a `vxor` of the sign bit), added to the spawn position.
-                const f32 lfOffsetZ = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lrHalf.z, lrHalf.z); });
-                const f32 lfOffsetY = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lrHalf.y, lrHalf.y); });
-                const f32 lfOffsetX = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lrHalf.x, lrHalf.x); });
                 Vector3 lvPosition;
                 lvPosition.x = lpEvent->mSpawnPosition.x + lfOffsetX;
                 lvPosition.y = lpEvent->mSpawnPosition.y + lfOffsetY;
@@ -904,12 +874,9 @@ namespace BrnParticle
                 lvPosition.w = lpEvent->mSpawnPosition.w + 0.0f;
 
                 Vector3 lvVelocity;
-                const f32 lfAimDraw = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); });
                 if (!(lfAimDraw < BurstLayoutF32(lpLayout, KU_BURST_CAMERA_PROBABILITY)))   // `fcmpu ; bge` 0x8229AB48
                 {
                     // ---- the cone (0x8229AC14) ----
-                    const f32 lfLateral = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(-lfConeHalfAngle, lfConeHalfAngle); });
-                    const f32 lfAzimuth = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); }) * KF_DEBRIS_BURST_TWO_PI;
                     // One TrigBaseFunctions5 evaluation over (az, az, lat, lat) with the (sin, cos, sin, cos)
                     // phases (vmrghw, 0x8229ACCC..0x8229AD2C).
                     const f32 lfSinAzimuth = ShowerSinCosLane(lfAzimuth, KF_SHOWER_SIN_PHASE);
@@ -924,9 +891,6 @@ namespace BrnParticle
                     lvDirection.y = lfCosLateral;
                     lvDirection.z = lfSinAzimuth * lfCosLateral;
                     lvDirection.w = lvDirection.x;
-                    const f32 lfSpeed   = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(lfSpeedMin, lfSpeedMax); });
-                    const f32 lfInherit = std::fma(DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); }), KF_DEBRIS_BURST_INHERIT_RANGE,
-                                                   KF_DEBRIS_BURST_INHERIT_MIN);
                     // v127 = V * splat(inherit), then vmaddfp128 v127 = dir * splat(speed) + v127.
                     lvVelocity.x = std::fma(lvDirection.x, lfSpeed, lrInherit.x * lfInherit);
                     lvVelocity.y = std::fma(lvDirection.y, lfSpeed, lrInherit.y * lfInherit);
@@ -952,11 +916,9 @@ namespace BrnParticle
                     ++luDiagAtCamera;                                                       // [DIAG]
                 }
 
-                const f32 lfSize     = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(lfSizeMin, lfSizeMax); });          // f28
-                const Vector3 lvAxis = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return BurstRandomUnitVector(lrRandom); });
-                const f32 lfSpin     = DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lrRandom.RandomFloat(); });   // `lfsx f30` -- drawn BEFORE the colour's two
+          // f28
+   // `lfsx f30` -- drawn BEFORE the colour's two
                 Vector4 lvColour;
-                DrawRandomPC([&](CgsNumeric::Random& lrRandom) { return lColourRandomiser.Randomise(lvColour, lrRandom); });
                 lrArray.SpawnDebris(lvPosition, lvVelocity, lvAxis, lvColour,
                                     std::fma(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
                                     lfSize, lpEvent->mfCurrentTime);
@@ -968,6 +930,6 @@ namespace BrnParticle
                 ++lauDiagPieces[luType];                                                    // [DIAG]
             }
         }
-        DebrisBurstWitness(lpEvent, lauDiagPieces, luDiagAtCamera, lvDiagFirstPosition, lvDiagFirstVelocity);   // [DIAG]
+   // [DIAG]
     }
 }

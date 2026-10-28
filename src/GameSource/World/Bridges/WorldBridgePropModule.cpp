@@ -214,17 +214,7 @@ void BridgePhysicsModuleToPropModule_PostPhysics(
     // The getenv latch is a function-local static const evaluated ONCE (a per-frame getenv
     // would be a per-frame syscall).
     {
-        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbLoggedFirstUpdatedProps = false;
-        if ( sbPropDiag && !sbLoggedFirstUpdatedProps
-             && lrUpdatedProps.GetLength() > 0
-             && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedFirstUpdatedProps = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-bridge] first " << lrUpdatedProps.GetLength()
-                << " UpdatePropEvents -> prop post-physics input\n";
-        }
     }
 
     lpPropInputBuffer_PostPhysics->AppendUpdatedPropQueue(&lrUpdatedProps);   // @0x827AA2D8
@@ -302,17 +292,7 @@ void BridgeSceneContactsToPropModule_PrePhysics(
     // is still inert -- which is a different failure from "the bridge dropped the data".
     // The latch is evaluated ONCE: getenv per frame would be a per-frame syscall.
     {
-        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbLoggedFirstContacts = false;
-        if ( sbPropDiag && !sbLoggedFirstContacts
-             && lpPotentialContacts->GetLength() > 0
-             && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedFirstContacts = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q5-world] first " << lpPotentialContacts->GetLength()
-                << " potential contacts -> prop module\n";
-        }
     }
 
     lpPropInputBuffer_PrePhysics->AppendPotentialContactQueue(lpPotentialContacts); // @0x827AA170
@@ -466,17 +446,7 @@ void BridgePropModuleToTrafficModule_PrePhysics(
     // frame a smashed traffic light actually raises a request, so a silent log separates "the
     // bridge dropped it" from "PropZoneManager never posted one". Rate: once, ever.
     {
-        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbLoggedFirstLights = false;
-        if ( sbPropDiag && !sbLoggedFirstLights
-             && ( lrKnockDown.GetLength() > 0 || lrRestore.GetLength() > 0 )
-             && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedFirstLights = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[Q6-lights] first traffic-light requests -> traffic module: knockdown "
-                << lrKnockDown.GetLength() << " restore " << lrRestore.GetLength() << "\n";
-        }
     }
 }
 

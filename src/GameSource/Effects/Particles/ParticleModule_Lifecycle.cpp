@@ -37,7 +37,6 @@
 // ============================================================================
 
 #include "GameSource/Effects/Particles/ParticleModule.h"
-#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"      // ParticleIO::PrepareOutputBuffer
 #include "GameSource/Effects/Particles/ParticleCpuMonitors.h"   // the Race / Crash monitor sets
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList::Get*Allocator
@@ -49,7 +48,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceResponse
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"     // BrnResource::GameDataIO::LoadGameDataEvent (stage 18's reply)
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"  // BrnParticle::TextureNameMap
-#include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"  // IsUnconvertedPC (stage 6's PC leaf)
+#include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera
 #include "SharedClasses/Graphics/ParticleDescriptionResourceType.h"  // ParticleDescriptionCollection
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"          // cLionEffectDefinition
@@ -559,7 +558,6 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
             lrArray.mBankRegular.Prepare(&lrArray);
             lrArray.mBankCrash.Prepare(&lrArray);
         }
-        mSimpleParticleFramePC.Prepare(maSimpleParticles);
 
         // --- the spark spawn buffer ----------------------------------------------------------
         // ⚠ the console stores the count with `sthx` (a HALFWORD) even though the DWARF types
@@ -779,12 +777,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
             CgsResource::SafeResourceHandle<BrnVFXMeshCollection> lMeshCollection;
             lMeshCollection.mpResourceMemory = lpReply->mpResourceMemory;
             lMeshCollection.mpSourceEntry    = lpReply->mpSourceEntry;
-            // FLAG PC platform leaf -- STALE-ASSET TOLERANCE, not game logic. A PARTICLES.BUNDLE converted before
-            // the debris-mesh port still carries the collection big-endian; its handler's FixUp refused it (and
-            // said so, once). Leave the array unbound: stage 7 then asks nothing for it and RenderDebrisArray skips
-            // it, exactly as before the port. A ported collection always binds, as on the console.
-            if (BrnVFXMeshCollectionResourceType::IsUnconvertedPC(lMeshCollection.Get()))
-                continue;
             maDebris[lpReply->miEventId].AcquireMeshCollection(lMeshCollection);
         }
         // fall through
@@ -798,11 +790,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         miResourceCount = 0;
         for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
         {
-            // FLAG PC platform leaf (stage 6's refusal): an array left unbound there is passed over. On the
-            // console all five are bound here. The converter ports all three collections or none, so the pass
-            // never shifts a later array's event id.
-            if (maDebris[luArray].MeshCollection() == 0)
-                continue;
             lpOutput->GetResourceRequestInterface()->AcquireResource(
                 &mReceiverQueue, miResourceCount++, KI_FX_BUNDLE_POOL, maDebris[luArray].GetTextureName());
         }
@@ -833,24 +820,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         // stages are through, one line each, once per run. DELETE-WHEN-STABLE.
         {
             static bool sbLogged = false;
-            const char* const lpcDiag = std::getenv("BRN_DEBRIS_DIAG");
-            if (!sbLogged && lpcDiag != 0 && lpcDiag[0] == '1')
-            {
-                sbLogged = true;
-                for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
-                {
-                    const Native::BrnDebrisArray& lrArray = maDebris[luArray];
-                    const bool lbBound = lrArray.MeshCollection() != 0;
-                    char lacMsg[256];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                                  "[fxbundle] stages 5-8 done: debris array %u '%s' mesh=%p texture '%s' -> %p\n",
-                                  luArray, lrArray.Params()->mpMeshCollectionName,
-                                  static_cast<void*>(lrArray.MeshCollection()),
-                                  lbBound ? lrArray.GetTextureName() : "(unbound)",
-                                  static_cast<void*>(lrArray.Texture()));
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
         }
         // fall through (into stage 11, 0x8229D1A8)
     }
@@ -997,28 +966,6 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         {
             CGS_ASSERT(maSimpleParticles[luSimpleArray].IsReady(),
                        "Missing Native Particle Texture. Did you forget to include it in the Native Lion Effect ?");
-        }
-        // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only, once, BRN_SIMPLEFX_DIAG=1 only
-        // (default OFF). Which of the 13 arrays took a texture -- a bit per array (the ready
-        // byte) -- so a run shows the simple-particle chain's texture half resolved before
-        // anything is drawn with it. DELETE-WHEN-STABLE.
-        {
-            static bool sbLogged = false;
-            if (!sbLogged && Native::SimpleFxDiagArmed())
-            {
-                sbLogged = true;
-                u32 luReadyMask = 0;
-                for (u32 luSimpleArray = 0; luSimpleArray < KU_NUM_SIMPLE_ARRAYS; ++luSimpleArray)
-                {
-                    if (maSimpleParticles[luSimpleArray].IsReady())
-                        luReadyMask |= (1u << luSimpleArray);
-                }
-                char lacMsg[160];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[simplefx] LoadFXBundle stage 12: simple-particle arrays ready mask=0x%04X "
-                    "(0x1FFF == all 13)\n", luReadyMask);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
         }
         // fall through
     }

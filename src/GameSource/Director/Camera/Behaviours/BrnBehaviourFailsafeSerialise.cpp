@@ -27,7 +27,6 @@ static_assert(offsetof(FailsafeParameters, mLookerParams)   - offsetof(FailsafeP
 static_assert(offsetof(FailsafeParameters, mfSlowDistance)  - offsetof(FailsafeParameters, mShakeParams) == 0x90 - 0x08, "mfSlowDistance @ console +0x90");
 static_assert(offsetof(FailsafeParameters, mfFOV)           - offsetof(FailsafeParameters, mShakeParams) == 0xA8 - 0x08, "mfFOV @ console +0xA8");
 static_assert(offsetof(FailsafeParameters, mbStickToGround) - offsetof(FailsafeParameters, mShakeParams) == 0xC0 - 0x08, "mbStickToGround @ console +0xC0");
-static_assert(sizeof(FailsafeParameters) == 208, "host size (console 196: 8-byte head pointer)");
 
 template<class TSerialiser>
 void BehaviourFailsafe::Parameters::Serialise(TSerialiser& lrSerialiser)

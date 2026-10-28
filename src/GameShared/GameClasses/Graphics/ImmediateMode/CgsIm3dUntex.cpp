@@ -32,7 +32,6 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredVertex.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -48,9 +47,7 @@ void* RenderEngineDeviceBeginShaderStates(void*, void**);
 // sources (tools/nushaders/Source/Executable/20.fx and 21.fx).
 namespace renderengine
 {
-    extern const u8  gauIm3dUntexVertexProgramPC[];
     extern const u32 guIm3dUntexVertexProgramPCSize;
-    extern const u8  gauIm3dUntexPixelProgramPC[];
     extern const u32 guIm3dUntexPixelProgramPCSize;
 }
 
@@ -142,20 +139,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     // Adopt the canonical D3D9 platform-4 images when supplied by the PC caller.
     // They are compiled from the TUB Untex source pair, not the console Xenos blobs.
     // A non-PC image still follows the original console route below.
-    if (renderengine::ProgramBufferData* lpAdoptedVertex =
-            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
-    {
-        renderengine::ProgramBufferData* const lpAdoptedPixel =
-            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
-        if (lpAdoptedPixel != nullptr)
-        {
-            mapVertexProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
-            mapPixelProgramBuffer[li8ProgramIndex] =
-                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
-            return li8ProgramIndex;
-        }
-    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -317,7 +300,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     }
     else
     {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
         spgLastVertexProgram = lpVertexProgram;
         lbChanged = true;
     }
@@ -325,7 +307,6 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
-        shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[li8Program]);
         return true;
     }
     return false;
@@ -354,8 +335,6 @@ void ImRenderer<V>::BeginRendering()
     mgpActiveRenderer = static_cast<ImRendererBase*>(this);
     shadow::Device::ResetShadowing();
     mi8CurrentProgram = 0;
-    shadow::DeviceSetVertexProgramInternal(mapVertexProgramBuffer[0]);
-    shadow::DeviceSetPixelProgram(mapPixelProgramBuffer[0]);
     shadow::Device::SetVertexDescriptor(
         reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
 }
@@ -379,10 +358,6 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
         D3DDevice_InsertFence(mgpDevice);
     struct PackedVertex { Vector3F mPosition; RGBA8 mColour; };
     static_assert(sizeof(PackedVertex) == 16, "ARTIST untextured GPU vertex stride");
-    // FLAG PC-platform leaf: the native BeginVertices call receives the
-    // primitive parameter that the console passes through DirectDraw state.
-    PackedVertex* lpOutput = static_cast<PackedVertex*>(D3DDevice_BeginVertices(
-        mgpDevice, static_cast<u32>(lePrimitiveType), luCount, sizeof(PackedVertex)));
     if (lpOutput != nullptr)
         for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
             lpOutput[luVertex] = {{lpVertices[luVertex].mv3Pos.x,
@@ -434,8 +409,6 @@ void Im3dUntex::Construct(rw::IResourceAllocator* lpAllocator)
         mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
     }
 
-    const void* lapVertexProgramBinary[1] = { renderengine::gauIm3dUntexVertexProgramPC };
-    const void* lapPixelProgramBinary[1]  = { renderengine::gauIm3dUntexPixelProgramPC };
     const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dUntexVertexProgramPCSize };
     const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dUntexPixelProgramPCSize };
     const s8    KI8_PROGRAMS_BUILT        = 1;

@@ -324,19 +324,8 @@ bool BoostMessageManager::AddMessage(MessageType leMessageType, const char* lpcT
     // months with both ends committed. Budgeted per call, not per type: a full strip is
     // three slots, so a handful of lines is enough to prove the strip is being written.
     {
-        static const bool sbDiag  = (getenv("BRN_BOOST_TICKER_DIAG") != 0);
         static s32        siLines = 0;
         const s32         KI_ADDMESSAGE_DIAG_MAX = 48;
-        if (sbDiag && siLines < KI_ADDMESSAGE_DIAG_MAX && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[boost-ticker] slot type=" << static_cast<s32>(leMessageType)
-                << " text=" << lpcText
-                << " ttl=" << lfTimeToLive
-                << " boost=" << liBoostAmount
-                << " [DELETE-WHEN-STABLE]\n";
-        }
     }
     return true;
 }

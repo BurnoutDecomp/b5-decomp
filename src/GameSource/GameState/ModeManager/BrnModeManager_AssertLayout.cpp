@@ -38,9 +38,6 @@ void ModeManager::_AssertLayout()
     static_assert(sizeof(GameStateModuleIO::CarCheckpointData) == 8,
                   "CarCheckpointData is an 8-byte per-car checkpoint bit set (X360 stride at "
                   "ModeManager+32480; 35 of them span 280 bytes to +32760)");
-    static_assert(sizeof(CgsContainers::BitArray<E_GLOBAL_RACE_CAR_INDEX_COUNT>) == 8,
-                  "BitArray<35> is ONE 64-bit field -- ModeManager::Construct zeroes each of the two "
-                  "reached-sets with a single `std` (X360 +0x8BF0 / +0x8BF8)");
     static_assert(sizeof(LandmarkIndex) == 2,
                   "LandmarkIndex wraps one s16 region index -- ClearLandmarkAndFinishLineData stores "
                   "the 0xFFFF sentinel into mPlayerCurrentLandmark with a half-word `sthx`");

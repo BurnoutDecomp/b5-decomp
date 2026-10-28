@@ -1,6 +1,5 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnAmbienceEffect.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnAmbienceControl.h"
-#include "GameSource/Sound/Vehicles/Environment/BrnEnvironmentSoundDiag.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -137,10 +136,6 @@ void AmbienceEffect::UpdateParams(f32 /*afTimeStep*/)
         BrnSound::Logic::Streaming::StreamRequest(this, 0, 0.1f));
 
     static s32 siDiagPlay = 0;
-    if (SndEnvDiagBudget(siDiagPlay))
-        *CgsDev::Log::gpDebugPrint << "[sndenv] ambience play region="
-                                   << static_cast<s32>(lrRegion.GetCurrent())
-                                   << " [FLAG PC witness]\n";
 }
 
 // ---------------------------------------------------------------------------

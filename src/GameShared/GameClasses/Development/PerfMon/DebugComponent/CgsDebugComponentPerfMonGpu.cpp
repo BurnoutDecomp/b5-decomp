@@ -55,24 +55,6 @@ namespace CgsDev
         const RGBA KC_GRAPHLABEL    = 0xFF6666FFu;               // lis/ori immediate in 0x8282CEA0
         const RGBA KC_GRAPHSCALEBAR = 0x80252525u;               // lis/ori immediate in 0x8282CEA0
 
-        // FLAG PC-platform leaf: opt-in witnesses for the actual overlay calls.
-        bool gbTraceGpuCallbacksPC = false;
-        bool TraceGpuOverlayPC(bool lbVisible, bool lbGraph)
-        {
-            static const bool sbEnabled = std::getenv("BRN_GPU_MONITOR_TRACE") != nullptr;
-            static u32 suCalls = 0;
-            static int siLastMode = -1;
-            if (!sbEnabled) return false;
-            const int liMode = !lbVisible ? 0 : lbGraph ? 1 : 2;
-            const bool lbSample = ++suCalls <= 3 || suCalls % 120 == 0 || liMode != siLastMode;
-            siLastMode = liMode;
-            if (lbSample && CgsDev::Log::gpDebugPrint)
-                CgsDev::Log::gpDebugPrint->AppendFormat(
-                    "[gpu-overlay] visible=%d mode=%s monitored=%.6f\n", lbVisible ? 1 : 0,
-                    lbGraph ? "graph" : "table", PerfMonGpu::GetLastTotal());
-            return lbSample && lbVisible;
-        }
-
     }
 
     // PS3 DecFIGS @0xB213B0; the X360 inlines the identical body into DebugManager::Construct
@@ -103,7 +85,6 @@ namespace CgsDev
     // (Unlike the CPU sibling, this does NOT null-check the render pointer.)
     void DebugComponentPerfMonGpu::RenderHUD( Debug2DImmediateRender* lpDebug2DRender )
     {
-        gbTraceGpuCallbacksPC = TraceGpuOverlayPC(mbVisible, mbDisplayAsGraph);
         if ( !mbVisible )
             return;
 
@@ -111,7 +92,6 @@ namespace CgsDev
             RenderPerformanceGraph( lpDebug2DRender );
         else
             RenderPerformanceTable( lpDebug2DRender );
-        gbTraceGpuCallbacksPC = false;
     }
 
     // X360 0x8282CDF0. Draw the GPU performance table: the "GPU Render Cost" title one and a half
@@ -240,10 +220,6 @@ namespace CgsDev
                                       lpParameter->mfDrawY, 0.0f, 0.0f };
         lpParameter->mpRender->DrawText( lacValue, lv2ValuePos, lfRowHeight, lColour, false );
 
-        if (gbTraceGpuCallbacksPC && CgsDev::Log::gpDebugPrint)
-            CgsDev::Log::gpDebugPrint->AppendFormat("[gpu-overlay-row] name=%s value=%.6f y=%.6f\n",
-                lParameters.mpcName, lParameters.mfCurrentValue, lpParameter->mfDrawY);
-
         // Advance to the next row.
         lpParameter->mfDrawY += lfRowHeight;
     }
@@ -271,10 +247,6 @@ namespace CgsDev
         const Vector2 lv2Size = { (lfX + lfBarLength) - lfX,
                                   (lfY + KF_GRAPHBARHEIGHT) - lfY, 0.0f, 0.0f };
         lpParam->mpRender->DrawBox( lv2Min, lv2Size, lColour );
-
-        if (gbTraceGpuCallbacksPC && CgsDev::Log::gpDebugPrint)
-            CgsDev::Log::gpDebugPrint->AppendFormat("[gpu-overlay-bar] name=%s value=%.6f width=%.6f\n",
-                lrData.mpcName, lrData.mfCurrentValue, lv2Size.x);
 
         lpParam->mfDrawX    += lfBarLength;
         lpParam->mfTotalGpu += lrData.mfCurrentValue;

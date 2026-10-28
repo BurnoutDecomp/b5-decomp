@@ -20,15 +20,11 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::DepthStencilState / TextureState / MaterialState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"  // BlendState / BlendStateParameters
-#include "pc/gcm/renderengine/texture.h"          // renderengine::Texture
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"  // shadow::Device::SetState -- the rasteriser third BeginRendering binds
 
 #include <cstdio>   // snprintf (the [texreg] / [lionmat] witnesses)
 #include <cstdlib>  // malloc -- CreateInternalMaterial allocates the blend state with it
-#include "pc/gcm/renderengine/LionDrawDiagPC.h"
-
 // D3DDevice_SetTexture -- the platform (Xbox 360 D3D) texture-bind entry point. X360 call:
 // D3DDevice_SetTexture(off_83271608, 0, texture, 0x80000000) -- (device, sampler, texture,
 // flags); the 0x80000000 flag requests the "set immediately / no GPU stall" path. Declared
@@ -36,8 +32,6 @@
 extern "C" void D3DDevice_SetTexture(void* apDevice, unsigned int auSampler,
                                      void* apTexture, unsigned int auFlags);
 
-// [lionbind] the live sampler-0 probe (XenonD3D9Shims.cpp). FLAG PC bring-up diagnostic,
-// DELETE-WHEN-STABLE -- see the witness banner above SetMaterial.
 namespace renderengine
 {
     void LionBindProbe(const char* apcTag, const void* apRequestedTexture,
@@ -372,18 +366,6 @@ U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* apMateri
 
     CGS_ASSERT(mpRenderer != 0, "mpRenderer != NULL");
 
-    // asm 0x82280D38..0x82280D44. The template is ImRendererBase's shared alpha-blend state.
-    // ⚠ FLAG PC-platform: the state library is not built on this backend
-    // (ImRendererBase::ConstructOnceOnly is an empty PC leaf, ImmediateMode.cpp), so this
-    // word reads null and the console's unconditional read would fault. Skipping it is provably
-    // inert and NOT a default-shaped guess: ConstructBlendState(6, 7, 0) produces byte for byte
-    // the block DefaultConstructBlendParameters just wrote (the derivation is over that
-    // function). DELETE-WHEN a caller fills the render-state library.
-    if (dword_83010F20 != 0)
-    {
-        renderengine::BlendState::GetParameters(dword_83010F20, &lParams);
-    }
-
     // asm 0x82280D4C..0x82280D90 -- the fixed part, ahead of the switch.
     u32& lruBlend = lParams.maBlendFactor[0];
     lParams.mbState16 = 1u;                                   // AlphaTestEnable
@@ -648,9 +630,6 @@ renderengine::Texture* LionParticleRender::FindTexture(U32 auTextureMapHandle) c
     return lpTexture;
 }
 
-// ============================================================================================
-// [lionbind] / [liontab] -- FLAG PC bring-up diagnostics. NOT console behaviour: ours, bounded,
-// log-only, DELETE-WHEN-STABLE.
 //
 // WHY. The Lion pass draws a hard-edged, near-opaque pale block where the console draws soft
 // smoke, and the three inputs that could do that are all readable from the device rather than
@@ -700,8 +679,6 @@ namespace
 
         const void* lpD3D = (apTexture != 0)
                           ? static_cast<const void*>(apTexture->mpD3DTexture) : 0;
-        renderengine::LionBindProbe(apcTag, apTexture, lpD3D, auTextureHandle,
-                                    static_cast<unsigned int>(liEntry), luCount);
 
         // ...and, once, the acquired-texture table beside the map it is indexed by.
         static bool sbTableDumped = false;
@@ -750,23 +727,6 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
     // The cache test and the two stores are the console's own, against the console's own storage
     // (asm 0x82289744 / 0x82289770 / 0x82289774 -- see the note where the private fork used to be).
     renderengine::Texture* lpTexture = FindTexture(apMaterial->mTextureHandle);
-    if(renderengine::LionDrawDiag_EnabledPC())
-    {
-        u32 luMapIndex=~0u;
-        const TextureNameMap* lpMap=mTextureNameMap.operator->();
-        if(lpMap)
-            for(u32 i=0;i<lpMap->GetEntryCount();++i)
-                if(lpMap->GetEntries()[i].muHashedLionTextureName==apMaterial->mTextureHandle)
-                {luMapIndex=i;break;}
-        const CgsResource::ResourceHandle* lpHandle=luMapIndex<KU_MAX_PARTICLE_TEXTURES
-            ? &saTextures[luMapIndex] : nullptr;
-        const u64 luResourceId=lpHandle && lpHandle->mpSourceEntry
-            ? lpHandle->GetResourceId().GetHash() : 0;
-        renderengine::LionDrawDiag_SetMaterialPC(apMaterial->mpTextureName.Get(),
-            apMaterial->mFlags,apMaterial->GetShaderType(),apMaterial->mBlendMode,
-            apMaterial->mTextureHandle,luMapIndex,luResourceId,
-            lpHandle?lpHandle->mpSourceEntry:nullptr,lpTexture?lpTexture->mpD3DTexture:nullptr);
-    }
     if (shadow::Device::GetSamplerTextureShadow(0u) != static_cast<void*>(lpTexture))
     {
         LionBindWitness("B", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
@@ -1046,7 +1006,6 @@ void LionParticleRender::Setup()
     DepthStencilState* lpDefaultState = reinterpret_cast<DepthStencilState*>(lpDefaultMemory);
     spDefaultDepthStencil = DepthStencilState::Initialize(&lpDefaultState, &lDefault);
 }
-
 
 // =================================================================================================
 // Landed 2026-09-05 by the boost-exhaust wave: the frame's camera publish and the cVector draw

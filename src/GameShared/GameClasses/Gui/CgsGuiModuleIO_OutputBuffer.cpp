@@ -91,7 +91,6 @@ namespace CgsGuiModuleIO
         if (!IsBufferLockedForWriting())
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
@@ -101,7 +100,6 @@ namespace CgsGuiModuleIO
         if (!lpSourceQueue)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),

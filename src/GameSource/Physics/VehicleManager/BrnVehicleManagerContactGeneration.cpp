@@ -454,29 +454,6 @@ namespace Vehicle
 
             const s32 liModelIndex = lpDeformationManager->FindModelIndexByEntityID(
                 EntityId{ (static_cast<u32>(liCar) << 10) | 0x01000000u });
-            // [FLAG PC bring-up] the console CGS_ASSERT(liModelIndex != -1, "liIndex != -1")
-            // (BrnDeformationManager.h:560) is DEGRADED to the log-once below: with the first
-            // live car it fired per frame (178 halts in 80 s) while the model table was
-            // permanently -1. ProcessAddDeformationModelEvents is now mounted and keyed by the
-            // HANDLING BODY id (BrnDeformationManager.cpp:310), so this line firing means a
-            // genuinely UNREGISTERED car -- the same table feeds GetSpheresForCar, whose null
-            // result trips DoCarCarContactGeneration's :877/:878.
-            // RESTORE the console assert once a boot shows this line silent.
-            if (liModelIndex == -1)
-            {
-                static bool sbLoggedNoDeformationModel = false;
-                if (!sbLoggedNoDeformationModel)
-                {
-                    sbLoggedNoDeformationModel = true;
-                    if (CgsDev::Message::gxMessageFilterFlags & 1)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[FLAG PC bring-up] StartVehicleContactGeneration: no deformation "
-                               "model for live race car -- car SKIPPED for world contact "
-                               "generation, console assert 'liIndex != -1' degraded to this line. "
-                               "Reported once, not per frame\n";
-                }
-                continue;   // host bounds guard; the console's assert is fire-and-continue
-            }
 
             // Skip frozen cars: the asm reads the model's vehicle-physics frame flag @+112
             // (mbFrozen through the ExternallySimulatedBody base).
@@ -670,22 +647,8 @@ namespace Vehicle
             // per frame. One line for the whole process could never report queue 7: the first
             // pair of any race is race-car-vs-traffic (queue 8).
             {
-                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0
-                                                || getenv("BRN_SHOWTIME_WATCH") != 0);
                 static bool       sabFirstForQueue[14] = { false };
                 const u32         luDiagQueue = (lu16QueueID < 14u) ? lu16QueueID : 13u;
-                if (sbPropDiag && !sabFirstForQueue[luDiagQueue] && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sabFirstForQueue[luDiagQueue] = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[Q7-carcar] first car-car pair A=" << static_cast<u32>(lCarPhysicsIdA)
-                        << " B=" << static_cast<u32>(lCarPhysicsIdB)
-                        << " spheres=" << static_cast<s32>(lSphereListA.miNumSpheres
-                                                           + lSphereListB.miNumSpheres)
-                        << " pairs=0"        // the sphere arm posts a stream command, not a pair
-                        << " arm=sphere-sphere queue=" << static_cast<s32>(lu16QueueID)
-                        << "\n";
-                }
             }
         }
         else
@@ -798,8 +761,6 @@ namespace Vehicle
             static s32 siCGenProbe = -1;
             if (siCGenProbe < 0)
             {
-                const char* lpcEnv = getenv("BRN_WALL_PROBE");
-                siCGenProbe = (lpcEnv != nullptr && lpcEnv[0] != '0') ? 1 : 0;
             }
             static u32 suCGenFrame = 0u;
             static bool sabWasSwept[8] = { false, false, false, false, false, false, false, false };
@@ -968,28 +929,6 @@ namespace Vehicle
         }
         else
         {
-            // ---- the FULL arms (0x8261C0D4..0x8261C278) -- deformation-model driven ------------
-            // [FLAG PC bring-up] HOST BOUNDS GUARD, same shape and reason as the race-car one in
-            // StartVehicleContactGeneration above. DeformationManager::IsUsingSweptSpheres /
-            // GetSweptSpheresForCar / GetDeformedBBox all index mpaModels[FindModelIndexByEntityID]
-            // after a FIRE-AND-CONTINUE assert, so a promoted traffic car with no registered
-            // deformation model reads mpaModels[-1] on the host. The console always has the model.
-            // RESTORE the unguarded path once every promoted traffic car is confirmed to have a
-            // registered deformation model. Returns before the marker entry.
-            if (lpDeformationManager->FindModelIndexByEntityID(lPhysicsEntityId) == -1)
-            {
-                static bool sbLoggedNoTrafficDeformationModel = false;
-                if (!sbLoggedNoTrafficDeformationModel)
-                {
-                    sbLoggedNoTrafficDeformationModel = true;
-                    if (CgsDev::Message::gxMessageFilterFlags & 1)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[FLAG PC bring-up] DoTrafficCarWorldContactGeneration: no deformation "
-                               "model for physical traffic car -- car SKIPPED for world contact "
-                               "generation. Reported once, not per frame\n";
-                }
-                return;
-            }
 
             if (miNumTrafficSphereWorldTests < KI_MAX_TRAFFIC_SPHERE_WORLD_TESTS)   // cmpwi 0x15
             {
@@ -1041,9 +980,6 @@ namespace Vehicle
                             luQueueIndex,                             // tag A == the caller's queue (9)
                             1);                                       // tag B
 
-                    // [FLAG PC witness] BRN_SWEPT_DIAG: the batch ran inline, so its result count
-                    // is already final here. Not in the console build; first-N capped.
-                    static const bool sbSweptDiag = (getenv("BRN_SWEPT_DIAG") != 0);
                     static s32        siSweptBatches = 0;
                     static s32        siSweptLines   = 0;
                     if (sbSweptDiag && CgsDev::Log::gpDebugPrint != nullptr)
@@ -1261,26 +1197,6 @@ namespace Vehicle
 
         // ---- (3) THE HARVEST -------------------------------------------------------------------
         AddContactResultsToQueue(mpContactGenerator, mpContactGenList, lpPotentialContactInterface);
-
-        // [FLAG PC boot witness] one-shot: the first frame the harvest posts anything, say so
-        // with the count — the leg-3 successor of leg-2's "24 PrimitiveTestResult(s)" witness.
-        {
-            static bool sbLoggedHarvest = false;
-            if (!sbLoggedHarvest)
-            {
-                const s32 liRawWorldContacts =
-                    lpPotentialContactInterface->GetRaceCarWithWorldQueue().GetLength();
-                if (liRawWorldContacts > 0)
-                {
-                    sbLoggedHarvest = true;
-                    if (CgsDev::Message::gxMessageFilterFlags & 1)
-                        *CgsDev::Log::gpDebugPrint
-                            << "⭐ world contacts HARVESTED: " << static_cast<u32>(liRawWorldContacts)
-                            << " PotentialContact(s) in the race-car-vs-world queue [5] [FLAG PC "
-                               "boot witness]. Reported once, not per frame\n";
-                }
-            }
-        }
 
         // ---- (4) the HIDE_ONLINE unhide tail ----------------------------------------------------
         for (s32 liHiddenCar = mHiddenRaceCars.GetFirstNonZeroBit();
@@ -1762,8 +1678,6 @@ namespace Vehicle
             static s32 siCValidProbe = -1;
             if (siCValidProbe < 0)
             {
-                const char* lpcEnv = getenv("BRN_WALL_PROBE");
-                siCValidProbe = (lpcEnv != nullptr && lpcEnv[0] != '0') ? 1 : 0;
             }
             static u32 suCValidFrame = 0u;
             ++suCValidFrame;
@@ -1773,22 +1687,6 @@ namespace Vehicle
                     << "[cvalid] n " << static_cast<s32>(suCValidFrame)
                     << " raw " << liNumContacts
                     << " valid " << liValidatedContacts << "\n";
-            }
-        }
-        // ---- end [cvalid] ------------------------------------------------------------------------
-
-        // [FLAG PC boot witness] one-shot: first frame anything survives validation.
-        {
-            static bool sbLoggedValidated = false;
-            if (!sbLoggedValidated && liValidatedContacts > 0)
-            {
-                sbLoggedValidated = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "⭐ world contacts VALIDATED: " << static_cast<u32>(liValidatedContacts)
-                        << " of " << static_cast<u32>(liNumContacts)
-                        << " raw contact(s) accepted into the Validated queue [6] [FLAG PC boot "
-                           "witness]. Reported once, not per frame\n";
             }
         }
 

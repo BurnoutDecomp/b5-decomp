@@ -227,14 +227,6 @@ namespace Deformation
                 {
                     sbLoggedSolveWitness = true;
                     Matrix44Affine lPre; mpaModels[liModelIndex].GetTransform(lPre);
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "penetration solver LIVE: "
-                            << lpSolver->GetNumWorldContacts() << " world contact(s); pos "
-                            << lPre.wAxis.x << " " << lPre.wAxis.y << " " << lPre.wAxis.z
-                            << " -> " << lpSolvedTransform->wAxis.x << " "
-                            << lpSolvedTransform->wAxis.y << " " << lpSolvedTransform->wAxis.z
-                            << " [FLAG PC boot witness]. Reported once, not per frame\n";
                 }
             }
 
@@ -253,8 +245,6 @@ namespace Deformation
                 static s32 siWallProbe = -1;
                 if ( siWallProbe < 0 )
                 {
-                    const char* lpcEnv = getenv( "BRN_WALL_PROBE" );
-                    siWallProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                 }
                 if ( siWallProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
                 {

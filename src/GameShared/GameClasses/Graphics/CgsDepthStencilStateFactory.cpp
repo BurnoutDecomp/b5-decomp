@@ -119,14 +119,3 @@ void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON],
                "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZGTEQ_ZWRITEON ]");
 }
-
-// FLAG PC-platform leaf: no console body or caller; vtable filler.
-void CgsDepthStencilStateFactory::Destruct()
-{
-}
-
-// FLAG PC-platform leaf: no console body or caller; vtable filler.
-bool CgsDepthStencilStateFactory::Prepare()
-{
-    return true;
-}

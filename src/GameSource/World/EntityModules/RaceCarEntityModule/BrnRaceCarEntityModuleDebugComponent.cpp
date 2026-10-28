@@ -30,8 +30,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                                                // Magnitude, operator+/-/*
-#include "pc/math/VmxFloat.h"
-#include "pc/debug/IniComponentLifecycle.h"
 #include "SDKs/XboxMath/XMVectorSin.h"
 #include "SDKs/XboxMath/XMVectorCos.h"
 #include "SDKs/XboxMath/XMVectorTan.h"
@@ -123,22 +121,6 @@ namespace
 
     const CgsDev::RGBA KRGBA_TEXT_WHITE = 0xFFFFFFFFu;
 
-    // FLAG PC-platform leaf: loading configured vehicle LODs materializes this
-    // lazy page before a player exists. Its original frame/overlay methods
-    // require an attached player. Only INI-origin activation waits for that
-    // prerequisite; its bindings and configured values are already available.
-    bool IniPlayerUnavailablePC(const CgsDev::DebugComponent* lpComponent,
-                                const RaceCarEntityModule* lpModule)
-    {
-        if (!CgsPC::Debug::IsIniComponent(lpComponent))
-            return false;
-        if (!lpModule)
-            return true;
-        const EActiveRaceCarIndex leIndex = lpModule->GetPlayerActiveRaceCarIndex();
-        if (leIndex < E_ACTIVE_RACE_CAR_INDEX_0 || leIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
-            return true;
-        return !lpModule->GetActiveRaceCar(leIndex)->IsAttached();
-    }
 }
 
 // ================================================================================================
@@ -195,8 +177,6 @@ void RaceCarEntityModuleDebugComponent::AirRamAddNew(void* lpData)
 {
     auto* lpComponent = static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
     lpComponent->mbAirRam = true; // ARTIST 822A79A8: the callback's sole side effect.
-    // FLAG PC-platform leaf: bounded passive witness; no physics event is invented.
-    static const bool sbTrace = std::getenv("BRN_RACECAR_RAM_TRACE") != nullptr;
     static u32 suTraceLines = 0;
     if (sbTrace && suTraceLines < 4 && CgsDev::Log::gpDebugPrint)
     {
@@ -209,8 +189,6 @@ void RaceCarEntityModuleDebugComponent::AirRamAddNew(void* lpData)
 void RaceCarEntityModuleDebugComponent::ResetAverageSpeedCallback(void* lpData)
 {
     RaceCarEntityModuleDebugComponent* lpComponent = static_cast<RaceCarEntityModuleDebugComponent*>(lpData);
-    // FLAG PC-platform leaf: passive observation of the original two reset stores.
-    static const bool sbTrace = std::getenv("BRN_RACECAR_HUD_TRACE") != nullptr;
     const s32 liPreviousFrames = sbTrace ? lpComponent->miAverageSpeedFrameCount : 0;
     lpComponent->mfAverageSpeed           = 0.0f;
     lpComponent->miAverageSpeedFrameCount = 0;
@@ -374,14 +352,11 @@ void RaceCarEntityModuleDebugComponent::OnActivate()
 // The player's running mean speed (m/s): new mean = (speed + mean * n) / (n + 1).
 void RaceCarEntityModuleDebugComponent::Update()
 {
-    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
-        return;
     ActiveRaceCar* lpPlayerCar =
         mpRaceCarEntityModule->GetActiveRaceCar(mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex());
 
     if (lpPlayerCar != nullptr)
     {
-        const f32 lfSpeed = CgsPC::VmxFloat::Magnitude3(lpPlayerCar->GetVelocity());
 
         const s32 liFrameCount = miAverageSpeedFrameCount;
         miAverageSpeedFrameCount = liFrameCount + 1;
@@ -397,8 +372,6 @@ void RaceCarEntityModuleDebugComponent::Update()
 
 void RaceCarEntityModuleDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
 {
-    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
-        return;
     const rw::RGBA lWhite(0xFF, 0xFF, 0xFF, 0xFF);
 
     if (mbRenderTailgateCones)
@@ -418,9 +391,6 @@ void RaceCarEntityModuleDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRend
         }
     }
 
-    // FLAG PC-platform leaf: bounded, opt-in observation after the real draw calls.
-    // Only a shown history reads the Array; inactive/unconstructed history is untouched.
-    static const bool sbTrace = (std::getenv("BRN_RESET_HISTORY_TRACE") != nullptr);
     static bool sbWasShown = false;
     static u32 suTraceLines = 0, suShownFrames = 0;
     if (sbTrace && suTraceLines < 24)
@@ -502,10 +472,6 @@ void RaceCarEntityModuleDebugComponent::RenderTailgateCones(CgsDev::Debug3DImmed
         Matrix44Affine lConeTransform = lpCar->GetTransform();
         const Vector3  lDirection     = lpCar->GetDirection();
 
-        lConeTransform.wAxis = CgsPC::VmxFloat::MultiplyAdd(
-            lDirection, KF_Z_OFFSET_FROM_CAR_CENTRE_TO_CONE_APEX, lConeTransform.wAxis);
-        lConeTransform.zAxis = CgsPC::VmxFloat::Multiply(lConeTransform.zAxis, -KF_TAILGATING_CONE_DEPTH);
-
         const VecFloat lvfHalfAngle = { KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS,
                                         KF_TAILGATING_CONE_HALF_ANGLE_RADS, KF_TAILGATING_CONE_HALF_ANGLE_RADS };
 
@@ -520,7 +486,6 @@ void RaceCarEntityModuleDebugComponent::RenderSingleDebugCone(CgsDev::Debug3DImm
                                                               Matrix44Affine lTransform, VecFloat lvfHalfAngle,
                                                               rw::RGBA lColour, s32 liNumSegments) const
 {
-    namespace vmx = CgsPC::VmxFloat;
     const f32 lfLength = vmx::Magnitude3(lTransform.zAxis);
     const Vector3 lRadius = {
         vmx::Multiply(lfLength, XboxMath::XMVectorTan(lvfHalfAngle.x)),
@@ -572,8 +537,6 @@ void RaceCarEntityModuleDebugComponent::DrawResetOnWaterHeight(CgsDev::Debug3DIm
 
 void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
 {
-    if (IniPlayerUnavailablePC(this, mpRaceCarEntityModule))
-        return;
     // One line per active-race-car slot: "<slot>:" then, for an active car,
     // "Damaged: <bool>, <persistent damage>".
     if (mbRenderCarDamageState)
@@ -666,8 +629,6 @@ void RaceCarEntityModuleDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender
         RenderTrafficRelated(lpRender);
     }
 
-    // FLAG PC-platform leaf: bounded passive visibility/statistics observer.
-    static const bool sbTrace = std::getenv("BRN_RACECAR_HUD_TRACE") != nullptr;
     static u32 suPreviousMask = 0xffffffffu, suFrames = 0, suTransitionLines = 0, suSampleLines = 0;
     const u32 luMask = (mbRenderCarDamageState ? 1u : 0u) | (mbRenderCarSreamingState ? 2u : 0u)
         | (mbShowAverageSpeed ? 4u : 0u) | (mbShowEngineState ? 8u : 0u) | (mbTrafficRelatedData ? 16u : 0u);

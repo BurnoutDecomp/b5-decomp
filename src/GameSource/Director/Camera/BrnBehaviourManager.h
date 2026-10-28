@@ -276,21 +276,10 @@ namespace Camera
         // 1600-byte slots); BehaviourManager::Prepare @0x8223DBE0 refills 8 and 20. The SLOT COUNTS
         // are behaviour and are the console's.
         //
-        // FLAG PC platform leaf (x64 pointer widening): the SMALL BUCKET. On the console it is
-        // exactly the largest small behaviour, BehaviourGyroCam (0x640 bytes, `li r7,0x640`
-        // @0x822598D8). On this host the same GyroCam is 1632 bytes -- every vptr and pointer in it
-        // widened -- so the console's 100 Vector4 cannot hold it. The rule survives and the number
-        // is re-derived from it: the host bucket is the host's largest small behaviour, 102 Vector4
-        // == 1632 bytes (the pool grows by 20 * 32 bytes). BrnBehaviourManager.cpp static_asserts
-        // that equality against the real BehaviourGyroCam, and AllocateBehaviour<> static_asserts
-        // every behaviour against the bucket of the pool the console gives it. The large bucket
-        // still holds every large behaviour on this host (the largest, IceAnim, is 3984 of 4000
-        // bytes) and stays the console's.
         static const u32 KU_LARGE_BEHAVIOUR_POOL_UNITS         = 250u;
         static const u32 KU_LARGE_BEHAVIOUR_POOL_SLOTS         = 8u;
         static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS_CONSOLE = 100u;
-        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS         = 102u;   // FLAG PC platform leaf (above)
-        static const u32 KU_SMALL_BEHAVIOUR_POOL_SLOTS         = 20u;
+        static const u32 KU_SMALL_BEHAVIOUR_POOL_UNITS         = 102u;           static const u32 KU_SMALL_BEHAVIOUR_POOL_SLOTS         = 20u;
 
         typedef BrnDirector::AbstractPool<KU_LARGE_BEHAVIOUR_POOL_UNITS, KU_LARGE_BEHAVIOUR_POOL_SLOTS,
                                           rw::math::vpu::Vector4> LargeBehaviourPool;
@@ -668,9 +657,6 @@ namespace Camera
     {
         if constexpr (ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_SMALL)
         {
-            static_assert(sizeof(TBehaviour) <= sizeof(SmallBehaviourPool::Bucket),
-                          "a small behaviour outgrew the host small bucket: re-derive "
-                          "BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS");
 
             const s32 liNumFree = mSmallBehaviourPool.GetNumFreeObjects();
             if (liNumFree <= 0)

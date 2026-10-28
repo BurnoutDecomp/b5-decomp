@@ -9,8 +9,6 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameSource/Sound/Global/BrnHudSoundDiag.h"   // the opt-in [sweeteners-attach] witness only
-
 #include <cmath>
 
 namespace BrnSound
@@ -204,11 +202,6 @@ bool SweetenersEffect::Attach()
     // square wave now holds.
     if (BrnSound::Logic::HudSoundDiagBudget(guSweetenersDiagAttach))
     {
-        BrnSound::Logic::HudSoundDiagPrintf(
-            "[sweeteners-attach] car %d seed %08x%08x up (%.3f, %.3f) down (%.3f, %.3f) [FLAG PC witness]\n",
-            static_cast<s32>(miRaceCarIndex), static_cast<u32>(luSeedHighWord), static_cast<u32>(luSeedLowWord),
-            static_cast<double>(mPopsSquareWave.mUpTimeWindow.mfMin), static_cast<double>(mPopsSquareWave.mUpTimeWindow.mfMax),
-            static_cast<double>(mPopsSquareWave.mDownTimeWindow.mfMin), static_cast<double>(mPopsSquareWave.mDownTimeWindow.mfMax));
     }
 
     BrnSound::Logic::GlobalStateManager* lpGlobal =

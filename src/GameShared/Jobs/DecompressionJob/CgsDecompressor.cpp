@@ -3,16 +3,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT (DecompressionJobEntry range check)
 
 #include <cstring>   // std::memset / std::memcpy (models the Xbox memset/XMemCpy intrinsics)
-#include <windows.h> // OutputDebugStringA (the X360 calls it directly on an inflate error)
+#include <xtl.h> // OutputDebugStringA (the X360 calls it directly on an inflate error)
 
 namespace CgsResource
 {
-    void Decompressor::CancelStreamPC()
-    {
-        // FLAG PC-platform leaf: the stable native worker owns zlib's state.
-        // The caller has joined execution and verified an active stream state.
-        if (mStream.state) inflateEnd(&mStream);
-    }
     // 0x82ACC9C0 -- zlib zalloc trampoline. zlib passes the z_stream::opaque (our `this`) and the
     // item count/size; allocate items*size from the job's heap at 4-byte alignment.
     void* Decompressor::CompressorAllocateCallback(void* lpOpaque, uInt luItems, uInt luSize)
@@ -31,8 +25,6 @@ namespace CgsResource
     // 0x82ACC9E0 -- prime the working stream for the FIRST entry and inflateInit_ it.
     s32 Decompressor::BeginDecompressingFirstEntry()
     {
-        // FLAG PC-platform leaf: use the native zlib structure and library ABI.
-        std::memset(&mStream, 0, sizeof(mStream));
 
         const CompressedData& lEntry = mpEntries[muCurrentEntry];
 
@@ -79,10 +71,6 @@ namespace CgsResource
 
         muNumEntries = lpJobData->muNumEntries;
 
-        // FLAG PC-platform leaf: the original snapshot spans 128 console
-        // bytes. Copy its named state so native pointer widths cannot truncate
-        // it or overwrite the following worker fields.
-        mStream = lpJobData->mpStatus->mDecompressionStream;
         muAmountRead = lpJobData->mpStatus->muAmountRead;
         muAmountWritten = lpJobData->mpStatus->muAmountWritten;
         miLastInflateResult = lpJobData->mpStatus->miLastInflateResult;
@@ -147,10 +135,6 @@ namespace CgsResource
     {
         // ARTIST82ACCCAC saves r4: data is the SECOND EA::Jobs parameter.
         auto* lpData = static_cast<DecompressionJobData*>(lParam1.mpValue);
-        // FLAG PC-platform leaf: native thread ids do not encode X360 slots.
-        // The owning interface supplies a stable workspace; modern zlib's
-        // inflateStateCheck also requires its z_stream address to stay fixed.
-        CGS_ASSERT(lpData && lpData->mpNativeWorker, "No native decompression worker\n");
         if (lpData && lpData->mpNativeWorker)
             lpData->mpNativeWorker->Execute(lpData);
     }

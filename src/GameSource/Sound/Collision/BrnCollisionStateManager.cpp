@@ -168,15 +168,6 @@ void OutputCollision::DebugPrint(const CollisionStateManager& lCollisionManager)
           << " CamDist: " << std::sqrt(maParameter[1].x) << "\t\n";
 }
 
-namespace
-{
-bool CollisionAudioDiagEnabled()
-{
-    static const bool sbEnabled = std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr;
-    return sbEnabled;
-}
-}
-
 // ---------------------------------------------------------------------------
 // CollisionStateManager::CollisionStateManager()  ctor @ 0x826FFAC0  (HEAVY)
 //
@@ -462,52 +453,6 @@ void CollisionStateManager::ResourcesAreReady()
 
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the two caches the bin
         // selection reads, as built.
-        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[collision-audio] bin caches built regular="
-                << static_cast<s32>(maBinLoopupCache[InputCollision::E_REGULAR].GetEntryCount())
-                << "/" << static_cast<s32>(mCrashBinList.mNumCrashBins())
-                << " prop="
-                << static_cast<s32>(maBinLoopupCache[InputCollision::E_PROP].GetEntryCount())
-                << "/" << static_cast<s32>(mPropsCrashBinList.mNumCrashBins()) << "\n";
-            // Every entry's material pair, once: what a collision's two materials must meet -- and,
-            // for the regular bins, the other gates SelectCollisionBin walks (the action and
-            // orientation masks, the distance and impulse bands).
-            for (u32 luPipeline = 0; luPipeline < InputCollision::E_MAX_PIPELINES; ++luPipeline)
-            {
-                const BinLookupCache& lrCache = maBinLoopupCache[luPipeline];
-                for (u32 luEntry = 0; luEntry < lrCache.GetEntryCount(); ++luEntry)
-                {
-                    char lacLine[256];
-                    if (luPipeline == InputCollision::E_REGULAR)
-                    {
-                        const Attrib::Gen::crashbin lBin(mCrashBinList.GetCrashBinCollectionKey(luEntry), nullptr);
-                        std::snprintf(lacLine, sizeof(lacLine),
-                                      "[collision-audio] cache entry pipeline=%u %u matA=0x%016llx matB=0x%016llx"
-                                      " action=%u orient=%u distance=%g..%g impulse=%g..%g\n",
-                                      luPipeline, luEntry,
-                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialA),
-                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialB),
-                                      lBin.IsValid() ? static_cast<u32>(lBin.mAction()) : 0u,
-                                      lBin.IsValid() ? static_cast<u32>(lBin.mOrientation()) : 0u,
-                                      lBin.IsValid() ? static_cast<double>(lBin.DistanceFactor_Min()) : 0.0,
-                                      lBin.IsValid() ? static_cast<double>(lBin.DistanceFactor_Max()) : 0.0,
-                                      lBin.IsValid() ? static_cast<double>(lBin.PhysicsImpulseNormalization_MIN()) : 0.0,
-                                      lBin.IsValid() ? static_cast<double>(lBin.PhysicsImpulseNormalization_MAX()) : 0.0);
-                    }
-                    else
-                    {
-                        std::snprintf(lacLine, sizeof(lacLine),
-                                      "[collision-audio] cache entry pipeline=%u %u matA=0x%016llx matB=0x%016llx\n",
-                                      luPipeline, luEntry,
-                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialA),
-                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialB));
-                    }
-                    *CgsDev::Log::gpDebugPrint << lacLine;
-                }
-            }
-        }
     }
     mbResourcesAreLoaded = true;
 
@@ -522,15 +467,6 @@ void CollisionStateManager::ResourcesAreReady()
         if (mPropDataResourceHandle != CgsResource::NULLResourceHandle)
         {
             BuildPropToMaterialTable();
-            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-            {
-                u32 luValidMappings = 0;
-                for (u32 luIndex = 0; luIndex < 500u; ++luIndex)
-                    luValidMappings += maPropToMaterialMappings[luIndex].mbValid ? 1u : 0u;
-                *CgsDev::Log::gpDebugPrint
-                    << "[collision-audio] prop resource bound mappings="
-                    << static_cast<s32>(luValidMappings) << "\n";
-            }
         }
     }
 }
@@ -642,42 +578,7 @@ int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
     {
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a bin was chosen but its
         // sample pick came back empty (the state stays free).
-        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-        {
-            static u32 suNoSamplePrintCount = 0;
-            if (suNoSamplePrintCount++ < 32u)
-            {
-                char lacLine[160];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] no sample pipeline=%d bin=%d size=%d action=%d mat=%llx/%llx\n",
-                              static_cast<s32>(lpCollision->mePipeline), static_cast<s32>(lpCollision->miBinIndex),
-                              static_cast<s32>(lpCollision->meSize), static_cast<s32>(lpCollision->meAction),
-                              static_cast<unsigned long long>(lpCollision->maMaterial[0]),
-                              static_cast<unsigned long long>(lpCollision->maMaterial[1]));
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
         return 1;
-    }
-
-    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suPrintCount = 0;
-        if (suPrintCount++ < 64u)
-        {
-            char lacLine[224];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[collision-audio] play pipeline=%d bin=%d size=%d sample=%d orient=%d impulse=%g "
-                          "action=%d mat=%llx/%llx\n",
-                          static_cast<s32>(lpCollision->mePipeline), static_cast<s32>(lpCollision->miBinIndex),
-                          static_cast<s32>(lpCollision->meSize), lpCollision->miSampleID,
-                          static_cast<s32>(lpCollision->meOrientation),
-                          static_cast<double>(lpCollision->mNormalizedImpulse.x),
-                          static_cast<s32>(lpCollision->meAction),
-                          static_cast<unsigned long long>(lpCollision->maMaterial[0]),
-                          static_cast<unsigned long long>(lpCollision->maMaterial[1]));
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
     }
 
     if (KI_DEBUG_CULL_AGAINST_PLAYING)
@@ -1605,22 +1506,6 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
                     lrInput.DebugPrint(*this);
                 }
                 // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a repeated impact eaten.
-                if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-                {
-                    static u32 suEatenPrintCount = 0;
-                    if (suEatenPrintCount++ < 16u)
-                    {
-                        char lacLine[160];
-                        std::snprintf(lacLine, sizeof(lacLine),
-                                      "[collision-audio] scrape eaten A=%u:%u B=%u:%u orient=%d\n",
-                                      GetEntityOwner(lrInput.mScrapeInfo.mEntityIdA),
-                                      GetEntityIndex(lrInput.mScrapeInfo.mEntityIdA),
-                                      GetEntityOwner(lrInput.mScrapeInfo.mEntityIdB),
-                                      GetEntityIndex(lrInput.mScrapeInfo.mEntityIdB),
-                                      static_cast<s32>(lrInput.mScrapeInfo.meOrientation));
-                        *CgsDev::Log::gpDebugPrint << lacLine;
-                    }
-                }
             }
         }
         else if (UniqueScrape(lrInput.mScrapeInfo, lapNew, lu32New))
@@ -1653,20 +1538,6 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
                 lpState->SetLifetime(CollisionState::E_SCRAPE);
                 lrStateScrape = lapContinuing[lu32Scrape]->mScrapeInfo;
                 // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a state keeps a scrape.
-                if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-                {
-                    static u32 suRefreshPrintCount = 0;
-                    if (suRefreshPrintCount++ < 16u)
-                    {
-                        char lacLine[160];
-                        std::snprintf(lacLine, sizeof(lacLine),
-                                      "[collision-audio] scrape refresh A=%u:%u B=%u:%u orient=%d intensity=%.3f\n",
-                                      GetEntityOwner(lrStateScrape.mEntityIdA), GetEntityIndex(lrStateScrape.mEntityIdA),
-                                      GetEntityOwner(lrStateScrape.mEntityIdB), GetEntityIndex(lrStateScrape.mEntityIdB),
-                                      static_cast<s32>(lrStateScrape.meOrientation), lrStateScrape.mfIntensity);
-                        *CgsDev::Log::gpDebugPrint << lacLine;
-                    }
-                }
                 lpState = nullptr;
                 lapContinuing[lu32Scrape] = nullptr;
             }
@@ -1689,20 +1560,6 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
         lpState->Attach(&lOutput);
         lpState->SetLifetime(CollisionState::E_SCRAPE);
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a scrape takes a free state.
-        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-        {
-            static u32 suStartPrintCount = 0;
-            if (suStartPrintCount++ < 16u)
-            {
-                char lacLine[160];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] scrape start A=%u:%u B=%u:%u orient=%d intensity=%.3f\n",
-                              GetEntityOwner(lOutput.mScrapeInfo.mEntityIdA), GetEntityIndex(lOutput.mScrapeInfo.mEntityIdA),
-                              GetEntityOwner(lOutput.mScrapeInfo.mEntityIdB), GetEntityIndex(lOutput.mScrapeInfo.mEntityIdB),
-                              static_cast<s32>(lOutput.mScrapeInfo.meOrientation), lOutput.mScrapeInfo.mfIntensity);
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
     }
 
     for (u32 lu32Scrape = 0; lu32Scrape < lu32New; ++lu32Scrape)
@@ -1717,20 +1574,6 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
             CGS_ASSERT(lpScrape != nullptr, "lpScrape");
             *lpScrape = lpInput->mScrapeInfo;
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a scrape enters the history.
-            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-            {
-                static u32 suHistoryPrintCount = 0;
-                if (suHistoryPrintCount++ < 16u)
-                {
-                    char lacLine[160];
-                    std::snprintf(lacLine, sizeof(lacLine),
-                                  "[collision-audio] scrape history A=%u:%u B=%u:%u orient=%d stamp=%.3f\n",
-                                  GetEntityOwner(lpScrape->mEntityIdA), GetEntityIndex(lpScrape->mEntityIdA),
-                                  GetEntityOwner(lpScrape->mEntityIdB), GetEntityIndex(lpScrape->mEntityIdB),
-                                  static_cast<s32>(lpScrape->meOrientation), lpScrape->mfTimeStamp);
-                    *CgsDev::Log::gpDebugPrint << lacLine;
-                }
-            }
         }
     }
 }
@@ -2603,26 +2446,6 @@ void CollisionStateManager::UpdateResolver(
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a race car entering the cache, with
     // the transform and deformed box every contact's orientation will be read from.
-    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suCachePrintCount = 0;
-        for (u32 luCar = 0; luCar < RaceCarCache::KU_MAX_NUM_RACE_CARS && suCachePrintCount < 16u; ++luCar)
-        {
-            const RaceCarCache::RaceCarCacheNode& lrCar = *mRaceCarCache.GetRaceCar(luCar);
-            if (!lrCar.mbActive.HasChangedTo(true))
-                continue;
-            ++suCachePrintCount;
-            char lacLine[224];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[collision-audio] race-car cache car=%u active pos=(%.2f,%.2f,%.2f) "
-                          "box=(%.2f,%.2f,%.2f)..(%.2f,%.2f,%.2f) com=(%.2f,%.2f,%.2f)\n",
-                          luCar, lrCar.mTransform.GetCurrent().Pos().x, lrCar.mTransform.GetCurrent().Pos().y,
-                          lrCar.mTransform.GetCurrent().Pos().z, lrCar.mMin.x, lrCar.mMin.y, lrCar.mMin.z,
-                          lrCar.mMax.x, lrCar.mMax.y, lrCar.mMax.z,
-                          lrCar.mComOffset.x, lrCar.mComOffset.y, lrCar.mComOffset.z);
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
-    }
 
     // 0x826F92D0..0x826F9328, on the frame just copied: any change of the impact time (either way,
     // `lwz 4 / lwz 0 ; cmpw ; bne` at +0x81E8) or the fatality turning to E_FATAL_START (+0x81E0,
@@ -2665,37 +2488,6 @@ void CollisionStateManager::UpdateResolver(
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): proves the leg is dispatched and
             // counts what it carried -- the first three frames, every 1800th after that (8 lines), and any
             // frame whose queue is not empty (16 lines).
-            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-            {
-                static u32 su32DiscardedFrames = 0;
-                static u32 su32DiscardedRecords = 0;
-                static u32 su32DiscardedPeriodicLines = 0;
-                static u32 su32DiscardedFilledLines = 0;
-                const s32 liDiscarded = lrContacts.GetDiscardedContacts()->GetLength();
-                ++su32DiscardedFrames;
-                su32DiscardedRecords += static_cast<u32>(liDiscarded);
-                bool lbPrint = false;
-                if (liDiscarded != 0 && su32DiscardedFilledLines < 16u)
-                {
-                    ++su32DiscardedFilledLines;
-                    lbPrint = true;
-                }
-                else if ((su32DiscardedFrames <= 3u || su32DiscardedFrames % 1800u == 0u) &&
-                         su32DiscardedPeriodicLines < 8u)
-                {
-                    ++su32DiscardedPeriodicLines;
-                    lbPrint = true;
-                }
-                if (lbPrint)
-                {
-                    char lacLine[192];
-                    std::snprintf(lacLine, sizeof(lacLine),
-                                  "[collision-audio] discarded leg dispatched frame=%u n=%d added=%u total_records=%u\n",
-                                  su32DiscardedFrames, liDiscarded, mu32InputCollisionCount - lu32DiscardedFrom,
-                                  su32DiscardedRecords);
-                    *CgsDev::Log::gpDebugPrint << lacLine;
-                }
-            }
 
         }
         // The deformation legs (item 3), on the deformation output the sound input carries (the
@@ -2709,7 +2501,6 @@ void CollisionStateManager::UpdateResolver(
         // (a budget PER LEG, so a burst on one leg cannot hide the others), the raw queue census on any
         // frame one of them is non-empty, and each glass event's state and suppression flag -- the
         // glass builder culls everything but an unsuppressed smash (0x826BE544..0x826BE564).
-        const bool lbDeformDiag = CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint != nullptr;
         // Per leg: up to 8 culled inputs and, separately, up to 24 live ones.
         struct LegBudget { u32 mu32Culled; u32 mu32Live; };
         auto DiagLeg = [this, lbDeformDiag](const char* lpcLeg, u32 lu32From, LegBudget& lrBudget)
@@ -2850,23 +2641,6 @@ void CollisionStateManager::UpdateResolver(
     UpdateScrapes(lrFrame);                                                           // 0x826F9720
     CullInputCollisions();                                                            // 0x826F9728
     ProcessCollisions();                                                              // 0x826F9730
-    if (mu32InputCollisionCount != 0u && CollisionAudioDiagEnabled() &&
-        CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suPrintCount = 0;
-        if (suPrintCount++ < 32u)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[collision-audio] resolve inputs="
-                << static_cast<s32>(mu32InputCollisionCount)
-                << " outputs=" << static_cast<s32>(mu32OutputCollisionCount)
-                << " props=" << liPropCount << " orient=";
-            for (u32 luInput = 0; luInput < mu32InputCollisionCount && luInput < 4u; ++luInput)
-                *CgsDev::Log::gpDebugPrint << (luInput ? "," : "")
-                                           << static_cast<s32>(maInputCollision[luInput].meOrientation);
-            *CgsDev::Log::gpDebugPrint << "\n";
-        }
-    }
 }
 
 bool CollisionStateManager::ProcessCollision(
@@ -2999,61 +2773,6 @@ void CollisionStateManager::UpdateParams(f32 afDeltaTime)
                     // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the pool had no
                     // free state and no attached one of lower priority, so this output and every
                     // one after it goes unvoiced this frame.
-                    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-                    {
-                        static u32 suNoStatePrintCount = 0;
-                        if (suNoStatePrintCount++ < 32u)
-                        {
-                            u32 luAttached = 0;
-                            f32 lfLowest = 0.0f;
-                            for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
-                                 lpBase = lpBase->GetNextState())
-                            {
-                                const f32 lfPriority = static_cast<CollisionState*>(lpBase)
-                                                           ->GetOutputCollision().mfPriority;
-                                if (lpBase->IsAttached() && (luAttached++ == 0 || lfPriority < lfLowest))
-                                    lfLowest = lfPriority;
-                            }
-                            const OutputCollision& lrUnplayed = *lapCollisions[luIndex];
-                            char lacLine[224];
-                            std::snprintf(lacLine, sizeof(lacLine),
-                                          "[collision-audio] no free state action=%d mat=%llx/%llx bin=%d "
-                                          "priority=%g attached=%u lowest=%g unplayed=%u\n",
-                                          static_cast<s32>(lrUnplayed.meAction),
-                                          static_cast<unsigned long long>(lrUnplayed.maMaterial[0]),
-                                          static_cast<unsigned long long>(lrUnplayed.maMaterial[1]),
-                                          static_cast<s32>(lrUnplayed.miBinIndex),
-                                          static_cast<double>(lrUnplayed.mfPriority), luAttached,
-                                          static_cast<double>(lfLowest),
-                                          mu32OutputCollisionCount - luIndex);
-                            *CgsDev::Log::gpDebugPrint << lacLine;
-                            // The first few saturations: who holds the pool.
-                            if (suNoStatePrintCount <= 4u)
-                            {
-                                for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
-                                     lpBase = lpBase->GetNextState())
-                                {
-                                    if (!lpBase->IsAttached())
-                                        continue;
-                                    const CollisionState* lpHeld = static_cast<const CollisionState*>(lpBase);
-                                    const OutputCollision& lrHeld = lpHeld->GetOutputCollision();
-                                    std::snprintf(lacLine, sizeof(lacLine),
-                                                  "[collision-audio]   held lifetime=%d priority=%g attached=%.3f now=%.3f "
-                                                  "action=%d mat=%llx/%llx bin=%d sample=%d scrape=%d\n",
-                                                  static_cast<s32>(lpHeld->GetLifetime().GetCurrent()),
-                                                  static_cast<double>(lrHeld.mfPriority),
-                                                  static_cast<double>(lpHeld->GetTimeWeAttached()),
-                                                  static_cast<double>(mfCurrentTime),
-                                                  static_cast<s32>(lrHeld.meAction),
-                                                  static_cast<unsigned long long>(lrHeld.maMaterial[0]),
-                                                  static_cast<unsigned long long>(lrHeld.maMaterial[1]),
-                                                  static_cast<s32>(lrHeld.miBinIndex), lrHeld.miSampleID,
-                                                  lrHeld.mScrapeInfo.mbValid ? 1 : 0);
-                                    *CgsDev::Log::gpDebugPrint << lacLine;
-                                }
-                            }
-                        }
-                    }
                     break;
                 }
             }
@@ -3172,19 +2891,6 @@ void CollisionStateManager::SelectCollisionBin(
     // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the early-out below, counted --
     // a second material of Nothing (an entity no material maps, e.g. the prop a race-car contact
     // touched) never reaches a bin; the prop pipeline voices that contact.
-    if (lrOutput.maMaterial[1] == 1 && CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suSkipPrintCount = 0;
-        if (suSkipPrintCount++ < 32u)
-        {
-            char lacLine[128];
-            std::snprintf(lacLine, sizeof(lacLine),
-                          "[collision-audio] skip pipeline=%d second material 1 mat0=0x%016llx\n",
-                          static_cast<int>(lrOutput.mePipeline),
-                          static_cast<unsigned long long>(lrOutput.maMaterial[0]));
-            *CgsDev::Log::gpDebugPrint << lacLine;
-        }
-    }
     if (lrOutput.maMaterial[1] == 1)
         return;
     if (KI_SPEW_COLLISION_BIN_LOGIC_VERBOSE >= 1)
@@ -3378,20 +3084,6 @@ void CollisionStateManager::SelectCollisionBin(
             }
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG); the console's own
             // BinLogic debug text here is "No large / medium / small samples in this bin, next".
-            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-            {
-                static u32 suSizeMissPrintCount = 0;
-                if (suSizeMissPrintCount++ < 32u)
-                {
-                    char lacLine[128];
-                    std::snprintf(lacLine, sizeof(lacLine),
-                                  "[collision-audio] size miss pipeline=%d entry=%u size=%d "
-                                  "normalized=%f -> next bin\n",
-                                  static_cast<int>(lrOutput.mePipeline), luIndex,
-                                  static_cast<int>(leSize), static_cast<double>(lfNormalized));
-                    *CgsDev::Log::gpDebugPrint << lacLine;
-                }
-            }
             continue;
         }
         lrOutput.meSize = leSize;
@@ -3426,29 +3118,6 @@ void CollisionStateManager::SelectCollisionBin(
         // through the pipeline's lookup cache -- which entry, and the pair it matched on. A
         // deformation-leg input (a detach / hinge action, or a body-part / mirror / glass
         // material: 0x20|0x40|0x80|0x100|0x200) keeps its own budget and is tagged.
-        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-        {
-            static u32 suCacheSelectPrintCount = 0;
-            static u32 suDeformSelectPrintCount = 0;
-            const bool lbDeformInput =
-                static_cast<s32>(lrOutput.meAction) != 1 ||
-                ((lrOutput.maMaterial[0] | lrOutput.maMaterial[1]) & 0x3E0ull) != 0;
-            u32& lruSelectBudget = lbDeformInput ? suDeformSelectPrintCount : suCacheSelectPrintCount;
-            if (lruSelectBudget++ < 32u)
-            {
-                char lacLine[192];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] cache select pipeline=%d entry=%u/%u %s "
-                              "matA=0x%016llx matB=0x%016llx%s\n",
-                              static_cast<int>(lrOutput.mePipeline), luIndex,
-                              lrCache.GetEntryCount(),
-                              lbMaterialsForward ? "forward" : "reverse",
-                              static_cast<unsigned long long>(lrEntry.mx64MaterialA),
-                              static_cast<unsigned long long>(lrEntry.mx64MaterialB),
-                              lbDeformInput ? " input=deform" : "");
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
         return;
     }
 
@@ -3460,44 +3129,6 @@ void CollisionStateManager::SelectCollisionBin(
         lrOutput.DebugPrint(*this);
     }
 
-    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
-    {
-        // Plain collisions (action 1) and the deformation actions (detach / hinge) keep separate
-        // budgets, so a run's early wall hits cannot hide what happened to a door coming off.
-        static u32 suRejectPrintCount = 0;
-        static u32 suDeformRejectPrintCount = 0;
-        u32& lruRejectBudget = static_cast<s32>(lrOutput.meAction) == 1 ? suRejectPrintCount
-                                                                         : suDeformRejectPrintCount;
-        if (lruRejectBudget++ < 32u)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[collision-audio] reject pipeline="
-                << static_cast<s32>(lrOutput.mePipeline)
-                << " bins=" << static_cast<s32>(lrCache.GetEntryCount())
-                << " gates=" << static_cast<s32>(luMaterialBins)
-                << "/" << static_cast<s32>(luValidBins)
-                << "/" << static_cast<s32>(luCameraBins)
-                << "/" << static_cast<s32>(luGameModeBins)
-                << "/" << static_cast<s32>(luImpactTimeBins)
-                << "/" << static_cast<s32>(luFatalityBins)
-                << "/" << static_cast<s32>(luOrientationBins)
-                << "/" << static_cast<s32>(luActionBins)
-                << "/" << static_cast<s32>(luDistanceBins)
-                << "/" << static_cast<s32>(luImpulseBins)
-                << " mat=" << static_cast<s32>(lrOutput.maMaterial[0] >> 32)
-                << ":" << static_cast<s32>(lrOutput.maMaterial[0] & 0xFFFFFFFFull)
-                << "/" << static_cast<s32>(lrOutput.maMaterial[1] >> 32)
-                << ":" << static_cast<s32>(lrOutput.maMaterial[1] & 0xFFFFFFFFull)
-                << " camera=" << static_cast<s32>(mx32CameraBinFlags)
-                << " mode=" << static_cast<s32>(mx32GameModeBinFlags)
-                << " impact=" << static_cast<s32>(lrOutput.meImpactTime)
-                << " fatal=" << static_cast<s32>(lrOutput.meFatality)
-                << " orient=" << static_cast<s32>(lrOutput.meOrientation)
-                << " action=" << static_cast<s32>(lrOutput.meAction)
-                << " distance2=" << lfDistanceSquared
-                << " impulse=" << lfImpulse << "\n";
-        }
-    }
 }
 
 template <typename BinType>

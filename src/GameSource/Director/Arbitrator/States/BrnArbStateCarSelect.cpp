@@ -90,7 +90,6 @@
 // in AttribSys/Generated/classes/iceanim.h.
 // ----------------------------------------------------------------------------
 
-
 namespace BrnDirector
 {
     namespace
@@ -716,16 +715,6 @@ namespace BrnDirector
         // [diag] BRN_CRASHCAM_DIAG -- this state's meState edge. It is here because the
         // crash-camera investigation needed to know WHY the arbitrator never returns to roaming,
         // and this state is where it parks. Edge-triggered; off unless the variable is set.
-        if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siLastCarSelState = -1;
-            if (static_cast<s32>(meState) != siLastCarSelState)
-            {
-                siLastCarSelState = static_cast<s32>(meState);
-                *CgsDev::Log::gpDebugPrint
-                    << "[crashcam] carselect meState -> " << siLastCarSelState << "\n";
-            }
-        }
         // ✅ THE CAST IS GONE (2026-08-29, crash-camera wave). This used to launder
         // mpPlayerCar through a reinterpret_cast because ArbStateSharedInfo forward-declared its
         // pointee as `BrnDirector::VehicleInfo` -- a namespace fork of a type that does not
@@ -740,18 +729,7 @@ namespace BrnDirector
         // ArbStateRoaming carries the same block. Off unless the env var is set; remove with the
         // bring-up path.
         {
-            static const bool sbTrace = (getenv("BRN_DIRECTOR_TRACE") != 0);
             static s32 siLastReported = -2;
-            if (sbTrace && static_cast<s32>(meState) != siLastReported &&
-                CgsDev::Log::gpDebugPrint != 0)
-            {
-                siLastReported = static_cast<s32>(meState);
-                *CgsDev::Log::gpDebugPrint
-                    << "[carselect] meState -> " << siLastReported
-                    << " (jy " << static_cast<s32>(lrGameState.meJunkyardState)
-                    << " newProfileIntro " << (lrGameState.mbNewProfileIntroActive ? 1 : 0)
-                    << " flyby " << (lrGameState.mbGameIntroFlybyActive ? 1 : 0) << ")\n";
-            }
         }
 
         // The junkyard camera is not the "entering junkyard" camera by default; each arm that

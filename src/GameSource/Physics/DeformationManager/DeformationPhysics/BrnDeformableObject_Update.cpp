@@ -26,7 +26,6 @@
 // The present counter, so an [st-mag] line names the dumped frame it belongs to (the dump writes
 // bb_<present>.bmp). Same extern the [deform-bbox] witness takes (BrnDeformableObject_BBox.cpp:19).
 namespace renderengine { extern u32 guPresentCount; }
-#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                // [diag] BRN_FRAME_DUMP_ARM=x15
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"             // BrnPhysics::Vehicle::Wheel (UpdateWheels seats / twists / detaches it)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"   // CgsDev::Debug3DImmediateRender::DrawBox / DrawLine (RenderSensors)
 #include "rw/rwcore_structs.h"                                                    // rw::RGBA (RenderSensors colours)
@@ -161,15 +160,6 @@ namespace Deformation
         };
         ChainProbe gChainProbe = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         s32 giChainProbeOn = -1;
-        inline bool ChainProbeOn()
-        {
-            if ( giChainProbeOn < 0 )
-            {
-                const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
-                giChainProbeOn = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
-            }
-            return giChainProbeOn == 1;
-        }
 
         // ⭐⭐ TABLE RETIRED 2026-08-14 (walls leg 4): the flagged-zero KsaApplyDirection placeholder
         // is the shared BrnPhysics::Deformation::KA_IMPULSE_DIRECTIONS (BrnCollidableBody.cpp) --
@@ -746,15 +736,7 @@ namespace Deformation
                                                    lParams.mbWorldContact);
             // PC diagnostic only: witness a completed, nonzero world-contact call.
             // Restitution and bounce flags elsewhere do not prove this handler ran.
-            static const bool sbWatchShowtimeContact = (std::getenv("BRN_SHOWTIME_WATCH") != nullptr);
             static u32 suReportedShowtimeContacts = 0;
-            if (sbWatchShowtimeContact && lParams.mbWorldContact && lvfImpulseMagnitude.x > 0.0f &&
-                suReportedShowtimeContacts < 8 && CgsDev::Log::gpDebugPrint != nullptr)
-            {
-                ++suReportedShowtimeContacts;
-                *CgsDev::Log::gpDebugPrint << "[showtime-contact] world=1 magnitude="
-                    << lvfImpulseMagnitude.x << " handler=ApplyShowtimeContactImpulse\n";
-            }
         }
 
         // The vehicle's crashed byte (asm: `*(vehicle + 1808)`), read separately from the vtable+0x10
@@ -1147,15 +1129,6 @@ namespace Deformation
                         // so a strip of the showtime victim gain starts at the frame it fires
                         // instead of at boot. STICKY; four plain stores, no branch on an env
                         // var, because the ONLY reader is itself opt-in. See BrnDiagFilmLatch.h.
-                        if ( BrnDiag::gFilmLatch.muVictimGainLatched == 0u )
-                        {
-                            BrnDiag::gFilmLatch.muVictimGainPresent =
-                                renderengine::guPresentCount;
-                            BrnDiag::gFilmLatch.miVictimGainGid =
-                                static_cast<s32>((GetGlobalEntityId().muValue >> 10) & 0x3FFFu);
-                            BrnDiag::gFilmLatch.mfVictimGainShaped = lfShapedMagnitude;
-                            BrnDiag::gFilmLatch.muVictimGainLatched = 1u;
-                        }
                     }
                 }
 
@@ -1172,8 +1145,6 @@ namespace Deformation
                     static s32 siStMagProbe = -1;
                     if ( siStMagProbe < 0 )
                     {
-                        const char* lpcEnv = getenv( "BRN_SHOWTIME_WATCH" );
-                        siStMagProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                     }
                     // ⚠️⚠️ TWO BUDGETS, NOT ONE (measured 2026-09-03, run st_FIX1). A single
                     // 4,000-line budget was spent by present 2981 -- entirely on arm-0 rows from
@@ -1473,8 +1444,6 @@ namespace Deformation
                     static s32 siTanProbe = -1;
                     if ( siTanProbe < 0 )
                     {
-                        const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
-                        siTanProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                     }
                     static u32 suTanLines = 0u;
                     if ( siTanProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && suTanLines < 1200u
@@ -1991,109 +1960,6 @@ namespace Deformation
     // ⛔ SO DO NOT RE-OPEN "TOO MANY CONTACTS" OR "TOO MUCH IMPULSE" WITHOUT A NEW KIND OF EVIDENCE:
     // both were measured here against the frame's own momentum change and both close.
     //
-    // ⭐⭐⭐ WHAT IS ACTUALLY WRONG-LOOKING, AND IT IS AN ENERGY-ROUTING RESULT, NOT A MAGNITUDE ONE.
-    // The owner's report is "the car flies way too much; a head-on wall hit should press the car
-    // INTO the wall until the wheels stop and then it should just sit there". Measured, and every
-    // step of the chain is arithmetic that closes on the same log:
-    //   (1) ALL FOUR WALL NORMALS ARE EXACTLY HORIZONTAL -- n.y == 0.000000 on every one. There is
-    //       no upward component in the wall impulse, so nothing launches the car directly.
-    //   (2) The crush arrives along BODY -Z at armBody.y == +0.198 .. +0.234, i.e. 20-23 cm ABOVE
-    //       the centre of mass. ExternalPhysicsBody::GetImpulsesFromLocalImpulse @0x825A1A80 forms
-    //       the arm as `position - mTransform.Pos()` (`lvx128 v0, r3, 0x30 ; vsubfp v0, v2, v0`
-    //       @0x825A1AC0/C4 on the WORLD-space-position arm). So the crush torques the car NOSE-UP
-    //       about its own CoM. Summed over the entry frame's twelve arrivals: pitch -8,273 N.m.s
-    //       -> dW_pitch -2.54 rad/s predicted, -2.51 observed; yaw +8,881 -> +2.42 vs +2.29; roll
-    //       +859 -> +1.13 vs +1.20. The angular ledger closes as tightly as the linear one.
-    //       ⭐⭐⭐ AND THE 20 cm IS THE CONSOLE'S OWN -- SETTLED 2026-09-05 AGAINST RETAIL DATA, so
-    //       do not re-open it. It is NOT in the streamed geometry: the shipped spec puts PUSMC01's
-    //       front crush spheres BELOW the spec origin (sensors 4..9 mInitialOffset.y == -0.176 ..
-    //       -0.217). The arm is DERIVED, by two asm-attested steps that both put the rig in the
-    //       wheels' own zero-mean frame:
-    //         * ProcessCreateEvents @0x82616D2C accumulates the mean of the four streamed WheelSpec
-    //           positions into mBaseAttribs.mCOMOffset (on top of an authored tweak that is zero
-    //           for this car). Re-derived from the shipped bytes alone, that mean is
-    //           (0.000023, -0.403568, -0.081302) -- to all six printed digits the `com=` the entry
-    //           probe prints. The rule is therefore confirmed independently of our own source.
-    //         * DeformationManager hands the NEGATED value to TransformToNewCOMSpace (X360
-    //           0x82644AF0..B04 `vspltisw v0,-1 / vslw / vxor v1,v13,v0 / bl`; PS3 0x76ADE4 emits
-    //           the identical five), so every sensor moves by -mCOMOffset -- the same frame
-    //           SimpleVehiclePhysics::SetAttributes @0x82602828 puts the WHEELS in.
-    //       => body sensor centre = mInitialOffset - wheelMean: sensor 6 -> +0.2016, 7 -> +0.2275,
-    //       8 -> +0.2016, 9 -> +0.1866, versus the four observed armBody.y of 0.2123 / 0.2339 /
-    //       0.2128 / 0.1979 -- the 1-2 cm residual is the contact point sitting on the sphere
-    //       rather than at its centre. The CoM lands 0.3370 m above the road (mMeshOffset.y
-    //       0.74058 - 0.4036), i.e. at axle height, with the bumper spheres 20 cm above it.
-    //       tools/assets/bundles/vehicle_geometry_audit.py compared the SHIPPED bytes against X360
-    //       retail for 429 cars: 380,798 deformation-spec values and 461,963 AttribSysVault values,
-    //       ZERO mismatches, with seven negative controls that all bite (`--selftest`). Both halves
-    //       of the difference `contactPoint - CoM` are retail's.
-    //   (3) THAT PITCH THEN DRIVES THE REAR UNDERSIDE INTO THE ROAD. Four frames later the sensors
-    //       at armBody == (-0.612,-0.185,-1.939) and (-0.017,-0.180,-1.969) -- 1.94 m BEHIND the
-    //       CoM, and 18 cm below it because a ground contact touches the BOTTOM of a 0.45 m sphere
-    //       whose centre is +0.2635 above the CoM -- report ground normals (n == (0,1,0) to five
-    //       decimals) closing at 7.5 and 5.1 m/s, because the nose-up rate swings the tail down
-    //       faster than the CoM is rising. Their impulses come back as dir 2 (+Y body) at 1,063 and
-    //       924 N.s, which LIFTS the car and deposits +2,061 / +1,819 of pitch.
-    //       ⛔⛔ THAT PITCH IS NOSE-DOWN, NOT NOSE-UP -- THIS LINE USED TO SAY "ANOTHER ... nose-up"
-    //       AND IT WAS A SIGN ERROR. In this frame -Wbody.x is nose-up: over frames 679..695 of
-    //       mwK_h230_s60 the pitch rate runs 0.29 -> -2.22 -> -3.32 while fwd.y rises -0.025 ->
-    //       +0.527, i.e. the nose climbs while the rate is NEGATIVE. The crush's deposits are
-    //       negative (-2,459 / -3,339 / -3,224 / -734); the ground's are POSITIVE. They oppose.
-    //   (4) SO THERE IS NO RUNAWAY -- the pitch feedback is NEGATIVE and the rotation is being
-    //       KILLED, not fed. crash_impulse_ledger `ledger` on the same log: the arriving contacts
-    //       predict dW_pitch -2.540 (obs -2.510) on the entry frame, -1.371 (-1.107) on the next,
-    //       then +0.482 (+0.676) as the tail lands; the nose-up rate PEAKS at -3.322 rad/s on frame
-    //       681 and decays monotonically from there. "The loop runs away" was the sign error
-    //       restated and it is withdrawn.
-    //       WHAT SURVIVES IS THE LIFT, AND IT IS ENTIRELY THE TAIL-GROUND PAIR. Over the ten frames
-    //       after entry the deformation contacts deposit +6,218 N.s of WORLD-Y (JworldY =
-    //       Jbody.x*right.y + Jbody.y*up.y + Jbody.z*fwd.y, per frame 376/648/2004/701/649/1058/
-    //       376/244/120/42 == 3.91 m/s on 1589 kg), the car climbs 1.16 m and then flies with ZERO
-    //       contacts of any kind for 33 consecutive frames. On the biggest frame (681, +2,004) the
-    //       dir-2 total is 2,585 N.s, of which 1,987 is the two ground contacts; the remaining 598
-    //       is the FRONT WALL contact's body-Y component, which is not a leak -- a horizontal world
-    //       impulse at a 4.2-degree nose-up attitude MUST have Jb.y == -(right.y*Jb.x +
-    //       fwd.y*Jb.z)/up.y == +517 against +534 measured, and it cancels back to zero world-Y by
-    //       construction (-36.5 + 2,576.6 - 535.4 == +2,004.7 vs the ledger's 2,004).
-    //       ⇒ THE OPEN QUESTION IS THE POLE-VAULT ITSELF: whether the console lets a tail that is
-    //       driven into the road at 7.5 m/s convert that into 1.25 m/s of CoM lift in one frame,
-    //       i.e. whether the ground contact's effective mass and absorption are ours. It is NOT a
-    //       positive-feedback loop and it is NOT the sensor geometry.
-    //   (5) RESULT, ACROSS THE WHOLE BANKED CORPUS (26 crashes, mwA/mwB/mwK/cs_* one crash per
-    //       boot, entry 54-90 m/s): the car gains 0.66-3.12 m of HEIGHT in EVERY one, and travels
-    //       11-134 m (median ~48 m) past the impact point before the crash episode ends. It never
-    //       once presses into the wall and stops. On the filmed 89.5 m/s shot (cs6_film_h230_s70,
-    //       401 frames on disk) it pole-vaults nose-first up a tunnel wall, completes a single
-    //       180-degree roll and lands on its roof.
-    // ⚠️ SAID PLAINLY: every number above is THIS BUILD MEASURING ITSELF. The arithmetic is
-    // ARTIST's (formula, restitution, arm, shaping and absorption are all read out of the image);
-    // what no measurement here can settle is whether the console's SENSOR SPHERE GEOMETRY puts the
-    // front contacts 20 cm above the CoM, because that is streamed data, not code. That is the one
-    // input left in the chain m / I^-1 / r / n / v_rel that has never been checked against an
-    // external oracle.
-    // =============================================================================================
-    // =============================================================================================
-    // [carcar-dv] -- PC WITNESS, NOT X360 (2026-09-25, crash parity FX-LADDER, the contact-impulse
-    // chain). Opt-in BRN_CARCAR_DV=1: one line per APPLIED car-car contact between two RACE CARS
-    // (owner byte 1 on both objects), at most KU_CARCAR_DV_MAX_LINES. It changes nothing. It reads
-    // both bodies before ApplyCarCarImpulse and after the two CalculateNewVelocity drains that follow
-    // it, plus what the deformation chain delivered to each rigid body in between
-    // (gCarCarDvArrivalTap, BrnVehicleRigidBody.h). Every float is printed as raw IEEE bits, so an
-    // offline model of the console bodies -- ApplyCarCarImpulse @0x82624C08,
-    // CalculateCollisionImpulseWithBody @0x8259CAE8, ApplySensorImpulse @0x826078B0, the sensor's
-    // ApplyLocalImpulse (sub_825E1320), PassOnImpulse (0x825BA400), VehicleRigidBody
-    // @0x8260DFA0, ApplyCarContactImpulse @0x825D4C10 / ApplyCrashedContactImpulse @0x825D4D50,
-    // GetImpulsesFromLocalImpulse @0x825A1A80 and CalculateNewVelocity @0x825A1B10 -- can recompute
-    // each car's delta-v from the same inputs and be compared with what this build did.
-    // Layout "v1" (all words hex): step present gidA gidB sensorA sensorB kbAllowDriveTimeDeformation
-    //   | dt | pointOnA(3) pointOnB(3) normal(3) impactTime
-    //   | per body, A (this object) then B (the other): flags (crashing 1, IsPlayerVehicleInShowtime 2,
-    //     IsUsingAftertouch 4, IsPlayerVehicleActuallyInShowtime 8, HasBouncedThisFrame 16,
-    //     owner << 8, absorption set << 16, head-sensor absorption level << 24), transform rows
-    //     x y z w (12), v(3), w(3), mass, world inverse inertia rows (9), accumulators J L F T (12),
-    //     carCarResponse (+0x1070.z), CarAngularImpulseScale (+0x280.y), absorption, proportion,
-    //     speedForMax per direction (6), arrivals, routes, arrival body-space sum (3), v'(3), w'(3)
-    // [FLAG PC witness] DELETE-WHEN the car-car contact-impulse chain is signed off live.
     namespace
     {
         const u32 KU_CARCAR_DV_MAX_LINES = 3000u;
@@ -2124,8 +1990,6 @@ namespace Deformation
             static s32 siCarCarDv = -1;
             if ( siCarCarDv < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_CARCAR_DV" );
-                siCarCarDv = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             return siCarCarDv == 1;
         }
@@ -2135,20 +1999,6 @@ namespace Deformation
     {
         // ---- [chain] PC bring-up instrument -- DELETE WHEN the wall test is banked -------------
         ++gChainProbe.muUpdateContacts;
-        if ( ChainProbeOn() && CgsDev::Log::gpDebugPrint != 0
-             && (gChainProbe.muUpdateContacts % 600u) == 0u )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[chain] upd " << static_cast<s32>(gChainProbe.muUpdateContacts)
-                << " scan " << static_cast<s32>(gChainProbe.muSensorsScanned)
-                << " getImp " << static_cast<s32>(gChainProbe.muGetImpulseHits)
-                << " sensorImp " << static_cast<s32>(gChainProbe.muSensorImpulse)
-                << " dirsTried " << static_cast<s32>(gChainProbe.muDirsTried)
-                << " dirsPassed " << static_cast<s32>(gChainProbe.muDirsPassed)
-                << " dispatched " << static_cast<s32>(gChainProbe.muDispatched)
-                << " nullSensor " << static_cast<s32>(gChainProbe.muNullSensor)
-                << "\n";
-        }
 
         const Vector3 lvVelocityDir = vpu::Normalize(GetVehicleBody().GetLinearVelocity());
 
@@ -2258,7 +2108,6 @@ namespace Deformation
             static s32 siAbsorbProbe = -1;
             if ( siAbsorbProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
                 // ⭐⭐⭐ BRN_DENT_PROBE ARMS THIS LINE TOO, AT THE EMITTER (2026-09-07).
                 // A `[dent]` depth taken without this line beside it is unreadable -- the whole
                 // A1/A2 corpus was measured on a car in E_ABSORPTIONSET_INVINCIBLE and nothing in
@@ -2268,11 +2117,6 @@ namespace Deformation
                 // guarantee -- flow_run, a bare `set BRN_DENT_PROBE=1`, a future script nobody has
                 // written yet -- because the dependency lives in the code that prints, not in the
                 // code that launches. flow_run.ps1 also arms it and SAYS so, for the human.
-                if ( lpcEnv == 0 || lpcEnv[0] == '0' )
-                {
-                    lpcEnv = getenv( "BRN_DENT_PROBE" );
-                }
-                siAbsorbProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static u32 suAbsorbLines  = 0u;
             static u32 suAbsorbFrames = 0u;
@@ -2299,8 +2143,6 @@ namespace Deformation
             static s32 siAbsorbPerEntity = -1;
             if ( siAbsorbPerEntity < 0 )
             {
-                const char* lpcPerEntity = getenv( "BRN_ABSORB_PER_ENTITY" );
-                siAbsorbPerEntity = ( lpcPerEntity != 0 && atoi( lpcPerEntity ) > 0 ) ? 1 : 0;
             }
             bool lbAbsorbSample = false;
             if ( siAbsorbPerEntity == 1 )
@@ -2673,8 +2515,6 @@ namespace Deformation
                     static s32 siWheelProbe = -1;
                     if ( siWheelProbe < 0 )
                     {
-                        const char* lpcEnv = getenv( "BRN_RESTROW_PROBE" );
-                        siWheelProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
                     }
                     static s32 siWheelLines = 0;
                     if ( siWheelProbe == 1 && siWheelLines < 48 && CgsDev::Log::gpDebugPrint != 0 )
@@ -2832,8 +2672,6 @@ namespace Deformation
             static s32 siWheelProbe = -1;
             if ( siWheelProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_WHEEL_PROBE" );
-                siWheelProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static s32 siWheelProbeLines = 0;
             const bool lbProbe = ( siWheelProbe == 1 && CgsDev::Log::gpDebugPrint != 0 );
@@ -3013,8 +2851,6 @@ namespace Deformation
             static s32 siOn = -1;
             if ( siOn < 0 )
             {
-                const char* lpcEnv = getenv("BRN_IK_CADENCE_DIAG");
-                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
             }
             return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
         }
@@ -3296,10 +3132,6 @@ namespace Deformation
                 if ( !sbLoggedRadiusGate )
                 {
                     sbLoggedRadiusGate = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "conductor gate: module-output scene interface unprepared -- "
-                               "SetEntityRadius skipped [FLAG PC boot gate]\n";
                 }
             }
         }
@@ -3375,11 +3207,6 @@ namespace Deformation
             {
                 lpWheel->Twist();
                 ++miNumBrokenWheels;
-                // FLAG PC witness: observe the restored transition without changing it.
-                if (std::getenv("BRN_WHEEL_PROBE") && CgsDev::Log::gpDebugPrint)
-                    *CgsDev::Log::gpDebugPrint << "[wheel-probe] ROAD_RAGE_TWIST obj "
-                        << static_cast<s32>(mu16DeformableObjectIndex) << " wheel "
-                        << static_cast<s32>(leWheel) << "\n";
             }
         }
 

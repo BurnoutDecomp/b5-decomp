@@ -15,7 +15,6 @@ target_sources(${PROJECT_NAME}
     PUBLIC
         BrnCrashAnalyser.h
         BrnDirectorDevTools.h
-        BrnDirectorHarness.h
         BrnDirectorICEWrapper.h
         BrnDirectorModule.h
         BrnDirectorResourceManager.h

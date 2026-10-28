@@ -4,8 +4,6 @@
 #include "BrnCommonTypes.h"      // Vector3, Matrix44
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::IResourceAllocator
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // ProgramBufferData, ProgramVariableHandle
-#include "pc/gcm/renderengine/VertexDescriptor.h"                            // VertexDescriptorData
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnSunCorona::Construct                 @ 0x824009B0  (EXECUTED in the boot trace)
 //   BrnSunCorona::Destruct                  @ 0x823F8298
@@ -80,25 +78,6 @@ struct BrnSunCorona
                              f32 lfWhiteLevel,
                              f32 lfDebugOverrideBrightness,
                              bool lbDebugOverrideBrightness);
-
-    // [FLAG PC bring-up] NOT an X360 function. The console builds this object inside
-    // BrnRendererModule::Construct, which is not reconstructed, so the PC side comes up lazily on
-    // the first frame that has a device (BrnRendererModule.cpp's EnsureSunCoronaBringUp) and the
-    // gate has to be able to ask "did that succeed". Same shape and same DELETE-WHEN as
-    // BrnCoronaManager::IsConstructed(): delete when BrnRendererModule::Construct is
-    // reconstructed and can call Construct at the console's own point.
-    bool IsConstructed() const
-    {
-        return mpVertexDescriptor != 0
-            && mpOcclusionVertexProgram != 0 && mpOcclusionPixelProgram != 0
-            && mpFlareVertexProgram != 0 && mpFlarePixelProgram != 0;
-    }
-
-    // [FLAG PC bring-up] Seed the console's OWN switch (mbRenderSunCorona, +0x51) from the
-    // config.ini knob. NOT a second piece of state (AGENTS.md rule 3): the byte already exists and
-    // Construct already sets it true. The recovered Renderer debug page registers the separate
-    // module-level "Render coronas" switch; its ARTIST bindings do not include this member.
-    void PCBringUpSetRenderSunCorona(bool lbRender) { mbRenderSunCorona = lbRender; }
 
     // ---- layout (DWARF GameSource/Graphics/BrnSunCorona.h, verified vs the X360 store offsets) --
     rw::IResourceAllocator*             mpAllocator;                                 // +0x00

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
-#include <Windows.h>
+#include <xtl.h>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsSystem::GetSystemTimeMS         @ 0x828D75F0

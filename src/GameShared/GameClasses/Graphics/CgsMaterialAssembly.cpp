@@ -50,10 +50,6 @@ namespace CgsGraphics
         mpCPUShaderConstants->SetCPUShader(lpShader, this);
 
         // Passive load-time witness; does not change authored animation values.
-        const char* lpDiag = std::getenv("BRN_MATERIAL_ANIM_DIAG");
-        if (lpDiag && lpDiag[0] && lpDiag[0] != '0')
-            *CgsDev::Log::gpDebugPrint << "[material-anim] attach material=" << muNameHash
-                << " duration=" << lfDuration << " framesU=" << lfStepsU << " framesV=" << lfStepsV << "\n";
     }
     // GetMaterial @ 0x827E6720. Bounds-checks luIndex against mu8NumMaterials (the asm
     // reads the byte at offset 8) and returns mappMaterials[luIndex]:

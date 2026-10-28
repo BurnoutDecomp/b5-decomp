@@ -207,57 +207,8 @@ namespace BrnGui
             }
         }
 
-        // [FLAG PC witness] BRN_PAYBACK_DIAG: opt-in trace of the payback widget and the
-        // freeburn challenge selector/ticker calls this state makes. No console counterpart.
-        // Each tag is logged on its first KI_PAYBACK_DIAG_REPEAT sightings only.
-        const s32 KI_PAYBACK_DIAG_TAGS   = 16;
         const s32 KI_PAYBACK_DIAG_REPEAT = 4;
 
-        void PaybackDiag(const char* lpacTag, s32 liValueA, s32 liValueB)
-        {
-            static const bool sbEnabled = (std::getenv("BRN_PAYBACK_DIAG") != 0);
-            if (!sbEnabled)
-                return;
-
-            static const char* sapcTags[KI_PAYBACK_DIAG_TAGS];
-            static s32         saiSeen[KI_PAYBACK_DIAG_TAGS];
-            for (s32 li = 0; li < KI_PAYBACK_DIAG_TAGS; ++li)
-            {
-                if (sapcTags[li] == 0)
-                    sapcTags[li] = lpacTag;
-                if (sapcTags[li] != lpacTag)
-                    continue;
-                if (saiSeen[li] >= KI_PAYBACK_DIAG_REPEAT)
-                    return;
-                ++saiSeen[li];
-                char lac[160];
-                std::snprintf(lac, sizeof(lac), "[payback] %s %d %d\n", lpacTag, liValueA, liValueB);
-                CgsDev::Log::WriteToLog(lac);
-                return;
-            }
-        }
-
-        // ---- GuiCache boundary (X360 cache members BrnGuiCache.h has not named yet) --
-        // Same discipline as BrnFBurnMainHudState.cpp's boundary block: one named leaf per
-        // un-named console field, so the eventual cache carve lands in exactly these spots.
-
-        // (2026-08-27 verify round: the friends-list-overlay and in-event leaves that stood
-        // here are RETIRED -- this same wave carved and named both cache bytes, so the code
-        // below reads mpCache->IsFriendsListOpen() (+0xB86C) and
-        // mpCache->IsEventPreparedForModeStart() (+0xA014) directly, matching the wS2/wS3
-        // partfiles. Their own DELETE-WHEN conditions were already met at review time.)
-
-        // [FLAG PC-platform leaf] the road-rule-shot arm's own gate byte (X360
-        // cache+0xAC59, inside BrnGuiCache.h's mPad_AC4C[14]). UpdateSetupState @0x8247A314
-        // gates the whole opponent-record search + RoadRuleShotComponent setup on it.
-        // Reported false, which parks the arm; the three fields it would then need
-        // (+0xAC50 CgsID road id, +0xAC58 time-rule bool, +0xAC5B snap-vs-show bool) are
-        // all in the same un-named pad, so there is nothing honest to read yet.
-        // DELETE-WHEN: BrnGuiCache.h carves mPad_AC4C[14] into its four X360 fields.
-        bool GuiCache_RoadRuleShotPending(const GuiCache* /*lpGuiCache*/)
-        {
-            return false;
-        }
     }
 
     // =======================================================================
@@ -1200,7 +1151,6 @@ namespace BrnGui
 //      below exists to distinguish from a black screen.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -2105,9 +2055,6 @@ namespace BrnGui
                 {
                     const GuiDirtyTrickNewEvent* lpTrick =
                         reinterpret_cast<const GuiDirtyTrickNewEvent*>(lpEvent);
-                    PaybackDiag("begin-award trick/victim",
-                                static_cast<s32>(lpTrick->meTrickType),
-                                static_cast<s32>(lpTrick->meVictimActiveRaceCarIndex));
                     mPaybackComponent.BeginAwardAnimation(lpTrick->meTrickType,
                                                           lpTrick->meVictimActiveRaceCarIndex);
                 }
@@ -2116,7 +2063,6 @@ namespace BrnGui
             case 180:
                 if (mbPaybackComponent)
                 {
-                    PaybackDiag("become-invisible event", liEventId, 0);
                     mPaybackComponent.BecomeInvisible();
                 }
                 break;
@@ -2362,7 +2308,6 @@ namespace BrnGui
                 case 2:
                     if (mbFreeburnChallengeSelector)
                     {
-                        PaybackDiag("selector select-by-id action", 2, 0);
                         mChallengeSelectorComponent.SetAvailableChallenges(
                             static_cast<s32>(mpCache->muChallengeSlotMirror));
                         mChallengeSelectorComponent.SelectAvailableChallengeByID(
@@ -2372,7 +2317,6 @@ namespace BrnGui
                 case 3:
                     if (mbFreeburnChallengeSelector)
                     {
-                        PaybackDiag("selector hide action", 3, 0);
                         mChallengeSelectorComponent.Hide();
                     }
                     break;
@@ -2392,7 +2336,6 @@ namespace BrnGui
                 else if (mbFreeburnChallengeSelector)
                 {
                     CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:1379 (non-gating)
-                    PaybackDiag("selector select-by-id event", 574, 0);
                     mChallengeSelectorComponent.SetAvailableChallenges(
                         static_cast<s32>(mpCache->muChallengeSlotMirror));
                     // The payload opens with the challenge's full 64-bit CgsID.
@@ -2405,7 +2348,6 @@ namespace BrnGui
                     mChallengeComponent.Hide();
                 if (mbFreeburnChallengeSelector && mChallengeSelectorComponent.IsVisible())
                 {
-                    PaybackDiag("selector hide event", 576, 0);
                     mChallengeSelectorComponent.Hide();
                 }
                 break;
@@ -2413,7 +2355,6 @@ namespace BrnGui
                 if (!mpCache->IsLocalPlayerHost() && mbFreeburnChallengeSelector &&
                     mChallengeSelectorComponent.IsVisible())
                 {
-                    PaybackDiag("selector hide event", 578, 0);
                     mChallengeSelectorComponent.Hide();
                 }
                 break;
@@ -2426,7 +2367,6 @@ namespace BrnGui
                     if (liAvailable > 0)
                     {
                         CGS_ASSERT(lpEvent != 0, "lpShowChallengeSelectorEvent");   // cpp:887 (non-gating)
-                        PaybackDiag("selector show available", liAvailable, 0);
                         mChallengeSelectorComponent.Show();
                         // A zero id selects the first available challenge instead.
                         const CgsID lChallengeID = *reinterpret_cast<const CgsID*>(lpEvent);
@@ -2584,7 +2524,6 @@ namespace BrnGui
         }
         if (mbPaybackComponent)
         {
-            PaybackDiag("update", 0, 0);
             mPaybackComponent.Update(mpCache->GetTime());
         }
         if (mbCompass)
@@ -2802,7 +2741,6 @@ namespace BrnGui
 //     in retail, so the deferral costs no behaviour at all.
 // ===================================================================================
 
-
 namespace BrnGui
 {
     namespace
@@ -2936,16 +2874,6 @@ namespace BrnGui
             }
         }
 
-        // ---- the active ticker's positional-parameter slots -------------------------
-        // StartFreeburnChallengeTicker's stack frame carries FOUR (text, format) pairs and
-        // hands all four to FormatAndAddText, though liNumParams is only ever 1..3 (one for
-        // the challenge's player count plus one per action that has targets, and
-        // KI_MAX_ACTIONS_PER_CHALLENGE == 2). The console leaves slot 3 holding whatever the
-        // frame last had there -- it aliases the dead id-536 record's payload half-word at
-        // sp+0xAC. FLAG PC defensive: the slots are zero-seeded here (FormatTextV never reads
-        // past liNumParams, so no queued byte changes); an uninitialised vararg read would be
-        // UB on the host. DELETE-WHEN: never.
-        const s32 KI_TICKER_MAX_PARAMS    = 4;
         const u32 KU_TICKER_PARAM_TEXT_LEN = 64;   // `li r4, 0x40` into both SnPrintf calls
 
 // (fold: an identical definition of LogDeferredComponent was dropped here -- this TU defines it once, above)
@@ -3025,7 +2953,6 @@ namespace BrnGui
             if (std::strcmp(lpacClipName, macPaybackName) == 0)
             {
                 // @0x82474728 `addi r3, r28, 0x920` == &mPaybackComponent.
-                PaybackDiag("transition-complete", 0, 0);
                 mPaybackComponent.RespondToTransitionComplete();
             }
         }
@@ -3194,7 +3121,6 @@ namespace BrnGui
         const u64 lu64Word = lpCompleted->maxBits[liChallengeIndex >> 6];
         const bool lbAlreadyCompleted =
             lu64Word != 0 && (lu64Word & (static_cast<u64>(1) << (liChallengeIndex & 63))) != 0;
-        PaybackDiag("ticker completed index/bit", liChallengeIndex, lbAlreadyCompleted ? 1 : 0);
 
         // @0x8247ADC8..0x8247AE34 -- the separator format. FRENCH (ELanguage 10) puts a space
         // BEFORE the colon; every other language does not. The "[~]" prefix marks a challenge

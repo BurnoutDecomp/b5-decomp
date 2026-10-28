@@ -10,82 +10,6 @@
 #include <cstring>
 #include <cstdio>
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
-#include "pc/gcm/renderengine/device.h"
-
-// ARTIST823F6730. A request is consumed once even when lock/open/write fails.
-// The original prefix bytes are 64 3A 5C 00; sanitizing the whole filename changes its
-// colon to an underscore. Preserve the resulting relative d_\ path and do not
-// create directories or redirect failed writes.
-void BrnRendererModule::TakeScreenshot()
-{
-    if (!mbDispatchThreadTakeScreenshot)
-        return;
-
-    renderengine::Device::LockedFrontBuffer lLockedFrontBuffer = {};
-    if (renderengine::Device::LockFrontBuffer(lLockedFrontBuffer))
-    {
-        char lacFileName[256];
-        CgsCore::SPrintf(lacFileName, sizeof(lacFileName), "%sscreenshot%d_%s.tga",
-                        "d:\\", static_cast<s32>(muScreenshotCounter++), macScreenShotText);
-        for (char* lpcCharacter = lacFileName; *lpcCharacter != '\0'; ++lpcCharacter)
-        {
-            if (*lpcCharacter == ' ' || *lpcCharacter == ':')
-                *lpcCharacter = '_';
-        }
-
-        FILE* lpFile = std::fopen(lacFileName, "wb");
-        if (lpFile)
-        {
-            // External TGA header bytes: uncompressed24-bit BGR, bottom origin.
-            u8 lauHeader[18] = {};
-            lauHeader[2] = 2;
-            lauHeader[12] = static_cast<u8>(lLockedFrontBuffer.width);
-            lauHeader[13] = static_cast<u8>(lLockedFrontBuffer.width >> 8);
-            lauHeader[14] = static_cast<u8>(lLockedFrontBuffer.height);
-            lauHeader[15] = static_cast<u8>(lLockedFrontBuffer.height >> 8);
-            lauHeader[16] = 24;
-            bool lbWriteFailed = std::fwrite(lauHeader, sizeof(lauHeader), 1, lpFile) != 1;
-
-            // FLAG PC-platform leaf: native D3D9 readback already supplies
-            // linear BGRX/BGRA rows. Xenos untile and its5120-byte scratch-buffer
-            // limit do not apply to this native row source.
-            const u8* lpuPixels = static_cast<const u8*>(lLockedFrontBuffer.pixelData);
-            for (s32 liRow = static_cast<s32>(lLockedFrontBuffer.height) - 1; liRow >= 0; --liRow)
-            {
-                const u8* lpuRow = lpuPixels + static_cast<usize>(liRow) * lLockedFrontBuffer.pitch;
-                for (u32 luColumn = 0; luColumn < lLockedFrontBuffer.width; ++luColumn)
-                {
-                    const u8* lpuPixel = lpuRow + luColumn * 4u;
-                    const u8 lauBgr[3] = {lpuPixel[0], lpuPixel[1], lpuPixel[2]};
-                    if (std::fwrite(lauBgr, sizeof(lauBgr), 1, lpFile) != 1)
-                        lbWriteFailed = true;
-                }
-            }
-            if (std::fclose(lpFile) != 0)
-                lbWriteFailed = true;
-
-            // FLAG PC-platform leaf: observe actual I/O failure without changing
-            // original request consumption, counter behavior or remaining writes.
-            if (lbWriteFailed)
-            {
-                char lacMessage[360];
-                std::snprintf(lacMessage, sizeof(lacMessage),
-                              "[screenshot] write failed: %s\n", lacFileName);
-                CgsDev::Log::WriteToLog(lacMessage);
-            }
-        }
-        else
-        {
-            // FLAG PC-platform leaf: failure observation only; no path fallback.
-            char lacMessage[360];
-            std::snprintf(lacMessage, sizeof(lacMessage),
-                          "[screenshot] open failed: %s\n", lacFileName);
-            CgsDev::Log::WriteToLog(lacMessage);
-        }
-        renderengine::Device::UnlockFrontBuffer(lLockedFrontBuffer);
-    }
-    mbDispatchThreadTakeScreenshot = false;
-}
 
 // -------------------------------------------------------------------------------------------------
 // BrnRendererModule::DEBUGTriggerScreenShot
@@ -126,12 +50,10 @@ void BrnRendererModule::MemoryUsage()
     const u32 luMainUsage           = lUsage.m_baseResourceDescriptors[0].m_size;
     const u32 luPhysicalUsage       = lUsage.m_baseResourceDescriptors[2].m_size;
 
-    const u64 lu64MainStart     = static_cast<u64>(reinterpret_cast<uintptr_t>(lpMainStart));
-    const u64 lu64PhysicalStart = static_cast<u64>(reinterpret_cast<uintptr_t>(lpPhysicalStart));
-    // FLAG PC-platform leaf: a retained native arena can have an empty physical
-    // domain. Sum printed addresses as native integers, without null-pointer arithmetic.
-    const u64 lu64MainEnd       = lu64MainStart + luMainCapacity;
-    const u64 lu64PhysicalEnd   = lu64PhysicalStart + luPhysicalCapacity;
+    const u32 luMainStart     = static_cast<u32>(reinterpret_cast<uintptr_t>(lpMainStart));
+    const u32 luPhysicalStart = static_cast<u32>(reinterpret_cast<uintptr_t>(lpPhysicalStart));
+    const u32 luMainEnd = luMainStart + luMainCapacity;
+    const u32 luPhysicalEnd   = luPhysicalStart + luPhysicalCapacity;
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {
@@ -147,8 +69,8 @@ void BrnRendererModule::MemoryUsage()
     }
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {
-        *CgsDev::Log::gpDebugPrint << "Main Memory start address " << lu64MainStart
-                                   << " end address: " << lu64MainEnd << "\n";
+        *CgsDev::Log::gpDebugPrint << "Main Memory start address " << luMainStart
+                                   << " end address: " << luMainEnd << "\n";
     }
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {
@@ -158,8 +80,8 @@ void BrnRendererModule::MemoryUsage()
     }
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {
-        *CgsDev::Log::gpDebugPrint << "Physical Memory start address " << lu64PhysicalStart
-                                   << " end address: " << lu64PhysicalEnd << "\n";
+        *CgsDev::Log::gpDebugPrint << "Physical Memory start address " << luPhysicalStart
+                                   << " end address: " << luPhysicalEnd << "\n";
     }
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {

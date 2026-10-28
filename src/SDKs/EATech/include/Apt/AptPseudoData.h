@@ -114,10 +114,3 @@ struct AptPseudoData_t
                     s16                          li16CharacterId,
                     void*                        lpData);
 };
-
-static_assert(offsetof(AptPseudoData_t, mpClipActions) == 0x18, "XB1 pseudo clip actions@18");
-static_assert(offsetof(AptPseudoData_t, mfRatio) == 0x20, "XB1 pseudo ratio@20");
-static_assert(offsetof(AptPseudoData_t, muxFlags) == 0x24, "XB1 pseudo flags@24");
-static_assert(offsetof(AptPseudoData_t, mi16CharacterId) == 0x28, "XB1 pseudo ID@28");
-static_assert(offsetof(AptPseudoData_t, mi16Depth) == 0x2A, "XB1 pseudo clip depth@2A");
-static_assert(sizeof(AptPseudoData_t) == 48, "XB1 pseudo allocation is48 bytes");

@@ -51,9 +51,6 @@ namespace CgsDev
             if (leEvent != E_INPUTEVENT_SELECT)
                 return;
 
-            // FLAG PC-platform leaf: keep the navigation context visible when
-            // opening a child. Back closes the child and focuses this parent.
-            OpenAsWindow();
         }
 
         void Menu::Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY,

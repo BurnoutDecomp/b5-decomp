@@ -20,7 +20,7 @@
 
 #include "SDKs/EATech/rwcore/filesys/device.h"
 
-#include <windows.h> // MemoryBarrier (the host mapping of the X360 lwsync)
+#include <xtl.h> // MemoryBarrier (the host mapping of the X360 lwsync)
 #include <cstring>   // strchr, strncpy
 
 namespace rw

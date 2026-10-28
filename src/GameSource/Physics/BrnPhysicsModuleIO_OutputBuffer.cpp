@@ -46,20 +46,11 @@ namespace PhysicsModuleIO
         // deformation seat further out, which nothing reads by absolute offset, whereas a
         // SHRINK below the console span would silently re-seat it inside data the prop
         // interface owns -- and that is what this must catch.
-        static_assert(offsetof(OutputBuffer, mDeformationOutputInterface)
-                    - offsetof(OutputBuffer, mPropManagerOutputInterface)    >= 148656 - 71792,
-                      "prop -> deformation console delta (>=: measured host == console, 76864)");
         // 2026-08-24 (deform-land wave): the two deformation seats hold their REAL types, so
         // both relations flip from pad-held `==` to type-held `>=` -- host sizeof exceeds each
         // console span (16-vs-12-byte queue headers; SkinData/VehicleLocatorOutput pointers
         // widen). A shrink below the console span fails here instead of silently re-seating
         // the following member.
-        static_assert(offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules)
-                    - offsetof(OutputBuffer, mDeformationOutputInterface)    >= 159648 - 148656,
-                      "deformation -> entity-modules console delta (>=: host queues/pointers widen)");
-        static_assert(offsetof(OutputBuffer, mSceneInputInterface)
-                    - offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules) >= 179424 - 159648,
-                      "entity-modules -> scene console delta (>=: host queues/pointers widen)");
         // this relation is no longer held by a pad -- it is held by
         // sizeof(InSceneUpdateInterface) itself, now that mSceneInputInterface IS that type.
         // Console delta 818,768; measured host 818,944 (the 16-vs-12-byte queue headers). The

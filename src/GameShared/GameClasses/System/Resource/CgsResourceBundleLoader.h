@@ -30,20 +30,6 @@ namespace CgsResource
     class BundleLoader
     {
     public:
-        // Load lpcFileName into lpPool. Returns the number of newly created member resources,
-        // or a negative error; allocation failure rolls back this load's references. If
-        // lpfnResolveType is null (or a resource's type is unknown),
-        // that resource is created and its data copied, but it is not fixed up.
-        // Stored-id form: the RAW on-disc 64-bit entry id, UNTAGGED -- the X360 store path
-        // (AllocatePoolModuleState::CreateResourceList 0x828FF480) registers `*(u64*)entry`
-        // verbatim, and every game-side acquire emits the raw zero-extended HashString
-        // return (the pool rides the acquire event's miPoolId field, not the id's high
-        // dword -- DoAcquireResourceRequest 0x828FCD48 `lwz r4,8(r31)`).
-        // [FLAG PC bring-up] LoadBundle's negative returns. The X360 loader has one failure
-        // path; this port needs to tell "the converted file is not in build/game at all" apart
-        // from "it is there and this loader refuses it", because only the second is a defect.
-        // DELETE-WHEN every bundle the game asks for is ported.
-        enum { KI_LOAD_FAILED = -1, KI_LOAD_FILE_MISSING = -2 };
 
         s32 LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType);
 

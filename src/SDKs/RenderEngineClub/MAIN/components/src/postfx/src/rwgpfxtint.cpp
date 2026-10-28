@@ -5,8 +5,6 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxtint.h"   // Tint
 #include "SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxhelper.h"  // PfxHelper::CreateProgram
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"     // ProgramBuffer
-#include "pc/gcm/renderengine/texture.h"                                        // Texture
-#include "pc/gcm/renderengine/renderstates.h"                                   // TextureState
 #include "rw/rwcore_structs.h"                                                  // rw::Resource / BaseResourceDescriptors<5>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -165,12 +163,6 @@ namespace postfx
         lpTint->m_textureStateTintMap =
             renderengine::TextureState::Initialize(&lpTint->m_textureStateTintMapResource, &lStateParams);
 
-        // Bind the shared pixel program's lookup-offset constant, then zero the offset vector.
-        // The null test is a PC bring-up guard only: the committed lookup dereferences its first
-        // argument unconditionally (programbuffer.cpp:263), and on this build the program is null
-        // because its microcode is absent. A zero register count is what the lookup itself writes
-        // when a name misses, so the "not bound" state is spelled the same way either way.
-        // [FLAG PC bring-up: the tint pixel program's microcode is absent -- see the note above]
         if (gpTintPixelProgram != nullptr)
         {
             renderengine::ProgramBuffer::GetVariableHandleByName(

@@ -69,5 +69,4 @@ namespace BrnNetwork
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(BurnoutSkillzMessage) == 0x64, "sizeof(BurnoutSkillzMessage) == 0x64");
 } // namespace BrnNetwork

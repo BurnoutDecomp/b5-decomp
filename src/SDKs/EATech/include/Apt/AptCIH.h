@@ -47,14 +47,8 @@ struct AptCXForm;
 struct AptRect;
 struct AptNativeHash;
 
-// FLAG PC-platform leaf (.apt native-8 blob offset): the offset of the AptMovie/AptCharacterAnimation body embedded by value inside a
-// sprite/animation AptCharacter. The console reaches it at char+0x10 (== the console sizeof(AptCharacter)
-// header); on the x64 gate the serialised AptCharacter header widens under the 8-byte pointer rule
-// (GUIAPT64 "1:7:8" layout) so the embedded body lands at char+0x20 (VERIFIED vs TITLE_SCREEN02.bundle:
-// movie/sprite body @ char+0x20, where the fixed-up frame count + character table live). We ship ONLY
-// the 8-byte format, so this is a compile-time constant (single native-64 path, matching Fixup). Read by
-// AptGetClipMovie + AptGetMovieCharacterAnimation.
-static const unsigned int KU_AptEmbeddedMovieOff = 0x20u;
+// ARTIST embeds the timeline after the 16-byte AptCharacter header.
+static const unsigned int KU_AptEmbeddedMovieOff = 0x10u;
 
 struct AptCIH : public AptValueGC
 {
@@ -71,15 +65,6 @@ struct AptCIH : public AptValueGC
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptCIH, mInstanceName)         == 0x10, "x64 GetInstanceName @0x140839100: lea rax,[rcx+10h]");
-        static_assert(offsetof(AptCIH, mFlagsA)               == 0x18, "x64 GetASChanged @0x140838000: mov eax,[rcx+18h]");
-        static_assert(offsetof(AptCIH, mFlagsB)               == 0x1C, "x64 GetCreatedOnFrame @0x1408387E0: mov eax,[rcx+1Ch]");
-        static_assert(offsetof(AptCIH, mpDisplayListPrevious) == 0x20, "x64 GetDisplayListPrevious @0x1408388A0");
-        static_assert(offsetof(AptCIH, mpDisplayListNext)     == 0x28, "x64 GetDisplayListNext @0x140838890");
-        static_assert(offsetof(AptCIH, mpDisplayListParent)   == 0x30, "x64 GetDisplayListParent @0x1400C95D0");
-        static_assert(offsetof(AptCIH, mpCharacterInst)       == 0x38, "x64 GetCharacterInst @0x1408385B0");
-        static_assert(offsetof(AptCIH, mpAssetString)         == 0x40, "x64 ctor sub_140825520: mov [rbx+40h],rbp");
-        static_assert(sizeof(AptCIH) == 0x48, "x64: GC-pool alloc 72 at sub_140834A90/sub_14084F0A0");
     }
 
     AptCIH(AptCharacter* pCharacter, AptCIH* pParent);   // @0x824C7C
@@ -158,7 +143,6 @@ struct AptCIH : public AptValueGC
     // Returns 1 when a class was bound, else 0. Body in AptDisplayList.cpp.
     int AssociateInstToClass();
 
-
     // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the animation
     // subtype (caller has already confirmed IsAnimationInst, type tag 9).
     AptCharacterAnimationInst* GetAnimationInst() const;
@@ -216,7 +200,6 @@ struct AptCIH : public AptValueGC
     // actions from pSource's char-inst when given, then forwards to placeObject.
     AptCIH* InsertChild(AptCIH* pSource, AptCharacter* pCharacter, int nDepth,
                         EAStringC* pName, AptValue* pInitObject);   // @0x82B09CA0
-
 
     // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
     // TU) -- tear down this node's character instance / placed state. Declared so

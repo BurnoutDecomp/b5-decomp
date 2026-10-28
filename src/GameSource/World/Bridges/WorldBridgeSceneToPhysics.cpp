@@ -210,17 +210,7 @@ namespace WorldModule
         // reach rw::physics at all, or only the world modules?". Fires on the first non-empty
         // frame and never again. The latch is evaluated ONCE (getenv per frame is a syscall).
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static bool       sbLoggedFirstContacts = false;
-            if ( sbPropDiag && !sbLoggedFirstContacts
-                 && lpScenePotentialContacts->GetLength() > 0
-                 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbLoggedFirstContacts = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q5-world] first " << lpScenePotentialContacts->GetLength()
-                    << " potential contacts -> physics\n";
-            }
         }
 
         lpPhysicsPotentialContacts->Append(*lpScenePotentialContacts);                     // @0x827A6EF8

@@ -1,5 +1,4 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
-#include "pc/input/EngineFeedback.h"
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // the seat bring-up leg reads the RESIDENT spec (WheelSpecs, mMeshOffset)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
@@ -854,8 +853,6 @@ namespace Vehicle
             static s32 siTyreProbe = -1;
             if (siTyreProbe < 0)
             {
-                const char* lpcEnv = getenv("BRN_TYRE_PROBE");
-                siTyreProbe = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
             }
             if (siTyreProbe == 1 && CgsDev::Log::gpDebugPrint != 0)
             {
@@ -1003,16 +1000,6 @@ namespace Vehicle
     // DELETE-WHEN the crash-scrub lever is banked.
     namespace
     {
-        bool WfcProbeArmed()
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-                const char* lpcEnv = getenv("BRN_CRASH_RESPONSE_DIAG");
-                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
-            }
-            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
-        }
 
         // Per-wheel outcome of one HandleWheelFrictionCrashing call.
         //   0 = no traction / burnout    -> the 0.95 spin-decay leg, no torque
@@ -3387,7 +3374,7 @@ namespace Vehicle
 
     namespace
     {
-        bool DriftProbeArmed();   // the opt-in [drift] probe gate (BRN_DRIFT_PROBE), defined with the probe below
+   // the opt-in [drift] probe gate (BRN_DRIFT_PROBE), defined with the probe below
     }
 
     // @0x825D2270  VehiclePhysics::MaintainDriftSpeed
@@ -3474,24 +3461,6 @@ namespace Vehicle
                 // lines. It proves this success arm is dispatched and prints the length of the G51-D1
                 // velocity term, |mLinearVelocity| / speedParam (below 1 while the drift's sideways
                 // damping bites; the pre-fix Normalize made it exactly 1).
-                if (DriftProbeArmed() && lpControls->GetType() == E_DRIVER_TYPE_PLAYER)
-                {
-                    static u32 suWitnessLines = 0u;
-                    if (suWitnessLines < 60u)
-                    {
-                        ++suWitnessLines;
-                        const f32 lfVelocityMagnitude = vpu::Magnitude(mLinearVelocity);
-                        *CgsDev::Log::gpDebugPrint
-                            << "[drift-maintain] n " << static_cast<s32>(suWitnessLines)
-                            << " speedParam " << lfSpeed
-                            << " |v| " << lfVelocityMagnitude
-                            << " velTerm " << vpu::Magnitude(lVelDir)
-                            << " maintained " << lfMaintained
-                            << " deficit " << lfDeficit
-                            << " imp " << lImpulse.x << " " << lImpulse.y << " " << lImpulse.z
-                            << "\n";
-                    }
-                }
             }
         }
     }
@@ -3668,16 +3637,6 @@ namespace Vehicle
     // this one prints the operands. Nothing here is console state.
     namespace
     {
-        bool DriftProbeArmed()
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-                const char* lpcEnv = getenv("BRN_DRIFT_PROBE");
-                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
-            }
-            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
-        }
         u32 s_uDriftProbeFrame = 0u;
 
         // [rollcatch] latch -- NOT IN THE X360 BINARY. Shares BRN_CRASH_RESPONSE_DIAG with the
@@ -3687,8 +3646,6 @@ namespace Vehicle
             static s32 siArmed = -1;
             if (siArmed < 0)
             {
-                const char* lpcEnv = getenv("BRN_CRASH_RESPONSE_DIAG");
-                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
             }
             return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
         }
@@ -3701,8 +3658,6 @@ namespace Vehicle
         CheckForEnteringDrift(lpControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
 
         // [drift] probe (opt-in, see DriftProbeArmed above). Only the PLAYER car is printed.
-        const bool lbDriftProbe = DriftProbeArmed()
-                               && (lpControls == NULL || lpControls->GetType() == E_DRIVER_TYPE_PLAYER);
         if (lbDriftProbe)
         {
             ++s_uDriftProbeFrame;
@@ -4393,17 +4348,6 @@ namespace Vehicle
             return guWheelSusOverflowFrame;   // a 17th instance shares one counter; visible by `car`
         }
 
-        bool WheelSusProbeArmed()
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-                const char* lpcEnv = getenv("BRN_WHEEL_SUS_PROBE");
-                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
-            }
-            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
-        }
-
         // One line of budget. Prints the exhaustion notice exactly once.
         bool WheelSusTakeLine()
         {
@@ -4456,35 +4400,16 @@ namespace Vehicle
         //   was never armed. ⭐ Nothing in the log said so: an unarmed probe and a quiet one look
         //   identical, which is the whole reason a probe must be seen to FIRE before its silence is
         //   read as a measurement. Parse the number and let the NUMBER decide.
-        f32 SusVProbeThreshold()
-        {
-            static f32 sfThreshold = -1.0f;
-            if (sfThreshold < 0.0f)
-            {
-                const char* lpcEnv = getenv("BRN_SUSV_PROBE");
-                sfThreshold = (lpcEnv != NULL && lpcEnv[0] != '\0')
-                                  ? static_cast<f32>(std::atof(lpcEnv))
-                                  : 0.0f;
-                if (sfThreshold < 0.0f) sfThreshold = 0.0f;   // <= 0 is off; see SusVProbeArmed
-            }
-            return sfThreshold;
-        }
         // ⭐ AND IT ANNOUNCES ITSELF, ONCE. An unarmed probe and a probe whose threshold was never
         //   crossed are indistinguishable in a log -- that is how the bug above nearly got
         //   published as a result. With this line, "[susv] ARMED" present + no [susv] rows IS a
         //   measurement; its absence says the run never armed the probe at all.
         bool SusVProbeArmed()
         {
-            const bool lbArmed = SusVProbeThreshold() > 0.0f && CgsDev::Log::gpDebugPrint != NULL;
             static bool sbAnnounced = false;
             if (lbArmed && !sbAnnounced)
             {
                 sbAnnounced = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[susv] ARMED at threshold " << SusVProbeThreshold()
-                    << " m/s -- one line per UpdateSuspensionPostSimulation call whose whole-function"
-                       " |dv| crosses it. No rows after this line means the threshold was never"
-                       " crossed; no ARMED line at all means the probe was never on.\n";
             }
             return lbArmed;
         }
@@ -4547,93 +4472,6 @@ namespace Vehicle
         ApplySuspensionForces(lvfTimeStep);
 
         // ---- [wsus] the per-step suspension witness (player car only) ------------------------
-        if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER)
-        {
-            u32& lruFrame = WheelSusFrameFor(this);
-            ++lruFrame;
-            const u32 luF = lruFrame;
-            guWheelSusFrame = luF;
-            const u32 luCar = static_cast<u32>(reinterpret_cast<u64>(this));
-
-            if (WheelSusTakeLine())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[wsus] f " << static_cast<s32>(luF)
-                    << " car " << luCar
-                    << " pos " << mTransform.Pos().x << " " << mTransform.Pos().y << " " << mTransform.Pos().z
-                    << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
-                    << " mph " << mfSpeedMPH.x
-                    << " ang " << mAngularVelocity.x << " " << mAngularVelocity.y << " " << mAngularVelocity.z
-                    << " up " << mTransform.Up().x << " " << mTransform.Up().y << " " << mTransform.Up().z
-                    << " at " << mTransform.At().x << " " << mTransform.At().y << " " << mTransform.At().z
-                    << " air " << (mbHasAir ? 1 : 0)
-                    << " crash " << (mbCrashing ? 1 : 0)
-                    << " nwc " << static_cast<s32>(mi8NumWorldCollisions)
-                    << " dt " << lfDeltaTime
-                    << "\n";
-            }
-
-            for (s32 liW = 0; liW < eNumDrivenWheels && WheelSusTakeLine(); ++liW)
-            {
-                const Wheel& lrW = maWheels[liW];
-                const Wheel::RoadContact& lrC = lrW.GetRoadContact();
-                const SuspensionSpring& lrS = maSprings[liW];
-                // What ApplySuspensionForces pushed with this frame (mass * acceleration, > 0 only,
-                // traction only) -- recomputed from the same lanes it read.
-                const f32 lfPush = (lrW.mbHasTraction && lrW.mu8State != 2)
-                    ? lrS.mvStiffness_Damping_Mass_Position.z
-                      * lrS.mvVelocity_Acceleration_DampingForce_SpringForce.y
-                    : 0.0f;
-                *CgsDev::Log::gpDebugPrint
-                    << "[wsus-w] f " << static_cast<s32>(luF) << " car " << luCar << " w " << liW
-                    << " onG " << (lrC.mbIsOnGround ? 1 : 0)
-                    << " close " << (lrC.mbIsCloseToGround ? 1 : 0)
-                    << " hasT " << (lrW.mbHasTraction ? 1 : 0)
-                    << " st " << static_cast<s32>(lrW.mu8State)
-                    << " hit " << lrC.mPosition.x << " " << lrC.mPosition.y << " " << lrC.mPosition.z
-                    << " n " << lrC.mNormal.x << " " << lrC.mNormal.y << " " << lrC.mNormal.z
-                    << " ld " << lrC.mfLineDistanceToRoad
-                    << " wy " << lrW.mPosition.y
-                    << " sy " << lrW.mStreamedPositionPlusTwistAmount.y
-                    << " tdn " << lrW.mSuspensionAndInertiaVariables.x
-                    << " tup " << lrW.mSuspensionAndInertiaVariables.y
-                    << " k " << lrS.mvStiffness_Damping_Mass_Position.x
-                    << " c " << lrS.mvStiffness_Damping_Mass_Position.y
-                    << " m " << lrS.mvStiffness_Damping_Mass_Position.z
-                    << " p " << lrS.mvStiffness_Damping_Mass_Position.w
-                    << " v " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.x
-                    << " a " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.y
-                    << " Fd " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.z
-                    << " Fs " << lrS.mvVelocity_Acceleration_DampingForce_SpringForce.w
-                    << " push " << (lfPush > 0.0f ? lfPush : 0.0f)
-                    << " mow " << lrW.mSpeedAndMassOnWheelVariables.z
-                    << "\n";
-            }
-
-            if ((luF % 600u) == 1u && WheelSusTakeLine())
-            {
-                const VehicleAttribs::SuspensionAttribs& lrSus = mpAttribs->mSuspensionAttribs;
-                *CgsDev::Log::gpDebugPrint
-                    << "[wsus-attr] f " << static_cast<s32>(luF)
-                    << " car " << luCar
-                    << " mass " << mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
-                    << " mfMass " << mfMass.x
-                    << " rest " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.x
-                    << " damp " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.y
-                    << " upMov " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.z
-                    << " dnMov " << lrSus.mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement.w
-                    << " frontOff " << lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.x
-                    << " rearOff " << lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.y
-                    << " inAir " << lrSus.mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding.z
-                    << " scal " << mvSpringMassScalers.x << " " << mvSpringMassScalers.y
-                    << " " << mvSpringMassScalers.z << " " << mvSpringMassScalers.w
-                    << " rad " << maWheels[0].mSlipVariables.w << " " << maWheels[1].mSlipVariables.w
-                    << " " << maWheels[2].mSlipVariables.w << " " << maWheels[3].mSlipVariables.w
-                    << " unsprung " << maWheels[0].mIntegrationVariables.w
-                    << " tll " << mSimpleAttribs.mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w
-                    << "\n";
-            }
-        }
         // ---- end [wsus] -----------------------------------------------------------------------
     }
 
@@ -4915,7 +4753,6 @@ namespace Vehicle
             maSprings[liWheel].SetExternalForce(
                 maSprings[liWheel].mvExternalForce.x - lafCornerTransfer[liWheel]);
         }
-
 
         // ---- 8) the tail store (0x825FA248): snapshot the velocity for the next frame. Redundant
         //         with the caller's own pre-call copy -- the console issues both.
@@ -5628,18 +5465,6 @@ namespace Vehicle
                 if (lfDistanceToRoad > 0.0f)
                 {
                     // ---- [wsus-rep] the above-plane repair, when it fires ---------------------
-                    if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER
-                        && WheelSusTakeLine())
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[wsus-rep] f " << static_cast<s32>(WheelSusFrameFor(this))
-                            << " car " << static_cast<u32>(reinterpret_cast<u64>(this))
-                            << " w " << liWheel
-                            << " d " << lfDistanceToRoad
-                            << " wyBefore " << lrWheel.mPosition.y
-                            << " n " << lrPlaneNormal.x << " " << lrPlaneNormal.y << " " << lrPlaneNormal.z
-                            << "\n";
-                    }
                     // ---- end [wsus-rep] -------------------------------------------------------
                     lrWheel.mPosition.y = std::max(
                         lrWheel.mPosition.y + lfDistanceToRoad,
@@ -5678,8 +5503,6 @@ namespace Vehicle
         }
 
         // ---- [wsus-post] the post-simulation half of the witness (player car only) -----------
-        const bool lbWheelSusProbe =
-            WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER;
         const u32 luWheelSusF   = lbWheelSusProbe ? WheelSusFrameFor(this) : 0u;
         const u32 luWheelSusCar = static_cast<u32>(reinterpret_cast<u64>(this));
         if (lbWheelSusProbe && WheelSusTakeLine())
@@ -5850,32 +5673,9 @@ namespace Vehicle
         {
             const Vector3 lSusV5 = mLinearVelocity;
             const f32 lfTotal = SusVMag(lSusV5, lSusV0);
-            if (lfTotal >= SusVProbeThreshold())
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[susv] car " << static_cast<u32>(reinterpret_cast<u64>(this))
-                    << " total " << lfTotal
-                    << " v0 " << lSusV0.x << " " << lSusV0.y << " " << lSusV0.z
-                    << " v5 " << lSusV5.x << " " << lSusV5.y << " " << lSusV5.z
-                    << " | bump "   << SusVMag(lSusV1, lSusV0)
-                    << " stabI "    << SusVMag(gvSusVStabAfterIntegrate, lSusV1)
-                    << " stabD "    << SusVMag(lSusV2, gvSusVStabAfterIntegrate)
-                    << " integ "    << SusVMag(lSusV3, lSusV2)
-                    << " imp "      << SusVMag(lSusV4, lSusV3)
-                    << " wforce "   << SusVMag(lSusV5, lSusV4)
-                    << " | damped " << (gbSusVStabDamped ? 1 : 0)
-                    << " dampF "    << gfSusVStabDampFactor
-                    << " vDotN "    << gfSusVStabVDotN
-                    << " nwc "      << static_cast<s32>(mi8NumWorldCollisions)
-                    << " air "      << (mbHasAir ? 1 : 0)
-                    << " crash "    << (IsCrashing() ? 1 : 0)
-                    << " tSinceLand " << mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.x
-                    << "\n";
-            }
         }
         // ---- end [susv] -------------------------------------------------------------------------
     }
-
 
     // ============================ C09 crash/contact-impulse group (verifier-corrected) ============================
 // [clean] ApplyCarContactImpulse
@@ -6667,117 +6467,6 @@ namespace Vehicle
                                                  + lrTransform.zAxis.z * lfForwardShift;
     }
 
-    // ===========================================================================================
-    //  [FLAG PC bring-up] SeatTransformFromCreateLegBringUp -- NOT an X360 function.
-    // ===========================================================================================
-    // The PC stand-in for the create-event leg that reaches the seat on console:
-    //     VehicleManager::ProcessCreateEvents @0x82616770
-    //       -> vcall vtable+0x30 on maRaceCarPhysics[i]        (VERIFIED in the pseudocode)
-    //       -> RaceCarPhysics::Prepare @0x82639CB8             (export hole; bl chain decoded)
-    //       -> VehiclePhysics::Prepare @0x82637C80 -> ... -> SetAttributes -> Wheel::Prepare
-    //       -> SetTransformFromPositionOnRoad @0x825D1C00
-    // No VehicleManager runs on this build, so RaceCarEntityModule::ResetActiveRaceCar calls this
-    // instead, and every seat input is derived from the RESIDENT streamed deformation spec the way
-    // the console's own create leg derives it:
-    //
-    //   * wheel radius[i] = 0.5f * spec.maWheelSpecs[i].mScale.y -- ProcessCreateEvents' own
-    //     derivation (v219[0]=0.5; vspltw scale lane 1; vmulfp128), fed through the REAL
-    //     Wheel::Prepare (f1 -> mSlipVariables.w), which is the lane the seat reads.
-    //   * wheel local position[i] = spec.maWheelSpecs[i].mPosition - COMeff, fed through the REAL
-    //     Wheel::Prepare (v1 -> mStreamedPositionPlusTwistAmount.xyz). On console the subtraction
-    //     is SimpleVehiclePhysics::SetAttributes' `vsubfp v1, wheelPos, mSimpleAttribs.mCOMOffset`.
-    //
-    // * COMeff = spec.mMeshOffset -- ONE STEP HERE IS INFERRED FROM MEASUREMENT, stated
-    //     plainly. The console populates mSimpleAttribs.mCOMOffset from VehicleAttribs+0x20, which
-    //     SetupAttribs @0x825F4CD8 fills VERBATIM from the vault's physicsvehiclebaseattribs
-    //     CoMOffset -- and that ships (6000, 0, 0) for PUSMC01 (5000/6000 across cars), which
-    //     CANNOT be the live subtractor (wheel local x would be -5999; retail drives). The value
-    //     that IS consistent with everything measured:
-    //       - shipped spec mMeshOffset            = (0, +0.740575, -0.170226)
-    //       - shipped spec+1552 (the model-space -> handling-space matrix the game side reads into
-    //         ActiveRaceCar::mCentreOfMassTransform) = identity, translation (0, -0.740575,
-    //         +0.170226) = -mMeshOffset
-    //       - the user-attested retail rest height: physics origin ~1.481 above ground
-    //         == radius(0.342469) + |specY - mMeshOffset.y|(1.138681) - 0.035 + 0.035-settle
-    //     so mMeshOffset is used, and the exact console plumbing of that vector into
-    //     mSimpleAttribs.mCOMOffset stays an OPEN question (the ProcessCreateEvents pseudocode
-    //     shows a `mCOMOffset += avg(wheelSpecPos)` mutation that cannot be the whole story;
-    //     its raw asm was not decoded this wave). The witness prints at the call site expose all
-    //     three numbers on every run.
-    //
-    // * TWO CONSOLE TERMS DELIBERATELY NOT REPRODUCED, stated plainly:
-    //       1. the front/rear RIDE-HEIGHT raise (SetAttributes adds suspension FrontHeight/
-    //          RearHeight -- +0.033/-0.02 in PUSMC01's vault -- to the wheel Y before the COM
-    //          subtraction). On console the springs settle the car back to design height within
-    //          ticks; on this build NOTHING simulates, so reproducing the raise without the
-    //          settling would freeze the car sunk by exactly that amount. Lands with the
-    //          vault->VehicleAttribs chain + the integrator (the physics wall).
-    //       2. Wheel::Prepare's f2..f4 scalars (flt_82FB8BB0 + the two suspension-travel bounds):
-    //          passed 0 -- none of those lanes is read by the seat, and their live sources are the
-    //          same unlanded attribs chain. Flagged, not faked.
-    //
-    //   * mpAttribs: the REAL mPlayerVehicleAttribs member (the slot VehiclePhysics::Prepare
-    //     @0x82637C80 copies the create attribs into and re-points mpAttribs at), Construct()ed by
-    //     the REAL VehicleAttribs::Construct, with mBaseAttribs.mCOMOffset = COMeff and mbIsValid
-    //     set the way SetupAttribs' tail sets it -- so the seat's z-term (mCOMOffset.z =
-    //     -0.170226) exactly cancels mCentreOfMassTransform's +0.170226 and the MODEL origin lands
-    //     on the road point. That geometric closure is the role of the term; the seat's asserts
-    //     run against a valid attribs block.
-    //
-    // The staged VehiclePhysics lives in zeroed static storage (no constructor: the class uses the
-    // console's Construct() pattern, and running the full Construct here would drag the whole
-    // dynamics closure in for a placement-only helper; the seat and Wheel::Prepare touch no vptr).
-    // DELETE-WHEN ProcessCreateEvents + RaceCarPhysics::Prepare land.
-    // -------------------------------------------------------------------------------------------
-    Matrix44Affine VehiclePhysics::SeatTransformFromCreateLegBringUp(
-            const StreamedDeformationSpec* lpSpec,
-            const Matrix44Affine&          lrPlacementTransform)
-    {
-        using BrnPhysics::Deformation::WheelSpec;
-
-        alignas(16) static u8 saSeatVehicleStorage[sizeof(VehiclePhysics)];
-        std::memset(saSeatVehicleStorage, 0, sizeof(saSeatVehicleStorage));
-        VehiclePhysics* lpStaged = reinterpret_cast<VehiclePhysics*>(saSeatVehicleStorage);
-
-        // COMeff -- see the banner. mMeshOffset, witness-checked against -(spec+1552 translation)
-        // at the call site's print.
-        const Vector3& lvCOMOffset = lpSpec->mMeshOffset;
-
-        // The REAL attribs block in its REAL slot, built by the REAL constructor.
-        VehicleAttribs& lrAttribs = lpStaged->mPlayerVehicleAttribs;
-        lrAttribs.Construct();
-        lrAttribs.mBaseAttribs.mCOMOffset = lvCOMOffset;
-        lrAttribs.mbIsValid = true;              // SetupAttribs @0x825F4CD8 tail: li 1; stb +0x360
-        lrAttribs.mFrontTireAttribs.PrepareDefaultFrontTire();
-        lrAttribs.mRearTireAttribs.PrepareDefaultRearTire();
-        lpStaged->mpAttribs = &lrAttribs;        // Prepare: `*(this+0x720) = this+0xAA0`
-
-        // The four wheels, in spec order (0/1 front, 2/3 rear -- the same order the console's
-        // create leg walks), through the REAL writer.
-        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
-        {
-            const WheelSpec* lpWheelSpec = lpSpec->GetWheelSpec(liWheel);
-
-            const Vector3 lvLocalPos = {
-                lpWheelSpec->mPosition.x - lvCOMOffset.x,
-                lpWheelSpec->mPosition.y - lvCOMOffset.y,
-                lpWheelSpec->mPosition.z - lvCOMOffset.z,
-                0.0f
-            };
-            const f32 lfRadius = 0.5f * lpWheelSpec->mScale.y;   // ProcessCreateEvents' derivation
-
-            lpStaged->maWheels[liWheel].Prepare(
-                lvLocalPos, lfRadius,
-                0.0f, 0.0f, 0.0f,                                // f2..f4 -- flagged, see banner
-                (liWheel < 2) ? &lrAttribs.mFrontTireAttribs     // the console's per-wheel table:
-                              : &lrAttribs.mRearTireAttribs );   // {front, front, rear, rear}
-        }
-
-        // The REAL seat.
-        lpStaged->SetTransformFromPositionOnRoad(lrPlacementTransform);
-        return lpStaged->GetTransform();
-    }
-
     // ============================================================================================
     // THE ORCHESTRATOR (orchestrator wave, 2026-08-07): VehiclePhysics::Update @0x826412C0
     // and the driving spine it conducts. Every body below is a full transcription of its X360
@@ -7088,12 +6777,6 @@ namespace Vehicle
             lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.y;   // +0xB0 .y
         const f32 lfPowerToRear =
             lrBase.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z;   // +0xB0 .z
-
-        // FLAG PC-platform leaf: copy this operation's real axle selection for
-        // the trigger observer, including the handbrake rear-only branch.
-        CgsInput::AdaptiveTriggers::EngineFeedback::RecordDrive(
-            reinterpret_cast<std::uintptr_t>(&mEngine), lfPowerToFront, lfPowerToRear,
-            lbHandBrake && !(5.0f > lfForwardSpeed));
 
         if (lbHandBrake && !(5.0f > lfForwardSpeed))                  // unk_8208FB14 == 5.0
         {
@@ -7512,19 +7195,6 @@ namespace Vehicle
     // |mBodyPointVelocity - mLinearVelocity| / |mAngularVelocity| (the component of r perpendicular
     // to omega). G54-D1: the console's airborne arm is the body-local wheel position
     // rotated (a body-scale arm, ~1-3 m); the old streamed-minus-Pos() arm implied |worldPos|.
-    namespace
-    {
-        bool WheelBpvProbeArmed()
-        {
-            static s32 siArmed = -1;
-            if (siArmed < 0)
-            {
-                const char* lpcEnv = getenv("BRN_WHEEL_BPV_PROBE");
-                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
-            }
-            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
-        }
-    }
 
 // [clean] UpdateWheels  @0x8261E4F0
     // @0x8261E4F0  BrnPhysics::Vehicle::VehiclePhysics::UpdateWheels  (1130 insns)
@@ -7642,29 +7312,6 @@ namespace Vehicle
         CalculateBodyVelocityAtWheelContact(eFrontRightWheel, mSteeringDirection, lvfTimeStep);
 
         // ---- [wheel-bpv] witness (opt-in, see WheelBpvProbeArmed; not console state) -----------
-        if (WheelBpvProbeArmed() && lpControls->GetType() == E_DRIVER_TYPE_PLAYER)
-        {
-            static u32 suWitnessLines = 0u;
-            const f32 lfOmega = vpu::Magnitude(mAngularVelocity);
-            for (s32 liW = 0; liW < eNumDrivenWheels && suWitnessLines < 40u; ++liW)
-            {
-                const Wheel& lrWheel = maWheels[liW];
-                // only a ROTATING body separates the two arms (at omega = 0 both give bpv = v)
-                if (lrWheel.GetRoadContact().mbIsOnGround || !(lfOmega > 0.05f))
-                    continue;
-                ++suWitnessLines;
-                const f32 lfRelative =
-                    vpu::Magnitude(vpu::Subtract(lrWheel.mBodyPointVelocity, mLinearVelocity));
-                *CgsDev::Log::gpDebugPrint
-                    << "[wheel-bpv] n " << static_cast<s32>(suWitnessLines)
-                    << " w " << liW
-                    << " |omega| " << lfOmega
-                    << " |bpv-v| " << lfRelative
-                    << " arm " << (lfRelative / lfOmega)
-                    << " |pos| " << vpu::Magnitude(mTransform.wAxis)
-                    << "\n";
-            }
-        }
 
         // ---- 0x8261E838: just-landed spin-up (order 2,3,0,1) ---------------------------------
         static const EVehicleDrivenWheel kaeLandOrder[eNumDrivenWheels] = {
@@ -7867,7 +7514,6 @@ namespace Vehicle
         const f32 lfWfcMass = mbCrashing
             ? mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x
             : 0.0f;
-        const bool lbWfcProbe = mbCrashing && WfcProbeArmed();
         const Vector3 lWfcTorque0 = mTotalTorque;
         const Vector3 lWfcLinF0   = mTotalLinearForce;
         if (lbWfcProbe)
@@ -7974,27 +7620,6 @@ namespace Vehicle
         }
 
         // ---- [wsus-t] the tyre half of the witness (player car only; same frame index) -------
-        if (WheelSusProbeArmed() && mPreviousControls.GetType() == E_DRIVER_TYPE_PLAYER)
-        {
-            const u32 luF   = WheelSusFrameFor(this);
-            const u32 luCar = static_cast<u32>(reinterpret_cast<u64>(this));
-            for (s32 liW = 0; liW < eNumDrivenWheels && WheelSusTakeLine(); ++liW)
-            {
-                const Wheel& lrW = maWheels[liW];
-                *CgsDev::Log::gpDebugPrint
-                    << "[wsus-t] f " << static_cast<s32>(luF) << " car " << luCar << " w " << liW
-                    << " Flong " << lrW.mForceVariables.x << " Flat " << lrW.mForceVariables.y
-                    << " FlongC " << lrW.mForceVariables.z << " FlatC " << lrW.mForceVariables.w
-                    << " slip " << lrW.mSlipVariables.y << " latSpd " << lrW.mSlipVariables.x
-                    << " omega " << lrW.mIntegrationVariables.x
-                    << " roadLong " << lrW.mSpeedAndMassOnWheelVariables.x
-                    << " surfSpd " << lrW.mSpeedAndMassOnWheelVariables.w
-                    << " mow " << lrW.mSpeedAndMassOnWheelVariables.z
-                    << " broke " << (lrW.mbBrokenAdhesiveLimit ? 1 : 0)
-                    << " vel " << mLinearVelocity.x << " " << mLinearVelocity.y << " " << mLinearVelocity.z
-                    << "\n";
-            }
-        }
         // ---- end [wsus-t] ---------------------------------------------------------------------
     }
 
@@ -9415,17 +9040,6 @@ namespace Vehicle
         AirTrack gaAirTrack[KI_AIR_CARS] = {};
         u32 guAirLines = 0u;
 
-        bool AirWitnessOn()
-        {
-            static s32 siOn = -1;
-            if ( siOn < 0 )
-            {
-                const char* lpcEnv = getenv("BRN_AIR_DIAG");
-                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
-            }
-            return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
-        }
-
         void AirWitnessEnd(s32 liCar, AirTrack& lrTrack, const char* lpcEnd, bool lbCrashingNow)
         {
             if ( lrTrack.muSteps >= KU_AIR_MIN_PRINT_STEPS )
@@ -9637,10 +9251,6 @@ namespace Vehicle
         (void)lvfRealTimeStep;
 
         // [air] (DIAG, BRN_AIR_DIAG) -- the step's final wheel contact flags + pose; reads only.
-        if ( AirWitnessOn() )
-        {
-            AirWitnessStep(this, lpControls->miVehicleID, maWheels, mTransform, mLinearVelocity, mbCrashing, lfDT);
-        }
 
         CgsDev::PerfMonCpu::StartMonitor(gs_iVPhysUpdatePM);
 
@@ -9691,8 +9301,6 @@ namespace Vehicle
         // START is. The type is a printed FIELD now, and that field is what settled issue #21's
         // "the car spins on the start line": drvType=1 (AI), steer=-1.0, donutAttribs=1.
         // getenv is read ONCE (this runs for every vehicle, every step).
-        static const char* const kspStartLineDiag = getenv("BRN_STARTLINE_DIAG");
-        const bool lbStartLineDiag = (kspStartLineDiag != 0) && (lpControls->miVehicleID == 0);
         f32     lfDiagHeadingPre = 0.0f;
         bool    lbDiagFrozenPre  = false;
         Vector3 lvDiagAngVelPre  = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -9746,26 +9354,6 @@ namespace Vehicle
                 // Dense early (first 5 frames) then every 60, so both the RISE and the DURATION
                 // are visible rather than inferred.
                 {
-                    static const char* const kspW = getenv("BRN_CRASH_PLAYER");
-                    if (kspW != 0)
-                    {
-                        static u32 sluW = 0;
-                        ++sluW;
-                        if ((sluW <= 5u || (sluW % 60u) == 0u) && CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                // Identity is the body's POSITION, not a pointer: it can be
-                                // cross-checked against the player position that
-                                // [world->director] publish and [T4-player] print, so this
-                                // cannot silently report a different car.
-                                << "[crash-probe] UpdateCrashing @0x82638810 ran: at ("
-                                << mTransform.wAxis.x << ", " << mTransform.wAxis.z << ")"
-                                << " mbCrashing=" << (mbCrashing ? 1 : 0)
-                                << " mfTimeCrashing="
-                                << mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y
-                                << " frame=" << sluW << "\n";
-                        }
-                    }
                 }
             }
             else

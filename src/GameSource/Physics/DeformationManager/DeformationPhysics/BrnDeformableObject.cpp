@@ -244,17 +244,7 @@ namespace Deformation
         // Opt-in integration witness; records the shaped impulse before decomposition.
         if (lbThisInShowtime && (lOtherCar.GetGlobalEntityId().muValue >> 24) == KU_TRAFFIC_ENTITY_OWNER)
         {
-            static const bool lbWatch = std::getenv("BRN_SHOWTIME_WATCH") != nullptr;
             static u32 luWatchCount = 0;
-            if (lbWatch && luWatchCount < 8 && CgsDev::Log::gpDebugPrint != nullptr)
-            {
-                ++luWatchCount;
-                *CgsDev::Log::gpDebugPrint << "[showtime-car-contact] other="
-                    << lOtherCar.GetGlobalEntityId().muValue << " playerMass=" << lThisBody.GetMass().x
-                    << " trafficMass=" << lOtherBody.GetMass().x
-                    << " shaped=" << lImpulse.x << "," << lImpulse.y << "," << lImpulse.z
-                    << " velocityY=" << lThisBody.GetLinearVelocity().y << "\n";
-            }
         }
         // Build the impulse parameter block.
         //
@@ -417,16 +407,7 @@ namespace Deformation
                                      vpu::Negate(lImpulseUnit), lvfShapedMagnitude, lContact.mpOtherSensor,
                                      /*lbAddToSpy*/ false, /*lbUseNormalScaledFriction*/ true);
 
-        static const bool lbWatchPair = std::getenv("BRN_SHOWTIME_WATCH") != nullptr;
         static u32 luPairCount = 0;
-        if (lbWatchPair && luPairCount < 8 && CgsDev::Log::gpDebugPrint != nullptr)
-        {
-            ++luPairCount;
-            *CgsDev::Log::gpDebugPrint << "[car-car-contact] pair-applied other="
-                << lOtherCar.GetGlobalEntityId().muValue << " reversePoint="
-                << lParams.mImpulsePosition.x << "," << lParams.mImpulsePosition.y << ","
-                << lParams.mImpulsePosition.z << "\n";
-        }
 
         return true;
     }
@@ -760,8 +741,6 @@ namespace Deformation
             static s32 siWorldProbe = -1;
             if ( siWorldProbe < 0 )
             {
-                const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
-                siWorldProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             static u32 suWorld      = 0;
             static u32 suHorizontal = 0;

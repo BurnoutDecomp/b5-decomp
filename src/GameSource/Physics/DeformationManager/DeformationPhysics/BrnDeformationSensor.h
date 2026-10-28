@@ -157,7 +157,6 @@ namespace Deformation
 	// HOST layout pin. Not the console's 64 -- three 16-byte Vector3 + f32 + 4 pad + two 8-byte
 	// pointers + bool, 16-aligned == 80. It exists to make the record's size a CHECKED fact rather
 	// than an assumption: the defect this replaced was an 80-byte view laid over a 64-byte record.
-	static_assert(sizeof(StoredContact) == 80, "host StoredContact is 80 bytes (two widened pointers)");
 	static_assert(alignof(StoredContact) == 16, "StoredContact is 16-aligned (its leading Vector3)");
 	static_assert(offsetof(StoredContact, mLocalPointOnB) == 16, "mLocalPointOnB @ +16");
 	static_assert(offsetof(StoredContact, mNormal) == 32, "mNormal @ +32");

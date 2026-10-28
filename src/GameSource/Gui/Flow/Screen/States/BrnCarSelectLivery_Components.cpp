@@ -19,8 +19,6 @@
 // group's real emptiness contract, and the console's own idiom.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
-#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"  // FLAG PC diagnostic: one readiness receipt per context
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -353,11 +351,6 @@ namespace BrnGui
             mHelpItemContinue.SetItem("$GENERAL_OPTION_CONTINUE",
                                       ButtonIconComponent::E_PADBUTTON_SELECT,
                                       ButtonIconComponent::E_PADBUTTON_INVISIBLE);
-            // FLAG PC diagnostic: Continue is enabled; retain the input handler's exit gate.
-            if (meCurrentState == E_CARSELECT_VISIBLE_INTERACTIVE && !mbExiting)
-                CreateMatchTracePC::LiveryReady(static_cast<s32>(meCurrentState),
-                    static_cast<s32>(meCarSelectType), mbExiting, mbCarChangeInProgress,
-                    mCurrentSetupInfo.mCarId, miMostRecentDropInId);
             // ⭐ THE CAROUSEL COUNT IS SHARED WITH THE SIBLING SCREEN. The X360 reads
             // dword_82FB4958 here, and that is the SAME global BrnGui::CarSelectVehicle's
             // HandleCarInfoResponseEvent writes (it is a linker-visible counter, not a
@@ -471,38 +464,6 @@ namespace BrnGui
                    "mpWorldDataController");   // BrnGuiCache.h:2324
 
         BrnGui::WorldDataController* lpWorldData = mpGuiCache->GetWorldDataController();
-
-        // ⚠️ FLAG PC bring-up guard -- NOT in the X360 body. RETIRED-AND-REPLACED 2026-08-02.
-        //
-        // The previous guard bailed whenever the acquire machine had not reached
-        // E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS (11), on the stated grounds that
-        // GetColourPaletteFromType gates on that state. IT DOES NOT: the X360 body @0x824BDA40
-        // has no meState compare at all, only `lType < eNumPalettes`. (Its sibling
-        // GetProgressionData @0x82428818 DOES gate -- `cmpwi r11, 0xB` -- which is where that
-        // claim came from.) The real reason the palette was unreadable was that resource type
-        // 0x1001E was never REGISTERED, so the "CarColours" acquire replied with a null memory
-        // pointer and the accessor handed back `&null->maPalettes[type]` -- boot-measured WER
-        // fault offset 0x1011D9 == ColourSelection::SetupColourSelectionGradient + 0x239.
-        // That registration has landed, so the state gate is gone.
-        //
-        // What is left is a NULL-RESOURCE guard, which is a strictly weaker and honest claim:
-        // if the acquire ever fails again (a missing bundle, a failed pool load) this bails
-        // instead of dereferencing null. It costs one pointer test on a path the console
-        // reaches with the resource always bound.
-        if (!lpWorldData->HasPlayerCarColours())
-        {
-            static bool s_bLoggedNoPalette = false;
-            if (!s_bLoggedNoPalette && CgsDev::Log::gpDebugPrint != 0)
-            {
-                s_bLoggedNoPalette = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[CarSelectLivery] FLAG: the player-car-colour resource did not bind "
-                       "(WorldDataController state "
-                    << static_cast<s32>(lpWorldData->GetState())
-                    << ") -- the colour picker stays empty this run.\n";
-            }
-            return;
-        }
 
         const BrnWorld::PlayerCarColourPalette* lpPalette =
             lpWorldData->GetColourPaletteFromType(

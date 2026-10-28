@@ -563,17 +563,6 @@ namespace Deformation
 		u32          guHopLastDump = 0xFFFFFFFFu;
 		s32          giHopProbe = -1;
 
-		s32 HopProbeLevel()
-		{
-			if ( giHopProbe < 0 )
-			{
-				const char* lpcEnv = getenv( "BRN_HOP_PROBE" );
-				giHopProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? atoi( lpcEnv ) : 0;
-				if ( giHopProbe < 0 ) { giHopProbe = 0; }
-			}
-			return giHopProbe;
-		}
-
 		HopSensorRow* HopFind( const void* lpSensor, s32 liDir )
 		{
 			for ( s32 li = 0; li < giHopRows; ++li )
@@ -705,32 +694,6 @@ namespace Deformation
 		// move and is pulled back toward rest. That is the console's own arithmetic (it happens
 		// whenever a dent banked at allowedCompression 1.0 is later passed an impulse at the
 		// 0.2 drive-time budget), so it is counted, not clamped.
-		if ( HopProbeLevel() > 0 )
-		{
-			++giHopDepth;
-			++gHop.muChainDeposits;
-			if ( ( mpSpec ? mpSpec->maNextSensor[liDir] : 0u ) == 0u ) { ++gHop.muNextZeroAtHop; }
-			if ( lfAmount > 0.0f )       { ++gHop.muPositive; }
-			else if ( lfAmount < 0.0f )  { ++gHop.muNegative; }
-			else                         { ++gHop.muZeroMove; }
-			gHop.mfChainMove += ( lfAmount >= 0.0f ? lfAmount : -lfAmount );
-
-			HopSensorRow* lpRow = HopFind( this, liDir );
-			if ( lpRow != 0 )
-			{
-				if ( mpSpec != 0 )
-				{
-					lpRow->mafInitialOffset[0] = mpSpec->mInitialOffset.x;
-					lpRow->mafInitialOffset[1] = mpSpec->mInitialOffset.y;
-					lpRow->mafInitialOffset[2] = mpSpec->mInitialOffset.z;
-				}
-				lpRow->mfChainMove += ( lfAmount >= 0.0f ? lfAmount : -lfAmount );
-				++lpRow->muHits;
-				if ( lfAmount < 0.0f ) { ++lpRow->muNegative; }
-				lpRow->miOwner = BrnPhysics::Vehicle::gT5ApplyOwner;
-				lpRow->miDepth = giHopDepth;
-			}
-		}
 
 		// Forward the (now absorbed) impulse onto the next body in the chain. The X360
 		// UNCONDITIONALLY calls (asm tail):
@@ -877,17 +840,6 @@ namespace Deformation
 		// the last present at which a `[dent-guard]` line was emitted (one per present, at most)
 		u32         guDentGuardLastDump     = 0xFFFFFFFFu;
 		u32         guDentGuardLines        = 0;
-
-		s32 DentProbeLevel()
-		{
-			if ( giDentProbe < 0 )
-			{
-				const char* lpcEnv = getenv( "BRN_DENT_PROBE" );
-				giDentProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? atoi( lpcEnv ) : 0;
-				if ( giDentProbe < 0 ) { giDentProbe = 0; }
-			}
-			return giDentProbe;
-		}
 
 		DentRow* DentFind( const void* lpSensor, s32 liDir )
 		{
@@ -1178,8 +1130,6 @@ namespace Deformation
 			static s32 siImpulseProbe = -1;
 			if ( siImpulseProbe < 0 )
 			{
-				const char* lpcEnv = getenv( "BRN_IMPULSE_PROBE" );
-				siImpulseProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
 			}
 			// ⚠️ TWO WINDOWS (2026-08-16, walls leg 9): the +Y floor support runs this body ~20 times
 			// a frame while the car merely rests, so a flat cap is spent long before anything
@@ -1229,216 +1179,6 @@ namespace Deformation
 		}
 
 		// ---- [dent] the console-law ledger, both sides -----------------------------------------
-		if ( DentProbeLevel() > 0 )
-		{
-			DentRow* lpRow = DentFind( this, liDir );
-			if ( lpRow != 0 )
-			{
-				const f32 lfUnclamped = lfAbsorbed * lpImpulseParams->mvfInverseInertia.x
-				                      * lpImpulseParams->mvfTimeStep.x;
-				if ( mpSpec != 0 )
-				{
-					lpRow->mafInitialOffset[0] = mpSpec->mInitialOffset.x;
-					lpRow->mafInitialOffset[1] = mpSpec->mInitialOffset.y;
-					lpRow->mafInitialOffset[2] = mpSpec->mInitialOffset.z;
-				}
-				const f32 lfAllowedNow = lpImpulseParams->mvfAllowedCompressionFactor.x;
-				if ( lpRow->mfAllowed != lfAllowedNow )
-				{
-					lpRow->mfAllowed = lfAllowedNow;
-					lpRow->mfSupply = 0.0f; lpRow->mfApplied = 0.0f; lpRow->mfSupply60 = 0.0f;
-					lpRow->muRoomClamped = 0u; lpRow->muFree = 0u; lpRow->muWorld = 0u;
-				}
-				lpRow->mfCeiling     = lfCompressionLimit;
-				lpRow->mfSupply     += lfUnclamped;
-				// The SAME deposit with the console's exponent. On the console dt == 1/60 so
-				// KVF_60_HTZ * dt == 1 exactly and pow(base, 1) == base. Normalised to the SAME
-				// wall-clock slice (this PC step covers 60*dt console steps, each depositing
-				// incoming*base*invI/60 -- so the slice total is incoming*base*invI*dt).
-				const f32 lfIncoming  = lfAbsorbed + lpImpulseParams->mvfImpulseMagnitude.x;
-				lpRow->mfSupply60   += lfIncoming * lfBase
-				                     * lpImpulseParams->mvfInverseInertia.x
-				                     * lpImpulseParams->mvfTimeStep.x;
-
-				lpRow->mfApplied    += lfMove;
-				lpRow->mfLastToLimit = lfToLimit;
-				lpRow->mfLastMag     = lfAbsorbed + lpImpulseParams->mvfImpulseMagnitude.x;  // incoming
-				lpRow->mfLastInvI    = lpImpulseParams->mvfInverseInertia.x;
-				lpRow->mfLastFactor  = lfAbsorbFactor;
-				lpRow->mfLastVn      = lpImpulseParams->mvfVelocityAlongNormal.x;
-				lpRow->mfLastDt      = lpImpulseParams->mvfTimeStep.x;
-				lpRow->mfLastBase    = lfBase;
-				lpRow->miOwner       = BrnPhysics::Vehicle::gT5ApplyOwner;
-				lpRow->miSet         = static_cast<s32>( leSet );
-				lpRow->miLevel       = static_cast<s32>( lu8AbsorptionLevel );
-				if ( lpImpulseParams->mbWorldContact ) { ++lpRow->muWorld; }
-				if ( lfUnclamped > lfRoom ) { ++lpRow->muRoomClamped; } else { ++lpRow->muFree; }
-				// ⭐ ARRIVAL COUNTERS -- the only fields on this row that are not silenced by an
-				// absorption set whose whole table row is 0.0. See the DentRow banner.
-				++lpRow->muApplies;
-				if ( leSet == E_ABSORPTIONSET_INVINCIBLE )
-				{
-					++lpRow->muInvApplies;
-					++guDentInvincibleApplies;
-				}
-			}
-			// Dump the whole ledger once per PRESENT, so every row in a block shares one frame.
-			//
-			// ⛔⛔ READ THIS BEFORE QUOTING ANY `[dent]` DEPTH: THIS INSTRUMENT IS STRUCTURALLY
-			//    BLIND TO AN `E_ABSORPTIONSET_INVINCIBLE` WINDOW, AND ITS SILENCE LOOKS EXACTLY
-			//    LIKE "THE CAR BARELY DENTED". (Recorded 2026-09-07, reconciliation wave.)
-			//    The skip below is the mechanism. With meAbsorptionSet == 4 the whole
-			//    AbsorptionTable row is 0.0, so lfAbsorbFactor == 0, lfAbsorbed == 0 and
-			//    lfMove == lfAbsorbed * invI * dt == 0 -- every row keeps mfApplied == 0 and
-			//    mfSupply == 0 and is therefore SKIPPED HERE, on every present, for the whole
-			//    window. Nothing is printed and nothing says so.
-			//    MEASURED on the two boots ef38a2e8 published (exe 97de10bb...,
-			//    scratch/flow_run/budg_A1, budg_A2). `[absorb]` in the SAME logs prints the
-			//    state this table cannot:
-			//      A1 (108 mph): first contact frame is `set 4 noDamageTimer 0.650001
-			//        contacts 1 scratchSum 0.000000` -- the ENTIRE contact-producing part of the
-			//        impact is set 4 (15 sampled frames, timer 0.650 -> 0.033), then set 0.
-			//        The FIRST `[dent]` line of the run is 105 log lines AFTER the LAST set-4
-			//        line. The impact produced ZERO dent rows.
-			//      A2 (154 mph): identical shape -- 17 set-4 frames (timer 0.883 -> 0.050)
-			//        covering the first impact, then 50 set-0 frames.
-			//    Second, independent tell, from `[tanbank]` in the same logs: peak |J| into the
-			//    rigid body is 43,146 (A1) / 45,377 (A2). BrnVehicleRigidBody.cpp's own census is
-			//    max|J| 45,248 INVINCIBLE vs 1,202 absorbing normally -- so the arriving impulse
-			//    names the state as well as the flag does.
-			//    ⇒ ef38a2e8's "A1's 108 mph head-on reached 0.045 m of a 0.900 m ceiling" is NOT
-			//    a measurement of that impact. It is the post-invincibility tail: 59 applies on
-			//    ONE front-left sensor, after the energy was already spent. Do not read it as a
-			//    deformation shortfall, and do not compare it with any number from a set-0 crash.
-			//    ⭐ THE RULE: a `[dent]` depth is only meaningful beside the `[absorb]` line for
-			//    the same frames. Arm BRN_CRASH_RESPONSE_DIAG with BRN_DENT_PROBE, always, and
-			//    discard any crash whose contact frames carry `set 4`.
-			//
-			// ⭐⭐⭐ THE GUARD THAT MAKES THAT RULE STRUCTURAL, NOT ADVISORY (2026-09-07). The
-			//    banner above is a WARNING, and a warning in a source file is not an instrument.
-			//    Three things changed here so the blind window cannot be silent again:
-			//      1. The filter is now `moved OR TOUCHED-SINCE-LAST-PRESENT-WHILE-INVINCIBLE`.
-			//         A row that received an impulse and absorbed nothing PRINTS, with
-			//         `pcApplied 0` and `set 4` on its face -- which is the state the old filter
-			//         deleted. The extra clause is scoped to set 4 on purpose: a set-0 row that
-			//         merely brushes the ground still filters out, so this does not change the
-			//         line volume of an ordinary run (measured below by the guard counter).
-			//      2. Every row carries `applies` (arrivals, whatever they absorbed) and `nInv`
-			//         (of those, how many were invincible). A ZERO-VALUED SUM AND A ZERO ARRIVAL
-			//         COUNT ARE NOW DIFFERENT NUMBERS on the same line.
-			//      3. A `[dent-guard]` line prints once per present whenever ANY arrival that
-			//         present was invincible, so `grep '\[dent-guard\]'` answers "was this corpus
-			//         taken on a car that could dent" without reading a single dent row.
-			//    ⚠️ THE NEGATIVE CONTROL, and it bites by construction: on a run with no
-			//    invincible arrivals, `[dent-guard]` prints NOTHING and `nInv` is 0 on every row.
-			//    On the A1/A2 corpus that produced this finding it would have printed on ~15
-			//    consecutive presents before the first ordinary `[dent]` row existed at all.
-			if ( renderengine::guPresentCount != guDentLastDump && CgsDev::Log::gpDebugPrint != 0
-			     && guDentLines < 200000u )
-			{
-				guDentLastDump = renderengine::guPresentCount;
-				for ( s32 li = 0; li < giDentRows; ++li )
-				{
-					DentRow& lrR = gaDentRows[li];
-					const bool lbMoved   = ( lrR.mfApplied > 0.005f || lrR.mfSupply > 0.05f );
-					const bool lbTouched = ( lrR.muApplies != lrR.muAppliesLastDump );
-					const bool lbBlind   = ( lbTouched
-					                      && lrR.miSet == E_ABSORPTIONSET_INVINCIBLE );
-					lrR.muAppliesLastDump = lrR.muApplies;
-					if ( !lbMoved && !lbBlind ) { continue; }
-					// the PC's achieved displacement along THIS direction, read live off the sphere
-					f32 lfDisp = 0.0f;
-					const DeformationSensor* lpS = static_cast<const DeformationSensor*>( lrR.mpSensor );
-					if ( lpS->mpLocalSpaceSphere != 0 && lpS->mpSpec != 0 )
-					{
-						const Vector4& lrC = SphereVec( lpS->mpLocalSpaceSphere );
-						const Vector3  lC3 = { lrC.x, lrC.y, lrC.z, 0.0f };
-						const Vector3  lFR = Sub3( lC3, lpS->mpSpec->mInitialOffset );
-						lfDisp = Dot3( KA_IMPULSE_DIRECTIONS[lrR.miDir], lFR );
-					}
-					const f32 lfConsole = ( lrR.mfSupply < lrR.mfCeiling ) ? lrR.mfSupply : lrR.mfCeiling;
-					++guDentLines;
-					*CgsDev::Log::gpDebugPrint
-						<< "[dent] present " << static_cast<s32>( renderengine::guPresentCount )
-						<< " owner " << lrR.miOwner
-						<< " off (" << lrR.mafInitialOffset[0] << "," << lrR.mafInitialOffset[1]
-						<< "," << lrR.mafInitialOffset[2] << ")"
-						<< " dir " << lrR.miDir
-						<< " set " << lrR.miSet << " lvl " << lrR.miLevel
-						<< " allowed " << lrR.mfAllowed
-						<< " ceiling " << lrR.mfCeiling
-						<< " supply " << lrR.mfSupply
-						<< " supply60 " << lrR.mfSupply60
-						<< " lastDt " << lrR.mfLastDt << " lastBase " << lrR.mfLastBase
-						<< " console " << lfConsole
-						<< " pcApplied " << lrR.mfApplied
-						<< " pcDisp " << lfDisp
-						<< " toLimit " << lrR.mfLastToLimit
-						<< " nRoom " << static_cast<s32>( lrR.muRoomClamped )
-						<< " nFree " << static_cast<s32>( lrR.muFree )
-						<< " nWorld " << static_cast<s32>( lrR.muWorld )
-						// ⭐ applies/nInv: see the guard banner. `applies 0` means nothing ever hit
-						// this sensor; `applies N nInv N` with `pcApplied 0` means N impulses hit it
-						// and the absorption table refused every one of them.
-						<< " applies " << static_cast<s32>( lrR.muApplies )
-						<< " nInv " << static_cast<s32>( lrR.muInvApplies )
-						<< " lastMag " << lrR.mfLastMag
-						<< " lastInvI " << lrR.mfLastInvI
-						<< " lastF " << lrR.mfLastFactor
-						<< " lastVn " << lrR.mfLastVn
-						<< "\n";
-				}
-			}
-
-			// ---- [dent-guard] ONE LINE PER PRESENT IN WHICH AN ARRIVAL WAS INVINCIBLE -----------
-			// The whole point is that it is CHEAP TO GREP and prints in the state the dent table
-			// used to delete. A run with no line here took its dents on a car that could dent.
-			if ( CgsDev::Log::gpDebugPrint != 0
-			     && renderengine::guPresentCount != guDentGuardLastDump
-			     && guDentGuardLines < 20000u )
-			{
-				// ⚠️⚠️ THE OWNER IS THE ONE THE CURRENT IMPULSE BELONGS TO, NOT "the last row that
-				// happened to be invincible". UpdateContacts runs for EVERY DeformableObject, and a
-				// traffic car's own post-spawn invincibility overlaps the player's crash constantly
-				// -- so scanning the table for an owner would name owner 2 on a line the player's
-				// impulse produced, and every consumer that filters `owner 1` (crash_sweep_report
-				// does) would then MISS the contamination it exists to catch. gT5ApplyOwner is the
-				// same selector the row itself records, so the two always agree. Blind rows are
-				// counted for THAT owner only, for the same reason.
-				const s32 liGuardOwner = BrnPhysics::Vehicle::gT5ApplyOwner;
-				s32 liBlindRows = 0;
-				for ( s32 li = 0; li < giDentRows; ++li )
-				{
-					if ( gaDentRows[li].miSet == E_ABSORPTIONSET_INVINCIBLE
-					     && gaDentRows[li].muInvApplies != 0u
-					     && gaDentRows[li].miOwner == liGuardOwner )
-					{
-						++liBlindRows;
-					}
-				}
-				if ( liBlindRows > 0 && leSet == E_ABSORPTIONSET_INVINCIBLE )
-				{
-					guDentGuardLastDump = renderengine::guPresentCount;
-					++guDentGuardLines;
-					*CgsDev::Log::gpDebugPrint
-						<< "[dent-guard] present " << static_cast<s32>( renderengine::guPresentCount )
-						<< " owner " << liGuardOwner
-						<< " set " << static_cast<s32>( leSet )
-						<< " blindRows " << liBlindRows
-						<< " invAppliesTotal " << static_cast<s32>( guDentInvincibleApplies )
-						// ⛔ NO BRACKETED TAG IN THIS PROSE. It used to end "Read [absorb] for
-						// noDamageTimer", and crash_sweep_report.py dispatched log lines by
-						// SUBSTRING -- so every one of these lines matched its [absorb] branch,
-						// failed that branch's regex, and was dropped. The report then said
-						// "[dent-guard] presents 0" about a log containing six of them. The
-						// parser now matches by prefix; this text stays tag-free so the next
-						// substring-matching reader cannot be poisoned the same way.
-						<< " -- IMPULSES ARE ARRIVING INTO E_ABSORPTIONSET_INVINCIBLE:"
-						   " every dent depth on these frames is 0 BY ARITHMETIC, not by physics."
-						   " Read the absorb line for noDamageTimer and DISCARD this crash.\n";
-				}
-			}
-		}
 
 		const f32 lfPassedOn = lfAbsorbed * 0.5f;
 
@@ -1469,7 +1209,6 @@ namespace Deformation
 		// on the host it is the difference between a located defect and a wild jump if a future
 		// builder ever forgets the store again.
 		// ---- [hop] arm the chain-depth bracket (see the ledger banner above RecievePassedOnImpulse)
-		const s32 liHopProbe = HopProbeLevel();
 		if ( liHopProbe > 0 )
 		{
 			giHopDepth = 0;

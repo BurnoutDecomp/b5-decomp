@@ -43,8 +43,6 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"     // CgsGeometric::Frustum
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                   // CgsGraphics::Model::State (CalcOptimisedLod param/return)
 #include "GameSource/Director/Camera/Camera.h"                          // BrnDirector::Camera::Camera (maShadowMapCamera / the render-camera params)
-#include "pc/gcm/renderengine/renderstates.h"                           // renderengine::TextureState (+ its Parameters)
-
 namespace rw { struct Resource; }   // opaque -- see FLAG above; no reconstructed complete-type home yet
 
 namespace BrnWorld

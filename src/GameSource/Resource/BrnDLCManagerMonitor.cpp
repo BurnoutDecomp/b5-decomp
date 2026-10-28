@@ -36,9 +36,6 @@ namespace BrnResource
         if (!mbDLCMonitorThreadStarted)
         {
             EA::Thread::ThreadParameters lParameters;
-            // FLAG PC-platform leaf: the selected vendor Begin resumes after setup;
-            // it has no suspended-start field, matching ARTIST's explicit false request.
-            lParameters.mpName = "DLCNotifyThread";
             lParameters.mnProcessor = 0;
             lParameters.mnPriority = 100;
 

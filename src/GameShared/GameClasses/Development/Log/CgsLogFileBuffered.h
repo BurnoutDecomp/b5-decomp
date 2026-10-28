@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
-#include <windows.h>
+#include <xtl.h>
 
 // CgsDev::Log::LogFileBuffered - a StrStreamBase whose char* sink buffers text in a caller-supplied
 // scratch buffer and reopens the named file for each flush. Used by the resource/allocator debug dump
@@ -37,8 +37,6 @@ namespace Log
 
     protected:
         void Append(const char* lpcText);
-        // FLAG PC-platform leaf: widen the original Win32 handle to the host HANDLE.
-        HANDLE miFile;
         char* mpcBuffer;          // caller-supplied flush scratch
         s32   miBufferLength;     // capacity of mpcBuffer
         char  macFileName[512];   // file path this stream writes to

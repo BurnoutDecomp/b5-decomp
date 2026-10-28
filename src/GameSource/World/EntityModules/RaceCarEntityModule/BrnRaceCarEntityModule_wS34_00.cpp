@@ -32,10 +32,6 @@ namespace BrnWorld
             case 1:     // E_RELEASESTAGE_MANAGER
             {
                 miPrepareCarIndex = 1;
-                // [FLAG PC bring-up] the console gates on ModuleSingleBuffered::Release() here.
-                // This header keeps the base inside maPrecedingState, so it is not reachable --
-                // the same seam Prepare stage 1 documents for ModuleSingleBuffered::Prepare, which
-                // therefore never ran and left the base nothing to release.
                 break;
             }
 
@@ -81,11 +77,7 @@ namespace BrnWorld
     // ========================================================================
     void RaceCarEntityModule::Destruct()
     {
-        // [FLAG PC bring-up] ModuleSingleBuffered::Destruct() opens the console body. The base
-        // lives inside maPrecedingState in this header and is not reachable (Construct and
-        // Prepare carry the same seam).
-
-        mBoostDebugComponent.Destruct(); // ARTIST 0x822F3E18, folded empty base body
+ // ARTIST 0x822F3E18, folded empty base body
         // The race-car diagnostic owner is real; teardown is inlined at 822F3E1C..822F3E54.
         mRCEntityModuleDebugComponent.Destruct();
 

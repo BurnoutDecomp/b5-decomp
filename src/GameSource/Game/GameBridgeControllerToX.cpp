@@ -440,16 +440,7 @@ namespace BrnGame
             // [DIAG] NOT IN THE X360 BINARY -- BRN_PROP_DIAG, the gate of the showtime arm's own
             // [showtime] witnesses (GameStateModule_gSR_00.cpp ShowtimeDiagEnabled): the forced
             // controls as published (first 20 frames, then silent).
-            static const bool sbShowtimeIntroDiag = (std::getenv("BRN_PROP_DIAG") != 0);
             static s32 siShowtimeIntroLinesLeft = 20;
-            if (sbShowtimeIntroDiag && siShowtimeIntroLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                --siShowtimeIntroLinesLeft;
-                *CgsDev::Log::gpDebugPrint << "[showtime-intro] BridgeControllerToWorld override: accel "
-                                           << lControls.mfAcceleration << " brake " << lControls.mfBraking
-                                           << " handbrake " << lControls.mfHandBrake << " steering "
-                                           << lControls.mfSteering << "\n";
-            }
         }
 
         lpWorldInput->SetPlayerVehicleControls(&lControls);
@@ -534,81 +525,6 @@ namespace BrnGame
             lpGameStateInput->GetControllerToGameStateInterface()->SetActiveControllerPort(liPort);
         }
         (void)lbIsPlaying;
-    }
-
-    // FLAG PC-platform leaf: preserve the existing persistent-input/button-only
-    // adapter while the original staged caller remains outside native startup.
-    void BrnGameModule::BridgeControllerToGameStateNativePC(
-        BrnGameState::GameStateModule* lpGameStateModule,
-        const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
-        s32 liActionContext)
-    {
-        // Merge the input module's bind / unbind result queues into the game-state pre-world buffer's
-        // own bind / unbind result queues. The input-side queues are returned by name
-        // (GetBindResultQueue / GetUnbindResultQueue const).
-        const CgsInput::InputIO::OutputBuffer::BindResultQueue*   lpInBind   = lpInputOutputBuffer->GetBindResultQueue();
-        const CgsInput::InputIO::OutputBuffer::UnBindResultQueue* lpInUnbind = lpInputOutputBuffer->GetUnbindResultQueue();
-        CGS_ASSERT(lpInBind   != 0, "lpInputBindResultQueue");
-        CGS_ASSERT(lpInUnbind != 0, "lpInputUnbindResultQueue");
-
-        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpPreWorld =
-            GetGameStatePreWorldInputBuffer(lpGameStateModule);
-        if (lpPreWorld == 0)
-            return;   // module not Construct()ed yet -- nothing to publish into
-
-        // ---- THE BIND / UNBIND MERGE: STILL PARKED, BUT ITS OFFSETS ARE NO LONGER A MYSTERY ----
-        // ⭐ [D2] The three console addresses, READ OFF 0x823CD738 + sub_823B8EC0 rather than
-        // guessed. sub_823B8EC0 is a write-locked PreWorldInputBuffer accessor returning
-        // `this + 11240`; the bridge derives the other two from it:
-        //     v10 = sub_823B8EC0(buffer)             -> buffer + 0x2BE8  == the BIND result queue
-        //     v11 = sub_823B8EC0(buffer) + 108       -> buffer + 0x2C54  == the UNBIND result queue
-        //     *(sub_823B8EC0(buffer) + 216) = port   -> buffer + 0x2CC0  == the resolved player-0 port
-        // All three land inside PreWorldInputBuffer's still-opaque +0x7B0..+0x2CC8 span (the
-        // maPadToPlayerStatus seat in BrnGameStateModuleIO.h) -- and +0x2CC0 sitting exactly 8
-        // bytes below the ASSERTED mPlayerStatusInterface @ +0x2CC8 is the independent check that
-        // these are in the right span, not merely in the right ballpark.
-        // ⚠️ NOT WIRED, deliberately: homing them means splitting that padding seat into three
-        // typed members -- a BrnGameStateModuleIO.h layout change with its own _AssertLayout work,
-        // out of scope for this sink, and the gesture leg reads none of them. The console's two
-        // Appends and the port store are preserved verbatim:
-        //     BindResultQueue::Append  (buffer + 0x2BE8, lpInBind);
-        //     UnBindResultQueue::Append(buffer + 0x2C54, lpInUnbind);
-        //     *(buffer + 0x2CC0) = liPort;
-        (void)lpInBind;
-        (void)lpInUnbind;
-
-        // Resolve player-0 and publish the button-pressed block into the PreWorld input buffer.
-        s32 liPort = 0;
-        const CgsInput::InputIO::PadOutputInformation* lpPad =
-            GetPadInfoForPlayer0(lpInputOutputBuffer, &liPort);
-        if (lpPad)
-        {
-            // ⭐⭐ THE GESTURE SINK. X360 call site:
-            //     SetButtonPressed(a2, result + 24, a4, *(result + 924) == 2)
-            // `a2` is the PreWorldInputBuffer (see GetGameStatePreWorldInputBuffer's banner);
-            // `result + 24` is pad + 0x18 == &PadOutputInformation::maActionInfo[0]; the trailing
-            // two are STALE HEX-RAYS ARGS -- the CALLEE at 0x823BA240 is a two-parameter function
-            // (`SetButtonPressed(_DWORD *result, int a2)`) whose body touches nothing but the
-            // write-lock bit, the null check on a2, and its 21 stores. Verified by reading the
-            // callee, not inferred from the call site.
-            //
-            // The last of those 21 stores is the one this whole leg exists for:
-            //     v2[69] = *a2 > 0.25 && *(a2 + 8) > 0.25;        (0x823BA454..0x823BA480)
-            // i.e. buffer +0x45 == ControllerInput::mbRaceModePressed == "accelerator AND brake
-            // analogue both past quarter travel" -- the offline event-start gesture that
-            // GameStateModule::ShouldStartSnapRaceMode @0x82363700 holds for 0.35 s at speed <= 30
-            // before StartModeAtLights @0x82396CF8 runs. Source bytes 0 and 8 are action slots 0
-            // and 1, which are ACCELERATE and BRAKE: CgsInputPadsPC.cpp's binding table binds
-            // exactly those two ids to the triggers, and BridgeControllerToWorld reads
-            // maActionInfo[0].mfValue -> mfAcceleration and [1].mfValue -> mfBraking.
-            lpPreWorld->SetButtonPressed(
-                reinterpret_cast<const BrnGameState::GameStateModuleIO::ControllerActionSource*>(lpPad->maActionInfo));
-            (void)liActionContext;
-
-            // The resolved player-0 port store (X360 `*(sub_823B8EC0(buffer) + 216) = v13`, i.e.
-            // buffer + 0x2CC0). Parked with the two queue Appends above -- same un-homed seat.
-            (void)liPort;
-        }
     }
 
     // =========================================================================

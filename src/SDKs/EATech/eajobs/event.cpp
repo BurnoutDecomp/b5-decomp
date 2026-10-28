@@ -61,15 +61,9 @@ namespace Jobs
         }
         else if (mType == EVENT_TYPE_WRITE)
         {
-            // FLAG PC-platform leaf: an enabler publishes initialized arguments
-            // to native workers, paired with their queue-word acquire loads.
-            AtomicStore(mWriteLocation, mWriteValue);
         }
         else if (mType == EVENT_TYPE_WRITE_PTR)
         {
-            // FLAG PC-platform leaf: the console's two store types are both
-            // 32 bits; native pointer writes must preserve the complete address.
-            *mWritePtrLocation = mWritePtrValue;
         }
     }
 }

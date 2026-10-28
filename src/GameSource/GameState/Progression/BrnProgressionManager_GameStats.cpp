@@ -89,11 +89,6 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
     const ProgressionData* lpProgressionData = GetProgressionData();
     if (lpProgressionData == 0)
     {
-        // [FLAG PC bring-up] The console has no guard here -- its ResourcePtr::operator-> fires
-        // the CgsResourcePtr.h:563 assert and then reads through the null anyway. Nothing in the
-        // mounted set can reach this function before PROGRESSION.DAT is bound, but a null here
-        // would be an access violation rather than a wrong number, so it is answered instead.
-        return 0;
     }
 
     const s32 liRank = static_cast<s32>(mi8ProgressionRank);
@@ -130,13 +125,6 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 // +0x48. That is the binary's behaviour, not an omission here: the GUI's "all medals"/"road
 // rule medals" readouts really do read zero on this build's console counterpart.
 //
-// [FLAG PC bring-up] THREE back-pointers the console dereferences unguarded are NULL on this
-// build because nothing calls ProgressionManager::Construct/Prepare2 yet -- mpVehicleList,
-// mpStreetManager and mpAchievementManager (the identical hole ComputeCompletionPercentage
-// already documents and guards the same way). Each is guarded and logged ONCE here rather than
-// dereferenced; the affected fields keep Construct()'s zero and SAY SO in the log, so a zero on
-// screen is attributable rather than mysterious. DELETE-WHEN Construct/Prepare2 run for real.
-// ===================================================================================
 void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameStats,
                                       const BrnGameState::StuntManager* lpStuntManager,
                                       s32                               liNumChallengesCompleted)
@@ -211,22 +199,6 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             }
 
             const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lpCarData->GetId());
-            // FLAG PC-platform leaf: imported profiles may retain later/DLC
-            // cars absent from the currently loaded ARTIST catalogue. Keep
-            // those save records intact and count only available entries.
-            // A valid index with missing data still asserts below.
-            if (liVehicleIndex < 0)
-            {
-                static u32 suUnavailableCarReports = 0;
-                if (suUnavailableCarReports < 16u && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++suUnavailableCarReports;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[stats] imported profile car absent from loaded catalogue id="
-                        << lpCarData->GetId() << " -- retained; excluded from owned count\n";
-                }
-                continue;
-            }
             const BrnResource::VehicleListEntry* lpVehicleData =
                 mpVehicleList->GetVehicleData(liVehicleIndex);
             if (lpVehicleData == 0)
@@ -407,15 +379,6 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
     }
     else
     {
-        // ⛔⛔ [FLAG PC bring-up] THE ONE FIELD Construct() DOES NOT ZERO, SO THE GUARD MUST.
-        // miTotalRoads is the single member the console's GameStats::Construct never stores to
-        // (see its NOTE) -- because the console always overwrites it here, from the StreetData.
-        // With mpStreetManager NULL the record is a STACK LOCAL whose miTotalRoads is whatever
-        // was on the caller's frame: the first measured run printed "roads 0/32758" on the pause
-        // screen. A garbage denominator that renders is worse than a blank one, so the guard
-        // stores the zero the console's own path would have produced from an empty world.
-        // This is the ONLY place this wave departs from "Construct's value survives".
-        lpGameStats->SetTotalRoads(0);
 
         if (CgsDev::Log::gpDebugPrint != 0)
         {

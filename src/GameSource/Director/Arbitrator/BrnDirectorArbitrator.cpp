@@ -350,19 +350,6 @@ namespace BrnDirector
             {
                 static bool sbLastHitWater = false;
                 const bool  lbHitWater     = lrSharedInfo.mpPlayerCrashInfo->mbHitWater;
-                if (lbHitWater != sbLastHitWater && getenv("BRN_DIRECTOR_ACTION_DIAG") != 0 &&
-                    CgsDev::Log::gpDebugPrint != 0)
-                {
-                    const Camera::CameraEffects& lrEffects = lrCameraInOut.GetEffects();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[water-fade] mbHitWater -> " << (lbHitWater ? 1 : 0)
-                        << " start-hook " << (lrEffects.mbHasStartHookNameString ? 1 : 0)
-                        << " '" << (lrEffects.mbHasStartHookNameString
-                                        ? lrEffects.mStartHookNameString.mHookNameString : "")
-                        << "' blend " << lrEffects.mfStartHookNameBlendAmount
-                        << " stop-hook " << (lrEffects.mbHasStopHookNameString ? 1 : 0)
-                        << " gameplay-cam snap " << (lbHitWater ? 1 : 0) << "\n";
-                }
                 sbLastHitWater = lbHitWater;
             }
 
@@ -416,15 +403,6 @@ namespace BrnDirector
                 meState = E_STATE_CRASH_NAV_ICE_CAMERAS;    // stw 4, +0x44F8 @0x8226B100
 
                 // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per entry.
-                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[pause-cam] arbitrator NORMAL -> CRASH_NAV_ICE_CAMERAS (crashNavShown "
-                        << (lrSharedInfo.mpGameState->mbCrashNavShown ? 1 : 0) << " 100pct "
-                        << (lrSharedInfo.mpGameState->mbDoing100PercentSequence ? 1 : 0)
-                        << " paused " << (lbPaused ? 1 : 0) << ") crash-nav active "
-                        << (mArbStateCrashNav.IsActive() ? 1 : 0) << "\n";
-                }
             }
 
             // ⚠️ GATE: the RENDER_METRICS trigger --
@@ -470,13 +448,6 @@ namespace BrnDirector
                 meState = E_STATE_NORMAL;                   // li 2 ; stw 0x44F8 @0x8226B3B8
 
                 // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. One line per exit.
-                if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[pause-cam] arbitrator CRASH_NAV_ICE_CAMERAS -> NORMAL (crashNavShown "
-                        << (lrSharedInfo.mpGameState->mbCrashNavShown ? 1 : 0)
-                        << " paused " << (lbPaused ? 1 : 0) << ")\n";
-                }
             }
             break;
 
@@ -600,7 +571,6 @@ namespace BrnDirector
             //   -- held back for the same reason as case 5's start-hook (see there).
         }
     }
-
 
     // ------------------------------------------------------------------------
     // Destruct / UpdateDebugCameras -- DECLARATION-ONLY (no X360 asm in this TU's function set;

@@ -107,8 +107,6 @@ void OnlineViewChallenges::ShowScreen()
     if (mChallengeToggle.mItemText.HighlightId(2)) mChallengeToggle.SetDirty();
     mChallengeListComponent.Setup(mpGuiCache, static_cast<s32>(mChallengeToggle.GetHighlightedId()), false);
     UpdateArrows();
-    if (std::getenv("BRN_EASYDRIVE_TRACE") && CgsDev::Log::gpDebugPrint)
-        *CgsDev::Log::gpDebugPrint << "[challenge-browser] ready\n";
 }
 
 void OnlineViewChallenges::UpdateArrows()

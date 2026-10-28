@@ -88,17 +88,8 @@ const char* const KAC_PROGMGR_FILE =
 const f32 KF_UNLOCK_DEFORM_AMOUNT   = 0.85f;   // flt_82029BB8
 const f32 KF_TRAFFIC_SCALE_AT_RANK  = 1.0f;    // flt_82001C98
 
-// [FLAG PC witness] the `[eventfinish] ...` line -- not in the console binary. Opt-in behind
-// BRN_EVENT_FINISH_DIAG (read once), capped at KI_WITNESS_LINE_BUDGET lines a run; it only
-// reads state the function has already written.
-const s32 KI_WITNESS_LINE_BUDGET = 16;
 s32       giWitnessLines         = 0;
 
-bool EventFinishDiagEnabled()
-{
-    static const bool sbDiag = (getenv("BRN_EVENT_FINISH_DIAG") != 0);
-    return sbDiag && CgsDev::Log::gpDebugPrint != 0 && giWitnessLines < KI_WITNESS_LINE_BUDGET;
-}
 }
 
 namespace BrnProgression
@@ -551,21 +542,6 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
     const f32 lfCompletionPercentage = ComputeCompletionPercentage();
     lpAction->mfCurrentGameCompletePercentage = lfCompletionPercentage;
 
-    if (EventFinishDiagEnabled())
-    {
-        ++giWitnessLines;
-        *CgsDev::Log::gpDebugPrint
-            << "[eventfinish] event=" << luEventId
-            << " mode="               << static_cast<s32>(leGameModeType)
-            << " pos="                << lpAction->miFinishPosition
-            << " flags="              << static_cast<u32>(lpEvent->GetFlags())
-            << " derivedCars="        << (lpAction->mbHasBlock58 != 0 ? 1 : 0)
-            << " rank="               << static_cast<s32>(mi8ProgressionRank)
-            << " silver="             << (mProfile.GetSilverCarsUnlocked() ? 1 : 0)
-            << " gold="               << (mProfile.GetGoldCarsUnlocked() ? 1 : 0)
-            << " completion="         << lfCompletionPercentage
-            << "\n";
-    }
 }
 
 // ------------------------------------------------------------------------------------

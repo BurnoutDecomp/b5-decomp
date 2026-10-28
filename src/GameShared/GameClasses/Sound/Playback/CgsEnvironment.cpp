@@ -37,8 +37,6 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include "GameShared/GameClasses/System/PC/CgsRwacCommandTracePC.h"
-
 namespace CgsSound
 {
 namespace Playback
@@ -47,9 +45,6 @@ namespace Playback
 Environment::eAudioMode Environment::GetAudioMode() const
 {
     CGS_ASSERT(mpDacPlugin != 0, "mpDacPlugin");
-    // FLAG PC-platform leaf: AudioOutputPC opens the engine DAC as a two-channel
-    // XAudio2 source voice, the native equivalent of XAudioGetSpeakerConfig.
-    return E_AUDIO_MODE_STEREO;
 }
 
 // Header-inline in the X360 callers: allocate one resource block through the
@@ -622,7 +617,6 @@ void Environment::Update(f32 af32TimeStep)
 
     // Snapshot after the full producer pass while the existing System lock is
     // held. The default-off path performs no ring reads or extra locking.
-    const bool lbTraceEnabled = CgsSystem::RwacCommandTracePC::Enabled();
     const void* lpRing = 0;
     unsigned luCursor = 0;
     unsigned luCapacity = 0;
@@ -641,9 +635,6 @@ void Environment::Update(f32 af32TimeStep)
                "Command buffer high water mark.");
 
     rw::audio::core::RwacSystemUnlock(lpSystem);
-    if (lbTraceEnabled)
-        CgsSystem::RwacCommandTracePC::EmitFirstActiveOccupancy(
-            lpSystem, lpRing, luCursor, luCapacity, luHighWater, luSystemFrame);
 }
 
 } // namespace Playback

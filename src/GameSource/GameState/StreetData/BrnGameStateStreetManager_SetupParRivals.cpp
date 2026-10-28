@@ -252,26 +252,6 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
         }
     }
 
-    // [FLAG PC witness] -- NOT IN THE X360 BINARY. Opt-in behind BRN_PROGRESSION_RIVALS (the
-    // progression_rivals case's gate), first 2 calls only: proves the pick loop ran to the end on
-    // this boot and fingerprints the first roads' picks, which are drawn from Construct()'s
-    // 0xB5E330D02EC654DA (FX-GS2, G12-D11). DELETE-WHEN: the par-rival picks have a live oracle.
-    {
-        static s32 siParRivalsWitnessed = 0;
-        if ( siParRivalsWitnessed < 2 && getenv( "BRN_PROGRESSION_RIVALS" ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++siParRivalsWitnessed;
-            *CgsDev::Log::gpDebugPrint << "[parrivals] SetupParRivals done: roads="
-                                       << static_cast<s32>( mpStreetData->GetRoadCount() );
-            for ( s32 liRoad = 0; liRoad < 4 && liRoad < mpStreetData->GetRoadCount(); ++liRoad )
-            {
-                *CgsDev::Log::gpDebugPrint << " r" << liRoad << "="
-                                           << static_cast<u64>( maaParRivalIds[liRoad][0] ) << ","
-                                           << static_cast<u64>( maaParRivalIds[liRoad][1] );
-            }
-            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
-        }
-    }
 }
 
 } // namespace BrnGameState

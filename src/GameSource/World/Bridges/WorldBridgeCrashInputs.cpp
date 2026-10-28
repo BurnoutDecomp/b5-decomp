@@ -43,16 +43,6 @@ namespace
 {
     // [crash-exit] dispatch witnesses -- NOT X360. Opt-in on the BRN_CRASH_RESPONSE_DIAG latch
     // (0/unset == inert); one line per bridge per session, proving the un-parked legs ran.
-    bool CrashBridgeWitnessOn()
-    {
-        static int siWitness = -1;
-        if( siWitness < 0 )
-        {
-            const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
-            siWitness = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
-        }
-        return ( siWitness == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
-    }
 }
 
 // =================================================================================================
@@ -133,13 +123,6 @@ void BridgeInputToCrashModule(
 
     {
         static bool s_bWitnessed = false;
-        if( !s_bWitnessed && CrashBridgeWitnessOn() )
-        {
-            s_bWitnessed = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] BridgeInputToCrashModule: all five legs ran (network 0x827ADF30,"
-                   " vehicle-driver 0x827ADF58 un-parked) [FLAG PC witness]\n";
-        }
     }
 }
 
@@ -250,13 +233,6 @@ void BridgeCrashModuleToPhysicsModule(
     lpPhysicsModuleInputBuffer->GetVehicleInputInterface()->Append( *lpCrashVehicleInput );   // 0x827AACE4 / 0x827AACEC
 
     static bool s_bWitnessed = false;
-    if( !s_bWitnessed && CrashBridgeWitnessOn() )
-    {
-        s_bWitnessed = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[crash-exit] BridgeCrashModuleToPhysicsModule: crash vehicle-input appended to the"
-               " physics input (0x827AACEC) [FLAG PC witness]\n";
-    }
 }
 
 }   // namespace WorldModule

@@ -289,10 +289,6 @@ namespace AIModuleIO
 
         if (static_cast<u32>(leActiveRaceCarIndex) >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
         {
-            // [FLAG PC bring-up] the console's index tripwires are NON-gating (it fires the
-            // assert and then indexes anyway). On the host an out-of-range index would scribble
-            // past nine 8-byte bit arrays into the management queue, so the bail is kept.
-            return;
         }
 
         const u32 luIndex = static_cast<u32>(leActiveRaceCarIndex);

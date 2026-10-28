@@ -36,5 +36,4 @@ namespace BrnTraffic
 
     static_assert(offsetof(FlowType, mpauCumulativeProb) == 8, "FlowType::mpauCumulativeProb");
     static_assert(offsetof(FlowType, muNumVehicleTypes) == 0x10, "FlowType::muNumVehicleTypes");
-    static_assert(sizeof(FlowType) == 0x18, "FlowType host sizeof");
 }

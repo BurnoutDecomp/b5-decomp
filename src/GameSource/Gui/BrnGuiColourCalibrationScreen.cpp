@@ -5,9 +5,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CgsResource::Events::AcquireResourceResponse
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOptionsBrightnessContrastPostFxControl
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                     // GameDataIO::InputBuffer / RequestInterface<32768>
-#include "pc/gcm/renderengine/renderstates.h"                            // renderengine::TextureState (+ Parameters)
-#include "pc/gcm/renderengine/texture.h"                                 // renderengine::Texture
-
 // BrnGui::ColourCalibrationScreen -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // Bodied here (4 ledger functions, DWARF primary file GameSource/Gui/
@@ -63,15 +60,6 @@ namespace
     // pool-module request/response tag).
     const s32 KI_EVENT_ACQUIRERESOURCE = 4;
 
-    // The console publish is CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<T>; the
-    // instantiation for this exact T is X360 0x82465D98 and its whole body is
-    //     assert(IsBufferLockedForWriting());
-    //     mOutEvents.AddEvent(&event, T::GetEventType() /*546*/, sizeof(T) /*X360 12*/);
-    // FLAG PC-ABI adapter: with no live CgsGuiModuleIO::OutputBuffer on PC the screen is
-    // handed that buffer's mOutEvents stand-in (GuiModule::mGuiOutQueue) directly, so this
-    // helper IS AddGuiOutEvent<T>'s body, minus the lock assert the raw queue has no bit
-    // for. Same AddEvent, same GetEventType() key, same sizeof(T) record.
-    // DELETE-WHEN the GUI module owns a real CgsGuiModuleIO::OutputBuffer.
     template <class T>
     void AddGuiOutEvent(CgsModule::VariableEventQueue<18432, 16>* lpQueue, const T& lrEvent)
     {
@@ -114,9 +102,6 @@ void ColourCalibrationScreen::RecvEvent(const CgsModule::Event* lpEvent, s32 liI
         CGS_ASSERT(E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState,
                    "E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED == meState");
         meState = E_COLOURCALIBRATIONSCREENSTATE_PREPARE_TO_SHOW;
-        // [FLAG PC bring-up diagnostic] edge-triggered by construction (514 is only taken
-        // out of CONSTRUCTED). DELETE-WHEN the calibration card is visible on screen.
-        CgsDev::Log::WriteToLog("[calib-screen] show requested (GUI 514)\n");
     }
     else if (liId == 515)
     {
@@ -238,14 +223,6 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         }
         else
         {
-            // [FLAG PC bring-up] the console cannot reach here (GuiModule::Prepare caches a
-            // real allocator before any Update runs). On PC the bank-42 allocator can be
-            // absent if GameDataModule::CreateAllocators could not carve it; say so once and
-            // carry on -- the committed PC renderengine::TextureState::Initialize does not
-            // read lpResourceMemory at all (texturestate.cpp: it `new`s the state and keeps
-            // the sampler config), so an uncarved resource costs correctness nothing here.
-            CgsDev::Log::WriteToLog("[calib-screen] FLAG: no RW linear resource allocator "
-                                    "(bank 42) -- texture-state resource not carved\n");
         }
 
         mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource,

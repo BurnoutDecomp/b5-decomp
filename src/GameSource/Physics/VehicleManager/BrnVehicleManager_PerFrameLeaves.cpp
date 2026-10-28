@@ -238,10 +238,6 @@ namespace Vehicle
         if (!s_bLogged)
         {
             s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: VehicleManager::"
-                                              "BridgeSimpleTrafficWithCarContactsToSimulation "
-                                              "@0x825C83B0 (375) inert [FLAG PC boot gate]\n";
         }
     }
 }

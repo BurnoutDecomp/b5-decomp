@@ -9,13 +9,10 @@ target_sources(${PROJECT_NAME}
         BrnGameModule_wN1_02.cpp
         BrnGameModuleIO.cpp
         BrnGlobalCpuMonitors.cpp
-        BrnGlobalCpuMonitors_embed_check.cpp
-        BrnHarnessWinTeleport.cpp
         BrnLoadingScreenRenderer.cpp
         BrnLUACall.cpp
         BrnLUACallbackHelper.cpp
         GameBridgeControllerToX.cpp
-        GameBridgeControllerToX_embed_check.cpp
         GameBridgeDirectorToX.cpp
         GameBridgeGameStateToX.cpp
         GameBridgeGameStateToX_Controller.cpp
@@ -33,10 +30,8 @@ target_sources(${PROJECT_NAME}
         GameBridgeGUIToX_Sound.cpp
         GameBridgeGUIToX_wBT_01.cpp
         GameBridgeNetworkToX.cpp
-        GameBridgeNetworkToX_embed_check.cpp
         GameBridgeRendererToX.cpp
         GameBridgeReplayToX.cpp
-        GameBridgeReplayToX_embed_check.cpp
         GameBridgeSoundToX.cpp
         GameBridgeWorldToGui.cpp
         GameBridgeWorldToX.cpp
@@ -49,7 +44,6 @@ target_sources(${PROJECT_NAME}
         BrnGameModule.hpp
         BrnGameModuleIO.h
         BrnGlobalCpuMonitors.h
-        BrnHarnessWinTeleport.h
         BrnLoadingScreenRenderer.h
         BrnLUACall.h
         BrnLUACallbackHelper.h

@@ -170,14 +170,6 @@ namespace
         }
     }
 
-    // [FLAG PC witness] -- NOT IN THE X360 BINARY. Opt-in (BRN_PROGRESSION_LIFECYCLE=1), three
-    // lines per boot at most (Construct / Prepare / the Prepare2 tail each print once).
-    // tools/tests/cases/progression_lifecycle.ps1 is the reader.
-    bool LifecycleDiagEnabled()
-    {
-        static const bool sbDiag = (getenv("BRN_PROGRESSION_LIFECYCLE") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -304,21 +296,6 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     mbHasJustRankedUp = false;
     mNewlyUnlockedCarID = 0;
 
-    // [FLAG PC bring-up] Remaining console stores HAVE NO MODELLED MEMBER IN THIS TREE'S HEADER and
-    // are therefore NOT made here, rather than made through an offset hack. They are named
-    // by the DWARF; the remaining initialization gaps are listed below:
-    //   +0x2092C miLastReturnedRival                  (DWARF :842 -- the rivals lane declared its
-    //                                                  twin miLastUpdatedRival; add this with it)
-    //   +0x20974 mbPlayerJustWonATrophyUpdateRequired (DWARF :194)
-    //   +0x2096D mi8HackEventRankNumber               (DWARF :173)
-    //   +0x2096E mbHackEventNumberActive              (DWARF :176)
-    //   +0x20800 mbSendAchievementAwardedEvent_DEBUG /
-    //   +0x20804 miAchievementToAward_DEBUG           (DWARF :828/:829)
-    // The ONE that is NOT zero is +0x2094C meLastPlayerDistrict = 18 (DWARF :853); its value is
-    // kept in KI_NO_LAST_PLAYER_DISTRICT above for whoever declares the member.
-    // DELETE-WHEN those members are declared -- each is one line here.
-    (void)KI_NO_LAST_PLAYER_DISTRICT;
-
     // NAME CORRECTION, RECORDED NOT APPLIED. The member stored above as `miMaxCarCount` is
     // spelled `int32_t miMaxCarCount` by the DWARF (BrnProgressionManager.h:859), sitting exactly
     // where +0x2095C is (right after the three road-rules tallies), with the getter
@@ -329,18 +306,6 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     // (BrnProgressionManager_Unlocks.cpp) belongs to another lane running concurrently.
     // FOLLOW-UP: rename miMaxCarCount -> miMaxCarCount.
 
-    if (LifecycleDiagEnabled())
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[lifecycle] construct: street=" << (mpStreetManager    != 0 ? 1 : 0)
-            << " stunt="                        << (mpStuntManager     != 0 ? 1 : 0)
-            << " training="                     << (mpTrainingManager  != 0 ? 1 : 0)
-            << " carselect="                    << (mpCarSelectManager != 0 ? 1 : 0)
-            << " preMon="                       << miPreWorldUpdate
-            << " postMon="                      << miPostWorldUpdate
-            << " medalsRequested="              << (mbPlayerMedalsUpdateRequired ? 1 : 0)
-            << "\n";
-    }
 }
 
 // --------------------------------------------------------------------------------------------
@@ -466,19 +431,6 @@ bool ProgressionManager::Prepare(GsmIO::OutputBuffer* lpOutput,
 
     mProfile.Construct();
 
-    if (LifecycleDiagEnabled())
-    {
-        static bool sbSaid = false;
-        if (!sbSaid)
-        {
-            sbSaid = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[lifecycle] prepare: aiSections="
-                << (mpAISectionData.HasMemoryResource() ? 1 : 0)
-                << " stage=" << static_cast<s32>(meAILoadStage)
-                << "\n";
-        }
-    }
     return true;
 }
 
@@ -808,12 +760,6 @@ void ProgressionManager::RunPrepare2Tail()
     if (!mpAISectionData.HasMemoryResource())
     {
         static bool sbSaidNoAISections = false;
-        ParkOnce(sbSaidNoAISections,
-                 "[FLAG PC bring-up] ProgressionManager::Prepare2: mpAISectionData is NOT bound "
-                 "(LoadAIData @0x8239A0D0 reported DONE with a null handle), so "
-                 "ComputeLandmarkAISectionIndices / ProcessLoadedPresetRaces / SetupRoamingSections "
-                 "are SKIPPED this boot -- the landmark AI-section table and the preset-race list "
-                 "stay empty. This is a data/pool problem, not a code one.\n");
         return;
     }
 
@@ -825,34 +771,6 @@ void ProgressionManager::RunPrepare2Tail()
 
     SetupRoamingSections();
 
-    if (LifecycleDiagEnabled())
-    {
-        static bool sbSaid = false;
-        if (!sbSaid)
-        {
-            sbSaid = true;
-
-            s32 liRoamingSections = 0;
-            for (s32 liDistrict = 0; liDistrict < KI_DISTRICT_COUNT; ++liDistrict)
-            {
-                liRoamingSections += maRoamingSections[liDistrict].GetCount();
-            }
-
-            const BrnTrigger::TriggerData* const lpTriggerData =
-                static_cast<const BrnTrigger::TriggerData*>(mpTriggerData);
-
-            *CgsDev::Log::gpDebugPrint
-                << "[lifecycle] prepare2: presetRaces=" << static_cast<s32>(muNumPresetRaces)
-                << " roamingSections="                  << liRoamingSections
-                << " landmarkAI="                       << lpTriggerData->GetNumLandmarks()
-                << " vehicles="                         << (mpVehicleList        != 0 ? 1 : 0)
-                << " ach="                              << (mpAchievementManager != 0 ? 1 : 0)
-                << " street="                           << (mpStreetManager      != 0 ? 1 : 0)
-                << " stunt="                            << (mpStuntManager       != 0 ? 1 : 0)
-                << " training="                         << (mpTrainingManager    != 0 ? 1 : 0)
-                << "\n";
-        }
-    }
 }
 
 }

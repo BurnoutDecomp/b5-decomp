@@ -1,8 +1,6 @@
 #include "GameShared/GameClasses/RenderWare/CgsRwTextureStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
-#include "pc/gcm/renderengine/renderstates.h"   // renderengine::TextureState
-
 #include <cstddef>   // offsetof
 #include <cstdint>   // uintptr_t
 

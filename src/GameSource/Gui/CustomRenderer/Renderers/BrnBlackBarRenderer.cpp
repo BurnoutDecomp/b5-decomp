@@ -63,10 +63,6 @@ namespace BrnGui
         }
 
         lpIm2dRenderBuffer->BeginRendering();
-        // FLAG PC-platform leaf: this command buffer consumes logical 1280x720
-        // positions and byte colour scales; the shared unit-to-screen transform
-        // is the host form of ARTIST's full-screen Im2d transform @0x830112D0.
-        lpIm2dRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);
         lpIm2dRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
         lpIm2dRenderBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
         lpIm2dRenderBuffer->SetState(CgsGui::gpBillboardDepthStencilState);

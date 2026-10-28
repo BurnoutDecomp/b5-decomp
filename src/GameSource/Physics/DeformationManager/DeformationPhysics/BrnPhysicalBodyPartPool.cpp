@@ -81,7 +81,6 @@ namespace Deformation
     // from Construct. TO RE-MERGE: mount this TU and move the body back.
     // ==========================================================================================
 
-
     // ------------------------------------------------------------------------------------------
     // Create @ 0x826269A0
     //   Find the first free slot (the asm walks the used-mask fields skipping any all-ones field
@@ -361,9 +360,6 @@ namespace Deformation
         }
     }
 
-
-
-
     // =============================================================================================
     // ⭐ 2026-08-14 (walls leg 4): the local PotentialContactInterfaceModel's two queue accessors,
     // bodied as VIEWS over the REAL PhysicsModuleIO::PotentialContactInterface (the fork seam the
@@ -524,17 +520,6 @@ namespace Deformation
     // =============================================================================================
     namespace
     {
-        s32 UbbProbePeriod()
-        {
-            static s32 siPeriod = -1;
-            if ( siPeriod < 0 )
-            {
-                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                const s32 liValue = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
-                siPeriod = (liValue > 0 && CgsDev::Log::gpDebugPrint != 0) ? liValue : 0;
-            }
-            return siPeriod;
-        }
 
         // ⭐ THE PERIOD IS THE CONTROL. At 600 calls (~10 s of physics) a crash run prints
         // several census rows BEFORE the first part ever detaches, and those rows must read
@@ -598,11 +583,6 @@ namespace Deformation
                     gxaUbbFirstSweep[gxUbbFirstSweepLen++] = liSlot;
                 }
             }
-        }
-
-        if ( UbbProbePeriod() <= 0 || (gxUbbCalls % KU_UBB_CENSUS_EVERY) != 0u )
-        {
-            return;
         }
 
         u32 luDistinctSlots = 0;
@@ -760,8 +740,6 @@ namespace Deformation
                 static s32 siPoseProbe = -1;
                 if (siPoseProbe < 0)
                 {
-                    const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                    siPoseProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
                 }
                 if (siPoseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && liSlot < 16)
                 {

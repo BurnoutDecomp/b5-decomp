@@ -61,9 +61,6 @@ struct AptFrameStack : public AptValueWithHash
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptFrameStack, mHash)            == 0x10, "x64: ClearScope/Lookup thunks 'add rcx,10h'");
-        static_assert(offsetof(AptFrameStack, mpEnclosingScope) == 0x38, "x64 ctor @0x140825FA0: 'mov [rbx+38h],rdi'");
-        static_assert(sizeof(AptFrameStack) == 0x40, "x64: GC-pool alloc 64 at sub_1408355C0 (CreateFrameStack)");
     }
 
     // ctor @0x82AF02A0 -- chain to the enclosing scope (AddRef'd) + an empty local

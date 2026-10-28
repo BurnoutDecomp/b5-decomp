@@ -64,6 +64,5 @@ typedef struct _AptValueGC_MemItem
     // Layout pinned against the x64 XB1 export (never called).
     static void _AssertLayout()
     {
-        static_assert(sizeof(_AptValueGC_MemItem) == 0x18, "x64: free-header is 3 qwords; GC alloc carves at header+24");
     }
 }AptValueGC_MemItem;

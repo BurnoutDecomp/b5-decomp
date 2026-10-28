@@ -22,17 +22,6 @@
 //   Render and RenderHNGSquare (the latter has no export of its own; its body was read out of
 //   the image). Render's only caller is RacingLineGenerator::RenderHardNoGoMap.
 //
-// PARKS (declared in the header, deliberately NOT bodied here)
-//   [FLAG PC bring-up] MoveTargetToLegalPosition, GetNearestEdges, IsSquareOccupied,
-//     FindNearestSpaceForTarget, CheckForContinuedSpreading, FindSpaceForTarget,
-//     ConvertInterpToPosition, IsInRange, MapSquareOccupied(f32,f32), SetMapSquare(f32,f32)
-//     -- DWARF-declared, NO IDA export, and not reached by any caller recovered in this wave
-//     (the only X360 xrefs into this class are RacingLineGenerator::{SetUpHardNoGoMap,
-//     DropHardNoGoLinesIntoMap, SpreadHNGBackOneStep, SetupSectionExit, GetRouteCentre,
-//     SetUpIncomingPortalTarget, CalculateIntersectionWithProjectedRoute, GetHalfRoadWidthHere,
-//     GetPointFarAhead} and SteeringFan::IncludeHardNoGo, all of which are covered above).
-//     Declared-only so the DWARF surface is recorded; DELETE-WHEN a caller that inlines one
-//     of them is decompiled and the block can be read out of its asm.
 //
 // THE PSEUDOCODE LIES IN THREE PLACES (all resolved against the asm):
 //   * 0x82768858 is MapSquareOccupied(int32_t, int32_t), NOT the (f32, f32) overload: its two

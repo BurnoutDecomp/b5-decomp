@@ -7,9 +7,6 @@
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"         // CgsNetwork::NetworkTexture::GetFormat
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h" // CgsNetwork::NetworkImageConverter
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
-#include "pc/gcm/renderengine/pixelformat.h"                                  // renderengine::PixelFormat
-#include "pc/gcm/renderengine/device.h"                                       // renderengine::gDevice (the PC device gate)
-
 #include <cstring>   // memset
 #include <cstdio>    // [diag] snprintf ([netimg] slot-ring probe)
 #include <cstdlib>   // [diag] getenv   (BRN_NETIMG gates it)
@@ -73,16 +70,6 @@ namespace BrnGui
         // image, so without it each set has exactly ONE element and the two elements differ;
         // with it each has three and they meet. Hence bitmasks + distinct-value counts below,
         // not maxima. [[diagnostics-that-lie]]
-        bool NetImgProbeEnabled()
-        {
-            static int siEnabled = -1;
-            if (siEnabled < 0)
-            {
-                const char* lpcValue = std::getenv("BRN_NETIMG");
-                siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
-            }
-            return siEnabled != 0;
-        }
 
         u32 guNetImgRenderSlotMask = 0;   // bit n set == miCurrentRenderTexture was n at a READ
         u32 guNetImgCopySlotMask   = 0;   // bit n set == miCurrentCopyToTexture was n at a WRITE
@@ -185,19 +172,6 @@ namespace BrnGui
         {
             mePrepareStage = E_PREPARESTAGE_TEXTURES;
 
-            // [FLAG PC-platform device gate 2026-08-27] every Texture2D::Initialize below
-            // needs the D3D device. On a healthy boot the device exists before any prepare
-            // runs (renderengine::Device::Start is called from EnginePrepare, before
-            // gGameModule.Construct -- BrnMain.cpp). But Device::Start can FAIL wholesale
-            // and unrecoverably (measured: GetDeviceCaps hr=0x8876086C D3DERR_NOTAVAILABLE
-            // when the user's session is DISCONNECTED -- an RDP drop leaves the whole run
-            // headless; Device::Start's [device] diag line names the step). Without this
-            // gate such a run dies on 21 "maapTextureBuffer[...]" asserts (null Initialize
-            // returns) instead of limping on like every other device consumer does. Defer
-            // exactly like the AptRT text bring-up ("device not up yet -- deferred"):
-            // report not-ready and let the GuiModule prepare PUMP retry next frame.
-            if (renderengine::gDevice == 0)
-                return false;
 
             // Build the three resource descriptors: normal (A1R5G5B5), YUY2 (G8B8) and
             // compressed (DXT1), all 160x120, one mip. The X360 fills a Texture2D::Parameters
@@ -411,19 +385,6 @@ namespace BrnGui
             if (lpImageEvent->mpTexture != 0) ++guNetImgCopies;
             if (miCurrentCopyToTexture >= 0 && miCurrentCopyToTexture < KI_NUM_TEXTURES_TO_BUFFER)
                 guNetImgCopySlotMask |= (1u << miCurrentCopyToTexture);
-            if (NetImgProbeEnabled())
-            {
-                char lacMsg[220];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[netimg] RECV258 n=%u tex=%p idx=%d copyTo=%d render=%d "
-                    "renderTexture=%d useDefault=%d\n",
-                    guNetImgRecv258, static_cast<const void*>(lpImageEvent->mpTexture),
-                    static_cast<int>(lpImageEvent->miTextureIndex),
-                    static_cast<int>(miCurrentCopyToTexture),
-                    static_cast<int>(miCurrentRenderTexture),
-                    mbRenderTexture ? 1 : 0, mbUseDefaultTexture ? 1 : 0);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
 
             if (mbRenderTexture)
             {
@@ -476,7 +437,6 @@ namespace BrnGui
         // silence as "no defect" identically. Update() is the per-frame drive, so this ticks
         // whatever the renderer is doing. [[diagnostics-that-lie]]
         ++guNetImgUpdates;
-        if (NetImgProbeEnabled() && (guNetImgUpdates % 300u) == 0u) NetImgDumpCensus("upd");
 
         if (miClearTexturesFrameCount >= 0)
         {
@@ -505,34 +465,14 @@ namespace BrnGui
         ++guNetImgReads;
         if (miCurrentRenderTexture >= 0 && miCurrentRenderTexture < KI_NUM_TEXTURES_TO_BUFFER)
             guNetImgRenderSlotMask |= (1u << miCurrentRenderTexture);
-        if (NetImgProbeEnabled() && guNetImgReads <= 3u)
-        {
-            char lacFirst[200];
-            std::snprintf(lacFirst, sizeof(lacFirst),
-                "[netimg] READ n=%u idx=%d render=%d useDefault=%d renderTexture=%d "
-                "flags=%d%d%d default=%p\n",
-                guNetImgReads, static_cast<int>(liTextureIndex),
-                static_cast<int>(miCurrentRenderTexture), mbUseDefaultTexture ? 1 : 0,
-                mbRenderTexture ? 1 : 0,
-                (liTextureIndex >= 0 && liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY &&
-                 maabRenderTexture[liTextureIndex][miCurrentRenderTexture]) ? 1 : 0,
-                (liTextureIndex >= 0 && liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY &&
-                 maabRenderCompressedTexture[liTextureIndex][miCurrentRenderTexture]) ? 1 : 0,
-                (liTextureIndex >= 0 && liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY &&
-                 maabRenderYUY2Texture[liTextureIndex][miCurrentRenderTexture]) ? 1 : 0,
-                static_cast<void*>(mpDefaultTexture));
-            CgsDev::Log::WriteToLog(lacFirst);
-        }
 
         if (mbUseDefaultTexture)
         {
             ++guNetImgReadsDefault;
-            if (NetImgProbeEnabled() && (guNetImgReads % 600u) == 0u) NetImgDumpCensus("read");
             CGS_ASSERT(mpDefaultTexture != 0, "NULL != mpDefaultTexture");
             *lpiShaderProgram = 0;
             return mpDefaultTexture;
         }
-        if (NetImgProbeEnabled() && (guNetImgReads % 600u) == 0u) NetImgDumpCensus("read");
 
         CGS_ASSERT((liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY),
                    "(liTextureIndex >= 0) && (liTextureIndex < KI_MAX_NUM_TEXTURES_TO_DISPLAY)");
@@ -582,17 +522,6 @@ namespace BrnGui
         ++guNetImgSwaps;
         if (miCurrentCopyToTexture >= 0 && miCurrentCopyToTexture < KI_NUM_TEXTURES_TO_BUFFER)
             guNetImgCopySlotMask |= (1u << miCurrentCopyToTexture);   // the CURSOR, not just writes
-        if (NetImgProbeEnabled() && (guNetImgSwaps <= 5u || (guNetImgSwaps % 600u) == 0u))
-        {
-            char lacMsg[200];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[netimg] SWAP n=%u render=%d copyTo=%d out=%p shader=%d flapt=%p\n",
-                guNetImgSwaps, static_cast<int>(miCurrentRenderTexture),
-                static_cast<int>(miCurrentCopyToTexture), static_cast<void*>(lpOutput),
-                static_cast<int>(liShaderProgram), static_cast<void*>(mpFlaptRenderer));
-            CgsDev::Log::WriteToLog(lacMsg);
-            if ((guNetImgSwaps % 600u) == 0u) NetImgDumpCensus("swap");
-        }
 
         CGS_ASSERT(mpFlaptRenderer, "mpFlaptRenderer");
         mpFlaptRenderer->SetSpecialTextureShaderProgram(liShaderProgram);

@@ -176,14 +176,6 @@ namespace BrnWorld
     {
         // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off: the prop world's half of the
         // prop-progression handshake (L4 WORLDVFX 2026-09-27). DELETE-WHEN-STABLE.
-        bool PropProgressionDiag()
-        {
-            static const bool sbArmed = []() {
-                const char* const lpcValue = std::getenv( "BRN_PROPPROG_DIAG" );
-                return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
-            }();
-            return sbArmed && CgsDev::Log::gpDebugPrint != 0;
-        }
 
         // ------------------------------------------------------------------
         // The pre-scene output buffer models its interface members as opaque sized spans
@@ -426,22 +418,6 @@ namespace BrnWorld
 
             // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off (see the
             // SendingPropProgression arm below). DELETE-WHEN-STABLE.
-            if ( PropProgressionDiag() )
-            {
-                u32 luHitProps = 0;
-                for ( u32 luZone = 0; luZone < KU_MAX_ZONES; ++luZone )
-                {
-                    for ( u32 luProp = 0; luProp < KU_MAX_PROP_INSTANCES_PER_ZONE; ++luProp )
-                    {
-                        if ( mZoneManager.HasPropBeenHit( luZone, luProp ) )
-                        {
-                            ++luHitProps;
-                        }
-                    }
-                }
-                *CgsDev::Log::gpDebugPrint << "[propprog] world: the profile's hit props installed (action 199): "
-                                           << luHitProps << " props -> E_STREAM\n";
-            }
 
             meStreamingMode = E_STREAM;
         }
@@ -466,13 +442,6 @@ namespace BrnWorld
                         "meStreamingMode != E_WAITING_FOR_PROFILE_DATA" );         // cpp:529
             // [DIAG] NOT IN THE X360 BINARY. BRN_PROPPROG_DIAG=1 only, default off: the world's half of
             // the prop-progression handshake (L4 WORLDVFX, tests/PropProgressionLive.ps1). DELETE-WHEN-STABLE.
-            if ( PropProgressionDiag() )
-            {
-                *CgsDev::Log::gpDebugPrint << "[propprog] world: SendingPropProgression (action 194) -- mode "
-                                           << static_cast<s32>( meStreamingMode )
-                                           << " -> E_RESET_UNLOADING_FOR_PROFILE, loaded zones "
-                                           << static_cast<u32>( muNumberOfLoadedZones ) << "\n";
-            }
             meStreamingMode = E_RESET_UNLOADING_FOR_PROFILE;
         }
 
@@ -767,16 +736,7 @@ namespace BrnWorld
         // loaded-zone count (no cell can be active before a zone is loaded). Boot-log grep:
         // "[Q5-props] first cell activation sweep".
         {
-            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
             static bool sbLoggedFirstCellSweep = false;
-            if ( sbPropDiag && !sbLoggedFirstCellSweep && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbLoggedFirstCellSweep = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[Q5-props] first cell activation sweep ran; loadedZones "
-                    << muNumberOfLoadedZones
-                    << " (active-cell count not exposed: PropZoneManager::mCellManager is private)\n";
-            }
         }
 
         // ================================================================
@@ -854,31 +814,6 @@ namespace BrnWorld
                     if ( !mbResourceSystemStalled && muNumberOfLoadedZones != KU_MAX_LOADED_ZONES )
                     {
                         CgsResource::ResourcePtr<PropZoneData> lZoneData( lpAssetEvent->mHandle );
-
-                        // FLAG PC-platform leaf: native asynchronous acquires can
-                        // complete without a resident resource (PoolModule returns
-                        // NULLResourceHandle on a miss). Leave this zone unloaded
-                        // and clear its pending request, so the normal streaming
-                        // path retries while its world graphics remain resident.
-                        // The console assumes the acquire succeeded here.
-                        if ( !lZoneData.HasMemoryResource() )
-                        {
-                            mabWaitingForInstances.UnSetBit( luZone );
-                            if ( CgsDev::Log::gpDebugPrint != 0 )
-                            {
-                                static u32 suMissingInstanceReports = 0;
-                                if ( suMissingInstanceReports < 8 )
-                                {
-                                    ++suMissingInstanceReports;
-                                    *CgsDev::Log::gpDebugPrint
-                                        << "[props-stream] prop instances unavailable for zone "
-                                        << luZone << "; leaving zone unloaded for streaming retry\n";
-                                }
-                            }
-                            liEventType = mReceiverQueue.GetNextEvent(
-                                lpEventData, &lpEventData, &liEventSize );
-                            continue;
-                        }
 
                         if ( !mbResourceSystemStalled )
                         {
@@ -1011,13 +946,6 @@ namespace BrnWorld
         // [12] publish the frame.
         // ================================================================
         mrTimestep = lpInput->GetCurrentTimestep();
-
-        // FLAG PC-platform leaf: count fixed 60 Hz update ticks instead of rendered
-        // frames. Saturate until the next main-view pass refreshes the marker list.
-        if ( miFramesUntilUpdateVisibleSigns > 0 )
-        {
-            --miFramesUntilUpdateVisibleSigns;
-        }
 
         // P9: the corona-phase advance -- STILL PARKED. Re-measured 2026-08-19 (wave Q6 C5):
         // the decode is COMPLETE and every raw offset now has a DWARF name

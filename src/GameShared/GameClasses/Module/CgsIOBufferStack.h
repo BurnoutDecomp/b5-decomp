@@ -13,16 +13,6 @@
 // bodies + per-type template instantiations are their own TU.
 namespace CgsModule
 {
-    // FLAG PC (host-policy diagnostic knob, not console behaviour): returns true when the
-    // environment variable BRN_IOBUF_ZERO=1 is set, in which case CreateIOBuffer<T> zero-fills
-    // the buffer before constructing it -- the behaviour the PC template used to have
-    // unconditionally (`new (lpMem) T()` value-initialises, memset-ing ~18-20 MB EVERY frame:
-    // 10.8% of the main thread in the 2026-08-15 driving profile). The console does NOT zero
-    // (every one of the 134 X360 CreateIOBuffer<T> instantiations is `Alloc(...)` followed by
-    // the buffer's own Construct, never a memset), so this is OFF by default and exists only so
-    // a future "it broke when the zeroing went away" regression can be A/B'd in one boot.
-    // Read ONCE into a function-local static -- never per create.
-    bool IOBufferHostZeroFillEnabled();
 
     struct IOBufferStack
     {
@@ -86,11 +76,6 @@ namespace CgsModule
                 *lpOutBuffer = 0;
                 return false;
             }
-
-            // FLAG PC: opt-in host diagnostic only (BRN_IOBUF_ZERO=1) -- see the note on
-            // IOBufferHostZeroFillEnabled above. The console never does this.
-            if (IOBufferHostZeroFillEnabled())
-                memset(lpMem, 0, sizeof(T));
 
             *lpOutBuffer = new (lpMem) T;
             (*lpOutBuffer)->Construct();

@@ -570,27 +570,6 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
                 maiBurnoutSkillsUpdatedFlags[leLocalActiveRaceCarIndex] |= 4u;
             }
 
-            // [FLAG PC witness] [skillz] THE ROAD-SCORE RUNG. NOT IN THE CONSOLE BINARY. Opt-in
-            // behind BRN_STUNT_DIAG, first-N capped. This is the single point where a finished
-            // road run is accepted into the car's road-rule table (UpdateEntry returned true),
-            // so one line here answers "did a road rule actually score?". Road runs end at human
-            // cadence, so the rung cannot flood; the cap is belt and braces.
-            // DELETE-WHEN the road-rule feeds have a standing regression case.
-            {
-                static const bool sbStuntDiag = (getenv("BRN_STUNT_DIAG") != 0);
-                static s32        siRoadLines = 0;
-                const s32         KI_ROAD_LINE_MAX = 200;
-                if (sbStuntDiag && siRoadLines < KI_ROAD_LINE_MAX && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++siRoadLines;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[skillz] road score road=" << liChallengeIndex
-                        << " type=" << static_cast<s32>(leScoreType)
-                        << " score=" << liNewScore
-                        << " prev=" << liPreviousHolderScore
-                        << " car=" << static_cast<s32>(leLocalActiveRaceCarIndex) << "\n";
-                }
-            }
         }
     }
 }

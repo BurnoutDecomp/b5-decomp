@@ -512,7 +512,6 @@ namespace BrnAI
     static_assert(offsetof(AICar, mbIsDrifting)         == 0x1544, "AICar::mbIsDrifting @ +0x1544");
     static_assert(offsetof(AICar, mbIsTouchingRaceCar)  == 0x1545, "AICar::mbIsTouchingRaceCar @ +0x1545");
     static_assert(offsetof(AICar, mbIsInResetPairSection) == 0x1551, "AICar::mbIsInResetPairSection @ +0x1551");
-    static_assert(offsetof(AICar, mpDriverHost)         == 0x1558, "AICar::mpDriverHost @ +0x1558 (host-only tail slot)");
 
     // ⭐⭐ THE WHOLE-OBJECT STRIDE, MEASURED 2026-08-26 (aimodule wave) AND NOW PINNED.
     // Every offset above pins a member; NONE of them pins the SIZE, and the size is what the

@@ -5,7 +5,6 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                                   // CgsID == u64 (GetID return)
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"    // CgsGui::CustomRenderComponentInterface base
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                              // CgsGui::GuiEventQueueSmall (a queue typedef)
-#include "pc/gcm/renderengine/texture.h"                                         // renderengine::Texture / Texture2D / Texture::Locked
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                            // BrnGui::GuiEventNetworkPlayerImage (id 258) -- the canonical home
 
 // ============================================================================

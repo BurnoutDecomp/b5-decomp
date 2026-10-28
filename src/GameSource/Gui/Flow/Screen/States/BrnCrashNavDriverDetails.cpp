@@ -262,21 +262,9 @@ namespace
     // it is de-inlined back to the named record type.
     typedef CgsGui::GuiEventPlayAptMovie GuiEventPlayAptMovieRecord;
 
-
     // [DIAG] NOT IN THE X360 BINARY (BRN_SCREEN_DIAG=1). The text HandleStatData left in each
     // field, one line per field, so a live run reads the screen's values without OCR. Called
     // once per stats response (one per screen entry, plus the elite licence card's re-request).
-    void DiagStatText(const TextField* lpaFields, s32 liNumFields)
-    {
-        static const bool sbEnabled = (getenv("BRN_SCREEN_DIAG") != 0);
-        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
-            return;
-        for (s32 liField = 0; liField < liNumFields; ++liField)
-        {
-            *CgsDev::Log::gpDebugPrint << "[ddetails] stat text " << lpaFields[liField].GetName()
-                                       << "='" << lpaFields[liField].GetText() << "'\n";
-        }
-    }
 }
 
 // ---------------------------------------------------------------- OnEnter @0x824CEC80
@@ -822,10 +810,6 @@ bool CrashNavDriverDetails::UpdatePermanent()
                 reinterpret_cast<const GuiEventStatsResponse*>(lpEvent);
             HandleStatData(lpStatsEvent);
             // [DIAG] BRN_SCREEN_DIAG only -- not in the X360 binary.
-            DiagStatText(maStatTextfields, KI_NUM_STAT_TEXTFIELDS);
-            DiagStatText(maDistrictBillboardsTextfields, KI_NUM_DISTRICTS);
-            DiagStatText(maDistrictJumpsTextfields, KI_NUM_DISTRICTS);
-            DiagStatText(maDistrictSmashesTextfields, KI_NUM_DISTRICTS);
             // The percentage-complete word the licence card shows: +0xC4 of the same record
             // (the console reads `i[49]`).
             mLicenseComponent.SetPercentageComplete(lpStatsEvent->miPercentageComplete);

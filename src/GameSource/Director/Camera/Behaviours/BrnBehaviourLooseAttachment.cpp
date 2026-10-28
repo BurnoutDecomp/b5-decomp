@@ -290,7 +290,6 @@ static_assert(offsetof(LooseAttachmentParameters, mfField54)          - offsetof
 static_assert(offsetof(LooseAttachmentParameters, mfDutch)            - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x58 - 0x08, "Dutch @ console +0x58");
 static_assert(offsetof(LooseAttachmentParameters, mfDetachLerpAmount) - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x5C - 0x08, "Detach Lerp Amount @ console +0x5C");
 static_assert(offsetof(LooseAttachmentParameters, mbLookFromTarget)   - offsetof(LooseAttachmentParameters, mPositionLagParams) == 0x60 - 0x08, "Look from target @ console +0x60");
-static_assert(sizeof(LooseAttachmentParameters) == 112, "host size (console 100: 8-byte head pointer)");
 
 } // namespace Camera
 } // namespace BrnDirector

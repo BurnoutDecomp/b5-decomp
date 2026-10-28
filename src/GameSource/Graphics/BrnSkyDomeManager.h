@@ -8,9 +8,6 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"   // DrawIndexedParameters (16B)
-#include "pc/gcm/renderengine/VertexBuffer.h"
-#include "pc/gcm/renderengine/IndexBuffer.h"
-
 namespace rw { class IResourceAllocator; namespace math { namespace fpu {
     template<class T> struct Vector3Template; } } }
 namespace BrnGraphics { class Im3dSkyDome; }
@@ -37,23 +34,6 @@ public:
     void RenderToEnvironmentMap(BrnGraphics::EEnvironmentMapFace, BrnGraphics::Im3dSkyDome*,
                                 const renderengine::Texture*, const renderengine::Texture*,
                                 const BrnShaderConstantsFrame*);                                // :71
-
-    // FLAG PC-platform leaf: inspect completed geometry without changing its ownership.
-    // Only call after the renderer's existing one-shot sky owner reports completion.
-    struct PreparedGeometryPC
-    {
-        const void* mpMainVertexHeader;
-        const void* mpMainIndexHeader;
-        const void* mpCubeVertexHeader;
-        const void* mpCubeIndexHeader;
-        DrawIndexedParameters mMainDraw;
-        DrawIndexedParameters mCubeDraw;
-    };
-    PreparedGeometryPC GetPreparedGeometryPC() const
-    {
-        return {mpMainVertexBuffer, mpMainIndexBuffer, mpCubeVertexBuffer, mpCubeIndexBuffer,
-                mMainDrawParameters, mCubeDrawParameters};
-    }
 
 private:
     // BrnSkyDomeManager.h:78

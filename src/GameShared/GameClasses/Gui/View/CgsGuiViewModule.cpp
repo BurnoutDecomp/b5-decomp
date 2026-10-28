@@ -17,27 +17,8 @@
 
 // [diag] BRN_IM2D_TRACE (risk R1, RenderBlackScreen): the present counter the 2D traces
 // gate on, and the Win32 env read. Both are diagnostic-only.
-#include <windows.h>                                   // [diag] GetEnvironmentVariableA
+#include <xtl.h>                                   // [diag] GetEnvironmentVariableA
 namespace renderengine { extern u32 guPresentCount; }  // [diag]
-
-namespace
-{
-    // [FLAG PC witness] BRN_HUD_VIS gate for the `[hud-vis] view->mgr` lines in the
-    // per-event manager forward (lane `hud`, bug-test wave 2026-09-06). NOT IN THE X360
-    // BINARY. DELETE-WHEN tools/tests/cases/hud_visibility.ps1 is retired.
-    bool HudVisWitnessEnabled()
-    {
-        static s32 siState = -1;
-        if (siState < 0)
-        {
-            char lacValue[8] = { 0 };
-            const DWORD luLen = ::GetEnvironmentVariableA("BRN_HUD_VIS", lacValue,
-                                                          sizeof(lacValue));
-            siState = (luLen > 0 && lacValue[0] != '0') ? 1 : 0;
-        }
-        return siState != 0;
-    }
-}
 
 namespace CgsGui
 {
@@ -400,48 +381,9 @@ namespace CgsGui
             // and the channel-41 bridge output. Nothing rides both.
             if (mpCustomRendererManager != 0)
             {
-                // [FLAG PC witness] `[hud-vis] view->mgr` -- lane `hud`, bug-test wave
-                // 2026-09-06. NOT IN THE X360 BINARY. Names each event id that actually
-                // reaches the custom-renderer manager through this seat, first two per id.
-                // Opt-in behind BRN_HUD_VIS=1.
-                // DELETE-WHEN tools/tests/cases/hud_visibility.ps1 is retired.
-                if (HudVisWitnessEnabled() && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    static s32 saiSeen[64] = { 0 };
-                    static s32 saiType[64] = { 0 };
-                    static s32 siCount     = 0;
-                    s32 liSlot = -1;
-                    for (s32 lk = 0; lk < siCount; ++lk)
-                        if (saiType[lk] == liEventId) { liSlot = lk; break; }
-                    if (liSlot < 0 && siCount < 64)
-                    {
-                        liSlot = siCount++;
-                        saiType[liSlot] = liEventId;
-                        saiSeen[liSlot] = 0;
-                    }
-                    if (liSlot >= 0 && saiSeen[liSlot] < 2)
-                    {
-                        ++saiSeen[liSlot];
-                        *CgsDev::Log::gpDebugPrint
-                            << "[hud-vis] view->mgr type=" << liEventId << "\n";
-                    }
-                }
                 mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
             }
 
-            // ⚠️ [FLAG PC seat deviation, 2026-08-24, STILL LIVE] the manager ALSO hears the
-            // module-input stream from BrnGui::GuiModule::DispatchInboundGuiEvents. On the
-            // console it would hear it here instead: CgsGui::GuiModule::BridgeFromInputToView
-            // @0x8285B088 appends the WHOLE module GUI-event queue onto this view queue
-            // (ViewModule::AddViewState<32768,16> @0x82859E28 -> AppendSafe, no filter), so
-            // ONE forward covered both streams. This build's BridgeFromInputToView has no
-            // caller, so that half of the stream never arrives here and the module pump keeps
-            // its own forward. The two seats are disjoint -- see the tail forward above.
-            // DELETE-WHEN BridgeFromInputToView gets its console caller: then drop the module
-            // pump's forward and this note, and the tail above is the only seat, as on X360.
-
-            liEventId = lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetNextEvent(
-                lpEvent, &lpEvent, &liSize);
         }
     }
 
@@ -617,7 +559,6 @@ namespace CgsGui
             if (siR1State < 0)
             {
                 char lacR1Buf[8];
-                siR1State = (GetEnvironmentVariableA("BRN_IM2D_TRACE", lacR1Buf, sizeof(lacR1Buf)) > 0) ? 1 : 0;
             }
             if (siR1State == 1 && (renderengine::guPresentCount % 60u) == 0u)
             {

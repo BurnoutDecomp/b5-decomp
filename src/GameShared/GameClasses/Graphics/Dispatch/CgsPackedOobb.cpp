@@ -1,6 +1,4 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsPackedOobb.h"
-#include "pc/geometric/PackedOobbSIMD.h"
-
 #include <cmath>
 #include <cstring>   // memcpy (the bit-pattern reads below)
 
@@ -101,13 +99,6 @@ namespace
 
 void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
 {
-#if defined(_M_X64) || defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
-    if (PackedOobbPC::Enabled())
-    {
-        PackedOobbPC::ToMatrix(mPackedBB, roMatrix);
-        return;
-    }
-#endif
     const u32* const lpauLane = mPackedBB.mauLane;
 
     // --- unpack the quaternion: vperm stru_83011130 -> vcfsx 0x1F ---
@@ -222,13 +213,6 @@ void PackedOobb::MultiplyByMatrix(const rw::math::vpu::Matrix44& roIn,
     rw::math::vpu::Matrix44 lOobb;
     ToMatrix(lOobb);
 
-#if defined(_M_X64) || defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
-    if (PackedOobbPC::Enabled())
-    {
-        PackedOobbPC::Multiply(lOobb, roIn, roOut);
-        return;
-    }
-#endif
     // ARTIST loads all four input rows before its first output store. Preserve
     // that snapshot on the scalar path too: roIn and roOut may be the same matrix.
     const rw::math::vpu::Matrix44 lInput = roIn;

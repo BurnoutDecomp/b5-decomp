@@ -243,10 +243,6 @@ namespace CgsDev
         {
             mbVisible = true;
             mErrorWindow.Prepare(lpcMessage);
-            // FLAG PC-platform leaf: an unavailable native debug section can
-            // be opened while another window has focus. Route dismissal to its
-            // modal explanation instead of leaving it behind the command window.
-            SetActiveWindow(&mErrorWindow);
         }
 
         void DebugUI::SetMetrics(const Metrics& lrMetrics)
@@ -361,39 +357,6 @@ namespace CgsDev
 
             mScriptInterface.Update(mController.GetSpecialKeyPress());
 
-            // FLAG PC-platform leaf: opt-in witness for the named-event UI harness.
-            if (std::getenv("BRN_DEBUG_UI_TRACE"))
-            {
-                // Diagnostic-only edge memory; do not infer visibility from input events.
-                static bool sbTraceVisibilityInitialized = false;
-                static bool sbLastTraceVisible = false;
-                const bool lbTraceVisible = IsVisible();
-                const bool lbVisibilityChanged = sbTraceVisibilityInitialized &&
-                                                 (lbTraceVisible != sbLastTraceVisible);
-                sbTraceVisibilityInitialized = true;
-                sbLastTraceVisible = lbTraceVisible;
-
-                if (leEvent != E_INPUTEVENT_NONE ||
-                    mController.GetKeyPress() != 0 ||
-                    lbVisibilityChanged)
-                {
-                    char lacSelection[256] = {};
-                    if (MenuWindow* lpMenuWindow = dynamic_cast<MenuWindow*>(mpActiveWindow))
-                    {
-                        Menu* lpMenu = lpMenuWindow->GetMenu();
-                        lpMenu->GetSelectedItemString(lacSelection, sizeof(lacSelection));
-                        if (MenuItem* lpItem = lpMenu->FindMenuItemByName(lacSelection))
-                            lpItem->GetDisplayName(lacSelection, sizeof(lacSelection));
-                    }
-                    char lacTrace[512];
-                    std::snprintf(lacTrace, sizeof(lacTrace),
-                        "[debug-ui] event=%d visible=%d window=\"%s\" selection=\"%s\" key=%d\n",
-                        static_cast<s32>(leEvent), lbTraceVisible ? 1 : 0,
-                        mpActiveWindow && mpActiveWindow->GetCaption() ? mpActiveWindow->GetCaption() : "",
-                        lacSelection, static_cast<s32>(mController.GetKeyPress()));
-                    CgsDev::Log::WriteToLog(lacTrace);
-                }
-            }
         }
 
         void DebugUI::Render()

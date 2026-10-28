@@ -429,8 +429,6 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
         static s32 siAttribProbe = -1;
         if( siAttribProbe < 0 )
         {
-            const char* lpcEnv = getenv( "BRN_ENGINE_PROBE" );
-            siAttribProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
         }
         static s32 siAttribDumps = 0;
         if( siAttribProbe == 1 && lpSrc != 0 && siAttribDumps < 3
@@ -1126,8 +1124,6 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
         static s32 siMassProbe = -1;
         if( siMassProbe < 0 )
         {
-            const char* lpcEnv = getenv( "BRN_ENGINE_PROBE" );
-            siMassProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
         }
         static s32 siMassDumps = 0;
         if( siMassProbe == 1 && siMassDumps < 3 && CgsDev::Log::gpDebugPrint != 0 )

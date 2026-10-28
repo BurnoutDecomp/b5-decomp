@@ -105,14 +105,6 @@ namespace CgsGui
     // assert capacity, hash the name, and append {hash, header} at the next free slot,
     // bumping the count. Returns the found-or-registered header.
     //
-    // The X360 body reads the name from the header's first word (`*a2` == mpacMovieName)
-    // and stores the header pointer (`a2`) itself. On x64 the header's mpacMovieName field
-    // is an UN-RELOCATED file offset (the no-op FixUp; see CgsAptDataHeader.cpp), so the
-    // console form resolves it as header base + offset (the converted 6-field header's name
-    // offset is the 8-byte slot at +0x00); the two-arg form takes an already-resolved name
-    // (FLAG PC-platform leaf: host .apt blob offset access -- the import fallback's
-    // spelling of the same registration).
-    // =========================================================================
     AptDataHeader* AptDataHandler::AddAptData(AptDataHeader* lpHeader)
     {
         const uintptr_t luBase    = reinterpret_cast<uintptr_t>(lpHeader);

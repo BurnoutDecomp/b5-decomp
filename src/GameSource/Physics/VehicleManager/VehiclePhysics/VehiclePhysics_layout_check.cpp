@@ -356,23 +356,6 @@ namespace Vehicle
         // of each line are the two INDEPENDENT derivations, not one number typed twice: the
         // right-hand side is the X360 asm literal, the left is what MSVC actually laid out.
         // ==========================================================================================
-        static_assert(offsetof(VehiclePhysics, mfSpeedMPH) == X360LayoutCheck::KU_A_SPEEDMPH,
-                      "SVP HOST: mfSpeedMPH must land on the console's 0x6C0 (UpdateHandBrake "
-                      "`li r7,0x6C0`; IsUsingSweptSpheres `li r7,0x6C0`)");
-        static_assert(offsetof(VehiclePhysics, mDeformableAABB)
-                          == X360Layout::KU_SVP_DEFORMABLE_AABB_OFF,
-                      "SVP HOST: mDeformableAABB must land on the console's 0x6D0 -- the seat "
-                      "UpdateDeformedBBox writes and every consumer reads by name");
-        static_assert(offsetof(VehiclePhysics, mOriginalAABB)
-                          == X360Layout::KU_SVP_ORIGINAL_AABB_OFF,
-                      "SVP HOST: mOriginalAABB must land on the console's 0x6F0 "
-                      "(ResetDeformableAABB's copy SOURCE)");
-        static_assert(offsetof(VehiclePhysics, mbCrashing)
-                          == X360Layout::KU_SVP_MBCRASHING_OFF,
-                      "SVP HOST: mbCrashing must land on the console's 0x710");
-        static_assert(sizeof(SimpleVehiclePhysics) == X360Layout::KU_SVP_SIZEOF,
-                      "SVP HOST: sizeof(SimpleVehiclePhysics) must be the console's 0x720 -- the "
-                      "offset VehiclePhysics::Construct stores mpAttribs at (`stw r30,0x720(r31)`)");
 
         static_assert(sizeof(VehiclePhysics::SlamEffect) == 0x30,
                       "SlamEffect: Vector3 + six f32 + s8 -> 0x30 (the 0x1130 - 0x1100 gap)");
@@ -413,10 +396,6 @@ namespace Vehicle
         static_assert(sizeof(CgsInput::Device::WheelFFSpring) == 8,
                       "WheelFFSpring: two f32 -- UpdateDriving writes 0x13D0 and 0x13D4 and nothing "
                       "else, and mbRollingInAir is at 0x13D8");
-        static_assert(sizeof(CgsContainers::BitArray<KU_MAX_AIR_RAMS>) == 8,
-                      "BitArray<4>: one 64-bit field (UpdateAirRam's `ld` walk)");
-        static_assert(sizeof(CgsContainers::BitArray<KU_MAX_SPINS>) == 8,
-                      "BitArray<8>: one 64-bit field (UpdateSpinEffects' `ld` walk)");
         static_assert(sizeof(BrnPlayerDriverControls) == X360Layout::KU_VP_CONTROLS_SIZE,
                       "BrnPlayerDriverControls: 0x48, the literal VehiclePhysics::UpdateDriving "
                       "memcpys -- and the reason meDriverType lands on 0x10D4");

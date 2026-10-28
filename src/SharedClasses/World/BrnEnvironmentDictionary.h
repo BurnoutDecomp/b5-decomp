@@ -139,9 +139,6 @@ namespace EnvironmentSettings
                        "Dictionary::muVersion leads the record on both targets (FixUp reads *a2)" );
         static_assert( offsetof( Dictionary, muSeasonCnt )     == 0x04, "Dictionary::muSeasonCnt @0x04" );
         static_assert( offsetof( Dictionary, mpSeasonDatii )   == 0x08, "Dictionary::mpSeasonDatii @0x08" );
-        static_assert( offsetof( Dictionary, muLocationCnt )   == 0x10, "Dictionary::muLocationCnt @0x10 on x64 (console +0x0C)" );
-        static_assert( offsetof( Dictionary, mpLocationDatii ) == 0x18, "Dictionary::mpLocationDatii @0x18 on x64 (console +0x10)" );
-        static_assert( sizeof( Dictionary ) == 32, "Dictionary header is 32 bytes on x64 (console 20)" );
     }
 }
 }

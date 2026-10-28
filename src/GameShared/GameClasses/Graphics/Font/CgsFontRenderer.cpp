@@ -2,11 +2,11 @@
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // IncrementUtf8Pointer
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the buffered Apt string path)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [FLAG PC witness] the BRN_FONT_DIAG [font] trace
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (RenderDropShadow's two console asserts)
 
 #include <cmath>    // fabsf
-#include <cstdlib>  // getenv ([FLAG PC witness] BRN_FONT_DIAG gate)
+#include <cstdlib>
 #include <cstring>
 
 // CgsGraphics::TextObject + TextRenderer bodies (faithful X360 ARTIST ports):
@@ -161,7 +161,6 @@ namespace CgsGraphics
     {
         mpIm2dRenderBuffer      = 0;   // +0x00
         mpIm3dRenderBuffer      = 0;   // +0x04
-        mpBufferedRenderBuffer = nullptr;  // FLAG PC-platform leaf: native buffered2D transport.
         mauVertexCount[0]       = 0;   // +0x08
         mapaVertices[0]         = 0;   // +0x0C
         mabTempVerticesInUse[0] = false;   // +0x10
@@ -226,32 +225,12 @@ namespace CgsGraphics
             *reinterpret_cast<u32*>(&lrVtx.mv4Colour) = lColour;
         }
 
-        // ---------------------------------------------------------------------------------
-        // [FLAG PC witness] BRN_FONT_DIAG=1 -- the text/drop-shadow submission trace. NOT IN
-        // THE X360 BINARY. Prints ONE line per DISTINCT (string prefix, drop-shadow flag) the
-        // font renderer submits, hard-capped at KU_FONT_DIAG_SLOTS distinct keys, so a
-        // per-frame re-submission of the same field never floods the log.
-        // DELETE-WHEN: the Apt drop-shadow pass has been screenshot-verified against a console
-        // capture (bug-test lane aptshadow, 2026-09-06).
-        // ---------------------------------------------------------------------------------
-        // TWO independent budgets, keyed on the DROP-SHADOW FLAG -- the thing the bug is about.
-        // The debug overlay (Debug2DImmediateRender: "62 fps", "2560MB 288KB 0B") writes a NEW
-        // string every frame and never asks for a shadow, so with ONE shared budget it spends
-        // the lot inside two seconds and no shadowed string ever gets a line. Measured: run
-        // 20260906_100822 burned all 256 slots on the overlay. Bucketing on mbDropShadow makes
-        // the overlay structurally unable to starve the signal.
         enum
         {
             KU_FONT_DIAG_BUCKETS      = 2,   // 0 = shadow off, 1 = shadow on
             KU_FONT_DIAG_SLOTS_PLAIN  = 24,
             KU_FONT_DIAG_SLOTS_SHADOW = 232
         };
-
-        bool lFontDiagEnabled()
-        {
-            static const bool sbOn = (std::getenv("BRN_FONT_DIAG") != 0);
-            return sbOn;
-        }
 
         bool lFontDiagFirstSight(u32 luBucket, u32 luKey)
         {
@@ -282,9 +261,6 @@ namespace CgsGraphics
         void lWitnessTextSubmission(const CgsGraphics::TextObject& lrTextObject, u32 luGlyphVerts,
                                     u32 luPath)
         {
-            // FLAG PC-platform leaf: one passive submission witness per race-car
-            // HUD kind; the normal FPS/build text cannot spend this budget.
-            static const bool sbHudTrace = std::getenv("BRN_RACECAR_HUD_TRACE") != nullptr;
             static u32 suSeenHudKinds = 0;
             if (sbHudTrace && CgsDev::Log::gpDebugPrint && lrTextObject.mpUtf8String)
             {
@@ -303,8 +279,6 @@ namespace CgsGraphics
                         *lrTextObject.mpfCurrentFontHeight, lpcText);
                 }
             }
-            if (!lFontDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-                return;
 
             char lacText[17];
             u32  luLen = 0;
@@ -326,16 +300,6 @@ namespace CgsGraphics
             if (!lFontDiagFirstSight(lrTextObject.mbDropShadow ? 1u : 0u, luKey))
                 return;
 
-            *CgsDev::Log::gpDebugPrint
-                << "[font] path=" << (luPath != 0 ? "apt" : "imm")
-                << " str=\"" << lacText
-                << "\" shadow=" << (lrTextObject.mbDropShadow ? 1u : 0u)
-                << " quads=" << (luGlyphVerts / 6u)
-                << " shadowquads=" << (guFontDiagShadowVerts / 6u)
-                << " colour=" << CgsDev::E_PRINTMODE_HEXONCE << lrTextObject.mTextColour
-                << " shadowcolour=" << CgsDev::E_PRINTMODE_HEXONCE << lrTextObject.mDropShadowColour
-                << " off=(" << KF_DROPSHADOW_OFFSET_X << "," << KF_DROPSHADOW_OFFSET_Y
-                << ") [FLAG PC witness]\n";
         }
     }
 
@@ -360,7 +324,6 @@ namespace CgsGraphics
 
         mauVertexCount[leType] = 0;
 
-        // [FLAG PC witness] BRN_FONT_DIAG accounting for this call (see the anon namespace).
         u32 luDiagGlyphVerts = 0;
         guFontDiagShadowVerts = 0;
 
@@ -610,7 +573,6 @@ namespace CgsGraphics
 
         RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpOutVert, luVertexCount, leType);
 
-        guFontDiagShadowVerts += luVertexCount;   // [FLAG PC witness] BRN_FONT_DIAG accounting
     }
 
     // --- Render-buffer helpers (faithful X360 ports). Each dispatches to whichever immediate buffer
@@ -855,12 +817,6 @@ namespace CgsGraphics
             CGS_ASSERT(mabTempVerticesInUse[leType], "Temporary text vertices are not in use");
             CGS_ASSERT(lpVertices == maaTempVertices[leType], "lpVertices == maaTempVertices[leType]");
             Im3dVertex* const lpOut3d = mpIm3dRenderBuffer->RenderStart(luVertexCount);
-            // FLAG PC-platform leaf: allocation failure retains no drawable vertex run.
-            if (lpOut3d == nullptr)
-            {
-                mabTempVerticesInUse[leType] = false;
-                return;
-            }
             for (u32 luI = 0; luI < luVertexCount; ++luI)
             {
                 lpOut3d[luI].mv3Pos = {lpVertices[luI].mv2Pos.x, lpVertices[luI].mv2Pos.y, 0.0f, 0.0f};

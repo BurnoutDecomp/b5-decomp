@@ -109,11 +109,6 @@ namespace WorldModule
             if (!sbLoggedBridgeParks)
             {
                 sbLoggedBridgeParks = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] BridgePhysicsModuleToRaceCarModule_PostPhysics: legs "
-                       "1-4 and 6 (vehicle output, vehicle-manager output, deformation-for-entity-"
-                       "modules, deformation, contact spy) are LIVE; leg 5 (scene-update Append "
-                       "@0x827A9340) remains parked.\n";
             }
         }
     }

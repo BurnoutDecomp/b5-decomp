@@ -62,10 +62,6 @@ namespace CgsGui
         // as header base + offset. Body in CgsAptDataHandler.cpp.
         AptDataHeader* AddAptData(AptDataHeader* lpHeader);
 
-        // The resolved-name form (FLAG PC-platform leaf: host .apt blob offset access --
-        // kept for callers whose name string is already resolved; the import fallback path).
-        AptDataHeader* AddAptData(AptDataHeader* lpHeader, const char* lpacName);
-
         // X360 0x8284A338 (CgsAptDataHandler.cpp). Un-register a loaded AptDataHeader BY ITS
         // NAME HASH -- the counterpart to AddAptData, and the one this table was missing.
         // AddAptData is idempotent by name, so without this a movie whose bundle has been

@@ -126,29 +126,6 @@ namespace BrnTraffic
 
             lpResponseQueue->AddEvent(lResponse);
 
-            // [td-type] PC witness (BRN_TD_DIAG), NOT in the X360 binary: the one line that tells
-            // a run whether the request reached the traffic module and what class it answered.
-            // Without it the only observable is the takedown manager's silent fall-through to
-            // E_VEHICLECLASS_CAR. [FLAG PC witness]
-            // DELETE-WHEN: "takedown bus" has been seen in a real run.
-            {
-                static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
-                static s32 siPrinted = 0;
-                if (sbTdDiag && siPrinted < 64 && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    ++siPrinted;
-                    static const char* const kpacClassNames[] = { "car", "van", "bus", "bigrig" };
-                    const s32 liClass = static_cast<s32>(lResponse.meType);
-                    *CgsDev::Log::gpDebugPrint
-                        << "[td-type] answered index=" << static_cast<s32>(luVehicleIndex)
-                        << " alive=" << (lpVehicle->IsAlive() ? 1 : 0)
-                        << " class=" << liClass
-                        << "(" << ((liClass >= 0 && liClass < 4) ? kpacClassNames[liClass] : "?") << ")"
-                        << " requests=" << lpRequestQueue->GetLength()
-                        << " responses=" << lpResponseQueue->GetLength()
-                        << " [FLAG PC witness]\n";
-                }
-            }
         }
     }
 }

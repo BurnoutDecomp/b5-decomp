@@ -109,22 +109,6 @@ namespace
     const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f }; // unk_82FADED0
     const Vector2 KV_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f }; // unk_82FAE140
 
-    // ⚠️ [FLAG PC bring-up] NOT IN THE X360 BINARY -- the district-map ACQUIRE RETRY BUDGET.
-    // The console's LoadDistrictMap has no retry and its Prepare dereferences the handle
-    // unconditionally, because on the console the Districts.dat bundle is resident long before
-    // the acquire is issued. On PC the pool answers an acquire for a non-resident bundle with a
-    // BOTH-NULL handle (the defect that printed `[StreetManager] district map: handle=0` until
-    // 2026-08-11), so the console shape is a null dereference on the boot-critical path.
-    // The chosen host behaviour is WAIT-then-GIVE-UP, never crash and never stall:
-    //   * a null-handle response re-arms the acquire and returns false (Prepare re-pumps stage 4),
-    //   * after KI_MAX_DISTRICT_MAP_ACQUIRE_RETRIES pumps the map is declared unavailable, the
-    //     load machine latches DONE and Prepare SKIPS the map bind + the census (leaving the
-    //     tally zero) and returns true, so the boot completes with a loud one-shot log instead
-    //     of hanging on stage 4.
-    // Held as file statics rather than StuntManager members so the console's class layout is
-    // untouched (there is exactly one GameStateModule, hence one StuntManager).
-    // DELETE-WHEN the Districts.dat bundle is proven resident at stage 4 on PC.
-    const s32 KI_MAX_DISTRICT_MAP_ACQUIRE_RETRIES = 8;
     s32       giDistrictMapAcquireRetries         = 0;
     bool      gbDistrictMapUnavailable            = false;
 
@@ -169,11 +153,6 @@ namespace
     // [DIAG] NOT IN THE X360 BINARY. The wave-gateui `[UI-gate]` ladder, same idiom + same env
     // guard as PropEntityModule_wQ_04.cpp's "[prop-diag] BREAK" rung (the producer this chain
     // hangs off). Evaluated ONCE per process, never per call.
-    bool UIGateDiagOn()
-    {
-        static const bool sbDiag = (getenv("BRN_PROP_DIAG") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
 
     // [DIAG] NOT IN THE X360 BINARY. First-N latch for the per-event `[UI-gate]` rungs, copied
     // from the `[prop-diag] BREAK` rung's own first-N guard in PropEntityModule_wQ_04.cpp: a
@@ -182,8 +161,6 @@ namespace
 
     bool UIGateDiagFirstN(s32* lpiCounter)
     {
-        if (!UIGateDiagOn())
-            return false;
         if (*lpiCounter >= KI_UI_GATE_DIAG_FIRST_N)
             return false;
         ++(*lpiCounter);
@@ -599,15 +576,6 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
     // built. It is the ONLY direct read-out of whether the district map bound to a real grid --
     // an all-zero tally means either the map blob is wrong or the world rect is (see
     // KV_DISTRICT_MAP_WORLD_ORIGIN above), and every downstream count/total is then garbage.
-    if (UIGateDiagOn())
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] prepare tally jump=" << maiTotalStuntElementCounts[E_STUNT_ELEMENT_TYPE_JUMP]
-            << " smash="     << maiTotalStuntElementCounts[E_STUNT_ELEMENT_TYPE_SMASH]
-            << " billboard=" << maiTotalStuntElementCounts[E_STUNT_ELEMENT_TYPE_BILLBOARD]
-            << " sigTD="     << miSignatureTakedownCount
-            << " regions="   << liGenericRegionCount << "\n";
-    }
 
     return true;
 }
@@ -955,11 +923,6 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
             if (siDropLines < KI_JUMP_DROP_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
             {
                 ++siDropLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[FLAG PC bring-up] [jump-ladder] take-off DECLINED speed="
-                    << lfPlayerSpeed
-                    << " (gate 40 mph) doneBefore=" << (lbHasBeenDoneBefore ? 1 : 0)
-                    << " alwaysToJumpCameras=" << (mbAlwaysToJumpCameras ? 1 : 0) << "\n";
             }
             mpLastJumpElement = 0;   // drop the jump
             return;
@@ -1061,11 +1024,6 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
                 if (siJumpStartLines < KI_JUMP_START_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
                 {
                     ++siJumpStartLines;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] [jump-ladder] action=56 OnJumpStart posted cut="
-                        << lJumpStartAction.miCameraCut
-                        << " type=" << lJumpStartAction.miCameraType
-                        << " firstTime=" << static_cast<s32>(lJumpStartAction.mbFirstTime) << "\n";
                 }
             }
 
@@ -1138,9 +1096,6 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
                 if (siLandLines < KI_JUMP_LAND_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
                 {
                     ++siLandLines;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] [jump-ladder] JUMP COMPLETED -- ProcessStuntElement"
-                           "(isJump=true), landingTime=" << mfJumpLandingTime << "\n";
                 }
             }
 
@@ -1379,26 +1334,6 @@ bool StuntManager::LoadDistrictMap(GameStateModuleIO::OutputBuffer* lpOutput)
                 mDistrictMapResourceHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
             }
 
-            // ⚠️ [FLAG PC bring-up] NOT IN THE X360 BINARY -- the not-ready retry. The console
-            // advances straight to DONE here. See KI_MAX_DISTRICT_MAP_ACQUIRE_RETRIES at the top
-            // of this file for why the host cannot: the pool answers an acquire for a NON-RESIDENT
-            // bundle with a both-null handle, and Prepare would then dereference it.
-            //
-            // ⛔ [gateui] ROUND-3 FIX (verify_r2_fixgsm F2) -- THE TEST IS THE FULL READINESS
-            // PREDICATE, NOT JUST `mpResourceMemory == 0`. Round 2 tested only the outer pointer
-            // here while Prepare tested BOTH clauses, so a handle that came back non-null but whose
-            // SmallResource main-memory word was still null (the console's own assert line 125)
-            // latched DONE with gbDistrictMapUnavailable FALSE -- and Prepare then waited on a
-            // machine that never re-issues, for ever. Both sites now ask
-            // DistrictMapHandleReady(), so the retry budget bounds EVERY not-ready shape and
-            // Prepare's wait is guaranteed to terminate in either the ready or the give-up arm.
-            if (!DistrictMapHandleReady(mDistrictMapResourceHandle) &&
-                giDistrictMapAcquireRetries < KI_MAX_DISTRICT_MAP_ACQUIRE_RETRIES)
-            {
-                ++giDistrictMapAcquireRetries;
-                meDistrictMapLoadStage = E_DISTRICT_MAP_ACQUIRE_REQUEST;   // re-issue next pump
-                return false;
-            }
             if (!DistrictMapHandleReady(mDistrictMapResourceHandle))
             {
                 gbDistrictMapUnavailable = true;   // Prepare skips the census, loudly
@@ -1441,9 +1376,6 @@ void StuntManager::LatchJumpElement(const BrnTrigger::GenericRegion* lpRegion)
         if (siLatchLines < KI_JUMP_LATCH_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
         {
             ++siLatchLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] [jump-ladder] LatchJumpElement: jump region latched (id="
-                << static_cast<s32>(lpRegion->GetRegionIndex()) << ")\n";
         }
     }
 }

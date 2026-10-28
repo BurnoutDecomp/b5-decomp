@@ -1,4 +1,4 @@
-#include <Windows.h>
+#include <xtl.h>
 #include "SDKs/EATech/eathread/eathread_pc_dynamicthreadarray.h"
 #include "eathread/eathread.h"
 

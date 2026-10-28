@@ -24,16 +24,8 @@ namespace World
 // ResourcesAreReady 0x826BA9E0, HandleWorldZoneUnload 0x826BAB28 (each also requires
 // gxMessageFilterFlags bit 0). [DIAG] NOT IN THE X360 BINARY: BRN_EMITTER_DIAG=1 turns it on for a
 // harness run, standing in for the debugger/menu that flips it on a console.
-bool KB_SPEW_STATIC_MAP_INFO = std::getenv("BRN_EMITTER_DIAG") != nullptr;
 
-namespace
-{
-bool SpewStaticMapInfo()
-{
-    return KB_SPEW_STATIC_MAP_INFO && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 &&
-           CgsDev::Log::gpDebugPrint != 0;
-}
-} // namespace
+ // namespace
 
 void StaticSoundMapZone::Construct(u16 lu16Zone)
 {

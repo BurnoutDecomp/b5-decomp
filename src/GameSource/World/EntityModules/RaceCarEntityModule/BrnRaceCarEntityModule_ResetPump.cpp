@@ -143,26 +143,6 @@ void RaceCarEntityModule::WriteUpdatedAIData( RaceCarEntityModuleIO::OutputBuffe
     {
         const ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
 
-        // [FLAG PC bring-up] the bail is the deviation. The console reads the player slot's
-        // pose unconditionally here, behind ActiveRaceCar::GetPosition's own IsAttached
-        // assert. On this build mePlayerActiveRaceCarIndex is published by the junkyard
-        // hand-off and the slot is attached by then -- but a PC assert BLOCKS the game until
-        // END, so an unattached slot would be a hang rather than a dropped frame.
-        if( !lpPlayerCar->IsAttached() )
-        {
-            static bool sbReportedUnattachedPlayer = false;
-            if( !sbReportedUnattachedPlayer && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbReportedUnattachedPlayer = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[resetpump] WriteUpdatedAIData: mePlayerActiveRaceCarIndex is "
-                    << static_cast<s32>( mePlayerActiveRaceCarIndex )
-                    << " but that slot is not attached -- skipping this frame's AI publish "
-                       "(the console would assert here) [FLAG]\n";
-            }
-            return;
-        }
-
         lpAI->SetPlayerActiveRaceCarData( lpPlayerCar->GetPosition(),
                                           lpPlayerCar->GetDirection(),
                                           mePlayerActiveRaceCarIndex );
@@ -199,63 +179,8 @@ void RaceCarEntityModule::WriteUpdatedAIData( RaceCarEntityModuleIO::OutputBuffe
         // Showtime run proves the read reaches the manager's byte. Bounded: two edges per session.
         if( leCar == mePlayerActiveRaceCarIndex )
         {
-            static const bool sbShowtimeWatch = ( getenv( "BRN_SHOWTIME_WATCH" ) != 0 );
             static bool       sbLastPublished = false;
-            if( sbShowtimeWatch && lbIsInShowtime != sbLastPublished
-                && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime-ai] player slot " << liCar << " publishes showtime "
-                    << ( sbLastPublished ? 1 : 0 ) << " -> " << ( lbIsInShowtime ? 1 : 0 )
-                    << " (mCrashPlayManager.IsInShowtime)\n";
-            }
             sbLastPublished = lbIsInShowtime;
-        }
-
-        // =========================================================================================
-        // [FLAG PC witness] NOT IN THE X360 BINARY. THE PRODUCER END OF THE RIVAL ROUTE PATH.
-        //
-        // `lpCar->GetCurrentAISection()` (ActiveRaceCar +0x73E) is the ONLY thing that tells the AI
-        // which road a car is on: it becomes RaceCarAIInterface::mauSectionIndices[slot], which
-        // AIModule::StoreDrivenCarData @0x827957F0 hands to AICar::UpdateInRangeData @0x82792A18 as
-        // the under-car section (PPC r7), which stores it straight into AICar::muBestSectionIndex
-        // @+0x1534 -- and RouteRequestManager::Update @0x82797FA8 refuses to issue ANY route request
-        // for a car whose best AND default section are both 0x7FFF. So a rival stuck on 0x7FFF here
-        // can never get a road, and nothing downstream would say so.
-        //
-        // In run6 this was only inferable from the [collision-tag] diagnostic, which is throttled to
-        // one line per 512 calls and therefore sampled two of the six cars. One line per slot when
-        // it first publishes, plus one whenever a slot's section crosses the valid/invalid boundary,
-        // makes the claim direct and bounded. DELETE-WHEN rivals are seen driving their own routes.
-        // =========================================================================================
-        {
-            const u16 lu16Section = lpCar->GetCurrentAISection();
-
-            static s32 saiSectionWitness[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { 0 };
-            static bool sabWasValid[E_ACTIVE_RACE_CAR_INDEX_COUNT]      = { false };
-            static bool sabSeen[E_ACTIVE_RACE_CAR_INDEX_COUNT]          = { false };
-            static s32  siSectionWitnessTotal                           = 0;
-
-            const bool lbValid   = ( lu16Section != BrnWorld::KI_INVALID_SECTION_INDEX );
-            const bool lbFlipped = sabSeen[ liCar ] && ( lbValid != sabWasValid[ liCar ] );
-
-            if( ( saiSectionWitness[ liCar ] < 2 || lbFlipped )
-                && siSectionWitnessTotal < 48
-                && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                ++saiSectionWitness[ liCar ];
-                ++siSectionWitnessTotal;
-                *CgsDev::Log::gpDebugPrint
-                    << "[route-src] active slot " << liCar
-                    << ( ( leCar == mePlayerActiveRaceCarIndex ) ? " (PLAYER)" : " (rival)" )
-                    << " publishes AI section " << static_cast<s32>( lu16Section )
-                    << ( lbValid ? " VALID" : " INVALID(0x7FFF) -- this car can never be routed" )
-                    << " insideSectionSystem " << ( lpCar->IsInsideAISectionSystem() ? 1 : 0 )
-                    << " [FLAG PC witness]\n";
-            }
-
-            sabSeen[ liCar ]     = true;
-            sabWasValid[ liCar ] = lbValid;
         }
 
         lpAI->UpdateActiveRaceCarData(
@@ -539,7 +464,6 @@ void RaceCarEntityModule::ProcessResetOnTrackResultQueue(
         }
     }
 }
-
 
 // =================================================================================================
 // RaceCarEntityModule::CheckForResetOnTrackConditions @0x822CE9E0 (305 X360 instructions)

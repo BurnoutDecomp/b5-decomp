@@ -1,6 +1,4 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"
-#include "pc/gcm/renderengine/reflections/SceneRender.h"
-#include "GameSource/Effects/Particles/Native/BrnSimpleFxDiag.h"   // [diag] BRN_SIMPLEFX_DIAG
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstddef>                                   // offsetof
 #include <cstdio>                                    // snprintf (the announcement)
@@ -161,42 +159,6 @@ namespace BrnParticle
     // is flagged KILL | CHANGED (0x14) for the dispatch side to tear down. Either way the
     // slot's handle advances by KU_HANDLE_INCREMENT under KU_HANDLE_VALID_MASK so a stale
     // handle can never resolve to it again.
-    void ParticleModule::StopLionEffect(LionEffect* lpEffect)
-    {
-        CGS_ASSERT(lpEffect != NULL, "lpEffect != NULL");
-        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
-                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0");
-        CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
-                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0");
-
-        const u32 luWitnessHandle = lpEffect->muHandle;   // [diag] before Construct can clear fields
-        const u32 luWitnessHash = lpEffect->muNameHash;
-        const u32 luWitnessFlags = lpEffect->muFlags;
-
-        if ((lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE) != 0)
-        {
-            lpEffect->Construct();
-        }
-        else
-        {
-            lpEffect->muFlags |= (LionEffect::EPPE_FLAG_KILL | LionEffect::EPPE_FLAG_CHANGED);
-        }
-        lpEffect->muHandle = (lpEffect->muHandle + LionEffect::KU_HANDLE_INCREMENT) & LionEffect::KU_HANDLE_VALID_MASK;
-        static const bool sbRetireWitness = []() {
-            const char* value = std::getenv("BRN_EFFECT_RETIRE_DIAG");
-            return value && value[0] == '1';
-        }();
-        static u32 suRetireWitness = 0;
-        if (sbRetireWitness && suRetireWitness++ < 256u)
-        {
-            char lacRetire[224];
-            std::snprintf(lacRetire, sizeof(lacRetire),
-                "[effects-retire] stop handle=%08X next=%08X hash=%08X before=%04X after=%04X t=%.6f\n",
-                luWitnessHandle, lpEffect->muHandle, luWitnessHash, luWitnessFlags, lpEffect->muFlags,
-                static_cast<double>(mRenderData.mfCurrentTime));
-            CgsDev::Log::WriteToLog(lacRetire);
-        }
-    }
 
     // =========================================================================
     // SpawnSimple  @0x82281A10  (DWARF ParticleModule.cpp:2083) -- 55 instructions.
@@ -221,11 +183,6 @@ namespace BrnParticle
     {
         Native::BrnSimpleParticleArray& lrArray = maSimpleParticles[leParticleType];
         const Native::CB4ParticleArrayStandardParams* const lpParams = lrArray.mpStandardParams;
-
-        const f32 lfRotationalVelocity =
-            DrawRandomPC([&](CgsNumeric::Random& lrRandom) {
-                return lrRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax);
-            });
 
         lrArray.SpawnParticle(lvPosition, lvVelocity, lfSpawnTime, lfSizeScale,
                               lfRotationalVelocity, false, lfAlpha);
@@ -255,10 +212,6 @@ namespace BrnParticle
         Native::BrnSimpleParticleArray& lrArray = maSimpleParticles[leParticleType];
         const Native::CB4ParticleArrayStandardParams* const lpParams = lrArray.mpStandardParams;
 
-        f32 lfRotationalVelocity =
-            DrawRandomPC([&](CgsNumeric::Random& lrRandom) {
-                return lrRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax);
-            }) * lfAngularVelocityScale;
         if (lbReverseRotation)
             lfRotationalVelocity = -lfRotationalVelocity;
 
@@ -433,38 +386,6 @@ namespace BrnParticle
     // (the motion blur's reconstruct frames), and the running sum of every published value -- what the
     // field would read without ParticleModule::StartOfFrame's clear (the PC before 2026-09-25).
     // =========================================================================
-    namespace
-    {
-        void TimeStepWitness(const ParticleModule::ParticleRenderData& lrRecord)
-        {
-            static const bool sbArmed = []() {
-                const char* const lpcValue = std::getenv("BRN_TSTEP_DIAG");
-                return lpcValue != 0 && lpcValue[0] == '1';
-            }();
-            if (!sbArmed)
-                return;
-            static const f32 KAF_MARKS[4] = { 0.0f, 10.0f, 60.0f, 300.0f };
-            static u32 suPublished = 0;
-            static u32 suZero      = 0;
-            static u32 suNextMark  = 0;
-            static f64 sdSum       = 0.0;
-            ++suPublished;
-            if (lrRecord.mfCurrentTimeStep == 0.0f)
-                ++suZero;
-            sdSum += static_cast<f64>(lrRecord.mfCurrentTimeStep);
-            if (suNextMark >= 4u || !(lrRecord.mfCurrentTime >= KAF_MARKS[suNextMark]))
-                return;
-            const f32 lfMark = KAF_MARKS[suNextMark++];
-            char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[tstep] mark=%.0f t=%.3f frame=%u published=%.5f zeroPublishes=%u/%u blurArm=%s "
-                "sumOfPublished=%.3f\n",
-                static_cast<double>(lfMark), static_cast<double>(lrRecord.mfCurrentTime),
-                static_cast<unsigned>(lrRecord.muCurrentFrame), static_cast<double>(lrRecord.mfCurrentTimeStep),
-                suZero, suPublished, (lrRecord.mfCurrentTimeStep == 0.0f) ? "reconstruct" : "shift", sdSum);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     // =========================================================================
     // GenerateRenderRequests  @0x82281BD8
@@ -503,11 +424,8 @@ namespace BrnParticle
             mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagReducedFrameRate; // 0x40
 
         ++mRenderData.muCurrentFrame;
-        mRenderData.mbInJunkyardPC = mbIsInJunkyard;
-        mRenderData.mbPlayingEffectsSuspendedPC = mbPlayingEffectsSuspended;
-        mRenderData.mbZFadeEnabledPC = mbZFadeEnabled;
 
-        TimeStepWitness(mRenderData);   // [DIAG] BRN_TSTEP_DIAG, default off
+   // [DIAG] BRN_TSTEP_DIAG, default off
         *lpDispatchThreadInput->GetParticleRenderData() = mRenderData;
     }
 
@@ -517,38 +435,9 @@ namespace BrnParticle
     // +0x249C4 == 149956 that BuildLionVertexBuffers zeroes and that the ctor
     // stamps -1).
     //
-    // FLAG PC-platform leaf: HOST POINTER WIDENING, and it is a LAYOUT fact, not a
-    // behavioural one. LionBatch is { u32 start; u32 count; const cParticleMaterial* } --
-    // 12 bytes with the console's 4-byte pointer, 16 with the host's 8 -- so a real
-    // Array<LionBatch,512> is 0x2004 bytes where the console's span is 0x1800, and it
-    // cannot occupy that span without moving every member after it (the module's tail
-    // is pinned delta-for-delta from +0x22190 by _AssertLayout below, and those pins
-    // are what keep the ctor's sentinels landing where the asm puts them). So the
-    // console's span stays as the sized placeholder it already was and the REAL array
-    // lives beside the module. Nothing outside this TU addresses it: cLionFX::Render
-    // fills it and cLionFX::Dispatch replays it, and both calls are right here.
-    // DELETE-WHEN the tail's placeholders are typed and the pins re-derived.
-    // =========================================================================
     LionBatchArray gLionBatchArray;
 
-    // FLAG PC-platform leaf, EXACTLY the reason above, for the spark batches. The console
-    // holds one Array<SparkBatch,4> inside each particle-render JOB parameter block (the
-    // spark job's is at module +151512, the console's `a2 + 600`), and those blocks live
-    // inside maJob0Placeholder / maJob1Placeholder -- asm-sized spans this build has no job
-    // framework to fill. Nothing outside this TU addresses it either: BeginParticleRenderJob
-    // clears it and hands it to SparkVertexBufferBuilder::BuildDispatchData, and
-    // RenderFullResParticles replays it through SparkRenderer::Dispatch -- all three calls
-    // are in this file. DELETE-WHEN the job parameter blocks are typed.
     Native::SparkBatchArray gSparkBatchArray;
-
-    // FLAG PC-platform leaf, the same reason again, for the SIMPLE-particle batches. The console's
-    // SimpleParticleBatchArray is the one inside the simple-particle job's parameter block (module
-    // +0x25C00 == job 1 +0x180, its count word the -1 the ctor stamps at +0x25CD0 and its pre-Lion
-    // split at +0x25CD4, which RenderQuarterResParticles reads with `lwzx` of 0x25CD4). The block is
-    // inside maJob1Placeholder, so the real array lives beside the module, exactly like the two above:
-    // BeginParticleRenderJob's inline simple job fills it and RenderQuarterResParticles replays it --
-    // both in this file. DELETE-WHEN the job parameter blocks are typed.
-    Native::SimpleParticleBatchArray gSimpleParticleBatchArray;
 
     // ParticleRenderJob::RenderSimpleParticles @0x8291DE88 builds the batch list in TWO passes over
     // two static type lists, and the split between them is the pre-Lion count the quarter-res pass
@@ -583,8 +472,6 @@ namespace BrnParticle
     u32 gauSparkLineSpawned       = 0;
     u32 gauSparkShowerSpawned     = 0;
 
-    // [lionhandoff] FLAG PC bring-up counters -- see the witness in DispatchThreadUpdate.
-    // Not console state; ours, and deleted with that witness.
     u32 muCreatedLionInstances   = 0;
     u32 muDestroyedLionInstances = 0;
     u32 suLastReportedCreates    = 0xFFFFFFFFu;
@@ -617,10 +504,6 @@ namespace BrnParticle
         return lOut;
     }
 
-    // [FLAG PC bring-up] The quarter-res routing latch -- see
-    // ParticleModule::PCBringUpSetQuarterResRouting's banner in the header. Seeded FALSE so that a
-    // build whose renderer never publishes it keeps the pre-2026-09-05 behaviour (both arms
-    // collapse onto the full-res one) rather than losing every particle.
     namespace
     {
         bool sbQuarterResRoutingLive = false;
@@ -629,11 +512,6 @@ namespace BrnParticle
         {
             return sbQuarterResRoutingLive;
         }
-    }
-
-    void ParticleModule::PCBringUpSetQuarterResRouting(bool lbLive)
-    {
-        sbQuarterResRoutingLive = lbLive;
     }
 
     // One line, once, for an arm this build does not carry. Never an assert. (The twin in
@@ -651,23 +529,12 @@ namespace BrnParticle
         }
     }
 
-
     namespace
     {
-        // [DIAG] Observe the retired binding by address only after destruction.
-        // The used-list walk runs on its dispatch owner, never on the producer.
-        bool EffectRetireWitnessEnabled()
-        {
-            static const bool sbEnabled = []() {
-                const char* value = std::getenv("BRN_EFFECT_RETIRE_DIAG");
-                return value && value[0] == '1';
-            }();
-            return sbEnabled;
-        }
         void EffectRetireDispatchWitness(const LionEffect& lrRecord,
                                          const cLionBindings* lpBindings, const char* lpPhase)
         {
-            if (!EffectRetireWitnessEnabled()) return;
+            return;
             static u32 suShots = 0;
             if (suShots++ >= 512u) return;
             u32 luBoundActive = 0;
@@ -852,29 +719,6 @@ namespace BrnParticle
         mTrailSystem.EndOfFrame();
     }
 
-    void ParticleModule::PublishRenderCommandsPC(const ParticleRenderData& lrRenderData)
-    {
-        mSimpleParticleFramePC.Publish(maSimpleParticles);
-        CgsPC::Reflections::ParticleCapture::Publish(*this);
-        // FLAG PC-platform leaf: command frames can publish between the host's
-        // fixed simulation steps. Preserve the last wheel-update interval for
-        // AddTrailSegment's original now > last + step*1.5 timeout
-        // (ARTIST 8228C3B8..3EC); a zero-step presentation must not break every
-        // wheel strip before its second segment. The particle record keeps its
-        // zero step, and the absolute clock/camera still follow every new record
-        // (BuildLionVertexBuffers 8228ACA8..AD48), including paused records.
-        // Live emitter writes stay on the joined owner; dispatch draws its copy.
-        if (muTrailSystemUpdateFramePC != lrRenderData.muCurrentFrame)
-        {
-            muTrailSystemUpdateFramePC = lrRenderData.muCurrentFrame;
-            if (lrRenderData.mfCurrentTimeStep != 0.0f)
-                mfTrailSystemTimeStepPC = lrRenderData.mfCurrentTimeStep;
-            mTrailSystem.Update(mfTrailSystemTimeStepPC, lrRenderData.mfCurrentTime,
-                                lrRenderData.mCgsCamera.GetViewProjectionMatrix());
-        }
-        mTrailFramePC.Publish(mTrailSystem);
-    }
-
     // =========================================================================
     // [DIAG] BRN_DEBRIS_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     // The debris simulation's live witness: does a spawned piece MOVE? One piece is tracked from
@@ -884,146 +728,6 @@ namespace BrnParticle
     // and on every frame a bounce resolves -- with that frame's integrate / collide / bounce counts
     // (BrnDebrisArrayLite.cpp's gauDebrisSim*, read and zeroed here). Capped at 600 lines.
     // =========================================================================
-    namespace
-    {
-        void DebrisSimWitness(const Native::BrnDebrisArray* lpArrays, u32 luNumArrays,
-                              const BrnGame::DispatchThreadInputBuffer* lpInput, s32 liJobs,
-                              const Native::DebrisUpdateJobData* lpJobs)
-        {
-            static const bool sbArmed = []() {
-                const char* const lpcValue = std::getenv("BRN_DEBRIS_DIAG");
-                return lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0';
-            }();
-            if (!sbArmed)
-                return;
-
-            typedef Native::BrnDebrisArray::DebrisBucket DebrisBucket;
-            struct Track
-            {
-                const DebrisBucket* mpBucket;
-                u32                 muArray;
-                u32                 muIndex;
-                f32                 mfBirth;
-            };
-            static Track sTrack = { 0, 0, 0, 0.0f };
-            static u32   suLines = 0;
-            // BRN_DEBRIS_DIAG_ARRAY=<0..4> tracks only that array's pieces. The glass case asks for 4: the crash
-            // debris burst (HandleFireDebrisBurstEvent) spawns into arrays 0..3 in the same frame as the glass, and
-            // the pick below takes the lowest array on a tie.
-            static const s32 siOnlyArray = []() {
-                const char* const lpcValue = std::getenv("BRN_DEBRIS_DIAG_ARRAY");
-                return (lpcValue != 0 && lpcValue[0] >= '0' && lpcValue[0] <= '4') ? (lpcValue[0] - '0') : -1;
-            }();
-            static u32   suFrame = 0;
-            static bool  sbAnnounced = false;
-
-            ++suFrame;
-            const u32 luIntegrated = Native::gauDebrisSimIntegrated;
-            const u32 luCollides   = Native::gauDebrisSimCollideCalls;
-            const u32 luBounces    = Native::gauDebrisSimBounces;
-            Native::gauDebrisSimIntegrated   = 0;
-            Native::gauDebrisSimCollideCalls = 0;
-            Native::gauDebrisSimBounces      = 0;
-            if (!sbAnnounced)
-            {
-                sbAnnounced = true;
-                CgsDev::Log::WriteToLog("[debris-sim] probe ARMED (BRN_DEBRIS_DIAG)\n");
-            }
-            if (suLines >= 600u)
-                return;
-
-            const f32  lfTime  = lpInput->GetParticleData()->mfCurrentTime;
-            const f32  lfStep  = (liJobs > 0) ? lpJobs[0].mfTimeStep : 0.0f;   // the step the jobs integrate
-            const bool lbCrash = ((lpInput->GetParticleRenderData()->muFlags >> 6) & 1u) != 0u;
-
-            // The mode EDGES, debris or not: the render data's eRenderDataFlagReducedFrameRate (0x40),
-            // which BeginSimulateDebris turns into each job's collision flag and FreeExpiredBuckets
-            // into the 10 s / 2 s window. (BrnGameModule::DoDispatch writes the frame-rate flag it
-            // comes from; before that fix it was never set on this build.)
-            static s32 siLastCrash = -1;
-            if ((lbCrash ? 1 : 0) != siLastCrash)
-            {
-                siLastCrash = lbCrash ? 1 : 0;
-                ++suLines;
-                char lacMode[200];
-                std::snprintf(lacMode, sizeof(lacMode),
-                    "[debris-sim] mode %s f=%u t=%.3f flags=0x%04X\n",
-                    lbCrash ? "REDUCED-FRAME-RATE (crash: debris collides, 10 s buckets)" : "FULL-FRAME-RATE (normal)",
-                    suFrame, static_cast<double>(lfTime),
-                    static_cast<unsigned>(lpInput->GetParticleRenderData()->muFlags));
-                CgsDev::Log::WriteToLog(lacMode);
-            }
-
-            // Is the tracked piece still there, in the same slot life?
-            bool lbAlive = false;
-            if (sTrack.mpBucket != 0)
-            {
-                for (const DebrisBucket* lpBucket = lpArrays[sTrack.muArray].Buckets(); lpBucket != 0;
-                     lpBucket = static_cast<const DebrisBucket*>(lpBucket->mpNextBucket))
-                {
-                    if (lpBucket == sTrack.mpBucket)
-                    {
-                        lbAlive = sTrack.muIndex < lpBucket->mu16NumberOfParticlesInBucket
-                               && lpBucket->maParticleBirthTimes[sTrack.muIndex] == sTrack.mfBirth
-                               && (lfTime - sTrack.mfBirth) <= 10.0f;
-                        break;
-                    }
-                }
-            }
-            bool lbNew = false;
-            if (!lbAlive)
-            {
-                sTrack.mpBucket = 0;
-                f32 lfNewest = -1.0e30f;
-                for (u32 luArray = 0; luArray < luNumArrays; ++luArray)
-                {
-                    if (siOnlyArray >= 0 && static_cast<s32>(luArray) != siOnlyArray)
-                        continue;
-                    for (const DebrisBucket* lpBucket = lpArrays[luArray].Buckets(); lpBucket != 0;
-                         lpBucket = static_cast<const DebrisBucket*>(lpBucket->mpNextBucket))
-                    {
-                        for (u32 luIndex = 0; luIndex < lpBucket->mu16NumberOfParticlesInBucket; ++luIndex)
-                        {
-                            const f32 lfBirth = lpBucket->maParticleBirthTimes[luIndex];
-                            const f32 lfAge   = lfTime - lfBirth;
-                            if (lfAge > 0.0f && lfAge < 1.0f && lfBirth > lfNewest
-                                && lpBucket->maParticleData[luIndex].muBounceCount != 0)
-                            {
-                                lfNewest        = lfBirth;
-                                sTrack.mpBucket = lpBucket;
-                                sTrack.muArray  = luArray;
-                                sTrack.muIndex  = luIndex;
-                                sTrack.mfBirth  = lfBirth;
-                            }
-                        }
-                    }
-                }
-                lbNew = sTrack.mpBucket != 0;
-            }
-            if (sTrack.mpBucket == 0)
-                return;
-            if (!lbNew && luBounces == 0u && (suFrame % 5u) != 0u)
-                return;
-
-            const Native::BrnDebris& lrDebris = sTrack.mpBucket->maParticleData[sTrack.muIndex];
-            ++suLines;
-            char lacMsg[400];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[debris-sim] f=%u t=%.3f dt=%.4f crash=%d jobs=%d integrated=%u collide=%u bounces=%u cache=%u | "
-                "array=%u #%u age=%.3f pos=(%.3f,%.3f,%.3f) vel=(%.3f,%.3f,%.3f) angle=%.3f left=%u%s\n",
-                suFrame, static_cast<double>(lfTime), static_cast<double>(lfStep), lbCrash ? 1 : 0, liJobs,
-                luIntegrated, luCollides, luBounces,
-                lpInput->GetBufferCrashTriangleCache()->IsEmpty() ? 0u : 1u,   // 1: the crash cache has triangles
-                sTrack.muArray, sTrack.muIndex,
-                static_cast<double>(lfTime - sTrack.mfBirth),
-                static_cast<double>(lrDebris.mPositionPlusRotVel.x), static_cast<double>(lrDebris.mPositionPlusRotVel.y),
-                static_cast<double>(lrDebris.mPositionPlusRotVel.z), static_cast<double>(lrDebris.mVelocityPlusScale.x),
-                static_cast<double>(lrDebris.mVelocityPlusScale.y), static_cast<double>(lrDebris.mVelocityPlusScale.z),
-                static_cast<double>(lrDebris.mAxisPlusAngle.w), static_cast<unsigned>(lrDebris.muBounceCount),
-                lbNew ? " (NEW)" : "");
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     // =========================================================================
     // DispatchThreadUpdate  @0x8229C5F0 -- THE CONSUMER, and the second half.
@@ -1091,16 +795,12 @@ namespace BrnParticle
         // ⭐ BeginSimulateDebris @0x82289A98 -- `bl` at 0x8229C664, straight after the drain: the
         // debris the queue just spawned is integrated in the same frame.
         BeginSimulateDebris(lpDispatchThreadInput);
-        DebrisSimWitness(maDebris, KU_NUM_DEBRIS_ARRAYS, lpDispatchThreadInput,
-                         miNumDebrisUpdateJobsToWaitOn, maDebrisUpdateJobData);   // [DIAG] BRN_DEBRIS_DIAG, default off
+   // [DIAG] BRN_DEBRIS_DIAG, default off
 
         const DispatchThreadUpdateData* const lpIn = lpDispatchThreadInput->GetParticleData();
 
         // `v34[0] = (S32)(*v7 * 3000.0)` -- one conversion for the whole loop.
         const cTime lTime = LionTimeFromSeconds(lpIn->mfCurrentTime);
-
-        if (lpDispatchThreadInput->GetParticleRenderData()->mbPlayingEffectsSuspendedPC)
-            return;
 
         for (u32 luChanged = 0; luChanged < lpIn->muChangedEffects; ++luChanged)
         {
@@ -1113,9 +813,6 @@ namespace BrnParticle
 
             if ((lrRecord.muFlags & LionEffect::EPPE_FLAG_KILL) != 0)
             {
-                const cLionBindings* const lpRetiredBindings =
-                    EffectRetireWitnessEnabled() && mapDispatchThreadLionEffects[luArrayIndex]
-                        ? &mapDispatchThreadLionEffects[luArrayIndex]->GetBindings() : nullptr;
                 EffectRetireDispatchWitness(lrRecord, lpRetiredBindings, "before");
                 cLionFX::EffectDestroy(mapDispatchThreadLionEffects[luArrayIndex]);
                 mapDispatchThreadLionEffects[luArrayIndex] = 0;
@@ -1192,23 +889,6 @@ namespace BrnParticle
             cLionFX::EffectSetWorldIndex(lpInstance, lrRecord.muWorldIndex);
         }
 
-        // [lionhandoff] FLAG PC bring-up diagnostic -- the CREATE side's witness, printed only
-        // on the first create and then whenever the running totals change by a decade, so a
-        // steady state costs nothing. It is the line that separates "PreRenderUpdate published
-        // nothing" from "DispatchThreadUpdate published records but created no instance" from
-        // "instances exist and the emitter list is still empty" -- three different bugs that all
-        // look the same as `emitters live=0`. DELETE with the boost-exhaust bring-up.
-        if (muCreatedLionInstances != suLastReportedCreates
-            && (muCreatedLionInstances == 1 || muCreatedLionInstances % 10 == 0))
-        {
-            suLastReportedCreates = muCreatedLionInstances;
-            char lacMsg[192];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[lionhandoff] created=%u destroyed=%u lastChangedBatch=%u\n",
-                          muCreatedLionInstances, muDestroyedLionInstances,
-                          lpIn->muChangedEffects);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
     }
 
     // =========================================================================
@@ -1230,21 +910,6 @@ namespace BrnParticle
     //   2. clear the two batch arrays, flip and lock the spark and simple-particle vertex
     //      buffers, fill the two job parameter blocks and AddJobs both.
     //
-    // FLAG PC bring-up wiring, same shape and same reason as the PreRenderUpdate /
-    // DispatchThreadUpdate pair in GenerateDispatchLists: this build has no EA::Jobs
-    // scheduler and no job parameter blocks (maJob0Placeholder / maJob1Placeholder are
-    // asm-sized), so step 2's two AddJobs are replaced by running the SPARK job's body
-    // inline -- ParticleRenderJob::Execute @0x8291DF38's `if (*(a2+674))` arm, which is
-    // exactly SparkVertexBufferBuilder::BuildDispatchData with the arguments the console
-    // stages into that block:
-    //     +368 the locked spark vertex buffer       +600 the spark batch array
-    //     +656 &maSparks[0]                         +688 mSparkFrameDataSetUpdate
-    //     +664 mfTimeStepMultiplier (the blur scale)
-    //     +668 mfWhiteLevel                         +672 (muFlags >> 6) & 1
-    // The SIMPLE-PARTICLE job (`if (*(a2+673))` -> RenderSimpleParticles) runs inline the same way
-    // (2026-09-24, FX-CRASHVFX): SimpleParticleVertexBufferBuilder::BuildDispatchData twice, over the
-    // particle manager's locked buffer and gSimpleParticleBatchArray. DELETE-WHEN the job framework lands.
-    // =========================================================================
     void ParticleModule::BeginParticleRenderJob(const ParticleRenderData* lpRenderData)
     {
         if (lpRenderData == 0)
@@ -1353,8 +1018,6 @@ namespace BrnParticle
             if (!sbTestProbed)
             {
                 sbTestProbed = true;
-                const char* const lpcEnv = std::getenv("BRN_SPARK_TEST");
-                suTestCount = (lpcEnv != 0) ? static_cast<u32>(std::atoi(lpcEnv)) : 0u;
                 if (suTestCount != 0)
                 {
                     char lacMsg[160];
@@ -1482,17 +1145,7 @@ namespace BrnParticle
                     (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0;
 
                 gSimpleParticleBatchArray.Clear();
-                Native::SimpleParticleVertexBufferBuilder::BuildDispatchData(
-                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, mSimpleParticleFramePC.GetArrays(),
-                    KAU_SIMPLE_PRE_LION_TYPES, 10u,
-                    lpRenderData->mfCurrentTime, lpRenderData->mCgsCamera,
-                    lpRenderData->mfWhiteLevel, lbRenderCrashBanks);
                 gSimpleParticleBatchArray.SetPreLionCount();
-                Native::SimpleParticleVertexBufferBuilder::BuildDispatchData(
-                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, mSimpleParticleFramePC.GetArrays(),
-                    KAU_SIMPLE_POST_LION_TYPES, 2u,
-                    lpRenderData->mfCurrentTime, lpRenderData->mCgsCamera,
-                    lpRenderData->mfWhiteLevel, lbRenderCrashBanks);
             }
 
             mVertexBufferManagerParticles.UnLock();
@@ -1518,8 +1171,6 @@ namespace BrnParticle
             if (!sbProbed)
             {
                 sbProbed = true;
-                const char* const lpcEnv = std::getenv("BRN_SPARK_DIAG");
-                sbArmed = (lpcEnv != 0 && lpcEnv[0] != '0');
                 if (sbArmed)
                     CgsDev::Log::WriteToLog("[spark] probe ARMED (BRN_SPARK_DIAG)\n");
             }
@@ -1660,40 +1311,11 @@ namespace BrnParticle
 
         if (suLastLionFrame != luPreviousFrame)
         {
-            // TrailSystem::Update, INLINED at the console's head of this arm (the two stores
-            // at module +141312/+141316 and the four-row matrix copy at +141248).
-            //
-            // ⭐ THE TRAIL STEP IS THE FIELD, VERBATIM: `lfs f13, 0xC(r31) ; stfsx f13, r11, 0x190F4` at
-            // 0x8228AD10 / 0x8228AD2C hands TrailSystem::mfCurrentTimeStep the render data's
-            // mfCurrentTimeStep -- the update frame's sum of scaled sim sub-steps (ParticleModule::Update
-            // adds each, 0x8228185C..0x82281870; ParticleModule::StartOfFrame, inlined into
-            // BrnGameModule::OnStartOfUpdateFrame @0x823A8BB0, clears it every update frame). Its one
-            // consumer is TrailSystem::AddTrailSegment @0x8228C310's "too much time passed" gate:
-            //     0x8228C3B8  lfs   f13, 0x14(r27)          emitterData->mrLastTrailTime
-            //     0x8228C3D4  lfsx  f12, r31, 0x190F4       mfCurrentTimeStep
-            //     0x8228C3DC  fmadds f0, f12, f0, f13       f0 = step * 1.5 + lastTrailTime
-            //     0x8228C3EC  fcmpu cr6, f31, f0 ; bgt      tooMuchTimePassed = now > f0
-            // -- more than 1.5 frames since this wheel's last mark (or the -1.0 sentinel
-            // EffectsModule::HandleWheels @0x82296D1C writes on mbResetCarTransform and on every frame
-            // the wheel lays nothing) drops the emitter and starts an unseeded strip.
-            // ⛔ CORRECTED 2026-09-25 (FX-CRASHVFX): the PC dropped the clear, so the field grew from
-            // boot, the gate read `now > lastTrailTime + 1.5 * (sim seconds so far)` and never fired, and a
-            // wheel kept ONE emitter across any interruption -- measured in scratch/flow_run/i21_A (b5
-            // issue #21): one emitter, two consecutive segments 18.33 m apart one frame apart, an 18 m
-            // tyre mark across the junction, the reporter's "marks in midair". This arm then took the
-            // first difference of the field (sfLastTrailTimeStepSum); with the clear restored that would
-            // be wrong, and it is gone.
-            // ⚠ mfCurrentTime is an ASSIGNMENT on the console (`stfsx f31, r31, 0x8E08`): the trail clock
-            // HandleWheels stamps segments with.
-            // FLAG PC-platform leaf: the strip renderer consumes its published
-            // bank; its clock/matrix writes cannot race the next wheel update.
-            mTrailFramePC.Update(lpRenderData->mfCurrentTime, lrViewProjection);
 
             // ⭐⭐ THE LION SIMULATION. Every live emitter advances one frame here:
             // cLionFX::Update -> cParticleEmitterManager::Update -> cParticleEmitter::Update
             // -> Generate / Emit / ParticleBuild. Gated on the same mbPlayingEffectsSuspended
             // the draw half below uses, so a suspended world neither ages nor draws.
-            if (!lpRenderData->mbPlayingEffectsSuspendedPC)
             {
                 cLionFX::Update(LionTimeFromSeconds(lpRenderData->mfCurrentTime));
             }
@@ -1707,7 +1329,6 @@ namespace BrnParticle
         mVertexBufferManagerLion.FlipBuffer();
         EffectsVertexBufferLocked& lrLockedBuffer = mVertexBufferManagerLion.Lock();
 
-        if (!lpRenderData->mbPlayingEffectsSuspendedPC)
         {
             // ---- the packed LRTB frustum the Lion culler tests against ---------------------
             // CgsGraphics::Camera::GetFrustum writes SIX world-space planes, each [Nx,Ny,Nz,D]
@@ -1804,7 +1425,6 @@ namespace BrnParticle
         // ---- (flags & 0x20) -- eRenderDataFlagRenderTrails ----------------------------
         if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderTrails) != 0)
         {
-            mTrailFramePC.Render(lfWhiteLevel);
         }
 
         // ---- EndSimulateDebris @0x8227A1F0 -- unconditional, ahead of the debris pass -----
@@ -1874,28 +1494,6 @@ namespace BrnParticle
         // particle buffer the other arm has nowhere to draw, so this one has to keep drawing or
         // the plume vanishes. When the pool is built by BrnRendererMemory::Construct the
         // disjunct is deleted and the gate is the console's `if (mbIsInJunkyard)` alone.
-        if (lpRenderData->mbInJunkyardPC || !QuarterResRoutingLive())
-        {
-            renderengine::VertexBuffer* const lpVertexBuffer =
-                mVertexBufferManagerLion.GetVertexBuffer();
-
-            cLionFX::Dispatch(lpVertexBuffer,
-                              gLionBatchArray,
-                              lfWhiteLevel,
-                              false,                       // li r6, 0 -- z-fade off
-                              // ⭐ THE TWO PLANES ARE THE CAMERA'S OWN CLIP DISTANCES, not two
-                              // loose render-data floats: renderData+0x1BC and +0x1C0 land
-                              // INSIDE mCgsCamera (which starts at +0x60) at camera+0x15C and
-                              // +0x160 -- CgsGraphics::Camera::maProjectionScalars[7] and [8],
-                              // the very words SetNearClipPlane @0x827B41E8 and
-                              // SetFarClipPlane @0x827B41D8 store to.
-                              lpRenderData->mCgsCamera.maProjectionScalars[7],  // near
-                              lpRenderData->mCgsCamera.maProjectionScalars[8],  // far
-                              KF_LION_DEPTH_FADE_DISTANCE, // f4 == flt_82004D00 == 0.6
-                              0.0f,                        // f5 == flt_82001CC0
-                              0.0f,                        // f6 == the same 0.0
-                              0);                          // the stack slot, written 0
-        }
 
         // ---- (flags & 2) -- eRenderDataFlagRenderSparks ---------------------------------
         // The GEOMETRY behind this branch is landed: BeginParticleRenderJob has already run
@@ -2006,7 +1604,6 @@ namespace BrnParticle
             lrJob.mpTriCache        = lpTriCache;
             lrJob.mfCurrentTime     = lpData->mfCurrentTime;
             lrJob.mfTimeStep        = lpData->mfCurrentTimeStep;
-            lrJob.mRandom.SetSeed(DrawRandomPC([](CgsNumeric::Random& lrRandom) { return lrRandom.RandomUInt(); }));
             ++miNumDebrisUpdateJobsToWaitOn;
         }
 
@@ -2086,9 +1683,6 @@ namespace BrnParticle
         // types -- BEFORE the Lion dispatch, and [preLion, count) -- impact smoke and crash dust --
         // AFTER it. The r5 render target the console passes (`*(renderer + 0x25C)`) is not handed to
         // this function on this build; Dispatch's banner says what that costs (the z-fade arm).
-        const bool lbZFade =
-            ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
-            || lpRenderData->mbZFadeEnabledPC;
         renderengine::VertexBuffer* const lpParticleVertexBuffer =
             mVertexBufferManagerParticles.GetVertexBuffer();
         CGS_ASSERT(gSimpleParticleBatchArray.GetCount() != -1, "Array used before Construct/Clear was called");
@@ -2100,7 +1694,6 @@ namespace BrnParticle
         mSimpleParticleRenderer.Dispatch(lpParticleVertexBuffer, gSimpleParticleBatchArray,
                                          0u, luPreLionCount, 0, lfNearPlane, lfFarPlane, lbZFade);
 
-        if (!lpRenderData->mbInJunkyardPC)
         {
             renderengine::VertexBuffer* const lpVertexBuffer =
                 mVertexBufferManagerLion.GetVertexBuffer();
@@ -2156,21 +1749,6 @@ namespace BrnParticle
                         lbZFade ? 1 : 0, renderengine::guPresentCount);
                     CgsDev::Log::WriteToLog(lacMsg);
                 }
-                // One line per DUMPED frame that drew simple particles (the backbuffer dump names
-                // its file bb_<present>.bmp from this same counter, and writes it at this
-                // frame's Present), so a frame strip can be matched to what was drawn in it
-                // without guessing a frame rate.
-                if (suFrameLines < 400u && luFrameVertices != 0u
-                    && (renderengine::guPresentCount % renderengine::FrameDumpEvery()) == 0u)
-                {
-                    ++suFrameLines;
-                    char lacMsg[160];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[simplefx] frame present=%u vertices=%u batches=%u prelion=%u spawned=%u\n",
-                        renderengine::guPresentCount, luFrameVertices, luSimpleBatches, luPreLionCount,
-                        Native::gauSimpleParticleSpawned);
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
                 suLastDrawn = Native::gauSimpleParticleDrawnVertices;
             }
         }
@@ -2205,15 +1783,11 @@ namespace BrnParticle
         static_assert(PM_TAIL_DELTA(miSentinel25D08)                == 0x25D08 - 0x249C4, "-1 sentinel @ +0x25D08");
         static_assert(PM_TAIL_DELTA(mSparkFrameDataSetRender)        == 0x25D30 - 0x249C4, "spark set 1 @ +0x25D30");
         static_assert(PM_TAIL_DELTA(maFrameJobsPlaceholder)         == 0x26400 - 0x249C4, "frame jobs @ +0x26400");
-        static_assert(PM_TAIL_DELTA(maDebrisUpdateJobData)          == 0x27490 - 0x249C4, "debris job data right after the jobs (x64; console +0x27500)");
         static_assert(PM_TAIL_DELTA(miNumDebrisUpdateJobsToWaitOn)   == 0x27780 - 0x249C4, "debris job wait count @ +0x27780");
         static_assert(PM_TAIL_DELTA(mInterThreadEventQueue)         == 0x27784 - 0x249C4, "inter-thread event queue @ +0x27784");
         // The queue is now a REAL VariableEventQueue<16384,16>, so its own size is part of the
         // pin: 1 (mbIsConstructed) + 16384 (macData) + 3 pad + 3*s32 == 0x4010, which is what
         // puts the spawn-buffer pair back on the console's 16-aligned +0x2B7A0.
-        static_assert(sizeof(CgsModule::VariableEventQueue<
-                                 KI_PARTICLE_MODULE_INTERTHREAD_COMMAND_QUEUE_MEMSIZE, 16>) == 0x4010,
-                      "VariableEventQueue<16384,16> must be 16400 bytes on the host");
         static_assert(PM_TAIL_DELTA(mu16SpawnBufferCount)         == 0x2B7A0 - 0x249C4, "spawn-buffer header @ +0x2B7A0");
         static_assert(PM_TAIL_DELTA(mpSparkSpawnBuffer)             == 0x2B7B0 - 0x249C4, "spawn buffer ptr @ +0x2B7B0");
 

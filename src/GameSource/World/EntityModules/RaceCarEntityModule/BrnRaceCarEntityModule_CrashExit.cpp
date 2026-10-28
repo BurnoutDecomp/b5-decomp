@@ -63,15 +63,6 @@ namespace
     // (Also TU-local in BrnRaceCarEntityModule.cpp for SetupCarColour -- the DWARF home.)
     const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
 
-    // [DIAG] BRN_CRASH_EXIT_DIAG -- NOT IN THE X360 BINARY. The latch every [crash-exit] /
-    // [persist-damage] witness in this TU prints under. They used to print on every run, gated only
-    // on gpDebugPrint (reviewer A on 65eadffe, 2026-09-24).
-    bool CrashExitDiagEnabled()
-    {
-        static const bool sbOn = ( getenv( "BRN_CRASH_EXIT_DIAG" ) != 0 );
-        return sbOn && CgsDev::Log::gpDebugPrint != 0;
-    }
-
     // =============================================================================================
     // [PC HARNESS + DIAG, NOT X360] THE RE-COLOUR SCENARIO (crash parity FX-FOLLOWUPS item 4, 2026-09-25).
     // Called once per PostScene frame from the top of ProcessRaceCarCrashCompleteEvents; nothing in the
@@ -115,19 +106,6 @@ namespace
     EPersistDamagePreload GetPersistDamagePreload()
     {
         static const EPersistDamagePreload seMode = []() {
-            const char* lpcValue = getenv( "BRN_PERSIST_DAMAGE_PRELOAD" );
-            if( lpcValue == 0 )
-            {
-                return E_PERSIST_DAMAGE_PRELOAD_OFF;
-            }
-            if( strcmp( lpcValue, "wrap" ) == 0 )
-            {
-                return E_PERSIST_DAMAGE_PRELOAD_WRAP;
-            }
-            if( strcmp( lpcValue, "clean" ) == 0 )
-            {
-                return E_PERSIST_DAMAGE_PRELOAD_CLEAN;
-            }
             return E_PERSIST_DAMAGE_PRELOAD_OFF;
         }();
         return seMode;
@@ -192,11 +170,6 @@ namespace
                     }
                     if( CgsDev::Log::gpDebugPrint != 0 )
                     {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[persist-preload] HARNESS " << ( leMode == E_PERSIST_DAMAGE_PRELOAD_WRAP ? "wrap" : "clean" )
-                            << " victim " << liVictim << " car " << laiSlots[liPick]
-                            << " damage " << lfBefore << " -> " << lpRaceCar->GetPersistentDamage()
-                            << " damaged cars " << lrModule.GetPersistentDamageCarCount() << " [FLAG PC harness]\n";
                     }
                 }
             }
@@ -215,11 +188,6 @@ namespace
             {
                 saiLastColour[liSlot] = -2;
             }
-        }
-        if( !CrashExitDiagEnabled() || siLines >= 16 ||
-            !lrModule.GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_AI_PERSISTENT_DAMAGE ) )
-        {
-            return;
         }
         for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
         {
@@ -253,16 +221,6 @@ namespace
             {
                 lrWatch.mbArmed = false;
                 ++siLines;
-                if( CrashExitDiagEnabled() )   // the file's witness latch (run_fxrcem4_diag_latch's rule)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[persist-damage] repaint car " << liSlot << " colour " << lrWatch.miColourBefore
-                        << " -> " << lrWatch.miColourAfter
-                        << ( lbRepainted ? " REPAINTED" : " NOT repainted in 600 frames" )
-                        << " paint (" << lrWatch.mPaintBefore.x << ", " << lrWatch.mPaintBefore.y << ", "
-                        << lrWatch.mPaintBefore.z << ") -> (" << lrPaint.x << ", " << lrPaint.y << ", " << lrPaint.z
-                        << ") after " << lrWatch.miFrames << " frame(s)\n";
-                }
             }
         }
     }
@@ -270,35 +228,6 @@ namespace
     // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE X360 BINARY. ProcessPowerParking's witness: one capped
     // line whenever the published bit 0 flips, and one whenever the nearby-parked counts it hands the
     // scorer change while a park is in progress (crash parity FX-SCENEMGR item 4, 2026-09-24).
-    void PowerParkPublishDiag( bool lbParking, u32 luNearbyParkedCarCount, u32 luNearbyParkedPlayerCount,
-                               f32 lfClosestDistanceSq, f32 lfClosestPerpendicularDist )
-    {
-        static const bool sbOn = ( getenv( "BRN_POWER_PARK_DIAG" ) != 0 );
-        static s32 siLastParking = -1;
-        static u32 suLastCount = 0xFFFFFFFFu, suLastPlayers = 0xFFFFFFFFu;
-        static u32 suLines = 0u;
-        if( !sbOn || CgsDev::Log::gpDebugPrint == 0 || suLines >= 96u )
-            return;
-
-        if( ( lbParking ? 1 : 0 ) != siLastParking )
-        {
-            ++suLines;
-            *CgsDev::Log::gpDebugPrint << "[power-park] publish RaceCarToTrafficInterface bit 0 = "
-                                       << ( lbParking ? 1 : 0 ) << "\n";
-            siLastParking = lbParking ? 1 : 0;
-            suLastCount = 0xFFFFFFFFu;
-        }
-        if( lbParking && ( luNearbyParkedCarCount != suLastCount || luNearbyParkedPlayerCount != suLastPlayers ) )
-        {
-            ++suLines;
-            *CgsDev::Log::gpDebugPrint << "[power-park] nearby parked data: count " << luNearbyParkedCarCount
-                                       << " players " << luNearbyParkedPlayerCount
-                                       << " closestSq " << lfClosestDistanceSq
-                                       << " perp " << lfClosestPerpendicularDist << "\n";
-            suLastCount   = luNearbyParkedCarCount;
-            suLastPlayers = luNearbyParkedPlayerCount;
-        }
-    }
 }
 
 // =================================================================================================
@@ -417,15 +346,6 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
             continue;
         }
 
-        if( CrashExitDiagEnabled() )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] CRASH COMPLETE received for active race car "
-                << static_cast<s32>( luActiveRaceCarIndex )
-                << " crashing=" << ( lpActiveRaceCar->IsCrashing() ? 1 : 0 )
-                << " remove=" << ( lrEvent.mbRemoveRaceCar ? 1 : 0 ) << "\n";
-        }
-
         // 0x822F40C8..0x822F4390 -- the taken-down AI persistent-damage block. See the banner.
         if( GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_AI_PERSISTENT_DAMAGE ) &&
             lpActiveRaceCar->IsTakenDown() )
@@ -472,16 +392,6 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
 
                 // [DIAG] BRN_CRASH_EXIT_DIAG -- NOT IN THE X360 BINARY -- one line per credited AI
                 // takedown in a persistent-damage mode: what the rival will carry into its respawn.
-                if( CrashExitDiagEnabled() )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[persist-damage] car " << static_cast<s32>( luActiveRaceCarIndex )
-                        << " damage " << lfDamageBefore << " -> "
-                        << lpTakenDownCar->GetPersistentDamage()
-                        << " recolour " << ( lbRecolour ? 1 : 0 )
-                        << " colour " << liColourBefore << " -> " << lpTakenDownCar->GetColourIndex()
-                        << " palette " << lpTakenDownCar->GetColourPalette() << "\n";
-                }
             }
         }
 
@@ -534,16 +444,6 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
         // [DIAG] BRN_CRASH_EXIT_DIAG -- NOT IN THE X360 BINARY -- one line per crash-exit reset
         // request (the CRASH COMPLETE line above is the same cadence), carrying the engine state
         // that picked the speed.
-        if( CrashExitDiagEnabled() )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] reset-on-track active race car "
-                << static_cast<s32>( luActiveRaceCarIndex )
-                << " engineState " << static_cast<s32>( lpActiveRaceCar->GetEngineState() )
-                << " online " << ( mbIsInOnlineGameMode ? 1 : 0 )
-                << " speed " << lfResetSpeed << " type " << static_cast<s32>( leResetType )
-                << " dist " << lfResetDistance << "\n";
-        }
     }
 }
 
@@ -585,18 +485,7 @@ void RaceCarEntityModule::ProcessLeapedAndStompedCars(
 
         // [DIAG] BRN_STOMP_DIAG -- NOT IN THE X360 BINARY. First-N capped proof the leg was
         // DISPATCHED with a non-empty traffic list (Showtime + airborne + candidates).
-        static const bool sbStompDiag = ( getenv( "BRN_STOMP_DIAG" ) != 0 );
         static u32 suStompDiagLines = 0u;
-        if( sbStompDiag && miStoredStompeeCount > 0 && suStompDiagLines < 64u
-            && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            ++suStompDiagLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[stomp] ProcessLeapedAndStompedCars stored " << miStoredStompeeCount
-                << " stompee(s); first entity " << mStoredStompees[0].mEntityId.muValue
-                << " at (" << mStoredStompees[0].mPosition.x << ", " << mStoredStompees[0].mPosition.y
-                << ", " << mStoredStompees[0].mPosition.z << ")\n";
-        }
     }
 }
 
@@ -681,8 +570,6 @@ void RaceCarEntityModule::ProcessPowerParking(
         mPowerParkingManager.IsPowerParking() );
 
     // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE X360 BINARY (see PowerParkPublishDiag).
-    PowerParkPublishDiag( mPowerParkingManager.IsPowerParking(), luNearbyParkedCarCount,
-                          luNearbyParkedPlayerCount, lfClosestDistanceSq, lfClosestPerpendicularDist );
 }
 
 // =================================================================================================
@@ -745,24 +632,12 @@ void RaceCarEntityModule::PostSceneUpdate(
 
         // [DIAG] BRN_SHOWTIME_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. One capped line per change
         // of the published pair, so a run proves the publish is DISPATCHED and shows its values.
-        static const bool sbShowtimeTrafficDiag = ( getenv( "BRN_SHOWTIME_TRAFFIC_DIAG" ) != 0 );
         static s32 siLastOnGround = -1;
         static f32 sfLastScale = -1.0f;
         static u32 suShowtimeTrafficLines = 0u;
         const s32 liOnGround = lpRaceCarToTraffic->IsFlagSet(
             RaceCarEntityModuleIO::RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_IN_SHOWTIME_ON_GROUND ) ? 1 : 0;
         const f32 lfScale = lpRaceCarToTraffic->GetShowtimeTrafficDensityScale();
-        if( sbShowtimeTrafficDiag && CgsDev::Log::gpDebugPrint != 0 && suShowtimeTrafficLines < 32u
-            && ( liOnGround != siLastOnGround || lfScale != sfLastScale ) )
-        {
-            siLastOnGround = liOnGround;
-            sfLastScale    = lfScale;
-            ++suShowtimeTrafficLines;
-            *CgsDev::Log::gpDebugPrint << "[showtime-traffic] PostSceneUpdate publish onGround "
-                                       << liOnGround << " densityScale " << lfScale
-                                       << " (in showtime " << ( mCrashPlayManager.IsInShowtime() ? 1 : 0 )
-                                       << ")\n";
-        }
     }
 
     // 0x822FE558..0x822FE588 -- THE POWER PARKING CONSUMER (crash parity FX-SCENEMGR item 4,
@@ -801,27 +676,6 @@ void RaceCarEntityModule::PostSceneUpdate(
 
     {
         static bool sbLoggedPostScenePark = false;
-        if( !sbLoggedPostScenePark && CrashExitDiagEnabled() )
-        {
-            sbLoggedPostScenePark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate: all eight console"
-                   " callees are reconstructed and called -- ProcessRaceCarCrashCompleteEvents,"
-                   " (resetpump wave 2026-08-26) SendResetOnTrackRequests, (roll-frequency"
-                   " wave 2026-09-05) CheckForResetOnTrackConditions, (near-miss producer"
-                   " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses, (2026-09-24)"
-                   " ProcessLeapedAndStompedCars, (2026-09-24) ProcessPowerParking and"
-                   " (2026-09-24) PlaceOnTrackManager::PostSceneUpdate\n"
-                   "[crash-exit] ... and the RESET-ON-TRACK PUMP HAS BOTH PRODUCERS: the crash"
-                   " leg (ProcessRaceCarCrashCompleteEvents -> RequestResetOnTrack) and, as of"
-                   " 2026-09-05, the WATCHDOG leg (CheckForResetOnTrackConditions @0x822CE9E0 --"
-                   " drowned / super-fatal surface / wedged / force-reset / fell out of the world"
-                   " / airborne over 10 s). Both drain through WriteUpdatedAIData (PreScene) ->"
-                   " the two AI bridges -> AIModule::Update slice -> ResetOnTrackManager ->"
-                   " BridgeAIToEntityModules_PrePhysics -> ProcessResetOnTrackResultQueue"
-                   " (PrePhysics) -> ActiveRaceCar::RequestPlaceOnTrack."
-                   " See BrnRaceCarEntityModule_ResetPump.cpp for the whole round trip\n";
-        }
     }
 
     lpInput->UnlockForRead();

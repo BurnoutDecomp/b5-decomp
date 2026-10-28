@@ -34,9 +34,6 @@ void RelocatorJob::Execute(void* lpvJobData)
         if (luSize == 0)
             continue;
 
-        // FLAG PC-platform leaf: compare native addresses, not unrelated C++
-        // pointers. Half-open spans correctly classify even one-byte overlaps.
-        const uintptr_t luSource = reinterpret_cast<uintptr_t>(lpcSource);
         const uintptr_t luDest = reinterpret_cast<uintptr_t>(lpcDest);
         if (luDest + luSize <= luSource || luDest >= luSource + luSize)
         {

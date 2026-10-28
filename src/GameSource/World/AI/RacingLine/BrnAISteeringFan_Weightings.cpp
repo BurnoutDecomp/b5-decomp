@@ -191,38 +191,11 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
     // DELETE-WHEN issue #31 is closed.
     const Vector2 lCarDirection2DRaw = To2DFan(lUseful);
     {
-        static const bool sbAiNan = (std::getenv("BRN_AI_NAN") != 0);
         static s32 siReported = 0;
         static bool sbFirstDone = false;
         const f32 lfLengthSq2D = lCarDirection2DRaw.x * lCarDirection2DRaw.x
                                + lCarDirection2DRaw.y * lCarDirection2DRaw.y;
         const bool lbDegenerate = !(lfLengthSq2D > 0.0f);   // 0, underflowed-to-0, or NaN
-        if (sbAiNan && CgsDev::Log::gpDebugPrint != 0 &&
-            ((lbDegenerate && siReported < 64) || !sbFirstDone))
-        {
-            if (lbDegenerate) ++siReported;
-            const char* lpcTag = lbDegenerate ? "degenerate" : "first(control)";
-            const f32 lfVelSq = lpCar->mVelocity.x * lpCar->mVelocity.x
-                              + lpCar->mVelocity.y * lpCar->mVelocity.y
-                              + lpCar->mVelocity.z * lpCar->mVelocity.z;
-            *CgsDev::Log::gpDebugPrint
-                << "[ai-nan] " << lpcTag << " car=" << lpCar->miRaceCarIndex
-                << " state=" << static_cast<s32>(lpCar->meCarState)
-                << " inAir=" << (lpCar->mbIsInAir ? 1 : 0)
-                << " crashing=" << (lpCar->mbIsCrashing ? 1 : 0)
-                << " lenSq2D=" << lfLengthSq2D
-                << " useful=(" << lUseful.x << "," << lUseful.y << "," << lUseful.z << ")"
-                << " vel=(" << lpCar->mVelocity.x << "," << lpCar->mVelocity.y
-                << "," << lpCar->mVelocity.z << ") velSq=" << lfVelSq
-                << " dir=(" << lpCar->mDirection.x << "," << lpCar->mDirection.y
-                << "," << lpCar->mDirection.z << ")"
-                << " right=(" << lpCar->mRight.x << "," << lpCar->mRight.y
-                << "," << lpCar->mRight.z << ")"
-                << " pos=(" << lpCar->mPosition.x << "," << lpCar->mPosition.y
-                << "," << lpCar->mPosition.z << ")"
-                << " speedInRange=" << lpCar->mfSpeedInRange << "\n";
-            sbFirstDone = true;
-        }
     }
 
     const Vector2 lCarDirection2D = Normalize2DFan(lCarDirection2DRaw);
@@ -307,12 +280,6 @@ void SteeringFan::CachePointAhead(RacingLineGenerator* lpRacingLineGenerator,
                                                                     mCentreFarAhead,
                                                                     mCentreAheadFarAhead);
 #else
-        // [FLAG PC bring-up] RacingLineGenerator::GetPointFarAhead @0x827900A0 has no body in this
-        // tree (it needs GetLocalSectionID / GetSectionPointer / GetSectionInterpPosition). The
-        // console's own "no point found" answer is false, which is what every consumer of
-        // mbPointAheadKnown treats as "use the fallback". Same park as
-        // AIDriver::FindFinalDriftDirection's. DELETE-WHEN the generator query stack lands.
-        mbPointAheadKnown = false;
 #endif
     }
 
@@ -323,14 +290,6 @@ void SteeringFan::CachePointAhead(RacingLineGenerator* lpRacingLineGenerator,
                                                                        mCentreHere,
                                                                        mCentreAhead);
 #else
-    // [FLAG PC bring-up] RacingLineGenerator::GetCentreCentreLineHere @0x8278E930 has no body in
-    // this tree. false is the console's own "centre line not known" answer, and it is exactly what
-    // AIDriver::Update's twin park at BrnAIDriver.cpp already stores into
-    // RacingLine::mbCentreLineHereKnown. Consequence: IncludeCentreLineTracking and
-    // IncludeRouteParallelTracking below both take their "zero the row" arm, so rows
-    // eFan_SteerToCentre and eFan_DriveParallel contribute nothing until the generator lands.
-    // DELETE-WHEN the generator query stack lands.
-    (void)lpRacingLineGenerator;
     mbCentreHereKnown = false;
 #endif
 }
@@ -396,27 +355,7 @@ void SteeringFan::IncludeCentreLineTracking(RacingLineGenerator* lpRacingLineGen
     // whether the row came out non-zero, so a live run shows the draw reached the rivals.
     // Members are read only; nothing here feeds back into the weights.
     {
-        static const bool sbFanDiag = (std::getenv("BRN_AI_FAN_DIAG") != 0);
         static u32 suComputed = 0, suLive = 0, suPrinted = 0;
-        if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            f32 lfMinRow = 0.0f;
-            for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
-                if (mfWeighting[eFan_SteerToCentre][liStep] < lfMinRow)
-                    lfMinRow = mfWeighting[eFan_SteerToCentre][liStep];
-            ++suComputed;
-            if (lfMinRow < 0.0f)
-                ++suLive;
-            if ((lfMinRow < 0.0f && suPrinted < 16) || (suComputed % 240) == 0)
-            {
-                ++suPrinted;
-                *CgsDev::Log::gpDebugPrint
-                    << "[aidrv] centre-row fan " << static_cast<s32>(reinterpret_cast<intptr_t>(this) & 0xFFFFFF)
-                    << " ahead " << lfAhead << " recip " << lfAheadRecip
-                    << " minRow " << lfMinRow
-                    << " live " << suLive << "/" << suComputed << "\n";
-            }
-        }
     }
 }
 

@@ -35,15 +35,6 @@ namespace CgsGui
 
         // DWARF CgsGuiResourceModule.h:129-131.
         static const s32 KI_RESOURCE_RECEIVER_QUEUE       = 8192;
-        // [FLAG PC-platform widening] the console value is 64 (X360 AddBundleToQueue
-        // @0x82848090: `cmpwi r11, 0x40`). This build's HUD-flow stand-in (the inline
-        // BrnHudFlow hack that replaces the Lua FSM -- see the Lua-system note) issues the
-        // whole component-resource roster in ONE frame where the console's scripted flow
-        // staggers it, so with the boost bar's twelve texture requests live the single-frame
-        // peak measured 65 (the [gui-queue] diag, 2026-08-25: 50+ type-7 component records +
-        // the boost textures). Widened -- capacity only, the queue mechanics and the assert
-        // are unchanged -- until the faithful Lua flow retires the stand-in.
-        static const s32 KI_MAX_BUNDLES_TO_LOAD           = 128;
         static const s32 KI_MAX_RESOURCES_WITHOUT_WAITING = 5;
 
         // DWARF CgsGuiResourceModule.h:51.
@@ -182,13 +173,6 @@ namespace CgsGui
         // X360 @0x8284FFE8 (DWARF :362): match type-3 receiver responses (unload
         // completions, by full-path hash) onto the pending records; mark parsed, unloaded.
         void ParseUnloaded();
-
-        // [PC] platform request servicer -- the synchronous stand-in for the console's
-        // resource/pool module chain that consumes the output buffer's request queue and
-        // posts the responses back into mReceiverQueue. Runs at the Update tail (the spot
-        // the console scheduler would run the downstream modules). Defined in
-        // CgsGuiResourceModulePC.cpp (FLAG'd PC-platform leaf).
-        void ServicePlatformRequests(OutputBuffer* lpOutput);
 
         // ---- members (DWARF :132-173; X360 offsets in the class comment) --------------
         EPrepareStage   mePrepareStage;

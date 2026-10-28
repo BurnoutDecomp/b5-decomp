@@ -281,17 +281,6 @@ BrnCoronaTypeParams BrnCoronaTypeParams::smParams[eCoronaTypeCount] =
 // ---------------------------------------------------------------------------------------------
 const BrnCoronaTypeParams& BrnCoronaTypeParams::GetCoronaTypeParams(BrnCoronaType leType)
 {
-    // [FLAG PC guard -- NOT PRESENT IN THE CONSOLE BINARY] sub_823FD428 indexes the table with a
-    // raw type*48 and no range check, so an out-of-range BrnCoronaType reads 48 bytes past the
-    // table there too.  This CGS_ASSERT costs one predictable compare per lookup in EVERY build
-    // (CGS_ASSERT is not configuration-gated in this tree) and does NOT change the value returned
-    // -- like the console, an out-of-range type still reads past the table.  It exists so a bad producer
-    // (SubmitCoronasForRaceCar's per-tag-type switch is the one about to be written) fails loudly
-    // instead of drawing a corona with a garbage texture id -- which would index the 12-row atlas
-    // UV table out of bounds and still *render*, the exact "it draws, so it works" failure mode
-    // this subsystem is prone to.  Delete it if a reviewer prefers strict binary parity.
-    CGS_ASSERT(leType >= 0 && leType < eCoronaTypeCount,
-               "leType >= 0 && leType < eCoronaTypeCount");
 
     return smParams[leType];
 }

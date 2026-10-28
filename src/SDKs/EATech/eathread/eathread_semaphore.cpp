@@ -4,7 +4,7 @@
 // vendor snapshot). See eathread_semaphore.h for the committed-type / vendor-
 // snapshot divergence FLAG and the WAIT-TIMEOUT FLAG.
 
-#include <Windows.h>  // CreateSemaphoreA / WaitForSingleObject / CloseHandle / GetTickCount
+#include <xtl.h>  // CreateSemaphoreA / WaitForSingleObject / CloseHandle / GetTickCount
 #include <intrin.h>   // _InterlockedDecrement -- portable stand-in for the X360
                       // interrupt-masked lwarx/stwcx. reservation idiom.
 #include <new>        // placement new (SemaphoreFactory::ConstructSemaphore)

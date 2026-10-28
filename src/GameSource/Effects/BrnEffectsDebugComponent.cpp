@@ -22,7 +22,6 @@
 #include "GameSource/Effects/BrnEffectsDebugComponent.h"
 
 #include <cmath>
-#include "pc/math/VmxFloat.h"
 #include "SDKs/XboxMath/XMVectorATan.h"
 
 #include "GameSource/Effects/EffectsModule.h"
@@ -67,7 +66,6 @@ namespace BrnEffects
         // routines82C6EB00/EBC8/F100/F128/F150 from the cited rodata words.
         f32 JunkyardSinCosLane(f32 lfRadians, f32 lfPhase)
         {
-            namespace vmx = CgsPC::VmxFloat;
             const f32 lfCycle = vmx::MultiplyAdd(lfRadians, 0.15915493667125702f, lfPhase); //3E22F983
             const f32 lfFraction = vmx::Subtract(lfCycle, vmx::Flush(std::floor(lfCycle)));
             const f32 lfMirror = vmx::Subtract(1.0f, lfFraction);
@@ -82,7 +80,6 @@ namespace BrnEffects
         // signed-pi quadrant correction and an explicit z==0 signed-pi/2 select.
         f32 JunkyardHeadingRadians(f32 lfX, f32 lfZ)
         {
-            namespace vmx = CgsPC::VmxFloat;
             lfZ = vmx::Flush(lfZ);
             f32 lfReciprocal = vmx::Flush(static_cast<f32>(1.0 / static_cast<f64>(lfZ)));
             const f32 lfError = vmx::NegativeMultiplySubtract(lfReciprocal, lfZ, 1.0f);
@@ -577,10 +574,7 @@ namespace BrnEffects
             rw::math::vpu::Matrix44Affine lTransform;
             const Vector3 lI = {1.0f, 0.0f, 0.0f, 0.0f};
             const Vector3 lK = {0.0f, 0.0f, 1.0f, 0.0f};
-            lTransform.Right() = CgsPC::VmxFloat::MultiplyAdd(lI, lfSin, CgsPC::VmxFloat::Multiply(lK, lfCos));
             lTransform.Up()    = rw::math::vpu::Vector3 {  0.0f,  1.0f,  0.0f,  0.0f };
-            lTransform.At() = CgsPC::VmxFloat::Subtract(CgsPC::VmxFloat::Multiply(lK, lfSin),
-                                                       CgsPC::VmxFloat::Multiply(lI, lfCos));
             lTransform.Pos()   = rw::math::vpu::Vector3 {  lpThis->mfJunkyardVfxPosX,
                                                            lpThis->mfJunkyardVfxPosY,
                                                            lpThis->mfJunkyardVfxPosZ, 0.0f };

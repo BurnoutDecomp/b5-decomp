@@ -13,7 +13,6 @@ namespace CgsGui
         if (!lpInput)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::MessageBufferPC lMessage;
             CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
             lStream << "Invalid input queue in GuiModule::BridgeFromInputToView";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),

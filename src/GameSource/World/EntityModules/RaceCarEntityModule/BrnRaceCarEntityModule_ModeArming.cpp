@@ -38,8 +38,6 @@
 #include "SharedClasses/DataLists/VehicleList.h"                          // VehicleList::GetVehicleIndex / GetVehicleData
 #include "SharedClasses/DataLists/VehicleListEntry.h"                     // VehicleListEntry::GetCarType / GetLiveryType
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                // GlobalColourPalette (the colour assert)
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"            // [net] witness lines (PC harness)
-
 namespace BrnWorld
 {
 
@@ -62,7 +60,6 @@ static const s32 KI_PLAYER_START_GRID_SLOT = 0;
 // The car arrives AT REST: PlaceOnTrackManager::PlaceCarOnTrack multiplies the reset direction
 // by this speed, and VehiclePhysics::Reset re-seeds every motion register from that zero.
 static const f32 KF_START_GRID_PLACE_ON_TRACK_SPEED = 0.0f;
-
 
 // ----------------------------------------------------------------------------
 // HandlePrepareForModeAction @0x823092F0 -- common non-Showtime boost spine.
@@ -208,21 +205,6 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
 
     if (CgsDev::Log::gpDebugPrint != 0)
     {
-        // [FLAG PC witness] [ai-attach] ONE LINE PER PREPARE-FOR-MODE (not per frame). The
-        // start-style inputs PlaceRaceCarOnLoad's rival arms branch on, printed where they are
-        // latched, so the next run's log says WHICH arm every rival should be taking before the
-        // per-car lines below it say which one it took.
-        // DELETE-WHEN rivals drive and the AI lane closes.
-        *CgsDev::Log::gpDebugPrint
-            << "[ai-attach] mode armed: opponents " << miOpponentCount
-            << " mode " << static_cast<s32>(meGameModeType)
-            << " aiDriveByStart " << static_cast<s32>(mbSpawnAIBehindStartGrid)
-            << " playerRolls " << static_cast<s32>(mbPlayerRollsOnEventStart)
-            << " donut " << static_cast<s32>(mbPlayerDonutsOnEventStart)
-            << " resetBehind "
-            << static_cast<s32>(GetGameModeFlag(
-                   BrnGameState::GameModeParams::KU_FLAG_AI_RESET_ON_TRACK_BEHIND))
-            << " [FLAG PC witness]\n";
     }
 
     // ========================================================================================
@@ -408,11 +390,6 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         CGS_ASSERT(liLocalPlayerGridPosition > -1 && liLocalPlayerGridPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "( liLocalPlayerGridPosition > -1 ) && ( liLocalPlayerGridPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS )");
 
-        BrnNetHarnessPC::Witness("world", "online grid mode=%d cars=%d lobby=%d localGrid=%d respawnLocal=%d",
-                                 static_cast<s32>(lpGameModeParams->GetGameModeType()), liGridCount,
-                                 lbIsFreeburnLobby ? 1 : 0, liLocalPlayerGridPosition,
-                                 lbRespawnLocalCar ? 1 : 0);
-
         AddRaceCarToStartingGridOrFreeburnLobby(lpPFMAction, lpOutput->GetRaceCarAIInterface(),
                                                 lpGameModeParams, lbIsFreeburnLobby, lbRespawnLocalCar,
                                                 liLocalPlayerGridPosition, leLocalPlayerActiveRaceCarIndex,
@@ -518,7 +495,6 @@ void RaceCarEntityModule::SetAllActiveCarsInGameMode(bool lbCarSelectAllowedInGa
     }
 }
 
-
 // ----------------------------------------------------------------------------
 // SetAllCarsOnStartLine @ 0x822A4850.
 //
@@ -570,7 +546,6 @@ void RaceCarEntityModule::SetAllCarsOnStartLine(ActiveRaceCar::ERaceStartState l
         lpActiveRaceCar->SetOnStartLine(leRaceStartState);
     }
 }
-
 
 // ============================================================================================
 // ⭐⭐⭐ SetupOpponents @0x82307DF0 -- THE MODE-START SPINE, landed 2026-08-27 (start-grid wave).
@@ -679,7 +654,6 @@ void RaceCarEntityModule::SetupOpponents(
                               true);
     }
 }
-
 
 // ============================================================================================
 // ⭐⭐⭐ SetUpPlayerCarForMode @0x823058F8 -- THE FUNCTION THAT SEATS THE PLAYER ON THE GRID.
@@ -925,7 +899,6 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
         mePlayerActiveRaceCarIndex);
 }
 
-
 // ============================================================================================
 // RemoveAllRaceCars -- the online roster's clean slate.
 //
@@ -951,7 +924,6 @@ void RaceCarEntityModule::RemoveAllRaceCars(RaceCarEntityModuleIO::OutputBuffer_
         }
     }
 }
-
 
 // ============================================================================================
 // AddRaceCarToStartingGridOrFreeburnLobby -- seat one roster car.
@@ -1053,13 +1025,6 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
     const CgsID lModelId = lpGameModeParams->maModelIds[liGridPosition];
     const Matrix44Affine lTransform =
         BrnDirector::Camera::Utils::CreateLookAt(lPosition, rw::math::vpu::Add(lPosition, lDirection));
-
-    // FLAG PC-platform leaf: bounded, passive observation through the existing LAN witness.
-    BrnNetHarnessPC::Witness("debug-spawn", "lobby=%d force=%d local=%d respawn=%d grid=%d position=(%g,%g,%g)",
-                             lbIsFreeburnLobby ? 1 : 0,
-                             mRCEntityModuleDebugComponent.mbForceOnlineFreeburnSpawnPosition ? 1 : 0,
-                             lbIsLocal ? 1 : 0, lbRespawnLocalCar ? 1 : 0, liGridPosition,
-                             lPosition.x, lPosition.y, lPosition.z);
 
     // ---- 5. the local car's boost strategy + stats -----------------------------------------
     ERaceCarType leRaceCarType = E_RACE_CAR_TYPE_NETWORK;
@@ -1236,10 +1201,6 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         }
     }
 
-    BrnNetHarnessPC::Witness("world", "grid car %d net=%d local=%d type=%d active=%d model=%016llX",
-                             liGridPosition, static_cast<s32>(lGridNetworkPlayerID), lbIsLocal ? 1 : 0,
-                             static_cast<s32>(lpRaceCar->GetType()), static_cast<s32>(leActiveRaceCarIndex),
-                             static_cast<unsigned long long>(lModelId));
 }
 
 } // namespace BrnWorld

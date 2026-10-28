@@ -64,16 +64,6 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // directly as a member (AptDisplayList.h is included above); the free-function
 // forwarder is retired.
 
-// ---------------------------------------------------------------------------
-// AptGetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
-// AptCharacter record. The X360 reaches it as `mpRenderItem->mpCharacter + 0x10`;
-// the same reinterpret AptCharacterAnimation.cpp / AptCIHMembers.cpp use.
-// Centralised here so the three play-head methods name it once.
-// FLAG PC-platform leaf: serialised .apt blob offset access -- the character table
-// is native-8 "1:7:8" FILE data (relocated live by Fixup), not a modelled C++
-// member; the widened header lands the embedded body at char+0x20
-// (KU_AptEmbeddedMovieOff, AptCIH.h -- console char+0x10). We ship only the 8-byte
-// format, so this is the single native-64 offset.
 static AptMovie* AptGetClipMovie(const AptCharacterSpriteInstBase* pInst)
 {
     AptCharacter* pCharacter = pInst->mpRenderItem->mpCharacter;
@@ -497,13 +487,6 @@ int AptCIH::jumpToFrame(int nFrame)
 
 // tick @0x82B0BED8 -- advance the movie-clip node one frame.
 //
-// FLAG PC-platform leaf (host tick gating): the console tick dereferences the char
-// inst (a1+32), its render item (v6[1]), the render item's character and the embedded
-// clip movie (char + embed) WITHOUT null guards -- everything is always live in the
-// shipped game. On our partial bring-up the render-tree / AS scope is not fully stood up
-// yet, so this faithful body is NOT ticked at boot: the host driver holds it off
-// (BrnGuiAptRuntime UpdateRuntime: lbTickReady=false) until the converter delivers
-// a uniformly-64-bit bundle. The body below is the single faithful X360 decompile.
 
 int AptCIH::tick()
 {
@@ -515,7 +498,6 @@ int AptCIH::tick()
 
     AptCharacterSpriteInstBase* pInst =
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);   // v6 = *(a1+32)
-
 
     // Only sprite(5)/animation(9) clips have a play-head (v6[2] >> 26 == 5 or 9).
     const uint32_t nType = pInst->GetTypeTag();

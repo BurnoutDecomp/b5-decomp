@@ -14,7 +14,6 @@
 #include "GameSource/GameState/BrnGameEvents.h"                                            // LocalPlayerDisconnectedEvent
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                                      // GuiEventNetworkPlayerImage / CustomMatchResults / CamStatus
 #include "GameSource/Gui/Events/BrnGuiEventNetworkPlayerStats.h"                           // GuiEventNetworkPlayerStats
-#include "GameSource/Gui/PC/BrnCreateMatchTrace.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                  // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                                // GuiEventShowLoginQuestion / GuiEventNetworkDisconnected
@@ -26,8 +25,6 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceTelemetry.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGamesX360.h" // SetSessionFlags
-#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                         // [PC HARNESS] bounded [net] witness lines
-
 // ============================================================================================
 // BrnNetwork::BrnNetworkManager -- event handling and GUI / game output (partfile).
 //
@@ -428,7 +425,6 @@ namespace BrnNetwork
         lEvent.miTimeLimit         = lGameParams.TimeLimit();
 
         GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lEvent, lEvent.GetEventType());
-        BrnGui::CreateMatchTracePC::Parameters(BrnGui::CreateMatchTracePC::E_PARAMS_SERVER_READBACK, lEvent);
     }
 
     // ----------------------------------------------------------------------------------------
@@ -706,7 +702,6 @@ namespace BrnNetwork
             PlayerMenuData* lpMenuData =
                 static_cast<PlayerMenuData*>(lpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
             CGS_ASSERT(lpMenuData != NULL, "lpMenuData");
-            BrnNetHarnessPC::Witness("player", "added id=%d local=%d name=%.16s", lPlayerID, lbIsLocalPlayer ? 1 : 0, (lpMenuData != NULL) ? lpMenuData->macName : "?");
 
             lPlayerParams.Prepare();
             lpNetworkManager->GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerID(lPlayerID,
@@ -752,7 +747,6 @@ namespace BrnNetwork
         }
 
         case CgsNetwork::PlayerManager::E_EVENT_START_PLAYER_REMOVAL:
-            BrnNetHarnessPC::Witness("player", "removing id=%d", lPlayerID);
             lpNetworkManager->GetHostMigrationManager()->RemovePlayer(lPlayerID);
             lpNetworkManager->GetStartTimeManager()->RemovePlayer(lPlayerID);
             lpNetworkManager->GetVoIPManager()->RemovePlayer(lpNetworkManager->GetServerInterface(), lPlayerID);

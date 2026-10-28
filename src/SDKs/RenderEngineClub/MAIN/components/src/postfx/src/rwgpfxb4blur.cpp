@@ -77,13 +77,6 @@ namespace postfx
 // Goes into b5-decomp/src/SDKs/RenderEngineClub/MAIN/components/src/postfx/src/rwgpfxb4blur.cpp.
 // ================================================================================================
 
-// ---- THE SEVEN PC PROGRAM IMAGES ---------------------------------------------------------------
-// [FLAG PC-platform leaf: shader programs] The D3D9 counterparts of the EIGHT Xenos packages this
-// TU compiles, wrapped as platform-4 ShaderProgramBuffer images by the generated leaf
-// pc/gcm/renderengine/PostFxB4BlurProgramsPC.cpp (sibling of PostFxBloomProgramsPC.cpp and
-// PostFxHelperProgramsPC.cpp). Declared here as the minimal external surface -- the same convention
-// rwgpfxhelper.cpp:120-131 and BrnPostFxBloom.cpp already use for their own generated leaves; there
-// is no header for these.
 //
 // The eight console packages (scratch/postfx_step6_producers/PACKAGES_DUMP_B4BLUR.md, dumped from
 // ARTIST_copy.i64 -- every dumped size matches the byte count each call site below already records)
@@ -104,19 +97,12 @@ namespace postfx
 // static_assert ties it to sizeof() of the array.
 namespace renderengine
 {
-    extern const u8  gauPostFxB4BlurQuadVertexProgramPC[];
     extern const u32 guPostFxB4BlurQuadVertexProgramPCSize;
-    extern const u8  gauPostFxB4BlurScatterVertexProgramPC[];
     extern const u32 guPostFxB4BlurScatterVertexProgramPCSize;
-    extern const u8  gauPostFxB4BlurScatterPixelProgramPC[];
     extern const u32 guPostFxB4BlurScatterPixelProgramPCSize;
-    extern const u8  gauPostFxB4BlurRadialPixelProgramPC[];
     extern const u32 guPostFxB4BlurRadialPixelProgramPCSize;
-    extern const u8  gauPostFxB4BlurTexturePixelProgramPC[];
     extern const u32 guPostFxB4BlurTexturePixelProgramPCSize;
-    extern const u8  gauPostFxB4BlurDownSamplePixelProgramPC[];
     extern const u32 guPostFxB4BlurDownSamplePixelProgramPCSize;
-    extern const u8  gauPostFxB4BlurBlurPixelProgramPC[];
     extern const u32 guPostFxB4BlurBlurPixelProgramPCSize;
 }
 
@@ -336,9 +322,6 @@ namespace postfx
         //   float4s carry the blur pixel program's SEVEN tap UVs -- which is why the blur program
         //   needs no offset uniform. The DWARF corroborates: B4Blur::RenderBlurQuad builds a
         //   VertexIterator5<VertexTypeFloat3, VertexTypeFloat4 x4> (dwarfdump rwgpfxb4blur.cpp:270).
-        m_quadVertexProgram = PfxHelper::CreateProgram(
-            0, renderengine::gauPostFxB4BlurQuadVertexProgramPC,
-            renderengine::guPostFxB4BlurQuadVertexProgramPCSize, m_allocator);
 
         // ---- the SCATTER quad's vertex descriptor (asm 0x823FEC10-0x823FECB4) ----------------------
         // Three elements: position, uv, one extra (usage indices 1, 6, 7).
@@ -389,18 +372,12 @@ namespace postfx
         // ---- the scatter programs (asm 0x823FED80-0x823FEE18) ---------------------------------------
         //   CreateProgram(0, &unk_82045600, 0x144=324) -- POSITION pass-through, TEXCOORD0 = uv +
         //   uvOffset.xy, TEXCOORD1 = the per-vertex FLOAT4 the scatter pixel program reads.
-        m_scatterVertexProgram = PfxHelper::CreateProgram(
-            0, renderengine::gauPostFxB4BlurScatterVertexProgramPC,
-            renderengine::guPostFxB4BlurScatterVertexProgramPCSize, m_allocator);
         BindProgramVariable(m_scatterVertexProgram, "uvOffset", m_scatterUVOffsetHandle);
 
         //   CreateProgram(1, &unk_82045748, 0x26C=620) -- ONE tap of low_texture displaced radially
         //   away from scatterScalars1.xy by a value-noise amount scaled by scatterScalars1.w and a
         //   [0,1] falloff built from |TEXCOORD1.xy|; alpha is a second saturate built from
         //   |TEXCOORD1.zw|. Recovered instruction by instruction in brn_postfx_b4blur.fx.
-        m_scatterPixelProgram = PfxHelper::CreateProgram(
-            1, renderengine::gauPostFxB4BlurScatterPixelProgramPC,
-            renderengine::guPostFxB4BlurScatterPixelProgramPCSize, m_allocator);
         BindProgramVariable(m_scatterPixelProgram, "scatterScalars1", m_scatterScalars1Handle);
         BindProgramVariable(m_scatterPixelProgram, "scatterScalars2", m_scatterScalars2Handle);
 
@@ -408,17 +385,11 @@ namespace postfx
         //   CreateProgram(0, &unk_82045AC0, 0x144=324). ⚠ THE SAME 324 BYTES AS 0x82045600 -- the
         //   two packages are byte-identical, so the same PC array is adopted here. Two separate
         //   ProgramBuffer objects still result, exactly as on the console.
-        m_radialVertexProgram = PfxHelper::CreateProgram(
-            0, renderengine::gauPostFxB4BlurScatterVertexProgramPC,
-            renderengine::guPostFxB4BlurScatterVertexProgramPCSize, m_allocator);
         BindProgramVariable(m_radialVertexProgram, "uvOffset", m_radialUVOffsetHandle);
 
         //   CreateProgram(1, &unk_82045C08, 0x2CC=716) -- EIGHT taps of low_texture marched from the
         //   pixel toward scatterScalars1.xy at scatterScalars2.x + i*scatterScalars2.y (i = 0..7),
         //   averaged with 1/8: the radial "speed streak" blur.
-        m_radialPixelProgram = PfxHelper::CreateProgram(
-            1, renderengine::gauPostFxB4BlurRadialPixelProgramPC,
-            renderengine::guPostFxB4BlurRadialPixelProgramPCSize, m_allocator);
         BindProgramVariable(m_radialPixelProgram, "scatterScalars1", m_radialScalars1Handle);
         BindProgramVariable(m_radialPixelProgram, "scatterScalars2", m_radialScalars2Handle);
 
@@ -432,9 +403,6 @@ namespace postfx
         //   oC0 = float4(tex2D(tex, uv).rgb * blendFactor.x, blendFactor.x). The sampler's CTAB name
         //   really is "tex" here, not "low_texture"/"scene_texture"; samplers are bound by UNIT, so
         //   the name only has to match so the two descriptor tables compare equal.
-        m_textureProgram = PfxHelper::CreateProgram(
-            1, renderengine::gauPostFxB4BlurTexturePixelProgramPC,
-            renderengine::guPostFxB4BlurTexturePixelProgramPCSize, nullptr);
         BindProgramVariable(m_textureProgram, "blendFactor", m_blendFactorTextureHandle);
 
         //   CreateProgram(1, &unk_820454E0, 0x120=288) -- ⚠ ONE TAP, NOT SIXTEEN, on X360: the
@@ -444,9 +412,6 @@ namespace postfx
         //   `float[16] blur4SampleOffsets`, dwarfdump rwgpfxb4blur.cpp:849), so the X360 build
         //   compiled a narrower variant of the program. The PC image matches X360, register count
         //   included, so this handle stays a ONE-row handle on both sides.
-        m_downsampleProgram = PfxHelper::CreateProgram(
-            1, renderengine::gauPostFxB4BlurDownSamplePixelProgramPC,
-            renderengine::guPostFxB4BlurDownSamplePixelProgramPCSize, m_allocator);
         BindProgramVariable(m_downsampleProgram, "sampleOffsets", m_sampleOffsetHandle);
 
         //   CreateProgram(1, &unk_820452A8, 0x234=564) -- a SEVEN-tap combine of per-vertex UVs
@@ -462,9 +427,6 @@ namespace postfx
         //   that exactly -- the weights are literals there too and no `controlScalars` uniform is
         //   declared -- because giving the PC program a uniform the console program does not have
         //   would make a push that is a no-op on the console start moving pixels here.
-        m_blurProgram = PfxHelper::CreateProgram(
-            1, renderengine::gauPostFxB4BlurBlurPixelProgramPC,
-            renderengine::guPostFxB4BlurBlurPixelProgramPCSize, m_allocator);
         BindProgramVariable(m_blurProgram, "controlScalars", m_controlScalarsHandle);
 
         // ---- the scatter rasterizer state (asm 0x823FEF44-0x823FEFF8) --------------------------------

@@ -52,7 +52,6 @@ public:
     bool Prepare();
     bool Release();
     void Destruct();
-    void CancelStreamPC();
     bool Update(void* lpInputBuffer, void* lpOutputBuffer);
     void ProcessReceiverQueue();
     void ProcessPoolResponses();
@@ -101,8 +100,6 @@ private:
     char* mpcHeaderBuffer;
     char* mpcDebugDataBuffer;
     bool mabStreamBuffersUsed[2];
-    // FLAG PC-platform leaf: invalid open-response handles retire failed loads.
-    bool mabStreamOpenFailed[2];
     char* mapcStreamBuffers[2];
     char* mpcSecondaryStreamBuffer;
     bool* mpNeeds;

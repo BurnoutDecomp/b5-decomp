@@ -60,12 +60,6 @@ extern s32 gT5WindowFrame;
 
 namespace
 {
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 
     // [T5-ram] arm the post-hit measurement window. 180 frames at 60 Hz == 3 s.
     // RE-ARM POLICY (2026-09-02, traffic crash wave): the first version armed on the FIRST
@@ -99,16 +93,6 @@ namespace
         gT5SumImpulseMag    = 0.0f;
         gT5MaxClosing       = 0.0f;
         gT5WindowFrame      = 0;
-        if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[T5-arm] slot=" << static_cast<s32>(lu16TrafficSlot)
-                << " global=" << gT5RamGlobalIndex
-                << " crashing=" << (lbCrashingOutcome ? 1 : 0)
-                << " playerSpeed=" << lfPlayerSpeed
-                << " mph=" << (lfPlayerSpeed * 2.2369363f)
-                << "\n";
-        }
     }
 
     // [T4-hit] outcome lines: a BUDGET rather than a once-per-kind latch, so a run with several
@@ -341,17 +325,6 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
     ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, true);
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
-    if (s_iT4OutcomeBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        --s_iT4OutcomeBudget;
-        s_bT4CrashingReported = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[T4-hit] outcome=CRASHING trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
-            << " crasherOwner=" << static_cast<s32>(EntityOwnerOf(lCrasherEntityID))
-            << " crasherIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
-            << " trafficSpeed=" << SpeedOf(*lpVehicle->mpVehicleBody)
-            << "\n";
-    }
 
     // An articulated car crashes as one: the other half of the joint takes the same response.
     // The CRASHING early-out at the top ends the recursion when it comes back to this half.
@@ -431,20 +404,6 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
     ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, false);
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
-    if (s_iT4OutcomeBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        --s_iT4OutcomeBudget;
-        s_bT4CheckedReported = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[T4-hit] outcome=CHECKED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
-            << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
-            << " relSpeed=" << RelativeSpeed(*lpRaceCarPhysics, *lpVehicle->mpVehicleBody)
-            // OnChecked @0x8261E3F0 gates the crash arm on the CHECKER's strength stat (> 8);
-            // print it beside the outcome so a non-crashing checked car can be read against it.
-            << " checkerStrength=" << static_cast<s32>(lpRaceCarPhysics->GetStrengthStat())
-            << " trafficCrashingAfter=" << (lpVehicle->mpVehicleBody->IsCrashing() ? 1 : 0)
-            << "\n";
-    }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -521,17 +480,6 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
     ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID, false);
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
-    if (s_iT4OutcomeBudget > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        --s_iT4OutcomeBudget;
-        s_bT4SlammedReported = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[T4-hit] outcome=SLAMMED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
-            << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
-            << " relSpeed=" << RelativeSpeed(*lpRaceCarPhysics, *lpVehicle->mpVehicleBody)
-            << " slamMag=" << lfMagnitude
-            << "\n";
-    }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -604,17 +552,6 @@ void PhysicalTrafficManager::TestForNearMissFreakOut(
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE. lfSeverity is
     // the SQUARED relative speed the console feeds SetFreakedOut, reported as-is.
-    if (!s_bT4NearMissReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        s_bT4NearMissReported = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[T4-hit] outcome=NEARMISS trafficSlot="
-            << static_cast<s32>(EntityIndexOf(lTrafficPhysicsEntityID))
-            << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lRaceCarPhysicsEntityID))
-            << " relSpeedSq=" << lfSeverity
-            << " side=" << lfSide
-            << "\n";
-    }
 }
 
 }   // namespace Vehicle

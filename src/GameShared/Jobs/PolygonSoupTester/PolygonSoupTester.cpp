@@ -15,15 +15,6 @@
 //   0x829158D8  add  r3, unk_83123940, spuId*0x19040
 //   0x829158DC  bl   PolygonSoupTesterJob::Execute(this, a2)
 //
-// ⚠️⚠️ FLAG PC-platform leaf: THE SPU ID.
-// `(EA::Jobs::GetJobThreadId() - 0xF8000088) / 4` is an X360 hardware-thread-address
-// arithmetic. There is no such id on this host, and EA::Jobs::GetJobThreadId has no
-// body in this tree at all. The console's INTENT is "index this thread's private job
-// context", and on this single-threaded PC build there is exactly one. Only that one
-// computation is replaced; the bounds assert, the context array, its 0x19040 stride and
-// the Execute call are all the console's. Same precedent and same marker as
-// CgsLooseOctree::StartFrustumTestJobs (CgsLooseOctree.cpp:997).
-// ============================================================================
 
 #include "GameShared/Jobs/PolygonSoupTester/PolygonSoupTesterJob.h"
 
@@ -42,10 +33,6 @@ void PolygonSoupTesterEntry(EA::Jobs::Param laParam0,
     (void)laParam0;
     (void)laParam2;
     (void)laParam3;
-
-    // ---- FLAG PC-platform leaf: the job-thread index ----
-    // X360: spuId = (EA::Jobs::GetJobThreadId() - 0xF8000088) / 4.
-    const s32 liJobThreadIndex = 0;
 
     CGS_ASSERT(liJobThreadIndex < KI_NUM_POLYGON_SOUP_TESTER_JOBS,
                "SPU Id out of range: ");   // PolygonSoupTester.cpp:55

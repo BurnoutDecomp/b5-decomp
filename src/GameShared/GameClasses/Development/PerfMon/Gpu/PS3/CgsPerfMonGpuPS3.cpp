@@ -5,8 +5,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <Windows.h>
-#include "pc/gcm/renderengine/GpuMonitorTiming.h"
+#include <xtl.h>
 #ifdef AddMonitor
 #undef AddMonitor
 #endif
@@ -32,7 +31,6 @@
 // a completed packet is published at the original update-side Swap boundary.
 // Pending/invalid packets retain the last complete sample, never CPU timings.
 
-#include "pc/gcm/renderengine/device.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <mutex>
 #include <cstdlib>
@@ -75,44 +73,7 @@ namespace CgsDev
         PerfMonGpuBuffer gBuffer;                 // X360 gValues @ 0x83018270
         f32              gfCyclesToPercent = 0.0f; // X360 flt_83018CE8: 100.0 / QPF, ticks -> percent-of-second
 
-        // FLAG PC-platform leaf: bridge completed GPU-query packets across the
-        // joined render/update boundary. The original callback828259B8 clears
-        // 33 costs on frame begin, stores begins in slots33..65, and accumulates
-        // end-begin in slots0..32. Native packets preserve those slot meanings.
-        std::mutex gNativeSampleMutex;
-        renderengine::GpuMonitorTimingPC::Result gNativeSample;
         u64 guConsumedNativeFrame = 0;
-
-        void PublishNativeGpuSample(const renderengine::GpuMonitorTimingPC::Result& lrResult)
-        {
-            using namespace renderengine::GpuMonitorTimingPC;
-            {
-                std::lock_guard<std::mutex> lLock(gNativeSampleMutex);
-                if (lrResult.status == Reset ||
-                    (lrResult.status == Valid && lrResult.frame > gNativeSample.frame))
-                    gNativeSample = lrResult;
-            }
-            // FLAG PC-platform leaf: opt-in witnesses for the real query path.
-            static const bool sbTrace = std::getenv("BRN_GPU_MONITOR_TRACE") != nullptr;
-            static u32 suValidTraces = 0, suFailureTraces = 0;
-            if (!sbTrace || !CgsDev::Log::gpDebugPrint) return;
-            if (lrResult.status == Valid && (suValidTraces++ < 8 || lrResult.frame % 120 == 0))
-            {
-                CgsDev::Log::gpDebugPrint->AppendFormat(
-                    "[gpu-monitors] frame=%llu status=valid frequency=%llu used=0x%08X totalMs=%.6f",
-                    static_cast<unsigned long long>(lrResult.frame),
-                    static_cast<unsigned long long>(lrResult.frequency), lrResult.used,
-                    double(lrResult.ticks[FrameTimer]) * 1000.0 / double(lrResult.frequency));
-                for (unsigned i = 0; i < MaxMonitors; ++i)
-                    if (lrResult.used & (u32(1) << i))
-                        CgsDev::Log::gpDebugPrint->AppendFormat(" id%u=%.6f", i,
-                            double(lrResult.ticks[i]) * 1000.0 / double(lrResult.frequency));
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-            else if (lrResult.status != Pending && lrResult.status != Valid && suFailureTraces++ < 8)
-                CgsDev::Log::gpDebugPrint->AppendFormat("[gpu-monitors] frame=%llu status=%d\n",
-                    static_cast<unsigned long long>(lrResult.frame), int(lrResult.status));
-        }
 
         enum PerfMonGpuTimerOp
         {
@@ -121,20 +82,6 @@ namespace CgsDev
             E_PMGTO_STARTMONITOR = 2,
             E_PMGTO_STOPMONITOR = 3,
         };
-
-        // FLAG PC-platform leaf: the original op/id command contexts feed
-        // timestamp query markers at the same points in the D3D9 command stream.
-        void InsertGpuTimingMarker(PerfMonGpuTimerOp leOp, s32 liMonitorId)
-        {
-            using namespace renderengine::GpuMonitorTimingPC;
-            switch (leOp)
-            {
-            case E_PMGTO_BEGINFRAME: Begin(renderengine::gDevice, PublishNativeGpuSample); break;
-            case E_PMGTO_ENDFRAME: gRecorder.End(); break;
-            case E_PMGTO_STARTMONITOR: gRecorder.Start(static_cast<unsigned>(liMonitorId)); break;
-            case E_PMGTO_STOPMONITOR: gRecorder.Stop(static_cast<unsigned>(liMonitorId)); break;
-            }
-        }
 
         // Build a runtime assert message ("<prefix><monitor name>\n") and fire it through the assert
         // front-end, reproducing the X360 StrStream-into-the-message-buffer path (StartMonitor 0x153,
@@ -157,7 +104,6 @@ namespace CgsDev
 
     bool PerfMonGpu::Construct()
     {
-        renderengine::GpuMonitorTimingPC::DeviceReset();
         guConsumedNativeFrame = 0;
         miMaxMonitor       = 0;
         meGameFrequency    = E_PMF_60HZ;
@@ -182,29 +128,7 @@ namespace CgsDev
         CGS_ASSERT(!mbProfilingRunning, "mbProfilingRunning == false");
         const s32 liPreviousRead = gBuffer.miCurrentReadBuffer;
         gBuffer.miCurrentReadBuffer = (liPreviousRead + 1) % KI_NUMBUFFERS;
-        // FLAG PC-platform leaf: D3D9 completion is asynchronous. Retain the
-        // previous complete snapshot when a newer packet is still pending;
-        // do not expose an incomplete ring slot as a zero-cost GPU frame.
-        std::memcpy(gBuffer.mau64Timers[gBuffer.miCurrentReadBuffer],
-                    gBuffer.mau64Timers[liPreviousRead], sizeof(gBuffer.mau64Timers[0]));
         std::lock_guard<std::mutex> lLock(gNativeSampleMutex);
-        if (gNativeSample.status == renderengine::GpuMonitorTimingPC::Reset)
-        {
-            std::memset(gBuffer.mau64Timers, 0, sizeof(gBuffer.mau64Timers));
-            guConsumedNativeFrame = 0;
-            gNativeSample.status = renderengine::GpuMonitorTimingPC::Pending;
-        }
-        else if (gNativeSample.status == renderengine::GpuMonitorTimingPC::Valid
-            && gNativeSample.frame > guConsumedNativeFrame)
-        {
-            gBuffer.miCurrentWriteBuffer = gBuffer.miCurrentReadBuffer;
-            std::memcpy(gBuffer.mau64Timers[gBuffer.miCurrentReadBuffer],
-                        gNativeSample.ticks, sizeof(gNativeSample.ticks));
-            // The GPU's frequency belongs to these timestamps. QPF is only
-            // the original initial factor, before the first complete sample.
-            gfCyclesToPercent = static_cast<f32>(100.0 / double(gNativeSample.frequency));
-            guConsumedNativeFrame = gNativeSample.frame;
-        }
     }
 
     void PerfMonGpu::StartProfiling()

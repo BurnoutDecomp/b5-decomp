@@ -19,7 +19,7 @@
 #ifndef NOMINMAX
 #  define NOMINMAX
 #endif
-#include <windows.h>
+#include <xtl.h>
 
 // ===========================================================================
 // rw::shared_globals::internal::OSGlobalManager -- out-of-line ctor home.

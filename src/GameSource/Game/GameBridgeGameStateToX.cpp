@@ -199,26 +199,6 @@ namespace BrnGame
             PushGuiEvent(lGuiOnTailEvent, lpGuiInput);                          // 486 / 16
         }
 
-        // [gui-iface] PC witness (BRN_MODEMGR_DIAG -- the switch the [tailing] producer witness
-        // already uses): prove the leg RUNS and what it posted. The first 24 non-empty calls.
-        // [FLAG PC witness]
-        {
-            static const bool sbDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
-            static s32 siPrinted = 0;
-            const s32 liPosted = liDTNewLength + liDTTriggeredLength + liDTEndedLength
-                               + liOvertakeLength + liFinishRaceLength + liTookLeadLength
-                               + liTookLastLength + liOnTailQueueLength;
-            if (sbDiag && liPosted > 0 && siPrinted < 24 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siPrinted;
-                *CgsDev::Log::gpDebugPrint
-                    << "[gui-iface] posted 177x" << liDTNewLength << " 179x" << liDTTriggeredLength
-                    << " 181x" << liDTEndedLength << " 371x" << liOvertakeLength
-                    << " 372x" << liFinishRaceLength << " 484x" << liTookLeadLength
-                    << " 485x" << liTookLastLength << " 486x" << liOnTailQueueLength
-                    << " [FLAG PC witness]\n";
-            }
-        }
     }
 
     // =========================================================================
@@ -265,29 +245,6 @@ namespace BrnGame
 
         const s32 liCount = lpTakedownQueue->GetLength();
 
-        // [td-gui] PC witness (BRN_TD_DIAG): prove the translator RUNS, and with what queue depth.
-        // A takedown that reaches ProcessTakedownEvent but produces no GUI event is either a leg
-        // that never runs or a queue drained before this point; only the count separates them.
-        // [FLAG PC witness]
-        {
-            static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
-            static s32 siCalls = 0;
-            ++siCalls;
-            // First three calls, every non-empty call, and a heartbeat every 600 calls -- the
-            // heartbeat is the term that separates "runs every frame and reads zero" from "stopped
-            // being called after boot", which a first-N-only witness cannot distinguish.
-            if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0
-                && (liCount > 0 || siCalls <= 3 || (siCalls % 600) == 0))
-            {
-                *CgsDev::Log::gpDebugPrint << "[td-gui] translator called on queue "
-                                           << static_cast<s32>(reinterpret_cast<u64>(lpTakedownQueue) & 0xFFFFFFFFu)
-                                           << " queued=" << liCount
-                                           << " call=" << siCalls
-                                           << " player=" << liPlayerActiveRaceCarIndex
-                                           << " [FLAG PC witness]\n";
-            }
-        }
-
         for (s32 i = 0; i < liCount; ++i)
         {
             const BrnGameState::TakedownEvent& lrRecord = lpTakedownQueue->GetEvent(i);
@@ -301,22 +258,6 @@ namespace BrnGame
             else
             {
                 lbHard = ((mu64TakedownDisplayFlags & KU_TAKEDOWN_SOFT_DISPLAY_MASK) == 0);
-            }
-
-            // [td-gui] PC witness (BRN_TD_DIAG): the type actually crossing into the GUI module,
-            // and which arm carried it. [FLAG PC witness]
-            {
-                static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
-                if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[td-gui] " << (lbHard ? "hard" : "soft")
-                                               << " type=" << static_cast<s32>(lrRecord.meType)
-                                               << " aggressor=" << static_cast<s32>(lrRecord.meAggressorIndex)
-                                               << " victim=" << static_cast<s32>(lrRecord.meVictimIndex)
-                                               << " chain=" << lrRecord.miTakedownChainCount
-                                               << " multiple=" << lrRecord.miMultipleTakedownCount
-                                               << " [FLAG PC witness]\n";
-                }
             }
 
             if (lbHard)

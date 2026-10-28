@@ -36,11 +36,6 @@
 #include <cstdlib>
 
 // [diag] BRN_PFX_DIAG -- the director-side witness of the post-FX hook hand-over.
-static bool PfxDirDiag()
-{
-    static const bool sbOn = (getenv("BRN_PFX_DIAG") != 0);
-    return sbOn && CgsDev::Log::gpDebugPrint != 0;
-}
 
 namespace BrnGame
 {
@@ -86,27 +81,6 @@ namespace BrnGame
         lBlackBars.lfSingleBarSize = lpCamera->mState.IsFlagSet(
             BrnDirector::Camera::CameraState::E_FLAG_VALID)
                 ? lrEffects.mfBlackBarAmount : 1.0f;
-        // FLAG PC diagnostic: bounded witness of the exact console invalid-camera
-        // fallback, used to trace a producer that can otherwise cover the world.
-        if (std::getenv("BRN_BLACKBARS_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siLastFlags = -1;
-            static f32 sfLastAmount = -1.0f;
-            static u32 suSamples = 0;
-            if (suSamples < 64 && (siLastFlags != lpCamera->mState_uFlags ||
-                                  sfLastAmount != lBlackBars.lfSingleBarSize))
-            {
-                ++suSamples;
-                siLastFlags = lpCamera->mState_uFlags;
-                sfLastAmount = lBlackBars.lfSingleBarSize;
-                *CgsDev::Log::gpDebugPrint << "[blackbars] director valid="
-                    << (lpCamera->mState.IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_VALID) ? 1 : 0)
-                    << " flags=" << lpCamera->mState_uFlags
-                    << " authored=" << lrEffects.mfBlackBarAmount
-                    << " published=" << lBlackBars.lfSingleBarSize
-                    << " behaviour=" << static_cast<u32>(lpCamera->mpDebugInfoBehaviour != 0) << "\n";
-            }
-        }
         CgsGui::GuiModule::AddGuiEvent(lBlackBars, lpGuiInputBuffer);
 
         // pseudocode 151..152: the enumeration request -> 500.
@@ -115,7 +89,6 @@ namespace BrnGame
             CgsGui::GuiEvent<500> lRequest;
             CgsGui::GuiModule::AddGuiEvent(lRequest, lpGuiInputBuffer);
             static bool sbSaid500 = false;
-            if (PfxDirDiag() && !sbSaid500) { sbSaid500 = true; *CgsDev::Log::gpDebugPrint << "[pfx-dir] bridge posts 500 (enumeration request)\n"; }
         }
 
         // pseudocode 153..170: a stop request -> 496 (the console leaves the GUID unwritten;
@@ -127,7 +100,6 @@ namespace BrnGame
             lStop.muGuid = 0;
             CopyHookName(lStop.macName, lrEffects.GetStopHookNameString().mHookNameString);
             mGuiModule.AddGuiEvent(&lStop, lpGuiInputBuffer);
-            if (PfxDirDiag()) *CgsDev::Log::gpDebugPrint << "[pfx-dir] bridge posts 496 stop '" << lStop.macName << "'\n";
         }
 
         // pseudocode 171..209: a start request -> 495, every per-type maximum = the blend.
@@ -145,7 +117,6 @@ namespace BrnGame
             lStart.mfMaximum3DTintWeight       = lfBlend;
             CopyHookName(lStart.macName, lrEffects.GetStartHookNameString().mHookNameString);
             mGuiModule.AddGuiEvent(&lStart, lpGuiInputBuffer);
-            if (PfxDirDiag()) *CgsDev::Log::gpDebugPrint << "[pfx-dir] bridge posts 495 start '" << lStart.macName << "' blend " << lfBlend << "\n";
         }
 
         // pseudocode 210..230: the background request -> 498 (start pending, no stop) /

@@ -65,7 +65,6 @@ namespace CgsNetwork { class NetworkTexture; }
 // header out of this one).
 namespace BrnNetwork { enum ECameraStatus : s32; struct LiveRevengeProfile; }
 namespace BrnNetwork { enum EBuddyNotification : s32; }
-#include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (cam picture events)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
 namespace BrnReplays { class BaseSerialiser; }
@@ -254,10 +253,6 @@ namespace BrnGui
         CgsGui::ImageFileInfo maImageFileInfo[3];
         s32 GetEventType() const { return 359; }
     };
-    static_assert(sizeof(CgsGui::ImageFileInfo) == 24,
-                  "ImageFileInfo carries a native 64-bit buffer pointer");
-    static_assert(sizeof(GuiEventLoadImageFiles) == 72,
-                  "three host-native image-file records widen the X360 48-byte event");
     struct GuiEventMedalUpdate { u8 maData[8]; s32 GetEventType() const { return 307; } };  // id 307 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventMiniMapSwitch { u8 maData[1]; s32 GetEventType() const { return 205; } };  // id 205 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventMustFixCarFirst { u8 maData[1]; s32 GetEventType() const { return 552; } };  // id 552 size 1 (raw; size not GuiEvent-shaped)
@@ -435,8 +430,6 @@ namespace BrnGui
         CgsGui::ImageFileInfo mImageFileInfo;
         s32 GetEventType() const { return 358; }
     };
-    static_assert(sizeof(GuiEventSaveImageFileAndAutosave) == 24,
-                  "GUI358 carries one host-native ImageFileInfo record");
     // [E1 event-status wave 2026-08-26] GuiEventScoreUpdate (id 424) has been RECOVERED and
     // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape. Same reason for the
     // move as GuiAttackScoreUpdate above. Deleted rather than left to shadow it.

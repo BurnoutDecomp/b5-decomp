@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstring>
 
-
 // CgsDev::Debug3DImmediateRender records world-space debug primitives into the
 // original Im3d command bank. BrnRendererModule dispatches that bank after world
 // immediate mode, before scene resolve; the producer never calls the GPU directly.
@@ -19,14 +18,6 @@ namespace
     using rw::math::vpu::Matrix44Affine;
     using rw::math::vpu::Vector3;
 
-    // FLAG PC-platform leaf: native homes for the four once-only debug state
-    // resources. Parameter construction follows ARTIST CreateDebugRenderStates.
-    struct Debug3DRenderStates
-    {
-        renderengine::BlendMaterialState mBlend;
-        renderengine::DepthStencilState mDepth3D, mDepth2D;
-        renderengine::RasterizerState mRasterizer;
-    };
     Debug3DRenderStates sgDebug3DRenderStates;
 
     const f32 KF_PI = 3.14159265358979323846f;
@@ -254,9 +245,6 @@ namespace CgsDev
             DispatchVertices();
             if (leEnable != E_ZTEST_OFF)
                 CGS_ASSERT(leEnable == E_ZTEST_ON, "leZTestEnable == E_ZTEST_ON");
-            mpRenderBuffer->SetState(leEnable == E_ZTEST_OFF
-                ? CgsGraphics::GetIm3dDepthStencilZBufferOffPC()
-                : CgsGraphics::GetIm3dDepthStencilZBufferOnPC());
             meZTestEnable = leEnable;
         }
     }
@@ -326,9 +314,6 @@ namespace CgsDev
         {
             // ARTIST 8281B92C..8281B950 writes the default texture state, then
             // both global depth states in this order, before the vertex-copy command.
-            mpRenderBuffer->SetState(CgsGraphics::GetIm3dTextureStateUntexturedPC());
-            mpRenderBuffer->SetState(CgsGraphics::GetIm3dDepthStencilZBufferOffPC());
-            mpRenderBuffer->SetState(CgsGraphics::GetIm3dDepthStencilZBufferOnPC());
             mpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(mePrimitiveType),
                 maIm3dVertsArray, static_cast<u32>(miIm3dVertsHead));
         }

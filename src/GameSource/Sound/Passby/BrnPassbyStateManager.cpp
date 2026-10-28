@@ -73,28 +73,15 @@ s32 KI_SPEW_PASSBY_STATE_INFO = 0; // ARTIST dword_82FFB930
 // =============================================================================
 namespace
 {
-    bool PassbySoundDiagEnabled()
-    {
-        static int siEnabled = -1;
-        if (siEnabled < 0)
-        {
-            const char* lpcEnv = std::getenv("BRN_PASSBY_SOUND_DIAG");
-            siEnabled = (lpcEnv && lpcEnv[0] && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        return siEnabled != 0;
-    }
 
     void PassbySoundDiag(const char* lpcMessage)
     {
-        if (PassbySoundDiagEnabled())
-            CgsDev::Log::WriteToLog(lpcMessage);
     }
 
     void PassbySoundDiagWaiting(bool lbCreated)
     {
         static u32 suCalls = 0;
-        if (!PassbySoundDiagEnabled())
-            return;
+        return;
         if ((suCalls++ % 600u) != 0)
             return;
         char lacMsg[160];
@@ -481,20 +468,6 @@ void PassbyStateManager::UpdateParams( f32 lfTimeStep )
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): each frame that had posts --
     // how many were handed to a state. Capped at 64 lines.
-    if( muPostedPassbyCount != 0 && PassbySoundDiagEnabled() )
-    {
-        static u32 suPrintCount = 0;
-        if( suPrintCount++ < 64u )
-        {
-            char lacMsg[160];
-            std::snprintf( lacMsg, sizeof( lacMsg ),
-                           "[passby-sound] dispatch posted=%u attached=%u type0=%d relVel0=%g control0=%d\n",
-                           muPostedPassbyCount, luAttached, static_cast<s32>( maPostedPassbys[0].meType ),
-                           static_cast<double>( maPostedPassbys[0].mfRelativeVelocityMagnitude ),
-                           maPostedPassbys[0].mp3dControl != 0 ? 1 : 0 );
-            CgsDev::Log::WriteToLog( lacMsg );
-        }
-    }
 
     muPostedPassbyCount = 0;
     if( KI_SPEW_PASSBY_STATE_INFO )
@@ -547,7 +520,6 @@ void PassbyStateManager::ResourcesAreReady()
 
 // (GetResourceRegistrar: the console has no PassbyStateManager override -- the inherited
 // BrnStateManager::GetResourceRegistrar @0x82696510 serves LoadAsset; see the header.)
-
 
 // ---------------------------------------------------------------------------
 // DynamicPropByCache::Find  @ 0x82683438

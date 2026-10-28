@@ -1,6 +1,4 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
-#include "pc/input/VehicleFeedback.h"
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diagnostic] Prepare's per-stage log line
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"            // BrnGameState::ModeManager::GetCurrentGameMode
@@ -173,7 +171,6 @@ void GameStateModule::Construct()
     // (the two manager pointers into gsm+568, its back-pointer at gsm+1256) BEFORE the
     // TriggerQueryManager / RoadRules / DriveThru constructs; the queue constructs follow at
     // gsm+249936 / +250272 / +250800. Both halves in GameStateModule_gTD_00.cpp.
-    ConstructTakedownBringUp();
 
     // [PGEP] The invite manager (console gsm+0x7F0), constructed right after PaybackManager::Construct
     // (its five queue Constructs and three seed stores are inlined there). Held by pointer here; see
@@ -576,14 +573,6 @@ void GameStateModule::PreWorldUpdate(
     if (lbDriveThruDataDirty)
         SendSetUpAllDriveThrusMessage(lpActionQueue);
     DetectModeStarts(lpInput, lpOutput);
-    // FLAG PC-platform leaf: optional feedback observes this frame's locked
-    // snapshot and semantic events. Publish only copied values, never a handle.
-    if (CgsInput::PCGamepad::WantsFeedback())
-        CgsInput::PCGamepad::PublishFeedback(CgsInput::AdaptiveTriggers::ObserveVehicle(
-            mLastActiveRaceCarInterface, mePlayerActiveRaceCarIndex, lGameEvents, mContactSpyInterface,
-            miSimPauseFlags != 0 || mbWaitingForStreaming || mCarSelectManager.IsInJunkyard() ||
-            mOnlineCarSelectManager.IsInOnlineCarSelect(),
-            meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME || meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE));
     lGameEvents.Destruct();
     mpGameStateInviteManager->Update(lpOutput, lpActionQueue);
     mModeManager.HandleOnlineTeamModes(lpInput, lpOutput, &mpTakedownCache->mTakedownEventQueue);
@@ -832,22 +821,6 @@ void GameStateModule::Destruct()
         mpGameStateInviteManager->Destruct();
         delete mpGameStateInviteManager;
         mpGameStateInviteManager = 0;
-    }
-
-    // [FX-GS 2026-09-23, crash-parity G12-D12] PaybackManager::Destruct -- the console's own leg:
-    // X360 GameStateModule::Destruct @0x82375420 calls it at 0x823755A0 with r3 = gsm+0x570 (the
-    // manager, embedded by value on the console), after ModeManager::Destruct (0x82375578) and the
-    // +0x7F0 VariableEventQueue<1536,16>::Destruct (0x82375588), before the MugshotManager (+0x500)
-    // reset stores and before ModuleSingleBuffered::Destruct (0x82375694). This reduced body has no
-    // ModeManager / queue legs, so the call keeps its console place relative to the base Destruct.
-    // [FLAG PC] the delete is the partner of GameStateModule_gTD_00.cpp's `new PaybackManager()`
-    // (the manager is held by pointer on PC for the include-cycle reason recorded on the member);
-    // the console has no free, the manager dies with the module.
-    if (mpPaybackManager != 0)
-    {
-        mpPaybackManager->Destruct();
-        delete mpPaybackManager;
-        mpPaybackManager = 0;
     }
 
     CgsModule::ModuleSingleBuffered::Destruct();
@@ -1803,52 +1776,6 @@ ModeManager* GameStateModule::GetModeManager()
 }
 
 // --------------------------------------------------------------------------------------------
-// ⭐⭐ [tut-ticker] PreWorldUpdateTrainingBringUp -- the extracted TRAINING leg of PreWorldUpdate
-// @0x823A5328 (see the header banner for the console asm). ModeManager::PreWorldUpdate is selected
-// separately through the GameState EMM path and owns the clock updates; this helper handles the
-// console's own pair:
-//     r8 = ShouldAllowTimedTutorialTips();
-//     TrainingManager::Update(mpTrainingManager, <preWorldInput>, actionQueue,
-//                             &mLastActiveRaceCarInterface, lfGameTimestep, r8);
-// The output buffer's action queue is taken under the module's own write bracket, exactly as
-// the sibling PreWorldUpdate legs do.
-// --------------------------------------------------------------------------------------------
-void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
-{
-    if (mpOutputBuffer == 0 || mpTrainingManager == 0)
-    {
-        return;
-    }
-
-    // The extracted PreWorldUpdateClocksBringUp helper has no current caller in this source tree;
-    // retain it for separate cleanup. The active GameState EMM pre-world path calls the full
-    // ModeManager::PreWorldUpdate, which already includes the same clock updates. Do not restore
-    // a second clock path here, or the mode and freeburn timers would advance twice.
-
-    GetPreWorldInputBuffer()->LockForRead();
-    mpOutputBuffer->LockForWrite();
-    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
-
-    mbIsUpdating = true;   // the module's own accessors assert this (IsOnlineGameMode et al.)
-    // [FX-GS2 2026-09-23, G10-D11] PreWorldUpdate @0x823A5328 calls CheckForTailingRivals at
-    // 0x823A57A0, immediately before ShouldAllowTimedTutorialTips (0x823A57A8): r4 = the output
-    // buffer, r5 = gsm+0x3D3C0 (the post-world vehicle-output copy -- mpTakedownCache here),
-    // f1 = the same game timestep TrainingManager::Update gets.
-    if (mpTakedownCache != 0)
-    {
-        CheckForTailingRivals(mpOutputBuffer, &mpTakedownCache->mVehicleOutputInterface, lfGameTimestep);
-    }
-    const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
-    mpTrainingManager->Update(GetPreWorldInputBuffer(), lpActionQueue, &mLastActiveRaceCarInterface,
-                              lfGameTimestep, lbAllowTimedTips);
-    mbIsUpdating = false;
-
-    mpOutputBuffer->UnlockForWrite();
-    GetPreWorldInputBuffer()->UnlockForRead();
-}
-
-// --------------------------------------------------------------------------------------------
 // ApplyCarStats (X360 0x82381188).
 // Publish the newly-selected car's gameplay stats out of its VehicleListEntry as the 24-byte
 // action 198. The six payload words and their sources are read straight off the asm:
@@ -2363,10 +2290,6 @@ CgsID GameStateModule::GetSpawnCar(const BrnProgression::Profile* lpProfile)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", KAC_GSM_FILE, 6664);
         CgsDev::Assert::EndAssert();
-        // [FLAG PC guard] the console carries on to `lbz r31, 9(entry+0x90)` with entry == NULL, i.e. it
-        // reads address 0x99 and faults. The PC answers the function's own other result instead of
-        // faulting: the default car.
-        return CgsIDCompress("PUSMC01");
     }
     // The console's second assert tests entry+0x90 (the embedded gameplay block), which cannot be NULL
     // once entry is not; GetUnlockRank() is that block's +0x09 byte.
@@ -2379,58 +2302,6 @@ CgsID GameStateModule::GetSpawnCar(const BrnProgression::Profile* lpProfile)
 }
 
 // ============================================================================
-// PreWorldUpdateSetupPlayerCarBringUp -- the extracted one-shot leg of
-// PreWorldUpdate @0x823A5328 (0x823A5510..0x823A5540). See the header for the FLAG.
-// ============================================================================
-void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
-{
-    // The console's one-shot setup leg, behind its own latch. The case-78 arm that
-    // completes the entry it starts runs from ProcessGameEvents in PreWorldUpdateStuntBringUp,
-    // driven by the GUI's game event 78 (BrnGui::InGame::OnEnter's command 145 through
-    // BridgeGuiToGameState), as on the console.
-    if (mpOutputBuffer == 0)
-    {
-        return;
-    }
-    if (!mbSendSetupPlayerCarPending)
-    {
-        return;
-    }
-
-    // The console gets the queue from GameStateModuleIO::OutputBuffer (its `Ou` accessor at
-    // 0x823A54E4) and asserts it non-null at BrnGameStateModule.cpp:1149.
-    mpOutputBuffer->LockForWrite();
-    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
-    mbIsUpdating = true;                   // the module asserts this in its own accessors
-    if (mbSendSetupPlayerCarPending)
-    {
-        mbSendSetupPlayerCarPending = false;   // the console's `stb r17, 0(r28)` -- one-shot
-
-        // ⭐⭐ THE FLAG THAT USED TO STAND AT THE BOTTOM OF THIS FUNCTION IS RETIRED
-        // (2026-08-27, event-starts producer wave). SendSetUpAllEventStartsMessage @0x823759D0 is
-        // BODIED now (GameStateModule_SendSetUpAllEventStarts.cpp) and this is the console's own
-        // partner call on this same one-shot latch -- PreWorldUpdate @0x823A5510..0x823A5540 runs
-        // SendSetupPlayerCarEvent AND SendSetUpAllEventStartsMessage(lpOutput) under it, in this
-        // order, inside the write lock this bracket already holds (which is required: the
-        // publish's SetSetUpAllEventStartsInterfaceIsValid asserts the buffer is locked for
-        // writing). It publishes the event-start table -- the ONLY path in the image to
-        // SetUpAllEventStartsInterface::AddEventStart @0x82361398, and therefore the only thing
-        // that ever puts a record in the GUI cache's maEventStarts. Until it ran,
-        // GuiCache::GetProfileEventDisplayInfo walked a zero-length array on every sat-nav
-        // refresh and fired the console's own "Unable to find event start with event id: ".
-        // ⓘ ONE-SHOT: the latch is armed once, in Construct (0x823807A4), and this E_MGS_IN_GAME leg is
-        // its first and only consumer -- by then the producer's data preconditions (TrafficData, AI
-        // lanes, district map) are all satisfied. [FX-AIBUZZ 2026-09-24: was armed at Prepare's end]
-        SendSetupPlayerCarEvent(lpActionQueue);
-        SendSetUpAllEventStartsMessage(mpOutputBuffer);
-    }
-
-    mbIsUpdating = false;
-    mpOutputBuffer->UnlockForWrite();
-}
-
-// ============================================================================
 // IsControllerActive -- DWARF BrnGameStateModule.h:1173, inlined by the console into
 // PreWorldUpdate @0x823A5328. The two-value test is transcribed from that inline:
 //     if ( v61 == 3 || (v63 = v61 != 0, v62 = 0, !v63) ) v62 = 1;
@@ -2440,25 +2311,6 @@ bool GameStateModule::IsControllerActive() const
 {
     return meControllerState == E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE
         || meControllerState == E_CONTROLLERSTATE_NOT_IN_GAME;
-}
-
-// ============================================================================
-// PreWorldUpdatePublishControllerActiveBringUp -- the extracted CONTROLLER-ACTIVE publish
-// of PreWorldUpdate @0x823A5328. See the header for the FLAG and the measurement.
-// ============================================================================
-void GameStateModule::PreWorldUpdatePublishControllerActiveBringUp()
-{
-    if (mpOutputBuffer == 0)
-    {
-        return;
-    }
-
-    // The console holds the output buffer's write lock across this whole tail of PreWorldUpdate
-    // (LockForWrite is taken near the top, at the same place the car-select leg takes it in its
-    // own extraction), so the store is made under the same lock here.
-    mpOutputBuffer->LockForWrite();
-    mpOutputBuffer->SetControllerActive(IsControllerActive());
-    mpOutputBuffer->UnlockForWrite();
 }
 
 // ================================================================================================
@@ -2607,7 +2459,6 @@ void GameStateModule::CopyScoringDataToOutput(
     }
 }
 
-
 // ==============================================================================================
 // GameStateModule::ProcessContacts  --  X360 0x8236BC68  (DWARF BrnGameStateModule.h:853)
 // ==============================================================================================
@@ -2616,10 +2467,6 @@ void GameStateModule::CopyScoringDataToOutput(
 // @0x8238F358 (`bl` #25, bracketed by PerfMonCpu Start/StopMonitor(miProcessContactsPM ==
 // *(this+292352))), which calls it at the console's own position.
 //
-// [FLAG PC bring-up] ARGUMENT REDUCED, BODY COMPLETE. The console parameter is
-// `const PostWorldInputBuffer*` and the ONLY thing the body ever reads from it is
-// GetContactSpyInterface() (sub_82362988 -> +0x6E30, BrnGameStateModuleIO.h:204), called three
-// times; everything else comes from `this`. See the declaration's banner in the header.
 //
 // THE TWO OWNER READS ARE NOT THE SAME INSTRUCTION AND MUST NOT BE THE SAME C++.
 // The console reads the A-side owner as `lwz r11,0(c) ; srwi r10,r11,24` -- a word load and a
@@ -2662,7 +2509,6 @@ void GameStateModule::ProcessContacts(
     //       (measured: 152 samples in E_GMS_RESULTS, 5 in IN_PROGRESS) -- so counting only past
     //       the gates would measure the gate, not the physics.
     {
-        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
         static s32        siEntryFrame    = 0;
         static s32        siMaxProps      = 0;
         static s32        siMaxTraffic    = 0;
@@ -2670,31 +2516,6 @@ void GameStateModule::ProcessContacts(
         static s32        siTrafficFrames = 0;
         static s32        siTotalTraffic  = 0;
 
-        if (sbWatch && CgsDev::Log::gpDebugPrint != 0 &&
-            lpContactSpyInterface != 0 && lpContactSpyInterface->IsValid())
-        {
-            const s32 liProps   = lpContactSpyInterface->GetPropContacts()->GetLength();
-            const s32 liTraffic = lpContactSpyInterface->GetTrafficContacts()->GetLength();
-            if (liProps   > siMaxProps)   { siMaxProps   = liProps; }
-            if (liTraffic > siMaxTraffic) { siMaxTraffic = liTraffic; }
-            if (liProps   > 0) { ++siPropFrames; }
-            if (liTraffic > 0) { ++siTrafficFrames; siTotalTraffic += liTraffic; }
-        }
-
-        if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siEntryFrame++ % 120) == 0)
-        {
-            const GameMode* const lpMode = mModeManager.GetCurrentGameMode();
-            *CgsDev::Log::gpDebugPrint
-                << "[contact-entry] frames=" << siEntryFrame
-                << " spy=" << ((lpContactSpyInterface != 0) ? 1 : 0)
-                << " valid=" << ((lpContactSpyInterface != 0 && lpContactSpyInterface->IsValid()) ? 1 : 0)
-                << " mode=" << static_cast<s32>(mModeManager.GetCurrentGameModeType())
-                << " state=" << ((lpMode != 0) ? static_cast<s32>(lpMode->GetCurrentState()) : -99)
-                << " | props: max=" << siMaxProps << " frames=" << siPropFrames
-                << " | traffic: max=" << siMaxTraffic << " frames=" << siTrafficFrames
-                << " total=" << siTotalTraffic
-                << "\n";
-        }
     }
 
     if (lpContactSpyInterface == 0 || !lpContactSpyInterface->IsValid())
@@ -2741,19 +2562,7 @@ void GameStateModule::ProcessContacts(
     // 190 s run). This one only reports how many frames actually reached the console's own
     // scoring gates, which is the other half of the answer.
     {
-        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
         static s32        siFrame = 0;
-        if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siFrame++ % 120) == 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[contact-pass] gatedFrames=" << siFrame
-                << " mode=" << static_cast<s32>(leGameModeType)
-                << " state=" << static_cast<s32>(lpCurrentGameMode->GetCurrentState())
-                << " playerIdx=" << static_cast<s32>(GetPlayerActiveRaceCarIndex())
-                << " props=" << lpPropContacts->GetLength()
-                << " traffic=" << lpTrafficContacts->GetLength()
-                << "\n";
-        }
     }
 
     // 0x8236BD10..0x8236BD30 -- the two scorers. r24 = ScoringSystem+0x20 (the crash scorer);
@@ -2864,17 +2673,7 @@ void GameStateModule::ProcessContacts(
             // a run can count pushes against pops and scores. Capped, so a long showtime cannot
             // flood the log.
             {
-                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
                 static s32        siPushLinesLeft = 160;
-                if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && siPushLinesLeft > 0)
-                {
-                    --siPushLinesLeft;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[showtime-crash] traffic car " << static_cast<s32>(luVictimTrafficIndex)
-                        << " crashed; combo=" << lpCrashScorer->GetCurrentComboCount()
-                        << " pending=" << mShowtimePendingTrafficIndexStack.GetLength()
-                        << " (UpdateShowtimeMode pops it)\n";
-                }
             }
 
             if (mShowtimePendingTrafficIndexStack.IsFull())
@@ -3026,20 +2825,7 @@ void GameStateModule::SendVehicleImpactMessages(
     // physics never reported an impact" from "it reported one and nothing paid out". Budgeted.
     // DELETE-WHEN-STABLE.
     {
-        static const bool sbImpactDiag  = (getenv("BRN_BOOST_TICKER_DIAG") != 0);
         static s32        siImpactLines = 0;
-        if (sbImpactDiag && siImpactLines < 24 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siImpactLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[impact] type " << lpImpactEvent->meImpactType
-                << " aggressor " << lpImpactEvent->meAggressorActiveRaceCarIndex
-                << " victim " << lpImpactEvent->meVictimActiveRaceCarIndex
-                << " player " << static_cast<s32>(GetPlayerActiveRaceCarIndex())
-                << " -> action " << liActionId
-                << " + msg " << static_cast<u64>(lMessageId)
-                << " [DELETE-WHEN-STABLE]\n";
-        }
     }
 }
 
@@ -3169,16 +2955,7 @@ void GameStateModule::SendRouteRequestAction(const GameStateModuleIO::LandmarkRo
                                   static_cast<s32>(sizeof(lRouteRequestAction)));   // li r5, 0x32 ; li r6, 0x30
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_ROUTE_INFO_DIAG: the question as posted (first 40).
-    static const bool sbRouteDiag = (getenv("BRN_ROUTE_INFO_DIAG") != 0);
     static s32 siRouteLinesLeft = 40;
-    if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        --siRouteLinesLeft;
-        *CgsDev::Log::gpDebugPrint << "[route-info] SendRouteRequestAction owner " << static_cast<s32>(leRequestOwner)
-                                   << " event " << static_cast<s32>(lRouteRequestAction.muEventId)
-                                   << " sections " << static_cast<s32>(lRouteRequestAction.muStartSectionIndex)
-                                   << " -> " << static_cast<s32>(lRouteRequestAction.muEndSectionIndex) << "\n";
-    }
 }
 
 }

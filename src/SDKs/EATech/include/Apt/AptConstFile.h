@@ -68,13 +68,4 @@ struct AptConstFile
         return (sig[10] == ':') ? (sig[11] - '0') : 6;
     }
 
-    // 4 = 32-bit serialised format (the console default), 8 = 64-bit.
-    int GetPointerSizeBytes() const
-    {
-        const char* sig = GetSignature();
-        // "<n>:<version>:<pointerSize>": version ':' @byte10 (digit @11), pointer-size
-        // ':' @byte12 (digit @13). e.g. "1:7:4" => 4, "1:7:8" => 8.
-        const int nSize = (sig[12] == ':') ? (sig[13] - '0') : 4;
-        return (nSize == 8) ? 8 : 4;   // anything but a clear 8 => the safe 4-byte path
-    }
 };

@@ -14,7 +14,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf / StrCpy
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / gxMessageFilterFlags
 
-#include <windows.h>   // FindFirstFileA / FindNextFileA / FindClose (the X360 file enumerator)
+#include <xtl.h>   // FindFirstFileA / FindNextFileA / FindClose (the X360 file enumerator)
 #include <cstring>     // strchr / strlen
 
 namespace CgsFileSystem

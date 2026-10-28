@@ -33,13 +33,6 @@ namespace rw { namespace graphics { namespace postfx { class ColourCube; } } }
 // post-FX *Data structs (those carry SIMD alignment padding that these tightly packed blend
 // payloads do not). Members are accessed by name only.
 //
-// [FLAG PC bring-up] PFXNodeFader / PFXHookNodeBlender are RUNTIME objects (carved inside
-// BrnGui::EffectsArbitrator, never deserialised), so their pointer members widen on x64 and
-// no console byte offset is asserted on them -- the offsets quoted are provenance for the
-// asm reads only. One widening the console never needed: a fader keeps the PFXGroup it was
-// initialised from (the console re-derives it from the node's 32-bit link each read; on PC
-// that link is a blob-relative offset only the bundle can resolve -- see BrnGuiPFXHooks.h).
-// =============================================================================
 
 namespace BrnGui
 {

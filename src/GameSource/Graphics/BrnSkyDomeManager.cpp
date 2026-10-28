@@ -6,8 +6,6 @@
 #include "GameSource/Graphics/ImmediateMode/BrnIm3d.h"               // BrnGraphics::Im3dSkyDome
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"  // CgsResource::ResourceDescriptor
-#include "pc/gcm/renderengine/VertexDescriptor.h"                    // renderengine::VertexDescriptorData
-#include "pc/gcm/renderengine/Xbox2VertexBufferShims.h"              // D3DVertexBuffer_Lock/Unlock, Xbox2UnSet
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator, rw::Resource
 #include "rw/math/fpu/matrix33_operation.h"                          // Matrix33FromYRotationAngle, Mult
 
@@ -18,19 +16,8 @@ namespace
     rw::Resource AllocateSkyBuffer(rw::IResourceAllocator* lpAllocator,
                                   const CgsResource::ResourceDescriptor& lrDescriptor)
     {
-#if defined(D_PLATFORM_X360)
         return lpAllocator->DoAllocate(
             reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), nullptr);
-#else
-        // FLAG PC-platform leaf: procedural VertexBuffer/IndexBuffer::Initialize in
-        // ImmediateMode.cpp owns its low-address payload through ArenaAlloc and never
-        // consumes resource lane two. The native WorldDispatch provider supplies the
-        // header in main memory. Request only that consumed backing here; keep the
-        // shared descriptors and serialized-resource allocation paths unchanged.
-        rw::ResourceDescriptor lHeaderDescriptor;
-        lHeaderDescriptor.m_baseResourceDescriptors[0] = lrDescriptor.m_baseResourceDescriptors[0];
-        return lpAllocator->DoAllocate(lHeaderDescriptor, nullptr);
-#endif
     }
 }
 
@@ -474,7 +461,6 @@ namespace
     // land at +0x114, not at 0x10*(count+1) -- for the sky's two elements that expression
     // addresses 0x30, which is inside element 1's record. The table is therefore read BY NAME,
     // which is also how the only other consumer reads it (shadow::Device::
-    // FlushVertexProgramState, `mauStreamStride[luElement]`), and how the PC leaf that builds
     // the descriptor writes it. Element 0 owns stream 0, which is the stream being bound.
     u32 GetVertexStreamStride(const renderengine::VertexDescriptorData* lpDescriptor)
     {

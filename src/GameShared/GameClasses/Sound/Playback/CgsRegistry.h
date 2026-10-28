@@ -107,17 +107,7 @@ private:
     // never assumes the blob byte size, so the named indexing stays faithful).
     const Entity* mapEntity[1];
 
-    // CgsRegistry.h:215-224. Named starts of the three in-place regions.
-    // [FLAG PC bring-up] NOT an X360 method. True when this blob's header is the PORTED
-    // (48-byte header, 8-byte slot) layout rather than the console's (0x1C / 4-byte) one.
-    // Checks the converter's own three invariants; see the banner on FixUp.
-    bool IsPortedLayout() const;
-
 public:
-    // [FLAG PC bring-up] NOT an X360 method. IsPortedLayout, plus a one-shot report to the
-    // log when it fails. True means: refuse this blob, do not walk it. Public because
-    // Module::AddRegistry is the one consumer that sees every blob first.
-    bool IsStaleBlob() const;
 private:
 
     const Entity** GetFirstEntity() { return mapEntity; }

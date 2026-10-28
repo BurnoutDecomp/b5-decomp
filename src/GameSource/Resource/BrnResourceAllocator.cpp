@@ -4,18 +4,16 @@
 #include "GameSource/Resource/BrnMemoryMapData.h"  // MemoryMapImageInitializer
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
-#include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include <new>   // std::nothrow (the GlobalGraphics arena carve)
 #include <malloc.h>   // _aligned_malloc (DefaultLinearAllocator PC backing)
-#include <Windows.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
+#include <xtl.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
 // the heap the whole GameData resource system (ConstructResourceModule -> ResourceModule::Construct)
 // carves its module/bank memory from, and the one ICE::ICEMemory::Construct allocates its debug pool
 // from.
 //
-// [PC-LEAF, consistent with the allocator-layer decision]: on X360 this is
 // Allocators::mGlobalDebugAllocator - an rw allocator over a memory region the boot path reserves;
 // here it is a big malloc-backed region with an EA::Allocator::GeneralAllocator over it. The backing
 // block is allocated lazily on first use; mpInternalDebugAllocator is published non-null at static
@@ -24,7 +22,6 @@ namespace BrnResource
 {
     namespace
     {
-        // 768 MB root debug heap. [PC-LEAF] the X360 reserves a fixed ~smaller budget split across banks;
         // the PC bring-up routes the 27 pools' memory (~266 MB) through the MemoryModule's root banks (a
         // ~384 MB type0+type1 backing carved from here), with a debug-heap FALLBACK if a bank carve fails
         // (another ~266 MB) -- so this is sized to hold the bank backing + a full fallback at once.
@@ -34,28 +31,6 @@ namespace BrnResource
         HeapResourceAllocator           s_DebugResourceAllocator;
         bool                            s_bDebugHeapBacked = false;
 
-        // Lazily reserve + adopt the backing block (avoids the reservation at static init).
-        //
-        // FLAG PC-platform leaf: the block MUST live below 4 GB. Everything the resource
-        // system touches is carved from this one root -- the MemoryModule root banks and
-        // all 27 pools (so every bnd2 resource payload and its in-place FixUp), plus all
-        // 24 memory-map allocators (so the AttribSys package heap: every Attrib::Alloc,
-        // the schema.vlt/.bin blobs and the Attrib vault's PtrN pointer fixups). The
-        // shipped serialised format stores those pointers in FOUR-BYTE slots, read back
-        // with the committed PointerFromU32 idiom; on the 32-bit X360 that is free, on
-        // x64 it only round-trips when the pointee is under 4 GB. The plain CRT malloc
-        // this used to be handed out ~0x21e_00000000 on Windows x64, so the first fixed-up
-        // slot dereference faulted (strlen on Attrib's truncated typenames pointer).
-        // See GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h.
-        void EnsureDebugHeapBacked()
-        {
-            if (s_bDebugHeapBacked)
-                return;
-            void* lpBlock = CgsMemory::LowMemory::Reserve(KN_DEBUG_HEAP_SIZE);
-            if (lpBlock)
-                s_DebugGeneralAllocator.AddCore(lpBlock, KN_DEBUG_HEAP_SIZE);
-            s_bDebugHeapBacked = true;
-        }
     }
 
     // Published non-null at static init; points at the root HeapResourceAllocator (which IS-A
@@ -74,7 +49,6 @@ namespace BrnResource
     namespace
     {
         // The single GameData general allocator (allocator-gate leaf). 64 MB carved from the debug
-        // heap, lazily on first use. [PC-LEAF] stands in for the per-bank rw general allocators the
         // X360's GameDataModule::CreateAllocators builds from the memory map; the loading-screen
         // module loads (e.g. SoundModule) carve their module memory from it.
         const size_t                       KN_GAMEDATA_GENERAL_SIZE = 64u * 1024u * 1024u;
@@ -185,9 +159,6 @@ namespace BrnResource
         PrintConsoleMemory("Post-memory map initialisation");
     }
 
-    // FLAG PC-platform note: the host MEMORYSTATUS fields are pointer-sized, so a free figure of
-    // 4 GB or more wraps in the u32 the console returns. The memory checks only compare two
-    // readings, so a wrapped value still reports a change.
     u32 GetAvailableMemory()
     {
         MEMORYSTATUS lMemoryStatus;
@@ -242,10 +213,6 @@ namespace BrnResource
         for (s32 liType = 0; liType < 5; ++liType)
             maAllocators[liType].Construct();
 
-        // FLAG PC-platform leaf: XPhysicalAlloc's native replacement preserves its 64 KiB
-        // alignment and exact sizes. The two blocks live for the process lifetime of the
-        // static mInitialDefaultAllocator, as do the corresponding console allocations.
-        gaInitialDefaultLinearBacking[0] = _aligned_malloc(0x800u, 0x10000u);
         maAllocators[0].Create(gaInitialDefaultLinearBacking[0], 0x800u);
 
         gaInitialDefaultLinearBacking[1] = _aligned_malloc(0x400000u, 0x10000u);
@@ -333,7 +300,6 @@ namespace BrnResource
 
     // Carve a resource matching lDescriptor from the root debug heap. The returned rw::Resource's
     // m_baseResources[0] is the memory block (the X360 DoAllocate fills the per-pool base pointers;
-    // PC leaf serves pool 0 from the general heap).
     rw::Resource HeapResourceAllocator::Allocate(const rw::ResourceDescriptor& lDescriptor, const char* /*lpcName*/)
     {
         EnsureDebugHeapBacked();
@@ -357,14 +323,6 @@ namespace BrnResource
     // banner has called it out as "declaration-only, defined nowhere" ever since, and the
     // effects link is the first consumer that cannot proceed without it (LNK2019, measured).
     //
-    // ⚠ FLAG PC-platform leaf. The console builds this object in
-    // Allocators::ConstructGlobalGraphicsMemory @0x82666B70 over an XPhysicalAlloc'd region --
-    // physically contiguous, GPU-visible memory sized from the X360 memory map
-    // (Allocators::InitMemoryMap @0x82664728). Neither exists on the host and neither is
-    // reconstructed. What every CALLER needs is the abstract rw::IResourceAllocator contract
-    // (DoAllocate hands back a lane-0 block), so this supplies exactly that over one host heap
-    // block -- the SAME shape BrnRendererModule.cpp's `sWorldDispatchAllocator` already uses for
-    // the sky dome's buffers. A platform substitution, not a stand-in for game logic.
     //
     // WHO TAKES IT: ParticleModule::Prepare @0x8229BEA0 hands `off_82F2C814` to all five
     // contained Im3d renderers; the one that matters for the tyre mark, Im3dSkidsRenderer::
@@ -399,9 +357,6 @@ namespace BrnResource
         }
         sGlobalGraphicsAllocator.AdoptMemory(lHeapResource, lHeapCapacity);
 
-        // FLAG PC-platform leaf: bind the genuine wrapper to this actual retained
-        // backing. Keep the native raw return object, arena and allocation contract.
-        mpInternalGraphicsAllocator = &sGlobalGraphicsAllocator;
         mGlobalGraphicsAllocator.Construct(mpInternalGraphicsAllocator, "GlobalGraphics");
 
         sbGlobalGraphicsReady = true;
@@ -524,7 +479,6 @@ namespace BrnResource
                 if (!lResource.m_baseResources[luLane])
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lStream << "Failed to allocate memory type " << lapcMemoryNames[luLane] << "\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), lpcFile, 1355);
@@ -536,7 +490,6 @@ namespace BrnResource
                 if (reinterpret_cast<uintptr_t>(lResource.m_baseResources[luLane]) % luAlignment)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::MessageBufferPC lBuffer;
                     CgsDev::StrStream lStream(lBuffer.GetBuffer(), lBuffer.GetSize());
                     lStream << "Allocated memory is not aligned to " << luAlignment << "bytes\n";
                     CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), lpcFile, 1358);

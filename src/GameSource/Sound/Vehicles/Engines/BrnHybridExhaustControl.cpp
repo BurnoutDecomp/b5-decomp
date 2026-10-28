@@ -186,8 +186,6 @@ bool HybridExhaustControl::Attach()
         static int siDiag = -1;
         if (siDiag < 0)
         {
-            const char* lpcEnv = std::getenv("BRN_GINSU_DIAG");
-            siDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
         }
         if (siDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
         {
@@ -201,7 +199,6 @@ bool HybridExhaustControl::Attach()
                 << "\n";
         }
     }
-
 
     CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != nullptr,
                "mVehicleEngineAttributes.LoopModel()");
@@ -573,26 +570,6 @@ void HybridExhaustControl::UpdateMix(f32 /*afTimeStep*/)
     //   mix.*     = mFinalEngineMix after the clutch/shift smoothing
     //   clutch/shift = the two states that select smoothing, and the pair a drift disturbs
     // One line per ~1 s of attached time.
-    if (getenv("BRN_ENGINE_GAIN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        static u32 suVolCall = 0;
-        if ((suVolCall++ % 60) == 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[engvol] thrMix " << lfThrottleMix
-                << " audioVol " << lfAudioVolume
-                << " masterGain " << lfMasterGain
-                << " mixLoop " << mFinalEngineMix.Loop
-                << " mixAccel " << mFinalEngineMix.AccelGinsu
-                << " mixDecel " << mFinalEngineMix.DecelGinsu
-                << " volAccel " << mFinalEngineVolume.AccelGinsu
-                << " volDecel " << mFinalEngineVolume.DecelGinsu
-                << " clutch " << static_cast<s32>(mpClutchControl->GetClutchState())
-                << " shift " << static_cast<s32>(mpShiftControl->GetShiftingState())
-                << " smoothing " << (lbUseSmoothing ? 1 : 0)
-                << "\n";
-        }
-    }
 
     const f32 lfAccelDecelMix = Lerp(
         mfPercentOfDecelThreshold, mfPercentOfAccelThreshold, lfThrottleMix);

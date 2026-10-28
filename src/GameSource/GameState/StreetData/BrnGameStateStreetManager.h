@@ -437,14 +437,6 @@ namespace BrnGameState
         ::CgsID GetRightPlayerRoadId();                                  // :465
         const CgsResource::ResourceHandle* GetDistrictMapResourceHandle() const;   // :468
 
-        // ⚠️ [FLAG PC bring-up] ACCESSOR GROW, not an X360 method. The loaded AI-lanes resource
-        // this manager's LoadAIData binds; read by GameStateModule::SendSetUpAllEventStartsMessage
-        // because the copy the CONSOLE reads (ProgressionManager::mpAISectionData) has no binder in
-        // this tree. Returns 0 while unbound rather than firing the ResourcePtr's own assert, the
-        // same HasMemoryResource() idiom ProgressionManager::GetProgressionData uses.
-        // See the body in BrnGameStateStreetManager_wB_01.cpp for the offset proof + DELETE-WHEN.
-        const BrnAI::AISectionsData* GetAISectionData() const;
-
         // @ 0x8233F350 / 0x8233F230 / 0x8233F2C0. Tally the player's ruled roads and
         // mirror the result into the ProgressionManager counters (+133456/+133460/+133464).
         s32 GetNumberOfCompleteRoadsRuledByLocalPlayer();
@@ -656,12 +648,7 @@ namespace BrnGameState
         CgsResource::ResourcePtr<BrnAI::AISectionsData>     mpAISectionData;                   // +0x1CE8
         CgsResource::ResourceHandle              mDistrictMapResourceHandle;                   // +0x1D08
 
-        // [FLAG PC bring-up] the three owner back-pointers carry `= 0` in-class initialisers.
-        // StreetManager::Construct is their only writer; it runs from GameStateModule::Construct
-        // and stores all three, so the zeros only cover a read that would come before that call.
-        // They do not change the layout (the _AssertLayout pins below still hold), and zero is
-        // what Destruct writes back into all three.
-        BrnProgression::ProgressionManager*      mpProgressionManager = 0;                     // +0x1D10
+                     // +0x1D10
         GameStateModule*                         mpGameStateModule    = 0;                     // +0x1D14
         RoadRulesManager*                        mpRoadRulesManager   = 0;                     // +0x1D18
 
@@ -703,20 +690,7 @@ namespace BrnGameState
         bool                                     mbLockLeftSign;                               // +0x1DCE
         bool                                     mbPlayerIsInAShortcut;                        // +0x1DCF
 
-        // ⚠️ [FLAG PC bring-up] the three stage words carry in-class initialisers holding the
-        // EXACT values StreetManager::Construct @0x82335978 writes into them. Reason, stated
-        // rather than hidden: GameStateModule now embeds this manager BY VALUE (DWARF :425) but
-        // does NOT yet call StreetManager::Construct -- that Construct's first statement is
-        // mStreetManagerDebugComponent.Construct(this), which emits the debug component's vtable
-        // and therefore hard-references its virtual Update/OnActivate/RenderHUD and the ~15
-        // still-unhomed StreetManager/ScoringSystem/ProgressionManager accessors those call
-        // (MEASURED with dumpbin /SYMBOLS over the mount candidate set). Without the stage words
-        // seeded, LoadStreetData would switch on an INDETERMINATE value on the very first tick.
-        // These initialisers do not change the layout (the _AssertLayout offsets below still
-        // hold) and they are not invented values -- they are Construct's own three stores.
-        // Same doctrine as BrnGameStateModule.h's `mpOutputBuffer = 0`.
-        // DELETE-WHEN GameStateModule::Construct calls StreetManager::Construct for real.
-        LoadStage                                meLoadStage            = E_LOAD_NOT_STARTED;            // +0x1DD0
+            // +0x1DD0
         AILoadStage                              meAILoadStage          = E_AI_DATA_LOAD_NOT_STARTED;    // +0x1DD4
         DistrictMapLoadStage                     meDistrictMapLoadStage = E_DISTRICT_MAP_LOAD_REQUEST;   // +0x1DD8
 

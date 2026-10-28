@@ -2,45 +2,29 @@ target_sources(${PROJECT_NAME}
     PRIVATE
         BrnActiveFburnChallengeMessage.cpp
         BrnAggressiveDrivingMessage.cpp
-        BrnAggressiveDrivingMessage_embed_check.cpp
         BrnBurningHomeRunSwitchRunnerMessage.cpp
         BrnBurnoutSkillzMessage.cpp
         BrnCameraRequestMessage.cpp
-        BrnCameraRequestMessage_embed_check.cpp
         BrnCameraRequestResponseMessage.cpp
-        BrnCameraRequestResponseMessage_embed_check.cpp
         BrnCameraStatusMessage.cpp
-        BrnCameraStatusMessage_embed_check.cpp
         BrnCarSelectMessage.cpp
-        BrnCarSelectMessage_embed_check.cpp
         BrnCheckpointTriggeredMessage.cpp
         BrnCollectableMessage.cpp
-        BrnCollectableMessage_embed_check.cpp
         BrnCrashingTrafficMessage.cpp
-        BrnCrashingTrafficMessage_embed_check.cpp
         BrnDirtyTrickMessage.cpp
-        BrnDirtyTrickMessage_embed_check.cpp
         BrnFburnChallengeStatusMessage.cpp
         BrnFburnChallengeSuccessMessage.cpp
         BrnFburnSuccessUpdateMessage.cpp
         BrnFreeburnChallengeMessage.cpp
         BrnHullSyncMessage.cpp
         BrnImageMessage.cpp
-        BrnImageMessage_embed_check.cpp
         BrnLiveRevengeSyncMessage.cpp
-        BrnLiveRevengeSyncMessage_embed_check.cpp
         BrnMarkedManMessage.cpp
-        BrnMarkedManMessage_embed_check.cpp
         BrnPlayerFinishedRoundMessage.cpp
-        BrnPlayerFinishedRoundMessage_embed_check.cpp
         BrnRestartTrafficMessage.cpp
-        BrnRestartTrafficMessage_embed_check.cpp
         BrnRoadRulesMessage.cpp
-        BrnRoadRulesMessage_embed_check.cpp
         BrnRoadRulesPersonalBestMessage.cpp
-        BrnRoadRulesPersonalBestMessage_embed_check.cpp
         BrnSelectedRoutesMessage.cpp
-        BrnSelectedRoutesMessage_embed_check.cpp
         BrnShowtimeSwitchMessage.cpp
         BrnShowtimeUpdateMessage.cpp
         BrnStatsUpdateMessage.cpp
@@ -48,9 +32,7 @@ target_sources(${PROJECT_NAME}
         BrnStuntScoreUpdatedMessage.cpp
         BrnTeamSelectMessage.cpp
         BrnTrafficHashMessage.cpp
-        BrnTrafficHashMessage_embed_check.cpp
         BrnUpdateMessage.cpp
-        BrnUpdateMessage_embed_check.cpp
         BrnUpdateMessage_wN1_01.cpp
 
     PUBLIC

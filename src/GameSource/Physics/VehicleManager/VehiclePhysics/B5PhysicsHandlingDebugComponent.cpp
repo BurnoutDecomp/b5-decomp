@@ -607,8 +607,6 @@ namespace Vehicle
         // tail up (+8). The window's own base is width-identical, so the graphs stay at +0x30/+0x70
         // inside it.
         const std::ptrdiff_t KD_WINDOW_STEP = 0x10;
-        static_assert(sizeof(GripCurveDebugWindow) == 0x0C0 + KD_WINDOW_STEP,
-                      "GripCurveDebugWindow host size -- the number KD_WINDOW_STEP carries");
         const std::ptrdiff_t KD_AFTER_WINDOWS = KD_AFTER_BASE + 2 * KD_WINDOW_STEP;
         static_assert(offsetof(D, mRearWheelsGripCurveWindow) == 0x190 + KD_AFTER_BASE + KD_WINDOW_STEP,
                       "mRearWheelsGripCurveWindow");

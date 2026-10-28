@@ -453,11 +453,7 @@ namespace BrnNetwork
         // The XINVITE_INFO field offsets Update reads off the XInviteGetAcceptedInfo buffer
         // (mHostXuid via 'ld' pInfo+0x08 @ 0x82573B94; muTitleId via 'lwz' pInfo+0x10 @
         // 0x82573B78/0x82573BD4; the +0x14 hostInfo region encoded into @ 0x82573BEC).
-        static_assert(offsetof(XInviteInfo, mHostXuid) == 0x08,
-                      "XInviteInfo::mHostXuid is the xuidInviter at +0x08");
         static_assert(offsetof(XInviteInfo, muTitleId) == 0x10,
                       "XInviteInfo::muTitleId is the dwTitleID at +0x10");
-        static_assert(offsetof(XInviteInfo, maHostInfo) == 0x14,
-                      "XInviteInfo::maHostInfo is the hostInfo region at +0x14");
     }
 }

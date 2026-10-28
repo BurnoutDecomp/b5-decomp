@@ -512,8 +512,6 @@ namespace Deformation
             static s32 siGlassProbe = -1;
             if ( siGlassProbe < 0 )
             {
-                const char* lpcEnv = getenv("BRN_GLASS_PROBE");
-                siGlassProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
             }
             if ( siGlassProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
             {
@@ -622,8 +620,6 @@ namespace Deformation
             static s32 siSpecProbe = -1;
             if ( siSpecProbe < 0 )
             {
-                const char* lpcEnv = getenv("BRN_GLASS_PROBE");
-                siSpecProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
             }
             if ( siSpecProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
             {
@@ -1101,8 +1097,6 @@ namespace Deformation
             static s32 siWheelResetProbe = -1;
             if ( siWheelResetProbe < 0 )
             {
-                const char* lpcEnv = getenv("BRN_WHEELRESET_PROBE");
-                siWheelResetProbe = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
             }
             if ( siWheelResetProbe == 1 && CgsDev::Log::gpDebugPrint != 0 )
             {

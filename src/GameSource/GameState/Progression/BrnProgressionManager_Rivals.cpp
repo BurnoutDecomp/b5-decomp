@@ -243,16 +243,6 @@ void ProgressionManager::OnPursuitWon(CgsID lRivalId, BrnGameState::GameStateMod
                                 BrnGameState::GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE, 1);
 }
 
-
-// ==============================================================================================
-// [progression wave 2026-09-06, lane rivals] THE RIVAL LEG THAT NEVER RAN ON PC.
-// ==============================================================================================
-// CarSelectManager::UpdateExitState raises mbUpdateRivals (X360 +0x20971) on EVERY junkyard exit
-// -- that writer is live on PC -- and ProgressionManager::PreWorldUpdate @0x823A4F68 drains it
-// through UpdateRivals. Neither UpdateRivals nor anything it calls had a body, so since the
-// PreWorldUpdate landing (issue #10) every single log carried
-//   "[FLAG PC bring-up] ProgressionManager::PreWorldUpdate: UpdateRivals() is NOT reconstructed"
-// and no unlocked rival was ever handed to the world. Landed here:
 //
 //   UnlockRivals         @0x8236F658  (asserts BrnProgressionManager.cpp:1096, ProgressionData.h:468)
 //   UpdateRivals         @0x82396298  (assert  BrnProgressionData.h:468)
@@ -297,15 +287,6 @@ namespace
     bool gbSaidNoAchievementFwd  = false;
     // ---- [progression wave 2026-09-06, lane rivals2] ----
     bool gbSaidNoAISectionData   = false;
-
-    // [FLAG PC witness] the `[rivals] ...` lines -- NOT IN THE X360 BINARY. Opt-in behind
-    // BRN_PROGRESSION_RIVALS, every line first-N capped, none per-frame unbounded.
-    // tools/tests/cases/progression_rivals.ps1 reads them.
-    bool RivalsDiagEnabled()
-    {
-        static const bool sbDiag = (getenv("BRN_PROGRESSION_RIVALS") != 0);
-        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-    }
 
     // Drain-scoped counters for the witness (one UpdateRivals "drain" spans as many frames as
     // ProgressionData has rivals -- the console advances miLastUpdatedRival by at most one
@@ -353,9 +334,6 @@ CgsID ProgressionManager::UnlockRivals(BrnGameState::GameStateModuleIO::GameActi
     {
         // [PC GUARD] the console reaches the resource through ResourcePtr::operator-> (whose own
         // assert fires); GetProgressionData answers 0 before the load completes on PC.
-        ParkOnceRivals(gbSaidNoProgressionData,
-                       "[FLAG PC bring-up] ProgressionManager: the ProgressionData resource is not "
-                       "bound yet; the rival legs (UnlockRivals / UpdateRivals) no-op this frame.\n");
         return 0;
     }
 
@@ -402,17 +380,6 @@ CgsID ProgressionManager::UnlockRivals(BrnGameState::GameStateModuleIO::GameActi
 
         lpSavedRival->meState = RivalData::E_STATE_UNLOCKED;          // stw 1, 0x10(saved)
 
-        if (RivalsDiagEnabled() && giUnlockLines < 16)
-        {
-            ++giUnlockLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[rivals] unlock: medals=" << static_cast<s32>(lu8MedalCount)
-                << " index="                  << liIndex
-                << " rival="                  << static_cast<u64>(lpRival->GetId())
-                << " car="                    << static_cast<u64>(lpRival->GetCarId())
-                << "\n";
-        }
-
         return lpRival->GetCarId();                                   // ld r3, 8(lpRival)
     }
 
@@ -455,9 +422,6 @@ void ProgressionManager::UpdateRivals(BrnGameState::GameStateModuleIO::GameActio
     {
         // [PC GUARD] see UnlockRivals. The request byte stays set so the drain resumes when the
         // resource is bound, exactly as an unfinished console drain would.
-        ParkOnceRivals(gbSaidNoProgressionData,
-                       "[FLAG PC bring-up] ProgressionManager: the ProgressionData resource is not "
-                       "bound yet; the rival legs (UnlockRivals / UpdateRivals) no-op this frame.\n");
         return;
     }
 
@@ -484,28 +448,6 @@ void ProgressionManager::UpdateRivals(BrnGameState::GameStateModuleIO::GameActio
         miLastUpdatedRival      = 0;
         mbUpdateRivalsRequested = false;                               // stbx 0 -> this+0x20971
 
-        if (RivalsDiagEnabled() && giDrainLines < 32)
-        {
-            ++giDrainLines;
-            s32 liProfileRivals = mProfile.GetRivalCount();
-            s32 liUnlocked      = 0;
-            for (s32 liRival = 0; liRival < liProfileRivals; ++liRival)
-            {
-                const RivalData* lpcSaved = mProfile.GetRivalData(liRival);
-                if (lpcSaved != 0 &&
-                    lpcSaved->meState != RivalData::E_STATE_LOCKED &&
-                    lpcSaved->meState != RivalData::E_STATE_BEATEN)
-                {
-                    ++liUnlocked;
-                }
-            }
-            *CgsDev::Log::gpDebugPrint
-                << "[rivals] update: profileRivals=" << liProfileRivals
-                << " unlocked="                      << liUnlocked
-                << " posted="                        << giDrainPosted
-                << " authoredRivals="                << lpProgressionData->GetRivalCount()
-                << "\n";
-        }
         giDrainPosted = 0;
     }
 }
@@ -621,9 +563,6 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
         // [PC GUARD] see UnlockRivals: the console reaches the resource through
         // ResourcePtr::operator-> (whose own assert fires); GetProgressionData answers 0 before
         // the load completes on PC. UpdateRivals cannot reach here with a null today.
-        ParkOnceRivals(gbSaidNoProgressionData,
-                       "[FLAG PC bring-up] ProgressionManager: the ProgressionData resource is not "
-                       "bound yet; the rival legs (UnlockRivals / UpdateRivals) no-op this frame.\n");
         return;
     }
 
@@ -664,14 +603,6 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
     // (SetupRoamingSections fills 139 sections across the 18 districts, not 18 x 8).
     if (lrDistrictSections.GetCount() <= 0)
     {
-        if (RivalsDiagEnabled() && giAddLines < 16)
-        {
-            ++giAddLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[rivals] add: index=" << liRivalIndex
-                << " district="           << leRivalDistrict
-                << " sections=0 posted=0 (no roaming section authored in this district)\n";
-        }
         return;
     }
 
@@ -686,11 +617,6 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
     // dereferences it unconditionally (`addis r3, r27, 2 ; addi r3, r3, 0x904`).
     if (!mpAISectionData.HasMemoryResource())
     {
-        ParkOnceRivals(gbSaidNoAISectionData,
-                       "[FLAG PC bring-up] ProgressionManager::AddRivalToWorld @0x8238B0A8: "
-                       "mpAISectionData is not bound (LoadAIData @0x8239A0D0 has not completed), "
-                       "so the rival's spawn position cannot be read; game action 196 was NOT "
-                       "posted this pass.\n");
         return;
     }
 
@@ -716,21 +642,6 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
                                 BrnGameState::GameStateModuleIO::E_ACTION_ADD_RIVAL,
                                 static_cast<s32>(sizeof(lAction)));  // li r5, 0xC4 ; li r6, 0xB0
 
-    if (RivalsDiagEnabled() && giAddLines < 16)
-    {
-        ++giAddLines;
-        *CgsDev::Log::gpDebugPrint
-            << "[rivals] add: index="  << liRivalIndex
-            << " district="            << leRivalDistrict
-            << " sectionSlot="         << static_cast<s32>(luSectionSlot)
-            << " section="             << static_cast<s32>(lu16AISection)
-            << " rival="               << static_cast<u64>(lpRival->GetId())
-            << " state="               << static_cast<s32>(lpRivalSavedData->meState)
-            << " spawn="               << lAction.mSpawnPosition.x
-            << ","                     << lAction.mSpawnPosition.z
-            << " posted=196 size="     << static_cast<s32>(sizeof(lAction))
-            << "\n";
-    }
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -794,24 +705,9 @@ void ProgressionManager::OnTakedownTo(BrnGameState::GameStateModuleIO::GameActio
                 // The same hole OnEventFinishUpdateProfile's WON_EVENT tip sits in: nothing calls
                 // SetTrainingManager because the outer ProgressionManager::Construct/Prepare pair
                 // is not reconstructed. DELETE-WHEN that installer lands.
-                ParkOnceRivals(gbSaidNoTrainingManager,
-                               "[FLAG PC bring-up] ProgressionManager::OnTakedownTo: "
-                               "mpTrainingManager (X360 +133440) is NULL -- nothing calls "
-                               "SetTrainingManager yet, so the takedown training tip was not "
-                               "requested. The takedown itself IS tallied.\n");
             }
         }
 
-        if (RivalsDiagEnabled() && giTakedownLines < 16)
-        {
-            ++giTakedownLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[rivals] takedownTo: type=" << static_cast<s32>(leType)
-                << " carType="                  << mProfile.GetCurrentCarType()
-                << " tip="                      << static_cast<s32>(leTip)
-                << " requested="                << (lbRequest ? 1 : 0)
-                << "\n";
-        }
     }
 
     mProfile.AddTakedown(leType);                                     // 0x823668E0
@@ -845,11 +741,6 @@ void ProgressionManager::OnOnlineRaceComplete(s32 liNumberOfPlayers, bool lbWonR
     // class parks around the same hole (see the P2 parks in GameStateModule_gRR_00.cpp).
     // The profile tallies above ARE written, which is the part this function owns.
     // DELETE-WHEN BrnGameStateAchievementManagerPS3.cpp is mounted.
-    ParkOnceRivals(gbSaidNoAchievementFwd,
-                   "[FLAG PC bring-up] ProgressionManager::OnOnlineRaceComplete: "
-                   "AchievementManagerBase::OnOnlineRaceComplete @0x8235B6A8 is bodied but its TU "
-                   "is not mounted; the online-race achievements were not evaluated. The profile "
-                   "tallies WERE updated.\n");
     (void)mpAchievementManager;
 }
 

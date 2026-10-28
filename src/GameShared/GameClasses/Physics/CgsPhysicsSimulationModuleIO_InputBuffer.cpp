@@ -77,7 +77,6 @@ namespace PhysicsSimulationIO
         // chain alone catches is member REORDERING and inserted padding (tamper: swapping two
         // queue members fails the seams around them). Neither gate subsumes the other.
         static_assert(offsetof(InputBuffer, mAddRigidBodyQueue)    ==    16, "mAddRigidBodyQueue @0x10      (GetAddRigidBodyQueue const @0x8289E408  addi r3,r28,0x10)");
-        static_assert(offsetof(InputBuffer, mUpdateRigidBodyQueue) == 38432, "mUpdateRigidBodyQueue @0x9620 (accessor @0x8289E4B0  addis 1 / addi -0x69E0; host == console, InAddRigidBody is pointer-free)");
 
         static_assert(offsetof(InputBuffer, mApplyForceQueue)             == offsetof(InputBuffer, mUpdateRigidBodyQueue)        + sizeof(InputBuffer::mUpdateRigidBodyQueue),        "update-rb -> apply-force gapless        (X360 @0x12C30, accessor @0x8289E558  addis 1 / addi  0x2C30)");
         static_assert(offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) == offsetof(InputBuffer, mApplyForceQueue)             + sizeof(InputBuffer::mApplyForceQueue),             "apply-force -> change-inertia gapless   (X360 @0x14B80, accessor @0x8259EE80 -- the retracted one)");

@@ -110,13 +110,6 @@ AIModule::AIModule()
 // never running to set this flag. Without this store, stage 1 below would take the allocation
 // path and fail.
 //
-// ⚠️ [FLAG PC boot gate] PARKED, each for the same reason -- the owning TU is not mounted and the
-// member has no named home in this class's pad spine:
-//     * the AIDebugComponent seed block (+270908..+270948), its Construct(+271532) and Register
-//     * the six "AI Module, ..." perf monitors  (Update's StartMonitor/StopMonitor legs are parked
-//       with them)
-//     * +322040/+322044 and ContactSpyInterface::Construct(+322408)
-// =================================================================================================
 void AIModule::Construct()
 {
     CgsModule::ModuleSingleBuffered::Construct();
@@ -124,8 +117,6 @@ void AIModule::Construct()
     mePrepareStage     = E_PREPARESTAGE_START;
     meLoadMapDataStage = E_LOADMAPDATA_REQUEST_BUNDLE;
     meReleaseStage     = E_RELEASESTAGE_DONE;
-
-    // [FLAG PC boot gate] the AIDebugComponent seed block + Register -- see the banner.
 
     mResourceReceiverQueue.Construct();
 
@@ -163,23 +154,6 @@ void AIModule::Construct()
         maAICars[leCar].Construct(leCar);
     }
 
-    // [FLAG PC boot gate] The six perf monitors and AIDebugComponent::Construct
-    // remain parked -- see the banner.
-
-    // ⭐ The two player cursors. The console DOES store both here, and both are 0:
-    //     0x82794D34  li   r30, 0                 (the only write to r30 in the whole body)
-    //     0x827952C4/0x827952D4  lis/ori r11 = 0x4E9F8 ; 0x827952F4  stwx r30, r31, r11
-    //                                            -> mePlayerActiveRaceCarIndex = 0
-    //     0x827952F8/0x827952FC  lis/ori r10 = 0x4E9FC ; 0x8279530C  stwx r30, r31, r10
-    //                                            -> mePlayerGlobalRaceCarIndex = 0
-    // ⛔ CORRECTED 2026-09-22 (crash parity, G04-D6): the active cursor was seeded to INVALID (-1)
-    // on the claim that "the console does not store them in Construct" and that "Update always
-    // overwrites it before anything reads it". Both claims were false: PausedUpdate @0x8279A1E0
-    // calls HandleManagementEvents at 0x8279A37C with no mbPlayerDataSet gate and never writes this
-    // field, and case 4 (PLAYER_TAKEN_OVER, 0x82798C58..0x82798C80) reads it -- a boot-time paused
-    // drain handed GetAIDriver(-1) to the "Invalid driver index" assert where the console acts on
-    // driver 0.
-    mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
     mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
 
     // The rest of the console Construct: the +322400..+322435 flag block, the +294784 Random prime,
@@ -229,10 +203,6 @@ void AIModule::Destruct()
     CgsModule::ModuleSingleBuffered::Destruct();
     mResourceReceiverQueue.Clear();
     mRouteMapModule.Destruct();
-    // [FLAG PC boot gate] 0x8276E3C0..0x8276E400, the AIDebugComponent leg: the same gate as
-    // Construct's AIDebugComponent::Construct -- the component is never built on this build (the
-    // class has no member for it), so its `mpAIModule != NULL` assert would fire on nothing.
-    mContactSpyInterface.Construct();
 }
 
 // =================================================================================================
@@ -276,8 +246,6 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
         {
             mePrepareStage++;
             mResourceReceiverQueue.Clear();
-            // [FLAG PC boot gate] CgsDev::DebugComponent::Register(this + 271532) -- the
-            // AIDebugComponent, which Construct never built. See the banner.
         }
         // fall through
 
@@ -306,56 +274,6 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
             if ( !mRouteMapModule.Prepare( mMapDataHandle ) )
             {
                 return false;
-            }
-
-            // [FLAG PC boot gate] `*(this + 322500) = 0` -- no named home in the pad spine.
-
-            // The X360 builds a fresh ResourcePtr<AISectionsData> from the handle and passes it
-            // by value; the manager rebinds its own from it and the temporary unlinks on the way
-            // out. Same construction here.
-            mResetOnTrackManager.Construct(
-                CgsResource::ResourcePtr<AISectionsData>( mMapDataHandle ),
-                // ⭐⭐ THE ARRAY, at last (aicar_reset wave 2026-08-26). The X360 passes
-                // `this + 560` == this module's embedded 35-entry AICar array; the previous wave
-                // deliberately passed NULL because Construct built no cars and 35 zeroed AICars
-                // would have read as ACTIVE (E_AI_CAR_STATE_IN_RANGE == 0). Construct now runs the
-                // one attested initialisation that fixes exactly that -- see the FLAG there.
-                maAICars );
-
-            // ⭐⭐ [FLAG PC diagnostic] THE CONTROL THAT COULD FALSIFY "THE ROAD NETWORK
-            // LOADED". A non-null resource pointer proves nothing on this build --
-            // [[valid-pointer-invalid-object]] and [[below-4GB heap ⇒ pointer triage by
-            // ALIGNMENT]] between them mean a bound-looking ResourcePtr can point at a
-            // plausible address holding nothing. So this reads FOUR WORDS OUT OF THE
-            // RESOURCE ITSELF, one of which has a known correct answer:
-            // AISectionsData::muVersion must be KU_AI_SECTIONS_DATA_VERSION == 12, which no
-            // garbage pointer produces. sections/resetPairs/sizeInBytes are the corroborating
-            // magnitudes (sizeInBytes must be commensurate with AI.DAT's 3.27 MB).
-            // ⚠️ If this line ever prints version != 12, the acquire "succeeded" and the
-            // resource is NOT the road network -- do not read the BOUND above as evidence.
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-            {
-                const AISectionsData* lpSections = GetLoadedAISectionsData();
-                *CgsDev::Log::gpDebugPrint
-                    << "[ai] ResetOnTrackManager Constructed: AISectionsData="
-                    << ( mResetOnTrackManager.HasAISectionData() ? "BOUND" : "NULL" )
-                    << " aiCars=" << ( mResetOnTrackManager.GetAICarArray() != 0 ? "BOUND" : "NULL" )
-                    << " aiCar0State=" << static_cast<s32>( maAICars[0].meCarState )
-                    << " (expect 2 == INACTIVE)\n";
-                if ( lpSections != 0 )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[ai] AISectionsData: version=" << static_cast<s32>( lpSections->muVersion )
-                        << " (expect " << static_cast<s32>( KU_AI_SECTIONS_DATA_VERSION ) << ")"
-                        << " sections=" << static_cast<s32>( lpSections->muNumSections )
-                        << " resetPairs=" << static_cast<s32>( lpSections->muNumSectionResetPairs )
-                        << " sizeInBytes=" << static_cast<s32>( lpSections->GetSizeInBytes() ) << "\n";
-                }
-                else
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[ai] AISectionsData: NULL -- the acquire did not deliver a resource\n";
-                }
             }
 
             mePrepareStage++;

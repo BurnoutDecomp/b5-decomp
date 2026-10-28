@@ -61,26 +61,6 @@
 //   E_ROUND_ROBIN_FAN arm and AIDriver::CalculateDesiredSpeed's GetSpeedRatio read can all take
 //   their console arm by flipping this ONE line to 1.
 //
-// [FLAG PC bring-up] IT IS DELIBERATELY STILL 0, and this is the R6 lane's headline finding:
-//   kfBias (recovered in full -- see BrnAISteeringFan_Target.cpp) shows that in
-//   eBiasMode_Race the ONLY contributors with a non-zero weight are eFan_SteerToCentre (+20),
-//   eFan_AvoidHNG (+50), eFan_ExitHNG (-300), eFan_AvoidTraffic (-100),
-//   eFan_AvoidOncomingTraffic (-400), eFan_AvoidEdges (-200) and eFan_DriveParallel (-200).
-//   EVERY ONE of those needs something this tree does not have yet: the first, second, third and
-//   seventh need RacingLine::mbCentreLineHereKnown / the HardNoGoMap section stack (i.e.
-//   BRN_AI_RACINGLINE_STACK_PRESENT), the fourth and fifth need the .bss-resident tuning
-//   constants IncludeConstantBearing reads, and the sixth has no IDA export at all. With all of
-//   them inert every mfCumulativeWeighting slot stays 0.0, and a FLAT fan is pathological:
-//   BestTargetInArea is "first wins on ties", so GetDrivingTarget returns mTarget[0] -- the ray
-//   mfFanAngle (80 degrees) to the car's RIGHT -- and GetSpeedRatio turns index 0 into ratio 0.0,
-//   which CalculateDesiredSpeed multiplies into (0 * 0.75 + 0.25) = a QUARTER of the desired
-//   speed. That is exactly the failure BrnAIDriver_Update.cpp's GetSpeedRatio park documents
-//   from run6. Flipping this to 1 before the racing-line half lands would therefore replace
-//   "rival drives straight" with "rival turns hard right at a quarter speed".
-//   FLIP IT TO 1 the moment BRN_AI_RACINGLINE_STACK_PRESENT can also go to 1 (or as soon as
-//   IncludeHardNoGo + IncludeConstantBearing have bodies); every gated site already carries the
-//   faithful console call. DELETE-WHEN both halves are present.
-// ============================================================================================
 #ifndef BRN_AI_RACINGLINE_STACK_PRESENT
 #define BRN_AI_RACINGLINE_STACK_PRESENT 1   // flipped 2026-09-05 (aiwave2): the section-cache + query halves and HardNoGoMap are bodied
 #endif

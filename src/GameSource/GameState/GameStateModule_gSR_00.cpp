@@ -60,7 +60,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h" // CgsSystem::TimerRequests (the showtime arm's third argument)
-#include "pc/math/VmxFloat.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "rw/math/vpu/vector3_operation.h"                              // Dot (the showtime arm's two vmsum3fp128)
 
@@ -94,21 +93,6 @@ namespace BrnGameState
 {
 namespace
 {
-
-// [FLAG PC witness] NOT IN THE CONSOLE. Opt-in (BRN_DISCO_DIAG), first 32 lines: the discovery
-// reward checks and the case-95 region answer.
-void DiscoveryWitness(const char* lpcWhat, s32 liA, s32 liB, s32 liC, s32 liD)
-{
-    static const bool sbDiag      = (getenv("BRN_DISCO_DIAG") != 0);
-    static s32        siLinesLeft = 32;
-    if (!sbDiag || siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
-    {
-        return;
-    }
-    --siLinesLeft;
-    *CgsDev::Log::gpDebugPrint << "[disco] " << lpcWhat << " " << liA << " " << liB << " " << liC
-                               << " " << liD << "\n";
-}
 
 // --------------------------------------------------------------------------------------------
 // The EventJunction lookup both CheckIfPlayerIsAtJunctionWithAnEvent and StartModeAtLights
@@ -191,21 +175,6 @@ bool IsLightTriggerIdValid(u32 luLightTriggerId)
            ((luLightTriggerId & 0x000000FFu) != 0x000000FFu);
 }
 
-// [DIAG] the `[snap]` rung -- NOT IN THE X360 BINARY. Same logger and same env guard
-// (BRN_PROP_DIAG) as the `[UI-gate]` / `[evt-flow]` ladders elsewhere in this chain.
-bool SnapDiagEnabled()
-{
-    static const bool sbDiag = (getenv("BRN_PROP_DIAG") != 0);
-    return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-}
-
-// [DIAG] the `[showtime]` rung -- NOT IN THE X360 BINARY, same guard and same logger.
-bool ShowtimeDiagEnabled()
-{
-    static const bool sbDiag = (getenv("BRN_PROP_DIAG") != 0);
-    return sbDiag && CgsDev::Log::gpDebugPrint != 0;
-}
-
 // ---- the showtime arm's three console literals, all image-read out of the ARTIST .rdata -----
 // flt_82CDB8CC == 0x41200000 == 10.0f. The arm squares it (`fmuls f30, f0, f0` @0x8239A60C) and
 // compares the squared speed against the square, so this is the minimum speed in the linear
@@ -218,63 +187,6 @@ const f32 KF_SHOWTIME_INTRO_SECONDS = 0.5f;
 // deliberate hair above zero, so IsInShowtimeIntro() stays true and the next frame re-enters the
 // decision arm. That is how the console waits for a car that is still airborne to land.
 const f32 KF_SHOWTIME_INTRO_RETRY_SECONDS = 9.99999975e-06f;
-
-// --------------------------------------------------------------------------------------------
-// [FLAG PC bring-up, NOT in the X360 binary] BRN_SKIP_TRAINING_TIP -- the harness tip bypass.
-//
-// The boot-time tutorial tip ("Find an Auto-Repair shop...") is a MODAL type (< 77), so
-// IsBlockingTrainingTipActive above is TRUE for it, and it holds the junction canEnter gate down
-// for minutes of real time. It does clear on its own -- this is not a defect and this flag is not
-// a fix for one -- but a harness run is 275 s long and spends most of that boot-time window
-// standing at a junction with the start-hint glyphs suppressed, so the hint chain cannot be
-// exercised at all under the harness.
-//
-// OPT IN ONLY: OFF unless the environment carries BRN_SKIP_TRAINING_TIP, cached once in the same
-// `static const bool` shape as SnapDiagEnabled's BRN_PROP_DIAG read, so a retail-shaped run
-// (no env) is bit-identical to the console gate.
-//
-// ⛔ SCOPE. This wrapper is called from the TWO canEnter computations in
-// CheckIfPlayerIsAtJunctionWithAnEvent ONLY (mbCanEnterEventAtJunction and the action record's
-// own mbCanEnterEvent). IsBlockingTrainingTipActive itself is NOT modified, because its third
-// caller -- ShouldStartSnapRaceMode's pre-gate @0x82363700 -- is the gesture-hold arm, and that
-// one must keep the console's behaviour: a bypass there would let a harness run actually START a
-// mode out of a tip-blocked state, which is a capability -StartEvent already owns explicitly.
-//
-// DELETE-WHEN the training flow's tip lifecycle is fully reconstructed and fast-forwardable
-// (i.e. TrainingManager's RequestTip / GetTimeSinceLastTip / tip-expiry path is bodied and the
-// harness can retire or complete a pending tip directly, so nothing needs to ignore one).
-// --------------------------------------------------------------------------------------------
-bool IsBlockingTrainingTipActiveForCanEnterGate(const TrainingManager* lpTrainingManager)
-{
-    const bool lbBlocking = IsBlockingTrainingTipActive(lpTrainingManager);
-    if (!lbBlocking)
-    {
-        return false;
-    }
-
-    static const bool sbSkipTip = (getenv("BRN_SKIP_TRAINING_TIP") != 0);
-    if (!sbSkipTip)
-    {
-        return true;
-    }
-
-    // One shot, and only when the flag CHANGED the answer -- so a log proves the bypass did
-    // something rather than merely that the variable was set.
-    if (SnapDiagEnabled())
-    {
-        static bool sbLoggedSuppression = false;
-        if (!sbLoggedSuppression)
-        {
-            sbLoggedSuppression = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[snap] BRN_SKIP_TRAINING_TIP -- blocking training tip (type "
-                << static_cast<s32>(lpTrainingManager->GetCurrentTrainingType())
-                << ") IGNORED for the junction canEnter gate."
-                << " [FLAG PC bring-up, NOT in the X360 binary]\n";
-        }
-    }
-    return false;
-}
 
 }   // anonymous namespace
 
@@ -513,12 +425,6 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
             return;   // [GUARD]
         }
 
-        // mbCanEnterEventAtJunction (gsm+284369), @0x82390904..0x82390984: no game mode running,
-        // no blocking training tip, and at or below 30 mph (flt_82029F30, image-read).
-        // [FLAG PC bring-up, NOT in the X360 binary] the tip term goes through the
-        // BRN_SKIP_TRAINING_TIP wrapper (banner at its definition above). With the env var unset
-        // -- every retail-shaped run -- it is IsBlockingTrainingTipActive verbatim.
-        bool lbCanEnterEvent = false;
         if (mModeManager.GetCurrentGameMode() == 0)
         {
             lbCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(mpTrainingManager) &&
@@ -624,30 +530,6 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                 }
             }
 
-            // [PARKED] THE TRAINING-TIP ARM (0x82390B18..0x82390D5C), entered only when
-            // `lbJunctionChanged || TrainingManager::mbVoiceoverFinishedLastFrame` (gsm+46663).
-            // Console body, written out for whoever lands it -- it is a clean three-way choice
-            // and every id below is image-cited:
-            //   * no special car          -> E_TRAINING_TYPE_DISCOVERS_EVENT (8)
-            //   * special car, I am in it -> E_TRAINING_TYPE_CORRECT_CAR_FOR_CHALLENGE (24),
-            //                                and mark tip 25 already-seen on the Profile
-            //   * special car, I am not   -> E_TRAINING_TYPE_WRONG_CAR_FOR_CHALLENGE (25)
-            //   each behind the same gauntlet: !TrainingManager::IsTipPending() &&
-            //   !IsInPictureParadise() && ModeManager::GetTimeInFreeBurn() >= 30.0f (the first
-            //   arm only) && IsTipAllowedInGameMode(type) &&
-            //   !Profile::HasPlayerSeenTrainingType(type) && GetTimeSinceLastTip() >= 5.0f,
-            //   then RequestTip(type).
-            // Parked because it drives TrainingManager state through accessors that are
-            // declare-only on this build (IsTipPending / GetProfile / GetTimeSinceLastTip /
-            // RequestTip) and posts NO action -- nothing the mounted GUI reads depends on it.
-
-            // LABEL_118 (@0x82390D5C..0x82390DA0): the record's OWN mbCanEnterEvent is the member
-            // AND the unlocked flag AND "no blocking tip", recomputed here because the console
-            // recomputes it (the member was latched before the event lookup ran).
-            // [FLAG PC bring-up, NOT in the X360 binary] same BRN_SKIP_TRAINING_TIP wrapper as the
-            // member gate above -- both halves of canEnter must agree or the record would say
-            // "cannot enter" while the member said it could.
-            bool lbActionCanEnterEvent = false;
             if (mbCanEnterEventAtJunction && lbEventUnlocked)
             {
                 lbActionCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(mpTrainingManager);
@@ -662,21 +544,6 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
 
         mbJunctionNewlyDiscovered = false;                                         // @0x82390DDC
 
-        if (SnapDiagEnabled())
-        {
-            static s32 siArrivalLines = 0;
-            if (siArrivalLines < 12)
-            {
-                ++siArrivalLines;
-                *CgsDev::Log::gpDebugPrint
-                    << "[snap] junction ENTER box=" << lAction.muJunctionLogicBoxId
-                    << " event=" << lAction.muEventJunctionID
-                    << " mode=" << static_cast<s32>(lAction.meGameModeType)
-                    << " canEnter=" << (lAction.mbCanEnterEvent ? 1 : 0)
-                    << " unlocked=" << (lAction.mbEventUnlocked ? 1 : 0)
-                    << " speed=" << lpState->mfSpeedMPH << "\n";
-            }
-        }
         return;
     }
 
@@ -719,17 +586,6 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
     mbCanEnterEventAtJunction      = false;                                        // @0x82390ECC
     mbJunctionNewlyDiscovered      = false;                                        // @0x82390ED0
 
-    if (SnapDiagEnabled())
-    {
-        static s32 siExitLines = 0;
-        if (siExitLines < 12)
-        {
-            ++siExitLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[snap] junction LEAVE box=" << lAction.muJunctionLogicBoxId
-                << " event=" << lAction.muEventJunctionID << "\n";
-        }
-    }
 }
 
 // ============================================================================================
@@ -844,13 +700,6 @@ bool GameStateModule::ShouldStartSnapRaceMode(bool                     lbRaceMod
     *lpOutStartMechanism = lbAtLights ? E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS
                                       : E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_ANYWHERE;
 
-    if (SnapDiagEnabled())
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[snap] HOLD COMPLETE -- start mechanism "
-            << static_cast<s32>(*lpOutStartMechanism)
-            << " (speed " << lpPlayerRaceCarState->mfSpeedMPH << ")\n";
-    }
     return true;
 }
 
@@ -900,7 +749,6 @@ void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuf
         }
         else
         {
-            namespace vmx = CgsPC::VmxFloat;
             const f32 lfGameTimeStep = lpInput->GetTimerStatusInterface()
                 ->GetGameTimerStatus()->GetCurrentTimeStep();
             GameStateModuleIO::ShowtimeIntroAction lShowtimeIntro;
@@ -1229,16 +1077,6 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
 
     lStartGameModeParams.SetPlayerBaseDeformation(
         lpProfile->GetPlayerBaseDeformAmount(lPlayerCarId));                       // @0x82397298
-
-    if (SnapDiagEnabled())
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[snap] START GAME MODE runtime-mode " << static_cast<s32>(leGameModeType)
-            << " (data mode " << liDataGameType << ") eventJunction " << luEventJunctionID
-            << " junction " << lpJunctionLogicBox->GetID()
-            << " rank " << static_cast<s32>(li8ProgressionRank)
-            << " ratio " << lfProgressionRankAsRatio << "\n";
-    }
 
     // THE HOP. ModeManager::StartGameMode @0x8234FCE8 is COMMITTED (BrnModeManager_Start.cpp)
     // and mounted; it is what runs SetupGameMode -> PrepareForMode (the 2272-byte action 23) and

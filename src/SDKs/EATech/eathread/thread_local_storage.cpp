@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eathread/thread_local_storage.h"
 
-#include <windows.h> // TlsAlloc, TlsFree, TlsGetValue, TlsSetValue, TLS_OUT_OF_INDEXES
+#include <xtl.h> // TlsAlloc, TlsFree, TlsGetValue, TlsSetValue, TLS_OUT_OF_INDEXES
 
 // ============================================================================
 // SDKs/EATech/eathread/thread_local_storage.cpp

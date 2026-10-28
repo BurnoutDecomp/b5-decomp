@@ -34,10 +34,6 @@ namespace BrnGui
     // the async listener or fabricate an XDK cancellation.
     bool BrnGuiKeyboard::Release()
     {
-#if defined(_WIN32) && !defined(_XBOX)
-        // FLAG PC-platform leaf: retire native work before its title owner is released.
-        mKeyboard.AbandonPlatformOperation();
-#endif
         mpSystemUserProfile = 0;
         return true;
     }
@@ -45,10 +41,6 @@ namespace BrnGui
     // ARTIST825077D4: only the profile owner pointer is cleared here.
     void BrnGuiKeyboard::Destruct()
     {
-#if defined(_WIN32) && !defined(_XBOX)
-        // FLAG PC-platform leaf: also covers Destruct without a prior Release.
-        mKeyboard.AbandonPlatformOperation();
-#endif
         mpSystemUserProfile = 0;
     }
 

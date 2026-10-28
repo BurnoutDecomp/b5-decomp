@@ -245,16 +245,6 @@ namespace Deformation
         //                  condition is stated in (mi16NumPhysicalParts, before -> after).
         // DELETE-WHEN the detach question is closed and banked.
         // =========================================================================================
-        inline bool DetachProbeOn()
-        {
-            static s32 siProbe = -1;
-            if (siProbe < 0)
-            {
-                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
-                siProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
-            }
-            return (siProbe == 1) && (CgsDev::Log::gpDebugPrint != 0);
-        }
 
         // [jb-exit] NOT X360 -- FX-WITNESS 2026-09-24, BRN_JB_EXIT_DIAG=1. The ONE per-hinge refusal
         // the forwarder's [jb-exit] row cannot see, because TestJointForBreaking is never called: a
@@ -265,8 +255,6 @@ namespace Deformation
             static s32 siOn = -1;
             if ( siOn < 0 )
             {
-                const char* lpcEnv = getenv("BRN_JB_EXIT_DIAG");
-                siOn = ( lpcEnv != 0 && atoi(lpcEnv) > 0 ) ? 1 : 0;
             }
             return ( siOn == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
         }
@@ -333,7 +321,6 @@ namespace Deformation
         // already shed" predicate this file used to synthesise. An INVINCIBLE car sheds nothing.
         // [detach-probe] gate witness -- see the block at the top of this file.
         s32 liProbeAttached = 0, liProbeHinged = 0, liProbeArmAHits = 0, liProbeJointBreaks = 0;
-        const bool lbProbe = DetachProbeOn();
 
         if ( mi16NumPhysicalParts < KI_MAX_PHYSICAL_PARTS
              && meAbsorptionSet != E_ABSORPTIONSET_INVINCIBLE   // +26460 (asm-proven)
@@ -851,24 +838,6 @@ namespace Deformation
 
         // [detach-probe] BOTH outcomes -- a null return (pool full) is a different failure from
         // "the call site was never reached", and printing only the successes would hide it.
-        if ( DetachProbeOn() )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[detach-make] ent " << static_cast<s32>(mGlobalEntityId.muValue)
-                << " part " << liPartIndex
-                << " type " << static_cast<s32>(lrPart.GetPartType())
-                << " hinge " << (lbHinge ? 1 : 0)
-                << " result " << ((lpPhysicalBodyPart != 0) ? "PART" : "NULL")
-                << " nPhysBefore " << static_cast<s32>(li16NumPhysical)
-                << " meshId " << lrPart.GetMeshId()
-                << " vehPos (" << GetVehicleBody().GetTransform().wAxis.x
-                << ", " << GetVehicleBody().GetTransform().wAxis.y
-                << ", " << GetVehicleBody().GetTransform().wAxis.z << ")"
-                << " specGfxPos (" << lpSpec->GetPartGraphicsTransform().wAxis.x
-                << ", " << lpSpec->GetPartGraphicsTransform().wAxis.y
-                << ", " << lpSpec->GetPartGraphicsTransform().wAxis.z << ")"
-                << "\n";
-        }
 
         if ( lpPhysicalBodyPart != nullptr )
         {
@@ -923,26 +892,6 @@ namespace Deformation
                 // [hinge-geom] NOT X360. The four numbers this wave recovered, at the one site that
                 // consumes them, so "the hinge geometry is real now" is a reading and not a claim.
                 // Before this wave every one of them was 0. DELETE-WHEN the hinge pose is banked.
-                if ( DetachProbeOn() )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[hinge-geom] ent " << static_cast<s32>(mGlobalEntityId.muValue)
-                        << " part " << liPartIndex
-                        << " type " << static_cast<s32>(lrPart.GetPartType())
-                        << " tag " << liJointIndex
-                        << " joint " << liActiveJoint
-                        << " jointPos (" << lpActiveJoint->GetCarSpacePosition().x
-                        << ", " << lpActiveJoint->GetCarSpacePosition().y
-                        << ", " << lpActiveJoint->GetCarSpacePosition().z << ")"
-                        << " localCom (" << lLocalComPosition.x << ", " << lLocalComPosition.y
-                        << ", " << lLocalComPosition.z << ")"
-                        << " maxAngle " << lpActiveJoint->GetMaxAngle()
-                        << " detachThresh " << lpActiveJoint->GetMaxStress()
-                        << " bodyPos (" << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.x
-                        << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.y
-                        << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.z << ")"
-                        << "\n";
-                }
 
                 maPartStates[liPartIndex] = KU_PART_STATE_HINGED;         // *(v49 + 26180) = 3
                 ++mi16NumHingedParts;                                     // ++*(_R31 + 26288)
@@ -1020,39 +969,9 @@ namespace Deformation
                 // tell "the event was appended" from "the emit ran and the queue is still empty",
                 // which is exactly the distinction the deleted hook could never make. Latched on
                 // BRN_DEFORM_TRACE. DELETE-WHEN a consumer exists and can be measured instead.
-                if ( DetachProbeOn() )
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[detach-notify] appended DetachedPartNotificationEvent type "
-                        << static_cast<s32>(lNotification.meType)
-                        << " vehicle " << static_cast<s32>(lNotification.mVehicleId.muValue)
-                        << " queueLen "
-                        << lpOutput->GetDeformationOutputInterface()
-                                   ->mDetachedPartNotificationQueue.GetLength()
-                        << "\n";
-                }
             }
 
             // [detach-probe] the win-condition counter, at the site, after the increment.
-            if ( DetachProbeOn() )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[detach-part] PART CAME OFF ent " << static_cast<s32>(mGlobalEntityId.muValue)
-                    << " ikPart " << liPartIndex
-                    << " type " << static_cast<s32>(lrPart.GetPartType())
-                    << " hinge " << (lbHinge ? 1 : 0)
-                    << " poolIndex " << static_cast<s32>(lu8PoolIndex)
-                    << " nPhys " << static_cast<s32>(li16NumPhysical)
-                    << " -> " << static_cast<s32>(mi16NumPhysicalParts)
-                    << " nHinged " << static_cast<s32>(mi16NumHingedParts)
-                    << " bodyPos (" << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.x
-                    << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.y
-                    << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.z << ")"
-                    << " evtPos (" << lpPhysicalBodyPart->GetEventRenderTransform().wAxis.x
-                    << ", " << lpPhysicalBodyPart->GetEventRenderTransform().wAxis.y
-                    << ", " << lpPhysicalBodyPart->GetEventRenderTransform().wAxis.z << ")"
-                    << "\n";
-            }
 
             // Wheel-panel tail switch: invalidate the wheel tag-point lane(s) the detached panel
             // carried, so the wheel renderer stops following the now-detached tag point.

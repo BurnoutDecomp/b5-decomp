@@ -372,29 +372,7 @@ namespace BrnGameState
         // rumble table -- every surface's rumblesurface priority and speed band, and whether its RumbleSurface
         // ref resolved to a collection (a surface with priority < 0 never rumbles; an unresolved ref reads the
         // zeroed default layout, priority 0). Read-only: the same accessors the passes below use.
-        static const bool sbSurfaceTableDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static bool       sbSurfaceTableLogged = false;
-        if (sbSurfaceTableDiag && !sbSurfaceTableLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbSurfaceTableLogged = true;
-            const s32 liNumSurfaces = mSurfaceList.Num_Surfaces();
-            *CgsDev::Log::gpDebugPrint << "[rumble] surface table surfaces=" << liNumSurfaces << "\n";
-            for (s32 liSurface = 0; liSurface < liNumSurfaces; ++liSurface)
-            {
-                void* lpTableRef = mSurfaceList.Surfaces(static_cast<u32>(liSurface));
-                if (lpTableRef == nullptr)
-                {
-                    continue;
-                }
-                Attrib::Gen::surface       lTableSurface(*static_cast<const Attrib::RefSpec*>(lpTableRef), 0);
-                Attrib::Gen::rumblesurface lTableRumble(lTableSurface.RumbleSurface(), 0);
-                *CgsDev::Log::gpDebugPrint
-                    << "[rumble] surface table id=" << liSurface << " prio=" << lTableRumble.RumblePriority()
-                    << " min=" << lTableRumble.MinSpeedForRumble() << " max=" << lTableRumble.MaxSpeedForRumble()
-                    << " resolved=" << static_cast<s32>(lTableSurface.RumbleSurface().HasResolvedCollection() ? 1 : 0)
-                    << "\n";
-            }
-        }
 
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
             lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);
@@ -427,20 +405,8 @@ namespace BrnGameState
                 // whenever a grounded wheel's surface id changes (budgeted), with that surface's priority --
                 // the proof the wheel pass is dispatched on live data.
                 {
-                    static const bool sbWheelDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
                     static s32        saiLastSurface[4] = { -1, -1, -1, -1 };
                     static s32        siWheelDiagLines = 0;
-                    if (sbWheelDiag && siWheelDiagLines < 64 && CgsDev::Log::gpDebugPrint != 0
-                        && saiLastSurface[leWheelIndex] != static_cast<s32>(lu8SurfaceId))
-                    {
-                        saiLastSurface[leWheelIndex] = static_cast<s32>(lu8SurfaceId);
-                        ++siWheelDiagLines;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[rumble] surface wheel=" << static_cast<s32>(leWheelIndex)
-                            << " id=" << static_cast<s32>(lu8SurfaceId)
-                            << " prio=" << lRumbleSurface.RumblePriority()
-                            << " mph=" << lpRaceCarState->mfSpeedMPH << "\n";
-                    }
                 }
 
                 if (lRumbleSurface.RumblePriority() >= 0)
@@ -859,21 +825,8 @@ namespace BrnGameState
         // "[rumble] pad-request" line (InputPads::UpdatePadRumble, CgsInputPads.cpp -- the motor
         // speeds the effects ask for) and the "[rumble] motor" line (the PC XInputSetState leaf,
         // CgsInputPadsPC.cpp -- what a connected pad was sent).
-        static const bool sbBridgeDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static s32        siBridgeDiagLines = 0;
         const s32         KI_BRIDGE_DIAG_MAX_LINES = 64;
-        if (sbBridgeDiag && (liNumJolts + liNumStops + liNumPlays + liNumVolumes) > 0
-            && siBridgeDiagLines < KI_BRIDGE_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siBridgeDiagLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[rumble] bridge jolts=" << liNumJolts << " stops=" << liNumStops
-                << " plays=" << liNumPlays << " volumes=" << liNumVolumes
-                << " paused=" << static_cast<s32>(lpInputInputBuffer->GetRumblePaused() ? 1 : 0)
-                << " enabled=" << static_cast<s32>(lpInputInputBuffer->GetRumbleEnabled() ? 1 : 0)
-                << " ff=" << static_cast<s32>(lpInputInputBuffer->GetWheelForceFeedbackEnabled() ? 1 : 0)
-                << "\n";
-        }
     }
 
     // ------------------------------------------------------------------------
@@ -900,20 +853,7 @@ namespace BrnGameState
         lEvent.mfRumbleVolume   = lfVolume;
         mPlayRumbleEffectEventQueue.AddEvent(lEvent);
 
-        static const bool sbSurfaceDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static s32        siSurfaceDiagLines = 0;
-        if (sbSurfaceDiag && siSurfaceDiagLines < 32 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siSurfaceDiagLines;
-            *CgsDev::Log::gpDebugPrint
-                << "[rumble] surface play id=" << liRumbleId << " prio=" << liRumblePriority << " vol=" << lfVolume
-                << " low{sus=" << lJoltEffect.mLowFreqJoltData.mfSustainTime
-                << " peak=" << lJoltEffect.mLowFreqJoltData.mfPeakSpeedValue
-                << " susv=" << lJoltEffect.mLowFreqJoltData.mfSustainSpeedValue
-                << "} high{sus=" << lJoltEffect.mHighFreqJoltData.mfSustainTime
-                << " peak=" << lJoltEffect.mHighFreqJoltData.mfPeakSpeedValue
-                << " susv=" << lJoltEffect.mHighFreqJoltData.mfSustainSpeedValue << "}\n";
-        }
     }
 
     void RumbleManager::ChangeRumbleVolume(s32 liRumbleId, f32 lfVolume, const CgsInput::InputIO::JoltEffect& lJoltEffect)
@@ -926,13 +866,7 @@ namespace BrnGameState
         lEvent.mfRumbleVolume = lfVolume;
         mChangeVolumeRumbleEffectEventQueue.AddEvent(lEvent);
 
-        static const bool sbSurfaceDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static s32        siSurfaceDiagLines = 0;
-        if (sbSurfaceDiag && siSurfaceDiagLines < 32 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siSurfaceDiagLines;
-            *CgsDev::Log::gpDebugPrint << "[rumble] surface volume id=" << liRumbleId << " vol=" << lfVolume << "\n";
-        }
     }
 
     void RumbleManager::StopRumble(s32 liRumbleId)
@@ -943,13 +877,7 @@ namespace BrnGameState
         lEvent.miRumbleId = liRumbleId;
         mStopRumbleEffectEventQueue.AddEvent(lEvent);
 
-        static const bool sbSurfaceDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static s32        siSurfaceDiagLines = 0;
-        if (sbSurfaceDiag && siSurfaceDiagLines < 32 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++siSurfaceDiagLines;
-            *CgsDev::Log::gpDebugPrint << "[rumble] surface stop id=" << liRumbleId << "\n";
-        }
     }
 
     // ------------------------------------------------------------------------
@@ -985,7 +913,6 @@ namespace BrnGameState
         // landing / race-car-impact lines -- a witness that reports an absence it never observed.
         // The drain and the motor have their own lines ("[rumble] bridge", "[rumble] pad-request",
         // "[rumble] motor").
-        static const bool sbRumbleDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static s32        saiRumbleDiagLines[5] = { 0, 0, 0, 0, 0 };
         const s32         KI_RUMBLE_DIAG_MAX_LINES_PER_PRODUCER = 16;
         const s32         liSlot = (liRumblePriority == KN_RUMBLE_IMPACT_PRIORITY)         ? 0
@@ -993,21 +920,5 @@ namespace BrnGameState
                                  : (liRumblePriority == KN_LANDING_RUMBLE_PRIORITY)        ? 2
                                  : (liRumblePriority == KN_CRASH_RUMBLE_PRIORITY)          ? 3
                                  : 4;
-        if (sbRumbleDiag && saiRumbleDiagLines[liSlot] < KI_RUMBLE_DIAG_MAX_LINES_PER_PRODUCER &&
-            CgsDev::Log::gpDebugPrint != 0)
-        {
-            ++saiRumbleDiagLines[liSlot];
-            *CgsDev::Log::gpDebugPrint
-                << "[rumble] jolt prio=" << liRumblePriority
-                << " queued=" << static_cast<s32>(lbQueued ? 1 : 0)
-                << " len=" << mPlayJoltEffectEventQueue.GetLength()
-                << " low{sus=" << lJoltEffect.mLowFreqJoltData.mfSustainTime
-                << " peak=" << lJoltEffect.mLowFreqJoltData.mfPeakSpeedValue
-                << " susv=" << lJoltEffect.mLowFreqJoltData.mfSustainSpeedValue
-                << "} high{sus=" << lJoltEffect.mHighFreqJoltData.mfSustainTime
-                << " peak=" << lJoltEffect.mHighFreqJoltData.mfPeakSpeedValue
-                << " susv=" << lJoltEffect.mHighFreqJoltData.mfSustainSpeedValue
-                << "}\n";
-        }
     }
 }
