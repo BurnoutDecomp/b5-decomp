@@ -55,6 +55,14 @@ namespace CgsGui
     };
     static_assert(sizeof(GuiEvent<91>) == 1, "ARTIST GUI tag 91 is one byte");
 
+    // ARTIST8243A014..03C: one unwritten byte boxed as {1,106,12,payload} on channel40.
+    template <>
+    struct GuiEvent<106> : public CgsModule::Event
+    {
+        s32 GetEventType() const { return 106; }
+    };
+    static_assert(sizeof(GuiEvent<106>) == 1, "ARTIST invite-finished tag106 is one byte");
+
     // ARTIST's Payback bridge uses these one-byte tag instantiations, not the generic
     // 12-byte header record: AddGuiEvent helpers 0x823D7570/0x823D7628/0x823D2FB8 pin
     // ids 178/180/183 at size 1. Keep their empty byte representation unwritten.

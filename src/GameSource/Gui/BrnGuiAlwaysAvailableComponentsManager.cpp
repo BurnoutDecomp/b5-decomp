@@ -33,8 +33,7 @@
 // cache+0xB878 IS GetOptionsDataProfile() (BrnGuiCache.h:1001/:2116), and profile+0x7344 is
 // miLastPlayedSongIndex. Cases 26 and 502 are now written from the asm; see each in place.
 //
-// STILL DEFERRED, and honestly so: the online-invite family (175/43/105), whose
-// OnlineInviteMessageComponent::ShowMessage is genuinely not committed, and case 503 (the
+// STILL DEFERRED: case 503 (the
 // CLASSICAL chyron -- a different overlay, DWARF GuiClassicalChyronEvent, carrying two
 // 48-char text ids and writing cache+0x12BC0 == the profile's picture-paradise index).
 // ===================================================================================
@@ -46,6 +45,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the in-queue Update walks
 #include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache (event 64 connect)
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                  // event105 buddy notification payload
+#include "GameShared/GameClasses/Development/CgsStrStream.h"           // original dynamic assert text
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"              // CgsGui::GuiEventTimeInfo (event 26)
 #include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"                   // GuiEATraxNewTrackEvent (event 502)
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile (case 502 tail)
@@ -350,16 +351,77 @@ namespace BrnGui
                 break;
             }
 
-            // The online-invite chyron (175/43/105) and the EATrax rich-presence case (503)
-            // drive in-game-only overlays that do not fire on the boot/front-end path. Their
-            // console bodies reach OnlineInviteMessageComponent::ShowMessage (not yet
-            // committed) and BrnGui::OptionsDataProfile / GuiCache far members with no
-            // committed type home. The dispatch is kept; the un-homed accessor calls are
-            // FLAG'd deferrals until those TUs land.
-            // FLAG PC-platform leaf: in-game online-invite overlay + 503 (un-homed callees).
-            case 175:
-            case 43:
-            case 105:
+            case 175:   // host-start notification
+                if (mbContainerMovieClipPlaying)
+                    mOnlineNotificationMessageComponent.ShowMessage(
+                        gacOnlineInviteArgument820046A7,
+                        OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_HOST_START_EVENT);
+                break;
+
+            case 43:    // network-connected/news notification
+            {
+                CGS_ASSERT(lpEvent != 0, "lpConnectedEvent");
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                const CgsGui::GuiEventNetworkConnected* lpConnectedEvent =
+                    reinterpret_cast<const CgsGui::GuiEventNetworkConnected*>(lpEvent);
+                if (lpConnectedEvent->maData[1] != 0 && !mbShowNewsNotification)
+                {
+                    mbShowNewsNotification = true;
+                    if (mbContainerMovieClipPlaying)
+                        mOnlineNotificationMessageComponent.ShowMessage(
+                            gacOnlineInviteArgument820046A7,
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NEW_NEWS);
+                }
+                break;
+            }
+
+            case 105:    // invite, buddy-online or online-buddy-count notification
+            {
+                const GuiEventBuddyNotification* lpBuddyNotification =
+                    reinterpret_cast<const GuiEventBuddyNotification*>(lpEvent);
+                const s32 liNotification =
+                    static_cast<s32>(lpBuddyNotification->meBuddyNotification);
+                if (liNotification == 0)
+                {
+                    if (mbContainerMovieClipPlaying)
+                        mOnlineNotificationMessageComponent.ShowMessage(
+                            lpBuddyNotification->mBuddyName.GetPlayerName(),
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
+                }
+                else if (static_cast<u32>(liNotification) < 3u)
+                {
+                    if (mbContainerMovieClipPlaying)
+                    {
+                        if (liNotification == 1)
+                            mOnlineNotificationMessageComponent.ShowMessage(
+                                lpBuddyNotification->mBuddyName.GetPlayerName(),
+                                OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_BUDDY_ONLINE);
+                        else
+                            mOnlineNotificationMessageComponent.ShowMessage(
+                                lpBuddyNotification->miNumBuddies,
+                                OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_NUM_BUDDIES_ONLINE);
+                    }
+                }
+                else
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                                CgsDev::Assert::giMessageBufferSize);
+                    lMessage << "Invalid buddy notification type : " << liNotification << "\n";
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                        "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 426);
+                    CgsDev::Assert::EndAssert();
+                    if (mbContainerMovieClipPlaying)
+                        mOnlineNotificationMessageComponent.ShowMessage(
+                            "Invalid Buddy Name",
+                            OnlineInviteMessageComponent::E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED);
+                }
+                break;
+            }
+
+            // Explicitly out of scope for this invite delta: ARTIST 0x82509338 case503
+            // displays two 48-byte localized text IDs and writes the picture-paradise index
+            // to GuiCache +0x12BC0. This original consumer remains unimplemented here.
             case 503:
                 break;
 
@@ -383,6 +445,14 @@ namespace BrnGui
     // HUD. `bl 0x82439E70` has exactly ONE caller in the image -- GuiModule::Update -- and
     // this is that call site. The omission was mine, in the commit that landed the chyron.
     // =======================================================================================
+    // The console's fourth gated overlay call (ARTIST 0x8252A2C8) is kept separate from the
+    // host gameplay-frame-bit timer helper so it retains the original Prepare/container gate.
+    void AlwaysAvailableComponentsManager::UpdateOnlineInviteComponent()
+    {
+        if (mbContainerMovieClipPlaying == true)
+            mOnlineNotificationMessageComponent.Update();
+    }
+
     void AlwaysAvailableComponentsManager::UpdateTimedComponents()
     {
         // 0x8252A288..0x8252A298. The console compares against 1 exactly, not "non-zero".
@@ -398,11 +468,7 @@ namespace BrnGui
         // console. This tree declares BrnSaveIconComponent::Update (:42) and defines it
         // nowhere, so the two agree: the slot does nothing.
 
-        // [FLAG PC bring-up] 0x8252A2C8  OnlineInviteMessageComponent::Update @0x82439FF0
-        // (this + 0x100B8) -- the fourth tick under this same gate. OnlineInviteMessage
-        // Component has no Update in this tree (no .cpp), so there is nothing to call and
-        // nothing is invented here. It drives the online-invite toast's own timeout only;
-        // the EATrax and achievement overlays above are unaffected.
-        // DELETE-WHEN OnlineInviteMessageComponent::Update lands.
+        // The original online-invite tick uses UpdateOnlineInviteComponent() under the
+        // same Prepare/container gate at ARTIST 0x8252A2C8.
     }
 }

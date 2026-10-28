@@ -34,6 +34,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"               // Array<T,N>
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingGraph.h"  // BrnAI::RaceBalancingGraph, GraphType
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingRoute.h"  // BrnAI::RaceBalancingRoute
+#include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingDebugComponent.h" // embedded debug component
 
 namespace BrnAI
 {
@@ -48,7 +49,6 @@ namespace BrnAI
     // balancer's working. On X360 those reads/calls hit the private members/symbols directly;
     // befriending it is the faithful de-inlined form of that direct access (additive -- no layout
     // or release-behaviour change, like the existing friends in BrnRaceBalancingRoute.h).
-    class RaceBalancingDebugComponent;
 
     // DWARF BrnAICar.h:648 / BrnRaceBalancingManager.h:102-109 -- the rubber-band
     // tuning constants (rodata). KF_DEFAULT_SPEED is the fall-back target speed
@@ -73,7 +73,7 @@ namespace BrnAI
         friend class RaceBalancingDebugComponent;
 
         // ---- public interface (DWARF declaration order :56-97) -----------------------------
-        void Construct(AIModule* lpAIModule);                                   // :56  (inlined on X360)
+        void Construct(AIModule* lpAIModule);                                   // :56  (inlined in AIModule::Construct on X360)
 
         // @0x82789AF8 -- bodied in this TU. NOTE: the DecFIGS DWARF lists only
         // (const Array*, int32_t), but the X360 asm reads a third register argument (r6)
@@ -143,13 +143,9 @@ namespace BrnAI
         bool mbInRace;                                        // +0x4878 (18552)
         bool mbOnStartLine;                                   // +0x4879 (18553)
 
-        // PLACEHOLDER -- BrnAI::RaceBalancingDebugComponent (DWARF :131). It derives from
-        // CgsDev::DebugComponent (vtable + base members) and adds mpAIModule /
-        // mpRaceBalancingManager / miCurrentRival / mbShowData. Its exact sizeof is not
-        // recoverable from this TU's asm (the 5 bodied funcs never touch it), so it is an
-        // opaque byte placeholder here; total sizeof(RaceBalancingManager) is therefore NOT
-        // pinned. Every member the bodied funcs DO touch is pinned below. See open_questions.
-        u8 mRaceBalancingDebugComponent_placeholder[0x40];   // +0x487C (size unverified)
+        // DWARF BrnRaceBalancingManager.h:131; ARTIST AIModule::Construct initializes and
+        // registers this embedded component at manager +0x487C (module +0x4224C).
+        RaceBalancingDebugComponent mRaceBalancingDebugComponent;
     };
     // The touched private offsets are pinned inside _AssertLayout() (BrnRaceBalancingManager.cpp)
     // where offsetof has the member context it needs; the compile gate enforces them.

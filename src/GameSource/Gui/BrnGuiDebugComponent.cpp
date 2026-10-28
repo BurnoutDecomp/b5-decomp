@@ -283,9 +283,8 @@ void GuiDebugComponent::Destruct()
 }
 
 
-// ARTIST8250CBC8. This helper has a native typed-input caller in GuiModule::Update, but that
-// caller is not mounted by the selected host no-argument Update path. Keep the real provider
-// and its queue/payload contract independently reviewable until that wrapper is recovered.
+// ARTIST8250CBC8. GuiModule::Update calls this with its live typed GUI input buffer
+// immediately before the original queue drain at 0x82527FD8.
 void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
 {
     WorstCaseHudSharedPayload lSharedPayload;

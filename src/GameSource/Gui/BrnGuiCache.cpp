@@ -277,6 +277,8 @@ namespace BrnGui
         mbAreRoadRulesAvailable = false; // 0x82505A3C
         mbFriendsListOpen = false;
         mbFriendsListChangePending = false;
+        mu8EasyDriveGateState = 0;      // ARTIST 0x82505A24, stbx zero at +0x13B99
+        mu8EATraxChyronActive = 0;      // ARTIST 0x82505A54, stbx zero at +0x13B98
 
         // ARTIST825061D0/D8: retain the real pre-notification defaults.
         mSku = CgsLanguage::E_SKU_DEFAULT;
@@ -1356,6 +1358,18 @@ namespace BrnGui
 
         switch (liEventId)
         {
+        // ARTIST GuiCache::RecEvent @0x8250DDF0. These byte stores preserve the two
+        // invite-eligibility states consumed by OnlineInviteMessageComponent::IsMessageAllowed.
+        // The original accepts both producer ids for each byte; payload width is one byte.
+        case 91:
+        case 471:
+            mu8EATraxChyronActive = *reinterpret_cast<const u8*>(lpEvent);
+            break;
+        case 92:
+        case 96:
+            mu8EasyDriveGateState = *reinterpret_cast<const u8*>(lpEvent);
+            break;
+
         // ARTIST8250F1F8..F220; native jump index is event id minus4.
         // CP15's canonical notifications are raw enum payloads at+0.
         case 27:

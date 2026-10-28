@@ -82,17 +82,16 @@ namespace
     const f32 KF_DEF_EFFECTS_LAYER_WEIGHT      = 0.0f;   // flt_82001CC0 (bloom + vignette weight)
     const f32 KF_DEF_EFFECTS_LAYER_TINT_WEIGHT = 0.25f;  // flt_82003F40 (tint weight)
 
-    // K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION (X360 unk_8300F410). This is MUTABLE .data, not
-    // rodata -- its bytes are zero in the image and its real initial value is written by a
-    // static-init TU outside this wave. EnableJunkyardLightingSetup seeds the override with it
-    // and then immediately overwrites it from the nearest loaded junkyard setup, so it only
-    // matters when no setups are loaded.
-    // FLAG PC-platform leaf: static-init initialiser for this .data global not reconstructed.
+    // K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION (X360 unk_8300F410). The mapped .data bytes
+    // start as zero, but ARTIST's startup initializer @0x82C6AA08 writes
+    // {0.0f, flt_820CBDB0, 0.0f, 0.0f}; flt_820CBDB0 has bits 0xBF7D2F1B and decodes to
+    // -0.9890000224113464f. EnableJunkyardLightingSetup seeds the override with this vector
+    // and replaces it only if at least one junkyard lighting setup was loaded.
     Vector3 GetDefaultJunkyardKeyLightDirection()
     {
         Vector3 lDirection;
         lDirection.x = 0.0f;
-        lDirection.y = 0.0f;
+        lDirection.y = -0.9890000224113464f;
         lDirection.z = 0.0f;
         lDirection.w = 0.0f;
         return lDirection;
