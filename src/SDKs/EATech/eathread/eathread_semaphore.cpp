@@ -4,9 +4,7 @@
 // vendor snapshot). See eathread_semaphore.h for the committed-type / vendor-
 // snapshot divergence FLAG and the WAIT-TIMEOUT FLAG.
 
-#include <xtl.h>  // CreateSemaphoreA / WaitForSingleObject / CloseHandle / GetTickCount
-#include <xtl.h>   // _InterlockedDecrement -- portable stand-in for the X360
-                      // interrupt-masked lwarx/stwcx. reservation idiom.
+#include <xtl.h>  // native semaphore APIs, atomics and _CountLeadingZeros
 #include <new>        // placement new (SemaphoreFactory::ConstructSemaphore)
 
 #include "SDKs/EATech/eathread/eathread_semaphore.h"
@@ -196,17 +194,8 @@ int Semaphore::Wait(const u32* pTimeoutAbsolute)
         //   -> (==0) is false (0) -> 0 - 2 = -2.
         // dwResult != 258 -> non-zero -> cntlzw < 32 -> &0x20==0 -> true (1)
         //   -> 1 - 2 = -1.
-        const unsigned int uDelta = dwResult - 258u;        // WAIT_TIMEOUT
-        unsigned long      uLeadingZeros = 0;
-        // cntlzw: count of leading zero bits of the 32-bit value (32 when zero).
-        if (uDelta == 0u)
-            uLeadingZeros = 32u;
-        else
-        {
-            unsigned long uIndex;
-            _BitScanReverse(&uIndex, uDelta);  // index of highest set bit
-            uLeadingZeros = 31u - uIndex;
-        }
+        const unsigned int uDelta = dwResult - 258u;
+        const unsigned int uLeadingZeros = _CountLeadingZeros(static_cast<long>(uDelta));
         return ((uLeadingZeros & 0x20u) == 0u ? 1 : 0) - 2;
     }
 }

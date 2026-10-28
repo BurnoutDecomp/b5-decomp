@@ -1,7 +1,9 @@
 #include "SDKs/EATech/eajobs/jobs.h"
 
-#include <xtl.h> // _InterlockedExchange (MSVC atomic intrinsic)
-#include <xtl.h>
+#include <xtl.h> // native atomic intrinsics
+
+// ARTIST calls this real XDK conversion helper even for the cold frequency.
+extern "C" f64 __u64tod(u64 value);
 
 // ============================================================================
 // SDKs/EATech/eajobs/jobs.cpp
@@ -47,9 +49,12 @@ namespace Jobs
         return static_cast<Allocator*>(spAllocator);
     }
 
-    // @ 0x82BC9988 -- ticks -> seconds, caching 1.0/freq on first use.
+    // @ 0x82BC9988 -- native 49,875,000-Hz ticks; cache the reciprocal on first use.
     f32 TicksToSeconds(u64 uTicks)
     {
+        static f64 ldSecondsPerTick = 0.0;
+        if (ldSecondsPerTick == 0.0)
+            ldSecondsPerTick = 1.0 / __u64tod(static_cast<u64>(0x02F90838u));
         return static_cast<f32>(static_cast<f64>(uTicks) * ldSecondsPerTick);
     }
 
