@@ -103,13 +103,13 @@ namespace physics
         CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mType)     == 0x0C), "Params.mType     @+0x0C (ctor stw 0, 0xC(r11))");
 
         // Adjacency form -- survives a member WIDENING, which a total-size check would not.
-        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mDamping)  == offsetof(DriveDynamics::Params, mSpring)  + sizeof(DriveDynamics::Params::mSpring)),   "mDamping follows mSpring");
-        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mStrength) == offsetof(DriveDynamics::Params, mDamping) + sizeof(DriveDynamics::Params::mDamping)),  "mStrength follows mDamping");
-        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mType)     == offsetof(DriveDynamics::Params, mStrength)+ sizeof(DriveDynamics::Params::mStrength)), "mType follows mStrength");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mDamping)  == offsetof(DriveDynamics::Params, mSpring)  + sizeof(((DriveDynamics::Params*)0)->mSpring)),   "mDamping follows mSpring");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mStrength) == offsetof(DriveDynamics::Params, mDamping) + sizeof(((DriveDynamics::Params*)0)->mDamping)),  "mStrength follows mDamping");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mType)     == offsetof(DriveDynamics::Params, mStrength)+ sizeof(((DriveDynamics::Params*)0)->mStrength)), "mType follows mStrength");
 
         CGS_STATIC_ASSERT((offsetof(DriveDynamics, mLinear)  == 0x00), "DriveDynamics.mLinear  @+0x00 (:261)");
         CGS_STATIC_ASSERT((offsetof(DriveDynamics, mAngular) == 0x10), "DriveDynamics.mAngular @+0x10 (asm second quad at +0x10..+0x1C)");
-        CGS_STATIC_ASSERT((offsetof(DriveDynamics, mAngular) == offsetof(DriveDynamics, mLinear) + sizeof(DriveDynamics::mLinear)), "mAngular follows mLinear");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics, mAngular) == offsetof(DriveDynamics, mLinear) + sizeof(((DriveDynamics*)0)->mLinear)), "mAngular follows mLinear");
 
         // The X360-attested ARRAY STRIDE -- DriveData::AddDrive @0x828A0330 reaches
         // maDynamics as `(i+2)<<5` and maScaledDynamics as `(i+3)<<5`, i.e. 32 bytes apart.

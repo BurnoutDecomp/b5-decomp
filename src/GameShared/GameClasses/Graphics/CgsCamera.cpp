@@ -598,10 +598,22 @@ namespace CgsGraphics
         maProjectionScalars[7] = lfNearClipPlane;  // m_nearClipPlane
         maProjectionScalars[8] = lfFarClipPlane;   // m_farClipPlane
 
-        mView.xAxis = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };
-        mView.yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
-        mView.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
-        mView.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector4 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+            mView.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            mView.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            mView.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mView.wAxis = lAggregateValue;
+        }
 
         SetFovHorizontal(lfFovHorizontal);
     }
@@ -689,12 +701,24 @@ namespace CgsGraphics
         const f32 lfFar  = maProjectionScalars[8];   // a1[88]
         const f32 lfNearTimesFar = lfNear * lfFar;   // v10
 
-        mProjection.xAxis = Vector4{ maProjectionScalars[1], 0.0f, 0.0f, 0.0f };  // v15
-        mProjection.yAxis = Vector4{ 0.0f, maProjectionScalars[4], 0.0f, 0.0f };  // v14
-        mProjection.zAxis = Vector4{ 0.0f, 0.0f,
-                                     (lfNear + lfFar) / (lfFar - lfNear), 1.0f }; // v17
-        mProjection.wAxis = Vector4{ 0.0f, 0.0f,
-                                     (-2.0f * lfNearTimesFar) / (lfFar - lfNear), 0.0f }; // v16
+        {
+            const Vector4 lAggregateValue = { maProjectionScalars[1], 0.0f, 0.0f, 0.0f };
+            mProjection.xAxis = lAggregateValue;
+        }  // v15
+        {
+            const Vector4 lAggregateValue = { 0.0f, maProjectionScalars[4], 0.0f, 0.0f };
+            mProjection.yAxis = lAggregateValue;
+        }  // v14
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f,
+                                     (lfNear + lfFar) / (lfFar - lfNear), 1.0f };
+            mProjection.zAxis = lAggregateValue;
+        } // v17
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f,
+                                     (-2.0f * lfNearTimesFar) / (lfFar - lfNear), 0.0f };
+            mProjection.wAxis = lAggregateValue;
+        } // v16
 
         UpdateViewProjectionMatrix();
     }
@@ -719,10 +743,22 @@ namespace CgsGraphics
         const f32 lfFar  = maProjectionScalars[8];   // f10
         const f32 lfInvScale = 1.0f / lfOrthoScale;  // f11
 
-        mProjection.xAxis = Vector4{ lfInvScale, 0.0f, 0.0f, 0.0f };
-        mProjection.yAxis = Vector4{ 0.0f, lfInvScale, 0.0f, 0.0f };
-        mProjection.zAxis = Vector4{ 0.0f, 0.0f, 1.0f / (lfFar - lfNear), 0.0f };
-        mProjection.wAxis = Vector4{ 0.0f, 0.0f, lfNear / (lfNear - lfFar), 1.0f };
+        {
+            const Vector4 lAggregateValue = { lfInvScale, 0.0f, 0.0f, 0.0f };
+            mProjection.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, lfInvScale, 0.0f, 0.0f };
+            mProjection.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 1.0f / (lfFar - lfNear), 0.0f };
+            mProjection.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, lfNear / (lfNear - lfFar), 1.0f };
+            mProjection.wAxis = lAggregateValue;
+        }
 
         UpdateViewProjectionMatrix();
     }
@@ -816,15 +852,27 @@ namespace CgsGraphics
 
         Matrix44 lResult;
         // row0/row1 = VP columns 0/1 (the vmrghw ladder)
-        lResult.xAxis = Vector4{ mViewProjection.xAxis.x, mViewProjection.yAxis.x,
+        {
+            const Vector4 lAggregateValue = { mViewProjection.xAxis.x, mViewProjection.yAxis.x,
                                  mViewProjection.zAxis.x, mViewProjection.wAxis.x };
-        lResult.yAxis = Vector4{ mViewProjection.xAxis.y, mViewProjection.yAxis.y,
+            lResult.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { mViewProjection.xAxis.y, mViewProjection.yAxis.y,
                                  mViewProjection.zAxis.y, mViewProjection.wAxis.y };
+            lResult.yAxis = lAggregateValue;
+        }
         // row2 = mView column 2 (the vmrglw pair over the view rows)
-        lResult.zAxis = Vector4{ mView.xAxis.z, mView.yAxis.z, mView.zAxis.z, mView.wAxis.z };
+        {
+            const Vector4 lAggregateValue = { mView.xAxis.z, mView.yAxis.z, mView.zAxis.z, mView.wAxis.z };
+            lResult.zAxis = lAggregateValue;
+        }
         // row3 = the projection z/w coefficient quartet (vperm/vsldoi combine)
-        lResult.wAxis = Vector4{ mProjection.zAxis.z, mProjection.wAxis.z,
+        {
+            const Vector4 lAggregateValue = { mProjection.zAxis.z, mProjection.wAxis.z,
                                  mProjection.zAxis.w, mProjection.wAxis.w };
+            lResult.wAxis = lAggregateValue;
+        }
         return lResult;
     }
 
@@ -840,12 +888,24 @@ namespace CgsGraphics
         const f32 lfFar  = maProjectionScalars[8];   // a1[88]
         const f32 lfNearTimesFar = lfNear * lfFar;   // v10
 
-        mProjection.xAxis = Vector4{ maProjectionScalars[1], 0.0f, 0.0f, 0.0f };
-        mProjection.yAxis = Vector4{ 0.0f, maProjectionScalars[4], 0.0f, 0.0f };
-        mProjection.zAxis = Vector4{ 0.0f, 0.0f,
+        {
+            const Vector4 lAggregateValue = { maProjectionScalars[1], 0.0f, 0.0f, 0.0f };
+            mProjection.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, maProjectionScalars[4], 0.0f, 0.0f };
+            mProjection.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f,
                                      (lfNear + lfFar) / (lfNear - lfFar), -1.0f };
-        mProjection.wAxis = Vector4{ 0.0f, 0.0f,
+            mProjection.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f,
                                      (lfNearTimesFar * 2.0f) / (lfNear - lfFar), 0.0f };
+            mProjection.wAxis = lAggregateValue;
+        }
 
         UpdateViewProjectionMatrix();
     }
@@ -916,14 +976,26 @@ namespace CgsGraphics
         maClipState[15] = 1.0;                                                          // +0x138 (0x3FF0...)
 
         // Narrow into the float view rows (w lanes zero), then rebuild the VP.
-        mView.xAxis = Vector4{ static_cast<f32>(maClipState[0]),  static_cast<f32>(maClipState[1]),
+        {
+            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[0]),  static_cast<f32>(maClipState[1]),
                                static_cast<f32>(maClipState[2]),  0.0f };
-        mView.yAxis = Vector4{ static_cast<f32>(maClipState[4]),  static_cast<f32>(maClipState[5]),
+            mView.xAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[4]),  static_cast<f32>(maClipState[5]),
                                static_cast<f32>(maClipState[6]),  0.0f };
-        mView.zAxis = Vector4{ static_cast<f32>(maClipState[8]),  static_cast<f32>(maClipState[9]),
+            mView.yAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[8]),  static_cast<f32>(maClipState[9]),
                                static_cast<f32>(maClipState[10]), 0.0f };
-        mView.wAxis = Vector4{ static_cast<f32>(maClipState[12]), static_cast<f32>(maClipState[13]),
+            mView.zAxis = lAggregateValue;
+        }
+        {
+            const Vector4 lAggregateValue = { static_cast<f32>(maClipState[12]), static_cast<f32>(maClipState[13]),
                                static_cast<f32>(maClipState[14]), 0.0f };
+            mView.wAxis = lAggregateValue;
+        }
 
         UpdateViewProjectionMatrix();
     }

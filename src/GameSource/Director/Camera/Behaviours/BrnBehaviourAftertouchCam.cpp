@@ -86,10 +86,22 @@ namespace
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{ 1.0f,   0.0f,  0.0f, 0.0f };
-        lResult.yAxis = Vector3{ 0.0f,  lfCos, lfSin, 0.0f };
-        lResult.zAxis = Vector3{ 0.0f, -lfSin, lfCos, 0.0f };
-        lResult.wAxis = Vector3{ 0.0f,   0.0f,  0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 1.0f,   0.0f,  0.0f, 0.0f };
+            lResult.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f,  lfCos, lfSin, 0.0f };
+            lResult.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, -lfSin, lfCos, 0.0f };
+            lResult.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f,   0.0f,  0.0f, 0.0f };
+            lResult.wAxis = lAggregateValue;
+        }
         return lResult;
     }
 

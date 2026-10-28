@@ -171,23 +171,23 @@ namespace Deformation
     void DeformationManager::_AssertLayout()
     {
         // mModelsAdded is one 64-bit BitArray field (CgsBitArray.h:22, 28 bits -> 1 field).
-        CGS_STATIC_ASSERT((75904u + sizeof(DeformationManager::mModelsAdded) == 75912u),
+        CGS_STATIC_ASSERT((75904u + sizeof(((DeformationManager*)0)->mModelsAdded) == 75912u),
                       "DeformationManager: maGlobalEntityIDs must abut mModelsAdded at +75912");
 
         // 28 scene-entity ids, 4 bytes each.
-        CGS_STATIC_ASSERT((sizeof(DeformationManager::maGlobalEntityIDs) == 112u),
+        CGS_STATIC_ASSERT((sizeof(((DeformationManager*)0)->maGlobalEntityIDs) == 112u),
                       "DeformationManager: maGlobalEntityIDs is 28 * 4 bytes");
-        CGS_STATIC_ASSERT((75912u + sizeof(DeformationManager::maGlobalEntityIDs) == 76024u),
+        CGS_STATIC_ASSERT((75912u + sizeof(((DeformationManager*)0)->maGlobalEntityIDs) == 76024u),
                       "DeformationManager: mWorldRigidBodyId must abut maGlobalEntityIDs at +76024");
 
         // ⭐ THE LOAD-BEARING PAIR. The rigid-body handle packs the owning EntityId in the HIGH
         // dword and the body index in the LOW dword (CgsRigidBody.h:3-5), so a 4-byte seat keeps
         // the index and discards the owning entity with no diagnostic at all. These are the two
         // asserts the 4-byte stand-in must fail.
-        CGS_STATIC_ASSERT((sizeof(DeformationManager::mWorldRigidBodyId) == 8u),
+        CGS_STATIC_ASSERT((sizeof(((DeformationManager*)0)->mWorldRigidBodyId) == 8u),
                       "DeformationManager: mWorldRigidBodyId is EIGHT bytes -- it is "
                       "CgsPhysics::RigidBodyId, not the 4-byte BrnCommonTypes.h stand-in");
-        CGS_STATIC_ASSERT((76024u + sizeof(DeformationManager::mWorldRigidBodyId) == 76032u),
+        CGS_STATIC_ASSERT((76024u + sizeof(((DeformationManager*)0)->mWorldRigidBodyId) == 76032u),
                       "DeformationManager: mpaModels sits at its attested +76032 ONLY if "
                       "mWorldRigidBodyId is 8 bytes; at 4 the chain lands on +76028");
     }

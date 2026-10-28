@@ -1331,9 +1331,12 @@ namespace Vehicle
         const f32 lfCz = lvOmega.x * lfRy - lvOmega.y * lfRx;
 
         // v_contact = v_linear + (omega x r)
-        lrWheel.mBodyPointVelocity = Vector3{ mLinearVelocity.x + lfCx,
+        {
+            const Vector3 lAggregateValue = { mLinearVelocity.x + lfCx,
                                               mLinearVelocity.y + lfCy,
                                               mLinearVelocity.z + lfCz, 0.0f };
+            lrWheel.mBodyPointVelocity = lAggregateValue;
+        }
     }
 
     // @0x825B7FC0  BrnPhysics::Vehicle::VehiclePhysics::StoreLocalWheelPositions
@@ -1362,11 +1365,14 @@ namespace Vehicle
             const f32 lfDz = lvWorld.z - lvPos.z;
 
             // local = transpose(R) * d  ==  (d . Right, d . Up, d . At)  (orthonormal inverse = transpose)
-            maLocalTractionPoints[liWheel] = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 lfDx * lvRight.x + lfDy * lvRight.y + lfDz * lvRight.z,
                 lfDx * lvUp.x    + lfDy * lvUp.y    + lfDz * lvUp.z,
                 lfDx * lvAt.x    + lfDy * lvAt.y    + lfDz * lvAt.z,
                 0.0f };
+                maLocalTractionPoints[liWheel] = lAggregateValue;
+            }
         }
     }
 
@@ -1510,10 +1516,13 @@ namespace Vehicle
         const f32 lfYawRate = mAngularVelocity.x * lvUp.x
                             + mAngularVelocity.y * lvUp.y
                             + mAngularVelocity.z * lvUp.z;          // vmsum3fp128
-        mAngularVelocity = Vector3{ mAngularVelocity.x - lvUp.x * lfYawRate,
+        {
+            const Vector3 lAggregateValue = { mAngularVelocity.x - lvUp.x * lfYawRate,
                                     mAngularVelocity.y - lvUp.y * lfYawRate,
                                     mAngularVelocity.z - lvUp.z * lfYawRate,
                                     0.0f };
+            mAngularVelocity = lAggregateValue;
+        }
 
         // ---- 0x825FD2F4: the steered wheel direction = R(Up, steeringAngle) * At ----------------
         // Rodrigues about the (unit) body up axis. The console evaluates sin/cos with one inlined
@@ -2332,7 +2341,10 @@ namespace Vehicle
         //       frame even though the console body does nothing here. -----
         if (!mbHasAir)
         {
-            mPitchYawRollFromTakeOff = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // `stvx128 v0, r30, 0x13C0`
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mPitchYawRollFromTakeOff = lAggregateValue;
+            }   // `stvx128 v0, r30, 0x13C0`
             mbRollingInAir           = false;                               // `stb r10, 0x13D8`
             return;
         }
@@ -4460,7 +4472,10 @@ namespace Vehicle
         // 3) snapshot mLinearVelocity (+0x50 == base+0x40) into mPreviousWorldSpaceVelocity (+0x1330),
         //    so CalculateWeightTransfer can difference it against this frame's velocity.
         //    asm @0x8261F6E4-0x8261F6F8: `lvx128 v0,this,0x50 ; stvx128 v0,this,0x1330`.
-        mPreviousWorldSpaceVelocity = Vector3{ mLinearVelocity.x, mLinearVelocity.y, mLinearVelocity.z, 0.0f };
+        {
+            const Vector3 lAggregateValue = { mLinearVelocity.x, mLinearVelocity.y, mLinearVelocity.z, 0.0f };
+            mPreviousWorldSpaceVelocity = lAggregateValue;
+        }
 
         // 4) build the dynamic load-transfer external force per spring -- and, the finding that
         //    unblocked the whole tyre model, WRITE EACH WHEEL'S MassOnWheel LANE. dt is re-issued
@@ -5241,8 +5256,11 @@ namespace Vehicle
                 lfAirborneMassSum += lfBodyMass * lfScaler;
 
             // 0x825F8024/0x825F8034: unconditional one-lane rotate in this pass.
-            lvRotatingScalers = Vector4{ lvRotatingScalers.y, lvRotatingScalers.z,
+            {
+                const Vector4 lAggregateValue = { lvRotatingScalers.y, lvRotatingScalers.z,
                                          lvRotatingScalers.w, lvRotatingScalers.x };
+                lvRotatingScalers = lAggregateValue;
+            }
         }
         const f32 lfRecipGroundedScalerSum = 1.0f / lfGroundedScalerSum;   // v123 (0x825F8044)
 
@@ -5345,8 +5363,11 @@ namespace Vehicle
             //  are elided -- eight more blocks, all debug.)
 
             // 0x825F9BC8..0x825F9BD8: advance the scaler register -- reached ONLY by a serviced wheel.
-            lvRotatingScalers = Vector4{ lvRotatingScalers.y, lvRotatingScalers.z,
+            {
+                const Vector4 lAggregateValue = { lvRotatingScalers.y, lvRotatingScalers.z,
                                          lvRotatingScalers.w, lvRotatingScalers.x };
+                lvRotatingScalers = lAggregateValue;
+            }
         }
 
         // ---- PASS 3 (0x825F9C0C): airborne wheels -- extend the visible wheel, clamp, round-trip ----
@@ -6614,8 +6635,14 @@ namespace Vehicle
 
         if (mbFrozen)
         {
-            mLinearVelocity  = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 0 -> +0x50
-            mAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // stvx128 0 -> +0x60
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mLinearVelocity = lAggregateValue;
+            }   // stvx128 0 -> +0x50
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mAngularVelocity = lAggregateValue;
+            }   // stvx128 0 -> +0x60
         }
     }
 
@@ -7988,7 +8015,10 @@ namespace Vehicle
         mPreviousControls.ResetType();                       // +0x10D4 <- 0 == E_DRIVER_TYPE_PLAYER
         mPreviousTransform             = lTransform;                                   // +0x1370
         meCarType                      = KI_PREPARE_CAR_TYPE;                          // +0x13DC
-        mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };         // +0xFD0
+        {
+            const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mvfWheelFrictionLinearMultiplier = lAggregateValue;
+        }         // +0xFD0
 
         // The SECOND store to +0x13B0 -- the zero above is overwritten by the argument. Both
         // instructions are in the console body; neither is dropped.
@@ -8186,9 +8216,15 @@ namespace Vehicle
         ModifyControlsForDrift(&lCopy);
 
         { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
-        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat
+        {
+            const VecFloat lAggregateValue = { lfMPH, lfMPH, lfMPH, lfMPH };
+            mfSpeedMPH = lAggregateValue;
+        } }   // splat
         { const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
-          mfMass = VecFloat{ lfM, lfM, lfM, lfM }; }   // splat (refreshed per frame)
+          {
+              const VecFloat lAggregateValue = { lfM, lfM, lfM, lfM };
+              mfMass = lAggregateValue;
+          } }   // splat (refreshed per frame)
 
         UpdateInAirStats(lvfTimeStep.x);
 
@@ -8258,8 +8294,11 @@ namespace Vehicle
             if (mbAllWheelsHaveTraction)
             {
                 const VecFloat lvSurface = GetSurfaceLinearDrag();
-                lvDrag = Vector3{ lvDrag.x + lvSurface.x, lvDrag.y + lvSurface.y,
+                {
+                    const Vector3 lAggregateValue = { lvDrag.x + lvSurface.x, lvDrag.y + lvSurface.y,
                                   lvDrag.z + lvSurface.z, lvDrag.w + lvSurface.w };
+                    lvDrag = lAggregateValue;
+                }
             }
 
             const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity);
@@ -8281,7 +8320,10 @@ namespace Vehicle
         CheckState("After update wheel effects");
 
         { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
-        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat
+        {
+            const VecFloat lAggregateValue = { lfMPH, lfMPH, lfMPH, lfMPH };
+            mfSpeedMPH = lAggregateValue;
+        } }   // splat
         mbCrashedThisFrame = false;   // stb 0 -> +0x713
         CheckState("After update freezing");
 
@@ -8398,9 +8440,12 @@ namespace Vehicle
                                       mShuntEffect.mDirectionPlusDesiredSpeed.z * lfDeficit * lfMass,
                                       0.0f };
                 const f32 lfUpComp = vpu::Dot(lvUp, lvImpulse);
-                lvImpulse = Vector3{ lvImpulse.x - lvUp.x * lfUpComp,
+                {
+                    const Vector3 lAggregateValue = { lvImpulse.x - lvUp.x * lfUpComp,
                                      lvImpulse.y - lvUp.y * lfUpComp,
                                      lvImpulse.z - lvUp.z * lfUpComp, 0.0f };
+                    lvImpulse = lAggregateValue;
+                }
                 AddWorldSpaceImpulse(lvImpulse);
 
                 lpControls->mfBrake     = 0.0f;                          // stfs +8
@@ -8560,11 +8605,14 @@ namespace Vehicle
             if (lfLy >  lfMaxCrashAngVelY) lfLy =  lfMaxCrashAngVelY;
             if (lfLz < -lfMaxCrashAngVelZ) lfLz = -lfMaxCrashAngVelZ;
             if (lfLz >  lfMaxCrashAngVelZ) lfLz =  lfMaxCrashAngVelZ;
-            mAngularVelocity = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 mTransform.xAxis.x * lfLx + mTransform.yAxis.x * lfLy + mTransform.zAxis.x * lfLz,
                 mTransform.xAxis.y * lfLx + mTransform.yAxis.y * lfLy + mTransform.zAxis.y * lfLz,
                 mTransform.xAxis.z * lfLx + mTransform.yAxis.z * lfLy + mTransform.zAxis.z * lfLz,
                 0.0f };
+                mAngularVelocity = lAggregateValue;
+            }
         }
         BRN_ROLLCATCH_SAMPLE();   // 2: after the registered per-axis clamp
 
@@ -8572,7 +8620,10 @@ namespace Vehicle
         if (IsCrashingNormally())                  // vcall +0x18, second dispatch
         {
             const f32 lfM = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
-            mfMass = VecFloat{ lfM, lfM, lfM, lfM };                    // splat, this+0xE0
+            {
+                const VecFloat lAggregateValue = { lfM, lfM, lfM, lfM };
+                mfMass = lAggregateValue;
+            }                    // splat, this+0xE0
         }
         else
         {
@@ -8582,7 +8633,10 @@ namespace Vehicle
             if (lfT > 1.0f) lfT = 1.0f;                                 // vminfp 1
             const f32 lfMass = lfT * (KF_CRASHMASS_OUT_HI - KF_CRASHMASS_OUT_LO)
                                + KF_CRASHMASS_OUT_LO;                   // vmaddfp lerp
-            mfMass = VecFloat{ lfMass, lfMass, lfMass, lfMass };
+            {
+                const VecFloat lAggregateValue = { lfMass, lfMass, lfMass, lfMass };
+                mfMass = lAggregateValue;
+            }
         }
 
         mLastLinearVelocity = mLinearVelocity;     // stvx this+0x13B0 (before UpdateInAirStats)
@@ -8693,13 +8747,19 @@ namespace Vehicle
                 mTransform.xAxis.z * lrLocal.x + mTransform.yAxis.z * lrLocal.y + mTransform.zAxis.z * lrLocal.z,
                 0.0f };
             const Vector3 lvCross = vpu::Cross(mAngularVelocity, lvR);
-            maWheels[liWheel].mBodyPointVelocity = Vector3{ mLinearVelocity.x + lvCross.x,
+            {
+                const Vector3 lAggregateValue = { mLinearVelocity.x + lvCross.x,
                                                             mLinearVelocity.y + lvCross.y,
                                                             mLinearVelocity.z + lvCross.z, 0.0f };
+                maWheels[liWheel].mBodyPointVelocity = lAggregateValue;
+            }
         }
 
         { const f32 lfMPH = vpu::Dot(mLinearVelocity, mTransform.zAxis) * 2.2369363f;
-        mfSpeedMPH = VecFloat{ lfMPH, lfMPH, lfMPH, lfMPH }; }   // splat, KF_MPS_TO_MPH
+        {
+            const VecFloat lAggregateValue = { lfMPH, lfMPH, lfMPH, lfMPH };
+            mfSpeedMPH = lAggregateValue;
+        } }   // splat, KF_MPS_TO_MPH
         mbCrashedThisFrame = false;                              // stb 0 -> +0x713
 
         // ----- the start-line velocity re-seat (asm 0x826391E8..0x82639250) -----
@@ -8711,8 +8771,11 @@ namespace Vehicle
             mbFrozen = false;                                    // stb 0 -> +0x70
             const Vector3& lvN = mAboveGroundTestResult.mIntersectionNormal;   // +0x580
             const f32 lfAlong = vpu::Dot(mLinearVelocity, lvN);
-            mLinearVelocity = Vector3{ lvN.x * lfAlong, lvN.y * lfAlong,
+            {
+                const Vector3 lAggregateValue = { lvN.x * lfAlong, lvN.y * lfAlong,
                                        lvN.z * lfAlong, 0.0f };
+                mLinearVelocity = lAggregateValue;
+            }
         }
 
         // ----- the wall-contact window (asm 0x82639254..0x826392D8; unconditional here,

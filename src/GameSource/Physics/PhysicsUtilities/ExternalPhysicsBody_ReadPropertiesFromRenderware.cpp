@@ -56,9 +56,18 @@ namespace BrnPhysics
     {
         // Local inverse inertia: the diagonal matrix of the body's local diagonal vector.
         const vpu::Vector3& lvLocalDiag = lpRigidBody->GetLocalInvInertiaDiagonal();
-        mLocalInverseInertia.xAxis = Vector3{ lvLocalDiag.x, 0.0f, 0.0f, 0.0f };
-        mLocalInverseInertia.yAxis = Vector3{ 0.0f, lvLocalDiag.y, 0.0f, 0.0f };
-        mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lvLocalDiag.z, 0.0f };
+        {
+            const Vector3 lAggregateValue = { lvLocalDiag.x, 0.0f, 0.0f, 0.0f };
+            mLocalInverseInertia.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, lvLocalDiag.y, 0.0f, 0.0f };
+            mLocalInverseInertia.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, lvLocalDiag.z, 0.0f };
+            mLocalInverseInertia.zAxis = lAggregateValue;
+        }
 
         // Mass: 1 / the body's packed inverse mass, splatted across the lane register.
         const f32 lfMass = 1.0f / lpRigidBody->GetInverseMass();
@@ -71,8 +80,17 @@ namespace BrnPhysics
         const vpu::Vector4& lvA = lpRigidBody->GetInertiaFull();    // {Ixx, Ixy, Ixz}
         const vpu::Vector4& lvB = lpRigidBody->GetInertiaSplit();   // {Izz, Iyy, Iyz}
         const f32 lfInvm = lpRigidBody->GetInverseMass();           // console mIfull.w
-        mWorldInverseInertia.xAxis = Vector3{ lvA.x, lvA.y, lvA.z, lfInvm };
-        mWorldInverseInertia.yAxis = Vector3{ lvA.y, lvB.y, lvB.z, lfInvm };
-        mWorldInverseInertia.zAxis = Vector3{ lvA.z, lvB.z, lvB.x, lfInvm };
+        {
+            const Vector3 lAggregateValue = { lvA.x, lvA.y, lvA.z, lfInvm };
+            mWorldInverseInertia.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lvA.y, lvB.y, lvB.z, lfInvm };
+            mWorldInverseInertia.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lvA.z, lvB.z, lvB.x, lfInvm };
+            mWorldInverseInertia.zAxis = lAggregateValue;
+        }
     }
 }

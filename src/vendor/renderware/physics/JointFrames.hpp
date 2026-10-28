@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cmath>   // VMX arithmetic and reciprocal-square-root estimate model
+#include <vectorintrinsics.h>
 #include "types.hpp" // original sign XOR and bit-select
-#include <cstring> // float-word transfers
 #include <cstddef> // offsetof (the layout pins below)
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::{Vector3, Matrix33}
@@ -42,107 +41,77 @@ namespace math
 {
 namespace vpu
 {
-    namespace QuaternionFromMatrix33Detail
-    {
-        inline float Flush(float lfValue)
-        {
-            return std::fpclassify(lfValue) == FP_SUBNORMAL
-                ? std::copysign(0.0f, lfValue) : lfValue;
-        }
-
-        inline float Add(float lfA, float lfB) { return Flush(Flush(lfA) + Flush(lfB)); }
-        inline float Subtract(float lfA, float lfB) { return Flush(Flush(lfA) - Flush(lfB)); }
-        inline float Multiply(float lfA, float lfB) { return Flush(Flush(lfA) * Flush(lfB)); }
-        inline float MultiplyAdd(float lfA, float lfC, float lfB)
-        {
-            return Flush(std::fmaf(Flush(lfA), Flush(lfC), Flush(lfB)));
-        }
-        inline float NegativeMultiplySubtract(float lfA, float lfC, float lfB)
-        {
-            const float lfDifference = Flush(std::fmaf(Flush(lfA), Flush(lfC), -Flush(lfB)));
-            return std::isnan(lfDifference) ? lfDifference : -lfDifference;
-        }
-        inline float FlipSign(float lfValue)
-        {
-            uint32_t luWord;
-            std::memcpy(&luWord, &lfValue, sizeof(luWord));
-            luWord ^= 0x80000000u;
-            std::memcpy(&lfValue, &luWord, sizeof(lfValue));
-            return lfValue;
-        }
-        inline float Select(float lfA, float lfB, bool lbSelectB)
-        {
-            uint32_t luA, luB;
-            std::memcpy(&luA, &lfA, sizeof(luA));
-            std::memcpy(&luB, &lfB, sizeof(luB));
-            const uint32_t luMask = 0u - static_cast<uint32_t>(lbSelectB);
-            const uint32_t luResult = (luA & ~luMask) | (luB & luMask);
-            float lfResult;
-            std::memcpy(&lfResult, &luResult, sizeof(lfResult));
-            return lfResult;
-        }
-        inline Quaternion Select(Quaternion lA, Quaternion lB, bool lbSelectB)
-        {
-            { const Quaternion lResult = {Select(lA.x, lB.x, lbSelectB), Select(lA.y, lB.y, lbSelectB),
-                              Select(lA.z, lB.z, lbSelectB), Select(lA.w, lB.w, lbSelectB)}; return lResult; }
-        }
-        inline float RefinedReciprocalSqrt(float lfValue)
-        {
-            // FLAG (model): correctly rounded vrsqrtefp seed, as in SLerpDetail.
-            // Both unconditional VMX Newton passes are retained, including 0*Inf.
-            float lfEstimate = Flush(static_cast<float>(1.0 / std::sqrt(static_cast<double>(Flush(lfValue)))));
-            for (int liStep = 0; liStep < 2; ++liStep)
-            {
-                const float lfSquared = Multiply(lfEstimate, lfEstimate);
-                const float lfHalf = Multiply(lfEstimate, 0.5f);
-                const float lfResidual = NegativeMultiplySubtract(lfValue, lfSquared, 1.0f);
-                lfEstimate = MultiplyAdd(lfHalf, lfResidual, lfEstimate);
-            }
-            return lfEstimate;
-        }
-    }
-
-    // ARTIST JointFrames setters 8259B580/8259B728/8259B8D0 inline this
-    // conversion. Four candidates are evaluated before the final three vsels.
-    // Runtime sign masks are written at 82C74000/30/60 (their BSS image is zero).
-    // Keep (signedX+signedY)+(signedZ+1), the two unguarded rsqrt refinements,
-    // t*rsqrt / 0.5*rsqrt, off-diagonal gathers and strict comparison order.
+    // ARTIST 8259B580/8259B728/8259B8D0. Keep all four candidates, both
+    // unguarded reciprocal-square-root refinements and the original strict selects.
     inline Quaternion QuaternionFromMatrix33(const Matrix33& m, float epsilon = 0.0f)
     {
-        using namespace QuaternionFromMatrix33Detail;
-        const float lfX = m.xAxis.x, lfY = m.yAxis.y, lfZ = m.zAxis.z;
-        const float laSignedX[4] = {lfX, lfX, FlipSign(lfX), FlipSign(lfX)};
-        const float laSignedY[4] = {lfY, FlipSign(lfY), lfY, FlipSign(lfY)};
-        const float laSignedZ[4] = {lfZ, FlipSign(lfZ), FlipSign(lfZ), lfZ};
-        float laSumXY[4], laS[4], laS2[4];
-        for (int liLane = 0; liLane < 4; ++liLane)
-        {
-            laSumXY[liLane] = Add(laSignedX[liLane], laSignedY[liLane]);
-            const float lfT = Add(laSumXY[liLane], Add(laSignedZ[liLane], 1.0f));
-            const float lfInverseRoot = RefinedReciprocalSqrt(lfT);
-            laS[liLane] = Multiply(lfT, lfInverseRoot);
-            laS2[liLane] = Multiply(0.5f, lfInverseRoot);
-        }
+        // Sign masks are initialized by ARTIST 82C74000/30/60; the permute
+        // controls are the original words at 82CDA360..82CDA430.
+        static const CGS_ALIGN(16) u32 kaSignX[4] = { 0, 0, 0x80000000u, 0x80000000u };
+        static const CGS_ALIGN(16) u32 kaSignY[4] = { 0, 0x80000000u, 0, 0x80000000u };
+        static const CGS_ALIGN(16) u32 kaSignZ[4] = { 0, 0x80000000u, 0x80000000u, 0 };
+        static const CGS_ALIGN(16) u32 kaGatherX[4] = { 0x04050607, 0x10111213, 0x00010203, 0x00010203 };
+        static const CGS_ALIGN(16) u32 kaGatherYZ[4] = { 0x00010203, 0x00010203, 0x08090A0B, 0x10111213 };
+        static const CGS_ALIGN(16) u32 kaGatherZX[4] = { 0x00010203, 0x00010203, 0x04050607, 0x18191A1B };
+        static const CGS_ALIGN(16) u32 kaGatherYZero[4] = { 0x00010203, 0x10111213, 0x00010203, 0x00010203 };
+        static const CGS_ALIGN(16) u32 kaWeightTrace[4] = { 0x10111213, 0x10111213, 0x10111213, 0x00010203 };
+        static const CGS_ALIGN(16) u32 kaWeightX[4] = { 0x04050607, 0x14151617, 0x14151617, 0x14151617 };
+        static const CGS_ALIGN(16) u32 kaWeightY[4] = { 0x18191A1B, 0x08090A0B, 0x18191A1B, 0x18191A1B };
+        static const CGS_ALIGN(16) u32 kaWeightZ[4] = { 0x1C1D1E1F, 0x1C1D1E1F, 0x0C0D0E0F, 0x1C1D1E1F };
+        static const CGS_ALIGN(16) u32 kaCandidateX[4] = { 0x0C0D0E0F, 0x18191A1B, 0x14151617, 0x00010203 };
+        static const CGS_ALIGN(16) u32 kaCandidateY[4] = { 0x18191A1B, 0x0C0D0E0F, 0x10111213, 0x04050607 };
+        static const CGS_ALIGN(16) u32 kaCandidateZ[4] = { 0x14151617, 0x10111213, 0x0C0D0E0F, 0x08090A0B };
 
-        // The original two vperm/vsldoi gathers end in half and zero, giving
-        // N.w = S.w = 0.5. Upper row W lanes never enter the conversion.
-        const Vector4 lN{Subtract(m.yAxis.z, m.zAxis.y), Subtract(m.zAxis.x, m.xAxis.z),
-                         Subtract(m.xAxis.y, m.yAxis.x), 0.5f};
-        const Vector4 lS{Add(m.yAxis.z, m.zAxis.y), Add(m.zAxis.x, m.xAxis.z),
-                         Add(m.xAxis.y, m.yAxis.x), 0.5f};
-        const Quaternion lQ0{Multiply(lN.x, laS2[0]), Multiply(lN.y, laS2[0]),
-                             Multiply(lN.z, laS2[0]), Multiply(lN.w, laS[0])};
-        const Quaternion lQ1{Multiply(lN.w, laS[1]), Multiply(lS.z, laS2[1]),
-                             Multiply(lS.y, laS2[1]), Multiply(lN.x, laS2[1])};
-        const Quaternion lQ2{Multiply(lS.z, laS2[2]), Multiply(lN.w, laS[2]),
-                             Multiply(lS.x, laS2[2]), Multiply(lN.y, laS2[2])};
-        const Quaternion lQ3{Multiply(lS.y, laS2[3]), Multiply(lS.x, laS2[3]),
-                             Multiply(lN.w, laS[3]), Multiply(lN.z, laS2[3])};
-        Quaternion lResult = Select(lQ3, lQ2, Flush(lfY) > Flush(lfZ));
-        lResult = Select(lResult, lQ1, (Flush(lfX) > Flush(lfY)) & (Flush(lfX) > Flush(lfZ)));
-        const float lfTrace = Add(laSumXY[0], lfZ);
-        return Select(lResult, lQ0, lfTrace > Flush(epsilon));
+        const __vector4 rowX = __lvx(&m.xAxis, 0);
+        const __vector4 rowY = __lvx(&m.yAxis, 0);
+        const __vector4 rowZ = __lvx(&m.zAxis, 0);
+        const __vector4 diagonalX = __vspltw(rowX, 0);
+        const __vector4 diagonalY = __vspltw(rowY, 1);
+        const __vector4 diagonalZ = __vspltw(rowZ, 2);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 signedXY = __vaddfp(__vxor(diagonalX, __lvx(kaSignX, 0)),
+                                           __vxor(diagonalY, __lvx(kaSignY, 0)));
+        const __vector4 terms = __vaddfp(signedXY,
+            __vaddfp(__vxor(diagonalZ, __lvx(kaSignZ, 0)), one));
+        __vector4 inverseRoots = __vrsqrtefp(terms);
+        for (int step = 0; step < 2; ++step)
+        {
+            const __vector4 squared = __vmulfp(inverseRoots, inverseRoots);
+            const __vector4 halfEstimate = __vmulfp(inverseRoots, half);
+            const __vector4 residual = __vnmsubfp(terms, squared, one);
+            inverseRoots = __vmaddfp(halfEstimate, residual, inverseRoots);
+        }
+        const __vector4 roots = __vmulfp(terms, inverseRoots);
+        const __vector4 scales = __vmulfp(half, inverseRoots);
+        const __vector4 gatherX = __vperm(rowX, half, __lvx(kaGatherX, 0));
+        const __vector4 gatherYZ = __vperm(rowY, rowZ, __lvx(kaGatherYZ, 0));
+        const __vector4 gatherZX = __vperm(rowZ, rowX, __lvx(kaGatherZX, 0));
+        const __vector4 gatherYZero = __vperm(rowY, zero, __lvx(kaGatherYZero, 0));
+        const __vector4 upper = __vsldoi(gatherYZ, gatherX, 8);
+        const __vector4 lower = __vsldoi(gatherZX, gatherYZero, 8);
+        const __vector4 difference = __vsubfp(upper, lower);
+        const __vector4 sum = __vaddfp(upper, lower);
+        const __vector4 candidateTrace = __vmulfp(difference,
+            __vperm(roots, scales, __lvx(kaWeightTrace, 0)));
+        const __vector4 candidateX = __vmulfp(__vperm(difference, sum, __lvx(kaCandidateX, 0)),
+            __vperm(roots, scales, __lvx(kaWeightX, 0)));
+        const __vector4 candidateY = __vmulfp(__vperm(difference, sum, __lvx(kaCandidateY, 0)),
+            __vperm(roots, scales, __lvx(kaWeightY, 0)));
+        const __vector4 candidateZ = __vmulfp(__vperm(difference, sum, __lvx(kaCandidateZ, 0)),
+            __vperm(roots, scales, __lvx(kaWeightZ, 0)));
+        __vector4 selected = __vsel(candidateZ, candidateY, __vcmpgtfp(diagonalY, diagonalZ));
+        selected = __vsel(selected, candidateX,
+            __vand(__vcmpgtfp(diagonalX, diagonalY), __vcmpgtfp(diagonalX, diagonalZ)));
+        const __vector4 trace = __vspltw(__vaddfp(signedXY, diagonalZ), 0);
+        const __vector4 threshold = { epsilon, epsilon, epsilon, epsilon };
+        selected = __vsel(selected, candidateTrace, __vcmpgtfp(trace, threshold));
+        Quaternion result;
+        __stvx(selected, &result, 0);
+        return result;
     }
+
 }
 }
 
@@ -211,10 +180,10 @@ namespace physics
         CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatL) == 0x40), "mQuatL @+0x40 (Build r25 = 0x40 over body B; BurnoutPR [esi+40h])");
 
         // Adjacency form -- survives a member WIDENING, which the stride check below would not.
-        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosA)  == offsetof(JointFrames, mQuatA) + sizeof(JointFrames::mQuatA)), "mPosA follows mQuatA");
-        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatB) == offsetof(JointFrames, mPosA)  + sizeof(JointFrames::mPosA)),  "mQuatB follows mPosA");
-        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosB)  == offsetof(JointFrames, mQuatB) + sizeof(JointFrames::mQuatB)), "mPosB follows mQuatB");
-        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatL) == offsetof(JointFrames, mPosB)  + sizeof(JointFrames::mPosB)),  "mQuatL follows mPosB");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosA)  == offsetof(JointFrames, mQuatA) + sizeof(((JointFrames*)0)->mQuatA)), "mPosA follows mQuatA");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatB) == offsetof(JointFrames, mPosA)  + sizeof(((JointFrames*)0)->mPosA)),  "mQuatB follows mPosA");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosB)  == offsetof(JointFrames, mQuatB) + sizeof(((JointFrames*)0)->mQuatB)), "mPosB follows mQuatB");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatL) == offsetof(JointFrames, mPosB)  + sizeof(((JointFrames*)0)->mPosB)),  "mQuatL follows mPosB");
 
         // The X360-attested ARRAY STRIDE. ProcessUpdateJointFramesQueue @0x8289F4E8 steps
         // JointData::maFrames by `slwi r10,r31,2 / add r10,r31,r10 / slwi r10,r10,4` == i*5*16

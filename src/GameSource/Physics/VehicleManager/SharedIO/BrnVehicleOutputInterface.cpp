@@ -150,9 +150,9 @@ namespace Vehicle
 
         // --- and the widths of the fields AddJoint reads by name (an offset gate alone is
         //     blind to a member retyped in place -- the TrafficPhysics tamper test proved that) ---
-        CGS_STATIC_ASSERT((sizeof(InAddJoint::mu64Id) == 8),           "mId is an 8-byte handle (ld, not lwz)");
-        CGS_STATIC_ASSERT((sizeof(InAddJoint::mu64ParentBodyId) == 8), "mParentBodyId is an 8-byte handle");
-        CGS_STATIC_ASSERT((sizeof(InAddJoint::mu64ChildBodyId) == 8),  "mChildBodyId is an 8-byte handle");
+        CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mu64Id) == 8),           "mId is an 8-byte handle (ld, not lwz)");
+        CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mu64ParentBodyId) == 8), "mParentBodyId is an 8-byte handle");
+        CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mu64ChildBodyId) == 8),  "mChildBodyId is an 8-byte handle");
         CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64Id) == 0),            "AddJoint's `ld r10, 0(r29)`");
         CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64ParentBodyId) == 8),  "AddJoint's `ld r10, 8(r29)`");
         CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64ChildBodyId) == 16),  "AddJoint's `ld r10, 0x10(r29)`");
@@ -168,11 +168,11 @@ namespace Vehicle
         // against is still caught: every interior offset is a sum of the widths before it, and
         // shrinking or re-typing any of them moves a later one.
         CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointFrames) == 32),  "mJointFrames @+0x20 (drain `addi r11,r26,0x20`)");
-        CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointFrames) == 80),    "JointFrames is 80B -- the FIVE lvx128 lanes");
-        CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointLimits) == offsetof(InAddJoint, mJointFrames) + sizeof(InAddJoint::mJointFrames)),
+        CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mJointFrames) == 80),    "JointFrames is 80B -- the FIVE lvx128 lanes");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointLimits) == offsetof(InAddJoint, mJointFrames) + sizeof(((InAddJoint*)0)->mJointFrames)),
                                                                  "mJointLimits follows mJointFrames (+0x70)");
-        CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointLimits) == 64),    "JointLimits is 64B -- the EIGHT ld/std pairs");
-        CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy) == offsetof(InAddJoint, mJointLimits) + sizeof(InAddJoint::mJointLimits)),
+        CGS_STATIC_ASSERT((sizeof(((InAddJoint*)0)->mJointLimits) == 64),    "JointLimits is 64B -- the EIGHT ld/std pairs");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy) == offsetof(InAddJoint, mJointLimits) + sizeof(((InAddJoint*)0)->mJointLimits)),
                                                                  "mbSpy follows mJointLimits (+0xB0, the drain's `lbz 0xB0(event)`)");
         CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy) == 176),        "176 + 1 -> 192 is the ONLY alignment slack in this record");
 

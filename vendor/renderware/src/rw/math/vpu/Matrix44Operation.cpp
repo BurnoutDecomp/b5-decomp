@@ -179,14 +179,26 @@ Matrix44 Inverse(const Matrix44& lrMatrix, Vector4& lrDeterminant)
         NegativeMultiplySubtract(lfStep1, lfDeterminant, 1.0f), lfStep1);
 
     Matrix44 lInverse;
-    lInverse.xAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.x), Multiply(lfInvDeterminant, lvCofactor1.x),
+    {
+        const Vector4 lAggregateValue = { Multiply(lfInvDeterminant, lvCofactor0.x), Multiply(lfInvDeterminant, lvCofactor1.x),
                               Multiply(lfInvDeterminant, lvCofactor2.x), Multiply(lfInvDeterminant, lvCofactor3.x) };
-    lInverse.yAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.y), Multiply(lfInvDeterminant, lvCofactor1.y),
+        lInverse.xAxis = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { Multiply(lfInvDeterminant, lvCofactor0.y), Multiply(lfInvDeterminant, lvCofactor1.y),
                               Multiply(lfInvDeterminant, lvCofactor2.y), Multiply(lfInvDeterminant, lvCofactor3.y) };
-    lInverse.zAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.z), Multiply(lfInvDeterminant, lvCofactor1.z),
+        lInverse.yAxis = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { Multiply(lfInvDeterminant, lvCofactor0.z), Multiply(lfInvDeterminant, lvCofactor1.z),
                               Multiply(lfInvDeterminant, lvCofactor2.z), Multiply(lfInvDeterminant, lvCofactor3.z) };
-    lInverse.wAxis = Vector4{ Multiply(lfInvDeterminant, lvCofactor0.w), Multiply(lfInvDeterminant, lvCofactor1.w),
+        lInverse.zAxis = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { Multiply(lfInvDeterminant, lvCofactor0.w), Multiply(lfInvDeterminant, lvCofactor1.w),
                               Multiply(lfInvDeterminant, lvCofactor2.w), Multiply(lfInvDeterminant, lvCofactor3.w) };
+        lInverse.wAxis = lAggregateValue;
+    }
 
     return lInverse;
 }

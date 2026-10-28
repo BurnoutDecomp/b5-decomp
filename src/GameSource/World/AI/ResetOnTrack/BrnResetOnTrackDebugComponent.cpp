@@ -219,10 +219,14 @@ void ResetOnTrackDebugComponent::PushHngTestInfo(
         mpResetOnTrackManager->GetAICar(E_GLOBAL_RACE_CAR_INDEX_0)->GetPosition();
 
     HngTestEntry lEntry;
-    lEntry.mStartPosition =
-        Vector3{lStartPosition.x, lReferencePosition.y, lStartPosition.y, 0.0f};
-    lEntry.mEndPosition =
-        Vector3{lEndPosition.x, lReferencePosition.y, lEndPosition.y, 0.0f};
+    {
+        const Vector3 lAggregateValue = {lStartPosition.x, lReferencePosition.y, lStartPosition.y, 0.0f};
+        lEntry.mStartPosition = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = {lEndPosition.x, lReferencePosition.y, lEndPosition.y, 0.0f};
+        lEntry.mEndPosition = lAggregateValue;
+    }
     lEntry.mbHit = lbHit;
     mHngTestRingBuffer.Push(&lEntry);
     ++miLastHngTestCount;

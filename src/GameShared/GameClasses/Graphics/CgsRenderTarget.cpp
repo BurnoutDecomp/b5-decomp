@@ -388,14 +388,14 @@ void CgsRenderTarget::_AssertLayout()
     // pointer-invariant and safe to pin.
     CGS_STATIC_ASSERT((KU_NUM_COLOUR_SECTIONS == 4),
                   "the X360 build carries four colour sections (the PS3 DWARF's five is a merge delta)");
-    CGS_STATIC_ASSERT((sizeof(CgsRenderTarget::maRenderTargets) / sizeof(CgsRenderTargetSurface)
+    CGS_STATIC_ASSERT((sizeof(((CgsRenderTarget*)0)->maRenderTargets) / sizeof(CgsRenderTargetSurface)
                       + 1 == 5),
                   "four colour records + one depth record = the five the X360 ctor seeds");
 
     // The tile / ZCull indices the ctor seeds to -1 are single signed-byte sentinels; the target slot
     // it clears to null is a pointer.
-    CGS_STATIC_ASSERT((sizeof(CgsRenderTargetSurface::ms8TileIndex) == 1),
+    CGS_STATIC_ASSERT((sizeof(((CgsRenderTargetSurface*)0)->ms8TileIndex) == 1),
                   "tile index is a single byte sentinel");
-    CGS_STATIC_ASSERT((sizeof(CgsRenderTargetSurface::mpTarget) == sizeof(void*)),
+    CGS_STATIC_ASSERT((sizeof(((CgsRenderTargetSurface*)0)->mpTarget) == sizeof(void*)),
                   "surface target slot is a pointer");
 }

@@ -113,7 +113,10 @@ namespace
         lResult.xAxis = lrMatrix.xAxis;
         lResult.yAxis = lrMatrix.yAxis;
         lResult.zAxis = lrMatrix.zAxis;
-        lResult.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lResult.wAxis = lAggregateValue;
+        }
         return lResult;
     }
     // The console emits every scalar lerp inline as (to - from) * t + from.

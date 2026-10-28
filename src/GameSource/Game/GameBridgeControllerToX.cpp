@@ -323,8 +323,14 @@ namespace BrnGame
         // The z/w lanes are the console's: the stvx128 moves whatever the two stfs pairs
         // left in the other half of each quadword, and only x/y are ever read (Vector2's
         // consumers are 2-lane dots and the yaw/pitch integrators). Zeroed here.
-        lImage.mCarModifier    = Vector2{ lpPad->mfStickLX, lpPad->mfStickLY, 0.0f, 0.0f };
-        lImage.mCameraModifier = Vector2{ lpPad->mfStickRX, lpPad->mfStickRY, 0.0f, 0.0f };
+        {
+            const Vector2 lAggregateValue = { lpPad->mfStickLX, lpPad->mfStickLY, 0.0f, 0.0f };
+            lImage.mCarModifier = lAggregateValue;
+        }
+        {
+            const Vector2 lAggregateValue = { lpPad->mfStickRX, lpPad->mfStickRY, 0.0f, 0.0f };
+            lImage.mCameraModifier = lAggregateValue;
+        }
 
         MapActionInfoToDebugController(&lImage.mDebugController, lpSecondaryPad->maActionInfo);
         {

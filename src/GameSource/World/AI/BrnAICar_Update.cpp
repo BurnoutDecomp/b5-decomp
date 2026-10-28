@@ -1057,7 +1057,10 @@ namespace BrnAI
         mfBehaviourTimer                = 0.0f;                                  // 0x82792650 stfs f31,0x14E0
         lpThisRoute->meStatus           = Route::E_STATUS_UNINITIALISED;         // 0x82792654 stw 0,0x1408
         lpThisRoute->miNodeCount        = 0;                                     // 0x82792658 stw 0,0x1400
-        mPosition                       = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };     // 0x8279265C stvx128 v0,0(r29)
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mPosition = lAggregateValue;
+        }     // 0x8279265C stvx128 v0,0(r29)
         lpThisRoute->miDefaultStartNode = 0;                                     // 0x82792660 stw 0,0x1404
         meBehaviour                     = E_AI_BEHAVIOUR_CRUISING;               // 0x82792664 stw 3,0x14B4
         mePreviousBehaviour             = E_AI_BEHAVIOUR_CRUISING;               // 0x82792668 stw 3,0x14B8
@@ -1162,7 +1165,10 @@ namespace BrnAI
             muResetOnTrackStartPortal  = 0;                                                 // 0x827928AC stb r30(li 0 @0x82792848),0x1538
             muResetOnTrackEndPortal    = 1;                                                 // 0x827928B0 stb r9(li 1 @0x82792850),0x1539
             meResetSpeedType           = E_RESET_SPEED_TYPE_COUNT;                          // 0x827928B4 stw r8(0x14),0x14D0 <- 20
-            mPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };                                          // vspltisw 0 -> stvx128 0x1430
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                mPosition = lAggregateValue;
+            }                                          // vspltisw 0 -> stvx128 0x1430
         }
 
         mbPlaceOnTrackRequested = false;                                                    // 0x153C
@@ -1193,7 +1199,10 @@ namespace BrnAI
         mfScheduleOffset0       = 0.0f;                                                     // 0x1518
         mfScheduleOffset1       = 0.0f;                                                     // 0x151C
         miProximityIndex        = -100;                                                     // 0x152C
-        mLastRoutePosition      = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };                                // stfs f31 x3 + stw 0 -> stvx128 0x1480
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLastRoutePosition = lAggregateValue;
+        }                                // stfs f31 x3 + stw 0 -> stvx128 0x1480
     }
 
     // ==================================================================================

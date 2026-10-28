@@ -508,13 +508,19 @@ WorldEntityModule::PreSceneUpdate(
         PVSIO::GetZoneRequest lRequest;
         lRequest.miPlayerIndex = 0;
         lRequest.miPad04 = 0;
-        lRequest.mPosition = Vector4{ mPositionUsedForPVS.x, mPositionUsedForPVS.y,
+        {
+            const Vector4 lAggregateValue = { mPositionUsedForPVS.x, mPositionUsedForPVS.y,
                                       mPositionUsedForPVS.z, 0.0f };
+            lRequest.mPosition = lAggregateValue;
+        }
         lRequest.miLookupIndex = mPlayerZoneResponse.GetLookupIndex();
         lRequest.mbUseVelocity = 1;
-        lRequest.mVelocity = Vector4{ lpRaceCarState->mLinearVelocity.x,
+        {
+            const Vector4 lAggregateValue = { lpRaceCarState->mLinearVelocity.x,
                                       lpRaceCarState->mLinearVelocity.y,
                                       lpRaceCarState->mLinearVelocity.z, 0.0f };
+            lRequest.mVelocity = lAggregateValue;
+        }
 
         mPVSModule.GetInputInterface()->mZoneRequestQueue.AddEvent( lRequest );
     }
@@ -525,8 +531,11 @@ WorldEntityModule::PreSceneUpdate(
         PVSIO::GetZoneRequest lRequest;
         lRequest.miPlayerIndex = 0;
         lRequest.miPad04 = 0;
-        lRequest.mPosition = Vector4{ mPositionUsedForPVS.x, mPositionUsedForPVS.y,
+        {
+            const Vector4 lAggregateValue = { mPositionUsedForPVS.x, mPositionUsedForPVS.y,
                                       mPositionUsedForPVS.z, 0.0f };
+            lRequest.mPosition = lAggregateValue;
+        }
         lRequest.miLookupIndex = mPlayerZoneResponse.GetLookupIndex();
         lRequest.mbUseVelocity = 0;
         lRequest.mVelocity.SetZero();

@@ -713,10 +713,22 @@ namespace Vehicle
 
         // The last-wall-triangle record: four zero vectors, then the three edge cosines. The
         // console issues the vectors out of address order (the normal first); they are independent.
-        mLastWallTriangle.mVertex0      = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        mLastWallTriangle.mVertex1      = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        mLastWallTriangle.mVertex2      = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        mLastWallTriangle.mNormal       = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLastWallTriangle.mVertex0 = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLastWallTriangle.mVertex1 = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLastWallTriangle.mVertex2 = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLastWallTriangle.mNormal = lAggregateValue;
+        }
         mLastWallTriangle.mfEdgeCosine0 = 0.0f;
         mLastWallTriangle.mfEdgeCosine1 = 0.0f;
         mLastWallTriangle.mfEdgeCosine2 = 0.0f;
@@ -751,7 +763,10 @@ namespace Vehicle
         // One console loop, two cursors: the per-wheel suspension force and its applied flag.
         for (u32 luWheel = 0; luWheel < eNumDrivenWheels; ++luWheel)
         {
-            maSuspensionForces[luWheel]        = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                maSuspensionForces[luWheel] = lAggregateValue;
+            }
             mabSuspensionForceApplied[luWheel] = false;
         }
 

@@ -781,16 +781,22 @@ namespace CgsSceneManager
         lBoundingSphere.mPositionRadius.w = lfRadius;
 
         CgsGeometric::AxisAlignedBox lBoundingBox;
-        lBoundingBox.mMin = rw::math::vpu::Vector4{
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {
             lvBoxPosition.x - lfRadius,
             lvBoxPosition.y - lfRadius,
             lvBoxPosition.z - lfRadius,
             -lfRadius};
-        lBoundingBox.mMax = rw::math::vpu::Vector4{
+            lBoundingBox.mMin = lAggregateValue;
+        }
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {
             lvBoxPosition.x + lfRadius,
             lvBoxPosition.y + lfRadius,
             lvBoxPosition.z + lfRadius,
             lfRadius};
+            lBoundingBox.mMax = lAggregateValue;
+        }
 
         // RunQuery publishes its leaf-index list into the mutable spatial map.
         // The console stores this manager as const but calls that mutator directly.
@@ -979,9 +985,12 @@ namespace CgsSceneManager
             std::fma(mSweptSphereSize, 2.0f, lfVelocityLength) * 1.05f;
 
         CgsGeometric::Sphere lBroadPhaseSphere;
-        lBroadPhaseSphere.mPositionRadius = rw::math::vpu::Vector4{
+        {
+            const rw::math::vpu::Vector4 lAggregateValue = {
             lvStartPosition.x, lvStartPosition.y, lvStartPosition.z, lfBroadPhaseRadius
         };
+            lBroadPhaseSphere.mPositionRadius = lAggregateValue;
+        }
 
         CgsGeometric::AxisAlignedBox lQueryBox;
         lQueryBox.Set(
@@ -1007,12 +1016,15 @@ namespace CgsSceneManager
         else
         {
             const f32 lfInverseLength = 1.0f / lfVelocityLength;
-            lvSweepDirection = rw::math::vpu::Vector3{
+            {
+                const rw::math::vpu::Vector3 lAggregateValue = {
                 lvVelocity.x * lfInverseLength,
                 lvVelocity.y * lfInverseLength,
                 lvVelocity.z * lfInverseLength,
                 0.0f
             };
+                lvSweepDirection = lAggregateValue;
+            }
         }
 
         CgsGeometric::SweptSphere lSweptSphere;

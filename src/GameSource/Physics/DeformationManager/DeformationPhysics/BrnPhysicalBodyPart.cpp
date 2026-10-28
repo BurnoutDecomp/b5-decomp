@@ -1770,22 +1770,34 @@ namespace Deformation
 
         // Rodrigues about lJointAxis, assembled row-by-row exactly as the three vperm/vrlimi128 do.
         Matrix44Affine lJointRotationMatrix;
-        lJointRotationMatrix.xAxis = Vector3{
+        {
+            const Vector3 lAggregateValue = {
             lfCos + lfOneMinusCos * lJointAxis.x * lJointAxis.x,
             lfOneMinusCos * lJointAxis.x * lJointAxis.y + lfSin * lJointAxis.z,
             lfOneMinusCos * lJointAxis.x * lJointAxis.z - lfSin * lJointAxis.y,
             0.0f };
-        lJointRotationMatrix.yAxis = Vector3{
+            lJointRotationMatrix.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {
             lfOneMinusCos * lJointAxis.y * lJointAxis.x - lfSin * lJointAxis.z,
             lfCos + lfOneMinusCos * lJointAxis.y * lJointAxis.y,
             lfOneMinusCos * lJointAxis.y * lJointAxis.z + lfSin * lJointAxis.x,
             0.0f };
-        lJointRotationMatrix.zAxis = Vector3{
+            lJointRotationMatrix.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {
             lfOneMinusCos * lJointAxis.z * lJointAxis.x + lfSin * lJointAxis.y,
             lfOneMinusCos * lJointAxis.z * lJointAxis.y - lfSin * lJointAxis.x,
             lfCos + lfOneMinusCos * lJointAxis.z * lJointAxis.z,
             0.0f };
-        lJointRotationMatrix.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            lJointRotationMatrix.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lJointRotationMatrix.wAxis = lAggregateValue;
+        }
 
         const auto lJointDirection = [&lJointRotationMatrix](const Vector3& lrLocal) -> Vector3
         {
@@ -1810,11 +1822,14 @@ namespace Deformation
         lNewPartTransform.zAxis = lVehicleDirection(lJointRotationMatrix.zAxis);   // stvx128 this+0x20
         {
             const Vector3 lRotatedCom = lVehicleDirection(lNewLocalCom);
-            lNewPartTransform.wAxis = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 lVehicleTransform.wAxis.x + lRotatedCom.x,
                 lVehicleTransform.wAxis.y + lRotatedCom.y,
                 lVehicleTransform.wAxis.z + lRotatedCom.z,
-                0.0f };                                                            // stvx128 this+0x30
+                0.0f };
+                lNewPartTransform.wAxis = lAggregateValue;
+            }                                                            // stvx128 this+0x30
         }
         mRwBody.SetTransform(lNewPartTransform);
 
@@ -2333,9 +2348,12 @@ namespace Deformation
 
         // ---- the payload ----
         lEvent.mFrictionStress = lPointVelocity;   // FLAG: a VELOCITY in the friction-stress slot
-        lEvent.mNormalStress   = Vector3{ lNormal.x * lfCollisionMagnitude,
+        {
+            const Vector3 lAggregateValue = { lNormal.x * lfCollisionMagnitude,
                                           lNormal.y * lfCollisionMagnitude,
                                           lNormal.z * lfCollisionMagnitude, 0.0f };
+            lEvent.mNormalStress = lAggregateValue;
+        }
         lEvent.mNormal         = lNormal;
         lEvent.mPointOnA       = lContactPoint;
         lEvent.mPointOnB       = lContactPoint;

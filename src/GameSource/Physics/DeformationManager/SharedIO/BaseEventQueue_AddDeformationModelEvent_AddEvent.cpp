@@ -62,9 +62,9 @@
 // The three width facts the 176 rests on, pinned individually so a regression names its own cause
 // rather than only moving the total. ⭐ These are the SIZES, not a count (the console evidence for
 // each is in BrnCommonTypes.h's eight-witness banner and BrnDeformationEvents.h).
-CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::AddDeformationModelEvent::mHandlingBodyID) == 8),
+CGS_STATIC_ASSERT((sizeof(((BrnPhysics::Deformation::AddDeformationModelEvent*)0)->mHandlingBodyID) == 8),
               "mHandlingBodyID is CgsPhysics::RigidBodyId -- the console `std`/`ld` at event +8");
-CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::AddDeformationModelEvent::mGlobalEntityId) == 4),
+CGS_STATIC_ASSERT((sizeof(((BrnPhysics::Deformation::AddDeformationModelEvent*)0)->mGlobalEntityId) == 4),
               "mGlobalEntityId stays 32-bit -- the console `stw`/`lwz` at event +0x10");
 CGS_STATIC_ASSERT((offsetof(BrnPhysics::Deformation::AddDeformationModelEvent, mCOMOffset) == 0x20),
               "the SIMD block starts at the console's own +0x20 once the head is the right width");

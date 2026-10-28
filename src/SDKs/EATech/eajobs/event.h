@@ -125,8 +125,8 @@ namespace Detail
         u32              mPad1;
 
     private:
-        BucketListNode(const BucketListNode&) = delete;
-        BucketListNode& operator=(const BucketListNode&) = delete;
+        BucketListNode(const BucketListNode&);
+        BucketListNode& operator=(const BucketListNode&);
     };
 }
 }

@@ -445,7 +445,10 @@ namespace Deformation
         mfRadius         = lfRadius;
         mbFrozen         = false;
         mbAddedToScene   = false;
-        mLinearVelocity  = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLinearVelocity = lAggregateValue;
+        }
     }
 
     // ==============================================================================================

@@ -459,7 +459,10 @@ namespace Vehicle
         SimpleVehiclePhysics* const lpTrafficPhysics =
             lpTrafficManager->GetTrafficVehicle(liTraffic)->mpVehicleBody;
         Matrix44Affine lGraphicsTransform = lpTrafficPhysics->GetGraphicsVehicleTransform();
-        lGraphicsTransform.wAxis = Vector3{ 3355.0f, 6.0f, -1378.8f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 3355.0f, 6.0f, -1378.8f, 0.0f };
+            lGraphicsTransform.wAxis = lAggregateValue;
+        }
         lpTrafficPhysics->SetGraphicsVehicleTransform(lGraphicsTransform);
     }
 

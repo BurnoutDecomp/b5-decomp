@@ -111,8 +111,14 @@ namespace Deformation
 		}
 
 		CgsPhysics::PhysicsSimulationIO::OutContactSpy lSpy;
-		lSpy.mFrictionStress = Vector3{maPostPhysicsVec0[0], maPostPhysicsVec0[1], maPostPhysicsVec0[2], maPostPhysicsVec0[3]};
-		lSpy.mNormalStress = Vector3{maPostPhysicsVec1[0], maPostPhysicsVec1[1], maPostPhysicsVec1[2], maPostPhysicsVec1[3]};
+		{
+		    const Vector3 lAggregateValue = {maPostPhysicsVec0[0], maPostPhysicsVec0[1], maPostPhysicsVec0[2], maPostPhysicsVec0[3]};
+		    lSpy.mFrictionStress = lAggregateValue;
+		}
+		{
+		    const Vector3 lAggregateValue = {maPostPhysicsVec1[0], maPostPhysicsVec1[1], maPostPhysicsVec1[2], maPostPhysicsVec1[3]};
+		    lSpy.mNormalStress = lAggregateValue;
+		}
 		lSpy.mNormal = mSpyNormal;
 		lSpy.mPointOnA = mSpyPointOnA;
 		lSpy.mPointOnB = mSpyPointOnB;
@@ -1604,7 +1610,10 @@ namespace Deformation
 	{
 		lrInverse.mPointOnA = mPointOnB;
 		lrInverse.mPointOnB = mPointOnA;
-		lrInverse.mNormal   = Vector3{ -mNormal.x, -mNormal.y, -mNormal.z, 0.0f };
+		{
+		    const Vector3 lAggregateValue = { -mNormal.x, -mNormal.y, -mNormal.z, 0.0f };
+		    lrInverse.mNormal = lAggregateValue;
+		}
 		lrInverse.mpOtherVehicle      = mpOtherVehicle;
 		lrInverse.mpOtherSensor       = mpOtherSensor;
 		lrInverse.mfImpactTimeInFrame = mfImpactTimeInFrame;

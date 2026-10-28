@@ -43,8 +43,8 @@ namespace CgsNetwork
     {
         // The graph scale the bandwidth bars start with (kbps at full width) and the bandwidth
         // budget the bars are coloured against (console .rdata floats).
-        static constexpr f32 KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH = 256.0f;
-        static constexpr f32 KF_DEFAULT_MAX_BANDWIDTH           = 128.0f;
+        static const f32 KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
+        static const f32 KF_DEFAULT_MAX_BANDWIDTH;
 
         // The lifecycle is inlined into PlayerManager's Construct / Prepare / Release / Destruct.
         void Construct(PlayerManager* lpPlayerManager)

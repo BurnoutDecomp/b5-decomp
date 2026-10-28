@@ -143,9 +143,11 @@ namespace BrnGui
         // before the lvx/stvx copy -- Vector2::Set semantics).
         for (s32 liIconIndex = 0; liIconIndex < miNumEventIcons; ++liIconIndex)
         {
-            lv2IconPositions[liIconIndex] =
-                Vector2{ ma2DEventIcons[liIconIndex].mfEventIconPosX,
+            {
+                const Vector2 lAggregateValue = { ma2DEventIcons[liIconIndex].mfEventIconPosX,
                          ma2DEventIcons[liIconIndex].mfEventIconPosY, 0.0f, 0.0f };
+                lv2IconPositions[liIconIndex] = lAggregateValue;
+            }
         }
 
         // The X360 re-checks the out-pointer before the count store (the assert above

@@ -532,8 +532,14 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
 void VehicleAttribs::Construct()
 {
     // ---- mBaseAttribs: the geometry, as four whole-register stores -------------------------
-    mBaseAttribs.mFrontRightWheelPos = Vector3{ KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_FRONT_WHEEL_POS_Z, KF_ZERO };
-    mBaseAttribs.mRearRightWheelPos  = Vector3{ KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_REAR_WHEEL_POS_Z,  KF_ZERO };
+    {
+        const Vector3 lAggregateValue = { KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_FRONT_WHEEL_POS_Z, KF_ZERO };
+        mBaseAttribs.mFrontRightWheelPos = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = { KF_WHEEL_POS_X, KF_WHEEL_POS_Y, KF_REAR_WHEEL_POS_Z,  KF_ZERO };
+        mBaseAttribs.mRearRightWheelPos = lAggregateValue;
+    }
 
     mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = KF_MASS;
     mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y = KF_TIME_FOR_FULL_BRAKE_RECIP;
@@ -568,7 +574,10 @@ void VehicleAttribs::Construct()
     mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.z = KF_POWER_TO_REAR;
     mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo.w = KF_DOWN_FORCE_LIFT_CO;
 
-    mBaseAttribs.mCOMOffset = Vector3{ KF_ZERO, KF_COM_OFFSET_Y, KF_COM_OFFSET_Z, KF_ZERO };
+    {
+        const Vector3 lAggregateValue = { KF_ZERO, KF_COM_OFFSET_Y, KF_COM_OFFSET_Z, KF_ZERO };
+        mBaseAttribs.mCOMOffset = lAggregateValue;
+    }
 
     mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x = KF_PITCH_DAMPING_ON_TAKE_OFF;
     mBaseAttribs.mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y = KF_YAW_DAMPING_ON_TAKE_OFF;
@@ -584,10 +593,13 @@ void VehicleAttribs::Construct()
                                                            KF_CRASH_EXTRA_VELOCITY_FACTOR,
                                                            KF_CRASH_EXTRA_VELOCITY_FACTOR,
                                                            KF_CRASH_EXTRA_VELOCITY_FACTOR };
-    mBaseAttribs.mDrivetimeDeformLimits = Vector4{ KF_DRIVETIME_DEFORM_LIMIT_X,
+    {
+        const Vector4 lAggregateValue = { KF_DRIVETIME_DEFORM_LIMIT_X,
                                                    KF_DRIVETIME_DEFORM_LIMIT_Y,
                                                    KF_DRIVETIME_DEFORM_LIMIT_Z,
                                                    KF_DRIVETIME_DEFORM_LIMIT_W };
+        mBaseAttribs.mDrivetimeDeformLimits = lAggregateValue;
+    }
 
     // 0x825F444C -- r3 == this+0x190.
     mEngineAttribs.Construct();
@@ -1287,7 +1299,10 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
     mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = KF_AI_MASS_PRESEED;   // (overwritten below)
     mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z = KF_AI_MAX_SPEED_PRESEED;  // (overwritten below)
     mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.y = KF_AI_TIME_FOR_FULL_BRAKE_RECIP;
-    mBaseAttribs.mCOMOffset = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // 0x825F5A34 (re-copied below)
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mBaseAttribs.mCOMOffset = lAggregateValue;
+    }   // 0x825F5A34 (re-copied below)
     mBaseAttribs.mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels.w = KF_AI_BRAKE_SCALE_TO_LOCK;
     mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.x = KF_AI_TRACTION_LINE_LENGTH;
     mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y = KF_AI_LOW_SPEED_DRIVING_MPH;
@@ -1324,8 +1339,11 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
     mBaseAttribs.mCrashExtraVelocityFactors = Vector3Plus{ 0.0f, KF_AI_CRASH_EXTRA_VEL_FACTOR,
                                                            KF_AI_CRASH_EXTRA_VEL_FACTOR,
                                                            KF_AI_CRASH_EXTRA_VEL_FACTOR };  // +0x30
-    mBaseAttribs.mDrivetimeDeformLimits = Vector4{ KF_AI_DEFORM_LIMIT_X, KF_AI_DEFORM_LIMIT_Y,
-                                                   KF_AI_DEFORM_LIMIT_ZW, KF_AI_DEFORM_LIMIT_ZW };  // +0x40
+    {
+        const Vector4 lAggregateValue = { KF_AI_DEFORM_LIMIT_X, KF_AI_DEFORM_LIMIT_Y,
+                                                   KF_AI_DEFORM_LIMIT_ZW, KF_AI_DEFORM_LIMIT_ZW };
+        mBaseAttribs.mDrivetimeDeformLimits = lAggregateValue;
+    }  // +0x40
 
     // 0x825F5CD0..0x825F5CD8: the AI tire preps.
     mFrontTireAttribs.PrepareFrontTireForAI();                  // this+0x2D0
@@ -1432,13 +1450,22 @@ void SimpleVehicleAttribs::Construct()
     mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.z = KF_DEFAULT_MASS;
     mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.w = KF_DEFAULT_TRACTION_LINE;
     miRaceCarID = 0;                                                       // stw 0 -> +0xE0
-    mFrontRightWheelPos = Vector3{ KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
-                                   KF_DEFAULT_FRONT_WHEEL_Z, 0.0f };       // +0xB0
-    mRearRightWheelPos  = Vector3{ KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
-                                   KF_DEFAULT_REAR_WHEEL_Z, 0.0f };        // +0xC0
+    {
+        const Vector3 lAggregateValue = { KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
+                                   KF_DEFAULT_FRONT_WHEEL_Z, 0.0f };
+        mFrontRightWheelPos = lAggregateValue;
+    }       // +0xB0
+    {
+        const Vector3 lAggregateValue = { KF_DEFAULT_WHEEL_X, KF_DEFAULT_WHEEL_Y,
+                                   KF_DEFAULT_REAR_WHEEL_Z, 0.0f };
+        mRearRightWheelPos = lAggregateValue;
+    }        // +0xC0
     mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.x = KF_DEFAULT_WHEEL_MASS;
     mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.y = KF_DEFAULT_WHEEL_MASS;
-    mCOMOffset = Vector3{ 0.0f, KF_DEFAULT_COM_Y, KF_DEFAULT_COM_Z, 0.0f };  // +0xD0
+    {
+        const Vector3 lAggregateValue = { 0.0f, KF_DEFAULT_COM_Y, KF_DEFAULT_COM_Z, 0.0f };
+        mCOMOffset = lAggregateValue;
+    }  // +0xD0
     mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.z = 0.0f;
     mvFrontWheelMass_RearWheelMass_FrontWheelHeightOffset_RearWheelHeightOffset.w = 0.0f;
     mvUpwardMovement_DownwardMovement_Mass_TractionLineLength.x = KF_DEFAULT_UPWARD_MOVEMENT;

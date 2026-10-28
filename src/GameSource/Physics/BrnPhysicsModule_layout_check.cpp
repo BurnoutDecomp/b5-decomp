@@ -264,9 +264,9 @@ namespace BrnPhysics
 
         // The two widths the asm proved directly, asserted as widths so a retype that preserves
         // spacing still fails.
-        CGS_STATIC_ASSERT((sizeof(PhysicsModule::mWorldRigidBodyId) == 8),
+        CGS_STATIC_ASSERT((sizeof(((PhysicsModule*)0)->mWorldRigidBodyId) == 8),
                       "mWorldRigidBodyId is written with a single `stdx` -- eight bytes");
-        CGS_STATIC_ASSERT((sizeof(PhysicsModule::mbIsOnlineGameMode) == 1),
+        CGS_STATIC_ASSERT((sizeof(((PhysicsModule*)0)->mbIsOnlineGameMode) == 1),
                       "mbIsOnlineGameMode is written with `stbx` -- one byte");
 
         // Whole-block span: 433208 - 433072 == 136. Fires if anything is inserted or removed

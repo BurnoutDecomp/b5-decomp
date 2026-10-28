@@ -702,19 +702,19 @@ namespace BrnTraffic
                       <  offsetof(TrafficEntityModule, maStoredAITrafficData)), "mpVehicleList before maStoredAITrafficData");
 
         // Asm-attested array counts (pool capacities; see BrnTrafficConstants.h).
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maVehicles) / sizeof(Vehicle) == 600),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maVehicles) / sizeof(Vehicle) == 600),
                       "maVehicles holds KU_MAX_TOTAL_TRAFFIC == 600 (asm 0x258)");
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maVehicleAxles) / sizeof(VehicleAxles) == 600),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maVehicleAxles) / sizeof(VehicleAxles) == 600),
                       "maVehicleAxles is one per vehicle slot");
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maStaticTrafficParams) / sizeof(StaticTrafficParam) == 199),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maStaticTrafficParams) / sizeof(StaticTrafficParam) == 199),
                       "maStaticTrafficParams holds KU_MAX_STATIC_TRAFFIC == 199 (asm 0xC7)");
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maParams) / sizeof(Param) == 400),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maParams) / sizeof(Param) == 400),
                       "maParams holds KU_MAX_PARAMS == 400");
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maVehicleTypeRuntime) / sizeof(VehicleTypeRuntime) == 96),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maVehicleTypeRuntime) / sizeof(VehicleTypeRuntime) == 96),
                       "maVehicleTypeRuntime holds KU_MAX_VEHICLE_TYPES == 96");
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maStoredAITrafficData) / sizeof(StoredAITrafficData) == 8),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maStoredAITrafficData) / sizeof(StoredAITrafficData) == 8),
                       "maStoredAITrafficData is one per active race car (Prepare stage 4 walks 8)");
-        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maGenerators) / sizeof(GeneratorAddress) == 512),
+        CGS_STATIC_ASSERT((sizeof(((TrafficEntityModule*)0)->maGenerators) / sizeof(GeneratorAddress) == 512),
                       "maGenerators holds KU_MAX_GENERATORS == 512");
 
         // Pointer-free record sizes, pinned by the console's container strides. These are the

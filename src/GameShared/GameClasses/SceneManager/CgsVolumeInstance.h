@@ -169,10 +169,10 @@ namespace CgsSceneManager
 
     // Widths the X360 accesses pin directly (std/stw/sth/stb + the two 16-byte
     // vector stores).
-    CGS_STATIC_ASSERT((sizeof(VolumeInstance::mWorldSpaceTransform) == 64),
+    CGS_STATIC_ASSERT((sizeof(((VolumeInstance*)0)->mWorldSpaceTransform) == 64),
                   "VolumeInstance::mWorldSpaceTransform is 4 x 16-byte lanes (X360 4x stvx128)");
-    CGS_STATIC_ASSERT((sizeof(VolumeInstance::mPadding) == 16),
+    CGS_STATIC_ASSERT((sizeof(((VolumeInstance*)0)->mPadding) == 16),
                   "VolumeInstance::mPadding is one 16-byte lane (X360 stvx128 v127,r3,0x40)");
-    CGS_STATIC_ASSERT((sizeof(VolumeInstance::mx8Flags) == 1),
+    CGS_STATIC_ASSERT((sizeof(((VolumeInstance*)0)->mx8Flags) == 1),
                   "VolumeInstance::mx8Flags is a byte (X360 lbz/stb at +0x6A)");
 }

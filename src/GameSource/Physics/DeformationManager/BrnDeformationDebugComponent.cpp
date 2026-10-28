@@ -64,8 +64,10 @@ namespace Deformation
     void DeformationSensor::SetLocalPosition(Vector3 lPosition)
     {
         const f32 lfRadius = mpLocalSpaceSphere->mPositionRadius.w;
-        mpLocalSpaceSphere->mPositionRadius =
-            Vector4{ lPosition.x, lPosition.y, lPosition.z, lfRadius };
+        {
+            const Vector4 lAggregateValue = { lPosition.x, lPosition.y, lPosition.z, lfRadius };
+            mpLocalSpaceSphere->mPositionRadius = lAggregateValue;
+        }
     }
 
     void DeformationSensor::UpdateWorldPosition(Matrix44Affine lVehicleTransform)
@@ -78,8 +80,10 @@ namespace Deformation
         };
         const Vector3 lWorld = rw::math::vpu::TransformPoint(lVehicleTransform, lLocal);
         const f32 lfRadius = mpWorldSpaceSphere->mPositionRadius.w;
-        mpWorldSpaceSphere->mPositionRadius =
-            Vector4{ lWorld.x, lWorld.y, lWorld.z, lfRadius };
+        {
+            const Vector4 lAggregateValue = { lWorld.x, lWorld.y, lWorld.z, lfRadius };
+            mpWorldSpaceSphere->mPositionRadius = lAggregateValue;
+        }
     }
 
     // ==============================================================================================
@@ -444,8 +448,14 @@ namespace Deformation
             // The current deformed box.
             lpRig->GetDeformedBoundingBox( &lScratch );
             DeformationAxisAlignedBox lDeformedBox;
-            lDeformedBox.mMin = Vector3{ lScratch.mMin.x, lScratch.mMin.y, lScratch.mMin.z, 0.0f };
-            lDeformedBox.mMax = Vector3{ lScratch.mMax.x, lScratch.mMax.y, lScratch.mMax.z, 0.0f };
+            {
+                const Vector3 lAggregateValue = { lScratch.mMin.x, lScratch.mMin.y, lScratch.mMin.z, 0.0f };
+                lDeformedBox.mMin = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lScratch.mMax.x, lScratch.mMax.y, lScratch.mMax.z, 0.0f };
+                lDeformedBox.mMax = lAggregateValue;
+            }
 
             f32 lfBestExtent = KF_DRIVETIME_EXTENT_LIMIT;
             const f32 lfLimitExtent = std::fabs( lLimitBox.GetExtent( leAxis ) );
@@ -470,8 +480,14 @@ namespace Deformation
                 lpRig->UpdateDeformedBBoxDebug();
 
                 lpRig->GetDeformedBoundingBox( &lScratch );
-                lDeformedBox.mMin = Vector3{ lScratch.mMin.x, lScratch.mMin.y, lScratch.mMin.z, 0.0f };
-                lDeformedBox.mMax = Vector3{ lScratch.mMax.x, lScratch.mMax.y, lScratch.mMax.z, 0.0f };
+                {
+                    const Vector3 lAggregateValue = { lScratch.mMin.x, lScratch.mMin.y, lScratch.mMin.z, 0.0f };
+                    lDeformedBox.mMin = lAggregateValue;
+                }
+                {
+                    const Vector3 lAggregateValue = { lScratch.mMax.x, lScratch.mMax.y, lScratch.mMax.z, 0.0f };
+                    lDeformedBox.mMax = lAggregateValue;
+                }
                 const f32 lfExtent = std::fabs( lDeformedBox.GetExtent( leAxis ) );
                 if ( lfExtent >= lfBestExtent )
                 {

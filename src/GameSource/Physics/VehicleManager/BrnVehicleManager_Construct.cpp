@@ -367,7 +367,10 @@ namespace Vehicle
         // +172432. `stvx128 v0, r31, r9` of the 16 bytes at unk_82181520 -- the identity basis row
         // {0,0,1,0}, settled in-repo twice (ICECameraSpaceHandler.cpp:124, BrnShadowMap.cpp:955/998).
         // i.e. the cached car-vs-car prediction normal starts as the world +Z axis.
-        mCachedCarCarPredictionNormal = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+            mCachedCarCarPredictionNormal = lAggregateValue;
+        }
 
         meStationaryPlayerWheelAngle = 2;       // +172448
         mbCrashRaceCarWhenFatal      = true;    // +172452

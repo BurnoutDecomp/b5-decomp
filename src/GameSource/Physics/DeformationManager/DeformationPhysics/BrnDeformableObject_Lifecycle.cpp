@@ -195,7 +195,10 @@ namespace Deformation
         // sum, then SetLastLinearVelocity / SetEntitySphereSize). mAngularVelocitySum is a VecFloat.
         // 0x82608DAC: the zero goes to +0x66C0 == mLastAngularVelocity. Console ClearVariables never
         // writes the +0xF40 spin accumulator (crash parity G20-D4, 2026-09-23).
-        mLastAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mLastAngularVelocity = lAggregateValue;
+        }
         SetLastLinearVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
         SetEntitySphereSize(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
 
@@ -1102,7 +1105,10 @@ namespace Deformation
         // every twist, and miNumBrokenWheels is the counter it increments there; neither was ever
         // reset, so miNumBrokenWheels climbed monotonically for the life of the session and each
         // reset car inherited the previous wreck's twist limits.
-        mWheelTwistLimits  = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };   // asm: +0x6760 = 0
+        {
+            const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            mWheelTwistLimits = lAggregateValue;
+        }   // asm: +0x6760 = 0
         miNumBrokenWheels  = 0;                                   // asm: +0x6770 = 0
         //   0x8263A594  stb r28, 0x712(r9)   with r9 == *(this+0x194C) == the attached VehiclePhysics
         // -- the vehicle's own "has started deforming" latch, which DeformableObject::
@@ -1571,16 +1577,28 @@ namespace Deformation
         // Zero limits until seated; the console never sees a null here.
         if (lpVehicle == 0 || lpVehicle->mpAttribs == 0)
         {
-            lrLimitA = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-            lrLimitB = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lrLimitA = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lrLimitB = lAggregateValue;
+            }
             return;
         }
 
         // A = the live drive-time deform band (vehicle+0x720 -> attribs+0x40).
         const Vector4& lrA = lpVehicle->mpAttribs->mBaseAttribs.mDrivetimeDeformLimits;
 
-        lrLimitA = Vector3{  lrA.x, 0.0f,   lrA.z,  lrA.x };   // pos limits
-        lrLimitB = Vector3{ -lrA.x, -lrA.y, -lrA.w, -lrA.x };  // neg limits
+        {
+            const Vector3 lAggregateValue = {  lrA.x, 0.0f,   lrA.z,  lrA.x };
+            lrLimitA = lAggregateValue;
+        }   // pos limits
+        {
+            const Vector3 lAggregateValue = { -lrA.x, -lrA.y, -lrA.w, -lrA.x };
+            lrLimitB = lAggregateValue;
+        }  // neg limits
     }
 
     // =================================================================================================

@@ -423,7 +423,10 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
     lafSideBlocked[1] = 0.0f;
 
     Vector3 laLateral[KI_SWEEP_SIDE_COUNT];
-    laLateral[0] = Vector3{ -lLateral.x, -lLateral.y, -lLateral.z, 0.0f };   // var_E0 (the xor)
+    {
+        const Vector3 lAggregateValue = { -lLateral.x, -lLateral.y, -lLateral.z, 0.0f };
+        laLateral[0] = lAggregateValue;
+    }   // var_E0 (the xor)
     laLateral[1] = lLateral;                                                 // var_D0
 
     for (s32 liAttempt = 1; liAttempt <= KI_SWEEP_MAX_ATTEMP_COUNT; ++liAttempt)
@@ -464,9 +467,12 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
             if (!TestCarHNG(lpAISection, lpaNearbyVehicles, lCandidate2D, lDirection2D,
                             lpRequest->GetResetSpeed()))
             {
-                lpResetData->mPosition = Vector3{ lpResetData->mPosition.x + lOffset.x,
+                {
+                    const Vector3 lAggregateValue = { lpResetData->mPosition.x + lOffset.x,
                                                   lpResetData->mPosition.y + lOffset.y,
                                                   lpResetData->mPosition.z + lOffset.z, 0.0f };
+                    lpResetData->mPosition = lAggregateValue;
+                }
                 return true;
             }
         }
@@ -482,9 +488,12 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
             (static_cast<f32>(miResetCount % KI_FALLBACK_SPREAD_WRAP) - KF_FALLBACK_SPREAD_BIAS)
             * KF_FALLBACK_SPREAD_SCALE * KF_SWEEP_DISTANCE;
 
-        lpResetData->mPosition = Vector3{ lLateral.x * lfSpread + lpResetData->mPosition.x,
+        {
+            const Vector3 lAggregateValue = { lLateral.x * lfSpread + lpResetData->mPosition.x,
                                           lLateral.y * lfSpread + lpResetData->mPosition.y,
                                           lLateral.z * lfSpread + lpResetData->mPosition.z, 0.0f };
+            lpResetData->mPosition = lAggregateValue;
+        }
     }
 
     return true;

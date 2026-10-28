@@ -1707,14 +1707,20 @@ void BrnRendererModule::BeginRenderAntiAliased(f32 lfWhiteLevel, bool lbClearSte
     if (mbGreyBackgroundColour)
     {
         const f32 lfGrey = lfWhiteLevel * KF_BACKGROUND_COLOUR_GREY;
-        mvBackgroundColour = Vector4{ lfGrey, lfGrey, lfGrey, KF_BACKGROUND_COLOUR_ALPHA };
+        {
+            const Vector4 lAggregateValue = { lfGrey, lfGrey, lfGrey, KF_BACKGROUND_COLOUR_ALPHA };
+            mvBackgroundColour = lAggregateValue;
+        }
     }
     else
     {
-        mvBackgroundColour = Vector4{ lfWhiteLevel * KF_BACKGROUND_COLOUR_RED,
+        {
+            const Vector4 lAggregateValue = { lfWhiteLevel * KF_BACKGROUND_COLOUR_RED,
                                       lfWhiteLevel * KF_BACKGROUND_COLOUR_GREEN,
                                       lfWhiteLevel * KF_BACKGROUND_COLOUR_BLUE,
                                       KF_BACKGROUND_COLOUR_ALPHA };
+            mvBackgroundColour = lAggregateValue;
+        }
     }
 
     // ...then read straight back OUT of the member into the D3DVECTOR4 the clear consumes. This is
@@ -3052,14 +3058,26 @@ bool BrnRendererUpdatePostFxMotionBlur(
 
     const CgsGraphics::Camera& lrCamera = lpParticleRenderData->mCgsCamera;
 
-    lCameraView.xAxis = rw::math::vpu::Vector3{ lrCamera.mView.xAxis.x, lrCamera.mView.xAxis.y,
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.xAxis.x, lrCamera.mView.xAxis.y,
                                                 lrCamera.mView.xAxis.z, lrCamera.mView.xAxis.w };
-    lCameraView.yAxis = rw::math::vpu::Vector3{ lrCamera.mView.yAxis.x, lrCamera.mView.yAxis.y,
+        lCameraView.xAxis = lAggregateValue;
+    }
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.yAxis.x, lrCamera.mView.yAxis.y,
                                                 lrCamera.mView.yAxis.z, lrCamera.mView.yAxis.w };
-    lCameraView.zAxis = rw::math::vpu::Vector3{ lrCamera.mView.zAxis.x, lrCamera.mView.zAxis.y,
+        lCameraView.yAxis = lAggregateValue;
+    }
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.zAxis.x, lrCamera.mView.zAxis.y,
                                                 lrCamera.mView.zAxis.z, lrCamera.mView.zAxis.w };
-    lCameraView.wAxis = rw::math::vpu::Vector3{ lrCamera.mView.wAxis.x, lrCamera.mView.wAxis.y,
+        lCameraView.zAxis = lAggregateValue;
+    }
+    {
+        const rw::math::vpu::Vector3 lAggregateValue = { lrCamera.mView.wAxis.x, lrCamera.mView.wAxis.y,
                                                 lrCamera.mView.wAxis.z, lrCamera.mView.wAxis.w };
+        lCameraView.wAxis = lAggregateValue;
+    }
 
     // The console's five-argument call, argument for argument (asm 0x8240DD04-0x8240DD4C):
     //   r3 = &BrnPostFx::mMotionBlurState        r4 = particleRenderData + 0x60  (the view)

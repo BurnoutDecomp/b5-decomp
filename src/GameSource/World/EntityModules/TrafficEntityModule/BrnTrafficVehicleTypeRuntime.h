@@ -46,7 +46,10 @@ namespace BrnTraffic
         {
             mBBoxOffset.SetZero();
             mBBoxHalfSize.SetZero();
-            mCabPivot_TrailerPivot_BackAxle_FwdAxle = Vector4{ -1.5f, 1.5f, -1.1f, 1.1f };
+            {
+                const Vector4 lAggregateValue = { -1.5f, 1.5f, -1.1f, 1.1f };
+                mCabPivot_TrailerPivot_BackAxle_FwdAxle = lAggregateValue;
+            }
         }
 
         // DWARF :66 `void Prepare(const StreamedDeformationSpec *, Attribute::Key)`,

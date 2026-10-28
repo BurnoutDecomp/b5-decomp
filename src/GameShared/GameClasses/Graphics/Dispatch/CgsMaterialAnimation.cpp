@@ -87,7 +87,10 @@ void SmoothLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAssembly*
     lpMaterial->GetCPUShaderConstants()->GetValue("AnimDuration", lValue);
     const f32 lfRemainder = static_cast<f32>(std::fmod(static_cast<double>(lfTime),
                                                      static_cast<double>(lValue.x)));
-    lrOffset = Vector4{lfRemainder / lValue.x, 0.0f, 0.0f, 0.0f};
+    {
+        const Vector4 lAggregateValue = {lfRemainder / lValue.x, 0.0f, 0.0f, 0.0f};
+        lrOffset = lAggregateValue;
+    }
 }
 
 // ARTIST vtable entry 820D6B84 -> unnamed 827F0290..3338 (also DecFIGS AE07D4).
@@ -104,7 +107,10 @@ void SteppedLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAssembly
                                                      static_cast<double>(lfDuration)));
     const f32 lfFrame = static_cast<f32>(std::floor(static_cast<double>(
         lfRemainder / (lfInvSteps * lfDuration))));
-    lrOffset = Vector4{lfFrame * lfInvSteps, 0.0f, 0.0f, 0.0f};
+    {
+        const Vector4 lAggregateValue = {lfFrame * lfInvSteps, 0.0f, 0.0f, 0.0f};
+        lrOffset = lAggregateValue;
+    }
 }
 
 // ARTIST 827F0340..431: U loops over duration; V over framesV * duration.
@@ -131,5 +137,8 @@ void SteppedGridLoopAnimation::OnCalculateOffset(const CgsGraphics::MaterialAsse
     const f32 lfInvV = 1.0f / lfFramesV;
     const f32 lfFrameV = static_cast<f32>(std::floor(static_cast<double>(
         lfRemainderV / (lfInvV * lfDurationV))));
-    lrOffset = Vector4{lfOffsetU, lfFrameV * lfInvV, 0.0f, 0.0f};
+    {
+        const Vector4 lAggregateValue = {lfOffsetU, lfFrameV * lfInvV, 0.0f, 0.0f};
+        lrOffset = lAggregateValue;
+    }
 }

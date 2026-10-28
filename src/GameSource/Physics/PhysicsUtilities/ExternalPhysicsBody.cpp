@@ -555,9 +555,18 @@ namespace BrnPhysics
         lpEntry->mbDrain         = false;
         lpEntry->mV              = gpDvWatchBody->GetLinearVelocity();
         lpEntry->mP              = gpDvWatchBody->GetPosition();
-        lpEntry->mDv             = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        lpEntry->mJ              = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        lpEntry->mFdt            = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lpEntry->mDv = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lpEntry->mJ = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lpEntry->mFdt = lAggregateValue;
+        }
         lpEntry->mfInvMass       = 0.0f;
     }
 
@@ -801,13 +810,19 @@ namespace BrnPhysics
                 lpDvEntry->mbDrain         = true;
                 lpDvEntry->mV              = mLinearVelocity;
                 lpDvEntry->mP              = mTransform.wAxis;
-                lpDvEntry->mDv             = Vector3{ mLinearVelocity.x - lDvBefore.x,
+                {
+                    const Vector3 lAggregateValue = { mLinearVelocity.x - lDvBefore.x,
                                                       mLinearVelocity.y - lDvBefore.y,
                                                       mLinearVelocity.z - lDvBefore.z, 0.0f };
+                    lpDvEntry->mDv = lAggregateValue;
+                }
                 lpDvEntry->mJ              = mTotalLinearImpulse;
-                lpDvEntry->mFdt            = Vector3{ mTotalLinearForce.x * lfDt,
+                {
+                    const Vector3 lAggregateValue = { mTotalLinearForce.x * lfDt,
                                                       mTotalLinearForce.y * lfDt,
                                                       mTotalLinearForce.z * lfDt, 0.0f };
+                    lpDvEntry->mFdt = lAggregateValue;
+                }
                 lpDvEntry->mfInvMass       = lfInvMass;
             }
         }
@@ -1407,9 +1422,18 @@ namespace BrnPhysics
             const Vector3 lvInvTens = lpEvent->mInertia.GetInverseInertia();
 
             // diag(invTens) -- the identity rows scaled per-lane (see the banner).
-            mLocalInverseInertia.xAxis = Vector3{ lvInvTens.x, 0.0f, 0.0f, 0.0f };
-            mLocalInverseInertia.yAxis = Vector3{ 0.0f, lvInvTens.y, 0.0f, 0.0f };
-            mLocalInverseInertia.zAxis = Vector3{ 0.0f, 0.0f, lvInvTens.z, 0.0f };
+            {
+                const Vector3 lAggregateValue = { lvInvTens.x, 0.0f, 0.0f, 0.0f };
+                mLocalInverseInertia.xAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, lvInvTens.y, 0.0f, 0.0f };
+                mLocalInverseInertia.yAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { 0.0f, 0.0f, lvInvTens.z, 0.0f };
+                mLocalInverseInertia.zAxis = lAggregateValue;
+            }
 
             const f32 lfMass = 1.0f / lpEvent->mInertia.GetInverseMass();
             mfMass.x = lfMass;
@@ -1544,11 +1568,14 @@ namespace BrnPhysics
         }
         else
         {
-            lvR = Vector3{
+            {
+                const Vector3 lAggregateValue = {
                 mTransform.xAxis.x * lPoint.x + mTransform.yAxis.x * lPoint.y + mTransform.zAxis.x * lPoint.z,
                 mTransform.xAxis.y * lPoint.x + mTransform.yAxis.y * lPoint.y + mTransform.zAxis.y * lPoint.z,
                 mTransform.xAxis.z * lPoint.x + mTransform.yAxis.z * lPoint.y + mTransform.zAxis.z * lPoint.z,
                 0.0f };
+                lvR = lAggregateValue;
+            }
         }
         return vpu::Add(mLinearVelocity, vpu::Cross(mAngularVelocity, lvR));
     }

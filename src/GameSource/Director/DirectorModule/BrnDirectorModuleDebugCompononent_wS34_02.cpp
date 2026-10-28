@@ -179,12 +179,12 @@ void DebugComponent::_AssertLayout()
                   offsetof(MainDirector, mbShowAllCameraNames) == offsetof(MainDirector, mbAllowJumpMoment) + 3 &&
                   offsetof(MainDirector, maStateFlagTail) == offsetof(MainDirector, mbAllowJumpMoment) + 4),
                   "MainDirector: +0x3542C..+0x3542F then the flag tail at +0x35430");
-    CGS_STATIC_ASSERT((sizeof(bool) == 1 && sizeof(MainDirector::maStateFlagTail) == 0x20),
+    CGS_STATIC_ASSERT((sizeof(bool) == 1 && sizeof(((MainDirector*)0)->maStateFlagTail) == 0x20),
                   "MainDirector: the flag tail is 0x20 one-byte flags");
     CGS_STATIC_ASSERT((sizeof(DebugPrinter) == 0x24 && offsetof(DebugPrinter, mbEnabled) == 0x20 &&
-                  sizeof(MainDirector::maDebugPrinterA) == sizeof(DebugPrinter) &&
-                  sizeof(MainDirector::maDebugPrinterB) == sizeof(DebugPrinter) &&
-                  sizeof(MainDirector::maDebugPrinterMain) >= sizeof(DebugPrinter)),
+                  sizeof(((MainDirector*)0)->maDebugPrinterA) == sizeof(DebugPrinter) &&
+                  sizeof(((MainDirector*)0)->maDebugPrinterB) == sizeof(DebugPrinter) &&
+                  sizeof(((MainDirector*)0)->maDebugPrinterMain) >= sizeof(DebugPrinter)),
                   "DebugPrinter: 0x24 bytes, mbEnabled at +0x20; each printer span holds one");
     CGS_STATIC_ASSERT((offsetof(Camera::BehaviourGameplayExternal, mbEnableBoostEffects) ==
                   offsetof(Camera::BehaviourGameplayExternal, mbEnableDebugRender) + 1),

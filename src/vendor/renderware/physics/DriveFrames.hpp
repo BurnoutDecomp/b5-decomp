@@ -51,9 +51,9 @@ namespace physics
 
         // Adjacency form -- survives a member WIDENING, which the absolute offsets would too
         // but which the stride check below would not.
-        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosA)  == offsetof(DriveFrames, mQuatA) + sizeof(DriveFrames::mQuatA)), "mPosA follows mQuatA");
-        CGS_STATIC_ASSERT((offsetof(DriveFrames, mQuatB) == offsetof(DriveFrames, mPosA)  + sizeof(DriveFrames::mPosA)),  "mQuatB follows mPosA");
-        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosB)  == offsetof(DriveFrames, mQuatB) + sizeof(DriveFrames::mQuatB)), "mPosB follows mQuatB");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosA)  == offsetof(DriveFrames, mQuatA) + sizeof(((DriveFrames*)0)->mQuatA)), "mPosA follows mQuatA");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mQuatB) == offsetof(DriveFrames, mPosA)  + sizeof(((DriveFrames*)0)->mPosA)),  "mQuatB follows mPosA");
+        CGS_STATIC_ASSERT((offsetof(DriveFrames, mPosB)  == offsetof(DriveFrames, mQuatB) + sizeof(((DriveFrames*)0)->mQuatB)), "mPosB follows mQuatB");
 
         // The X360-attested ARRAY STRIDE -- ProcessUpdateDriveFramesQueue @0x8289FD18 steps
         // DriveData::maFrames by `liIndex << 6`, and copies exactly four 16-byte lanes.

@@ -295,12 +295,7 @@ namespace collision
         u32                       muFlags;                // +0x24  DWARF `flags`
     };
 
-    // ⚠️ CONSOLE-ONLY OFFSETS above. The +0x04/+0x08/... comments are X360 word offsets
-    // and are documentation only: every slot is an 8-byte pointer on the host, so the
-    // record's host sizeof deliberately differs from the console's 0x28. What IS pinned
-    // is the slot ORDER and the fact that the three TU-local views in this directory
-    // (which spell slot 0 as one host word and reach getBBox at host +8 / createGPInstance
-    // at host +40) reinterpret this exact record -- see the static_asserts at the foot.
+    // These are the native descriptor offsets used by the ARTIST dispatch sites.
 
     // ---------------------------------------------------------------------------
     // rw::collision::BoxVolume -- DWARF box.h:50 (`: public Volume`).
@@ -483,22 +478,19 @@ namespace collision
     CGS_STATIC_ASSERT((sizeof(SphereVolume) == 96), "SphereVolume adds no storage over Volume");
     CGS_STATIC_ASSERT((offsetof(BoxVolume, mBoxData) == 0x44), "BoxVolume half-extents @ +0x44");
 
-    // --- descriptor-record pins (HOST offsets; what the TU-local views reinterpret) ---
-    // The three TU-local descriptor views in this directory spell slot 0 as ONE host word
-    // and then index the slots positionally; these asserts are what keeps them honest if
-    // anyone ever reorders or retypes a slot above.
-    //   VolumeBBoxQuery.cpp:68 / VolumeQuery.cpp:167  -> getBBox          at host +8
-    //   PrimitiveIntersect.cpp:1226                   -> createGPInstance at host +40
+    // ARTIST descriptor records are ten 32-bit words (type id, seven method
+    // slots, name and flags); GetBBox is slot 1 and CreateGPInstance slot 5.
+    CGS_STATIC_ASSERT((sizeof(Volume::VTable) == 0x28), "X360 volume descriptor size");
     CGS_STATIC_ASSERT((offsetof(Volume::VTable, muTypeID)              ==  0), "VTable typeID");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBox)           ==  8), "VTable getBBox");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBoxDiag)       == 16), "VTable getBBoxDiag");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetInterval)       == 24), "VTable getInterval");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetMaximumFeature) == 32), "VTable getMaximumFeature");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnCreateGPInstance)  == 40), "VTable createGPInstance");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnLineSegIntersect)  == 48), "VTable lineSegIntersect");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnRelease)           == 56), "VTable release");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpcName)               == 64), "VTable name");
-    CGS_STATIC_ASSERT((offsetof(Volume::VTable, muFlags)               == 72), "VTable flags");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBox)           ==  4), "VTable getBBox");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBoxDiag)       == 8), "VTable getBBoxDiag");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetInterval)       == 12), "VTable getInterval");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetMaximumFeature) == 16), "VTable getMaximumFeature");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnCreateGPInstance)  == 20), "VTable createGPInstance");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnLineSegIntersect)  == 24), "VTable lineSegIntersect");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnRelease)           == 28), "VTable release");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpcName)               == 32), "VTable name");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, muFlags)               == 36), "VTable flags");
 
 } // namespace collision
 } // namespace rw

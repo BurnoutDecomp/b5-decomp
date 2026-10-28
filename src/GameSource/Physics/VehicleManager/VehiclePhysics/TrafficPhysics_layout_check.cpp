@@ -145,14 +145,14 @@ namespace Vehicle
         // moves NOTHING and the offset arithmetic cannot see it -- yet the console plainly stores it
         // with `stb` (SetFreakedOut @0x825B89B0) and loads it with `lbz` (Update @0x82639690). These
         // four lines are the only thing between that and a silent width change.
-        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mOwnerID) == 4),
+        CGS_STATIC_ASSERT((sizeof(((TrafficPhysics*)0)->mOwnerID) == 4),
                       "mOwnerID is one 32-bit packed EntityId");
-        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mu8FreakOutState) == 1),
+        CGS_STATIC_ASSERT((sizeof(((TrafficPhysics*)0)->mu8FreakOutState) == 1),
                       "mu8FreakOutState is a BYTE -- SetFreakedOut `stb r11, 0x13F4(r3)` and Update "
                       "`lbz r11, 0x13F4(r30)`");
-        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mfFreakOutDirection) == 4),
+        CGS_STATIC_ASSERT((sizeof(((TrafficPhysics*)0)->mfFreakOutDirection) == 4),
                       "mfFreakOutDirection is an f32 -- SetFreakedOut `stfs f1, 0x13F8(r3)`");
-        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mfFreakOutTime) == 4),
+        CGS_STATIC_ASSERT((sizeof(((TrafficPhysics*)0)->mfFreakOutTime) == 4),
                       "mfFreakOutTime is an f32 -- Update `lfs f0, 0x13FC(r30)` / `stfs f0, 0x13FC`");
 
         // The block's own members must still EXIST, under these names, in this ORDER. Absolute host

@@ -274,14 +274,20 @@ namespace Vehicle
                     SetCrashing();                               // vcall +0x08
             }
             // Both legs converge on loc_8263989C: full wheel friction + a ZEROED timer.
-            mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };   // +0xFD0
+            {
+                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                mvfWheelFrictionLinearMultiplier = lAggregateValue;
+            }   // +0xFD0
             lfNewFreakOutTime = 0.0f;                            // flt_82001CC0
             break;
         }
         case E_FREAK_OUT_STATE_INITIAL:
             // INITIAL -> SPIN_OUT immediately; if not already crashing, fire the crash virtual.
             mu8FreakOutState = E_FREAK_OUT_STATE_SPIN_OUT;       // stb 3 -> +0x13F4
-            mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
+            {
+                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                mvfWheelFrictionLinearMultiplier = lAggregateValue;
+            }
             if (!IsCrashing())
                 SetCrashing();
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
@@ -292,9 +298,11 @@ namespace Vehicle
             // hard on, wheel friction down to 0.2; full gas only inside the 2.0 s window.
             lCopy.mfSteering  = mfFreakOutDirection;             // stfs +0x13F8 -> copy+0x10
             lCopy.mfHandBrake = 1.0f;                            // flt_82001C98 -> copy+0xC
-            mvfWheelFrictionLinearMultiplier =
-                VecFloat{ KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION,
+            {
+                const VecFloat lAggregateValue = { KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION,
                           KF_TURNROLL_WHEEL_FRICTION, KF_TURNROLL_WHEEL_FRICTION };
+                mvfWheelFrictionLinearMultiplier = lAggregateValue;
+            }
             if (mfFreakOutTime < KF_FREAKOUT_TURNROLL_MAX)       // fcmpu vs 2.0 [flt_82001D9C]
                 lCopy.mfGas = 1.0f;
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
@@ -308,7 +316,10 @@ namespace Vehicle
             lCopy.mfSteering = mfFreakOutDirection;
             lCopy.mfBrake    = 1.0f;
             lCopy.mfGas      = 1.0f;
-            mvfWheelFrictionLinearMultiplier = VecFloat{ 1.0f, 1.0f, 1.0f, 1.0f };
+            {
+                const VecFloat lAggregateValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+                mvfWheelFrictionLinearMultiplier = lAggregateValue;
+            }
             lfNewFreakOutTime = mfFreakOutTime + lfTimeStep;
             break;
 

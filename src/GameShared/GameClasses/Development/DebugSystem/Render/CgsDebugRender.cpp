@@ -30,10 +30,22 @@ namespace CgsDev
         Matrix44Affine MakeTransform(const Internal::CInEventDrawAxis& lrEvent)
         {
             Matrix44Affine lTransform;
-            lTransform.xAxis = Vector3{ lrEvent.mfRtX, lrEvent.mfRtY, lrEvent.mfRtZ, 0.0f };
-            lTransform.yAxis = Vector3{ lrEvent.mfUpX, lrEvent.mfUpY, lrEvent.mfUpZ, 0.0f };
-            lTransform.zAxis = Vector3{ lrEvent.mfAtX, lrEvent.mfAtY, lrEvent.mfAtZ, 0.0f };
-            lTransform.wAxis = Vector3{ lrEvent.mfPosX, lrEvent.mfPosY, lrEvent.mfPosZ, 1.0f };
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfRtX, lrEvent.mfRtY, lrEvent.mfRtZ, 0.0f };
+                lTransform.xAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfUpX, lrEvent.mfUpY, lrEvent.mfUpZ, 0.0f };
+                lTransform.yAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfAtX, lrEvent.mfAtY, lrEvent.mfAtZ, 0.0f };
+                lTransform.zAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfPosX, lrEvent.mfPosY, lrEvent.mfPosZ, 1.0f };
+                lTransform.wAxis = lAggregateValue;
+            }
             return lTransform;
         }
 
@@ -41,10 +53,22 @@ namespace CgsDev
         Matrix44Affine MakeBoxTransform(const BoxEvent& lrEvent)
         {
             Matrix44Affine lTransform;
-            lTransform.xAxis = Vector3{ lrEvent.mfRtX, lrEvent.mfRtY, lrEvent.mfRtZ, 0.0f };
-            lTransform.yAxis = Vector3{ lrEvent.mfUpX, lrEvent.mfUpY, lrEvent.mfUpZ, 0.0f };
-            lTransform.zAxis = Vector3{ lrEvent.mfAtX, lrEvent.mfAtY, lrEvent.mfAtZ, 0.0f };
-            lTransform.wAxis = Vector3{ lrEvent.mfPosX, lrEvent.mfPosY, lrEvent.mfPosZ, 1.0f };
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfRtX, lrEvent.mfRtY, lrEvent.mfRtZ, 0.0f };
+                lTransform.xAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfUpX, lrEvent.mfUpY, lrEvent.mfUpZ, 0.0f };
+                lTransform.yAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfAtX, lrEvent.mfAtY, lrEvent.mfAtZ, 0.0f };
+                lTransform.zAxis = lAggregateValue;
+            }
+            {
+                const Vector3 lAggregateValue = { lrEvent.mfPosX, lrEvent.mfPosY, lrEvent.mfPosZ, 1.0f };
+                lTransform.wAxis = lAggregateValue;
+            }
             return lTransform;
         }
 
@@ -348,10 +372,22 @@ namespace CgsDev
                               Vector4 lMin, Vector4 lMax)
     {
         Matrix44Affine lTransform;
-        lTransform.xAxis = Vector3{ lpTransform[0], lpTransform[1], lpTransform[2], lpTransform[3] };
-        lTransform.yAxis = Vector3{ lpTransform[4], lpTransform[5], lpTransform[6], lpTransform[7] };
-        lTransform.zAxis = Vector3{ lpTransform[8], lpTransform[9], lpTransform[10], lpTransform[11] };
-        lTransform.wAxis = Vector3{ lpTransform[12], lpTransform[13], lpTransform[14], lpTransform[15] };
+        {
+            const Vector3 lAggregateValue = { lpTransform[0], lpTransform[1], lpTransform[2], lpTransform[3] };
+            lTransform.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpTransform[4], lpTransform[5], lpTransform[6], lpTransform[7] };
+            lTransform.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpTransform[8], lpTransform[9], lpTransform[10], lpTransform[11] };
+            lTransform.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpTransform[12], lpTransform[13], lpTransform[14], lpTransform[15] };
+            lTransform.wAxis = lAggregateValue;
+        }
         DrawBox(MakeVector3(lMin.x, lMin.y, lMin.z), MakeVector3(lMax.x, lMax.y, lMax.z),
                 lTransform, lColour);
     }
@@ -364,10 +400,22 @@ namespace CgsDev
     void DebugRender::DrawAxis(const f32* lpTransform)
     {
         Matrix44Affine lTransform;
-        lTransform.xAxis = Vector3{ lpTransform[0], lpTransform[1], lpTransform[2], lpTransform[3] };
-        lTransform.yAxis = Vector3{ lpTransform[4], lpTransform[5], lpTransform[6], lpTransform[7] };
-        lTransform.zAxis = Vector3{ lpTransform[8], lpTransform[9], lpTransform[10], lpTransform[11] };
-        lTransform.wAxis = Vector3{ lpTransform[12], lpTransform[13], lpTransform[14], lpTransform[15] };
+        {
+            const Vector3 lAggregateValue = { lpTransform[0], lpTransform[1], lpTransform[2], lpTransform[3] };
+            lTransform.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpTransform[4], lpTransform[5], lpTransform[6], lpTransform[7] };
+            lTransform.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpTransform[8], lpTransform[9], lpTransform[10], lpTransform[11] };
+            lTransform.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lpTransform[12], lpTransform[13], lpTransform[14], lpTransform[15] };
+            lTransform.wAxis = lAggregateValue;
+        }
         DrawAxis(lTransform);
     }
 

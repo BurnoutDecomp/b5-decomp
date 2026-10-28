@@ -78,33 +78,33 @@ namespace PhysicsSimulationIO
         // queue members fails the seams around them). Neither gate subsumes the other.
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddRigidBodyQueue)    ==    16), "mAddRigidBodyQueue @0x10      (GetAddRigidBodyQueue const @0x8289E408  addi r3,r28,0x10)");
 
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mApplyForceQueue)             == offsetof(InputBuffer, mUpdateRigidBodyQueue)        + sizeof(InputBuffer::mUpdateRigidBodyQueue)),        "update-rb -> apply-force gapless        (X360 @0x12C30, accessor @0x8289E558  addis 1 / addi  0x2C30)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) == offsetof(InputBuffer, mApplyForceQueue)             + sizeof(InputBuffer::mApplyForceQueue)),             "apply-force -> change-inertia gapless   (X360 @0x14B80, accessor @0x8259EE80 -- the retracted one)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetRigidBodySpyQueue)        == offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) + sizeof(InputBuffer::mChangeRigidBodyInertiaQueue)), "change-inertia -> set-rb-spy gapless    (X360 @0x18A10, accessor @0x8289E600  addis 2 / addi -0x75F0)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveRigidBodyQueue)        == offsetof(InputBuffer, mSetRigidBodySpyQueue)        + sizeof(InputBuffer::mSetRigidBodySpyQueue)),        "set-rb-spy -> remove-rb gapless         (X360 @0x196A0, accessor @0x8289E6A8 -- export HOLE, headless)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveAllRigidBodiesQueue)   == offsetof(InputBuffer, mRemoveRigidBodyQueue)        + sizeof(InputBuffer::mRemoveRigidBodyQueue)),        "remove-rb -> remove-all gapless         (X360 @0x1A330, accessor @0x8289E750  addis 2 / addi -0x5CD0)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mApplyForceQueue)             == offsetof(InputBuffer, mUpdateRigidBodyQueue)        + sizeof(((InputBuffer*)0)->mUpdateRigidBodyQueue)),        "update-rb -> apply-force gapless        (X360 @0x12C30, accessor @0x8289E558  addis 1 / addi  0x2C30)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) == offsetof(InputBuffer, mApplyForceQueue)             + sizeof(((InputBuffer*)0)->mApplyForceQueue)),             "apply-force -> change-inertia gapless   (X360 @0x14B80, accessor @0x8259EE80 -- the retracted one)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetRigidBodySpyQueue)        == offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) + sizeof(((InputBuffer*)0)->mChangeRigidBodyInertiaQueue)), "change-inertia -> set-rb-spy gapless    (X360 @0x18A10, accessor @0x8289E600  addis 2 / addi -0x75F0)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveRigidBodyQueue)        == offsetof(InputBuffer, mSetRigidBodySpyQueue)        + sizeof(((InputBuffer*)0)->mSetRigidBodySpyQueue)),        "set-rb-spy -> remove-rb gapless         (X360 @0x196A0, accessor @0x8289E6A8 -- export HOLE, headless)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveAllRigidBodiesQueue)   == offsetof(InputBuffer, mRemoveRigidBodyQueue)        + sizeof(((InputBuffer*)0)->mRemoveRigidBodyQueue)),        "remove-rb -> remove-all gapless         (X360 @0x1A330, accessor @0x8289E750  addis 2 / addi -0x5CD0)");
         // ⚠️ The ONE seam with alignment slack, on BOTH targets: the remove-all queue ends
         // 16-unaligned (its element is a bare u8) and the next queue is 16-aligned. Console:
         // 107312 + 20 -> pad to 107344. The rounded form is the exact claim; a gapless form
         // here would be inventing a layout neither target has.
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddContactQueue)             == ((offsetof(InputBuffer, mRemoveAllRigidBodiesQueue) + sizeof(InputBuffer::mRemoveAllRigidBodiesQueue) + 15) / 16) * 16),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddContactQueue)             == ((offsetof(InputBuffer, mRemoveAllRigidBodiesQueue) + sizeof(((InputBuffer*)0)->mRemoveAllRigidBodiesQueue) + 15) / 16) * 16),
                                                                                                                                                                                       "remove-all -> add-contact, padded to 16 (X360 @0x1A350, accessor @0x8289E7F8  addis 2 / addi -0x5CB0)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddJointQueue)               == offsetof(InputBuffer, mAddContactQueue)             + sizeof(InputBuffer::mAddContactQueue)),             "add-contact -> add-joint gapless        (X360 @0x2E360, accessor @0x8289E8A0  addis 3 / addi -0x1CA0)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveJointQueue)            == offsetof(InputBuffer, mAddJointQueue)               + sizeof(InputBuffer::mAddJointQueue)),               "add-joint -> remove-joint gapless       (X360 @0x2FE70, accessor @0x8289E948  addis 3 / addi -0x190)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateJointFramesQueue)      == offsetof(InputBuffer, mRemoveJointQueue)            + sizeof(InputBuffer::mRemoveJointQueue)),            "remove-joint -> joint-frames gapless    (X360 @0x2FFA0, accessor @0x8289E9F0  addis 3 / addi -0x60)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateJointLimitsQueue)      == offsetof(InputBuffer, mUpdateJointFramesQueue)      + sizeof(InputBuffer::mUpdateJointFramesQueue)),      "joint-frames -> joint-limits gapless    (X360 @0x30D30, accessor @0x8289EA98  addis 3 / addi  0xD30)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetJointSpyQueue)            == offsetof(InputBuffer, mUpdateJointLimitsQueue)      + sizeof(InputBuffer::mUpdateJointLimitsQueue)),      "joint-limits -> joint-spy gapless       (X360 @0x31880, accessor @0x8289EB40  addis 3 / addi  0x1880)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddDriveQueue)               == offsetof(InputBuffer, mSetJointSpyQueue)            + sizeof(InputBuffer::mSetJointSpyQueue)),            "joint-spy -> add-drive gapless          (X360 @0x31AD0, accessor @0x8289EBE8  addis 3 / addi  0x1AD0)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveDriveQueue)            == offsetof(InputBuffer, mAddDriveQueue)               + sizeof(InputBuffer::mAddDriveQueue)),               "add-drive -> remove-drive gapless       (X360 @0x31B70, accessor @0x8289EC90  addis 3 / addi  0x1B70)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateDriveFramesQueue)      == offsetof(InputBuffer, mRemoveDriveQueue)            + sizeof(InputBuffer::mRemoveDriveQueue)),            "remove-drive -> drive-frames gapless    (X360 @0x31B90, accessor @0x8289ED38  addis 3 / addi  0x1B90)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    == offsetof(InputBuffer, mUpdateDriveFramesQueue)      + sizeof(InputBuffer::mUpdateDriveFramesQueue)),      "drive-frames -> drive-dynamics gapless  (X360 @0x31BF0, accessor @0x8289EDE0  addis 3 / addi  0x1BF0)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetDriveSpyQueue)            == offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    + sizeof(InputBuffer::mUpdateDriveDynamicsQueue)),    "drive-dynamics -> drive-spy gapless     (X360 @0x31C30, accessor @0x8289EE88 -- export HOLE, headless)");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateExternalBodyQueue)     == offsetof(InputBuffer, mSetDriveSpyQueue)            + sizeof(InputBuffer::mSetDriveSpyQueue)),            "drive-spy -> external-body gapless      (X360 @0x31C50, accessor @0x8289EF30  addis 3 / addi  0x1C50)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddJointQueue)               == offsetof(InputBuffer, mAddContactQueue)             + sizeof(((InputBuffer*)0)->mAddContactQueue)),             "add-contact -> add-joint gapless        (X360 @0x2E360, accessor @0x8289E8A0  addis 3 / addi -0x1CA0)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveJointQueue)            == offsetof(InputBuffer, mAddJointQueue)               + sizeof(((InputBuffer*)0)->mAddJointQueue)),               "add-joint -> remove-joint gapless       (X360 @0x2FE70, accessor @0x8289E948  addis 3 / addi -0x190)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateJointFramesQueue)      == offsetof(InputBuffer, mRemoveJointQueue)            + sizeof(((InputBuffer*)0)->mRemoveJointQueue)),            "remove-joint -> joint-frames gapless    (X360 @0x2FFA0, accessor @0x8289E9F0  addis 3 / addi -0x60)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateJointLimitsQueue)      == offsetof(InputBuffer, mUpdateJointFramesQueue)      + sizeof(((InputBuffer*)0)->mUpdateJointFramesQueue)),      "joint-frames -> joint-limits gapless    (X360 @0x30D30, accessor @0x8289EA98  addis 3 / addi  0xD30)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetJointSpyQueue)            == offsetof(InputBuffer, mUpdateJointLimitsQueue)      + sizeof(((InputBuffer*)0)->mUpdateJointLimitsQueue)),      "joint-limits -> joint-spy gapless       (X360 @0x31880, accessor @0x8289EB40  addis 3 / addi  0x1880)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mAddDriveQueue)               == offsetof(InputBuffer, mSetJointSpyQueue)            + sizeof(((InputBuffer*)0)->mSetJointSpyQueue)),            "joint-spy -> add-drive gapless          (X360 @0x31AD0, accessor @0x8289EBE8  addis 3 / addi  0x1AD0)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRemoveDriveQueue)            == offsetof(InputBuffer, mAddDriveQueue)               + sizeof(((InputBuffer*)0)->mAddDriveQueue)),               "add-drive -> remove-drive gapless       (X360 @0x31B70, accessor @0x8289EC90  addis 3 / addi  0x1B70)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateDriveFramesQueue)      == offsetof(InputBuffer, mRemoveDriveQueue)            + sizeof(((InputBuffer*)0)->mRemoveDriveQueue)),            "remove-drive -> drive-frames gapless    (X360 @0x31B90, accessor @0x8289ED38  addis 3 / addi  0x1B90)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    == offsetof(InputBuffer, mUpdateDriveFramesQueue)      + sizeof(((InputBuffer*)0)->mUpdateDriveFramesQueue)),      "drive-frames -> drive-dynamics gapless  (X360 @0x31BF0, accessor @0x8289EDE0  addis 3 / addi  0x1BF0)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetDriveSpyQueue)            == offsetof(InputBuffer, mUpdateDriveDynamicsQueue)    + sizeof(((InputBuffer*)0)->mUpdateDriveDynamicsQueue)),    "drive-dynamics -> drive-spy gapless     (X360 @0x31C30, accessor @0x8289EE88 -- export HOLE, headless)");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateExternalBodyQueue)     == offsetof(InputBuffer, mSetDriveSpyQueue)            + sizeof(((InputBuffer*)0)->mSetDriveSpyQueue)),            "drive-spy -> external-body gapless      (X360 @0x31C50, accessor @0x8289EF30  addis 3 / addi  0x1C50)");
 
         // The widened queue itself, stated in the only form that is true on both targets:
         // 16-byte queue header + 200 elements of (16-byte id slot + the RigidBody). On the
         // console that evaluates to 16 + 200*192 == 38416 (the 0x9620->0x12C30 gap).
-        CGS_STATIC_ASSERT((sizeof(InputBuffer::mUpdateRigidBodyQueue) == 16 + 200 * (16 + sizeof(rw::physics::RigidBody))),
+        CGS_STATIC_ASSERT((sizeof(((InputBuffer*)0)->mUpdateRigidBodyQueue) == 16 + 200 * (16 + sizeof(rw::physics::RigidBody))),
                       "update-rb queue = 16 + 200*(16 + sizeof(RigidBody))  (X360: 16 + 200*192)");
 
         // ADJACENCY, spelled as `sizeof(InputBuffer::member)` and NOT as `sizeof(SomeQueueType)`.
@@ -112,17 +112,17 @@ namespace PhysicsSimulationIO
         // MEMBER and would pass with the member pointing at the wrong queue type entirely. These
         // four are the queues whose element strides were wrong until this wave, so they are the
         // ones most worth stating twice.
-        CGS_STATIC_ASSERT((sizeof(InputBuffer::mUpdateJointFramesQueue)   == 3472), "16 + 36*96 -- the 96 is (199984-196512-16)/36");
-        CGS_STATIC_ASSERT((sizeof(InputBuffer::mUpdateJointLimitsQueue)   == 2896), "16 + 36*80 -- the 80 is (202880-199984-16)/36");
-        CGS_STATIC_ASSERT((sizeof(InputBuffer::mUpdateDriveFramesQueue)   ==   96), "16 +  1*80 -- the 80 is (203760-203664-16)/1");
-        CGS_STATIC_ASSERT((sizeof(InputBuffer::mUpdateDriveDynamicsQueue) ==   64), "16 +  1*48 -- the 48 is (203824-203760-16)/1");
+        CGS_STATIC_ASSERT((sizeof(((InputBuffer*)0)->mUpdateJointFramesQueue)   == 3472), "16 + 36*96 -- the 96 is (199984-196512-16)/36");
+        CGS_STATIC_ASSERT((sizeof(((InputBuffer*)0)->mUpdateJointLimitsQueue)   == 2896), "16 + 36*80 -- the 80 is (202880-199984-16)/36");
+        CGS_STATIC_ASSERT((sizeof(((InputBuffer*)0)->mUpdateDriveFramesQueue)   ==   96), "16 +  1*80 -- the 80 is (203760-203664-16)/1");
+        CGS_STATIC_ASSERT((sizeof(((InputBuffer*)0)->mUpdateDriveDynamicsQueue) ==   64), "16 +  1*48 -- the 48 is (203824-203760-16)/1");
         // ... and the same four spelled a THIRD way: each member's offset MUST equal the previous
         // member's offset plus that previous member's own size. This is the form that catches a
         // compensating pair of errors, which absolute pins alone cannot.
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateJointLimitsQueue)   == offsetof(InputBuffer, mUpdateJointFramesQueue)   + sizeof(InputBuffer::mUpdateJointFramesQueue)),   "joint frames -> joint limits is gapless");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetJointSpyQueue)         == offsetof(InputBuffer, mUpdateJointLimitsQueue)   + sizeof(InputBuffer::mUpdateJointLimitsQueue)),   "joint limits -> joint spy is gapless");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateDriveDynamicsQueue) == offsetof(InputBuffer, mUpdateDriveFramesQueue)   + sizeof(InputBuffer::mUpdateDriveFramesQueue)),   "drive frames -> drive dynamics is gapless");
-        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetDriveSpyQueue)         == offsetof(InputBuffer, mUpdateDriveDynamicsQueue) + sizeof(InputBuffer::mUpdateDriveDynamicsQueue)), "drive dynamics -> drive spy is gapless");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateJointLimitsQueue)   == offsetof(InputBuffer, mUpdateJointFramesQueue)   + sizeof(((InputBuffer*)0)->mUpdateJointFramesQueue)),   "joint frames -> joint limits is gapless");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetJointSpyQueue)         == offsetof(InputBuffer, mUpdateJointLimitsQueue)   + sizeof(((InputBuffer*)0)->mUpdateJointLimitsQueue)),   "joint limits -> joint spy is gapless");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mUpdateDriveDynamicsQueue) == offsetof(InputBuffer, mUpdateDriveFramesQueue)   + sizeof(((InputBuffer*)0)->mUpdateDriveFramesQueue)),   "drive frames -> drive dynamics is gapless");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mSetDriveSpyQueue)         == offsetof(InputBuffer, mUpdateDriveDynamicsQueue) + sizeof(((InputBuffer*)0)->mUpdateDriveDynamicsQueue)), "drive dynamics -> drive spy is gapless");
     }
 
     // -------- explicit instantiations: InputBuffer::AppendXxxQueue<N> --------

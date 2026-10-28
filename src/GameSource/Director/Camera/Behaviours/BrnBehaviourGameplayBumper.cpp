@@ -263,7 +263,10 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     }
     else
     {
-        lBlendedUp = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+            lBlendedUp = lAggregateValue;
+        }
     }
 
     // ---- 2. lean that surface back toward the car's own up ---------------------------------
@@ -297,10 +300,22 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // rotation applied twice, i.e. the 'front camera points at a fixed world direction' the
     // owner reported.)
     Matrix44Affine lCameraFrame;
-    lCameraFrame.xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
-    lCameraFrame.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
-    lCameraFrame.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
-    lCameraFrame.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 1.0f };
+    {
+        const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+        lCameraFrame.xAxis = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+        lCameraFrame.yAxis = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 1.0f, 0.0f };
+        lCameraFrame.zAxis = lAggregateValue;
+    }
+    {
+        const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+        lCameraFrame.wAxis = lAggregateValue;
+    }
 
     // @0x8222691C..0x82226994: `ld r7, 0x140(camera)` / `ori r6, r7, 2` / `std r6, 0x140` --
     // the camera's own state-flag word gains bit 1 for this frame.
@@ -323,14 +338,20 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     Vector3 lSprings;
     if (lrCar.mbResetCarTransform)                                 // sharedInfo +0x4AE
     {
-        lSprings = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { 1.0f, 1.0f, 1.0f, 0.0f };
+            lSprings = lAggregateValue;
+        }
     }
     else
     {
-        lSprings = Vector3{ mpParameters->mfPitchSpring,
+        {
+            const Vector3 lAggregateValue = { mpParameters->mfPitchSpring,
                             mpParameters->mfYawSpring,
                             mpParameters->mfRollSpring * KF_ROLL_SPRING_SCALE,
                             0.0f };
+            lSprings = lAggregateValue;
+        }
     }
     const Vector3 lOneMinusSprings = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f } - lSprings;
 
@@ -380,7 +401,10 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     const f32 lfEyeZ = lbLookback ? (lrInfo.mPlayerInfo.mAABB.mMin.z + lfZReach)
                                   : (lrInfo.mPlayerInfo.mAABB.mMax.z - lfZReach);
 
-    lCameraFrame.wAxis = Vector3{ 0.0f, mpParameters->mfYOffset, lfEyeZ, 1.0f };
+    {
+        const Vector3 lAggregateValue = { 0.0f, mpParameters->mfYOffset, lfEyeZ, 1.0f };
+        lCameraFrame.wAxis = lAggregateValue;
+    }
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The eye's inputs, every 60th call.
     {

@@ -37,6 +37,7 @@
 // rwcore.h under include/rw/; it never touches rw/math/vpu/, so this hand-maintained header
 // (like its sibling types.h) is immune to regeneration.
 
+#include <vectorintrinsics.h>
 #include <cmath>                  // std::sqrt for Magnitude/Length/Normalize
 #include "rw/math/vpu/types.h"    // rw::math::vpu::Vector3 (Vector2/3/4 + matrices)
 
@@ -53,13 +54,17 @@ namespace vpu
     // CgsMicrophone.cpp (lCurrent.maRows[3] - lPrevious.maRows[3]).
     inline Vector3 operator-(Vector3 lLhs, Vector3 lRhs)
     {
-        { const Vector3 lResult = { lLhs.x - lRhs.x, lLhs.y - lRhs.y, lLhs.z - lRhs.z, lLhs.w - lRhs.w }; return lResult; }
+        Vector3 result;
+        __stvx(__vsubfp(__lvx(&lLhs, 0), __lvx(&lRhs, 0)), &result, 0);
+        return result;
     }
 
     // X360 0x825B2620. Full 4-lane vaddfp (binary `vaddfp v1,v1,v2`, SDK Add over mV).
     inline Vector3 operator+(Vector3 lLhs, Vector3 lRhs)
     {
-        { const Vector3 lResult = { lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w }; return lResult; }
+        Vector3 result;
+        __stvx(__vaddfp(__lvx(&lLhs, 0), __lvx(&lRhs, 0)), &result, 0);
+        return result;
     }
 
     // SDK Add/Subtract free functions -- the named-call spellings of operator+/operator-.
@@ -79,14 +84,17 @@ namespace vpu
     // SDK component-wise Mult(a,b) (vmaddfp a,b,0). Distinct from Dot (which sums lanes).
     inline Vector3 Mult(Vector3 lLhs, Vector3 lRhs)
     {
-        { const Vector3 lResult = { lLhs.x * lRhs.x, lLhs.y * lRhs.y, lLhs.z * lRhs.z, lLhs.w * lRhs.w }; return lResult; }
+        Vector3 result;
+        __stvx(__vmulfp(__lvx(&lLhs, 0), __lvx(&lRhs, 0)), &result, 0);
+        return result;
     }
 
     // SDK MultAdd(a,b,c) = vmaddfp a,b,c (a*b + c, fused over all 4 lanes).
     inline Vector3 MultAdd(Vector3 lA, Vector3 lB, Vector3 lC)
     {
-        { const Vector3 lResult = { lA.x * lB.x + lC.x, lA.y * lB.y + lC.y,
-                        lA.z * lB.z + lC.z, lA.w * lB.w + lC.w }; return lResult; }
+        Vector3 result;
+        __stvx(__vmaddfp(__lvx(&lA, 0), __lvx(&lB, 0), __lvx(&lC, 0)), &result, 0);
+        return result;
     }
 
     // Scalar broadcast Mult/operator* (SDK `operator*(Vector3, VecFloat)` = vmaddfp v,s,0).
@@ -125,7 +133,7 @@ namespace vpu
     // one lane -> reconstructed as scalar float. xyz lanes only (w excluded).
     inline float Dot(Vector3 lLhs, Vector3 lRhs)
     {
-        return lLhs.x * lRhs.x + lLhs.y * lRhs.y + lLhs.z * lRhs.z;
+        return __vmsum3fp(__lvx(&lLhs, 0), __lvx(&lRhs, 0)).x;
     }
 
     // SDK Cross(a,b) -- the permute/vnmsubfp cross product. Standard xyz cross; the w lane
@@ -144,7 +152,8 @@ namespace vpu
     // DWARF BrnMathUnity attests rw::math::vpu::MagnitudeSquared over Vector3 (many sites).
     inline float MagnitudeSquared(Vector3 lrVector)
     {
-        return lrVector.x * lrVector.x + lrVector.y * lrVector.y + lrVector.z * lrVector.z;
+        const __vector4 value = __lvx(&lrVector, 0);
+        return __vmsum3fp(value, value).x;
     }
 
     // SDK free function is Magnitude; reconstructed game source spells it Length. Both
@@ -193,13 +202,15 @@ namespace vpu
         const float lfMagnitudeSquared = MagnitudeSquared(lrVector);
         if (lfMagnitudeSquared <= 0.0f)
         {
-            lrUnitOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+            lrUnitOut = lZero;
             return 0.0f;
         }
 
         const float lfInverseMagnitude = 1.0f / std::sqrt(lfMagnitudeSquared);
-        lrUnitOut = Vector3{ lrVector.x * lfInverseMagnitude, lrVector.y * lfInverseMagnitude,
-                             lrVector.z * lfInverseMagnitude, lrVector.w * lfInverseMagnitude };
+        const Vector3 lUnit = { lrVector.x * lfInverseMagnitude, lrVector.y * lfInverseMagnitude,
+                               lrVector.z * lfInverseMagnitude, lrVector.w * lfInverseMagnitude };
+        lrUnitOut = lUnit;
         return lfMagnitudeSquared * lfInverseMagnitude;
     }
 
@@ -371,11 +382,12 @@ namespace vpu
     // `vcmpgefp128 v12, v127, v13` @0x8260FFF0 followed by `vnot v12, v12` @0x8261000C.
     inline Mask3 CompLessThan(Vector3 lA, Vector3 lB)
     {
-        return Mask3{
+        const Mask3 lResult = {
             !(lA.x >= lB.x) ? 1.0f : 0.0f,
             !(lA.y >= lB.y) ? 1.0f : 0.0f,
             !(lA.z >= lB.z) ? 1.0f : 0.0f,
             !(lA.w >= lB.w) ? 1.0f : 0.0f };
+        return lResult;
     }
 
     // CompGreaterThan(a, b) -- Feb-2007 vector3_operation_inline.h:701-706: a bare
@@ -384,11 +396,12 @@ namespace vpu
     // MEASURED in the consumer: `vcmpgtfp128 v13, v127, v0` @0x82610008.
     inline Mask3 CompGreaterThan(Vector3 lA, Vector3 lB)
     {
-        return Mask3{
+        const Mask3 lResult = {
             lA.x > lB.x ? 1.0f : 0.0f,
             lA.y > lB.y ? 1.0f : 0.0f,
             lA.z > lB.z ? 1.0f : 0.0f,
             lA.w > lB.w ? 1.0f : 0.0f };
+        return lResult;
     }
 
     // Select(mask, trueValue, falseValue) -- Feb-2007 vector3_operation_inline.h:738-743,

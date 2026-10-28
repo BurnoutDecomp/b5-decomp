@@ -598,7 +598,10 @@ namespace Deformation
         const f32 lfDecayFactor =
             std::exp( std::log( kfAngularVelocityDecay ) * ( lfTimeStep * KF_ANGULAR_DECAY_REFERENCE_RATE ) );
         lfSum *= lfDecayFactor;
-        mAngularVelocitySum = VecFloat{ lfSum, lfSum, lfSum, lfSum };   // 0x8263A99C stvx128 -> +0xF40
+        {
+            const VecFloat lAggregateValue = { lfSum, lfSum, lfSum, lfSum };
+            mAngularVelocitySum = lAggregateValue;
+        }   // 0x8263A99C stvx128 -> +0xF40
 
         // (2) over-threshold test: 0x8263A9A8 vcmpgtfp. sum > kfAngularVelocityForDetachment (8.0),
         // all-lanes bit. Below threshold returns (the sum is kept).

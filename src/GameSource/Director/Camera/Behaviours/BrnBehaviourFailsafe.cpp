@@ -67,10 +67,22 @@ namespace
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{ lfCos, 0.0f, -lfSin, 0.0f };
-        lResult.yAxis = Vector3{  0.0f, 1.0f,   0.0f, 0.0f };
-        lResult.zAxis = Vector3{ lfSin, 0.0f,  lfCos, 0.0f };
-        lResult.wAxis = Vector3{  0.0f, 0.0f,   0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = { lfCos, 0.0f, -lfSin, 0.0f };
+            lResult.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {  0.0f, 1.0f,   0.0f, 0.0f };
+            lResult.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { lfSin, 0.0f,  lfCos, 0.0f };
+            lResult.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {  0.0f, 0.0f,   0.0f, 0.0f };
+            lResult.wAxis = lAggregateValue;
+        }
         return lResult;
     }
 
@@ -82,10 +94,22 @@ namespace
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
         Matrix44Affine lResult;
-        lResult.xAxis = Vector3{  lfCos, lfSin, 0.0f, 0.0f };
-        lResult.yAxis = Vector3{ -lfSin, lfCos, 0.0f, 0.0f };
-        lResult.zAxis = Vector3{   0.0f,  0.0f, 1.0f, 0.0f };
-        lResult.wAxis = Vector3{   0.0f,  0.0f, 0.0f, 0.0f };
+        {
+            const Vector3 lAggregateValue = {  lfCos, lfSin, 0.0f, 0.0f };
+            lResult.xAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = { -lfSin, lfCos, 0.0f, 0.0f };
+            lResult.yAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {   0.0f,  0.0f, 1.0f, 0.0f };
+            lResult.zAxis = lAggregateValue;
+        }
+        {
+            const Vector3 lAggregateValue = {   0.0f,  0.0f, 0.0f, 0.0f };
+            lResult.wAxis = lAggregateValue;
+        }
         return lResult;
     }
 

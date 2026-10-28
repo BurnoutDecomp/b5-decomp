@@ -1,8 +1,6 @@
 #pragma once
 
 #include <cstddef>   // offsetof (layout pins)
-#include "types.hpp"   // uintptr_t (host-width pointer words)
-
 #include "types.hpp"
 
 // ===========================================================================
@@ -42,23 +40,8 @@
 // @+0x74. The committed SDKs/EATech/rwcollision/volumelinequery.cpp records
 // the same shape for its 128-byte entries.)
 //
-// HOST-WIDTH PROMOTION (waveQ5 C1, 2026-08-18) -- AGENTS gotcha 1.
-// The two leading fields are POINTERS, not console values. Carrying them as
-// `u32` meant every writer had to truncate a 64-bit host pointer
-// (`static_cast<u32>(reinterpret_cast<uintptr_t>(p))`) and every reader
-// re-widened the truncated word back into a pointer it then DEREFERENCED --
-// PrimitiveBatchIntersect -> CreateGPInstance, VolumeBBoxQuery::GetOverlaps,
-// VolumeVolumeQuery's culler. Nothing had executed that path yet only because
-// VolumeVolumeQuery::Initialize was still gated to NULL; retiring that gate
-// turns the truncation into a live wild-pointer dereference.
-// They are therefore `uintptr_t` (host width) here. THE STRIDE IS UNCHANGED:
-// the console leaves +0x08..+0x0F unwritten (VolRef::operator= @0x82BB33E8
-// copies +0x00, +0x04, then jumps to +0x10), so the two extra 4-byte halves
-// land exactly in that hole -- mRow0 stays at +0x10, every later member keeps
-// its offset, the trailing mPad75[11] is untouched and sizeof stays 0x80.
-// (The pre-promotion plan assumed the pad tail would have to shrink by 8; the
-// +0x08 alignment slot absorbs it instead, which is why nothing moves. The
-// offsets are pinned by static_asserts below so a future edit cannot drift.)
+// The first vector row carries 16-byte alignment, preserving the native gap
+// after the two pointer words. The assertions below pin this complete layout.
 // ===========================================================================
 
 namespace rw
@@ -70,7 +53,7 @@ class VolRef
 {
 public:
     // 16-byte (xyzw) vector row matching a VMX register.
-    struct Vec4
+    struct CGS_ALIGN(16) Vec4
     {
         f32 x;
         f32 y;
@@ -81,12 +64,10 @@ public:
     // @ 0x82BB33E8 -- copy-assign all cached fields from rOther.
     VolRef& operator=(const VolRef& rOther);
 
-    // HOST WIDTH (see the banner above): the console stores one 32-bit word
-    // each at +0x00/+0x04 and leaves +0x08..+0x0F unwritten; on x64 the two
-    // pointers occupy +0x00..+0x0F and that unwritten slot disappears.
-    uintptr_t muVolumePtr;     // +0x00  the referenced Volume
-    uintptr_t muTransformPtr;  // +0x08 (console +0x04)  cached transform
-                               //       pointer (may aim at mRow0), 0 = none
+    // ARTIST stores pointers at +0/+4. The first vector row's native 16-byte
+    // alignment leaves the +8..+15 slot unwritten.
+    uintptr_t muVolumePtr;
+    uintptr_t muTransformPtr;
     Vec4 mRow0;           // +0x10  transform row 0
     Vec4 mRow1;           // +0x20  transform row 1
     Vec4 mRow2;           // +0x30  transform row 2
@@ -110,10 +91,10 @@ public:
 // The stride the query objects index with (`idx << 7`).
 CGS_STATIC_ASSERT((sizeof(VolRef) == 0x80), "VolRef on-object stride must be 0x80");
 
-// Everything from the transform rows on keeps its console offset after the
-// host-width promotion of the two leading pointer words (the +0x08..+0x0F
-// unwritten slot absorbs the growth exactly).
+// Native pointer words, aligned rows and cached query fields.
 CGS_STATIC_ASSERT((offsetof(VolRef, muVolumePtr)    == 0x00), "VolRef::muVolumePtr");
+CGS_STATIC_ASSERT((offsetof(VolRef, muTransformPtr) == 0x04), "X360 VolRef transform pointer");
+CGS_STATIC_ASSERT((__alignof(VolRef) == 16), "X360 VolRef vector alignment");
 CGS_STATIC_ASSERT((offsetof(VolRef, mRow0)          == 0x10), "VolRef::mRow0");
 CGS_STATIC_ASSERT((offsetof(VolRef, mRow1)          == 0x20), "VolRef::mRow1");
 CGS_STATIC_ASSERT((offsetof(VolRef, mRow2)          == 0x30), "VolRef::mRow2");

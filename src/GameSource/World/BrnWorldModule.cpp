@@ -350,8 +350,14 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
 void
 ShaderLodInfo::Construct()
 {
-    mShaderLod1NearDistance  = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    mMaxBelievableRadius     = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    {
+        const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mShaderLod1NearDistance = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mMaxBelievableRadius = lAggregateValue;
+    }
     mfShaderLod1NearDistance = 20.0f;
     miEnvMapTechnique        = 0;
     miOverrideTechnique      = -1;
@@ -363,10 +369,13 @@ ShaderLodInfo::Update()
 {
     // The broadcast splat: the tuned scalar into every lane of the SIMD member
     // the dispatch feeds read.
-    mShaderLod1NearDistance = Vector4{ mfShaderLod1NearDistance,
+    {
+        const Vector4 lAggregateValue = { mfShaderLod1NearDistance,
                                        mfShaderLod1NearDistance,
                                        mfShaderLod1NearDistance,
                                        mfShaderLod1NearDistance };
+        mShaderLod1NearDistance = lAggregateValue;
+    }
 }
 
 // ============================================================================
@@ -3015,8 +3024,10 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
             // Env-map refresh around the player car; latch its position.
             mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() );
-            mPlayerCarPosition =
-                Vector4{ lPlayerPosition.x, lPlayerPosition.y, lPlayerPosition.z, 0.0f };
+            {
+                const Vector4 lAggregateValue = { lPlayerPosition.x, lPlayerPosition.y, lPlayerPosition.z, 0.0f };
+                mPlayerCarPosition = lAggregateValue;
+            }
 
             // |linear velocity| -> the player speed member (X360 vmsum3fp + vrsqrte
             // + Newton refinement == rw::math::vpu::Magnitude).
@@ -4433,7 +4444,10 @@ GenerateShaderConstantsForQuadricIrradiance( const rw::math::vpu::Matrix44& lIrr
     lIrradianceQuadricForShaderA.xAxis    = lIrradiance_1;
 
     Matrix44 lIrradianceQuadricForShaderB = lIrradiance_xy_yz_zx_yy;
-    lIrradianceQuadricForShaderB.wAxis    = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+    {
+        const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 1.0f };
+        lIrradianceQuadricForShaderB.wAxis = lAggregateValue;
+    }
 
     lOutQuadricMatrix0 = lIrradianceQuadricForShaderA;
     lOutQuadricMatrix1 = lIrradianceQuadricForShaderB;

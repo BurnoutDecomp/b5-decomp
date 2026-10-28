@@ -64,9 +64,10 @@ struct Cubic1D
     // Default-init applied to every Cubic1D in a fresh ICETake: all scalars zero,
     // the duration set to 1.0, the flags set to 1, the state cleared.
     Cubic1D()
-        : Val(0.0f), dVal(0.0f), ValDesired(0.0f), dValDesired(0.0f), Coeff{},
+        : Val(0.0f), dVal(0.0f), ValDesired(0.0f), dValDesired(0.0f),
           time(0.0f), duration(1.0f), state(0), flags(1)
     {
+        for (int li = 0; li < 4; ++li) Coeff[li] = 0.0f;
     }
 
     void Update(f32 dt, f32 derivativeLimit, f32 secondDerivativeLimit);

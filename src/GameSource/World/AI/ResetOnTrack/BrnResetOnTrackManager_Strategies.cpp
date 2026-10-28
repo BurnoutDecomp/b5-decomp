@@ -763,9 +763,12 @@ void ResetOnTrackManager::EnsureAIIsDrivingSameDirectionAsPlayer(const AICar* lp
 
     if (0.0f > lfDot)
     {
-        lpResetData->mDirection = Vector3{ -lpResetData->mDirection.x,
+        {
+            const Vector3 lAggregateValue = { -lpResetData->mDirection.x,
                                            -lpResetData->mDirection.y,
                                            -lpResetData->mDirection.z, 0.0f };
+            lpResetData->mDirection = lAggregateValue;
+        }
     }
 }
 
@@ -867,10 +870,13 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
 
         const Vector3 lDirection = lpPlayerAICar->GetDirection();
         const Vector3 lPosition  = lpPlayerAICar->GetPosition();
-        lpResetData->mPosition = Vector3{ lPosition.x - lDirection.x * KF_DISTANCE_BEHIND_PLAYER,
+        {
+            const Vector3 lAggregateValue = { lPosition.x - lDirection.x * KF_DISTANCE_BEHIND_PLAYER,
                                           lPosition.y - lDirection.y * KF_DISTANCE_BEHIND_PLAYER,
                                           lPosition.z - lDirection.z * KF_DISTANCE_BEHIND_PLAYER,
                                           0.0f };
+            lpResetData->mPosition = lAggregateValue;
+        }
     }
 
     return true;
@@ -942,7 +948,10 @@ bool ResetOnTrackManager::ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData)
             lpResetData->mpAISection = lpAISection;
             lpResetData->mPosition   = lMiddle;
             // 0x82784334..0x82784368: {1.0, 0.0, 0.0, 0.0} built on the stack and stored to +0x20.
-            lpResetData->mDirection  = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 1.0f, 0.0f, 0.0f, 0.0f };
+                lpResetData->mDirection = lAggregateValue;
+            }
             return true;
         }
     }
@@ -1103,9 +1112,12 @@ bool ResetOnTrackManager::ResetFixedDistanceAheadOfPlayer(ResetOnTrackCoords* lp
 
     EnsureAIIsDrivingSameDirectionAsPlayer(lpPlayerAICar, lpResetData);
 
-    lpResetData->mDirection = Vector3{ -lpResetData->mDirection.x,
+    {
+        const Vector3 lAggregateValue = { -lpResetData->mDirection.x,
                                        -lpResetData->mDirection.y,
                                        -lpResetData->mDirection.z, 0.0f };
+        lpResetData->mDirection = lAggregateValue;
+    }
     return true;
 }
 
@@ -1139,8 +1151,11 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
     const f32 lfEntranceDot = fabsf(Dot2D(Normalise2D(lVectorFromPlayer), lPlayerDirection));
 
     const Vector2 lFlatExit = BrnMath::Flatten(lExitNodePosition);
-    lVectorFromPlayer = Vector2{ lFlatExit.x - lPlayerPosition.x,
+    {
+        const Vector2 lAggregateValue = { lFlatExit.x - lPlayerPosition.x,
                                  lFlatExit.y - lPlayerPosition.y, 0.0f, 0.0f };
+        lVectorFromPlayer = lAggregateValue;
+    }
     if (IsZero2D(lVectorFromPlayer))
     {
         return lExitNodePosition;
@@ -1418,8 +1433,11 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     if (!IsZero3D(lRelativePosition))
     {
         const f32 lfInverse = 1.0f / sqrtf(Dot3D(lRelativePosition, lRelativePosition));
-        lRelativePosition = Vector3{ lRelativePosition.x * lfInverse, lRelativePosition.y * lfInverse,
+        {
+            const Vector3 lAggregateValue = { lRelativePosition.x * lfInverse, lRelativePosition.y * lfInverse,
                                      lRelativePosition.z * lfInverse, lRelativePosition.w * lfInverse };
+            lRelativePosition = lAggregateValue;
+        }
     }
     const f32 lfAheadness = Dot3D(lRelativePosition, lpPlayerAICar->GetDirection());
 
@@ -1447,8 +1465,11 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
 
     lpResetData->mpAISection = lpNextSideRouteSection;
     const f32 lfInverse = 1.0f / sqrtf(Dot3D(lDirection3D, lDirection3D));
-    lpResetData->mDirection = Vector3{ lDirection3D.x * lfInverse, lDirection3D.y * lfInverse,
+    {
+        const Vector3 lAggregateValue = { lDirection3D.x * lfInverse, lDirection3D.y * lfInverse,
                                        lDirection3D.z * lfInverse, lDirection3D.w * lfInverse };
+        lpResetData->mDirection = lAggregateValue;
+    }
     return true;
 }
 

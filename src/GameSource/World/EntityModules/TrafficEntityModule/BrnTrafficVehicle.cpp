@@ -330,8 +330,10 @@ void Vehicle::InitialiseAsStandard(
     muHeadlightFlashState   = 0xFF;
 
     mPitch_Roll_Steering_WheelRot.SetZero();
-    mSpeed_DistAcrossLane_SwerveAmount_W =
-        Vector4{ lfSpeed, lfDistAcrossLane, 0.0f, 0.0f };
+    {
+        const Vector4 lAggregateValue = { lfSpeed, lfDistAcrossLane, 0.0f, 0.0f };
+        mSpeed_DistAcrossLane_SwerveAmount_W = lAggregateValue;
+    }
 
     miManoeuvre      = E_MANOEUVRE_NONE;
     mfSwerveTime     = 0.0f;

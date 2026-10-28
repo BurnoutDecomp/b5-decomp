@@ -330,9 +330,15 @@ namespace BrnMath
             lfFz /= lfLen;
         }
 
-        lrTransform.xAxis = Vector3{ lfRx, lfRy, lfRz, 0.0f };
+        {
+            const Vector3 lAggregateValue = { lfRx, lfRy, lfRz, 0.0f };
+            lrTransform.xAxis = lAggregateValue;
+        }
         lrTransform.yAxis = lUp;                                   // asm stvx128 out+0x10
-        lrTransform.zAxis = Vector3{ lfFx, lfFy, lfFz, 0.0f };
+        {
+            const Vector3 lAggregateValue = { lfFx, lfFy, lfFz, 0.0f };
+            lrTransform.zAxis = lAggregateValue;
+        }
         lrTransform.wAxis = lPosition;                             // asm stvx128 out+0x30
 
         CGS_ASSERT(rw::math::vpu::IsValid(lrTransform.xAxis), "RwMath::IsOrthogonal3x3( lTransform )"); // :64

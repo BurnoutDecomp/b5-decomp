@@ -248,37 +248,28 @@ void SinCos(f32* lpfSin, f32* lpfCos, Angle leAngle)
 // ===========================================================================
 Angle ATan(f32 lfX, f32 lfY)
 {
-    const f32 KF_ONE     = 1.0f;          // vcfsx(vspltisw 1, 0)
-    const f32 KF_PI      = 3.1415927f;    // flt_8207A90C == 0x40490FDB
-    const f32 KF_HALF_PI = 1.5707964f;    // flt_8207A914 == 0x3FC90FDB
-
-    const f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfX));        // vrefp (modelled)
-    const f32 lfResidual = XboxMath::XMVectorATanDetail::NegativeMultiplySubtract(lfEstimate, lfX, KF_ONE);
-    const f32 lfReciprocal = std::fma(lfEstimate, lfResidual, lfEstimate);
-    const f32 lfQuotient   = std::fma(lfY, lfReciprocal, 0.0f);
-
-    f32 lfResult = XboxMath::XMVectorATan(lfQuotient);
-
-    union { f32 mf; u32 mu; } lSign, lPi, lHalfPi;
-    lSign.mf   = lfY;
-    lPi.mf     = KF_PI;
-    lHalfPi.mf = KF_HALF_PI;
-    lPi.mu     |= (lSign.mu & 0x80000000u);
-    lHalfPi.mu |= (lSign.mu & 0x80000000u);
-
-    if (0.0f > lfX)
-    {
-        lfResult = lPi.mf + lfResult;
-    }
-    if (0.0f == lfX)
-    {
-        lfResult = lHalfPi.mf;
-    }
+    // ARTIST 0x8252AC54..0x8252ACBC: one reciprocal refinement, then native
+    // ATan and the two bitwise quadrant selects. Keep VMX zero/NaN behavior.
+    const XMVECTOR lvX = ::XMVectorReplicate(lfX);
+    const XMVECTOR lvY = ::XMVectorReplicate(lfY);
+    const XMVECTOR lvOne = __vcfsx(__vspltisw(1), 0);
+    const XMVECTOR lvZero = __vspltisw(0);
+    const XMVECTOR lvEstimate = __vrefp(lvX);
+    const XMVECTOR lvResidual = __vnmsubfp(lvEstimate, lvX, lvOne);
+    const XMVECTOR lvReciprocal = __vmaddfp(lvEstimate, lvResidual, lvEstimate);
+    const XMVECTOR lvQuotient = __vmaddfp(lvY, lvReciprocal, lvZero);
+    XMVECTOR lvResult = ::XMVectorATan(lvQuotient);
+    XMVECTOR lvSignMask = __vspltisw(-1);
+    lvSignMask = __vslw(lvSignMask, lvSignMask);
+    const XMVECTOR lvSign = __vand(lvY, lvSignMask);
+    const XMVECTOR lvPi = __vor(::XMVectorReplicate(3.1415927f), lvSign);
+    const XMVECTOR lvHalfPi = __vor(::XMVectorReplicate(1.5707964f), lvSign);
+    lvResult = __vsel(lvResult, __vaddfp(lvPi, lvResult), __vcmpgtfp(lvZero, lvX));
+    lvResult = __vsel(lvResult, lvHalfPi, __vcmpeqfp(lvZero, lvX));
 
     Angle leResult;
     VecFloat lvfRadians;
-    lvfRadians.x = lfResult;
-    lvfRadians.y = lvfRadians.z = lvfRadians.w = lfResult;
+    __stvx(lvResult, &lvfRadians, 0);
     leResult.SetFromVecFloat(lvfRadians);
     return leResult;
 }
@@ -324,10 +315,12 @@ f32 Sqrt(f32 lfValue)
 // ===========================================================================
 void Identity(Matrix4* lpMatrix)
 {
-    lpMatrix->maRows[0] = { 1.0f, 0.0f, 0.0f, 0.0f };
-    lpMatrix->maRows[1] = { 0.0f, 1.0f, 0.0f, 0.0f };
-    lpMatrix->maRows[2] = { 0.0f, 0.0f, 1.0f, 0.0f };
-    lpMatrix->maRows[3] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    static const Vector4 kaIdentity[4] = {
+        { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }
+    };
+    for (int liRow = 0; liRow < 4; ++liRow)
+        lpMatrix->maRows[liRow] = kaIdentity[liRow];
 }
 
 // ===========================================================================

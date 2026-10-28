@@ -54,8 +54,10 @@ namespace Fuzzy
         // mNormalScore lanes: x = base "normal" score (0.2), y = the extreme-swerve
         // stickiness pulled from the tweak block, z = w = 0 (the asm reads +0x2C of
         // mpTweakValues == mfExtremeSwerveStickiness into lane y).
-        mNormalScore_ExtremeSwerveStickiness_Z_W =
-            Vector4{ 0.2f, mpTweakValues->GetExtremeSwerveStickiness(), 0.0f, 0.0f };
+        {
+            const Vector4 lAggregateValue = { 0.2f, mpTweakValues->GetExtremeSwerveStickiness(), 0.0f, 0.0f };
+            mNormalScore_ExtremeSwerveStickiness_Z_W = lAggregateValue;
+        }
     }
 
     // ---------------------------------------------------------------------------------

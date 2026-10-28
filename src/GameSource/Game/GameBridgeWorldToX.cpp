@@ -344,7 +344,10 @@ namespace BrnGame
             else
             {
                 const Vector3& lHalfExtent = lpState->mHalfExtent;
-                lVehicleInfo.mAABB.mMin = Vector3{ -lHalfExtent.x, -lHalfExtent.y, -lHalfExtent.z, -lHalfExtent.w };
+                {
+                    const Vector3 lAggregateValue = { -lHalfExtent.x, -lHalfExtent.y, -lHalfExtent.z, -lHalfExtent.w };
+                    lVehicleInfo.mAABB.mMin = lAggregateValue;
+                }
                 lVehicleInfo.mAABB.mMax = lHalfExtent;
             }
             CGS_ASSERT(!rw::math::vpu::IsZero(lVehicleInfo.mAABB.mMax - lVehicleInfo.mAABB.mMin),
@@ -356,7 +359,10 @@ namespace BrnGame
             // Seed: the normal is the .rdata vector at 0x82181510 = (0, 1, 0, 0) (x360rd; `lvx128`
             // through r25 = unk_82181510), the stress is `vspltisw128 v127, 0`, the impact is f31 =
             // flt_82001CC0 = 0.0f.
-            lVehicleInfo.mHardestNormalStressNormal = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+            {
+                const Vector3 lAggregateValue = { 0.0f, 1.0f, 0.0f, 0.0f };
+                lVehicleInfo.mHardestNormalStressNormal = lAggregateValue;
+            }
             lVehicleInfo.mHardestNormalStress.SetZero();
             lVehicleInfo.mfHardestImpact            = 0.0f;
             // [FLAG] the console never stores +0x4E4 (the stack byte keeps whatever the previous

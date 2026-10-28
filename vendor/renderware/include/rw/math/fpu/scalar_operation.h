@@ -1,6 +1,6 @@
 #pragma once
 
-// Portable PC reconstruction of the RenderWare rwmath scalar (FPU) math helpers
+// Native Xbox 360 RenderWare rwmath scalar (FPU) helpers
 // (EARenderWare rwmath 1.02.00, rw/math/fpu/*). Only the templated/scalar helpers the game
 // spells `rw::math::fpu::*` at the call sites are provided here (the camera-utils / BrnLooker
 // family uses Clamp/Abs/Min/Max/Cos/Tan/IsZero).
@@ -11,14 +11,15 @@
 // `fsel d, t, x, y` = (t >= 0) ? x : y takes y when t is NaN and counts -0 as >= 0. So they are
 // NOT std::min / std::max: with a NaN in EITHER operand Min returns its first operand and Max
 // its second; on equal operands (+0 against -0 included) Min returns its second and Max its
-// first; and Clamp(NaN, lo, hi) is hi. The PC spelling is the compare on the difference itself,
-// which the build's default /fp:precise keeps exact for NaN and signed zero. Measured inlines:
+// first; and Clamp(NaN, lo, hi) is hi. The XDK __fsel intrinsic preserves these
+// selections directly. Measured inlines:
 // Min 0x822B21F8/0x822B21FC `fsubs f13,a,b ; fsel f0,f13,b,a` (CheckVehicleForPowerPark),
 // Max 0x8271F574 `fsel f0,d,d,0.0` (Max(d, 0.0f), the `d - 0.0` folded).
 //
 // Grounding for IsZero: the tolerance is FLT_EPSILON (2^-23 = 1.1920929e-7), the exact
 // immediate the BrnLooker.cpp Zoom asm compares against (0.00000011920929).
 
+#include <ppcintrinsics.h>
 #include <cmath>
 
 namespace rw
@@ -29,7 +30,7 @@ namespace fpu
 {
     // The console IsZero tolerance: FLT_EPSILON. Pinned from the BrnLooker Zoom asm, which
     // compares |x| against this immediate before asserting the timestep is non-zero.
-    inline constexpr float KF_IS_ZERO_TOLERANCE = 1.1920929e-7f;
+    static const float KF_IS_ZERO_TOLERANCE = 1.1920929e-7f;
 
     // scalar.h:136-139 / :203-206 -- the generic forms (integral T): `a < b ? a : b`, `a > b ? a : b`.
     template <typename T> inline T Min(T lLhs, T lRhs) { return (lLhs < lRhs) ? lLhs : lRhs; }
@@ -39,14 +40,14 @@ namespace fpu
     template <> inline float Min<float>(float lfLhs, float lfRhs)
     {
         const float lfTest = lfLhs - lfRhs;
-        return (lfTest >= 0.0f) ? lfRhs : lfLhs;
+        return static_cast<float>(__fsel(lfTest, lfRhs, lfLhs));
     }
 
     // scalar.h:208-235 -- Max<float>: test = a - b ; fsel(test, a, b).
     template <> inline float Max<float>(float lfLhs, float lfRhs)
     {
         const float lfTest = lfLhs - lfRhs;
-        return (lfTest >= 0.0f) ? lfLhs : lfRhs;
+        return static_cast<float>(__fsel(lfTest, lfLhs, lfRhs));
     }
 
     // scalar.h:169-196 / :237-264 -- the double forms are the same fsel, with the difference held
@@ -55,13 +56,13 @@ namespace fpu
     template <> inline double Min<double>(double ldLhs, double ldRhs)
     {
         const float lfTest = static_cast<float>(ldLhs - ldRhs);
-        return (lfTest >= 0.0f) ? ldRhs : ldLhs;
+        return __fsel(lfTest, ldRhs, ldLhs);
     }
 
     template <> inline double Max<double>(double ldLhs, double ldRhs)
     {
         const float lfTest = static_cast<float>(ldLhs - ldRhs);
-        return (lfTest >= 0.0f) ? ldLhs : ldRhs;
+        return __fsel(lfTest, ldLhs, ldRhs);
     }
 
     // scalar.h:335-338 -- Clamp(value, min, max) = Min(max, Max(min, value)), through the forms

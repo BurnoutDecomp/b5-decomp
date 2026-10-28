@@ -325,32 +325,56 @@ void UpdateVehiclesJob::Initialise(UpdateVehiclesJobParams* lpParams)
 
     // 0x8291A070..0x8291A1BC -- the eight tuning vectors, built in three stack blocks and
     // stored at console +0x1A0..+0x210.
-    maTuning[E_TUNE_LIMITS] = Vector4{ KF_MAX_FLOAT, KF_TWO_PI, KF_TUNE_LIMITS_Z, KF_TUNE_LIMITS_W };
-    maTuning[E_TUNE_SWERVE] = Vector4{ KF_TUNE_SWERVE_X, KF_TUNE_SWERVE_Y,
+    {
+        const Vector4 lAggregateValue = { KF_MAX_FLOAT, KF_TWO_PI, KF_TUNE_LIMITS_Z, KF_TUNE_LIMITS_W };
+        maTuning[E_TUNE_LIMITS] = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { KF_TUNE_SWERVE_X, KF_TUNE_SWERVE_Y,
                                       KF_TUNE_SWERVE_Z, KF_TUNE_SWERVE_W };
-    maTuning[E_TUNE_LANE]   = Vector4{ KF_TUNE_LANE_X, KF_TUNE_LANE_Y, KF_APPROX_LANE_WIDTH, KF_ZERO };
+        maTuning[E_TUNE_SWERVE] = lAggregateValue;
+    }
+    {
+        const Vector4 lAggregateValue = { KF_TUNE_LANE_X, KF_TUNE_LANE_Y, KF_APPROX_LANE_WIDTH, KF_ZERO };
+        maTuning[E_TUNE_LANE] = lAggregateValue;
+    }
 
     // 0x8291A088/0x8291A09C: two runtime sin() calls on the 35 deg / 10 deg doubles.
-    maTuning[E_TUNE_ANGLES] = Vector4{ static_cast<f32>(std::sin(KF_SWERVE_ANGLE_NARROW)),
+    {
+        const Vector4 lAggregateValue = { static_cast<f32>(std::sin(KF_SWERVE_ANGLE_NARROW)),
                                       static_cast<f32>(std::sin(KF_SWERVE_ANGLE_WIDE)),
                                       KF_TUNE_ANGLES_Z, KF_TUNE_ANGLES_W };
+        maTuning[E_TUNE_ANGLES] = lAggregateValue;
+    }
 
-    maTuning[E_TUNE_LANE_CENTRE] = Vector4{ KF_MAX_DIST_ACROSS_LANE, KF_STOPLINE_SIDE_SPACE,
+    {
+        const Vector4 lAggregateValue = { KF_MAX_DIST_ACROSS_LANE, KF_STOPLINE_SIDE_SPACE,
                                            KF_STOPLINE_SIDE_VARIATION,
                                            KF_MAX_DIST_FROM_LANE_CENTRE };
+        maTuning[E_TUNE_LANE_CENTRE] = lAggregateValue;
+    }
 
     // Lane z is rebuilt from the params every Initialise: mfSimTimeStep^2 * 360.
-    maTuning[E_TUNE_FILTERS] = Vector4{ KF_RECIP_ROLL_SPEED_MIN, KF_TUNE_FILTERS_Y,
+    {
+        const Vector4 lAggregateValue = { KF_RECIP_ROLL_SPEED_MIN, KF_TUNE_FILTERS_Y,
                                        lpParams->mfSimTimeStep * lpParams->mfSimTimeStep
                                            * KF_SIM_TIMESTEP_SQ_SCALE,
                                        KF_TUNE_FILTERS_W };
+        maTuning[E_TUNE_FILTERS] = lAggregateValue;
+    }
 
-    maTuning[E_TUNE_TIME] = Vector4{ KF_TUNE_TIME_X, KF_TUNE_TIME_Y,
+    {
+        const Vector4 lAggregateValue = { KF_TUNE_TIME_X, KF_TUNE_TIME_Y,
                                     lpParams->mfSimTimeStep,
                                     lpParams->mfSimTimeSinceLastDecision };
+        maTuning[E_TUNE_TIME] = lAggregateValue;
+    }
 
-    maTuning[E_TUNE_MOVE] = Vector4{ KF_TUNE_MOVE_X, KF_ZERO,
+    {
+        const Vector4 lAggregateValue = { KF_TUNE_MOVE_X, KF_ZERO,
                                     KF_RECIP_LANE_CENTRE_SPEED, KF_TUNE_MOVE_W };
+        maTuning[E_TUNE_MOVE] = lAggregateValue;
+    }
 
     // 0x8291A198..0x8291A1B0
     mpCurrentVehicle            = 0;
