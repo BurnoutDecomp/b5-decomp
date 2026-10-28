@@ -8267,6 +8267,31 @@ void TrafficEntityModule::UpdateTrailers_MoveToCab(u32 luTrailer)
     lpTrailer->SetWheelRot(lpCab->GetWheelRot().x);
 }
 
+// ARTIST 0x8273B168. The purgatory update runs on both decision and nondecision calls.
+void TrafficEntityModule::UpdateTrailers(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    (void)lpInput;
+    (void)lpOutput;
+    UpdateTrailers_UpdatePurgatory();
+    Vehicle* lpTrailer = GetTrailerVehicle(0);
+    if (!lpTrailer->IsAlive() || lpTrailer->IsPhysical())
+    {
+        return;
+    }
+    if (lpTrailer->GetCabIndex() != KU_INVALID_VEHICLE)
+    {
+        const Vehicle* lpCab = GetVehicle(lpTrailer->GetCabIndex());
+        lpTrailer->CopyEffectsFromCab(lpCab);
+        if (lpCab->IsPhysical())
+        {
+            return;
+        }
+    }
+    UpdateTrailers_MoveToCab(0);
+}
+
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::GenerateNewVehicle  @ 0x82736528   (leak :4785)
 //
