@@ -101,7 +101,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
     {
         const GameStateModuleIO::RequestGameTrainingEvent* lpTrainingEvent =
             reinterpret_cast<const GameStateModuleIO::RequestGameTrainingEvent*>(lpEvent);
-        mpTrainingManager->RequestTraining(static_cast<BrnProgression::ETrainingType>(lpTrainingEvent->meTrainingType));
+        mTrainingManager.RequestTraining(static_cast<BrnProgression::ETrainingType>(lpTrainingEvent->meTrainingType));
         break;
     }
 
@@ -145,7 +145,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
         if ((luStuntActionComplete & 0x1u) == 0x1u)
         {
             liCompletedBarrelRolls = lpCompletedStuntEvent->miCompletedBarrelRolls;
-            mpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_BARREL_ROLL);
+            mTrainingManager.RequestTraining(BrnProgression::E_TRAINING_TYPE_BARREL_ROLL);
             mAchievementManager.OnBarrelRoll(liCompletedBarrelRolls);
             mModeManager.GetScoringSystem()->PlayerPerformedBarrelRolls(GetPlayerActiveRaceCarIndex(),
                                                                         liCompletedBarrelRolls);
@@ -157,12 +157,12 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
             mDeveloperChallengeManager.OnFlatSpin(lfFlatSpinDegrees);
             if (lfFlatSpinDegrees > KF_FLAT_SPIN_TRAINING_MIN_DEGREES)
             {
-                mpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_FLAT_SPIN);
+                mTrainingManager.RequestTraining(BrnProgression::E_TRAINING_TYPE_FLAT_SPIN);
             }
         }
         if ((luStuntActionComplete & 0x4u) == 0x4u)
         {
-            mpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_USES_E_BRAKE);
+            mTrainingManager.RequestTraining(BrnProgression::E_TRAINING_TYPE_USES_E_BRAKE);
             lfHandbreakTurnAngle = lpCompletedStuntEvent->mfCompletedHandbreakTurnAngle;
         }
         if ((luStuntActionComplete & 0x40u) == 0x40u)

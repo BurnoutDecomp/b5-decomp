@@ -215,24 +215,15 @@ private:
     // this+1564 (0x61C) (DWARF h:225). ⭐ The resource-load stage word Prepare switches on --
     // the X360 reads/writes `*(this + 0x61C)` at every case. Grown from the reserved blob
     // 2026-08-01 with Prepare.
-    // ⚠️ FLAG (PC bring-up): the console clears it in GameStateModule::ClearData (Prepare
-    // stage 0), which is not reconstructed; the in-class initialiser below stands in for that
-    // one store. GameStateModule is embedded BY VALUE in BrnGameModule and is NOT in its ctor
-    // init list, so without it this word is garbage. DELETE-WHEN ClearData lands.
-    ETriggerLoadStage meTriggerLoadStage = E_TRIGGER_LOAD_NOT_STARTED;   // this+1564
+    ETriggerLoadStage meTriggerLoadStage;   // this+1564
 
     // this+1568. ResourcePtr onto the loaded track TriggerData resource (DWARF h:226). operator->
     // dereferences its leading main-memory pointer (this+1568); a NULL pointer fires the X360
     // "Can not instance resource pointer - it has no main memory resource" assert.
-    CgsResource::ResourcePtr<BrnTrigger::TriggerData> mpTriggerData;   // this+1568 (0x1C bytes)
+    CgsResource::ResourcePtr<BrnTrigger::TriggerData> mpTriggerData;   // this+1568 (32-byte native resource pointer)
 
     // this+1600 (0x640) (DWARF h:227). The loaded traffic-lane resource. Prepare's last stage
     // binds it (`addi r3, r31, 0x640; bl BaseResourcePtr::CreateFromHandle` @0x823984A4).
-    // ⚠️ The X360 gap between mpTriggerData (+1568) and this (+1600) is 32, not the 28 bytes
-    // BaseResourcePtr's six 32-bit fields add up to -- so the console's ResourcePtr is 32 bytes
-    // wide, not 28. Immaterial on the 64-bit gate (both are 56 there and every absolute offset
-    // below this point is already #if-guarded to the 32-bit build), but the committed
-    // "0x1C bytes" annotation on mpTriggerData above is WRONG by 4 and is corrected here.
     CgsResource::ResourcePtr<BrnTraffic::TrafficData> mpTrafficData;   // this+1600
 
     // ARTIST PreWorldUpdate8239F6B8 and SubmitTriggerQueries82392948.

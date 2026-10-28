@@ -26,7 +26,7 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"          // [FX-BRIDGES CC-11] BrnAI::RouteMapModuleIO::RequestOwner (SendRouteRequestAction)
 // [gateui] The two sub-objects the smash/billboard chain needs BY VALUE, both at their console
 // positions (StuntManager this+183952, DeveloperChallengeManager this+185712). Neither header
-// includes this one back, so there is no cycle (contrast mpTrainingManager below).
+// includes this one back.
 #include "GameSource/GameState/Offences/BrnStuntManager.h"           // BrnGameState::StuntManager (mStuntManager, by value)
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // DeveloperChallengeManager (by value)
 #include "GameSource/GameState/FlybyManager/BrnGameStateOfflineFlybyManager.h" // original Prepare's embedded owner
@@ -40,6 +40,7 @@
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"                       // BrnGameState::StreetManager (mStreetManager, by value)
 // [FX-RUMBLE 2026-09-22] the force-feedback manager, held BY VALUE as the console holds it (DWARF
 // BrnGameStateModule.h:775, X360 gsm+46680). Its header does not include this one back.
+#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h" // embedded original owner
 #include "GameSource/GameState/RumbleManager/BrnRumbleManager.h"                             // BrnGameState::RumbleManager (mRumbleManager, by value)
 
 // The module's cached read-only snapshot of the active race cars (mLastActiveRaceCarInterface,
@@ -70,9 +71,6 @@ namespace BrnResource    { struct VehicleList; }
 // the real class is BrnGameState::DeveloperChallengeManager, BrnDeveloperChallengeManager.h).
 // (The DeveloperChallengeManager is no longer a forward-declared pointer: the module embeds the
 // real subobject -- see the include above and mDeveloperChallengeManager below.)
-// [gateui] TrainingManager stays a forward declaration ON PURPOSE -- BrnTrainingManager.h includes
-// THIS header, so including it back is a cycle. See mpTrainingManager's FLAG at the member.
-namespace BrnGameState   { class TrainingManager; }
 // For the ResetPlayerDebugComponent additive grows below (pointer-only).
 namespace BrnResource    { class  WheelList; }
 namespace BrnTrigger     { struct TriggerData; }
@@ -523,10 +521,8 @@ public:
     //   * mModeManager.mpCurrentGameMode (this+7608) == 0.
     bool ShouldAllowTimedTutorialTips();
 
-    // [tut-ticker] the heap TrainingManager (see mpTrainingManager's FLAG at the member). The
-    // console embeds it by value at this+46640; ModeManager::PreWorldUpdateClocksBringUp and the
-    // two extracted arms above reach it through this named accessor.
-    TrainingManager*       GetTrainingManager()       { return mpTrainingManager; }
+    // ARTIST embeds the training manager at this+0xB630.
+    TrainingManager*       GetTrainingManager()       { return &mTrainingManager; }
 
     // [takedown wave 2026-09-02] the takedown classifier (X360: embedded at gsm+568; heap-allocated
     // here, see GameStateModule_gTD_00.cpp). ModeManager::UpdateCurrentMode reads IsInTakedownCamera.
@@ -534,7 +530,7 @@ public:
     const TakedownManager* GetTakedownManager() const { return mpTakedownManager; }
     // The one query ModeManager needs, exposed without the manager header (second-enum rule).
     bool IsInTakedownCamera() const;   // TakedownManager::IsInTakedownCamera @0x82359620, GameStateModule_gTD_00.cpp
-    const TrainingManager* GetTrainingManager() const { return mpTrainingManager; }
+    const TrainingManager* GetTrainingManager() const { return &mTrainingManager; }
 
     // ⭐ X360 0x8236BAC8. The nearest junkyard's CgsID to lPosition -- the single input that turns
     // the loaded TriggerData into "which junkyard do I enter". Both start-of-game entries need it:
@@ -1081,21 +1077,19 @@ private:
     // the player's tail (CheckForTailingRivals). [FX-GS2 2026-09-23, G10-D11]
     // ClearData @0x8236B3A8 zeroes it (std 0 at +0/+8/+0x10 and stw 0 at +0x18 from gsm+0x32D90,
     // 0x8236B420..0x8236B42C) at Construct and at Prepare's START stage [FX-TAILS-A 2026-09-24]; the
-    // member initialiser is the same value for the static-storage window before Construct.
     // ⚠️ CONSOLE QUIRK, KEPT: CheckForTailingRivals walks race-car slots 0..7 with a pointer that
     // steps 4 bytes per slot -- even across the player's own slot (`addi r27, r27, 4` @0x82376384)
     // -- so slot 7 is the word AFTER this 7-entry array, i.e. muNetworkGameRandomSeed.
     // Get/SetRivalTailingTime route slot 7 to that word's bits instead of indexing out of bounds.
-    f32                 mafRivalTailingTimes[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    f32                 mafRivalTailingTimes[7];
     // DWARF BrnGameStateModule.h:793 (X360 this+208300) -- the seed word for the online session's
     // shared RNG, declared immediately ABOVE mePlayerActiveRaceCarIndex by the DWARF and landing in
     // exactly the 4-byte gap the X360 leaves there. See GetNetworkRandomSeed() for the writer and
     // the reader.
     // GameStateModule::ClearData @0x8236B3A8 seeds it to -1 (`stwx r29(-1), r31, 0x32DAC`
     // @0x8236B410, NOT 0) at Construct and at Prepare's START stage [FX-TAILS-A 2026-09-24: ClearData
-    // landed]. The initialiser is the same -1 for the window before Construct (GameStateModule is a
-    // by-value sub-object of BrnGameModule and is not in its ctor init list).
-    u32                 muNetworkGameRandomSeed = 0xFFFFFFFFu;
+    // landed].
+    u32                 muNetworkGameRandomSeed;
     // DWARF BrnGameStateModule.h:794 (X360 this+208304).
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
     // DWARF BrnGameStateModule.h:882 (X360 this+292289) -- set true only while the module is updating.
@@ -1131,7 +1125,7 @@ private:
     // ModeManager's mode machine and ProcessGameEvents' case 16/106 arms are not reconstructed --
     // so it holds E_CONTROLLERSTATE_NOT_IN_GAME, which is the CORRECT state for the free-roam the
     // junkyard handover leaves the player in, and which IsControllerActive() reports as active.
-    EControllerState    meControllerState = E_CONTROLLERSTATE_NOT_IN_GAME;
+    EControllerState    meControllerState;
     // [stuntrace waveB fix round, 2026-08-26] X360 this+232296 (0x38B68) -- the word immediately
     // after meControllerState, requested by three wave-B partfiles. OFFSET ARBITRATED FROM THE ASM
     // (two implementers filed different numbers): it is 0x38B68, NOT 0x38BE8.
@@ -1158,13 +1152,13 @@ private:
     // VEHICLE_LIST) is real now and installs it from the GameData reply, exactly as the console
     // does. (What is still deferred at that stage is the pair of ApplyVehicleList republish
     // hooks, not the pointer.)
-    BrnResource::VehicleList* mpVehicleList = 0;
+    BrnResource::VehicleList* mpVehicleList;
     // X360 +0x456EC (284396). The loaded wheel list -- Prepare's stage 9/10, same shape,
     // reply id 59. GetWheelList() hands it back.
-    BrnResource::WheelList*   mpWheelList = 0;
+    BrnResource::WheelList*   mpWheelList;
     // Console +0x45710 (284432), reference header :847. The freeburn challenge list, bound by
     // Prepare's stage 6 (reply 53) and handed to ModeManager::Prepare by stage 13.
-    const BrnResource::ChallengeList* mpFreeburnChallengeList = 0;
+    const BrnResource::ChallengeList* mpFreeburnChallengeList;
     // ⭐ [FX-FLOW 2026-09-24] X360 +0x456F0 (284400), DWARF BrnGameStateModule.h:845
     // `ResourcePtr<BrnWorld::GlobalColourPalette> mpPlayerCarColours`. The player-car colour
     // palettes ("CarColours", pool 5): bound by Prepare's stage 11/12 (AcquireResource +
@@ -1181,15 +1175,14 @@ private:
     // The console arms it ONCE, in Construct (`stbx r24(=1), r31, 0x32DC4` @0x823807A4); an image-wide
     // scan finds no other writer. [FX-AIBUZZ 2026-09-24: the old note said an event handler arms it and
     // the PC armed it at the end of Prepare -- both corrected; see Construct]
-    bool mbSendSetupPlayerCarPending = false;
+    bool mbSendSetupPlayerCarPending;
     // Console +0x32DC5, the byte after the latch above; reference header :798. Set by
     // ProcessGameEvents case 162 when the challenge selector is shown (action 2) and cleared when
     // it is hidden (action 3); UpdateRoadRulesManager reads it.
-    bool mbFreeburnChallengeSelectorVisible = false;
+    bool mbFreeburnChallengeSelectorVisible;
     // Console +0x32DB8. The console's UpdateRoadRulesManager stores the ChallengeManager's
     // GetChallengeStyle() here every frame and passes it to RoadRulesManager::Update.
-    BrnResource::ChallengeListEntry::EFreeburnChallengeStyle meFreeburnChallengeStyle =
-        BrnResource::ChallengeListEntry::E_FREEBURN_STYLE_NONE;
+    BrnResource::ChallengeListEntry::EFreeburnChallengeStyle meFreeburnChallengeStyle;
     // Console +0x475BC, reference header mfSimTimeStep. PreWorldUpdate latches the sim timer's
     // step here at its top; UpdateRoadRulesManager and StreetManager::Update read it.
     // X360 +0x475B0..+0x475B6 (DecFIGS :440..:437): the four registered signature-takedown
@@ -1199,34 +1192,33 @@ private:
     bool mbDrawCrashDebugText;
     bool mbDrawSignatureTakedownRegionText;
     bool mbDebugMakeAllTakedownsSignature;
-    f32 mfSimTimeStep = 0.0f;
+    f32 mfSimTimeStep;
 
     // [L4 WORLDVFX 2026-09-27] Console +0x475C0 (292288), DWARF BrnGameStateModule.h:449
     // `bool mbPropSystemNeedsProgression` -- the byte right after mfSimTimeStep and before mbIsUpdating
     // (+0x475C1). ProcessGameEvents case 112 sets it; the dispatcher's tail posts action 199 and clears
-    // it (GameStateModule_ProcessGameEvents.cpp). Construct clears it too; the initialiser is the same
-    // value for the window before Construct.
-    bool mbPropSystemNeedsProgression = false;
+    // it (GameStateModule_ProcessGameEvents.cpp). Construct clears it too.
+    bool mbPropSystemNeedsProgression;
 
     // DecFIGS :887..904; ARTIST Construct stores these monitor handles at
     // +0x475C4..+0x47604. The host follows named members, not console offsets.
-    s32 miTriggersPostPM = -1;
-    s32 miTriggersPrePM = -1;
-    s32 miShowTimeUpdate = -1;
-    s32 miCarSelectManagerUpdate = -1;
-    s32 miGameStatePrePM = -1;
-    s32 miGameStatePostPM = -1;
-    s32 miTakedownPM = -1;
-    s32 miDetectModeStartsPM = -1;
-    s32 miRoadRulesPM = -1;
-    s32 miDriveThrusPM = -1;
-    s32 miProcessEventsPM = -1;
-    s32 miEmmUpdatePM = -1;
-    s32 miModeManagerPrePM = -1;
-    s32 miModeManagerPostPM = -1;
-    s32 miCopyingAndResettingPM = -1;
-    s32 miProcessContactsPM = -1;
-    s32 miStreetManagerPM = -1;
+    s32 miTriggersPostPM;
+    s32 miTriggersPrePM;
+    s32 miShowTimeUpdate;
+    s32 miCarSelectManagerUpdate;
+    s32 miGameStatePrePM;
+    s32 miGameStatePostPM;
+    s32 miTakedownPM;
+    s32 miDetectModeStartsPM;
+    s32 miRoadRulesPM;
+    s32 miDriveThrusPM;
+    s32 miProcessEventsPM;
+    s32 miEmmUpdatePM;
+    s32 miModeManagerPrePM;
+    s32 miModeManagerPostPM;
+    s32 miCopyingAndResettingPM;
+    s32 miProcessContactsPM;
+    s32 miStreetManagerPM;
 
     // Console +0x32DC8 (208328), 48 bytes: the module's copy of the PreWorldInputBuffer's timer block,
     // taken at the top of ProcessGameEvents and read by the mode and scoring updates after it.
@@ -1241,7 +1233,7 @@ private:
     // streaming bools at 232304/232305, :812 is an s32 at 232308, :813 a bool[4] at 232312, and
     // :816 (the 16-aligned action below) lands on 232320, which is the OTHER offset this arm's asm
     // attests. Both ends of the DWARF span agree with the asm, so the byte is not a guess.
-    bool mbWaitingToPutPlayerInJunkyard = false;
+    bool mbWaitingToPutPlayerInJunkyard;
 
     // ---- the streaming-wait block (X360 +0x38B6C..+0x38B7A; DWARF :808-:813) ----------------
     // WaitForStreaming @0x823900E8 sets the countdown to 2 and PreWorldUpdate @0x823A5328
@@ -1252,10 +1244,10 @@ private:
     // slots to 1 (`stb r10(1)` x4, 0x8236B4FC..0x8236B514) and the countdown / waiting byte to 0
     // (0x8236B4D4 / 0x8236B4AC). (The addresses this line used to cite, 0x82384A78 / 0x82385AF0,
     // are mid-function instructions of other bodies.)
-    s32  miStreamingWaitCountdown = 0;                 // +232300 (0x38B6C)
-    bool mbWaitForStreaming = true;                    // +232304 (:809)
-    bool mbWaitingForStreaming = false;                // +232305 (:810)
-    bool mabModuleStreamingComplete[4] = { true, true, true, true };   // +232307..+232310
+    s32  miStreamingWaitCountdown;                 // +232300 (0x38B6C)
+    bool mbWaitForStreaming;                    // +232304 (:809)
+    bool mbWaitingForStreaming;                // +232305 (:810)
+    bool mabModuleStreamingComplete[4];   // +232307..+232310
 
     // X360 +0x38B80 (232320). The CarSelectionChangedAction SendSetupPlayerCarEvent hands
     // EnterJunkyardAtStartOfGame as its sixth argument (the console passes `this + 0x38B80`); the
@@ -1306,16 +1298,12 @@ private:
     BrnAI::AIModuleIO::AICarOutputInterface    mLastAICarOutputInterface;
 
     // The module's own output buffer -- see GetOutputBuffer() above for the ownership FLAG.
-    // Zero-initialised in-class: BrnGameModule embeds this module by value and does NOT list
-    // it in its ctor init list, so without this the Construct() guard would read garbage.
-    GameStateModuleIO::OutputBuffer*         mpOutputBuffer = 0;
+    GameStateModuleIO::OutputBuffer*         mpOutputBuffer;
 
     // [D2 gesture-sink] The module-owned stand-in for the console's per-frame
     // "GameStatePreWorld" IOBufferStack buffer -- see GetPreWorldInputBuffer() above for the
-    // full attestation, the refuted +0x2BE8 premise, and the DELETE-WHEN. Zero-initialised
-    // in-class for the same reason mpOutputBuffer is: BrnGameModule embeds this module by value
-    // and does not list it in its ctor init list.
-    GameStateModuleIO::PreWorldInputBuffer*  mpPreWorldInputBuffer = 0;
+    // full attestation, the refuted +0x2BE8 premise, and the DELETE-WHEN.
+    GameStateModuleIO::PreWorldInputBuffer*  mpPreWorldInputBuffer;
 
     // ---- the Prepare slice's own members (X360 offsets from Prepare @0x8239E578) ----
 
@@ -1357,7 +1345,7 @@ private:
     // `mePrepareStage` of CgsModule::ModuleSingleBuffered -- exactly as the console's two
     // classes do (they are different words at different offsets, +8 on the base vs +552 here).
     // The base's copy is private, so there is no ambiguity; nothing reads it through this class.
-    EPrepareStage mePrepareStage = E_PREPARESTAGE_START;
+    EPrepareStage mePrepareStage;
 
     // ✅ [gateui] THE meDistrictsBundleStage STAND-IN LATCH IS RETIRED (2026-08-20).
     // It carried the LoadBundle("Districts.dat", pool 5) request/response half of
@@ -1393,7 +1381,7 @@ private:
         E_PREPARE2STAGE_STREET_MANAGER = 2,
         E_PREPARE2STAGE_DONE           = 3,
     };
-    EPrepare2Stage mePrepare2Stage = E_PREPARE2STAGE_START;
+    EPrepare2Stage mePrepare2Stage;
 
     // DecFIGS names +0x230 meReleaseStage. ARTIST adds the developer-challenge
     // release case at 1, shifting IMAGE_MANAGER..DONE by one from the PS3 enum.
@@ -1417,7 +1405,7 @@ private:
         E_RELEASESTAGE_DONE = 15,
     };
     // ARTIST Construct @0x823803D8 seeds 15; original Prepare's tail resets 0.
-    EReleaseStage meReleaseStage = E_RELEASESTAGE_DONE;
+    EReleaseStage meReleaseStage;
 
     // [PC bring-up observer -- NOT an X360 member.] True once Prepare2 has completed BOTH legs,
     // i.e. once "Progression.dat" and "STREETDATA.DAT" are resident in pool 5. It cannot be
@@ -1425,7 +1413,7 @@ private:
     // `li r28, 1`), so the stage word stops at 2. Read by BrnGameModule::ResourceUpdateThread
     // through IsPrepare2Complete() to hold the GUI lane's WorldDataController::Prepare2 until
     // the two resources it acquires by name actually exist. See the latch site in Prepare2.
-    bool mbPrepare2Complete = false;
+    bool mbPrepare2Complete;
 
     // DWARF BrnGameStateModule.h:201 (X360 this+42320). The track-trigger dispatcher that owns
     // the loaded TriggerData / traffic-lane resources. Held BY VALUE as the console holds it.
@@ -1504,6 +1492,9 @@ private:
     ResetPlayerDebugComponent mResetPlayerDebugComponent; // ARTIST +0x32EA0 (208544)
     CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
 
+    // DWARF BrnGameStateModule.h:774; ARTIST 0x82380584..0x823805C4.
+    TrainingManager                         mTrainingManager;
+
     // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1/D5] DWARF BrnGameStateModule.h:775
     // `RumbleManager mRumbleManager;`, the line after mTrainingManager (:774) -- X360 gsm+46680
     // (0xB658), the `addis r3,rX,1 ; addi r3,r3,-0x49A8` every console call site builds:
@@ -1514,12 +1505,10 @@ private:
     //     GameStateModule::ProcessGameEvents case 31 -> OnVehicleAggressorImpact x2 (0x823A27C8/EC)
     //     GameStateModule::BridgeRumbleToInput @0x8236B570 -> RumbleManager::BridgeRumbleToInput
     //                                              (FX-RUMBLE3 G10-D4, from DoUpdate_InputPreWorld)
-    // Unlike mpTrainingManager there is no include cycle, so it is embedded exactly as the console
-    // embeds it. The module lives in static storage (BrnMain.cpp's gGameModule), and Construct()
-    // seeds every flag and queue the console seeds before anything reads them.
+    // Construct seeds the original flags and queues before they are read.
     RumbleManager                           mRumbleManager;
-    TakedownManager*        mpTakedownManager = 0;   // [takedown wave] X360 gsm+568 by value; heap here (GameStateModule_gTD_00.cpp)
-    TakedownPostWorldCache* mpTakedownCache = 0;     // [takedown wave] X360 gsm+249936/+250272/+250816 by value; heap here
+    TakedownManager*        mpTakedownManager;   // [takedown wave] X360 gsm+568 by value; heap here (GameStateModule_gTD_00.cpp)
+    TakedownPostWorldCache* mpTakedownCache;     // [takedown wave] X360 gsm+249936/+250272/+250816 by value; heap here
     // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1/D2] DWARF BrnGameStateModule.h:828
     // `ContactSpyInterface mContactSpyInterface;` -- X360 gsm+250800, the one-pointer handle
     // between mRaceCarCrashEventQueue (:827, gsm+250272, in mpTakedownCache here) and
@@ -1539,8 +1528,8 @@ private:
     // both from the takedown leg). Held by pointer for the same reason mpTrainingManager is:
     // BrnMugshotManager.h `#include`s THIS header, so a by-value member is a genuine include cycle.
     // The offsets are the identity proof, not a layout (semantic parity by named members).
-    MugshotManager*         mpMugshotManager = 0;
-    PaybackManager*         mpPaybackManager = 0;
+    MugshotManager*         mpMugshotManager;
+    PaybackManager*         mpPaybackManager;
 
     // ---- [PGEP] the invite, image and online-flyby managers ----------------------------------
     // The console embeds all three by value (reference header  mGameStateInviteManager at
@@ -1560,12 +1549,12 @@ public:
     OnlineFlybyManager*        GetOnlineFlybyManager()     { return mpOnlineFlybyManager; }
     RichPresenceManagerX360*   GetRichPresenceManager()    { return mpRichPresenceManager; }
 private:
-    GameStateInviteManager*    mpGameStateInviteManager = 0;
-    GameStateImageManagerBase* mpImageManager           = 0;
+    GameStateInviteManager*    mpGameStateInviteManager;
+    GameStateImageManagerBase* mpImageManager;
     // ARTIST's offline owner is embedded; no active NativePC caller selects it.
     OfflineFlybyManager        mOfflineFlybyManager;
-    OnlineFlybyManager*        mpOnlineFlybyManager     = 0;
-    RichPresenceManagerX360*   mpRichPresenceManager    = 0;
+    OnlineFlybyManager*        mpOnlineFlybyManager;
+    RichPresenceManagerX360*   mpRichPresenceManager;
 
     // ========================================================================================
     // ⭐⭐ [stuntrace wave D, D3] THE JUNCTION CACHE + THE HOLD TIMER (X360 +0x456C8..+0x456D2
@@ -1590,7 +1579,7 @@ private:
     // @0x8236B554 / 0x8236B558) and the three junction bools to 0 (0x8236B55C..0x8236B564) at
     // Construct and Prepare's START stage [FX-TAILS-A 2026-09-24]; the initialisers carry the same
     // values -- the ones the departure arm itself restores -- for the window before Construct.
-    u32  muCachedJunctionLightTriggerId = 0xFFFFFFFFu;
+    u32  muCachedJunctionLightTriggerId;
 
     // X360 +284364 (0x456CC). JunctionLogicBox::muID of that same junction (`lwz r9, 0(r31)` off
     // the box, `stw r9, 0(r11)` @0x82390998 with r11 == this + 0x456CC), re-read immediately as
@@ -1598,7 +1587,7 @@ private:
     // (`lwz r7, 0(r11)` @0x82390994) and the difference drives the "the junction changed" bit
     // (`subf r9,r7,r8 / cntlzw / extrwi / xori` @0x823909A0..0x823909BC). Also reset to -1 by
     // the departure post (`stw r11, 0(r31)` @0x82390EC8).
-    u32  muCachedJunctionLogicBoxId     = 0xFFFFFFFFu;
+    u32  muCachedJunctionLogicBoxId;
 
     // X360 +284368 (0x456D0). "This junction was discovered on THIS visit" -- the one-shot the
     // discovery arm sets (`*(result + 284368) = 1`, 0x823906xx) and every action-201 post
@@ -1606,21 +1595,21 @@ private:
     // @0x82390ED0). It feeds the action's mbIsNewlyDiscovered (+0x22) and forces the banner
     // even at speed. ⓘ Reads false for the whole run on this build -- see the PARKED discovery
     // arm in GameStateModule_gSR_00.cpp.
-    bool mbJunctionNewlyDiscovered      = false;
+    bool mbJunctionNewlyDiscovered;
 
     // X360 +284369 (0x456D1). "The player may start the event standing here" -- no game mode is
     // running, no blocking training tip is up, and the car is at or below 30 mph
     // (`stb r10, 0(r24)` @0x82390984, r24 == this + 0x456D1). Read back by the event arm's
     // LABEL_118 gate and by the departure post, and cleared by the departure post
     // (`stb r28(0), 0(r30)` @0x82390ECC).
-    bool mbCanEnterEventAtJunction      = false;
+    bool mbCanEnterEventAtJunction;
 
     // X360 +284370 (0x456D2). "An arrival action has been posted for the junction I am in" --
     // set by the arrival post (`stbx r21(1), r27, r22` @0x8239096C, r22 == 0x456D2) and cleared
     // the moment the player is no longer in ANY traffic-light region (`stbx r28(0), r27, r22`
     // @0x823907EC). It is the second half of the post gate, which is why the console keeps
     // re-posting the arrival record every frame while the player idles in the junction.
-    bool mbAtJunctionWithEvent          = false;
+    bool mbAtJunctionWithEvent;
 
     // X360 +284436 (0x45714). The accelerator+brake HOLD countdown, in seconds.
     // ShouldStartSnapRaceMode decrements it by the frame timestep and fires when it crosses 0;
@@ -1631,7 +1620,7 @@ private:
     // mfTimeSpentDoingCrashStartAction below (:852, +284440). Not renamed here because
     // ShouldStartSnapRaceMode and its call sites are another lane's live work this session; the
     // DWARF name is recorded so a later pass is a rename, not a re-derivation.
-    f32  mfSnapRaceStartHoldSeconds     = 0.35f;
+    f32  mfSnapRaceStartHoldSeconds;
 
     // =========================================================================================
     // ⭐⭐⭐ [showtime S7b-b, 2026-08-27] THE SEVEN SHOWTIME MEMBERS ShouldStartShowtimeMode
@@ -1659,29 +1648,28 @@ private:
     // fires when it crosses 0; EVERY refusal arm re-arms it to the console's 0.0099999998f
     // (flt_82029F24, image-read: 0x3C23D70A). Ten milliseconds -- i.e. ONE frame of holding both
     // bumpers with every gate satisfied.
-    f32                mfTimeSpentDoingCrashStartAction = 0.0099999998f;
+    f32                mfTimeSpentDoingCrashStartAction;
 
     // X360 +284444 (0x4571C), DWARF :853. ✅ The post-mode LOCKOUT, and it counts DOWN despite the
     // name. Construct @0x82380388 and OnModeEnd @0x823767E0 both store 2.0f into it; while it is
     // above zero ShouldStartShowtimeMode decrements it, re-arms the hold and refuses. So showtime
     // cannot be re-entered for two seconds after any mode ends -- and cannot be entered for the
     // first two seconds of a session.
-    f32                mfTimeSinceLastCrashMode         = 2.0f;
+    f32                mfTimeSinceLastCrashMode;
 
     // X360 +284448 (0x45720), DWARF :854. ✅ THE 0.5 s INTRO WINDOW. Two independent witnesses:
     // IsInShowtimeIntro @0x82356A60 is nothing but `*(this+284448) > 0.0f`, and
     // GetShowtimeIntroSteering @0x82356A90 asserts on exactly that expression. Opened to
     // flt_82CDB8D0 (0.5f, image-read) by the else arm, decremented every frame, and cleared to 0
     // when the arm takes its decision.
-    f32                mfShowtimeIntroTimeLeft          = 0.0f;
+    f32                mfShowtimeIntroTimeLeft;
 
     // X360 +284452 (0x45724), DWARF :855. ✅ The forced steering the intro applies, +/-1.0f
     // (flt_82001C98 / flt_820037C8, both image-read). GetShowtimeIntroSteering @0x82356A90 returns
     // exactly this word. Latched by the else arm from the SIGN of the player car's angular
     // velocity Y, so the car keeps spinning the way it was already turning.
-    // ⓘ Construct does NOT seed it (the console only ever reads it behind IsInShowtimeIntro(), and
-    // the arm always writes it before opening the window); zeroed here for determinism.
-    f32                mfShowtimeIntroSteering          = 0.0f;
+    // Construct does not seed it; the intro arm writes it before opening the window.
+    f32                mfShowtimeIntroSteering;
 
     // X360 +284464 (0x45730), DWARF :856. The heading the car had when the intro opened, cached as
     // a whole 16-byte vector (`stvx128 v0, r30, r10` with r10 == 0x45730, @0x8239A6C4) and
@@ -1695,14 +1683,14 @@ private:
     // payload of game action 138 (E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR), whose consumer
     // VehicleManager::SetShowtimeBehaviour asserts `< 3` -- which is what pins both the type and
     // E_SHOWTIME_MODE_COUNT. ShouldStartShowtimeMode refuses while it is E_SHOWTIME_MODE_OFF.
-    EShowtimeBehaviour meShowtimeBehaviour              = E_SHOWTIME_MODE_ON_SIXAXIS;   // Construct: 2
+    EShowtimeBehaviour meShowtimeBehaviour;   // Construct: 2
 
     // X360 +284512 (0x45760), DWARF :860. [FX-SHOWTIME2 2026-09-24] The debug request to cycle
     // meShowtimeBehaviour. Its one writer is ToggleShowtimeBehaviour() (inlined in
     // GameStateDebugComponent::ToggleShowtimeCallback @0x823578F8 as `*(module + 284512) = 1`);
     // UpdateShowtimeMode @0x82380F1C reads it, cycles the behaviour, posts action 138 and clears it
     // (`stb r29(=0), 0(r31)` @0x82380F78). Construct @0x82380388 stores 0.
-    bool               mbToggleShowtimeBehaviour        = false;
+    bool               mbToggleShowtimeBehaviour;
 
     // X360 +284511/+284514 (0x4575F/0x45762), DecFIGS DWARF :404/:380. These are the two
     // snap-race controls registered by GameStateDebugComponent::OnActivate; Construct sets both
@@ -1717,7 +1705,7 @@ private:
     // clear the arm does NOT start showtime -- it re-arms the window to 9.99999975e-06f
     // (flt_82004884, image-read) and retries next frame. A car that is airborne for the whole
     // window waits until it lands.
-    bool               mbShowtimeIntroHasTouchedGround  = false;
+    bool               mbShowtimeIntroHasTouchedGround;
 
     // ⭐⭐⭐ X360 +284513 (0x45761). [bounce wave] THE SHOWTIME RISING-EDGE LATCH, and the reason
     // ~1900 instructions of showtime physics had never executed on this build.
@@ -1729,7 +1717,7 @@ private:
     // above) -- a showtime bool pair, which is independent corroboration of the offset's meaning.
     // Starts false: the console's own initial state is "not in showtime", so the first entry into
     // showtime IS a rising edge, which is exactly what makes the first post happen.
-    bool mbWasInShowtimeGameMode        = false;
+    bool mbWasInShowtimeGameMode;
     bool mbAllowSnapRaceMode;
 
     // =========================================================================================
@@ -1772,13 +1760,13 @@ private:
     // pops only when it is no longer positive, then re-seeds it to KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES
     // (2, `li r11, 2` @0x82381124). Seeded 1 by GameStateModule::ClearData @0x8236B3A8 (`li r10, 1`
     // @0x8236B4DC, `stwx r10` @0x8236B550), which Construct and Prepare both run (landed FX-TAILS-A
-    // 2026-09-24); the initialiser is the same 1 for the window before Construct.
-    s32 miShowtimePendingFrameDelay = 1;
+    // 2026-09-24).
+    s32 miShowtimePendingFrameDelay;
 
     // X360 +284508 (0x4575C), DWARF :864. The index whose traffic-type answer is outstanding;
     // K_INVALID_VEHICLE_INDEX (0xFFFF) when none is (ClearData @0x8236B548 / OnModeEnd @0x82376864
     // store -1; UpdateShowtimeMode sets it on a pop and clears it on the next frame).
-    u16 muShowtimeRequestedTrafficIndex = 0xFFFFu;
+    u16 muShowtimeRequestedTrafficIndex;
 
 public:
     // ARTIST 8238EF50; called inside PreWorldUpdate's input/output lock bracket.

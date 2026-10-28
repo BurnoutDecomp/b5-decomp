@@ -427,7 +427,7 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
 
         if (mModeManager.GetCurrentGameMode() == 0)
         {
-            lbCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(mpTrainingManager) &&
+            lbCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(&mTrainingManager) &&
                               (lpState->mfSpeedMPH <= 30.0f);
         }
 
@@ -532,7 +532,7 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
 
             if (mbCanEnterEventAtJunction && lbEventUnlocked)
             {
-                lbActionCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(mpTrainingManager);
+                lbActionCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(&mTrainingManager);
             }
             lAction.mbCanEnterEvent = lbActionCanEnterEvent;
         }
@@ -668,7 +668,7 @@ bool GameStateModule::ShouldStartSnapRaceMode(bool                     lbRaceMod
         return false;
     }
 
-    if (IsBlockingTrainingTipActive(mpTrainingManager))
+    if (IsBlockingTrainingTipActive(&mTrainingManager))
     {
         mfSnapRaceStartHoldSeconds = 0.35f;
         return false;

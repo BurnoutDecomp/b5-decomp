@@ -14,7 +14,7 @@
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"             // [FX-GS2 G10-D11] mpTakedownCache->mVehicleOutputInterface (CheckForTailingRivals' r5)
 #include "GameSource/GameState/BrnGameEvents.h"                         // [returning-player wave] E_GUI_HAS_STARTED_GAME (the case-78 trigger)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> (the carry-queue walk)
-#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // [gateui] the complete type mpTrainingManager is newed as (see its FLAG in the header)
+#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
 #include "SharedClasses/DataLists/VehicleList.h"                        // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
 #include "SharedClasses/DataLists/WheelList.h"                          // BrnResource::WheelList (GetWheelCount -- Prepare's list diagnostic)
 #include "SharedClasses/DataLists/VehicleListEntry.h"                   // BrnResource::VehicleListEntry (parent id / livery + car type / stats)
@@ -147,24 +147,6 @@ void GameStateModule::Construct()
     // map's receiver queue and registers the debug component -- so without it OnPropHit would
     // latch into, and Prepare would stream through, uninitialised state.
     //
-    // ⚠️ THE TRAINING-MANAGER ARGUMENT IS A HEAP OBJECT HERE, NOT A SUB-OBJECT -- see
-    // mpTrainingManager's FLAG in the header for the include cycle that forces it. It is
-    // allocated FIRST so the pointer StuntManager stores is final and non-null: passing 0 would
-    // fire the console's own `mpTrainingManager` assert (BrnStuntManager.cpp:71) EVERY BOOT.
-    // (the old "TrainingManager::Construct is deliberately NOT called / nothing dereferences
-    //  it" block is RETIRED -- its own DELETE-WHEN is paid below. The console's Construct is
-    //  indeed absent from the 0x82380388 list; its PS3 twin 0x241DE0 shows what it seeds and
-    //  the X360 inlines those stores at the manager's real initialisation site.)
-    if (mpTrainingManager == 0)
-    {
-        mpTrainingManager = new TrainingManager();
-    }
-    // ⭐ [tut-ticker] 2026-08-24: TrainingManager::Construct HAS a caller now (the DELETE-WHEN
-    // above is paid): the manager is Constructed here, before mStuntManager.Construct, so the
-    // pointer StuntManager stores refers to a fully-seeded object. Body is the PS3-attested
-    // TrainingManager::Construct (DecFIGS 0x241DE0; the X360 inlines it -- no export exists).
-    mpTrainingManager->Construct(&mProgressionManager, this);
-
     // X360 GameStateModule::Construct calls ModeManager::Construct here, after the invite
     // manager and before ProgressionManager::Construct. Preserve the original owner argument order.
     // [takedown wave 2026-09-02] X360 Construct @0x82380388 inlines TakedownManager::Construct
@@ -204,10 +186,9 @@ void GameStateModule::Construct()
     // deviation allows. The three sub-objects whose addresses it takes -- mCarSelectManager,
     // mStreetManager, mStuntManager -- are only STORED, never dereferenced, so taking the address
     // of one that has not been Constructed yet is well-defined and the stored value is final. The
-    // TrainingManager is the heap object allocated further up, so the pointer is non-null here
-    // and Construct's `lpTrainingManager != NULL` assert passes.
+    // TrainingManager is the embedded object; its address is final before Construct runs.
     mProgressionManager.Construct(&mCarSelectManager, &mStreetManager,
-                                  mpTrainingManager, &mStuntManager);
+                                  &mTrainingManager, &mStuntManager);
 
     // The prepare-reply queue, at the console's seat: immediately after ProgressionManager::Construct
     // (0x8238050C) the console builds EventReceiverQueue<3072,16>::Construct inline on this+0x38BC0 --
@@ -218,10 +199,9 @@ void GameStateModule::Construct()
 
     // The console's next two calls: TriggerQueryManager::Construct (the progression, takedown and
     // road-rules managers it keeps) and RoadRulesManager::Construct (the street, mode and training
-    // managers). The TakedownManager and the TrainingManager are the heap objects allocated
-    // above, so both pointers are final and non-null.
+    // managers). The training-manager address refers to the embedded owner.
     mTriggerQueryManager.Construct(&mProgressionManager, mpTakedownManager, &mRoadRulesManager);
-    mRoadRulesManager.Construct(&mStreetManager, &mModeManager, mpTrainingManager);
+    mRoadRulesManager.Construct(&mStreetManager, &mModeManager, &mTrainingManager);
 
     // ⭐ [drive-thru wave 2026-08-27] THE DRIVE-THRU SUB-OBJECT, wired with the console's own five
     // arguments. X360 0x82380388 line 116, immediately after RoadRulesManager::Construct:
@@ -237,10 +217,7 @@ void GameStateModule::Construct()
     // E_TYPE_COUNT (32) "nothing cached" sentinel. Without it Update's per-frame sweep reads 46
     // uninitialised timers and its `meDriveThruCache != E_TYPE_COUNT` gate is a coin flip
     // [[valid-pointer-invalid-object]].
-    // ⓘ The TrainingManager argument is the heap object, not a sub-object, for the same include
-    // cycle documented at mStuntManager.Construct above; it is allocated further up, so the
-    // pointer stored here is final and non-null.
-    mDriveThruManager.Construct(&mCarSelectManager, mpTrainingManager, &mModeManager,
+    mDriveThruManager.Construct(&mCarSelectManager, &mTrainingManager, &mModeManager,
                                 this, &mProgressionManager);
 
     // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D5] RumbleManager::Construct @0x82378A70 -- call
@@ -249,6 +226,8 @@ void GameStateModule::Construct()
     // The manager's ONLY initialiser: rumble enabled, wheel force-feedback on, the six other flags
     // clear, and the four inline event queues bound (a queue that never ran Construct has a NULL
     // mpEvents, and the first AddEventSafe on it fires "mpEvents != NULL").
+    // ARTIST 0x82380584..0x823805C4 initializes the embedded training owner here.
+    mTrainingManager.Construct(&mProgressionManager, this);
     mRumbleManager.Construct();
 
     // X360 0x82380388 calls CarSelectManager @0x823805DC, OnlineCarSelectManager @0x823805F0,
@@ -257,7 +236,7 @@ void GameStateModule::Construct()
     mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
     mOnlineCarSelectManager.Construct(this, &mProgressionManager);
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
-                            mpTrainingManager, this);
+                            &mTrainingManager, this);
 
     // X360 0x82380628 constructs the embedded OfflineFlybyManager at gsm+0x2D630 through its
     // FlybyManager base; 0x82380634 clears its two-bit message set. The typed owner body below
@@ -491,7 +470,7 @@ void GameStateModule::PreWorldUpdate(
     CgsDev::PerfMonCpu::StopMonitor(miCopyingAndResettingPM);
     CheckForTailingRivals(lpOutput, &mpTakedownCache->mVehicleOutputInterface, lfGameTimeStep);
     const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
-    mpTrainingManager->Update(lpInput, lpActionQueue, &mLastActiveRaceCarInterface,
+    mTrainingManager.Update(lpInput, lpActionQueue, &mLastActiveRaceCarInterface,
                               lfGameTimeStep, lbAllowTimedTips);
     mRumbleManager.Update(&mLastActiveRaceCarInterface, &mpTakedownCache->mRaceCarCrashEventQueue,
                           mePlayerActiveRaceCarIndex, &mContactSpyInterface, lfGameTimeStep);
@@ -792,13 +771,6 @@ void GameStateModule::Destruct()
         mpPreWorldInputBuffer->Destruct();
         delete mpPreWorldInputBuffer;
         mpPreWorldInputBuffer = 0;
-    }
-
-    // [gateui] the partner of Construct()'s allocation -- see mpTrainingManager's FLAG.
-    if (mpTrainingManager != 0)
-    {
-        delete mpTrainingManager;
-        mpTrainingManager = 0;
     }
 
     // [PGEP] The console's GameStateModule::Destruct runs GameStateImageManagerBase::Destruct early

@@ -354,7 +354,7 @@ bool StreetManager::LoadAIData( GameStateModuleIO::OutputBuffer* lpOutput,
 
             meAILoadStage = E_AI_DATA_ACQUIRE_REQUESTED;
         }
-        [[fallthrough]];   // X360 falls straight into the case-3 poll
+        // Fall through to the case-3 poll.
 
         case E_AI_DATA_ACQUIRE_REQUESTED:
         {
@@ -374,7 +374,8 @@ bool StreetManager::LoadAIData( GameStateModuleIO::OutputBuffer* lpOutput,
 
             // ARTIST 0x8234FA70 binds the received AI-lanes resource before
             // marking the load complete (same native-width handle as Progression).
-            const auto* asset = reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+            const BrnResource::GameDataIO::GameDataAssetEvent* asset =
+                reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
             mpAISectionData = asset->mHandle;
 
             meAILoadStage = E_AI_DATA_LOAD_COMPLETE;

@@ -82,13 +82,13 @@ namespace BrnGameState
         static const s32 KI_MAX_WHEEL_NAME_COUNT        = 128;   // :121
         static const s32 KI_MAX_TELEPORT_LOCATION_COUNT = 128;   // :122
 
-                                            // :124  (+0x0C)
+        GameStateModule* mpGameStateModule; // +0C, ARTIST8235798C
 
-        CgsDev::DebugUI::StringList maLocationNames[KI_MAX_TELEPORT_LOCATION_COUNT + 1] = {};    // :126
-        CgsDev::DebugUI::StringList maCarFilterNames[KI_CAR_FILTER_COUNT + 1] = {};              // :127
-        CgsDev::DebugUI::StringList maCarNames[KI_MAX_CAR_NAME_COUNT + 1] = {};                  // :128
-        CgsDev::DebugUI::StringList maCarVersionNames[KI_MAX_CAR_VERSION_NAME_COUNT + 1] = {};   // :129
-        CgsDev::DebugUI::StringList maWheelNames[KI_MAX_WHEEL_NAME_COUNT + 1] = {};              // :130
+        CgsDev::DebugUI::StringList maLocationNames[KI_MAX_TELEPORT_LOCATION_COUNT];    // :126
+        CgsDev::DebugUI::StringList maCarFilterNames[KI_CAR_FILTER_COUNT];              // :127
+        CgsDev::DebugUI::StringList maCarNames[KI_MAX_CAR_NAME_COUNT];                  // :128
+        CgsDev::DebugUI::StringList maCarVersionNames[KI_MAX_CAR_VERSION_NAME_COUNT];   // :129
+        CgsDev::DebugUI::StringList maWheelNames[KI_MAX_WHEEL_NAME_COUNT];              // :130
 
         CgsID maCarIds[KI_MAX_CAR_NAME_COUNT];                                          // :131
         CgsID maCarVersionIds[KI_MAX_CAR_VERSION_NAME_COUNT];                           // :132
@@ -108,5 +108,28 @@ namespace BrnGameState
         s32  miCurrentWheelIndex;        // :144  (+0x5CB0)
 
         bool mbShowCarInfo;              // :146  (+0x5CB4)
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT((sizeof(ResetPlayerDebugComponent) == 0x5CC0), "X360 reset debug component");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, mpGameStateModule) == 0xC), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maLocationNames) == 0x10), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarFilterNames) == 0x410), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarNames) == 0x460), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarVersionNames) == 0x780), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maWheelNames) == 0x800), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarIds) == 0xC00), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarVersionIds) == 0xF20), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maLocationStrings) == 0xFA0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maLocationPositions) == 0x2FA0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maLocationDirections) == 0x37A0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarStrings) == 0x3FA0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, maCarVersionStrings) == 0x58A0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, miCurrentLocationIndex) == 0x5CA0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, miCurrentCarFilter) == 0x5CA4), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, miCurrentCarIndex) == 0x5CA8), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, miCurrentCarVersionIndex) == 0x5CAC), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, miCurrentWheelIndex) == 0x5CB0), "ARTIST reset debug member");
+            CGS_STATIC_ASSERT((offsetof(ResetPlayerDebugComponent, mbShowCarInfo) == 0x5CB4), "ARTIST reset debug member");
+        }
     };
 }

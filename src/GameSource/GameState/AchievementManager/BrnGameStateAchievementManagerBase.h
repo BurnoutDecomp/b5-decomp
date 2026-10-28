@@ -4,9 +4,7 @@
 // b5-decomp/src/GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h
 // ============================================================================
 // Canonical home for BrnGameState::AchievementManagerBase -- the platform-neutral
-// achievement-tracking base (DISTINCT from the data-table-blocked PS3 variant
-// BrnGameState::AchievementManagerPS3, which derives from this and supplies the
-// concrete AchievementEarnt/IsAchievementEarnt + a BitArray<60> send-queue).
+// achievement-tracking base. AchievementManagerX360 supplies the platform virtuals.
 //
 // SHAPE is DWARF-authoritative
 // (references/DecFIGS/dwarfdump/.../AchievementManager/BrnGameStateAchievementManagerBase.h):
@@ -30,11 +28,7 @@
 // defined alongside the bodies (their values ARE X360-asm-attested). The PS3-named
 // EAchievement enum is retained here for the shared base/PS3 signatures.
 //
-// FLAG (best-effort / out of scope): KAE_LICENSE_ACHIEVEMENTS is a const data table
-// (X360 @ 0x8202AF68) that OnLicenseUpgrade indexes by (rank-1). Its six entries are
-// rodata we cannot recover from the code exports; it is declared extern here and the
-// .cpp gives a best-effort definition (the six license-grade ids in rank order) that
-// is FLAGGED, not asm-verified.
+// KAE_LICENSE_ACHIEVEMENTS is recovered from the six native words at8202AF68.
 // ----------------------------------------------------------------------------
 
 #include "types.hpp"                                       // u8, s32, f32, etc.
@@ -233,35 +227,27 @@ protected:
     virtual bool IsAchievementEarnt(EAchievement leAchievement)      = 0;       // DWARF :224 (vtable slot 1)
 
 protected:
-               // this+0x04 (DWARF :228)
-    StreetManager*                      mpStreetManager      = 0;               // this+0x08 (DWARF :229)
-    ScoringSystem*                      mpScoringSystem      = 0;                // this+0x0C (DWARF :230)
-    GameStateModule*                    mpGameStateModule    = 0;                // this+0x10 (DWARF :231)
+    BrnProgression::ProgressionManager* mpProgressionManager; // +04, ARTIST8235A998
+    StreetManager* mpStreetManager;                          // +08, ARTIST8235A9C0
+    ScoringSystem* mpScoringSystem;                          // +0C, ARTIST8235A9E8
+    GameStateModule* mpGameStateModule;                      // +10, ARTIST8235AA0C
+
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(AchievementManagerBase) == 20), "X360 achievement base");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerBase, mpProgressionManager) == 4), "ARTIST progression owner");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerBase, mpStreetManager) == 8), "ARTIST street owner");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerBase, mpScoringSystem) == 12), "ARTIST scoring owner");
+        CGS_STATIC_ASSERT((offsetof(AchievementManagerBase, mpGameStateModule) == 16), "ARTIST game-state owner");
+    }
 };
 
-// ---------------------------------------------------------------------------
-// BrnGameState::AchievementManagerPS3 -- the concrete platform achievement manager
-// (DWARF: derives from AchievementManagerBase, supplies the two pure virtuals + a
-// BitArray<60> send-queue). Its full data-table-gated layout is BLOCKED (the X360
-// achievement-id tables are not in the exports), so this is a MINIMAL complete slice:
-// it derives from the base and stubs the two pure virtuals so callers that hold a
-// StuntModeScoring::AchievementManager* (== this) can resolve the inherited base
-// methods (e.g. SkillzManager's OnFreeburnSkillzTotalChange forward) under cl /c.
-// Grow this in place when the PS3 manager's own TU is reconstructed; do NOT fork.
-// FLAG: the override bodies + the send-queue member are placeholders, not the real PS3
-// behaviour (compile-only completeness for pointer-method dispatch).
-class AchievementManagerPS3 : public AchievementManagerBase
-{
-protected:
-    void AchievementEarnt(EAchievement leAchievement) ;
-    bool IsAchievementEarnt(EAchievement leAchievement) ;
-};
 
 }
 
 // ---------------------------------------------------------------------------
 // KAE_LICENSE_ACHIEVEMENTS (X360 @ 0x8202AF68) -- const rodata indexed by
-// (liNewLicenseRank - 1) in OnLicenseUpgrade. Six entries (rank 1..6). The bytes
-// are NOT in the code exports; the definition in the .cpp is FLAGGED best-effort.
+// (liNewLicenseRank - 1) in OnLicenseUpgrade. Six original words recovered from
+// the ARTIST image:6,10,15,19,23,33.
 // ---------------------------------------------------------------------------
 extern const EAchievement KAE_LICENSE_ACHIEVEMENTS[6];

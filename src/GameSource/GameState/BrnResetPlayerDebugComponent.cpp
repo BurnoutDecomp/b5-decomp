@@ -193,7 +193,7 @@ namespace BrnGameState
     // ------------------------------------------------------------------------------------------------
     void ResetPlayerDebugComponent::TeleportCar()
     {
-        GameStateModuleIO::TeleportPlayerCarEvent lEvent = {};
+        GameStateModuleIO::TeleportPlayerCarEvent lEvent;
         lEvent.mPosition = maLocationPositions[miCurrentLocationIndex];
         lEvent.mDirection = maLocationDirections[miCurrentLocationIndex];
         mpGameStateModule->GetDebugGameEventQueue()->AddEvent(
@@ -207,7 +207,7 @@ namespace BrnGameState
     {
         if (mpGameStateModule->GetModeManager()->GetCurrentGameMode() != 0)
             return;
-        GameStateModuleIO::ChangePlayerCarEvent lEvent = {};
+        GameStateModuleIO::ChangePlayerCarEvent lEvent;
         lEvent.mCarModelId = maCarVersionIds[miCurrentCarVersionIndex];
         lEvent.mWheelModelId = mpGameStateModule->GetWheelList()->GetWheelData(miCurrentWheelIndex)->mID;
         lEvent.mbResetPlayerCamera = true;

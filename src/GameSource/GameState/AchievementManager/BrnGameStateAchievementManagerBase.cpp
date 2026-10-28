@@ -441,21 +441,13 @@ void AchievementManagerBase::OnShowTimeMultiplier(s32 liMultiplier)
 }
 
 // ----------------------------------------------------------------------------
-// KAE_LICENSE_ACHIEVEMENTS  (X360 @ 0x8202AF68)
-//
-// FLAG (best-effort, NOT asm-verified): the six rodata bytes at 0x8202AF68 are
-// not in the code exports. OnLicenseUpgrade indexes this table by (rank - 1), so
-// rank 1..6 map to the six license-grade achievements in ascending grade order.
-// The X360-numbered ids for the license grades are not independently attested by
-// this TU; the PS3-named EAchievement enumerators are used as the closest known
-// mapping. If the table bytes are later recovered, replace these values.
-// ----------------------------------------------------------------------------
+// KAE_LICENSE_ACHIEVEMENTS: six native u32 entries at ARTIST8202AF68.
 const EAchievement KAE_LICENSE_ACHIEVEMENTS[6] =
 {
-    E_ACHIEVEMENT_LICENSE_GRADE_D,        // rank 1
-    E_ACHIEVEMENT_LICENSE_GRADE_C,        // rank 2
-    E_ACHIEVEMENT_LICENSE_GRADE_B,        // rank 3
-    E_ACHIEVEMENT_LICENSE_GRADE_A,        // rank 4
-    E_ACHIEVEMENT_LICENSE_GRADE_BURNOUT,  // rank 5
-    E_ACHIEVEMENT_LICENSE_GRADE_ELITE,    // rank 6
+    static_cast<EAchievement>(6),
+    static_cast<EAchievement>(10),
+    static_cast<EAchievement>(15),
+    static_cast<EAchievement>(19),
+    static_cast<EAchievement>(23),
+    static_cast<EAchievement>(33),
 };

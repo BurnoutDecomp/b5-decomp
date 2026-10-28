@@ -39,20 +39,7 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"           // PreWorldInputBuffer / OutputBuffer
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // TelemetryData / E_TELEMETRY_ACHIEVEMENT_EARNT
 
-// The system-software achievement calls (bodies in the PC platform layer, CgsXboxLivePC_wBT_01.cpp).
-extern "C" u32 XUserGetSigninState(u32 luUserIndex);
-extern "C" u32 XUserCreateAchievementEnumerator(u32 luTitleId, u32 luUserIndex, u64 luXuid,
-                                                u32 luDetailFlags, u32 luStartingIndex, u32 luItems,
-                                                u32* lpcbBuffer, void** lphEnum);
-extern "C" u32 XEnumerate(void* lhEnum, void* lpvBuffer, u32 lcbBuffer, u32* lpcItemsReturned,
-                          void* lpOverlapped);
-extern "C" u32 XUserWriteAchievements(u32 luNumAchievements, const void* lpAchievements,
-                                      void* lpOverlapped);
-
-// Win32/XDK CloseHandle (real prototype lives in <winbase.h>); declared as an
-// extern "C" free function, mirroring the CgsGuideIntegration / System glue
-// precedent. mhEnumerator is a raw HANDLE (void*).
-extern "C" int CloseHandle(void* lhObject);
+// Native system calls use the XDK declarations from the owning header.
 
 namespace BrnGameState
 {
@@ -330,7 +317,7 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
     for (u32 luDetail = 0; luDetail < KU_NUM_ACHIEVEMENTS; ++luDetail)
     {
         const XACHIEVEMENT_DETAILS& lrDetails = maAchievementDetails[luDetail];
-        if (lrDetails.dwAchievedLow == 0 && lrDetails.dwAchievedHigh == 0)
+        if (lrDetails.ftAchieved.dwLowDateTime == 0 && lrDetails.ftAchieved.dwHighDateTime == 0)
         {
             continue;
         }
