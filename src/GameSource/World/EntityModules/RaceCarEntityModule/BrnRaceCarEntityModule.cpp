@@ -387,6 +387,18 @@ void RaceCarEntityModule::Construct()
     mpWheelList          = 0;
     mbCarColoursBound    = false;
 
+    // ARTIST Construct @0x822FD898 clears the whole debug-cannon request/result block.
+    // In particular, r4 is formed as +0x18774 and `stwx r30,r31,r4` writes a null RaceCar*.
+    // Reset the custom Construct lifecycle explicitly; the header's member initializers only
+    // cover ordinary C++ object construction and do not model a repeated engine Construct call.
+    DEBUG_mbSpawnDebugRaceCarThisFrame = false;  // +0x18740
+    DEBUG_mbCleanDebugRaceCarThisFrame = false;  // +0x18741
+    DEBUG_mbDebugRaceCarIsActive       = false;  // +0x18742
+    DEBUG_mDebugRaceCarPosition.SetZero();       // +0x18750
+    DEBUG_mDebugRaceCarDirection.SetZero();      // +0x18760
+    DEBUG_mfDebugRaceCarVelocity       = 0.0f;   // +0x18770
+    DEBUG_mpDebugRaceCar               = nullptr; // +0x18774 (ARTIST Construct stwx 0)
+
     // ARTIST 822FE1B8..822FE2A0 resets these editable values on every
     // Construct call. In-class initializers alone do not reset a reused module.
     DEBUG_mbOverrideDamage        = false;
