@@ -7,13 +7,9 @@
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                      // K_INVALID_RIGID_BODY_ID (qword_82F2A3A8)
 #include "rw/math/vpu/vector3_operation.h"                                    // vpu::Dot (T-bone side-speed gates, wave B3b)
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint ([bringup] crash-entry banner)
-#include "GameSource/World/BrnEntityTypes.h"                                   // BrnWorld::EEntityTypeID -- the owner byte the crash witness names
 
-#include <cstdlib>  // getenv: opt-in PC contact diagnostics
 #include <cmath>    // std::fabs
 #include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980), the angle between the cars
-#include <cstring>  // std::memcpy: the [td-replay] witness prints raw IEEE bits
 #include <cstddef>  // offsetof (layout asserts)
 
 // includes folded in from the BrnVehicleManager_w*.cpp partfiles (2026-09-15)
@@ -156,77 +152,6 @@ namespace Vehicle
     // = 0.44704 * 50.0 == 50 MPH in m/s. The old 0.0 made the gate a pass-through.
     static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.44704f * 50.0f;   // flt_82FB8290 <- init 0x82C5BB18 (22.352 m/s)
 
-    // [PC HARNESS, NOT X360] BRN_TD_REPLAY=1 (with BRN_TD_DIAG=1) adds the [td-replay] line: every
-    // input the impact ladder reads for a player-involved evaluation, as raw IEEE bits, so
-    // tests/FxLadderReplay.cpp can feed a recorded contact through the extracted production ladder
-    // bit for bit. DELETE-WHEN the FX-LADDER replay fixture no longer needs fresh recordings.
-
-    static const char* WitnessImpactTypeName(s32 liImpactType)
-    {
-        switch (liImpactType)
-        {
-        case E_IMPACT_NONE:          return "none";
-        case E_IMPACT_TRADING_PAINT: return "trading-paint";
-        case E_IMPACT_NUDGE:         return "nudge";
-        case E_IMPACT_SLAM:          return "slam";
-        case E_IMPACT_SHUNT:         return "shunt";
-        case E_IMPACT_BOOST_SLAM:    return "boost-slam";
-        case E_IMPACT_BOOST_SHUNT:   return "boost-shunt";
-        case E_IMPACT_GRINDING:      return "grinding";
-        case E_IMPACT_RUBBING:       return "rubbing";
-        default:                     return "?";
-        }
-    }
-
-    static const char* WitnessTakedownTypeName(s32 liTakedownType)
-    {
-        switch (liTakedownType)
-        {
-        case BrnGameState::E_TAKEDOWN_NONE:          return "none";
-        case BrnGameState::E_TAKEDOWN_STANDARD:      return "standard";
-        case BrnGameState::E_TAKEDOWN_GRINDING:      return "grinding";
-        case BrnGameState::E_TAKEDOWN_T_BONE:        return "t-bone";
-        case BrnGameState::E_TAKEDOWN_VERTICAL:      return "vertical";
-        case BrnGameState::E_TAKEDOWN_TRAFFIC_CHECK: return "traffic-check";
-        case BrnGameState::E_TAKEDOWN_HEAD_ON:       return "head-on";
-        case BrnGameState::E_TAKEDOWN_UNKNOWN0:      return "unknown0";
-        case BrnGameState::E_TAKEDOWN_UNKNOWN1:      return "unknown1";
-        case BrnGameState::E_TAKEDOWN_DOUBLE:        return "double";
-        case BrnGameState::E_TAKEDOWN_REVENGE:       return "revenge";
-        case BrnGameState::E_TAKEDOWN_INTO_CAR:      return "into-car";
-        case BrnGameState::E_TAKEDOWN_INTO_VAN:      return "into-van";
-        case BrnGameState::E_TAKEDOWN_INTO_BUS:      return "into-bus";
-        default:                                     return "?";
-        }
-    }
-
-    // The OWNER byte of an EntityId word, by name. The crash record's aggressor seat is an
-    // EntityId, never a slot index: "no attacker" is spelled by the OWNER (world / traffic /
-    // the victim's own id), and the entity field means nothing until the owner is read. A witness
-    // that printed only bits 10..23 rendered a WORLD-owned aggressor as "attacker 0" -- which
-    // reads as the player's race-car slot and is what made every self-inflicted rival crash look
-    // like the player was credited for it.
-    static const char* WitnessEntityOwnerName(u32 luOwner)
-    {
-        switch (static_cast<s32>(luOwner))
-        {
-        case BrnWorld::E_ENTITYTYPE_WORLD:                   return "world";
-        case BrnWorld::E_ENTITYTYPE_RACECAR:                 return "racecar";
-        case BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE:         return "traffic";
-        case BrnWorld::E_ENTITYTYPE_PROP:                    return "prop";
-        case BrnWorld::E_ENTITYTYPE_TRIGGER:                 return "trigger";
-        case BrnWorld::E_ENTITYTYPE_WORLD_GRAPHICS:          return "world-graphics";
-        case BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART: return "racecar-part";
-        case BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART: return "traffic-part";
-        case BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL:           return "racecar-wheel";
-        case BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL:  return "detached-racecar-wheel";
-        case BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL:  return "detached-traffic-wheel";
-        case BrnWorld::E_ENTITYTYPE_PROP_COLLISION_RACECAR:  return "prop-collision-racecar";
-        case BrnWorld::E_ENTITYTYPE_PROP_COLLISION_TRAFFIC:  return "prop-collision-traffic";
-        default:                                             return "?";
-        }
-    }
-
     // Game event 31: three words, as written at 0x82643B34..0x82643B54.
     struct ImpactIoEventRecord : public CgsModule::Event
     {
@@ -294,12 +219,6 @@ namespace Vehicle
         CGS_ASSERT((lContact.mEntityIdB.muValue >> 24) == 1, "Contact B must be a race car");
         const s32 liIndexA = (lContact.mEntityIdA.muValue >> 10) & 0x3FFF;
         const s32 liIndexB = (lContact.mEntityIdB.muValue >> 10) & 0x3FFF;
-        {
-            // Keep a separate player allowance: the AI pack contacts itself before
-            // the player arrives, otherwise those contacts exhaust the diagnostic.
-            static s32 saiWitnessed[2] = {};
-            s32& siWitnessed = saiWitnessed[liIndexA == mePlayerActiveRaceCarIndex || liIndexB == mePlayerActiveRaceCarIndex];
-        }
         if (!mbSlamsAndShuntsOn)
             return;
         if (!mUsedRaceCars.IsBitSet(liIndexA) || !mUsedRaceCars.IsBitSet(liIndexB))
@@ -492,105 +411,24 @@ namespace Vehicle
     void VehicleManager::CheckForAllTypesOfImpacts(RaceCarResponseInfo* lpInfo)
     {
 
-        const RaceCarPhysics::TdSlamGateSample* lpWGateB = 0;
-        s32 liWGap = -1;
-        if (lbWitness)
-        {
-            static u32 suaWPairLastEval[8][8] = {};   // the car's own update count + 1 at the last evaluation
-            const s32 liWPairA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
-            const s32 liWPairB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
-            lpWGateA = RaceCarPhysics::FindTdSlamGateSample(lpInfo->mpRaceCarA);
-            lpWGateB = RaceCarPhysics::FindTdSlamGateSample(lpInfo->mpRaceCarB);
-            if (lpWGateA != 0 && lpWGateB != 0
-                && liWPairA >= 0 && liWPairA < 8 && liWPairB >= 0 && liWPairB < 8)
-            {
-                const u32 luWLast = suaWPairLastEval[liWPairA][liWPairB];
-                liWGap = (luWLast == 0u) ? -1 : static_cast<s32>(lpWGateA->muUpdates + 1u - luWLast);
-                suaWPairLastEval[liWPairA][liWPairB] = lpWGateA->muUpdates + 1u;
-                suaWPairLastEval[liWPairB][liWPairA] = lpWGateB->muUpdates + 1u;
-            }
-        }
-        auto lWitnessEpisode = [&]()
-        {
-            *CgsDev::Log::gpDebugPrint << " gap=" << liWGap;
-            const RaceCarPhysics::TdSlamGateSample* const lapWGate[2] = { lpWGateA, lpWGateB };
-            const RaceCarPhysics* const lapWCar[2] = { lpInfo->mpRaceCarA, lpInfo->mpRaceCarB };
-            for (s32 liWSide = 0; liWSide < 2; ++liWSide)
-            {
-                *CgsDev::Log::gpDebugPrint << (liWSide == 0 ? " gateA=" : " gateB=");
-                if (lapWGate[liWSide] == 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "?";
-                    continue;
-                }
-                *CgsDev::Log::gpDebugPrint << "(n=" << lapWGate[liWSide]->miNumCollisions
-                                           << ",w=" << lapWGate[liWSide]->miNumWorldCollisions
-                                           << ",ctl=" << lapWGate[liWSide]->mfControlSteer
-                                           << ",pre=" << lapWGate[liWSide]->mfSlamBeforeGate
-                                           << (lapWGate[liWSide]->mbCrashingBranch ? ",crashing" : "")
-                                           << ",now=" << lapWCar[liWSide]->miNumCollisions
-                                           << ",nowW=" << static_cast<s32>(lapWCar[liWSide]->mi8NumWorldCollisions)
-                                           << ")";
-            }
-        };
 
         // Energy gate: ignore contacts whose combined closing speed is below the threshold.
-        const f32 lfWitnessSpeedSum =
+        const f32 lfSpeedSum =
             std::fabs(lpInfo->mfRaceCarBSpeed) + std::fabs(lpInfo->mfRaceCarASpeed);
-        if (lfWitnessSpeedSum < KF_MIN_IMPACT_SPEED_SUM)
+        if (lfSpeedSum < KF_MIN_IMPACT_SPEED_SUM)
         {
             return;
         }
 
-        if (lbWitness)
-        {
-
-            const s32 liWA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
-            const s32 liWB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
-            const Vector3& lvWN = lpInfo->mpContact->mNormal;
-            const f32 lfWAlign = std::fabs(Dot3_VM(lvWN, lpInfo->mRaceCarATransform.At()))
-                               + std::fabs(Dot3_VM(lvWN, lpInfo->mRaceCarBTransform.At()));
-            const bool lbWABehind = Dot3_VM(vpu::Subtract(lpInfo->mRaceCarBTransform.Pos(),
-                                                          lpInfo->mRaceCarATransform.Pos()),
-                                            lpInfo->mRaceCarATransform.At()) >= 0.0f;
-            const s32 liWShuntAggr = lbWABehind ? liWA : liWB;
-            const s32 liWShuntVict = lbWABehind ? liWB : liWA;
-            const Vector3 lvWBToA = vpu::Subtract(lpInfo->mRaceCarATransform.Pos(), lpInfo->mRaceCarBTransform.Pos());
-            const f32 lfWSideA = Dot3_VM(lvWBToA, lpInfo->mRaceCarATransform.Right());
-            const f32 lfWSideB = Dot3_VM(lvWBToA, lpInfo->mRaceCarBTransform.Right());
-            const f32 lfWRawA = lpInfo->mpRaceCarA->GetSlamSteering();
-            const f32 lfWRawB = lpInfo->mpRaceCarB->GetSlamSteering();
-            *CgsDev::Log::gpDebugPrint
-                << "[td-ladder] GATES closing=" << lpInfo->mfClosingSpeed
-                << " sA=" << lpInfo->mfRaceCarASpeed << " sB=" << lpInfo->mfRaceCarBSpeed
-                << " recentA=" << (HasRaceCarHadRecentImpact(liWA) ? 1 : 0) << "(" << mafNoImpactTimeSeconds[liWA] << ")"
-                << " recentB=" << (HasRaceCarHadRecentImpact(liWB) ? 1 : 0) << "(" << mafNoImpactTimeSeconds[liWB] << ")"
-                << " | shunt align=" << lfWAlign << "/1.9 aggr=" << liWShuntAggr
-                << " aggrBeingByVict=" << (maRaceCarVehicles[liWShuntAggr].IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liWShuntVict)) ? 1 : 0)
-                << " | slam dotAt=" << Dot3_VM(lpInfo->mRaceCarATransform.At(), lpInfo->mRaceCarBTransform.At())
-                << " sideA=" << lfWSideA << " sideB=" << lfWSideB
-                << " rawSteerA=" << lfWRawA << " rawSteerB=" << lfWRawB
-                << " steerA=" << ((lfWSideA > 0.0f ? 1.0f : lfWSideA >= 0.0f ? 0.0f : -1.0f) * lfWRawA)
-                << " steerB=" << (-(lfWSideB > 0.0f ? 1.0f : lfWSideB >= 0.0f ? 0.0f : -1.0f) * lfWRawB)
-                << " beingAbyB=" << (lpInfo->mpRaceCarA->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liWB)) ? 1 : 0)
-                << " beingBbyA=" << (lpInfo->mpRaceCarB->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liWA)) ? 1 : 0)
-                << " pgoB=" << static_cast<s32>(mau8FramesSincePlayerGrindingOther[liWB])
-                << " ogpA=" << static_cast<s32>(mau8FramesSinceOtherGrindingPlayer[liWA])
-                << " pgoA=" << static_cast<s32>(mau8FramesSincePlayerGrindingOther[liWA])
-                << " ogpB=" << static_cast<s32>(mau8FramesSinceOtherGrindingPlayer[liWB]);
-            lWitnessEpisode();
-        }
 
         // Highest priority: a player shunting an AI into a third AI, and re-hits on a car that is
         // already crashing -- these run even if a car is mid-crash.
         if (CheckForPlayerSlammingAIIntoAI(lpInfo))
         {
-            if (lbWitness) lWitnessResult("SlammingAIIntoAI");
             return;
         }
         if (CheckForHittingAlreadyCrashingCar(lpInfo))
         {
-            if (lbWitness) lWitnessResult("HittingAlreadyCrashingCar");
             return;
         }
 
@@ -598,38 +436,30 @@ namespace Vehicle
         // freshly taken down.
         if (lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
         {
-            if (lbWitness) lWitnessResult("REJECT already-crashing");
             return;
         }
 
         if (CheckForVerticalTakedown(lpInfo))
         {
-            if (lbWitness) lWitnessResult("VERTICAL");
             return;
         }
         if (CheckForTBoneTakedown(lpInfo))
         {
-            if (lbWitness) lWitnessResult("T_BONE");
             return;
         }
         if (CheckForHeadToHead(lpInfo))
         {
-            if (lbWitness) lWitnessResult("HEAD_ON");
             return;
         }
         if (CheckForShuntAndNudge(lpInfo))
         {
-            if (lbWitness) lWitnessResult("shunt/nudge");
             return;
         }
         if (CheckForSlamAndTradingPaint(lpInfo))
         {
-            if (lbWitness) lWitnessResult("slam/paint");
             return;
         }
-        const bool lbStationary = CheckForStationaryTargetTakedown(lpInfo);
-        if (lbWitness)
-            lWitnessResult(lbStationary ? "stationary=1" : "stationary=0 (ladder exhausted)");
+        CheckForStationaryTargetTakedown(lpInfo);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -1103,7 +933,6 @@ namespace Vehicle
         // Perpendicularity band: ||angle| - pi/2| < band(deg) * (pi/180)  (flt_8208F604/8208F5F4).
         const f32 lfPiOver2  = 1.5707964f;
         const f32 lfDegToRad = 0.017453292f;
-        // [td-tbone] PC witness: the perpendicularity term and the two lateral-speed terms.
         if (std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
             < mfTBoneTakedownMaxAngle * lfDegToRad)
         {
@@ -1463,7 +1292,6 @@ namespace Vehicle
         RaceCarPhysics* const lpVehB = &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexB)];
         RaceCarPhysics* const lpVehA = &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
 
-        // [td-vert] PC witness: every gate of both arms, so a rejection names its own term.
 
         bool lbFired = false;
         EntityId lVictimId{};
@@ -1814,25 +1642,6 @@ void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
         KAB_SURFACE_IS_WATER[liSurface]     = lGameplaySurface.IsWater();
     }
 
-    // [surface-bank] boot witness -- diagnostic only, DELETE-WHEN the bank has a test that
-    // asserts a non-zero grip.
-    {
-        static bool sbBankReported = false;
-        if (!sbBankReported)
-        {
-            sbBankReported = true;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[surface-bank] ReadSurfaceProperties: numSurfaces="
-                    << liSurfaceCount << " grip[0..3]=" << KAVF_SURFACE_GRIP[0].x << ","
-                    << KAVF_SURFACE_GRIP[1].x << "," << KAVF_SURFACE_GRIP[2].x << ","
-                    << KAVF_SURFACE_GRIP[3].x << " rough[1]=" << KAVF_SURFACE_ROUGHNESS[1].x
-                    << " drag[1]=" << KAVF_SURFACE_LINEAR_DRAG[1].x
-                    << " water[1]=" << (KAB_SURFACE_IS_WATER[1] ? 1 : 0) << "\n";
-            }
-        }
-    }
 
     gbReadSurfaceProperties = true;
 }

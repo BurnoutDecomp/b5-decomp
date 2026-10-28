@@ -1,13 +1,12 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Add, Subtract, Mult, Normalize, MagnitudeSquared}
+#include "rw/math/fpu/scalar_operation.h"   // original scalar fsel clamps
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Math/BrnMathUtils.h"    // BrnMath::Magnitude2D / MagnitudeSquared2D (XZ plane)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [showtime-probe] CgsDev::Log::gpDebugPrint
-#include <cstdlib>   // [showtime-probe] getenv
-#include <algorithm> // std::clamp
+#include <algorithm> // std::min / std::max
 #include <cmath>     // std::sqrt, std::fabs
+#include <cfloat>    // FLT_MAX
 #include <cstddef>   // offsetof
-#include <cstdio>    // opt-in Showtime input/force witness
 
 // BrnPhysics::Vehicle::RaceCarPhysics -- the two out-of-line ledger funcs owned by the
 // Vehicle-physics group (IsCrashingNormally @0x827E42B8, GetHeightAboveRoad @0x825B3998), PLUS the
@@ -124,13 +123,6 @@ namespace Vehicle
                    "lu8StrengthStat < KU8_MAX_STRENGTH");                            // :192
 
         mu8StrengthStat = lu8StrengthStat;                                           // stb  0x140E
-        // [DIAG] BRN_STRENGTH_STAT_OVERRIDE=<0..10>. NOT IN THE X360 BINARY. Opt-in stand-in for
-        // driving a strength-9/10 car: the console reads this byte from the vehicle list
-        // (VehicleListEntry+155) and the harness can only spawn the junkyard car (strength 5).
-        // OnChecked @0x8261E3F4 gates the checked car's crash on `> 8`. DELETE-WHEN the harness
-        // can pick a car.
-        {
-        }
 
         SetTransformFromPositionOnRoad(lOnRoadTransform);
 
@@ -218,90 +210,6 @@ namespace Vehicle
     namespace { PlayerParameters& MS = msPlayerParams; }   // short alias for the bodies below
 
     // =========================================================================================
-    // ---- [at-gate] AFTERTOUCH GATE CENSUS -- NOT IN THE X360 BINARY. OPT-IN (BRN_AT_GATE_DIAG=1).
-    //
-    // THE QUESTION. The owner reports that a crashing car "in the air can turn weirdly, like
-    // someone is pulling it and making it turn". `UpdateAftertouch` @0x8262EBE8 is the only crash
-    // helper that adds a yaw ANGULAR impulse plus two +/-4 m world-up LEVER impulses, and their
-    // arms come from the CAMERA's axes (lpCameraMatrix->xAxis / ->zAxis), which rotate
-    // independently of the car. If it ever ran during an ordinary crash, that is exactly the felt
-    // symptom. The console gates the WHOLE body on three tests (asm 0x8262EC1C-EC4C) and the
-    // CALLER gates the dispatch on a fourth (UpdateCrashing asm 0x82638E30 `beq`).
-    //
-    // ⭐ WHY A HISTOGRAM AND NOT A MAX. The previous wave's "peak yaw" numbers (6.499/6.336/...)
-    // were the default +/-6.5 per-axis angular-velocity clamp being read back, not a torque. A
-    // gate question is answered by COUNTS of distinct outcomes, so this keys every crash frame by
-    // the four gate bits at once and counts the 16 combinations.
-    //
-    // ⭐⭐ THE DENOMINATOR AND THE CONTROL BIT ARE BOTH IN THE KEY, DELIBERATELY.
-    //   * `crashF` is incremented on EVERY frame the player's car is crashing, from
-    //     RaceCarPhysics::Update -- which runs whether or not UpdateAftertouch is dispatched. So a
-    //     zero aftertouch census can be told apart from a probe that never ran: crashF > 0 proves
-    //     the instrument is live at the point where the decision is made.
-    //   * bit 3 of the key is `hasAir`, a bit that MUST vary across a real crash. A key histogram
-    //     that collapses onto one value with hasAir stuck is a broken probe, not a finding.
-    // Every printed line carries its own window boundary (`win=[a,b]`) beside the accumulators.
-    // DELETE-WHEN the aftertouch/tumble question is closed and banked.
-    // =========================================================================================
-    namespace
-    {
-        struct AtGateCensus
-        {
-            // --- caller side: RaceCarPhysics::Update, every frame the player car is crashing ---
-            u32 muCrashFrames;
-            u32 muCrashFrameAtEpisodeStart;
-            u32 mauKey[16];          // bit0 additive | bit1 showtimeVCall | bit2 showtimeAllowed | bit3 hasAir
-            u32 muEpisodes;
-            bool mbInEpisode;
-            // --- callee side: RaceCarPhysics::UpdateAftertouch ---
-            u32 muEnter;
-            u32 mauGateCrashing[2];   // [0] = IsCrashing() false, [1] = true
-            u32 mauGateStartLine[2];  // [0] = not on start line (proceed), [1] = on start line (bail)
-            u32 mauGateShowtime[2];   // [0] = +0x14 vcall FALSE (bail), [1] = TRUE (proceed)  <-- THE ANSWER
-            u32 muBodyRan;            // passed all three entry gates
-            u32 muChannelsRan;        // ... and (additive && enable > 0)
-            u32 muYawAngImpulse;      // AddWorldSpaceAngularImpulse actually issued
-            u32 muLeverRoll;          // lever impulse 1 (yaw / camera-X arm) actually issued
-            u32 muLeverPitch;         // lever impulse 2 (pitch / camera-Z arm) actually issued
-        };
-        AtGateCensus gsAtGate = { 0, 0, { 0 }, 0, false, 0, { 0 }, { 0 }, { 0 }, 0, 0, 0, 0, 0 };
-
-        void AtGatePrint(const char* lpcWhy, u32 luWinFrom, u32 luWinTo)
-        {
-            if (CgsDev::Log::gpDebugPrint == 0)
-                return;
-            *CgsDev::Log::gpDebugPrint
-                << "[at-gate] " << lpcWhy
-                << " ep=" << static_cast<s32>(gsAtGate.muEpisodes)
-                << " win=[" << static_cast<s32>(luWinFrom) << "," << static_cast<s32>(luWinTo) << "]"
-                << " crashF=" << static_cast<s32>(gsAtGate.muCrashFrames)
-                << " | key(add,stVCall,stAllow,air):";
-            for (s32 liK = 0; liK < 16; ++liK)
-            {
-                if (gsAtGate.mauKey[liK] != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << " " << ((liK & 1) ? 1 : 0) << ((liK & 2) ? 1 : 0)
-                        << ((liK & 4) ? 1 : 0) << ((liK & 8) ? 1 : 0)
-                        << "=" << static_cast<s32>(gsAtGate.mauKey[liK]);
-                }
-            }
-            *CgsDev::Log::gpDebugPrint
-                << " | AT enter=" << static_cast<s32>(gsAtGate.muEnter)
-                << " crashing[0,1]=" << static_cast<s32>(gsAtGate.mauGateCrashing[0])
-                << "," << static_cast<s32>(gsAtGate.mauGateCrashing[1])
-                << " startline[0,1]=" << static_cast<s32>(gsAtGate.mauGateStartLine[0])
-                << "," << static_cast<s32>(gsAtGate.mauGateStartLine[1])
-                << " showtimeVCall[0,1]=" << static_cast<s32>(gsAtGate.mauGateShowtime[0])
-                << "," << static_cast<s32>(gsAtGate.mauGateShowtime[1])
-                << " bodyRan=" << static_cast<s32>(gsAtGate.muBodyRan)
-                << " channels=" << static_cast<s32>(gsAtGate.muChannelsRan)
-                << " yawAng=" << static_cast<s32>(gsAtGate.muYawAngImpulse)
-                << " leverRoll=" << static_cast<s32>(gsAtGate.muLeverRoll)
-                << " leverPitch=" << static_cast<s32>(gsAtGate.muLeverPitch)
-                << "\n";
-        }
-    }
     // -----------------------------------------------------------------------------------------
     // THE SEED CONSTANTS ARE READ (2026-08-03, constants wave). The banner that used to sit
     // here said "the exports do NOT contain their numeric values (verified: 0x82F2A2xx have no
@@ -444,95 +352,10 @@ namespace Vehicle
         }   // +0x100 splat(flt_82002138)
     }
 
-    namespace
-    {
 
-        RaceCarPhysics::TdSlamGateSample gaTdSlamGate[8] = {};
 
-        void TdSlamGateRecord(const RaceCarPhysics* lpCar, bool lbCrashingBranch, s32 liNumCollisions,
-                              s32 liNumWorldCollisions, f32 lfControlSteer, f32 lfSlamBeforeGate)
-        {
-            for (RaceCarPhysics::TdSlamGateSample& lrSample : gaTdSlamGate)
-            {
-                if (lrSample.mpCar != lpCar && lrSample.mpCar != 0)
-                    continue;
-                lrSample.mpCar                = lpCar;
-                ++lrSample.muUpdates;
-                lrSample.mbCrashingBranch     = lbCrashingBranch;
-                lrSample.miNumCollisions      = liNumCollisions;
-                lrSample.miNumWorldCollisions = liNumWorldCollisions;
-                lrSample.mfControlSteer       = lfControlSteer;
-                lrSample.mfSlamBeforeGate     = lfSlamBeforeGate;
-                return;
-            }
-        }
-    }
 
-    const RaceCarPhysics::TdSlamGateSample* RaceCarPhysics::FindTdSlamGateSample(const RaceCarPhysics* lpCar)
-    {
-        for (const TdSlamGateSample& lrSample : gaTdSlamGate)
-        {
-            if (lrSample.mpCar == lpCar)
-                return &lrSample;
-        }
-        return 0;
-    }
 
-    namespace
-    {
-        struct TdReactWatchSlot
-        {
-            const RaceCarPhysics* mpCar;
-            s32 miImpactId;
-            s32 miRole;        // 0 = victim, 1 = aggressor
-            s32 miStep;        // steps printed so far
-        };
-        TdReactWatchSlot gaTdReactWatch[8] = {};
-        const s32 KI_TD_REACT_STEPS = 120;
-    }
-
-    void RaceCarPhysics::TdReactWatch(const RaceCarPhysics* lpCar, s32 liImpactId, s32 liRole)
-    {
-        TdReactWatchSlot* lpFree = 0;
-        for (TdReactWatchSlot& lrSlot : gaTdReactWatch)
-        {
-            if (lrSlot.mpCar == lpCar)
-            {
-                lpFree = &lrSlot;   // re-arm the car's own slot
-                break;
-            }
-            if (lpFree == 0 && lrSlot.mpCar == 0)
-                lpFree = &lrSlot;
-        }
-        if (lpFree == 0)
-            return;
-        lpFree->mpCar      = lpCar;
-        lpFree->miImpactId = liImpactId;
-        lpFree->miRole     = liRole;
-        lpFree->miStep     = 0;
-    }
-
-    void RaceCarPhysics::TdReactStep(const BrnPlayerDriverControls* lpControls) const
-    {
-        for (TdReactWatchSlot& lrSlot : gaTdReactWatch)
-        {
-            if (lrSlot.mpCar != this)
-                continue;
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                const Vector3& lvV = mLinearVelocity;
-                const Vector3& lvUp = mTransform.yAxis;
-                const f32 lfUpDot = vpu::Dot(lvUp, lvV);
-                const Vector3 lvPlanar{ lvV.x - lvUp.x * lfUpDot, lvV.y - lvUp.y * lfUpDot,
-                                        lvV.z - lvUp.z * lfUpDot, 0.0f };
-                const Vector3Plus& lvShunt = mShuntEffect.mDirectionPlusDesiredSpeed;
-                const f32 lfAlong = lvShunt.x * lvPlanar.x + lvShunt.y * lvPlanar.y + lvShunt.z * lvPlanar.z;
-            }
-            if (++lrSlot.miStep >= KI_TD_REACT_STEPS)
-                lrSlot.mpCar = 0;
-            return;
-        }
-    }
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::Update  @0x826415E8
@@ -585,105 +408,13 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     // =======================================================================================
     // =======================================================================================
-    // [showtime-watch] -- NOT an X360 function. A per-frame WITNESS on the REAL showtime state.
-    //
-    // ⛔⛔ IT REPLACES `RunShowtimeBringUpProbe`, AND THAT PROBE'S OWN DELETE-WHEN IS WHY.
-    // The block that stood here was armed by BRN_SHOWTIME_TEST and, once the car passed 25 mph,
-    // CALLED `SetPlayerVehicleInShowtime(true, 5.0, 50.0)` and `SetCrashing(true)` itself, then
-    // drove `UpdateAftertouch` by hand every frame. Its banner said exactly why:
-    //     "NOTHING in this build can reach it through gameplay: the sole console caller of
-    //      VehicleManager::SetPlayerCarToShowtimeMode (the game-mode/action chain) is not
-    //      reconstructed ... ⛔ DELETE-WHEN: the game-mode chain lands and a real showtime run
-    //      replaces this witness."
-    // ⭐⭐⭐ THAT CONDITION IS MET AS OF 2026-08-27. `PhysicsModule::HandleGameActions @0x825A72F0`
-    // is real (BrnPhysicsModuleGameActions.cpp) and `GameStateModule::StartCrashMode @0x8236B580`
-    // is real (GameStateModule_Showtime.cpp); a run that holds both bumpers now reaches
-    // SetPlayerCarToShowtimeMode through the console's own chain, and the game's own assert
-    // callstack printed it:
-    //     RaceCarPhysics::SetPlayerVehicleInShowtime <- VehicleManager::SetPlayerCarToShowtimeMode
-    //       <- PhysicsModule::HandleGameActions <- PhysicsModule::Update
-    // So the FABRICATED ENTRY IS DELETED. Keeping it would leave a second, invented road into
-    // showtime alongside the real one -- and the two would diverge silently.
-    //
-    // WHAT SURVIVES is the half that was never fabricated: the state line. It is now gated on the
-    // REAL `mbPlayerCarInShowtime` instead of on an injected one, so it can only print when the
-    // console's own chain has put the car in showtime. It fires on the transition and then every
-    // 30 frames while showtime lasts, and it carries the BOUNCE counters as well as the launch
-    // latches -- because "did the P6 bounce chain execute" is a question about
-    // mbJustBounced / muBounceChainCount, not about whether showtime was entered.
-    // Opt-in via BRN_SHOWTIME_WATCH so a default run is untouched.
-    //
-    // ⭐⭐⭐ HOW TO READ THE LINE IT PRINTS, and what its FIRST measurement already said.
-    // On 2026-08-27 a real showtime run produced 164 of these. The car entered showtime, took the
-    // launch impulse, flew a genuine arc (velY +5.2 -> 0.1 -> -5.1 with hasAir going 1 -> 0) and
-    // tumbled (angMag to 5.6). And across every one of those lines:
-    //     justBounced=0  bouncedThisFrame=0  chain=0  boosting=0  usingAftertouch=0
-    //     pushT=0.400000
-    // ⚠️ `pushT` IS THE TELL, AND IT IS THE ONE FIELD THAT CANNOT LIE HERE. mfTimeUntilPush is
-    // decremented by the timestep on exactly ONE line in the whole tree -- UpdateShowtimePhysics,
-    // ~:1228 below -- and SetPlayerVehicleInShowtime had just seeded it to 0.4. A timer that is
-    // seeded and then never ticks proves its owning body never ran, which is a far stronger claim
-    // than "the bounce flags are zero" (those could be zero because nothing hit anything).
-    // The gate is `VehiclePhysics::UpdateCrashing`'s `if (lbPlayerAftertouchForceAdditive)` --
-    // console-faithful, asm 0x82638E30 `beq` -- fed by VehicleManager::mbAftertouchIsForceAdditive,
-    // whose only writer is game action 42.
-    // ⭐ STALE CLAIM CORRECTED 2026-09-07 (aftertouch-gate wave), WITH ITS OWN NUMBER. The line
-    // above used to end "...game action 42, which nothing in the tree posts", and the pushT
-    // paragraph above it is that era's evidence. Action 42's producer landed the same day
-    // (2026-08-27) -- see the arm in BrnPhysicsModuleGameActions.cpp -- and the [at-gate] census
-    // measured it firing: over run atg_showB, 753 of 753 UpdateAftertouch entries arrived with the
-    // additive flag SET, and 688 of them reached the aftertouch channels. So this gate now OPENS
-    // in showtime. What has NOT changed is that it stays SHUT everywhere else: the same census on
-    // a plain 156 mph wall crash (run atg_crashA) read the flag clear on 944 of 944 crash frames.
-    // The full five-link
-    // diagnosis is written out at that arm in BrnPhysicsModuleGameActions.cpp.
-    // ⇒ ENTERING showtime and RUNNING showtime are two different milestones. This witness is what
-    // keeps the first from being reported as the second.
-    // =======================================================================================
     void RaceCarPhysics::Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
                                 const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                                 const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                                 bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
                                 CgsNumeric::Random& lrRandom)
     {
-        {
-            static bool       sbWasInShowtime = false;
-            static s32        siFrameMod      = 0;
 
-        }
-
-        if (TdSlamGateArmed())   // [td-react] PC witness, not X360: the hit-reaction step trace
-            TdReactStep(lpControls);
-
-        // ---- [at-gate] CALLER-SIDE CENSUS. See the banner on AtGateCensus. This is the
-        // DENOMINATOR half: it fires on every frame this car is crashing, whether or not
-        // UpdateCrashing dispatches the +0x28 vcall, so "the aftertouch never ran" can be told
-        // apart from "the probe never ran". Reads only; changes nothing the console does.
-        if (AtGateArmed() && IsCrashing())
-        {
-            // The +0x14 virtual is sampled HERE, through the same dispatch UpdateAftertouch uses,
-            // so the key records what the console's own gate would have read on this frame even
-            // on the frames where the caller's `if (lbPlayerAftertouchForceAdditive)` skips it.
-            const s32 liKey = (lbPlayerAftertouchForceAdditive ? 1 : 0)
-                            | (IsPlayerVehicleActuallyInShowtime() ? 2 : 0)
-                            | (lbShowtimeAllowed ? 4 : 0)
-                            | (mbHasAir ? 8 : 0);
-            if (!gsAtGate.mbInEpisode)
-            {
-                gsAtGate.mbInEpisode = true;
-                gsAtGate.muEpisodes++;
-                gsAtGate.muCrashFrameAtEpisodeStart = gsAtGate.muCrashFrames;
-            }
-            gsAtGate.muCrashFrames++;
-            gsAtGate.mauKey[liKey]++;
-            if ((gsAtGate.muCrashFrames % 60u) == 0u)
-                AtGatePrint("tick", gsAtGate.muCrashFrameAtEpisodeStart, gsAtGate.muCrashFrames);
-        }
-        else if (AtGateArmed() && gsAtGate.mbInEpisode)
-        {
-            gsAtGate.mbInEpisode = false;
-            AtGatePrint("EPISODE-END", gsAtGate.muCrashFrameAtEpisodeStart, gsAtGate.muCrashFrames);
-        }
 
         // THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
         //     static const f32 KF_DT = 0.0f;   // FLAG: frame dt ... un-homed here
@@ -729,9 +460,6 @@ namespace Vehicle
 
             mfSlamSteering = 0.0f;          // this->float1404 = 0.0 (flt_82001CC0)
 
-            if (TdSlamGateArmed())          // [td-slamgate] PC witness, not X360
-                TdSlamGateRecord(this, true, miNumCollisions, static_cast<s32>(mi8NumWorldCollisions),
-                                 lpControls->GetSteer(), 0.0f);
         }
         else
         {
@@ -755,7 +483,7 @@ namespace Vehicle
             else if (lfSteer * mfSlamSteering < -0.30000001f)
             {
                 // 0x82641784..A4: multiply by -0.2, then clamp with the two fsel instructions.
-                mfSlamSteering = std::clamp(mfSlamSteering * -0.2f, -0.2f, 0.2f);
+                mfSlamSteering = rw::math::fpu::Clamp(mfSlamSteering * -0.2f, -0.2f, 0.2f);
             }
 
             if (std::fabs(lfSteer) >= 0.1f)
@@ -763,9 +491,6 @@ namespace Vehicle
             else
                 mfSlamSteering = mfSlamSteering * 0.94999999f;   // inside -> decay 0.95/frame
 
-            if (TdSlamGateArmed())     // [td-slamgate] PC witness, not X360: what the gate below reads
-                TdSlamGateRecord(this, false, miNumCollisions, static_cast<s32>(mi8NumWorldCollisions),
-                                 lfSteer, mfSlamSteering);
 
             if (miNumCollisions > 0)   // asm @0x82641814: `lwz r11,0x1354(r31)` -- a WORD at +0x1354, i.e.
                                        // miNumCollisions. The committed source named mi8SlammingRaceCarId
@@ -1043,39 +768,69 @@ namespace Vehicle
         static const f32 KF_SPEED_LOWER_LIMIT_MPH = 30.0f; // unk_82FB9C00
         static const f32 KF_SPEED_RANGE_MPH       = 55.0f; // unk_82FB8B80 = 85 - 30
 
-        Vector3 lImpulse = vpu::Mult(mPropCollisionImpulseSum, KF_PROP_IMPULSE_MODIFIER);
+        const __vector4 lvZero = __vspltisw(0);
+        const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+        const __vector4 lvHalf = __vcfsx(__vspltisw(1), 1);
+        const __vector4 lvModifier = { KF_PROP_IMPULSE_MODIFIER, KF_PROP_IMPULSE_MODIFIER,
+                                      KF_PROP_IMPULSE_MODIFIER, KF_PROP_IMPULSE_MODIFIER };
+        const __vector4 lvMaxSlowdown = { KF_MAX_SLOWDOWN, KF_MAX_SLOWDOWN,
+                                         KF_MAX_SLOWDOWN, KF_MAX_SLOWDOWN };
+        const __vector4 lvMinSpeedSquared = { KF_MIN_SPEED_SQUARED, KF_MIN_SPEED_SQUARED,
+                                             KF_MIN_SPEED_SQUARED, KF_MIN_SPEED_SQUARED };
+        const __vector4 lvSpeedLower = { KF_SPEED_LOWER_LIMIT_MPH, KF_SPEED_LOWER_LIMIT_MPH,
+                                        KF_SPEED_LOWER_LIMIT_MPH, KF_SPEED_LOWER_LIMIT_MPH };
+        const __vector4 lvSpeedRange = { KF_SPEED_RANGE_MPH, KF_SPEED_RANGE_MPH,
+                                        KF_SPEED_RANGE_MPH, KF_SPEED_RANGE_MPH };
+        static const CGS_ALIGN(16) u32 kauMomentumPermute[4] = {
+            0x00010203, 0x14151617, 0x00010203, 0x00010203 // ARTIST 82CDA350
+        };
 
-        // Remove only the upward component. A downward component is retained exactly as the
-        // `vmax(dot(up, impulse), 0)` / subtract pair at 0x826007D4..F4 does.
-        const Vector3 lWorldUp = GetWorldUpRow();
-        const f32 lfUpComponent = std::max(vpu::Dot(lWorldUp, lImpulse), 0.0f);
-        lImpulse = vpu::Subtract(lImpulse, vpu::Mult(lWorldUp, lfUpComponent));
+        __vector4 lvImpulse = __vmulfp(__lvx(&mPropCollisionImpulseSum, 0), lvModifier);
+        __stvx(lvImpulse, &mPropCollisionImpulseSum, 0);
+        const __vector4 lvWorldUp = __lvx(&GetWorldUpRow(), 0);
+        const __vector4 lvUpComponent = __vmaxfp(__vmsum3fp(lvWorldUp, lvImpulse), lvZero);
+        lvImpulse = __vsubfp(lvImpulse, __vmulfp(lvWorldUp, lvUpComponent));
+        __stvx(lvImpulse, &mPropCollisionImpulseSum, 0);
 
-        const Vector3 lLinearVelocity = GetLinearVelocity();
-        if (vpu::MagnitudeSquared(lLinearVelocity) > KF_MIN_SPEED_SQUARED)
+        const __vector4 lvVelocity = __lvx(&GetLinearVelocity(), 0);
+        const VecFloat lvfMass = GetMass();
+        const __vector4 lvMomentum = __vmulfp(lvVelocity, __lvx(&lvfMass, 0));
+        const __vector4 lvMomentumSquared = __vmsum3fp(lvMomentum, lvMomentum);
+        __vector4 lvInverseMagnitude = __vrsqrtefp(lvMomentumSquared);
+        for (int liStep = 0; liStep < 2; ++liStep)
         {
-            const Vector3 lMomentum = vpu::Mult(lLinearVelocity, GetMass().x);
-            const f32 lfComponentLimit = vpu::Magnitude(lMomentum) * KF_MAX_SLOWDOWN;
-            lImpulse.x = std::clamp(lImpulse.x, -lfComponentLimit, lfComponentLimit);
-            lImpulse.y = std::clamp(lImpulse.y, -lfComponentLimit, lfComponentLimit);
-            lImpulse.z = std::clamp(lImpulse.z, -lfComponentLimit, lfComponentLimit);
-            lImpulse.w = std::clamp(lImpulse.w, -lfComponentLimit, lfComponentLimit);
+            const __vector4 lvSquared = __vmulfp(lvInverseMagnitude, lvInverseMagnitude);
+            const __vector4 lvHalfEstimate = __vmulfp(lvInverseMagnitude, lvHalf);
+            const __vector4 lvResidual = __vnmsubfp(lvMomentumSquared, lvSquared, lvOne);
+            lvInverseMagnitude = __vmaddfp(lvHalfEstimate, lvResidual, lvInverseMagnitude);
         }
-        else
-        {
-            lImpulse.SetZero();
-        }
+        const __vector4 lvMagnitude = __vsel(__vmulfp(lvMomentumSquared, lvInverseMagnitude),
+            lvZero, __vcmpeqfp(lvZero, lvMomentumSquared));
+        __vector4 lvMagnitudeRow = __vperm(lvMagnitude, lvMagnitude, __lvx(kauMomentumPermute, 0));
+        lvMagnitudeRow = __vrlimi(lvMagnitudeRow, lvMagnitude, 2, 0);
+        const __vector4 lvLimit = __vmulfp(lvMagnitudeRow, lvMaxSlowdown);
+        __vector4 lvSignMask = __vspltisw(-1);
+        lvSignMask = __vslw(lvSignMask, lvSignMask);
+        lvImpulse = __vminfp(__vmaxfp(lvImpulse, __vxor(lvLimit, lvSignMask)), lvLimit);
+        lvImpulse = __vsel(lvZero, lvImpulse,
+            __vcmpgtfp(__vmsum3fp(lvVelocity, lvVelocity), lvMinSpeedSquared));
+        __stvx(lvImpulse, &mPropCollisionImpulseSum, 0);
 
-        const f32 lfSpeedFactor = std::clamp(
-            (GetSpeedMPH().x - KF_SPEED_LOWER_LIMIT_MPH) / KF_SPEED_RANGE_MPH,
-            0.0f, 1.0f);
-        lImpulse = vpu::Mult(lImpulse, 1.0f - lfSpeedFactor);
-
+        __vector4 lvReciprocal = __vrefp(lvSpeedRange);
+        for (int liStep = 0; liStep < 2; ++liStep)
+            lvReciprocal = __vmaddfp(lvReciprocal,
+                __vnmsubfp(lvReciprocal, lvSpeedRange, lvOne), lvReciprocal);
+        const VecFloat lvfSpeedMPH = GetSpeedMPH();
+        __vector4 lvSpeedFactor = __vmulfp(lvReciprocal,
+            __vsubfp(__lvx(&lvfSpeedMPH, 0), lvSpeedLower));
+        lvSpeedFactor = __vminfp(lvOne, __vmaxfp(lvZero, lvSpeedFactor));
+        lvImpulse = __vmulfp(lvImpulse, __vsubfp(lvOne, lvSpeedFactor));
+        __stvx(lvImpulse, &mPropCollisionImpulseSum, 0);
         if (!mbAllWheelsHaveTraction)
-            lImpulse.SetZero();
+            __stvx(lvZero, &mPropCollisionImpulseSum, 0);
 
-        AddWorldSpaceImpulse(lImpulse);
-        mPropCollisionImpulseSum.SetZero();
+        AddWorldSpaceImpulse(mPropCollisionImpulseSum);
+        __stvx(lvZero, &mPropCollisionImpulseSum, 0);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1122,7 +877,7 @@ namespace Vehicle
             const f32 lfFlatMagSq = vpu::MagnitudeSquared(lvFlat);
             Vector3 lvUnit2D = (lfFlatMagSq > 0.0f)
                              ? vpu::Mult(lvFlat, 1.0f / std::sqrt(lfFlatMagSq))
-                             : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                             : Vector3();
 
             Vector3 lvIdeal = vpu::Mult(lvUnit2D, lfClampedSpeed);
 
@@ -1177,12 +932,6 @@ namespace Vehicle
                 if (mbHasAir || IsCrashing())   // +0x1350 || +0x710 (asm; audit F2)
                 {
                     lfTimeUntilPush = 0.001f;   // already airborne/crashing -> tiny delay, no relaunch
-                    // [showtime] one-shot mode-entry diagnostic (branch witness; entry is a
-                    // once-per-mode-change event, so this cannot spam).
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[showtime] enter: airborne/crash arm (hasAir=" << (mbHasAir ? 1 : 0)
-                            << " crashing=" << (IsCrashing() ? 1 : 0) << ") pushT=0.001\n";
                 }
                 else
                 {
@@ -1212,17 +961,11 @@ namespace Vehicle
                     // customPosition, timerTillFire.
                     const bool lbRising = !(GetAngularVelocity().y < 0.0f);   // +0x60 lane .y
                     AddAirRam(lbRising ? 5130u : 3082u, KF_LAUNCH_AIRRAM_FACTOR, KF_LAUNCH_AIRRAM_ARG,
-                              Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
+                              Vector3(), Vector3(), 0.0f);
 
                     lfTimeUntilPush = KF_TIMEUNTILPUSH_DELAY;   // flt_82F2A2A4 (0.4, image-read)
                     MS.mbLaunchActive = true;                   // byte_82FB84B2 = 1
 
-                    // [showtime] one-shot mode-entry diagnostic (branch witness).
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[showtime] enter: LAUNCH arm, push vel=(" << lvPush.x << ", "
-                            << lvPush.y << ", " << lvPush.z << ") rising=" << (lbRising ? 1 : 0)
-                            << " pushT=" << KF_TIMEUNTILPUSH_DELAY << "\n";
                 }
                 MS.mfTimeUntilPush = lfTimeUntilPush;   // flt_82FB84C4 = v68
             }
@@ -1460,7 +1203,7 @@ namespace Vehicle
             }
             if (lfAirRamFactor > 0.0f)
                 AddAirRam(1u, lfAirRamFactor, KF_BOUNCE_AIRRAM_DECAY /* flt_82FB9140 = 0.2 */,
-                          lvAirRamDir, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
+                          lvAirRamDir, Vector3(), 0.0f);
         }
 
         // launch-push timer expiry: fire the launch pop + extra spin, then set bounce-boost.
@@ -1475,16 +1218,10 @@ namespace Vehicle
                     // SetShowtimeAimDirection stores (asm 0x82600030-94).
                     Vector3 lvDir = vpu::Normalize(vpu::Add(KV_WORLD_UP, MS.mAimDirection));
                     AddAirRam(1u, KF_PUSH_AIRRAM_FACTOR, KF_PUSH_AIRRAM_ARG,
-                              lvDir, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
+                              lvDir, Vector3(), 0.0f);
                     // pop spin: cameraX * splat(flt_82F2A2A8 = 500).
                     AddWorldSpaceAngularImpulse(vpu::Mult(lvCameraX, KF_PUSH_SPIN_SCALE));
 
-                    // [showtime] one-shot launch-pop diagnostic (fires once per launch window).
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[showtime] launch pop: airram dir=(" << lvDir.x << ", " << lvDir.y
-                            << ", " << lvDir.z << ") aim=(" << MS.mAimDirection.x << ", "
-                            << MS.mAimDirection.y << ", " << MS.mAimDirection.z << ")\n";
                 }
                 MS.mbBounceBoosting = true;   // lbBounceBoosting = 1
                 MS.mbShouldBounceBoost = false;
@@ -1494,88 +1231,6 @@ namespace Vehicle
         CapShowtimeVelocities();
     }
 
-    namespace
-    {
-        struct TargetAssistWitness
-        {
-            s32 miNumTargets;
-            f32 mfAirTime;
-            bool mbAirGate;
-            Vector3 mvAim;
-            f32 mfMaxDot;
-            s32 miBest;
-            s32 miBestId;
-            f32 mfBestDot;
-            f32 mfBestDist;
-            f32 mfBestWeight;
-            bool mbForceFired;
-            f32 mfForce;
-            f32 mfEnvelopeY;
-            s32 miCurrentTargetId;
-            s32 miPrevTargetId;
-        };
-
-        // The witness's own read-back of the candidate scores, so the decision block stays as committed
-        // (run_showtime_ground_plane extracts the candidate loop verbatim). Same expressions as the loop:
-        // (target - car) in the ground plane, unit, dot with the aim, weight (2 - dot) * dist, x 0.5 for
-        // last frame's target.
-        void ScoreTargetAssistCandidates(TargetAssistWitness& lrW, const Vector3& lvPosition,
-                                         const Vector3* lpaPositions, const s32* lpaIds,
-                                         f32 lfStickiness)
-        {
-            lrW.mfMaxDot = -2.0f;
-            for (s32 liT = 0; liT < lrW.miNumTargets && liT < 8; ++liT)   // the lists hold 8
-            {
-                Vector3 lvToTarget = vpu::Subtract(lpaPositions[liT], lvPosition);
-                lvToTarget.y = 0.0f;
-                const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
-                const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
-                const Vector3 lvUnit = (lfDist > 0.0f) ? vpu::Mult(lvToTarget, 1.0f / lfDist)
-                                                       : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-                const f32 lfDot = vpu::Dot(lrW.mvAim, lvUnit);
-                if (lfDot > lrW.mfMaxDot)
-                    lrW.mfMaxDot = lfDot;
-                if (liT == lrW.miBest)
-                {
-                    lrW.mfBestDot    = lfDot;
-                    lrW.mfBestDist   = lfDist;
-                    lrW.mfBestWeight = (2.0f - lfDot) * lfDist
-                                     * ((lpaIds[liT] == lrW.miPrevTargetId) ? lfStickiness : 1.0f);
-                }
-            }
-        }
-
-        void NoteTargetAssist(const TargetAssistWitness& lrW)
-        {
-            static const s32 KI_TASSIST_WITNESS_CAP = 64;
-            static s32  siLines   = 0;
-            static u32  suCalls   = 0;
-            static bool sbLastGate = false;
-
-            ++suCalls;
-            const bool lbFirst = (suCalls == 1);
-            const bool lbFlip  = (lrW.mbAirGate != sbLastGate);
-            sbLastGate = lrW.mbAirGate;
-            if (!(lrW.mbAirGate || lbFirst || lbFlip) || CgsDev::Log::gpDebugPrint == 0)
-                return;
-            if (siLines > KI_TASSIST_WITNESS_CAP)
-                return;
-            if (siLines++ == KI_TASSIST_WITNESS_CAP)
-            {
-                *CgsDev::Log::gpDebugPrint << "[tassist] cap of " << KI_TASSIST_WITNESS_CAP
-                                           << " lines reached; later calls are not printed\n";
-                return;
-            }
-            *CgsDev::Log::gpDebugPrint
-                << "[tassist] call=" << suCalls << " targets=" << lrW.miNumTargets
-                << " air=" << lrW.mfAirTime << " gate=" << (lrW.mbAirGate ? 1 : 0)
-                << " aim=(" << lrW.mvAim.x << ", " << lrW.mvAim.y << ", " << lrW.mvAim.z << ")"
-                << " maxDot=" << lrW.mfMaxDot << " best=" << lrW.miBest << " id=" << lrW.miBestId
-                << " dot=" << lrW.mfBestDot << " dist=" << lrW.mfBestDist << " weight=" << lrW.mfBestWeight
-                << " fired=" << (lrW.mbForceFired ? 1 : 0) << " force=" << lrW.mfForce
-                << " envY=" << lrW.mfEnvelopeY << " cur=" << lrW.miCurrentTargetId << "\n";
-        }
-    }
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::UpdateTargetAssist  @0x8261FF50
@@ -1610,34 +1265,17 @@ namespace Vehicle
         CGS_ASSERT(mbPlayerCarInShowtime, "mbPlayerCarInShowtime");   // :1036
 
         s32 liBest = -1;
-        f32 lfBestWeight = 3.4028235e38f;   // FLT_MAX seed
+        f32 lfBestWeight = FLT_MAX;   // FLT_MAX seed
 
         if (MS.miNumTargets <= 0)   // dword_82FB8570
             return;
 
-        // [tassist] witness record (NOT X360; filled as the decision is made, printed at the exits).
-        TargetAssistWitness lWitness = {};
-        if (lbWitness)
-        {
-            lWitness.miNumTargets = MS.miNumTargets;
-            lWitness.mfAirTime    = mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z;
-            lWitness.mvAim        = lvAimDirection;
-            lWitness.miPrevTargetId = MS.miCurrentTargetId;
-            lWitness.miBest       = -1;
-        }
 
         // gate: really airborne -- time-without-traction (+0x1060.z) above 0.5 s.
         if (!(mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > KF_AIRTIME_GATE))
         {
-            if (lbWitness)
-            {
-                lWitness.miCurrentTargetId = MS.miCurrentTargetId;
-                lWitness.mfEnvelopeY       = MS.mAssistStrength.x;
-                NoteTargetAssist(lWitness);
-            }
             return;
         }
-        lWitness.mbAirGate = true;
 
         const Vector3 lvPosition = mTransform.Pos();   // lvx128 [this+0x40]
 
@@ -1649,7 +1287,7 @@ namespace Vehicle
             const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
             const Vector3 lvUnit = (lfDist > 0.0f)
                                  ? vpu::Mult(lvToTarget, 1.0f / lfDist)
-                                 : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // vsel zero guard
+                                 : Vector3();   // vsel zero guard
 
             const f32 lfDot = vpu::Dot(lvAimDirection, lvUnit);   // vmsum3fp128 v127, v11
             if (lfDot > KF_TARGET_SCORE_GATE)   // flt_82F2A328 (0.766) -- the DOT gate
@@ -1704,7 +1342,7 @@ namespace Vehicle
             {
                 Vector3 lvUnit = (lfDist > 0.0f)
                                ? vpu::Mult(lvToTarget, 1.0f / lfDist)
-                               : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                               : Vector3();
 
                 // the intercept: 2D speed via BrnMath::Magnitude2D(mLinearVelocity).
                 const f32 lfSpeed2D = BrnMath::Magnitude2D(GetLinearVelocity());
@@ -1725,75 +1363,14 @@ namespace Vehicle
 
                 mUsedAirRams.UnSetAll();   // std r31(0), 0x1158(r28) -- drop the queued air rams
 
-                if (lbWitness)
-                {
-                    lWitness.mbForceFired = true;   // [tassist] witness only
-                    lWitness.mfForce      = lfForce;
-                }
             }
         }
 
-        if (lbWitness)
-        {
-            lWitness.miBest            = liBest;
-            lWitness.miBestId          = (liBest >= 0) ? static_cast<s32>(MS.maTargetIds[liBest].muValue) : 0;
-            lWitness.miCurrentTargetId = MS.miCurrentTargetId;
-            lWitness.mfEnvelopeY       = MS.mAssistStrength.x;
-            s32 laiIds[8] = {};
-            for (s32 liT = 0; liT < lWitness.miNumTargets && liT < 8; ++liT)
-                laiIds[liT] = static_cast<s32>(MS.maTargetIds[liT].muValue);
-            ScoreTargetAssistCandidates(lWitness, lvPosition, MS.maTargetPositions, laiIds,
-                                        KF_TARGET_STICKINESS);
-            NoteTargetAssist(lWitness);
-        }
     }
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::UpdateAftertouch  @0x8262EBE8
     //
-    // ⭐⭐⭐ MEASURED AND CLEARED 2026-09-07 (aftertouch-gate wave). THIS FUNCTION IS **NOT** THE
-    // SOURCE OF "the car in the air turns weirdly, like someone is pulling it".
-    //
-    // WHY IT WAS THE SUSPECT. It is the only crash helper that adds a yaw ANGULAR impulse and two
-    // +/-4 m world-up LEVER impulses, and their arms are built from `lpCameraMatrix->xAxis` /
-    // `->zAxis` -- the CAMERA's axes, which rotate independently of the car. If it ran during an
-    // ordinary crash it would feel exactly like that, and left/right-wrong for free.
-    //
-    // WHAT THE CENSUS MEASURED (the [at-gate] instrument above; exe md5 827CBC6A...).
-    //   run atg_crashA -- a 70 m/s (156 mph) placed wall crash, free burn, 2 crash episodes:
-    //       crashF = 944         (the probe is live at the decision point)
-    //       add    = 0 / 944     (UpdateCrashing's own gate, asm 0x82638E30, never opened)
-    //       +0x14 showtime vcall = 0 / 944  (sampled through the same dispatch this body uses)
-    //       AT enter = 0, bodyRan = 0, yawAng = leverRoll = leverPitch = 0
-    //     Liveness control: the key's `hasAir` bit took BOTH values (902 grounded / 42 airborne),
-    //     so the histogram was reading live state, not stuck.
-    //   run atg_showB -- the NEGATIVE CONTROL, a real both-bumpers showtime entry:
-    //       AT enter = 753, crashing[0,1] = 0,753, startline[0,1] = 753,0,
-    //       showtimeVCall[0,1] = 0,753, bodyRan = 753, channels = 688
-    //   run atg_showD -- the same, with the STEERING STICK held so the channels have an input:
-    //       AT enter = 917, bodyRan = 917, channels = 688, **leverRoll = 688**
-    //     i.e. every counter the crash run reported as zero is DEMONSTRABLY able to move,
-    //     including the +/-4 m camera-X lever impulse itself.
-    // ⇒ TWO independent gates -- the caller's `mbAftertouchIsForceAdditive` and this body's own
-    //   +0x14 `IsPlayerVehicleActuallyInShowtime` -- were shut on 944 of 944 crash frames.
-    //   Aftertouch is a SHOWTIME behaviour and only a showtime behaviour, which is what the
-    //   console does. Every sign, constant and axis below was re-read from the image the same day
-    //   and is faithful (see the per-line citations).
-    //
-    // ⭐⭐ AND THE YAW ANGULAR IMPULSE IS STRUCTURALLY DEAD -- IN THE CONSOLE TOO. Its magnitude is
-    // `lfScalar * -2000 * dt * enable`, and `lfScalar` is the THIRD out-param of
-    // GetAftertouchValues @0x825B2E88, which both arms of that leaf set to `flt_82001CC0` == 0.0
-    // (image read). Nothing writes that stack slot (`var_124`) between the call @0x8262EE78 and
-    // the read @0x8262F2D4 -- checked instruction by instruction across the whole listing -- so
-    // the impulse is the zero vector and the `vcmpgtfp` epsilon guard @0x8262F374 always skips
-    // `AddWorldSpaceAngularImpulse`. The measurement agrees independently: yawAng = 0 across 688
-    // channel executions in the showtime control run. So do NOT read the `-2000` below as a live
-    // torque; it is multiplied by a hard zero, and that is ARTIST's own arithmetic.
-    // ⚠️ WHAT THIS CANNOT DISTINGUISH: it counts APPLICATIONS, not magnitudes, so a tiny impulse
-    // and a huge one score the same; and it says nothing about torque applied by any body other
-    // than this one. `leverPitch` is the ONE counter never seen to move -- it needs
-    // `mfForwardSteering` (the in-air pitch stick), which no harness channel supplies -- so its
-    // zero is unproven, unlike every other zero above.
     // REWRITTEN 2026-08-24 (showtime wave) from a fresh full disassembly (show_asm.txt in the
     // wave scratchpad; 2616 bytes read end to end). The committed body's channel structure was
     // a slice sketch; the console's is:
@@ -1846,32 +1423,17 @@ namespace Vehicle
                                           VecFloat lvfTimeStep,
                                           bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis)
     {
-        // ---- [at-gate] CALLEE-SIDE CENSUS (see the banner on AtGateCensus). Each gate is
-        // counted as a two-bin histogram BEFORE it is taken, so a bail is attributed to the
-        // gate that caused it rather than inferred from a silent function.
-        const bool lbAtGate = AtGateArmed();
-        if (lbAtGate)
-        {
-            gsAtGate.muEnter++;
-            gsAtGate.mauGateCrashing[IsCrashing() ? 1 : 0]++;
-        }
 
         if (!IsCrashing())                        // lbz +0x710 @0x8262EC1C, beq -> bail
             return;
-        if (lbAtGate)
-            gsAtGate.mauGateStartLine[lpControls->mbIsOnStartLine ? 1 : 0]++;
         // RE-NAMED 2026-08-03. `lbz r11, 0x40(r25)` @0x8262EC28, must be ZERO to proceed --
         // 0x40 is mbIsOnStartLine. Aftertouch is disabled while the car sits on the start line.
         if (lpControls->mbIsOnStartLine)          // asm lbz +0x40, bne -> bail
             return;
         // the vtbl+0x14 virtual (image-attested slot; IsPlayerVehicleActuallyInShowtime on the
         // RaceCarPhysics vtable @0x820D1034). FALSE bails the whole body @0x8262EC4C.
-        if (lbAtGate)
-            gsAtGate.mauGateShowtime[IsPlayerVehicleActuallyInShowtime() ? 1 : 0]++;
         if (!IsPlayerVehicleActuallyInShowtime())
             return;
-        if (lbAtGate)
-            gsAtGate.muBodyRan++;
 
         // FLATTEN, then normalise, the camera X and Z axes (the console's own asserts, :0x207 /
         // :0x20F, run on the FLAT copies). 0x8262EC54..0x8262EC78: `lvx128 camX ; stvx128 ;
@@ -1905,8 +1467,6 @@ namespace Vehicle
 
         if (lbDoForceAdditiveAftertouch && lfEnable > 0.0f)
         {
-            if (lbAtGate)
-                gsAtGate.muChannelsRan++;
             f32 lfYaw = 0.0f, lfPitch = 0.0f, lfScalar = 0.0f;
             // FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave): the console leaf
             // @0x825B2E88 is the 4-arg reference form; THIS call site passes the bool as a
@@ -1957,34 +1517,6 @@ namespace Vehicle
                 }
             }
 
-            if (lbTraceControls)
-            {
-                char lacControlLine[1024];
-                std::snprintf(lacControlLine,sizeof(lacControlLine),
-                    "[showtime-control] raw %.9g %.9g %.9g requested %.9g brake %.9g wheel %d button %d "
-                    "decoded %.9g %.9g %.9g enable %.9g dt %.9g air %d height %.9g valid %d "
-                    "cameraX %.9g %.9g %.9g cameraZ %.9g %.9g %.9g force %.9g %.9g %.9g\n",
-                    lpControls->mfSteering,lpControls->mfForwardSteering,lpControls->mfSpin,
-                    lpControls->mfRequestedGas,lpControls->mfBrake,
-                    lpControls->mbIsSteeringWheel?1:0,lpControls->mbBoostBounce?1:0,
-                    lfYaw,lfPitch,lfScalar,lfEnable,lvfTimeStep.x,mbHasAir?1:0,
-                    mAboveGroundTestResult.mfVerticalDistance,mAboveGroundTestResult.mbValid?1:0,
-                    lvCameraX.x,lvCameraX.y,lvCameraX.z,lvCameraZ.x,lvCameraZ.y,lvCameraZ.z,
-                    lvForce.x,lvForce.y,lvForce.z);
-                CgsDev::Log::WriteToLog(lacControlLine);
-                const auto& lrCameraX=lpCameraMatrix->xAxis;
-                const auto& lrCameraY=lpCameraMatrix->yAxis;
-                const auto& lrCameraZ=lpCameraMatrix->zAxis;
-                const auto& lrCameraPos=lpCameraMatrix->wAxis;
-                std::snprintf(lacControlLine,sizeof(lacControlLine),
-                    "[showtime-control-basis] x %.9g %.9g %.9g %.9g y %.9g %.9g %.9g %.9g "
-                    "z %.9g %.9g %.9g %.9g pos %.9g %.9g %.9g %.9g\n",
-                    lrCameraX.x,lrCameraX.y,lrCameraX.z,lrCameraX.w,
-                    lrCameraY.x,lrCameraY.y,lrCameraY.z,lrCameraY.w,
-                    lrCameraZ.x,lrCameraZ.y,lrCameraZ.z,lrCameraZ.w,
-                    lrCameraPos.x,lrCameraPos.y,lrCameraPos.z,lrCameraPos.w);
-                CgsDev::Log::WriteToLog(lacControlLine);
-            }
 
             if (vpu::MagnitudeSquared(lvForce) > 1.1920929e-07f)   // the FLT_EPSILON lane test
                 AddWorldSpaceForce(lvForce);                       // bl @0x8262F1FC
@@ -2002,10 +1534,10 @@ namespace Vehicle
                 const f32 lfAimMagSq = vpu::MagnitudeSquared(lvAim);
                 lvAim = (lfAimMagSq > 0.0f)
                       ? vpu::Mult(lvAim, 1.0f / std::sqrt(lfAimMagSq))
-                      : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // vsel zero guard
+                      : Vector3();   // vsel zero guard
 
-                UpdateTargetAssist(lpControls, lvfTimeStep,
-                                   VecFloat{ lfEnable, lfEnable, lfEnable, lfEnable }, lvAim);
+                const VecFloat lvfEnable = { lfEnable, lfEnable, lfEnable, lfEnable };
+                UpdateTargetAssist(lpControls, lvfTimeStep, lvfEnable, lvAim);
             }
 
             // yaw ANGULAR impulse from the aftertouch scalar (0x8262F2D0-F38C):
@@ -2014,8 +1546,6 @@ namespace Vehicle
                 KV_WORLD_UP, lfScalar * KF_AT_ROLL_SCALAR * lvfTimeStep.x * lfEnable);
             if (HasAftertouchImpulse(lvYawImpulse))
             {
-                if (lbAtGate)
-                    gsAtGate.muYawAngImpulse++;
                 AddWorldSpaceAngularImpulse(lvYawImpulse);
             }
 
@@ -2031,16 +1561,6 @@ namespace Vehicle
                                                      : vpu::Subtract(mTransform.Pos(), lvArm);
                 if (HasAftertouchImpulse(lvImpulse))
                 {
-                    if (lbTraceControls)
-                    {
-                        char lacControlLine[256];
-                        std::snprintf(lacControlLine,sizeof(lacControlLine),
-                            "[showtime-control-roll] impulse %.9g %.9g %.9g point %.9g %.9g %.9g\n",
-                            lvImpulse.x,lvImpulse.y,lvImpulse.z,lvAt.x,lvAt.y,lvAt.z);
-                        CgsDev::Log::WriteToLog(lacControlLine);
-                    }
-                    if (lbAtGate)
-                        gsAtGate.muLeverRoll++;
                     AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
                                     lvAt, rw::physics::WORLD_SPACE);
                 }
@@ -2061,16 +1581,6 @@ namespace Vehicle
                                                        : vpu::Subtract(mTransform.Pos(), lvArm);
                 if (HasAftertouchImpulse(lvImpulse))
                 {
-                    if (lbTraceControls)
-                    {
-                        char lacControlLine[256];
-                        std::snprintf(lacControlLine,sizeof(lacControlLine),
-                            "[showtime-control-pitch] impulse %.9g %.9g %.9g point %.9g %.9g %.9g\n",
-                            lvImpulse.x,lvImpulse.y,lvImpulse.z,lvAt.x,lvAt.y,lvAt.z);
-                        CgsDev::Log::WriteToLog(lacControlLine);
-                    }
-                    if (lbAtGate)
-                        gsAtGate.muLeverPitch++;
                     AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
                                     lvAt, rw::physics::WORLD_SPACE);
                 }
@@ -2078,9 +1588,11 @@ namespace Vehicle
         }
 
         if (lbShowtime)   // lbz +0x140C @0x8262F5D4
+        {
+            const VecFloat lvfEnable = { lfEnable, lfEnable, lfEnable, lfEnable };
             UpdateShowtimePhysics(lpControls, lvCameraX, lvCameraZ, lvfTimeStep,
-                                  VecFloat{ lfEnable, lfEnable, lfEnable, lfEnable },
-                                  lbUseSixaxis);
+                                  lvfEnable, lbUseSixaxis);
+        }
     }
 
     // never-called layout pin: makes the per-TU compile gate enforce the PlayerParameters singleton
