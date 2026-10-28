@@ -163,16 +163,8 @@ namespace
     // ----------------------------------------------------------------------------------
 
     // CgsGui::GuiEventPlayMusicOnMenuStream -- carries a sound-name hash + two flag bytes.
-    struct MusicOnMenuStreamEvent : public CgsGui::GuiEvent<155>
-    {
-        s32 miHash;     // +0x0C (the MakeHash result, or dword_830082A8)
-        u8  mu8FlagA;   // +0x10
-        u8  mu8FlagB;   // +0x11
-        u8  maPad[2];
-        explicit MusicOnMenuStreamEvent(s32 liHash)
-            : CgsGui::GuiEvent<155>(0, 12), miHash(liHash), mu8FlagA(0), mu8FlagB(0)
-        { maPad[0] = maPad[1] = 0; }
-    };
+    // ARTIST BootLegal8247784C/82477AEC uses the canonical flat music event.
+    using MusicOnMenuStreamEvent = CgsGui::GuiEventPlayMusicOnMenuStream;
 
     // BrnGui::GuiMuteDac's X360 payload is one byte, event id 88.
     struct MuteDacPayload

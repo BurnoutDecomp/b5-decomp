@@ -34,7 +34,9 @@
 #include "GameSource/Gui/Events/BrnGuiEventPreRaceMessages.h"
 
 #include "GameSource/GameState/BrnGameActions.h"
-#include "types.hpp"                                   // u8/s8/u32 widths, f32
+#include "types.hpp"
+#include <cstring>
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"                                   // u8/s8/u32 widths, f32
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray
@@ -138,6 +140,21 @@ struct GuiAudioTriggerWirePayload457
     s32  meAction;
     char macLabel[32];
     char macMovie[32];
+
+    GuiAudioTriggerWirePayload457() = default;
+
+    // FLAG PC-platform leaf: the existing internal carrier retains its legacy
+    // header. Project only its named payload fields into the attested raw wire
+    // representation; never wrap or reinterpret that header as event data.
+    explicit GuiAudioTriggerWirePayload457(const GuiAudioTriggerEvent& lrEvent)
+        : meAction(lrEvent.meAction)
+    {
+        std::memcpy(macComponent, lrEvent.macComponent, sizeof(macComponent));
+        std::memcpy(macLabel, lrEvent.macLabel, sizeof(macLabel));
+        std::memcpy(macMovie, lrEvent.macMovie, sizeof(macMovie));
+    }
+
+    s32 GetEventType() const { return 457; }
 };
 
 static_assert(sizeof(GuiAudioTriggerWirePayload457) == 100,
@@ -3230,4 +3247,30 @@ namespace BrnGui
         s32 GetEventType() const { return 493; }
     };
     static_assert(sizeof(GuiEventRequestCollisionWorldEvent) == 4, "ARTIST823DA2CC..D8: GUI493 payload is four bytes");
+}
+
+// ARTIST82436890: the raw100-byte audio trigger is boxed on channel40.
+// This typed boundary does not remap unrelated event201 records.
+namespace CgsGui
+{
+    template <>
+    inline void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerWirePayload457>(
+        BrnGui::GuiAudioTriggerWirePayload457& lrEvent)
+    {
+        GuiEventWrapper<BrnGui::GuiAudioTriggerWirePayload457, 40> lWrapper(lrEvent);
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+            40, static_cast<s32>(sizeof(lWrapper)));
+    }
+
+    // ARTIST82436890 is the shared instance used by all32 original callers.
+    // The PC carrier owns a legacy header; project its named100-byte body
+    // before boxing. This specializes the type, never the numeric event201.
+    template <>
+    inline void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(
+        BrnGui::GuiAudioTriggerEvent& lrEvent)
+    {
+        BrnGui::GuiAudioTriggerWirePayload457 lPayload(lrEvent);
+        OutputGuiEvent<BrnGui::GuiAudioTriggerWirePayload457>(lPayload);
+    }
+
 }

@@ -25,6 +25,9 @@ namespace Module
 
 namespace
 {
+    static_assert(sizeof(CgsSound::Io::Message<BrnGui::GuiAudioTriggerWirePayload457>) == 116,
+        "ARTIST sound message6 is header16 plus raw100-byte audio payload");
+
     struct GuiEventWireHeader
     {
         u32 muPayloadSize;
@@ -496,7 +499,7 @@ void SoundLogicModule::ProcessGuiEvents(
             u8 lu8PlayOverCustomSoundtrack;
             const bool lbFullChannel155Record =
                 lpuPayload == lpuEventBytes &&
-                liSize >= static_cast<s32>(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream)) &&
+                liSize >= static_cast<s32>(sizeof(GuiEventWireHeader) + sizeof(CgsGui::GuiEventPlayMusicOnMenuStream)) &&
                 lpEventHeader->muEventType == 155u &&
                 lpEventHeader->muPayloadOffset == sizeof(GuiEventWireHeader);
             if (lbFullChannel155Record)
@@ -529,21 +532,32 @@ void SoundLogicModule::ProcessGuiEvents(
         case 201: // PC's typed GuiAudioTriggerEvent id
         case 457: // ARTIST wire id
         {
-            CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
+            // Retain only the existing typed112-byte PC compatibility carrier.
+            // Unrelated raw8-byte event201 is HideDriveThru, not an audio trigger.
+            if (liType == 201 && liSize < static_cast<s32>(sizeof(BrnGui::GuiAudioTriggerEvent)))
+                break;
+            CgsSound::Io::Message<BrnGui::GuiAudioTriggerWirePayload457> lMessage;
             lMessage.Construct(6, 0, 0, 0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
-            if (liType == 201 && liSize >= static_cast<s32>(sizeof(lMessage.mData)))
+            if (liType == 201)
             {
-                lMessage.mData =
-                    *reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
+                lMessage.mData = BrnGui::GuiAudioTriggerWirePayload457(
+                    *reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent));
             }
             else
             {
                 const BrnGui::GuiAudioTriggerWirePayload457& lrPayload =
                     *reinterpret_cast<const BrnGui::GuiAudioTriggerWirePayload457*>(
                         lpuPayload);
-                lMessage.mData.Construct(
-                    lrPayload.meAction, lrPayload.macComponent,
-                    lrPayload.macLabel, lrPayload.macMovie);
+                // ARTIST copies the already constructed raw100-byte payload.
+                // Copy fields into the existing internal carrier without running
+                // its formatting/logging constructor a second time.
+                std::memcpy(lMessage.mData.macComponent, lrPayload.macComponent,
+                    sizeof(lrPayload.macComponent));
+                lMessage.mData.meAction = lrPayload.meAction;
+                std::memcpy(lMessage.mData.macLabel, lrPayload.macLabel,
+                    sizeof(lrPayload.macLabel));
+                std::memcpy(lMessage.mData.macMovie, lrPayload.macMovie,
+                    sizeof(lrPayload.macMovie));
             }
             QueueSoundMessage(mMessageQueue, lMessage);
             break;
@@ -1180,9 +1194,11 @@ void SoundLogicModule::ProcessCameraFlags(const Io::RootInputBuffer::DirectorCam
     if (lrState.IsFlagSet(CameraState::E_FLAG_JY_FLASH) &&
         lrState.HasChanged(CameraState::E_FLAG_JY_FLASH))
     {
-        CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
+        CgsSound::Io::Message<BrnGui::GuiAudioTriggerWirePayload457> lMessage;
         lMessage.Construct(6, 0, 0, 0, MH::E_EFFECT_TYPE_OBJECT);
-        lMessage.mData.Construct(7, "", "CodeCameraFlash", "");
+        BrnGui::GuiAudioTriggerEvent lAudio;
+        lAudio.Construct(7, "", "CodeCameraFlash", "");
+        lMessage.mData = BrnGui::GuiAudioTriggerWirePayload457(lAudio);
         QueueSoundMessage(mMessageQueue, lMessage);
         if (SoundLogicDiagEnabled() && siDiagCameraLines < KI_SOUNDLOGIC_DIAG_MAX_LINES)
         {
@@ -1226,9 +1242,11 @@ void SoundLogicModule::ProcessCameraFlags(const Io::RootInputBuffer::DirectorCam
     if (lrState.IsFlagSet(CameraState::E_FLAG_ONLINE_RACE_INTRO_FINISHED) &&
         lrState.HasChanged(CameraState::E_FLAG_ONLINE_RACE_INTRO_FINISHED))
     {
-        CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
+        CgsSound::Io::Message<BrnGui::GuiAudioTriggerWirePayload457> lMessage;
         lMessage.Construct(6, 0, 0, 0, MH::E_EFFECT_TYPE_OBJECT);
-        lMessage.mData.Construct(0, "", "OnlineRaceStart", "");
+        BrnGui::GuiAudioTriggerEvent lAudio;
+        lAudio.Construct(0, "", "OnlineRaceStart", "");
+        lMessage.mData = BrnGui::GuiAudioTriggerWirePayload457(lAudio);
         QueueSoundMessage(mMessageQueue, lMessage);
     }
 }

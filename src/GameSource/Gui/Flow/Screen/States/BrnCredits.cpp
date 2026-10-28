@@ -8,8 +8,9 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash
 
-static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20,
-              "X360 channel-40 menu-music record is {8,23,12}+8");
+static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 8 &&
+              sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>) == 20,
+              "X360 channel-40 menu-music is a raw8-byte payload in a20-byte wrapper");
 
 // BrnGui::Credits -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
