@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eajobs/reference_count.h"
 
-#include <intrin.h> // _InterlockedCompareExchange (MSVC atomic CAS intrinsic)
+#include <xtl.h> // _InterlockedCompareExchange (MSVC atomic CAS intrinsic)
 
 // ============================================================================
 // SDKs/EATech/eajobs/reference_count.cpp

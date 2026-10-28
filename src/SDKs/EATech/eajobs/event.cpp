@@ -1,7 +1,7 @@
 #include "SDKs/EATech/eajobs/event.h"
 #include "SDKs/EATech/eajobs/jobs.h"
 
-#include <intrin.h> // _InterlockedDecrement (MSVC atomic intrinsic)
+#include <xtl.h> // _InterlockedDecrement (MSVC atomic intrinsic)
 
 // EA::Jobs::Event::Run @ 0x82BC98B8.
 //

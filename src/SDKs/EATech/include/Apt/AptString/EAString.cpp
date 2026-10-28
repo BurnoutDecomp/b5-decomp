@@ -40,7 +40,7 @@
 
 #include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp/strstr/strchr
 #include <cstdlib>   // malloc/free (the pre-AptInit static-init fallback)
-#include <intrin.h>  // _InterlockedIncrement16/_InterlockedDecrement16 (the refcount atomic)
+#include <xtl.h>  // _InterlockedIncrement16/_InterlockedDecrement16 (the refcount atomic)
 #include <cctype>    // tolower/toupper (the UTF8_Make{Lower,Upper} case fold)
 #include <cstdarg>   // va_start/va_end (the Format varargs collection)
 #include <cstdio>    // vsnprintf (the Format/vsFormat printf core)

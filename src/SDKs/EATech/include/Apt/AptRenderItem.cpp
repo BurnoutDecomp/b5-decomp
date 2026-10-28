@@ -21,7 +21,7 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                // DOGMA_PoolManager
 
-#include <intrin.h>   // _InterlockedIncrement/Decrement/_InterlockedExchange
+#include <xtl.h>   // _InterlockedIncrement/Decrement/_InterlockedExchange
 #include <new>        // placement new (lazy colour-matrix construct)
 
 int AptRenderItem::sItemsAllocated = 0;

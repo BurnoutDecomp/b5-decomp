@@ -15,7 +15,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h" // gValuesToRelease (Teardown drains it)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager (StringPool::Initialize bucket array)
 
-#include <intrin.h>   // _InterlockedExchange (the Apt string-pool spin lock)
+#include <xtl.h>   // _InterlockedExchange (the Apt string-pool spin lock)
 #include <cstring>    // memset / strcmp (bucket-array clear + pool key compare)
 
 // ---------------------------------------------------------------------------

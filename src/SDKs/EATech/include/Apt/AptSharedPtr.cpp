@@ -1,6 +1,6 @@
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"
 
-#include <intrin.h>   // _InterlockedIncrement / _InterlockedDecrement (MSVC)
+#include <xtl.h>   // _InterlockedIncrement / _InterlockedDecrement (MSVC)
 
 #include "SDKs/EATech/include/Apt/AptFile.h"     // AptFile + ~AptFile (Delete)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager (Delete frees here)

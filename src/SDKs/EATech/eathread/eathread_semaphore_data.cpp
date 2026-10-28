@@ -1,6 +1,6 @@
 #include "SDKs/EATech/eathread/eathread_semaphore_data.h"
 
-#include <intrin.h> // _InterlockedCompareExchange (MSVC atomic CAS intrinsic)
+#include <xtl.h> // _InterlockedCompareExchange (MSVC atomic CAS intrinsic)
 
 // ============================================================================
 // SDKs/EATech/eathread/eathread_semaphore_data.cpp

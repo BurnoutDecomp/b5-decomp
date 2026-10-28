@@ -8,7 +8,7 @@
 
 #include "SDKs/EATech/eathread/eathread_barrier.h"
 
-#include <intrin.h>  // _InterlockedDecrement / _InterlockedExchange / _InterlockedCompareExchange
+#include <xtl.h>  // _InterlockedDecrement / _InterlockedExchange / _InterlockedCompareExchange
 
 namespace EA
 {

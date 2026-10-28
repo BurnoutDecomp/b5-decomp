@@ -5,7 +5,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"
-#include <intrin.h>   // _InterlockedExchange (the free-list spin lock)
+#include <xtl.h>   // _InterlockedExchange (the free-list spin lock)
 #include <new>        // placement new
 
 AptFloat* AptFloat::spFirstFree = 0;
