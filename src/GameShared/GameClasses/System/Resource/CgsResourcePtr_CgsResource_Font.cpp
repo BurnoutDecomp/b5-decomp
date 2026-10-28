@@ -36,7 +36,7 @@ namespace CgsResource { struct Font; }
 template<>
 CgsResource::Font* CgsResource::ResourcePtr<CgsResource::Font>::operator->()
 {
-    CgsResource::Font* lpResource = *static_cast<CgsResource::Font* const*>(mpResourceMemory);
+    CgsResource::Font* lpResource = *static_cast<CgsResource::Font* const*>(mResourceMemory.m_baseResources[0]);
     CGS_ASSERT(lpResource, "Can not instance resource pointer - it has no main memory resource\n");
     return lpResource;
 }
