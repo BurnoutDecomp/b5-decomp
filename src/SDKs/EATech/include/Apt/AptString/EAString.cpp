@@ -12,23 +12,8 @@
 // needs it (leaf-first) -- the linker only needs bodies for what is actually
 // called.
 //
-// TWO PC-PORT NOTES (faithful-shape, leaf-localised; 2026-08-07 audit):
-//  1. ATOMIC REFCOUNT: the console mutates the refcount half of StringDataC's
-//     first 32-bit word with an lwarx/stwcx. atomic (+/-0x10000; big-endian puts
-//     m_uRefCount in the high half). The XB1 x64 build mutates the SAME word
-//     with _Interlocked* ops (inlined in sub_140838AE0 / sub_140831FA0:
-//     _InterlockedExchangeAdd(+/-1), then Deallocate(pData, m_uMaxSize + 9) at
-//     zero). The host mirrors both with _InterlockedIncrement16 /
-//     _InterlockedDecrement16 on the named m_uRefCount field -- the identical
-//     observable atomic on either endianness.
-//  2. PRE-INIT POOL FALLBACK: buffer alloc routes through gpNonGCPoolManager,
-//     wired by AptAllocatorInitialize at the Apt bring-up (AptInit.cpp). Static-
-//     init strings (the 88 saConstant AS-name literals, AptStringPool.cpp)
-//     construct at CRT init BEFORE that wiring; on the console they were rodata
-//     StaticStringHelperT records and never allocated at all. That pre-init
-//     window (and only it) takes a CRT-heap fallback, leaf-marked at each site
-//     and padded to the pool's 8-byte rounding so a post-wire release of such a
-//     block free-lists it in-bounds.
+// ARTIST uses the first 32-bit header word for interrupt-masked refcount
+// updates and the native DOGMA pool for every allocated string buffer.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -39,8 +24,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
 #include <cstring>   // strlen/strcmp/memcpy/memmove/memset/memcmp/strstr/strchr
-#include <cstdlib>   // malloc/free (the pre-AptInit static-init fallback)
-#include <xtl.h>  // _InterlockedIncrement16/_InterlockedDecrement16 (the refcount atomic)
+#include <xtl.h>   // native interrupt-masked 32-bit InterlockedExchangeAdd
 #include <cctype>    // tolower/toupper (the UTF8_Make{Lower,Upper} case fold)
 #include <cstdarg>   // va_start/va_end (the Format varargs collection)
 #include <cstdio>    // vsnprintf (the Format/vsFormat printf core)
@@ -62,28 +46,20 @@ AptUserFunctions* EAStringC::sAptCallbacks              = 0;
 // ---------------------------------------------------------------------------
 void EAStringC::IncreaseInternalRefCount()
 {
-    // Console: lwarx/stwcx. atomic +0x10000 on the first 32-bit word (big-endian
-    // holds m_uRefCount in the high half). XB1 x64: _InterlockedExchangeAdd(+1)
-    // on the same word (inlined in sub_140838AE0). Host: the equivalent 16-bit
-    // interlocked bump on the named field.
     if (m_pData != reinterpret_cast<DebugDataC*>(&s_EmptyInternalData))
-        _InterlockedIncrement16(reinterpret_cast<volatile short*>(&m_pData->m_uRefCount));
+        _InterlockedExchangeAdd(
+            reinterpret_cast<volatile long*>(&m_pData->m_uRefCount), 0x10000);
 }
 
 void EAStringC::DecreaseInternalRefCount(StringDataC* const pData)
 {
     if (pData == reinterpret_cast<StringDataC*>(&s_EmptyInternalData))
         return;
-    // Console: lwarx/stwcx. atomic -0x10000, then test the high half == 0. XB1
-    // x64: interlocked decrement of the same word, then Deallocate(pData,
-    // m_uMaxSize + 9) at zero (inlined in sub_140838AE0 / sub_140831FA0). Host:
-    // the equivalent 16-bit interlocked decrement on the named field.
-    if (_InterlockedDecrement16(reinterpret_cast<volatile short*>(&pData->m_uRefCount)) == 0)
-    {
-        // Block size = header(8) + maxsize + null(1) = m_uMaxSize + 9, matching
-        // AllocateBuffer's (len+12)&~3 rounding.
-        const size_t nAllocatedSize = static_cast<size_t>(pData->m_uMaxSize) + 9;
-    }
+
+    const uint32_t uPrevious = static_cast<uint32_t>(_InterlockedExchangeAdd(
+        reinterpret_cast<volatile long*>(&pData->m_uRefCount), -0x10000));
+    if (((uPrevious - 0x10000u) & 0xFFFF0000u) == 0)
+        gpNonGCPoolManager->Deallocate(pData, static_cast<size_t>(pData->m_uMaxSize) + 9);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +72,7 @@ void EAStringC::AllocateBuffer(const uint32_t uSize)
     const uint32_t nBlock   = (uSize + 12) & 0xFFFFFFFCu;
     const uint16_t uMaxSize = static_cast<uint16_t>(nBlock - 9);
 
-    DebugDataC* result;
+    DebugDataC* const result = static_cast<DebugDataC*>(gpNonGCPoolManager->Allocate(nBlock));
 
     m_pData              = result;
     result->m_uRefCount  = 1;
@@ -105,6 +81,7 @@ void EAStringC::AllocateBuffer(const uint32_t uSize)
 
 void EAStringC::DeallocateBuffer(const void* const pBuffer, const uint32_t uSize)
 {
+    gpNonGCPoolManager->Deallocate(const_cast<void*>(pBuffer), uSize);
 }
 
 void EAStringC::InitFromBuffer(const char* const pStrText)
@@ -127,15 +104,7 @@ void EAStringC::InitFromBuffer(const char* const pStrText)
     }
 }
 
-// The grow/copy-on-write workhorse behind ReserveSize/Append/Insert/etc.
-// PS3 External 0x7F49FC == XB1 sub_140831FA0 (the x64 twin corroborates every
-// width: the 16-bit refcount==1 exclusive-owner test, the (size+size/8+12)&~3
-// block rounding, maxsize = block-9, and the dec-old free of m_uMaxSize+9
-// through gpNonGCPoolManager). In-place when we exclusively own the block
-// (refcount==1) and it already fits; otherwise reallocate (with 12.5% slack)
-// and copy-out, or drop to the empty string when reserving zero (the XB1
-// stores the empty sentinel without a refcount bump -- matching
-// IncreaseInternalRefCount's empty-block guard).
+// ARTIST @0x82AE34A0: in-place update or 12.5-percent-slack copy-on-write.
 void EAStringC::ChangeBuffer(const uint32_t uSizeToReserve, const uint32_t uOffsetCopy,
                              const uint32_t uSizeCopy, const CBPushZero ePushZero,
                              const uint32_t uInternalSize)
@@ -173,7 +142,6 @@ void EAStringC::ChangeBuffer(const uint32_t uSizeToReserve, const uint32_t uOffs
     else
     {
         m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
-        IncreaseInternalRefCount();
         DecreaseInternalRefCount(old);
     }
 }
