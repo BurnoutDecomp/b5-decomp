@@ -9,9 +9,7 @@
 // (`lwz r10, 0x10(r30)`). The 16 leading scalar bytes (7 u8, 1 alignment pad, u16
 // muNumRungs, 2 u16 lights, 2 u8 counters) put it there with no synthetic padding.
 //
-// X360 pointers are 4 bytes and host pointers 8, so the console offsets hold only
-// for the scalar header. Members are pinned BY NAME; the static_asserts below pin
-// the HOST layout against the lane_transcode.py emitter, not the console's.
+// Native four-byte pointer slots and the inline asset table are checked below.
 // =============================================================================
 
 #include "types.hpp"
@@ -20,7 +18,7 @@
 #include "SharedClasses/Traffic/BrnTrafficStaticTraffic.h"  // StaticTrafficVehicle (by value in the array)
 #include "SharedClasses/Traffic/BrnTrafficSectionFlow.h"    // SectionFlow (real pointee for mpaSectionFlows)
 #include "SharedClasses/Traffic/Junctions/BrnTrafficStopLine.h" // StopLine (real pointee for mpaStopLines)
-#include <cstddef>   // offsetof (host layout static_asserts)
+#include <cstddef>   // offsetof (native layout checks)
 
 namespace BrnTraffic
 {
@@ -133,12 +131,13 @@ struct Hull
     void FixDown(const void* lpBaseData);
 };
 
-// Host layout contract with tools/assets/bundles/lane_transcode.py's emitter.
+// ARTIST pointer stores at 82762114..14C and the following inline asset table.
 CGS_STATIC_ASSERT((offsetof(Hull, muNumRungs)                    == 0x08), "Hull::muNumRungs");
 CGS_STATIC_ASSERT((offsetof(Hull, mpaSections)                   == 0x10), "Hull::mpaSections");
-CGS_STATIC_ASSERT((offsetof(Hull, mpaRungs)                      == 0x18), "Hull::mpaRungs");
-CGS_STATIC_ASSERT((offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x68), "Hull::mpaLightTriggerJunctionLookup");
-CGS_STATIC_ASSERT((offsetof(Hull, mauVehicleAssets)              == 0x70), "Hull::mauVehicleAssets");
+CGS_STATIC_ASSERT((offsetof(Hull, mpaRungs)                      == 0x14), "Hull::mpaRungs");
+CGS_STATIC_ASSERT((offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x3C), "Hull::mpaLightTriggerJunctionLookup");
+CGS_STATIC_ASSERT((offsetof(Hull, mauVehicleAssets)              == 0x40), "Hull::mauVehicleAssets");
+CGS_STATIC_ASSERT((sizeof(Hull) == 0x50), "X360 Hull stride");
 
 inline const Section* Hull::GetSection(u32 luIndex) const
 {

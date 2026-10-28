@@ -4339,8 +4339,8 @@ void TrafficEntityModule::UpdateJunctions()
             const u8 luNewState =
                 static_cast<u8>((lpauJunctionStates[luJunction] + 1) % lpJunction->GetNumStates());
             lpauJunctionStates[luJunction] = luNewState;
-            lpafChangeTimes[luJunction] = std::fma(static_cast<f32>(lpJunction->GetStateTiming(luNewState)),
-                                                   KF_JUNCTION_STATE_TIMING_UNIT, lpafChangeTimes[luJunction]);
+            // ARTIST 82724244 fuses the inlined duration with this accumulation.
+            lpafChangeTimes[luJunction] += lpJunction->GetTimeInState(luNewState);
 
             for (u32 luLight = 0; luLight < lpJunction->GetNumLights(); ++luLight)
             {

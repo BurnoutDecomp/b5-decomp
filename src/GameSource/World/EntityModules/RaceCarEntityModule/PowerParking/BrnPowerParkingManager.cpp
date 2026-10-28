@@ -9,7 +9,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // PlayerVehicleControls
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h" // RaceCarEntityModuleIO::GameEventQueue
 
-#include <cmath>                                     // std::sqrt / std::fmaf
+#include <cmath>                                     // std::sqrt
+#include <cfloat>                                    // FLT_MAX
 
 // ============================================================================
 // GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.cpp
@@ -100,7 +101,7 @@ namespace BrnWorld
         miWeightedPositionAlignmentScore = 0;
         miWeightedAngleAlignmentScore    = 0;
 
-        mfLowestSpeedThisPark            = 3.4028235e38f;   // FLT_MAX (flt_8201442C)
+        mfLowestSpeedThisPark            = FLT_MAX;   // flt_8201442C
 
         mePowerParkOutcome               = E_PPO_TO_BE_DETERMINED;
         mfTimeUntilDisplayOutcome        = 0.0f;
@@ -164,7 +165,7 @@ namespace BrnWorld
         miWeightedPositionAlignmentScore = 0;
         miWeightedAngleAlignmentScore    = 0;
 
-        mfLowestSpeedThisPark            = 3.4028235e38f;   // FLT_MAX (flt_8201442C)
+        mfLowestSpeedThisPark            = FLT_MAX;   // flt_8201442C
 
         mePowerParkOutcome               = E_PPO_TO_BE_DETERMINED;
         mfTimeUntilDisplayOutcome        = 0.0f;
@@ -393,12 +394,12 @@ namespace BrnWorld
             // fmuls d*d ; fmsubs (d*d)*d - 0.4 (flt_82CDB4D8, one rounding) ; fsel against 0.0. The CUBE
             // of the distance, as the console computes it.
             const f32 lfPerpendicularDist = rw::math::fpu::Max(
-                std::fmaf(mfClosestPerpendicularDist * mfClosestPerpendicularDist, mfClosestPerpendicularDist,
-                          -KF_MAX_PERPENDICULAR_DISTANCE_FOR_PERFECT),
+                (mfClosestPerpendicularDist * mfClosestPerpendicularDist) * mfClosestPerpendicularDist
+                    - KF_MAX_PERPENDICULAR_DISTANCE_FOR_PERFECT,
                 0.0f);
 
             // fnmsubs a*a against 1.0 (one rounding) then the two-fsel Clamp to [0, 1].
-            mfAngleAlignmentScore = rw::math::fpu::Clamp(std::fmaf(-lfClosestAngleDiff, lfClosestAngleDiff, 1.0f),
+            mfAngleAlignmentScore = rw::math::fpu::Clamp(1.0f - lfClosestAngleDiff * lfClosestAngleDiff,
                                                          0.0f, 1.0f);
             mfPositionAlignmentScore = rw::math::fpu::Clamp(
                 1.0f - lfPerpendicularDist / KF_MAX_PERPENDICULAR_DISTANCE_FOR_ALIGNMENT, 0.0f, 1.0f);

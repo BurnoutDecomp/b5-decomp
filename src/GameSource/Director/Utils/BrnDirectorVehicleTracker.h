@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                                // rw::math::vpu::Vector3 (journal entry type)
 #include "rw/math/vpu/vector3_operation.h"                    // operator- / operator/ (GetImplicitVelocity)
+#include "rw/math/fpu/scalar_operation.h"                    // timestep IsZero assertion
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameSource/BurnoutConstants.h"                      // EActiveRaceCarIndex
 #include "GameSource/Director/Utils/BrnDirectorDataJournal.h" // DataJournal<T,N>
@@ -212,7 +213,7 @@ VehicleTracker::GetImplicitVelocity() const
 {
     if (mPositionJournal.GetSize() > 1)
     {
-        CGS_ASSERT(!rw::math::vpu::IsZero(rw::math::vpu::Vector3{ mTimestepJournal[0], 0.0f, 0.0f, 0.0f }),
+        CGS_ASSERT(!rw::math::fpu::IsZero(mTimestepJournal[0]),
                    "!rw::math::fpu::IsZero(mTimestepJournal[0])");
         return (mPositionJournal[0] - mPositionJournal[1]) / mTimestepJournal[0];
     }
@@ -237,7 +238,7 @@ VehicleTracker::GetImplicitAcceleration() const
 {
     if (mLinearVelocityJournal.GetSize() > 1)
     {
-        CGS_ASSERT(!rw::math::vpu::IsZero(rw::math::vpu::Vector3{ mTimestepJournal[0], 0.0f, 0.0f, 0.0f }),
+        CGS_ASSERT(!rw::math::fpu::IsZero(mTimestepJournal[0]),
                    "!rw::math::fpu::IsZero(mTimestepJournal[0])");
         return (mLinearVelocityJournal[0] - mLinearVelocityJournal[1]) / mTimestepJournal[0];
     }

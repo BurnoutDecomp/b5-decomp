@@ -10,42 +10,21 @@
 // EMBED it by value (e.g. BrnGameState::AchievementManagerX360::mOverLapped @
 // this+0x38, which calls Construct() from Prepare/Release) can #include the real
 // layout instead of forking an opaque byte blob. The method bodies stay in the
-// platform .cpp; this header carries only declarations + the XDK slice.
+// platform .cpp; this header uses the XDK definition directly.
 //
 // The embedded XOVERLAPPED is exactly 7 DWORDs (28 bytes); Construct zero-fills
 // those 7 DWORDs and GetResultString maps an XGetOverlappedResult() code to a
-// printable string. Platform-specific glue (mirrors System/PS3): the XDK entry
-// points are forward-declared here as extern "C" free functions.
+// printable string.
 // ----------------------------------------------------------------------------
 
 #include "types.hpp"
 #include <cstddef>
-
-// Minimal XDK XOVERLAPPED slice (real definition lives in the Xbox 360 XDK
-// <xtl.h>). 7 DWORDs == 28 bytes, matching Construct's zero-fill loop (v1 = 7).
-struct XOVERLAPPED
-{
-    u32 InternalLow;          // 0x00
-    u32 InternalHigh;         // 0x04
-    u32 InternalContext;      // 0x08
-    u32 hEvent;               // 0x0C  ARTIST XGetOverlappedResult @829271D0
-    u32 pCompletionRoutine;   // 0x10  ARTIST XCAM callback @829882E0
-    u32 dwCompletionContext;  // 0x14  (completion routine context)
-    u32 dwExtendedError;      // 0x18  ARTIST XGetOverlappedExtendedError @82927280
-};
-typedef XOVERLAPPED* PXOVERLAPPED;
+#include <xtl.h>
 
 CGS_STATIC_ASSERT((sizeof(XOVERLAPPED) == 28), "Original X360 overlapped width");
 CGS_STATIC_ASSERT((offsetof(XOVERLAPPED, hEvent) == 0x0c), "ARTIST event word");
 CGS_STATIC_ASSERT((offsetof(XOVERLAPPED, pCompletionRoutine) == 0x10), "ARTIST callback word");
 CGS_STATIC_ASSERT((offsetof(XOVERLAPPED, dwExtendedError) == 0x18), "ARTIST extended error word");
-// Native64 HWND/HANDLE/callback values belong to the PC owner, never these guest32 words.
-
-// XDK entry points (real prototypes live in the Xbox 360 XDK <xapi.h>/<xtl.h>);
-// declared here as extern "C" free functions, mirroring the System/PS3 glue
-// precedent (CgsHardwareLanguagePS3.cpp's `extern "C" int XTLGetLanguage();`).
-extern "C" u32 XGetOverlappedResult(PXOVERLAPPED lpOverlapped, u32* lpdwResult, u32 bWait);
-extern "C" u32 XGetOverlappedExtendedError(PXOVERLAPPED lpOverlapped);
 
 namespace CgsSystem
 {

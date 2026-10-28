@@ -127,23 +127,20 @@ namespace BrnTraffic
         void FixUp(const void* lpBaseData);
         void FixDown(const void* lpBaseData);
 
-        // [L3 RACEINTRO 2026-09-27, the BL-1 merge] The host layout tools/assets/bundles/lane_transcode.py
-        // writes TrafficData::mTrafficLights to, pinned by the retired SharedClasses/Traffic/
-        // BrnTrafficLightCollection.h and moved here with it. The six relocated pointers widen 4 -> 8 on
-        // x64 (console +0x08..+0x1C / +0x124 / +0x128). NEVER CALLED; a member because the members are
-        // private (the BrnJunctionLogicBox.h precedent).
+        // Native serialized record; a member function can check the private fields.
         static void _AssertLayout()
         {
             CGS_STATIC_ASSERT((sizeof(TrafficLightType) == 2), "TrafficLightType stride");
+            CGS_STATIC_ASSERT((sizeof(TrafficLightCollection) == 0x12C), "X360 traffic light collection size");
             CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpaPosAndYRotations) == 0x08),
                           "TrafficLightCollection::mpaPosAndYRotations");
-            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpaCoronaPositions) == 0x30),
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpaCoronaPositions) == 0x1C),
                           "TrafficLightCollection::mpaCoronaPositions");
-            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mauInstanceHashOffsets) == 0x38),
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mauInstanceHashOffsets) == 0x20),
                           "TrafficLightCollection::mauInstanceHashOffsets");
-            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpauInstanceHashTable) == 0x140),
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpauInstanceHashTable) == 0x124),
                           "TrafficLightCollection::mpauInstanceHashTable");
-            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpauInstanceHashToIndexLookup) == 0x148),
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpauInstanceHashToIndexLookup) == 0x128),
                           "TrafficLightCollection::mpauInstanceHashToIndexLookup");
         }
 
