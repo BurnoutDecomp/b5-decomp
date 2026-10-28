@@ -666,15 +666,20 @@ namespace BrnTraffic
 namespace BrnTraffic
 {
 
-// ARTIST export hole 0x8274FF38.
+// ARTIST 0x8274FF38..0x8274FFF8 (raw image recovery).
 bool DebugComponent::ShouldObjectBeCulled(Vector3 lPosition,
                                          CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
     CGS_ASSERT(lpDisplay != nullptr, "lpDisplay");
     const Vector3 lOffset = lPosition - lpDisplay->GetCameraPosition();
-    const f32 lfCullSquared = mfRenderCullDistance * mfRenderCullDistance;
+    f32 lfCullSquared = mfRenderCullDistance * mfRenderCullDistance;
+    // The scalar square is compared in VMX mode, where subnormal operands are zero.
+    if (std::fpclassify(lfCullSquared) == FP_SUBNORMAL)
+        lfCullSquared = 0.0f;
+    // Model vmsum3fp128 with a wide sum; scalar Dot rounds each product.
+    // Reuse the existing VMX dot model, including overflow and denormal results.
     // Original negates (threshold > squared-distance): equality and NaN cull.
-    return !(lfCullSquared > rw::math::vpu::Dot(lOffset, lOffset));
+    return !(lfCullSquared > rw::math::vpu::SLerpDetail::Dot3(lOffset, lOffset));
 }
 
 // ARTIST 0x82758670. Unlike the following wrappers, this ignores miHullToDrawFor.

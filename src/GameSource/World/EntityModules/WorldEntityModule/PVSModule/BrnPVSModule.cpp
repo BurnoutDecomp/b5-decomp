@@ -255,36 +255,12 @@ namespace
         lpOutputBuffer->mZoneResponseQueue.Clear();                      // stw 0, 8(output)
         lpOutputBuffer->mGameDataRequestInterface.mRequestQueue.Clear(); // Clear @ output+0x1718
 
-        // [FLAG PC boot gate] The console cannot reach Update before Prepare has bound the
-        // zone list (Prepare only returns true once the type-58 reply lands), so the X360
-        // dereferences the resource pointer unguarded. On this build a refused/failed PVS
-        // bundle would turn that into an assert on the per-frame path, so report it once and
-        // answer nothing. DELETE once the PVS load is proven to never fail.
-        void* lpZoneListMemory = 0;
-        mZoneList.GetResource( &lpZoneListMemory );
-        if ( lpZoneListMemory == 0 )
-        {
-            static bool sbLoggedNoZoneList = false;
-            if ( !sbLoggedNoZoneList && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
-            {
-                sbLoggedNoZoneList = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "PVSModule::Update: no zone list bound -- the PVS resource never"
-                       " arrived [FLAG PC boot gate]\n";
-            }
-            lpInputBuffer->mZoneRequestQueue.Clear();
-            UnlockInputForRead();
-            UnlockOutputForWrite();
-            return;
-        }
-
-        // The X360 stack frame holds the response and the per-zone Zone* scratch array
-        // (_DWORD v70[68]) ACROSS the whole request loop -- fields the not-found path does
-        // not write keep whatever the previous request left behind. PC deviation: the
-        // response is zero-initialised so a zone miss can never publish stale/garbage zone
-        // ids into the world graphics streamer.
+        // The X360 stack frame holds the response and per-zone Zone* scratch array
+        // (_DWORD v70[68]) across the whole request loop. A zone miss writes only its
+        // player index, zero zone count, and -1 lookup index; the other response bytes
+        // retain their stack/prior-request contents, exactly as the 736-byte event copy
+        // does on X360.
         PVSIO::GetZoneResponse lResponse;
-        memset( &lResponse, 0, sizeof( lResponse ) );
 
         const CgsSceneManager::Zone* lapZones[ PVSIO::GetZoneResponse::KI_MAX_ZONES ];
 
@@ -349,10 +325,6 @@ namespace
 
                     CGS_ASSERT( ( liZone >= 0 ) && ( liZone < PVSIO::GetZoneResponse::KI_MAX_ZONES ),
                                 "(liIndex >= 0) && (liIndex < KI_MAX_ZONES)" );  // BrnPVSModuleEvents.h:230
-                    if ( liZone >= PVSIO::GetZoneResponse::KI_MAX_ZONES )
-                    {
-                        break;   // PC safety: the X360 assert is non-gating and overruns the reply
-                    }
 
                     lapZones[liZone]                 = lpNeighbourZone;
                     lResponse.maZoneIds[liZone]      = luZoneId;
@@ -379,10 +351,6 @@ namespace
 
                     CGS_ASSERT( ( liZone >= 0 ) && ( liZone < PVSIO::GetZoneResponse::KI_MAX_ZONES ),
                                 "(liIndex >= 0) && (liIndex < KI_MAX_ZONES)" );  // BrnPVSModuleEvents.h:230
-                    if ( liZone >= PVSIO::GetZoneResponse::KI_MAX_ZONES )
-                    {
-                        break;   // PC safety (see above)
-                    }
 
                     lapZones[liZone]                  = lpNeighbourZone;
                     lResponse.maZoneIds[liZone]       = luZoneId;
@@ -391,11 +359,6 @@ namespace
                     lResponse.mabZoneRequired[liZone] = lbRequired;
                     lResponse.mafZoneWeights[liZone]  = KF_ZERO_WEIGHT;
                     ++liZone;
-                }
-
-                if ( lResponse.miNumZones > liZone )
-                {
-                    lResponse.miNumZones = liZone;   // PC safety clamp (see the asserts above)
                 }
             }
 
