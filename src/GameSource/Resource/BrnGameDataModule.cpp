@@ -1,4 +1,5 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
+#include "pc/gui/FlaptAllocatorCapacity.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
 #include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
@@ -522,7 +523,13 @@ namespace BrnResource
             const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_LINEAR_ALLOCATORS[li];
             ++miNumAllocatorCreationRequests;
 
-            void* lpMem = LaneAlloc::Carve(lpAllocator, lrDef.mauSize[0], lrDef.mauAlign[0],
+            // FLAG PC-platform leaf: bank66 stores widened Flapt runtime
+            // arrays. Project its original capacity using attested strides;
+            // every other linear allocator retains its original byte budget.
+            const u32 luNativeSize = lrDef.miBankId == 66
+                ? BrnFlapt::PC::GetFlaptAllocatorCapacity(lrDef.mauSize[0])
+                : lrDef.mauSize[0];
+            void* lpMem = LaneAlloc::Carve(lpAllocator, luNativeSize, lrDef.mauAlign[0],
                                            lrDef.mpcName);
             if (lpMem == 0)
             {
@@ -531,7 +538,7 @@ namespace BrnResource
                 continue;
             }
             maGeneratedLinearAllocators[li].Construct();
-            maGeneratedLinearAllocators[li].Create(lpMem, lrDef.mauSize[0]);
+            maGeneratedLinearAllocators[li].Create(lpMem, luNativeSize);
 
             mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
             mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
