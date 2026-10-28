@@ -164,7 +164,6 @@ public:
     {
         Assign(rOther.mpBegin, rOther.mpEnd);
     }
-    RealmcString& operator=(const RealmcString&) = delete;
 
     // The inlined basic_string destructor: Free().
     ~RealmcString() { Free(); }
@@ -183,6 +182,8 @@ public:
     const char* End()   const { return mpEnd; }
 
 private:
+    RealmcString& operator=(const RealmcString&);
+
     char*       mpBegin;         // +0
     char*       mpEnd;           // +4
     char*       mpCapEnd;        // +8

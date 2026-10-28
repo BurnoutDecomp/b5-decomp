@@ -46,6 +46,10 @@
 
 #include "SDKs/Realmc/RealmcCore.h"   // RealmcCore::allocator / g_pRealmcAllocator / MessagePtr
 
+// EABase uses wchar_t for char16_t on legacy MSVC targets with 2-byte wchar_t.
+typedef wchar_t char16_t;
+CGS_STATIC_ASSERT((sizeof(char16_t) == 2), "ARTIST UTF-16 code unit");
+
 namespace RealmcCore
 {
 
