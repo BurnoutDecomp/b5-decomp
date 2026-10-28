@@ -62,7 +62,7 @@ s32 KI_DEBUG_DUCKING = 0;                   // 0x82FFB8E0
 // AttachController @0x8268812C) -- FX-VOICEPOOL 2026-09-24; see GetGain.
 // ---------------------------------------------------------------------------
 CollisionEffect::CollisionEffect()
-    : mpCollisionControl(nullptr)         // stw 0, 0x38
+    : mpCollisionControl(0)         // stw 0, 0x38
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE) // stw 0, 0x3C
     , mbFirstUpdate(false)                // +0x40: the X360 ctor leaves it; Attach sets it
     , mbUseAzimuth(false)                 // +0x41: the X360 ctor leaves it; Attach sets it
@@ -133,7 +133,7 @@ s32 CollisionEffect::GetController(s32 aiIndex)
 
 void CollisionEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr, "lpController");
+    CGS_ASSERT(apController != 0, "lpController");
     if (!apController)
         return;
     if (apController->GetEffectID() == 0)
@@ -167,7 +167,7 @@ bool CollisionEffect::Prepare(CgsSound::Logic::State* apState)
         BrnSound::Logic::GlobalStateManager* lpGlobalStateManager =
             static_cast<BrnSound::Logic::GlobalStateManager*>(
                 GetLogicModule()->GetEnvironment().GetStateManager(0));
-        CGS_ASSERT(lpGlobalStateManager != nullptr, "lpGlobalStateManager");
+        CGS_ASSERT(lpGlobalStateManager != 0, "lpGlobalStateManager");
         if (!lpGlobalStateManager)
             return false;
 
@@ -234,10 +234,10 @@ void CollisionEffect::GetSizeSpecificSettings(const OutputCollision& arCollision
 template <typename T>
 void CollisionEffect::InitWork(CollisionState* apState, const OutputCollision& arCollision)
 {
-    const T lBin(arCollision.mBinKey, nullptr);
+    const T lBin(arCollision.mBinKey, 0);
     CollisionStateManager* lpManager =
         static_cast<CollisionStateManager*>(apState->GetStateManager());
-    CGS_ASSERT(lpManager != nullptr, "lpStateManager");
+    CGS_ASSERT(lpManager != 0, "lpStateManager");
 
     mCrashVoice.Attach(
         static_cast<s32>(CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~")),
@@ -376,7 +376,7 @@ bool CollisionEffect::Attach()
     if (mpCollisionControl->GetCollisionFinished())
         return true;
 
-    CGS_ASSERT(mCrashVoice.GetVoiceObject() != nullptr, "mCrashVoice.IsCreated()");
+    CGS_ASSERT(mCrashVoice.GetVoiceObject() != 0, "mCrashVoice.IsCreated()");
     CollisionState* lpState = static_cast<CollisionState*>(GetStateBase());
     const OutputCollision& lrCollision = lpState->GetOutputCollision();
     switch (lrCollision.mePipeline)
@@ -535,7 +535,7 @@ f32 CollisionEffect::GetGain() const
 
     f32 lfMixerOutput;
     Nicotine::DMixIO* lpDmix = GetDMixIOPtr();   // lwz r3,0x34(this): the effect's own endpoint
-    if (lpDmix != nullptr) // cmplwi; beq
+    if (lpDmix != 0) // cmplwi; beq
     {
         // GetDMixOutput(slot, preset): preset 0 == DMX_VOL. extsw -> signed s32.
         const s32 liOutput =

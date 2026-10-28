@@ -91,25 +91,25 @@ private:
 inline Vector3
 BoxRegion::GetPosition() const
 {
-    return Vector3{ mPositionX, mPositionY, mPositionZ, 0.0f };
+    { const Vector3 lResult = { mPositionX, mPositionY, mPositionZ, 0.0f }; return lResult; }
 }
 
 inline Vector2
 BoxRegion::GetPosition2D() const
 {
-    return Vector2{ mPositionX, mPositionZ, 0.0f, 0.0f };
+    { const Vector2 lResult = { mPositionX, mPositionZ, 0.0f, 0.0f }; return lResult; }
 }
 
 inline Vector3
 BoxRegion::GetRotation() const
 {
-    return Vector3{ mRotationX, mRotationY, mRotationZ, 0.0f };
+    { const Vector3 lResult = { mRotationX, mRotationY, mRotationZ, 0.0f }; return lResult; }
 }
 
 inline Vector3
 BoxRegion::GetDimensions() const
 {
-    return Vector3{ mDimensionX, mDimensionY, mDimensionZ, 0.0f };
+    { const Vector3 lResult = { mDimensionX, mDimensionY, mDimensionZ, 0.0f }; return lResult; }
 }
 
 inline f32

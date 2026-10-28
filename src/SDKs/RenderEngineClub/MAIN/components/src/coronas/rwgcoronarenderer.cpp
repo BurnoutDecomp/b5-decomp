@@ -154,11 +154,11 @@ namespace
     };
     // The layout pins (the campaign's _AssertLayout discipline): the vertex MUST byte-match what
     // VertexDescriptor::Initialize auto-packs for the four elements (0 / 16 / 28 / 44, stride 48).
-    static_assert(sizeof(CoronaVertex) == 48, "the corona vertex is the console's 48-byte packed record");
-    static_assert(offsetof(CoronaVertex, mafPositionAndDistance) ==  0, "POSITION0 at +0");
-    static_assert(offsetof(CoronaVertex, mafDirection)           == 16, "NORMAL0 at +16");
-    static_assert(offsetof(CoronaVertex, mafUvAndOffset)         == 28, "TEXCOORD0 at +28");
-    static_assert(offsetof(CoronaVertex, muColour)               == 44, "COLOR0 at +44");
+    CGS_STATIC_ASSERT((sizeof(CoronaVertex) == 48), "the corona vertex is the console's 48-byte packed record");
+    CGS_STATIC_ASSERT((offsetof(CoronaVertex, mafPositionAndDistance) ==  0), "POSITION0 at +0");
+    CGS_STATIC_ASSERT((offsetof(CoronaVertex, mafDirection)           == 16), "NORMAL0 at +16");
+    CGS_STATIC_ASSERT((offsetof(CoronaVertex, mafUvAndOffset)         == 28), "TEXCOORD0 at +28");
+    CGS_STATIC_ASSERT((offsetof(CoronaVertex, muColour)               == 44), "COLOR0 at +44");
 
     // The Xenos immediate-vertex stride the console passes to D3DDevice_BeginVertices.
     const u32 KU_CORONA_VERTEX_STRIDE = 48u;

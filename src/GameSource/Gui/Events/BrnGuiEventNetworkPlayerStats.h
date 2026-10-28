@@ -36,11 +36,11 @@ namespace BrnGui
         // Never called -- complete-class context for the layout pins.
         static void _AssertLayout()
         {
-            static_assert(sizeof(BrnNetwork::NetworkPlayerStats) == 0x84, "stats base is 0x84 bytes");
-            static_assert(offsetof(GuiEventNetworkPlayerStats, mPlayerID) == 0x84, "player id at +0x84");
-            static_assert(offsetof(GuiEventNetworkPlayerStats, miWorldRank) == 0x88, "rank at +0x88");
-            static_assert(offsetof(GuiEventNetworkPlayerStats, macPlayerName) == 0x8C, "name at +0x8C");
-            static_assert(sizeof(GuiEventNetworkPlayerStats) == 156, "posted with size 156");
+            CGS_STATIC_ASSERT((sizeof(BrnNetwork::NetworkPlayerStats) == 0x84), "stats base is 0x84 bytes");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkPlayerStats, mPlayerID) == 0x84), "player id at +0x84");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkPlayerStats, miWorldRank) == 0x88), "rank at +0x88");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkPlayerStats, macPlayerName) == 0x8C), "name at +0x8C");
+            CGS_STATIC_ASSERT((sizeof(GuiEventNetworkPlayerStats) == 156), "posted with size 156");
         }
     };
 }

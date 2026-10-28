@@ -255,7 +255,7 @@ namespace CgsNetwork
         { &KA_GAMES_DS_ERROR_MAPPINGS[65], 7 },
         { &KA_GAMES_DS_ERROR_MAPPINGS[72], 4 }
     };
-    static_assert(sizeof(KA_GAMES_DS_ERROR_MAPPINGS) / sizeof(KA_GAMES_DS_ERROR_MAPPINGS[0]) == 47 + 22 + 7,
+    CGS_STATIC_ASSERT((sizeof(KA_GAMES_DS_ERROR_MAPPINGS) / sizeof(KA_GAMES_DS_ERROR_MAPPINGS[0]) == 47 + 22 + 7),
                   "the search entry's count of 22 ends inside the results table");
 
     // ===================================================================
@@ -973,7 +973,7 @@ namespace CgsNetwork
                     if (::strcmp(lpA->aOpponents[i].strParams,
                                         lpB->aOpponents[j].strParams) != 0)
                     {
-                        RaiseServerInterfaceEvent(mpServerInterface, 
+                        RaiseServerInterfaceEvent(mpServerInterface,
                             static_cast<EServerInterfaceEvent>(KI_EVT_PARAM_CHANGED), 0);
                         lbChanged = true;
                     }

@@ -81,18 +81,18 @@ struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
     // thunk is emitted in this class's own TU.
     virtual ~CollisionEffect();
 
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auAllocator);
 
-    virtual bool Prepare(CgsSound::Logic::State* apState) override;
-    virtual s32 GetController(s32 aiIndex) override;
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual void ProcessUpdate() override;
-    virtual bool Detach() override;
+    virtual bool Prepare(CgsSound::Logic::State* apState) ;
+    virtual s32 GetController(s32 aiIndex) ;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual void ProcessUpdate() ;
+    virtual bool Detach() ;
 
     // @ 0x82688138 -- collision crash gain. Bodied in BrnCollisionEffect.cpp.
     // DWARF (BrnCollisionEffect.cpp:231) declares this `float GetGain() const`.
@@ -192,8 +192,8 @@ struct Collision3DControl : public BrnSound::Logic::Brn3DUserSpaceEffectControl
     // BrnCollisionEffect.h:199 (DWARF) -- the RTTI factory hook (@ 0x826F80E8).
     // Non-virtual, non-const; returns the EffectControl* base view.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
 };
 

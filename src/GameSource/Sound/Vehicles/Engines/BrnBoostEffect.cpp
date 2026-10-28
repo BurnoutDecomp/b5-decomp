@@ -65,8 +65,8 @@ BoostEffect::BoostEffect()
     , mTimeOfLastBoostOut(0.0f)
     , mTimeOfLastBoostIn(0.0f)
     , mTimeInBoost(0.0f)
-    , mpPhysicsControl(nullptr)
-    , mpSpeedStreamControl(nullptr)
+    , mpPhysicsControl(0)
+    , mpSpeedStreamControl(0)
 {
     mBoostFunctionPointer.Construct(this, &BoostEffect::OnPostInit);
 }
@@ -96,12 +96,12 @@ void BoostEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 
 void BoostEffect::SetupLoadData()
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 
     const char* lpcBank = mpPhysicsControl->GetVehicleEngineAttributes().BoostBank();
-    CGS_ASSERT(lpcBank != nullptr, "mpPhysicsControl->GetVehicleEngineAttributes().mBoostBank()");
+    CGS_ASSERT(lpcBank != 0, "mpPhysicsControl->GetVehicleEngineAttributes().mBoostBank()");
     CGS_ASSERT(lpcBank && *lpcBank, "strcmp(mpPhysicsControl->GetVehicleEngineAttributes().mBoostBank(),\"\") != 0");
     if (!lpcBank || !*lpcBank)
         return;
@@ -109,7 +109,7 @@ void BoostEffect::SetupLoadData()
     char lacBundle[64];
     std::snprintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcBank);
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
-        lacBundle, nullptr, BrnSound::Logic::ResourceRegistrar::E_DATA);
+        lacBundle, 0, BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
 bool BoostEffect::Attach()
@@ -117,7 +117,7 @@ bool BoostEffect::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return false;
 
@@ -159,7 +159,7 @@ bool BoostEffect::Attach()
 
 void BoostEffect::UpdateParams(f32 afTimeStep)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 
@@ -270,7 +270,7 @@ void BoostEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
 
 void BoostEffect::UpdateBoostStream()
 {
-    CGS_ASSERT(mpSpeedStreamControl != nullptr, "mpSpeedStreamControl");
+    CGS_ASSERT(mpSpeedStreamControl != 0, "mpSpeedStreamControl");
     if (!mpSpeedStreamControl)
         return;
 
@@ -283,8 +283,8 @@ void BoostEffect::UpdateBoostStream()
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingManager =
         lpModule ? static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
-            lpModule->GetEnvironment().GetStateManager(6)) : nullptr;
-    CGS_ASSERT(lpStreamingManager != nullptr, "lpStreamingStateMan");
+            lpModule->GetEnvironment().GetStateManager(6)) : 0;
+    CGS_ASSERT(lpStreamingManager != 0, "lpStreamingStateMan");
     if (!lpStreamingManager)
         return;
 
@@ -321,8 +321,8 @@ bool BoostEffect::Detach()
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingManager =
         lpModule ? static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
-            lpModule->GetEnvironment().GetStateManager(6)) : nullptr;
-    CGS_ASSERT(lpStreamingManager != nullptr, "lpStreamingStateMan");
+            lpModule->GetEnvironment().GetStateManager(6)) : 0;
+    CGS_ASSERT(lpStreamingManager != 0, "lpStreamingStateMan");
     if (lpStreamingManager)
         lpStreamingManager->PostStreamRequest(
             BrnSound::Logic::Streaming::StreamStopRequest(this, 0.25f));

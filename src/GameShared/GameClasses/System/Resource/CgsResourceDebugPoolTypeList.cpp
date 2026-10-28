@@ -116,7 +116,7 @@ namespace CgsResource
             TypeEntry& lrEntry = maTypes[miNumTypes];
             lrEntry.muTypeId = luTypeId;
             lrEntry.miCount = 1;
-            const char* lpcTypeName = nullptr;
+            const char* lpcTypeName = 0;
             for (s32 liIndex = 0; liIndex < mpPoolModule->mNumTypes; ++liIndex)
             {
                 const PoolModule::ResourceTypeEntry& lrRegistered = mpPoolModule->maTypes[liIndex];

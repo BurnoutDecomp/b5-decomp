@@ -19,7 +19,7 @@ namespace Log
     // mePrintMode (this+4) and the vtable (this+0) are set by the StrStreamBase base ctor.
     LogFileBuffered::LogFileBuffered()
         : miFile(INVALID_HANDLE_VALUE)
-        , mpcBuffer(nullptr)
+        , mpcBuffer(0)
         , miBufferLength(0)
         , miBufferPosition(0)
     {
@@ -51,8 +51,8 @@ namespace Log
         mpcBuffer = lpcBuffer;
         miBufferLength = liBufferLength;
         miBufferPosition = 0;
-        miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, nullptr,
-                             CREATE_ALWAYS, 0, nullptr);
+        miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, 0,
+                             CREATE_ALWAYS, 0, 0);
         if (miFile == INVALID_HANDLE_VALUE)
         {
             CgsDev::Assert::BeginAssert();
@@ -71,7 +71,7 @@ namespace Log
         if (macFileName[0] != '\0')
         {
             miFile = CreateFileA(macFileName, GENERIC_WRITE, FILE_SHARE_WRITE,
-                                 nullptr, OPEN_EXISTING, 0, nullptr);
+                                 0, OPEN_EXISTING, 0, 0);
             if (miFile == INVALID_HANDLE_VALUE)
             {
                 CgsDev::Assert::BeginAssert();
@@ -79,9 +79,9 @@ namespace Log
                     "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFileBuffered.cpp", 156);
                 CgsDev::Assert::EndAssert();
             }
-            SetFilePointer(miFile, 0, nullptr, FILE_END);
+            SetFilePointer(miFile, 0, 0, FILE_END);
             DWORD luWritten;
-            WriteFile(miFile, mpcBuffer, static_cast<DWORD>(miBufferPosition), &luWritten, nullptr);
+            WriteFile(miFile, mpcBuffer, static_cast<DWORD>(miBufferPosition), &luWritten, 0);
             CloseHandle(miFile);
             miFile = INVALID_HANDLE_VALUE;
             miBufferPosition = 0;
@@ -93,7 +93,7 @@ namespace Log
         Flush();
         macFileName[0] = '\0';
         miFile = INVALID_HANDLE_VALUE;
-        mpcBuffer = nullptr;
+        mpcBuffer = 0;
         miBufferLength = 0;
         miBufferPosition = 0;
     }

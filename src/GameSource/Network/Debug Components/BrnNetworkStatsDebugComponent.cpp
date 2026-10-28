@@ -64,7 +64,7 @@ namespace BrnNetwork
     {
         Register();
 
-        mpServerInterface   = nullptr;
+        mpServerInterface   = 0;
         miRaceElo           = 0;
         miBurningHomeRunElo = 0;
         miRoadRageElo       = 0;
@@ -75,10 +75,10 @@ namespace BrnNetwork
     bool StatsDebugComponent::Prepare(CgsNetwork::ServerInterface* lpServerInterface,
                                       NetworkPlayerStatsManager* lpStatsManager)
     {
-        CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
         mpServerInterface = lpServerInterface;
 
-        CGS_ASSERT(lpStatsManager != nullptr, "lpStatsManager");
+        CGS_ASSERT(lpStatsManager != 0, "lpStatsManager");
         mpStatsManager = lpStatsManager;
 
         miRaceElo           = 0;
@@ -94,10 +94,10 @@ namespace BrnNetwork
         UnregisterVariable(&miRaceElo);
         UnregisterVariable(&miRoadRageElo);
         UnregisterVariable(&miBurningHomeRunElo);
-        UnregisterFunction(&StatsDebugComponent::GetELOFromServer, nullptr);
-        UnregisterFunction(&StatsDebugComponent::SetELOOnServer, nullptr);
+        UnregisterFunction(&StatsDebugComponent::GetELOFromServer, 0);
+        UnregisterFunction(&StatsDebugComponent::SetELOOnServer, 0);
 
-        mpServerInterface   = nullptr;
+        mpServerInterface   = 0;
         miRaceElo           = 0;
         miBurningHomeRunElo = 0;
         miRoadRageElo       = 0;
@@ -109,7 +109,7 @@ namespace BrnNetwork
     // bodies) -- a no-op, dropped -- then stores 0 to mpServerInterface and the three ELO values.
     void StatsDebugComponent::Destruct()
     {
-        mpServerInterface   = nullptr;
+        mpServerInterface   = 0;
         miRaceElo           = 0;
         miBurningHomeRunElo = 0;
         miRoadRageElo       = 0;
@@ -176,14 +176,14 @@ namespace BrnNetwork
     // header note; mirrored here.
     void StatsDebugComponent::GetELOFromServer(void* lpData)
     {
-        CGS_ASSERT(lpData != nullptr, "lpData");
+        CGS_ASSERT(lpData != 0, "lpData");
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
 
-        CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != nullptr,
+        CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
                    "lpStatsDebugComponent->mpServerInterface");
         ServerInterfaceCustomCommands* lpCustomCommandsComponent =
             GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
-        CGS_ASSERT(lpCustomCommandsComponent != nullptr, "lpCustomCommandsComponent");
+        CGS_ASSERT(lpCustomCommandsComponent != 0, "lpCustomCommandsComponent");
 
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRaceElo, true);
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRoadRageElo, true);
@@ -202,14 +202,14 @@ namespace BrnNetwork
     // of the GET order, per the custom-commands header note), restored by _SetEloCallbackFunction.
     void StatsDebugComponent::SetELOOnServer(void* lpData)
     {
-        CGS_ASSERT(lpData != nullptr, "lpData");
+        CGS_ASSERT(lpData != 0, "lpData");
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
 
-        CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != nullptr,
+        CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
                    "lpStatsDebugComponent->mpServerInterface");
         ServerInterfaceCustomCommands* lpCustomCommandsComponent =
             GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
-        CGS_ASSERT(lpCustomCommandsComponent != nullptr, "lpCustomCommandsComponent");
+        CGS_ASSERT(lpCustomCommandsComponent != 0, "lpCustomCommandsComponent");
 
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRaceElo, true);
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miBurningHomeRunElo, true);
@@ -227,9 +227,9 @@ namespace BrnNetwork
     // the read-only locks, and on failure clear the custom-commands component's error status.
     void StatsDebugComponent::_GetEloCallbackFunction(void* lpData, void* /*lpResult*/, bool lbSuccess)
     {
-        CGS_ASSERT(lpData != nullptr, "lpData");
+        CGS_ASSERT(lpData != 0, "lpData");
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
-        CGS_ASSERT(lpStatsDebugComponent != nullptr, "lpStatsDebugComponent");
+        CGS_ASSERT(lpStatsDebugComponent != 0, "lpStatsDebugComponent");
 
         *CgsDev::Log::gpDebugPrint << "Got stat debug get callback\n";
 
@@ -243,7 +243,7 @@ namespace BrnNetwork
 
         if (!lbSuccess)
         {
-            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != nullptr,
+            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
                        "lpStatsDebugComponent->mpServerInterface");
             ServerInterfaceCustomCommands* lpCustomCommandsComponent =
                 GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
@@ -260,9 +260,9 @@ namespace BrnNetwork
     // re-arm the step.)
     void StatsDebugComponent::_SetEloCallbackFunction(void* lpData, void* /*lpResult*/, bool lbSuccess)
     {
-        CGS_ASSERT(lpData != nullptr, "lpData");
+        CGS_ASSERT(lpData != 0, "lpData");
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
-        CGS_ASSERT(lpStatsDebugComponent != nullptr, "lpStatsDebugComponent");
+        CGS_ASSERT(lpStatsDebugComponent != 0, "lpStatsDebugComponent");
 
         *CgsDev::Log::gpDebugPrint << "Got stat debug set callback\n";
 
@@ -272,7 +272,7 @@ namespace BrnNetwork
 
         if (!lbSuccess)
         {
-            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != nullptr,
+            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
                        "lpStatsDebugComponent->mpServerInterface");
             ServerInterfaceCustomCommands* lpCustomCommandsComponent =
                 GetCustomCommands(lpStatsDebugComponent->mpServerInterface);

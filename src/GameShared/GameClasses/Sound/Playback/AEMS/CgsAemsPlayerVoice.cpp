@@ -116,7 +116,7 @@ AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
     {
         void* lpSlotMemory = arFactory.GetEnvironment().Allocate(
             static_cast<u32>(sizeof(AemsContentSlot)),
-            static_cast<u32>(alignof(AemsContentSlot)), "AemsContentSlot");
+            static_cast<u32>(__alignof(AemsContentSlot)), "AemsContentSlot");
         CGS_ASSERT(lpSlotMemory, "lpSlotMemory");
         if (lpSlotMemory)
             GetSlot(0).SetImplementation(::new (lpSlotMemory) AemsContentSlot());

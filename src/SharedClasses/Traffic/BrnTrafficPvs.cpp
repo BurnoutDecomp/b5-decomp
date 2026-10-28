@@ -10,7 +10,7 @@
 // =============================================================================
 
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"
-#include <cstdint>   // uintptr_t (relocation arithmetic)
+#include "types.hpp"   // uintptr_t (relocation arithmetic)
 
 namespace BrnTraffic
 {

@@ -71,7 +71,7 @@ namespace Deformation
 	// The 0x20 stride is load-bearing twice over: BodyPartBBoxSpec's ten control points are
 	// walked at that stride by CalculateBoundingBoxExtents (`addi r26, r26, 0x20`), and the
 	// whole IKBodyPartSpec record is a VIEW over streamed console bytes.
-	static_assert(sizeof(BBoxPointSkinData) == 32, "BBoxPointSkinData stride 0x20");
-	static_assert(alignof(BBoxPointSkinData) == 16, "BBoxPointSkinData is 16-byte aligned (the console asserts it)");
+	CGS_STATIC_ASSERT((sizeof(BBoxPointSkinData) == 32), "BBoxPointSkinData stride 0x20");
+	CGS_STATIC_ASSERT((__alignof(BBoxPointSkinData) == 16), "BBoxPointSkinData is 16-byte aligned (the console asserts it)");
 }
 }

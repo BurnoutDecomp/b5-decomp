@@ -96,11 +96,11 @@ namespace CgsNetwork
         // bits cleared (Destruct keeps the registry back-pointer).
         void  Construct()
         {
-            mpHeapAllocator                    = nullptr;
-            mpReliableMessageBuffer            = nullptr;
+            mpHeapAllocator                    = 0;
+            mpReliableMessageBuffer            = 0;
             miReliableMessageSendIndex         = 0;
             miReliableMessagesRecvdBufferIndex = 0;
-            mpPlayerManager                    = nullptr;
+            mpPlayerManager                    = 0;
             miNumBufferedReliableMessages      = 0;
             mabValidSendData.UnSetAll();
         }
@@ -110,10 +110,10 @@ namespace CgsNetwork
         void  Destruct()
         {
             miNumBufferedReliableMessages      = 0;
-            mpReliableMessageBuffer            = nullptr;
+            mpReliableMessageBuffer            = 0;
             miReliableMessageSendIndex         = 0;
             miReliableMessagesRecvdBufferIndex = 0;
-            mpHeapAllocator                    = nullptr;
+            mpHeapAllocator                    = 0;
             mabValidSendData.UnSetAll();
         }
 

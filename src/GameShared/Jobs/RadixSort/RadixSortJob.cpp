@@ -1,7 +1,7 @@
 #include "GameShared/Jobs/RadixSort/RadixSortJob.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <algorithm>
-#include <cstdint>
+#include "types.hpp"
 
 // ARTIST82AD2818..82AD28B8. The name is historical:82AD28B0 calls
 // std::_Sort<u64*,int>, over the complete unsigned records, in place.

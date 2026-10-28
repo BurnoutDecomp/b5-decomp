@@ -87,8 +87,8 @@ ScrapeEffect::ScrapeEffect()
     , mfParam_AEMS_material_a(0.0f)
     , miParam_AEMS_material_b(0)
     , mfParam_AEMS_is_Crashing(0.0f)
-    , mpCollision3DControl(nullptr)
-    , mpCollisionControl(nullptr)
+    , mpCollision3DControl(0)
+    , mpCollisionControl(0)
     , mScrapeVoice()
     , mbPlaying(false)
 {
@@ -152,7 +152,7 @@ s32 ScrapeEffect::GetController(s32 aiIndex)
 
 void ScrapeEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr, "lpController");
+    CGS_ASSERT(apController != 0, "lpController");
     if (!apController)
         return;
 
@@ -274,7 +274,7 @@ void ScrapeEffect::UpdateParams(f32 /*afDeltaTime*/)
 {
     mScrapeVoice.Update();
     CollisionState* lpState = mpCollisionControl->GetCollisionState();
-    CGS_ASSERT(lpState != nullptr, "lpCollisionState");
+    CGS_ASSERT(lpState != 0, "lpCollisionState");
 
     const CollisionState::ELifetime leCurrent =
         lpState->GetLifetime().GetCurrent();

@@ -38,7 +38,7 @@ s32 CStaticBatchAllocator::CreateObject(u32 uXMemAttributes, u32 uHeapSize,
 {
     void* pRaw = gXMemMemoryManager.XMemAlloc(sizeof(CStaticBatchAllocator) + uHeapSize,
                                               uXMemAttributes);   // a2 + 0x1C, a1
-    if (pRaw == nullptr)                        // cmplwi cr6, r11, 0 ; beq -> OOM
+    if (pRaw == 0)                        // cmplwi cr6, r11, 0 ; beq -> OOM
         return KS_OUTOFMEMORY;                  // 0x8007000E
 
     CStaticBatchAllocator* pObject =
@@ -74,7 +74,7 @@ CStaticBatchAllocator::CStaticBatchAllocator(u32 uXMemAttributes, u32 uHeapSize)
 // released once, by AbsoluteRelease.
 CStaticBatchAllocator::~CStaticBatchAllocator()
 {
-    mpHeapBase = nullptr; // stw r9(0), 0x18(this) -- base ~CBatchAllocator then no-ops
+    mpHeapBase = 0; // stw r9(0), 0x18(this) -- base ~CBatchAllocator then no-ops
 }
 
 // @ 0x82C313D8 -- destruct then free the whole co-allocated block. asm:

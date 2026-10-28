@@ -24,7 +24,7 @@
 // asm `stw`/`lwz`; the record keeps X360 widths so its array stride stays byte-exact (see
 // KU_VIDEOFRAMEANALYST_STRIDE and CVideoFrameAnalyst::_AssertLayout).
 // =====================================================================================
-#include <cstdint>
+#include "types.hpp"
 
 #include "types.hpp"
 

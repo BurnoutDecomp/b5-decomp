@@ -18,7 +18,7 @@ public:
     u32 muRacePosition;
     bool mbVisible;
 };
-static_assert(sizeof(GuiModuleAboveCarObjectLayout) == 32, "ARTIST replay car stride");
+CGS_STATIC_ASSERT((sizeof(GuiModuleAboveCarObjectLayout) == 32), "ARTIST replay car stride");
 }
 
 #endif

@@ -37,13 +37,13 @@ f32 EvaluateCurveY(const Matrix44& lrCurve, f32 lfX)
 }
 
 ShiftControl::ShiftControl()
-    : mpPhysicsControl(nullptr)
-    , mpEngineControl(nullptr)
-    , mpHybridControl(nullptr)
+    : mpPhysicsControl(0)
+    , mpEngineControl(0)
+    , mpHybridControl(0)
     , mbNeed_ShiftGearSnd(false)
     , mbNeed_DisengageSnd(false)
     , mbNeed_EngageSnd(false)
-    , mShiftingPatternData(nullptr, nullptr)
+    , mShiftingPatternData(0, 0)
     , meShiftState(E_SHFT_NONE)
     , meShiftStageChanged(E_SHFT_NONE)
     , miRaceCarIndex(0)
@@ -54,7 +54,7 @@ ShiftControl::ShiftControl()
     , mfRPM_LFO_FRQ(0.0f)
     , mfRPMAtShift(0.0f)
     , mfLastUpShift(0.0f)
-    , mpShiftingActivator(nullptr)
+    , mpShiftingActivator(0)
 {
 }
 
@@ -86,13 +86,13 @@ bool ShiftControl::Attach()
 {
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return false;
 
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    CGS_ASSERT(lpModule != nullptr, "mpLogicModule");
+    CGS_ASSERT(lpModule != 0, "mpLogicModule");
     if (!lpModule)
         return false;
 
@@ -257,7 +257,7 @@ void ShiftControl::PostShiftFX_End()
 void ShiftControl::EndShifting()
 {
     mfRPMAtShift = 0.0f;
-    mpShiftingActivator = nullptr;
+    mpShiftingActivator = 0;
     meShiftState = E_SHFT_NONE;
     meShiftStageChanged = E_SHFT_NONE;
     PostShiftFX_End();

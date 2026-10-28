@@ -100,7 +100,7 @@ struct PlayerTriggerAction
     u8    mbFirstFrame;    // +0x14  stb   (FindFirstInstanceOf(maLastFrameTriggers, idx) == -1)
     u8    mauPad[3];       // +0x15..+0x17 (the console never writes these; zeroed here)
 };
-static_assert(sizeof(PlayerTriggerAction) == 24, "PlayerTriggerAction is the console's 24 bytes");
+CGS_STATIC_ASSERT((sizeof(PlayerTriggerAction) == 24), "PlayerTriggerAction is the console's 24 bytes");
 
 // ============================================================================
 // X360 0x82364BF0 — BrnGameState::TriggerQueryManager::Construct
@@ -713,20 +713,20 @@ void TriggerQueryManager::_AssertLayout()
     // pointers and grows on x64. All absolute X360 offsets are therefore meaningful only on the
     // 32-bit layout; production code accesses these members by name and needs no console padding.
 #if defined(_M_IX86) || (defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4)
-    static_assert(offsetof(TriggerQueryManager, maActiveTriggers)              == 912,  "maActiveTriggers @ +912");
-    static_assert(offsetof(TriggerQueryManager, mpTriggerData)                == 1568, "mpTriggerData @ +1568");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, maActiveTriggers)              == 912),  "maActiveTriggers @ +912");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mpTriggerData)                == 1568), "mpTriggerData @ +1568");
 
     // These later offsets also include the X360-width ResourcePtr<TriggerData> (28B versus 56B
     // on the 64-bit gate); preserve the console layout pins only in the 32-bit build.
-    static_assert(offsetof(TriggerQueryManager, mbTriggersUpdated)            == 1808, "mbTriggersUpdated @ +1808");
-    static_assert(offsetof(TriggerQueryManager, mbPlayerInTrafficLightRegion) == 1809, "mbPlayerInTrafficLightRegion @ +1809");
-    static_assert(offsetof(TriggerQueryManager, mPlayerCurrentTrafficLightId) == 1812, "mPlayerCurrentTrafficLightId @ +1812");
-    static_assert(offsetof(TriggerQueryManager, mpProgressionManager)         == 1816, "mpProgressionManager @ +1816");
-    static_assert(offsetof(TriggerQueryManager, mpTakedownManager)            == 1820, "mpTakedownManager @ +1820");
-    static_assert(offsetof(TriggerQueryManager, mpRoadRulesManager)           == 1824, "mpRoadRulesManager @ +1824");
-    static_assert(offsetof(TriggerQueryManager, mLandmarkIndexArray)          == 1832, "mLandmarkIndexArray @ +1832");
-    static_assert(offsetof(TriggerQueryManager, mbDoSoundLookAheadThisFrame)  == 1868, "mbDoSoundLookAheadThisFrame @ +1868");
-    static_assert(offsetof(TriggerQueryManager, mbCarHasTeleported)           == 1869, "mbCarHasTeleported @ +1869");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mbTriggersUpdated)            == 1808), "mbTriggersUpdated @ +1808");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mbPlayerInTrafficLightRegion) == 1809), "mbPlayerInTrafficLightRegion @ +1809");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mPlayerCurrentTrafficLightId) == 1812), "mPlayerCurrentTrafficLightId @ +1812");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mpProgressionManager)         == 1816), "mpProgressionManager @ +1816");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mpTakedownManager)            == 1820), "mpTakedownManager @ +1820");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mpRoadRulesManager)           == 1824), "mpRoadRulesManager @ +1824");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mLandmarkIndexArray)          == 1832), "mLandmarkIndexArray @ +1832");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mbDoSoundLookAheadThisFrame)  == 1868), "mbDoSoundLookAheadThisFrame @ +1868");
+    CGS_STATIC_ASSERT((offsetof(TriggerQueryManager, mbCarHasTeleported)           == 1869), "mbCarHasTeleported @ +1869");
 #endif
 }
 

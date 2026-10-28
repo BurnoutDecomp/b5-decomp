@@ -103,7 +103,7 @@ namespace CgsCollision
     // reconstruction zero-initialises them at the one build site instead
     // (deterministic; garbage is not reproducible), flagged there.
     // -------------------------------------------------------------------------
-    struct alignas(16) PrimitiveTestResult
+    struct CGS_ALIGN(16) PrimitiveTestResult
     {
         Vector3     mPrimitive0Normal;    // +0x00  DWARF :60 (triangle side's normal)
         Vector3     mPrimitive1Normal;    // +0x10  DWARF :61 (sphere side's normal; the kernel
@@ -122,7 +122,7 @@ namespace CgsCollision
         bool IsValid() const;
     };
 
-    static_assert(sizeof(PrimitiveTestResult) == 80,
+    CGS_STATIC_ASSERT((sizeof(PrimitiveTestResult) == 80),
                   "PrimitiveTestResult is the 80-byte result-list record "
                   "(pointer-free; the list stride is a contract)");
 }

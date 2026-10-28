@@ -586,8 +586,8 @@ namespace SceneManagerIO
 
     // Size pins for the three volume-instance element records defined by this TU (their stride
     // is load-bearing: it fixes each queue's capacity against Construct's queue-base offsets).
-    static_assert(sizeof(InEventSetVolumeInstanceTransform)     == 80, "InEventSetVolumeInstanceTransform X360 stride 0x50 (id + affine matrix)");
-    static_assert(sizeof(InEventSetVolumeInstanceCullingGroup)  == 16, "InEventSetVolumeInstanceCullingGroup X360 stride 0x10 (id + culling-group word)");
-    static_assert(sizeof(InEventAddVolumeInstanceForCaching)    == 16, "InEventAddVolumeInstanceForCaching X360 stride 0x10 (id + cache-options word)");
+    CGS_STATIC_ASSERT((sizeof(InEventSetVolumeInstanceTransform)     == 80), "InEventSetVolumeInstanceTransform X360 stride 0x50 (id + affine matrix)");
+    CGS_STATIC_ASSERT((sizeof(InEventSetVolumeInstanceCullingGroup)  == 16), "InEventSetVolumeInstanceCullingGroup X360 stride 0x10 (id + culling-group word)");
+    CGS_STATIC_ASSERT((sizeof(InEventAddVolumeInstanceForCaching)    == 16), "InEventAddVolumeInstanceForCaching X360 stride 0x10 (id + cache-options word)");
 }
 }

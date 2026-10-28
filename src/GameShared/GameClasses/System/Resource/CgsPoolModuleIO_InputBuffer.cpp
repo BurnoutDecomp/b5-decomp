@@ -18,7 +18,7 @@ namespace PoolIO
 {
     void InputBuffer::_AssertLayoutInput()
     {
-        static_assert(offsetof(InputBuffer, mPoolInputQueue) == 0x0004, "mPoolInputQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mPoolInputQueue) == 0x0004), "mPoolInputQueue @0x0004");
     }
 
     // X360 0x828E1A00: write-lock; return this + 4.

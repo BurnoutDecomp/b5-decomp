@@ -53,7 +53,7 @@ void FreeburnChallengeManager::Construct( GuiCache* lpCache )
     mpGuiCache           = lpCache;
     mfTimeToNextChange   = 0.0f;
     mePageState          = E_PAGE_STATE_AUTO_ROTATE;
-    mpCurrentChallenge   = nullptr;
+    mpCurrentChallenge   = 0;
     meInternalState      = E_INTERNAL_STATE_OFF;
     miCurrentTargetIndex = 0;
     miTargetsCount       = 0;
@@ -189,7 +189,7 @@ void FreeburnChallengeManager::StartChallenge( const GuiChallengeStartEvent* lpE
     const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
     const s32 liChallengeIndex = lpList->GetChallengeIndex( lpEvent->mChallengeID );
     mpCurrentChallenge = ( liChallengeIndex < 0 )
-                       ? nullptr
+                       ? 0
                        : lpList->GetChallengeData( liChallengeIndex );
 
     miTargetsCount       = 0;
@@ -266,7 +266,7 @@ void FreeburnChallengeManager::TriggerChallenge( const GuiChallengeTriggerRespon
     const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
     const s32 liChallengeIndex = lpList->GetChallengeIndex( lpEvent->mChallengeID );
     mpCurrentChallenge = ( liChallengeIndex < 0 )
-                       ? nullptr
+                       ? 0
                        : lpList->GetChallengeData( liChallengeIndex );
 
     miTargetsCount       = 0;
@@ -382,7 +382,7 @@ void FreeburnChallengeManager::StartNotActiveChallenge( const GuiChallengeNotAct
     const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
     const s32 liChallengeIndex = lpList->GetChallengeIndex( lChallengeID );
     mpCurrentChallenge = ( liChallengeIndex < 0 )
-                       ? nullptr
+                       ? 0
                        : lpList->GetChallengeData( liChallengeIndex );
 }
 
@@ -417,7 +417,7 @@ void FreeburnChallengeManager::SelectNext()
 void FreeburnChallengeManager::HandleCompletionStatus(
     const GuiEventFburnChallengeEveryPlayerStatus* lpCompletionEvent )
 {
-    static_assert( sizeof( BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData ) == 2104,
+    CGS_STATIC_ASSERT(( sizeof( BrnGameState::GameStateModuleIO::FburnChallengeEveryPlayerStatusData ) == 2104),
                    "GUI 581 carries the 2104-byte every-player status block" );
     std::memcpy( &mCompletedData, lpCompletionEvent, sizeof( mCompletedData ) );
 }

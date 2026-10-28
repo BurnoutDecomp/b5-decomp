@@ -7,8 +7,8 @@ namespace BrnNetwork
 {
     void SuspensionManager::Construct(BrnNetworkManager* lpNetworkManager)
     {
-        mCallback = nullptr;
-        mpUserData = nullptr;
+        mCallback = 0;
+        mpUserData = 0;
         mpNetworkManager = lpNetworkManager;
         meSuspensionType = E_SUSPENSION_TYPE_COUNT;
         meSubState = E_SUBSTATE_COUNT;
@@ -16,8 +16,8 @@ namespace BrnNetwork
 
     bool SuspensionManager::Prepare()
     {
-        mCallback = nullptr;
-        mpUserData = nullptr;
+        mCallback = 0;
+        mpUserData = 0;
         meSuspensionType = E_SUSPENSION_TYPE_COUNT;
         meSubState = E_SUBSTATE_COUNT;
         return true;
@@ -25,8 +25,8 @@ namespace BrnNetwork
 
     bool SuspensionManager::Release()
     {
-        mCallback = nullptr;
-        mpUserData = nullptr;
+        mCallback = 0;
+        mpUserData = 0;
         meSuspensionType = E_SUSPENSION_TYPE_COUNT;
         meSubState = E_SUBSTATE_COUNT;
         return true;
@@ -34,9 +34,9 @@ namespace BrnNetwork
 
     void SuspensionManager::Destruct()
     {
-        mCallback = nullptr;
-        mpUserData = nullptr;
-        mpNetworkManager = nullptr;
+        mCallback = 0;
+        mpUserData = 0;
+        mpNetworkManager = 0;
         meSuspensionType = E_SUSPENSION_TYPE_COUNT;
         meSubState = E_SUBSTATE_COUNT;
     }
@@ -79,8 +79,8 @@ namespace BrnNetwork
 
     void SuspensionManager::Disconnected()
     {
-        mCallback = nullptr;
-        mpUserData = nullptr;
+        mCallback = 0;
+        mpUserData = 0;
         meSubState = E_SUBSTATE_COUNT;
     }
 

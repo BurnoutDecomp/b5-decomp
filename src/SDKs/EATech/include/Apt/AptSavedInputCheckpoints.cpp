@@ -38,7 +38,7 @@
 // ---------------------------------------------------------------------------
 
 // The single global checkpoint list (declared in the header; homed by the boot TU).
-AptFileSavedInputStateVector* gpAptSavedInputCheckpoints = nullptr;   // dword_8324D810
+AptFileSavedInputStateVector* gpAptSavedInputCheckpoints = 0;   // dword_8324D810
 
 // ===========================================================================
 // AptFileSavedInputStateVector -- the StringAsVectorPolicy growth/teardown ops,
@@ -87,7 +87,7 @@ void AptFileSavedInputStateVector::Clear()
         mpData[i].~AptFileSavedInputState();
     if (mpData)
         ::operator delete(mpData);
-    mpData     = nullptr;
+    mpData     = 0;
     mnSize     = 0;
     mnCapacity = 0;
 }
@@ -178,11 +178,11 @@ void Checkpoint(AptFileSavedInputStateVector& rList, const EAStringC& name)
     // 2. Not present -- is the file already loaded?
     AptLoader*  pLoader = gpAptTarget->GetLoader();
     AptFilePtr  loaded  = pLoader->IsLoaded(name);
-    const bool  bLoaded = (loaded.pData != nullptr);
+    const bool  bLoaded = (loaded.pData != 0);
 
     // Release the reference IsLoaded handed back (we only needed the yes/no).
     AptFile* pTmp = loaded.pData;
-    loaded.pData = nullptr;
+    loaded.pData = 0;
     if (pTmp && AptSharedPtrDecRef(pTmp) == 0)
         AptSharedPtrDelete(pTmp);
 

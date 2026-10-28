@@ -27,7 +27,7 @@ AptRenderItem* AptRenderItemButton::Clone(int nCreatedOnTick, bool bCopyExtended
 {
     void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemButton));
     if (!p)
-        return nullptr;
+        return 0;
     return new (p) AptRenderItemButton(this, nCreatedOnTick, bCopyExtended);
 }
 

@@ -121,12 +121,12 @@ namespace BrnGameState
                                  GameStateModuleIO::OutputBuffer* lpOutput,
                                  TrafficTypeResponseQueue* lpLastTrafficTypeResponseQueue)
     {
-        CGS_ASSERT(lpActiveCarInterface != nullptr,           "lpActiveCarInterface != NULL");            // :180
-        CGS_ASSERT(lpRaceCarCrashEventQueue != nullptr,       "lpRaceCarCrashEventQueue != NULL");        // :181
-        CGS_ASSERT(lpCrashingVehicleInterface != nullptr,     "lpCrashingVehicleInterface != NULL");      // :182
-        CGS_ASSERT(lpInput != nullptr,                        "lpInput != NULL");                         // :183
-        CGS_ASSERT(lpOutput != nullptr,                       "lpOutput != NULL");                        // :184
-        CGS_ASSERT(lpLastTrafficTypeResponseQueue != nullptr, "lpLastTrafficTypeResponseQueue != NULL");  // :185
+        CGS_ASSERT(lpActiveCarInterface != 0,           "lpActiveCarInterface != NULL");            // :180
+        CGS_ASSERT(lpRaceCarCrashEventQueue != 0,       "lpRaceCarCrashEventQueue != NULL");        // :181
+        CGS_ASSERT(lpCrashingVehicleInterface != 0,     "lpCrashingVehicleInterface != NULL");      // :182
+        CGS_ASSERT(lpInput != 0,                        "lpInput != NULL");                         // :183
+        CGS_ASSERT(lpOutput != 0,                       "lpOutput != NULL");                        // :184
+        CGS_ASSERT(lpLastTrafficTypeResponseQueue != 0, "lpLastTrafficTypeResponseQueue != NULL");  // :185
         // (lpCrashingVehicleInterface is asserted and then never read -- as on the console.)
 
         UpdateTakedownTimes(lpActiveCarInterface, lfDeltaTime);
@@ -154,7 +154,7 @@ namespace BrnGameState
         {
             lbDetectTakedowns = lpActiveCarInterface->GetPlayerEngineState() == E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
         }
-        if (lbDetectTakedowns && mpModeManager->GetCurrentGameMode() != nullptr)
+        if (lbDetectTakedowns && mpModeManager->GetCurrentGameMode() != 0)
         {
             lbDetectTakedowns = !mpModeManager->GetCurrentGameModeParams()->GetFlag(GameModeParams::KU_FLAG_DISABLE_ALL_TDS);
         }
@@ -532,12 +532,12 @@ namespace BrnGameState
             }
         }
 
-        CGS_ASSERT(mpModeManager != nullptr, "mpModeManager != NULL");                                   // :745
+        CGS_ASSERT(mpModeManager != 0, "mpModeManager != NULL");                                   // :745
 
         // The takedown camera: player aggressor, offline, and the mode is not enforcing soft takedowns
         // (`extldi r12,r12,64,33` @0x82393EB8 == muFlags bit 33 == KU_FLAG_ENFORCE_SOFT_TAKEDOWNS).
         const bool lbEnforceSoftTakedowns =
-            mpModeManager->GetCurrentGameMode() != nullptr &&
+            mpModeManager->GetCurrentGameMode() != 0 &&
             mpModeManager->GetCurrentGameModeParams()->GetFlag(GameModeParams::KU_FLAG_ENFORCE_SOFT_TAKEDOWNS);
         if (!lbEnforceSoftTakedowns && !mpModeManager->IsOnlineGameMode())
         {
@@ -565,9 +565,9 @@ namespace BrnGameState
         lpTakedownEvent->miTakedownChainCount    = lpAggressorRaceCarData->miTakedownChainLength;
         lpTakedownEvent->miMultipleTakedownCount = lpAggressorRaceCarData->miMultipleTakedownLength;
 
-        CGS_ASSERT(mpModeManager != nullptr, "mpModeManager != NULL");                                   // :780
+        CGS_ASSERT(mpModeManager != 0, "mpModeManager != NULL");                                   // :780
 
-        if (mpModeManager->GetCurrentGameMode() != nullptr)
+        if (mpModeManager->GetCurrentGameMode() != 0)
         {
             // Inside a mode: a second takedown inside the multiple window is a DOUBLE; the event goes
             // to the scoring side through the output buffer's takedown queue.

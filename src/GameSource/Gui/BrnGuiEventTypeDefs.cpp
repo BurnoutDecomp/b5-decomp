@@ -258,7 +258,7 @@ CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
 
     const CgsID lId = CgsIDCompress(lpcOverlayId);
 
-    static_assert(sizeof(CgsID) == sizeof(maMessages[0].maHead),
+    CGS_STATIC_ASSERT((sizeof(CgsID) == sizeof(maMessages[0].maHead)),
                   "overlay id (std r3,0) overlays the first param record's 8-byte head");
     std::memcpy(&maMessages[0].maHead[0], &lId, sizeof(CgsID)); // std r3, 0(this)
 
@@ -273,7 +273,7 @@ CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
 // value or assert that it is non-null.
 CgsID GuiOverlayRequest::Construct(CgsID lOverlayId)
 {
-    static_assert(sizeof(CgsID) == sizeof(maMessages[0].maHead),
+    CGS_STATIC_ASSERT((sizeof(CgsID) == sizeof(maMessages[0].maHead)),
                   "overlay id (std r3,0) overlays the first param record's 8-byte head");
     miNumMessages = 0;   // stw 0, 0x118(this)
     mbButton1Used = 0;   // stb 0, 0x11C(this)
@@ -303,11 +303,11 @@ CgsID GuiOverlayRequest::Construct(CgsID lOverlayId)
 // overrun.
 s32 GuiOverlayRequest::AddMessageParam(u32 luId, const char* lpcParam)
 {
-    static_assert(sizeof(ParamInfo) == 0x44, "param record stride 0x44 (GetMessageParam: 0x44*idx)");
-    static_assert(__builtin_offsetof(ParamInfo, muId) == 0x08, "param id @ record+0x08");
-    static_assert(__builtin_offsetof(ParamInfo, macText) == 0x0C, "param text @ record+0x0C");
+    CGS_STATIC_ASSERT((sizeof(ParamInfo) == 0x44), "param record stride 0x44 (GetMessageParam: 0x44*idx)");
+    CGS_STATIC_ASSERT((__builtin_offsetof(ParamInfo, muId) == 0x08), "param id @ record+0x08");
+    CGS_STATIC_ASSERT((__builtin_offsetof(ParamInfo, macText) == 0x0C), "param text @ record+0x0C");
     // The console's 64-byte text write from the LAST slot must still land inside the object.
-    static_assert(KI_MAX_MESSAGES * 0x44 - 0x44 + 0x0C + 64 <= sizeof(GuiOverlayRequest),
+    CGS_STATIC_ASSERT((KI_MAX_MESSAGES * 0x44 - 0x44 + 0x0C + 64 <= sizeof(GuiOverlayRequest)),
                   "the attested 64-byte text write stays within the request object");
 
     CGS_ASSERT(miNumMessages < KI_MAX_MESSAGES,
@@ -338,11 +338,11 @@ s32 GuiOverlayRequest::GetMessageParam(ParamOut* lpOut, s32 liIndex) const
     // X360-pinned member offsets (validated from a member context where the private
     // members are visible to offsetof): the two button records at +0x88/+0xCC, the count
     // at +0x118 and the two guard bytes at +0x11C/+0x11D.
-    static_assert(__builtin_offsetof(GuiOverlayRequest, mButton1) == 0x88, "button1 record @+0x88");
-    static_assert(__builtin_offsetof(GuiOverlayRequest, mButton2) == 0xCC, "button2 record @+0xCC");
-    static_assert(__builtin_offsetof(GuiOverlayRequest, miNumMessages) == 0x118, "count @+0x118");
-    static_assert(__builtin_offsetof(GuiOverlayRequest, mbButton1Used) == 0x11C, "button1 guard @+0x11C");
-    static_assert(__builtin_offsetof(GuiOverlayRequest, mbButton2Used) == 0x11D, "button2 guard @+0x11D");
+    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mButton1) == 0x88), "button1 record @+0x88");
+    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mButton2) == 0xCC), "button2 record @+0xCC");
+    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, miNumMessages) == 0x118), "count @+0x118");
+    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mbButton1Used) == 0x11C), "button1 guard @+0x11C");
+    CGS_STATIC_ASSERT((__builtin_offsetof(GuiOverlayRequest, mbButton2Used) == 0x11D), "button2 guard @+0x11D");
 
     CGS_ASSERT( liIndex < miNumMessages, "Index isn't used in Overlay." );
     CGS_ASSERT( liIndex >= 0,            "Index isn't valid." );

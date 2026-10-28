@@ -172,7 +172,7 @@ namespace Io
             // X360 byte-faithful up to the audio-car-loaded queue: the leading GuiOut
             // region is pure POD storage (no host-wider members), so the queue's start
             // is asserted at its exact X360 offset (load-bearing for the memcpy split).
-            static_assert(offsetof(PreUpdateOutput, mAudioCarDataLoadedQueue) == 0x110,
+            CGS_STATIC_ASSERT((offsetof(PreUpdateOutput, mAudioCarDataLoadedQueue) == 0x110),
                           "PreUpdateOutput.mAudioCarDataLoadedQueue @ +0x110");
             // X360-32bit vs host-64bit divergence: AudioCarDataLoadedEvent embeds a
             // host-wider pointer (mpVehicleListEntry: 4B on X360, 8B on host) and the
@@ -458,8 +458,8 @@ namespace Io
             // + SEQUENCE with the console inter-member gaps as pads; the old absolute
             // offsetof asserts past +0x620 are retired (console offsets stay in the
             // member comments).
-            static_assert(offsetof(RootInputBuffer, mReplayStatusInterface)  == 0x00004, "mReplayStatusInterface @ +0x004");
-            static_assert(offsetof(RootInputBuffer, mVehicleData)            == 0x00620, "mVehicleData @ +0x620");
+            CGS_STATIC_ASSERT((offsetof(RootInputBuffer, mReplayStatusInterface)  == 0x00004), "mReplayStatusInterface @ +0x004");
+            CGS_STATIC_ASSERT((offsetof(RootInputBuffer, mVehicleData)            == 0x00620), "mVehicleData @ +0x620");
         }
     };
 
@@ -575,7 +575,7 @@ namespace Io
 
         static void _AssertLayout()
         {
-            static_assert(offsetof(RootPreUpdateOutputBuffer, mPreUpdateOutput) == 0x08,
+            CGS_STATIC_ASSERT((offsetof(RootPreUpdateOutputBuffer, mPreUpdateOutput) == 0x08),
                           "RootPreUpdateOutputBuffer.mPreUpdateOutput @ +0x08");
         }
     };
@@ -667,7 +667,7 @@ namespace Io
             lpAttribSysQueue->Clear();
 
             for (auto& lpSerialiser : mReplayRequestInterface.mapSerialisers)
-                lpSerialiser = nullptr;
+                lpSerialiser = 0;
         }
 
         // X360 ::G 0x823B8A68 (read-lock, DWARF :289) / ::GetReso 0x826951D0 (write-lock, DWARF :292)
@@ -706,11 +706,11 @@ namespace Io
         {
             // The byte-backed queues retain their offsets. The final pointer
             // array follows native alignment and doubles in width on x64.
-            static_assert(offsetof(RootOutputBuffer, mResourceRequestInterfaceStorage) == 0x0004,
+            CGS_STATIC_ASSERT((offsetof(RootOutputBuffer, mResourceRequestInterfaceStorage) == 0x0004),
                           "RootOutputBuffer.mResourceRequestInterface @ +0x04");
-            static_assert(offsetof(RootOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x1014,
+            CGS_STATIC_ASSERT((offsetof(RootOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x1014),
                           "RootOutputBuffer.mAttribSysRequestInterface @ +0x1014");
-            static_assert(sizeof(void*) != 4 || offsetof(RootOutputBuffer, mReplayRequestInterface) == 0x1824,
+            CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(RootOutputBuffer, mReplayRequestInterface) == 0x1824),
                           "RootOutputBuffer.mReplayRequestInterface @ +0x1824");
         }
     };

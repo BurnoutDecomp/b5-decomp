@@ -23,7 +23,7 @@
 #include <intrin.h>  // _InterlockedExchange (the Apt non-GC value-pool spin lock)
 #include <new>       // placement new (construct an AptString into pooled storage)
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
-#include <cstdint>   // uintptr_t (the StringMembersIndex wordlist member-id payload)
+#include "types.hpp"   // uintptr_t (the StringMembersIndex wordlist member-id payload)
 
 // The global native-method argument stack -- the AS interpreter's native-call
 // dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the call args here
@@ -557,7 +557,7 @@ AptString* AptString::Create(const char* szValue)
     pNode->SetReleaseAtEnd();
     // family-(B) push: live count (mnCapacity member) bounded by capacity (mnTop
     // member) -- the zombie-vector idiom. Null pre-init: nothing to defer into.
-    if (gpValuesToRelease != nullptr &&
+    if (gpValuesToRelease != 0 &&
         gpValuesToRelease->mnCapacity < gpValuesToRelease->mnTop)
         gpValuesToRelease->mppItems[gpValuesToRelease->mnCapacity++] = pNode;
     else

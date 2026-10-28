@@ -12,10 +12,10 @@ namespace CgsResource
 class ZoneListResourceType : public Type
 {
 public:
-    uint32_t           GetTypeID() const override;
-    void               FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    uint32_t           GetTypeID() const ;
+    void               FixDown(void* lpResource, const rw::Resource& lrResource) const ;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
     virtual void*      Serialise(const void* lpResource, const rw::Resource& lrDest) const;
 };
 }

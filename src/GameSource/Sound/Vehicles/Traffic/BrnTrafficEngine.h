@@ -41,8 +41,8 @@ struct Traffic3DControl : public BrnSound::Logic::Brn3DEffectControl
     Traffic3DControl() {}
     virtual ~Traffic3DControl();
 
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 };

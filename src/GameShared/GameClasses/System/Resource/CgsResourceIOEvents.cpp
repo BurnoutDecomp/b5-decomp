@@ -19,7 +19,7 @@ namespace Events
 
 BundleLoaderEvent& BundleLoaderEvent::SetFileName(const char* pcFileName)
 {
-    if (pcFileName != nullptr)
+    if (pcFileName != 0)
     {
         // Measure the source length (excluding the NUL), matching the inlined
         // helper's strlen-style pre-pass that feeds the bounds assert.
@@ -100,7 +100,7 @@ AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const ch
 // returns its incoming `result`).
 OpenStreamRequest* OpenStreamRequest::SetFileName(const char* lpcFileName)
 {
-    if (lpcFileName != nullptr)
+    if (lpcFileName != 0)
     {
         // Inlined CgsStringUtils.h:65 bounded copy -- measure source length for the bounds assert.
         const char* pcScan = lpcFileName;

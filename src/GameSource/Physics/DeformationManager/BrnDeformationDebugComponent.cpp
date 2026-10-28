@@ -227,7 +227,7 @@ namespace Deformation
     // =============================================================================================
     void DeformationDebugComponent::Update()
     {
-        if ( mpSelectedRig != nullptr && mpSelectedRig->GetDeformationSpec() != nullptr )
+        if ( mpSelectedRig != 0 && mpSelectedRig->GetDeformationSpec() != 0 )
         {
             mpSelectedRig->CalculateDriveTimeLimitsDebug();
         }
@@ -244,7 +244,7 @@ namespace Deformation
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
 
         DeformableObject* lpRig = lpThis->mpSelectedRig;
-        if ( lpRig == nullptr )
+        if ( lpRig == 0 )
         {
             return;
         }
@@ -302,7 +302,7 @@ namespace Deformation
     void DeformationDebugComponent::OnSensorPositionChange(void* /*lpValue*/, void* lpUserData)
     {
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
-        if ( lpThis->mpSelectedSensor == nullptr || lpThis->mpSelectedRig == nullptr )
+        if ( lpThis->mpSelectedSensor == 0 || lpThis->mpSelectedRig == 0 )
         {
             return;
         }
@@ -323,7 +323,7 @@ namespace Deformation
     {
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
 
-        if ( lpThis->mpSelectedRig != nullptr )
+        if ( lpThis->mpSelectedRig != 0 )
         {
             lpThis->CompressSelectedRig( lpThis->mfCompressRightSide, lpThis->mfCompressLeftSide,
                                          lpThis->mfCompressFloor,     lpThis->mfCompressRoof,
@@ -341,7 +341,7 @@ namespace Deformation
     {
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
 
-        if ( lpThis->mpSelectedRig == nullptr )
+        if ( lpThis->mpSelectedRig == 0 )
         {
             return;
         }
@@ -386,7 +386,7 @@ namespace Deformation
         mfCompressFront     = lfFront;
 
         DeformableObject* lpRig = mpSelectedRig;
-        if ( lpRig == nullptr || lpRig->GetDeformationSpec() == nullptr )
+        if ( lpRig == 0 || lpRig->GetDeformationSpec() == 0 )
         {
             return;
         }
@@ -424,7 +424,7 @@ namespace Deformation
     void DeformationDebugComponent::CompressSelectedRig_MaxDrivetime()
     {
         DeformableObject* lpRig = mpSelectedRig;
-        if ( lpRig == nullptr )
+        if ( lpRig == 0 )
         {
             return;
         }
@@ -498,7 +498,7 @@ namespace Deformation
     void DeformationDebugComponent::DetachPart()
     {
         DeformableObject* lpRig = mpSelectedRig;
-        if ( lpRig == nullptr )
+        if ( lpRig == 0 )
         {
             return;
         }
@@ -555,7 +555,7 @@ namespace Deformation
     void DeformationDebugComponent::ResetSelectedRig(void* lpUserData)
     {
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
-        if ( lpThis->mpSelectedRig != nullptr )
+        if ( lpThis->mpSelectedRig != 0 )
         {
             lpThis->mpSelectedRig->ResetDeformationNextUpdate(true);
         }
@@ -733,20 +733,20 @@ namespace Deformation
     // =============================================================================================
     void DeformationDebugComponent::DrawDetachedWheels(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT( lpRender != nullptr, "lpDisplay != NULL" );   // BrnDeformationDebugComponent.cpp:536
+        CGS_ASSERT( lpRender != 0, "lpDisplay != NULL" );   // BrnDeformationDebugComponent.cpp:536
 
         DeformableObject* lpRig = mpSelectedRig;
-        if ( lpRig == nullptr )
+        if ( lpRig == 0 )
         {
             return;
         }
         const StreamedDeformationSpec* lpSpec = lpRig->GetDeformationSpec();
-        if ( lpSpec == nullptr )
+        if ( lpSpec == 0 )
         {
             return;
         }
         BrnPhysics::Vehicle::VehiclePhysics* lpPhysics = lpRig->GetVehiclePhysicsDebug();
-        if ( lpPhysics == nullptr )
+        if ( lpPhysics == 0 )
         {
             return;
         }
@@ -759,10 +759,10 @@ namespace Deformation
                 // EVehicleDrivenWheel is a NAMESPACE-scope enum (BrnSimpleVehiclePhysics.h:52), not
                 // nested in VehiclePhysics -- the nested copy retired with the re-parenting.
                 lpPhysics->GetWheel( static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel) );
-            CGS_ASSERT( &lrWheel != nullptr, "lpWheel" );   // BrnDeformationDebugComponent.cpp:556 (non-gating)
+            CGS_ASSERT( &lrWheel != 0, "lpWheel" );   // BrnDeformationDebugComponent.cpp:556 (non-gating)
 
             const WheelSpec* lpWheelSpec = lpSpec->GetW( liWheel );
-            CGS_ASSERT( lpWheelSpec != nullptr, "lpWheelSpec" );   // BrnDeformationDebugComponent.cpp:560
+            CGS_ASSERT( lpWheelSpec != 0, "lpWheelSpec" );   // BrnDeformationDebugComponent.cpp:560
 
             if ( lpWheelSpec->liTagPointIndex == -1 )
             {
@@ -886,7 +886,7 @@ namespace Deformation
     // =============================================================================================
     void DeformationDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT( mpDeformationManager != nullptr, "mpDeformationManager != NULL" );   // BrnDeformationDebugComponent.cpp:266
+        CGS_ASSERT( mpDeformationManager != 0, "mpDeformationManager != NULL" );   // BrnDeformationDebugComponent.cpp:266
 
         const s32 liSelectedPart = giDebugOnlyRenderThisCarPart;   // -1 == all parts
 
@@ -895,7 +895,7 @@ namespace Deformation
         // iterating 0..27 and skipping inactive slots reproduces the same rig set in index order.
         for ( s32 liRigIndex = 0; liRigIndex < 28; ++liRigIndex )
         {
-            if ( mpDeformationManager == nullptr || !mpDeformationManager->IsDeformableObjectActive( liRigIndex ) )
+            if ( mpDeformationManager == 0 || !mpDeformationManager->IsDeformableObjectActive( liRigIndex ) )
             {
                 continue;
             }
@@ -934,7 +934,7 @@ namespace Deformation
                     const Vector3 lvWorld = TransformPointToWorld( lrXform, lrTag.GetPosition() );
 
                     // Highlight the selected tag point (gate on the mpSelectedRig POINTER, rig+20).
-                    if ( mpSelectedRig != nullptr && miSelectedPoint == liTag )
+                    if ( mpSelectedRig != 0 && miSelectedPoint == liTag )
                     {
                         lpRender->DrawHollowSphere( lvWorld, KF_DEBUG_SPHERE_RADIUS, KRGBA_WHITE );
                     }
@@ -964,7 +964,7 @@ namespace Deformation
                 // The highlight index subtracts the SELECTED rig's tag-point count (asm reads
                 // *(mpSelectedRig+19216), not the iterated rig's), so cache it once when a rig is
                 // selected. Left at 0 when there is no selection (the highlight gate is off anyway).
-                const s32 liSelectedRigTagPoints = ( mpSelectedRig != nullptr )
+                const s32 liSelectedRigTagPoints = ( mpSelectedRig != 0 )
                                                        ? mpSelectedRig->GetNumTagPointsDebug() : 0;
                 for ( s32 liDriven = 0; liDriven < liNumDrivenPoints; ++liDriven )
                 {
@@ -979,7 +979,7 @@ namespace Deformation
 
                     // Highlight the selected driven point (gate on mpSelectedRig; the global point index
                     // minus the SELECTED rig's tag-point count selects into the driven-point array).
-                    if ( mpSelectedRig != nullptr && miSelectedPoint - liSelectedRigTagPoints == liDriven )
+                    if ( mpSelectedRig != 0 && miSelectedPoint - liSelectedRigTagPoints == liDriven )
                     {
                         lpRender->DrawHollowSphere( lvWorld, KF_DEBUG_SPHERE_RADIUS, KRGBA_WHITE );
                     }
@@ -1068,7 +1068,7 @@ namespace Deformation
         }
 
         // ---- drive-time-limits box (mpSelectedRig only) ------------------------------------------
-        if ( mbDrawDrivetimeLimitsBox && mpSelectedRig != nullptr )
+        if ( mbDrawDrivetimeLimitsBox && mpSelectedRig != 0 )
         {
             const Matrix44Affine& lrXform = mpSelectedRig->GetVehiclePhysicsDebug()->GetTransform();
             lpRender->DrawBox( mpSelectedRig->GetDriveTimeLimitsMin(), mpSelectedRig->GetDriveTimeLimitsMax(),
@@ -1076,7 +1076,7 @@ namespace Deformation
         }
 
         // ---- deformed box (mpSelectedRig only) ---------------------------------------------------
-        if ( mbDrawDeformedBox && mpSelectedRig != nullptr )
+        if ( mbDrawDeformedBox && mpSelectedRig != 0 )
         {
             const Matrix44Affine& lrXform = mpSelectedRig->GetVehiclePhysicsDebug()->GetTransform();
             CgsGeometric::AxisAlignedBox lBox;

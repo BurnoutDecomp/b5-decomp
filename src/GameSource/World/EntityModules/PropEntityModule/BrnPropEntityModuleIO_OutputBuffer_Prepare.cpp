@@ -36,23 +36,23 @@ namespace PropEntityIO
         //   * member ORDER is unchanged, and
         //   * the members DO NOT OVERLAP, i.e. each one is genuinely large enough to hold the
         //     type the consumers cast it to (the old 1-byte mPropInputInterface was not).
-        static_assert(offsetof(OutputBuffer_Prepare, mResourceRequestInterface) == 4,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_Prepare, mResourceRequestInterface) == 4),
                       "mResourceRequestInterface must follow the status byte (console +4)");
-        static_assert(offsetof(OutputBuffer_Prepare, mSceneInputInterface)
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_Prepare, mSceneInputInterface)
                           >= offsetof(OutputBuffer_Prepare, mResourceRequestInterface)
-                             + sizeof(ResourceRequestInterfaceStorage),
+                             + sizeof(ResourceRequestInterfaceStorage)),
                       "mSceneInputInterface overlaps mResourceRequestInterface");
-        static_assert(offsetof(OutputBuffer_Prepare, mPropInputInterface)
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_Prepare, mPropInputInterface)
                           >= offsetof(OutputBuffer_Prepare, mSceneInputInterface)
-                             + sizeof(SceneInputInterfaceStorage),
+                             + sizeof(SceneInputInterfaceStorage)),
                       "mPropInputInterface overlaps mSceneInputInterface");
         // Neither interface may silently shrink back below its console extent (the console
         // spans are 1056-4 == 1052 and 819824-1056 == 818768).
-        static_assert(sizeof(ResourceRequestInterfaceStorage) >= 1024,
+        CGS_STATIC_ASSERT((sizeof(ResourceRequestInterfaceStorage) >= 1024),
                       "resource-request interface smaller than its console payload -- retype regressed");
-        static_assert(sizeof(SceneInputInterfaceStorage) >= 818768 - 16,
+        CGS_STATIC_ASSERT((sizeof(SceneInputInterfaceStorage) >= 818768 - 16),
                       "scene-input interface smaller than the console span -- retype regressed");
-        static_assert(sizeof(PropInputInterfaceStorage) >= 11264,
+        CGS_STATIC_ASSERT((sizeof(PropInputInterfaceStorage) >= 11264),
                       "prop-input interface smaller than the console span -- retype regressed");
     }
 

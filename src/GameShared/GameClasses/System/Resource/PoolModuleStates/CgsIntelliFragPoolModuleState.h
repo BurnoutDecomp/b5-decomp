@@ -55,9 +55,9 @@ namespace CgsResource
     private:
         // ---- the two concrete-strategy hooks (overrides) --------------------------------------
         virtual bool RunDefragAlgorithm(AllocListSet* lpAllocListSet, LinearHeapNode* lpNodes,
-                                        s32 liLastNode, s32 liMemType) override;
+                                        s32 liLastNode, s32 liMemType) ;
         virtual void RunPoolDefragmentation(RelocateRequest* lpRequests, RelocateSource* lpSources,
-                                            u32 luNum, s32 liMemType) override;
+                                            u32 luNum, s32 liMemType) ;
 
         // ---- Layout (first derived member at +0x4C) --------------------------------------
         EInternalState meState;        // +0x4C

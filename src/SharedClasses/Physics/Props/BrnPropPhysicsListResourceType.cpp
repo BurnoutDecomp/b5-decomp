@@ -91,8 +91,8 @@ namespace Props
     void PropPhysicsResourceType::_AssertWireContract()
     {
         PropPhysicsDataHeader::_AssertLayout();
-        static_assert(sizeof(CgsResource::ResourceDescriptor) ==
-                      5 * sizeof(rw::BaseResourceDescriptor),
+        CGS_STATIC_ASSERT((sizeof(CgsResource::ResourceDescriptor) ==
+                      5 * sizeof(rw::BaseResourceDescriptor)),
                       "the serialised descriptor is five (size, alignment) entries");
     }
 }

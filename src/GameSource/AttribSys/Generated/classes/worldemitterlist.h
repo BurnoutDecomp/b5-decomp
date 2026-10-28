@@ -52,7 +52,7 @@ namespace Gen
     class worldemitterlist : public Instance
     {
     public:
-        explicit worldemitterlist(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit worldemitterlist(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
 
         void ChangeWithDefault(const RefSpec& lrRefSpec)
@@ -86,11 +86,11 @@ namespace Gen
             RefSpec mWorldEmitters[50];      // +0x008 (:93)
             s32     mNumWorldEmitters;       // +0x4B8 (:94)
         };
-        static_assert(offsetof(_LayoutStruct, mWorldEmitters) == 0x8,
+        CGS_STATIC_ASSERT((offsetof(_LayoutStruct, mWorldEmitters) == 0x8),
                       "worldemitterlist::mWorldEmitters @+8 (ARTIST schema, mWorldEmitters(i) @0x82686600)");
-        static_assert(offsetof(_LayoutStruct, mNumWorldEmitters) == 0x4B8,
+        CGS_STATIC_ASSERT((offsetof(_LayoutStruct, mNumWorldEmitters) == 0x4B8),
                       "worldemitterlist::mNumWorldEmitters @+0x4B8 (ARTIST schema; Attach @0x826F5804)");
-        static_assert(sizeof(_LayoutStruct) == 1216,
+        CGS_STATIC_ASSERT((sizeof(_LayoutStruct) == 1216),
                       "worldemitterlist layout 1216 bytes (ARTIST schema ClassLoadData layout size)");
     };
 

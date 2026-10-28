@@ -35,9 +35,9 @@ namespace CgsGuiModuleIO
         // The pointer-free queue fixes mRendererSet at +0x8020 on both targets.
         // The interior camera follows five host-width pointers, so only its
         // alignment is shared with the console's +0x20 interior offset.
-        static_assert(offsetof(InputBuffer, mRendererSet) == 0x8020,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRendererSet) == 0x8020),
                       "mRendererSet @0x8020 (32800) -- GetImRenderers return-offset");
-        static_assert(offsetof(ImRendererSet, mCamera) % alignof(CgsGraphics::Camera) == 0,
+        CGS_STATIC_ASSERT((offsetof(ImRendererSet, mCamera) % __alignof(CgsGraphics::Camera) == 0),
                       "ImRendererSet.mCamera keeps its original alignment");
     }
 

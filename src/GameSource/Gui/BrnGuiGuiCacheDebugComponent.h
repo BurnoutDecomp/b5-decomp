@@ -37,13 +37,13 @@ namespace BrnGui
         void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
 
         // ARTIST vtable 0x820CE850 slot 2 -> 0x82505800.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
     protected:
         // ARTIST vtable 0x820CE850 slots 3/4/6 -> 0x824ED358, ICF 0x824ED348, 0x824F8060.
-        const char* GetName() const override;
-        const char* GetPath() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
+        void OnActivate() ;
 
         // ARTIST 0x824FD6B0 and 0x824F8148. Both are called only by RenderHUD.
         void ShowGuiCacheStatus(CgsDev::Debug2DImmediateRender* lpRender);

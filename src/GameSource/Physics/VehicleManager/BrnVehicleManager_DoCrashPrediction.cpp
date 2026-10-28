@@ -291,14 +291,14 @@ void VehicleManager::DoCrashPrediction(
     typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
 
     // The eight leading asserts, BrnVehicleManager.cpp:2880..:2887, in console order.
-    CGS_ASSERT(lpInputBufferStack != nullptr,       "lpInputBufferStack != NULL");             // :2880
-    CGS_ASSERT(lpOutputBufferStack != nullptr,      "lpOutputBufferStack != NULL");            // :2881
-    CGS_ASSERT(lpInputInterface != nullptr,         "lpInputInterface != NULL");               // :2882
-    CGS_ASSERT(lpVehicleOutputInterface != nullptr, "lpVehicleOutputInterface != NULL");       // :2883
-    CGS_ASSERT(lpRequestOutputInterface != nullptr, "lpRequestOutputInterface != NULL");       // :2884
-    CGS_ASSERT(lpManagerOutputInterface != nullptr, "lpVehicleManagerOutputInterface != NULL");// :2885
-    CGS_ASSERT(lpDeformationInterface != nullptr,   "lpDeformationInterface != NULL");         // :2886
-    CGS_ASSERT(lpContactInterface != nullptr,       "lpPotentialContactQueue != NULL");        // :2887
+    CGS_ASSERT(lpInputBufferStack != 0,       "lpInputBufferStack != NULL");             // :2880
+    CGS_ASSERT(lpOutputBufferStack != 0,      "lpOutputBufferStack != NULL");            // :2881
+    CGS_ASSERT(lpInputInterface != 0,         "lpInputInterface != NULL");               // :2882
+    CGS_ASSERT(lpVehicleOutputInterface != 0, "lpVehicleOutputInterface != NULL");       // :2883
+    CGS_ASSERT(lpRequestOutputInterface != 0, "lpRequestOutputInterface != NULL");       // :2884
+    CGS_ASSERT(lpManagerOutputInterface != 0, "lpVehicleManagerOutputInterface != NULL");// :2885
+    CGS_ASSERT(lpDeformationInterface != 0,   "lpDeformationInterface != NULL");         // :2886
+    CGS_ASSERT(lpContactInterface != 0,       "lpPotentialContactQueue != NULL");        // :2887
 
     // `stwx r30, r15, r11` x2 @0x82646180/84 -> +172416 / +172420, the car-car prediction cache.
     muCachedCarASlot = 0;

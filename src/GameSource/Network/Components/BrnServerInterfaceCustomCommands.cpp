@@ -137,12 +137,12 @@ void ServerInterfaceCustomCommands::Construct()
 {
     CgsNetwork::ServerInterfaceComponent::Construct();
 
-    mpServerInterface    = nullptr;   // a1[4]
-    mpCallback           = nullptr;   // a1[9]
-    mpCallbackData       = nullptr;   // a1[10]
-    mpiRaceElo           = nullptr;   // a1[5]
-    mpiRoadRageElo       = nullptr;   // a1[6]
-    mpiBurningHomeRunElo = nullptr;   // a1[7]
+    mpServerInterface    = 0;   // a1[4]
+    mpCallback           = 0;   // a1[9]
+    mpCallbackData       = 0;   // a1[10]
+    mpiRaceElo           = 0;   // a1[5]
+    mpiRoadRageElo       = 0;   // a1[6]
+    mpiBurningHomeRunElo = 0;   // a1[7]
     meCurrentAction      = E_ACTION_COUNT;  // a1[8] = 11
 }
 
@@ -155,14 +155,14 @@ bool ServerInterfaceCustomCommands::Prepare(CgsNetwork::ServerInterfaceDirtySock
     if (!CgsNetwork::ServerInterfaceCustomCommands::Prepare())
         return false;
 
-    CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+    CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
 
     mpServerInterface    = lpServerInterface;  // a1[4]
-    mpCallback           = nullptr;            // a1[9]
-    mpCallbackData       = nullptr;            // a1[10]
-    mpiRaceElo           = nullptr;            // a1[5]
-    mpiRoadRageElo       = nullptr;            // a1[6]
-    mpiBurningHomeRunElo = nullptr;            // a1[7]
+    mpCallback           = 0;            // a1[9]
+    mpCallbackData       = 0;            // a1[10]
+    mpiRaceElo           = 0;            // a1[5]
+    mpiRoadRageElo       = 0;            // a1[6]
+    mpiBurningHomeRunElo = 0;            // a1[7]
     meCurrentAction      = E_ACTION_COUNT;      // a1[8] = 11
     return true;
 }
@@ -175,12 +175,12 @@ bool ServerInterfaceCustomCommands::Release()
     if (!CgsNetwork::ServerInterfaceCustomCommands::Release())
         return false;
 
-    mpServerInterface    = nullptr;   // a1[4]
-    mpCallback           = nullptr;   // a1[9]
-    mpCallbackData       = nullptr;   // a1[10]
-    mpiRaceElo           = nullptr;   // a1[5]
-    mpiRoadRageElo       = nullptr;   // a1[6]
-    mpiBurningHomeRunElo = nullptr;   // a1[7]
+    mpServerInterface    = 0;   // a1[4]
+    mpCallback           = 0;   // a1[9]
+    mpCallbackData       = 0;   // a1[10]
+    mpiRaceElo           = 0;   // a1[5]
+    mpiRoadRageElo       = 0;   // a1[6]
+    mpiBurningHomeRunElo = 0;   // a1[7]
     meCurrentAction      = E_ACTION_COUNT;  // a1[8] = 11
     return true;
 }
@@ -189,13 +189,13 @@ bool ServerInterfaceCustomCommands::Release()
 // BrnServerInterfaceBase::Destruct: null / idle the members, then the base Destruct.
 void ServerInterfaceCustomCommands::Destruct()
 {
-    mpServerInterface    = nullptr;
-    mpiRaceElo           = nullptr;
-    mpiRoadRageElo       = nullptr;
-    mpiBurningHomeRunElo = nullptr;
+    mpServerInterface    = 0;
+    mpiRaceElo           = 0;
+    mpiRoadRageElo       = 0;
+    mpiBurningHomeRunElo = 0;
     meCurrentAction      = E_ACTION_COUNT;
-    mpCallback           = nullptr;
-    mpCallbackData       = nullptr;
+    mpCallback           = 0;
+    mpCallbackData       = 0;
 
     CgsNetwork::ServerInterfaceCustomCommands::Destruct();
 }
@@ -217,7 +217,7 @@ void ServerInterfaceCustomCommands::SendCustomCommand(EAction leNewAction,
     meCurrentAction = leNewAction;                       // a1[8] = leNewAction
     StartActionCore(KPC_ACTION_NAMES[leNewAction]);      // (*(vtable+12))(this, off_82F29F30[a2])
 
-    CGS_ASSERT(lpcMessageData != nullptr, "lpcMessageData");
+    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),         // *(a1[4]+120)
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction], // dword_820872A4[a1[8]]
@@ -240,11 +240,11 @@ void ServerInterfaceCustomCommands::GetEloOfLocalPlayer(s32* lpiRaceElo, s32* lp
                                                         s32* lpiRoadRageElo,
                                                         CustomCommandCallback lCallback, void* lpData)
 {
-    CGS_ASSERT(lpiRaceElo != nullptr, "lpRaceElo");            // a2, cpp:601
-    CGS_ASSERT(lpiRoadRageElo != nullptr, "lpRoadRageElo");    // a4, cpp:602
-    CGS_ASSERT(lpiBurningHomeRunElo != nullptr, "lpBurningHomeRunElo"); // a3, cpp:603
-    CGS_ASSERT(lCallback != nullptr, "lCallback");            // a5, cpp:604
-    CGS_ASSERT(lpData != nullptr, "lpData");                  // a6, cpp:605
+    CGS_ASSERT(lpiRaceElo != 0, "lpRaceElo");            // a2, cpp:601
+    CGS_ASSERT(lpiRoadRageElo != 0, "lpRoadRageElo");    // a4, cpp:602
+    CGS_ASSERT(lpiBurningHomeRunElo != 0, "lpBurningHomeRunElo"); // a3, cpp:603
+    CGS_ASSERT(lCallback != 0, "lCallback");            // a5, cpp:604
+    CGS_ASSERT(lpData != 0, "lpData");                  // a6, cpp:605
 
     mpCallbackData       = lpData;                 // a1[10] -- stw r25, 0x28
     mpCallback           = lCallback;              // a1[9]  -- stw r26, 0x24
@@ -323,8 +323,8 @@ void ServerInterfaceCustomCommands::UploadOfflineProgress(
     const NetworkInOfflineProgression::OfflineProgressionT* lpOfflineProgression,
     s32 liFreeburnChallengeSuccessCount)
 {
-    CGS_ASSERT(lpOfflineProgression != nullptr, "lpOfflineProgression");
-    CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
+    CGS_ASSERT(lpOfflineProgression != 0, "lpOfflineProgression");
+    CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
 
     char* lpcBuffer = mpServerInterface->GetMessageBuffer();
     lpcBuffer[0] = 0;
@@ -382,7 +382,7 @@ void ServerInterfaceCustomCommands::GetRoadRulesHighScores(u32 luTimeStamp, s32 
     meCurrentAction = E_ACTION_GET_ROAD_RULES_SCORES;            // a1[8] = 1
     StartActionCore(KPC_ACTION_NAMES[E_ACTION_GET_ROAD_RULES_SCORES]); // off_82F29F34
 
-    CGS_ASSERT(lpcMessageData != nullptr, "lpcMessageData");
+    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
@@ -402,7 +402,7 @@ void ServerInterfaceCustomCommands::SetRoadRulesForLocalPlayer(RoadRulesUploadDa
     mpCallbackData = lpData;     // a1[10]
     mpCallback     = lCallback;  // a1[9]
 
-    CGS_ASSERT(lpRoadRulesData != nullptr, "lpRoadRulesData");
+    CGS_ASSERT(lpRoadRulesData != 0, "lpRoadRulesData");
     CGS_ASSERT(lpRoadRulesData->GetNumScores() > 0, "lpRoadRulesData->GetNumScores() > 0");
 
     char* lpcBuffer = mpServerInterface->GetMessageBuffer();
@@ -473,7 +473,7 @@ void ServerInterfaceCustomCommands::SetRoadRulesForLocalPlayer(RoadRulesUploadDa
     meCurrentAction = E_ACTION_SET_ROAD_RULES_SCORES;          // a1[8] = 0
     StartActionCore(KPC_ACTION_NAMES[E_ACTION_SET_ROAD_RULES_SCORES]);
 
-    CGS_ASSERT(lpcMessageData != nullptr, "lpcMessageData");
+    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
@@ -492,8 +492,8 @@ void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
     // PlayerName::IsEmpty() is "first char is NUL"; the X360 checks `lbz; cmplwi 0`.
     CGS_ASSERT(lpaFriendsNames[0].GetPlayerName()[0] != 0, "!lpaFriendsNames[0].IsEmpty()");
 
-    mpCallbackData = nullptr;  // a1[10]
-    mpCallback     = nullptr;  // a1[9]
+    mpCallbackData = 0;  // a1[10]
+    mpCallback     = 0;  // a1[9]
 
     char* lpcBuffer = mpServerInterface->GetMessageBuffer();
     lpcBuffer[0] = 0;
@@ -511,7 +511,7 @@ void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
         {
             char lacFormatted[32];
             // Names with embedded spaces are quoted; others are written bare.
-            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != nullptr)
+            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != 0)
                                         ? "\"%s\"" : "%s";
             CgsCore::SPrintf(lacFormatted, 19, lpcFormat, lpName->GetPlayerName());
             std::strncat(lacFriendsList, lacFormatted, 1900);
@@ -530,7 +530,7 @@ void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
     meCurrentAction = E_ACTION_UPLOAD_FRIENDS;                 // a1[8] = 4
     StartActionCore(KPC_ACTION_NAMES[E_ACTION_UPLOAD_FRIENDS]); // off_82F29F40
 
-    CGS_ASSERT(lpcMessageData != nullptr, "lpcMessageData");
+    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
@@ -572,7 +572,7 @@ void ServerInterfaceCustomCommands::UpdateServerFriendsRecord(
         for (s32 liPlayer = 0; liPlayer < liNumPlayersToAdd; ++liPlayer)
         {
             char lacFormatted[32];
-            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != nullptr)
+            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != 0)
                                         ? "\"%s\"" : "%s";
             CgsCore::SPrintf(lacFormatted, 19, lpcFormat, lpName->GetPlayerName());
             std::strncat(lacFriendsList, lacFormatted, 1900);
@@ -592,7 +592,7 @@ void ServerInterfaceCustomCommands::UpdateServerFriendsRecord(
         for (s32 liPlayer = 0; liPlayer < liNumPlayersToRemove; ++liPlayer)
         {
             char lacFormatted[32];
-            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != nullptr)
+            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != 0)
                                         ? "\"%s\"" : "%s";
             CgsCore::SPrintf(lacFormatted, 19, lpcFormat, lpName->GetPlayerName());
             std::strncat(lacFriendsList, lacFormatted, 1900);
@@ -610,7 +610,7 @@ void ServerInterfaceCustomCommands::UpdateServerFriendsRecord(
     meCurrentAction = E_ACTION_UPLOAD_FRIENDS;                 // a1[8] = 4
     StartActionCore(KPC_ACTION_NAMES[E_ACTION_UPLOAD_FRIENDS]); // off_82F29F40
 
-    CGS_ASSERT(lpcMessageData != nullptr, "lpcMessageData");
+    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
@@ -626,7 +626,7 @@ void ServerInterfaceCustomCommands::UploadLiveRevengeData(const ServerGeneratedT
                                                           const s32* lpiRivalIDs,
                                                           s32 liNumberToUpload)
 {
-    CGS_ASSERT(lpRivalData != nullptr, "lpRivalData");
+    CGS_ASSERT(lpRivalData != 0, "lpRivalData");
     CGS_ASSERT(liNumberToUpload >= 0, "liNumberToUpload >= 0");
 
     if (liNumberToUpload <= 0)
@@ -650,7 +650,7 @@ void ServerInterfaceCustomCommands::UploadLiveRevengeData(const ServerGeneratedT
     meCurrentAction = E_ACTION_UPLOAD_RIVAL_DATA;              // v7[8] = 7
     StartActionCore(KPC_ACTION_NAMES[E_ACTION_UPLOAD_RIVAL_DATA]); // off_82F29F4C
 
-    CGS_ASSERT(lpcMessageData != nullptr, "lpcMessageData");
+    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
 
     LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
                       KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
@@ -792,7 +792,7 @@ int ServerInterfaceCustomCommands::UploadEventScoreData(EventScoreData* lpEventS
     mpCallbackData = lpData;     // a1[10] -- stw r6, 0x28
     mpCallback     = lCallback;  // a1[9]  -- stw r5, 0x24
 
-    CGS_ASSERT(lpEventScoreData != nullptr, "lpEventScoreUploadData");
+    CGS_ASSERT(lpEventScoreData != 0, "lpEventScoreUploadData");
 
     lpEventScoreData->SerialiseToString(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH);
 
@@ -827,11 +827,11 @@ void ServerInterfaceCustomCommands::_CustomCommandSentCallback(::LobbyApiRefT* /
 // error, then run the stored callback and clear it.
 void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
 {
-    CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-    CGS_ASSERT(lpMsg != nullptr, "lpMsg");
+    CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+    CGS_ASSERT(lpMsg != 0, "lpMsg");
 
     bool  lbSuccess = false;   // v4
-    void* lpResult  = nullptr; // v5
+    void* lpResult  = 0; // v5
 
     // The X360 result buffers are all function-scope stack frames so they stay alive until
     // the (synchronous) callback runs in the common tail: the two road-rules result objects
@@ -855,13 +855,13 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
 
             s32 liScoreType = 0;  // v21
             for (char* lpToken = std::strtok(mpServerInterface->GetMessageBuffer(), ",");
-                 lpToken; lpToken = std::strtok(nullptr, ","))
+                 lpToken; lpToken = std::strtok(0, ","))
             {
                 char lacName[16];   // v85
                 char lacScore[16];  // v83
                 std::strncpy(lacName, lpToken, 16);
 
-                char* lpScoreToken = std::strtok(nullptr, ",");
+                char* lpScoreToken = std::strtok(0, ",");
                 std::strncpy(lacScore, lpScoreToken, 11);
 
                 // A {"0","0"} name/score pair decodes to an empty record.
@@ -898,7 +898,7 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
             std::strncpy(lacField, lpToken, 13);
             const s32 liIdLow = std::atoi(lacField);
 
-            lpToken = std::strtok(nullptr, ",");
+            lpToken = std::strtok(0, ",");
             std::strncpy(lacField, lpToken, 13);
             const s32 liIdHigh = std::atoi(lacField);
 
@@ -906,8 +906,8 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
                                    static_cast<u32>(liIdLow));
 
             s32 liScoreType = 0;  // v47
-            for (char* lpScore = std::strtok(nullptr, ","); lpScore;
-                 lpScore = std::strtok(nullptr, ","))
+            for (char* lpScore = std::strtok(0, ","); lpScore;
+                 lpScore = std::strtok(0, ","))
             {
                 char lacScore[16];  // v86
                 std::strncpy(lacScore, lpScore, 11);
@@ -925,25 +925,25 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
     {
         if (liCode == 0)
         {
-            CGS_ASSERT(mpiRaceElo != nullptr, "mpiRaceElo");
-            CGS_ASSERT(mpiRoadRageElo != nullptr, "mpiRoadRageElo");
-            CGS_ASSERT(mpiBurningHomeRunElo != nullptr, "mpiBurningHomeRunElo");
+            CGS_ASSERT(mpiRaceElo != 0, "mpiRaceElo");
+            CGS_ASSERT(mpiRoadRageElo != 0, "mpiRoadRageElo");
+            CGS_ASSERT(mpiBurningHomeRunElo != 0, "mpiBurningHomeRunElo");
 
             *mpiRaceElo          = TagFieldGetNumber(TagFieldFind(lpcData, "RACE"), 0);
             *mpiRoadRageElo      = TagFieldGetNumber(TagFieldFind(lpcData, "ROADRAGE"), 0);
             *mpiBurningHomeRunElo = TagFieldGetNumber(TagFieldFind(lpcData, "BURNINGHOMERUN"), 0);
             lbSuccess = true;
         }
-        mpiRaceElo           = nullptr;
-        mpiRoadRageElo       = nullptr;
-        mpiBurningHomeRunElo = nullptr;
+        mpiRaceElo           = 0;
+        mpiRoadRageElo       = 0;
+        mpiBurningHomeRunElo = 0;
     }
     else if (liKind == KI_ACTIONS_TO_MESSAGE_CODES[E_ACTION_GET_FRIENDS]) // 'fget'
     {
         if (liCode == 0)
         {
-            CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetMessageBuffer() != nullptr,
+            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface->GetMessageBuffer() != 0,
                        "mpServerInterface->GetMessageBuffer()");
 
             const char* lpcFriends = TagFieldFind(lpcData, "F");
@@ -1008,8 +1008,8 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
     meCurrentAction = E_ACTION_COUNT;               // a1[8] = 11
     if (lCallback)
         lCallback(mpCallbackData, lpResult, lbSuccess);
-    mpCallback     = nullptr;  // a1[9] = 0
-    mpCallbackData = nullptr;  // a1[10] = 0
+    mpCallback     = 0;  // a1[9] = 0
+    mpCallbackData = 0;  // a1[10] = 0
 }
 
 }  // namespace BrnNetwork

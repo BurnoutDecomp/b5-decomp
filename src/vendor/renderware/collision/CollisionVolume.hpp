@@ -470,18 +470,18 @@ namespace collision
     }
 
     // --- layout pins (console offsets; all X360-asm-attested) -----------------------
-    static_assert(sizeof(Vec4) == 16, "rw::collision::Vec4 must be one 16-byte row");
-    static_assert(offsetof(Volume, maTransform)   == 0x00, "Volume::transform  @ +0x00");
-    static_assert(offsetof(Volume, muVTableSlot)  == 0x40, "Volume::vTable     @ +0x40");
-    static_assert(offsetof(Volume, mBoxData)      == 0x44, "Volume::boxData    @ +0x44");
-    static_assert(offsetof(Volume, mfRadius)      == 0x50, "Volume::radius     @ +0x50");
-    static_assert(offsetof(Volume, muGroupID)     == 0x54, "Volume::groupID    @ +0x54");
-    static_assert(offsetof(Volume, muSurfaceID)   == 0x58, "Volume::surfaceID  @ +0x58");
-    static_assert(offsetof(Volume, muFlags)       == 0x5C, "Volume::m_flags    @ +0x5C");
-    static_assert(sizeof(Volume)       == 96, "rw::collision::Volume console stride is 96");
-    static_assert(sizeof(BoxVolume)    == 96, "BoxVolume adds no storage over Volume");
-    static_assert(sizeof(SphereVolume) == 96, "SphereVolume adds no storage over Volume");
-    static_assert(offsetof(BoxVolume, mBoxData) == 0x44, "BoxVolume half-extents @ +0x44");
+    CGS_STATIC_ASSERT((sizeof(Vec4) == 16), "rw::collision::Vec4 must be one 16-byte row");
+    CGS_STATIC_ASSERT((offsetof(Volume, maTransform)   == 0x00), "Volume::transform  @ +0x00");
+    CGS_STATIC_ASSERT((offsetof(Volume, muVTableSlot)  == 0x40), "Volume::vTable     @ +0x40");
+    CGS_STATIC_ASSERT((offsetof(Volume, mBoxData)      == 0x44), "Volume::boxData    @ +0x44");
+    CGS_STATIC_ASSERT((offsetof(Volume, mfRadius)      == 0x50), "Volume::radius     @ +0x50");
+    CGS_STATIC_ASSERT((offsetof(Volume, muGroupID)     == 0x54), "Volume::groupID    @ +0x54");
+    CGS_STATIC_ASSERT((offsetof(Volume, muSurfaceID)   == 0x58), "Volume::surfaceID  @ +0x58");
+    CGS_STATIC_ASSERT((offsetof(Volume, muFlags)       == 0x5C), "Volume::m_flags    @ +0x5C");
+    CGS_STATIC_ASSERT((sizeof(Volume)       == 96), "rw::collision::Volume console stride is 96");
+    CGS_STATIC_ASSERT((sizeof(BoxVolume)    == 96), "BoxVolume adds no storage over Volume");
+    CGS_STATIC_ASSERT((sizeof(SphereVolume) == 96), "SphereVolume adds no storage over Volume");
+    CGS_STATIC_ASSERT((offsetof(BoxVolume, mBoxData) == 0x44), "BoxVolume half-extents @ +0x44");
 
     // --- descriptor-record pins (HOST offsets; what the TU-local views reinterpret) ---
     // The three TU-local descriptor views in this directory spell slot 0 as ONE host word
@@ -489,16 +489,16 @@ namespace collision
     // anyone ever reorders or retypes a slot above.
     //   VolumeBBoxQuery.cpp:68 / VolumeQuery.cpp:167  -> getBBox          at host +8
     //   PrimitiveIntersect.cpp:1226                   -> createGPInstance at host +40
-    static_assert(offsetof(Volume::VTable, muTypeID)              ==  0, "VTable typeID");
-    static_assert(offsetof(Volume::VTable, mpfnGetBBox)           ==  8, "VTable getBBox");
-    static_assert(offsetof(Volume::VTable, mpfnGetBBoxDiag)       == 16, "VTable getBBoxDiag");
-    static_assert(offsetof(Volume::VTable, mpfnGetInterval)       == 24, "VTable getInterval");
-    static_assert(offsetof(Volume::VTable, mpfnGetMaximumFeature) == 32, "VTable getMaximumFeature");
-    static_assert(offsetof(Volume::VTable, mpfnCreateGPInstance)  == 40, "VTable createGPInstance");
-    static_assert(offsetof(Volume::VTable, mpfnLineSegIntersect)  == 48, "VTable lineSegIntersect");
-    static_assert(offsetof(Volume::VTable, mpfnRelease)           == 56, "VTable release");
-    static_assert(offsetof(Volume::VTable, mpcName)               == 64, "VTable name");
-    static_assert(offsetof(Volume::VTable, muFlags)               == 72, "VTable flags");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, muTypeID)              ==  0), "VTable typeID");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBox)           ==  8), "VTable getBBox");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetBBoxDiag)       == 16), "VTable getBBoxDiag");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetInterval)       == 24), "VTable getInterval");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnGetMaximumFeature) == 32), "VTable getMaximumFeature");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnCreateGPInstance)  == 40), "VTable createGPInstance");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnLineSegIntersect)  == 48), "VTable lineSegIntersect");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpfnRelease)           == 56), "VTable release");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, mpcName)               == 64), "VTable name");
+    CGS_STATIC_ASSERT((offsetof(Volume::VTable, muFlags)               == 72), "VTable flags");
 
 } // namespace collision
 } // namespace rw

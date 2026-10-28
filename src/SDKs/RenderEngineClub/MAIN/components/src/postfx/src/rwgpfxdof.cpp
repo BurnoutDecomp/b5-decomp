@@ -84,7 +84,7 @@ namespace postfx
     {
         // The X360 nulls the program slot first (`stw r10(=0), 0(r31)` @0x82402CE0), then writes the
         // default tuning state, then resolves the supplied parameters over the top of it.
-        m_depthOfFieldProgram = nullptr;
+        m_depthOfFieldProgram = 0;
 
         m_state.m_focalPlanes[0] = 0.1f;
         m_state.m_focalPlanes[1] = 10.0f;
@@ -102,7 +102,7 @@ namespace postfx
         // GetVariableHandleByName lookups. The pointer passed here is the PC image of that same
         // program; CreateProgram adopts it and returns a live ProgramBufferData.
 
-        if (m_depthOfFieldProgram != nullptr)
+        if (m_depthOfFieldProgram != 0)
         {
             renderengine::ProgramBuffer::GetVariableHandleByName(
                 m_depthOfFieldProgram, reinterpret_cast<const u8*>("g_focalConstants1"),
@@ -244,7 +244,7 @@ namespace postfx
     // ============================================================================================
     void DepthOfField::Release()
     {
-        if (m_depthOfFieldProgram == nullptr)
+        if (m_depthOfFieldProgram == 0)
         {
             return;
         }
@@ -252,7 +252,7 @@ namespace postfx
         renderengine::ProgramBuffer::Release(m_depthOfFieldProgram);
 
         PfxHelper* const lpHelper = gpPfxHelper;
-        if (lpHelper != nullptr)
+        if (lpHelper != 0)
         {
             rw::Resource lProgramResource;
             std::memset(&lProgramResource, 0, sizeof(lProgramResource));
@@ -260,7 +260,7 @@ namespace postfx
             lpHelper->GetAllocator()->DoFree(lProgramResource);
         }
 
-        m_depthOfFieldProgram = nullptr;
+        m_depthOfFieldProgram = 0;
     }
 }
 }

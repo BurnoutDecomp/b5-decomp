@@ -85,7 +85,7 @@ namespace CgsPhysics
     // The 0x4B2 pin -- the one X360-attested fact about this type (Alloc/Free literal in the
     // CreateIOBuffer/DestroyIOBuffer instantiations @0x8289E0D0/@0x8289E190). Pointer-free,
     // so it holds verbatim on the host.
-    static_assert(sizeof(IslandGenerator) == 0x4B2, "IslandGenerator == 1202 (the X360 IOBufferStack::Alloc literal)");
-    static_assert(offsetof(IslandGenerator, maBodyIslandData)  == 0x002, "maBodyIslandData after the 1-byte IOBuffer base, align 2");
-    static_assert(offsetof(IslandGenerator, mau16ParentIsland) == 0x322, "mau16ParentIsland == 2 + 200*4");
+    CGS_STATIC_ASSERT((sizeof(IslandGenerator) == 0x4B2), "IslandGenerator == 1202 (the X360 IOBufferStack::Alloc literal)");
+    CGS_STATIC_ASSERT((offsetof(IslandGenerator, maBodyIslandData)  == 0x002), "maBodyIslandData after the 1-byte IOBuffer base, align 2");
+    CGS_STATIC_ASSERT((offsetof(IslandGenerator, mau16ParentIsland) == 0x322), "mau16ParentIsland == 2 + 200*4");
 }

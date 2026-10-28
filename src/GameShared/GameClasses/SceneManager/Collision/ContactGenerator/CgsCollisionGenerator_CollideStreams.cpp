@@ -104,7 +104,7 @@ namespace CgsCollision
             CgsMemory::SimpleDataStreamProducer* lpProducer =
                 static_cast<CgsMemory::SimpleDataStreamProducer*>(
                     lrAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer)));  // li r4, 0x180 (console sizeof)
-            CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");
+            CGS_ASSERT(lpProducer != 0, "Failed to allocate stream producer\n");
 
             u32 luCommandBufferSize = 0;
             u32 luResultBufferSize  = 0;
@@ -113,7 +113,7 @@ namespace CgsCollision
                 &luCommandBufferSize, &luResultBufferSize);
 
             void* lpCommandBuffer = lrAllocator.Malloc(luCommandBufferSize);
-            CGS_ASSERT(lpCommandBuffer != nullptr, "Failed to allocate stream buffers\n");
+            CGS_ASSERT(lpCommandBuffer != 0, "Failed to allocate stream buffers\n");
 
             lpProducer->Construct(liMaxCommands, liCommandSize, lpCommandBuffer, 0, 0, 0);
 
@@ -144,12 +144,12 @@ namespace CgsCollision
         CollisionResultList* lpList = static_cast<CollisionResultList*>(
             mCollisionResultsAllocator.Malloc(sizeof(CollisionResultList)));       // li r4, 0x10 (console sizeof)
         mapCollisionResultLists[liIndex] = lpList;                                 // stwx (before the test)
-        CGS_ASSERT(lpList != nullptr,
+        CGS_ASSERT(lpList != 0,
                    "Failed to allocate memory for collision results list");        // :254 (streamed form joined)
 
         void* lpResults = mCollisionResultsAllocator.Malloc(
             KI_PRIMITIVE_TEST_RESULT_MEMORY_SIZE * static_cast<s32>(lu16MaxResults)); // 5*n << 4
-        CGS_ASSERT(lpResults != nullptr,
+        CGS_ASSERT(lpResults != 0,
                    "Failed to allocate memory for collision result containing  collisions"); // :257 (count streamed on console)
 
         lpList->mpResults         = static_cast<CollisionResult*>(lpResults);      // stw  +0x00

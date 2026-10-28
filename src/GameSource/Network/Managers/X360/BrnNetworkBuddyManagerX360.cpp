@@ -441,19 +441,19 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerX360::_AssertLayout()
     {
-        static_assert(sizeof(reinterpret_cast<BuddyManagerX360*>(0)->macPendingSessionID) == 128,
+        CGS_STATIC_ASSERT((sizeof(reinterpret_cast<BuddyManagerX360*>(0)->macPendingSessionID) == 128),
                       "macPendingSessionID is the 128-byte X360 session length");
-        static_assert(offsetof(BuddyManagerX360, miPendingInviteUserPort)
-                      > offsetof(BuddyManagerX360, mhNotifier),
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, miPendingInviteUserPort)
+                      > offsetof(BuddyManagerX360, mhNotifier)),
                       "mhNotifier precedes miPendingInviteUserPort");
-        static_assert(offsetof(BuddyManagerX360, macPendingSessionID)
-                      - offsetof(BuddyManagerX360, miPendingInviteUserPort) == 4,
+        CGS_STATIC_ASSERT((offsetof(BuddyManagerX360, macPendingSessionID)
+                      - offsetof(BuddyManagerX360, miPendingInviteUserPort) == 4),
                       "miPendingInviteUserPort precedes macPendingSessionID");
 
         // The XINVITE_INFO field offsets Update reads off the XInviteGetAcceptedInfo buffer
         // (mHostXuid via 'ld' pInfo+0x08 @ 0x82573B94; muTitleId via 'lwz' pInfo+0x10 @
         // 0x82573B78/0x82573BD4; the +0x14 hostInfo region encoded into @ 0x82573BEC).
-        static_assert(offsetof(XInviteInfo, muTitleId) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(XInviteInfo, muTitleId) == 0x10),
                       "XInviteInfo::muTitleId is the dwTitleID at +0x10");
     }
 }

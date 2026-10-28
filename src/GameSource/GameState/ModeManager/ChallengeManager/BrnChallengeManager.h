@@ -211,12 +211,12 @@ namespace BrnGameState
         // (Moved here from the provisional BrnChallengeManagerLeapingData.h thin slice, which
         // now forwards to this header -- single owner, grown in place.)
         // --------------------------------------------------------------------
-        struct alignas(16) CarLeapingData
+        struct CGS_ALIGN(16) CarLeapingData
         {
             EActiveRaceCarIndex mActiveRaceCarIndex;   // +0x00 (DWARF :312)
             Vector3             mPlayerToCar;          // +0x10 (DWARF :313; 16-aligned SIMD)
         };
-        struct alignas(16) StoredLeapingData
+        struct CGS_ALIGN(16) StoredLeapingData
         {
             EActiveRaceCarIndex mActiveRaceCarIndex;      // +0x00 (DWARF :326)
             Vector3             mLeapRadiusEntryVector;   // +0x10 (DWARF :327; 16-aligned SIMD)

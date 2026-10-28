@@ -38,7 +38,7 @@
 //     the same object) is identical -- mirrors the sibling CardData::Empty.
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -59,7 +59,7 @@ public:
     //                 on first use.
     static TitleInfo& Empty();
 
-    std::uint32_t muTitle;   // +0x00  opaque title/state word (the copied word)
+    uint32_t muTitle;   // +0x00  opaque title/state word (the copied word)
 };
 // sizeof(TitleInfo) == 0x04 (4) bytes.
 

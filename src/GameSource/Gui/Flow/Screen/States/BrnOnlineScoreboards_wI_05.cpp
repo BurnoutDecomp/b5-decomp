@@ -60,8 +60,8 @@ namespace BrnGui
         // Record-size pins. Both payloads are pointer-free, so the X360's AddEvent size
         // immediates (20 and 16) must survive unchanged on the x64 host; if a host layout
         // ever drifts, it is caught here rather than on the wire.
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
     }
 
     // ---- UpdateSetupComponents @ 0x824918C8 ----------------------------------------

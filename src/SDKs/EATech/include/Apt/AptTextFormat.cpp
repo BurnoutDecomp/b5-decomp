@@ -177,9 +177,9 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
     // X360: in_word_set is only called when pThis (a2) is non-null.
     const TextFormatMembersIndex::Entry* pEntry =
         pThis ? TextFormatMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength())
-              : nullptr;
-    if (pEntry == nullptr)
-        return nullptr;
+              : 0;
+    if (pEntry == 0)
+        return 0;
 
     // X360: v4 = pEntry->miData - 1; if (v4 > 0xE) return 0; else jump byte_82145270[v4].
     // The jump table (base loc_82AF1954) maps each member id to its field accessor;
@@ -263,7 +263,7 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
         return AptBoolean::Create((mFormat.mnStyleFlags & TextFormat::KU_UNDERLINE_VALUE) != 0);
 
     default:  // miData 2/4/9/12/13/16 (blockIndent/bullet/leading/tabStops/target/url)
-        return nullptr;   // X360 loc_82AF1AF0: empty jump-table slots -> return 0
+        return 0;   // X360 loc_82AF1AF0: empty jump-table slots -> return 0
     }
 }
 
@@ -281,8 +281,8 @@ bool AptTextFormat::objectMemberSet(AptValue* const pThis,
 {
     const TextFormatMembersIndex::Entry* pEntry =
         pThis ? TextFormatMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength())
-              : nullptr;
-    if (pEntry == nullptr)
+              : 0;
+    if (pEntry == 0)
         return false;
 
     switch (pEntry->miData)

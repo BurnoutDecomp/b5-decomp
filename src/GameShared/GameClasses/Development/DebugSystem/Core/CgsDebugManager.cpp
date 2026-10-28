@@ -136,10 +136,10 @@ namespace CgsDev
         /* miVariablePoolSize         */ 50,
         /* miVariableMetadataPoolSize */ 50,
         /* miConsoleLineCount         */ 10,
-        /* mpRwAllocator              */ nullptr,
+        /* mpRwAllocator              */ 0,
     };
 
-    DebugManager* DebugManager::mpInstance = nullptr;
+    DebugManager* DebugManager::mpInstance = 0;
 
     // X360 @0x82822370: the three by-value components construct (their vtable stores are the inlined
     // component ctors; the two buffered-renderer queue flag bytes zero via the queues' own ctors),
@@ -148,7 +148,7 @@ namespace CgsDev
     // the CGS_ASSERT macro supplies THIS file/line instead.
     DebugManager::DebugManager()
     {
-        CGS_ASSERT(mpInstance == nullptr, "mpInstance == NULL");
+        CGS_ASSERT(mpInstance == 0, "mpInstance == NULL");
         mpInstance = this;
     }
 
@@ -173,15 +173,15 @@ namespace CgsDev
         rw::core::debug::Manager::CreateInstance(rw::ResourceAllocatorRegistry::GetDefaultAllocator());
 
         mpAllocator = lpParameters->mpRwAllocator;
-        if (mpAllocator == nullptr)
+        if (mpAllocator == 0)
             mpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
         mComponentList.Clear();
  // PC startup sidecar follows the component-list lifetime.
         gDebugManagerSection.Create();
 
-        mp3dRender = nullptr;
-        mp2dRender = nullptr;
+        mp3dRender = 0;
+        mp2dRender = 0;
         mBufferedRenderer.Construct();   // the two VariableEventQueue<16384,16>s (X360 inlines the pair)
 
         mpUI = &gInternalDebugUI;
@@ -190,13 +190,13 @@ namespace CgsDev
         // The optional CPU-trace log buffer (X360 @0x8283334C-B0): carved through the PARAMETER
         // allocator (not the defaulted member - the console reads params+0x14 again), align 16.
         // The game module passes size 0, so the carve is skipped on the boot path.
-        void* lpBuffer = nullptr;
+        void* lpBuffer = 0;
         s32 liLogBufferSize = 0;
         if (lpParameters->miPerfMonLogBufferSize > 0)
         {
             lpBuffer = AllocateMemoryResource(lpParameters->mpRwAllocator,
                                               static_cast<u32>(lpParameters->miPerfMonLogBufferSize), 16u);
-            CGS_ASSERT(lpBuffer != nullptr, "lpBuffer != NULL");
+            CGS_ASSERT(lpBuffer != 0, "lpBuffer != NULL");
             liLogBufferSize = lpParameters->miPerfMonLogBufferSize;
         }
 
@@ -280,9 +280,9 @@ namespace CgsDev
     {
         // The X360 has both renderers; on the bounded boot only the 2D renderer is constructed
         // (mp3dRender is the Debug3D follow-on), so guard each before handing the font over.
-        if (mp3dRender != nullptr)
+        if (mp3dRender != 0)
             mp3dRender->SetDebugFont(lrFont);
-        if (mp2dRender != nullptr)
+        if (mp2dRender != 0)
             mp2dRender->SetDebugFont(lrFont);
     }
 
@@ -303,7 +303,7 @@ namespace CgsDev
     DebugComponent* DebugManager::FindComponentByName(const char* lpcName)
     {
         if (!lpcName)
-            return nullptr;
+            return 0;
         if (*lpcName == '/')
             ++lpcName;
 
@@ -318,7 +318,7 @@ namespace CgsDev
                 _stricmp(lpcPath, lpcName) == 0)
                 return lpComponent;
         }
-        return nullptr;
+        return 0;
     }
 
     // X360 0x82832008. Register a component as a full menu section: a function row that, when
@@ -403,7 +403,7 @@ namespace CgsDev
         char lacCompletePath[256];
         lpComponent->GetComponentPath(lacCompletePath, sizeof(lacCompletePath));
         DebugUI::Menu* lpComponentVariablePath =
-            GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, nullptr);
+            GetUI().GetMenuManager().GetMenuFromPath(lacCompletePath, 0);
         if (lpComponentVariablePath)
         {
             DebugUI::Function* lpFunction = GetUI().GetFunctionManager().FindFunction(
@@ -560,7 +560,7 @@ namespace CgsDev
         const s32 liCount = lpData->mStack.GetNumStackAddresses();
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
-            const char* lpcName = lpData->mpMapReader ? lpData->mpMapReader->GetStackEntryName(liIndex) : nullptr;
+            const char* lpcName = lpData->mpMapReader ? lpData->mpMapReader->GetStackEntryName(liIndex) : 0;
             char lacAddr[24];
             if (!lpcName)
             {
@@ -586,12 +586,12 @@ namespace CgsDev
     void DebugManager::Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
                              CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2dRenderBuffer* lp2dRenderBuffer)
     {
-        CGS_ASSERT(mp3dRender != nullptr, "mp3dRender");
-        CGS_ASSERT(mp2dRender != nullptr, "mp2dRender");
+        CGS_ASSERT(mp3dRender != 0, "mp3dRender");
+        CGS_ASSERT(mp2dRender != 0, "mp2dRender");
 
-        CGS_ASSERT(lp3dRenderBuffer != nullptr, "lpRenderBuffer != NULL");   // CgsDebug3DImmediateRender.h:282
+        CGS_ASSERT(lp3dRenderBuffer != 0, "lpRenderBuffer != NULL");   // CgsDebug3DImmediateRender.h:282
         mp3dRender->SetRenderBuffer(lp3dRenderBuffer);
-        CGS_ASSERT(lp2dRenderBuffer != nullptr, "lpRenderBuffer != NULL");   // CgsDebug2DImmediateRender.h:253
+        CGS_ASSERT(lp2dRenderBuffer != 0, "lpRenderBuffer != NULL");   // CgsDebug2DImmediateRender.h:253
         mp2dRender->SetRenderBuffer(lp2dRenderBuffer);
 
         RenderWorld(lViewProjection, lCameraPosition);
@@ -604,7 +604,7 @@ namespace CgsDev
     // console's.) lCameraPosition is carried for the components' distance culls.
     void DebugManager::RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition)
     {
-        CGS_ASSERT(mp3dRender != nullptr, "must call ConstructRenderer");
+        CGS_ASSERT(mp3dRender != 0, "must call ConstructRenderer");
 
         mp3dRender->Begin(lViewProjection, lCameraPosition);
         mBufferedRenderer.Dispatch3D(mp3dRender, true);

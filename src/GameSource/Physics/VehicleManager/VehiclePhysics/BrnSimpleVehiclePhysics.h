@@ -111,13 +111,13 @@ namespace Vehicle
 
     // The grown type is pointer-free and width-identical host vs console, so its interior IS
     // gated with offsetof/sizeof (unlike the owning classes around it).
-    static_assert(sizeof(SimpleVehicleAttribs) == 240, "SimpleVehicleAttribs must be 240 bytes");
-    static_assert(offsetof(SimpleVehicleAttribs, mFrontTireAttribs) == 0x20,
+    CGS_STATIC_ASSERT((sizeof(SimpleVehicleAttribs) == 240), "SimpleVehicleAttribs must be 240 bytes");
+    CGS_STATIC_ASSERT((offsetof(SimpleVehicleAttribs, mFrontTireAttribs) == 0x20),
                   "mFrontTireAttribs @0x20");
-    static_assert(offsetof(SimpleVehicleAttribs, mAttribsKey) == 0xA0, "mAttribsKey @0xA0");
-    static_assert(offsetof(SimpleVehicleAttribs, mCOMOffset) == 0xD0,
+    CGS_STATIC_ASSERT((offsetof(SimpleVehicleAttribs, mAttribsKey) == 0xA0), "mAttribsKey @0xA0");
+    CGS_STATIC_ASSERT((offsetof(SimpleVehicleAttribs, mCOMOffset) == 0xD0),
                   "mCOMOffset @0xD0 (SimpleVehiclePhysics +0x670 == the +1648 witness)");
-    static_assert(offsetof(SimpleVehicleAttribs, mbIsValid) == 0xE4, "mbIsValid @0xE4");
+    CGS_STATIC_ASSERT((offsetof(SimpleVehicleAttribs, mbIsValid) == 0xE4), "mbIsValid @0xE4");
 
     // BrnPhysics::Vehicle::SimpleVehiclePhysics -- the lightweight ("simple") vehicle physics
     // body used for traffic/secondary cars. Derives from ExternalPhysicsBody (which derives
@@ -438,12 +438,12 @@ namespace Vehicle
         VecFloat GetSpeed() const
         {
             static const f32 KF_MPH_TO_MPS = 0.447039992f; // flt_82F31928 / unk_83017FE0
-            return VecFloat{
+            { const VecFloat lResult = {
                 mfSpeedMPH.x * KF_MPH_TO_MPS,
                 mfSpeedMPH.y * KF_MPH_TO_MPS,
                 mfSpeedMPH.z * KF_MPH_TO_MPS,
                 mfSpeedMPH.w * KF_MPH_TO_MPS
-            };
+            }; return lResult; }
         }
         // ADDITIVE GROW, read-only, no layout change.
         // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x82640518/@0x826405C0 and

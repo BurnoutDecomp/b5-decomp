@@ -52,38 +52,38 @@ namespace PropEntityIO
     // ------------------------------------------------------------------------------------
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PostPhysics, mPropBecamePhysicalEventQueue)
-                    < offsetof(OutputBuffer_PostPhysics, mRecordHitPropQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mPropBecamePhysicalEventQueue)
+                    < offsetof(OutputBuffer_PostPhysics, mRecordHitPropQueue)),
                       "console +0x010 < +0x160");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mRecordHitPropQueue)
-                    < offsetof(OutputBuffer_PostPhysics, mHitOverheadSignQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mRecordHitPropQueue)
+                    < offsetof(OutputBuffer_PostPhysics, mHitOverheadSignQueue)),
                       "console +0x160 < +0x7B0");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mHitOverheadSignQueue)
-                    < offsetof(OutputBuffer_PostPhysics, mBrokenPropQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mHitOverheadSignQueue)
+                    < offsetof(OutputBuffer_PostPhysics, mBrokenPropQueue)),
                       "console +0x7B0 < +0x820");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mBrokenPropQueue)
-                    < offsetof(OutputBuffer_PostPhysics, mSceneInputInterface),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mBrokenPropQueue)
+                    < offsetof(OutputBuffer_PostPhysics, mSceneInputInterface)),
                       "console +0x820 < +0x860");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mSceneInputInterface)
-                    < offsetof(OutputBuffer_PostPhysics, mPropInputInterface),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mSceneInputInterface)
+                    < offsetof(OutputBuffer_PostPhysics, mPropInputInterface)),
                       "console +0x860 < +0xC86B0");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mPropInputInterface)
-                    < offsetof(OutputBuffer_PostPhysics, mPropVFXLocatorQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mPropInputInterface)
+                    < offsetof(OutputBuffer_PostPhysics, mPropVFXLocatorQueue)),
                       "console +0xC86B0 < +0xCB2C0");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mPropVFXLocatorQueue)
-                    < offsetof(OutputBuffer_PostPhysics, mReplayRequestInterface),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mPropVFXLocatorQueue)
+                    < offsetof(OutputBuffer_PostPhysics, mReplayRequestInterface)),
                       "console +0xCB2C0 < +0xCB5F0");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mReplayRequestInterface)
-                    < offsetof(OutputBuffer_PostPhysics, mbShouldRequestProgression),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mReplayRequestInterface)
+                    < offsetof(OutputBuffer_PostPhysics, mbShouldRequestProgression)),
                       "console +0xCB5F0 < +0xCB61C");
 
         // Capacities, each named by its Construct callee's own IDA symbol at 0x822EFE34..
         // 0x822EFE80 -- the one fact about these queues that IS target-independent.
-        static_assert(PropBecamePhysicalEventQueue::KI_LENGTH == 20,  "PropBecamePhysicalEvent<20>");
-        static_assert(RecordHitPropQueue::KI_LENGTH           == 50,  "RecordPropHitEvent<50>");
-        static_assert(HitOverheadSignQueue::KI_LENGTH         == 100, "HitOverheadSignEvent<100>");
-        static_assert(BrokenPropQueue::KI_LENGTH              == 50,  "BrokenPropEvent<50>");
-        static_assert(PropVFXLocatorQueue::KI_LENGTH          == 10,  "PropVFXLocatorEvent<10>");
+        CGS_STATIC_ASSERT((PropBecamePhysicalEventQueue::KI_LENGTH == 20),  "PropBecamePhysicalEvent<20>");
+        CGS_STATIC_ASSERT((RecordHitPropQueue::KI_LENGTH           == 50),  "RecordPropHitEvent<50>");
+        CGS_STATIC_ASSERT((HitOverheadSignQueue::KI_LENGTH         == 100), "HitOverheadSignEvent<100>");
+        CGS_STATIC_ASSERT((BrokenPropQueue::KI_LENGTH              == 50),  "BrokenPropEvent<50>");
+        CGS_STATIC_ASSERT((PropVFXLocatorQueue::KI_LENGTH          == 10),  "PropVFXLocatorEvent<10>");
     }
 
     // ========================================================================

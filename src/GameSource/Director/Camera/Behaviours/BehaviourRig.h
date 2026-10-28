@@ -260,12 +260,12 @@ public:
     // ---- Public interface (DWARF BehaviourRig.h) ----------------------------
     void SetParameters(const Parameters* lpParameters);
 
-    virtual void          Construct()                                              override;
-    virtual bool          Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
-    virtual bool          Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
-    virtual CollisionPolicy* GetCollisionPolicy()                                  override;
-    virtual void          SetupTweaker(Utils::Tweaker& lrTweaker)                 override;
-    virtual const char*   GetName() const                                          override;
+    virtual void          Construct()                                              ;
+    virtual bool          Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;
+    virtual bool          Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;
+    virtual CollisionPolicy* GetCollisionPolicy()                                  ;
+    virtual void          SetupTweaker(Utils::Tweaker& lrTweaker)                 ;
+    virtual const char*   GetName() const                                          ;
 
     // DWARF BehaviourRig.h:304 -- header inline, no console symbol. Its one X360 site,
     // MomentTakedownLookback::Update @0x822662F0 (0x822666FC..0x82266714), stores

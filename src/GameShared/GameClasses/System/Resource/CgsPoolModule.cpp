@@ -169,7 +169,7 @@ namespace CgsResource
     void PoolModule::DoUnacquireResourceRequest(const Events::UnacquireResourceRequest* lpRequest,
                                                 PoolIO::OutputBuffer* lpOutput)
     {
-        if (lpOutput == nullptr)
+        if (lpOutput == 0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer", KPC_POOLMODULE_SRC, 1427);
@@ -194,7 +194,7 @@ namespace CgsResource
         Pool& lrPool = maPools[liPoolIndex];
         s32 liListIndex;
         Entry* lpEntry = lrPool.FindResource(lpRequest->mListId, false, 3, &liListIndex);
-        CGS_ASSERT(lpEntry != nullptr, "lpResource");
+        CGS_ASSERT(lpEntry != 0, "lpResource");
         lrPool.SetEntryStatus(liListIndex, 2);
         const EntryListResource* lpList = static_cast<const EntryListResource*>(lpEntry->mResource.m_baseResources[0]);
         lrPool.FixUpAndResolveResourceList(lpList->mIds, lpList->muNumEntries,
@@ -554,7 +554,7 @@ namespace CgsResource
                    "Can only entry allocate list state from idle state\n");
         ID lId;
         lId.SetHash(luId);
-        Pool* lpPool = nullptr;
+        Pool* lpPool = 0;
         if (!lbLiveUpdateReplace || liPoolId >= 0)
         {
             const s32 liPoolIndex = GetPoolIndex(liPoolId);

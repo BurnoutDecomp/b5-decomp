@@ -39,7 +39,7 @@ namespace Gen
         // same 32-bit value sign-extended).
         static const u64 KU_CLASS_KEY = 0xD028A974ull;
 
-        explicit presentationcomponent(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit presentationcomponent(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The X360 HUDEffect::Attach @0x8269C3C8 calls
         // Attrib::Instance::ChangeWithDefault(&mHudMessageData, <globaldata>+0x500)

@@ -35,13 +35,13 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 struct AptCharacter;
 struct AptMatrix;
 struct AptCXForm;
 class AptRenderingContext;
-enum AptMaskRenderOperation : int;   // values in CgsAptCallbackRender.h (Subtract=-1 / Normal=0 / Add=1)
+enum AptMaskRenderOperation ;   // values in CgsAptCallbackRender.h (Subtract=-1 / Normal=0 / Add=1)
 
 // The shared identity transforms returned when an item has no own matrix (DEFINED
 // in AptGlobals.cpp) and the global render-item teardown latch (DEFINED in
@@ -204,7 +204,7 @@ struct AptRenderItem
     AptRenderItem* Manager_GetMask() const { return mpMask; }
     // IsHighestRevisionItem @0x82AD4FF0 -- this item is the latest revision in the
     // manager's double-buffered chain (no newer revision linked).
-    bool IsHighestRevisionItem() const { return mpManagerNextRevision == nullptr; }
+    bool IsHighestRevisionItem() const { return mpManagerNextRevision == 0; }
     // IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
     // before nTick) AND the committed (non-writable) revision (x64 mFlags bit 6 clear).
     bool IsRenderableForThisTick(int nTick) const;

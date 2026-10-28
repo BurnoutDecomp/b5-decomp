@@ -275,8 +275,8 @@ namespace BrnProgression
         // console number out of the host arithmetic.
         static void _AssertLayout()
         {
-            static_assert(offsetof(DerivedCarArray, maLiveryTypes)
-                              == sizeof(Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>),
+            CGS_STATIC_ASSERT((offsetof(DerivedCarArray, maLiveryTypes)
+                              == sizeof(Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>)),
                           "maLiveryTypes must abut the CgsID base sub-object (X360: the "
                           "livery elements sit at base+0x48, their count word at +0x68)");
         }

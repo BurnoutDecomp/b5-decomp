@@ -29,7 +29,7 @@ namespace BrnTraffic
             return lfLhs.x > lfRhs.x && lfLhs.y > lfRhs.y && lfLhs.z > lfRhs.z && lfLhs.w > lfRhs.w;
         }
 
-        inline VecFloat SplatScalar(f32 lfValue) { return VecFloat{ lfValue, lfValue, lfValue, lfValue }; }
+        inline VecFloat SplatScalar(f32 lfValue) { { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; } }
     }
 
     // BrnTrafficData.h. Search the hull under lPosition plus the hulls under the four

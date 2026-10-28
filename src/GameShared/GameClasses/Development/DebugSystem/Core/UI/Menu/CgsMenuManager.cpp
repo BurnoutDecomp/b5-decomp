@@ -31,7 +31,7 @@ namespace CgsDev
             mMenuPool.Clear();
             mWindowPool.Clear();
 
-            mpMainMenu = CreateMenu("Development", nullptr);
+            mpMainMenu = CreateMenu("Development", 0);
         }
 
         // X360 CgsMenuManager.cpp:86 is empty (the debug allocator owns the pool backing).
@@ -70,7 +70,7 @@ namespace CgsDev
                     {
                         lpCurrentMenu = CreateMenu(acName, lpCurrentMenu);
                         if (!lpCurrentMenu)
-                            return nullptr;
+                            return 0;
                     }
                 }
 
@@ -92,14 +92,14 @@ namespace CgsDev
                 if (lpMenu->GetParent() == lpParent && _stricmp(lpMenu->GetCaption(), lpcName) == 0)
                     return lpMenu;
             }
-            return nullptr;
+            return 0;
         }
 
         Menu* MenuManager::CreateMenu(const char* lpcName, Menu* lpParent)
         {
             Menu* lpMenu = mMenuPool.Allocate();
             if (!lpMenu)
-                return nullptr;
+                return 0;
 
             lpMenu->Prepare(lpcName, lpParent);
             if (lpParent)
@@ -116,7 +116,7 @@ namespace CgsDev
                 if (lpWindow->GetMenu() == lpMenu)
                     return lpWindow;
             }
-            return nullptr;
+            return 0;
         }
 
         Menu* MenuManager::FindMenu(const MenuItem* lpMenuItem) const
@@ -127,7 +127,7 @@ namespace CgsDev
                 if (lpMenu->IsMenuItemAdded(lpMenuItem))
                     return lpMenu;
             }
-            return nullptr;
+            return 0;
         }
 
         MenuWindow* MenuManager::CreateMenuWindow(Menu* lpMenu)
@@ -135,7 +135,7 @@ namespace CgsDev
             EnsureFreeMenuWindow();
             MenuWindow* lpWindow = mWindowPool.Allocate();
             if (!lpWindow)
-                return nullptr;
+                return 0;
 
             lpWindow->Prepare(lpMenu);
             GetUI().AddWindow(lpWindow);
@@ -156,7 +156,7 @@ namespace CgsDev
         Window* MenuManager::Open(const char* lpcPath, Menu* lpParent)
         {
             Menu* lpMenu = GetMenuFromPath(lpcPath, lpParent);
-            return lpMenu ? Open(lpMenu) : nullptr;
+            return lpMenu ? Open(lpMenu) : 0;
         }
 
         void MenuManager::Close(Menu* lpMenu)
@@ -195,7 +195,7 @@ namespace CgsDev
 
         void MenuManager::AddMenuItem(const char* lpcPath, MenuItem* lpMenuItem)
         {
-            Menu* lpMenu = CreateMenuPath(lpcPath, nullptr);
+            Menu* lpMenu = CreateMenuPath(lpcPath, 0);
             if (lpMenu)
                 lpMenu->AddMenuItem(lpMenuItem);
         }
@@ -233,7 +233,7 @@ namespace CgsDev
 
         bool MenuManager::IsMenuItemAdded(MenuItem* lpMenuItem) const
         {
-            return FindMenu(lpMenuItem) != nullptr;
+            return FindMenu(lpMenuItem) != 0;
         }
 
         Menu* MenuManager::GetMenuFromPath(const char* lpcPath, Menu* lpParent)
@@ -261,7 +261,7 @@ namespace CgsDev
                 acName[liCopy] = '\0';
                 lpCurrentMenu = FindSubMenu(acName, lpCurrentMenu);
                 if (!lpCurrentMenu)
-                    return nullptr;
+                    return 0;
                 lpcSegment = lpcEnd;
             }
             return lpCurrentMenu;
@@ -303,7 +303,7 @@ namespace CgsDev
         void MenuManager::SplitPath(const char* lpcMenuItemPath, char* lpcPath,
                                     char* lpcMenuItem, s32 liSize)
         {
-            const char* lpcSplit = nullptr;
+            const char* lpcSplit = 0;
             for (const char* lpc = lpcMenuItemPath; *lpc; ++lpc)
                 if (*lpc == '/' || *lpc == '\\')
                     lpcSplit = lpc;
@@ -327,11 +327,11 @@ namespace CgsDev
             char acMenuPath[256];
             char acMenuItem[256];
             SplitPath(lpcPath, acMenuPath, acMenuItem, sizeof(acMenuPath));
-            Menu* lpMenu = GetMenuFromPath(acMenuPath, nullptr);
+            Menu* lpMenu = GetMenuFromPath(acMenuPath, 0);
             if (!lpMenu)
-                return nullptr;
+                return 0;
             MenuItem* lpMenuItem = lpMenu->FindMenuItemByName(acMenuItem);
-            return lpMenuItem ? lpMenuItem->OpenAsWindow() : nullptr;
+            return lpMenuItem ? lpMenuItem->OpenAsWindow() : 0;
         }
     }
 }

@@ -57,7 +57,7 @@ CrashStreamEffect::CrashStreamEffect()
     , mParams()
     , mbShowTime(false)
     , mbIsCrashing(false)
-    , mpPhysicsControl(nullptr)
+    , mpPhysicsControl(0)
     , mSubmix()
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE)
 {
@@ -70,7 +70,7 @@ s32 CrashStreamEffect::GetController(s32 aiIndex)
 
 void CrashStreamEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr && apController->GetEffectID() == 0,
+    CGS_ASSERT(apController != 0 && apController->GetEffectID() == 0,
                "Unexpected control.");
     if (apController && apController->GetEffectID() == 0)
         mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
@@ -143,7 +143,7 @@ void CrashStreamEffect::UpdateParams(f32 /*afTimeStep*/)
         BrnSound::Logic::GlobalStateManager* lpMgr =
             static_cast<BrnSound::Logic::GlobalStateManager*>(
                 lpModule->GetEnvironment().GetStateManager(0));
-        CGS_ASSERT(lpMgr != nullptr, "lpMgr");
+        CGS_ASSERT(lpMgr != 0, "lpMgr");
         const u32 luSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
         mSubmix.Connect(luSendName,
                         static_cast<u32>(lpMgr->GetSubmixVoice(
@@ -178,7 +178,7 @@ void CrashStreamEffect::UpdateParams(f32 /*afTimeStep*/)
     BrnSound::Logic::Streaming::StreamingStateManager* lpStreamingStateMgr =
         static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
             lpModule->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMgr != nullptr, "lpStreamingStateMgr");
+    CGS_ASSERT(lpStreamingStateMgr != 0, "lpStreamingStateMgr");
     lpStreamingStateMgr->PostStreamRequest(
         BrnSound::Logic::Streaming::StreamStopRequest(this, 0.0f));
 
@@ -218,7 +218,7 @@ bool CrashStreamEffect::Detach()
         static_cast<BrnSound::Logic::Streaming::StreamingStateManager*>(
             static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
                 ->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreamingStateMan != nullptr, "lpStreamingStateMan");
+    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
     lpStreamingStateMan->PostStreamRequest(
         BrnSound::Logic::Streaming::StreamStopRequest(this, 0.25f));
     return true;

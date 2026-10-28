@@ -41,7 +41,7 @@ namespace BrnTraffic
 
         // BrnTrafficPvs.h -- header-inline: the cell size's x lane, splatted (the console
         // inlines it as `lvx +0x10 ; vspltw 0`).
-        VecFloat GetCellSize() const { return VecFloat{ mCellSize.x, mCellSize.x, mCellSize.x, mCellSize.x }; }
+        VecFloat GetCellSize() const { { const VecFloat lResult = { mCellSize.x, mCellSize.x, mCellSize.x, mCellSize.x }; return lResult; } }
 
         // BrnTrafficPvs.h:64. X360 @ 0x827106B8 (IDA leaves it as sub_827106B8; the
         // DWARF names it). The same mapping as the :57 form, but it also hands back the

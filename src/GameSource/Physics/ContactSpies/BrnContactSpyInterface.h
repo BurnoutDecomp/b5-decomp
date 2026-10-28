@@ -46,7 +46,7 @@ namespace ContactSpy
         // body's own "lpData != NULL" tripwire (FireAssert file/line = this header :264).
         void SetData(ContactSpyData* lpData)
         {
-            CGS_ASSERT(lpData != nullptr, "lpData != NULL");
+            CGS_ASSERT(lpData != 0, "lpData != NULL");
             mpData = lpData;
         }
 
@@ -54,7 +54,7 @@ namespace ContactSpy
         // an unbound interface reads as empty; a bound one defers to the aggregate.
         bool IsEmpty() const
         {
-            return mpData == nullptr || mpData->IsEmpty();
+            return mpData == 0 || mpData->IsEmpty();
         }
 
         // ⭐ NEW 2026-08-29 (showtime score wave). DWARF BrnContactSpyInterface.h:59
@@ -72,7 +72,7 @@ namespace ContactSpy
         // so ProcessContacts reproduces the console test exactly (mpData is private).
         bool IsValid() const
         {
-            return mpData != nullptr;
+            return mpData != 0;
         }
 
         // ⭐ NEW 2026-08-29 (showtime score wave). DWARF BrnContactSpyInterface.h:92
@@ -87,7 +87,7 @@ namespace ContactSpy
         // no state and the assert is CGS_ASSERT-stamped.
         const ContactSpyData::TrafficContactQueue* GetTrafficContacts() const
         {
-            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            CGS_ASSERT(mpData != 0, "mpData != NULL");
             return mpData->GetTrafficContacts();
         }
 
@@ -105,7 +105,7 @@ namespace ContactSpy
         // 0xB3 == 179 is this header's own line in the console tree.
         const ContactSpyData::RaceCarContactQueue* GetRaceCarContacts() const
         {
-            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            CGS_ASSERT(mpData != 0, "mpData != NULL");
             return mpData->GetRaceCarContacts();
         }
 
@@ -131,7 +131,7 @@ namespace ContactSpy
         // at all.
         const ContactSpyData::PropContactQueue* GetPropContacts() const
         {
-            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            CGS_ASSERT(mpData != 0, "mpData != NULL");
             return mpData->GetPropContacts();
         }
 
@@ -158,13 +158,13 @@ namespace ContactSpy
         // in the whole image, was a log-once stub until it was bodied this wave.
         const ContactSpyData::PhysicalCarPartContactQueue* GetPhysicalCarPartContacts() const
         {
-            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            CGS_ASSERT(mpData != 0, "mpData != NULL");
             return mpData->GetPhysicalCarPartContacts();
         }
 
         const ContactSpyData::HingedCarPartContactQueue* GetHingedPartContacts() const
         {
-            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            CGS_ASSERT(mpData != 0, "mpData != NULL");
             return mpData->GetHingedPartContacts();
         }
 
@@ -184,7 +184,7 @@ namespace ContactSpy
         // image appends to its source, VehicleManager::mDiscardedContacts (see UpdateResolver).
         const ContactSpyData::DiscardedContactQueue* GetDiscardedContacts() const
         {
-            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            CGS_ASSERT(mpData != 0, "mpData != NULL");
             return mpData->GetDiscardedContacts();
         }
 

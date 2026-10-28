@@ -271,11 +271,11 @@ namespace CgsGui
     void ViewModule::ProcessIncomingViewEvents(const GuiEventQueueBase<65536, 16>* lpEvents,
                                                ViewIO::OutputBuffer* lpOutput)
     {
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liEventId =
             lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             switch (liEventId)
             {
@@ -347,7 +347,7 @@ namespace CgsGui
             case 62:
             {
                 const f32* lpSpacingEvent = reinterpret_cast<const f32*>(lpEvent);
-                CGS_ASSERT(lpSpacingEvent != nullptr, "lpSpacingEvent");
+                CGS_ASSERT(lpSpacingEvent != 0, "lpSpacingEvent");
                 mAptAux.DebugChangeFontSpacing(*lpSpacingEvent);
                 break;
             }

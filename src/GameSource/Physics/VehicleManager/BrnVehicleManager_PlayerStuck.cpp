@@ -335,7 +335,7 @@ namespace
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
             f32 lfTimeStep)
     {
-        CGS_ASSERT(lpTriCacheInterface != nullptr, "lpTriCacheInterface != NULL");        // :3334
+        CGS_ASSERT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL");        // :3334
 
         if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
         {
@@ -441,9 +441,9 @@ namespace
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface,
             BrnPhysics::Deformation::DeformationManager* lpDeformationManager)
     {
-        CGS_ASSERT(lpTractionContactGen != nullptr, "lpTractionContactGen != NULL");     // :2057
-        CGS_ASSERT(lpCacheInterface != nullptr, "lpCacheInterface != NULL");             // :2058
-        CGS_ASSERT(lpDeformationManager != nullptr, "lpDeformationManager != NULL");     // :2059
+        CGS_ASSERT(lpTractionContactGen != 0, "lpTractionContactGen != NULL");     // :2057
+        CGS_ASSERT(lpCacheInterface != 0, "lpCacheInterface != NULL");             // :2058
+        CGS_ASSERT(lpDeformationManager != 0, "lpDeformationManager != NULL");     // :2059
 
         if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
         {
@@ -470,7 +470,7 @@ namespace
         const CgsGeometric::Triangle4* const lpTriangles = lpCacheInterface->GetCache(static_cast<s32>(luPlayer));
         const s32 liNumBatches = lpCacheInterface->GetNumCachedTriangleBatches(static_cast<s32>(luPlayer));
 
-        LineDesc::StreamCommand* lpCommand = nullptr;
+        LineDesc::StreamCommand* lpCommand = 0;
         mpTractionLineStreamProducer->AllocateCommand(reinterpret_cast<void**>(&lpCommand));
 
         lpCommand->miNumLines = KI_NUM_STUCK_IN_COLLISION_LINE_TESTS;
@@ -538,7 +538,7 @@ namespace
 
         const LineDesc::StreamResult* const lpResult =
             static_cast<const LineDesc::StreamResult*>(lpResultIterator->GetCurrent());
-        if (lpResult == nullptr)
+        if (lpResult == 0)
         {
             return;
         }

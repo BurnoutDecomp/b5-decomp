@@ -40,7 +40,7 @@ struct ClassTypeInfo
     {
     }
 
-    T* CreateObject(u32 au32Param) { return createObject ? createObject(au32Param) : nullptr; }
+    T* CreateObject(u32 au32Param) { return createObject ? createObject(au32Param) : 0; }
 
     s32               ObjectID;     // :316
     const char*       typeName;     // :317

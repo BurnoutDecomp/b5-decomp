@@ -16,7 +16,7 @@
 // asset (mData set AND kind byte non-zero). Then clear the block (mpData = 0; packed kind|size = 0).
 void Attrib::Vault::DataBlock::ReleaseAsset(Vault::AssetID lAssetId, IGarbageCollector* lpGC)
 {
-    const bool lbReleaseAsset = (mpData != nullptr) && (GetKind() != 0);
+    const bool lbReleaseAsset = (mpData != 0) && (GetKind() != 0);
     if (lbReleaseAsset)
     {
         // X360: gc->vtable[1](kind, id, data, size). r6 (lpData) still holds mData from the
@@ -24,7 +24,7 @@ void Attrib::Vault::DataBlock::ReleaseAsset(Vault::AssetID lAssetId, IGarbageCol
         lpGC->ReleaseData(GetKind(), lAssetId, mpData, GetSize());
     }
 
-    mpData = nullptr;
+    mpData = 0;
     muKindAndSize = 0;
 }
 
@@ -84,7 +84,7 @@ void Attrib::Vault::ResolveDependency(unsigned int luIndex, void* lpData,
 
     DataBlock& lrBlock = mDepData[luIndex + 1];
 
-    const bool lbAlreadyResolved = (lrBlock.GetData() != nullptr) && (lrBlock.GetKind() != 0);
+    const bool lbAlreadyResolved = (lrBlock.GetData() != 0) && (lrBlock.GetKind() != 0);
     if (!lbAlreadyResolved)
         ++mResolvedCount;
 
@@ -530,7 +530,7 @@ Attrib::Vault::~Vault()
     bool lbExportsCleared = true;
     for (unsigned int luIndex = 0; luIndex < mNumExports; ++luIndex)
     {
-        if (mExportData[luIndex].GetData() != nullptr)
+        if (mExportData[luIndex].GetData() != 0)
         {
             lbExportsCleared = false;
             break;

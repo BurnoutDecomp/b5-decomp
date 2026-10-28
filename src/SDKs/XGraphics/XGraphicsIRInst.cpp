@@ -32,7 +32,7 @@ struct IROpcodeInfo
     u8  maPad04[0x30 - 4];   // +0x04 .. +0x2F opaque external rodata
     u32 muMakeKind;          // +0x30  factory dispatch index (dword_82FA5828)
 };
-static_assert(sizeof(IROpcodeInfo) == 0x34, "gaIROpcodeInfo stride must be 0x34");
+CGS_STATIC_ASSERT((sizeof(IROpcodeInfo) == 0x34), "gaIROpcodeInfo stride must be 0x34");
 
 typedef IRInst* (*IRMakeFn)(int aiOpcode);
 struct IRMakeTableEntry
@@ -47,7 +47,7 @@ struct IRRegTypeInfo
     u8 muIndexingMode;       // +0x07  byte_821B5107
     u8 maPad08[12 - 8];      // +0x08 .. +0x0B opaque
 };
-static_assert(sizeof(IRRegTypeInfo) == 12, "gaIRRegTypeInfo stride must be 12");
+CGS_STATIC_ASSERT((sizeof(IRRegTypeInfo) == 12), "gaIRRegTypeInfo stride must be 12");
 
 extern "C" IROpcodeInfo    gaIROpcodeInfo[];  // @ 0x82FA57F8 (dword_82FA57F8)
 extern "C" IRMakeTableEntry gaIRMakeTable[];  // @ 0x821B1EA0 (dword_821B1EA0)
@@ -92,7 +92,7 @@ IRInst* IRInst::Init()
     maOperand[0]     = -1;
     maOperandType[0] = 48;
     SetModifier(maModifier[0], KMODIFIER_ZERO); // dword_821B1F50
-    maRegs[0]    = nullptr;
+    maRegs[0]    = 0;
     maUnk98[0]   = 0;
     maUnk9E[0]   = 0;
     maUnkC8[0]   = 0;
@@ -115,14 +115,14 @@ IRInst* IRInst::Init()
         }
         maUnk98[liSlot] = 0;
         maUnk9E[liSlot] = 0;
-        maRegs[liSlot]  = nullptr;
+        maRegs[liSlot]  = 0;
         maUnkC8[liSlot] = 0;
     }
 
     // ---- per-channel source registers + swizzles --------------------------
     for (int liChannel = 0; liChannel < 32; ++liChannel)
     {
-        maSourceRegs[liChannel] = nullptr;
+        maSourceRegs[liChannel] = 0;
         maSwizzle[liChannel][0] = 3;
         maSwizzle[liChannel][1] = 3;
         maSwizzle[liChannel][2] = 3;

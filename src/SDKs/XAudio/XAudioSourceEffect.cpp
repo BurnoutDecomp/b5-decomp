@@ -59,7 +59,7 @@ s32 CSourceEffect::GetParam(u8 aSection, u8 aType, SAudioParamValue* apValue)
     if (aSection == 2 && aType == 3)
     {
         if (apValue->muSize == 56)
-            return GetParamA(apValue->mpValue, nullptr);
+            return GetParamA(apValue->mpValue, 0);
         if (apValue->muSize == 60)
             return GetParamA(apValue->mpValue,
                              reinterpret_cast<u8*>(apValue->mpValue) + 56);

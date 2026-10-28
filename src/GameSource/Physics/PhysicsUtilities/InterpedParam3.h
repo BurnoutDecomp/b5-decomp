@@ -47,12 +47,12 @@ namespace BrnPhysics
             const f32 lfAB = mvParams.x + (mvParams.y - mvParams.x) * lfT;   // lerp(A, B, t)
             const f32 lfBC = mvParams.y + (mvParams.z - mvParams.y) * lfT;   // lerp(B, C, t)
             const f32 lfResult = lfAB + (lfBC - lfAB) * lfT;                 // lerp(AB, BC, t)
-            return VecFloat{ lfResult, lfResult, lfResult, lfResult };
+            { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
         }
 
     private:
         Vector3 mvParams;   // +0x00 (.x = ParamA, .y = ParamB, .z = ParamC; .w unused)
     };
 
-    static_assert(sizeof(InterpedParam3) == 16, "InterpedParam3 is one 16-byte register");
+    CGS_STATIC_ASSERT((sizeof(InterpedParam3) == 16), "InterpedParam3 is one 16-byte register");
 }

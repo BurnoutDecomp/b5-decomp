@@ -164,11 +164,11 @@ namespace BrnNetwork
 
     inline void PostRoundManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, maUpdateFunctions) == 0x78, "maUpdateFunctions @ +0x78");
-        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mpNetworkManager) == 0xA8, "mpNetworkManager @ +0xA8");
-        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mbDidTheUserQuit) == 0xC0, "mbDidTheUserQuit @ +0xC0");
-        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mGameResults) == 0xC4, "mGameResults @ +0xC4");
-        static_assert(sizeof(void*) != 4 || sizeof(PostRoundManager) == 0x1A4, "PostRoundManager is 0x1A4 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(PostRoundManager, maUpdateFunctions) == 0x78), "maUpdateFunctions @ +0x78");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(PostRoundManager, mpNetworkManager) == 0xA8), "mpNetworkManager @ +0xA8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(PostRoundManager, mbDidTheUserQuit) == 0xC0), "mbDidTheUserQuit @ +0xC0");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(PostRoundManager, mGameResults) == 0xC4), "mGameResults @ +0xC4");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(PostRoundManager) == 0x1A4), "PostRoundManager is 0x1A4 bytes");
     }
 }
 

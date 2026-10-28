@@ -153,10 +153,10 @@ namespace BrnGui
             s32 GetEventType() const { return 457; }
         };
 
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "overlay wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiAudioTriggerPayload457) == 100, "audio trigger payload is 100 bytes");
-        static_assert(sizeof(GuiEventScoreboardRequestGamercardEvent) == 28, "gamercard record is 28 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "overlay wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerPayload457) == 100), "audio trigger payload is 100 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventScoreboardRequestGamercardEvent) == 28), "gamercard record is 28 bytes");
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, GuiOverlayRequestWire& lrWire)
         {

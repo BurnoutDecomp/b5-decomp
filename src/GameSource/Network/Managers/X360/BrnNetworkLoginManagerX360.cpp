@@ -75,7 +75,7 @@ namespace BrnNetwork
         meSubState            = E_SUBSTATE_COUNT;                          // stw 0xF, 0x0C
         meSignInType          = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x14
         meCompletedSignInType = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x18
-        mpTOS                 = nullptr;                                   // stw 0,  0x20
+        mpTOS                 = 0;                                   // stw 0,  0x20
         mePlatformSpecificSubState = E_PLATFORM_SPECIFIC_SUBSTATE_COUNT;   // stw 2,  0x24
         return true;
     }
@@ -88,7 +88,7 @@ namespace BrnNetwork
         meSubState            = E_SUBSTATE_COUNT;                          // stw 0xF, 0x0C
         meSignInType          = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x14
         meCompletedSignInType = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x18
-        mpTOS                 = nullptr;                                   // stw 0,  0x20
+        mpTOS                 = 0;                                   // stw 0,  0x20
         return true;
     }
 
@@ -100,7 +100,7 @@ namespace BrnNetwork
         meSubState            = E_SUBSTATE_COUNT;                          // stw 0xF, 0x0C
         meSignInType          = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x14
         meCompletedSignInType = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x18
-        mpTOS                 = nullptr;                                   // stw 0,  0x20
+        mpTOS                 = 0;                                   // stw 0,  0x20
     }
 
     // X360 0x82557308 -- chain the base Start, then arm the platform sub-state at SIGN_IN_TO_LIVE.

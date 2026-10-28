@@ -32,7 +32,7 @@ LoopRegister* LoopRegister::NewItem(s32 aiIndex, s32 aiType, CFG* apContext)
     // in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(LoopRegister));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) LoopRegister(aiIndex, aiType, apContext);
 }

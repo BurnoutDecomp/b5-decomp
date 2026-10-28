@@ -40,7 +40,7 @@ namespace rw
             // symbol alias for the single `stw 0` that is Thread's default ctor).
             // -----------------------------------------------------------------------------
             Device::Device(DeviceDriver* lpDriver, unsigned int luFlags)
-                : mpNext(nullptr)              // *a1 = 0
+                : mpNext(0)              // *a1 = 0
                 , mbThreadRunning(0)           // *(a1+4) = 0
                 , mbStopRequested(0)           // *(a1+5) = 0
                 , mbExternalThread(static_cast<u8>(luFlags & 1))  // *(a1+6) = a3 & 1
@@ -50,8 +50,8 @@ namespace rw
                 , mu64ReadBudget(0)            // *(a1+328) = 0
             {
                 // *(a1+8) = *(a1+12) = *(a1+16) = 0 -- empty op list.
-                mOpList.mpHead  = nullptr;
-                mOpList.mpTail  = nullptr;
+                mOpList.mpHead  = 0;
+                mOpList.mpTail  = 0;
                 mOpList.muCount = 0;
             }
 
@@ -78,7 +78,7 @@ namespace rw
                     mpDriver->Restore();                // (*(driver+8))(driver)
                 }
 
-                mpDriver = nullptr;                     // *(a1+320) = 0
+                mpDriver = 0;                     // *(a1+320) = 0
 
                 // The conditions, the worker thread and the mutexes are torn down by their
                 // member destructors.
@@ -93,15 +93,15 @@ namespace rw
                         AsyncOp* lpNext = lpOp->mpNext;
                         if (!lpNext)
                             break;
-                        lpOp->mpNext = nullptr;
+                        lpOp->mpNext = 0;
                         lpOp = lpNext;
                     }
                 }
 
-                mOpList.mpTail   = nullptr;   // *(a1+12) = 0
-                mOpList.mpHead   = nullptr;   // *(a1+8)  = 0
+                mOpList.mpTail   = 0;   // *(a1+12) = 0
+                mOpList.mpHead   = 0;   // *(a1+8)  = 0
                 mOpList.muCount  = 0;         // *(a1+16) = 0
-                mpNext           = nullptr;   // *a1      = 0
+                mpNext           = 0;   // *a1      = 0
             }
 
             // -----------------------------------------------------------------------------
@@ -156,7 +156,7 @@ namespace rw
                 if (!mbThreadRunning)
                     Start();
 
-                AsyncOp* lpAfter = nullptr;         // v5
+                AsyncOp* lpAfter = 0;         // v5
                 u64 lu64NewEnd = 0;                 // v6
                 if (lpOp->mbIsReadOp)
                     lu64NewEnd = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey) + lpOp->mu64Position;
@@ -192,7 +192,7 @@ namespace rw
             {
                 mLock.Lock(EA::Thread::kTimeoutNone);
 
-                if (mOpList.Remove(lpOp, nullptr))  // AsyncOp_::Remove(a1+8, a2, 0)
+                if (mOpList.Remove(lpOp, 0))  // AsyncOp_::Remove(a1+8, a2, 0)
                 {
                     lpOp->miPriority = liPriority;  // *(a2+12) = a3
                     InsertOp(lpOp);
@@ -223,7 +223,7 @@ namespace rw
                     if (lu64Budget && lu64End < lu64Budget)
                     {
                         AsyncOp* lpCur  = mOpList.mpHead;   // v7
-                        AsyncOp* lpPrev = nullptr;          // v8
+                        AsyncOp* lpPrev = 0;          // v8
                         u64 lu64CandEnd = 0;                // v9
                         bool lbFound = false;               // v10
 
@@ -289,15 +289,15 @@ namespace rw
                         // Inline head unlink (NOT AsyncOpList::Remove): the asm folds it.
                         if (lpOp == lpThis->mOpList.mpTail)
                         {
-                            lpThis->mOpList.mpHead = nullptr;
-                            lpThis->mOpList.mpTail = nullptr;
+                            lpThis->mOpList.mpHead = 0;
+                            lpThis->mOpList.mpTail = 0;
                         }
                         else
                         {
                             lpThis->mOpList.mpHead = lpOp->mpNext;
                         }
                         --lpThis->mOpList.muCount;
-                        lpOp->mpNext = nullptr;            // *v4 = 0
+                        lpOp->mpNext = 0;            // *v4 = 0
                     }
 
                     if (lpOp)
@@ -442,7 +442,7 @@ namespace rw
                 char lacScheme[64];   // _QWORD v33[8]
                 ::memset(lacScheme, 0, sizeof(lacScheme));
 
-                Device* lpMatch = nullptr;   // v24
+                Device* lpMatch = 0;   // v24
                 const char* lpColon = ::strchr(lpDst, ':');   // v23
                 if (lpColon)
                     ::strncpy(lacScheme, lpDst, static_cast<size_t>(lpColon - lpDst) + 1);
@@ -458,7 +458,7 @@ namespace rw
                 // driver name case-insensitively.
                 for (Device* lpDev = gpFileSysManager->mDeviceList.mpHead; lpDev; lpDev = lpDev->mpNext)
                 {
-                    const char* lpcName = (lpDev->mpDriver) ? lpDev->mpDriver->GetName() : nullptr;  // v26 = v25[80]
+                    const char* lpcName = (lpDev->mpDriver) ? lpDev->mpDriver->GetName() : 0;  // v26 = v25[80]
                     if (!lpcName)
                         continue;
 

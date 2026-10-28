@@ -187,9 +187,9 @@ namespace
         s32 GetEventType() const { return 88; }
     };
     typedef CgsGui::GuiEventWrapper<MuteDacPayload, 40> MuteDacRecord40;
-    static_assert(sizeof(MuteDacPayload) == 1 && offsetof(MuteDacPayload, mu8Mute) == 0,
+    CGS_STATIC_ASSERT((sizeof(MuteDacPayload) == 1 && offsetof(MuteDacPayload, mu8Mute) == 0),
                   "ARTIST event 88 payload is one byte");
-    static_assert(offsetof(MuteDacRecord40, mOutEvent) == 12 && sizeof(MuteDacRecord40) == 16,
+    CGS_STATIC_ASSERT((offsetof(MuteDacRecord40, mOutEvent) == 12 && sizeof(MuteDacRecord40) == 16),
                   "ARTIST event 88 channel-40 record is {1,88,12}+1");
 
     // BrnGui::GuiEventPlayVideo / GuiEventStopVideo -- carry a 112-byte MovieManager
@@ -215,11 +215,11 @@ namespace
         explicit SetPlayer0ControllerPortPayload(s32 liPort) : miPort(liPort) {}
     };
     typedef CgsGui::GuiEventWrapper<SetPlayer0ControllerPortPayload, 40> SetPlayer0ControllerPortRecord40;
-    static_assert(sizeof(SetPlayer0ControllerPortPayload) == 4 &&
-                  offsetof(SetPlayer0ControllerPortPayload, miPort) == 0,
+    CGS_STATIC_ASSERT((sizeof(SetPlayer0ControllerPortPayload) == 4 &&
+                  offsetof(SetPlayer0ControllerPortPayload, miPort) == 0),
                   "ARTIST event 143 payload is one word");
-    static_assert(offsetof(SetPlayer0ControllerPortRecord40, mOutEvent) == 12 &&
-                  sizeof(SetPlayer0ControllerPortRecord40) == 16,
+    CGS_STATIC_ASSERT((offsetof(SetPlayer0ControllerPortRecord40, mOutEvent) == 12 &&
+                  sizeof(SetPlayer0ControllerPortRecord40) == 16),
                   "ARTIST event 143 channel-40 record is {4,143,12}+4");
 
 }   // anonymous namespace

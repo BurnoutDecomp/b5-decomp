@@ -127,7 +127,7 @@ namespace BrnAI
     // member is only legal within class scope).
     void ResetOnTrackManager::_AssertLayout()
     {
-        static_assert(offsetof(ResetOnTrackManager, mResetOnTrackRequestQueue) == 0x000,
+        CGS_STATIC_ASSERT((offsetof(ResetOnTrackManager, mResetOnTrackRequestQueue) == 0x000),
                       "ROT queue offset drift");
 
         // ADDITIVE 2026-09-03 (aiwave A11). The two helper nodes stopped being `u8[0x10]` blobs
@@ -145,15 +145,15 @@ namespace BrnAI
         // and nothing indexes it by a console stride. Pinning the console numbers here would have
         // pinned a lie; pinning the SPACING catches the only thing that could actually break
         // (a member sneaking in between, or RouteNode's alignment shifting the pair).
-        static_assert(sizeof(RouteNode) == 0x10, "RouteNode is the console's 16-byte node");
-        static_assert(offsetof(ResetOnTrackManager, mHelperNodePrev) -
-                          offsetof(ResetOnTrackManager, mHelperNodeNext) == 0x10,
+        CGS_STATIC_ASSERT((sizeof(RouteNode) == 0x10), "RouteNode is the console's 16-byte node");
+        CGS_STATIC_ASSERT((offsetof(ResetOnTrackManager, mHelperNodePrev) -
+                          offsetof(ResetOnTrackManager, mHelperNodeNext) == 0x10),
                       "ROT helper nodes must be adjacent 16-byte RouteNodes");
-        static_assert(offsetof(ResetOnTrackManager, mResetOnTrackDebugComponent) -
-                          offsetof(ResetOnTrackManager, mHelperNodePrev) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(ResetOnTrackManager, mResetOnTrackDebugComponent) -
+                          offsetof(ResetOnTrackManager, mHelperNodePrev) == 0x10),
                       "ROT debug component follows mHelperNodePrev immediately");
-        static_assert(offsetof(ResetOnTrackManager, mHelperNodeNext) -
-                          offsetof(ResetOnTrackManager, mRandom) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(ResetOnTrackManager, mHelperNodeNext) -
+                          offsetof(ResetOnTrackManager, mRandom) == 0x30),
                       "ROT helper nodes follow mRandom immediately (no padding, no new member)");
     }
 

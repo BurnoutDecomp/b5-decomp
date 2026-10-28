@@ -137,7 +137,7 @@ namespace BrnNetworkModuleIO
     {
         TelemetryData mEventData;   // +0x00
     };
-    static_assert(sizeof(NetworkInTelemetryEvent) == 20, "NetworkInTelemetryEvent is queued as 20 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInTelemetryEvent) == 20), "NetworkInTelemetryEvent is queued as 20 bytes");
 
     // The compressed camera-picture request (reference home line 776). Queued as tag 53 with
     // the console size 12; the texture pointer makes the host record wider, so producers queue
@@ -162,7 +162,7 @@ namespace BrnNetworkModuleIO
     {
         char macRichPresenceString[100];                          // +0x00
     };
-    static_assert(sizeof(NetworkInUpdateRichPresence) == 100, "queued as 100 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInUpdateRichPresence) == 100), "queued as 100 bytes");
 
     // Console 16 bytes; the street-manager pointer is 8 bytes on the host.
     struct NetworkInRoadRulesDataEvent : public NetworkEvent<18>
@@ -192,7 +192,7 @@ namespace BrnNetworkModuleIO
         Road::ChallengeIndex                     mChallengeIndex;         // +0x28
         bool                                     mbLobbyPersonalBest;     // +0x2C
     };
-    static_assert(sizeof(NetworkInRoadRulesPBEvent) == 48, "queued as 48 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInRoadRulesPBEvent) == 48), "queued as 48 bytes");
 
     // Empty signal, queued as one byte.
     struct NetworkInRoadRulesOverwriteServerRecord : public NetworkEvent<20> {};
@@ -207,7 +207,7 @@ namespace BrnNetworkModuleIO
         bool                                              mbIsTakedownAggressorLocalPlayer;  // +0x18
         bool                                              mbMugshotRequiresBroadcast;        // +0x19
     };
-    static_assert(sizeof(NetworkInPaybackMugshotEvent) == 32, "queued as 32 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInPaybackMugshotEvent) == 32), "queued as 32 bytes");
 
     // Empty signal, queued as one byte.
     struct NetworkInAbortMugshotCaptureEvent : public NetworkEvent<30> {};
@@ -242,14 +242,14 @@ namespace BrnNetworkModuleIO
         NetworkPlayerID                 mPlayerID;                // +0x38
         EEventType                      meEventType;              // +0x3C
     };
-    static_assert(sizeof(NetworkInBurnoutSkillzEvent) == 64, "queued as 64 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInBurnoutSkillzEvent) == 64), "queued as 64 bytes");
 
     struct NetworkInShowtimeUpdateEvent : public NetworkEvent<36>
     {
         s32             miShowtimeScore;                          // +0x00
         NetworkPlayerID mPlayerID;                                // +0x04
     };
-    static_assert(sizeof(NetworkInShowtimeUpdateEvent) == 8, "queued as 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInShowtimeUpdateEvent) == 8), "queued as 8 bytes");
 
     struct NetworkInShowtimeSwitchEvent : public NetworkEvent<37>
     {
@@ -257,7 +257,7 @@ namespace BrnNetworkModuleIO
         NetworkPlayerID mPlayerID;                                // +0x04
         bool            mbEnteringShowtime;                       // +0x08
     };
-    static_assert(sizeof(NetworkInShowtimeSwitchEvent) == 12, "queued as 12 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInShowtimeSwitchEvent) == 12), "queued as 12 bytes");
 
     struct NetworkInFreeburnChallengeEvent : public NetworkEvent<38>
     {
@@ -268,21 +268,21 @@ namespace BrnNetworkModuleIO
         s32                            miActionIndex;                    // +0x18
         s32                            miNumberOfCompletedChallenges;    // +0x1C
     };
-    static_assert(sizeof(NetworkInFreeburnChallengeEvent) == 32, "queued as 32 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInFreeburnChallengeEvent) == 32), "queued as 32 bytes");
 
     struct NetworkInFburnChallengeStatusEvent : public NetworkEvent<39>
     {
         BrnGameState::GameStateModuleIO::CompletedFburnChallenges mCompletedChallenges;  // +0x000 (256)
         NetworkPlayerID                                           mPlayerID;             // +0x100
     };
-    static_assert(sizeof(NetworkInFburnChallengeStatusEvent) == 0x108, "queued as 0x108 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInFburnChallengeStatusEvent) == 0x108), "queued as 0x108 bytes");
 
     struct NetworkInFburnSuccessUpdateEvent : public NetworkEvent<40>
     {
         BrnGameState::GameStateModuleIO::LastSecondChallengeSuccess mChallengeSuccessUpdate;  // +0x00 (8)
         s32                                                          miActionIndex;           // +0x08
     };
-    static_assert(sizeof(NetworkInFburnSuccessUpdateEvent) == 16, "queued as 16 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInFburnSuccessUpdateEvent) == 16), "queued as 16 bytes");
 
     struct NetworkInFburnChallengeSuccessEvent : public NetworkEvent<41>
     {
@@ -290,7 +290,7 @@ namespace BrnNetworkModuleIO
         bool mabSuccessfulActions[2];                             // +0x08
         bool mabAccumulationThisFrame[2];                         // +0x0A
     };
-    static_assert(sizeof(NetworkInFburnChallengeSuccessEvent) == 12, "queued as 12 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInFburnChallengeSuccessEvent) == 12), "queued as 12 bytes");
 
     struct NetworkInActiveFburnChallengeEvent : public NetworkEvent<42>
     {
@@ -299,7 +299,7 @@ namespace BrnNetworkModuleIO
         NetworkPlayerID     mPlayerToSendToID;                    // +0x28
         s32                 miNumPlayersInChallenge;              // +0x2C
     };
-    static_assert(sizeof(NetworkInActiveFburnChallengeEvent) == 48, "queued as 48 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInActiveFburnChallengeEvent) == 48), "queued as 48 bytes");
 
     struct NetworkInChangeDistrictEvent : public NetworkEvent<43>
     {
@@ -326,7 +326,7 @@ namespace BrnNetworkModuleIO
         u16 mu16FlatSpins;                                        // +0x04
         u16 mu16BarrelRolls;                                      // +0x06
     };
-    static_assert(sizeof(NetworkInStuntMultiplierEvent) == 8, "queued as 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInStuntMultiplierEvent) == 8), "queued as 8 bytes");
 
     struct NetworkInShowGamerCard : public NetworkEvent<47>
     {
@@ -360,7 +360,7 @@ namespace BrnNetworkModuleIO
         s32   meGameModeType;                                     // +0x08 (GameStateModuleIO::EGameModeType)
         s32   miScore;                                            // +0x0C
     };
-    static_assert(sizeof(NetworkInScoreLeaderboardEvent) == 16, "queued as 16 bytes");
+    CGS_STATIC_ASSERT((sizeof(NetworkInScoreLeaderboardEvent) == 16), "queued as 16 bytes");
 
     // FLAG name (console-only tag): EventScoresManager::ProcessNetworkEvents appends the pointed-to
     // array onto its pending uploads. Console 4 bytes; the pointer is 8 bytes on the host.
@@ -446,24 +446,24 @@ namespace BrnNetworkModuleIO
     // Never called.
     inline void AssertNetworkInGuiEventLayouts()
     {
-        static_assert(sizeof(NetworkInFriendsUtilShut) == 1, "tag 6 size");
-        static_assert(sizeof(NetworkInSendInvite) == 16, "tag 8 size");
-        static_assert(offsetof(NetworkInRevokeInvite, mbHasOnlineGameBeenStarted) == 0x10, "tag 9 +0x10");
-        static_assert(sizeof(NetworkInRevokeInvite) == 17, "tag 9 size");
-        static_assert(sizeof(NetworkInInstantFreeburn) == 1, "tag 14 size");
-        static_assert(sizeof(NetworkInVoipEvent) == 4, "tag 17 size");
-        static_assert(sizeof(NetworkInSettingsUpdateEvent) == 4, "tag 23 size");
-        static_assert(sizeof(NetworkInLoadingScreenShown) == 1, "tag 25 size");
-        static_assert(sizeof(NetworkInLeftPostEvent) == 1, "tag 26 size");
-        static_assert(sizeof(NetworkInCancelLogin) == 1, "tag 27 size");
-        static_assert(sizeof(NetworkInLeavingJunkyard) == 1, "tag 28 size");
-        static_assert(offsetof(NetworkInScoreTargetEvent, miScore) == 0x10, "tag 50 +0x10");
-        static_assert(offsetof(NetworkInScoreTargetEvent, miVariation) == 0x1C, "tag 50 +0x1C");
-        static_assert(offsetof(NetworkInScoreTargetEvent, mbIsCurrentTarget) == 0x20, "tag 50 +0x20");
-        static_assert(sizeof(NetworkInScoreTargetEvent) == 36, "tag 50 size");
-        static_assert(sizeof(NetworkInRequestAccountSettings) == 1, "tag 51 size");
-        static_assert(offsetof(NetworkInAccountUpdate, mbTelemetryEnable) == 0x02, "tag 52 +0x02");
-        static_assert(sizeof(NetworkInAccountUpdate) == 3, "tag 52 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInFriendsUtilShut) == 1), "tag 6 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInSendInvite) == 16), "tag 8 size");
+        CGS_STATIC_ASSERT((offsetof(NetworkInRevokeInvite, mbHasOnlineGameBeenStarted) == 0x10), "tag 9 +0x10");
+        CGS_STATIC_ASSERT((sizeof(NetworkInRevokeInvite) == 17), "tag 9 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInInstantFreeburn) == 1), "tag 14 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInVoipEvent) == 4), "tag 17 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInSettingsUpdateEvent) == 4), "tag 23 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInLoadingScreenShown) == 1), "tag 25 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInLeftPostEvent) == 1), "tag 26 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInCancelLogin) == 1), "tag 27 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInLeavingJunkyard) == 1), "tag 28 size");
+        CGS_STATIC_ASSERT((offsetof(NetworkInScoreTargetEvent, miScore) == 0x10), "tag 50 +0x10");
+        CGS_STATIC_ASSERT((offsetof(NetworkInScoreTargetEvent, miVariation) == 0x1C), "tag 50 +0x1C");
+        CGS_STATIC_ASSERT((offsetof(NetworkInScoreTargetEvent, mbIsCurrentTarget) == 0x20), "tag 50 +0x20");
+        CGS_STATIC_ASSERT((sizeof(NetworkInScoreTargetEvent) == 36), "tag 50 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkInRequestAccountSettings) == 1), "tag 51 size");
+        CGS_STATIC_ASSERT((offsetof(NetworkInAccountUpdate, mbTelemetryEnable) == 0x02), "tag 52 +0x02");
+        CGS_STATIC_ASSERT((sizeof(NetworkInAccountUpdate) == 3), "tag 52 size");
     }
 }
 } // namespace BrnNetwork

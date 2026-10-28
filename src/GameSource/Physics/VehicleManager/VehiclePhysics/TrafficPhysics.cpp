@@ -41,10 +41,10 @@ namespace Vehicle
                                          const StreamedDeformationSpec* lpDeformSpec,
                                          const Vector3* lpWheelPositions, const f32* lpafWheelRadii)
     {
-        CGS_ASSERT(lpEvent != nullptr,          "lpEvent != NULL");
-        CGS_ASSERT(lpAttribs != nullptr,        "lpAttribs != NULL");
-        CGS_ASSERT(lpWheelPositions != nullptr, "lpWheelPositions != NULL");
-        CGS_ASSERT(lpafWheelRadii != nullptr,   "lpafWheelRadii != NULL");
+        CGS_ASSERT(lpEvent != 0,          "lpEvent != NULL");
+        CGS_ASSERT(lpAttribs != 0,        "lpAttribs != NULL");
+        CGS_ASSERT(lpWheelPositions != 0, "lpWheelPositions != NULL");
+        CGS_ASSERT(lpafWheelRadii != 0,   "lpafWheelRadii != NULL");
 
         // Sum the four streamed wheel positions (the `do { v12 += lvx128 } while (v15<4)` loop).
         Vector3 lvWheelPosSum = { 0.0f, 0.0f, 0.0f, 0.0f };

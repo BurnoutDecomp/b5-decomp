@@ -544,7 +544,7 @@ ClassTypeInfo<StateManager>* StateManager::AddToClassTypeInfoArray(ClassTypeInfo
 // ---------------------------------------------------------------------------
 ClassTypeInfo<StateManager>* StateManager::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<StateManager> sTypeInfo(0, "StateManager", nullptr, nullptr);
+    static ClassTypeInfo<StateManager> sTypeInfo(0, "StateManager", 0, 0);
     return &sTypeInfo;
 }
 

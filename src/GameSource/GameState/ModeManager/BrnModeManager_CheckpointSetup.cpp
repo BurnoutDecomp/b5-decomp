@@ -73,7 +73,7 @@ void ModeManager::SetUpCheckPointsForGameMode(const StartGameModeParams* lpStart
     }
 
     const BrnTrigger::TriggerData* lpTriggerData = GetTriggerData();
-    CGS_ASSERT(lpTriggerData != nullptr, "lpTriggerData != NULL");   // BrnModeManager.cpp:4912
+    CGS_ASSERT(lpTriggerData != 0, "lpTriggerData != NULL");   // BrnModeManager.cpp:4912
 
     const BrnProgression::RaceEventData* lpRaceEventData = lpStartGameModeParams->GetEventData();
     const s32 liCheckPointCount = lpRaceEventData->GetCheckpointCount();
@@ -100,7 +100,7 @@ void ModeManager::SetUpCheckPointsForGameMode(const StartGameModeParams* lpStart
 
         const BrnTrigger::Landmark* lpLandmark =
             lpTriggerData->FindLandmark(static_cast<CgsID>(liCheckPointLandmarkId));
-        CGS_ASSERT(lpLandmark != nullptr, "lpLandmark");             // BrnModeManager.cpp:4932
+        CGS_ASSERT(lpLandmark != 0, "lpLandmark");             // BrnModeManager.cpp:4932
 
         // Console: `lwz r11, 0x24(r31)` == TriggerRegion::mId (the landmark's CgsID, fed to the
         // AI-section lookup) and `lhz r29, 0x28(r31)` == TriggerRegion::miRegionIndex (the
@@ -163,7 +163,7 @@ void ModeManager::SetupPathfinding(const StartGameModeParams* lpStartGameModePar
 {
     // Console order: the event-data null test comes FIRST, the mode gate second.
     const BrnProgression::RaceEventData* lpRaceEventData = lpStartGameModeParams->GetEventData();
-    if (lpRaceEventData == nullptr)
+    if (lpRaceEventData == 0)
     {
         return;
     }
@@ -273,9 +273,9 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
 
     // Console fires this assert BEFORE the event-data test (both operands are already loaded).
     // The missing space in "lpProgressionData!= NULL" is the console's own spelling -- verbatim.
-    CGS_ASSERT(lpProgressionData != nullptr, "lpProgressionData!= NULL");   // BrnModeManager.cpp:5045
+    CGS_ASSERT(lpProgressionData != 0, "lpProgressionData!= NULL");   // BrnModeManager.cpp:5045
 
-    if (lpEventData == nullptr)
+    if (lpEventData == 0)
     {
         return;
     }
@@ -290,7 +290,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
 
     const BrnProgression::CarOpponentSet* lpOpponentSet =
         lpProgressionData->FindCarOpponentSet(lOriginalCarId, liPlayerRank);
-    CGS_ASSERT(lpOpponentSet != nullptr, "lpOpponentSet != NULL");            // BrnModeManager.cpp:5057
+    CGS_ASSERT(lpOpponentSet != 0, "lpOpponentSet != NULL");            // BrnModeManager.cpp:5057
 
     for (s32 liIndex = 0; liIndex < liStartGridCount; ++liIndex)
     {
@@ -305,7 +305,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
         // `mr r29, r30` @0x823294FC: the player's own car id is the fall-through model id.
         CgsID lCarModelId = lPlayerCarId;
 
-        if (lpOpponentSet != nullptr)                                        // re-tested @0x82329504
+        if (lpOpponentSet != 0)                                        // re-tested @0x82329504
         {
             CGS_ASSERT(lpOpponentSet->GetOpponentCount() > 0,
                        "lpOpponentSet->GetOpponentCount() > 0");             // BrnModeManager.cpp:5079

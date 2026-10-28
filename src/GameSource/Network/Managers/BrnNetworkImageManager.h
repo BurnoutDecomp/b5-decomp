@@ -205,7 +205,7 @@ namespace BrnNetwork
                     return &maMugshotData[liIndex];
                 }
             }
-            return nullptr;
+            return 0;
         }
 
         // The reliable-message send buffer has room for a mugshot. Inlined into
@@ -280,14 +280,14 @@ namespace BrnNetwork
 
     inline void NetworkImageManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || sizeof(MugshotData) == 0x40, "MugshotData stride is 0x40");
-        static_assert(sizeof(void*) != 4 || offsetof(MugshotData, mReceivedPhotoPackets) == 0x20, "MugshotData::mReceivedPhotoPackets @ +0x20");
-        static_assert(sizeof(void*) != 4 || offsetof(ImageMessageData, mImageMessageSend) == 0x8, "ImageMessageData::mImageMessageSend @ +0x8");
-        static_assert(sizeof(void*) != 4 || sizeof(ImageMessageData) == 8 + 2 * sizeof(ImageMessage), "ImageMessageData is the id plus two messages");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, maImageData) == 0x200, "maImageData @ +0x200");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, mTakedownVictimPlayerID) == 0x200 + KI_MAX_IMAGE_PLAYERS * sizeof(ImageMessageData), "mTakedownVictimPlayerID follows maImageData");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, mRoadRuleBeatenID) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x18, "mRoadRuleBeatenID @ +0x2160");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, mDebugComponent) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x34, "mDebugComponent @ +0x217C");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkImageManager) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x90, "NetworkImageManager is 0x21D8 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(MugshotData) == 0x40), "MugshotData stride is 0x40");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(MugshotData, mReceivedPhotoPackets) == 0x20), "MugshotData::mReceivedPhotoPackets @ +0x20");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(ImageMessageData, mImageMessageSend) == 0x8), "ImageMessageData::mImageMessageSend @ +0x8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ImageMessageData) == 8 + 2 * sizeof(ImageMessage)), "ImageMessageData is the id plus two messages");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkImageManager, maImageData) == 0x200), "maImageData @ +0x200");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkImageManager, mTakedownVictimPlayerID) == 0x200 + KI_MAX_IMAGE_PLAYERS * sizeof(ImageMessageData)), "mTakedownVictimPlayerID follows maImageData");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkImageManager, mRoadRuleBeatenID) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x18), "mRoadRuleBeatenID @ +0x2160");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkImageManager, mDebugComponent) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x34), "mDebugComponent @ +0x217C");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkImageManager) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x90), "NetworkImageManager is 0x21D8 bytes");
     }
 } // namespace BrnNetwork

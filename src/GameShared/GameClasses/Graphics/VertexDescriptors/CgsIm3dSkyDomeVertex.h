@@ -41,6 +41,6 @@ namespace BrnGraphics
     };
 
     // The stride BrnSkyDomeManager::CreateGeometry allocates (20 * vertexCount).
-    static_assert(sizeof(Im3dSkyDomeVertex) == 20,
+    CGS_STATIC_ASSERT((sizeof(Im3dSkyDomeVertex) == 20),
                   "Im3dSkyDomeVertex is the 20-byte float3 + float2 sky-dome vertex");
 }

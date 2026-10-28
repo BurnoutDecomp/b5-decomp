@@ -68,20 +68,20 @@ namespace Vehicle
     {
         using namespace X360Layout;
 
-        static_assert(KU_TP_OWN_BASE == KU_VP_SIZEOF,
+        CGS_STATIC_ASSERT((KU_TP_OWN_BASE == KU_VP_SIZEOF),
                       "TP: the own block must start exactly where VehiclePhysics's closes (0x13F0) -- "
                       "an anchor a different wave derived from different functions");
 
         // DWARF TrafficPhysics.h:117 -- EntityId, one 32-bit packed handle on both platforms.
         const unsigned KU_A_OWNERID       = KU_TP_OWN_BASE;                       // :117  0x13F0
         const unsigned KU_A_FREAKOUTSTATE = KU_A_OWNERID + 4u;                    // :118
-        static_assert(KU_A_FREAKOUTSTATE == KU_TP_FREAKOUTSTATE_OFF,
+        CGS_STATIC_ASSERT((KU_A_FREAKOUTSTATE == KU_TP_FREAKOUTSTATE_OFF),
                       "TP: mOwnerID (EntityId, 4) must land mu8FreakOutState on the asm-literal "
                       "0x13F4 (SetFreakedOut `stb r11, 0x13F4(r3)`)");
 
         // :118 is one byte; :119 is an f32, so it 4-aligns.
         const unsigned KU_A_FREAKOUTDIR   = ((KU_A_FREAKOUTSTATE + 1u) + 3u) & ~3u;   // :119
-        static_assert(KU_A_FREAKOUTDIR == KU_TP_FREAKOUTDIR_OFF,
+        CGS_STATIC_ASSERT((KU_A_FREAKOUTDIR == KU_TP_FREAKOUTDIR_OFF),
                       "TP: the u8 state plus 4-alignment must land mfFreakOutDirection on the "
                       "asm-literal 0x13F8 (SetFreakedOut `stfs f1, 0x13F8(r3)`)");
 
@@ -89,10 +89,10 @@ namespace Vehicle
         // :122 is CgsNumeric::Random, which is 16-ALIGNED (its DWARF union carries a
         // VectorIntrinsic[2]) -- so it rounds up, and on the console it happens to need no pad.
         const unsigned KU_A_RANDOM        = ((KU_A_FREAKOUTTIME + 4u) + 15u) & ~15u;  // :122
-        static_assert(KU_A_RANDOM == KU_TP_RANDOM_OFF,
+        CGS_STATIC_ASSERT((KU_A_RANDOM == KU_TP_RANDOM_OFF),
                       "TP: the two f32 timers plus Random's 16-alignment must land mRandom on the "
                       "asm-literal 0x1400 (Construct `addi r11, r31, 0x1400`, then `stw <1.0f>, 0`)");
-        static_assert(KU_A_RANDOM == KU_A_FREAKOUTTIME + 4u,
+        CGS_STATIC_ASSERT((KU_A_RANDOM == KU_A_FREAKOUTTIME + 4u),
                       "TP: ...and with ZERO alignment slack -- 0x13FC + 4 is already 16-aligned, so "
                       "there is no room here for an unmodelled member");
 
@@ -100,13 +100,13 @@ namespace Vehicle
         // ---- index. Both interior seats are asm literals of TrafficPhysics::Construct.
         const unsigned KU_A_RANDOM_SEED  = KU_A_RANDOM
                                          + ((CgsNumeric::KU_FLOAT_BUFFER_SIZE * 4u) + 7u) / 8u * 8u;
-        static_assert(KU_A_RANDOM_SEED == KU_TP_RANDOM_SEED_OFF,
+        CGS_STATIC_ASSERT((KU_A_RANDOM_SEED == KU_TP_RANDOM_SEED_OFF),
                       "TP: the 8-slot float ring (8 * 4 == 32, and muSeed is 8-aligned) must land "
                       "muSeed on the asm-literal 0x1420 (Construct `std r8, 0x20(r11)`; Update "
                       "@0x82639824 reads the same 0x1420 to step the LCG)");
 
         const unsigned KU_A_RANDOM_INDEX = KU_A_RANDOM_SEED + 8u;
-        static_assert(KU_A_RANDOM_INDEX == KU_TP_RANDOM_INDEX_OFF,
+        CGS_STATIC_ASSERT((KU_A_RANDOM_INDEX == KU_TP_RANDOM_INDEX_OFF),
                       "TP: the u64 seed must land muOldestBufferIndex on the asm-literal 0x1428 "
                       "(Construct `stw r30, 0x28(r11)`)");
 
@@ -115,10 +115,10 @@ namespace Vehicle
         // bakes as a literal for maFullTrafficPhysics[20]. Nothing in this file knows about that
         // function; it just has to land on it.
         const unsigned KU_A_TP_SIZEOF = (KU_A_RANDOM_INDEX + 4u + 15u) & ~15u;
-        static_assert(KU_A_TP_SIZEOF == KU_TP_SIZEOF,
+        CGS_STATIC_ASSERT((KU_A_TP_SIZEOF == KU_TP_SIZEOF),
                       "⭐⭐ TP CLOSURE: the own block must end exactly at 0x1430 == the 20-element "
                       "stride `mulli r11, r29, 0x1430` in PhysicalTrafficManager::Construct");
-        static_assert(KU_A_TP_SIZEOF - KU_TP_OWN_BASE == 0x40u,
+        CGS_STATIC_ASSERT((KU_A_TP_SIZEOF - KU_TP_OWN_BASE == 0x40u),
                       "TP: the whole own block is 64 bytes -- 16 of scalars + a 48-byte Random");
     }
 
@@ -128,15 +128,15 @@ namespace Vehicle
     // ==============================================================================================
     void TrafficPhysics::_AssertOwnBlockLayout()
     {
-        static_assert(sizeof(EntityId) == 4,
+        CGS_STATIC_ASSERT((sizeof(EntityId) == 4),
                       "EntityId is one packed 32-bit handle on both platforms (BrnCommonTypes.h:27) "
                       "-- if it ever widens, every seat in PART 1 moves");
-        static_assert(sizeof(CgsNumeric::Random) == 0x30 && alignof(CgsNumeric::Random) == 16,
+        CGS_STATIC_ASSERT((sizeof(CgsNumeric::Random) == 0x30 && __alignof(CgsNumeric::Random) == 16),
                       "CgsNumeric::Random: 48 bytes, 16-aligned. Both halves matter here -- the SIZE "
                       "closes the block on 0x1430 and the ALIGNMENT is what seats it on 0x1400 with "
                       "no pad. This is the assert that fires if anyone re-forks the 4-byte "
                       "`struct Random { u32 muState; }` this header used to carry.");
-        static_assert(CgsNumeric::KU_FLOAT_BUFFER_SIZE == 8,
+        CGS_STATIC_ASSERT((CgsNumeric::KU_FLOAT_BUFFER_SIZE == 8),
                       "the 8-slot ring TrafficPhysics::Construct primes -- it emits exactly ONE "
                       "direct store (slot 0 = 1.0f) plus SEVEN unrolled refills");
 
@@ -145,28 +145,28 @@ namespace Vehicle
         // moves NOTHING and the offset arithmetic cannot see it -- yet the console plainly stores it
         // with `stb` (SetFreakedOut @0x825B89B0) and loads it with `lbz` (Update @0x82639690). These
         // four lines are the only thing between that and a silent width change.
-        static_assert(sizeof(TrafficPhysics::mOwnerID) == 4,
+        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mOwnerID) == 4),
                       "mOwnerID is one 32-bit packed EntityId");
-        static_assert(sizeof(TrafficPhysics::mu8FreakOutState) == 1,
+        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mu8FreakOutState) == 1),
                       "mu8FreakOutState is a BYTE -- SetFreakedOut `stb r11, 0x13F4(r3)` and Update "
                       "`lbz r11, 0x13F4(r30)`");
-        static_assert(sizeof(TrafficPhysics::mfFreakOutDirection) == 4,
+        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mfFreakOutDirection) == 4),
                       "mfFreakOutDirection is an f32 -- SetFreakedOut `stfs f1, 0x13F8(r3)`");
-        static_assert(sizeof(TrafficPhysics::mfFreakOutTime) == 4,
+        CGS_STATIC_ASSERT((sizeof(TrafficPhysics::mfFreakOutTime) == 4),
                       "mfFreakOutTime is an f32 -- Update `lfs f0, 0x13FC(r30)` / `stfs f0, 0x13FC`");
 
         // The block's own members must still EXIST, under these names, in this ORDER. Absolute host
         // offsets are deliberately not asserted (see the banner); the relative order is the part
         // PART 1's arithmetic assumes and cannot itself see.
         typedef TrafficPhysics T;
-        static_assert(offsetof(T, mOwnerID) < offsetof(T, mu8FreakOutState), "DWARF :117 < :118");
-        static_assert(offsetof(T, mu8FreakOutState) < offsetof(T, mfFreakOutDirection), "DWARF :118 < :119");
-        static_assert(offsetof(T, mfFreakOutDirection) < offsetof(T, mfFreakOutTime), "DWARF :119 < :120");
-        static_assert(offsetof(T, mfFreakOutTime) < offsetof(T, mRandom), "DWARF :120 < :122");
+        CGS_STATIC_ASSERT((offsetof(T, mOwnerID) < offsetof(T, mu8FreakOutState)), "DWARF :117 < :118");
+        CGS_STATIC_ASSERT((offsetof(T, mu8FreakOutState) < offsetof(T, mfFreakOutDirection)), "DWARF :118 < :119");
+        CGS_STATIC_ASSERT((offsetof(T, mfFreakOutDirection) < offsetof(T, mfFreakOutTime)), "DWARF :119 < :120");
+        CGS_STATIC_ASSERT((offsetof(T, mfFreakOutTime) < offsetof(T, mRandom)), "DWARF :120 < :122");
 
         // And the block really is the TAIL of the class: nothing may be declared behind mRandom, or
         // the console's 0x1430 stride would not be the whole object.
-        static_assert(offsetof(T, mRandom) + sizeof(CgsNumeric::Random) == sizeof(T),
+        CGS_STATIC_ASSERT((offsetof(T, mRandom) + sizeof(CgsNumeric::Random) == sizeof(T)),
                       "mRandom is the last member -- the block closes the class, exactly as the "
                       "0x1430 stride requires on the console");
 

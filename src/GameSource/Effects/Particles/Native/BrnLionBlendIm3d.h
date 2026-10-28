@@ -128,40 +128,40 @@ namespace BrnGraphics
     // they are named in the message, not asserted.
     struct Im3dBlendLayoutCheck
     {
-        static_assert(sizeof(renderengine::ProgramVariableHandle) == 4,
+        CGS_STATIC_ASSERT((sizeof(renderengine::ProgramVariableHandle) == 4),
                       "ProgramVariableHandle is the 4-byte handle (programbuffer.h)");
 
 #define IM3DBLEND_HANDLE_DELTA(a, b) \
     (offsetof(Im3dBlend, b) - offsetof(Im3dBlend, a))
 
-        static_assert(IM3DBLEND_HANDLE_DELTA(mViewProjectionMatrixStateHandle_Normal,
-                                             mColourScaleStateHandle_Normal) == 0xC4 - 0xC0,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mViewProjectionMatrixStateHandle_Normal,
+                                             mColourScaleStateHandle_Normal) == 0xC4 - 0xC0),
                       "Construct asm word 45 (0x8229B394 addi r5,r31,0xC4) -- \"colourScale\" program 0");
-        static_assert(IM3DBLEND_HANDLE_DELTA(mColourScaleStateHandle_Normal,
-                                             mViewProjectionMatrixStateHandle_ZFade) == 0xC8 - 0xC4,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mColourScaleStateHandle_Normal,
+                                             mViewProjectionMatrixStateHandle_ZFade) == 0xC8 - 0xC4),
                       "Construct asm word 58 (0x8229B3C8 addi r5,r31,0xC8) -- \"worldViewProj\" program 1");
-        static_assert(IM3DBLEND_HANDLE_DELTA(mViewProjectionMatrixStateHandle_ZFade,
-                                             mColourScaleStateHandle_ZFade) == 0xCC - 0xC8,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mViewProjectionMatrixStateHandle_ZFade,
+                                             mColourScaleStateHandle_ZFade) == 0xCC - 0xC8),
                       "Construct asm word 67 (0x8229B3FC addi r5,r31,0xCC) -- \"colourScale\" program 1");
-        static_assert(IM3DBLEND_HANDLE_DELTA(mColourScaleStateHandle_ZFade,
-                                             mOffsetStateHandle_ZFade) == 0xD0 - 0xCC,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mColourScaleStateHandle_ZFade,
+                                             mOffsetStateHandle_ZFade) == 0xD0 - 0xCC),
                       "Construct asm word 77 (0x8229B438 addi r5,r31,0xD0) -- \"gOffset\"");
-        static_assert(IM3DBLEND_HANDLE_DELTA(mOffsetStateHandle_ZFade,
-                                             mScaleStateHandle_ZFade) == 0xD4 - 0xD0,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mOffsetStateHandle_ZFade,
+                                             mScaleStateHandle_ZFade) == 0xD4 - 0xD0),
                       "Construct asm word 86 (0x8229B470 addi r5,r31,0xD4) -- \"gScale\"");
-        static_assert(IM3DBLEND_HANDLE_DELTA(mScaleStateHandle_ZFade,
-                                             mDepthConversionStateHandle_ZFade) == 0xD8 - 0xD4,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mScaleStateHandle_ZFade,
+                                             mDepthConversionStateHandle_ZFade) == 0xD8 - 0xD4),
                       "Construct asm word 98 (0x8229B4B0 addi r5,r31,0xD8) -- \"gDepthConversion\"");
-        static_assert(IM3DBLEND_HANDLE_DELTA(mDepthConversionStateHandle_ZFade,
-                                             mDepthFadeStateHandle_ZFade) == 0xDC - 0xD8,
+        CGS_STATIC_ASSERT((IM3DBLEND_HANDLE_DELTA(mDepthConversionStateHandle_ZFade,
+                                             mDepthFadeStateHandle_ZFade) == 0xDC - 0xD8),
                       "Construct asm word 107 (0x8229B4E8 addi r5,r31,0xDC) -- \"gDepthFadeConstants\"");
 
         // THE KEYSTONE: the handle block is the LAST thing in Im3dBlend. On the console that is
         // 0xE0 - 0xC0 == 0x20 bytes, and 0xE0 is where SetCameraData @0x822824F8 (asm word 8,
         // `stfs f10, 0xE0(r3)`) starts writing LionBlendRenderer::mCameraTransform. If this ever
         // fails, a member was added to Im3dBlend that the console does not have.
-        static_assert(sizeof(Im3dBlend)
-                        - offsetof(Im3dBlend, mViewProjectionMatrixStateHandle_Normal) == 0xE0 - 0xC0,
+        CGS_STATIC_ASSERT((sizeof(Im3dBlend)
+                        - offsetof(Im3dBlend, mViewProjectionMatrixStateHandle_Normal) == 0xE0 - 0xC0),
                       "Im3dBlend ends at the console's 0xE0 -- SetCameraData asm word 8 "
                       "(0x82282518 stfs f10, 0xE0(r3)) writes mCameraTransform there");
 

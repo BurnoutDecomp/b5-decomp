@@ -172,7 +172,7 @@ namespace
             s32 miOffset;
             GuiAudioTriggerWirePayload457 mPayload;
         } lWire = { 100, 457, 12, {} };
-        static_assert(sizeof(GuiAudioTriggerWire) == 112,
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112),
                       "ARTIST GUI audio trigger wrapper size");
         std::memcpy(&lWire.mPayload, lEvent.macComponent, sizeof(lWire.mPayload));
         lpStateInterface->GetOutputEventQueue()->AddEvent(
@@ -1539,11 +1539,11 @@ namespace
                     mSelectRoutes.GetNumberCheckpoints(mSelectRoutes.GetCurrentRound()),
                     mSelectRoutes.GetCurrentRound()
                 };
-                static_assert(sizeof(lCreatedRoute.maData) == sizeof(laiRouteParams),
+                CGS_STATIC_ASSERT((sizeof(lCreatedRoute.maData) == sizeof(laiRouteParams)),
                               "custom-route-created payload");
                 std::memcpy(lCreatedRoute.maData, laiRouteParams, sizeof(laiRouteParams));
                 CgsGui::GuiEventWrapper<GuiNetworkCustomRouteCreated, 40> lWrapper(lCreatedRoute);
-                static_assert(sizeof(lWrapper) == 20, "custom-route-created wrapper");
+                CGS_STATIC_ASSERT((sizeof(lWrapper) == 20), "custom-route-created wrapper");
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lWrapper), 40,
                     static_cast<s32>(sizeof(lWrapper)));

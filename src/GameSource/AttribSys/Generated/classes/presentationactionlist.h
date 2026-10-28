@@ -21,8 +21,8 @@ namespace Gen
     class presentationactionlist : private Instance
     {
     public:
-        explicit presentationactionlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit presentationactionlist(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit presentationactionlist(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit presentationactionlist(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
 
         void ChangeWithDefault(const RefSpec& lrRefSpec)

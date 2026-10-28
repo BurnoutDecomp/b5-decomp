@@ -24,7 +24,7 @@ namespace BrnGui
     {
         // BrnCarouselSliderBar.cpp:48 @ 0x8241BB50 -- base Construct then init both flags.
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpacParentName) override;
+                       const char* lpacParentName) ;
 
         // BrnCarouselSliderBar.cpp:68 @ 0x8241BB90 -- publish the bar extents (and, when
         // dirty, the visibility) into the carousel's apt view states.

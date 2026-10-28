@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cmath>   // VMX arithmetic and reciprocal-square-root estimate model
-#include <cstdint> // original sign XOR and bit-select
+#include "types.hpp" // original sign XOR and bit-select
 #include <cstring> // float-word transfers
 #include <cstddef> // offsetof (the layout pins below)
 
@@ -64,7 +64,7 @@ namespace vpu
         }
         inline float FlipSign(float lfValue)
         {
-            std::uint32_t luWord;
+            uint32_t luWord;
             std::memcpy(&luWord, &lfValue, sizeof(luWord));
             luWord ^= 0x80000000u;
             std::memcpy(&lfValue, &luWord, sizeof(lfValue));
@@ -72,19 +72,19 @@ namespace vpu
         }
         inline float Select(float lfA, float lfB, bool lbSelectB)
         {
-            std::uint32_t luA, luB;
+            uint32_t luA, luB;
             std::memcpy(&luA, &lfA, sizeof(luA));
             std::memcpy(&luB, &lfB, sizeof(luB));
-            const std::uint32_t luMask = 0u - static_cast<std::uint32_t>(lbSelectB);
-            const std::uint32_t luResult = (luA & ~luMask) | (luB & luMask);
+            const uint32_t luMask = 0u - static_cast<uint32_t>(lbSelectB);
+            const uint32_t luResult = (luA & ~luMask) | (luB & luMask);
             float lfResult;
             std::memcpy(&lfResult, &luResult, sizeof(lfResult));
             return lfResult;
         }
         inline Quaternion Select(Quaternion lA, Quaternion lB, bool lbSelectB)
         {
-            return Quaternion{Select(lA.x, lB.x, lbSelectB), Select(lA.y, lB.y, lbSelectB),
-                              Select(lA.z, lB.z, lbSelectB), Select(lA.w, lB.w, lbSelectB)};
+            { const Quaternion lResult = {Select(lA.x, lB.x, lbSelectB), Select(lA.y, lB.y, lbSelectB),
+                              Select(lA.z, lB.z, lbSelectB), Select(lA.w, lB.w, lbSelectB)}; return lResult; }
         }
         inline float RefinedReciprocalSqrt(float lfValue)
         {
@@ -204,23 +204,23 @@ namespace physics
     // does NOT validate -- transcribed as shipped, not "completed".
     inline void _rw_physics_JointFrames_AssertLayout()
     {
-        static_assert(offsetof(JointFrames, mQuatA) == 0x00, "mQuatA @+0x00 (JointJacobian::Build lvx128 over [r26])");
-        static_assert(offsetof(JointFrames, mPosA)  == 0x10, "mPosA  @+0x10");
-        static_assert(offsetof(JointFrames, mQuatB) == 0x20, "mQuatB @+0x20");
-        static_assert(offsetof(JointFrames, mPosB)  == 0x30, "mPosB  @+0x30");
-        static_assert(offsetof(JointFrames, mQuatL) == 0x40, "mQuatL @+0x40 (Build r25 = 0x40 over body B; BurnoutPR [esi+40h])");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatA) == 0x00), "mQuatA @+0x00 (JointJacobian::Build lvx128 over [r26])");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosA)  == 0x10), "mPosA  @+0x10");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatB) == 0x20), "mQuatB @+0x20");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosB)  == 0x30), "mPosB  @+0x30");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatL) == 0x40), "mQuatL @+0x40 (Build r25 = 0x40 over body B; BurnoutPR [esi+40h])");
 
         // Adjacency form -- survives a member WIDENING, which the stride check below would not.
-        static_assert(offsetof(JointFrames, mPosA)  == offsetof(JointFrames, mQuatA) + sizeof(JointFrames::mQuatA), "mPosA follows mQuatA");
-        static_assert(offsetof(JointFrames, mQuatB) == offsetof(JointFrames, mPosA)  + sizeof(JointFrames::mPosA),  "mQuatB follows mPosA");
-        static_assert(offsetof(JointFrames, mPosB)  == offsetof(JointFrames, mQuatB) + sizeof(JointFrames::mQuatB), "mPosB follows mQuatB");
-        static_assert(offsetof(JointFrames, mQuatL) == offsetof(JointFrames, mPosB)  + sizeof(JointFrames::mPosB),  "mQuatL follows mPosB");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosA)  == offsetof(JointFrames, mQuatA) + sizeof(JointFrames::mQuatA)), "mPosA follows mQuatA");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatB) == offsetof(JointFrames, mPosA)  + sizeof(JointFrames::mPosA)),  "mQuatB follows mPosA");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mPosB)  == offsetof(JointFrames, mQuatB) + sizeof(JointFrames::mQuatB)), "mPosB follows mQuatB");
+        CGS_STATIC_ASSERT((offsetof(JointFrames, mQuatL) == offsetof(JointFrames, mPosB)  + sizeof(JointFrames::mPosB)),  "mQuatL follows mPosB");
 
         // The X360-attested ARRAY STRIDE. ProcessUpdateJointFramesQueue @0x8289F4E8 steps
         // JointData::maFrames by `slwi r10,r31,2 / add r10,r31,r10 / slwi r10,r10,4` == i*5*16
         // == i*80, and copies exactly FIVE 16-byte lanes at 0/0x10/0x20/0x30/0x40. The drive
         // sibling does four at a stride of 64 -- this record is one quaternion larger.
-        static_assert(sizeof(JointFrames) == 80, "JointFrames array stride 80 (drain i*80 + FIVE lvx128 lanes)");
+        CGS_STATIC_ASSERT((sizeof(JointFrames) == 80), "JointFrames array stride 80 (drain i*80 + FIVE lvx128 lanes)");
     }
 }
 }

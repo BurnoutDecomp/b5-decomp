@@ -5,7 +5,7 @@
 // base is this+0 with a 1712-byte stride, the car-id table is at this+47936, and the live-slot
 // BitArray is at this+48048. (The private-member offset pins are checked in _AssertLayout below,
 // which has member access; the public element stride is asserted here.)
-static_assert(sizeof(BrnPhysics::Deformation::CarStateRecord) == 0x6B0, "CarStateRecord stride 1712");
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::CarStateRecord) == 0x6B0), "CarStateRecord stride 1712");
 
 // BrnPhysics::Deformation::DeformationState::GetCarStateF @ 0x822CC340
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (asm authoritative). The deformation manager keeps
@@ -32,9 +32,9 @@ namespace Deformation
 {
     void DeformationState::_AssertLayout()
     {
-        static_assert(offsetof(DeformationState, maCarStates) == 0, "maCarStates @0");
-        static_assert(offsetof(DeformationState, maCarIds) == 47936, "maCarIds @47936");
-        static_assert(offsetof(DeformationState, mxLiveSlots) == 48048, "mxLiveSlots @48048");
+        CGS_STATIC_ASSERT((offsetof(DeformationState, maCarStates) == 0), "maCarStates @0");
+        CGS_STATIC_ASSERT((offsetof(DeformationState, maCarIds) == 47936), "maCarIds @47936");
+        CGS_STATIC_ASSERT((offsetof(DeformationState, mxLiveSlots) == 48048), "mxLiveSlots @48048");
     }
 
     const CarStateRecord* DeformationState::GetCarStateF(u32 luCarId) const
@@ -50,7 +50,7 @@ namespace Deformation
             }
             liSlot = mxLiveSlots.GetNextNonZeroBit(liSlot);
         }
-        return nullptr;
+        return 0;
     }
 }
 }

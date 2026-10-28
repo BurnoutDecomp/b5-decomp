@@ -22,7 +22,7 @@ namespace CgsDev
 
         ErrorWindow::ErrorWindow()
             : Window()
-            , mpcErrorMessage(nullptr)
+            , mpcErrorMessage(0)
             , mfPulse(0.0f)
         {
         }
@@ -40,7 +40,7 @@ namespace CgsDev
             const Metrics& lrMetrics = GetMetrics();
             const f32 lfWidth = lrMetrics.mfScreenWidth * KF_ERRORWINDOWWIDTH;
             const f32 lfHeight = lrMetrics.mfScreenHeight * KF_ERRORWINDOWHEIGHT;
-            Window::Prepare(lfWidth, lfHeight, nullptr,
+            Window::Prepare(lfWidth, lfHeight, 0,
                             KX_FLAGNOCAPTION | KX_FLAGNOBACKGROUND |
                             KX_FLAGMODAL | KX_FLAGNOCASCADE);
             SetPosition((lrMetrics.mfScreenWidth - lfWidth) * 0.5f,

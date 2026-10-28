@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
-#include <cstdint>  // uintptr_t (Construct's two 128-byte buffer-alignment tripwires)
+#include "types.hpp"  // uintptr_t (Construct's two 128-byte buffer-alignment tripwires)
 #include <atomic>   // std::atomic_thread_fence (End's console lwsync)
 
 namespace CgsMemory

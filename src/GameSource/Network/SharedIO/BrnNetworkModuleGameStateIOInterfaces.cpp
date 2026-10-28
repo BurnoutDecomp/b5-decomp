@@ -86,7 +86,7 @@ namespace BrnNetwork
         // interface's own events stay in front), then take its frame counter.
         void NetworkToGameStateInterface::Append(const NetworkToGameStateInterface* lpCopyFrom)
         {
-            CGS_ASSERT(lpCopyFrom != nullptr, "lpCopyFrom");
+            CGS_ASSERT(lpCopyFrom != 0, "lpCopyFrom");
 
             mDirtyTrickEventQueue.Append(lpCopyFrom->mDirtyTrickEventQueue);
             mRoadRulesReceivedQueue.Append(lpCopyFrom->mRoadRulesReceivedQueue);

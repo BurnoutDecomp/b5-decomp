@@ -43,12 +43,12 @@ namespace rw { namespace core { namespace debug {
         // Defined here (Manager owns it); IFormatter reads it via ManagerAllocatorSlot().
         ::rw::IResourceAllocator*& ManagerAllocatorSlot()
         {
-            static ::rw::IResourceAllocator* spAllocator = nullptr;
+            static ::rw::IResourceAllocator* spAllocator = 0;
             return spAllocator;
         }
 
         // X360 dword_8327F048 -- the singleton IFormatter instance published by CreateInstance.
-        ::rw::core::debug::IFormatter* spFormatterInstance = nullptr;
+        ::rw::core::debug::IFormatter* spFormatterInstance = 0;
 
     }  // namespace detail
 
@@ -67,7 +67,7 @@ namespace rw { namespace core { namespace debug {
         }
         else
         {
-            detail::spFormatterInstance = nullptr;
+            detail::spFormatterInstance = 0;
         }
 
         return 0;

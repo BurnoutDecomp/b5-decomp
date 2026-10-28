@@ -93,8 +93,8 @@ void CgsSystem::HardwareInit::InitializeHardware(s32 lnArgc, char** lapcArgv,
 {
     // The X360 has no separate working-/fopen-directory roots to override, so any
     // caller-supplied override is a programming error.
-    CGS_ASSERT(lpcWorkingDirOverride == nullptr, "Can not override working dir on xbox\n");
-    CGS_ASSERT(lpcFOpenDirOverride == nullptr, "Can not override fopen dir on xbox\n");
+    CGS_ASSERT(lpcWorkingDirOverride == 0, "Can not override working dir on xbox\n");
+    CGS_ASSERT(lpcFOpenDirOverride == 0, "Can not override fopen dir on xbox\n");
 
     // --- Bring up the job manager ---------------------------------------------
     // Build the engine's general heap over the static buffer and expose it to the

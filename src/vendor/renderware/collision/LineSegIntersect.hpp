@@ -78,12 +78,12 @@ struct VolumeLineSegIntersectResult
     VolRef vRef;        // +0x50  the hit volume reference (0x80 stride)
 };
 
-static_assert(offsetof(VolumeLineSegIntersectResult, position)  == 0x10, "VLSIR layout");
-static_assert(offsetof(VolumeLineSegIntersectResult, normal)    == 0x20, "VLSIR layout");
-static_assert(offsetof(VolumeLineSegIntersectResult, volParam)  == 0x30, "VLSIR layout");
-static_assert(offsetof(VolumeLineSegIntersectResult, lineParam) == 0x40, "VLSIR layout");
-static_assert(offsetof(VolumeLineSegIntersectResult, vRef)      == 0x50, "VLSIR layout");
-static_assert(sizeof(VolumeLineSegIntersectResult) == 0xD0,
+CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, position)  == 0x10), "VLSIR layout");
+CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, normal)    == 0x20), "VLSIR layout");
+CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, volParam)  == 0x30), "VLSIR layout");
+CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, lineParam) == 0x40), "VLSIR layout");
+CGS_STATIC_ASSERT((offsetof(VolumeLineSegIntersectResult, vRef)      == 0x50), "VLSIR layout");
+CGS_STATIC_ASSERT((sizeof(VolumeLineSegIntersectResult) == 0xD0),
               "result record must match the X360 208-byte result-list stride");
 
 // ---------------------------------------------------------------------------

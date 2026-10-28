@@ -8,7 +8,7 @@ namespace CgsResource
 class GenericRwacWaveContentResourceType : public BinaryFileResourceType
 {
 public:
-    uint32_t GetTypeID() const override;
+    uint32_t GetTypeID() const ;
 };
 }
 

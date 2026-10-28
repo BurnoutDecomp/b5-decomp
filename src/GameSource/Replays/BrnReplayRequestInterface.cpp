@@ -3,7 +3,7 @@
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdint>
+#include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (BrnReplays::ReplayIO::RequestInterface).
 //
@@ -36,10 +36,10 @@ namespace ReplayIO
                 !(mapSerialisers[liIndex] && lpOther->mapSerialisers[liIndex]),
                 "Only one of each type of serialiser can be registered\n");
 
-            std::uintptr_t luThis  =
-                reinterpret_cast<std::uintptr_t>(mapSerialisers[liIndex]);
-            std::uintptr_t luOther =
-                reinterpret_cast<std::uintptr_t>(lpOther->mapSerialisers[liIndex]);
+            uintptr_t luThis  =
+                reinterpret_cast<uintptr_t>(mapSerialisers[liIndex]);
+            uintptr_t luOther =
+                reinterpret_cast<uintptr_t>(lpOther->mapSerialisers[liIndex]);
 
             mapSerialisers[liIndex] =
                 reinterpret_cast<BaseSerialiser*>(luThis | luOther);

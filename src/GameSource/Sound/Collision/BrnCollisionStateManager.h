@@ -277,9 +277,9 @@ public:
 
     // ---- boot + lifecycle virtuals ----
     virtual bool Prepare();                       // @ 0x826F8B78  (vtable +0x0C)
-    virtual CgsSound::Logic::State* GetFreeState(void* apvAttachment) override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual void Notify(const CgsSound::Io::MessageHeader* apkMessage) override;
+    virtual CgsSound::Logic::State* GetFreeState(void* apvAttachment) ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual void Notify(const CgsSound::Io::MessageHeader* apkMessage) ;
 
     // ---- IResourceRequester overrides (pure in IResourceRequester; BrnStateManager
     // declares but does not body them, so the concrete leaf must override+body them). ----

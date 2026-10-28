@@ -118,7 +118,7 @@ namespace CgsResource
         u32 luCount = *reinterpret_cast<const u32*>(lBase + 104);
         if (luIndex >= luCount)
         {
-            *lppValue = nullptr;
+            *lppValue = 0;
             *lpuOffset = 0;
         }
         else

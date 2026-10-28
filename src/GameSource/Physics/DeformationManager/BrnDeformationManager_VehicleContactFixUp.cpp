@@ -100,7 +100,7 @@ namespace Deformation
 
         inline Vector3 SphereCentre(const Vector4& lrPosRadius)
         {
-            return Vector3{ lrPosRadius.x, lrPosRadius.y, lrPosRadius.z, 0.0f };
+            { const Vector3 lResult = { lrPosRadius.x, lrPosRadius.y, lrPosRadius.z, 0.0f }; return lResult; }
         }
 
         inline bool IsValid3(const Vector3& lrV)   // per-lane self-compare NaN tripwire
@@ -291,7 +291,7 @@ namespace Deformation
         // `vcmpgtfp. 0 > dot ; beq accept`, and `beq` is taken when the all-true bit is CLEAR -- so the
         // test is !(0 > dot), and a NaN dot ACCEPTS the neighbour. (`dot >= 0` refused a NaN dot and
         // fell to the no-neighbour arm, where the console runs the tangent arm.)
-        const DeformationSensor* lpNeighbour = nullptr;
+        const DeformationSensor* lpNeighbour = 0;
         const u8 lu8Neighbour0 = lrSensor.mpSpec->mau8NextBoundarySensor[0];
         if (static_cast<s32>(lu8Neighbour0) != liSensorIndex)
         {
@@ -320,7 +320,7 @@ namespace Deformation
         Vector3 lLocalNormal;
         bool    lbInterpolated = false;
 
-        if (lpNeighbour == nullptr)
+        if (lpNeighbour == 0)
         {
             // No neighbour faces the other car: plain sphere-surface point along the flattened
             // direction from the sensor centre to the incoming point.

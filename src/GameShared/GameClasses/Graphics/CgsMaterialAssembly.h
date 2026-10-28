@@ -80,9 +80,9 @@ namespace CgsGraphics
     };
 
     // The console header size MaterialResourceType::FixUp relocates in place.
-    static_assert(sizeof(MaterialAssembly) == 28,
+    CGS_STATIC_ASSERT((sizeof(MaterialAssembly) == 28),
                   "CgsGraphics::MaterialAssembly must be the console's 28-byte on-disc header");
-    static_assert(offsetof(MaterialAssembly, mu8NumMaterials) == 0x08,
+    CGS_STATIC_ASSERT((offsetof(MaterialAssembly, mu8NumMaterials) == 0x08),
                   "MaterialAssembly::mu8NumMaterials must be at +0x08");
 }
 

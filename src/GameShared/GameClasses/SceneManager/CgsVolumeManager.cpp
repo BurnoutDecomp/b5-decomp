@@ -69,12 +69,12 @@ namespace CgsSceneManager
 namespace
 {
     // The byte image of rw::collision::AABBox over the vendor POD Vector3 this TU speaks.
-    struct alignas(16) AABBoxRows
+    struct CGS_ALIGN(16) AABBoxRows
     {
         Vector3 mMin;   // AABBox +0x00
         Vector3 mMax;   // AABBox +0x10
     };
-    static_assert(sizeof(AABBoxRows) == 32, "AABBox image is two 16-byte rows");
+    CGS_STATIC_ASSERT((sizeof(AABBoxRows) == 32), "AABBox image is two 16-byte rows");
 }
 
 // ---------------------------------------------------------------------------

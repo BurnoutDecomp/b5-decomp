@@ -346,7 +346,7 @@ namespace BrnNetwork
     inline void BrnNetworkPlayer::_AssertLayout()
     {
 #define BRN_NP_AT(member, off) \
-        static_assert(sizeof(void*) != 4 || offsetof(BrnNetworkPlayer, member) == off, #member " @ " #off)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(BrnNetworkPlayer, member) == off), #member " @ " #off)
         BRN_NP_AT(mCompletedChallengesToSend,              0x0C48);
         BRN_NP_AT(mCachedBurnoutSkillzData,                0x0D48);
         BRN_NP_AT(mafPastLatencies,                        0x0D80);
@@ -378,7 +378,7 @@ namespace BrnNetwork
         BRN_NP_AT(mbHasResetCarTransformSinceLastUpdateSent, 0x222C);
         BRN_NP_AT(mbIsEliminated,                          0x2232);
         BRN_NP_AT(mbIsOnStartLine,                         0x2237);
-        static_assert(sizeof(void*) != 4 || sizeof(BrnNetworkPlayer) == 0x2240, "sizeof(BrnNetworkPlayer) == 0x2240");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(BrnNetworkPlayer) == 0x2240), "sizeof(BrnNetworkPlayer) == 0x2240");
 #undef BRN_NP_AT
     }
 }

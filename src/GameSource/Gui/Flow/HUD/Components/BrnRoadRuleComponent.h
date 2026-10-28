@@ -23,7 +23,7 @@
 // mLeftRoadAnimator @+0x160, mRightRoadAnimator @+0x198, mTransitionData @+0x3E8,
 // mUpcomingRoadData @+0x460, mCurrentRunningRoadID @+0x4E0, mabRulePending
 // @+0x4EA, mbRoadRulesVisible @+0x518, mbUpcomingRoadsVisible @+0x519.
-namespace BrnGameState { enum EActiveRoadRule : s32; }
+namespace BrnGameState { enum EActiveRoadRule ; }
 
 namespace BrnGui
 {

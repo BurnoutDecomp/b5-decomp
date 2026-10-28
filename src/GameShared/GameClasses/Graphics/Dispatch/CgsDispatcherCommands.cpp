@@ -250,8 +250,8 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
         lrList.mpDispatchBin = &m_Bin;
         lrList.muChainBlockCount = 0;
         lrList.muWord00 = 0;
-        lrList.mpBlockListHead = lrList.mpBlockListTail = nullptr;
-        lrList.mpSortedKeys = nullptr;
+        lrList.mpBlockListHead = lrList.mpBlockListTail = 0;
+        lrList.mpSortedKeys = 0;
         lrList.m_pBinBase = m_Bin.GetBase();
     }
 }
@@ -836,7 +836,7 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* lpInterpreter,
         // Bind the mesh geometry + draw.
         // ARTIST @0x827F59EC-0x827F5A30 enters the manager's per-mesh
         // conditional bracket after SetMeshBuffers and before either draw path.
-        const bool lbConditionalRender = spOcclusionCullManager != nullptr
+        const bool lbConditionalRender = spOcclusionCullManager != 0
             && spOcclusionCullManager->meOcclusionMode
                 == OcclusionCullManager::OCCLUSIONMODE_RENDER;
         if (lbConditionalRender)

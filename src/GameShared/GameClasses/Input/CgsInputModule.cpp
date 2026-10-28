@@ -40,7 +40,7 @@ void InputModule::Construct()
     mOutputUnbindResultQueue.Clear();
     mePrepareStage = E_INPUTPREPARESTAGE_START;
     meReleaseStage = E_INPUTRELEASESTAGE_DONE;
-    mpAllocator    = nullptr;
+    mpAllocator    = 0;
 }
 
 // X360 0x82903328 (export hole; ppcdis), the input module's vtable slot 17 (0x820CF648 + 0x44):
@@ -155,7 +155,7 @@ bool InputModule::Prepare(rw::IResourceAllocator* lpAllocator)
             // fall through
         case E_INPUTPREPARESTAGE_INPUTPADS:
             mePrepareStage = E_INPUTPREPARESTAGE_INPUTPADS;
-            CGS_ASSERT(lpAllocator != nullptr, "No allocator available\n");
+            CGS_ASSERT(lpAllocator != 0, "No allocator available\n");
             if (!mControllers.Prepare(lpAllocator))
             {
                 return false;

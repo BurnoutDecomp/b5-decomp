@@ -82,7 +82,7 @@ const PotentialContact* PotentialContactOrderer::GetContact(s32 liIndex)
     }
 
     CGS_ASSERT(false, "Couldn't find contact at specified index\n");
-    return nullptr;
+    return 0;
 }
 
 // X360 0x825B36E8: prune the ordered contact list. Walking from the earliest impact

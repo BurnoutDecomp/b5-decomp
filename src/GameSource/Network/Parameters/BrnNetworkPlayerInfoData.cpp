@@ -33,11 +33,11 @@ namespace BrnNetwork
 
     void* PlayerInfoData::GetData()
     {
-        return nullptr;
+        return 0;
     }
 
     const void* PlayerInfoData::GetData() const
     {
-        return nullptr;
+        return 0;
     }
 }

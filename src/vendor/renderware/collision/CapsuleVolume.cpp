@@ -3,7 +3,7 @@
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance (CreateGPInstance)
 
 #include <cmath>     // fabs
-#include <cstdint>   // uintptr_t (the console 32-bit mVolumeTag pointer image)
+#include "types.hpp"   // uintptr_t (the console 32-bit mVolumeTag pointer image)
 #include <cstring>   // memcpy (GetMaximumFeature edge copy)
 
 // ===========================================================================
@@ -165,7 +165,7 @@ RwBool CapsuleVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransfo
     Vec4 lvAxis;     // v0  -- the (optionally rotated) capsule axis, maFrame[2]
     Vec4 lvCentre;   // v13 -- the (optionally transformed) centre,  maFrame[3]
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         lvAxis   = RotateByTransform3x3(maFrame[2], lpTransform);
         lvCentre = TransformPointByTransform(maFrame[3], lpTransform);
@@ -284,7 +284,7 @@ RwBool CapsuleVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABBo
     f32 lfCentreY;
     f32 lfCentreZ;
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         const Vec4& lvM2   = maFrame[2];   // oriented axis
         const Vec4& lvM3   = maFrame[3];   // centre

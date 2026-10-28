@@ -26,21 +26,21 @@ namespace PhysicsSimulationIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mfTimeStepUsed)        == 0x0004,  "mfTimeStepUsed @ +0x0004");
-        static_assert(offsetof(OutputBuffer, muMaxIterationsUsed)   == 0x0008,  "muMaxIterationsUsed @ +0x0008");
-        static_assert(offsetof(OutputBuffer, mUpdateRigidBodyQueue) == 0x0010,  "mUpdateRigidBodyQueue @ +0x0010");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mfTimeStepUsed)        == 0x0004),  "mfTimeStepUsed @ +0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, muMaxIterationsUsed)   == 0x0008),  "muMaxIterationsUsed @ +0x0008");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mUpdateRigidBodyQueue) == 0x0010),  "mUpdateRigidBodyQueue @ +0x0010");
         // ⚠️ ADJACENCY PINS from here on (2026-08-06): OutUpdateRigidBody carries a full
         // rw::physics::RigidBody whose five pointer lanes widen on x64, so the queues after it
         // sit at console +0x9620/+0x1F430/+0x20040 ONLY on a 4-byte-pointer target. Each pin
         // states the console chain in host-tracking form; a transposed pair still fails.
-        static_assert(offsetof(OutputBuffer, mContactSpyQueue) ==
-                      offsetof(OutputBuffer, mUpdateRigidBodyQueue) + sizeof(OutUpdateRigidBodyQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mContactSpyQueue) ==
+                      offsetof(OutputBuffer, mUpdateRigidBodyQueue) + sizeof(OutUpdateRigidBodyQueue)),
                       "mContactSpyQueue right after mUpdateRigidBodyQueue (console +0x9620 == 0x10 + 16+200*192)");
-        static_assert(offsetof(OutputBuffer, mJointSpyQueue) ==
-                      offsetof(OutputBuffer, mContactSpyQueue) + sizeof(OutContactSpyQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mJointSpyQueue) ==
+                      offsetof(OutputBuffer, mContactSpyQueue) + sizeof(OutContactSpyQueue)),
                       "mJointSpyQueue right after mContactSpyQueue (console +0x1F430 == 0x9620 + 16+800*112; GetJointSpyQueue @0x8259F1C8)");
-        static_assert(offsetof(OutputBuffer, mDriveSpyQueue) ==
-                      offsetof(OutputBuffer, mJointSpyQueue) + sizeof(OutJointSpyQueue),
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mDriveSpyQueue) ==
+                      offsetof(OutputBuffer, mJointSpyQueue) + sizeof(OutJointSpyQueue)),
                       "mDriveSpyQueue right after mJointSpyQueue (console +0x20040 == 0x1F430 + 16+64*48; GetDriveSpyQueue @0x8259F270)");
     }
 

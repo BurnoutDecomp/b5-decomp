@@ -56,9 +56,9 @@ namespace BrnNetwork
         void RemovePlayer(LiveRevengeRelationship* lpRelationship);  // @ 0x825850C8
 
     protected:
-        const char* GetName() const override;   // @ 0x82585148 -> "Live Revenge"
-        const char* GetPath() const override;
-        void        OnActivate() override;       // @ 0x82594708
+        const char* GetName() const ;   // @ 0x82585148 -> "Live Revenge"
+        const char* GetPath() const ;
+        void        OnActivate() ;       // @ 0x82594708
 
     private:
         // Register/unregister the 16 (register) / 12 (unregister) "overall stats" menu variables of a

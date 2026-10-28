@@ -642,8 +642,8 @@ namespace Deformation
     void DetachedPartManager::UpdateTriangleCache(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface)
     {
-        CGS_ASSERT(lpSceneUpdateInterface != nullptr, "lpSceneUpdateInterface != NULL");   // :161
-        if ( lpSceneUpdateInterface == nullptr )
+        CGS_ASSERT(lpSceneUpdateInterface != 0, "lpSceneUpdateInterface != NULL");   // :161
+        if ( lpSceneUpdateInterface == 0 )
         {
             return;   // PC-safety guard (the console asserts and dereferences anyway)
         }

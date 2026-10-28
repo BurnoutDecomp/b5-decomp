@@ -30,7 +30,7 @@ namespace BrnNetwork
     bool NetworkNotificationManagerX360::Prepare()
     {
         mhNotifier = XNotifyCreateListener(1);   // li r3, 1 ; bl XNotifyCreateListener ; stw r3, 8(this)
-        CGS_ASSERT(mhNotifier != nullptr, "mhNotifier");
+        CGS_ASSERT(mhNotifier != 0, "mhNotifier");
         return true;                             // li r3, 1
     }
 
@@ -38,7 +38,7 @@ namespace BrnNetwork
     bool NetworkNotificationManagerX360::Release()
     {
         CloseHandle(mhNotifier);   // lwz r3, 8(this) ; bl CloseHandle
-        mhNotifier = nullptr;      // li r11, 0 ; stw r11, 8(this)
+        mhNotifier = 0;      // li r11, 0 ; stw r11, 8(this)
         return true;               // li r3, 1
     }
 

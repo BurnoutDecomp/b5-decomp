@@ -70,5 +70,5 @@ namespace BrnTraffic
 
     // Leak `typedef char __TmpArray[(sizeof( StopLine ) == 2)];` and the X360
     // Hull::GetStopLine stride. Load-bearing: mpaStopLines is indexed by name now.
-    static_assert(sizeof(StopLine) == 2, "BrnTraffic::StopLine stride (Hull::GetStopLine)");
+    CGS_STATIC_ASSERT((sizeof(StopLine) == 2), "BrnTraffic::StopLine stride (Hull::GetStopLine)");
 }

@@ -55,7 +55,7 @@ namespace CrashIO
     // 16 + 10*16 == 176 (12 + 10*16 == 172 on the console, mpEvents widening 4->8) -- the same
     // arithmetic the prop buffer's own banner records for the identical queue. alignas(16) is
     // kept: the EventQueue payload is SIMD-aligned.
-    struct alignas(16) RaceCarOutputInterface
+    struct CGS_ALIGN(16) RaceCarOutputInterface
     {
         typedef CgsModule::EventQueue<RaceCarCrashCompleteEvent, 10> RaceCarCrashCompleteEventQueue;
 

@@ -90,12 +90,12 @@ public:
     }
 
     // ---- the virtual interface (vtable off_8200A620) ------------------------------------------
-    void Construct() override;                                                    // slot 0 (cpp:51)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1 (cpp:69)
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // slot 2 (cpp:87)
-    CollisionPolicy* GetCollisionPolicy() override;                                // slot 5 (cpp:162)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // slot 6 (cpp:176)
-    const char* GetName() const override;                                          // slot 7 (cpp:198)
+    void Construct() ;                                                    // slot 0 (cpp:51)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;        // slot 1 (cpp:69)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;     // slot 2 (cpp:87)
+    CollisionPolicy* GetCollisionPolicy() ;                                // slot 5 (cpp:162)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;                         // slot 6 (cpp:176)
+    const char* GetName() const ;                                          // slot 7 (cpp:198)
 
 private:
     // ---- layout (DWARF :90..:97) ----------------------------------------------------------------

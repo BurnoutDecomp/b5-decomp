@@ -319,22 +319,22 @@ namespace LocalBackend
     static void LocalBackend_AssertLayout()
     {
         // Single vptr: first data member directly follows the one vtable pointer.
-        static_assert(offsetof(LocalBackend, mpJobInstances) == sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpJobInstances) == sizeof(void*)),
                       "single vptr: mpJobInstances is the first data member (one vtable ptr, no 2nd base)");
         // Member ORDER matches the X360 store sequence (offsets monotonic, ascending).
-        static_assert(offsetof(LocalBackend, mpJobInstances)  < offsetof(LocalBackend, mpPriorityQueue),  "mpJobInstances < mpPriorityQueue");
-        static_assert(offsetof(LocalBackend, mpPriorityQueue) < offsetof(LocalBackend, mNextSlot),        "mpPriorityQueue < mNextSlot");
-        static_assert(offsetof(LocalBackend, mNextSlot)       < offsetof(LocalBackend, mNumSlots),        "mNextSlot < mNumSlots");
-        static_assert(offsetof(LocalBackend, mNumSlots)       < offsetof(LocalBackend, mThreads),         "mNumSlots < mThreads");
-        static_assert(offsetof(LocalBackend, mThreads)        < offsetof(LocalBackend, mSubmissionCounter), "mThreads < mSubmissionCounter");
-        static_assert(offsetof(LocalBackend, mSubmissionCounter)     < offsetof(LocalBackend, mpProfilingCallback),     "mSubmissionCounter < mpProfilingCallback");
-        static_assert(offsetof(LocalBackend, mpProfilingCallback)    < offsetof(LocalBackend, mpProfilingContext),      "mpProfilingCallback < mpProfilingContext");
-        static_assert(offsetof(LocalBackend, mpProfilingContext)     < offsetof(LocalBackend, mGarbageCollectorCursor), "mpProfilingContext < mGarbageCollectorCursor");
-        static_assert(offsetof(LocalBackend, mGarbageCollectorCursor) < offsetof(LocalBackend, mpEnableProfiling),  "mGarbageCollectorCursor < mpEnableProfiling");
-        static_assert(offsetof(LocalBackend, mpEnableProfiling)  < offsetof(LocalBackend, mJobThreadSleepTimeoutMS),"mpEnableProfiling < mJobThreadSleepTimeoutMS");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpJobInstances)  < offsetof(LocalBackend, mpPriorityQueue)),  "mpJobInstances < mpPriorityQueue");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpPriorityQueue) < offsetof(LocalBackend, mNextSlot)),        "mpPriorityQueue < mNextSlot");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mNextSlot)       < offsetof(LocalBackend, mNumSlots)),        "mNextSlot < mNumSlots");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mNumSlots)       < offsetof(LocalBackend, mThreads)),         "mNumSlots < mThreads");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mThreads)        < offsetof(LocalBackend, mSubmissionCounter)), "mThreads < mSubmissionCounter");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mSubmissionCounter)     < offsetof(LocalBackend, mpProfilingCallback)),     "mSubmissionCounter < mpProfilingCallback");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpProfilingCallback)    < offsetof(LocalBackend, mpProfilingContext)),      "mpProfilingCallback < mpProfilingContext");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpProfilingContext)     < offsetof(LocalBackend, mGarbageCollectorCursor)), "mpProfilingContext < mGarbageCollectorCursor");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mGarbageCollectorCursor) < offsetof(LocalBackend, mpEnableProfiling)),  "mGarbageCollectorCursor < mpEnableProfiling");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpEnableProfiling)  < offsetof(LocalBackend, mJobThreadSleepTimeoutMS)),"mpEnableProfiling < mJobThreadSleepTimeoutMS");
         // The 32 inline workers occupy a real span between mThreads and the next member.
-        static_assert(offsetof(LocalBackend, mSubmissionCounter) - offsetof(LocalBackend, mThreads)
-                          == LocalBackend::KI_NUM_THREADS * sizeof(JobThread),
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mSubmissionCounter) - offsetof(LocalBackend, mThreads)
+                          == LocalBackend::KI_NUM_THREADS * sizeof(JobThread)),
                       "mThreads is exactly 32 contiguous JobThreads");
     }
 
@@ -600,8 +600,8 @@ namespace LocalBackend
     {
         const u32 index=SlotIndexFromHandle(uHandleQword);
         JobInstance* instance=(uSubmissionId==(static_cast<u64>(mpPriorityQueue[index])&0x7FFFFFFFFFFFull))
-            ? &mpJobInstances[index] : nullptr;
-        u32* location=nullptr;u32 value=0;
+            ? &mpJobInstances[index] : 0;
+        u32* location=0;u32 value=0;
         GetEnabler(uSubmissionId,uHandleQword,location,value);
         return Event(Event::EVENT_TYPE_WRITE,value,location,&instance->mStatus);
     }

@@ -84,7 +84,7 @@ namespace rw
             s32 Stream::queuerequest(StreamState* lpState, Request* lpReq)
             {
                 lpReq->miState = 1;
-                lpReq->mpNext  = nullptr;
+                lpReq->mpNext  = 0;
 
                 ::EnterCriticalSection(&lpState->mLock);
 
@@ -96,7 +96,7 @@ namespace rw
                 }
                 else
                 {
-                    lpReq->mpPrev = nullptr;
+                    lpReq->mpPrev = 0;
                     lpState->mpReqHead    = lpReq;
                     lpState->mpReqCurrent = lpReq;
                 }
@@ -201,7 +201,7 @@ namespace rw
                         ChunkNode* lpNode = static_cast<ChunkNode*>(Manager::Allocate(sizeof(ChunkNode)));
                         if (lpNode)
                         {
-                            lpNode->mpNext          = nullptr;
+                            lpNode->mpNext          = 0;
                             lpNode->mChunk.miState  = 0;
                             lpNode->mChunk.muKey    = static_cast<u32>(liRegion);
                             lpNode->mChunk.mpData   = lpState->mpParsePtr;
@@ -213,7 +213,7 @@ namespace rw
                         // node unconditionally here -- an OOM node would fault -- so keep the
                         // same shape rather than inventing a graceful path.)
                         ChunkNode* lpTail = lpState->mpChunkTail;
-                        lpNode->mpNext = nullptr;
+                        lpNode->mpNext = 0;
                         lpState->mpChunkTail = lpNode;
                         lpState->muChunkCount++;
                         if (lpTail)
@@ -327,15 +327,15 @@ namespace rw
                         {
                             if (lpHead == lpState->mpChunkTail)
                             {
-                                lpState->mpChunkHead = nullptr;
-                                lpState->mpChunkTail = nullptr;
+                                lpState->mpChunkHead = 0;
+                                lpState->mpChunkTail = 0;
                             }
                             else
                             {
                                 lpState->mpChunkHead = lpHead->mpNext;
                             }
                             lpState->muChunkCount--;
-                            lpHead->mpNext = nullptr;
+                            lpHead->mpNext = 0;
                         }
                         if (!lpState->mpChunkHead)
                         {
@@ -344,7 +344,7 @@ namespace rw
                                 & ~static_cast<uintptr_t>(0xF);
                             lpState->mpFillPtr = reinterpret_cast<u8*>(luAligned);
                         }
-                        lpChunk->mpNext = nullptr;
+                        lpChunk->mpNext = 0;
                         Manager::Free(lpChunk);
                         lpChunk = lpState->mpChunkHead;
                         if (!lpChunk)
@@ -609,13 +609,13 @@ namespace rw
                     }
                     else
                     {
-                        lpNode = nullptr;
+                        lpNode = 0;
                     }
                     mpCurrentChunk = lpNode;
                 }
                 else
                 {
-                    lpResult = nullptr;
+                    lpResult = 0;
                 }
 
                 ::LeaveCriticalSection(&lpState->mLock);
@@ -700,7 +700,7 @@ namespace rw
                                         ChunkNode* lpMatch;
                                         if (lpRegion->miUsage <= 0)
                                         {
-                                            lpMatch = nullptr;
+                                            lpMatch = 0;
                                         }
                                         else
                                         {

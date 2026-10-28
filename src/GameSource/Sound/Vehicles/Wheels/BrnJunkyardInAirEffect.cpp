@@ -69,7 +69,7 @@ bool JunkyardInAirEffect::Attach()
 
 void JunkyardInAirEffect::Notify(const CgsSound::Io::MessageHeader* apkMessage)
 {
-    CGS_ASSERT(apkMessage != nullptr, "lpMessageHeader");
+    CGS_ASSERT(apkMessage != 0, "lpMessageHeader");
     if (!apkMessage)
         return;
 
@@ -106,9 +106,9 @@ void JunkyardInAirEffect::UpdatePhysicsData(f32 afTimeStep)
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     BrnSound::Module::Io::LogicInputBuffer* lpInput =
-        lpModule ? lpModule->GetBrnInputStructure() : nullptr;
+        lpModule ? lpModule->GetBrnInputStructure() : 0;
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-        lpVehicles = lpInput ? lpInput->GetVehicleInterface() : nullptr;
+        lpVehicles = lpInput ? lpInput->GetVehicleInterface() : 0;
     if (!lpVehicles || !lpVehicles->IsPlayerCarActive())
         return;
 
@@ -116,7 +116,7 @@ void JunkyardInAirEffect::UpdatePhysicsData(f32 afTimeStep)
         lpVehicles->GetPlayerActiveRaceCarIndex();
     const BrnPhysics::Vehicle::RaceCarState* lpVehicleData =
         lpVehicles->GetRaceCarState(lePlayer);
-    CGS_ASSERT(lpVehicleData != nullptr, "lpVehiclePhysicsData");
+    CGS_ASSERT(lpVehicleData != 0, "lpVehiclePhysicsData");
     if (!lpVehicleData)
         return;
 

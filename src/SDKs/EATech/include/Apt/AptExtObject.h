@@ -29,7 +29,7 @@
 // ===========================================================================
 
 #include <cstddef>   // size_t
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValueGC base, AptValue, AptNativeString
 
@@ -78,7 +78,7 @@ public:
     // component ever registered. Pairs with ContainsNativeHashVirtual (cf.
     // AptValueWithHash's {&mHash, true} convention).
     virtual AptNativeHash* GetNativeHashVirtual()            { return mpNativeHash; }
-    virtual bool           ContainsNativeHashVirtual() const { return mpNativeHash != nullptr; }
+    virtual bool           ContainsNativeHashVirtual() const { return mpNativeHash != 0; }
 
     // ---- object-model override (leak AptExtObject.h) ----------------------
     // Store pValue under pName in the native-member hash, but only when no member of

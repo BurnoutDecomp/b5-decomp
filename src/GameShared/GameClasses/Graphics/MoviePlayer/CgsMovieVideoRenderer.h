@@ -25,26 +25,26 @@ namespace CgsGraphics
         };
 
         MovieVideoRenderer();
-        ~MovieVideoRenderer() override;
+        ~MovieVideoRenderer() ;
         static rw::ResourceDescriptor GetResourceDescriptor();
         static MovieVideoRenderer* Initialize(rw::Resource& lrResource);
         void SetParentMoviePlayer(MoviePlayer* lpParent) { mpParentMoviePlayer = lpParent; }
-        void Init(EA::Allocator::ICoreAllocator*, unsigned int, unsigned int) override;
-        unsigned int GetNumberOfVideoBuffers(rw::movie::VideoRenderable::VideoFormat) override;
-        float GetRenderingDelay() override;
-        void SetReleaseRenderableCallback(rw::movie::ReleaseVideoRenderableFunc*, rw::movie::MovieDecoder*) override;
-        void Render(rw::movie::VideoRenderable*) override;
+        void Init(EA::Allocator::ICoreAllocator*, unsigned int, unsigned int) ;
+        unsigned int GetNumberOfVideoBuffers(rw::movie::VideoRenderable::VideoFormat) ;
+        float GetRenderingDelay() ;
+        void SetReleaseRenderableCallback(rw::movie::ReleaseVideoRenderableFunc*, rw::movie::MovieDecoder*) ;
+        void Render(rw::movie::VideoRenderable*) ;
         void Render(s32 liStartRow, rw::movie::VideoRenderable* lpRenderable, bool lbStep);
-        void SetPositionX(float) override;
-        void SetPositionY(float) override;
-        void SetPositionZ(float) override;
-        float GetPositionX() override;
-        float GetPositionY() override;
-        float GetPositionZ() override;
-        void SetScaleX(float) override;
-        void SetScaleY(float) override;
-        float GetScaleX() override;
-        float GetScaleY() override;
+        void SetPositionX(float) ;
+        void SetPositionY(float) ;
+        void SetPositionZ(float) ;
+        float GetPositionX() ;
+        float GetPositionY() ;
+        float GetPositionZ() ;
+        void SetScaleX(float) ;
+        void SetScaleY(float) ;
+        float GetScaleX() ;
+        float GetScaleY() ;
 
     private:
         friend class MoviePlayer;

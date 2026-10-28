@@ -36,7 +36,7 @@ static inline void Blend2Lanes(V& lrOut, const V& lSrc, f32 lfWeight, f32 lfInvW
 // ---- BloomBlend::Add @ 0x824F6810 ----------------------------------------
 BloomBlend* BloomBlend::Add(const BrnEffects::BloomData* lpSrc, f32 lfWeight)
 {
-    if (lpSrc == nullptr)
+    if (lpSrc == 0)
     {
         return this;
     }
@@ -70,7 +70,7 @@ BloomBlend* BloomBlend::Add(const BrnEffects::BloomData* lpSrc, f32 lfWeight)
 // path folds only the first four lanes (mfDofAmount is left as copied).
 DepthOfFieldBlend* DepthOfFieldBlend::Add(const DepthOfFieldBlend* lpSrc, f32 lfWeight)
 {
-    if (lpSrc == nullptr)
+    if (lpSrc == 0)
     {
         return this;
     }
@@ -105,7 +105,7 @@ DepthOfFieldBlend* DepthOfFieldBlend::Add(const DepthOfFieldBlend* lpSrc, f32 lf
 // ---- TintData2dBlend::Add @ 0x824F6D60 -----------------------------------
 TintData2dBlend* TintData2dBlend::Add(const BrnEffects::TintData2d* lpSrc, f32 lfWeight)
 {
-    if (lpSrc == nullptr)
+    if (lpSrc == 0)
     {
         return this;
     }
@@ -158,7 +158,7 @@ BlurBlend* BlurBlend::Construct()
 // banner in SharedClasses/Graphics/BrnEffectsData.h for the full evidence.
 BlurBlend* BlurBlend::Add(const BrnEffects::BlurData* lpSrc, f32 lfWeight)
 {
-    if (lpSrc == nullptr)
+    if (lpSrc == 0)
     {
         return this;
     }
@@ -206,7 +206,7 @@ VignetteBlend* VignetteBlend::Construct()
 // (BrnEffectsData.h:161)].
 VignetteBlend* VignetteBlend::Add(const BrnEffects::VignetteData* lpSrc, f32 lfWeight)
 {
-    if (lpSrc == nullptr)
+    if (lpSrc == 0)
     {
         return this;
     }

@@ -142,7 +142,7 @@ public:
     // then walks the block reading address/port pairs and the server clock/config/
     // auto-report/heartbeat fields. Returns 1 only when the required server-time
     // field was present, else 0.
-    int Parse() override;
+    int Parse() ;
 
     // @ 0x82BD45F8. Called by CMassiveClientCore::RequestLocateService. Rejects a
     // null builder, SKU name or SKU version (returns -1100); otherwise chains the

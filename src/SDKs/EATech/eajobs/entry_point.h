@@ -50,10 +50,10 @@ namespace Jobs
 
         // ARTIST default settings (Job::Clear82BCA110 and JobInstance ctor).
         // Native pointers are initialized by member, not a console byte image.
-        EntryPoint() : mName{}, mPriority(JOB_PRIORITY_DEFAULT), mAffinity(JOB_AFFINITY_ANY),
+        EntryPoint() : mPriority(JOB_PRIORITY_DEFAULT), mAffinity(JOB_AFFINITY_ANY),
             mEnvironment(JOB_ENVIRONMENT_LOCAL), mKernelSwap(SWAP_OFF),
             mCodeRecycle(CODE_RECYCLE_ON), mBreakOnEntry(false), mAllowSleepOn(false),
-            mpfnLocalJob(nullptr) {}
+            mpfnLocalJob(0) { for (int li = 0; li < 16; ++li) mName[li] = 0; }
 
         // entry_point.h:55 -- point this entry at a job's code. The environment form
         // selects JOB_ENVIRONMENT_LOCAL (a function pointer) or JOB_ENVIRONMENT_SPU_THREADS

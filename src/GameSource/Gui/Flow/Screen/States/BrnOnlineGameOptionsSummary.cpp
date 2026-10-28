@@ -227,16 +227,16 @@ namespace BrnGui
         typedef CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, 40> GuiEventNetworkGameParamsWire;
         typedef CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40> GuiChallengeSelectedWire;
 
-        static_assert(sizeof(GuiCommandWire16<175>) == 16, "command record is 16 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiAutosaveRequestWire) == 16, "autosave record is 16 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiOverlayWaitFinishWire) == 24, "wait-finish record is 24 bytes");
-        static_assert(sizeof(GuiEventNetworkCreateGameWire) == 492, "create-game record is 492 bytes");
-        static_assert(sizeof(GuiEventNetworkGameParamsWire) == 492, "game-params record is 492 bytes");
-        static_assert(sizeof(GuiChallengeSelectedWire) == 32, "challenge-selected record is 32 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiCommandWire16<175>) == 16), "command record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestWire) == 16), "autosave record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCreateGameWire) == 492), "create-game record is 492 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkGameParamsWire) == 492), "game-params record is 492 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiChallengeSelectedWire) == 32), "challenge-selected record is 32 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
 
         template <typename TWire>
         void PostWire(CgsGui::StateInterface* lpStateInterface, const TWire& lrWire)

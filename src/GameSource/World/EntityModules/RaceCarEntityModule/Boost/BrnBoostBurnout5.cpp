@@ -1393,7 +1393,7 @@ BoostBurnout5::ApplyUpdate(f32 lfTimeStep)
     // is u64 -- so nothing is narrowed. A static_cast<u32> here would silently
     // drop the high word and make every collection lookup miss, which is exactly
     // the defect that was fixed on this class's declaration.
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), nullptr);
+    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), 0);
 
     // 0x822C2288-0x822C23C4 -- the 34 record -> member stores, in ascending
     // member order (which is the order the X360 emits them: +0x10 up to +0x94,
@@ -1729,7 +1729,7 @@ BoostBurnout5::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::Completed
     // BrnBoostBurnout5.cpp:830 on the console (the assert's line immediate is
     // 0x33E @0x822A6FC4); reported, then execution continues into the
     // dereferences below.
-    CGS_ASSERT(lpCompletedStuntAction != nullptr, "lpCompletedStuntAction != NULL");
+    CGS_ASSERT(lpCompletedStuntAction != 0, "lpCompletedStuntAction != NULL");
 
     if (lpCompletedStuntAction->muStuntActionComplete & 0x1u)        // barrel roll(s)
     {

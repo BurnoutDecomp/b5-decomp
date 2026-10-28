@@ -98,10 +98,10 @@ namespace CgsInput
 {
     inline void _ManagerX360_AssertLayout()
     {
-        static_assert(sizeof(ManagerX360Device) == 24, "ManagerX360Device must be 24 bytes (0x18 stride)");
-        static_assert(offsetof(ManagerX360Device, meDeviceType) == 0x00, "meDeviceType @ +0x00");
-        static_assert(offsetof(ManagerX360Device, maState)      == 0x04, "maState @ +0x04");
-        static_assert(offsetof(ManagerX360Device, mbConnected)  == 0x14, "mbConnected @ +0x14");
-        static_assert(offsetof(ManagerX360, maDevices)    == 0x00, "maDevices @ +0x00");
+        CGS_STATIC_ASSERT((sizeof(ManagerX360Device) == 24), "ManagerX360Device must be 24 bytes (0x18 stride)");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360Device, meDeviceType) == 0x00), "meDeviceType @ +0x00");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360Device, maState)      == 0x04), "maState @ +0x04");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360Device, mbConnected)  == 0x14), "mbConnected @ +0x14");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360, maDevices)    == 0x00), "maDevices @ +0x00");
     }
 }

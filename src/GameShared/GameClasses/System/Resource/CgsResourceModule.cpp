@@ -192,7 +192,7 @@ namespace CgsResource
     {
         const auto* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
         auto* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent)
@@ -217,7 +217,7 @@ namespace CgsResource
             case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
-            const CgsModule::Event* lpNext = nullptr;
+            const CgsModule::Event* lpNext = 0;
             liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
@@ -227,7 +227,7 @@ namespace CgsResource
     void ResourceModule::ProcessBundleLoaderStreamRequests(const BundleLoaderIO::OutputBuffer* lpLoaderOut)
     {
         const auto* lpQueue = lpLoaderOut->GetStreamRequestQueue();
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent)
@@ -238,7 +238,7 @@ namespace CgsResource
                 AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
             else
                 CGS_ASSERT(false, "Unexpected request from bundle loader\n");
-            const CgsModule::Event* lpNext = nullptr;
+            const CgsModule::Event* lpNext = 0;
             liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
@@ -476,7 +476,7 @@ namespace CgsResource
         ProcessPoolResourceRequests(&s_memIn, &s_poolOut);
         s_poolOut.UnlockForRead(); s_memIn.UnlockForWrite();
         {
-            mMemoryModule.Update(nullptr, nullptr, &s_memIn, &s_memOut);
+            mMemoryModule.Update(0, 0, &s_memIn, &s_memOut);
         }
         s_memOut.LockForRead(); ProcessMemoryResponses(&s_memOut); s_memOut.UnlockForRead();
         s_loaderOut.LockForRead(); s_poolOut.LockForRead();
@@ -604,7 +604,7 @@ namespace CgsResource
             }
 
             if (lcIndex == -1)
-                return nullptr;
+                return 0;
             return lpPool->mpRecords + 12 * lcIndex;
         }
     }

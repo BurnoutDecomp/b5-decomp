@@ -91,7 +91,7 @@ namespace BrnVehicle
             const u8* lpBytes = PointerFromU32<u8>(lpSpec->mpNumRigidBodiesForPart);   // a3[7]
             for (u32 luEntry = 0; luEntry < luCount; ++luEntry)
             {
-                if (lpBytes != nullptr && lpBytes[luEntry] != 0u)
+                if (lpBytes != 0 && lpBytes[luEntry] != 0u)
                     luSize += static_cast<u32>(lpBytes[luEntry]) << 6;  // byte << 6
             }
         }

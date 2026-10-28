@@ -177,7 +177,7 @@ namespace BrnTraffic
 
             const u64 luSetCall = ++gMailbox.muAcceptedSetCalls;
             if (!lrSource.mbDataReady || !lrSource.mbPvsPresent
-                || lrSource.mpModule == nullptr || lrSource.mpPvs == nullptr
+                || lrSource.mpModule == 0 || lrSource.mpPvs == 0
                 || lrSource.muActiveCount > KU_MAX_ACTIVE_HULLS
                 || lrSource.muAddedCount > KU_MAX_ACTIVE_HULLS
                 || lrSource.muRemovedCount > KU_MAX_ACTIVE_HULLS
@@ -266,7 +266,7 @@ namespace BrnTraffic
                 || !gMailbox.mbPending
                 || gMailbox.mPending.muEpoch != lrPublished.muEpoch
                 || gMailbox.mPending.mePhase != lrPublished.mePhase
-                || CgsDev::Log::gpDebugPrint == nullptr)
+                || CgsDev::Log::gpDebugPrint == 0)
                 return false;
 
             const Snapshot& lrSlot = gMailbox.mPending;
@@ -348,7 +348,7 @@ namespace BrnTraffic
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
 
             const rw::Resource lResource = BrnResource::GetDebugAllocator()->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             return lResource.m_baseResources[0];
         }
     }
@@ -636,107 +636,107 @@ namespace BrnTraffic
         // as bytes), which put every member from mabWheelExists onward 72 bytes out; nothing in
         // the tree could see it, because the array is a typed C array and the stride was
         // self-consistently wrong. See BrnTrafficEntityModule.h's banner on maLightTagPointTypes.
-        static_assert(sizeof(TrafficPhysicsInfo) == 4112,
+        CGS_STATIC_ASSERT((sizeof(TrafficPhysicsInfo) == 4112),
                       "TrafficPhysicsInfo must be the console's 0x1010 stride");
-        static_assert(sizeof(TrafficPhysicsInfo::DetachedPartRenderQueue) == 1312,
+        CGS_STATIC_ASSERT((sizeof(TrafficPhysicsInfo::DetachedPartRenderQueue) == 1312),
                       "mDetachedPartQueue == 32 + 20*64 (ARTIST, not the DWARF EventQueue)");
-        static_assert(offsetof(TrafficPhysicsInfo, maLightTagPointTypes) == 4016,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, maLightTagPointTypes) == 4016),
                       "maLightTagPointTypes @ +0xFB0 (ProcessDeformationData stbx base 0x591C0)");
-        static_assert(offsetof(TrafficPhysicsInfo, mabWheelExists) == 4040,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, mabWheelExists) == 4040),
                       "mabWheelExists @ +0xFC8 (BrnTrafficEntityModule_Render.cpp 'info+4040+i')");
-        static_assert(offsetof(TrafficPhysicsInfo, mfStuckTimeFront) == 4044,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, mfStuckTimeFront) == 4044),
                       "mfStuckTimeFront @ +0xFCC (UpdateVehicleStuckTimers @0x82708D90)");
-        static_assert(offsetof(TrafficPhysicsInfo, mfStuckTimeBack) == 4048,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, mfStuckTimeBack) == 4048),
                       "mfStuckTimeBack @ +0xFD0 (UpdateVehicleStuckTimers @0x82708DA8)");
-        static_assert(offsetof(TrafficPhysicsInfo, mfSteeringDirection) == 4060,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, mfSteeringDirection) == 4060),
                       "mfSteeringDirection @ +0xFDC (RecordTrafficVehicleIsPhysical stfsx 0x591EC)");
-        static_assert(offsetof(TrafficPhysicsInfo, mfDrivingDirection) == 4064,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, mfDrivingDirection) == 4064),
                       "mfDrivingDirection @ +0xFE0 (RecordTrafficVehicleIsPhysical stfsx 0x591F0)");
-        static_assert(offsetof(TrafficPhysicsInfo, miNumLightLocators) == 4068,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, miNumLightLocators) == 4068),
                       "miNumLightLocators @ +0xFE4 (ProcessDeformationData stbx 0x591F4)");
-        static_assert(offsetof(TrafficPhysicsInfo, muContactSideFlags) == 4104,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, muContactSideFlags) == 4104),
                       "muContactSideFlags @ +0x1008 (UpdateVehicleStuckTimers)");
-        static_assert(offsetof(TrafficPhysicsInfo, muOwningVehicleIndex) == 4106,
+        CGS_STATIC_ASSERT((offsetof(TrafficPhysicsInfo, muOwningVehicleIndex) == 4106),
                       "muOwningVehicleIndex @ +0x100A (TrafficPhysicsInfo::Construct sth)");
 
         // The state block, ten consecutive DWARF members (:602-:613) on ten consecutive X360
         // offsets 0x2F0..0x314. The Prepare/LoadData ladders and the state machine need it.
-        static_assert(offsetof(TrafficEntityModule, mePrepareStage)
-                      <  offsetof(TrafficEntityModule, meReleaseStage), "mePrepareStage before meReleaseStage");
-        static_assert(offsetof(TrafficEntityModule, meReleaseStage)
-                      <  offsetof(TrafficEntityModule, meResourceStage), "meReleaseStage before meResourceStage");
-        static_assert(offsetof(TrafficEntityModule, meResourceStage)
-                      <  offsetof(TrafficEntityModule, meEmptyTrafficPoolState), "meResourceStage before meEmptyTrafficPoolState");
-        static_assert(offsetof(TrafficEntityModule, meEmptyTrafficPoolState)
-                      <  offsetof(TrafficEntityModule, meState), "meEmptyTrafficPoolState before meState");
-        static_assert(offsetof(TrafficEntityModule, meState)
-                      <  offsetof(TrafficEntityModule, meStartingUpState), "meState before meStartingUpState");
-        static_assert(offsetof(TrafficEntityModule, meStartingUpState)
-                      <  offsetof(TrafficEntityModule, meRunningState), "meStartingUpState before meRunningState");
-        static_assert(offsetof(TrafficEntityModule, meRunningState)
-                      <  offsetof(TrafficEntityModule, meRunningStateToUseAfterStartup), "meRunningState before meRunningStateToUseAfterStartup");
-        static_assert(offsetof(TrafficEntityModule, meRunningStateToUseAfterStartup)
-                      <  offsetof(TrafficEntityModule, meTearingDownState), "meRunningStateToUseAfterStartup before meTearingDownState");
-        static_assert(offsetof(TrafficEntityModule, meTearingDownState)
-                      <  offsetof(TrafficEntityModule, mReceiverQueue), "meTearingDownState before mReceiverQueue");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, mePrepareStage)
+                      <  offsetof(TrafficEntityModule, meReleaseStage)), "mePrepareStage before meReleaseStage");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meReleaseStage)
+                      <  offsetof(TrafficEntityModule, meResourceStage)), "meReleaseStage before meResourceStage");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meResourceStage)
+                      <  offsetof(TrafficEntityModule, meEmptyTrafficPoolState)), "meResourceStage before meEmptyTrafficPoolState");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meEmptyTrafficPoolState)
+                      <  offsetof(TrafficEntityModule, meState)), "meEmptyTrafficPoolState before meState");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meState)
+                      <  offsetof(TrafficEntityModule, meStartingUpState)), "meState before meStartingUpState");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meStartingUpState)
+                      <  offsetof(TrafficEntityModule, meRunningState)), "meStartingUpState before meRunningState");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meRunningState)
+                      <  offsetof(TrafficEntityModule, meRunningStateToUseAfterStartup)), "meRunningState before meRunningStateToUseAfterStartup");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meRunningStateToUseAfterStartup)
+                      <  offsetof(TrafficEntityModule, meTearingDownState)), "meRunningStateToUseAfterStartup before meTearingDownState");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meTearingDownState)
+                      <  offsetof(TrafficEntityModule, mReceiverQueue)), "meTearingDownState before mReceiverQueue");
 
         // The three vehicle pools are one array, in the order the console's base element
         // indices (85 / 485 / 684) spell, with the axle array after it.
-        static_assert(offsetof(TrafficEntityModule, maVehicles)
-                      <  offsetof(TrafficEntityModule, maVehicleAxles), "maVehicles before maVehicleAxles");
-        static_assert(offsetof(TrafficEntityModule, maVehicleAxles)
-                      <  offsetof(TrafficEntityModule, maVehicleTransforms), "maVehicleAxles before maVehicleTransforms");
-        static_assert(offsetof(TrafficEntityModule, maVehicleTransforms)
-                      <  offsetof(TrafficEntityModule, maParams), "maVehicleTransforms before maParams");
-        static_assert(offsetof(TrafficEntityModule, maParams)
-                      <  offsetof(TrafficEntityModule, maParamTransforms), "maParams before maParamTransforms");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maVehicles)
+                      <  offsetof(TrafficEntityModule, maVehicleAxles)), "maVehicles before maVehicleAxles");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maVehicleAxles)
+                      <  offsetof(TrafficEntityModule, maVehicleTransforms)), "maVehicleAxles before maVehicleTransforms");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maVehicleTransforms)
+                      <  offsetof(TrafficEntityModule, maParams)), "maVehicleTransforms before maParams");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maParams)
+                      <  offsetof(TrafficEntityModule, maParamTransforms)), "maParams before maParamTransforms");
 
         // The tail run the Prepare stages walk, in DWARF order (:938 -> :944).
-        static_assert(offsetof(TrafficEntityModule, mStreamer)
-                      <  offsetof(TrafficEntityModule, maVehicleTypeRuntime), "mStreamer before maVehicleTypeRuntime");
-        static_assert(offsetof(TrafficEntityModule, maVehicleTypeRuntime)
-                      <  offsetof(TrafficEntityModule, miResourceRequestCount), "maVehicleTypeRuntime before miResourceRequestCount");
-        static_assert(offsetof(TrafficEntityModule, miResourceRequestCount)
-                      <  offsetof(TrafficEntityModule, mpVehicleList), "miResourceRequestCount before mpVehicleList");
-        static_assert(offsetof(TrafficEntityModule, mpVehicleList)
-                      <  offsetof(TrafficEntityModule, maStoredAITrafficData), "mpVehicleList before maStoredAITrafficData");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, mStreamer)
+                      <  offsetof(TrafficEntityModule, maVehicleTypeRuntime)), "mStreamer before maVehicleTypeRuntime");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maVehicleTypeRuntime)
+                      <  offsetof(TrafficEntityModule, miResourceRequestCount)), "maVehicleTypeRuntime before miResourceRequestCount");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, miResourceRequestCount)
+                      <  offsetof(TrafficEntityModule, mpVehicleList)), "miResourceRequestCount before mpVehicleList");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, mpVehicleList)
+                      <  offsetof(TrafficEntityModule, maStoredAITrafficData)), "mpVehicleList before maStoredAITrafficData");
 
         // Asm-attested array counts (pool capacities; see BrnTrafficConstants.h).
-        static_assert(sizeof(TrafficEntityModule::maVehicles) / sizeof(Vehicle) == 600,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maVehicles) / sizeof(Vehicle) == 600),
                       "maVehicles holds KU_MAX_TOTAL_TRAFFIC == 600 (asm 0x258)");
-        static_assert(sizeof(TrafficEntityModule::maVehicleAxles) / sizeof(VehicleAxles) == 600,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maVehicleAxles) / sizeof(VehicleAxles) == 600),
                       "maVehicleAxles is one per vehicle slot");
-        static_assert(sizeof(TrafficEntityModule::maStaticTrafficParams) / sizeof(StaticTrafficParam) == 199,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maStaticTrafficParams) / sizeof(StaticTrafficParam) == 199),
                       "maStaticTrafficParams holds KU_MAX_STATIC_TRAFFIC == 199 (asm 0xC7)");
-        static_assert(sizeof(TrafficEntityModule::maParams) / sizeof(Param) == 400,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maParams) / sizeof(Param) == 400),
                       "maParams holds KU_MAX_PARAMS == 400");
-        static_assert(sizeof(TrafficEntityModule::maVehicleTypeRuntime) / sizeof(VehicleTypeRuntime) == 96,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maVehicleTypeRuntime) / sizeof(VehicleTypeRuntime) == 96),
                       "maVehicleTypeRuntime holds KU_MAX_VEHICLE_TYPES == 96");
-        static_assert(sizeof(TrafficEntityModule::maStoredAITrafficData) / sizeof(StoredAITrafficData) == 8,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maStoredAITrafficData) / sizeof(StoredAITrafficData) == 8),
                       "maStoredAITrafficData is one per active race car (Prepare stage 4 walks 8)");
-        static_assert(sizeof(TrafficEntityModule::maGenerators) / sizeof(GeneratorAddress) == 512,
+        CGS_STATIC_ASSERT((sizeof(TrafficEntityModule::maGenerators) / sizeof(GeneratorAddress) == 512),
                       "maGenerators holds KU_MAX_GENERATORS == 512");
 
         // Pointer-free record sizes, pinned by the console's container strides. These are the
         // only absolute sizes pinned here: no record holds a pointer, so the console and host
         // byte sizes are the same number for the same reason.
-        static_assert(sizeof(PurgatoryInfo) == 4,
+        CGS_STATIC_ASSERT((sizeof(PurgatoryInfo) == 4),
                       "PurgatoryInfo == 4 (Array<PurgatoryInfo,N> count word at N*4)");
-        static_assert(sizeof(VehicleRenderInfo) == 12,
+        CGS_STATIC_ASSERT((sizeof(VehicleRenderInfo) == 12),
                       "VehicleRenderInfo == 12 (Array<VehicleRenderInfo,64> count word at 0x300)");
-        static_assert(sizeof(HullChangeInfo) == 8,
+        CGS_STATIC_ASSERT((sizeof(HullChangeInfo) == 8),
                       "HullChangeInfo == 8 (Array<HullChangeInfo,400> count word at 0xC80)");
-        static_assert(sizeof(TrafficCrashInfo) == 16,
+        CGS_STATIC_ASSERT((sizeof(TrafficCrashInfo) == 16),
                       "TrafficCrashInfo == 16 (Array<TrafficCrashInfo,160> count word at 0xA00)");
-        static_assert(sizeof(FiredKillZoneInfo) == 16,
+        CGS_STATIC_ASSERT((sizeof(FiredKillZoneInfo) == 16),
                       "FiredKillZoneInfo == 16 (Array<FiredKillZoneInfo,8> count word at 0x80)");
-        static_assert(sizeof(CollidableVehicleInfo4) == 128,
+        CGS_STATIC_ASSERT((sizeof(CollidableVehicleInfo4) == 128),
                       "CollidableVehicleInfo4 == 128 (eight Vector4 lanes; operator[] shifts by 7)");
-        static_assert(sizeof(CrashingThingData) == 32,
+        CGS_STATIC_ASSERT((sizeof(CrashingThingData) == 32),
                       "CrashingThingData == 32 (Array<CrashingThingData,168> operator[] shifts by 5)");
-        static_assert(sizeof(StoredAITrafficData) == 136,
+        CGS_STATIC_ASSERT((sizeof(StoredAITrafficData) == 136),
                       "StoredAITrafficData == 136 (Prepare stage 4 stride)");
-        static_assert(sizeof(DEBUG_VehicleFuzzyLogic) == 64,
+        CGS_STATIC_ASSERT((sizeof(DEBUG_VehicleFuzzyLogic) == 64),
                       "DEBUG_VehicleFuzzyLogic == 64 (Prepare stage 4 allocates 40 * 64 == 2560)");
     }
 }
@@ -3010,7 +3010,7 @@ void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_Pos
             // ARTIST 0x827215A8..0x827215CC: if the component exists and its byte +0x34 is
             // enabled, it overrides either selected centre with mCameraLastFrame's position.
             // This is the original "Use camera position" row's runtime consumer.
-            if (mpDebugComponent != nullptr && mpDebugComponent->UseCameraPosition())
+            if (mpDebugComponent != 0 && mpDebugComponent->UseCameraPosition())
             {
                 lSimCentre = mCameraLastFrame.GetPosition();
             }
@@ -3556,9 +3556,9 @@ void TrafficEntityModule::RecalculateActiveHulls(
         lPvsDiagSource.mbDecisionFrame = mbDecisionFrame;
         lPvsDiagSource.muFramesSinceDecision = muFramesSinceDecision;
         lPvsDiagSource.mbDataReady = mpData.HasMemoryResource();
-        const Pvs* lpPvsDiag = lPvsDiagSource.mbDataReady ? mpData->mpPvs : nullptr;
+        const Pvs* lpPvsDiag = lPvsDiagSource.mbDataReady ? mpData->mpPvs : 0;
         lPvsDiagSource.mpPvs = lpPvsDiag;
-        lPvsDiagSource.mbPvsPresent = lpPvsDiag != nullptr;
+        lPvsDiagSource.mbPvsPresent = lpPvsDiag != 0;
         lPvsDiagSource.muActiveCount = mActiveHulls.GetLength();
         for (u32 lu = 0; lu < lPvsDiagSource.muActiveCount && lu < KU_MAX_ACTIVE_HULLS; ++lu)
             lPvsDiagSource.mauActiveIds[lu] = mActiveHulls.GetItem(lu);
@@ -5051,7 +5051,7 @@ void TrafficEntityModule::Construct()
     // 16-byte alignment), install its host vtable with placement new, then run the explicit
     // two-phase Construct(this) body. The base Construct resets the just-created base state.
     void* lpDebugComponentStorage = AllocateTrafficDebugResource(sizeof(DebugComponent), 16u);
-    CGS_ASSERT(lpDebugComponentStorage != nullptr, "Unable to allocate traffic debug component");
+    CGS_ASSERT(lpDebugComponentStorage != 0, "Unable to allocate traffic debug component");
     mpDebugComponent = new (lpDebugComponentStorage) DebugComponent;
     mpDebugComponent->Construct(this);
 
@@ -9489,8 +9489,8 @@ u32 TrafficEntityModule::FindFirstParamAfterPos(u32 luHull, u32 luSectionIndex,
 // the original body gates ring writes by the menu toggle and distance from the saved camera.
 void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuzzyOutputs)
 {
-    CGS_ASSERT(lpafFuzzyOutputs != nullptr, "lpafFuzzyOutputs");
-    CGS_ASSERT(mpaDEBUGVehicleFuzzyLogic != nullptr, "mpaDEBUGVehicleFuzzyLogic");
+    CGS_ASSERT(lpafFuzzyOutputs != 0, "lpafFuzzyOutputs");
+    CGS_ASSERT(mpaDEBUGVehicleFuzzyLogic != 0, "mpaDEBUGVehicleFuzzyLogic");
 
     if (!mFuzzyBehaviours.mbDEBUGRenderParamScores)
         return;
@@ -9518,7 +9518,7 @@ void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuz
     if (muDEBUGVehicleFuzzyLogicCount >= 40)
         muDEBUGVehicleFuzzyLogicCount = 0;
 
-    CGS_ASSERT(lpDebugData != nullptr, "lpDebugData");
+    CGS_ASSERT(lpDebugData != 0, "lpDebugData");
     lpDebugData->muVehicle = luParam;
     CGS_ASSERT(luParam < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
     Vector3 lRenderPosition = maVehicleTransforms[luParam].Pos();
@@ -18564,7 +18564,7 @@ void TrafficEntityModule::HandleExternalRequests(
             }
             else
             {
-                static_assert(sizeof(BrnGameState::GameStateModuleIO::StreamingCompleteEvent) == 16,
+                CGS_STATIC_ASSERT((sizeof(BrnGameState::GameStateModuleIO::StreamingCompleteEvent) == 16),
                               "the console posts StreamingCompleteEvent as 16 bytes (`li r6, 0x10` @0x8274BC70)");
                 BrnGameState::GameStateModuleIO::StreamingCompleteEvent lStreamingComplete = {};
                 lStreamingComplete.meModule =
@@ -19707,9 +19707,9 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
 
     // The copy sizes are the whole Array objects; pinned so a layout drift fails the compile
     // instead of publishing a short collection.
-    static_assert( sizeof( TrafficInterface::NearMissTrafficCollection ) == 132,
+    CGS_STATIC_ASSERT(( sizeof( TrafficInterface::NearMissTrafficCollection ) == 132),
                    "NearMissTrafficCollection must stay 16 * 8 + 4 bytes" );
-    static_assert( sizeof( TrafficInterface::NearMissRaceCarCollection ) == 68,
+    CGS_STATIC_ASSERT(( sizeof( TrafficInterface::NearMissRaceCarCollection ) == 68),
                    "NearMissRaceCarCollection must stay 8 * 8 + 4 bytes" );
 
     {

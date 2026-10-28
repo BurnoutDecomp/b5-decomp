@@ -32,13 +32,13 @@ namespace BrnGameState
         void Construct(StuntManager* lpStuntManager);
         void Destruct();
 
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
-        void OnActivate() override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) ;
+        void OnActivate() ;
 
     protected:
-        const char* GetName() const override;
-        const char* GetPath() const override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
 
     private:
         static void CompleteAllJumps(void* lpData);

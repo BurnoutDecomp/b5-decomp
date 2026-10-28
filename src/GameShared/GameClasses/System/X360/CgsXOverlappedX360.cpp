@@ -53,7 +53,7 @@ const char* CgsXOverlapped::GetResultString(PXOVERLAPPED lpOverlapped)
 {
     // X360 @ 0x823557F0. XGetOverlappedResult returns the async completion code
     // (does NOT wait: bWait = 0, pdwResult = 0).
-    const u32 luResult = XGetOverlappedResult(lpOverlapped, nullptr, FALSE);
+    const u32 luResult = XGetOverlappedResult(lpOverlapped, 0, FALSE);
 
     switch (luResult)
     {

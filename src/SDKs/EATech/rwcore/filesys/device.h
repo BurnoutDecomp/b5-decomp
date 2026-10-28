@@ -81,7 +81,7 @@ namespace rw
 
                 virtual bool  Delete(const char* pPath) { return false; }
                 virtual bool  Move(const char* pFrom, const char* pTo) { return false; }
-                virtual void* FindBegin(const char* pPath, FindData* pData) { return nullptr; }
+                virtual void* FindBegin(const char* pPath, FindData* pData) { return 0; }
                 virtual bool  FindNext(void* pFind, FindData* pData) { return false; }
                 virtual bool  FindEnd(void* pFind) { return false; }
                 virtual bool  DirectoryCreate(const char* pPath) { return false; }

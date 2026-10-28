@@ -351,9 +351,9 @@ Vector3 RouteRequestManager::GetFleeVector(AICar* lpCarToAvoid, AICar* lpAICar)
 
     const Vector3 lAICarPos  = lpAICar->GetPosition();
     const Vector3 lThreatPos = lpCarToAvoid->GetPosition();
-    return Vector3{ lAICarPos.x - lThreatPos.x,
+    { const Vector3 lResult = { lAICarPos.x - lThreatPos.x,
                     lAICarPos.y - lThreatPos.y,
-                    lAICarPos.z - lThreatPos.z };
+                    lAICarPos.z - lThreatPos.z }; return lResult; }
 }
 
 // X360 @0x827891A0. A look-ahead request whose direction is GetFleeVector (away from the threat),
@@ -496,7 +496,7 @@ void RouteRequestManager::Update(
     RouteMapModuleIO::InputBuffer* lpRouteInputBuffer, BuzzBy* lpBuzzByManager)
 {
     // The X360 guards the whole roster walk on the player car being present (r5 != 0).
-    if (lpPlayerCar == nullptr)
+    if (lpPlayerCar == 0)
         return;
 
     static s32 saiRouteReqWitness[35] = { 0 };

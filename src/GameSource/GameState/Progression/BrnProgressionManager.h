@@ -1210,16 +1210,16 @@ private:
         // [progression wave: lifecycle] the head region is pointer-free too, so its console
         // shape survives to the host: 18 districts x Array<s16,8>, 20 bytes each, count word
         // at record +0x10 (SetupRoamingSections @0x8236FE60 -- see the member's banner).
-        static_assert(KI_DISTRICT_COUNT == 18, "X360 ctor / SetupRoamingSections walk 18 districts");
-        static_assert(sizeof(RoamingSections) == 20,
+        CGS_STATIC_ASSERT((KI_DISTRICT_COUNT == 18), "X360 ctor / SetupRoamingSections walk 18 districts");
+        CGS_STATIC_ASSERT((sizeof(RoamingSections) == 20),
                       "X360 head record stride is 0x14 (20) bytes: u16[8] + the count word");
         // The landmark cache IS pointer-free, so its console shape does survive to the host and
         // is worth pinning: FindLandmarkAISectionIndex @0x82359AE0 strides it by 8
         // (`addi r11, r11, 8`) and returns the halfword at +4 (`lhz r3, 4(r11)`), and the 512 *
         // 8 == 0x1000 span is what puts mDebugComponent at the +133000 this header records.
-        static_assert(sizeof(LandmarkAISectionIndexPair) == 8,
+        CGS_STATIC_ASSERT((sizeof(LandmarkAISectionIndexPair) == 8),
                       "X360 landmark->AI-section record stride is 8 bytes");
-        static_assert(KI_LANDMARK_AI_SECTION_INDEX_COUNT == 512,
+        CGS_STATIC_ASSERT((KI_LANDMARK_AI_SECTION_INDEX_COUNT == 512),
                       "DWARF BrnProgressionManager.h:826 sizes the table at 512 entries");
     }
 

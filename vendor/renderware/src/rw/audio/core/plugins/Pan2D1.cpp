@@ -54,8 +54,8 @@ const s32 KI_FRAME       = 256;          // MIXER_FRAME_SIZE (r6/r7 == 0x100 at 
 // PlugIn v-table the deleting destructor reinstalls (shared with Gain / Limiter1 /
 // ReverbModel1). These are opaque data symbols in the XEX; modelled as honest placeholders
 // so the bodies link without fabricating their contents.
-void *const KPAN_PAN2D1_VTAB  = nullptr; // off_8217F4B4
-void *const KBASE_PLUGIN_VTAB = nullptr; // off_820AA810
+void *const KPAN_PAN2D1_VTAB  = 0; // off_8217F4B4
+void *const KBASE_PLUGIN_VTAB = 0; // off_820AA810
 
 // The CreateInstance defaults (rodata, re-read big-endian from the decrypted XEX):
 const f32 KF_DEG2RAD          = 0.017453292f; // flt_8217F364

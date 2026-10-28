@@ -13,8 +13,8 @@ public:
     void Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem);
     bool Prepare();
 
-    const GameStateModuleIO::FlybyData* CalculateFlybyRivals() override;
-    s32 CalculateNumberOfCarsInFlyby() override;
+    const GameStateModuleIO::FlybyData* CalculateFlybyRivals() ;
+    s32 CalculateNumberOfCarsInFlyby() ;
 
 private:
     CgsContainers::BitArray<2> mStatShownMessages;

@@ -198,7 +198,7 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
 
         // Walk the cache's eight online-player records looking for the one driving the given
         // active-race-car index. Same helper (and the same known divergence) as
@@ -1444,7 +1444,7 @@ namespace BrnGui
 
 // (fold: an identical definition of GuiAudioTriggerWire was dropped here -- this TU defines it once, above)
 
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
     }
 
     // ------------------------------------------------- UpdateSoundEvents @ 0x824CB8B0
@@ -2495,7 +2495,7 @@ namespace BrnGui
 
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
     }
 
     // ================================================================================
@@ -3212,7 +3212,7 @@ namespace BrnGui
         // HOST WIDTH: the fourth field is a char POINTER. It is a 4-byte word on the X360
         // (payload 24, record 40) and 8 bytes on the x64 host (payload 32, record 48).
         // Never write those console numbers as literals -- the poster takes sizeof().
-        struct alignas(8) GuiEventSetHoveredEventIconPayload
+        struct CGS_ALIGN(8) GuiEventSetHoveredEventIconPayload
         {
             CgsID       mHoveredDriveThruId;   // +0x00
             CgsID       mHoveringRivalId;      // +0x08

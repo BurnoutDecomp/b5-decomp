@@ -69,7 +69,7 @@ namespace BrnGameState
     {
         // Base init (the X360 folds the CgsDev::DebugComponent::Construct body in via ICF).
 
-        CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule != NULL");
+        CGS_ASSERT(lpGameStateModule != 0, "lpGameStateModule != NULL");
 
         mpGameStateModule        = lpGameStateModule;
         miCurrentLocationIndex   = 0;
@@ -205,7 +205,7 @@ namespace BrnGameState
     // selected model and wheel with camera-reset and keep-reset-section enabled.
     void ResetPlayerDebugComponent::ChangeCar()
     {
-        if (mpGameStateModule->GetModeManager()->GetCurrentGameMode() != nullptr)
+        if (mpGameStateModule->GetModeManager()->GetCurrentGameMode() != 0)
             return;
         GameStateModuleIO::ChangePlayerCarEvent lEvent = {};
         lEvent.mCarModelId = maCarVersionIds[miCurrentCarVersionIndex];
@@ -291,7 +291,7 @@ namespace BrnGameState
             lpcLabel[0] = '\0';
             CgsDev::StrStream lLabelStream(lpcLabel, KI_CAR_TEXT_LENGTH);
             const char* lpcVehicleName = lpEntry->GetName();
-            lLabelStream << (lpcVehicleName != nullptr ? lpcVehicleName : "<NULLSTRING>");
+            lLabelStream << (lpcVehicleName != 0 ? lpcVehicleName : "<NULLSTRING>");
             lLabelStream << " - ";
             lLabelStream << lacCarId;
 
@@ -473,7 +473,7 @@ namespace BrnGameState
                        "meType < E_TYPE_COUNT");
             const char* lpcTypeName =
                 BrnTrigger::GenericRegion::KAPC_GENERIC_REGION_TYPE_STRINGS[static_cast<s32>(leType)];
-            if (lpcTypeName == nullptr)
+            if (lpcTypeName == 0)
             {
                 lpcTypeName = "<NULLSTRING>";
             }

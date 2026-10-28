@@ -44,7 +44,7 @@ namespace Gen
         static const u32 KU_OFFSET_NUM_MEDIUM = 0x164u;
         static const u32 KU_OFFSET_NUM_LARGE = 0x168u;
 
-        explicit crashbin(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit crashbin(Collection* lpCollection = 0, void* lpOwner = 0);
         crashbin(u64 luCollectionKey, void* lpOwner)
             : Instance(FindCollectionWithDefault(KU_CLASS_KEY, luCollectionKey), lpOwner)
         {

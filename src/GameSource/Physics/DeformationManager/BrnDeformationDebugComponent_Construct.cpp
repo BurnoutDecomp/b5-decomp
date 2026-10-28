@@ -55,7 +55,7 @@ namespace Deformation
     void DeformationDebugComponent::Construct(DeformationManager* lpDeformationManager)
     {
 
-        CGS_ASSERT( lpDeformationManager != nullptr, "lpDeformationManager" );   // BrnDeformationDebugComponent.cpp:158
+        CGS_ASSERT( lpDeformationManager != 0, "lpDeformationManager" );   // BrnDeformationDebugComponent.cpp:158
         mpDeformationManager = lpDeformationManager;
 
         mfCompressRightSide = 0.0f;
@@ -72,9 +72,9 @@ namespace Deformation
         mbRenderDrivenPointConnections  = false;
 
         miSelectedSensor   = 0;
-        mpSelectedSensor   = nullptr;
+        mpSelectedSensor   = 0;
         miSelectedRig      = 0;
-        mpSelectedRig      = nullptr;
+        mpSelectedRig      = 0;
         miCompressPreset   = 0;
 
         mbDrawDrivetimeLimitsBox = false;
@@ -101,7 +101,7 @@ namespace Deformation
         CGS_ASSERT( static_cast<u32>(liRig) < 28u, "invalid index : liIndex < 28" );   // CgsBitArray.h:203 (non-gating)
 
         DeformationManager* lpMgr = lpThis->mpDeformationManager;
-        if ( lpMgr != nullptr && lpMgr->IsDeformableObjectActive(liRig) )
+        if ( lpMgr != 0 && lpMgr->IsDeformableObjectActive(liRig) )
         {
             lpThis->mpSelectedRig = lpMgr->GetDeformableObject(liRig);
 
@@ -117,8 +117,8 @@ namespace Deformation
         }
         else
         {
-            lpThis->mpSelectedRig    = nullptr;
-            lpThis->mpSelectedSensor = nullptr;
+            lpThis->mpSelectedRig    = 0;
+            lpThis->mpSelectedSensor = 0;
             lpThis->miSelectedSensor = 0;
 
             lpThis->SetReadOnly( &lpThis->miSelectedSensor, true );
@@ -149,7 +149,7 @@ namespace Deformation
         DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
 
         DeformableObject* lpRig = lpThis->mpSelectedRig;
-        if ( lpRig == nullptr )
+        if ( lpRig == 0 )
         {
             return;
         }

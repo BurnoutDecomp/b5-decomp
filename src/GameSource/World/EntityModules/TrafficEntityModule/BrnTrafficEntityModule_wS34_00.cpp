@@ -71,7 +71,7 @@ namespace BrnTraffic
     {
         mReceiverQueue.Clear();
 
-        if ( mpDebugComponent != nullptr )
+        if ( mpDebugComponent != 0 )
         {
             mpDebugComponent->Destruct();
         }

@@ -141,31 +141,31 @@ void CDevice::SaveRingBufferState()
 // not absolute value.
 void _CDeviceAssertLayout()
 {
-    static_assert(offsetof(CDevice, muRingPut)   == 0x30, "muRingPut @ +0x30 (word[12])");
-    static_assert(offsetof(CDevice, muRingEnd)   == 0x34, "muRingEnd @ +0x34 (word[13])");
-    static_assert(offsetof(CDevice, muRingLimit) == 0x38, "muRingLimit @ +0x38 (word[14])");
-    static_assert(offsetof(CDevice, muOwnerThreadId) == 0x2A88,
+    CGS_STATIC_ASSERT((offsetof(CDevice, muRingPut)   == 0x30), "muRingPut @ +0x30 (word[12])");
+    CGS_STATIC_ASSERT((offsetof(CDevice, muRingEnd)   == 0x34), "muRingEnd @ +0x34 (word[13])");
+    CGS_STATIC_ASSERT((offsetof(CDevice, muRingLimit) == 0x38), "muRingLimit @ +0x38 (word[14])");
+    CGS_STATIC_ASSERT((offsetof(CDevice, muOwnerThreadId) == 0x2A88),
                   "owning-thread id @ +0x2A88 (pointer-invariant, before mpGpuReadback)");
-    static_assert(offsetof(CDevice, mpGpuReadback) == 0x2A90,
+    CGS_STATIC_ASSERT((offsetof(CDevice, mpGpuReadback) == 0x2A90),
                   "GPU read-back pointer @ +0x2A90");
-    static_assert(offsetof(CGpuReadback, muSecondaryRead) == 0x00,
+    CGS_STATIC_ASSERT((offsetof(CGpuReadback, muSecondaryRead) == 0x00),
                   "secondary cursor @ +0x00 of read-back block");
-    static_assert(offsetof(CGpuReadback, muPrimaryRead) == 0x3C,
+    CGS_STATIC_ASSERT((offsetof(CGpuReadback, muPrimaryRead) == 0x3C),
                   "primary cursor @ +0x3C of read-back block");
     // Past the host pointer the fields keep their relative ordering / 4-byte
     // stride even though their absolute X360 offsets shift by +4 on LLP64.
-    static_assert(offsetof(CDevice, muStopMarker) - offsetof(CDevice, muStopSegment) == 4,
+    CGS_STATIC_ASSERT((offsetof(CDevice, muStopMarker) - offsetof(CDevice, muStopSegment) == 4),
                   "stop marker immediately follows stop segment");
-    static_assert(offsetof(CDevice, muSaved5) - offsetof(CDevice, muSaved0) == 20,
+    CGS_STATIC_ASSERT((offsetof(CDevice, muSaved5) - offsetof(CDevice, muSaved0) == 20),
                   "six contiguous saved-state words");
-    static_assert(offsetof(CDevice, muLiveSave3) - offsetof(CDevice, muLiveSave0) == 12,
+    CGS_STATIC_ASSERT((offsetof(CDevice, muLiveSave3) - offsetof(CDevice, muLiveSave0) == 12),
                   "four contiguous live-state words");
     // GPU-block profiling fields poked by ~CBlocker: the seconds-per-tick scalar
     // precedes the two 64-bit tick accumulators. Only ORDER is pinned for the
     // scalar->counter step: on the LLP64 host the 8-byte-aligned u64 lands after
     // the misaligned-pointer shift, so its X360-absolute +8 spacing is not
     // reproducible (all access is by name). The two u64 counters ARE adjacent.
-    static_assert(offsetof(CDevice, mfSecondsPerTick) < offsetof(CDevice, mu64BlockTicks),
+    CGS_STATIC_ASSERT((offsetof(CDevice, mfSecondsPerTick) < offsetof(CDevice, mu64BlockTicks)),
                   "seconds-per-tick scalar precedes the block-ticks counters");
 }
 

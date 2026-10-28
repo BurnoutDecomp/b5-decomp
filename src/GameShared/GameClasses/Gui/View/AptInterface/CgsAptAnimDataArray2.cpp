@@ -22,6 +22,6 @@
 // `memcpy(176 * count + a1, a2, 176)`, so sizeof(AnimData) must be 176 (0xB0). This also
 // transitively pins the two embedded Array<>-member count offsets (mChannelData.miCount @
 // +0x90, meChannels.miCount @ +0xAC) the AnimData ctor (@ 0x824E8FC8) stores -1 into.
-static_assert(sizeof(CgsGui::AnimData) == 176, "AnimData stride 176 (X360 0x824E5BD0)");
+CGS_STATIC_ASSERT((sizeof(CgsGui::AnimData) == 176), "AnimData stride 176 (X360 0x824E5BD0)");
 
 template void Array<CgsGui::AnimData, 2>::Append(const CgsGui::AnimData&);

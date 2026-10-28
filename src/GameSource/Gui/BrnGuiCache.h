@@ -56,7 +56,7 @@ namespace BrnGameState { namespace GameStateModuleIO { class SpecificGameModeEve
 // included here (it pulls the whole game-state IO tree into this GUI boundary header).
 // A fixed-underlying-type enum is a COMPLETE type after an opaque declaration, so it can
 // be taken by value and used as an array subscript below.
-namespace BrnGameState { enum ECurrentMedalTargetTime : s32; }
+namespace BrnGameState { enum ECurrentMedalTargetTime ; }
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
 // CgsNetwork::PlayerName is now a COMPLETE type (included above): it is the lead value member
 // of ReplayPlayerActive (the replay-player-active table entry GetSortedReplayPlayerActive
@@ -139,7 +139,7 @@ namespace BrnGui
         u32                    muActiveCount; // +0x18 (stw; qsort key)
         u8                     mPad_1C[4];    // +0x1C..+0x1F (pad to the attested stride 32)
     };
-    static_assert(sizeof(ReplayPlayerActive) == 0x20, "ReplayPlayerActive stride 0x20 (32)");
+    CGS_STATIC_ASSERT((sizeof(ReplayPlayerActive) == 0x20), "ReplayPlayerActive stride 0x20 (32)");
 
     struct StateLoadingHelper
     {
@@ -325,7 +325,7 @@ namespace BrnGui
         s16     mi16AISectionIndex; // +0x20 (nearest AI section; 0x7FFF == invalid)
         u8      mPad_22[0x30 - 0x22]; // +0x22..+0x2F (array stride pad)
     };
-    static_assert(sizeof(SatNavEventDisplayInfo) == 0x30,
+    CGS_STATIC_ASSERT((sizeof(SatNavEventDisplayInfo) == 0x30),
                   "maEventStarts element stride (X360 indexer @0x824F65E0: 48*i)");
 
     class GuiCache
@@ -2444,5 +2444,5 @@ namespace BrnGui
         s32 miNumLandmarks;            // +0x24
         u32 muEventId;                 // +0x28
     };
-    static_assert(sizeof(PresetEvent) == 0x2C, "preset-event record stride (7700/175)");
+    CGS_STATIC_ASSERT((sizeof(PresetEvent) == 0x2C), "preset-event record stride (7700/175)");
 }

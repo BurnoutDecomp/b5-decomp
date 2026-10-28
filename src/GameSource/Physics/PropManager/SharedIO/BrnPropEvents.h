@@ -12,7 +12,7 @@ namespace BrnPhysics
     namespace Props
     {
         // Input event: update a prop's physics state.
-        struct alignas(16) UpdatePropEvent
+        struct CGS_ALIGN(16) UpdatePropEvent
         {
             Matrix44Affine         mTransform;
             Vector3                mLinearVelocity;
@@ -31,7 +31,7 @@ namespace BrnPhysics
         // (leading Matrix44Affine) => sizeof == 80, the stride the queue memcpy is faithful to
         // (BaseEventQueue<AddPhysicalPropEvent>::AddEvent @0x822C8308 / Append @0x827A7E50, and
         //  EventQueue<AddPhysicalPropEvent,50>::Construct @0x822E36E0).
-        struct alignas(16) AddPhysicalPropEvent
+        struct CGS_ALIGN(16) AddPhysicalPropEvent
         {
             Matrix44Affine         mTransform;            // BrnPropEvents.h:47  @0x00 (64B)
             BrnWorld::PropEntityID mEntityId;             // BrnPropEvents.h:48  @0x40 (4B)
@@ -48,7 +48,7 @@ namespace BrnPhysics
         // (miSlot). alignas(16) => sizeof == 80, the stride the queue memcpy is faithful to
         // (BaseEventQueue<AddPhysicalPartEvent>::AddEvent @0x822C8498 / Append @0x827A7F40, and
         //  EventQueue<AddPhysicalPartEvent,50>::Construct @0x822E3750).
-        struct alignas(16) AddPhysicalPartEvent
+        struct CGS_ALIGN(16) AddPhysicalPartEvent
         {
             Matrix44Affine         mTransform;    // BrnPropEvents.h:66  @0x00 (64B)
             BrnWorld::PropEntityID mEntityId;     // BrnPropEvents.h:67  @0x40 (4B)
@@ -72,7 +72,7 @@ namespace BrnPhysics
             BrnWorld::PropEntityID mEntityId;        // BrnPropEvents.h:106  @+0x0 (stw word0)
             s32                    miPhysicalIndex;  // BrnPropEvents.h:107  @+0x4 (stw word1)
         };
-        static_assert(sizeof(RemovePhysicalPropEvent) == 8,
+        CGS_STATIC_ASSERT((sizeof(RemovePhysicalPropEvent) == 8),
                       "RemovePhysicalPropEvent stride 8 (slwi,3)");
 
         // FLAGGED ADDITIVE GROW (Prop-Physics group): DWARF homes this at BrnPropEvents.h:119.
@@ -87,7 +87,7 @@ namespace BrnPhysics
             BrnWorld::PropEntityID mEntityId;        // BrnPropEvents.h:121  @+0x0 (stw word0)
             s32                    miPhysicalIndex;  // BrnPropEvents.h:122  @+0x4 (stw word1)
         };
-        static_assert(sizeof(RemovePhysicalPartEvent) == 8,
+        CGS_STATIC_ASSERT((sizeof(RemovePhysicalPartEvent) == 8),
                       "RemovePhysicalPartEvent stride 8 (slwi,3)");
 
         // FLAGGED ADDITIVE GROW (Prop-Physics group): the DWARF home of PropRaceCarContact is
@@ -103,7 +103,7 @@ namespace BrnPhysics
         // 32-byte stride. NOTE: the 32-byte stride is derived from the DWARF layout + alignment,
         // NOT confirmed by an AddEvent/Append memcpy (no such dossier exists for this type); 32 is
         // the only 16-aligned size >= 20. Flagged medium-confidence.
-        struct alignas(16) PropRaceCarContact
+        struct CGS_ALIGN(16) PropRaceCarContact
         {
             Vector3                mForce;         // BrnPropManager.h:58  @0x00 (16B)
             BrnWorld::PropEntityID mPropEntityId;  // BrnPropManager.h:59  @0x10 (4B)
@@ -122,7 +122,7 @@ namespace BrnPhysics
         // 16-byte alignment (Vector3 is alignas(16)) sizes the record to exactly 64
         // bytes (48 for the three Vector3 + 4 PropEntityID + 2 i16, padded to 64) --
         // the stride the Append memcpy is store-for-store faithful to.
-        struct alignas(16) PropUpdateNotification
+        struct CGS_ALIGN(16) PropUpdateNotification
         {
             Vector3                mPosition;        // BrnPropEvents.h:168
             Vector3                mLinearVelocity;  // BrnPropEvents.h:169

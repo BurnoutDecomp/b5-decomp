@@ -90,7 +90,7 @@ namespace Deformation
     {
         struct CylinderInitialiseStorage
         {
-            alignas(16) char maCylinderInitialiseBuffer[96];  // DWARF BrnPhysicalWheel.h:202
+            CGS_ALIGN(16) char maCylinderInitialiseBuffer[96];  // DWARF BrnPhysicalWheel.h:202
             char maConsoleNeighbourTail[32];                  // NOT a source member -- see above
         };
         CylinderInitialiseStorage gCylinderInitialiseStorage = {};

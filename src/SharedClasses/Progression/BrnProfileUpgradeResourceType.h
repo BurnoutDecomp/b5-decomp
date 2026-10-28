@@ -35,18 +35,18 @@ public:
     // X360 0x8267D870. The serialised descriptor is a single main-memory block: entry[0] =
     // { m_size = (elementCount + 1) * 8, m_alignment = 16 } (elementCount = *(u32*)lpResource),
     // the remaining four entries = { m_size = 0, m_alignment = 1 }.
-    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
 
     // X360 0x8267DF60. Relocate-on-load: convert the self-relative table offset at +4 into an
     // absolute pointer by adding the record base (`*(lpResource + 4) += lpResource`).
-    void FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    void FixUp(void* lpResource, const rw::Resource& lrResource) const ;
 
     // X360 0x8267DF70. Relocate-for-save: the inverse (`*(lpResource + 4) -= lpResource`).
-    void FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    void FixDown(void* lpResource, const rw::Resource& lrResource) const ;
 
     // X360 0x82676BA8. Import-pointer enumeration is not implemented for this resource type --
     // the X360 body unconditionally fires the "NOT IMPLEMENTED YET" assert and returns.
-    void GetImportPointer(const void* lpResource, u32 luIndex, u32* lpuOffset, const void** lppValue) const override;
+    void GetImportPointer(const void* lpResource, u32 luIndex, u32* lpuOffset, const void** lppValue) const ;
 };
 
 }

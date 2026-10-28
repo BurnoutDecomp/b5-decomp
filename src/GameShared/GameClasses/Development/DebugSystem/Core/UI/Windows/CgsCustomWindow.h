@@ -20,16 +20,16 @@ namespace CgsDev
         // The menu row that opens its owning Window. mpWindow points back at the CustomWindow it fronts.
         struct CustomWindowMenuItem : public MenuItem
         {
-            CustomWindowMenuItem() : mpWindow(nullptr) {}
+            CustomWindowMenuItem() : mpWindow(0) {}
 
             void Prepare(Window* lpWindow);
 
-            virtual void    Update(f32 lfTimeStep, InputEvent leEvent) override;
-            virtual void    Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfAlpha) override;
-            virtual void    ComputeSize() override;
-            virtual bool    IsUseful() const override;
-            virtual void    GetDisplayName(char* lpcBuffer, s32 liBufferLen) const override;
-            virtual Window* OpenAsWindow() override;
+            virtual void    Update(f32 lfTimeStep, InputEvent leEvent) ;
+            virtual void    Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, bool lbSelected, f32 lfAlpha) ;
+            virtual void    ComputeSize() ;
+            virtual bool    IsUseful() const ;
+            virtual void    GetDisplayName(char* lpcBuffer, s32 liBufferLen) const ;
+            virtual Window* OpenAsWindow() ;
 
         protected:
             Window* mpWindow;   // the window this row opens
@@ -41,13 +41,13 @@ namespace CgsDev
 
             void Prepare(f32 lfWidth, f32 lfHeight, const char* lpcCaption, const char* lpcMenuPath, s32 lxFlags);
 
-            virtual void Update(f32 lfTimeStep, InputEvent leEvent) override;
+            virtual void Update(f32 lfTimeStep, InputEvent leEvent) ;
 
             void Register(const char* lpcMenuPath);
             void Unregister();
 
         protected:
-            virtual void GetMenuPath(char* lpcBuffer, s32 liBufferLen) override;
+            virtual void GetMenuPath(char* lpcBuffer, s32 liBufferLen) ;
 
             CustomWindowMenuItem mMenuItem;   // the menu row that opens this window
         };

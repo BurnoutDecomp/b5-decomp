@@ -17,7 +17,7 @@
 // splat then vcfsx converts it to float). The union view `VectorIntrinsicUnion` is the
 // SDK's named way to read/write individual lanes by index.
 
-#include <cstdint>
+#include "types.hpp"
 
 namespace rw
 {
@@ -25,7 +25,7 @@ namespace math
 {
 namespace vpu
 {
-    struct alignas(16) VectorIntrinsic
+    struct CGS_ALIGN(16) VectorIntrinsic
     {
         // Four 32-bit lanes. The console register is lane-ordered [X,Y,Z,W]
         // (big-endian element 0 == VectorAxisX); we keep that lane ordering so the

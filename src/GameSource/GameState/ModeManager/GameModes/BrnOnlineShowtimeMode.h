@@ -38,16 +38,16 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (OnlineShowtimeMode::*)() const>(&OnlineShowtimeMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineShowtimeMode::*)() const>(&OnlineShowtimeMode::GetName)) != 0),
               "OnlineShowtimeMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (OnlineShowtimeMode::*)() const>(&OnlineShowtimeMode::GetIntroDurationSeconds)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (OnlineShowtimeMode::*)() const>(&OnlineShowtimeMode::GetIntroDurationSeconds)) != 0),
               "OnlineShowtimeMode::GetIntroDurationSeconds must bind GameMode vtable slot 8");
-static_assert(sizeof(static_cast<void (OnlineShowtimeMode::*)(EGameModeEvent)>(&OnlineShowtimeMode::SendEvent)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineShowtimeMode::*)(EGameModeEvent)>(&OnlineShowtimeMode::SendEvent)) != 0),
               "OnlineShowtimeMode::SendEvent must bind GameMode vtable slot 12");
-static_assert(sizeof(static_cast<void (OnlineShowtimeMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineShowtimeMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineShowtimeMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineShowtimeMode::Start)) != 0),
               "OnlineShowtimeMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<bool (OnlineShowtimeMode::*)(const ScoringSystem*) const>(&OnlineShowtimeMode::ShouldExit)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineShowtimeMode::*)(const ScoringSystem*) const>(&OnlineShowtimeMode::ShouldExit)) != 0),
               "OnlineShowtimeMode::ShouldExit must bind GameMode vtable slot 13");
-static_assert(sizeof(static_cast<bool (OnlineShowtimeMode::*)() const>(&OnlineShowtimeMode::RequiresStreaming)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineShowtimeMode::*)() const>(&OnlineShowtimeMode::RequiresStreaming)) != 0),
               "OnlineShowtimeMode::RequiresStreaming must bind GameMode vtable slot 23");
 }

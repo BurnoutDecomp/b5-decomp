@@ -24,12 +24,12 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"      // CgsSceneManager::SceneQueryId
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerTypes.h"  // CgsSceneManager::LineTestIntersection
 
-#include <cstdint>   // uintptr_t (the record area follows the header in the event's byte image)
+#include "types.hpp"   // uintptr_t (the record area follows the header in the event's byte image)
 
 namespace CgsSceneManager
 {
     // CgsSceneManagerTypes.h:67 -- the 64-byte record (two Vector3 lanes force the 16-byte padding).
-    static_assert(sizeof(LineTestIntersection) == 0x40, "LineTestIntersection is the 64-byte record");
+    CGS_STATIC_ASSERT((sizeof(LineTestIntersection) == 0x40), "LineTestIntersection is the 64-byte record");
 
 namespace SceneManagerIO
 {
@@ -56,6 +56,6 @@ namespace SceneManagerIO
         SceneQueryId GetQueryId() const          { return mQueryId; }
         const LineTestIntersection& GetIntersection(s32 liIndex) const { return GetIntersections()[liIndex]; }
     };
-    static_assert(sizeof(OutEventLineTestFineResult) == 0x10, "the header is 16 bytes; records start at +0x10");
+    CGS_STATIC_ASSERT((sizeof(OutEventLineTestFineResult) == 0x10), "the header is 16 bytes; records start at +0x10");
 }
 }

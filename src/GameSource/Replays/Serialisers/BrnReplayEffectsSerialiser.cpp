@@ -47,7 +47,7 @@ namespace BrnReplays
     {
         BaseSerialiser::Lock();
         EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
-        CGS_ASSERT(lpStatic != nullptr, "lpStatic");
+        CGS_ASSERT(lpStatic != 0, "lpStatic");
         switch (meMode)
         {
         case E_MODE_RECORDING:

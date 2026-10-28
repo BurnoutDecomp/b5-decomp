@@ -47,7 +47,7 @@ namespace CgsGui
     // assert string (GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h:169).
     void GuiComponent::SetStateInterface(StateInterface* lpStateInterface)
     {
-        CGS_ASSERT(lpStateInterface != nullptr,
+        CGS_ASSERT(lpStateInterface != 0,
                    "Invalid state interface sent to GuiComponent::SetStateInterface");
         mpStateInterface = lpStateInterface;
     }
@@ -61,7 +61,7 @@ namespace CgsGui
     void GuiComponent::FillAptViewMessage(const char* lpacAptName, const char* lpacViewState,
                                           const char* lpacParam, bool lbImmediate)
     {
-        CGS_ASSERT(mpStateInterface != nullptr, "mpStateInterface");
+        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
         // GetAccessPointers() reproduces the "mpAccessPointers != NULL" assert and the
         // +4 load the X360 inlined here.
         GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
@@ -79,9 +79,9 @@ namespace CgsGui
     //   * Finally the name is hashed into muHashedName (+0x84) and that hash returned.
     u32 GuiComponent::SetName(const char* lpacName, const char* lpacParentName)
     {
-        CGS_ASSERT(lpacName != nullptr, "Invalid name sent to GuiComponent::SetName");
+        CGS_ASSERT(lpacName != 0, "Invalid name sent to GuiComponent::SetName");
 
-        if (lpacParentName != nullptr)
+        if (lpacParentName != 0)
         {
             const u32 luNameLen   = static_cast<u32>(strlen(lpacName));
             const u32 luParentLen = static_cast<u32>(strlen(lpacParentName));

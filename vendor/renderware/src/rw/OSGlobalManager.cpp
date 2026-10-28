@@ -1,6 +1,6 @@
 #include "rw/rwcore_structs.h"
 
-#include <cstdint>
+#include "types.hpp"
 #include <new>       // placement new (the X360 ctor runs on the aligned heap block)
 #include <intrin.h>  // _InterlockedIncrement / _InterlockedDecrement (the X360 lwarx/stwcx loops)
 

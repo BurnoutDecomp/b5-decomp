@@ -13,11 +13,11 @@ namespace BrnTraffic
 {
     void SectionFlow::_AssertLayout()
     {
-        static_assert(offsetof(SectionFlow, muFlowTypeId)        == 0x00, "SectionFlow::muFlowTypeId");
-        static_assert(offsetof(SectionFlow, muVehiclesPerMinute) == 0x02, "SectionFlow::muVehiclesPerMinute");
+        CGS_STATIC_ASSERT((offsetof(SectionFlow, muFlowTypeId)        == 0x00), "SectionFlow::muFlowTypeId");
+        CGS_STATIC_ASSERT((offsetof(SectionFlow, muVehiclesPerMinute) == 0x02), "SectionFlow::muVehiclesPerMinute");
 
         // Pointer-free record: identical stride on console and host. Attested by the
         // shipped data (hull 4: 4 sections, 16-byte mpaSectionFlows block).
-        static_assert(sizeof(SectionFlow) == 4, "SectionFlow stride");
+        CGS_STATIC_ASSERT((sizeof(SectionFlow) == 4), "SectionFlow stride");
     }
 }

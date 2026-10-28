@@ -68,7 +68,7 @@ typedef int AptGetBytesEnum;       // GetBytesTotal/Loaded selector
 // DrawRenderingUnit dispatches on it; declared here as the SDK's int-backed enum so
 // the user-function table's render slots are type-correct. Identical re-declaration
 // in the host headers is permitted.)
-enum AptMaskRenderOperation : int;
+enum AptMaskRenderOperation ;
 
 // Apt.h:166 — horizontal/box text alignment.
 enum AptStringAlignment

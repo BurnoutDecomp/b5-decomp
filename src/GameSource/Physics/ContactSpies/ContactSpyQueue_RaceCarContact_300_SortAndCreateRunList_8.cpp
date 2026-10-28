@@ -84,7 +84,7 @@ template <typename T, s32 N>
 template <s32 OutMaxLength>
 void ContactSpyQueue<T, N>::SortAndCreateRunList(ContactSpyRunList<OutMaxLength>* lpOutRunList)
 {
-    CGS_ASSERT(lpOutRunList != nullptr, "lpOutRunList != NULL");   // BrnContactSpyQueue.cpp:110
+    CGS_ASSERT(lpOutRunList != 0, "lpOutRunList != NULL");   // BrnContactSpyQueue.cpp:110
 
     if (this->GetLength() == 0)
     {
@@ -125,7 +125,7 @@ void ContactSpyQueue<T, N>::SortAndCreateRunList(ContactSpyRunList<OutMaxLength>
             const char* lpcTypeName = this->DebugGetEntityTypeName();
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
-                if (lpcTypeName == nullptr)
+                if (lpcTypeName == 0)
                 {
                     lpcTypeName = "<NULLSTRING>";
                 }

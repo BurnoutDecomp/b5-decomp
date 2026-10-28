@@ -57,7 +57,7 @@ namespace
 
 // The line arm carves its result as one 128-byte arena slot and the stream copies a whole
 // aligned result per line, so the one-record block must be exactly that slot.
-static_assert(sizeof(LineWithPolySoupStreamJobDesc::StreamResult) == 128,
+CGS_STATIC_ASSERT((sizeof(LineWithPolySoupStreamJobDesc::StreamResult) == 128),
               "StreamResult is the 16-byte header plus one 112-byte hit record");
 
 // ----------------------------------------------------------------------------

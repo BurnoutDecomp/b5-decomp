@@ -63,8 +63,8 @@ public:
     bool Prepare(CgsResource::ResourceHandle lHandle);
 
     // ARTIST @0x82767E20 / @0x827750D0, DecFIGS .cpp:140 / :152.
-    bool Release() override;
-    void Destruct() override;
+    bool Release() ;
+    void Destruct() ;
 
     // The base's no-arg Update() stays reachable by name (the console hides it the same way).
     using CgsModule::ModuleSingleBuffered::Update;

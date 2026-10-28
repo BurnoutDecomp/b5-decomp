@@ -266,15 +266,15 @@ namespace BrnWorld
         // @0x822FA068. THE root of the prop chain: it is the only writer of
         // PropZoneManager::mauStartIndexOfZone[] = KU_UNLOADED_ZONE, so until it runs every
         // zone reads as already-loaded and nothing can ever stream in.
-        void Construct() override;
+        void Construct() ;
         // @0x82306DB8. Resumable staged prepare (see EPrepareStage).
         bool Prepare(PropEntityIO::OutputBuffer_Prepare* lpOutputBuffer,
                      rw::IResourceAllocator* lpPhysicsAllocator);
         // @0x822A92F8.
-        bool Release() override;
+        bool Release() ;
         // Bodied in BrnPropEntityModule_wS34_00.cpp (a tail call into
         // ModuleSingleBuffered::Destruct).
-        void Destruct() override;
+        void Destruct() ;
 
         // @0x822A90A0 / @0x822A9218. WorldModule::Construct registers the module's nested
         // pre-scene / post-physics CPU perf monitors through these.

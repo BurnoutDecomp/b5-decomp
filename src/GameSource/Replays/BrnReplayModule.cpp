@@ -16,7 +16,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstring>
-#include <cstdint>
+#include "types.hpp"
 #include <cstdio>   // snprintf
 
 // ============================================================================
@@ -56,9 +56,9 @@ namespace BrnReplays
             s32 miReel;
             char macName[256];
         };
-        static_assert(sizeof(ReplayModePayload) ==4 && sizeof(ReplayReelPayload) ==4,
+        CGS_STATIC_ASSERT((sizeof(ReplayModePayload) ==4 && sizeof(ReplayReelPayload) ==4),
                       "original scalar replay GUI payloads");
-        static_assert(sizeof(ReplayPlayReelPayload) ==8 && sizeof(ReplayReelNamePayload) ==260,
+        CGS_STATIC_ASSERT((sizeof(ReplayPlayReelPayload) ==8 && sizeof(ReplayReelNamePayload) ==260),
                       "original replay play/name payload extents");
 
         // The current inline CgsModuleUtils helpers keep the lock order but omit
@@ -69,13 +69,13 @@ namespace BrnReplays
         {
             static const char KACgsModuleUtilsPath[] =
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h";
-            if (lpDestBuffer == nullptr)
+            if (lpDestBuffer == 0)
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpInputBuffer", KACgsModuleUtilsPath, liDestLine);
                 CgsDev::Assert::EndAssert();
             }
-            if (lpSourceBuffer == nullptr)
+            if (lpSourceBuffer == 0)
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpOutputBuffer0", KACgsModuleUtilsPath, liSourceLine);
@@ -85,9 +85,9 @@ namespace BrnReplays
     }
 
     ReplayModule::ReplayModule()
-        : maJobs4940{EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr),
-                     EA::Jobs::Job(nullptr), EA::Jobs::Job(nullptr)}
-        , mSerialiseJob(nullptr)
+        : maJobs4940{EA::Jobs::Job(0), EA::Jobs::Job(0),
+                     EA::Jobs::Job(0), EA::Jobs::Job(0)}
+        , mSerialiseJob(0)
     {
         // Base and embedded stream constructors own their locks and the nested Relocator job.
         // ARTIST 827E0448..046C constructs these four module jobs in slot order, then the final job.
@@ -118,10 +118,10 @@ namespace BrnReplays
         mbStartActionReplay = false;
         mbAutoStart = true;
 
-        mpLinearMalloc = nullptr;
-        mpcPrimaryStreamBuffer = nullptr;
-        mpcHeaderStreamBuffer = nullptr;
-        mpSecondaryStreamBuffer = nullptr;
+        mpLinearMalloc = 0;
+        mpcPrimaryStreamBuffer = 0;
+        mpcHeaderStreamBuffer = 0;
+        mpSecondaryStreamBuffer = 0;
         miCurrentFrame = 0;
         miKeyFrameInterval = 10;
         meMode = E_MODE_INGAME;
@@ -139,7 +139,7 @@ namespace BrnReplays
         meStreamStage = E_STREAM_STAGE_CLOSED;
 
         for (s32 liSerialiser = 0; liSerialiser < KI_NUM_SERIALISERS; ++liSerialiser)
-            mapSerialisers[liSerialiser] = nullptr;
+            mapSerialisers[liSerialiser] = 0;
 
         for (s32 liReel = 0; liReel < 6; ++liReel)
         {
@@ -254,7 +254,7 @@ namespace BrnReplays
         if (mbSerialiseActive)
         {
             // ARTIST 8264B4CC..DC: null callback/context and sleep=-1, before poster End.
-            mSerialiseJob.WaitOn(nullptr, nullptr, -1);
+            mSerialiseJob.WaitOn(0, 0, -1);
             mCommandPoster.End();
             mbPosterActive = false;
         }
@@ -300,10 +300,10 @@ namespace BrnReplays
 
         const ReplayIO::InputBuffer_PostSim::GuiEventQueue* lpQueue =
             lpInputBuffer->GetGuiEvent();
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
         s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             switch (liEventType)
             {
@@ -484,7 +484,7 @@ namespace BrnReplays
         for (s32 liSlot = 0; liSlot < KI_NUM_SERIALISERS; ++liSlot)
         {
             const BaseSerialiser* lpSerialiser = mapSerialisers[liSlot];
-            if (lpSerialiser != nullptr && lpSerialiser->miBufferUsed > 0)
+            if (lpSerialiser != 0 && lpSerialiser->miBufferUsed > 0)
             {
                 laEntries[liNumSerialisers].miId = lpSerialiser->meId;
                 laEntries[liNumSerialisers].miSize = lpSerialiser->miBufferUsed;
@@ -514,7 +514,7 @@ namespace BrnReplays
         for (s32 liSlot = 0; liSlot < KI_NUM_SERIALISERS; ++liSlot)
         {
             const BaseSerialiser* lpSerialiser = mapSerialisers[liSlot];
-            if (lpSerialiser != nullptr)
+            if (lpSerialiser != 0)
                 lbAllReady = lbAllReady && lpSerialiser->mbDataReady;
         }
         mbPlaybackDataReady = lbAllReady;
@@ -532,7 +532,7 @@ namespace BrnReplays
         for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
         {
             BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-            if (lpSerialiser != nullptr)
+            if (lpSerialiser != 0)
             {
                 lpSerialiser->SetDataReady(true);
                 lpSerialiser->SetMode(leMode);
@@ -564,7 +564,7 @@ namespace BrnReplays
             for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
             {
                 BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                if (lpSerialiser != nullptr)
+                if (lpSerialiser != 0)
                 {
                     lpSerialiser->miBufferUsed = 0;
                     lpSerialiser->miBufferRead = 0;
@@ -586,7 +586,7 @@ namespace BrnReplays
             for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
             {
                 BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                if (lpSerialiser != nullptr)
+                if (lpSerialiser != 0)
                 {
                     lpSerialiser->SetMode(BaseSerialiser::E_MODE_RESTORING);
                     lpSerialiser->SetDataReady(false);
@@ -674,13 +674,13 @@ namespace BrnReplays
             {
                 StopRecording(lpInputBuffer, lpOutputBuffer, lUpdateSet);
                 StreamHeader* lpHeader = reinterpret_cast<StreamHeader*>(mpcHeaderBuffer);
-                if (lpHeader->mpFrameOffsets != nullptr)
+                if (lpHeader->mpFrameOffsets != 0)
                 {
                     lpHeader->ChopOffTailFrames();
-                    const std::uintptr_t luHeaderBase =
-                        reinterpret_cast<std::uintptr_t>(lpHeader);
-                    const std::uintptr_t luOffsets =
-                        reinterpret_cast<std::uintptr_t>(lpHeader->mpFrameOffsets);
+                    const uintptr_t luHeaderBase =
+                        reinterpret_cast<uintptr_t>(lpHeader);
+                    const uintptr_t luOffsets =
+                        reinterpret_cast<uintptr_t>(lpHeader->mpFrameOffsets);
                     lpHeader->mpFrameOffsets =
                         reinterpret_cast<StreamOffset*>(luOffsets - luHeaderBase);
                 }
@@ -757,12 +757,12 @@ namespace BrnReplays
                 return;
 
             StreamHeader* lpHeader = reinterpret_cast<StreamHeader*>(mpcHeaderBuffer);
-            if (lpHeader->mpFrameOffsets != nullptr)
+            if (lpHeader->mpFrameOffsets != 0)
             {
-                const std::uintptr_t luHeaderBase =
-                    reinterpret_cast<std::uintptr_t>(lpHeader);
-                const std::uintptr_t luOffsets =
-                    reinterpret_cast<std::uintptr_t>(lpHeader->mpFrameOffsets);
+                const uintptr_t luHeaderBase =
+                    reinterpret_cast<uintptr_t>(lpHeader);
+                const uintptr_t luOffsets =
+                    reinterpret_cast<uintptr_t>(lpHeader->mpFrameOffsets);
                 lpHeader->mpFrameOffsets =
                     reinterpret_cast<StreamOffset*>(luHeaderBase + luOffsets);
             }
@@ -781,7 +781,7 @@ namespace BrnReplays
                 const StreamOffset& lrOffset =
                     mReadStream.mpStreamHeader->mpFrameOffsets[mReadStream.miCurrentFrunk];
                 const s32 liReadSize = (lrOffset.miFrunkSize + 0xFFFF) & 0xFFFF0000;
-                if (!mPrimaryDiskReadStream.ReadBlock(lrOffset.miFileOffset, nullptr, liReadSize))
+                if (!mPrimaryDiskReadStream.ReadBlock(lrOffset.miFileOffset, 0, liReadSize))
                     return;
             }
 
@@ -793,7 +793,7 @@ namespace BrnReplays
             for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
             {
                 BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                if (lpSerialiser != nullptr)
+                if (lpSerialiser != 0)
                 {
                     lReadResult.mapBuffers[liId] = lpSerialiser->mpBuffer;
                     lReadResult.maiSizes[liId] = lpSerialiser->miBufferSize;
@@ -807,7 +807,7 @@ namespace BrnReplays
                     for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
                     {
                         BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                        if (lpSerialiser != nullptr)
+                        if (lpSerialiser != 0)
                             lpSerialiser->miBufferRead = 0;
                     }
                 }
@@ -820,7 +820,7 @@ namespace BrnReplays
                         for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
                         {
                             BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                            if (lpSerialiser != nullptr)
+                            if (lpSerialiser != 0)
                                 lpSerialiser->miBufferRead = 0;
                         }
                         ++miCurrentFrame;
@@ -836,7 +836,7 @@ namespace BrnReplays
                         for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
                         {
                             BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                            if (lpSerialiser != nullptr)
+                            if (lpSerialiser != 0)
                             {
                                 lpSerialiser->miBufferRead = 0;
                                 lpSerialiser->miBufferUsed = lReadResult.maiSizes[liId];
@@ -890,7 +890,7 @@ namespace BrnReplays
                 for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
                 {
                     BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                    if (lpSerialiser != nullptr)
+                    if (lpSerialiser != 0)
                     {
                         lpSerialiser->miBufferRead = 0;
                         lpSerialiser->miBufferUsed = 0;
@@ -912,7 +912,7 @@ namespace BrnReplays
                 for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
                 {
                     BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-                    if (lpSerialiser != nullptr)
+                    if (lpSerialiser != 0)
                     {
                         lpSerialiser->miBufferRead = 0;
                         lpSerialiser->SetDataReady(false);
@@ -943,7 +943,7 @@ namespace BrnReplays
         UnlockSerialisers();
         if (mbSerialiseActive)
         {
-            mSerialiseJob.WaitOn(nullptr, nullptr, -1);
+            mSerialiseJob.WaitOn(0, 0, -1);
             mCommandPoster.End();
             mbPosterActive = false;
         }
@@ -960,7 +960,7 @@ namespace BrnReplays
         for (s32 liId = 0; liId < KI_NUM_SERIALISERS; ++liId)
         {
             BaseSerialiser* lpSerialiser = mapSerialisers[liId];
-            if (lpSerialiser != nullptr)
+            if (lpSerialiser != 0)
             {
                 lpSerialiser->SetMode(BaseSerialiser::E_MODE_RESTORING);
                 lpSerialiser->SetDataReady(false);
@@ -1005,7 +1005,7 @@ namespace BrnReplays
         miCurrentPlayReel = -1;
         ClearSerialisers(BaseSerialiser::E_MODE_RESTORING, true);
         CloseReplayFiles(lpOutputBuffer);
-        mReadStream.mpStreamHeader = nullptr;
+        mReadStream.mpStreamHeader = 0;
         meStreamStage = E_STREAM_STAGE_CLOSING;
         if (mUnidentified5C38 != 0)
             CgsSystem::HardwareInit::EnableJobThread();
@@ -1070,7 +1070,7 @@ namespace BrnReplays
 
         lpStatusInterface->miCurrentRecordReel = miCurrentRecordReel;
         lpStatusInterface->miCurrentPlaybackReel = miCurrentPlayReel;
-        if (meState == E_STREAM_STATE_PLAYING && mReadStream.mpStreamHeader != nullptr)
+        if (meState == E_STREAM_STATE_PLAYING && mReadStream.mpStreamHeader != 0)
         {
             s32 liFrunksFromFirst =
                 mReadStream.miCurrentFrunk - mReadStream.mpStreamHeader->miFirstFrunk;

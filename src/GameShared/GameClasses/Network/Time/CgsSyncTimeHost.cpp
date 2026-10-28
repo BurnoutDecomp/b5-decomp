@@ -26,8 +26,8 @@ namespace CgsNetwork
     // message manager at +0x0 and the player manager at +0x4 (`*this = a3; this[1] = a2`).
     void SyncTimeHost::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != nullptr, "lpPlayerManager");
-        CGS_ASSERT(lpMessageManager != nullptr, "lpMessageManager");
+        CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
+        CGS_ASSERT(lpMessageManager != 0, "lpMessageManager");
 
         mpSyncTimeMessageManager = lpMessageManager;
         mpPlayerManager          = lpPlayerManager;
@@ -44,7 +44,7 @@ namespace CgsNetwork
     // slots are keyed by the client id.
     bool SyncTimeHost::Prepare()
     {
-        CGS_ASSERT(mpSyncTimeMessageManager != nullptr, "mpSyncTimeMessageManager");
+        CGS_ASSERT(mpSyncTimeMessageManager != 0, "mpSyncTimeMessageManager");
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_HOST);
         return true;
@@ -54,7 +54,7 @@ namespace CgsNetwork
     // Leave the session: park the shared message manager back in the idle mode.
     bool SyncTimeHost::Release()
     {
-        CGS_ASSERT(mpSyncTimeMessageManager != nullptr, "mpSyncTimeMessageManager");
+        CGS_ASSERT(mpSyncTimeMessageManager != 0, "mpSyncTimeMessageManager");
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_NONE);
         return true;
@@ -69,8 +69,8 @@ namespace CgsNetwork
     // reversed back into the named calls the DWARF source hints record.
     void SyncTimeHost::Update(u16 lu16FrameNumber, CgsSystem::Time& lTime)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
-        CGS_ASSERT(mpSyncTimeMessageManager != nullptr, "mpSyncTimeMessageManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpSyncTimeMessageManager != 0, "mpSyncTimeMessageManager");
 
         NetworkPlayerID lLocalPlayerID;
         mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -84,7 +84,7 @@ namespace CgsNetwork
             CgsSystem::Time lMessageClientTime;
             CgsSystem::Time lMessageHostTime;
 
-            CGS_ASSERT(lpMessage != nullptr, "lpMessage");
+            CGS_ASSERT(lpMessage != 0, "lpMessage");
 
             const bool lbRetrieved = lpMessage->Retrieve(&lMessageClientPlayerID,
                                                          &lMessageClientTime,

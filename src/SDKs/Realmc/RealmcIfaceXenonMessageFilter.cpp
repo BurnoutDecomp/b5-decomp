@@ -22,16 +22,16 @@ namespace
 // maResponse (MessagePtr::operator=); the stack ResponsePtr is torn down.
 void AnswerWith(RealmcCore::ResponsePtr& rHeld, int iValue)
 {
-    void* const lpMem = RealmcCore::AllocateMem(nullptr, sizeof(RealmcCore::Response));
+    void* const lpMem = RealmcCore::AllocateMem(0, sizeof(RealmcCore::Response));
     RealmcCore::Response* const lpResponse =
-        lpMem ? new (lpMem) RealmcCore::Response(iValue) : nullptr;
+        lpMem ? new (lpMem) RealmcCore::Response(iValue) : 0;
     const RealmcCore::ResponsePtr lAnswer(lpResponse);
     rHeld = lAnswer;
 }
 
 // The hidden-message bits the MessageClear handler tests.
-const std::uint32_t KU_HIDDEN_MESSAGE_BIT_0200 = 0x200;
-const std::uint32_t KU_HIDDEN_MESSAGE_BIT_2000 = 0x2000;
+const uint32_t KU_HIDDEN_MESSAGE_BIT_0200 = 0x200;
+const uint32_t KU_HIDDEN_MESSAGE_BIT_2000 = 0x2000;
 
 } // namespace
 

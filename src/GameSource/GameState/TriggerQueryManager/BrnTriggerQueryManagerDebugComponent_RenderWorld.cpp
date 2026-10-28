@@ -32,10 +32,10 @@ namespace
                                              const rw::math::vpu::Vector3& lrDirection,
                                              f32 lfScale)
     {
-        return rw::math::vpu::Vector3{std::fma(lrDirection.x, lfScale, lrPosition.x),
+        { const rw::math::vpu::Vector3 lResult = {std::fma(lrDirection.x, lfScale, lrPosition.x),
                                       std::fma(lrDirection.y, lfScale, lrPosition.y),
                                       std::fma(lrDirection.z, lfScale, lrPosition.z),
-                                      std::fma(lrDirection.w, lfScale, lrPosition.w)};
+                                      std::fma(lrDirection.w, lfScale, lrPosition.w)}; return lResult; }
     }
 }
 

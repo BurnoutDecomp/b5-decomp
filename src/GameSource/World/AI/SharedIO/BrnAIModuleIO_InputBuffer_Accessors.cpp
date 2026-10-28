@@ -218,7 +218,7 @@ namespace AIModuleIO
     void InputBuffer::SetRaceCarAIInterface(const RaceCarAIInterface* lpInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpInterface != nullptr, "lpInterface != NULL");
+        CGS_ASSERT(lpInterface != 0, "lpInterface != NULL");
         mRaceCarAIInterface = *lpInterface;
     }
 
@@ -228,7 +228,7 @@ namespace AIModuleIO
     void InputBuffer::SetTrafficAIInterface(const TrafficAIInterface* lpInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpInterface != nullptr, "lpInterface != NULL");
+        CGS_ASSERT(lpInterface != 0, "lpInterface != NULL");
         mTrafficAIInterface = *lpInterface;
     }
 
@@ -253,8 +253,8 @@ namespace AIModuleIO
     void InputBuffer::SetTimerInterface(const CgsSystem::TimerStatusInterface* lpTimerInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpTimerInterface != nullptr, "lpTimerInterface != NULL");
-        static_assert(sizeof(CgsSystem::TimerStatusInterface) == 48,
+        CGS_ASSERT(lpTimerInterface != 0, "lpTimerInterface != NULL");
+        CGS_STATIC_ASSERT((sizeof(CgsSystem::TimerStatusInterface) == 48),
                       "TimerStatusInterface is the console's two 24-byte TimerStatus runs");
         std::memcpy(&mTimerInterface, lpTimerInterface, sizeof(mTimerInterface));
     }
@@ -271,7 +271,7 @@ namespace AIModuleIO
     void InputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface* lpObject)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        static_assert(sizeof(RaceCarRaceDistanceInterface) == 40,
+        CGS_STATIC_ASSERT((sizeof(RaceCarRaceDistanceInterface) == 40),
                       "RaceCarRaceDistanceInterface is the console's 10-word block");
         mRaceCarRaceDistanceInterface = *lpObject;
     }
@@ -289,7 +289,7 @@ namespace AIModuleIO
     void InputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lpControls)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        static_assert(sizeof(PlayerVehicleControls) == 60,
+        CGS_STATIC_ASSERT((sizeof(PlayerVehicleControls) == 60),
                       "PlayerVehicleControls is the console's 60-byte block");
         mPlayerVehicleControls = *lpControls;
     }

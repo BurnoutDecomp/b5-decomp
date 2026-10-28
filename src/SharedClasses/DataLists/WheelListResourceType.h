@@ -8,8 +8,8 @@ namespace BrnResource
 class WheelListResourceType : public CgsResource::Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t GetTypeID() const ;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 

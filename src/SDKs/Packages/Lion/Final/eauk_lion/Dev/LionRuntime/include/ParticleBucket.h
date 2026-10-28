@@ -130,8 +130,8 @@ public:
     // @0x829139C0 / 0x82913A9C): matrices -> MatrixSimulationHelper, else vectors ->
     // VectorSimulationHelper, else neither -> LocalSimulationHelper. Inline by construction (the
     // console reads the field directly at every site).
-    bool HasMatrices() const { return mpMatrices != nullptr; }
-    bool HasVectors()  const { return mpVectors  != nullptr; }
+    bool HasMatrices() const { return mpMatrices != 0; }
+    bool HasVectors()  const { return mpVectors  != 0; }
 
     // ParticleBucket.h:70 / :198 -- the side arrays themselves, one element per particle SLOT
     // (not per emitted particle). MatrixSimulationHelper::UpdateLocatorVelocity @0x8290DF28 reads
@@ -179,7 +179,7 @@ public:
     // ParticleBucket.h:45 / :50 / :55 -- the back-link to the emitter that owns this bucket.
     // cParticleEmitter::BucketRemove clears it as it detaches (`stw r11(0), 4(r4)`).
     void SetEmitter(cParticleEmitter* apEmitter) { mpEmitter = apEmitter; }
-    void ClearEmitter()                          { mpEmitter = nullptr; }
+    void ClearEmitter()                          { mpEmitter = 0; }
     cParticleEmitter* GetEmitter() const         { return mpEmitter; }
 
     // ParticleBucket.h:112 / :208 -- the two the sub-emitter path reads. cParticleEmitter::

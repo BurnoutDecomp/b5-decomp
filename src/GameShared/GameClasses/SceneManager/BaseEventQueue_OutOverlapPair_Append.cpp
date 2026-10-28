@@ -36,7 +36,7 @@
 // Independently confirmed by the sibling AddEvent @ 0x828AD390 in the same dossier/TU family,
 // which stores three consecutive 8-byte fields per element: std r8,0(r11); std r10,8(r11);
 // std r10,0x10(r11) -> 24-byte (3x QWORD) record.
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::OutOverlapPair) == 24,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::OutOverlapPair) == 24),
               "OutOverlapPair stride 24");
 
 template bool

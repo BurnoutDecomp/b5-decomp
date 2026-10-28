@@ -194,18 +194,18 @@ public:
     // ---- the virtual interface (see the vtable table in the file banner) -------------------
 
     // PARTIAL (see the gate on the body below).
-    void Construct() override;                                                    // slot 0
+    void Construct() ;                                                    // slot 0
 
     // Seed the live height/distance/pitch/blend scalars from the adopted block.
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;        // slot 1
 
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;
 
     // Hand back whichever of the two embedded policies is active.
-    CollisionPolicy* GetCollisionPolicy() override;                                // slot 5
+    CollisionPolicy* GetCollisionPolicy() ;                                // slot 5
 
     // Return this behaviour's debug name.
-    const char* GetName() const override;                                          // slot 7
+    const char* GetName() const ;                                          // slot 7
 
     // ---- non-virtual API -------------------------------------------------------------------
 

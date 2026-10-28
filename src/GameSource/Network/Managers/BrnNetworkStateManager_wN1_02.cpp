@@ -101,7 +101,7 @@ namespace BrnNetwork
         template <typename TGuiEvent>
         void SetPayloadWord(TGuiEvent* lpEvent, s32 liValue)
         {
-            static_assert(sizeof(lpEvent->maData) == sizeof(s32), "4-byte GUI payload");
+            CGS_STATIC_ASSERT((sizeof(lpEvent->maData) == sizeof(s32)), "4-byte GUI payload");
             std::memcpy(lpEvent->maData, &liValue, sizeof(s32));
         }
     }
@@ -176,9 +176,9 @@ namespace BrnNetwork
         (void)lpTimerStatus;
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager->GetPlayerManager() != nullptr,
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+        CGS_ASSERT(lpStateManager->mpNetworkManager->GetPlayerManager() != 0,
                    "lpStateManager->mpNetworkManager->GetPlayerManager()");
 
         const NetworkPlayerID lLocalPlayerID =
@@ -189,8 +189,8 @@ namespace BrnNetwork
         lHostChangedEvent.mbIsLocalPlayerNowHost = lbHaveLocalPlayer && (lNewHostID == lLocalPlayerID);
         lHostChangedEvent.mbIsFirstHost          = (lOldHostID == CgsNetwork::K_INVALID_PLAYER_ID);
 
-        CGS_ASSERT(lpStateManager->mpNetworkModule != nullptr, "lpStateManager->mpNetworkModule");
-        CGS_ASSERT(lpStateManager->mpNetworkModule->GetNetworkEventQueue() != nullptr,
+        CGS_ASSERT(lpStateManager->mpNetworkModule != 0, "lpStateManager->mpNetworkModule");
+        CGS_ASSERT(lpStateManager->mpNetworkModule->GetNetworkEventQueue() != 0,
                    "lpStateManager->mpNetworkModule->GetNetworkEventQueue()");
         lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             AsEvent(&lHostChangedEvent), lHostChangedEvent.GetEventType(), sizeof(lHostChangedEvent));
@@ -202,11 +202,11 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------------
     void StateManager::GetCompressedCameraPicCallback(void* lpPixels, void* lpUserData)
     {
-        CGS_ASSERT(lpPixels != nullptr, "lpPixels");
-        CGS_ASSERT(lpUserData != nullptr, "lpUserData");
+        CGS_ASSERT(lpPixels != 0, "lpPixels");
+        CGS_ASSERT(lpUserData != 0, "lpUserData");
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
 
         BrnNetworkModuleIO::NetworkOutCamPicCompressedEvent lCompressedEvent;
         lCompressedEvent.miCompressedPixelSize = KI_COMPRESSED_CAMERA_PIC_SIZE;
@@ -300,7 +300,7 @@ namespace BrnNetwork
 
         CgsGui::GuiEventAddLocalisedTextPointer lTextEvent;
 
-        if (mpTOS != nullptr)
+        if (mpTOS != 0)
         {
             lTextEvent.miMarker = 1;
             std::strncpy(lTextEvent.macId, "TOS_TEXT", CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
@@ -308,7 +308,7 @@ namespace BrnNetwork
             mpNetworkModule->AddOutputGuiEvent(lTextEvent);
         }
 
-        if (mpNews != nullptr)
+        if (mpNews != 0)
         {
             lTextEvent.miMarker = 1;
             std::strncpy(lTextEvent.macId, "NEWS_TEXT", CgsGui::GuiEventAddLocalisedTextPointer::KI_MAX_ADD_ID_STRING_LENGTH);
@@ -333,11 +333,11 @@ namespace BrnNetwork
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             PlayerMenuData* lpMenuData = static_cast<PlayerMenuData*>(lpPlayerManager->GetMenuDataByID(lPlayerID));
-            CGS_ASSERT(lpMenuData != nullptr, "lpMenuData");
+            CGS_ASSERT(lpMenuData != 0, "lpMenuData");
 
             CgsNetwork::NetworkPlayer* lpPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
             if (!lpMenuData->mbFinalCarSelection
-                && (lpPlayer == nullptr || !lpPlayer->mbNetworkPlayerPaused))
+                && (lpPlayer == 0 || !lpPlayer->mbNetworkPlayerPaused))
             {
                 return false;
             }
@@ -417,7 +417,7 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(lpConnectEvent != nullptr, "lpConnectEvent");
+        CGS_ASSERT(lpConnectEvent != 0, "lpConnectEvent");
 
         // FLAG: the console logs "HandleConnectEvent() - NOT connected. SignInType=" <type>
         // " Still Signing In=" "true"/"false" "\n" to the same unhomed debug stream here.
@@ -433,12 +433,12 @@ namespace BrnNetwork
         GameParams lGameParams;
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
 
         lpStateManager->meState = E_STATE_COUNT;
 
-        CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != nullptr,
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != 0,
                    "lpStateManager->mpNetworkManager->GetServerInterface()");
 
         CgsNetwork::ServerInterfaceGames* lpGames =
@@ -463,7 +463,7 @@ namespace BrnNetwork
                 lpStateManager->StartFreeBurnLobbyGameMode(false, false, false, false);
             }
 
-            lpStateManager->mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_CREATED, nullptr);
+            lpStateManager->mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_CREATED, 0);
 
             BrnNetworkManager* lpNetworkManager = lpStateManager->mpNetworkManager;
             lpNetworkManager->GetVersionDisplay()->SetGameServerGame(
@@ -491,13 +491,13 @@ namespace BrnNetwork
             {
                 lpStateManager->mbDoInviteAfterCreate = false;
 
-                CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
-                CGS_ASSERT(lpStateManager->mpNetworkManager->GetBuddyManager() != nullptr,
+                CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+                CGS_ASSERT(lpStateManager->mpNetworkManager->GetBuddyManager() != 0,
                            "lpStateManager->mpNetworkManager->GetBuddyManager()");
                 lpStateManager->mpNetworkManager->GetBuddyManager()->CancelInvites();
 
-                CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
-                CGS_ASSERT(lpStateManager->mpNetworkManager->GetSuspensionManager() != nullptr,
+                CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+                CGS_ASSERT(lpStateManager->mpNetworkManager->GetSuspensionManager() != 0,
                            "lpStateManager->mpNetworkManager->GetSuspensionManager()");
                 SuspensionManager* lpSuspensionManager = lpStateManager->mpNetworkManager->GetSuspensionManager();
                 if (!lpSuspensionManager->IsSuspending())
@@ -536,12 +536,12 @@ namespace BrnNetwork
     void StateManager::JoinGameFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
 
         lpStateManager->meState = E_STATE_COUNT;
 
-        CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != nullptr,
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != 0,
                    "lpStateManager->mpNetworkManager->GetServerInterface()");
 
         const bool lbInGame =
@@ -560,7 +560,7 @@ namespace BrnNetwork
             lpStateManager->StartFreeBurnLobbyGameMode(false, false, lpStateManager->mbForceStartFreeburnLobby, false);
             lpStateManager->mbForceStartFreeburnLobby = false;
 
-            lpStateManager->mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_JOINED, nullptr);
+            lpStateManager->mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_JOINED, 0);
 
             BrnNetworkManager* lpNetworkManager = lpStateManager->mpNetworkManager;
             lpNetworkManager->GetVersionDisplay()->SetGameServerGame(
@@ -600,8 +600,8 @@ namespace BrnNetwork
     void StateManager::LeaveGameForOfflineGameFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
 
         if (!lbSuccess)
         {
@@ -617,14 +617,14 @@ namespace BrnNetwork
         lpStateManager->mpNetworkManager->OnLeaveGame();
 
         BrnGui::GuiEventNetworkPlayerImage lNetworkPlayerImageEvent;
-        lNetworkPlayerImageEvent.mpTexture      = nullptr;
+        lNetworkPlayerImageEvent.mpTexture      = 0;
         lNetworkPlayerImageEvent.miTextureIndex = -1;
         lpStateManager->mpNetworkModule->AddOutputGuiEvent(lNetworkPlayerImageEvent);
 
         lpStateManager->mpNetworkManager->GetCamera()->RequestFeed(CgsNetwork::K_INVALID_PLAYER_ID);
 
-        CGS_ASSERT(lpStateManager->mpNetworkModule != nullptr, "lpStateManager->mpNetworkModule");
-        CGS_ASSERT(lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface() != nullptr,
+        CGS_ASSERT(lpStateManager->mpNetworkModule != 0, "lpStateManager->mpNetworkModule");
+        CGS_ASSERT(lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface() != 0,
                    "lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface()");
 
         if (!GsmIO::IsOnlineFreeBurnLobby(lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface()->GetCurrentGameMode()))
@@ -643,7 +643,7 @@ namespace BrnNetwork
             }
         }
 
-        lpStateManager->mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_LEFT, nullptr);
+        lpStateManager->mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_LEFT, 0);
         lpStateManager->mpNetworkManager->GetVersionDisplay()->SetGameServerGame(false);
         lpStateManager->mpNetworkManager->GetStartTimeManager()->PrepareStartTime();
 
@@ -656,12 +656,12 @@ namespace BrnNetwork
     void StateManager::QuickJoinFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
 
         lpStateManager->meState = E_STATE_COUNT;
 
-        CGS_ASSERT(lpStateManager->mpNetworkManager != nullptr, "lpStateManager->mpNetworkManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != nullptr,
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != 0,
                    "lpStateManager->mpNetworkManager->GetServerInterface()");
 
         const bool lbInGame =
@@ -676,7 +676,7 @@ namespace BrnNetwork
             lpStateManager->mpNetworkModule->AddOutputGuiEvent(lInGameEvent);
 
             BrnNetworkManager* lpNetworkManager = lpStateManager->mpNetworkManager;
-            CGS_ASSERT(lpNetworkManager != nullptr, "lpNetworkManager");
+            CGS_ASSERT(lpNetworkManager != 0, "lpNetworkManager");
 
             lpStateManager->StartFreeBurnLobbyGameMode(false, false, lpStateManager->mbForceStartFreeburnLobby, false);
             lpStateManager->mbForceStartFreeburnLobby = false;
@@ -742,7 +742,7 @@ namespace BrnNetwork
             GsmIO::OnlineCarSelectEvent lCarSelectEvent;
             NetworkPlayerID         lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
-            CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+            CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
             lGameParams.Prepare();
             mpNetworkManager->GetServerInterface()->GetGameComponent()->GetGameParameters(&lGameParams);
@@ -756,7 +756,7 @@ namespace BrnNetwork
                 mpNetworkManager->GetTimerStatus(),
                 mpNetworkManager->GetTimeManager()->GetU16FrameCount());
 
-            CGS_ASSERT(mpNetworkManager->GetTeamSelectionManager() != nullptr,
+            CGS_ASSERT(mpNetworkManager->GetTeamSelectionManager() != 0,
                        "mpNetworkManager->GetTeamSelectionManager()");
             meState = E_STATE_WAIT_TEAM_SELECTION;
             mpNetworkManager->GetTeamSelectionManager()->StartTeamSelection(
@@ -895,7 +895,7 @@ namespace BrnNetwork
             if (meState == E_STATE_WAIT_DOWNLOAD_NEWS)
             {
                 lpcBuffer = StripWebOfferControlCodes(lpcBuffer);
-                lbFailed  = (lpcBuffer == nullptr);
+                lbFailed  = (lpcBuffer == 0);
             }
 
             if (!lbFailed)
@@ -920,10 +920,10 @@ namespace BrnNetwork
                     leEventType = NewsAndTOSEvent::E_EVENT_TYPE_RETRIEVED_TOS;
                 }
 
-                if (*lppText != nullptr)
+                if (*lppText != 0)
                 {
                     CgsNetwork::ServerInterfaceDirtySock::MemFree(*lppText, 0, 0);
-                    *lppText = nullptr;
+                    *lppText = 0;
                 }
                 *lppText = static_cast<CgsUnicode::CgsUtf8*>(CgsNetwork::ServerInterfaceDirtySock::MemAlloc(
                     mpNetworkManager->GetServerInterface()->GetHttpComponent()->GetHttpDownloadSize(), 0, 0));
@@ -988,7 +988,7 @@ namespace BrnNetwork
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         ConnApiControl(lpServerInterface->GetConnAPIRef(), KI_CONNAPI_CONTROL_MANGLE,
                        (lpServerInterface->GetDownloadableConfigComponent()->NumDemanglePlayers() != 0) ? 1 : 0,
-                       0, nullptr);
+                       0, 0);
 
         mpNetworkManager->GetCamera()->RequestFeed(CgsNetwork::K_INVALID_PLAYER_ID);
     }
@@ -1073,8 +1073,8 @@ namespace BrnNetwork
             mpNetworkModule->GetGameEventQueue()->AddEvent(AsEvent(&lRoundEvent), GsmIO::E_EVENT_START_NETWORK_ROUND, sizeof(lRoundEvent));
         }
 
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetGameStateToNetworkInterface() != nullptr,
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetGameStateToNetworkInterface() != 0,
                    "mpNetworkModule->GetGameStateToNetworkInterface()");
 
         if (lEvent.mbIsStartingGameAfterPlayerJoin
@@ -1106,7 +1106,7 @@ namespace BrnNetwork
             mpNetworkManager->GetCamera()->SetGameEnabled(true);
 
             const CgsNetwork::NetworkTexture* lpTextureToDisplay = mpNetworkManager->GetCamera()->GetRequestedCameraPicture();
-            if (lpTextureToDisplay == nullptr)
+            if (lpTextureToDisplay == 0)
             {
                 lpTextureToDisplay = mpNetworkManager->GetGamerPictureManager()->GetGamerPictureTexture(
                     mpNetworkManager->GetCamera()->GetRequestedPlayerID());
@@ -1114,31 +1114,31 @@ namespace BrnNetwork
             mpNetworkManager->PackTextureAndSendDisplayEventToGui(lpTextureToDisplay, 0);
             for (s32 liPlayerIndex = 1; liPlayerIndex < 3; ++liPlayerIndex)
             {
-                mpNetworkManager->PackTextureAndSendDisplayEventToGui(nullptr, liPlayerIndex);
+                mpNetworkManager->PackTextureAndSendDisplayEventToGui(0, liPlayerIndex);
             }
         }
         else if (meOutputPlayerTexture == OutputPlayerTextureEvent::E_OUTPUT_WINNER_IMAGE)
         {
-            CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
-            CGS_ASSERT(mpNetworkManager->GetServerInterface() != nullptr, "mpNetworkManager->GetServerInterface()");
+            CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+            CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, "mpNetworkManager->GetServerInterface()");
             CgsNetwork::ServerInterfaceGames* lpGamesComponent = mpNetworkManager->GetServerInterface()->GetGameComponent();
-            CGS_ASSERT(lpGamesComponent != nullptr, "lpGamesComponent");
+            CGS_ASSERT(lpGamesComponent != 0, "lpGamesComponent");
 
             s32 liDisplayedImageIndex = 0;
             if (lpGamesComponent->IsLocalPlayerInGame())
             {
                 bool                              lbAlreadyShowingPhotoFinish = false;
-                const CgsNetwork::NetworkTexture* lpTextureToDisplay          = nullptr;
+                const CgsNetwork::NetworkTexture* lpTextureToDisplay          = 0;
                 if (mNetworkPlayerIDToOutput != CgsNetwork::K_INVALID_PLAYER_ID)
                 {
                     CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-                    if (lpPlayerManager->GetPlayerByID(mNetworkPlayerIDToOutput) != nullptr
+                    if (lpPlayerManager->GetPlayerByID(mNetworkPlayerIDToOutput) != 0
                         || lpPlayerManager->IsLocalPlayer(mNetworkPlayerIDToOutput))
                     {
                         lpTextureToDisplay = mpNetworkManager->GetNetworkImageManager()->GetPhotoFinishImageByRoundWinner(
                             mNetworkPlayerIDToOutput, &lbAlreadyShowingPhotoFinish);
                     }
-                    if (lpTextureToDisplay == nullptr)
+                    if (lpTextureToDisplay == 0)
                     {
                         lpTextureToDisplay = mpNetworkManager->GetGamerPictureManager()->GetGamerPictureTexture(mNetworkPlayerIDToOutput);
                     }
@@ -1153,7 +1153,7 @@ namespace BrnNetwork
             {
                 const CgsNetwork::NetworkTexture* lpTextureToDisplay =
                     mpNetworkManager->GetGamerPictureManager()->GetLocalPlayerGamerPictureTexture();
-                if (lpTextureToDisplay != nullptr)
+                if (lpTextureToDisplay != 0)
                 {
                     mpNetworkManager->PackTextureAndSendDisplayEventToGui(lpTextureToDisplay, 0);
                     liDisplayedImageIndex = 1;
@@ -1162,7 +1162,7 @@ namespace BrnNetwork
 
             for (s32 liPlayerIndex = liDisplayedImageIndex; liPlayerIndex < 3; ++liPlayerIndex)
             {
-                mpNetworkManager->PackTextureAndSendDisplayEventToGui(nullptr, liPlayerIndex);
+                mpNetworkManager->PackTextureAndSendDisplayEventToGui(0, liPlayerIndex);
             }
         }
         else if (meOutputPlayerTexture == OutputPlayerTextureEvent::E_OUTPUT_SCALP_IMAGE)
@@ -1173,7 +1173,7 @@ namespace BrnNetwork
             lRaceCarsWithScalps.UnSetAll();
 
             CgsNetwork::ServerInterfaceGames* lpGamesComponent = mpNetworkManager->GetServerInterface()->GetGameComponent();
-            CGS_ASSERT(lpGamesComponent != nullptr, "lpGamesComponent");
+            CGS_ASSERT(lpGamesComponent != 0, "lpGamesComponent");
 
             if (lpGamesComponent->IsLocalPlayerInGame())
             {
@@ -1185,12 +1185,12 @@ namespace BrnNetwork
                         continue;
                     }
 
-                    const CgsNetwork::NetworkTexture* lpTextureToDisplay = nullptr;
+                    const CgsNetwork::NetworkTexture* lpTextureToDisplay = 0;
                     const NetworkPlayerID lVictimID = mpNetworkManager->GetNetworkImageManager()->GetMugshotVictimID(lPlayerID);
                     if (lVictimID != CgsNetwork::K_INVALID_PLAYER_ID)
                     {
                         lpTextureToDisplay = mpNetworkManager->GetNetworkImageManager()->GetMugshotImageByAggressor(lPlayerID);
-                        if (lpTextureToDisplay == nullptr)
+                        if (lpTextureToDisplay == 0)
                         {
                             lpTextureToDisplay = mpNetworkManager->GetGamerPictureManager()->GetGamerPictureTexture(lVictimID);
                         }
@@ -1211,7 +1211,7 @@ namespace BrnNetwork
             {
                 if (!lRaceCarsWithScalps.IsBitSet(static_cast<u32>(liPlayerIndex)))
                 {
-                    mpNetworkManager->PackTextureAndSendDisplayEventToGui(nullptr, liPlayerIndex);
+                    mpNetworkManager->PackTextureAndSendDisplayEventToGui(0, liPlayerIndex);
                 }
             }
         }
@@ -1219,14 +1219,14 @@ namespace BrnNetwork
         {
             const CgsNetwork::NetworkTexture* lpTextureToDisplay = mpNetworkManager->GetGamerPictureManager()->GetGamerPictureTexture(
                 mpNetworkManager->GetCamera()->GetRequestedPlayerID());
-            if (lpTextureToDisplay != nullptr)
+            if (lpTextureToDisplay != 0)
             {
                 mpNetworkManager->PackTextureAndSendDisplayEventToGui(lpTextureToDisplay, 0);
             }
             else
             {
-                CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-                CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != nullptr, "mpNetworkModule->GetNetworkEventQueue()");
+                CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+                CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, "mpNetworkModule->GetNetworkEventQueue()");
                 BrnNetworkModuleIO::NetworkOutNoPhotoBoothGamerPic lNoPhotoBoothGamerPicEvent;
                 mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                     AsEvent(&lNoPhotoBoothGamerPicEvent), lNoPhotoBoothGamerPicEvent.GetEventType(),
@@ -1234,26 +1234,26 @@ namespace BrnNetwork
             }
             for (s32 liPlayerIndex = 1; liPlayerIndex < 3; ++liPlayerIndex)
             {
-                mpNetworkManager->PackTextureAndSendDisplayEventToGui(nullptr, liPlayerIndex);
+                mpNetworkManager->PackTextureAndSendDisplayEventToGui(0, liPlayerIndex);
             }
         }
         else if (meOutputPlayerTexture == OutputPlayerTextureEvent::E_OUTPUT_GAMERPIC_LICENCE)
         {
             for (s32 liPlayerIndex = 0; liPlayerIndex < 3; ++liPlayerIndex)
             {
-                mpNetworkManager->PackTextureAndSendDisplayEventToGui(nullptr, liPlayerIndex);
+                mpNetworkManager->PackTextureAndSendDisplayEventToGui(0, liPlayerIndex);
             }
 
             const CgsNetwork::NetworkTexture* lpTextureToDisplay = mpNetworkManager->GetGamerPictureManager()->GetGamerPictureTexture(
                 mpNetworkManager->GetCamera()->GetRequestedPlayerID());
-            if (lpTextureToDisplay != nullptr)
+            if (lpTextureToDisplay != 0)
             {
                 mpNetworkManager->PackTextureAndSendDisplayEventToGui(lpTextureToDisplay, 1);
             }
             else
             {
-                CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-                CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != nullptr, "mpNetworkModule->GetNetworkEventQueue()");
+                CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+                CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, "mpNetworkModule->GetNetworkEventQueue()");
                 BrnNetworkModuleIO::NetworkOutNoPhotoBoothGamerPic lNoPhotoBoothGamerPicEvent;
                 mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                     AsEvent(&lNoPhotoBoothGamerPicEvent), lNoPhotoBoothGamerPicEvent.GetEventType(),

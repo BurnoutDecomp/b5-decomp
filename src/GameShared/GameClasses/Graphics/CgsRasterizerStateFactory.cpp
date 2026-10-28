@@ -85,9 +85,9 @@ void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.mu8FrontCounterClockwise = 1;
     lParameters.mu8ScissorEnable = 1;
 
-    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] = nullptr;
-    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] = nullptr;
-    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] = nullptr;
+    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] = 0;
+    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] = 0;
+    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] = 0;
 
     lParameters.muFillMode = 0;
     lParameters.muCullMode = 2;

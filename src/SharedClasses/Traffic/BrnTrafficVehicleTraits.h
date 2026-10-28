@@ -47,6 +47,6 @@ namespace BrnTraffic
         static const s32 KI_MAX_ALTERCATIONS_BEFORE_TANTRUM = 5;
     };
 
-    static_assert(sizeof(VehicleTraits) == 16,
+    CGS_STATIC_ASSERT((sizeof(VehicleTraits) == 16),
                   "VehicleTraits stride (GetVehicleTraitsForVehicleType @0x82705DF0 uses slwi 4)");
 }

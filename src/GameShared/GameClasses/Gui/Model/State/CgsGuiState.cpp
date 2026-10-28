@@ -35,7 +35,7 @@ namespace CgsGui
             }
         };
 
-        static_assert(sizeof(GuiEventStateChange) == 28,
+        CGS_STATIC_ASSERT((sizeof(GuiEventStateChange) == 28),
                       "GuiEventStateChange must match the ARTIST 28-byte wire record");
     }
 

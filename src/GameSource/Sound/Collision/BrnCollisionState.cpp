@@ -48,7 +48,7 @@ CollisionState::~CollisionState()
 // clear both lifetime samples and remember the state clock at attachment time.
 void CollisionState::Attach(void* apvAttachment)
 {
-    CGS_ASSERT(apvAttachment != nullptr, "lpAttachment");
+    CGS_ASSERT(apvAttachment != 0, "lpAttachment");
     if (!apvAttachment)
         return;
 
@@ -87,7 +87,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
 CollisionState::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x50000, "CollisionState", nullptr, &CollisionState::CreateObject);
+        0x50000, "CollisionState", 0, &CollisionState::CreateObject);
     return &sTypeInfo;
 }
 

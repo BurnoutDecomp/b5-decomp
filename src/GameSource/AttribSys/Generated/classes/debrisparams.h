@@ -25,7 +25,7 @@ namespace Gen
         // StringToKey("383338"/"595518"/"608203"). Additive (2026-09-02).
         static const u64 KU_DEBRISPARAMS_CLASS_KEY = 0x3024A28726D81D5FULL;
 
-        explicit debrisparams(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit debrisparams(Collection* lpCollection = 0, void* lpOwner = 0);
         // @0x8227EA48 -- the keyed form: FindCollection(class, luCollectionKey) then the
         // same Instance chain + 0xE0-byte default data area (no class-check assert there).
         debrisparams(u64 luCollectionKey, void* lpOwner);

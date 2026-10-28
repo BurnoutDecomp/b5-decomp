@@ -75,25 +75,25 @@ namespace Vehicle
         // ==========================================================================================
 
         // READY -- fits exactly, so `VehicleDriver::Construct` is callable by name today.
-        static_assert(sizeof(VehicleDriver) == 224,
+        CGS_STATIC_ASSERT((sizeof(VehicleDriver) == 224),
                       "VehicleDriver fits maRaceCarDrivers[8] (stride 0xE0) and mPlayerAiDriver");
-        static_assert(sizeof(VehicleManager::maRaceCarDrivers) == 8 * 224,
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarDrivers) == 8 * 224),
                       "the eight-car driver array is 1792 bytes: 64 + 1792 == 1856 == maRaceCarVehicles");
 
         // READY -- the ONE contained sub-object whose real class fits its X360 span on x64.
-        static_assert(sizeof(BrnPhysics::StuntOffencesManager) == 464,
+        CGS_STATIC_ASSERT((sizeof(BrnPhysics::StuntOffencesManager) == 464),
                       "StuntOffencesManager fits this+44240..44704 exactly (no pointer members; "
                       "last member ends at 0x1C4 == 452, padded to 464 at align 16 on both ISAs)");
-        static_assert(alignof(BrnPhysics::StuntOffencesManager) == 16 &&
-                      offsetof(VehicleManager, mStuntOffencesManager) % 16 == 0,
+        CGS_STATIC_ASSERT((__alignof(BrnPhysics::StuntOffencesManager) == 16 &&
+                      offsetof(VehicleManager, mStuntOffencesManager) % 16 == 0),
                       "and its 16-byte alignment is satisfied at 44240, so typing it moved nothing");
 
         // READY -- the discarded-contact queue fits because the pointer widening lands in the
         // padding the X360 header already carried: {T* , s32, s32} is 12->16 there and 8+4+4 == 16
         // here, then 16 + 20*64 == 1296 either way.
-        static_assert(sizeof(VehicleManager::mDiscardedContacts) == 1296,
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mDiscardedContacts) == 1296),
                       "EventQueue<DiscardedContact,20> fits this+160672..161968 exactly");
-        static_assert(sizeof(BrnPhysics::ContactSpy::DiscardedContact) == 64,
+        CGS_STATIC_ASSERT((sizeof(BrnPhysics::ContactSpy::DiscardedContact) == 64),
                       "and the 64-byte entry is what makes 16 + 20*64 == 1296 close");
 
         // ==========================================================================================
@@ -105,14 +105,14 @@ namespace Vehicle
         // right -- 161968 and 163264 are both asm-literal -- so the +32 is a genuine host/console
         // width difference and is carried as the second drift term, not derived away.
         // ==========================================================================================
-        static_assert(alignof(VehicleManagerDebugComponent) == 16 &&
-                      offsetof(VehicleManager, mDebugComponent) % 16 == 0,
+        CGS_STATIC_ASSERT((__alignof(VehicleManagerDebugComponent) == 16 &&
+                      offsetof(VehicleManager, mDebugComponent) % 16 == 0),
                       "the component holds alignas(16) OutContactSpy/PotentialContact members, and "
                       "the drift is a multiple of 16 (asserted above), so embedding it inserted no "
                       "leading pad");
-        static_assert(offsetof(VehicleManager, mDiscardedContacts)
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mDiscardedContacts)
                           + sizeof(VehicleManager::mDiscardedContacts)
-                          == offsetof(VehicleManager, mDebugComponent),
+                          == offsetof(VehicleManager, mDebugComponent)),
                       "and the discarded-contact queue abuts it with no gap, exactly as on the X360");
 
         // ==========================================================================================
@@ -138,8 +138,8 @@ namespace Vehicle
         // The two `stdx` in ProcessCreateEvents are the only writers, and they are at
         // this + 8*(idx + 0x154C) and this + 8*(idx + 0x1554) -- 43616 and 43680 on the console.
         // Nothing before +43616 moved, so those two seats hold verbatim on the host.
-        static_assert(offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
-                          == offsetof(VehicleManager, maRaceCarModelHandles) + 8 * sizeof(CgsResource::ResourceHandle),
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
+                          == offsetof(VehicleManager, maRaceCarModelHandles) + 8 * sizeof(CgsResource::ResourceHandle)),
                       "asm @0x826169E0/A60/A68: addi r8,r27,0x1554 ; slwi r9,r8,3 ; stdx r10,r9,r24 -- "
                       "the graphics array abuts the model array, one 8-element run later");
         // this used to read
@@ -150,8 +150,8 @@ namespace Vehicle
         // if either term moves independently, which the absolute form could not see.
         // THIS FIRED FOR REAL when the third term landed, and the wrong fix would have been to
         // bump the literal. The right one is here.
-        static_assert(alignof(PhysicalTrafficManager) == 16 &&
-                      offsetof(VehicleManager, mPhysicalTrafficManager) % 16 == 0,
+        CGS_STATIC_ASSERT((__alignof(PhysicalTrafficManager) == 16 &&
+                      offsetof(VehicleManager, mPhysicalTrafficManager) % 16 == 0),
                       "44768 % 16 == 0, so embedding the real type inserted no leading pad");
 
         // ---- the traffic manager's own head, which IS pointer-free and so DOES reproduce ---------
@@ -169,25 +169,25 @@ namespace Vehicle
         // whose chain closes on this very 5168. Here what is checked is the thing this TU can see --
         // that the array is exactly 20 elements with no pad behind it, and that the console
         // identification still holds as console arithmetic.
-        static_assert(X360Layout::KU_TP_SIZEOF == 5168u,
+        CGS_STATIC_ASSERT((X360Layout::KU_TP_SIZEOF == 5168u),
                       "asm: mulli r11, r29, 0x1430 -- the 20-element per-vehicle walk in "
                       "PhysicalTrafficManager::Construct @0x82636CA8");
-        static_assert(20u * X360Layout::KU_TP_SIZEOF + 44768u == 148128u,
+        CGS_STATIC_ASSERT((20u * X360Layout::KU_TP_SIZEOF + 44768u == 148128u),
                       "⭐ THE IDENTIFICATION, as console arithmetic: 44768 + 20*0x1430 == 148128, the "
                       "exact class offset the old `EntityId maRaceCarEntityIdRemap[8]` sibling "
                       "claimed. Same address, real name, and the real bound is 20 (a TRAFFIC index), "
                       "not 8.");
-        static_assert(offsetof(PhysicalTrafficManager, maTrafficEntityIDs)
-                          == 20u * sizeof(TrafficPhysics),
+        CGS_STATIC_ASSERT((offsetof(PhysicalTrafficManager, maTrafficEntityIDs)
+                          == 20u * sizeof(TrafficPhysics)),
                       "the entity-id array must abut maFullTrafficPhysics[20] with no pad -- this is "
                       "what fires if the array bound changes or TrafficPhysics grows an alignment "
                       "that inserts one");
-        static_assert(sizeof(PhysicalTrafficManager::maTrafficEntityIDs) == 20 * 4,
+        CGS_STATIC_ASSERT((sizeof(PhysicalTrafficManager::maTrafficEntityIDs) == 20 * 4),
                       "EntityId[20] -- SetRaceCarCrashing's owner==2 branch indexes it with a traffic "
                       "index, so the old [8] model was an out-of-bounds read for slots 8..19");
-        static_assert(sizeof(PhysicalTrafficManager::mArticulatedJointPool) == 832,
+        CGS_STATIC_ASSERT((sizeof(PhysicalTrafficManager::mArticulatedJointPool) == 832),
                       "asm: pool at this+103616, next written member at this+104448");
-        static_assert(sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600,
+        CGS_STATIC_ASSERT((sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600),
                       "asm: cmplwi 0x258 in ValidateAndFixUpTrafficTrafficContact (the DWARF says 601; "
                       "the asm is authoritative and the 16-alignment that follows absorbs the byte)");
 
@@ -195,24 +195,24 @@ namespace Vehicle
         // 44768 + 105648 + 128*sizeof(PotentialContact) + 4, rounded up to mDiscardedContacts'
         // 16-alignment, must equal the asm-pinned 160672. sizeof(PotentialContact) == 80 is the one
         // input that comes from a committed record rather than from the asm, so it is pinned.
-        static_assert(sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) == 80,
+        CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) == 80),
                       "3 x Vector3 + 2 VolumeInstanceId + 2 uint32 + 2 uint16, 16-aligned (DWARF "
                       "CgsPotentialContact.h:60-68). This is derivation B's only non-asm input.");
         // REBASED 2026-08-06 (big-five #2): the old opaque mPadNonPhysicalContacts span was
         // PROMOTED to the DWARF's real maNonPhysicalContacts[128] + miNonPhysicalContactCount
         // (+ 12 tail-pad bytes). The derivation closure is unchanged -- it is now stated over
         // the real members' combined span.
-        static_assert(sizeof(VehicleManager::maNonPhysicalContacts)
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maNonPhysicalContacts)
                           + sizeof(VehicleManager::miNonPhysicalContactCount)
                           + sizeof(VehicleManager::mPadAfterNonPhysicalContacts)
-                          == 128 * sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) + 4 + 12,
+                          == 128 * sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) + 4 + 12),
                       "maNonPhysicalContacts[128] + miNonPhysicalContactCount + 12 bytes of align pad "
                       "== 10256 == 160672 - 150416: the closure that forces X360 sizeof"
                       "(PhysicalTrafficManager) == 105648 and no other value");
-        static_assert(44768 + KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
+        CGS_STATIC_ASSERT((44768 + KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
                           + sizeof(VehicleManager::maNonPhysicalContacts)
                           + sizeof(VehicleManager::miNonPhysicalContactCount)
-                          + sizeof(VehicleManager::mPadAfterNonPhysicalContacts) == 160672,
+                          + sizeof(VehicleManager::mPadAfterNonPhysicalContacts) == 160672),
                       "and it closes on the X360's own mDiscardedContacts seat");
 
         // ---- the two master gates (DWARF :865/:866) -------------------------------------------
@@ -223,7 +223,7 @@ namespace Vehicle
         // and none of the old padding runs survived.
 
         // ---- per-car impact bookkeeping (DWARF :923..:934) -------------------------------------
-        static_assert(sizeof(VehicleManager::mafNoImpactTimeSeconds) == 32,
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mafNoImpactTimeSeconds) == 32),
                       "8 x f32: HandleRaceCarRaceCarContact seeds it with lfsx/stfsx, so it is a FLOAT array");
 
         // ---- the per-car vulnerability / grinding arrays (DWARF :937..:951) --------------------
@@ -234,7 +234,7 @@ namespace Vehicle
 
         // ---- the six world/traffic crash thresholds (DWARF :962..:968) -------------------------
 
-        static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0,
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mCameraMatrix) % 16 == 0),
                       "stvx128 requires 16-alignment -- a compiler-inserted pad here would fault at runtime");
 
         // ---- the 16 gameplay/debug bools (DWARF :972..:988) ------------------------------------
@@ -245,7 +245,7 @@ namespace Vehicle
         // ---- the eight car-stat strength scalars (DWARF :1015..:1023) --------------------------
 
         // ---- the cached car-vs-car prediction (DWARF :1026..:1029) -----------------------------
-        static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0,
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0),
                       "loaded/stored with lvx128/stvx128 -- must be 16-aligned");
         // The pointer-width decision this span depends on. If muCachedCarA/BSlot are ever widened
         // to real 8-byte pointers, the assert above is what will catch it -- do not "fix" it by
@@ -266,10 +266,10 @@ namespace Vehicle
         // role-neutral FLAG retired: the DWARF sequence pins +172580 as
         // miNumTrafficSphereWorldTests and +172584 as the console POINTER
         // mpTractionLineStreamProducer). The block's host growth is one more named drift term.
-        static_assert(offsetof(VehicleManager, mpTractionLineStreamProducer)
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, mpTractionLineStreamProducer)
                           >  offsetof(VehicleManager, miNumTrafficSphereWorldTests)
                       && offsetof(VehicleManager, miNumSPUTractionLineTests)
-                          >  offsetof(VehicleManager, mpTractionLineStreamProducer),
+                          >  offsetof(VehicleManager, mpTractionLineStreamProducer)),
                       "the DWARF :1072/:1075/:1076 tail order");
 
         // ---- shape guards the offsets alone cannot catch ---------------------------------------
@@ -307,11 +307,11 @@ namespace Vehicle
         // the array on picks it up (KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK is +812 once it is rebased
         // on the new term; 172616 + 812 == 173428 -> 16-aligned 173440). Seventh move, seventh named
         // drift term.
-        static_assert(sizeof(VehicleManager::maeImpactType) == 32, "EImpactType[8]");
-        static_assert(sizeof(VehicleManager::mauImpactScore) == 8, "uint8[8]");
-        static_assert(sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
-        static_assert(sizeof(VehicleManager::mafOtherGrindingPlayerDurationSeconds) == 32, "f32[8] -- NOT a scalar threshold");
-        static_assert(sizeof(VehicleManager::mStuckInCollisionTestCacheSphere) == 16, "one stvx128 == 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maeImpactType) == 32), "EImpactType[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mauImpactScore) == 8), "uint8[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mafPlayerGrindingOtherDurationSeconds) == 32), "f32[8] -- NOT a scalar threshold");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mafOtherGrindingPlayerDurationSeconds) == 32), "f32[8] -- NOT a scalar threshold");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mStuckInCollisionTestCacheSphere) == 16), "one stvx128 == 16 bytes");
 
         // =========================================================================================
         // THE RECORD IS GONE -- FOLDED 2026-08-03. `maRaceCarVehicles` is
@@ -344,47 +344,47 @@ namespace Vehicle
         // in isolation. Two components, two constants, two gates: neither can absorb an error in
         // the other, and a compensating pair cannot pass.
         // The two components, separately, so a compensating pair of errors cannot pass the sum.
-        static_assert(offsetof(VehicleManager, maRaceCarModelHandles) == 43616,
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarModelHandles) == 43616),
                       "⭐ the split must NOT move the first handle array: 43616 == 8 * 0x154C is "
                       "ProcessCreateEvents' own asm literal, and nothing before it drifts");
-        static_assert(offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarGraphicsModelHandles)
                           == offsetof(VehicleManager, maRaceCarModelHandles)
-                             + sizeof(VehicleManager::maRaceCarModelHandles),
+                             + sizeof(VehicleManager::maRaceCarModelHandles)),
                       "the two arrays abut (console 8 * 0x154C then 8 * 0x1554, 64 bytes apart)");
-        static_assert(alignof(RaceCarPhysics) == 16,
+        CGS_STATIC_ASSERT((__alignof(RaceCarPhysics) == 16),
                       "the array element must stay 16-aligned so element 0 keeps the asm-literal "
                       "+1856 base (1856 % 16 == 0)");
-        static_assert(offsetof(VehicleManager, maRaceCarVehicles) == 1856,
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarVehicles) == 1856),
                       "⭐ the fold must NOT move element 0: 1856 is the asm literal "
                       "VehicleManager::Construct hands VehiclePhysics::Construct "
                       "(`addi r3, r29, -0x140D`)");
-        static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)
-                          == offsetof(VehicleManager, maRaceCarVehicles) + 8 * sizeof(RaceCarPhysics),
+        CGS_STATIC_ASSERT((offsetof(VehicleManager, maRaceCarEntityIDs)
+                          == offsetof(VehicleManager, maRaceCarVehicles) + 8 * sizeof(RaceCarPhysics)),
                       "the eight-car array must abut maRaceCarEntityIDs with no slack -- the same "
                       "closure the X360's 1856 + 8*5216 == 43584 has");
-        static_assert(sizeof(RaceCarCrashData) == 12, "RaceCarCrashData stride (asm: 12)");
+        CGS_STATIC_ASSERT((sizeof(RaceCarCrashData) == 12), "RaceCarCrashData stride (asm: 12)");
 
         // The eight-car loop bound VehicleManager::Construct uses must BE the width of every
         // per-car array it walks. The 8 is asm-literal (`li r23, 8`); this pins that the constant
         // and the arrays cannot drift apart, which is the only way that loop could run off an end.
-        static_assert(sizeof(VehicleManager::maRaceCarVehicles) / sizeof(RaceCarPhysics)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarVehicles[8]");
-        static_assert(sizeof(VehicleManager::maRaceCarDrivers) / sizeof(VehicleDriver)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarDrivers[8]");
-        static_assert(sizeof(VehicleManager::maRaceCarEntityIDs) / sizeof(EntityId)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarEntityIDs[8]");
-        static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) / sizeof(u64)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarHandlingBodyIDs[8]");
-        static_assert(sizeof(VehicleManager::maeRaceCarTypes) / sizeof(BrnWorld::ERaceCarType)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maeRaceCarTypes[8]");
-        static_assert(sizeof(VehicleManager::mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "mauNetworkCarHiddenFrames[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarVehicles) / sizeof(RaceCarPhysics)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarVehicles[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarDrivers) / sizeof(VehicleDriver)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarDrivers[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarEntityIDs) / sizeof(EntityId)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarEntityIDs[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarHandlingBodyIDs) / sizeof(u64)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarHandlingBodyIDs[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maeRaceCarTypes) / sizeof(BrnWorld::ERaceCarType)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maeRaceCarTypes[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "mauNetworkCarHiddenFrames[8]");
         // AND the per-car debug components. There is no span and no cast any more: this is a real
         // array of the real class, so what is checkable here is the count, and that the element's
         // host size is exactly the number the array's drift term is derived from. Change either and
         // this fires -- which is how the term is kept from going stale.
-        static_assert(sizeof(VehicleManager::maRaceCarDebugComponent) / sizeof(DebugComponent)
-                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maRaceCarDebugComponent[8]");
+        CGS_STATIC_ASSERT((sizeof(VehicleManager::maRaceCarDebugComponent) / sizeof(DebugComponent)
+                          == VehicleManager::KI_MAX_ACTIVE_RACE_CARS), "maRaceCarDebugComponent[8]");
     }
 }
 }

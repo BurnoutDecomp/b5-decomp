@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstdlib>
-#include <cstdint>
+#include "types.hpp"
 
 namespace CgsResource
 {
@@ -35,12 +35,12 @@ namespace CgsResource
         meReleaseStage = E_RELEASESTAGE_DONE;
         meUpdateStage = E_UPDATESTAGE_IDLE;
         miBankId = -1;
-        mpEntries = nullptr;
-        mpEntryIds = nullptr;
+        mpEntries = 0;
+        mpEntryIds = 0;
         muNumEntries = 0;
         muMaxEntries = 0;
         miCurrentMemType = 0;
-        mpDistributionEntries = nullptr;
+        mpDistributionEntries = 0;
         mImportHashTable = ImportHashTable{};
     }
 
@@ -80,7 +80,7 @@ namespace CgsResource
         ImportHashTableValue* lpValues = static_cast<ImportHashTableValue*>(
             mAllocator.Malloc(sizeof(ImportHashTableValue) * luHashLength));
         mImportHashTable.Initialize(lpKeys, lpValues, static_cast<s32>(luHashLength));
-        CGS_ASSERT(mpEntries != nullptr && mpDistributionEntries != nullptr && mpEntryIds != nullptr,
+        CGS_ASSERT(mpEntries != 0 && mpDistributionEntries != 0 && mpEntryIds != 0,
                    "Failiure to allocate\n");
         muNumEntries = 0;
         muMaxEntries = lpOptions->muMaxEntries;
@@ -88,7 +88,7 @@ namespace CgsResource
 
         SmallResource lResource;
         for (s32 li = 0; li < KI_NUM_TYPES; ++li)
-            lResource.m_baseResources[li] = nullptr;
+            lResource.m_baseResources[li] = 0;
         SmallResourceDescriptor lDescriptor;
         lResource.CreateFromRWResource(lpOptions->mResource);
         lDescriptor.CreateFromRWDescriptor(lpOptions->mDescriptor);
@@ -97,7 +97,7 @@ namespace CgsResource
             const u32 luSize = lDescriptor.m_baseResourceDescriptors[li].m_size;
             if (luSize != 0)
             {
-                CGS_ASSERT(lResource.m_baseResources[li] != nullptr, "Allocator has NULL pointer\n");
+                CGS_ASSERT(lResource.m_baseResources[li] != 0, "Allocator has NULL pointer\n");
                 maResourceAllocators[li].Create(lResource.m_baseResources[li], luSize);
             }
         }
@@ -124,14 +124,14 @@ namespace CgsResource
     void* ScratchPool::AddEntry(Entry* lpEntry, s32 liEntryId, s32 liMemType, void* lpDestLocation)
     {
         if (muNumEntries >= muMaxEntries)
-            return nullptr;
+            return 0;
         mpEntryIds[muNumEntries] = lpEntry->mID;
         const rw::BaseResourceDescriptor& lrDescriptor = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[liMemType];
         CgsMemory::LinearMalloc& lrAllocator = maResourceAllocators[liMemType];
         lrAllocator.SetAlignment(lrDescriptor.m_alignment);
         void* lpTemp = lrAllocator.Malloc(lrDescriptor.m_size);
-        if (lpTemp == nullptr)
-            return nullptr;
+        if (lpTemp == 0)
+            return 0;
         ScratchEntry& lrScratch = mpEntries[muNumEntries];
         lrScratch.miEntryId = liEntryId;
         lrScratch.mpSrcLocation = lpEntry->mResource.m_baseResources[liMemType];
@@ -149,9 +149,9 @@ namespace CgsResource
         CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_IDLE, "Can not begin distribution during none-idle stage\n");
         miCurrentMemType = liMemType;
         BuildGatherDistributionList();
-        CGS_ASSERT(mpDistributionEntries != nullptr, "Distribution entries are NULL\n");
+        CGS_ASSERT(mpDistributionEntries != 0, "Distribution entries are NULL\n");
         u8* lpBase = static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress());
-        if (lpBase == nullptr)
+        if (lpBase == 0)
         {
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));

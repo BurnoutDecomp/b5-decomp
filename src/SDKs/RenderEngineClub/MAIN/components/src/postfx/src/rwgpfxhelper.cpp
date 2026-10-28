@@ -2,7 +2,7 @@
 
 #include <cmath>    // cosf / sinf / fabsf
 #include <cstring>  // memset
-#include <cstdint>  // intptr_t
+#include "types.hpp"  // intptr_t
 
 #include <new>      // placement new (the render-target debugger carve)
 #include <cstdio>   // std::snprintf
@@ -167,7 +167,7 @@ namespace
                                   const rw::BaseResourceDescriptors<5>& lrDescriptor)
     {
         return lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), 0);
     }
 
     // ---- the shared full-screen quad -------------------------------------------------------------
@@ -198,7 +198,7 @@ namespace
     const u32 KU_QUAD_VERTEX_STRIDE  = 20;
 }
 
-static_assert(sizeof(rw::graphics::postfx::PfxHelper::Vertex) == 20,
+CGS_STATIC_ASSERT((sizeof(rw::graphics::postfx::PfxHelper::Vertex) == 20),
               "the post-fx quad vertex must be the console's 0x14 FLOAT3+FLOAT2 stride");
 
 namespace rw
@@ -231,9 +231,9 @@ namespace postfx
                                                               u32 luSize, rw::IResourceAllocator* lpReserved)
     {
         // (a) a pre-built PC program image, if this blob is one.
-        if (lpMicrocode != nullptr)
+        if (lpMicrocode != 0)
         {
-            if (lpAdopted != nullptr)
+            if (lpAdopted != 0)
             {
                 return lpAdopted;
             }
@@ -244,12 +244,12 @@ namespace postfx
         {
             static bool sbReportedNoProgram = false;
         }
-        return nullptr;
+        return 0;
 #else
         // When no allocator override is given the asm dereferences the singleton and reads its first
         // word -- the allocator the helper itself was built with.
         rw::IResourceAllocator* lpAllocator = lpReserved;
-        if (lpAllocator == nullptr)
+        if (lpAllocator == 0)
         {
             lpAllocator = gpPfxHelper->GetAllocator();
         }
@@ -436,7 +436,7 @@ namespace graphics
 {
 namespace postfx
 {
-    PfxHelper* gpPfxHelper = nullptr;
+    PfxHelper* gpPfxHelper = 0;
 }
 }
 }
@@ -447,7 +447,7 @@ namespace
     // once. TU-local: the only two instructions in the whole export set that touch 82FAEE84 are the
     // load and the store inside PfxHelper::PfxHelper (grep pasted in the report), so no other TU can
     // name it and it stays file scope.
-    rw::graphics::postfx::RenderTargetDebugger* gpRenderTargetDebugger = nullptr;
+    rw::graphics::postfx::RenderTargetDebugger* gpRenderTargetDebugger = 0;
 
     // ---- the per-T half of SafeRelease -----------------------------------------------------------
     // On the console SafeRelease<T> calls `T::Release(ptr)` before handing the block back. This tree
@@ -518,7 +518,7 @@ namespace
     void BindProgramVariable(const renderengine::ProgramBufferData* lpProgram, const char* lpcName,
                              renderengine::ProgramVariableHandle& lrHandle)
     {
-        if (lpProgram == nullptr)
+        if (lpProgram == 0)
         {
             ClearHandle(lrHandle);
             return;
@@ -543,19 +543,19 @@ namespace postfx
     template< class T >
     void PfxHelper::SafeRelease(T*& lprObject)
     {
-        if (lprObject != nullptr)
+        if (lprObject != 0)
         {
             ReleaseObject(lprObject);
 
             rw::Resource lResource;
             for (u32 luSlot = 0u; luSlot < rw::KU_RESOURCE_LANE_COUNT; ++luSlot)
             {
-                lResource.m_baseResources[luSlot] = nullptr;
+                lResource.m_baseResources[luSlot] = 0;
             }
             lResource.m_baseResources[0] = lprObject;
             m_allocator->DoFree(lResource);
 
-            lprObject = nullptr;
+            lprObject = 0;
         }
     }
 
@@ -590,15 +590,15 @@ namespace postfx
         m_allocator  = lrParameters.allocator;
         gpPfxHelper  = this;
 
-        m_quadVertexDescriptor   = nullptr;
-        m_quadVertexBuffer       = nullptr;
-        m_quadDrawParams         = nullptr;   // +0x10: never written by the console ctor either
-        m_quadDepthStencilState  = nullptr;
-        m_quadVertexProgram      = nullptr;
-        m_9tapPixelProgram       = nullptr;
-        m_16tapPixelProgram      = nullptr;
-        m_4tapPixelProgram       = nullptr;
-        m_opaqueBlendState       = nullptr;
+        m_quadVertexDescriptor   = 0;
+        m_quadVertexBuffer       = 0;
+        m_quadDrawParams         = 0;   // +0x10: never written by the console ctor either
+        m_quadDepthStencilState  = 0;
+        m_quadVertexProgram      = 0;
+        m_9tapPixelProgram       = 0;
+        m_16tapPixelProgram      = 0;
+        m_4tapPixelProgram       = 0;
+        m_opaqueBlendState       = 0;
         ClearHandle(m_uvOffsetHandle);
         for (u32 luHandle = 0u; luHandle < 3u; ++luHandle)
         {
@@ -707,7 +707,7 @@ namespace postfx
             renderengine::DepthStencilState::GetResourceDescriptor(&lDescriptor, &lParameters);
 
             rw::Resource lResource = m_allocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_quadDepthStencilState = renderengine::DepthStencilState::Initialize(
                 reinterpret_cast<renderengine::DepthStencilState**>(&lResource), &lParameters);
         }
@@ -762,7 +762,7 @@ namespace postfx
         // entries the {0, 1} identity. 12 is the GUEST size of the three-pointer debugger, so the
         // host sizeof is used and the console immediate documented -- the same rule (and the same
         // failure it prevents) as BrnPostFx::Construct's five carves.
-        if (gpRenderTargetDebugger == nullptr)
+        if (gpRenderTargetDebugger == 0)
         {
             rw::ResourceDescriptor lDescriptor;
             lDescriptor.m_baseResourceDescriptors[0].m_size =
@@ -774,10 +774,10 @@ namespace postfx
                 lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
             }
 
-            const rw::Resource lResource = m_allocator->DoAllocate(lDescriptor, nullptr);
-            gpRenderTargetDebugger = (lResource.m_baseResources[0] != nullptr)
+            const rw::Resource lResource = m_allocator->DoAllocate(lDescriptor, 0);
+            gpRenderTargetDebugger = (lResource.m_baseResources[0] != 0)
                 ? new (lResource.m_baseResources[0]) rw::graphics::postfx::RenderTargetDebugger()
-                : nullptr;
+                : 0;
         }
     }
 
@@ -802,8 +802,8 @@ namespace postfx
         SafeRelease(m_9tapPixelProgram);       // 0x82403050  +0x20
 
         // asm 0x82403098-0x824030A4: `stw r31, 0(r30)` then `stw r31, off_82FAEE80@l(r11)`.
-        m_allocator = nullptr;
-        gpPfxHelper = nullptr;
+        m_allocator = 0;
+        gpPfxHelper = 0;
     }
 
     // ============================================================================================
@@ -845,9 +845,9 @@ namespace postfx
         void PushWeightRows(renderengine::ProgramVariableHandle& lrHandle,
                             const f32* lpafTable, u32 luRows)
         {
-            void* lpCursor = nullptr;
+            void* lpCursor = 0;
             RenderEngineDeviceBeginShaderStates(&lrHandle, &lpCursor);
-            if (lpCursor == nullptr)
+            if (lpCursor == 0)
                 return;
             f32* lpfRow = static_cast<f32*>(lpCursor);
             for (u32 luRow = 0; luRow < luRows; ++luRow)
@@ -917,7 +917,7 @@ namespace postfx
             shadow::Device::SetState(lpSourceRenderTarget->maColourTargets[0].mpTextureState,
                                      KU_HELPER_SAMPLER_SOURCE);                        // lwz r3,0x2C(r30) / bl @0x82403364
             shadow::Device::SetPixelProgram(m_16tapPixelProgram);                      // +0x30, bl @0x8240336C
-            RenderQuad(nullptr);                                                       // li r4, 0
+            RenderQuad(0);                                                       // li r4, 0
         }
         else if (leMethod == METHOD_16TAP_WITH_BILINEAR)                               // cmpwi cr6, r31, 1 @0x82403374
         {
@@ -930,7 +930,7 @@ namespace postfx
             PushWeightRows(m_blur4SamplesHandle, safBlur4Weights, 4u);                 // +0x48
             shadow::Device::SetState(lpSourceRenderTarget->maColourTargets[0].mpTextureState,
                                      KU_HELPER_SAMPLER_SOURCE);
-            RenderQuad(nullptr);
+            RenderQuad(0);
         }
         // Any other method: no table, no draw -- the console falls straight to the Resolve.
 
@@ -990,15 +990,15 @@ namespace postfx
         // 0x823FE5F0-620 cursor[0..3] = the caller's float4, or four copies of flt_82001CC0 == 0.0f
         //                when the caller passed null (`lvx128`/`stvx128` vs the zero splat).
         {
-            void* lpShaderState = nullptr;
+            void* lpShaderState = 0;
             RenderEngineDeviceBeginShaderStates(&m_uvOffsetHandle, &lpShaderState);
-            if (lpShaderState != nullptr)
+            if (lpShaderState != 0)
             {
                 f32* const lpfRow = static_cast<f32*>(lpShaderState);
-                lpfRow[0] = (lpafUvOffset != nullptr) ? lpafUvOffset[0] : 0.0f;
-                lpfRow[1] = (lpafUvOffset != nullptr) ? lpafUvOffset[1] : 0.0f;
-                lpfRow[2] = (lpafUvOffset != nullptr) ? lpafUvOffset[2] : 0.0f;
-                lpfRow[3] = (lpafUvOffset != nullptr) ? lpafUvOffset[3] : 0.0f;
+                lpfRow[0] = (lpafUvOffset != 0) ? lpafUvOffset[0] : 0.0f;
+                lpfRow[1] = (lpafUvOffset != 0) ? lpafUvOffset[1] : 0.0f;
+                lpfRow[2] = (lpafUvOffset != 0) ? lpafUvOffset[2] : 0.0f;
+                lpfRow[3] = (lpafUvOffset != 0) ? lpafUvOffset[3] : 0.0f;
             }
         }
 
@@ -1011,7 +1011,7 @@ namespace postfx
         D3DDevice* const lpDevice = reinterpret_cast<D3DDevice*>(renderengine::gpD3DDevice);
         void* const lpRing = D3DDevice_BeginVertices(lpDevice, KU_QUAD_PRIMITIVE_TYPE,
                                                      KU_QUAD_VERTEX_COUNT, KU_QUAD_VERTEX_STRIDE);
-        if (lpRing != nullptr)
+        if (lpRing != 0)
         {
             PfxHelper::Vertex* const lpDst = static_cast<PfxHelper::Vertex*>(lpRing);
             for (u32 luVertex = 0; luVertex < KU_QUAD_VERTEX_COUNT; ++luVertex)

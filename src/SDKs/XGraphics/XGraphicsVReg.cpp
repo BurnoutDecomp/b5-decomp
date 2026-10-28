@@ -42,13 +42,13 @@ VRegInfo::VRegInfo(s32 aiIndex, s32 aiType, CFG* apContext)
     // Def stack first (asm order), then the use and def instruction vectors --
     // each carved from the arena with a leading owner-arena pointer.
     void* lpStackMem = ArenaAllocPrefixed(lpArena, sizeof(DefStack));
-    mpDefStack = lpStackMem ? new (lpStackMem) DefStack(apContext) : nullptr;
+    mpDefStack = lpStackMem ? new (lpStackMem) DefStack(apContext) : 0;
 
     void* lpUsesMem = ArenaAllocPrefixed(lpArena, sizeof(InternalVector));
-    mpUses = lpUsesMem ? new (lpUsesMem) InternalVector(lpArena) : nullptr;
+    mpUses = lpUsesMem ? new (lpUsesMem) InternalVector(lpArena) : 0;
 
     void* lpDefsMem = ArenaAllocPrefixed(lpArena, sizeof(InternalVector));
-    mpDefs = lpDefsMem ? new (lpDefsMem) InternalVector(lpArena) : nullptr;
+    mpDefs = lpDefsMem ? new (lpDefsMem) InternalVector(lpArena) : 0;
 
     // Stamp this vreg with the graph's next id and advance the counter.
     miId = apContext->miNextVRegId++;

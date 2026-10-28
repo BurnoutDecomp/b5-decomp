@@ -110,7 +110,7 @@ namespace BrnGui
         }
         s32 miScoreMode;   // record +0x0C
     };
-    static_assert(sizeof(GuiEventSetRoadRuleScoreModeRecord) == 16,
+    CGS_STATIC_ASSERT((sizeof(GuiEventSetRoadRuleScoreModeRecord) == 16),
                   "the road-rule score-mode record is the 16 bytes AddEvent is given (li r6, 0x10)");
 
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;

@@ -16,7 +16,7 @@
 // The 80-byte stride matches sizeof(ContactSpyRunData) == 80 (EntityId@0, three Vector3
 // @0x10/0x20/0x30, s32 miStartIndex@0x40, s32 miRunLength@0x44, alignas(16) => 80). Called by
 // ContactSpyQueue<T,N>::SortAndCreateRunList (RaceCar/Traffic/PhysicalCarPart/Prop specialisations).
-static_assert(sizeof(BrnPhysics::ContactSpy::ContactSpyRunData) == 80,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::ContactSpy::ContactSpyRunData) == 80),
               "ContactSpyRunData stride 80");
 
 template bool

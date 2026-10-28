@@ -16,8 +16,8 @@ namespace CgsDev
     namespace DebugUI
     {
         Menu::Menu()
-            : mpParent(nullptr)
-            , mpCurrentMenuItem(nullptr)
+            : mpParent(0)
+            , mpCurrentMenuItem(0)
         {
             macCaption[0] = '\0';
             mMenuItems.Clear();
@@ -32,7 +32,7 @@ namespace CgsDev
             macCaption[liIndex] = '\0';
 
             mpParent          = lpParent;
-            mpCurrentMenuItem = nullptr;
+            mpCurrentMenuItem = 0;
             mMenuItems.Clear();
         }
 
@@ -99,7 +99,7 @@ namespace CgsDev
             {
                 mpCurrentMenuItem = mMenuItems.GetNextWrap(lpMenuItem);
                 if (mpCurrentMenuItem == lpMenuItem)
-                    mpCurrentMenuItem = nullptr;
+                    mpCurrentMenuItem = 0;
             }
             mMenuItems.Remove(lpMenuItem);
         }
@@ -124,7 +124,7 @@ namespace CgsDev
             if (!mpCurrentMenuItem)
                 mpCurrentMenuItem = mMenuItems.GetFirst();
             if (!mpCurrentMenuItem)
-                return nullptr;
+                return 0;
 
             MenuItem* lpCandidate = mpCurrentMenuItem;
             do
@@ -141,7 +141,7 @@ namespace CgsDev
             if (!mpCurrentMenuItem)
                 mpCurrentMenuItem = mMenuItems.GetLast();
             if (!mpCurrentMenuItem)
-                return nullptr;
+                return 0;
 
             MenuItem* lpCandidate = mpCurrentMenuItem;
             do
@@ -170,7 +170,7 @@ namespace CgsDev
                 if (_stricmp(acName, lpcName) == 0)
                     return lpItem;
             }
-            return nullptr;
+            return 0;
         }
 
         void Menu::GetSelectedItemString(char* lpcBuffer, s32 liBufferLen) const

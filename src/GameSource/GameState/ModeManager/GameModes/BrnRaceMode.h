@@ -57,10 +57,10 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (RaceMode::*)() const>(&RaceMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (RaceMode::*)() const>(&RaceMode::GetName)) != 0),
               "RaceMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<void (RaceMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&RaceMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RaceMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&RaceMode::Start)) != 0),
               "RaceMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<f32 (RaceMode::*)() const>(&RaceMode::GetOutroTimeout)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (RaceMode::*)() const>(&RaceMode::GetOutroTimeout)) != 0),
               "RaceMode::GetOutroTimeout must bind GameMode vtable slot 16");
 }

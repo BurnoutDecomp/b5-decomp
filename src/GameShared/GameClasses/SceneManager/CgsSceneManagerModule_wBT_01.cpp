@@ -66,7 +66,7 @@ namespace CgsSceneManager
         static const u32 KU_SPHERE_VOLUME_BLOCK_SIZE = 0x80;
         // The exclude-index sentinel.
         static const u16 KU16_NO_EXCLUDE_ENTITY_INDEX = 0xFFFF;
-        static_assert(sizeof(FineIntersectionTestIO::InEventVolumeTestDeepest().mVolumeBuffer) == KU_SPHERE_VOLUME_BLOCK_SIZE,
+        CGS_STATIC_ASSERT((sizeof(FineIntersectionTestIO::InEventVolumeTestDeepest().mVolumeBuffer) == KU_SPHERE_VOLUME_BLOCK_SIZE),
                       "the fine query's volume slot is one 0x80-byte block");
 
         SceneManagerIO::OutEventSphereTestFastResult lResult;
@@ -101,7 +101,7 @@ namespace CgsSceneManager
         }
 
         // ---- 2. the query sphere as a collision volume --------------------------------------------
-        alignas(16) u8 laVolumeMemory[KU_SPHERE_VOLUME_BLOCK_SIZE];
+        CGS_ALIGN(16) u8 laVolumeMemory[KU_SPHERE_VOLUME_BLOCK_SIZE];
         rw::Resource lVolumeResource;                                       // zeroed lanes
         lVolumeResource.m_baseResources[0] = laVolumeMemory;
         const rw::collision::SphereVolume* lpVolume =

@@ -21,13 +21,13 @@ namespace Utils
 {
 
 // Layout pins (the block holds no pointers, so host offsets are the console's).
-static_assert(offsetof(CameraImpactEffect::Parameters, mShakeParams) == 0x00,
+CGS_STATIC_ASSERT((offsetof(CameraImpactEffect::Parameters, mShakeParams) == 0x00),
               "CameraImpactEffect::Parameters::mShakeParams @ +0x00");
-static_assert(offsetof(CameraImpactEffect::Parameters, mfShakeDecayFactor) == 0x10,
+CGS_STATIC_ASSERT((offsetof(CameraImpactEffect::Parameters, mfShakeDecayFactor) == 0x10),
               "CameraImpactEffect::Parameters::mfShakeDecayFactor @ +0x10");
-static_assert(offsetof(CameraImpactEffect::Parameters, mfShakeMagnitude) == 0x14,
+CGS_STATIC_ASSERT((offsetof(CameraImpactEffect::Parameters, mfShakeMagnitude) == 0x14),
               "CameraImpactEffect::Parameters::mfShakeMagnitude @ +0x14");
-static_assert(offsetof(CameraImpactEffect::Parameters, mfShakeFrequencyScale) == 0x18,
+CGS_STATIC_ASSERT((offsetof(CameraImpactEffect::Parameters, mfShakeFrequencyScale) == 0x18),
               "CameraImpactEffect::Parameters::mfShakeFrequencyScale @ +0x18");
 
 template<class TSerialiser>

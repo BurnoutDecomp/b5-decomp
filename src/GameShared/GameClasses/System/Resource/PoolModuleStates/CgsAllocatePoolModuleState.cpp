@@ -32,13 +32,13 @@ namespace CgsResource
     void AllocatePoolModuleState::Construct(PoolModule* lpPoolModule)
     {
         meState = E_STATE_IDLE;
-        mpPool = nullptr;
+        mpPool = 0;
         mListId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(""))));
-        mpEntries = nullptr;
+        mpEntries = 0;
         miNumEntries = 0;
-        mpAllocListSet = nullptr;
-        mpOutNeeds = nullptr;
-        mpOutResources = nullptr;
+        mpAllocListSet = 0;
+        mpOutNeeds = 0;
+        mpOutResources = 0;
         mpPoolModule = lpPoolModule;
         mbAllowFailiure = false;
         mbCreateEntryListResource = false;
@@ -49,7 +49,7 @@ namespace CgsResource
     // Inlined at 829048FC..8290494C. The driver fills miEventId and mbFailed.
     void AllocatePoolModuleState::GenerateResponse(Events::AllocateResourceListResponse* lpResponse)
     {
-        lpResponse->mpUser = nullptr;
+        lpResponse->mpUser = 0;
         lpResponse->miEventId = 0;
         lpResponse->miPoolId = mpPool ? mpPool->GetId() : -1;
         lpResponse->mListId = mListId;
@@ -232,7 +232,7 @@ namespace CgsResource
     bool AllocatePoolModuleState::CheckEntryListDependency()
     {
         s32 liIndex;
-        if (mpPool->FindResource(mListId, true, 3, &liIndex) == nullptr)
+        if (mpPool->FindResource(mListId, true, 3, &liIndex) == 0)
         {
             return true;
         }
@@ -294,7 +294,7 @@ namespace CgsResource
                 lNewResource.mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_alignment = lrEntry.GetUncompresssedAlignment(luMemType);
             }
             lNewResource.mpResourceType = mpPoolModule->FindResourceType(lrEntry.muResourceTypeId);
-            CGS_ASSERT(lNewResource.mpResourceType != nullptr, "Invalid resource type on resource ");   // :407
+            CGS_ASSERT(lNewResource.mpResourceType != 0, "Invalid resource type on resource ");   // :407
             lNewResource.miNumImports        = lrEntry.muImportCount;
             lNewResource.muImportTableOffset = lrEntry.muImportOffset;
 
@@ -352,7 +352,7 @@ namespace CgsResource
     {
         s32    liIndex;
         Entry* lpResource = mpPool->FindResource(mListId, true, 3, &liIndex);
-        CGS_ASSERT(lpResource != nullptr, "Could not find entry list resource\n");   // :527
+        CGS_ASSERT(lpResource != 0, "Could not find entry list resource\n");   // :527
 
         if (mbCreateEntryListResource)
         {
@@ -386,7 +386,7 @@ namespace CgsResource
             s32   liResourceIndex;
             Entry* lpResource = mpPool->FindResourceWithDependencies(mpEntries[i].mResourceId, &lpContainingPool,
                                                                      true, 3, &liResourceIndex);
-            CGS_ASSERT(lpResource != nullptr, "Could not find resourc even though it was there last frame\n");   // :573
+            CGS_ASSERT(lpResource != 0, "Could not find resourc even though it was there last frame\n");   // :573
 
             mpPool->DecEntryRefCount(liResourceIndex);
         }

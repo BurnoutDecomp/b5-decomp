@@ -139,11 +139,11 @@ private:
     Microphone maMicrophones[E_MIC_MAX_NUM_POSITIONS][E_MAX_NUM_PLAYERS];
 };
 
-static_assert(sizeof(rw::math::vpu::Vector3) == 16, "Vector3 layout drift");
-static_assert(sizeof(rw::math::vpu::Matrix44Affine) == 64, "Matrix44Affine layout drift");
-static_assert(sizeof(CgsSound::Utils::DataPoint<rw::math::vpu::Matrix44Affine>) == 128, "DataPoint<Matrix44Affine> layout drift");
-static_assert(sizeof(MicrophoneSystem::Microphone) == 0xA0, "Microphone layout drift");
-static_assert(sizeof(MicrophoneSystem) == 0x290, "MicrophoneSystem layout drift");
+CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Vector3) == 16), "Vector3 layout drift");
+CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Matrix44Affine) == 64), "Matrix44Affine layout drift");
+CGS_STATIC_ASSERT((sizeof(CgsSound::Utils::DataPoint<rw::math::vpu::Matrix44Affine>) == 128), "DataPoint<Matrix44Affine> layout drift");
+CGS_STATIC_ASSERT((sizeof(MicrophoneSystem::Microphone) == 0xA0), "Microphone layout drift");
+CGS_STATIC_ASSERT((sizeof(MicrophoneSystem) == 0x290), "MicrophoneSystem layout drift");
 
 } // namespace Logic
 } // namespace CgsSound

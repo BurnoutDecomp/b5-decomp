@@ -4,13 +4,13 @@ namespace EA { namespace Allocator { class ICoreAllocator; } }
 namespace rw { namespace movie
 {
     class MovieDecoder;
-    using ReleaseVideoRenderableFunc = void(VideoRenderable*, MovieDecoder*);
+    typedef void ReleaseVideoRenderableFunc(VideoRenderable*, MovieDecoder*);
 
     // ARTIST 820D5798/820D5A48 and DecFIGS irenderer.h: sixteen slots.
     class IVideoRenderer
     {
     public:
-        virtual ~IVideoRenderer() = default;
+        virtual ~IVideoRenderer() {}
         virtual void Init(EA::Allocator::ICoreAllocator*, unsigned int, unsigned int) = 0;
         virtual unsigned int GetNumberOfVideoBuffers(VideoRenderable::VideoFormat) = 0;
         virtual float GetRenderingDelay() = 0;

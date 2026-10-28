@@ -22,6 +22,6 @@ namespace BrnGui
         s32 GetEventType() const { return 242; }
     };
 
-    static_assert(sizeof(GuiEventOnlineStatsResponse) == 24,
+    CGS_STATIC_ASSERT((sizeof(GuiEventOnlineStatsResponse) == 24),
                   "the stats response payload is six words");
 }

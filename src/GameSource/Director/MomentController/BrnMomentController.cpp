@@ -158,7 +158,7 @@ bool MomentController::MomentHandle::Release()
 namespace
 {
     typedef MomentController::MomentPool::Bucket MomentBucket;
-    #define BRN_MOMENT_FITS(T) static_assert(sizeof(MomentBucket) >= sizeof(T), "moment pool bucket too small for " #T " -- raise MomentController::KU_MOMENT_POOL_UNITS")
+    #define BRN_MOMENT_FITS(T) CGS_STATIC_ASSERT(sizeof(MomentBucket) >= sizeof(T), "moment pool bucket too small for " #T " -- raise MomentController::KU_MOMENT_POOL_UNITS")
     BRN_MOMENT_FITS(MomentHardStop);
     BRN_MOMENT_FITS(MomentHitTraffic);
     BRN_MOMENT_FITS(MomentTumbling);

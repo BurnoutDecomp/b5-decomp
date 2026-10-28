@@ -159,10 +159,10 @@ namespace Vehicle
         // Box::Set consumes only xyz, the w lane rides along).
         inline Vector3 ScaleHalfExtentForUnhideTest(Vector3 lHalfExtent)
         {
-            return Vector3{ lHalfExtent.x * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
+            { const Vector3 lResult = { lHalfExtent.x * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
                             lHalfExtent.y * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
                             lHalfExtent.z * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
-                            lHalfExtent.w * KF_UNHIDE_OVERLAP_EXTENT_SCALE };
+                            lHalfExtent.w * KF_UNHIDE_OVERLAP_EXTENT_SCALE }; return lResult; }
         }
     }
 
@@ -216,7 +216,7 @@ namespace Vehicle
 
         // ---- (2) the two IO buffers + the generator arena + the cleared state -------------------
         lpIOBufferStack->CreateIOBuffer(&mpContactGenList, "Contact Gen List");
-        CGS_ASSERT(mpContactGenList != nullptr, "mpContactGenList");                            // :79
+        CGS_ASSERT(mpContactGenList != 0, "mpContactGenList");                            // :79
         // (the CreateIOBuffer<T> template itself runs T::Construct, exactly as the console does
         //  -- @0x82614CB0; the former hand call here would have run it twice.)
 
@@ -598,8 +598,8 @@ namespace Vehicle
                 EntityId{ static_cast<u32>(lCarPhysicsIdA) }, &lpSpheresA);
             const s32 liNumSpheresB = lpDefMan->GetSpheresForCar(
                 EntityId{ static_cast<u32>(lCarPhysicsIdB) }, &lpSpheresB);
-            CGS_ASSERT(lpSpheresA != nullptr, "lpSpheresA");                                  // :877
-            CGS_ASSERT(lpSpheresB != nullptr, "lpSpheresB");                                  // :878
+            CGS_ASSERT(lpSpheresA != 0, "lpSpheresA");                                  // :877
+            CGS_ASSERT(lpSpheresB != 0, "lpSpheresB");                                  // :878
 
             SphereList lSphereListA;
             lSphereListA.mpSpheres    = reinterpret_cast<u8*>(
@@ -741,7 +741,7 @@ namespace Vehicle
             lpTriangleCacheInterface->GetCache(liRaceCarIndex);
         const s32 liNumTriangleBatches =
             lpTriangleCacheInterface->GetNumCachedTriangleBatches(liRaceCarIndex);
-        CGS_ASSERT(lpCachedTriangles != nullptr, "lpCachedTriangles");              // :943
+        CGS_ASSERT(lpCachedTriangles != 0, "lpCachedTriangles");              // :943
 
         const bool lbUseSweptSpheres =
             lpDeformationManager->IsUsingSweptSpheres(EntityId{ luEntityWord });
@@ -768,7 +768,7 @@ namespace Vehicle
             const s32 liSlot = (liRaceCarIndex >= 0 && liRaceCarIndex < 8) ? liRaceCarIndex : 0;
             const bool lbEdge = (lbUseSweptSpheres != sabWasSwept[liSlot]);
             sabWasSwept[liSlot] = lbUseSweptSpheres;
-            if (siCGenProbe == 1 && CgsDev::Log::gpDebugPrint != nullptr
+            if (siCGenProbe == 1 && CgsDev::Log::gpDebugPrint != 0
                 && (lbEdge || (suCGenFrame % 300u) == 0u))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -787,7 +787,7 @@ namespace Vehicle
             const CgsGeometric::Sphere* lpSpheres = 0;    // 0x825EB234 stw 0 (the callee may not write it)
             const s32 liNumSpheres =
                 lpDeformationManager->GetSpheresForCar(EntityId{ luEntityWord }, &lpSpheres);
-            CGS_ASSERT(lpSpheres != nullptr, "lpSpheres");                          // :952
+            CGS_ASSERT(lpSpheres != 0, "lpSpheres");                          // :952
 
             SphereList lSphereList;
             lSphereList.mpSpheres    = reinterpret_cast<u8*>(
@@ -815,7 +815,7 @@ namespace Vehicle
             const s32 liNumSweptSpheres =
                 lpDeformationManager->GetSweptSpheresForCar(EntityId{ luEntityWord },
                                                             &lpSweptSpheres);
-            CGS_ASSERT(lpSweptSpheres != nullptr, "lpSpheres");                     // :979
+            CGS_ASSERT(lpSweptSpheres != 0, "lpSpheres");                     // :979
 
             SweptSphereList lSweptSphereList;
             lSweptSphereList.mpaSweptSpheres = reinterpret_cast<u8*>(
@@ -888,7 +888,7 @@ namespace Vehicle
         typedef CgsSceneManager::CgsCollision::SweptSphereList SweptSphereList;
         typedef CgsSceneManager::CgsCollision::PrimitivePairListBuilder PrimitivePairListBuilder;
 
-        CGS_ASSERT(lpLinearMalloc != nullptr, "lpMalloc != NULL");                            // :1108
+        CGS_ASSERT(lpLinearMalloc != 0, "lpMalloc != NULL");                            // :1108
 
         const EntityId lPhysicsEntityId =
             mPhysicalTrafficManager.GetPhysicsEntityId(liTrafficIndex);
@@ -901,7 +901,7 @@ namespace Vehicle
         const CgsGeometric::Triangle4* lpCachedTriangles = lpTriangleCacheInterface->GetCache(liCacheSlot);
         const s32 liNumTriangleBatches =
             lpTriangleCacheInterface->GetNumCachedTriangleBatches(liCacheSlot);
-        CGS_ASSERT(lpCachedTriangles != nullptr, "lpCachedTriangles");                        // :1128
+        CGS_ASSERT(lpCachedTriangles != 0, "lpCachedTriangles");                        // :1128
 
         const u8 lu8PhysicalType = lpTrafficVehicle->mu8PhysicalType;              // lbz 0x32(r29)
         lpTrafficVehicle->mbUsingBoxWithWorld = false;                             // stb 0x34(r29)
@@ -940,7 +940,7 @@ namespace Vehicle
                     const CgsGeometric::Sphere* lpSpheres = 0;   // 0x8261C174 stw 0 -- the getter
                     const s32 liNumSpheres =                     // may not write the slot
                         lpDeformationManager->GetSpheresForCar(lPhysicsEntityId, &lpSpheres);
-                    CGS_ASSERT(lpSpheres != nullptr, "lpSpheres");                        // :1205
+                    CGS_ASSERT(lpSpheres != 0, "lpSpheres");                        // :1205
 
                     SphereList lSphereList;
                     lSphereList.mpSpheres    = reinterpret_cast<u8*>(
@@ -963,7 +963,7 @@ namespace Vehicle
                     const CgsGeometric::SweptSphere* lpSweptSpheres = 0;   // zeroed before the query
                     const s32 liNumSweptSpheres =
                         lpDeformationManager->GetSweptSpheresForCar(lPhysicsEntityId, &lpSweptSpheres);
-                    CGS_ASSERT(lpSweptSpheres != nullptr, "lpSpheres");                   // :1231
+                    CGS_ASSERT(lpSweptSpheres != 0, "lpSpheres");                   // :1231
 
                     SweptSphereList lSweptSphereList;
                     lSweptSphereList.mpaSweptSpheres = reinterpret_cast<u8*>(
@@ -982,7 +982,7 @@ namespace Vehicle
 
                     static s32        siSweptBatches = 0;
                     static s32        siSweptLines   = 0;
-                    if (sbSweptDiag && CgsDev::Log::gpDebugPrint != nullptr)
+                    if (sbSweptDiag && CgsDev::Log::gpDebugPrint != 0)
                     {
                         ++siSweptBatches;
                         const s32 liNumResults = static_cast<s32>(
@@ -1547,8 +1547,8 @@ namespace Vehicle
 
         CgsDev::PerfMonCpu::StartMonitor(miRaceCarWorldContactValidationPM);     // +172460
 
-        CGS_ASSERT(lpPotentialContactInterface != nullptr, "lpPotentialContactInterface != NULL"); // :1382
-        CGS_ASSERT(lpTriCache != nullptr, "lpTriCache != NULL");                                   // :1383
+        CGS_ASSERT(lpPotentialContactInterface != 0, "lpPotentialContactInterface != NULL"); // :1382
+        CGS_ASSERT(lpTriCache != 0, "lpTriCache != NULL");                                   // :1383
         CGS_ASSERT(lpPotentialContactInterface->GetRaceCarWithWorldQueueValidated().GetLength() == 0,
                    "lpPotentialContactInterface->GetRaceCarWithWorldQueueValidated()->GetLength() == 0"); // :1384
 
@@ -1681,7 +1681,7 @@ namespace Vehicle
             }
             static u32 suCValidFrame = 0u;
             ++suCValidFrame;
-            if (siCValidProbe == 1 && liNumContacts > 0 && CgsDev::Log::gpDebugPrint != nullptr)
+            if (siCValidProbe == 1 && liNumContacts > 0 && CgsDev::Log::gpDebugPrint != 0)
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[cvalid] n " << static_cast<s32>(suCValidFrame)
@@ -1724,7 +1724,7 @@ namespace Vehicle
         typedef BrnPhysics::PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue
                 CustomPotentialContactQueue;
 
-        CGS_ASSERT(lpContactInterface != nullptr, "lpPotentialContactInterface != NULL");   // :1458
+        CGS_ASSERT(lpContactInterface != 0, "lpPotentialContactInterface != NULL");   // :1458
 
         CustomPotentialContactQueue& lrSphereQueue = lpContactInterface->GetTrafficWithWorldQueue();
         for (s32 liContact = 0; liContact < lrSphereQueue.GetLength(); ++liContact)

@@ -70,8 +70,8 @@ void BridgeInputToPhysicsModule(
     // the cast can never become a partial copy. Retire it when BrnWorldIO adopts the canonical
     // type -- blocked today only because CgsSystem::TimerStatusInterface::operator= is
     // declaration-only and UpdateInputBuffer::SetTimerStatusInterface assigns through it.
-    static_assert(sizeof(BrnWorldIO::TimerStatusInterface)
-                      == sizeof(CgsSystem::TimerStatusInterface),
+    CGS_STATIC_ASSERT((sizeof(BrnWorldIO::TimerStatusInterface)
+                      == sizeof(CgsSystem::TimerStatusInterface)),
                   "world/physics timer-status blocks must be the same 48-byte X360 member");
     lpPhysicsModuleInputBuffer->SetTimerInterface(
         reinterpret_cast<const CgsSystem::TimerStatusInterface*>(

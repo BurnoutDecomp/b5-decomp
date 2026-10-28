@@ -388,10 +388,10 @@ int AptValue::isMCInParentChain() const
     for (;;)
     {
         AptNativeHash* const lpHash = lpNode->GetNativeHashVirtual();   // vtbl[2]
-        if (lpHash == nullptr)
+        if (lpHash == 0)
             break;
         lpNode = lpHash->mp__Proto__;                                   // hash +8
-        if (lpNode == nullptr)
+        if (lpNode == 0)
             break;
         if (lpNode == lpTarget)
             return 1;

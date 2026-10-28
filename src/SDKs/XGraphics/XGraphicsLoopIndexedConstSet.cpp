@@ -35,7 +35,7 @@ LoopIndexedConstSet* LoopIndexedConstSet::NewItem(s32 aiIndex, s32 aiType, CFG* 
     // -4 OOM sentinel; construct in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(LoopIndexedConstSet));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) LoopIndexedConstSet(aiIndex, aiType, apContext);
 }

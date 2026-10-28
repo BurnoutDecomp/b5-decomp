@@ -103,10 +103,10 @@ CgsRenderTarget::CgsRenderTargetSurface::CgsRenderTargetSurface()
     ms8TileIndex         = -1;
     ms8ZCullIndex        = -1;
     miZCullAddress       = -1;
-    mpTarget             = nullptr;
+    mpTarget             = 0;
     mu32TextureType      = 1;
-    mpSharedTarget       = nullptr;
-    mpSharedAddress      = nullptr;
+    mpSharedTarget       = 0;
+    mpSharedAddress      = 0;
 }
 
 // Construct an empty render-target description: the vtable goes in at +0x00, the five surface records
@@ -136,7 +136,7 @@ CgsRenderTarget::CgsRenderTarget()
 // USE_PROVIDED when the depth record already carries a Target*, else CREATE/NONE from its in-use flag.
 void CgsRenderTarget::Construct(rw::IResourceAllocator* lpAllocator)
 {
-    CGS_ASSERT(lpAllocator != nullptr, "Must have allocator to construct render target\n");
+    CGS_ASSERT(lpAllocator != 0, "Must have allocator to construct render target\n");
 
     mpAllocator = lpAllocator;
 
@@ -175,7 +175,7 @@ void CgsRenderTarget::Construct(rw::IResourceAllocator* lpAllocator)
         lrColour.SetNumSections(mu8NumSections);
 
         // A section that shares another target's memory is un-tiled; otherwise it keeps its tile slot.
-        if (lrSurface.mpSharedTarget != nullptr)
+        if (lrSurface.mpSharedTarget != 0)
         {
             lrColour.ShareMemoryWithTarget(lrSurface.mpSharedTarget, lrSurface.mpSharedAddress);
         }
@@ -196,7 +196,7 @@ void CgsRenderTarget::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.SetColorMode(lColourMode);
 
     // --- the depth / stencil section ---------------------------------------------------------------
-    if (mDepthTarget.mpTarget != nullptr)
+    if (mDepthTarget.mpTarget != 0)
     {
         lParameters.SetProvidedDepthStencilTarget(mDepthTarget.mpTarget);
         lParameters.SetDepthStencilMode(rw::graphics::postfx::RenderTarget::eRenderTarget_USE_PROVIDED);
@@ -221,7 +221,7 @@ void CgsRenderTarget::Construct(rw::IResourceAllocator* lpAllocator)
     lrDepth.SetZCullAddress(mDepthTarget.miZCullAddress);
     lrDepth.SetNumSections(mu8NumSections);
     // The depth record forwards NO texture type and NO filter mode - the X360 writes neither.
-    if (mDepthTarget.mpSharedTarget != nullptr)
+    if (mDepthTarget.mpSharedTarget != 0)
     {
         lrDepth.ShareMemoryWithTarget(mDepthTarget.mpSharedTarget, mDepthTarget.mpSharedAddress);
     }
@@ -271,14 +271,14 @@ void CgsRenderTarget::End()
 // The resolved colour texture for colour section luIndex.
 renderengine::Texture* CgsRenderTarget::GetTexture(u32 luIndex)
 {
-    CGS_ASSERT(mpRenderTarget != nullptr, "mpRenderTarget");
+    CGS_ASSERT(mpRenderTarget != 0, "mpRenderTarget");
     return mpRenderTarget->GetTexture(luIndex);
 }
 
 // The resolved depth/stencil texture.
 renderengine::Texture* CgsRenderTarget::GetDepthTexture()
 {
-    CGS_ASSERT(mpRenderTarget != nullptr, "mpRenderTarget");
+    CGS_ASSERT(mpRenderTarget != 0, "mpRenderTarget");
     return mpRenderTarget->GetDepthStencilTexture();
 }
 
@@ -291,7 +291,7 @@ void CgsRenderTarget::SetRenderTargetState(u32 luSection)
     (void)luSection;
 
     const renderengine::RenderTargetState* lpState = mpRenderTarget->GetRenderTargetState(0);
-    if (lpState == nullptr)
+    if (lpState == 0)
     {
         lpState = rw::graphics::postfx::gpDefaultRenderTargetState;
     }
@@ -337,7 +337,7 @@ void CgsRenderTarget::SetRenderTargetStateInvertDepth(u32 luSection)
     (void)luSection;
 
     const renderengine::RenderTargetState* lpState = mpRenderTarget->GetRenderTargetState(0);
-    if (lpState == nullptr)
+    if (lpState == 0)
     {
         lpState = rw::graphics::postfx::gpDefaultRenderTargetState;
     }
@@ -379,23 +379,23 @@ void CgsRenderTarget::SetRenderTargetStateInvertDepth(u32 luSection)
 // sentinels the ctor writes are single signed bytes.
 void CgsRenderTarget::_AssertLayout()
 {
-    static_assert(std::is_polymorphic<CgsRenderTarget>::value,
+    CGS_STATIC_ASSERT((std::is_polymorphic<CgsRenderTarget>::value),
                   "CgsRenderTarget must be polymorphic - the X360 ctor installs a vptr at +0x00");
 
     // The X360 record count: five 0x30-byte surfaces in total, of which four are colour. Derived in
     // the header's COLOUR-SECTION COUNT note from sizeof 0x110 / mpRenderTarget @ +0x108 / the ctor's
     // five seeded records / the four-iteration clear loops. This is a COUNT, not an offset, so it is
     // pointer-invariant and safe to pin.
-    static_assert(KU_NUM_COLOUR_SECTIONS == 4,
+    CGS_STATIC_ASSERT((KU_NUM_COLOUR_SECTIONS == 4),
                   "the X360 build carries four colour sections (the PS3 DWARF's five is a merge delta)");
-    static_assert(sizeof(CgsRenderTarget::maRenderTargets) / sizeof(CgsRenderTargetSurface)
-                      + 1 == 5,
+    CGS_STATIC_ASSERT((sizeof(CgsRenderTarget::maRenderTargets) / sizeof(CgsRenderTargetSurface)
+                      + 1 == 5),
                   "four colour records + one depth record = the five the X360 ctor seeds");
 
     // The tile / ZCull indices the ctor seeds to -1 are single signed-byte sentinels; the target slot
     // it clears to null is a pointer.
-    static_assert(sizeof(CgsRenderTargetSurface::ms8TileIndex) == 1,
+    CGS_STATIC_ASSERT((sizeof(CgsRenderTargetSurface::ms8TileIndex) == 1),
                   "tile index is a single byte sentinel");
-    static_assert(sizeof(CgsRenderTargetSurface::mpTarget) == sizeof(void*),
+    CGS_STATIC_ASSERT((sizeof(CgsRenderTargetSurface::mpTarget) == sizeof(void*)),
                   "surface target slot is a pointer");
 }

@@ -63,10 +63,10 @@ namespace EventInterpreterModuleIO
 
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mGuiOutEvents) == 0x0004, "mGuiOutEvents @0x0004");
-        static_assert(offsetof(OutputBuffer, mGuiOutResource) == 0x4814, "mGuiOutResource @0x4814");
-        static_assert(offsetof(OutputBuffer, mGuiOutView) == 0x5824, "mGuiOutView @0x5824");
-        static_assert(sizeof(OutputBuffer) == 0x15834, "ARTIST interpreter output size");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGuiOutEvents) == 0x0004), "mGuiOutEvents @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGuiOutResource) == 0x4814), "mGuiOutResource @0x4814");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGuiOutView) == 0x5824), "mGuiOutView @0x5824");
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer) == 0x15834), "ARTIST interpreter output size");
     }
 
     // X360 0x8284E480: read-lock (bit 4) const handle to the out-event queue (this+4).

@@ -20,8 +20,8 @@ namespace BrnReplays
 {
     GPUDiskWriteStream::GPUDiskWriteStream()
     {
-        static_assert(sizeof(maLock) >= sizeof(CRITICAL_SECTION), "native stream lock storage");
-        static_assert(alignof(GPUDiskWriteStream) >= alignof(CRITICAL_SECTION), "native stream lock alignment");
+        CGS_STATIC_ASSERT((sizeof(maLock) >= sizeof(CRITICAL_SECTION)), "native stream lock storage");
+        CGS_STATIC_ASSERT((__alignof(GPUDiskWriteStream) >= __alignof(CRITICAL_SECTION)), "native stream lock alignment");
         RtlInitializeCriticalSection(maLock);
     }
 

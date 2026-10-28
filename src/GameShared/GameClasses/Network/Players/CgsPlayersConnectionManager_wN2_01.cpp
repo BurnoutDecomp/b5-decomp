@@ -19,13 +19,13 @@ void PlayersConnectionManager::Update(const CgsSystem::TimerStatus* lpTimerStatu
                                       u16 lu16CurrentFrame)
 {
     DirtySock::ConnApiRefT* lpConnApi = mpServerInterface->GetConnAPIRef();
-    if (lpConnApi == nullptr)
+    if (lpConnApi == 0)
     {
         return;
     }
 
     const DirtySock::ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
-    if (lpClientList == nullptr)
+    if (lpClientList == 0)
     {
         return;
     }

@@ -65,7 +65,7 @@ void StreetManager::ProcessNetworkHighScoreEvent(
             BrnStreetData::ChallengeHighScoreEntry lFriendEntry;
             lFriendEntry.Construct();
             GetChallengeFriendHighScore( liSlotIndex, &lFriendEntry, false );
-            lFriendEntry.UpdateEntry( &lPersonalBest, nullptr );
+            lFriendEntry.UpdateEntry( &lPersonalBest, 0 );
             SetChallengeFriendHighScore( liSlotIndex, &lFriendEntry );
 
             if ( lbIsNewHighScore )

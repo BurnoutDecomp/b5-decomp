@@ -16,7 +16,7 @@ namespace RendererIO
         // `addi r3, this, 0x10` before BrnDirector::Camera::Camera::Construct). The alignas(16) camera
         // following the 1-byte CgsModule::IOBuffer base forces this on both targets -- this is a
         // same-object self-offset (target-stable), not a cross-pointer-member offset.
-        static_assert(offsetof(InputBuffer, mBrnCamera) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mBrnCamera) == 0x10),
                       "RendererIO::InputBuffer camera must be at this+0x10");
 
         CgsModule::IOBuffer::Construct();

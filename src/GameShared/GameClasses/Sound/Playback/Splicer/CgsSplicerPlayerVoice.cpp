@@ -59,7 +59,7 @@ void* SplicerPlayerVoice::operator new(size_t auSize, Factory& arFactory,
         lDescriptor.m_baseResourceDescriptors[luIndex].m_size = 0;
         lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
     }
-    static_assert(sizeof(CgsResource::ResourceDescriptor) == 40,
+    CGS_STATIC_ASSERT((sizeof(CgsResource::ResourceDescriptor) == 40),
                   "X360 serialised descriptor is 5x{size,align}=40B");
 
     const rw::ResourceDescriptor& lAbiDescriptor =
@@ -118,7 +118,7 @@ SplicerPlayerVoice::SplicerPlayerVoice(Factory& arFactory,
     {
         void* lpSlotMemory = arFactory.GetEnvironment().Allocate(
             static_cast<u32>(sizeof(SplicerContentSlot)),
-            static_cast<u32>(alignof(SplicerContentSlot)), "SplicerContentSlot");
+            static_cast<u32>(__alignof(SplicerContentSlot)), "SplicerContentSlot");
         CGS_ASSERT(lpSlotMemory != 0, "lpSf");
         if (lpSlotMemory)
             GetSlot(0).SetImplementation(
@@ -132,8 +132,8 @@ SplicerPlayerVoice::SplicerPlayerVoice(Factory& arFactory,
 //   GenericRwacVoice::~GenericRwacVoice(a1+0x2C); Voice::~Voice(a1); (a2&1) delete
 SplicerPlayerVoice::~SplicerPlayerVoice()
 {
-    mpInternalSubmix = nullptr; // stw r10,0x84(r31)
-    mpSplice = nullptr;         // stw r10,0x88(r31)
+    mpInternalSubmix = 0; // stw r10,0x84(r31)
+    mpSplice = 0;         // stw r10,0x88(r31)
 
     // The GenericRwacVoice base (subobject @+0x2C) and the Voice primary base (@+0)
     // destructors, plus the intervening vtable rewrites, are emitted implicitly here.

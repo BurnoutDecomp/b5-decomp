@@ -28,7 +28,7 @@ void TextFileWriteSerialiser::Construct(const char* lpcFilename)
 void TextFileWriteSerialiser::Destruct()
 {
     CGS_ASSERT(muRecursionDepth == 0, "muRecursionDepth == 0");
-    if (mpFile != nullptr)
+    if (mpFile != 0)
         std::fclose(mpFile);
 }
 
@@ -56,7 +56,7 @@ void TextFileWriteSerialiser::FormatName(char* lpcDest, const char* lpcSource)
 // ----------------------------------------------------------------------------
 void TextFileWriteSerialiser::Serialise(const char* lpcName, f32& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         FormatName(lacBuffer, lpcName);
@@ -66,7 +66,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, f32& lrValue)
 
 void TextFileWriteSerialiser::Serialise(const char* lpcName, s32& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         FormatName(lacBuffer, lpcName);
@@ -76,7 +76,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, s32& lrValue)
 
 void TextFileWriteSerialiser::Serialise(const char* lpcName, u32& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         FormatName(lacBuffer, lpcName);
@@ -86,7 +86,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, u32& lrValue)
 
 void TextFileWriteSerialiser::Serialise(const char* lpcName, Utils::VersionNumber& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         FormatName(lacBuffer, lpcName);
@@ -96,7 +96,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, Utils::VersionNumbe
 
 void TextFileWriteSerialiser::Serialise(const char* lpcName, Utils::FOV& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         FormatName(lacBuffer, lpcName);
@@ -106,7 +106,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, Utils::FOV& lrValue
 
 void TextFileWriteSerialiser::Serialise(const char* lpcName, bool& lrValue)
 {
-    if (mpFile != nullptr)
+    if (mpFile != 0)
     {
         char lacBuffer[KI_CHARBUFFERLENGTH];
         FormatName(lacBuffer, lpcName);
@@ -132,7 +132,7 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
         lLabel << lpcSafeName;
         lLabel << KAPC_COMPONENT_SUFFIX[liAxis];
 
-        if (mpFile != nullptr)
+        if (mpFile != 0)
         {
             char lacBuffer[KI_CHARBUFFERLENGTH];
             FormatName(lacBuffer, lLabel.GetBuffer());

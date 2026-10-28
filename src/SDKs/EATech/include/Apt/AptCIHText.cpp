@@ -41,7 +41,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"
@@ -78,9 +78,9 @@ extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
 // ---------------------------------------------------------------------------
 const char* AptResolveTextFieldFontName(AptCharacterInst* pTextInst)
 {
-    AptRenderItem* const pItem = pTextInst ? pTextInst->GetRenderItem() : nullptr;
-    AptCharacter*  const pChar = pItem ? pItem->mpCharacter : nullptr;
-    if (pChar == nullptr || pChar->mpFixupLink == nullptr)
+    AptRenderItem* const pItem = pTextInst ? pTextInst->GetRenderItem() : 0;
+    AptCharacter*  const pChar = pItem ? pItem->mpCharacter : 0;
+    if (pChar == 0 || pChar->mpFixupLink == 0)
         return "";
 
     const int32_t nFontIdx =
@@ -90,18 +90,18 @@ const char* AptResolveTextFieldFontName(AptCharacterInst* pTextInst)
 
     AptCharacterAnimation* const pDef = reinterpret_cast<AptCharacterAnimation*>(
         reinterpret_cast<char*>(pChar->mpFixupLink) + KU_AptEmbeddedMovieOff);
-    if (pDef->mpCharacterTable == nullptr || nFontIdx >= pDef->mnCharacterCount)
+    if (pDef->mpCharacterTable == 0 || nFontIdx >= pDef->mnCharacterCount)
         return "";
 
     const AptCharacter* const pFontChar = pDef->mpCharacterTable[nFontIdx];
-    if (pFontChar == nullptr || pFontChar->mnType != 3)   // not a FONT character
+    if (pFontChar == 0 || pFontChar->mnType != 3)   // not a FONT character
         return "";
 
     // type-3 font char: name pointer at font-char native-8 +0x20 (console +0x10;
     // relocated live by Fixup case 3 -- the same slot the draw path reads below).
     const char* const pName = *reinterpret_cast<const char* const*>(
         reinterpret_cast<const uint8_t*>(pFontChar) + 0x20);
-    return (pName != nullptr) ? pName : "";
+    return (pName != 0) ? pName : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -119,9 +119,9 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
 
     // v5 = the authored AptCharacterDynamicText (the render item's character); its
     // console +0x20 (mnDefaultGlyphIndex) is the font index (< 0 -> "no font").
-    AptRenderItem* pRI0 = pTextInst ? pTextInst->GetRenderItem() : nullptr;
+    AptRenderItem* pRI0 = pTextInst ? pTextInst->GetRenderItem() : 0;
     AptCharacterDynamicText* pCharacter =
-        static_cast<AptCharacterDynamicText*>(pRI0 ? pRI0->mpCharacter : nullptr);
+        static_cast<AptCharacterDynamicText*>(pRI0 ? pRI0->mpCharacter : 0);
 
     // 1. Re-resolve the bound-variable text into the render item (feeds the parent scope).
     pTextInst->UpdateText(pParent);
@@ -157,7 +157,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
     // TextFormat layer still opaque, the observable "has text" here is: the resolved
     // text string is non-empty. An empty string -> the "no text" branch (below).
     const EAStringC* pResolvedText = pItem->GetTextValueConst();
-    const bool bHasText = pResolvedText != nullptr && !pResolvedText->IsEmpty();
+    const bool bHasText = pResolvedText != 0 && !pResolvedText->IsEmpty();
 
     if (!bHasText)
     {
@@ -220,7 +220,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // (the AptValue* typing on the member is the opaque pass-through FLAG).
         const TextFormat* const pFmt = reinterpret_cast<const TextFormat*>(pTextFormat);
         unsigned int nColour = pItem->mTextColor;
-        if (pFmt != nullptr && pFmt->mnColor != -1)
+        if (pFmt != 0 && pFmt->mnColor != -1)
             nColour = static_cast<unsigned int>(pFmt->mnColor) | 0xFF000000u;
         params.nColour = nColour;
 
@@ -245,7 +245,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // Font style / indent / margins: overridden by the TextFormat record (console
         // style @+16 == mnStyleFlags, indent @+20, left/right margins @+24/+28), else
         // the "no format" defaults (style 0, indent/margins -1).
-        if (pFmt != nullptr)
+        if (pFmt != 0)
         {
             const int nStyle = pFmt->mnStyleFlags;
             params.nFontStyle   = static_cast<unsigned int>((nStyle == 2) ? 0 : nStyle);
@@ -264,7 +264,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // The current host handle (carried so the host can reuse / free it); the empty
         // sentinel is passed as null.
         params.pCurrString = (pItem->mZID == gAptEmptyTextRenderDataZID)
-                                 ? nullptr
+                                 ? 0
                                  : reinterpret_cast<AptAssetString>(
                                        static_cast<intptr_t>(pItem->mZID));
 
@@ -273,12 +273,12 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // internal node, i.e. mFontName.GetBuffer(), NOT a record field), else --
         // when the character carries a font index (>= 0) -- resolved off the parent
         // movie's font-character table; else null.
-        const char* pFontName = nullptr;
-        if (pFmt != nullptr)
+        const char* pFontName = 0;
+        if (pFmt != 0)
         {
             pFontName = pFmt->mFontName.GetBuffer();
         }
-        else if (pCharacter != nullptr && pCharacter->mnDefaultGlyphIndex >= 0 && pParent != nullptr)
+        else if (pCharacter != 0 && pCharacter->mnDefaultGlyphIndex >= 0 && pParent != 0)
         {
             // Resolve the font name off the PARENT's owning MOVIE def's character table.
             //   v11 = pParent->mpCharacterInst->mpRenderItem->mpCharacter->mpFixupLink
@@ -290,20 +290,20 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             // character record is SERIALISED native-8 data (name pointer at font-char +0x20,
             // relocated to a live pointer by Fixup case 3 -- documented offset access).
             AptCharacterInst* pParentCI = pParent->GetCharacterInst();
-            AptRenderItem*    pParentRI = pParentCI ? pParentCI->GetRenderItem() : nullptr;
-            AptCharacter*     pParentChar = pParentRI ? pParentRI->mpCharacter : nullptr;
+            AptRenderItem*    pParentRI = pParentCI ? pParentCI->GetRenderItem() : 0;
+            AptCharacter*     pParentChar = pParentRI ? pParentRI->mpCharacter : 0;
             // X360: the character's mnDefaultGlyphIndex (*(v5+32)) is only the "has a
             // font" GATE; the table INDEX is the render item's own font id (*(v10+100)
             // == mFontID -- seeded from the character but overridable per item).
             const int32_t     nFontIdx = pItem->mFontID;
-            if (pParentChar != nullptr && pParentChar->mpFixupLink != nullptr)
+            if (pParentChar != 0 && pParentChar->mpFixupLink != 0)
             {
                 AptCharacterAnimation* pDef = reinterpret_cast<AptCharacterAnimation*>(
                     reinterpret_cast<char*>(pParentChar->mpFixupLink) + KU_AptEmbeddedMovieOff);
-                if (pDef->mpCharacterTable != nullptr && nFontIdx < pDef->mnCharacterCount)
+                if (pDef->mpCharacterTable != 0 && nFontIdx < pDef->mnCharacterCount)
                 {
                     const AptCharacter* pFontChar = pDef->mpCharacterTable[nFontIdx];
-                    if (pFontChar != nullptr && pFontChar->mnType == 3)   // a FONT character
+                    if (pFontChar != 0 && pFontChar->mnType == 3)   // a FONT character
                     {
                         // type-3 font char: name pointer at font-char native-8 +0x20
                         // (console +0x10; relocated live by Fixup case 3).
@@ -316,7 +316,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
 
         // pnNumLines is a by-ref out-slot the console leaves uninitialised (Prepare owns
         // it); model as null (no line-count output requested here).
-        params.pnNumLines = nullptr;
+        params.pnNumLines = 0;
 
         // The measured OUTPUT fields Prepare writes back (width/height/length/max-scroll).
         // Seed them to safe defaults so that -- if the host callback does NOT run / cannot
@@ -330,8 +330,8 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         params.nMaxScroll  = static_cast<uint32_t>(pTextInst->mMaxScroll);
 
         // ---- call the host string-layout callback (X360 dword_8324E860 == pfnAllocateString) ----
-        AptAssetString hHandle = nullptr;
-        if (gAptFuncs.pfnAllocateString != nullptr)
+        AptAssetString hHandle = 0;
+        if (gAptFuncs.pfnAllocateString != 0)
             hHandle = gAptFuncs.pfnAllocateString(&params);
 
         // Store the returned host render-data handle on the render item (X360 SetZID(v22)).
@@ -344,7 +344,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
 
         const int nBoxAlign2 =
             (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 2)) >> 28;
-        if (hHandle != nullptr && nBoxAlign2 != 3)
+        if (hHandle != 0 && nBoxAlign2 != 3)
         {
             // X360 fold operands:
             //   v26        = the item's CURRENT field width (item +0x58 - +0x50 re-read
@@ -356,7 +356,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             //                clip's authored x anchor the nudge is relative to.
             const float fItemWidth   = pItem2->mBounds.fRight - pItem2->mBounds.fLeft;
             const float fParamsWidth = params.x1 - params.x0;
-            const float fTx = (pItem2->mpPositionMatrix != nullptr)
+            const float fTx = (pItem2->mpPositionMatrix != 0)
                                   ? pItem2->mpPositionMatrix->tx
                                   : 0.0f;   // gAptIdentityMatrix.tx (flt_8324E2B0[4])
             if (nBoxAlign2 == 2)         // centre: -(((newW - curW) * 0.5) - tx)
@@ -375,7 +375,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // Only when the host laid the string out (hHandle != 0 -> Prepare wrote the measured
         // width/height/length/max-scroll back into the params). Skipped on the unresolved
         // (no-FontCollection) path so no unmeasured value reaches the render item.
-        if (hHandle != nullptr)
+        if (hHandle != 0)
         {
             if (pItem2->mBounds.fLeft != params.x0)
                 pWritable->mBounds.fLeft = params.x0;

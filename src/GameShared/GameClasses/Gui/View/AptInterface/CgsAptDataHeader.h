@@ -25,7 +25,7 @@ namespace CgsGui
         void FixUp(u32 luDelta);
         void FixDown(u32 luDelta, bool lbEndianSwap);
     };
-    static_assert(offsetof(AptDataHeader, mpAptData) == 4, "ARTIST AptDataHeader.data");
-    static_assert(offsetof(AptDataHeader, mpConstData) == 8, "ARTIST AptDataHeader.const");
-    static_assert(offsetof(AptDataHeader, mpGeomStruct) == 12, "ARTIST AptDataHeader.geometry");
+    CGS_STATIC_ASSERT((offsetof(AptDataHeader, mpAptData) == 4), "ARTIST AptDataHeader.data");
+    CGS_STATIC_ASSERT((offsetof(AptDataHeader, mpConstData) == 8), "ARTIST AptDataHeader.const");
+    CGS_STATIC_ASSERT((offsetof(AptDataHeader, mpGeomStruct) == 12), "ARTIST AptDataHeader.geometry");
 }

@@ -54,7 +54,7 @@
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 #include <cstdlib>   // getenv (the BRN_LOSE_DIAG witness)
 
-static_assert(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20,
+CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20),
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -2021,9 +2021,9 @@ namespace BrnGui
         } lRunFsm;
         // The console's `li r6, 0x28` -- if this is not 40 the queued record is not the
         // console's, and RunFsm would read a shifted CgsID.
-        static_assert(sizeof(RunFsmRecord) == 40,
+        CGS_STATIC_ASSERT((sizeof(RunFsmRecord) == 40),
                       "GuiEventRunFsm channel-40 wrapper is 40 bytes (16-byte header + 24)");
-        static_assert(__builtin_offsetof(RunFsmRecord, mOutEvent) == 16,
+        CGS_STATIC_ASSERT((__builtin_offsetof(RunFsmRecord, mOutEvent) == 16),
                       "the wrapper's payload offset is 16 (GuiEventRunFsm is 8-aligned)");
         lRunFsm.miOutEventSize   = static_cast<s32>(sizeof(GuiEventRunFsm));   // 0x18
         lRunFsm.miOutEventType   = lRunFsm.mOutEvent.GetEventType();           // 0x90 == 144

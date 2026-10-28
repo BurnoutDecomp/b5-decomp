@@ -16,33 +16,9 @@
 //   mpaChallengeParScores +0x14, miStreetCount +0x18, miJunctionCount +0x1C,
 //   miRoadCount +0x20   (sizeof 36; strides Street 16 / Junction 36 / Road 64).
 //
-// ⚠️ THOSE ARE 32-BIT-POINTER OFFSETS AND DO NOT HOLD ON THE x64 HOST. The four
-// pointer members widen 4 -> 8 bytes, so every field behind them shifts and the
-// element strides grow:
-//   miVersion +0, miSize +4, mpaStreets +8, mpaJunctions +0x10, mpaRoads +0x18,
-//   mpaChallengeParScores +0x20, miStreetCount +0x28, miJunctionCount +0x2C,
-//   miRoadCount +0x30   (sizeof 56; strides Street 16 / Junction 48 / Road 72).
-// The _AssertLayout() block at the bottom of this header pins all of it.
-//
-// This matters beyond the C++: STREETDATA.DAT is loaded IN PLACE -- the resource
-// blob IS this object and StreetData::FixUp only adds the load base to the
-// serialised offset slots. The bundle converter
-// (tools/assets/bundles/nonapt_transcode.py::_street_data) therefore emits the
-// NATIVE x64 image above, not the console's compact one. Emitting the console
-// layout is what made FixUp read miRoadCount out of street[0] and fire
-// "The number of roads in the design data doesn't match the code const" at boot
-// (measured 2026-08-11: both the retail X360 file and the converted file carry
-// miRoadCount == 64, exactly the code const -- only the field's ADDRESS was wrong).
-//
-// SpanIndex is int16_t on X360 (GetStreet takes __int16) -- agrees with the
-// version-5 DWARF; the Feb-2007 leak's int32_t form is the older build and is
-// overridden by the binary.
-//
-// TAG NOTE: declared `struct` (not `class`) so it agrees with the committed
-// SharedClasses/StreetData/BrnStreetDataResourceType.h forward declaration
-// `struct StreetData` (avoids the MSVC C4099 struct/class tag mismatch). The
-// FixUp/FixDown(int) signatures match that stub's caller contract verbatim.
-// ---------------------------------------------------------------------------
+// The resource is loaded in place with these native 32-bit pointer layouts.
+// ARTIST GetRoad 0x8230ECD0 and FixDown 0x8267EDE0 attest the array offsets
+// and Road/Junction strides; no host data conversion is involved.
 
 #include <cstddef>                                       // offsetof (the _AssertLayout pins)
 
@@ -358,43 +334,42 @@ namespace BrnStreetData
             reinterpret_cast<uintptr_t>( mpaExits ) + luDelta );
     }
 
-    // ---- x64 layout pins ------------------------------------------------------
-    // STREETDATA.DAT is consumed in place, so these offsets are a WIRE CONTRACT with
-    // tools/assets/bundles/nonapt_transcode.py::_street_data. Anything that shifts a
-    // member here must shift the converter's emitted image in the same step; the two
-    // silently disagreeing is what produced the boot-time road-count assert.
+    // Native in-place resource layouts (ARTIST FixDown 0x8267EDE0).
     inline void Junction::_AssertLayout()
     {
-        static_assert( sizeof( SpanBase ) == 12, "SpanBase is 12 bytes on both targets" );
-        static_assert( sizeof( Street )   == 16, "Street stride is 16 (pointer-free)" );
-        static_assert( sizeof( Exit )     ==  8, "Junction::Exit stride is 8" );
-        static_assert( offsetof( Junction, mpaExits )    == 0x10, "Junction::mpaExits @0x10" );
-        static_assert( offsetof( Junction, miExitCount ) == 0x18, "Junction::miExitCount @0x18" );
-        static_assert( offsetof( Junction, macName )     == 0x1C, "Junction::macName @0x1C" );
+        CGS_STATIC_ASSERT((sizeof(Junction) == 36), "X360 Junction stride");
+        CGS_STATIC_ASSERT(( sizeof( SpanBase ) == 12), "SpanBase is 12 bytes on both targets" );
+        CGS_STATIC_ASSERT(( sizeof( Street )   == 16), "Street stride is 16 (pointer-free)" );
+        CGS_STATIC_ASSERT(( sizeof( Exit )     ==  8), "Junction::Exit stride is 8" );
+        CGS_STATIC_ASSERT((offsetof(Junction, mpaExits) == 0x0C), "X360 Junction::mpaExits");
+        CGS_STATIC_ASSERT((offsetof(Junction, miExitCount) == 0x10), "X360 Junction::miExitCount");
+        CGS_STATIC_ASSERT((offsetof(Junction, macName) == 0x14), "X360 Junction::macName");
     }
 
     inline void Road::_AssertLayout()
     {
-        static_assert( offsetof( Road, mpaSpans )       == 0x10, "Road::mpaSpans @0x10" );
-        static_assert( offsetof( Road, mId )            == 0x18, "Road::mId @0x18" );
-        static_assert( offsetof( Road, miRoadLimitId0 ) == 0x20, "Road::miRoadLimitId0 @0x20" );
-        static_assert( offsetof( Road, miRoadLimitId1 ) == 0x28, "Road::miRoadLimitId1 @0x28" );
-        static_assert( offsetof( Road, macDebugName )   == 0x30, "Road::macDebugName @0x30" );
-        static_assert( offsetof( Road, mChallenge )     == 0x40, "Road::mChallenge @0x40" );
-        static_assert( offsetof( Road, miSpanCount )    == 0x44, "Road::miSpanCount @0x44" );
+        CGS_STATIC_ASSERT((sizeof(Road) == 64), "X360 Road stride");
+        CGS_STATIC_ASSERT((offsetof(Road, mpaSpans) == 0x0C), "X360 Road::mpaSpans");
+        CGS_STATIC_ASSERT((offsetof(Road, mId) == 0x10), "X360 Road::mId");
+        CGS_STATIC_ASSERT((offsetof(Road, miRoadLimitId0) == 0x18), "X360 Road::miRoadLimitId0");
+        CGS_STATIC_ASSERT((offsetof(Road, miRoadLimitId1) == 0x20), "X360 Road::miRoadLimitId1");
+        CGS_STATIC_ASSERT((offsetof(Road, macDebugName) == 0x28), "X360 Road::macDebugName");
+        CGS_STATIC_ASSERT((offsetof(Road, mChallenge) == 0x38), "X360 Road::mChallenge");
+        CGS_STATIC_ASSERT((offsetof(Road, miSpanCount) == 0x3C), "X360 Road::miSpanCount");
     }
 
     inline void StreetData::_AssertLayout()
     {
-        static_assert( sizeof( ChallengeParScoresEntry ) == 40,
+        CGS_STATIC_ASSERT((sizeof(StreetData) == 36), "X360 StreetData header");
+        CGS_STATIC_ASSERT(( sizeof( ChallengeParScoresEntry ) == 40),
                        "ChallengeParScoresEntry stride is 40 (pointer-free)" );
-        static_assert( offsetof( StreetData, mpaStreets )            == 0x08, "mpaStreets @0x08" );
-        static_assert( offsetof( StreetData, mpaJunctions )          == 0x10, "mpaJunctions @0x10" );
-        static_assert( offsetof( StreetData, mpaRoads )              == 0x18, "mpaRoads @0x18" );
-        static_assert( offsetof( StreetData, mpaChallengeParScores ) == 0x20, "mpaChallengeParScores @0x20" );
-        static_assert( offsetof( StreetData, miStreetCount )   == 0x28, "miStreetCount @0x28" );
-        static_assert( offsetof( StreetData, miJunctionCount ) == 0x2C, "miJunctionCount @0x2C" );
-        static_assert( offsetof( StreetData, miRoadCount )     == 0x30, "miRoadCount @0x30" );
+        CGS_STATIC_ASSERT((offsetof(StreetData, mpaStreets) == 0x08), "X360 StreetData::mpaStreets");
+        CGS_STATIC_ASSERT((offsetof(StreetData, mpaJunctions) == 0x0C), "X360 StreetData::mpaJunctions");
+        CGS_STATIC_ASSERT((offsetof(StreetData, mpaRoads) == 0x10), "X360 StreetData::mpaRoads");
+        CGS_STATIC_ASSERT((offsetof(StreetData, mpaChallengeParScores) == 0x14), "X360 StreetData::mpaChallengeParScores");
+        CGS_STATIC_ASSERT((offsetof(StreetData, miStreetCount) == 0x18), "X360 StreetData::miStreetCount");
+        CGS_STATIC_ASSERT((offsetof(StreetData, miJunctionCount) == 0x1C), "X360 StreetData::miJunctionCount");
+        CGS_STATIC_ASSERT((offsetof(StreetData, miRoadCount) == 0x20), "X360 StreetData::miRoadCount");
     }
 }
 

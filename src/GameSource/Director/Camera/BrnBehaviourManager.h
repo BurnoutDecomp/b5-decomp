@@ -668,9 +668,9 @@ namespace Camera
         }
         else
         {
-            static_assert(ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_LARGE,
+            CGS_STATIC_ASSERT((ConsoleBehaviourPool<TBehaviour>::KE_POOL == E_BEHAVIOUR_POOL_LARGE),
                           "ConsoleBehaviourPool: unknown pool");
-            static_assert(sizeof(TBehaviour) <= sizeof(LargeBehaviourPool::Bucket),
+            CGS_STATIC_ASSERT((sizeof(TBehaviour) <= sizeof(LargeBehaviourPool::Bucket)),
                           "a large behaviour outgrew the large bucket (4000 bytes on the console)");
 
             const s32 liNumFree = mLargeBehaviourPool.GetNumFreeObjects();
@@ -966,30 +966,30 @@ namespace Camera
 
         // DWARF member order (BrnBehaviourManager.h:322 -> :369), pinned as strictly-increasing
         // offsets. Relative ordering is pointer-invariant under LLP64 widening.
-        static_assert(offsetof(BM, mLargeBehaviourPool)            <  offsetof(BM, mSmallBehaviourPool),            "BM order: large<small pool");
-        static_assert(offsetof(BM, mSmallBehaviourPool)            <  offsetof(BM, mBehaviourHelperPool),          "BM order: small pool<helper pool");
-        static_assert(offsetof(BM, mBehaviourHelperPool)          <  offsetof(BM, mBehaviourParameterBank),       "BM order: helper pool<param bank");
-        static_assert(offsetof(BM, mBehaviourParameterBank)       <  offsetof(BM, mBehaviourNeedsPreparingFlags), "BM order: param bank<prep flags");
-        static_assert(offsetof(BM, mBehaviourNeedsPreparingFlags) <  offsetof(BM, mBehaviourNeedsReleasingFlags), "BM order: prep<release flags");
-        static_assert(offsetof(BM, mBehaviourNeedsReleasingFlags) <  offsetof(BM, mBehaviourUpdateDuringPauseFlags), "BM order: release<pause flags");
-        static_assert(offsetof(BM, mBehaviourUpdateDuringPauseFlags) < offsetof(BM, mBehaviourUsedByHandleFlags), "BM order: pause<used flags");
-        static_assert(offsetof(BM, mBehaviourUsedByHandleFlags)   <  offsetof(BM, mBehaviourRefCounts),           "BM order: used flags<ref counts");
-        static_assert(offsetof(BM, mBehaviourRefCounts)           <  offsetof(BM, mDebugBehaviourRefCountIndexLog), "BM order: ref counts<index log");
-        static_assert(offsetof(BM, mDebugBehaviourRefCountIndexLog) < offsetof(BM, mDebugBehaviourRefCountLimits), "BM order: index log<ref limits");
-        static_assert(offsetof(BM, mDebugBehaviourRefCountLimits) <  offsetof(BM, mTempCameraBoostResponder),     "BM order: ref limits<boost responder");
-        static_assert(offsetof(BM, mTempCameraBoostResponder)     <  offsetof(BM, mSpeedResponder),               "BM order: boost<speed responder");
-        static_assert(offsetof(BM, mSpeedResponder)               <  offsetof(BM, mRotationController),           "BM order: speed responder<2D rot");
-        static_assert(offsetof(BM, mRotationController)           <  offsetof(BM, mSphericalRotationController),  "BM order: 2D rot<spherical rot");
-        static_assert(offsetof(BM, mSphericalRotationController)  <  offsetof(BM, mTweakerHelper),                "BM order: spherical rot<tweaker helper");
-        static_assert(offsetof(BM, mTweakerHelper)                <  offsetof(BM, mBehaviourHelperIndexArray),    "BM order: tweaker helper<helper index array");
-        static_assert(offsetof(BM, mBehaviourHelperIndexArray)    <  offsetof(BM, mpDirectorResourceManager),     "BM order: helper index array<resource mgr");
-        static_assert(offsetof(BM, mpDirectorResourceManager)     <  offsetof(BM, mfLastHandbrakeTime),           "BM order: resource mgr<handbrake time");
-        static_assert(offsetof(BM, mfLastHandbrakeTime)           <  offsetof(BM, mbDebugDisplayAllCameras),      "BM order: handbrake time<display-all flag");
+        CGS_STATIC_ASSERT((offsetof(BM, mLargeBehaviourPool)            <  offsetof(BM, mSmallBehaviourPool)),            "BM order: large<small pool");
+        CGS_STATIC_ASSERT((offsetof(BM, mSmallBehaviourPool)            <  offsetof(BM, mBehaviourHelperPool)),          "BM order: small pool<helper pool");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourHelperPool)          <  offsetof(BM, mBehaviourParameterBank)),       "BM order: helper pool<param bank");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourParameterBank)       <  offsetof(BM, mBehaviourNeedsPreparingFlags)), "BM order: param bank<prep flags");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourNeedsPreparingFlags) <  offsetof(BM, mBehaviourNeedsReleasingFlags)), "BM order: prep<release flags");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourNeedsReleasingFlags) <  offsetof(BM, mBehaviourUpdateDuringPauseFlags)), "BM order: release<pause flags");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourUpdateDuringPauseFlags) < offsetof(BM, mBehaviourUsedByHandleFlags)), "BM order: pause<used flags");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourUsedByHandleFlags)   <  offsetof(BM, mBehaviourRefCounts)),           "BM order: used flags<ref counts");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourRefCounts)           <  offsetof(BM, mDebugBehaviourRefCountIndexLog)), "BM order: ref counts<index log");
+        CGS_STATIC_ASSERT((offsetof(BM, mDebugBehaviourRefCountIndexLog) < offsetof(BM, mDebugBehaviourRefCountLimits)), "BM order: index log<ref limits");
+        CGS_STATIC_ASSERT((offsetof(BM, mDebugBehaviourRefCountLimits) <  offsetof(BM, mTempCameraBoostResponder)),     "BM order: ref limits<boost responder");
+        CGS_STATIC_ASSERT((offsetof(BM, mTempCameraBoostResponder)     <  offsetof(BM, mSpeedResponder)),               "BM order: boost<speed responder");
+        CGS_STATIC_ASSERT((offsetof(BM, mSpeedResponder)               <  offsetof(BM, mRotationController)),           "BM order: speed responder<2D rot");
+        CGS_STATIC_ASSERT((offsetof(BM, mRotationController)           <  offsetof(BM, mSphericalRotationController)),  "BM order: 2D rot<spherical rot");
+        CGS_STATIC_ASSERT((offsetof(BM, mSphericalRotationController)  <  offsetof(BM, mTweakerHelper)),                "BM order: spherical rot<tweaker helper");
+        CGS_STATIC_ASSERT((offsetof(BM, mTweakerHelper)                <  offsetof(BM, mBehaviourHelperIndexArray)),    "BM order: tweaker helper<helper index array");
+        CGS_STATIC_ASSERT((offsetof(BM, mBehaviourHelperIndexArray)    <  offsetof(BM, mpDirectorResourceManager)),     "BM order: helper index array<resource mgr");
+        CGS_STATIC_ASSERT((offsetof(BM, mpDirectorResourceManager)     <  offsetof(BM, mfLastHandbrakeTime)),           "BM order: resource mgr<handbrake time");
+        CGS_STATIC_ASSERT((offsetof(BM, mfLastHandbrakeTime)           <  offsetof(BM, mbDebugDisplayAllCameras)),      "BM order: handbrake time<display-all flag");
 
         // The reused-by-name helper pool stores BehaviourHelper by value: its element type must
         // begin with the type-erased pool handle (DWARF :309), the anchor every pool body reads.
-        static_assert(offsetof(BM::BehaviourHelper, mBehaviourPoolHandle) == 0, "BehaviourHelper: pool handle at +0");
-        static_assert(offsetof(BM::BehaviourHelper, mpDebugArbitratorStateOwner) < offsetof(BM::BehaviourHelper, mpDebugMomentOwner),
+        CGS_STATIC_ASSERT((offsetof(BM::BehaviourHelper, mBehaviourPoolHandle) == 0), "BehaviourHelper: pool handle at +0");
+        CGS_STATIC_ASSERT((offsetof(BM::BehaviourHelper, mpDebugArbitratorStateOwner) < offsetof(BM::BehaviourHelper, mpDebugMomentOwner)),
                       "BehaviourHelper: arb-state owner before moment owner");
     }
 }

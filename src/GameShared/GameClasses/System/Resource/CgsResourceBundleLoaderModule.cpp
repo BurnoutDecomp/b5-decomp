@@ -17,8 +17,8 @@ namespace CgsResource
         switch (mePrepareStage)
         {
         case E_STAGE_START:
-            maStreams[0] = nullptr;
-            maStreams[1] = nullptr;
+            maStreams[0] = 0;
+            maStreams[1] = 0;
             mabStreamOpenFailed[0] = mabStreamOpenFailed[1] = false;
             meStreamStage = STREAMSTAGE_IDLE;
             miNumLoadedBundles = 0;
@@ -97,7 +97,7 @@ namespace CgsResource
         mabStreamBuffersUsed[1] = false;
         mabStreamOpenFailed[0] = mabStreamOpenFailed[1] = false;
         // The allocator-backed overload supplies the loaded-bundle table.
-        mpLoadedBundles = nullptr;
+        mpLoadedBundles = 0;
         miMaxLoadedBundles = 0;
         miMaxPartialFixups = 60;
     }
@@ -123,7 +123,7 @@ namespace CgsResource
             rw::ResourceDescriptor lDescriptor;
             lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-            return lpAllocator->DoAllocate(lDescriptor, nullptr).m_baseResources[0];
+            return lpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
         };
         mpDecompressionEntries = static_cast<CompressedData*>(lAllocate(
             sizeof(CompressedData) * miMaxResourcesPerBundle, 128));
@@ -138,14 +138,14 @@ namespace CgsResource
             for (s32 li = 0; li < miMaxResourcesPerBundle; ++li) ::new (mpResources + li) SmallResource;
         if (mpLoadedBundles)
             for (s32 li = 0; li < miMaxLoadedBundles; ++li) ::new (mpLoadedBundles + li) LoadedBundleData;
-        mpcDebugDataBuffer = nullptr;
+        mpcDebugDataBuffer = 0;
         if (miDebugBufferSize > 0 && lpDebugAllocator)
         {
             rw::ResourceDescriptor lDebugDescriptor;
             lDebugDescriptor.m_baseResourceDescriptors[0].m_size = miDebugBufferSize;
             lDebugDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
             mpcDebugDataBuffer = static_cast<char*>(
-                lpDebugAllocator->DoAllocate(lDebugDescriptor, nullptr).m_baseResources[0]);
+                lpDebugAllocator->DoAllocate(lDebugDescriptor, 0).m_baseResources[0]);
         }
         mDecompressionJobInterface.Construct(CgsSystem::JobManager(), mpDecompressionEntries,
                                              miMaxResourcesPerBundle);

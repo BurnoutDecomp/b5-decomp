@@ -56,7 +56,7 @@ int CObjectRefCount::Release()
 // the delete flag set. Returns its result (the object pointer).
 void* CObjectRefCount::AbsoluteRelease(CObjectRefCount* apObject)
 {
-    if (apObject == nullptr) // cmplwi r3,0 ; beqlr
+    if (apObject == 0) // cmplwi r3,0 ; beqlr
         return apObject;     // return null
 
     // lwz r11,0(r3) (vtable) ; lwz r11,0(r11) (slot[0]) ; bctr (tail-call)

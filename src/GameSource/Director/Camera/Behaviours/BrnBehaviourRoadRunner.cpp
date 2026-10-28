@@ -41,11 +41,11 @@ namespace Camera
 
 // Pin the asm-attested member offsets the accessors sample. Every member of the truck is
 // size-stable (no pointers), so these hold exactly on the host too.
-static_assert(offsetof(TrafficLaneTruck, mTransform)            == 0x20, "transform @ +0x20");
-static_assert(offsetof(TrafficLaneTruck, mLocalAngularVelocity) == 0x60, "angular velocity @ +0x60");
-static_assert(offsetof(TrafficLaneTruck, mLinearVelocity)       == 0x70, "linear velocity @ +0x70");
-static_assert(offsetof(TrafficLaneTruck, mfSpeed)               == 0x80, "speed @ +0x80");
-static_assert(offsetof(TrafficLaneTruck, mbPrepared)            == 0x8C, "mbPrepared @ +0x8C");
+CGS_STATIC_ASSERT((offsetof(TrafficLaneTruck, mTransform)            == 0x20), "transform @ +0x20");
+CGS_STATIC_ASSERT((offsetof(TrafficLaneTruck, mLocalAngularVelocity) == 0x60), "angular velocity @ +0x60");
+CGS_STATIC_ASSERT((offsetof(TrafficLaneTruck, mLinearVelocity)       == 0x70), "linear velocity @ +0x70");
+CGS_STATIC_ASSERT((offsetof(TrafficLaneTruck, mfSpeed)               == 0x80), "speed @ +0x80");
+CGS_STATIC_ASSERT((offsetof(TrafficLaneTruck, mbPrepared)            == 0x8C), "mbPrepared @ +0x8C");
 
 // ----------------------------------------------------------------------------
 // TrafficLaneTruck::CalcTransformFromLanePosition @0x8222A640

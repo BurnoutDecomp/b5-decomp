@@ -87,8 +87,8 @@ void BridgeEntityModulesToPhysicsModule_PreScene(
     // below the console span this stops compiling instead of reading past the end.
     // (Nothing on this build reads the destination span back -- the buffer exposes no getter
     //  for it -- so the truncation is inert today. Retype the seat when a consumer needs it.)
-    static_assert(sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface)
-                      >= sizeof(BrnPhysics::PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage),
+    CGS_STATIC_ASSERT((sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface)
+                      >= sizeof(BrnPhysics::PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage)),
                   "SetRCEntityOutputInterface would read past the end of the source interface");
     lpPhysicsModuleInputBuffer->SetRCEntityOutputInterface(
         reinterpret_cast<const BrnPhysics::PhysicsModuleIO::InputBuffer::RCEntityOutputInterfaceStorage*>(

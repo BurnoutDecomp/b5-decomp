@@ -58,8 +58,8 @@ namespace CgsGraphics
         E_TexturePurpose ePurpose;
         Ptr32<renderengine::TextureState> state;
     };
-    static_assert(sizeof(Sampler) == 20, "Sampler must retain its serialized 20-byte stride");
-    static_assert(offsetof(Sampler, state) == 16, "Sampler::state must remain at serialized byte 16");
+    CGS_STATIC_ASSERT((sizeof(Sampler) == 20), "Sampler must retain its serialized 20-byte stride");
+    CGS_STATIC_ASSERT((offsetof(Sampler, state) == 16), "Sampler::state must remain at serialized byte 16");
 
     struct TexturePurposeEntry
     {

@@ -105,7 +105,7 @@ namespace BrnReplays
         s32 liIndex = 0;
         if (GetStaticLayout()->GetNumTrafficEntities() <= 0)
         {
-            return nullptr;
+            return 0;
         }
 
         s32 liKeyOffset = 0;
@@ -118,7 +118,7 @@ namespace BrnReplays
             liKeyOffset += SoundSerialiserStaticLayout::KU_TRAFFIC_RECORD_STRIDE;
             if (liIndex >= GetStaticLayout()->GetNumTrafficEntities())
             {
-                return nullptr;
+                return 0;
             }
         }
 
@@ -376,7 +376,7 @@ namespace BrnReplays
     s32 SoundSerialiser::Read(SoundSerialiserStaticLayout* lpStatic)
     {
         Lock();
-        CGS_ASSERT(lpStatic != nullptr, "lpStatic");
+        CGS_ASSERT(lpStatic != 0, "lpStatic");
 
         u8* lpBase = reinterpret_cast<u8*>(lpStatic);
 

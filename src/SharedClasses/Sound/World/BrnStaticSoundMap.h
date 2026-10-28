@@ -52,7 +52,7 @@ protected:
     // BrnStaticSoundMap.h:152 (DWARF). Position + packed w payload.
     Vector3Plus mPosPlus;
 };
-static_assert(sizeof(StaticSoundEntity) == 16,
+CGS_STATIC_ASSERT((sizeof(StaticSoundEntity) == 16),
               "StaticSoundEntity is one 16-byte Vector3Plus (porter contract)");
 
 // SubRegionDescriptor — the per-cell descriptor of the XZ sub-region grid.

@@ -55,7 +55,7 @@ namespace CgsSceneManager
 
 namespace ContactGenerator
 {
-    struct alignas(16) QueryAccumulator : public CgsModule::IOBuffer { u8 maReserved[4096]; };
+    struct CGS_ALIGN(16) QueryAccumulator : public CgsModule::IOBuffer { u8 maReserved[4096]; };
 }
 
 }

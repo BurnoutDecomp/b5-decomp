@@ -180,22 +180,22 @@ public:
 
     // Seed the whole behaviour: the base head, the embedded collision policy, the four rig
     // sub-objects, and the two reference-set bytes plus the two state flags.       (slot 0)
-    void Construct() override;
+    void Construct() ;
 
     // Assert the attachment reference was bound, drop the prepared latch and arm the
     // first-frame latch the rig seeds itself from. Cannot fail.                    (slot 1)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;
 
     // Hand back the vehicle-attached collision policy embedded after the base, or null once
     // the rig has detached.                                                        (slot 5)
-    CollisionPolicy* GetCollisionPolicy() override;
+    CollisionPolicy* GetCollisionPolicy() ;
 
     // Reset the tweaker this behaviour is handed; it exposes no tweakable of its own. (slot 6)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;
 
     //                                                                              (slot 7)
-    const char* GetName() const override;
+    const char* GetName() const ;
 
     // Update resolves the attachment/target, detaches, and applies lag, shake and impacts.
 
@@ -259,57 +259,57 @@ private:
     {
         // mCollisionPolicy sits immediately after the base, rounded up to its own 16-byte
         // alignment -- the step that puts it at the attested +0x20 on the console.
-        static_assert(offsetof(BehaviourLooseAttachment, mCollisionPolicy)
-                          == ((sizeof(Behaviour) + 15u) & ~static_cast<size_t>(15u)),
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mCollisionPolicy)
+                          == ((sizeof(Behaviour) + 15u) & ~static_cast<size_t>(15u))),
                       "mCollisionPolicy follows the Behaviour base, 16-aligned");
 
         // The embedded policy's own stride closes the gap to the world offset with no padding.
         // Without this link the chain would skip from the base straight to the rig run, and a
         // future widening of the policy would silently shift every member after it.
-        static_assert(offsetof(BehaviourLooseAttachment, mWorldSpaceOffsetFromCar)
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mWorldSpaceOffsetFromCar)
                        - offsetof(BehaviourLooseAttachment, mCollisionPolicy)
-                          == sizeof(CollisionPolicyAttachedToVehicle),
+                          == sizeof(CollisionPolicyAttachedToVehicle)),
                       "the world-space offset vector follows the embedded policy with no padding");
 
         // ...and the policy still measures the console stride on the host (it carries no
         // pointer that would widen), which is what holds the rig run at its attested run of
         // offsets. If the policy is ever widened this fires rather than silently sliding
         // every member from the world offset onward.
-        static_assert(sizeof(CollisionPolicyAttachedToVehicle) == 0x250,
+        CGS_STATIC_ASSERT((sizeof(CollisionPolicyAttachedToVehicle) == 0x250),
                       "the embedded vehicle-attached policy holds its console stride");
 
         // The rig run: one 16-byte world offset, then the four sub-objects back to back.
-        static_assert(offsetof(BehaviourLooseAttachment, mPositionLag)
-                       - offsetof(BehaviourLooseAttachment, mWorldSpaceOffsetFromCar) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mPositionLag)
+                       - offsetof(BehaviourLooseAttachment, mWorldSpaceOffsetFromCar) == 0x10),
                       "mPositionLag follows the world-space offset vector");
-        static_assert(offsetof(BehaviourLooseAttachment, mRandom)
-                       - offsetof(BehaviourLooseAttachment, mPositionLag) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mRandom)
+                       - offsetof(BehaviourLooseAttachment, mPositionLag) == 0x30),
                       "mRandom follows the position lag");
-        static_assert(offsetof(BehaviourLooseAttachment, mShake)
-                       - offsetof(BehaviourLooseAttachment, mRandom) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mShake)
+                       - offsetof(BehaviourLooseAttachment, mRandom) == 0x30),
                       "mShake follows the random generator");
-        static_assert(offsetof(BehaviourLooseAttachment, mImpact)
-                       - offsetof(BehaviourLooseAttachment, mShake) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mImpact)
+                       - offsetof(BehaviourLooseAttachment, mShake) == 0x10),
                       "mImpact follows the shake");
 
         // ...and the impact effect closes exactly where the target reference begins, which is
         // what leaves the two references no slack between them.
-        static_assert(offsetof(BehaviourLooseAttachment, mTarget)
-                       - offsetof(BehaviourLooseAttachment, mImpact) == 0x14,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mTarget)
+                       - offsetof(BehaviourLooseAttachment, mImpact) == 0x14),
                       "mTarget follows the 20-byte impact effect with no padding");
-        static_assert(offsetof(BehaviourLooseAttachment, mAttachment)
-                       - offsetof(BehaviourLooseAttachment, mTarget) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mAttachment)
+                       - offsetof(BehaviourLooseAttachment, mTarget) == 0x10),
                       "mAttachment follows the 16-byte target reference");
 
         // The state tail: the detach scalar, then the three flag bytes, contiguous.
-        static_assert(offsetof(BehaviourLooseAttachment, mbDetached)
-                       - offsetof(BehaviourLooseAttachment, mfDetachedAmount) == 0x04,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mbDetached)
+                       - offsetof(BehaviourLooseAttachment, mfDetachedAmount) == 0x04),
                       "mbDetached is the first flag byte after the detach scalar");
-        static_assert(offsetof(BehaviourLooseAttachment, mbFirstFrame)
-                       - offsetof(BehaviourLooseAttachment, mfDetachedAmount) == 0x05,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mbFirstFrame)
+                       - offsetof(BehaviourLooseAttachment, mfDetachedAmount) == 0x05),
                       "mbFirstFrame is the second flag byte");
-        static_assert(offsetof(BehaviourLooseAttachment, mbTargetVectorLock)
-                       - offsetof(BehaviourLooseAttachment, mfDetachedAmount) == 0x06,
+        CGS_STATIC_ASSERT((offsetof(BehaviourLooseAttachment, mbTargetVectorLock)
+                       - offsetof(BehaviourLooseAttachment, mfDetachedAmount) == 0x06),
                       "mbTargetVectorLock is the third flag byte");
     }
 };

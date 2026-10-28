@@ -198,100 +198,100 @@ namespace BrnDirector
 
     // Host sizes of the seven block types that carry a tail after the head (each is its console
     // size plus the head's 4 extra pointer bytes, rounded up to the type's 8-byte alignment).
-    static_assert(sizeof(Camera::BehaviourAftertouchCam::Parameters) == 120, "aftertouch-cam block (console 108)");
-    static_assert(sizeof(Camera::BehaviourAftertouchCrash::Parameters) == 120, "aftertouch-crash block (console 112)");
-    static_assert(sizeof(Camera::BehaviourHeliCam::Parameters) == 160, "helicam block (console 148)");
-    static_assert(sizeof(Camera::BehaviourGyroCam::Parameters) == 216, "gyro block (console 204)");
-    static_assert(sizeof(Camera::BehaviourFailsafe::Parameters) == 208, "failsafe block (console 196)");
-    static_assert(sizeof(Camera::BehaviourLooseAttachment::Parameters) == 112, "loose-attachment block (console 100)");
-    static_assert(sizeof(Camera::BehaviourSpirallingDeathcam::Parameters) == 184, "deathcam block (console 176)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourAftertouchCam::Parameters) == 120), "aftertouch-cam block (console 108)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourAftertouchCrash::Parameters) == 120), "aftertouch-crash block (console 112)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourHeliCam::Parameters) == 160), "helicam block (console 148)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourGyroCam::Parameters) == 216), "gyro block (console 204)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourFailsafe::Parameters) == 208), "failsafe block (console 196)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourLooseAttachment::Parameters) == 112), "loose-attachment block (console 100)");
+    CGS_STATIC_ASSERT((sizeof(Camera::BehaviourSpirallingDeathcam::Parameters) == 184), "deathcam block (console 176)");
 
     // The record's member order is the console's: every block starts after the previous one.
-    static_assert(offsetof(NamedParameters, mAftertouchCamDefault) == 0, "the record opens with the aftertouch-cam block");
-    static_assert(offsetof(NamedParameters, mAftertouchCamDefault) < offsetof(NamedParameters, mAftertouchCrashParams), "console +0 before +108");
-    static_assert(offsetof(NamedParameters, mAftertouchCrashParams) < offsetof(NamedParameters, mCrashDebugParams), "console +108 before +220");
-    static_assert(offsetof(NamedParameters, mCrashDebugParams) < offsetof(NamedParameters, mHeliCamDefaultParams), "console +220 before +332");
-    static_assert(offsetof(NamedParameters, mHeliCamDefaultParams) < offsetof(NamedParameters, mGyroCamDefaultParams), "console +332 before +480");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultParams) < offsetof(NamedParameters, mGyroCamTruckFront), "console +480 before +684");
-    static_assert(offsetof(NamedParameters, mGyroCamTruckFront) < offsetof(NamedParameters, mGyroCamLeft), "console +684 before +888");
-    static_assert(offsetof(NamedParameters, mGyroCamLeft) < offsetof(NamedParameters, mGyroCamRight), "console +888 before +1092");
-    static_assert(offsetof(NamedParameters, mGyroCamRight) < offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams), "console +1092 before +1296");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) < offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams), "console +1296 before +1500");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) < offsetof(NamedParameters, mGyroCamFollow), "console +1500 before +1704");
-    static_assert(offsetof(NamedParameters, mGyroCamFollow) < offsetof(NamedParameters, mGyroCamAlwaysLowParams), "console +1704 before +1908");
-    static_assert(offsetof(NamedParameters, mGyroCamAlwaysLowParams) < offsetof(NamedParameters, mGyroCamTakedownParams), "console +1908 before +2112");
-    static_assert(offsetof(NamedParameters, mGyroCamTakedownParams) < offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams), "console +2112 before +2316");
-    static_assert(offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) < offsetof(NamedParameters, mGyroCamHighParams), "console +2316 before +2520");
-    static_assert(offsetof(NamedParameters, mGyroCamHighParams) < offsetof(NamedParameters, mGyroCamHelicamParams), "console +2520 before +2724");
-    static_assert(offsetof(NamedParameters, mGyroCamHelicamParams) < offsetof(NamedParameters, mGyroCamDriveByLParams), "console +2724 before +2928");
-    static_assert(offsetof(NamedParameters, mGyroCamDriveByLParams) < offsetof(NamedParameters, mGyroCamDriveByRParams), "console +2928 before +3132");
-    static_assert(offsetof(NamedParameters, mGyroCamDriveByRParams) < offsetof(NamedParameters, mBystanderJumpLeftParameters), "console +3132 before +3336");
-    static_assert(offsetof(NamedParameters, mBystanderJumpLeftParameters) < offsetof(NamedParameters, mBystanderJumpParameters2), "console +3336 before +3492");
-    static_assert(offsetof(NamedParameters, mBystanderJumpParameters2) < offsetof(NamedParameters, mBystanderJumpFromBehindParameters), "console +3492 before +3648");
-    static_assert(offsetof(NamedParameters, mBystanderJumpFromBehindParameters) < offsetof(NamedParameters, mBystanderCloseParameters), "console +3648 before +3804");
-    static_assert(offsetof(NamedParameters, mBystanderCloseParameters) < offsetof(NamedParameters, mBystanderMediumParameters), "console +3804 before +3960");
-    static_assert(offsetof(NamedParameters, mBystanderMediumParameters) < offsetof(NamedParameters, mBystanderFarParameters), "console +3960 before +4116");
-    static_assert(offsetof(NamedParameters, mBystanderFarParameters) < offsetof(NamedParameters, mBystanderFarTallParameters), "console +4116 before +4272");
-    static_assert(offsetof(NamedParameters, mBystanderFarTallParameters) < offsetof(NamedParameters, mRigBonnetLowRight), "console +4272 before +4432");
-    static_assert(offsetof(NamedParameters, mRigBonnetLowRight) < offsetof(NamedParameters, mRigRearQFwd), "console +4432 before +4720");
-    static_assert(offsetof(NamedParameters, mRigRearQFwd) < offsetof(NamedParameters, mRigFrontQCuFwd), "console +4720 before +5008");
-    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd) < offsetof(NamedParameters, mRigFrontQBwd), "console +5008 before +5296");
-    static_assert(offsetof(NamedParameters, mRigFrontQBwd) < offsetof(NamedParameters, mRigFrontRearview), "console +5296 before +5584");
-    static_assert(offsetof(NamedParameters, mRigFrontRearview) < offsetof(NamedParameters, mRigBootViewFwd), "console +5584 before +5872");
-    static_assert(offsetof(NamedParameters, mRigBootViewFwd) < offsetof(NamedParameters, mRigFrontQLowBwd), "console +5872 before +6160");
-    static_assert(offsetof(NamedParameters, mRigFrontQLowBwd) < offsetof(NamedParameters, mRigRoofFwd), "console +6160 before +6448");
-    static_assert(offsetof(NamedParameters, mRigRoofFwd) < offsetof(NamedParameters, mRigBootFwd), "console +6448 before +6736");
-    static_assert(offsetof(NamedParameters, mRigBootFwd) < offsetof(NamedParameters, mRigFrontQCuFwd2), "console +6736 before +7024");
-    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd2) < offsetof(NamedParameters, mRigUnderbelly), "console +7024 before +7312");
-    static_assert(offsetof(NamedParameters, mRigUnderbelly) < offsetof(NamedParameters, mRigDropUnderbelly), "console +7312 before +7600");
-    static_assert(offsetof(NamedParameters, mRigDropUnderbelly) < offsetof(NamedParameters, mRigDropFrontQCuFwd), "console +7600 before +7888");
-    static_assert(offsetof(NamedParameters, mRigDropFrontQCuFwd) < offsetof(NamedParameters, mRigDropBootViewFwd), "console +7888 before +8176");
-    static_assert(offsetof(NamedParameters, mRigDropBootViewFwd) < offsetof(NamedParameters, mFailsafe), "console +8176 before +8464");
-    static_assert(offsetof(NamedParameters, mFailsafe) < offsetof(NamedParameters, mPassengerDefault), "console +8464 before +8660");
-    static_assert(offsetof(NamedParameters, mPassengerDefault) < offsetof(NamedParameters, mLooseAttachmentTakedown1), "console +8660 before +8696");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown1) < offsetof(NamedParameters, mLooseAttachmentTakedown2), "console +8696 before +8796");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown2) < offsetof(NamedParameters, mLooseAttachmentTakedown3), "console +8796 before +8896");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown3) < offsetof(NamedParameters, mFixedDefault), "console +8896 before +8996");
-    static_assert(offsetof(NamedParameters, mFixedDefault) < offsetof(NamedParameters, maLookAroundCarCamParameters), "console +8996 before +9012");
-    static_assert(offsetof(NamedParameters, maLookAroundCarCamParameters) < offsetof(NamedParameters, maSpirallingDeathcamParameters), "console +9012 before +9140");
-    static_assert(offsetof(NamedParameters, maSpirallingDeathcamParameters) < offsetof(NamedParameters, mRoadRunnerDefault), "console +9140 before +9316");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mAftertouchCamDefault) == 0), "the record opens with the aftertouch-cam block");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mAftertouchCamDefault) < offsetof(NamedParameters, mAftertouchCrashParams)), "console +0 before +108");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mAftertouchCrashParams) < offsetof(NamedParameters, mCrashDebugParams)), "console +108 before +220");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mCrashDebugParams) < offsetof(NamedParameters, mHeliCamDefaultParams)), "console +220 before +332");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mHeliCamDefaultParams) < offsetof(NamedParameters, mGyroCamDefaultParams)), "console +332 before +480");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDefaultParams) < offsetof(NamedParameters, mGyroCamTruckFront)), "console +480 before +684");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamTruckFront) < offsetof(NamedParameters, mGyroCamLeft)), "console +684 before +888");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamLeft) < offsetof(NamedParameters, mGyroCamRight)), "console +888 before +1092");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamRight) < offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams)), "console +1092 before +1296");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) < offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams)), "console +1296 before +1500");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) < offsetof(NamedParameters, mGyroCamFollow)), "console +1500 before +1704");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamFollow) < offsetof(NamedParameters, mGyroCamAlwaysLowParams)), "console +1704 before +1908");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamAlwaysLowParams) < offsetof(NamedParameters, mGyroCamTakedownParams)), "console +1908 before +2112");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamTakedownParams) < offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams)), "console +2112 before +2316");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) < offsetof(NamedParameters, mGyroCamHighParams)), "console +2316 before +2520");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamHighParams) < offsetof(NamedParameters, mGyroCamHelicamParams)), "console +2520 before +2724");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamHelicamParams) < offsetof(NamedParameters, mGyroCamDriveByLParams)), "console +2724 before +2928");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDriveByLParams) < offsetof(NamedParameters, mGyroCamDriveByRParams)), "console +2928 before +3132");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDriveByRParams) < offsetof(NamedParameters, mBystanderJumpLeftParameters)), "console +3132 before +3336");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderJumpLeftParameters) < offsetof(NamedParameters, mBystanderJumpParameters2)), "console +3336 before +3492");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderJumpParameters2) < offsetof(NamedParameters, mBystanderJumpFromBehindParameters)), "console +3492 before +3648");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderJumpFromBehindParameters) < offsetof(NamedParameters, mBystanderCloseParameters)), "console +3648 before +3804");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderCloseParameters) < offsetof(NamedParameters, mBystanderMediumParameters)), "console +3804 before +3960");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderMediumParameters) < offsetof(NamedParameters, mBystanderFarParameters)), "console +3960 before +4116");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderFarParameters) < offsetof(NamedParameters, mBystanderFarTallParameters)), "console +4116 before +4272");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderFarTallParameters) < offsetof(NamedParameters, mRigBonnetLowRight)), "console +4272 before +4432");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigBonnetLowRight) < offsetof(NamedParameters, mRigRearQFwd)), "console +4432 before +4720");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigRearQFwd) < offsetof(NamedParameters, mRigFrontQCuFwd)), "console +4720 before +5008");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQCuFwd) < offsetof(NamedParameters, mRigFrontQBwd)), "console +5008 before +5296");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQBwd) < offsetof(NamedParameters, mRigFrontRearview)), "console +5296 before +5584");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontRearview) < offsetof(NamedParameters, mRigBootViewFwd)), "console +5584 before +5872");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigBootViewFwd) < offsetof(NamedParameters, mRigFrontQLowBwd)), "console +5872 before +6160");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQLowBwd) < offsetof(NamedParameters, mRigRoofFwd)), "console +6160 before +6448");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigRoofFwd) < offsetof(NamedParameters, mRigBootFwd)), "console +6448 before +6736");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigBootFwd) < offsetof(NamedParameters, mRigFrontQCuFwd2)), "console +6736 before +7024");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQCuFwd2) < offsetof(NamedParameters, mRigUnderbelly)), "console +7024 before +7312");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigUnderbelly) < offsetof(NamedParameters, mRigDropUnderbelly)), "console +7312 before +7600");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigDropUnderbelly) < offsetof(NamedParameters, mRigDropFrontQCuFwd)), "console +7600 before +7888");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigDropFrontQCuFwd) < offsetof(NamedParameters, mRigDropBootViewFwd)), "console +7888 before +8176");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigDropBootViewFwd) < offsetof(NamedParameters, mFailsafe)), "console +8176 before +8464");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mFailsafe) < offsetof(NamedParameters, mPassengerDefault)), "console +8464 before +8660");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mPassengerDefault) < offsetof(NamedParameters, mLooseAttachmentTakedown1)), "console +8660 before +8696");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mLooseAttachmentTakedown1) < offsetof(NamedParameters, mLooseAttachmentTakedown2)), "console +8696 before +8796");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mLooseAttachmentTakedown2) < offsetof(NamedParameters, mLooseAttachmentTakedown3)), "console +8796 before +8896");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mLooseAttachmentTakedown3) < offsetof(NamedParameters, mFixedDefault)), "console +8896 before +8996");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mFixedDefault) < offsetof(NamedParameters, maLookAroundCarCamParameters)), "console +8996 before +9012");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, maLookAroundCarCamParameters) < offsetof(NamedParameters, maSpirallingDeathcamParameters)), "console +9012 before +9140");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, maSpirallingDeathcamParameters) < offsetof(NamedParameters, mRoadRunnerDefault)), "console +9140 before +9316");
     // A same-typed run is contiguous on the host as on the console: the next block of a run starts
     // one host sizeof further on (console strides 112 / 204 / 156 / 288 / 100).
-    static_assert(offsetof(NamedParameters, mCrashDebugParams) == offsetof(NamedParameters, mAftertouchCrashParams) + sizeof(Camera::BehaviourAftertouchCrash::Parameters), "console +220");
-    static_assert(offsetof(NamedParameters, mGyroCamTruckFront) == offsetof(NamedParameters, mGyroCamDefaultParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +684");
-    static_assert(offsetof(NamedParameters, mGyroCamLeft) == offsetof(NamedParameters, mGyroCamTruckFront) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +888");
-    static_assert(offsetof(NamedParameters, mGyroCamRight) == offsetof(NamedParameters, mGyroCamLeft) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1092");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) == offsetof(NamedParameters, mGyroCamRight) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1296");
-    static_assert(offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) == offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1500");
-    static_assert(offsetof(NamedParameters, mGyroCamFollow) == offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1704");
-    static_assert(offsetof(NamedParameters, mGyroCamAlwaysLowParams) == offsetof(NamedParameters, mGyroCamFollow) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +1908");
-    static_assert(offsetof(NamedParameters, mGyroCamTakedownParams) == offsetof(NamedParameters, mGyroCamAlwaysLowParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2112");
-    static_assert(offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) == offsetof(NamedParameters, mGyroCamTakedownParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2316");
-    static_assert(offsetof(NamedParameters, mGyroCamHighParams) == offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2520");
-    static_assert(offsetof(NamedParameters, mGyroCamHelicamParams) == offsetof(NamedParameters, mGyroCamHighParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2724");
-    static_assert(offsetof(NamedParameters, mGyroCamDriveByLParams) == offsetof(NamedParameters, mGyroCamHelicamParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +2928");
-    static_assert(offsetof(NamedParameters, mGyroCamDriveByRParams) == offsetof(NamedParameters, mGyroCamDriveByLParams) + sizeof(Camera::BehaviourGyroCam::Parameters), "console +3132");
-    static_assert(offsetof(NamedParameters, mBystanderJumpParameters2) == offsetof(NamedParameters, mBystanderJumpLeftParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3492");
-    static_assert(offsetof(NamedParameters, mBystanderJumpFromBehindParameters) == offsetof(NamedParameters, mBystanderJumpParameters2) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3648");
-    static_assert(offsetof(NamedParameters, mBystanderCloseParameters) == offsetof(NamedParameters, mBystanderJumpFromBehindParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3804");
-    static_assert(offsetof(NamedParameters, mBystanderMediumParameters) == offsetof(NamedParameters, mBystanderCloseParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +3960");
-    static_assert(offsetof(NamedParameters, mBystanderFarParameters) == offsetof(NamedParameters, mBystanderMediumParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +4116");
-    static_assert(offsetof(NamedParameters, mBystanderFarTallParameters) == offsetof(NamedParameters, mBystanderFarParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters), "console +4272");
-    static_assert(offsetof(NamedParameters, mRigRearQFwd) == offsetof(NamedParameters, mRigBonnetLowRight) + sizeof(Camera::BehaviourRig::Parameters), "console +4720");
-    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd) == offsetof(NamedParameters, mRigRearQFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +5008");
-    static_assert(offsetof(NamedParameters, mRigFrontQBwd) == offsetof(NamedParameters, mRigFrontQCuFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +5296");
-    static_assert(offsetof(NamedParameters, mRigFrontRearview) == offsetof(NamedParameters, mRigFrontQBwd) + sizeof(Camera::BehaviourRig::Parameters), "console +5584");
-    static_assert(offsetof(NamedParameters, mRigBootViewFwd) == offsetof(NamedParameters, mRigFrontRearview) + sizeof(Camera::BehaviourRig::Parameters), "console +5872");
-    static_assert(offsetof(NamedParameters, mRigFrontQLowBwd) == offsetof(NamedParameters, mRigBootViewFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +6160");
-    static_assert(offsetof(NamedParameters, mRigRoofFwd) == offsetof(NamedParameters, mRigFrontQLowBwd) + sizeof(Camera::BehaviourRig::Parameters), "console +6448");
-    static_assert(offsetof(NamedParameters, mRigBootFwd) == offsetof(NamedParameters, mRigRoofFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +6736");
-    static_assert(offsetof(NamedParameters, mRigFrontQCuFwd2) == offsetof(NamedParameters, mRigBootFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +7024");
-    static_assert(offsetof(NamedParameters, mRigUnderbelly) == offsetof(NamedParameters, mRigFrontQCuFwd2) + sizeof(Camera::BehaviourRig::Parameters), "console +7312");
-    static_assert(offsetof(NamedParameters, mRigDropUnderbelly) == offsetof(NamedParameters, mRigUnderbelly) + sizeof(Camera::BehaviourRig::Parameters), "console +7600");
-    static_assert(offsetof(NamedParameters, mRigDropFrontQCuFwd) == offsetof(NamedParameters, mRigDropUnderbelly) + sizeof(Camera::BehaviourRig::Parameters), "console +7888");
-    static_assert(offsetof(NamedParameters, mRigDropBootViewFwd) == offsetof(NamedParameters, mRigDropFrontQCuFwd) + sizeof(Camera::BehaviourRig::Parameters), "console +8176");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown2) == offsetof(NamedParameters, mLooseAttachmentTakedown1) + sizeof(Camera::BehaviourLooseAttachment::Parameters), "console +8796");
-    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown3) == offsetof(NamedParameters, mLooseAttachmentTakedown2) + sizeof(Camera::BehaviourLooseAttachment::Parameters), "console +8896");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mCrashDebugParams) == offsetof(NamedParameters, mAftertouchCrashParams) + sizeof(Camera::BehaviourAftertouchCrash::Parameters)), "console +220");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamTruckFront) == offsetof(NamedParameters, mGyroCamDefaultParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +684");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamLeft) == offsetof(NamedParameters, mGyroCamTruckFront) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +888");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamRight) == offsetof(NamedParameters, mGyroCamLeft) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +1092");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) == offsetof(NamedParameters, mGyroCamRight) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +1296");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) == offsetof(NamedParameters, mGyroCamDefaultSideTruckingLeftParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +1500");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamFollow) == offsetof(NamedParameters, mGyroCamDefaultSideTruckingRightParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +1704");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamAlwaysLowParams) == offsetof(NamedParameters, mGyroCamFollow) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +1908");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamTakedownParams) == offsetof(NamedParameters, mGyroCamAlwaysLowParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +2112");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) == offsetof(NamedParameters, mGyroCamTakedownParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +2316");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamHighParams) == offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +2520");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamHelicamParams) == offsetof(NamedParameters, mGyroCamHighParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +2724");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDriveByLParams) == offsetof(NamedParameters, mGyroCamHelicamParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +2928");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mGyroCamDriveByRParams) == offsetof(NamedParameters, mGyroCamDriveByLParams) + sizeof(Camera::BehaviourGyroCam::Parameters)), "console +3132");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderJumpParameters2) == offsetof(NamedParameters, mBystanderJumpLeftParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters)), "console +3492");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderJumpFromBehindParameters) == offsetof(NamedParameters, mBystanderJumpParameters2) + sizeof(Camera::BehaviourBystanderCam::Parameters)), "console +3648");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderCloseParameters) == offsetof(NamedParameters, mBystanderJumpFromBehindParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters)), "console +3804");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderMediumParameters) == offsetof(NamedParameters, mBystanderCloseParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters)), "console +3960");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderFarParameters) == offsetof(NamedParameters, mBystanderMediumParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters)), "console +4116");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mBystanderFarTallParameters) == offsetof(NamedParameters, mBystanderFarParameters) + sizeof(Camera::BehaviourBystanderCam::Parameters)), "console +4272");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigRearQFwd) == offsetof(NamedParameters, mRigBonnetLowRight) + sizeof(Camera::BehaviourRig::Parameters)), "console +4720");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQCuFwd) == offsetof(NamedParameters, mRigRearQFwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +5008");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQBwd) == offsetof(NamedParameters, mRigFrontQCuFwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +5296");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontRearview) == offsetof(NamedParameters, mRigFrontQBwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +5584");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigBootViewFwd) == offsetof(NamedParameters, mRigFrontRearview) + sizeof(Camera::BehaviourRig::Parameters)), "console +5872");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQLowBwd) == offsetof(NamedParameters, mRigBootViewFwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +6160");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigRoofFwd) == offsetof(NamedParameters, mRigFrontQLowBwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +6448");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigBootFwd) == offsetof(NamedParameters, mRigRoofFwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +6736");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigFrontQCuFwd2) == offsetof(NamedParameters, mRigBootFwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +7024");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigUnderbelly) == offsetof(NamedParameters, mRigFrontQCuFwd2) + sizeof(Camera::BehaviourRig::Parameters)), "console +7312");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigDropUnderbelly) == offsetof(NamedParameters, mRigUnderbelly) + sizeof(Camera::BehaviourRig::Parameters)), "console +7600");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigDropFrontQCuFwd) == offsetof(NamedParameters, mRigDropUnderbelly) + sizeof(Camera::BehaviourRig::Parameters)), "console +7888");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mRigDropBootViewFwd) == offsetof(NamedParameters, mRigDropFrontQCuFwd) + sizeof(Camera::BehaviourRig::Parameters)), "console +8176");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mLooseAttachmentTakedown2) == offsetof(NamedParameters, mLooseAttachmentTakedown1) + sizeof(Camera::BehaviourLooseAttachment::Parameters)), "console +8796");
+    CGS_STATIC_ASSERT((offsetof(NamedParameters, mLooseAttachmentTakedown3) == offsetof(NamedParameters, mLooseAttachmentTakedown2) + sizeof(Camera::BehaviourLooseAttachment::Parameters)), "console +8896");
 
     namespace Camera
     {
@@ -633,9 +633,9 @@ namespace BrnDirector
         // ahead of the record, or widens the head, the build fails here.
         inline void BehaviourParameterBank::_AssertBankLayout()
         {
-            static_assert(offsetof(BehaviourParameterBank, muVersion) == 0x0,
+            CGS_STATIC_ASSERT((offsetof(BehaviourParameterBank, muVersion) == 0x0),
                           "BehaviourParameterBank::muVersion @ bank +0x0");
-            static_assert(offsetof(BehaviourParameterBank, mNamedParameters) == 0x10,
+            CGS_STATIC_ASSERT((offsetof(BehaviourParameterBank, mNamedParameters) == 0x10),
                           "BehaviourParameterBank::mNamedParameters @ bank +0x10");
         }
     }

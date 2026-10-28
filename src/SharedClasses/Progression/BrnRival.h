@@ -19,7 +19,7 @@
 // =============================================================================
 
 // GetDistrict returns BrnWorld::EDistrict; only declared here, so an opaque forward is enough.
-namespace BrnWorld { enum EDistrict : s32; }
+namespace BrnWorld { enum EDistrict ; }
 
 namespace BrnProgression
 {

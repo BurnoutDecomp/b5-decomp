@@ -60,10 +60,10 @@ struct StaticPassbyControl : public BrnSound::Logic::BrnEffectControl
     // @ 0x826D0E38 -- RTTI factory hook.
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    bool Attach() override;
-    void UpdateParams(f32 afTimeStep) override;
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    bool Attach() ;
+    void UpdateParams(f32 afTimeStep) ;
     void ProcessPassbys(Vector3 lvPosition, f32 afSpeed, const PlayerVehicleStateManager* apPlayerStateMan);
     void TriggerPassby(const BrnSound::World::StaticSoundEntity& arEntity);
     void UpdateHistory(f32 afTimeStep);

@@ -46,10 +46,10 @@ namespace CgsSceneManager
         void Construct(const TriangleCollisionManager* lpTriCollisionManager);
 
         // ARTIST 0x828CAE88: run the enabled collision-debug passes in original order.
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRenderer) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRenderer) ;
 
         // ARTIST 0x828BF8C0: dispatch swept-sphere statistics to the live 2D renderer.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer) ;
 
         // ARTIST 0x828AAF18: add one callback to the four-slot static registry.
         static bool RegisterDrawCollisionPolyCallback(
@@ -65,14 +65,14 @@ namespace CgsSceneManager
         }
 
         // Inherited Register() is the actual CgsDev::DebugComponent::Register path.
-        const char* GetName() const override { return "Collision"; }
+        const char* GetName() const  { return "Collision"; }
 
         // ARTIST vtable 0x820CEEBC selects the folded World path @0x827DD250.
-        const char* GetPath() const override { return "World"; }
+        const char* GetPath() const  { return "World"; }
 
     protected:
         // ARTIST 0x828AAA68: register the collision controls and seed live spatial-level state.
-        void OnActivate() override;
+        void OnActivate() ;
 
     private:
         // ARTIST helper bodies are recovered from the same two owned component files.

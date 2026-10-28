@@ -112,25 +112,25 @@ namespace Vehicle
             VecFloat GetPitchDampingOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x;
-                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
 
             VecFloat GetYawDampingOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y;
-                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
 
             VecFloat GetRollDampingOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z;
-                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
 
             VecFloat GetRollLimitOnTakeOff() const
             {
                 const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.w;
-                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+                { const VecFloat lResult = { lfValue, lfValue, lfValue, lfValue }; return lResult; }
             }
         };
 
@@ -241,7 +241,7 @@ namespace Vehicle
             {
                 const f32 lfCrashSpeed =
                     mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x;
-                return VecFloat{ lfCrashSpeed, lfCrashSpeed, lfCrashSpeed, lfCrashSpeed };
+                { const VecFloat lResult = { lfCrashSpeed, lfCrashSpeed, lfCrashSpeed, lfCrashSpeed }; return lResult; }
             }
 
             Vector4 mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare;   // +0x00
@@ -320,125 +320,125 @@ namespace Vehicle
     // top-level offsetof asserts only, transposing two registers INSIDE DriftAttribs compiled
     // clean. The per-member offsetof block below is what closes that, and it is the part to keep
     // extending, not the sizeofs.
-    static_assert(sizeof(VehicleAttribs::VehicleBaseAttribs) == 0xE0, "VehicleBaseAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::SteeringAttribs)    == 0x20, "SteeringAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::DriftAttribs)       == 0x90, "DriftAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::EngineAttribs)      == 0xA0, "EngineAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::SuspensionAttribs)  == 0x30, "SuspensionAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::BodyRollAttribs)    == 0x20, "BodyRollAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::CollisionAttribs)   == 0x10, "CollisionAttribs size drift");
-    static_assert(sizeof(VehicleAttribs::BoostAttribs)       == 0x40, "BoostAttribs size drift");
-    static_assert(sizeof(Wheel::TireAttribs)                 == 0x40, "TireAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::VehicleBaseAttribs) == 0xE0), "VehicleBaseAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::SteeringAttribs)    == 0x20), "SteeringAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::DriftAttribs)       == 0x90), "DriftAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::EngineAttribs)      == 0xA0), "EngineAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::SuspensionAttribs)  == 0x30), "SuspensionAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::BodyRollAttribs)    == 0x20), "BodyRollAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::CollisionAttribs)   == 0x10), "CollisionAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs::BoostAttribs)       == 0x40), "BoostAttribs size drift");
+    CGS_STATIC_ASSERT((sizeof(Wheel::TireAttribs)                 == 0x40), "TireAttribs size drift");
 
     // the tire-scatter targets (attribs-data wave, 2026-08-09): the eight Prepare*Tire routines
     // stvx128 to r3 / r3+16 / r3+32 / r3+48, so the four registers must sit exactly there.
-    static_assert(sizeof(Wheel::TireGripCurve)                    == 0x10, "TireGripCurve is one 16-byte register");
-    static_assert(offsetof(Wheel::TireAttribs, mLongGripCurve)     == 0x00, "mLongGripCurve @+0x00 (stvx128 r3)");
-    static_assert(offsetof(Wheel::TireAttribs, mLatGripCurve)      == 0x10, "mLatGripCurve @+0x10 (stvx128 r3+16)");
-    static_assert(offsetof(Wheel::TireAttribs, mDriftLatGripCurve) == 0x20, "mDriftLatGripCurve @+0x20 (stvx128 r3+32)");
-    static_assert(offsetof(Wheel::TireAttribs, maPackedVariables)  == 0x30, "maPackedVariables @+0x30 (stvx128 r3+48; DonutAI preserves its w lane)");
+    CGS_STATIC_ASSERT((sizeof(Wheel::TireGripCurve)                    == 0x10), "TireGripCurve is one 16-byte register");
+    CGS_STATIC_ASSERT((offsetof(Wheel::TireAttribs, mLongGripCurve)     == 0x00), "mLongGripCurve @+0x00 (stvx128 r3)");
+    CGS_STATIC_ASSERT((offsetof(Wheel::TireAttribs, mLatGripCurve)      == 0x10), "mLatGripCurve @+0x10 (stvx128 r3+16)");
+    CGS_STATIC_ASSERT((offsetof(Wheel::TireAttribs, mDriftLatGripCurve) == 0x20), "mDriftLatGripCurve @+0x20 (stvx128 r3+32)");
+    CGS_STATIC_ASSERT((offsetof(Wheel::TireAttribs, maPackedVariables)  == 0x30), "maPackedVariables @+0x30 (stvx128 r3+48; DonutAI preserves its w lane)");
 
     // top-level placement
-    static_assert(offsetof(VehicleAttribs, mBaseAttribs)       == 0x000, "mBaseAttribs @0x000");
-    static_assert(offsetof(VehicleAttribs, mSteeringAttribs)   == 0x0E0, "mSteeringAttribs @0x0E0");
-    static_assert(offsetof(VehicleAttribs, mDriftAttribs)      == 0x100, "mDriftAttribs @0x100 (DWARF order: drift BEFORE engine)");
-    static_assert(offsetof(VehicleAttribs, mEngineAttribs)     == 0x190, "mEngineAttribs @0x190 (SetupAttribsForDonutAI writes MaxTorque at 0x1B0 == +0x20)");
-    static_assert(offsetof(VehicleAttribs, mSuspensionAttribs) == 0x230, "mSuspensionAttribs @0x230 (SetupSuspension reads it)");
-    static_assert(offsetof(VehicleAttribs, mBodyRollAttribs)   == 0x260, "mBodyRollAttribs @0x260 (CalculateWeightTransfer reads it)");
-    static_assert(offsetof(VehicleAttribs, mCollisionAttribs)  == 0x280, "mCollisionAttribs @0x280 (ApplyCrashedContactImpulse reads .y)");
-    static_assert(offsetof(VehicleAttribs, mBoostAttribs)      == 0x290, "mBoostAttribs @0x290");
-    static_assert(offsetof(VehicleAttribs, mFrontTireAttribs)  == 0x2D0, "mFrontTireAttribs @0x2D0 (SetupAttribsForDonutAI: addi r3,r7,0x2D0)");
-    static_assert(offsetof(VehicleAttribs, mRearTireAttribs)   == 0x310, "mRearTireAttribs @0x310 (SetupAttribsForDonutAI: addi r3,r7,0x310)");
-    static_assert(offsetof(VehicleAttribs, miRaceCarID)        == 0x350, "miRaceCarID @0x350 (operator=: lwz/stw)");
-    static_assert(offsetof(VehicleAttribs, mAttribsKey)        == 0x358, "mAttribsKey @0x358 (operator=: ld/std)");
-    static_assert(offsetof(VehicleAttribs, mbIsValid)          == 0x360, "mbIsValid @0x360 (operator=: li 1; stb)");
-    static_assert(sizeof(VehicleAttribs)                       == 0x370, "VehicleAttribs size drift");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBaseAttribs)       == 0x000), "mBaseAttribs @0x000");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mSteeringAttribs)   == 0x0E0), "mSteeringAttribs @0x0E0");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mDriftAttribs)      == 0x100), "mDriftAttribs @0x100 (DWARF order: drift BEFORE engine)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mEngineAttribs)     == 0x190), "mEngineAttribs @0x190 (SetupAttribsForDonutAI writes MaxTorque at 0x1B0 == +0x20)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mSuspensionAttribs) == 0x230), "mSuspensionAttribs @0x230 (SetupSuspension reads it)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBodyRollAttribs)   == 0x260), "mBodyRollAttribs @0x260 (CalculateWeightTransfer reads it)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mCollisionAttribs)  == 0x280), "mCollisionAttribs @0x280 (ApplyCrashedContactImpulse reads .y)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBoostAttribs)      == 0x290), "mBoostAttribs @0x290");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mFrontTireAttribs)  == 0x2D0), "mFrontTireAttribs @0x2D0 (SetupAttribsForDonutAI: addi r3,r7,0x2D0)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mRearTireAttribs)   == 0x310), "mRearTireAttribs @0x310 (SetupAttribsForDonutAI: addi r3,r7,0x310)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, miRaceCarID)        == 0x350), "miRaceCarID @0x350 (operator=: lwz/stw)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mAttribsKey)        == 0x358), "mAttribsKey @0x358 (operator=: ld/std)");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mbIsValid)          == 0x360), "mbIsValid @0x360 (operator=: li 1; stb)");
+    CGS_STATIC_ASSERT((sizeof(VehicleAttribs)                       == 0x370), "VehicleAttribs size drift");
 
     // the two absolute offsets SetupAttribsForDonutAI writes, spelled through the members
-    static_assert(offsetof(VehicleAttribs, mDriftAttribs)
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mDriftAttribs)
                   + offsetof(VehicleAttribs::DriftAttribs,
                              mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor)
-                  == 0x110, "MinSpeedForDrift must land on the asm's [this+0x110]");
-    static_assert(offsetof(VehicleAttribs, mEngineAttribs)
+                  == 0x110), "MinSpeedForDrift must land on the asm's [this+0x110]");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mEngineAttribs)
                   + offsetof(VehicleAttribs::EngineAttribs,
                              mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges)
-                  == 0x1B0, "MaxTorque must land on the asm's [this+0x1B0]");
-    static_assert(offsetof(VehicleAttribs, mBaseAttribs)
+                  == 0x1B0), "MaxTorque must land on the asm's [this+0x1B0]");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBaseAttribs)
                   + offsetof(VehicleAttribs::VehicleBaseAttribs, mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce)
-                  == 0x070, "Mass must land on the asm's [this+0x70]");
+                  == 0x070), "Mass must land on the asm's [this+0x70]");
 
     // the registers the (mounted) VehiclePhysics.cpp force pipeline reads through mpAttribs
-    static_assert(offsetof(VehicleAttribs, mBaseAttribs)
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBaseAttribs)
                   + offsetof(VehicleAttribs::VehicleBaseAttribs, mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo)
-                  == 0x0B0, "GetDownForce reads +0xB0 .w");
-    static_assert(offsetof(VehicleAttribs, mBaseAttribs)
+                  == 0x0B0), "GetDownForce reads +0xB0 .w");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBaseAttribs)
                   + offsetof(VehicleAttribs::VehicleBaseAttribs, mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor)
-                  == 0x0D0, "GetSurfaceGrip/Roughness/LinearDrag read +0xD0");
-    static_assert(offsetof(VehicleAttribs, mSteeringAttribs)
+                  == 0x0D0), "GetSurfaceGrip/Roughness/LinearDrag read +0xD0");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mSteeringAttribs)
                   + offsetof(VehicleAttribs::SteeringAttribs, mvMaxAngle_StraightReactionBias)
-                  == 0x0F0, "GetMaxSteeringAngleDuringDrift reads +0xF0 .x");
-    static_assert(offsetof(VehicleAttribs, mDriftAttribs)
+                  == 0x0F0), "GetMaxSteeringAngleDuringDrift reads +0xF0 .x");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mDriftAttribs)
                   + offsetof(VehicleAttribs::DriftAttribs, mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor)
-                  == 0x180, "ApplyDriftLatForce reads +0x180");
-    static_assert(offsetof(VehicleAttribs, mSuspensionAttribs)
+                  == 0x180), "ApplyDriftLatForce reads +0x180");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mSuspensionAttribs)
                   + offsetof(VehicleAttribs::SuspensionAttribs, mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding)
-                  == 0x250, "StabiliseAfterHardLanding reads +0x250");
-    static_assert(offsetof(VehicleAttribs, mBoostAttribs)
+                  == 0x250), "StabiliseAfterHardLanding reads +0x250");
+    CGS_STATIC_ASSERT((offsetof(VehicleAttribs, mBoostAttribs)
                   + offsetof(VehicleAttribs::BoostAttribs, mvBoostKickAcceleration_BoostKickHeightOffset)
-                  == 0x2B0, "ApplyBoostKickForce reads +0x2B0");
+                  == 0x2B0), "ApplyBoostKickForce reads +0x2B0");
 
     // ---- PER-REGISTER PLACEMENT (the permutation test) ---------------------------------------
     // One assert per data member of every sub-block, so that reordering ANY two registers fails
     // the build. Offsets are the DWARF declaration order at 16 bytes per register.
     #define BP_VA_OFF(BLOCK, MEMBER) offsetof(VehicleAttribs::BLOCK, MEMBER)
 
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mFrontRightWheelPos)        == 0x00, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mRearRightWheelPos)         == 0x10, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mCOMOffset)                 == 0x20, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mCrashExtraVelocityFactors) == 0x30, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mDrivetimeDeformLimits)     == 0x40, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, miRaceCarID)                == 0x50, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mBrakeScaleToFactorCurve)   == 0x60, "UpdateBrakesAndGetBrakingFactor reads base+0x60");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce) == 0x70, "Mass register at base+0x70");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels) == 0x80, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl) == 0x90, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass) == 0xA0, "VehicleBaseAttribs order drift");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo) == 0xB0, "GetDownForce reads base+0xB0 .w");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff) == 0xC0, "UpdateInAirBehaviour reads base+0xC0");
-    static_assert(BP_VA_OFF(VehicleBaseAttribs, mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor) == 0xD0, "GetSurface* read base+0xD0");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mFrontRightWheelPos)        == 0x00), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mRearRightWheelPos)         == 0x10), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mCOMOffset)                 == 0x20), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mCrashExtraVelocityFactors) == 0x30), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mDrivetimeDeformLimits)     == 0x40), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, miRaceCarID)                == 0x50), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mBrakeScaleToFactorCurve)   == 0x60), "UpdateBrakesAndGetBrakingFactor reads base+0x60");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce) == 0x70), "Mass register at base+0x70");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvDownForceZOffset_MagicBrakeFactorTurning_MagicBrakeFactorStraightLine_BrakeScaleToLockWheels) == 0x80), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl) == 0x90), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass) == 0xA0), "VehicleBaseAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo) == 0xB0), "GetDownForce reads base+0xB0 .w");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff) == 0xC0), "UpdateInAirBehaviour reads base+0xC0");
+    CGS_STATIC_ASSERT((BP_VA_OFF(VehicleBaseAttribs, mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor) == 0xD0), "GetSurface* read base+0xD0");
 
-    static_assert(BP_VA_OFF(SteeringAttribs, mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle) == 0x00, "SteeringAttribs order drift");
-    static_assert(BP_VA_OFF(SteeringAttribs, mvMaxAngle_StraightReactionBias) == 0x10, "GetMaxSteeringAngleDuringDrift reads steering+0x10");
+    CGS_STATIC_ASSERT((BP_VA_OFF(SteeringAttribs, mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle) == 0x00), "SteeringAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(SteeringAttribs, mvMaxAngle_StraightReactionBias) == 0x10), "GetMaxSteeringAngleDuringDrift reads steering+0x10");
 
-    static_assert(BP_VA_OFF(DriftAttribs, mDriftScaleToYawTorque) == 0x00, "ApplyDriftYaw reads drift+0x00");
-    static_assert(BP_VA_OFF(DriftAttribs, mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor) == 0x10, "UpdateDriftState reads drift+0x10 .x");
-    static_assert(BP_VA_OFF(DriftAttribs, mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale) == 0x20, "DriftAttribs order drift");
-    static_assert(BP_VA_OFF(DriftAttribs, mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift) == 0x30, "DriftAttribs order drift");
-    static_assert(BP_VA_OFF(DriftAttribs, mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff) == 0x40, "DriftAttribs order drift");
-    static_assert(BP_VA_OFF(DriftAttribs, mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower) == 0x50, "ApplyDriftLatForce reads drift+0x50");
-    static_assert(BP_VA_OFF(DriftAttribs, mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping) == 0x60, "ApplyNaturalDriftForces reads drift+0x60");
-    static_assert(BP_VA_OFF(DriftAttribs, mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime) == 0x70, "DriftAttribs order drift");
-    static_assert(BP_VA_OFF(DriftAttribs, mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor) == 0x80, "DriftAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mDriftScaleToYawTorque) == 0x00), "ApplyDriftYaw reads drift+0x00");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvMinSpeedForDrift_SteeringDriftScaleFactor_CounterSteeringDriftScaleFactor_BaseCounterSteeringDriftScaleFactor) == 0x10), "UpdateDriftState reads drift+0x10 .x");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale) == 0x20), "DriftAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvDriftTorqueFallOff_GripFromSteering_GripFromBrake_TimeForNaturalDrift) == 0x30), "DriftAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvNeutralTimeToReduceDrift_SideForceDriftScaleCutOff_SideForceDriftAngleCutOff_SideForceDriftSpeedCutOff) == 0x40), "DriftAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower) == 0x50), "ApplyDriftLatForce reads drift+0x50");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping) == 0x60), "ApplyNaturalDriftForces reads drift+0x60");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime) == 0x70), "DriftAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(DriftAttribs, mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor) == 0x80), "DriftAttribs order drift");
 
-    static_assert(BP_VA_OFF(EngineAttribs, mTorqueCurve) == 0x00, "EngineAttribs order drift");
-    static_assert(BP_VA_OFF(EngineAttribs, mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM) == 0x10, "Engine::ComputeGear reads engine+0x10 .x");
-    static_assert(BP_VA_OFF(EngineAttribs, mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges) == 0x20, "SetupAttribsForDonutAI writes engine+0x20 .x");
-    static_assert(BP_VA_OFF(EngineAttribs, mvFlyWheelInertia_FlyWheelFriction_GearChangeTime) == 0x30, "EngineAttribs order drift");
-    static_assert(BP_VA_OFF(EngineAttribs, mavGearRatios_TorqueScales_GearUpRPMs) == 0x40, "EngineAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(EngineAttribs, mTorqueCurve) == 0x00), "EngineAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(EngineAttribs, mvDifferential_TransmissionEfficiency_EngineResistance_GearDownRPM) == 0x10), "Engine::ComputeGear reads engine+0x10 .x");
+    CGS_STATIC_ASSERT((BP_VA_OFF(EngineAttribs, mvMaxTorque_TorqueFallOffRPM_MaxRPM_LSDMSpeedToAllowGearChanges) == 0x20), "SetupAttribsForDonutAI writes engine+0x20 .x");
+    CGS_STATIC_ASSERT((BP_VA_OFF(EngineAttribs, mvFlyWheelInertia_FlyWheelFriction_GearChangeTime) == 0x30), "EngineAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(EngineAttribs, mavGearRatios_TorqueScales_GearUpRPMs) == 0x40), "EngineAttribs order drift");
 
-    static_assert(BP_VA_OFF(SuspensionAttribs, mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement) == 0x00, "SetupSuspension reads suspension+0x00");
-    static_assert(BP_VA_OFF(SuspensionAttribs, mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding) == 0x10, "SuspensionAttribs order drift");
-    static_assert(BP_VA_OFF(SuspensionAttribs, mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding) == 0x20, "StabiliseAfterHardLanding reads suspension+0x20");
+    CGS_STATIC_ASSERT((BP_VA_OFF(SuspensionAttribs, mvRestDisplacement_Dampening_UpwardMovement_DownwardMovement) == 0x00), "SetupSuspension reads suspension+0x00");
+    CGS_STATIC_ASSERT((BP_VA_OFF(SuspensionAttribs, mvFrontWheelHeightOffset_RearWheelHeightOffset_InAirDamping_MaxPitchDampingOnLanding) == 0x10), "SuspensionAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(SuspensionAttribs, mvMaxYawDampingOnLanding_MaxRollDampingOnLanding_MaxVertVelocityDampingOnLanding_TimeToDampAfterLanding) == 0x20), "StabiliseAfterHardLanding reads suspension+0x20");
 
-    static_assert(BP_VA_OFF(BodyRollAttribs, mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ) == 0x00, "CalculateWeightTransfer reads bodyroll+0x00");
-    static_assert(BP_VA_OFF(BodyRollAttribs, mvWheelLongForceHeightOffset_WheelLatForceHeightOffset) == 0x10, "HandleWheelPairFriction reads bodyroll+0x10");
+    CGS_STATIC_ASSERT((BP_VA_OFF(BodyRollAttribs, mvWeightTransferDecayX_WeightTransferDecayZ_FactorOfWeightX_FactorOfWeightZ) == 0x00), "CalculateWeightTransfer reads bodyroll+0x00");
+    CGS_STATIC_ASSERT((BP_VA_OFF(BodyRollAttribs, mvWheelLongForceHeightOffset_WheelLatForceHeightOffset) == 0x10), "HandleWheelPairFriction reads bodyroll+0x10");
 
-    static_assert(BP_VA_OFF(CollisionAttribs, mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare) == 0x00, "ApplyCrashedContactImpulse reads collision+0x00 .y");
+    CGS_STATIC_ASSERT((BP_VA_OFF(CollisionAttribs, mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare) == 0x00), "ApplyCrashedContactImpulse reads collision+0x00 .y");
 
-    static_assert(BP_VA_OFF(BoostAttribs, mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset) == 0x00, "UpdateBoost reads boost+0x00");
-    static_assert(BP_VA_OFF(BoostAttribs, mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime) == 0x10, "ApplyNormalBoostForce reads boost+0x10");
-    static_assert(BP_VA_OFF(BoostAttribs, mvBoostKickAcceleration_BoostKickHeightOffset) == 0x20, "ApplyBoostKickForce reads boost+0x20");
-    static_assert(BP_VA_OFF(BoostAttribs, miBoostRule) == 0x30, "BoostAttribs order drift");
+    CGS_STATIC_ASSERT((BP_VA_OFF(BoostAttribs, mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset) == 0x00), "UpdateBoost reads boost+0x00");
+    CGS_STATIC_ASSERT((BP_VA_OFF(BoostAttribs, mvNormalBoostAcceleration_BoostKickMaxStartSpeed_BoostKickMaxTime_BoostKickMinTime) == 0x10), "ApplyNormalBoostForce reads boost+0x10");
+    CGS_STATIC_ASSERT((BP_VA_OFF(BoostAttribs, mvBoostKickAcceleration_BoostKickHeightOffset) == 0x20), "ApplyBoostKickForce reads boost+0x20");
+    CGS_STATIC_ASSERT((BP_VA_OFF(BoostAttribs, miBoostRule) == 0x30), "BoostAttribs order drift");
 
     #undef BP_VA_OFF
 }

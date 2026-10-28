@@ -50,7 +50,7 @@ PlayersConnectionManager::AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus,
                                     const char* lpcName, NetworkPlayerID lPlayerID,
                                     s32 liConnectionIndex, bool lbLocal)
 {
-    ConnectionDataEntry* lpEntry = nullptr;
+    ConnectionDataEntry* lpEntry = 0;
 
     if (!lbLocal)
     {
@@ -275,7 +275,7 @@ void PlayersConnectionManager::TestConnectionMessageDeliveredCallback(bool lbSuc
 {
     PlayersConnectionManager* lpConnMgr = static_cast<PlayersConnectionManager*>(lpUserData);
     ConnectionDataEntry*      lpEntry   = lpConnMgr->GetEntry(lRecvingPlayerID);
-    if (lpEntry == nullptr)
+    if (lpEntry == 0)
     {
         return;
     }
@@ -317,7 +317,7 @@ void PlayersConnectionManager::ConnectionStatusMessageDeliveredCallback(bool lbS
 
     PlayersConnectionManager* lpConnMgr = static_cast<PlayersConnectionManager*>(lpUserData);
     ConnectionDataEntry*      lpEntry   = lpConnMgr->GetEntry(lRecvingPlayerID);
-    if (lpEntry == nullptr)
+    if (lpEntry == 0)
     {
         return;
     }

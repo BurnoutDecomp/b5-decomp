@@ -23,10 +23,10 @@ public:
     virtual void* Serialise(const void* lpResource, const rw::Resource& lrDest,
                             const ResourceDescriptor& lrDescriptor) const;
 
-    uint32_t           GetTypeID() const override;
-    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
-    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void               FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t           GetTypeID() const ;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void               FixDown(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 

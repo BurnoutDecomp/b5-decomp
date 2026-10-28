@@ -20,7 +20,7 @@ namespace BrnTrafficIO
         // The offset is load-bearing here, and pinned from inside the member so offsetof can see
         // the private ones. The coarse-query queue precedes it at status+4 (the console's status
         // word is 4 bytes to our 1-byte FlagSet), and the 16-aligned interface still lands at 16416.
-        static_assert(offsetof(OutputBuffer_PostScene, mTrafficAIInterface) == 16416,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostScene, mTrafficAIInterface) == 16416),
                       "mTrafficAIInterface @16416");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mTrafficAIInterface;
@@ -35,10 +35,10 @@ namespace BrnTrafficIO
     {
         // Parity is by named member and sequence, so no offsetof pin is possible. What is
         // pinnable is that the scene seat must hold the whole 25-queue aggregate, not 44 bytes.
-        static_assert(sizeof(OutputBuffer_PostPhysics::SceneInputInterface) > 800000,
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PostPhysics::SceneInputInterface) > 800000),
                       "mSceneInputInterface is the real InSceneUpdateInterface (console 818768 B "
                       "at +11376), not the 44-byte span the +834784 accessor returns");
-        static_assert(sizeof(OutputBuffer_PostPhysics::InterfaceAt834784) == 44,
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PostPhysics::InterfaceAt834784) == 44),
                       "the X360-only member at console +834784 is 44 bytes (Construct zeroes 11 words)");
     }
 
@@ -278,8 +278,8 @@ namespace BrnTrafficIO
         // those console offsets off -- so they are NOT asserted here (they are pinned to the X360 XEX
         // by the XMemCpy(0x28F0)/XMemCpy(0x970) sizes the setters reverse). Per the layout rule: drop
         // the drifting assert rather than repad the 32-bit interior.
-        static_assert(offsetof(InputBuffer_PreScene, mTimerStatusInterface)         == 4,  "mTimerStatusInterface @4");
-        static_assert(offsetof(InputBuffer_PreScene, mActiveRaceCarOutputInterface) == 64, "mActiveRaceCarOutputInterface @64");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PreScene, mTimerStatusInterface)         == 4),  "mTimerStatusInterface @4");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PreScene, mActiveRaceCarOutputInterface) == 64), "mActiveRaceCarOutputInterface @64");
     }
 
     // X360 0x82710B30: GetTimerStatusInterface() const. Read-lock (status bit 4,
@@ -422,7 +422,7 @@ namespace BrnTrafficIO
     {
         // The 1648 offset is load-bearing (the X360 memcpy dest is this+0x670); pinned so offsetof
         // can see the private member. sizeof(RCEntityActiveRaceCarOutputInterface) == 0x28F0 == 10480.
-        static_assert(offsetof(InputBuffer_PostScene, mActiveRaceCarOutputInterface) == 1648,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PostScene, mActiveRaceCarOutputInterface) == 1648),
                       "mActiveRaceCarOutputInterface @1648");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         std::memcpy(&mActiveRaceCarOutputInterface, lpInterface,
@@ -439,7 +439,7 @@ namespace BrnTrafficIO
     {
         // mCrashTrafficOutputInterface is the first buffer member (X360 places it at this+8, right
         // after the 1-byte IOBuffer status). Pinned so the +8 base of both queues is exact.
-        static_assert(offsetof(InputBuffer_PostScene, mCrashTrafficOutputInterface) == 8,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PostScene, mCrashTrafficOutputInterface) == 8),
                       "mCrashTrafficOutputInterface @8");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
 
@@ -495,9 +495,9 @@ namespace BrnTrafficIO
     // ========================================================================
     void InputBuffer_PrePhysics::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PrePhysics, mPotentialContactQueue) == 16,     "mPotentialContactQueue @16");
-        static_assert(offsetof(InputBuffer_PrePhysics, mOverlapPairsQueue)     == 163872, "mOverlapPairsQueue @163872");
-        static_assert(offsetof(InputBuffer_PrePhysics, mPlayerResetInterface)  == 199744, "mPlayerResetInterface @199744");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PrePhysics, mPotentialContactQueue) == 16),     "mPotentialContactQueue @16");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PrePhysics, mOverlapPairsQueue)     == 163872), "mOverlapPairsQueue @163872");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PrePhysics, mPlayerResetInterface)  == 199744), "mPlayerResetInterface @199744");
     }
 
     // X360 0x827A9DE0: write-lock; reset the queue then merge the source potential-contact queue
@@ -677,10 +677,10 @@ namespace BrnTrafficIO
         // The two console offsets that ARE reproducible on the host: the scene interface is the
         // first member after the status pad (console +16), and the traffic->race-car block is the
         // 544-byte span BrnWorldModule.cpp's pre-scene snapshot copies.
-        static_assert(offsetof(OutputBuffer_PreScene, mSceneInputInterface) == 16,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mSceneInputInterface) == 16),
                       "mSceneInputInterface @16 (console; Construct calls "
                       "InSceneUpdateInterface::Construct(this+0x10))");
-        static_assert(sizeof(OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene) == 544,
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene) == 544),
                       "the traffic->race-car pre-scene block is console [818784, 819328) == 544 B");
         // Everything after mSceneInputInterface drifts: the aggregate's 25 queues carry an 8-byte
         // mpEvents on the host where the console has 4, so its host sizeof exceeds the console's
@@ -825,7 +825,7 @@ namespace BrnTrafficIO
     // ========================================================================
     void OutputBuffer_Prepare::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_Prepare, mSceneInputInterface) == 16,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_Prepare, mSceneInputInterface) == 16),
                       "mSceneInputInterface @16 (console; Construct @0x82761740 calls "
                       "InSceneUpdateInterface::Construct(this+0x10))");
         // No offsetof pin on mResourceRequestInterface: the member ahead of it is the real
@@ -955,17 +955,17 @@ namespace BrnTrafficIO
     {
         // Pointer-invariant pins only. Every member here is pointer-free, so the console's spans
         // survive to x64 and can be pinned as facts about the types, not as X360 byte offsets.
-        static_assert(sizeof(CgsSceneManager::EntityId) == 4,
+        CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
                       "EntityId is one packed 32-bit handle on both platforms");
-        static_assert(sizeof(Array<CgsSceneManager::EntityId, 650u>) == 650 * 4 + 4,
+        CGS_STATIC_ASSERT((sizeof(Array<CgsSceneManager::EntityId, 650u>) == 650 * 4 + 4),
                       "Array<EntityId,650> is 650 elements plus the trailing live-count word -- "
                       "the console's Construct @0x8275CEE8 zeroes that word at +2632, i.e. 2600 "
                       "bytes past the +32 the elements start at");
-        static_assert(sizeof(Vector3) == 16,
+        CGS_STATIC_ASSERT((sizeof(Vector3) == 16),
                       "mCameraPosition is the 16-byte vector Construct stores with a single "
                       "stvx128 at this+16");
-        static_assert(offsetof(InputBuffer_PreDispatch, maTrafficEntityIds)
-                        - offsetof(InputBuffer_PreDispatch, mCameraPosition) == 16,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PreDispatch, maTrafficEntityIds)
+                        - offsetof(InputBuffer_PreDispatch, mCameraPosition) == 16),
                       "maTrafficEntityIds follows mCameraPosition immediately (console +16 -> +32)");
     }
 
@@ -1011,10 +1011,10 @@ namespace BrnTrafficIO
     void OutputBuffer_PreDispatch::_AssertLayout()
     {
         // POINTER-INVARIANT ONLY -- VehicleRenderInfo is {u32, f32, 4-byte enum}.
-        static_assert(sizeof(BrnTraffic::VehicleRenderInfo) == 12,
+        CGS_STATIC_ASSERT((sizeof(BrnTraffic::VehicleRenderInfo) == 12),
                       "VehicleRenderInfo is 12 bytes (Array<VehicleRenderInfo,64>::Append "
                       "@0x8270A148 copies three dwords at a 12-byte stride)");
-        static_assert(sizeof(Array<BrnTraffic::VehicleRenderInfo, 64u>) == 64 * 12 + 4,
+        CGS_STATIC_ASSERT((sizeof(Array<BrnTraffic::VehicleRenderInfo, 64u>) == 64 * 12 + 4),
                       "the whole array is 772 bytes -- which is exactly why the console's "
                       "Construct @0x8275CF28 zeroes the live-count word at +772 and "
                       "CreateIOBuffer @0x827B7320 allocates 0x308 == 776 for a buffer whose "

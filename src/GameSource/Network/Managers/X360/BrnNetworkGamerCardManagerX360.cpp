@@ -90,7 +90,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_SUBSTATES; ++li)
         {
-            CGS_ASSERT(mapUpdateFunctions[li] != nullptr,
+            CGS_ASSERT(mapUpdateFunctions[li] != 0,
                        "No update function supplied for this substate");
         }
     }
@@ -104,7 +104,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_ACTIONS; ++li)
         {
-            CGS_ASSERT(mapActionFunctions[li] != nullptr,
+            CGS_ASSERT(mapActionFunctions[li] != 0,
                        "No function supplied for this action");
         }
     }
@@ -116,7 +116,7 @@ namespace BrnNetwork
         InitialiseActionArray();
         InitialiseProcessArray();
 
-        CGS_ASSERT(lpServerInterface != nullptr, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
 
         mpServerInterface          = lpServerInterface;   // *(a1 + 148) = a2
         maRequestedPlayerName.macName[0] = '\0';          // stb 0, 0x68
@@ -125,7 +125,7 @@ namespace BrnNetwork
         meSubState                 = 0;                   // stw 0, 0x84
         meProcess                  = KI_PROCESS_NONE;     // stw 5, 0x88
         miActionIndex              = 0;                   // stb 0, 0x8C
-        mpCompleteCallback         = nullptr;             // stw 0, 0x98
+        mpCompleteCallback         = 0;             // stw 0, 0x98
         miCompleteUserData         = 0;                   // stw 0, 0x9C
     }
 
@@ -133,14 +133,14 @@ namespace BrnNetwork
     void NetworkGamerCardManagerX360::Destruct()
     {
         miCompleteUserData         = 0;                   // stw 0, 0x9C
-        mpCompleteCallback         = nullptr;             // stw 0, 0x98
+        mpCompleteCallback         = 0;             // stw 0, 0x98
         miActionIndex              = 0;                   // stb 0, 0x8C
         meProcess                  = KI_PROCESS_NONE;     // stw 5, 0x88
         meSubState                 = 0;                   // stw 0, 0x84
         maRequestedPlayerName.macName[0] = '\0';          // stb 0, 0x68
         mRequestedGamerCardXUID    = 0;                   // std 0, 0x78
         muRequestingControllerPort = KU_NUMBER_OF_PADS;   // stw 4, 0x80
-        mpServerInterface          = nullptr;             // stw 0, 0x94
+        mpServerInterface          = 0;             // stw 0, 0x94
     }
 
     // X360 0x8254D348 -- reset the request state on a network disconnect.
@@ -170,7 +170,7 @@ namespace BrnNetwork
         if (lpListener)
         {
             CloseHandle(lpListener);
-            mNotifyListener = nullptr;                // stw 0, 0x90
+            mNotifyListener = 0;                // stw 0, 0x90
         }
         return true;                                  // li r3, 1
     }
@@ -178,7 +178,7 @@ namespace BrnNetwork
     // X360 0x8254CC50 -- dispatch the update function for the current sub-state.
     s32 NetworkGamerCardManagerX360::ProcessBeforeSimulation()
     {
-        CGS_ASSERT(mapUpdateFunctions[meSubState] != nullptr,
+        CGS_ASSERT(mapUpdateFunctions[meSubState] != 0,
                    "No update function supplied for the current substate");
         return (this->*mapUpdateFunctions[meSubState])();
     }
@@ -194,7 +194,7 @@ namespace BrnNetwork
         {
             s32 liUserData = miCompleteUserData;      // r5 = *(a1 + 156)
             u64 lXuid      = mRequestedGamerCardXUID; // r4 = *(a1 + 120)
-            mpCompleteCallback = nullptr;             // stw 0, 0x98
+            mpCompleteCallback = 0;             // stw 0, 0x98
             miCompleteUserData = 0;                   // stw 0, 0x9C
             liResult = lpfnComplete(liStatus, lXuid, liUserData);  // bctrl (r3=status, r4=xuid, r5=userdata)
         }
@@ -302,8 +302,8 @@ namespace BrnNetwork
     // X360 0x8254CED0 -- poll the player-info component's idle/error state for the request.
     s32 NetworkGamerCardManagerX360::PlayerInfoIdle()
     {
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetPlayerInfoComponent() != nullptr,
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface->GetPlayerInfoComponent() != 0,
                    "mpServerInterface->GetPlayerInfoComponent()");
 
         u32 luStatus = mpServerInterface->GetPlayerInfoComponent()->GetStatus();
@@ -400,7 +400,7 @@ namespace BrnNetwork
             muRequestingControllerPort = luRequestingControllerPort; // stw r29, 0x80
             liResult = XUserGetSigninState(luRequestingControllerPort);
 
-            mpCompleteCallback = nullptr;             // stw 0, 0x98
+            mpCompleteCallback = 0;             // stw 0, 0x98
             miCompleteUserData = 0;                   // stw 0, 0x9C
             miActionIndex      = 0;                    // stb 0, 0x8C
             meSubState         = 1;                    // stw 1, 0x84
@@ -421,7 +421,7 @@ namespace BrnNetwork
                                                    const PlayerName* lpPlayerName)
     {
         CgsNetwork::ServerInterfaceGames* lpGameComponent = mpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpGameComponent != nullptr, "lpGameComponent");
+        CGS_ASSERT(lpGameComponent != 0, "lpGameComponent");
 
         s32 liResult = lpGameComponent->IsLocalPlayerInGame();
         if (liResult)
@@ -448,7 +448,7 @@ namespace BrnNetwork
                 mRequestedGamerCardXUID    = lHostAddr;                    // std r11, 0x78
                 meProcess                  = 2;                           // li 2 ; stw 0x88
 
-                mpCompleteCallback = nullptr;         // *(a1 + 152) = 0
+                mpCompleteCallback = 0;         // *(a1 + 152) = 0
                 miCompleteUserData = 0;               // *(a1 + 156) = 0
                 miActionIndex      = 0;               // *(a1 + 140) = 0
                 meSubState         = 1;               // *(a1 + 132) = 1
@@ -469,7 +469,7 @@ namespace BrnNetwork
             // Signed in to Live -> process 0 (show), else process 1 (sign-in then show).
             meProcess = (liResult != KI_SIGNIN_STATE_LIVE);              // *(a1+136) = result != 2
 
-            mpCompleteCallback = nullptr;             // *(a1 + 152) = 0
+            mpCompleteCallback = 0;             // *(a1 + 152) = 0
             miCompleteUserData = 0;                   // *(a1 + 156) = 0
             miActionIndex      = 0;                   // *(a1 + 140) = 0
             meSubState         = 1;                   // *(a1 + 132) = 1

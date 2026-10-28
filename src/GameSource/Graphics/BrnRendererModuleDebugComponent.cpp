@@ -5,7 +5,7 @@ namespace BrnGraphics
 {
     void DebugComponent::Construct(::BrnRendererModule* lpRendererModule)
     {
-        CGS_ASSERT(lpRendererModule != nullptr, "lpRendererModule != NULL");
+        CGS_ASSERT(lpRendererModule != 0, "lpRendererModule != NULL");
         mpRendererModule = lpRendererModule;
         mfSunFlareOverrideBrightness = 0.3f;
         mbSunFlareOverrideBrightness = false;

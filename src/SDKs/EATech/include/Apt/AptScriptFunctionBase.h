@@ -63,7 +63,7 @@
 // verbatim.
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptObject.h"             // AptObject base + AptVFT_*
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC keys
@@ -222,9 +222,9 @@ public:
     // scope pointers.
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptScriptFunctionBase, mpCIH)         == 0x40, "first field after the 0x40 AptObject base");
-        static_assert(offsetof(AptScriptFunctionBase, mpParentAnim)  == 0x48, "getVariable reads the fn's ParentAnim here");
-        static_assert(sizeof(AptScriptFunctionBase) == 0x60, "console 0x30 widened; +0x58 u16 + pad");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpCIH)         == 0x40), "first field after the 0x40 AptObject base");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpParentAnim)  == 0x48), "getVariable reads the fn's ParentAnim here");
+        CGS_STATIC_ASSERT((sizeof(AptScriptFunctionBase) == 0x60), "console 0x30 widened; +0x58 u16 + pad");
     }
 
 protected:

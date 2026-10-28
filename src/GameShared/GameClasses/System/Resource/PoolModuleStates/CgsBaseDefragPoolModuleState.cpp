@@ -28,13 +28,13 @@ namespace CgsResource
     {
         mpPoolModule = lpPoolModule;
         miCurrentMemType = -1;
-        mpPool = nullptr;
-        mpAllocListSet = nullptr;
-        mpAddressedAllocRequests = nullptr;
-        mpRelocateRequests = nullptr;
-        mpDistributionEntries = nullptr;
-        mpLinearHeapNodes = nullptr;
-        mpRelocateSources = nullptr;
+        mpPool = 0;
+        mpAllocListSet = 0;
+        mpAddressedAllocRequests = 0;
+        mpRelocateRequests = 0;
+        mpDistributionEntries = 0;
+        mpLinearHeapNodes = 0;
+        mpRelocateSources = 0;
         muMaxAddressedAllocRequests = 0;
         muMaxRelocateRequests = 0;
         muMaxDistributionRequests = 0;

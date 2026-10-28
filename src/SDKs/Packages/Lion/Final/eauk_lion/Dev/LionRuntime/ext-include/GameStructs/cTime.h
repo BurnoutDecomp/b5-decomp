@@ -106,6 +106,6 @@ private:
 
 // One signed word. cParticleEmitter's DWARF spaces three cTime members four bytes apart
 // (+0x198 / +0x19C / +0x1A0), and InitialiseParticle @0x82911700 reads one with `lwz`.
-static_assert(sizeof(cTime) == 4,
+CGS_STATIC_ASSERT((sizeof(cTime) == 4),
               "cTime is ONE S32 tick (DWARF cTime.h:217; cParticleEmitter's mParentTime / "
               "mLastTime / mUpdateLastTime sit at +0x198 / +0x19C / +0x1A0)");

@@ -28,7 +28,7 @@
 // DetachedPartManager / DetachedWheelManager / PropManager / VehicleManager).
 //
 // X360-attested element stride (`slwi r, miLength, 5` == *32).
-static_assert(sizeof(CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition) == 32,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition) == 32),
               "InEventUpdateCachedPosition stride 32");
 
 template bool

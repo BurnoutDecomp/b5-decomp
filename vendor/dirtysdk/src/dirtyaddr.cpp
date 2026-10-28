@@ -7,7 +7,7 @@
 #include "dirtyaddr.h"
 #include "dirtylib.h"   // NetPrintf
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>
 
 static const char _DirtyAddr_strHex[16] =

@@ -45,9 +45,9 @@ GPUTimingMarkerFull::~GPUTimingMarkerFull()
 // X360-absolute byte offsets (every access above is by name).
 void _GPUTimingMarkerFullAssertLayout()
 {
-    static_assert(offsetof(GPUTimingMarkerFull, muOp) == 0,
+    CGS_STATIC_ASSERT((offsetof(GPUTimingMarkerFull, muOp) == 0),
                   "op token is the first word");
-    static_assert(offsetof(GPUTimingMarkerFull, mpDevice) > offsetof(GPUTimingMarkerFull, muOp),
+    CGS_STATIC_ASSERT((offsetof(GPUTimingMarkerFull, mpDevice) > offsetof(GPUTimingMarkerFull, muOp)),
                   "device pointer follows the op token");
 }
 

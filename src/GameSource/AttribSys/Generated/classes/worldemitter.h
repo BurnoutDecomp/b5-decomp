@@ -18,8 +18,8 @@ namespace Gen
     class worldemitter : public Instance
     {
     public:
-        explicit worldemitter(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit worldemitter(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit worldemitter(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit worldemitter(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
 
         void ChangeWithDefault(const RefSpec& lrRefSpec)
@@ -57,7 +57,7 @@ namespace Gen
             bool mbAffectedByDoppler;
             u8 mau8Padding[2];
         };
-        static_assert(sizeof(Layout) == 8, "ARTIST worldemitter data layout");
+        CGS_STATIC_ASSERT((sizeof(Layout) == 8), "ARTIST worldemitter data layout");
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::worldemitter,

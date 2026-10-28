@@ -58,13 +58,13 @@ public:
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x34 slot (the thunk swaps its two arguments so
     //                       the processor becomes `this`).
-    void Apply(RealmcCore::IMessageProcessor* pProcessor) override;
+    void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
 
     // Backs the X360 `vector deleting destructor' @0x82B560A8: it restores this
     // class's vtable (off_821488D0), chains the RealmcCore::MessageString base
     // dtor, then frees 32 bytes when the delete flag bit0 is set. The virtual
     // dtor + the class operator delete below reproduce it compiler-generated.
-    ~MessageSaveDone() override {}
+    ~MessageSaveDone()  {}
     static void operator delete(void* lpBlock, size_t luSize)
     {
         RealmcCore::FreeMemSize(lpBlock, static_cast<u32>(luSize));

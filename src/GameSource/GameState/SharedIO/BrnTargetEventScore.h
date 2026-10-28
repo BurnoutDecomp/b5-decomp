@@ -48,11 +48,11 @@ namespace GameStateModuleIO
     };
 
     // Pointer-free record: X360 offsets == host offsets, so the layout is pinnable.
-    static_assert(sizeof(TargetEventScore) == 40,
+    CGS_STATIC_ASSERT((sizeof(TargetEventScore) == 40),
                   "TargetEventScore must keep the X360 40-byte Array<.,49> element stride");
-    static_assert(offsetof(TargetEventScore, mEventId) == 0x18,
+    CGS_STATIC_ASSERT((offsetof(TargetEventScore, mEventId) == 0x18),
                   "TargetEventScore::mEventId must sit at the X360 +0x18 id slot");
-    static_assert(offsetof(TargetEventScore, miScore) == 0x20,
+    CGS_STATIC_ASSERT((offsetof(TargetEventScore, miScore) == 0x20),
                   "TargetEventScore::miScore must sit at the X360 +0x20 score slot");
 }
 }

@@ -224,7 +224,7 @@ void Simulation::RemoveDrive(Drive* lpDrive)
 Drive* Simulation::AddDrive(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void* lpDynamics)
 {
     if (m_FreeDR_Count == 0u)                             // +0x54
-        return nullptr;
+        return 0;
 
     Drive* const lpDrive = m_FreeDR_Anchor->m_right;      // +0x34, head of the free list
 
@@ -284,7 +284,7 @@ Drive* Simulation::AddDrive(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void
 Joint* Simulation::AddJoint(RigidBody* lpA, RigidBody* lpB, void* lpFrames, void* lpLimits)
 {
     if (m_FreeJT_Count == 0u)                             // +0x4C
-        return nullptr;
+        return 0;
 
     Joint* const lpJoint = m_FreeJT_Anchor->m_right;      // +0x2C, head of the free list
 
@@ -754,7 +754,7 @@ RigidBody* Simulation::AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame
     // `lwz r11,0x3C(r3)` ; `cmplwi r11,0` ; `li r3,0` -- the free list is the pool, so an
     // exhausted pool is a NULL return, not an assert.
     if (m_FreeRB_Count == 0u)
-        return nullptr;
+        return 0;
 
     --m_FreeRB_Count;                                   // `addi r9,r11,-1` ; `stw r9,0x3C`
     RigidBody* const lpBody = m_FreeRB_Anchor->mRight;  // `lwz r10,0x1C` ; `lwz r11,0x2C(r10)`
@@ -771,7 +771,7 @@ RigidBody* Simulation::AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame
         lpAnchor      = m_StaticRB_Anchor;              // +0x20
         lpuCount      = &m_StaticRB_Count;              // +0x40
         luCool        = m_CoolDown;                     // +0xAC <- +0xA4
-        lpBodyInertia = nullptr;                        // ⚠️ `stw r29(=0),0x5C` -- drops lpInertia
+        lpBodyInertia = 0;                        // ⚠️ `stw r29(=0),0x5C` -- drops lpInertia
         break;
 
     case FROZEN_BODY:                                   // @0x82BC36CC
@@ -826,7 +826,7 @@ RigidBody* Simulation::AddRigidBody(const rw::math::vpu::Matrix44Affine& lrFrame
     // `lwz r10,0x5C(r11)` ; `cmplwi r10,0` ; `beq` -- the console re-reads mInertia back out
     // of the body it just stored it into (0x82BC34C0/0x82BC3814/0x82BC3B74, one per path), so
     // the STATIC arm always skips the block even though the block is emitted there.
-    if (lpBody->mInertia != nullptr)
+    if (lpBody->mInertia != 0)
         lpBody->InertiaUpdate(lpBody->mInertia);        // mIfull/+0x70, mIsplt/+0x80, mInvm/+0x7C
 
     // ---- 5. the common tail ---------------------------------------------------------------
@@ -1425,7 +1425,7 @@ void Simulation::Horus_Pipeline()                       // @ 0x82BC1A20  (any mi
 // -------------------------------------------------------------------------------------
 void Simulation::SpyContactJacobians()
 {
-    static_assert(sizeof(ContactJacobianSpy) <= sizeof(Contact),
+    CGS_STATIC_ASSERT((sizeof(ContactJacobianSpy) <= sizeof(Contact)),
                   "the in-place emit must stay behind the read cursor");
 
     const f32 lfInvTsSq = 1.0f / (m_TimeStep * m_TimeStep);         // +0xA0

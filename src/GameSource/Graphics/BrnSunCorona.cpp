@@ -164,7 +164,7 @@ namespace
         f32 mafPosition[3];   // +0x00  POSITION0  -- ALREADY IN NDC
         f32 mafUv[2];         // +0x0C  TEXCOORD0
     };
-    static_assert(sizeof(SunCoronaVertex) == 20, "the sun-corona vertex is the console's 20-byte record");
+    CGS_STATIC_ASSERT((sizeof(SunCoronaVertex) == 20), "the sun-corona vertex is the console's 20-byte record");
 
     void SunCoronaLog(const char* lpcMessage)
     {

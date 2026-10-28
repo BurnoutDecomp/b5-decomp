@@ -9,17 +9,17 @@
 // Pin the X360-proven PadOutputInformation field offsets (the controller bridges read these by
 // name; the record must stay 932 bytes so OutputBuffer::maPadOutputInformation[7] does not move).
 namespace CgsInput { namespace InputIO {
-static_assert(sizeof(PadOutputInformation) == 932, "PadOutputInformation must be 0x3A4 bytes");
-static_assert(offsetof(PadOutputInformation, mfStickLX)       == 0x00,  "stickLX @ +0x00");
-static_assert(offsetof(PadOutputInformation, maActionInfo)    == 0x18,  "action table @ +0x18");
-static_assert(offsetof(PadOutputInformation, muConnectionWord)== 0x398, "connection word @ +0x398");
-static_assert(offsetof(PadOutputInformation, meControllerState)==0x39C, "controller state @ +0x39C");
-static_assert(offsetof(PadOutputInformation, mbDisconnected)  == 0x3A0, "disconnected flag @ +0x3A0");
-static_assert(sizeof(ActionInfo) == 8, "ActionInfo must be 8 bytes");
+CGS_STATIC_ASSERT((sizeof(PadOutputInformation) == 932), "PadOutputInformation must be 0x3A4 bytes");
+CGS_STATIC_ASSERT((offsetof(PadOutputInformation, mfStickLX)       == 0x00),  "stickLX @ +0x00");
+CGS_STATIC_ASSERT((offsetof(PadOutputInformation, maActionInfo)    == 0x18),  "action table @ +0x18");
+CGS_STATIC_ASSERT((offsetof(PadOutputInformation, muConnectionWord)== 0x398), "connection word @ +0x398");
+CGS_STATIC_ASSERT((offsetof(PadOutputInformation, meControllerState)==0x39C), "controller state @ +0x39C");
+CGS_STATIC_ASSERT((offsetof(PadOutputInformation, mbDisconnected)  == 0x3A0), "disconnected flag @ +0x3A0");
+CGS_STATIC_ASSERT((sizeof(ActionInfo) == 8), "ActionInfo must be 8 bytes");
 
 // Pin the sizes of the two record types the Set/Get accessors below copy.
-static_assert(sizeof(CgsInput::Device::WheelFFSpring) == 8, "WheelFFSpring must be 8 bytes");
-static_assert(sizeof(CgsSystem::TimerStatusInterface) == 48, "TimerStatusInterface must be 48 bytes");
+CGS_STATIC_ASSERT((sizeof(CgsInput::Device::WheelFFSpring) == 8), "WheelFFSpring must be 8 bytes");
+CGS_STATIC_ASSERT((sizeof(CgsSystem::TimerStatusInterface) == 48), "TimerStatusInterface must be 48 bytes");
 } }
 
 // =============================================================================

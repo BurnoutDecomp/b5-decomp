@@ -32,7 +32,7 @@
 // called from InSceneUpdateInterface::Append.
 //
 // X360-attested element stride (`slwi r, count, 5` == *32).
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::InEventAddForCollision) == 32,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::InEventAddForCollision) == 32),
               "InEventAddForCollision stride 32");
 
 template bool

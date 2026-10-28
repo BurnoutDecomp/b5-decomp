@@ -39,10 +39,10 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-struct alignas(16) WheelPhysicalStates
+struct CGS_ALIGN(16) WheelPhysicalStates
 {
     // BrnDeformationEvents.h:216
-    struct alignas(16) WheelPhysicalState
+    struct CGS_ALIGN(16) WheelPhysicalState
     {
         Matrix44Affine mWorldSpaceTransform;        // :218  +0x00
         Vector3        mWorldSpaceVelocity;         // :219  +0x40

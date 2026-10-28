@@ -30,7 +30,7 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunction2.h"     // DefineFunction2 value + its record
 #include "SDKs/EATech/include/Apt/AptCIH.h"                 // ctx->mpCIH -> AptValue* upcast
 
-#include <cstdint>
+#include "types.hpp"
 #include <new>      // placement new (operator new + ctor at the GC-pool slot)
 
 // AptObject::SetImplementedObjects (record the interface prototypes a class

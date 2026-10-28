@@ -421,7 +421,7 @@ void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppl
     if (mbChainActive && miCurrentChainableMultiplier < liMaxMultiplier)
     {
         ChainableMultiplierInfo* lpInfo = lpaMultiplierInfo->AddNew();
-        CGS_ASSERT(lpInfo != nullptr, "lpChainableMultiplierInfo");
+        CGS_ASSERT(lpInfo != 0, "lpChainableMultiplierInfo");
         lpInfo->miChainableScore = miChainableScore;
         lpInfo->miChainableField = miChainableField;
         lpInfo->miSuppliedValue  = liSuppliedValue;

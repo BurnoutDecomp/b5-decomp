@@ -103,88 +103,88 @@ public:
     // UpdateMaxBoost(false), then loads the 34 base tuning params from
     // boostparamsasset collection 576013 and re-zeroes the three Stunt*
     // earnings (B5 pays stunt boost through UpdateStuntBoost instead).
-    virtual bool Prepare() override;
+    virtual bool Prepare() ;
 
     // -- slot 1 --  @0x822C1FC8. The per-frame blue/red boost simulation.
-    virtual void ApplyUpdate(f32 lfTimeStep) override;
+    virtual void ApplyUpdate(f32 lfTimeStep) ;
 
     // -- slot 2 --  @0x822C23E0. Forces red mode, refills the bar and drops one
     // segment below miCombinedBoostLevel.
-    virtual void OnEnterInfiniteBoost() override;
+    virtual void OnEnterInfiniteBoost() ;
 
     // -- slot 3 --  @0x822A6F60. AddBoost(mfTakedownEarning), tail call.
-    virtual void OnTakedown() override;
+    virtual void OnTakedown() ;
 
     // -- slot 4 --  PURE in the base, so a concrete BoostBurnout5 must supply
     // it; ARTIST vtable slot 4 targets the shared empty body @0x8284CB38.
-    virtual void OnTakenDownByAIOrPlayer() override;
+    virtual void OnTakenDownByAIOrPlayer() ;
 
     // -- slot 5 --  PURE in the base; no BoostBurnout5 symbol. Folded onto one
     // directly targets BoostBurnout2's implementation @0x822A6E68 in the
     // ARTIST vtable.
-    virtual void OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType) override;
+    virtual void OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType) ;
 
     // -- slot 6 --  PURE in the base; no BoostBurnout5 symbol. Folded onto
     // BoostBurnout3::OnNearMiss @0x822A66A8 in the ARTIST vtable.
-    virtual void OnNearMiss(ENearMissType leNearMissType) override;
+    virtual void OnNearMiss(ENearMissType leNearMissType) ;
 
     // -- slot 7 --  @0x822A6F78. `mbBoosting = false` (stb +0xC5) and nothing
     // else -- the crash-side blue-mode teardown lives in ApplyUpdate.
-    virtual void OnCrash() override;
+    virtual void OnCrash() ;
 
     // -- slot 8 --  PURE in the base; no BoostBurnout5 symbol. Folded onto
     // BoostBurnout3::OnWrecked @0x822C2438 in the ARTIST vtable.
-    virtual void OnWrecked(bool lbIsInOnlineGameMode) override;
+    virtual void OnWrecked(bool lbIsInOnlineGameMode) ;
 
     // -- slot 9 --  @0x822A6A20 (BoostBurnout2/3 fold onto this body).
-    virtual void OnSlammed() override;
+    virtual void OnSlammed() ;
 
     // -- slot 10 -- @0x822A6C68. Switch on the element type: JUMP earns
     // mfStuntJumpEarning, BILLBOARD earns mfStuntBillBoardEarning, SMASH earns
     // nothing in retail.
-    virtual void OnStuntCompletion(BrnGameState::StuntElementType leElementType) override;
+    virtual void OnStuntCompletion(BrnGameState::StuntElementType leElementType) ;
 
     // -- slot 11 -- @0x822A6E50 (BoostBurnout2/3 fold onto this body).
-    virtual void OnShortcut() override;
+    virtual void OnShortcut() ;
 
     // -- slot 12 -- @0x822A6F18. AddBoost(mfTrafficCheck), then latches
     // mbJustTrafficChecked (+0xC2) after the call returns.
-    virtual void OnTrafficCheck() override;
+    virtual void OnTrafficCheck() ;
 
     // -- slot 13 -- @0x822D5330. mfMinBoostAllowedAmount = FLT_EPSILON;
     // miBoostLevel = miCombinedBoostLevel - 1; UpdateMaxBoost(false).
-    virtual void OnStartCrashPlay() override;
+    virtual void OnStartCrashPlay() ;
 
     // -- slot 15 -- @0x822A6F88. Returns the literal "Burnout 5 rules".
     // NOTE the trailing const -- the base slot is `const` and dropping it here
     // would silently mint a 51st vtable slot instead of overriding slot 15.
-    virtual const char* GetName() const override;
+    virtual const char* GetName() const ;
 
     // -- slot 17 -- @0x822A6C50. `return meBoostMode == E_BOOSTMODE_B2_BLUE;`
     // (NON-const, matching the base slot). BoostBurnout2/3 do not override it.
-    virtual bool IsBlueMode() override;
+    virtual bool IsBlueMode() ;
 
     // -- slot 18 -- @0x822A70C0. Asserts lpOutNumChained, writes max(
     // miChainSize, 0) through it, then reads AND clears the base's
     // mbChainNotifyPending (+0xCB, lbz/stb @0x822A7120).
-    virtual bool GetIsChainNotifyPending(u32* lpOutNumChained) override;
+    virtual bool GetIsChainNotifyPending(u32* lpOutNumChained) ;
 
     // -- slot 41 -- @0x822C2410. Zeroes mfBoostAmount/miBoostLevel/
     // mfHiddenBoost/meBoostMode, then UpdateMaxBoost.
-    virtual void RemoveAllBoostAndChunks() override;
+    virtual void RemoveAllBoostAndChunks() ;
 
     // -- slot 46 -- @0x822C1FC0. `UpdateMaxBoost(true)`, tail call.
-    virtual void OnDriveThru() override;
+    virtual void OnDriveThru() ;
 
     // -- slot 47 -- @0x822A6BD8. Per-mode gate: red compares mfBoostAmount
     // against 0 when already boosting and against mfMinBoostAllowedAmount
     // otherwise; blue compares against 0; any other mode returns false.
-    virtual bool AreWeAllowedToBoost() override;
+    virtual bool AreWeAllowedToBoost() ;
 
     // -- slot 48 -- @0x822A6F98. Stunt-boost accumulation from the completed
     // stunt action (barrel rolls, air spin, handbrake turn, clean landing).
     virtual void UpdateStuntBoost(
-        const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpAction) override;
+        const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpAction) ;
 
 private:
     // NON-virtual, private. @0x822A6CA8, called only from ApplyUpdate
@@ -233,29 +233,29 @@ private:
     // pointer members to a base that is 0x130 on console and host alike).
     static void _AssertLayout()
     {
-        static_assert(offsetof(BoostBurnout5, meBoostMode)            == 0x130, "Prepare stw @0x822C1DC0 / IsBlueMode lwz 0x130 @0x822A6C50");
-        static_assert(offsetof(BoostBurnout5, mbLeaveBlueDueToCrash)  == 0x134, "OnEnterInfiniteBoost stb 0x134 @0x822C2400");
-        static_assert(offsetof(BoostBurnout5, mbLeaveBlueDueToInsufficientHidden) == 0x135, "BlueModeRequestBoost stb 0x135 @0x822A6E24");
-        static_assert(offsetof(BoostBurnout5, mbSwicthBlueToRed)      == 0x136, "ApplyUpdate stb 0x136 @0x822C21BC");
-        static_assert(offsetof(BoostBurnout5, mbAddRemoveChunkMode)   == 0x137, "Prepare stb @0x822C1DFC");
-        static_assert(offsetof(BoostBurnout5, mbAllowBoostEarning)    == 0x138, "Prepare stb @0x822C1E04");
-        static_assert(offsetof(BoostBurnout5, mfHiddenBoost)          == 0x13C, "BlueModeRequestBoost lfs 0x13C @0x822A6D50");
-        static_assert(offsetof(BoostBurnout5, mbBoostInterrupted)     == 0x140, "ApplyUpdate stb 0x140 @0x822C21A8");
-        static_assert(offsetof(BoostBurnout5, miChainSize)            == 0x144, "GetIsChainNotifyPending lwz 0x144 @0x822A7104");
-        static_assert(offsetof(BoostBurnout5, mfBlueCrashDecrease)    == 0x148, "Prepare stfs 50.0f @0x822C1DD4");
-        static_assert(offsetof(BoostBurnout5, mStuntRollInProgress)   == 0x150, "Prepare stvx128 r11=0x150 @0x822C1DF8");
-        static_assert(offsetof(BoostBurnout5, mvPositionLastFrame)    == 0x160, "Prepare stvx128 r10=0x160 @0x822C1DF0");
-        static_assert(offsetof(BoostBurnout5, mvTakeOffAtVec)         == 0x170, "Prepare stvx128 r9=0x170 @0x822C1E00");
-        static_assert(offsetof(BoostBurnout5, mvLandAtVec)            == 0x180, "Prepare stvx128 r8=0x180 @0x822C1E08");
-        static_assert(offsetof(BoostBurnout5, mfBearingLastFrame)     == 0x190, "Prepare stfs @0x822C1DBC");
-        static_assert(offsetof(BoostBurnout5, mfAngleSoFar)           == 0x194, "Prepare stfs @0x822C1DC4");
-        static_assert(offsetof(BoostBurnout5, mfTimeElapsed)          == 0x198, "Prepare stfs @0x822C1DDC");
-        static_assert(offsetof(BoostBurnout5, mfTimeBoosting)         == 0x19C, "ApplyUpdate lfs 0x19C @0x822C2174");
-        static_assert(offsetof(BoostBurnout5, mbHandbreakTurnAttempting) == 0x1A0, "Prepare stb @0x822C1E0C");
-        static_assert(offsetof(BoostBurnout5, mbWasJustInTheAir)      == 0x1A1, "Prepare stb @0x822C1E10");
-        static_assert(offsetof(BoostBurnout5, mbTestForCleanLanding)  == 0x1A2, "Prepare stb @0x822C1E14");
-        static_assert(sizeof(BoostBurnout5) == 0x1B0, "16-aligned tail after the +0x1A2 bool");
-        static_assert(alignof(BoostBurnout5) == 16, "four Vector3 members force 16-byte alignment (console stvx128)");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, meBoostMode)            == 0x130), "Prepare stw @0x822C1DC0 / IsBlueMode lwz 0x130 @0x822A6C50");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbLeaveBlueDueToCrash)  == 0x134), "OnEnterInfiniteBoost stb 0x134 @0x822C2400");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbLeaveBlueDueToInsufficientHidden) == 0x135), "BlueModeRequestBoost stb 0x135 @0x822A6E24");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbSwicthBlueToRed)      == 0x136), "ApplyUpdate stb 0x136 @0x822C21BC");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbAddRemoveChunkMode)   == 0x137), "Prepare stb @0x822C1DFC");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbAllowBoostEarning)    == 0x138), "Prepare stb @0x822C1E04");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mfHiddenBoost)          == 0x13C), "BlueModeRequestBoost lfs 0x13C @0x822A6D50");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbBoostInterrupted)     == 0x140), "ApplyUpdate stb 0x140 @0x822C21A8");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, miChainSize)            == 0x144), "GetIsChainNotifyPending lwz 0x144 @0x822A7104");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mfBlueCrashDecrease)    == 0x148), "Prepare stfs 50.0f @0x822C1DD4");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mStuntRollInProgress)   == 0x150), "Prepare stvx128 r11=0x150 @0x822C1DF8");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mvPositionLastFrame)    == 0x160), "Prepare stvx128 r10=0x160 @0x822C1DF0");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mvTakeOffAtVec)         == 0x170), "Prepare stvx128 r9=0x170 @0x822C1E00");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mvLandAtVec)            == 0x180), "Prepare stvx128 r8=0x180 @0x822C1E08");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mfBearingLastFrame)     == 0x190), "Prepare stfs @0x822C1DBC");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mfAngleSoFar)           == 0x194), "Prepare stfs @0x822C1DC4");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mfTimeElapsed)          == 0x198), "Prepare stfs @0x822C1DDC");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mfTimeBoosting)         == 0x19C), "ApplyUpdate lfs 0x19C @0x822C2174");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbHandbreakTurnAttempting) == 0x1A0), "Prepare stb @0x822C1E0C");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbWasJustInTheAir)      == 0x1A1), "Prepare stb @0x822C1E10");
+        CGS_STATIC_ASSERT((offsetof(BoostBurnout5, mbTestForCleanLanding)  == 0x1A2), "Prepare stb @0x822C1E14");
+        CGS_STATIC_ASSERT((sizeof(BoostBurnout5) == 0x1B0), "16-aligned tail after the +0x1A2 bool");
+        CGS_STATIC_ASSERT((__alignof(BoostBurnout5) == 16), "four Vector3 members force 16-byte alignment (console stvx128)");
     }
 };
 

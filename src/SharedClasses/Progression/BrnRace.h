@@ -83,7 +83,7 @@ Race::GetAiSectionIndexArray() const
 // The console's own stride for this record: GuiCache::GetPresetRace indexes its preset-race
 // array as `120 * (index + 170) + cache`, and every producer/consumer memcpy of a whole race
 // is a 120-byte one. Pin the host size to it.
-static_assert(sizeof(Race) == 120, "BrnProgression::Race is the 120-byte race record");
+CGS_STATIC_ASSERT((sizeof(Race) == 120), "BrnProgression::Race is the 120-byte race record");
 
 }
 

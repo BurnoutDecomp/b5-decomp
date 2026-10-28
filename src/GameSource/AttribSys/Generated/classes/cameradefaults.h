@@ -48,7 +48,7 @@ namespace Gen
         // 32-bit Attrib::Key spelling here truncated it, so every name-keyed collection
         // resolve missed -- the identical defect the CLASS key had until c27208fc.
         // ⚠️ THE KEY IS NO LONGER DEFAULTED -- see the ELEMENT ctor below.
-        explicit cameradefaults(u64 luCollectionKey, void* lpOwner = nullptr);
+        explicit cameradefaults(u64 luCollectionKey, void* lpOwner = 0);
 
         // ⭐ THE ELEMENT / DEFAULT ctor -- X360 `sub_827DC8C8`, the ONE non-shotgroup slot
         // build in DirectorResourceManager::DirectorResourceManager @0x827DEB98 (offset
@@ -62,7 +62,7 @@ namespace Gen
         // this class is held BY VALUE inside DirectorResourceManager, which is reached
         // from the file-scope static gGameModule, so default construction runs PRE-MAIN
         // and must not call Attrib::FindCollection.
-        explicit cameradefaults(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit cameradefaults(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The base validity test, re-exported past the PRIVATE inheritance (same shape as
         // shotgroup's). DirectorResourceManager's PC bank diagnostic reads it; the console

@@ -146,7 +146,7 @@ namespace BrnAI
         // DWARF BrnResetOnTrackManager.h:78. 32-byte element. Layout-identical to the copy in
         // the committed BrnResetOnTrackManagerTypes.h (Vector3 mPosition@0 + f32 mfTime@0x10,
         // padded to 32 by the 16-byte align).
-        struct alignas(16) RecentResetEntry
+        struct CGS_ALIGN(16) RecentResetEntry
         {
             Vector3 mPosition; // +0x00
             f32     mfTime;    // +0x10
@@ -160,7 +160,7 @@ namespace BrnAI
         // and ComputeResetOnTrack passes the same 48-byte stack block to every strategy, so the
         // shape is the strategies' shared contract rather than one function's local. The section
         // pointer is opaque here (AISection's own home is the AI section-data TU, unmounted).
-        struct alignas(16) ResetOnTrackCoords
+        struct CGS_ALIGN(16) ResetOnTrackCoords
         {
             const void* mpAISection;   // +0x00  (AISection*, opaque on this build)
             Vector3     mPosition;     // +0x10

@@ -115,8 +115,8 @@ namespace BrnGameState
         u16 mu16X360Tail14;        // +0x14, handler reads this halfword; semantic name unresolved
         u16 mu16X360Tail16;        // +0x16, handler reads this halfword; semantic name unresolved
     };
-    static_assert(offsetof(StuntInfo, mu16X360Tail14) == 0x14 &&
-                  offsetof(StuntInfo, mu16X360Tail16) == 0x16 && sizeof(StuntInfo) == 24,
+    CGS_STATIC_ASSERT((offsetof(StuntInfo, mu16X360Tail14) == 0x14 &&
+                  offsetof(StuntInfo, mu16X360Tail16) == 0x16 && sizeof(StuntInfo) == 24),
                   "X360 WasStuntRecentlyPerformed copies six dwords");
 
     // DWARF BrnStuntModeScoring.h:74. Per-category running state used while rating a stunt.

@@ -43,11 +43,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides -------------------------------------------
-        void        Construct() override;
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;
-        const char* GetName() const override;
+        void        Construct() ;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;
+        const char* GetName() const ;
 
     private:
         Camera::BehaviourHandle<Camera::BehaviourRenderMetrics> mCam;      // +0x180

@@ -33,14 +33,14 @@ struct AmbienceEffect : public BrnSound::Logic::BrnEffectObject,
     // Effect-object factory hook. Returns the IResourceRequester view.
     static BrnSound::Logic::IResourceRequester* CreateObj( u32 luFlavour );
 
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    void UpdateParams(f32 afTimeStep) override;
-    bool Detach() override;
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    void UpdateParams(f32 afTimeStep) ;
+    bool Detach() ;
 
-    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const ;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
-                           f32 afGain, f32 afElapsedTime) override;
+                           f32 afGain, f32 afElapsedTime) ;
 
     // Members in declaration order.
     CgsSound::Logic::VoiceWrapper::CreateParams mParams;

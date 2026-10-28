@@ -73,6 +73,6 @@ namespace CgsSceneManager
             }
         }
 
-        return nullptr;
+        return 0;
     }
 }

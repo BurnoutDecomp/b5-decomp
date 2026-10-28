@@ -294,13 +294,13 @@ namespace CgsGraphics
     // members in the copied extent). Never called.
     inline void Camera_AssertLayout()
     {
-        static_assert(sizeof(Camera) == 0x170, "CgsGraphics::Camera sizeof must be 368 (X360 embed)");
-        static_assert(__alignof(Camera) == 16, "CgsGraphics::Camera must be 16-aligned");
-        static_assert(offsetof(Camera, mView)              == 0x00,  "mView @0x00");
-        static_assert(offsetof(Camera, mProjection)        == 0x40,  "mProjection @0x40");
-        static_assert(offsetof(Camera, mViewProjection)    == 0x80,  "mViewProjection @0x80");
-        static_assert(offsetof(Camera, maClipState)        == 0xC0,  "maClipState @0xC0");
-        static_assert(offsetof(Camera, maProjectionScalars)== 0x140, "maProjectionScalars @0x140");
+        CGS_STATIC_ASSERT((sizeof(Camera) == 0x170), "CgsGraphics::Camera sizeof must be 368 (X360 embed)");
+        CGS_STATIC_ASSERT((__alignof(Camera) == 16), "CgsGraphics::Camera must be 16-aligned");
+        CGS_STATIC_ASSERT((offsetof(Camera, mView)              == 0x00),  "mView @0x00");
+        CGS_STATIC_ASSERT((offsetof(Camera, mProjection)        == 0x40),  "mProjection @0x40");
+        CGS_STATIC_ASSERT((offsetof(Camera, mViewProjection)    == 0x80),  "mViewProjection @0x80");
+        CGS_STATIC_ASSERT((offsetof(Camera, maClipState)        == 0xC0),  "maClipState @0xC0");
+        CGS_STATIC_ASSERT((offsetof(Camera, maProjectionScalars)== 0x140), "maProjectionScalars @0x140");
     }
 #endif
 }

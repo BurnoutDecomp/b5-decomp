@@ -369,7 +369,7 @@ namespace BrnAI
         if (vpu::Magnitude(lCross) > KF_USEFUL_DIRECTION_MIN_LENGTH)
             return lCross;                                                                  // NOT normalised on the console
 
-        return Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+        { const Vector3 lResult = { 1.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
     }
 
     // ==================================================================================

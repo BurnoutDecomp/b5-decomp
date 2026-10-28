@@ -60,7 +60,7 @@ namespace Playback
             lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
             lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
         }
-        static_assert(sizeof(CgsResource::ResourceDescriptor) == 40,
+        CGS_STATIC_ASSERT((sizeof(CgsResource::ResourceDescriptor) == 40),
                       "X360 serialised descriptor is 5x{size,align}=40B");
 
         // The PC rwcore DoAllocate ABI takes the narrower rw::ResourceDescriptor (<4>);

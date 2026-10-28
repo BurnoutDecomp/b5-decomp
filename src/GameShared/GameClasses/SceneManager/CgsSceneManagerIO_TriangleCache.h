@@ -32,7 +32,7 @@ namespace SceneManagerIO
         // Hex-Rays int artifact -- corrected once that manager accessor was homed).
         const CgsGeometric::Triangle4* GetCache(s32 liObjectIndex) const
         {
-            CGS_ASSERT(mpTriangleCacheManager != nullptr, "mpTriangleCacheManager != NULL");
+            CGS_ASSERT(mpTriangleCacheManager != 0, "mpTriangleCacheManager != NULL");
             return mpTriangleCacheManager->GetTrianglesForCachedObject(liObjectIndex);
         }
 
@@ -59,7 +59,7 @@ namespace SceneManagerIO
         // member's constness is a separate, tree-wide change).
         void SetTriangleCacheManager(TriangleCacheManager* lpTriangleCacheManager)
         {
-            CGS_ASSERT(lpTriangleCacheManager != nullptr, "lpTriangleCacheManager != NULL");
+            CGS_ASSERT(lpTriangleCacheManager != 0, "lpTriangleCacheManager != NULL");
             mpTriangleCacheManager = lpTriangleCacheManager;
         }
 
@@ -70,7 +70,7 @@ namespace SceneManagerIO
         // pointer store). Assert message verbatim from the X360 rodata (no newline).
         void Append(const TriangleCacheInterface* lpInterfaceToAppend)
         {
-            CGS_ASSERT(lpInterfaceToAppend->mpTriangleCacheManager != nullptr,
+            CGS_ASSERT(lpInterfaceToAppend->mpTriangleCacheManager != 0,
                        "lpInterfaceToAppend->mpTriangleCacheManager != NULL");
             mpTriangleCacheManager = lpInterfaceToAppend->mpTriangleCacheManager;
         }

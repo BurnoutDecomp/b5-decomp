@@ -51,12 +51,8 @@ namespace CgsGui
         ResourceRequestTypes meType;
     };
 
-    // CgsGuiResourceModuleIO.h:150 (Feb-2007 source) / DecFIGS DWARF:
-    // request records are { request type, load/unload, file-name pointer, request id,
-    // resource id }. The X360 AddResourceRequests body copies a 24-byte record because
-    // pointers are 4 bytes there; on the PC/x64 gate the file-name pointer widens, so
-    // the queue payload is sizeof(GuiEventLoadRequest) == 32. Event id 39 is carried by
-    // the variable-event queue header, not by an in-payload GuiEvent<39> base.
+    // Native request image: type@0, operation@4, path@8, request id@12,
+    // resource id@16. Queue id 39 belongs to the event queue header.
     struct GuiEventLoadRequest : public CgsModule::Event
     {
         ResourceRequestTypes      meRequestType;
@@ -89,8 +85,10 @@ namespace CgsGui
         s32 GetEventType() const { return 39; }
     };
 
-    static_assert(sizeof(GuiEventLoadRequest) == 32,
-                  "GuiEventLoadRequest PC layout (X360 payload size is 24 with 4-byte ptrs)");
+    CGS_STATIC_ASSERT((sizeof(GuiEventLoadRequest) == 24), "X360 load-request payload");
+    CGS_STATIC_ASSERT((offsetof(GuiEventLoadRequest, mpacFileToLoad) == 8), "X360 load-request path");
+    CGS_STATIC_ASSERT((offsetof(GuiEventLoadRequest, muLoadRequestId) == 12), "X360 load-request id");
+    CGS_STATIC_ASSERT((offsetof(GuiEventLoadRequest, muResourceId) == 16), "X360 load-request resource");
 
     // CgsGuiResourceModuleIO.h:114 (DWARF): GuiEventLoadNotification : public GuiEvent<14>,
     // with members { ResourceHandle mResourceHandle; ResourceRequestTypes meRequestType;
@@ -110,21 +108,15 @@ namespace CgsGui
     //     X360 +0x00  mResourceHandle  (8 bytes: 2 x 4-byte ptr)
     //     X360 +0x08  meRequestType    (4 bytes; the value the consumer switches on)
     //     X360 +0x0C  muLoadRequestId  (4 bytes)
-    // Modelled NOT as `: public GuiEvent<14>` (whose committed PC model would push these to
-    // +0x0C and mismatch the asm) but as the flat record the X360 asm attests. Member ORDER
-    // is preserved and the fields are accessed BY NAME by the consumer; on the x64 PC build
-    // the pointers in ResourceHandle widen to 8 bytes (handle = 16, so meRequestType lands at
-    // +0x10 and the record is 24 bytes) -- the standard "widen pointers for PC" rule. The
-    // size pin below records the PC layout; the X360 figure (16) is noted above.
     struct GuiEventLoadNotification : public CgsModule::Event
     {
-        CgsResource::ResourceHandle mResourceHandle; // X360 +0x00 (8) / PC +0x00 (16)
-        ResourceRequestTypes        meRequestType;   // X360 +0x08    / PC +0x10
-        u32                         muLoadRequestId; // X360 +0x0C    / PC +0x14
+        CgsResource::ResourceHandle mResourceHandle; // X360 +0x00 (8)
+        ResourceRequestTypes        meRequestType;   // X360 +0x08
+        u32                         muLoadRequestId; // X360 +0x0C
     };
-    // PC layout (x64 widths): ResourceHandle is two 8-byte pointers (16) + two 4-byte words.
-    static_assert(sizeof(GuiEventLoadNotification) == 24,
-                  "GuiEventLoadNotification PC layout (X360 payload size is 16 with 4-byte ptrs)");
+    CGS_STATIC_ASSERT((sizeof(GuiEventLoadNotification) == 16), "X360 load-notification payload");
+    CGS_STATIC_ASSERT((offsetof(GuiEventLoadNotification, meRequestType) == 8), "X360 load-notification type");
+    CGS_STATIC_ASSERT((offsetof(GuiEventLoadNotification, muLoadRequestId) == 12), "X360 load-notification id");
 
     // CgsGuiResourceModuleIO.h:130 / :146 (DWARF). Unlike load notifications, unload records
     // carry only the request type, the original load-request id, and the file-name hash. The X360
@@ -144,9 +136,9 @@ namespace CgsGui
         u32                  muFileNameHash;  // X360 +0x08
     };
 
-    static_assert(sizeof(GuiEventUnloadRequestNotification) == 12,
+    CGS_STATIC_ASSERT((sizeof(GuiEventUnloadRequestNotification) == 12),
                   "GuiEventUnloadRequestNotification flat payload size");
-    static_assert(sizeof(GuiEventUnloadNotification) == 12,
+    CGS_STATIC_ASSERT((sizeof(GuiEventUnloadNotification) == 12),
                   "GuiEventUnloadNotification flat payload size");
 }
 

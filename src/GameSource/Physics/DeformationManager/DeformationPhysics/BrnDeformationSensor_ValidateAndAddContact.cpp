@@ -22,7 +22,7 @@
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::Magnitude (the normal-magnitude tripwire)
 
 #include <cstdlib>   // getenv    -- the opt-in [latch] bring-up probe only
-#include <cstdint>   // uintptr_t -- the opt-in [latch] bring-up probe only
+#include "types.hpp"   // uintptr_t -- the opt-in [latch] bring-up probe only
 
 namespace BrnPhysics
 {
@@ -56,7 +56,7 @@ namespace Deformation
 		}
 		inline Vector3 Sub3(const Vector3& lA, const Vector3& lB)
 		{
-			return Vector3{ lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f };
+			{ const Vector3 lResult = { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f }; return lResult; }
 		}
 
 		// DWARF: maStoredContacts[3].
@@ -156,7 +156,7 @@ namespace Deformation
 			lPointOnA.x * lR.x + lPointOnA.y * lU.x + lPointOnA.z * lAt.x + lT.x,
 			lPointOnA.x * lR.y + lPointOnA.y * lU.y + lPointOnA.z * lAt.y + lT.y,
 			lPointOnA.x * lR.z + lPointOnA.y * lU.z + lPointOnA.z * lAt.z + lT.z, 0.0f };
-		if ( mpLocalSpaceSphere != nullptr )
+		if ( mpLocalSpaceSphere != 0 )
 		{
 			const Vector4& lrCentre = SphereVec(mpLocalSpaceSphere);
 			lLocalA.x -= lrCentre.x;
@@ -195,7 +195,7 @@ namespace Deformation
 		// sensor's sphere centre to B (@0x825E22BC/0x825E22D4), which is only meaningful
 		// against a sphere-relative B.
 		lCandidate.mLocalPointOnB = lPointOnB;              // world (a world contact keeps this)
-		if ( lpOtherCar != nullptr )
+		if ( lpOtherCar != 0 )
 		{
 			// The console dereferences lpOtherSensor->mpLocalSpaceSphere unconditionally on this
 			// arm (the two are always supplied together by ReadPotentialContact); the null tests
@@ -204,7 +204,7 @@ namespace Deformation
 			lpOtherCar->GetInverseTransform(lInverseOtherCarTransform);
 
 			Vector3 lLocalB = rw::math::vpu::TransformPoint(lInverseOtherCarTransform, lPointOnB);
-			if ( lpOtherSensor != nullptr && lpOtherSensor->mpLocalSpaceSphere != nullptr )
+			if ( lpOtherSensor != 0 && lpOtherSensor->mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrOtherCentre = SphereVec(lpOtherSensor->mpLocalSpaceSphere);
 				lLocalB.x -= lrOtherCentre.x;

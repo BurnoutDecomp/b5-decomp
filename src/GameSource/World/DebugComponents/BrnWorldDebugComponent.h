@@ -25,8 +25,8 @@ namespace BrnWorld
         void Construct(WorldModule* lpWorldModule);
         void Update(const BrnWorldIO::DebugController* lpDebugController);
 
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) ;
 
         bool HaveDebugController() const { return mbHaveDebugController; }
         bool GetWantsDebugControllerFocus() const { return HaveDebugController(); }
@@ -39,10 +39,10 @@ namespace BrnWorld
         void HarnessSetAIDrivesPlayer(bool lbEnabled);
 
     protected:
-        const char* GetName() const override;
-        bool IsSimple() const override;
-        void OnActivate() override;
-        void OnRegister() override;
+        const char* GetName() const ;
+        bool IsSimple() const ;
+        void OnActivate() ;
+        void OnRegister() ;
 
     private:
         void DrawVehicleGun(CgsDev::Debug3DImmediateRender* lpDisplay) const;

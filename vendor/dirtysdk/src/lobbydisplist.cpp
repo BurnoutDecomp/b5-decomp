@@ -12,7 +12,7 @@
 #include "lobbysort.h"   // LobbyMSort
 #include "dirtymem.h"    // DirtyMemAlloc / DirtyMemFree / DirtyMemGroupQuery
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>
 
 // memory module id 'ldsp'

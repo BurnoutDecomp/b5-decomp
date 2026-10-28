@@ -182,10 +182,10 @@ namespace BrnGameState
         typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
         GameActionQueueImpl* lpQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpGameActionQueue);
 
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liType = lpQueueImpl->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             if (liType == 94)
             {

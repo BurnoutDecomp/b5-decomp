@@ -13,7 +13,7 @@ namespace rw { namespace movie
             VIDEOFORMAT_YV12, VIDEOFORMAT_YV12_BORDER48, VIDEOFORMAT_RGB24,
             VIDEOFORMAT_ARGB32, VIDEOFORMAT_MAXNUM
         };
-        using FrameNumber = s32;
+        typedef s32 FrameNumber;
         VideoRenderable();
         ~VideoRenderable();
         void SetData(u8* lpData, unsigned int luIndex) { mData[luIndex] = lpData; }

@@ -101,12 +101,12 @@ BrnSound::Logic::IResourceRequester* HybridExhaustControl::Create( bool abFlavou
 // Vector2[6] table, the two EngineMix values, and the mfPercentOf* thresholds.
 // ---------------------------------------------------------------------------
 HybridExhaustControl::HybridExhaustControl()
-    : mpPhysicsControl(nullptr)
-    , mpEngineControl(nullptr)
-    , mpShiftControl(nullptr)
-    , mpClutchControl(nullptr)
-    , mVehicleEngineAttributes(nullptr, nullptr)                 // vehicleengine(this+0x48,0,0)
-    , mMasterVehicleEngineComponentAttributes(nullptr, nullptr)  // vehicleengine(this+0x58,0,0)
+    : mpPhysicsControl(0)
+    , mpEngineControl(0)
+    , mpShiftControl(0)
+    , mpClutchControl(0)
+    , mVehicleEngineAttributes(0, 0)                 // vehicleengine(this+0x48,0,0)
+    , mMasterVehicleEngineComponentAttributes(0, 0)  // vehicleengine(this+0x58,0,0)
     // mAverageDeltaRPM: Average<3,f32> default ctor zeroes maPoints/muNextPoint/mfAverage
     // mPhysicsDeltaRpm / mAudioDeltaRpm / mGinsuRpm: DataPoint<f32> default -> {0,0}
     , mDecelCrossfadeMix(maCrossFadesPoints, 6)
@@ -168,7 +168,7 @@ bool HybridExhaustControl::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return false;
 
@@ -200,11 +200,11 @@ bool HybridExhaustControl::Attach()
         }
     }
 
-    CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != nullptr,
+    CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != 0,
                "mVehicleEngineAttributes.LoopModel()");
-    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != nullptr,
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != 0,
                "mVehicleEngineAttributes.GinsuFileAccel()");
-    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileDecel() != nullptr,
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileDecel() != 0,
                "mVehicleEngineAttributes.GinsuFileDecel()");
 
     // ARTIST @ 0x826998D4..0x826999E0. The decel Ginsu voice fades in over the
@@ -234,11 +234,11 @@ void HybridExhaustControl::UpdateParams(f32 afTimeStep)
     if (!mpPhysicsControl)
         return;
 
-    CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != nullptr,
+    CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != 0,
                "mVehicleEngineAttributes.LoopModel()");
-    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != nullptr,
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileAccel() != 0,
                "mVehicleEngineAttributes.GinsuFileAccel()");
-    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileDecel() != nullptr,
+    CGS_ASSERT(mVehicleEngineAttributes.GinsuFileDecel() != 0,
                "mVehicleEngineAttributes.GinsuFileDecel()");
 
     // ARTIST @ 0x826E3DE0: delta tracking, the virtual Ginsu-RPM mapping, then
@@ -251,9 +251,9 @@ void HybridExhaustControl::UpdateParams(f32 afTimeStep)
 
 void HybridExhaustControl::UpdateDeltaRPM()
 {
-    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
-    CGS_ASSERT(mpShiftControl != nullptr, "mpShiftControl");
-    CGS_ASSERT(mpClutchControl != nullptr, "mpClutchControl");
+    CGS_ASSERT(mpEngineControl != 0, "mpEngineControl");
+    CGS_ASSERT(mpShiftControl != 0, "mpShiftControl");
+    CGS_ASSERT(mpClutchControl != 0, "mpClutchControl");
     if (!mpEngineControl || !mpShiftControl || !mpClutchControl)
         return;
 
@@ -370,9 +370,9 @@ void HybridExhaustControl::UpdateRotationVolume(f32& arfVolume)
 
 void HybridExhaustControl::UpdateMix(f32 /*afTimeStep*/)
 {
-    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
-    CGS_ASSERT(mpShiftControl != nullptr, "mpShiftControl");
-    CGS_ASSERT(mpClutchControl != nullptr, "mpClutchControl");
+    CGS_ASSERT(mpEngineControl != 0, "mpEngineControl");
+    CGS_ASSERT(mpShiftControl != 0, "mpShiftControl");
+    CGS_ASSERT(mpClutchControl != 0, "mpClutchControl");
     if (!mpEngineControl || !mpShiftControl || !mpClutchControl)
         return;
 

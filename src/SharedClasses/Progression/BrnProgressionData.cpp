@@ -7,7 +7,7 @@
 #include "GameSource/GameState/BrnGameActions.h"             // complete BrnProgression::TrophyUnlockData (16-byte) for &mpaTrophyUnlocks[i]
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // ProgressionRankData (pointer-return only)
 #include <cstring>                                           // memset
-#include <cstdint>                                           // uintptr_t (load-time pointer relocation)
+#include "types.hpp"                                           // uintptr_t (load-time pointer relocation)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnProgression::ProgressionData::GetProgressionRankData      @ 0x82311790

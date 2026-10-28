@@ -26,7 +26,7 @@ namespace CgsDev
         // Pool element ctor: a freshly pooled window owns no menu until Prepare pairs it with one.
         MenuWindow::MenuWindow()
             : Window()
-            , mpMenu(nullptr)
+            , mpMenu(0)
         {
         }
 

@@ -126,7 +126,7 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // ResourceRegistrar so the broker's queues/pools are live. The 3 Voices are still
     // grown on top. (Overrides the engine base's virtual Construct -- the root
     // dispatches vtable slot 0 on this+0x280.)
-    void Construct() override;
+    void Construct() ;
 
     // Prepare (X360 0x82703C18, via vtable+0x58). The REAL resumable stage machine
     // (phase B5): capture the logic RW allocator; AttachBuffers; then per the console
@@ -142,7 +142,7 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
 
     virtual void Update(f32 af32GameDt, f32 af32SimDt,
                         CgsModule::IOBuffer* apInputBuffer,
-                        CgsModule::IOBuffer* apOutputBuffer) override;
+                        CgsModule::IOBuffer* apOutputBuffer) ;
 
     // BrnSoundLogicModule.cpp:522 (DWARF). The Burnout update carries the
     // frame's update-set in addition to the generic logic-engine arguments.
@@ -154,18 +154,18 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // ARTIST 0x826978A0 / 0x826978B8. The derived attachment mirrors the
     // generic engine buffer pointers into the Burnout-specific typed pair.
     void AttachBuffers(CgsModule::IOBuffer* apInputBuffer,
-                       CgsModule::IOBuffer* apOutputBuffer) override;
-    void DetachBuffers() override;
+                       CgsModule::IOBuffer* apOutputBuffer) ;
+    void DetachBuffers() ;
 
     // The engine base sizes the LOGIC Environment's state-manager map from this
     // (Prepare's CreateEnvironment stage: {allocator, GetNumberOfStates()}); the 9
     // AddStateManager registrations in CreateStateManagers demand exactly the 9.
-    virtual s32 GetNumberOfStates() override { return KI_NUM_STATE_MANAGERS; }
+    virtual s32 GetNumberOfStates()  { return KI_NUM_STATE_MANAGERS; }
 
     // @ 0x826838C8. The Burnout override of the engine's id generator: hand out the
     // next id from THIS module's own cursor (X360 this+0x5214), skipping the 19
     // RESERVED idents. Bodied in BrnSoundLogicModule.cpp.
-    virtual u32 GetUniqueId() override;
+    virtual u32 GetUniqueId() ;
 
     // @ 0x826E1F10 (DWARF :152; phase C1). Publish the module's accumulated
     // pre-update output block into the caller's scratch buffer (write-locked
@@ -223,7 +223,7 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // IResourceRequester completion callback. BurnoutGlobalData is loaded during
     // Prepare stage 2; this callback rebinds the generated instance to the now-live
     // AttribSys collection so the global effects can consume its RefSpecs.
-    virtual void ResourcesAreReady() override;
+    virtual void ResourcesAreReady() ;
 
     Attrib::Gen::burnoutglobaldata& GetGlobalData() { return mBurnoutGlobalData; }
     const Attrib::Gen::burnoutglobaldata& GetGlobalData() const { return mBurnoutGlobalData; }

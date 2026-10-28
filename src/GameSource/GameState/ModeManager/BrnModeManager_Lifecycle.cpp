@@ -96,7 +96,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mModeManagerDebugComponent.Register();
 
     ScoringSystem* lpScoringSystem = GetScoringSystem();
-    CGS_ASSERT(lpScoringSystem != nullptr, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem != 0, "lpScoringSystem");
     mScoringSystemDebugComponent.Construct(lpScoringSystem);
     mScoringSystemDebugComponent.Register();
 
@@ -127,15 +127,15 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mChallengeManager.Construct(lpGameStateModule, this, lpProgressionManager,
                                 lpRoadRulesManager, lpTriggerQueryManager);
 
-    CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule");      // BrnModeManager.cpp:202
+    CGS_ASSERT(lpGameStateModule != 0, "lpGameStateModule");      // BrnModeManager.cpp:202
     mpGameStateModule = lpGameStateModule;                              // +27992
 
-    CGS_ASSERT(lpProgressionManager != nullptr, "lpProgressionManager");// BrnModeManager.cpp:205
+    CGS_ASSERT(lpProgressionManager != 0, "lpProgressionManager");// BrnModeManager.cpp:205
     mpProgressionManager = lpProgressionManager;                        // +27996
 
     mpTriggerQueryManager = lpTriggerQueryManager;                      // +28000 (no assert on console)
 
-    CGS_ASSERT(lpNetworkRoundManager != nullptr, "lpNetworkRoundManager"); // BrnModeManager.cpp:210
+    CGS_ASSERT(lpNetworkRoundManager != 0, "lpNetworkRoundManager"); // BrnModeManager.cpp:210
     mpNetworkRoundManager = lpNetworkRoundManager;                      // +28004
 
     // ------------------------------------------------------------------------
@@ -145,7 +145,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     // ------------------------------------------------------------------------
     for (s32 liSlot = 0; liSlot < KI_GAME_MODE_SLOTS; ++liSlot)
     {
-        mapGameModes[liSlot] = nullptr;
+        mapGameModes[liSlot] = 0;
     }
 
     mapGameModes[0]  = &mRace;                   // console *(this+0)  = this+72
@@ -172,7 +172,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     // times on the same OnlineStuntRunMode; that is idempotent on console and MUST stay that way.
     for (s32 liSlot = 0; liSlot < KI_GAME_MODE_SLOTS; ++liSlot)
     {
-        if (mapGameModes[liSlot] != nullptr)
+        if (mapGameModes[liSlot] != 0)
         {
             mapGameModes[liSlot]->Construct(this);
         }
@@ -191,7 +191,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     // E_MODE_OFFLINE_RACE, which is the tut-ticker bug (hazards H3).
     // ------------------------------------------------------------------------
     miNumUnsucessfulGameModeAttempts = 0;                                // +3496
-    mpCurrentGameMode                = nullptr;                          // +3480
+    mpCurrentGameMode                = 0;                          // +3480
     mbFinishedOnlineEvent            = false;                            // +38151
     mbInstantIntroSplash             = false;                            // +38152
     meCurrentGameModeType            = GameStateModuleIO::E_MODE_NONE;   // +3476  = -1
@@ -269,7 +269,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
 
     mfTimeInFreeBurn = 0.0f;                                             // +38172
     mfTimeInMode     = 0.0f;                                             // +38176
-    mpGameActionQueue = nullptr;                                         // +28008
+    mpGameActionQueue = 0;                                         // +28008
     mfTimeInOnline   = 0.0f;                                             // +38180
 
     mbNeedToSendNextRequest            = false;                          // +35852
@@ -384,15 +384,15 @@ void ModeManager::ProcessEvent(GameStateModuleIO::EGameEventType leEventType,
 
     // The scorer choice is the CURRENT MODE's online flag, not the module's: a null current mode
     // reads as offline (the console's `beq` arm loads a literal 0 rather than dereferencing).
-    const bool lbOnlineMode = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+    const bool lbOnlineMode = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
 
     // this+13264 == mScoringSystem(+3504) + 0x2620 == the ONLINE stunt scorer;
     // this+4352  == mScoringSystem(+3504) + 0x350  == the OFFLINE stunt scorer.
     StuntModeScoring* lpStuntModeScoring =
         lbOnlineMode ? mScoringSystem.GetOnlineStuntScorer() : mScoringSystem.GetStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != nullptr, "lpStuntModeScoring");
+    CGS_ASSERT(lpStuntModeScoring != 0, "lpStuntModeScoring");
 
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
     const s32 liPlayerActiveRaceCarIndex =
         static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex());
 

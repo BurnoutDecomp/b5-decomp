@@ -44,7 +44,7 @@ AptRenderManagerItem* AptRenderManagerQueue::Add(AptRenderTreeManager::_AptRende
     if (lpNode)
     {
         lpNode->mppRootListHead = ppRootListHead;   // result[1] = a2  (+0x04)
-        lpNode->mpNext          = nullptr;          // *result   = 0   (+0x00)
+        lpNode->mpNext          = 0;          // *result   = 0   (+0x00)
     }
 
     // Tail-append. Empty list -> the node becomes the head; otherwise link it
@@ -73,8 +73,8 @@ void AptRenderManagerQueue::Clean()
     gAptRenderManagerQueueLock.Lock();
 
     AptRenderManagerItem* lpNode = mpHead;   // v8 = *result
-    mpHead = nullptr;                        // *result     = 0
-    mpTail = nullptr;                        // *(result+4) = 0
+    mpHead = 0;                        // *result     = 0
+    mpTail = 0;                        // *(result+4) = 0
 
     while (lpNode)
     {
@@ -93,5 +93,5 @@ void AptRenderManagerQueue::Clean()
 // ---------------------------------------------------------------------------
 bool AptRenderManagerQueue::IsEmpty() const
 {
-    return mpHead == nullptr;
+    return mpHead == 0;
 }

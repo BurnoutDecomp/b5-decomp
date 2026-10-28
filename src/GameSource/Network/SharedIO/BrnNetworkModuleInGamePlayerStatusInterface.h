@@ -156,7 +156,7 @@ namespace BrnNetwork
                         return &maInGamePlayerData[liIndex];
                     }
                 }
-                return nullptr;
+                return 0;
             }
             // Header-inline on the console (the output buffer's Construct carries it): clear every
             // record, empty the game name, zero the player count. +0x9E8 / +0x9EC are left alone.
@@ -242,7 +242,7 @@ namespace BrnNetwork
             // marked victim slot. X360 stride is 4 bytes (slwi idx,2); 8 entries.
             ::EActiveRaceCarIndex maMarkedManActiveRaceCarIndex[::E_ACTIVE_RACE_CAR_INDEX_COUNT]; // +0 (8 * 4 == 32)
         };
-        static_assert(sizeof(MarkedManInterface) == ::E_ACTIVE_RACE_CAR_INDEX_COUNT * 4,
+        CGS_STATIC_ASSERT((sizeof(MarkedManInterface) == ::E_ACTIVE_RACE_CAR_INDEX_COUNT * 4),
                       "MarkedManInterface = 8 x s32 race-car slots (0x20)");
     } // namespace BrnNetworkModuleIO
 } // namespace BrnNetwork

@@ -88,7 +88,7 @@ namespace CgsDev
                 const Metrics& lrMetrics = lrUI.GetMetrics();
                 Window::Prepare(lrMetrics.mfScreenWidth,
                                 lrMetrics.mfTextSize + lrMetrics.mfWindowBorderSize * 2.0f,
-                                nullptr,
+                                0,
                                 KX_FLAGNOCAPTION | KX_FLAGNOCASCADE | KX_FLAGNOCLAMPTOSCREEN);
                 UpdatePosition();
                 lrUI.AddWindow(this);

@@ -51,14 +51,14 @@ namespace CgsGraphics
         lrEntry.mpcName          = const_cast<char*>(lpcName);
         lrEntry.meTexturePurpose = static_cast<s32>(leTexturePurpose);
         lrEntry.miScope          = liScope;
-        if (lrEntry.mpBoundResourceA != nullptr)
+        if (lrEntry.mpBoundResourceA != 0)
         {
-            lrEntry.mpBoundResourceA = nullptr;
+            lrEntry.mpBoundResourceA = 0;
             lrEntry.mClearState      = 0;
         }
-        if (lrEntry.mpBoundResourceB != nullptr)
+        if (lrEntry.mpBoundResourceB != 0)
         {
-            lrEntry.mpBoundResourceB = nullptr;
+            lrEntry.mpBoundResourceB = 0;
             lrEntry.mClearState      = 0;
         }
         lrEntry.mClearState = 0;

@@ -29,7 +29,7 @@ namespace CgsDev
             virtual void    ComputeSize();
             // ARTIST vtable 820DC354 +0x0C -> 827E2F38 (false):
             // hierarchy rows are not actions when deciding which windows to keep.
-            bool IsUseful() const override { return false; }
+            bool IsUseful() const  { return false; }
             virtual void    GetDisplayName(char* lpcBuffer, s32 liBufferLen) const;
             virtual Window* OpenAsWindow();
 

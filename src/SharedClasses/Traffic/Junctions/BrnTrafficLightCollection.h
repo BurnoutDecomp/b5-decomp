@@ -48,10 +48,10 @@ namespace BrnTraffic
     // BrnTraffic::ETrafficLightState (BrnTrafficSharedConstants.h:86, included above). This header
     // carried a second copy of the same enum, so no TU could hold both homes; the copy is retired
     // and these asserts prove the home carries the retired copy's values, enumerator by enumerator.
-    static_assert(E_TRAFFICLIGHTSTATE_RED   == 0, "ETrafficLightState: RED is 0, as the retired copy");
-    static_assert(E_TRAFFICLIGHTSTATE_AMBER == 1, "ETrafficLightState: AMBER is 1, as the retired copy");
-    static_assert(E_TRAFFICLIGHTSTATE_GREEN == 2, "ETrafficLightState: GREEN is 2, as the retired copy");
-    static_assert(E_TRAFFICLIGHTSTATE_COUNT == 3, "ETrafficLightState: COUNT is 3, as the retired copy");
+    CGS_STATIC_ASSERT((E_TRAFFICLIGHTSTATE_RED   == 0), "ETrafficLightState: RED is 0, as the retired copy");
+    CGS_STATIC_ASSERT((E_TRAFFICLIGHTSTATE_AMBER == 1), "ETrafficLightState: AMBER is 1, as the retired copy");
+    CGS_STATIC_ASSERT((E_TRAFFICLIGHTSTATE_GREEN == 2), "ETrafficLightState: GREEN is 2, as the retired copy");
+    CGS_STATIC_ASSERT((E_TRAFFICLIGHTSTATE_COUNT == 3), "ETrafficLightState: COUNT is 3, as the retired copy");
 
     // DWARF BrnTrafficLightCollection.h:60 -- a 2-byte record naming a type's corona run
     // (offset + count into the collection's flat corona arrays). Stride pinned at 2 by
@@ -134,16 +134,16 @@ namespace BrnTraffic
         // private (the BrnJunctionLogicBox.h precedent).
         static void _AssertLayout()
         {
-            static_assert(sizeof(TrafficLightType) == 2, "TrafficLightType stride");
-            static_assert(offsetof(TrafficLightCollection, mpaPosAndYRotations) == 0x08,
+            CGS_STATIC_ASSERT((sizeof(TrafficLightType) == 2), "TrafficLightType stride");
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpaPosAndYRotations) == 0x08),
                           "TrafficLightCollection::mpaPosAndYRotations");
-            static_assert(offsetof(TrafficLightCollection, mpaCoronaPositions) == 0x30,
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpaCoronaPositions) == 0x30),
                           "TrafficLightCollection::mpaCoronaPositions");
-            static_assert(offsetof(TrafficLightCollection, mauInstanceHashOffsets) == 0x38,
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mauInstanceHashOffsets) == 0x38),
                           "TrafficLightCollection::mauInstanceHashOffsets");
-            static_assert(offsetof(TrafficLightCollection, mpauInstanceHashTable) == 0x140,
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpauInstanceHashTable) == 0x140),
                           "TrafficLightCollection::mpauInstanceHashTable");
-            static_assert(offsetof(TrafficLightCollection, mpauInstanceHashToIndexLookup) == 0x148,
+            CGS_STATIC_ASSERT((offsetof(TrafficLightCollection, mpauInstanceHashToIndexLookup) == 0x148),
                           "TrafficLightCollection::mpauInstanceHashToIndexLookup");
         }
 

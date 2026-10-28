@@ -73,12 +73,12 @@ namespace BrnGui
         // screen memcpy's 480 bytes between this type and the GuiCache mirror).
         static void _AssertLayout()
         {
-            static_assert(sizeof(Event) == 44,                                       "Event round-record stride");
-            static_assert(offsetof(GuiEventNetworkGameParams, meGameMode) == 440,    "meGameMode @+0x1B8");
-            static_assert(offsetof(GuiEventNetworkGameParams, meSecurity) == 448,    "meSecurity @+0x1C0");
-            static_assert(offsetof(GuiEventNetworkGameParams, miNumRounds) == 464,   "miNumRounds @+0x1D0");
-            static_assert(offsetof(GuiEventNetworkGameParams, mbRanked) == 479,      "mbRanked @+0x1DF");
-            static_assert(sizeof(GuiEventNetworkGameParams) == 480,                  "the 480-byte wire payload");
+            CGS_STATIC_ASSERT((sizeof(Event) == 44),                                       "Event round-record stride");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkGameParams, meGameMode) == 440),    "meGameMode @+0x1B8");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkGameParams, meSecurity) == 448),    "meSecurity @+0x1C0");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkGameParams, miNumRounds) == 464),   "miNumRounds @+0x1D0");
+            CGS_STATIC_ASSERT((offsetof(GuiEventNetworkGameParams, mbRanked) == 479),      "mbRanked @+0x1DF");
+            CGS_STATIC_ASSERT((sizeof(GuiEventNetworkGameParams) == 480),                  "the 480-byte wire payload");
         }
     };
 }

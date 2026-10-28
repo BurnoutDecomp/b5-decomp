@@ -79,7 +79,7 @@ namespace BrnWorld
         typedef TriggerEntityModuleIO::OutputBuffer_PrePhysics OutputBuffer_PrePhysics;
 
         // -- module lifecycle (X360 0x822D8ED0 / 0x822A8E10 / 0x822A8EC0 / 0x822C42F8) ----------
-        void Construct() override;   // 0x822D8ED0
+        void Construct() ;   // 0x822D8ED0
 
         // ---- ADDITIVE (WorldModule::EntityModulePrePhysicsUpdate @0x827BD5B8,
         //      X360 vtbl+72). Declaration-only; body with this module's own TU.
@@ -104,9 +104,9 @@ namespace BrnWorld
                              TriggerEntityModuleIO::InputBuffer_PreScene* lpInput,
                              TriggerEntityModuleIO::OutputBuffer_PreScene* lpOutput,
                              BrnUpdateSet lUpdateSet );
-        bool Prepare() override;     // 0x822A8E10
-        bool Release() override;     // 0x822A8EC0
-        void Destruct() override;    // 0x822C42F8
+        bool Prepare() ;     // 0x822A8E10
+        bool Release() ;     // 0x822A8EC0
+        void Destruct() ;    // 0x822C42F8
 
         // Recovered accessors used by the debug component's RenderWorld. X360 inlined these as
         // direct offset reads (mTriggers @ this+560 stride 128, mUsedTriggerList @ this+66096).

@@ -27,7 +27,7 @@ namespace CgsDev
 
         namespace
         {
-            PerfMonCpuInstance* gpMonitorsArray   = nullptr;
+            PerfMonCpuInstance* gpMonitorsArray   = 0;
             s32                 giMaxMonitorCount  = 0;
             std::atomic<s32>    giMonitorCount{0};
             std::mutex         gMonitorRegistration;
@@ -65,7 +65,7 @@ namespace CgsDev
 
         bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator)
         {
-            static_assert(sizeof(PerfMonCpuInstance) == 96, "ARTIST CPU monitor record stride");
+            CGS_STATIC_ASSERT((sizeof(PerfMonCpuInstance) == 96), "ARTIST CPU monitor record stride");
             LARGE_INTEGER liFreq;
             QueryPerformanceFrequency(&liFreq);
             gi64TimerFrequency = liFreq.QuadPart;

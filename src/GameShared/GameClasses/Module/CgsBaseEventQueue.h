@@ -17,7 +17,7 @@ namespace CgsModule
     public:
         void Construct(T* lpEventBuffer, s32 liMaxLength)
         {
-            CGS_ASSERT(lpEventBuffer != nullptr, "lpEventBuffer != NULL");
+            CGS_ASSERT(lpEventBuffer != 0, "lpEventBuffer != NULL");
             mpEvents = lpEventBuffer;
             miMaxLength = liMaxLength;
             miLength = 0;
@@ -32,7 +32,7 @@ namespace CgsModule
         {
             // X360 AddEvent appends UNCONDITIONALLY -- the two asserts are non-gating tripwires
             // (the bounds-gated "return false on full" variant is the separate AddEventSafe).
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
             CGS_ASSERT(miLength < miMaxLength, "EventQueue::AddEvent - Reached Max length");
             mpEvents[miLength] = lEvent;
             ++miLength;
@@ -62,7 +62,7 @@ namespace CgsModule
         // want the bounds-gated reserve; that is AllocateEventSafe below.
         T& AddEvent()
         {
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
             CGS_ASSERT(GetLength() < GetMaxLength(), "GetLength() < GetMaxLength()");
             s32 liIndex = miLength;
             ++miLength;
@@ -75,7 +75,7 @@ namespace CgsModule
         // a per-instantiation out-of-line body; modelled here as the generic inline template body.
         bool AddEventSafe(const T& lEvent)
         {
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
             if (miLength >= miMaxLength) return false;
             mpEvents[miLength] = lEvent;
             ++miLength;
@@ -127,10 +127,10 @@ namespace CgsModule
         // scope, right after InputBuffer::GetUpdateRigidBodyQueue.
         T* AllocateEventSafe()
         {
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");   // CgsBaseEventQueue.h:381
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");   // CgsBaseEventQueue.h:381
             if (miLength >= miMaxLength)
             {
-                return nullptr;
+                return 0;
             }
             s32 liIndex = miLength;
             ++miLength;
@@ -145,7 +145,7 @@ namespace CgsModule
         // i.e. &mpEvents[liIndex]. The DWARF gives the real `const T&` return.
         const T& GetEvent(s32 liIndex) const
         {
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
             CGS_ASSERT(liIndex < GetLength(), "liIndex < GetLength()");
             CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
             return mpEvents[liIndex];
@@ -157,7 +157,7 @@ namespace CgsModule
         // because a T& is ABI-returned as a 32-bit pointer; the DWARF gives the real T&.
         T& GetEvent(s32 liIndex)
         {
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
             CGS_ASSERT(liIndex < GetLength(), "liIndex < GetLength()");
             CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
             return mpEvents[liIndex];
@@ -166,7 +166,7 @@ namespace CgsModule
         // Asserted read of the queue's backing buffer (X360 CgsBaseEventQueue.h:486; called by Append).
         const T* GetQueueStartPointer() const
         {
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
             return mpEvents;
         }
 
@@ -186,7 +186,7 @@ namespace CgsModule
                 return true;
             }
 
-            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");                          // CgsBaseEventQueue.h:413
+            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");                          // CgsBaseEventQueue.h:413
             CGS_ASSERT(lSource.miLength + miLength <= miMaxLength, "Base event queue overflow"); // :414
 
             s32 liSourceLength = lSource.miLength;

@@ -47,11 +47,11 @@ struct ReverbEffect : public BrnSound::Logic::BrnEffectObject
     // @ 0x826D1438 -- RTTI factory hook.
     static CgsSound::Logic::EffectObject* CreateObject( u32 luType );
 
-    bool Attach() override;
-    void UpdateParams(f32 afTimeStep) override; // ARTIST 0x826D1498
-    void ProcessUpdate() override; // ARTIST 0x826BA590
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    bool Attach() ;
+    void UpdateParams(f32 afTimeStep) ; // ARTIST 0x826D1498
+    void ProcessUpdate() ; // ARTIST 0x826BA590
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
 
 private:
     // The reverb preset the player's surroundings call for right now.

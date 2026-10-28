@@ -97,9 +97,9 @@ namespace CgsSceneManager
         OverlapCullingModule();
 
         // --- virtual module interface (overrides ModuleSingleBuffered / Module) ---
-        void Construct() override;                                       // @ 0x828C18E8
-        bool Release() override;                                         // @ 0x828AB448
-        void Destruct() override;                                        // @ 0x828C... (trivial)
+        void Construct() ;                                       // @ 0x828C18E8
+        bool Release() ;                                         // @ 0x828AB448
+        void Destruct() ;                                        // @ 0x828C... (trivial)
 
         // Typed prepare/update. These are the module's own typed entry points (not the
         // no-arg base virtuals); SceneManagerModule calls them directly.
@@ -186,7 +186,7 @@ namespace CgsSceneManager
 
         // The in-class VolumeVolumeQuery scratch buffer (Construct partitions this; the X360
         // asserts the descriptor size <= KU_VOL_QUERY_MEM_SIZE and 16-byte alignment).
-        alignas(16) u8 maVolumeVolumeQueryMem[KU_VOL_QUERY_MEM_SIZE];
+        CGS_ALIGN(16) u8 maVolumeVolumeQueryMem[KU_VOL_QUERY_MEM_SIZE];
 
         // Internal-collision bookkeeping, sized to KI_MAX_NUM_VOLUME_INSTANCES.
         CgsContainers::BitArray<KU_MAX_NUM_VOLUME_INSTANCES> mabIsUsingInternalCollision;

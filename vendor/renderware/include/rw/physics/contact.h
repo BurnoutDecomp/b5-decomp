@@ -76,7 +76,7 @@ namespace physics
 // DWARF class-key is `struct` (contact.h:74). Members public for the same reason Jacobian.hpp's
 // are: the offsetof pins below must name them, and the SDK's own friend surface (Simulation,
 // via ContactBatchBuild) covers every access the subsystem makes anyway.
-struct alignas(16) Contact
+struct CGS_ALIGN(16) Contact
 {
     // The DWARF spells the vector members `RigidBody::Vector3U_32` -- typedef
     // Vector3Template<float>, the PACKED 12-byte triple (rigidbody.h:35), NOT the 16-byte
@@ -261,39 +261,39 @@ struct alignas(16) Contact
 };
 
 // ---- the layout pins -- console offsets, X360-attested at the cited stores ----------------
-static_assert(offsetof(Contact, mPosA)    == 0x00, "mPosA @+0x00    (drain stvx event row)");
-static_assert(offsetof(Contact, mBodyA)   == 0x0C, "mBodyA @+0x0C   (batch vsel w-lane mint)");
-static_assert(offsetof(Contact, mPosB)    == 0x10, "mPosB @+0x10");
-static_assert(offsetof(Contact, mBodyB)   == 0x1C, "mBodyB @+0x1C");
-static_assert(offsetof(Contact, mRi)      == 0x20, "mRi @+0x20      (the normal)");
-static_assert(offsetof(Contact, mRes)     == 0x2C, "mRes @+0x2C     (drain stfs e+0x48)");
-static_assert(offsetof(Contact, mUp)      == 0x30, "mUp @+0x30");
-static_assert(offsetof(Contact, mMus)     == 0x3C, "mMus @+0x3C     (drain stfs e+0x40)");
-static_assert(offsetof(Contact, mAt)      == 0x40, "mAt @+0x40");
-static_assert(offsetof(Contact, mMud)     == 0x4C, "mMud @+0x4C     (drain stfs e+0x44)");
-static_assert(offsetof(Contact, mVel)     == 0x50, "mVel @+0x50");
-static_assert(offsetof(Contact, mTag)     == 0x5C, "mTag @+0x5C     (drain stw loop index)");
-static_assert(offsetof(Contact, mComA)    == 0x60, "snapshot comA @+0x60   (body +0x10 row)");
-static_assert(offsetof(Contact, mIdA)     == 0x6C, "snapshot idA @+0x6C    (console mCom.w)");
-static_assert(offsetof(Contact, mComB)    == 0x70, "snapshot comB @+0x70");
-static_assert(offsetof(Contact, mIdB)     == 0x7C, "snapshot idB @+0x7C");
-static_assert(offsetof(Contact, mIfullA)  == 0x80, "snapshot IfullA @+0x80 (body +0x70 row)");
-static_assert(offsetof(Contact, mInvmA)   == 0x8C, "snapshot invmA @+0x8C  (console mIfull.w)");
-static_assert(offsetof(Contact, mIfullB)  == 0x90, "snapshot IfullB @+0x90");
-static_assert(offsetof(Contact, mInvmB)   == 0x9C, "snapshot invmB @+0x9C");
-static_assert(offsetof(Contact, mIspltA)  == 0xA0, "snapshot IspltA @+0xA0 (body +0x80 row)");
-static_assert(offsetof(Contact, mStateA)  == 0xAC, "snapshot stateA @+0xAC (the batch's ACTIVE-test lane)");
-static_assert(offsetof(Contact, mIspltB)  == 0xB0, "snapshot IspltB @+0xB0");
-static_assert(offsetof(Contact, mStateB)  == 0xBC, "snapshot stateB @+0xBC");
-static_assert(offsetof(Contact, mForceA)  == 0xC0, "snapshot forceA @+0xC0 (body +0x90 row)");
-static_assert(offsetof(Contact, mKineA)   == 0xCC, "snapshot kineA @+0xCC  (console mForce.w)");
-static_assert(offsetof(Contact, mForceB)  == 0xD0, "snapshot forceB @+0xD0");
-static_assert(offsetof(Contact, mKineB)   == 0xDC, "snapshot kineB @+0xDC");
-static_assert(offsetof(Contact, mTorqueA) == 0xE0, "snapshot torqueA @+0xE0 (body +0xA0 row)");
-static_assert(offsetof(Contact, mCoolA)   == 0xEC, "snapshot coolA @+0xEC  (console mTorque.w)");
-static_assert(offsetof(Contact, mTorqueB) == 0xF0, "snapshot torqueB @+0xF0");
-static_assert(offsetof(Contact, mCoolB)   == 0xFC, "snapshot coolB @+0xFC");
-static_assert(offsetof(Contact, mpBodyB)  == 0x108, "spy pointer tail B");
+CGS_STATIC_ASSERT((offsetof(Contact, mPosA)    == 0x00), "mPosA @+0x00    (drain stvx event row)");
+CGS_STATIC_ASSERT((offsetof(Contact, mBodyA)   == 0x0C), "mBodyA @+0x0C   (batch vsel w-lane mint)");
+CGS_STATIC_ASSERT((offsetof(Contact, mPosB)    == 0x10), "mPosB @+0x10");
+CGS_STATIC_ASSERT((offsetof(Contact, mBodyB)   == 0x1C), "mBodyB @+0x1C");
+CGS_STATIC_ASSERT((offsetof(Contact, mRi)      == 0x20), "mRi @+0x20      (the normal)");
+CGS_STATIC_ASSERT((offsetof(Contact, mRes)     == 0x2C), "mRes @+0x2C     (drain stfs e+0x48)");
+CGS_STATIC_ASSERT((offsetof(Contact, mUp)      == 0x30), "mUp @+0x30");
+CGS_STATIC_ASSERT((offsetof(Contact, mMus)     == 0x3C), "mMus @+0x3C     (drain stfs e+0x40)");
+CGS_STATIC_ASSERT((offsetof(Contact, mAt)      == 0x40), "mAt @+0x40");
+CGS_STATIC_ASSERT((offsetof(Contact, mMud)     == 0x4C), "mMud @+0x4C     (drain stfs e+0x44)");
+CGS_STATIC_ASSERT((offsetof(Contact, mVel)     == 0x50), "mVel @+0x50");
+CGS_STATIC_ASSERT((offsetof(Contact, mTag)     == 0x5C), "mTag @+0x5C     (drain stw loop index)");
+CGS_STATIC_ASSERT((offsetof(Contact, mComA)    == 0x60), "snapshot comA @+0x60   (body +0x10 row)");
+CGS_STATIC_ASSERT((offsetof(Contact, mIdA)     == 0x6C), "snapshot idA @+0x6C    (console mCom.w)");
+CGS_STATIC_ASSERT((offsetof(Contact, mComB)    == 0x70), "snapshot comB @+0x70");
+CGS_STATIC_ASSERT((offsetof(Contact, mIdB)     == 0x7C), "snapshot idB @+0x7C");
+CGS_STATIC_ASSERT((offsetof(Contact, mIfullA)  == 0x80), "snapshot IfullA @+0x80 (body +0x70 row)");
+CGS_STATIC_ASSERT((offsetof(Contact, mInvmA)   == 0x8C), "snapshot invmA @+0x8C  (console mIfull.w)");
+CGS_STATIC_ASSERT((offsetof(Contact, mIfullB)  == 0x90), "snapshot IfullB @+0x90");
+CGS_STATIC_ASSERT((offsetof(Contact, mInvmB)   == 0x9C), "snapshot invmB @+0x9C");
+CGS_STATIC_ASSERT((offsetof(Contact, mIspltA)  == 0xA0), "snapshot IspltA @+0xA0 (body +0x80 row)");
+CGS_STATIC_ASSERT((offsetof(Contact, mStateA)  == 0xAC), "snapshot stateA @+0xAC (the batch's ACTIVE-test lane)");
+CGS_STATIC_ASSERT((offsetof(Contact, mIspltB)  == 0xB0), "snapshot IspltB @+0xB0");
+CGS_STATIC_ASSERT((offsetof(Contact, mStateB)  == 0xBC), "snapshot stateB @+0xBC");
+CGS_STATIC_ASSERT((offsetof(Contact, mForceA)  == 0xC0), "snapshot forceA @+0xC0 (body +0x90 row)");
+CGS_STATIC_ASSERT((offsetof(Contact, mKineA)   == 0xCC), "snapshot kineA @+0xCC  (console mForce.w)");
+CGS_STATIC_ASSERT((offsetof(Contact, mForceB)  == 0xD0), "snapshot forceB @+0xD0");
+CGS_STATIC_ASSERT((offsetof(Contact, mKineB)   == 0xDC), "snapshot kineB @+0xDC");
+CGS_STATIC_ASSERT((offsetof(Contact, mTorqueA) == 0xE0), "snapshot torqueA @+0xE0 (body +0xA0 row)");
+CGS_STATIC_ASSERT((offsetof(Contact, mCoolA)   == 0xEC), "snapshot coolA @+0xEC  (console mTorque.w)");
+CGS_STATIC_ASSERT((offsetof(Contact, mTorqueB) == 0xF0), "snapshot torqueB @+0xF0");
+CGS_STATIC_ASSERT((offsetof(Contact, mCoolB)   == 0xFC), "snapshot coolB @+0xFC");
+CGS_STATIC_ASSERT((offsetof(Contact, mpBodyB)  == 0x108), "spy pointer tail B");
 
 // =====================================================================================
 // rw::physics::ContactJacobian -- THE SAME 272 BYTES AFTER ContactBatchBuild @0x82BC14C0
@@ -324,7 +324,7 @@ static_assert(offsetof(Contact, mpBodyB)  == 0x108, "spy pointer tail B");
 //   +0xF0 {TatB.xyz, dead}
 //   +0x100 mpBodyA / +0x108 mpBodyB  (host tail, carried through from the drain record)
 // =====================================================================================
-struct alignas(16) ContactJacobian
+struct CGS_ALIGN(16) ContactJacobian
 {
     typedef Contact::Vector3U_32 Vector3U_32;
 
@@ -364,20 +364,20 @@ struct alignas(16) ContactJacobian
     RigidBody*  mpBodyB;    // +0x108
 };
 
-static_assert(sizeof(ContactJacobian) == sizeof(Contact),
+CGS_STATIC_ASSERT((sizeof(ContactJacobian) == sizeof(Contact)),
               "the batch rewrites the record IN PLACE -- the overlay must cover it exactly");
-static_assert(offsetof(ContactJacobian, mBodyA)   == 0x0C, "post-batch idA @+0x0C");
-static_assert(offsetof(ContactJacobian, mFlags)   == 0x2C, "flags @+0x2C (spy `lwz 0x2C` + `& 8`)");
-static_assert(offsetof(ContactJacobian, mMus)     == 0x3C, "mus preserved @+0x3C (Anubis vspltw)");
-static_assert(offsetof(ContactJacobian, mMud)     == 0x4C, "mud preserved @+0x4C");
-static_assert(offsetof(ContactJacobian, mLambda)  == 0x50, "L accumulator row @+0x50");
-static_assert(offsetof(ContactJacobian, mBias)    == 0x60, "bias row @+0x60");
-static_assert(offsetof(ContactJacobian, mRi)      == 0x70, "normal @+0x70 (spy row 0)");
-static_assert(offsetof(ContactJacobian, mInvmA)   == 0x8C, "invmA @+0x8C (spy midpoint weight)");
-static_assert(offsetof(ContactJacobian, mInvmB)   == 0x9C, "invmB @+0x9C");
-static_assert(offsetof(ContactJacobian, mAt)      == 0xD0, "at @+0xD0 (spy row 2)");
-static_assert(offsetof(ContactJacobian, mTag)     == 0xDC, "tag @+0xDC (spy emit +0x68)");
-static_assert(offsetof(ContactJacobian, mpBodyA)  == offsetof(Contact, mpBodyA),
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mBodyA)   == 0x0C), "post-batch idA @+0x0C");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mFlags)   == 0x2C), "flags @+0x2C (spy `lwz 0x2C` + `& 8`)");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mMus)     == 0x3C), "mus preserved @+0x3C (Anubis vspltw)");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mMud)     == 0x4C), "mud preserved @+0x4C");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mLambda)  == 0x50), "L accumulator row @+0x50");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mBias)    == 0x60), "bias row @+0x60");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mRi)      == 0x70), "normal @+0x70 (spy row 0)");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mInvmA)   == 0x8C), "invmA @+0x8C (spy midpoint weight)");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mInvmB)   == 0x9C), "invmB @+0x9C");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mAt)      == 0xD0), "at @+0xD0 (spy row 2)");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mTag)     == 0xDC), "tag @+0xDC (spy emit +0x68)");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mpBodyA)  == offsetof(Contact, mpBodyA)),
               "the tail must not move between the two phases");
 
 // -------------------------------------------------------------------------------------------

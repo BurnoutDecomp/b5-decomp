@@ -147,7 +147,7 @@ namespace
     // Byte +0x17 and the text buffer are intentionally left untouched, as in ARTIST.
     void GameStateDebugComponent::Construct(GameStateModule* lpGameStateModule)
     {
-        CGS_ASSERT(lpGameStateModule != nullptr, "lpGameStateModule != NULL");
+        CGS_ASSERT(lpGameStateModule != 0, "lpGameStateModule != NULL");
 
         mpGameStateModule = lpGameStateModule;
         mbShowUpComingRoadRules = false;
@@ -163,7 +163,7 @@ namespace
     // ARTIST 0x82375464..0x82375468, inlined in GameStateModule::Destruct.
     void GameStateDebugComponent::Destruct()
     {
-        mpGameStateModule = nullptr;
+        mpGameStateModule = 0;
         DebugComponent::Destruct();
     }
 
@@ -459,7 +459,7 @@ namespace
         const CgsDev::DebugUI::Metrics& lrMetrics) const
     {
         ModeManager* lpModeManager = mpGameStateModule->GetModeManager();
-        if (lpModeManager->GetCurrentGameMode() == nullptr)
+        if (lpModeManager->GetCurrentGameMode() == 0)
         {
             return;
         }

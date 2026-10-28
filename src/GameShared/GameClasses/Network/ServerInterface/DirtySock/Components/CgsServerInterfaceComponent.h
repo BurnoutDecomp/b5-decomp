@@ -37,12 +37,12 @@ namespace CgsNetwork
     // Event enum used by the OnEvent vtable slot. The full enumerator set lives in the
     // CgsServerInterfaceEvents home; declared here with a fixed underlying type so the
     // OnEvent signature is well-formed without pulling in that header.
-    enum EServerInterfaceEvent : s32;
+    enum EServerInterfaceEvent ;
 
     // The server-interface result enum (full enumerator set homed in
     // CgsServerInterfaceErrors.h). Forward-declared with a fixed underlying type so the
     // ConvertError return type is well-formed without pulling in that header.
-    enum EServerInterfaceError : s32;
+    enum EServerInterfaceError ;
 
     // { DirtySock error code -> EServerInterfaceError } mapping entry (home:
     // CgsServerInterfaceDirtySockErrorHelpers.h). Reached only by pointer here, so the

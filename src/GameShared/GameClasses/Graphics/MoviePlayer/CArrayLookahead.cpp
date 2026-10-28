@@ -50,7 +50,7 @@ const s32 KI_EVENT_DISSOLVE_RUN  = 4;  // frame spanned by a detected dissolve
 // all-zero construction is folded inline in the asm; reconstructed as
 // value-initialisation of mDissolveDetector.
 CArrayLookahead::CArrayLookahead()
-    : mpArray(nullptr)
+    : mpArray(0)
     , muCapacity(0)
     , miImageWidth(0)
     , miImageHeight(0)
@@ -60,7 +60,7 @@ CArrayLookahead::CArrayLookahead()
     , muFrameCount(0)
     , miDissolveEnabled(1)
     , mDissolveDetector()
-    , mpDissolveDumpFile(nullptr)
+    , mpDissolveDumpFile(0)
 {
 }
 
@@ -71,17 +71,17 @@ CArrayLookahead::~CArrayLookahead()
     for (u32 luIndex = 0; luIndex < muCapacity; ++luIndex)
     {
         CHistogram* lpHistogram = mpArray[luIndex].mpHistogram;
-        if (lpHistogram != nullptr)
+        if (lpHistogram != 0)
         {
             XMemFree(lpHistogram, KU_LOOKAHEAD_XMEM_ATTRIBUTES);
-            mpArray[luIndex].mpHistogram = nullptr;
+            mpArray[luIndex].mpHistogram = 0;
         }
     }
 
-    if (mpArray != nullptr)
+    if (mpArray != 0)
     {
         XMemFree(mpArray, KU_LOOKAHEAD_XMEM_ATTRIBUTES);
-        mpArray = nullptr;
+        mpArray = 0;
     }
 }
 
@@ -103,7 +103,7 @@ s32 CArrayLookahead::Initialize(s32 liLookahead, s32 liWidth, s32 liHeight)
     }
 
     mpArray = static_cast<SElement*>(XMemAlloc(luAllocSize, KU_LOOKAHEAD_XMEM_ATTRIBUTES));
-    if (mpArray == nullptr)
+    if (mpArray == 0)
     {
         return -100;
     }
@@ -112,7 +112,7 @@ s32 CArrayLookahead::Initialize(s32 liLookahead, s32 liWidth, s32 liHeight)
     {
         CHistogram* lpHistogram =
             static_cast<CHistogram*>(XMemAlloc(sizeof(CHistogram), KU_LOOKAHEAD_XMEM_ATTRIBUTES));
-        if (lpHistogram == nullptr)
+        if (lpHistogram == 0)
         {
             return -100;
         }
@@ -141,7 +141,7 @@ s32 CArrayLookahead::Initialize(s32 liLookahead, s32 liWidth, s32 liHeight)
 // The image-data and histogram pointers are preserved.
 void CArrayLookahead::ResetElement(u32 luIndex)
 {
-    if (mpArray == nullptr)
+    if (mpArray == 0)
     {
         return;
     }
@@ -173,7 +173,7 @@ void CArrayLookahead::ResetElement(u32 luIndex)
 // @ 0x82A04D30
 s32 CArrayLookahead::AddArrayElement(const u8* lpImageData)
 {
-    if (mpArray == nullptr)
+    if (mpArray == 0)
     {
         return -100;
     }
@@ -200,11 +200,11 @@ s32 CArrayLookahead::AddArrayElement(const u8* lpImageData)
 // passed (in which case the existing handle is kept unchanged).
 void CArrayLookahead::SetDissolveDumpFile(void* lpFile)
 {
-    if (lpFile != nullptr && mpDissolveDumpFile != nullptr)
+    if (lpFile != 0 && mpDissolveDumpFile != 0)
     {
         return;
     }
-    mpDissolveDumpFile = nullptr;
+    mpDissolveDumpFile = 0;
 }
 
 // @ 0x82A05048
@@ -361,9 +361,9 @@ void CArrayLookahead::DetectEventInArray()
     u32       luPrev1 = 0u;
     u32       luPrev2 = 0u;
     u32       luPrev3 = 0u;
-    SElement* lpPrev1 = nullptr;
-    SElement* lpPrev2 = nullptr;
-    SElement* lpPrev3 = nullptr;
+    SElement* lpPrev1 = 0;
+    SElement* lpPrev2 = 0;
+    SElement* lpPrev3 = 0;
 
     do
     {
@@ -387,7 +387,7 @@ void CArrayLookahead::DetectEventInArray()
             const CHistogram* lpPrevHist = lpPrev1->mpHistogram;
 
             s32 liLumaChanged = 0;
-            if (lpPrevHist != nullptr
+            if (lpPrevHist != 0
                 && lpCurHist->miValid != 0
                 && lpPrevHist->miValid != 0)
             {
@@ -514,7 +514,7 @@ void CArrayLookahead::DetectEventInArray()
                         // Reverse-direction luma ratio (two-back / current).
                         const CHistogram* lpCurHist  = lrCur.mpHistogram;
                         const CHistogram* lpPrevHist = lpPrev2->mpHistogram;
-                        if (lpCurHist != nullptr
+                        if (lpCurHist != 0
                             && lpPrevHist->miValid != 0
                             && lpCurHist->miValid != 0)
                         {

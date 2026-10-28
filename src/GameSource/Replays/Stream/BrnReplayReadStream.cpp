@@ -21,7 +21,7 @@ namespace BrnReplays
         for (s32 liSerialiser = 0; liSerialiser < E_ID_COUNT; ++liSerialiser)
         {
             maiSizes[liSerialiser] = 0;
-            mapBuffers[liSerialiser] = nullptr;
+            mapBuffers[liSerialiser] = 0;
         }
     }
 
@@ -29,9 +29,9 @@ namespace BrnReplays
     // +8E0/+8E4/+8F0. The other cursor/counter fields are not reset here.
     void ReadStream::Construct()
     {
-        mpStreamHeader = nullptr;
+        mpStreamHeader = 0;
         miCurrentFrunk = 0;
-        mpStream = nullptr;
+        mpStream = 0;
     }
 
     // ARTIST 8264CFF8. The original capacity branch leaves destination/cursor

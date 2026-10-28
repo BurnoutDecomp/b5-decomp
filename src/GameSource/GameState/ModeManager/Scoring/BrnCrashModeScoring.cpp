@@ -116,7 +116,7 @@ namespace BrnGameState
                 return &lrCrash;
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // ------------------------------------------------------------------------
@@ -587,7 +587,7 @@ namespace BrnGameState
         GetVehicleScoreData(leVehicleClass, lVehicleTypeID, &liBaseValue, &liMultiplier, &leCategory);
 
         const RecentCrash* lpRecentCrash = GetRecentCrash(luTrafficEntityIndex);
-        if (lpRecentCrash != nullptr)
+        if (lpRecentCrash != 0)
         {
             const u32 luChainCount = lpRecentCrash->muCrashChainCount;
             if (luChainCount >= 2)
@@ -772,7 +772,7 @@ namespace BrnGameState
             // Player (A) hit traffic (B).
             CGS_ASSERT(luOwnerB == K_OWNER_TRAFFIC_VEHICLE,
                        "lEntityIdB.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
-            if (luIndexA != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexB)) != nullptr)
+            if (luIndexA != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexB)) != 0)
             {
                 return false;
             }
@@ -784,7 +784,7 @@ namespace BrnGameState
             // Player (B) hit traffic (A).
             CGS_ASSERT(luOwnerA == K_OWNER_TRAFFIC_VEHICLE,
                        "lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
-            if (luIndexB != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexA)) != nullptr)
+            if (luIndexB != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexA)) != 0)
             {
                 return false;
             }
@@ -797,9 +797,9 @@ namespace BrnGameState
             // already-active recorded crash; the OTHER participant becomes the new victim.
             RecentCrash* lpCrashA = GetRecentCrash(static_cast<u16>(luIndexA));
             RecentCrash* lpCrashB = GetRecentCrash(static_cast<u16>(luIndexB));
-            if (lpCrashA != nullptr)
+            if (lpCrashA != 0)
             {
-                if (lpCrashB != nullptr || !IsActiveCrash(lpCrashA))
+                if (lpCrashB != 0 || !IsActiveCrash(lpCrashA))
                 {
                     return false;
                 }
@@ -808,7 +808,7 @@ namespace BrnGameState
             }
             else
             {
-                if (lpCrashB == nullptr || !IsActiveCrash(lpCrashB))
+                if (lpCrashB == 0 || !IsActiveCrash(lpCrashB))
                 {
                     return false;
                 }
@@ -833,7 +833,7 @@ namespace BrnGameState
         {
             maRecentCrashes.Erase(0);
         }
-        CGS_ASSERT(GetRecentCrash(luTrafficCarIndex) == nullptr, "GetRecentCrash(luTrafficCarIndex) == NULL");
+        CGS_ASSERT(GetRecentCrash(luTrafficCarIndex) == 0, "GetRecentCrash(luTrafficCarIndex) == NULL");
         maRecentCrashes.Append(lCrash);
 
         ++miCurrentComboCount;        // *(a1+0x2E0) = *(a1+0x2E0)+1  (chain link recorded)
@@ -931,16 +931,16 @@ namespace BrnGameState
     {
         // The console's own two asserts, with their baked line numbers. Neither gates: it fires
         // and dereferences anyway.
-        CGS_ASSERT(lpActiveRaceCarInterface != nullptr, "lpActiveRaceCarInterface != NULL");  // :189
-        if (lpActiveRaceCarInterface == nullptr)
+        CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface != NULL");  // :189
+        if (lpActiveRaceCarInterface == 0)
         {
             return;   // [PC GUARD] not X360 -- the console's precondition is the assert above.
         }
 
         const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
             lpActiveRaceCarInterface->GetPlayerRaceCarState();
-        CGS_ASSERT(lpPlayerState != nullptr, "lpPlayerState != NULL");                        // :193
-        if (lpPlayerState == nullptr)
+        CGS_ASSERT(lpPlayerState != 0, "lpPlayerState != NULL");                        // :193
+        if (lpPlayerState == 0)
         {
             return;   // [PC GUARD] same shape.
         }

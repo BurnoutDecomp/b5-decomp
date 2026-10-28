@@ -11,7 +11,7 @@
 // The 32-byte stride matches sizeof(BrokenJointNotificationEvent) == alignas(16){ Vector3(16)
 // + EntityId(4) + EBodyParts(4) } rounded to 32. Caller (X360 xref): DeformationOutputInterface.
 // X360-attested element stride (`slwi r,len,5` == *32 in the XMemCpy).
-static_assert(sizeof(BrnPhysics::Deformation::BrokenJointNotificationEvent) == 32,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::BrokenJointNotificationEvent) == 32),
               "BrokenJointNotificationEvent stride 32");
 
 template bool

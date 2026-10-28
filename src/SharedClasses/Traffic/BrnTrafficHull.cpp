@@ -17,7 +17,7 @@
 #include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"  // JunctionLogicBox (+0x3C/+0x40)
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"         // LightTriggerStartData (0x1A0)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
-#include <cstdint>                                     // uintptr_t
+#include "types.hpp"                                     // uintptr_t
 
 namespace BrnTraffic
 {
@@ -176,7 +176,7 @@ namespace BrnTraffic
     const LightTriggerStartData* Hull::GetLightTriggerStartDataForJunction(const JunctionLogicBox* lpJunction,
                                                                           bool lbUseAlternateStartData) const
     {
-        CGS_ASSERT(lpJunction != nullptr, "lpJunction");                             // :293
+        CGS_ASSERT(lpJunction != 0, "lpJunction");                             // :293
 
         if (lbUseAlternateStartData)
         {
@@ -192,7 +192,7 @@ namespace BrnTraffic
             const s32 liStartIndex = lpJunction->GetOfflineStartDataIndex();
             if (liStartIndex <= -1)
             {
-                return nullptr;
+                return 0;
             }
             CGS_ASSERT(liStartIndex < muNumLightTriggersStartData,
                        "liStartIndex < muNumLightTriggersStartData");                // :309
@@ -203,7 +203,7 @@ namespace BrnTraffic
         const s32 liStartIndex = lpJunction->GetOfflineStartDataIndex();
         if (liStartIndex <= -1)
         {
-            return nullptr;
+            return 0;
         }
         CGS_ASSERT(liStartIndex < muNumLightTriggersStartData,
                    "liStartIndex < muNumLightTriggersStartData");                    // :319

@@ -26,7 +26,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    struct alignas(16) VehicleInputInterface
+    struct CGS_ALIGN(16) VehicleInputInterface
     {
         // ---- embedded-queue / interface typedefs (DWARF, homed via the includes above) --------
         typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult, 2000> InLineTestResultQueue; // BrnPhysicsToSceneQueueIO.h:45

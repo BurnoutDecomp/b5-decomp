@@ -45,25 +45,25 @@ struct TagValuePair
     const TagValuePair* mNext;
 
     TagValuePair(u32 auTag, s32 aiValue)
-        : mTag(auTag), mNext(nullptr)
+        : mTag(auTag), mNext(0)
     {
         mValue.mInt = aiValue;
     }
 
     TagValuePair(u32 auTag, size_t auValue)
-        : mTag(auTag), mNext(nullptr)
+        : mTag(auTag), mNext(0)
     {
         mValue.mSize = auValue;
     }
 
     TagValuePair(u32 auTag, f32 afValue)
-        : mTag(auTag), mNext(nullptr)
+        : mTag(auTag), mNext(0)
     {
         mValue.mFloat = afValue;
     }
 
     TagValuePair(u32 auTag, const void* apValue)
-        : mTag(auTag), mNext(nullptr)
+        : mTag(auTag), mNext(0)
     {
         mValue.mPointer = apValue;
     }

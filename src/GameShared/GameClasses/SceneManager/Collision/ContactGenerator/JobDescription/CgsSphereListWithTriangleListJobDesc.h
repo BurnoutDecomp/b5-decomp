@@ -86,7 +86,7 @@ namespace CgsCollision
         }
     };
 
-    static_assert(sizeof(SphereListWithTriangleListStreamJobDesc::StreamCommand) % 16 == 0,
+    CGS_STATIC_ASSERT((sizeof(SphereListWithTriangleListStreamJobDesc::StreamCommand) % 16 == 0),
                   "collide-stream command size must stay a multiple of 16 "
                   "(DataStreamCommandPoster::Construct tripwire :52)");
 }

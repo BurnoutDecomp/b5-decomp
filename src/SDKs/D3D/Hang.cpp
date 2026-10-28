@@ -41,7 +41,7 @@ int Out(OutCallback* ppfnOut, const char* pFormat, ...)
     RtlVsnprintf(szBuffer, 260, pFormat, args); // Count = 0x104
     va_end(args);
 
-    if (*ppfnOut != nullptr)            // lwz r11, 0(r31); cmplwi r11, 0
+    if (*ppfnOut != 0)            // lwz r11, 0(r31); cmplwi r11, 0
         return (*ppfnOut)(szBuffer);    // mtctr r11; bctrl
     return DXGPRINT(szBuffer);          // beq -> bl D3D__DXGPRINT
 }

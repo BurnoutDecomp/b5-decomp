@@ -27,7 +27,7 @@ namespace Log
         LogCombined()
         {
             for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
-                mapStreams[li] = nullptr;
+                mapStreams[li] = 0;
         }
 
         // X360 0x82817660 (CgsLogCombined.cpp:49). Store lpStream into the first empty slot; once
@@ -41,7 +41,7 @@ namespace Log
         void RemoveAllStreams();
 
         // Concrete sink so the StrStreamBase pure-virtual is satisfied; forwards to Append.
-        StrStreamBase& operator<<(const char* lpcText) override
+        StrStreamBase& operator<<(const char* lpcText)
         {
             Append(lpcText);
             return *this;

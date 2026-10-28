@@ -177,12 +177,12 @@ namespace BrnAI
     };
 
     // The X360 layout anchors (pointer-free type, so the host offsets are the console offsets).
-    static_assert(offsetof(SteeringFan, meBiasMode)            == 0x3B0, "SteeringFan::meBiasMode @ +944 (SetBiasMode this[236])");
-    static_assert(offsetof(SteeringFan, mfWeighting)           == 0x3B4, "SteeringFan::mfWeighting @ +948 (Prepare)");
-    static_assert(offsetof(SteeringFan, mfCumulativeWeighting) == 0x76C, "SteeringFan::mfCumulativeWeighting @ +1900 (GetBestIndex)");
-    static_assert(offsetof(SteeringFan, mTravelDirectionBias)  == 0x7B0, "SteeringFan::mTravelDirectionBias @ +1968 (Prepare)");
-    static_assert(offsetof(SteeringFan, mfReciprocalSteps)     == 0x7F4, "SteeringFan::mfReciprocalSteps @ +2036 (Prepare)");
-    static_assert(offsetof(SteeringFan, mfFanAngle)            == 0x800, "SteeringFan::mfFanAngle @ +2048 (Prepare)");
-    static_assert(offsetof(SteeringFan, miStateCounter)        == 0x804, "SteeringFan::miStateCounter @ +2052 (SetBiasMode this[513])");
-    static_assert(sizeof(SteeringFan)                          == 0x810, "SteeringFan is 0x810 bytes (AIDriver @0x710 .. @0xF20)");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, meBiasMode)            == 0x3B0), "SteeringFan::meBiasMode @ +944 (SetBiasMode this[236])");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, mfWeighting)           == 0x3B4), "SteeringFan::mfWeighting @ +948 (Prepare)");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, mfCumulativeWeighting) == 0x76C), "SteeringFan::mfCumulativeWeighting @ +1900 (GetBestIndex)");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, mTravelDirectionBias)  == 0x7B0), "SteeringFan::mTravelDirectionBias @ +1968 (Prepare)");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, mfReciprocalSteps)     == 0x7F4), "SteeringFan::mfReciprocalSteps @ +2036 (Prepare)");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, mfFanAngle)            == 0x800), "SteeringFan::mfFanAngle @ +2048 (Prepare)");
+    CGS_STATIC_ASSERT((offsetof(SteeringFan, miStateCounter)        == 0x804), "SteeringFan::miStateCounter @ +2052 (SetBiasMode this[513])");
+    CGS_STATIC_ASSERT((sizeof(SteeringFan)                          == 0x810), "SteeringFan is 0x810 bytes (AIDriver @0x710 .. @0xF20)");
 }

@@ -182,7 +182,7 @@ namespace Vehicle
                 lpDeformationInterface->mpDeformationState->GetCarStateF(
                     maRaceCarEntityIDs[mePlayerActiveRaceCarIndex].muValue);
 
-            if (lpCarState != nullptr)
+            if (lpCarState != 0)
             {
                 maRaceCarVehicles[mePlayerActiveRaceCarIndex].UpdateShowtimeBounceModifiers(lpCarState);
             }
@@ -200,8 +200,8 @@ namespace Vehicle
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
         f32 lfTimeStep)
     {
-        CGS_ASSERT(lpContact != nullptr, "lpContact != NULL");                          // :7727
-        CGS_ASSERT(lpTriCacheInterface != nullptr, "lpTriCacheInterface != NULL");      // :7728
+        CGS_ASSERT(lpContact != 0, "lpContact != NULL");                          // :7727
+        CGS_ASSERT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL");      // :7728
         CGS_ASSERT(static_cast<u32>(lpContact->muVolumeInstanceIdA.muId >> 56) == 2u,
                    "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");   // :7730
 

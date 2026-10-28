@@ -36,8 +36,8 @@ namespace CgsDev
 
             void Prepare(const char* lpcErrorMessage);
 
-            virtual void Update(f32 lfTimeStep, InputEvent leEvent) override;
-            virtual void Render(Debug2DImmediateRender* lpRender) override;
+            virtual void Update(f32 lfTimeStep, InputEvent leEvent) ;
+            virtual void Render(Debug2DImmediateRender* lpRender) ;
 
         protected:
             const char* mpcErrorMessage;   // +36: the error text drawn in the box (X360 CgsErrorWindow.h:65)

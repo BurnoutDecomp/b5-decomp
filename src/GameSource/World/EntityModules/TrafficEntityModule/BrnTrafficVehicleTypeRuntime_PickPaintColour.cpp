@@ -29,21 +29,21 @@ namespace BrnTraffic
 // console's 8-byte attrib key does not match this tree's 4-byte Attribute::Key alias.
 void VehicleTypeRuntime::_AssertLayout()
 {
-    static_assert(offsetof(VehicleTypeRuntime, mBBoxOffset) == 0x00, "mBBoxOffset");
-    static_assert(offsetof(VehicleTypeRuntime, mBBoxHalfSize) == 0x10, "mBBoxHalfSize");
-    static_assert(offsetof(VehicleTypeRuntime, mCabPivot_TrailerPivot_BackAxle_FwdAxle) == 0x20,
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, mBBoxOffset) == 0x00), "mBBoxOffset");
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, mBBoxHalfSize) == 0x10), "mBBoxHalfSize");
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, mCabPivot_TrailerPivot_BackAxle_FwdAxle) == 0x20),
                   "mCabPivot_TrailerPivot_BackAxle_FwdAxle");
-    static_assert(offsetof(VehicleTypeRuntime, mMass_WheelRadius_Z_W) == 0x30,
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, mMass_WheelRadius_Z_W) == 0x30),
                   "mMass_WheelRadius_Z_W");
 
-    static_assert(offsetof(VehicleTypeRuntime, mAttribKey)
-                      > offsetof(VehicleTypeRuntime, mMass_WheelRadius_Z_W),
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, mAttribKey)
+                      > offsetof(VehicleTypeRuntime, mMass_WheelRadius_Z_W)),
                   "mAttribKey follows mMass_WheelRadius_Z_W");
-    static_assert(offsetof(VehicleTypeRuntime, maiPaintColours)
-                      > offsetof(VehicleTypeRuntime, mAttribKey),
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, maiPaintColours)
+                      > offsetof(VehicleTypeRuntime, mAttribKey)),
                   "maiPaintColours follows mAttribKey");
-    static_assert(offsetof(VehicleTypeRuntime, miNumPaintColours)
-                      > offsetof(VehicleTypeRuntime, maiPaintColours),
+    CGS_STATIC_ASSERT((offsetof(VehicleTypeRuntime, miNumPaintColours)
+                      > offsetof(VehicleTypeRuntime, maiPaintColours)),
                   "miNumPaintColours follows maiPaintColours");
 }
 
@@ -51,7 +51,7 @@ Vector4 VehicleTypeRuntime::PickPaintColourForVehicle(u32 luSeed,
                                                       s32 liNumAvailableColours,
                                                       const Vector4* lpaPaintColours) const
 {
-    CGS_ASSERT(lpaPaintColours != nullptr, "lpaPaintColours");
+    CGS_ASSERT(lpaPaintColours != 0, "lpaPaintColours");
 
     CGS_ASSERT(miNumPaintColours != 0, "miNumPaintColours != 0");
 

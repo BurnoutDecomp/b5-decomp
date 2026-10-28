@@ -21,7 +21,7 @@ namespace TriggerEntityModuleIO
 {
     void OutputBuffer_PreScene::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PreScene, mSceneInputInterface) == 16,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mSceneInputInterface) == 16),
                       "mSceneInputInterface @16");
     }
 

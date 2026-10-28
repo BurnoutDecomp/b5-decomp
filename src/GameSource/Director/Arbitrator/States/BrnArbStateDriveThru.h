@@ -61,11 +61,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        void        Construct() override;                              // @0x8225AE10
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x8226E938
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x82235DB0
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x82235F00
-        const char* GetName() const override;                          // @0x821F6330
+        void        Construct() ;                              // @0x8225AE10
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ; // @0x8226E938
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;  // @0x82235DB0
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ; // @0x82235F00
+        const char* GetName() const ;                          // @0x821F6330
 
         // Destruct() is NOT in this TU's recovered X360 function set (the ledger's 5-function
         // postmortem set is Construct/GetName/Prepare/Release/Update); no override is added

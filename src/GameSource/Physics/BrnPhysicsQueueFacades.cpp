@@ -50,7 +50,7 @@ namespace BrnPhysics
     // deref path (only the baked assert FILE string differs from the prop siblings).
     void* ResourcePtrDeref_VehicleGraphics(RawResourcePtr* lpPtr)
     {
-        CGS_ASSERT(lpPtr->mpResourceMemory != nullptr,
+        CGS_ASSERT(lpPtr->mpResourceMemory != 0,
                    "Can not instance resource pointer - it has no main memory resource\n");
         return lpPtr->mpResourceMemory;
     }
@@ -95,7 +95,7 @@ namespace BrnPhysics
     // assert liIndex>=0; result = 8*liIndex + mpEvents. The *8 stride proves sizeof(T)==8.
     const void* GetEvent_Stride8_Const(const RawEventQueue* lpQueue, s32 liIndex)
     {
-        CGS_ASSERT(lpQueue->mpEvents != nullptr, "mpEvents != NULL");
+        CGS_ASSERT(lpQueue->mpEvents != 0, "mpEvents != NULL");
         CGS_ASSERT(liIndex < lpQueue->miLength, "liIndex < GetLength()");
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
         return lpQueue->mpEvents + 8 * static_cast<u32>(liIndex);

@@ -162,7 +162,7 @@ namespace Deformation
     //     typedef CgsSceneManager::SceneManagerIO::TriangleCacheInterface InTriangleCacheInterface;
     // so this is not a choice, it is the tree's own existing answer. See the evidence block beside
     // the CgsSceneManager forward declarations at the top of this header.
-    using InTriangleCacheInterface = CgsSceneManager::SceneManagerIO::TriangleCacheInterface;
+    typedef CgsSceneManager::SceneManagerIO::TriangleCacheInterface InTriangleCacheInterface;
 
     class DeformableObject
     {
@@ -695,7 +695,7 @@ namespace Deformation
         VecFloat GetEntitySphereSize() const
         {
             const f32 lfSize = mLastLinearVelocityPlusEntityRadius.w;
-            return VecFloat{ lfSize, lfSize, lfSize, lfSize };
+            { const VecFloat lResult = { lfSize, lfSize, lfSize, lfSize }; return lResult; }
         }
         void ResetSensors(Vector3Plus lA, Vector3 lB, Vector3 lC, Vector3 lD);                  // :713
         void PrepareIKPart(s32 liIndex);                                                        // :717

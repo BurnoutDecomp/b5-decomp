@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"            // CgsDev::PerfMonCpu
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdint>   // intptr_t
+#include "types.hpp"   // intptr_t
 
 // CgsNetwork::PlayerManager -- the registry lifecycle (Construct / Prepare / Release /
 // Destruct), the per-frame Update / PostUpdate / SendMessages pumps, the round edges, the
@@ -47,24 +47,24 @@ void PlayerManager::Construct(PlayerManagerConstructParams* lpConstructParams)
         maInactivePlayers[liIndex].Set(lpConstructParams->mapPlayerList[liIndex],
                                        lpConstructParams->mapMenuData[liIndex]);
         maInactivePlayers[liIndex].SetPlayerID(K_INVALID_PLAYER_ID);
-        maActivePlayers[liIndex].Set(nullptr, nullptr);
+        maActivePlayers[liIndex].Set(0, 0);
         maActivePlayers[liIndex].SetPlayerID(K_INVALID_PLAYER_ID);
     }
     for (; liIndex < KI_MAX_PLAYERS; ++liIndex)
     {
-        maInactivePlayers[liIndex].Set(nullptr, lpConstructParams->mapMenuData[liIndex]);
+        maInactivePlayers[liIndex].Set(0, lpConstructParams->mapMenuData[liIndex]);
         maInactivePlayers[liIndex].SetPlayerID(K_INVALID_PLAYER_ID);
-        maActivePlayers[liIndex].Set(nullptr, nullptr);
+        maActivePlayers[liIndex].Set(0, 0);
         maActivePlayers[liIndex].SetPlayerID(K_INVALID_PLAYER_ID);
     }
 
     miNumActivePlayers               = 0;
     miNumInactivePlayers             = KI_MAX_PLAYERS;
-    mpNetworkAdapter                 = nullptr;
+    mpNetworkAdapter                 = 0;
     mu16CurrentFrame                 = 0;
-    mpfOnReceivedFromWrongIPCallback = nullptr;
-    mpfConnectionFinalisedCallback   = nullptr;
-    mpConnectionFinalisedUserData    = nullptr;
+    mpfOnReceivedFromWrongIPCallback = 0;
+    mpfConnectionFinalisedCallback   = 0;
+    mpConnectionFinalisedUserData    = 0;
     mHostPlayerID                    = K_INVALID_PLAYER_ID;
     meLocalConsoleFrameRate          = CgsSystem::E_FRAMERATE_UNKNOWN;
     mLocalPlayerID                   = K_INVALID_PLAYER_ID;
@@ -82,7 +82,7 @@ void PlayerManager::Construct(PlayerManagerConstructParams* lpConstructParams)
     mReliableMessageManager.Construct();
     mConnectionManager.Construct();
 
-    mpServerInterface = nullptr;
+    mpServerInterface = 0;
     mePrepareState    = E_CONSTRUCTED;
     ResetEventCallbacks();
     mbDiskAccessible  = true;
@@ -101,7 +101,7 @@ void PlayerManager::Destruct()
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
         NetworkPlayer* lpNetworkPlayer = maActivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->Destruct();
         }
@@ -109,7 +109,7 @@ void PlayerManager::Destruct()
     for (s32 liIndex = 0; liIndex < miNumInactivePlayers; ++liIndex)
     {
         NetworkPlayer* lpNetworkPlayer = maInactivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->Destruct();
         }
@@ -117,18 +117,18 @@ void PlayerManager::Destruct()
 
     for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
     {
-        maInactivePlayers[liIndex].Set(nullptr, nullptr);
+        maInactivePlayers[liIndex].Set(0, 0);
         maInactivePlayers[liIndex].SetPlayerID(K_INVALID_PLAYER_ID);
-        maActivePlayers[liIndex].Set(nullptr, nullptr);
+        maActivePlayers[liIndex].Set(0, 0);
         maActivePlayers[liIndex].SetPlayerID(K_INVALID_PLAYER_ID);
     }
 
     miNumActivePlayers      = 0;
     miNumInactivePlayers    = 0;
-    mpNetworkAdapter        = nullptr;
-    mpServerInterface       = nullptr;
+    mpNetworkAdapter        = 0;
+    mpServerInterface       = 0;
     meLocalConsoleFrameRate = CgsSystem::E_FRAMERATE_UNKNOWN;
-    mpTimeManager           = nullptr;
+    mpTimeManager           = 0;
     mLocalPlayerID          = K_INVALID_PLAYER_ID;
     mbDiskAccessible        = true;
 
@@ -235,9 +235,9 @@ bool PlayerManager::Release()
 
     meLocalConsoleFrameRate = CgsSystem::E_FRAMERATE_UNKNOWN;
     mLocalPlayerID          = K_INVALID_PLAYER_ID;
-    mpServerInterface       = nullptr;
-    mpNetworkAdapter        = nullptr;
-    mpTimeManager           = nullptr;
+    mpServerInterface       = 0;
+    mpNetworkAdapter        = 0;
+    mpTimeManager           = 0;
     ResetEventCallbacks();
 
     mDebugComponent.Release();
@@ -274,7 +274,7 @@ void PlayerManager::Update(const CgsSystem::TimerStatus* lpTimerStatus, u16 lu16
     while (GetNextPlayerID(&lPlayerID, E_CONSIDER_ALL_PLAYERS))
     {
         NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer == nullptr)
+        if (lpNetworkPlayer == 0)
         {
             continue;
         }
@@ -314,7 +314,7 @@ void PlayerManager::SendMessages()
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
         NetworkPlayer* lpNetworkPlayer = maActivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer == nullptr)
+        if (lpNetworkPlayer == 0)
         {
             continue;
         }
@@ -342,7 +342,7 @@ void PlayerManager::OnRoundStart()
     while (GetNextPlayerID(&lPlayerID, E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
     {
         NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->OnRoundStart();
         }
@@ -380,11 +380,11 @@ void PlayerManager::Disconnected()
         ++miNumInactivePlayers;
 
         NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayerIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->Release();
         }
-        maActivePlayers[liPlayerIndex].SetNetworkPlayer(nullptr);
+        maActivePlayers[liPlayerIndex].SetNetworkPlayer(0);
         maActivePlayers[liPlayerIndex].SetPlayerID(K_INVALID_PLAYER_ID);
     }
 

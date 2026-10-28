@@ -259,7 +259,7 @@ namespace BrnNetwork
         CGS_ASSERT(lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID,
                    "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
-        TrafficSyncData* lpDataEntry = nullptr;
+        TrafficSyncData* lpDataEntry = 0;
         for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             if (maTrafficData[liIndex].mPlayerID == lPlayerID)
@@ -270,7 +270,7 @@ namespace BrnNetwork
         }
 
         // The console streams the player id after this prefix.
-        CGS_ASSERT(lpDataEntry != nullptr, "No entry for this player: ");
+        CGS_ASSERT(lpDataEntry != 0, "No entry for this player: ");
         return lpDataEntry;
     }
 
@@ -279,15 +279,15 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer == nullptr)
+        if (lpNetworkPlayer == 0)
         {
             return;
         }
 
-        TrafficSyncData* lpDataEntry = nullptr;
+        TrafficSyncData* lpDataEntry = 0;
         for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             if (maTrafficData[liIndex].mPlayerID == CgsNetwork::KI_INVALID_PLAYER_ID)
@@ -296,7 +296,7 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(lpDataEntry != nullptr, "lpDataEntry");
+        CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
 
         lpDataEntry->mPlayerID = lPlayerID;
         lpDataEntry->mBufferedHullActivates.Clear();
@@ -311,10 +311,10 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer == nullptr)
+        if (lpNetworkPlayer == 0)
         {
             return;
         }
@@ -348,7 +348,7 @@ namespace BrnNetwork
                                              sizeof(CrashingTrafficMessage),
                                              &lpDataEntry->mCrashingTrafficMessageSend,
                                              &lpDataEntry->mCrashingTrafficMessageRecv,
-                                             nullptr, nullptr, nullptr);
+                                             0, 0, 0);
         lpNetworkPlayer->RegisterMessageType(KI_RESTART_TRAFFIC_MESSAGE_TYPE,
                                              sizeof(RestartTrafficMessage),
                                              &lpDataEntry->mRestartTrafficMessageSend,
@@ -360,7 +360,7 @@ namespace BrnNetwork
                                              sizeof(TrafficHashMessage),
                                              &lpDataEntry->mTrafficHashMessageSend,
                                              &lpDataEntry->mTrafficHashMessageRecv,
-                                             nullptr, nullptr, nullptr);
+                                             0, 0, 0);
     }
 
     // =========================================================================
@@ -513,14 +513,14 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetTrafficOutputInterface() != nullptr,
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetTrafficOutputInterface() != 0,
                    "mpNetworkModule->GetTrafficOutputInterface()");
         const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface* lpTrafficOutput =
             mpNetworkModule->GetTrafficOutputInterface();
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr, "mpNetworkModule->GetNetworkManager()");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, "mpNetworkModule->GetNetworkManager()");
 
         const u16 lu16FramesSinceStart = mpTimeManager->GetU16FrameCountSinceStart();
         const s32 liLocalFrameRate =
@@ -555,7 +555,7 @@ namespace BrnNetwork
             do
             {
                 CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-                if (lpNetworkPlayer != nullptr)
+                if (lpNetworkPlayer != 0)
                 {
                     RestartTrafficMessage* lpRestartTrafficMessage = static_cast<RestartTrafficMessage*>(
                         lpNetworkPlayer->GetRegisteredSendMessage(KI_RESTART_TRAFFIC_MESSAGE_TYPE));
@@ -612,9 +612,9 @@ namespace BrnNetwork
     // =========================================================================
     bool TrafficManager::IsTrafficRestartRequired(u16* lpauOutActiveHulls, u16* lpuOutRestartFrame)
     {
-        CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
-        CGS_ASSERT(lpauOutActiveHulls != nullptr, "lpauOutActiveHulls");
-        CGS_ASSERT(lpuOutRestartFrame != nullptr, "lpuOutRestartFrame");
+        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+        CGS_ASSERT(lpauOutActiveHulls != 0, "lpauOutActiveHulls");
+        CGS_ASSERT(lpuOutRestartFrame != 0, "lpuOutRestartFrame");
 
         if (!mpTimeManager->HasStartFrameBeenSetValid() || !IsTrafficSystemResetPending())
         {
@@ -670,8 +670,8 @@ namespace BrnNetwork
         BufferedHullsToActivate lBufferedHullActivates;
         lBufferedHullActivates.MarkUnconstructed();
 
-        CGS_ASSERT(lpHullSyncMessage != nullptr, "lpHullSyncMessage");
-        CGS_ASSERT(lpNetworkModule != nullptr, "lpNetworkModule");
+        CGS_ASSERT(lpHullSyncMessage != 0, "lpHullSyncMessage");
+        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
 
         lBufferedHullActivates.Construct();
         const bool lbRetrieved = lpHullSyncMessage->Retrieve(&lBufferedHullActivates);
@@ -728,11 +728,11 @@ namespace BrnNetwork
         TrafficManager*        lpTrafficManager        = static_cast<TrafficManager*>(lpUserData);
         RestartTrafficMessage* lpRestartTrafficMessage = static_cast<RestartTrafficMessage*>(lpMessage);
 
-        CGS_ASSERT(lpTrafficManager != nullptr, "lpTrafficManager");
-        CGS_ASSERT(lpRestartTrafficMessage != nullptr, "lpRestartTrafficMessage");
-        CGS_ASSERT(lpTrafficManager->mpPlayerManager != nullptr, "lpTrafficManager->mpPlayerManager");
-        CGS_ASSERT(lpTrafficManager->mpNetworkModule != nullptr, "lpTrafficManager->mpNetworkModule");
-        CGS_ASSERT(lpTrafficManager->mpNetworkModule->GetNetworkManager() != nullptr,
+        CGS_ASSERT(lpTrafficManager != 0, "lpTrafficManager");
+        CGS_ASSERT(lpRestartTrafficMessage != 0, "lpRestartTrafficMessage");
+        CGS_ASSERT(lpTrafficManager->mpPlayerManager != 0, "lpTrafficManager->mpPlayerManager");
+        CGS_ASSERT(lpTrafficManager->mpNetworkModule != 0, "lpTrafficManager->mpNetworkModule");
+        CGS_ASSERT(lpTrafficManager->mpNetworkModule->GetNetworkManager() != 0,
                    "lpTrafficManager->mpNetworkModule->GetNetworkManager()");
 
         u16             lu16RestartFrame;
@@ -800,7 +800,7 @@ namespace BrnNetwork
     void TrafficManager::HandleHullSyncMessage(EActiveRaceCarIndex /*leActiveRaceCarIndex*/,
                                                u16 lu16TrafficUpdateToActivate, s32 liHull)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
@@ -812,7 +812,7 @@ namespace BrnNetwork
             }
 
             HullToActivateInfo* lpBufferedMessage = lrData.mBufferedHullActivates.Grow();
-            CGS_ASSERT(lpBufferedMessage != nullptr, "lpBufferedMessage");
+            CGS_ASSERT(lpBufferedMessage != 0, "lpBufferedMessage");
             lpBufferedMessage->muHull                 = static_cast<u16>(liHull);
             lpBufferedMessage->muTrafUpdateToActivate = lu16TrafficUpdateToActivate;
             lpBufferedMessage->muFramesSinceStart     = mpTimeManager->GetU16FrameCountSinceStart();
@@ -825,7 +825,7 @@ namespace BrnNetwork
     // =========================================================================
     bool TrafficManager::GetCrashingTrafficData(CrashingTrafficData* lpaCrashingTrafficData, s32* lpiCount)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
 
         const BrnWorld::CrashIO::NetworkOutputInterface::CrashingTrafficUpdateQueue* lpOwnedCrashingTrafficQueue =
             mpNetworkModule->GetCrashOutputInterface()->GetCrashingTrafficUpdateQueue();
@@ -850,7 +850,7 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::SendCrashingTrafficMessages(bool lbInGame)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         const u16 lu16Frame            = mpTimeManager->GetU16FrameCount();
         const u16 lu16FramesSinceStart = mpTimeManager->GetU16FrameCountSinceStart();
@@ -907,7 +907,7 @@ namespace BrnNetwork
                                               CgsSystem::EFrameRate leLocalConsoleFrameRate,
                                               CgsSystem::EFrameRate leRemoteConsoleFrameRate)
     {
-        CGS_ASSERT(lpMsg != nullptr, "lpMsg");
+        CGS_ASSERT(lpMsg != 0, "lpMsg");
 
         const u16 lu16MessageFrameToCompare = ConvertReceivedMessageFrameToLocalFrame(
             lpMsg->GetFramesSinceStart(), leLocalConsoleFrameRate, leRemoteConsoleFrameRate);
@@ -960,7 +960,7 @@ namespace BrnNetwork
                 return &lrMessage;
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // =========================================================================
@@ -974,9 +974,9 @@ namespace BrnNetwork
             return false;
         }
 
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        CGS_ASSERT(lpNetworkPlayer != nullptr, "lpNetworkPlayer");
+        CGS_ASSERT(lpNetworkPlayer != 0, "lpNetworkPlayer");
 
         const CgsSystem::EFrameRate leRemoteConsoleFrameRate = lpNetworkPlayer->GetRemoteConsoleFrameRate();
         const CgsSystem::EFrameRate leLocalConsoleFrameRate  =
@@ -1032,7 +1032,7 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::UpdateTrafficHashing(bool lbInGame)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
 
         if (!IsTrafficSystemResetPending() && !mbSuppressingHullSyncsUntilReset)
         {
@@ -1078,7 +1078,7 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::SendTrafficHashingMessage(bool /*lbInGame*/)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         if (!mbLastHashDataValid)
         {
@@ -1114,7 +1114,7 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::ReceiveTrafficHashingMessages()
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
@@ -1168,7 +1168,7 @@ namespace BrnNetwork
     // =========================================================================
     bool TrafficManager::FindHashForFrame(u16 lu16Update10HzFrame, u16* lpu16OutHash) const
     {
-        CGS_ASSERT(lpu16OutHash != nullptr, "lpu16OutHash");
+        CGS_ASSERT(lpu16OutHash != 0, "lpu16OutHash");
 
         for (s32 liIndex = 0; liIndex < maStoredTrafficHashes.GetLength(); ++liIndex)
         {
@@ -1455,7 +1455,7 @@ namespace BrnNetwork
         BufferedMessage* lpBufferedMessage = RetrieveBufferedMessage(lu16Frame);
         BrnWorld::CrashIO::NetworkInputInterface* lpCrashInput = mpNetworkModule->GetCrashInputInterface();
 
-        while (lpBufferedMessage != nullptr)
+        while (lpBufferedMessage != 0)
         {
             const EActiveRaceCarIndex leActiveRaceCarIndex =
                 mpNetworkModule->GetActiveRaceCarIndex(lpBufferedMessage->mOwningNetworkPlayerID);

@@ -4,7 +4,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdarg>
-#include <cstdint>
+#include "types.hpp"
 #include <coreallocator/icoreallocator_interface.h>
 #include "rwcore_enums.h"
 #include "rw/core/debug/DebugCriticalSection.h"  // canonical DebugCriticalSection (SKIP_EMIT_BODY)
@@ -12,7 +12,7 @@
 // Host-layout verification is meaningful only on a 64-bit build.
 #if defined(RW_VERIFY_LAYOUT) && (UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFull)
   #include <cstddef>
-  #define RW_SIZE_ASSERT(T, N) static_assert(sizeof(T) == (N), #T " size")
+  #define RW_SIZE_ASSERT(T, N) CGS_STATIC_ASSERT(sizeof(T) == (N), #T " size")
 #else
   #define RW_SIZE_ASSERT(T, N)
 #endif
@@ -67,7 +67,7 @@ struct Resource : public BaseResources<KU_RESOURCE_LANE_COUNT> {
     Resource()
     {
         for (uint32_t luIndex = 0; luIndex < KU_RESOURCE_LANE_COUNT; ++luIndex)
-            m_baseResources[luIndex] = nullptr;
+            m_baseResources[luIndex] = 0;
     }
 };
 RW_SIZE_ASSERT(rw::Resource, 40);
@@ -160,11 +160,11 @@ RW_SIZE_ASSERT(rw::FreeList, 80);
 // The interface is one host pointer wide. The helper bodies below are reconstructed from
 // ARTIST 0x8266AC50, 0x8266ABD8, 0x82666128 and 0x826645F8.
 struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
-    ~IResourceAllocator() override = default;
+    ~IResourceAllocator()  {}
     void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags,
-                uint32_t luAlignment, uint32_t luAlignmentOffset = 0) override;
-    void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags) override;
-    void Free(void* lpBlock, size_t luSizeOrFlags = 0) override;
+                uint32_t luAlignment, uint32_t luAlignmentOffset = 0) ;
+    void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags) ;
+    void Free(void* lpBlock, size_t luSizeOrFlags = 0) ;
 
     // X360 @0x823FF7D0; DecFIGS resourceallocator.h:178. Build the original
     // five-lane descriptor, dispatch DoAllocate, and return the lane-zero pointer
@@ -204,19 +204,17 @@ struct IResourceAllocator_vtbl {  // Paradise seven-slot vtable image on x64
 RW_SIZE_ASSERT(rw::IResourceAllocator_vtbl, 56);
 
 // ARTIST shows real public derivation and overrides the DoAllocate/DoFree slots.
-struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x64 host
-    LinearResourceAllocator() = default;
+struct LinearResourceAllocator : IResourceAllocator {  // ARTIST object size 0x94
     LinearResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
-    ::rw::Resource m_heapResource;  // +8
-    ::rw::ResourceDescriptor m_heapCapacity;  // +48
-    ::rw::ResourceDescriptor m_currentUsage;  // +88
-    ::rw::ResourceDescriptor m_paddingUsed;  // +128
-    uint32_t m_numAllocations;  // +168
-    uint8_t _pad0[4];  // +172
+    ::rw::Resource m_heapResource;  // +4
+    ::rw::ResourceDescriptor m_heapCapacity;  // +24
+    ::rw::ResourceDescriptor m_currentUsage;  // +64
+    ::rw::ResourceDescriptor m_paddingUsed;  // +104
+    uint32_t m_numAllocations;  // +144
 
     // ARTIST 0x82BBCD90 / 0x82BBCE30 reserve the aligned allocator object in lane
     // zero, then placement-construct it with the adjusted heap bases and original
-    // capacity. Host storage is derived from this type, rather than the original 148 bytes.
+    // capacity. Both routines reserve 0x94 bytes before applying alignment.
     static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn);
     static LinearResourceAllocator* Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     // Native lane convenience entry; delegates to the same DoAllocate transaction.
@@ -233,10 +231,10 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 176 on the x6
     // IResourceAllocator* (TriangleCacheManager::Prepare's "CachedObjectSlots" carve) reach
     // the linear pools through this. ARTIST 0x82BBCF50 validates all five proposed
     // lane extents before committing usage, padding and one resource allocation count.
-    virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
-    virtual void DoFree(const ::rw::Resource& lrResource) override;
+    virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor, const char* lpcName) ;
+    virtual void DoFree(const ::rw::Resource& lrResource) ;
 };
-RW_SIZE_ASSERT(rw::LinearResourceAllocator, 176);
+CGS_STATIC_ASSERT((sizeof(rw::LinearResourceAllocator) == 0x94), "ARTIST linear allocator size");
 
 struct LinearResourceAllocator_vtbl {  // Paradise seven-slot vtable image on x64
     void* _rw__LinearResourceAllocator;  // +0
@@ -281,8 +279,8 @@ RW_SIZE_ASSERT(rw::ResourceAllocatorRegistry, 1);
 // bodies are 0x82BBCA38/0x82BBCAE8 and lane two uses XMem physical memory.
 struct Xbox2NativeSystemAllocator : IResourceAllocator {
     ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
-                              const char* lpcName) override;
-    void DoFree(const ::rw::Resource& lrResource) override;
+                              const char* lpcName) ;
+    void DoFree(const ::rw::Resource& lrResource) ;
 };
 RW_SIZE_ASSERT(rw::Xbox2NativeSystemAllocator, 8);
 
@@ -290,8 +288,8 @@ RW_SIZE_ASSERT(rw::Xbox2NativeSystemAllocator, 8);
 // seven-slot interface while using the host CRT for the platform allocation leaf.
 struct SystemAllocatorGeneric : IResourceAllocator {
     ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
-                              const char* lpcName) override;
-    void DoFree(const ::rw::Resource& lrResource) override;
+                              const char* lpcName) ;
+    void DoFree(const ::rw::Resource& lrResource) ;
 };
 RW_SIZE_ASSERT(rw::SystemAllocatorGeneric, 8);
 
@@ -310,11 +308,11 @@ RW_SIZE_ASSERT(rw::ThrowDocException, 24);
 
 struct ZeroingSystemAllocatorGeneric : SystemAllocatorGeneric {
     ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
-                              const char* lpcName) override;
+                              const char* lpcName) ;
 };
 RW_SIZE_ASSERT(rw::ZeroingSystemAllocatorGeneric, 8);
 }  // namespace rw
-namespace rw::core {
+namespace rw { namespace core {
 
 struct IStringAllocator {  // sizeof = 8 on the x64 host
     void* __vftable;  // +0
@@ -601,8 +599,8 @@ struct WStringRefAllocator_vtbl {  // sizeof = 80 on the x64 host
     void* _rw__core__WStringRefAllocator;  // +72
 };
 RW_SIZE_ASSERT(rw::core::WStringRefAllocator_vtbl, 80);
-}  // namespace rw::core
-namespace rw::core::debug {
+} }  // namespace rw::core
+namespace rw { namespace core { namespace debug {
 
 struct PrintOpts {  // sizeof = 6
     uint8_t mDate;  // +0
@@ -613,16 +611,16 @@ struct PrintOpts {  // sizeof = 6
     uint8_t mNewLine;  // +5
 };
 RW_SIZE_ASSERT(rw::core::debug::PrintOpts, 6);
-}  // namespace rw::core::debug
-namespace rw::core::debug::detail {
+} } }  // namespace rw::core::debug
+namespace rw { namespace core { namespace debug { namespace detail {
 
 // DebugCriticalSection is SKIP_EMIT_BODY: the canonical hand-maintained wrapper (with
 // Create/Enter/Leave) lives in rw/core/debug/DebugCriticalSection.h (#included above);
 // its x64 layout matches (int miInitialised + CRITICAL_SECTION = 44 bytes). Emitting the
 // PDB-derived opaque body here too would be an ODR redefinition (C2011).
 RW_SIZE_ASSERT(rw::core::debug::detail::DebugCriticalSection, 44);
-}  // namespace rw::core::debug::detail
-namespace rw::core::debug {
+} } } }  // namespace rw::core::debug::detail
+namespace rw { namespace core { namespace debug {
 
 struct Channel {  // sizeof = 240 on the x64 host
     uint32_t mDeviceCount;  // +0
@@ -712,8 +710,8 @@ RW_SIZE_ASSERT(rw::core::debug::IFormatter, 8);
 //   [ 0] +0   ?Format@Formatter@debug@core@rw@@UEAA_NPEAD_KPEAVChannel@234@PEBD0@Z
 struct Formatter : IFormatter {  // sizeof = 8 (retained x64 symbol export)
     bool Format(char* lpBuffer, size_t luBufferLength, ::rw::core::debug::Channel* lpChannel,
-                const char* lpcFormat, va_list lArgs) override;
-    ~Formatter() override = default;
+                const char* lpcFormat, va_list lArgs) ;
+    ~Formatter()  {}
 };
 RW_SIZE_ASSERT(rw::core::debug::Formatter, 8);
 
@@ -739,7 +737,7 @@ struct Manager {  // sizeof = 1
     static int CreateInstance(::rw::IResourceAllocator* lpAllocator);
 };
 RW_SIZE_ASSERT(rw::core::debug::Manager, 1);
-}  // namespace rw::core::debug
+} } }  // namespace rw::core::debug
 namespace rw {
 
 struct int128_t {  // sizeof = 16
@@ -748,13 +746,13 @@ struct int128_t {  // sizeof = 16
 };
 RW_SIZE_ASSERT(rw::int128_t, 16);
 }  // namespace rw
-namespace rw::internal::memory {
+namespace rw { namespace internal { namespace memory {
 
 struct Profile {  // sizeof = 1
     uint8_t _pad0[1];  // +0
 };
 RW_SIZE_ASSERT(rw::internal::memory::Profile, 1);
-}  // namespace rw::internal::memory
+} } }  // namespace rw::internal::memory
 namespace rw {
 
 struct rwDebugPrintHelper {  // sizeof = 1024
@@ -762,7 +760,7 @@ struct rwDebugPrintHelper {  // sizeof = 1024
 };
 RW_SIZE_ASSERT(rw::rwDebugPrintHelper, 1024);
 }  // namespace rw
-namespace rw::shared_globals::internal {
+namespace rw { namespace shared_globals { namespace internal {
 
 struct AutoinitOSGlobalManager {  // sizeof = 1
     uint8_t _pad0[1];  // +0
@@ -791,7 +789,7 @@ struct OSGlobalNode {  // sizeof = 24 on the x64 host
     uint32_t mOSGlobalRefCount;  // +20
 };
 RW_SIZE_ASSERT(rw::shared_globals::internal::OSGlobalNode, 24);
-}  // namespace rw::shared_globals::internal
+} } }  // namespace rw::shared_globals::internal
 namespace rw {
 
 struct uint128_t {  // sizeof = 16

@@ -105,10 +105,10 @@ namespace
     inline Vector3 ToCarFrame(const Matrix44Affine& lrTransform, const Vector3& lrWorldPoint)
     {
         const Vector3 lvDelta = lrWorldPoint - lrTransform.wAxis;
-        return Vector3{ rw::math::vpu::Dot(lvDelta, lrTransform.xAxis),
+        { const Vector3 lResult = { rw::math::vpu::Dot(lvDelta, lrTransform.xAxis),
                         rw::math::vpu::Dot(lvDelta, lrTransform.yAxis),
                         rw::math::vpu::Dot(lvDelta, lrTransform.zAxis),
-                        0.0f };
+                        0.0f }; return lResult; }
     }
 }
 
@@ -339,7 +339,7 @@ VecFloat VehicleManager::PredictCarWorldContactTime(const CgsSceneManager::Scene
         lfImpactTime += 1.0f;                                             // vaddfp v0, v0, v12 (vcfsx 1)
     }
 
-    return VecFloat{ lfImpactTime, lfImpactTime, lfImpactTime, lfImpactTime };
+    { const VecFloat lResult = { lfImpactTime, lfImpactTime, lfImpactTime, lfImpactTime }; return lResult; }
 }
 
 }   // namespace Vehicle

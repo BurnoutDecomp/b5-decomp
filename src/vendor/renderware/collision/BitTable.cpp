@@ -32,7 +32,7 @@ namespace rw
 BitTable::Storage* BitTable::Initialize(Storage** lppStorage, int liWidth, int liHeight)
 {
     Storage* lpStorage = *lppStorage;
-    if (lpStorage != nullptr)
+    if (lpStorage != 0)
     {
         lpStorage->muWidth     = static_cast<u32>(liWidth);
         lpStorage->muHeight    = static_cast<u32>(liHeight);

@@ -121,7 +121,7 @@ namespace CgsNetwork
         void Destruct();
 
         bool HasStartTimePassed() const { return meStatus == E_STARTED; }
-        const StartTime* GetStartTime() const { return mbStartTimeIsValid ? &mStartTime : nullptr; }
+        const StartTime* GetStartTime() const { return mbStartTimeIsValid ? &mStartTime : 0; }
 
         void OnHostMigration(const CgsSystem::TimerStatus* lpTimerStatus,
                              NetworkPlayerID lOldHostID, NetworkPlayerID lNewHostID);
@@ -215,12 +215,12 @@ namespace CgsNetwork
     // six collaborator pointers.
     inline void StartTimeManager::Destruct()
     {
-        mpHostMigrationManager             = nullptr;
-        mpTimeManager                      = nullptr;
-        mpPlayerManager                    = nullptr;
-        mpfStartMessageArrivedLateCallback = nullptr;
-        mpfClientReadyCallback             = nullptr;
-        mpClientReadyData                  = nullptr;
+        mpHostMigrationManager             = 0;
+        mpTimeManager                      = 0;
+        mpPlayerManager                    = 0;
+        mpfStartMessageArrivedLateCallback = 0;
+        mpfClientReadyCallback             = 0;
+        mpClientReadyData                  = 0;
     }
 
     inline bool StartTimeManager::IsStartTimeValid() const

@@ -107,10 +107,10 @@ namespace BrnGui
     };
 
     // Layout pins from the X360 store/copy sequence (object is 0x238 bytes).
-    static_assert(sizeof(GuiEventOnlinePostEvent::Record) == 0x38,
+    CGS_STATIC_ASSERT((sizeof(GuiEventOnlinePostEvent::Record) == 0x38),
                   "GuiEventOnlinePostEvent::Record must be 56 bytes (X360 stride 0x38)");
-    static_assert(sizeof(GuiEventOnlinePostEvent::OnlineAward) == 0x0C,
+    CGS_STATIC_ASSERT((sizeof(GuiEventOnlinePostEvent::OnlineAward) == 0x0C),
                   "GuiEventOnlinePostEvent::OnlineAward must be 12 bytes (console stride 0x0C)");
-    static_assert(sizeof(GuiEventOnlinePostEvent) == 0x238,
+    CGS_STATIC_ASSERT((sizeof(GuiEventOnlinePostEvent) == 0x238),
                   "GuiEventOnlinePostEvent must be 0x238 bytes (X360 layout)");
 }

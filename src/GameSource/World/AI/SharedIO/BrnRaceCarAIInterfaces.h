@@ -144,7 +144,7 @@ namespace BrnAI
             s32                 mePersonalityType;      // +0x10 (DWARF :305, BrnAI::EPersonalityType)
             bool                mbKeepResetSection;     // +0x14 (DWARF :306)
         };
-        static_assert(sizeof(AttachAIControlEvent) == 24, "AttachAIControlEvent byte image must match X360 AddEvent liSize (0x18)");
+        CGS_STATIC_ASSERT((sizeof(AttachAIControlEvent) == 24), "AttachAIControlEvent byte image must match X360 AddEvent liSize (0x18)");
 
         // BrnRaceCarAIInterfaces.h:353 -- sizeof 20.
         struct AddCarToCurrentModeEvent : public CgsModule::Event
@@ -172,7 +172,7 @@ namespace BrnAI
         // ====================================================================
         // BrnAI::AIModuleIO::RaceCarAIInterface  (DWARF BrnRaceCarAIInterfaces.h:56)
         // ====================================================================
-        struct alignas(16) RaceCarAIInterface
+        struct CGS_ALIGN(16) RaceCarAIInterface
         {
             // BitArray<8> == CgsContainers::BitArray<8> (single 64-bit field, 8 bytes).
             typedef CgsContainers::BitArray<8u> ActiveRaceCarBitArray;   // DWARF :44
@@ -261,7 +261,7 @@ namespace BrnAI
         // per-car world position + facing ("at"), a "was this car updated" bitset,
         // a "may pass through traffic" bitset, and the two player-route node
         // positions used for extrapolation. Embedded by value in InputBuffer_PostPhysics.
-        struct alignas(16) AIRaceCarInterface
+        struct CGS_ALIGN(16) AIRaceCarInterface
         {
             // @0x8276D120  Record one inactive car: set its updated bit (asserting it
             // was not already set) and store its position + facing.

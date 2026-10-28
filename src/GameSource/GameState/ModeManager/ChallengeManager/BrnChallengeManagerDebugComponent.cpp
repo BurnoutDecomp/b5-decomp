@@ -61,7 +61,7 @@ namespace BrnGameState
     void ChallengeManagerDebugComponent::CompleteAllChallenges(void* lpContext)
     {
         ChallengeManagerDebugComponent* lpDebugComponent = static_cast<ChallengeManagerDebugComponent*>(lpContext);
-        if (lpDebugComponent == nullptr)
+        if (lpDebugComponent == 0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
@@ -77,7 +77,7 @@ namespace BrnGameState
         for (s32 liIndex = 0; liIndex < lpChallengeList->GetChallengeCount(); ++liIndex)
         {
             const BrnResource::ChallengeListEntry* lpChallengeData = lpChallengeList->GetChallengeData(liIndex);
-            if (lpChallengeData == nullptr)
+            if (lpChallengeData == 0)
             {
                 continue;
             }

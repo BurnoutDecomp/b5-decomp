@@ -19,7 +19,7 @@
 #include "SharedClasses/Traffic/BrnTrafficFlowType.h"// BrnTraffic::FlowType::FixUp / FixDown
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "types.hpp"
-#include <cstdint>                                   // uintptr_t (relocation arithmetic)
+#include "types.hpp"                                   // uintptr_t (relocation arithmetic)
 
 namespace BrnTraffic
 {
@@ -295,13 +295,13 @@ namespace BrnTraffic
         CGS_ASSERT(luHull < muNumHulls, "luHull < muNumHulls");               // :268
 
         const Hull* lpHull = mpapHulls[luHull];
-        CGS_ASSERT(lpHull != nullptr, "lpHull");                              // :271
+        CGS_ASSERT(lpHull != 0, "lpHull");                              // :271
 
         CGS_ASSERT(luLightTrigger < lpHull->muNumLightTriggers,
                    "luLightTrigger < lpHull->muNumLightTriggers");            // :274
 
         const JunctionLogicBox* lpJunction = lpHull->GetJunctionForLightTrigger(luLightTrigger);
-        CGS_ASSERT(lpJunction != nullptr, "lpJunction");                      // :278
+        CGS_ASSERT(lpJunction != 0, "lpJunction");                      // :278
 
         return lpHull->GetLightTriggerStartDataForJunction(lpJunction, lbUseAlternateStartData);
     }
@@ -361,7 +361,7 @@ namespace BrnTraffic
         CGS_ASSERT(luHull < muNumHulls, "luHull < muNumHulls");               // :303
 
         const Hull* lpHull = mpapHulls[luHull];
-        CGS_ASSERT(lpHull != nullptr, "lpHull");                              // :306
+        CGS_ASSERT(lpHull != 0, "lpHull");                              // :306
 
         CGS_ASSERT(luLightTrigger < lpHull->muNumLightTriggers,
                    "luLightTrigger < lpHull->muNumLightTriggers");            // :309
@@ -411,6 +411,6 @@ namespace BrnTraffic
 
         CGS_ASSERT(false, "Failed to find traffic kill zone with id . Your traffic & trigger data are probably "
                           "out of date.");                                    // BrnTrafficData.cpp:303
-        return nullptr;
+        return 0;
     }
 }

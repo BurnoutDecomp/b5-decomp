@@ -208,12 +208,12 @@ public:
                         //         verbatim into GPInstance::mFlags (+0x94)
 };
 
-static_assert(offsetof(CylinderVolume, maFrame)     == 0x00, "CylinderVolume::maFrame");
-static_assert(offsetof(CylinderVolume, mInitWord)   == 0x40, "CylinderVolume::mInitWord");
-static_assert(offsetof(CylinderVolume, mfHalfHeight)== 0x44, "CylinderVolume::mfHalfHeight");
-static_assert(offsetof(CylinderVolume, mfRadius)    == 0x48, "CylinderVolume::mfRadius");
-static_assert(offsetof(CylinderVolume, mfFatness)   == 0x50, "CylinderVolume::mfFatness");
-static_assert(offsetof(CylinderVolume, muFlags)     == 0x5C, "CylinderVolume::muFlags");
+CGS_STATIC_ASSERT((offsetof(CylinderVolume, maFrame)     == 0x00), "CylinderVolume::maFrame");
+CGS_STATIC_ASSERT((offsetof(CylinderVolume, mInitWord)   == 0x40), "CylinderVolume::mInitWord");
+CGS_STATIC_ASSERT((offsetof(CylinderVolume, mfHalfHeight)== 0x44), "CylinderVolume::mfHalfHeight");
+CGS_STATIC_ASSERT((offsetof(CylinderVolume, mfRadius)    == 0x48), "CylinderVolume::mfRadius");
+CGS_STATIC_ASSERT((offsetof(CylinderVolume, mfFatness)   == 0x50), "CylinderVolume::mfFatness");
+CGS_STATIC_ASSERT((offsetof(CylinderVolume, muFlags)     == 0x5C), "CylinderVolume::muFlags");
 
 } // namespace collision
 } // namespace rw

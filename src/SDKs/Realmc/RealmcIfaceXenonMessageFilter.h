@@ -57,23 +57,23 @@ public:
     //   mbState clear), or (main task 8 and hidden-message bit 0x200), or
     //   (main task 16 and hidden-message bit 0x2000). Each check that passes
     //   rebinds maResponse to a fresh Response(1).
-    void ProcessMessage(RealmcCore::MessageClear* pMessage) override;
+    void ProcessMessage(RealmcCore::MessageClear* pMessage) ;
 
     // Processor slot +0x48 -- while the handler's autosave state is active,
     //   answer a MessageTrc whose box has 1 or 2 options with Response(1) or
     //   Response(2); otherwise leave maResponse alone.
-    void ProcessMessage(RealmcCore::MessageTrc* pMessage) override;
+    void ProcessMessage(RealmcCore::MessageTrc* pMessage) ;
 
     // The base's other handlers stay visible for calls through this type.
     using RealmcCore::MessageFilter::ProcessMessage;
 
     // MessageFilter slot +0x5C -- clear the +0x10 state byte.
-    void Reset() override;
+    void Reset() ;
 
     // The deleting destructor: the MessageFilter base dtor does the teardown
     // (Release the embedded ResponsePtr, restore vtables); then 20 bytes are
     // freed through FreeMemSize (the class operator delete, host sizeof).
-    ~XenonMessageFilter() override;
+    ~XenonMessageFilter() ;
 
     static void operator delete(void* lpBlock, size_t luSize)
     {

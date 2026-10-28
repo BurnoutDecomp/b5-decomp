@@ -86,7 +86,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineScoreboards::BuildAlphabeticalRoadIndexes()
     {
-        static_assert(KI_NUM_ALPHABETICAL_ROADS == BrnGameState::KI_MAX_CHALLENGES,
+        CGS_STATIC_ASSERT((KI_NUM_ALPHABETICAL_ROADS == BrnGameState::KI_MAX_CHALLENGES),
                       "one alphabetical slot per challenge road");
         RoadSortData laRecords[KI_NUM_ALPHABETICAL_ROADS];
 

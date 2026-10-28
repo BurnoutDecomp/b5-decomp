@@ -386,7 +386,7 @@ const VecFloat KVF_RESET_ON_WATER_HEIGHT = { 0.25f, 0.25f, 0.25f, 0.25f };
 // same translation unit -- a hard C2011. VehicleManager::Construct @0x8263B7C8 has to call BOTH
 // VehicleDriver::Construct and PhysicalTrafficManager::Construct, so the fork was a compile-level
 // blocker on that function, not just a latent tidiness item.
-static_assert(sizeof(VehicleDriver) == 224,
+CGS_STATIC_ASSERT((sizeof(VehicleDriver) == 224),
               "VehicleDriver is 224 bytes (0xE0) -- the X360 GetTrafficDriver stride "
               "(*(this+103600) + 224*idx) and VehicleManager::Construct's `addi r25, r25, 0xE0`");
 
@@ -803,10 +803,10 @@ public:
     // in the banner for WHY it had to move and what the rejected alternative was.
     // ---------------------------------------------------------------------------------------
     PhysicalTrafficManager()
-        : mpaTrafficDrivers(nullptr)
-        , mpaTrafficVehicles(nullptr)
-        , mpaSimpleVehiclePhysics(nullptr)
-        , mpArticulatedJointCreateBuffer(nullptr)
+        : mpaTrafficDrivers(0)
+        , mpaTrafficVehicles(0)
+        , mpaSimpleVehiclePhysics(0)
+        , mpArticulatedJointCreateBuffer(0)
         , mfJointSwingBreakVelocity(0.0f)
         , mfJointTwistBreakVelocity(0.0f)
         , mfJointLinearBreakMph(0.0f)

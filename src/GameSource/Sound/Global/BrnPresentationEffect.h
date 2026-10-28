@@ -101,24 +101,24 @@ struct PresentationEffect : public BrnEffectObject,
     virtual ~PresentationEffect(); // out-of-line anchor; @ 0x826E78A8 vector deleting
                                    // destructor + @ 0x826E7728 adjustor{4} forward to it
 
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual void ProcessUpdate() override;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual void ProcessUpdate() ;
 
     // @ 0x826F77D0 -- vtable 0x820B5F10 slot +0x20. Runs the base detach, stops all
     // four aging voices, then posts a StreamStopRequest for this IStreamUser.
-    virtual bool Detach() override;
-    virtual void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
+    virtual bool Detach() ;
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessage) ;
 
-    virtual const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    virtual const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const ;
     virtual void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
-                                   f32 afGain, f32 afElapsedTime) override;
-    virtual void StreamStopped() override;
+                                   f32 afGain, f32 afElapsedTime) ;
+    virtual void StreamStopped() ;
 
     // DWARF :286; X360 this+0x40, stride 0x80 (attested). The ctor constructs all 4.
     AgingVoice maVoices[4];

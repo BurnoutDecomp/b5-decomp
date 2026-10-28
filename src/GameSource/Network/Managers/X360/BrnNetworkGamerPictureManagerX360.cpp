@@ -656,24 +656,24 @@ namespace BrnNetwork
     {
         // The picture table is a contiguous array of GamerPictureData entries; the per-entry field
         // order is miPlayerID -> mXuid -> mTexture -> mbReady (every one an asm store/load offset).
-        static_assert(offsetof(GamerPictureData, mXuid) > offsetof(GamerPictureData, miPlayerID),
+        CGS_STATIC_ASSERT((offsetof(GamerPictureData, mXuid) > offsetof(GamerPictureData, miPlayerID)),
                       "miPlayerID precedes mXuid");
-        static_assert(offsetof(GamerPictureData, mTexture) > offsetof(GamerPictureData, mXuid),
+        CGS_STATIC_ASSERT((offsetof(GamerPictureData, mTexture) > offsetof(GamerPictureData, mXuid)),
                       "mXuid precedes mTexture");
-        static_assert(offsetof(GamerPictureData, mbReady) > offsetof(GamerPictureData, mTexture),
+        CGS_STATIC_ASSERT((offsetof(GamerPictureData, mbReady) > offsetof(GamerPictureData, mTexture)),
                       "mTexture precedes mbReady");
 
         // The local entry follows the 7-entry remote table; the compressed scratch texture follows
         // the local entry; the deps/latch tail follows the compressed texture.
-        static_assert(offsetof(GamerPictureManagerX360, mLocalPlayerGamerPictureData)
+        CGS_STATIC_ASSERT((offsetof(GamerPictureManagerX360, mLocalPlayerGamerPictureData)
                       == offsetof(GamerPictureManagerX360, maGamerPictureData)
-                         + KI_MAX_GAMER_PICTURES * sizeof(GamerPictureData),
+                         + KI_MAX_GAMER_PICTURES * sizeof(GamerPictureData)),
                       "mLocalPlayerGamerPictureData follows the 7-entry remote table");
-        static_assert(offsetof(GamerPictureManagerX360, mpNetworkManager)
-                      > offsetof(GamerPictureManagerX360, mCompressedTexture),
+        CGS_STATIC_ASSERT((offsetof(GamerPictureManagerX360, mpNetworkManager)
+                      > offsetof(GamerPictureManagerX360, mCompressedTexture)),
                       "mCompressedTexture precedes the deps tail");
-        static_assert(offsetof(GamerPictureManagerX360, mbWasConnectedLastFrame)
-                      > offsetof(GamerPictureManagerX360, mbPictureDownloaded),
+        CGS_STATIC_ASSERT((offsetof(GamerPictureManagerX360, mbWasConnectedLastFrame)
+                      > offsetof(GamerPictureManagerX360, mbPictureDownloaded)),
                       "mbPictureDownloaded precedes mbWasConnectedLastFrame");
     }
 }

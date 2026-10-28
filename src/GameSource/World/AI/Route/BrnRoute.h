@@ -29,8 +29,8 @@ struct RouteNode
     }
     f32 GetPositionX() const { return mfPositionX; }
     f32 GetPositionZ() const { return mfPositionZ; }
-    Vector2 GetPosition() const { return Vector2{mfPositionX, mfPositionZ, 0.0f, 0.0f}; }
-    Vector3 GetPositionWithZeroY() const { return Vector3{mfPositionX, 0.0f, mfPositionZ, 0.0f}; }
+    Vector2 GetPosition() const { { const Vector2 lResult = {mfPositionX, mfPositionZ, 0.0f, 0.0f}; return lResult; } }
+    Vector3 GetPositionWithZeroY() const { { const Vector3 lResult = {mfPositionX, 0.0f, mfPositionZ, 0.0f}; return lResult; } }
     u16 GetSectionIndex() const { return muSectionIndex; }
     u8 GetPortalIndex() const { return muPortalIndex; }
     f32 GetDistanceLeft() const { return mfDistanceLeft; }

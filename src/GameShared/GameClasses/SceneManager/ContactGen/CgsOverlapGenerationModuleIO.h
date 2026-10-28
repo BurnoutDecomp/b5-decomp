@@ -112,12 +112,12 @@ namespace OverlapGenerationIO
     // than this header. RETIRE THIS TYPE the moment the Vector3 fork is healed: the members
     // below become plain `rw::collision::AABBox mAabb;` with AABBox.hpp included, and nothing
     // else changes (the layout is identical by construction).
-    struct alignas(16) AABBoxRows
+    struct CGS_ALIGN(16) AABBoxRows
     {
         Vector3 mMin;   // rw::collision::AABBox +0x00
         Vector3 mMax;   // rw::collision::AABBox +0x10
     };
-    static_assert(sizeof(AABBoxRows) == 32, "AABBox image is two 16-byte rows");
+    CGS_STATIC_ASSERT((sizeof(AABBoxRows) == 32), "AABBox image is two 16-byte rows");
 
     // CgsOverlapGenerationModuleIO.h:38 -- the capacity of the three body queues.
     // DWARF spells this as a namespace-scope global constant (guMAX_NUM_BODIES), not a
@@ -143,7 +143,7 @@ namespace OverlapGenerationIO
     //   stw r7 -> +0x20; stw r5 -> +0x24; stw r8 -> +0x28; std r9 -> +0x30.
     //   X360 consumer reads:  r5 = the event pointer (== &mAabb); lwz 0x24 -> muIndex;
     //   lwz 0x28 -> meBodyState; ld 0x30 -> mVolumeInstanceID.
-    struct alignas(16) InAddBody : public CgsModule::Event
+    struct CGS_ALIGN(16) InAddBody : public CgsModule::Event
     {
         // The culling-group tag: the same u32 typedef the add-for-collision event carries
         // (DWARF names the member's type `InEventAddForCollision::CullingGroup`).
@@ -171,7 +171,7 @@ namespace OverlapGenerationIO
     // OverlapGenerationModule::ProcessUpdateBodyQueue @0x828C1DE8.
     //   X360 producer stores: 4x ld/std off the caller's box -> +0x00..+0x1F;
     //   stvx128 v1 -> +0x20; stw r4 -> +0x30; std r6 -> +0x38.
-    struct alignas(16) InUpdateBody : public CgsModule::Event
+    struct CGS_ALIGN(16) InUpdateBody : public CgsModule::Event
     {
         AABBoxRows            mAabb;              // :146 +0x00 (DWARF type: AABBox; see AABBoxRows)
         Vector3               mPadding;           // :147 +0x20 (the sweeper's padding lane)
@@ -264,27 +264,27 @@ namespace OverlapGenerationIO
     // The element sizes/offsets below are identical on the X360 and on the x64 host (no
     // member of any event is a pointer), so they can be asserted directly. sizeof of the
     // buffers themselves is asserted only where the console value survives widening.
-    static_assert(sizeof(InAddBody) == 64, "InAddBody stride == 0x40 (AddEvent 0x828B85D8 slwi 6)");
-    static_assert(offsetof(InAddBody, mAabb) == 0x00, "InAddBody::mAabb at +0x00");
-    static_assert(offsetof(InAddBody, mCullGroup) == 0x20, "InAddBody::mCullGroup at +0x20 (stw r7)");
-    static_assert(offsetof(InAddBody, muIndex) == 0x24, "InAddBody::muIndex at +0x24 (stw r5)");
-    static_assert(offsetof(InAddBody, meBodyState) == 0x28, "InAddBody::meBodyState at +0x28 (stw r8)");
-    static_assert(offsetof(InAddBody, mVolumeInstanceID) == 0x30, "InAddBody::mVolumeInstanceID at +0x30 (std r9)");
+    CGS_STATIC_ASSERT((sizeof(InAddBody) == 64), "InAddBody stride == 0x40 (AddEvent 0x828B85D8 slwi 6)");
+    CGS_STATIC_ASSERT((offsetof(InAddBody, mAabb) == 0x00), "InAddBody::mAabb at +0x00");
+    CGS_STATIC_ASSERT((offsetof(InAddBody, mCullGroup) == 0x20), "InAddBody::mCullGroup at +0x20 (stw r7)");
+    CGS_STATIC_ASSERT((offsetof(InAddBody, muIndex) == 0x24), "InAddBody::muIndex at +0x24 (stw r5)");
+    CGS_STATIC_ASSERT((offsetof(InAddBody, meBodyState) == 0x28), "InAddBody::meBodyState at +0x28 (stw r8)");
+    CGS_STATIC_ASSERT((offsetof(InAddBody, mVolumeInstanceID) == 0x30), "InAddBody::mVolumeInstanceID at +0x30 (std r9)");
 
-    static_assert(sizeof(InUpdateBody) == 64, "InUpdateBody stride == 0x40 (AddEvent 0x828B8730 slwi 6)");
-    static_assert(offsetof(InUpdateBody, mAabb) == 0x00, "InUpdateBody::mAabb at +0x00");
-    static_assert(offsetof(InUpdateBody, mPadding) == 0x20, "InUpdateBody::mPadding at +0x20 (stvx128 v1)");
-    static_assert(offsetof(InUpdateBody, muIndex) == 0x30, "InUpdateBody::muIndex at +0x30 (stw r4)");
-    static_assert(offsetof(InUpdateBody, mVolumeInstanceID) == 0x38, "InUpdateBody::mVolumeInstanceID at +0x38 (std r6)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateBody) == 64), "InUpdateBody stride == 0x40 (AddEvent 0x828B8730 slwi 6)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateBody, mAabb) == 0x00), "InUpdateBody::mAabb at +0x00");
+    CGS_STATIC_ASSERT((offsetof(InUpdateBody, mPadding) == 0x20), "InUpdateBody::mPadding at +0x20 (stvx128 v1)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateBody, muIndex) == 0x30), "InUpdateBody::muIndex at +0x30 (stw r4)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateBody, mVolumeInstanceID) == 0x38), "InUpdateBody::mVolumeInstanceID at +0x38 (std r6)");
 
-    static_assert(sizeof(InRemoveBody) == 16, "InRemoveBody stride == 0x10 (AddEvent 0x828B8888 slwi 4)");
-    static_assert(offsetof(InRemoveBody, mVolumeInstanceID) == 0x00, "InRemoveBody::mVolumeInstanceID at +0x00");
-    static_assert(offsetof(InRemoveBody, muIndex) == 0x08, "InRemoveBody::muIndex at +0x08");
+    CGS_STATIC_ASSERT((sizeof(InRemoveBody) == 16), "InRemoveBody stride == 0x10 (AddEvent 0x828B8888 slwi 4)");
+    CGS_STATIC_ASSERT((offsetof(InRemoveBody, mVolumeInstanceID) == 0x00), "InRemoveBody::mVolumeInstanceID at +0x00");
+    CGS_STATIC_ASSERT((offsetof(InRemoveBody, muIndex) == 0x08), "InRemoveBody::muIndex at +0x08");
 
-    static_assert(sizeof(InForceNoPadding) == 4, "InForceNoPadding stride == 4 (AddEvent 0x828B89D0 slwi 2)");
+    CGS_STATIC_ASSERT((sizeof(InForceNoPadding) == 4), "InForceNoPadding stride == 4 (AddEvent 0x828B89D0 slwi 2)");
 
     // The whole input buffer: IOBufferStack::Free(..., 2359888) @0x828C53F0. This total
     // survives the x64 widening intact (see the header banner), so it is asserted.
-    static_assert(sizeof(InputBuffer) == 2359888, "sizeof(OverlapGenerationIO::InputBuffer) == 2,359,888 (DestroyIOBuffer 0x828C53F0)");
+    CGS_STATIC_ASSERT((sizeof(InputBuffer) == 2359888), "sizeof(OverlapGenerationIO::InputBuffer) == 2,359,888 (DestroyIOBuffer 0x828C53F0)");
 }
 }

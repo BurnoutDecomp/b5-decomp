@@ -44,7 +44,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mnClipActionFlags / mDisplayList
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"              // removeClonedObject
 
-#include <cstdint>
+#include "types.hpp"
 
 // The pooled "this"/"_global" keys -- defined with their literal contents in
 // AptGlobals.cpp.
@@ -252,7 +252,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
 
     // Pick the target node: the current-target slot when it is a clip / CIHNone,
     // otherwise the run scope.
-    AptCIH* pNode = nullptr;
+    AptCIH* pNode = 0;
     if (pContext->mpPendingReleaseValue && IsClipHandleOrCIHNone(pContext->mpPendingReleaseValue))
         pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
     else if (IsClipHandleOrCIHNone(pContext->mpCIH))
@@ -347,7 +347,7 @@ void AptActionInterpreter::_FunctionAptActionStop(AptActionInterpreter* /*pInter
         return;
 
     AptCharacterInst* const pInst = pNode->GetCharacterInst();
-    if (pInst->GetTypeTag() != KU_TYPETAG_LEVEL && pInst != nullptr)
+    if (pInst->GetTypeTag() != KU_TYPETAG_LEVEL && pInst != 0)
         static_cast<AptCharacterSpriteInstBase*>(pInst)->mnClipActionFlags &= ~KU_CLIP_PLAYING;
 }
 
@@ -369,7 +369,7 @@ void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* p
     // scope, AptValue* target, parent, name, depth, initObject=null).
         // AptActionInterpreter::_doCloneSprite is now a member (declared in the header).
         pInterp->_doCloneSprite(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                            pParentValue, pNameValue, nDepth, nullptr);
+                            pParentValue, pNameValue, nDepth, 0);
 
     pInterp->stackSafePop(3);   // console Burnout_X360_Artist_01e3_0(this, 3)
 }
@@ -386,7 +386,7 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
     AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
     if (pTop->getIsDefined())
     {
-        AptValue* pResolved = nullptr;
+        AptValue* pResolved = 0;
         pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                            pTop, &pResolved);   // homed member (InterpHelpers.cpp)
         if (pResolved && IsClipHandleOrCIHNone(pResolved))
@@ -428,7 +428,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
     if (pTarget->isString())
     {
         EAStringC leafName;                                          // console v23 scratch
-        AptValue* pResolvedContext = nullptr;                        // console HIDWORD(v24)
+        AptValue* pResolvedContext = 0;                        // console HIDWORD(v24)
 
         // Boxed strings (type != 1) expose their AptString behind AptStringObject::mpValue.
         const EAStringC* pName = (pTarget->getVtblIndex() == AptVFT_StringValue)
@@ -518,12 +518,12 @@ void AptActionInterpreter::_FunctionAptActionSetTarget(AptActionInterpreter* pIn
         // empty path -> drop the current target.
         if (pContext->mpPendingReleaseValue)
             pContext->mpPendingReleaseValue->Release();
-        pContext->mpPendingReleaseValue = nullptr;
+        pContext->mpPendingReleaseValue = 0;
         return;
     }
 
     EAStringC strPath(szPath);   // console EAStringC::InitFromBuffer scratch (RAII Decrease)
-    AptValue* pTarget = nullptr;
+    AptValue* pTarget = 0;
     if (szPath[0] == '/' || szPath[0] == '.')
     {
         // relative walk: each leading ".." climbs to the display-list parent.
@@ -539,7 +539,7 @@ void AptActionInterpreter::_FunctionAptActionSetTarget(AptActionInterpreter* pIn
     else
     {
         strPath.TrimRight("/");
-        pTarget = pInterp->getObject(pContext->mpCIH, nullptr, &strPath);
+        pTarget = pInterp->getObject(pContext->mpCIH, 0, &strPath);
     }
 
     pContext->mpPendingReleaseValue = pTarget;
@@ -571,7 +571,7 @@ void AptActionInterpreter::_FunctionAptActionSetTarget2(AptActionInterpreter* pI
         // empty path -> drop the current target.
         if (pContext->mpPendingReleaseValue)
             pContext->mpPendingReleaseValue->Release();
-        pContext->mpPendingReleaseValue = nullptr;
+        pContext->mpPendingReleaseValue = 0;
     }
 
     pInterp->stackPop();
@@ -589,7 +589,7 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
 {
     AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
 
-    AptValue* pResolved = nullptr;
+    AptValue* pResolved = 0;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pTop, &pResolved);   // homed member (InterpHelpers.cpp)
 

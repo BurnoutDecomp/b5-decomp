@@ -101,7 +101,7 @@ s32 CVoice::Stop(u8 auFlag)
                     {
                         const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                         lpLock->muSavedIrql   = 0;
-                        lpLock->mpOwnerThread = nullptr;
+                        lpLock->mpOwnerThread = 0;
                         KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                         KfLowerIrql(luRestoreIrql);
                     }
@@ -119,7 +119,7 @@ s32 CVoice::Stop(u8 auFlag)
                     {
                         const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                         lpLock->muSavedIrql   = 0;
-                        lpLock->mpOwnerThread = nullptr;
+                        lpLock->mpOwnerThread = 0;
                         KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                         KfLowerIrql(luRestoreIrql);
                     }
@@ -142,7 +142,7 @@ s32 CVoice::Stop(u8 auFlag)
                 {
                     const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                     lpLock->muSavedIrql   = 0;
-                    lpLock->mpOwnerThread = nullptr;
+                    lpLock->mpOwnerThread = 0;
                     KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                     KfLowerIrql(luRestoreIrql);
                 }
@@ -195,7 +195,7 @@ s32 CVoice::Stop(u8 auFlag)
                 {
                     const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                     lpLock->muSavedIrql   = 0;
-                    lpLock->mpOwnerThread = nullptr;
+                    lpLock->mpOwnerThread = 0;
                     KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                     KfLowerIrql(luRestoreIrql);
                 }
@@ -216,7 +216,7 @@ s32 CVoice::Stop(u8 auFlag)
             {
                 const KIRQL luRestoreIrql = lpLock->muSavedIrql;
                 lpLock->muSavedIrql   = 0;
-                lpLock->mpOwnerThread = nullptr;
+                lpLock->mpOwnerThread = 0;
                 KeReleaseSpinLockFromRaisedIrql(&lpLock->muLock);
                 KfLowerIrql(luRestoreIrql);
             }
@@ -319,12 +319,12 @@ s32 CVoice::ProcessEffect(SVoiceEffect* apEffect, CFrameBuffer** apInOut)
     else if ((apEffect->muFlagB & 3) != 0)
     {
         lpIn  = *apInOut;
-        lpOut = nullptr;
+        lpOut = 0;
     }
     else if ((apEffect->muFlagB & 4) != 0)
     {
         lpOut = *apInOut;
-        lpIn  = nullptr;
+        lpIn  = 0;
     }
     else
     {

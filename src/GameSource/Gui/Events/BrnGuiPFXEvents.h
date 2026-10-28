@@ -76,20 +76,20 @@ namespace BrnGui
 
     // Original commands are their complete payload objects. Flatten the
     // original empty GuiEvent base; no synthetic GUI prefix occupies storage.
-    static_assert(sizeof(GuiPFXHookEvent) == 64 &&
+    CGS_STATIC_ASSERT((sizeof(GuiPFXHookEvent) == 64 &&
                   offsetof(GuiPFXHookEvent, muGuid) == 0 &&
                   offsetof(GuiPFXHookEvent, mfMaximumBloomWeight) == 4 &&
-                  offsetof(GuiPFXHookEvent, macName) == 28, "PFX495 native record");
-    static_assert(sizeof(GuiPFXHookStopEvent) == 40 &&
-                  offsetof(GuiPFXHookStopEvent, macName) == 4, "PFX496 native record");
-    static_assert(sizeof(GuiPFXStartBackgroundHookEvent) == 44 &&
-                  offsetof(GuiPFXStartBackgroundHookEvent, mfMaximumWeight) == 40,
+                  offsetof(GuiPFXHookEvent, macName) == 28), "PFX495 native record");
+    CGS_STATIC_ASSERT((sizeof(GuiPFXHookStopEvent) == 40 &&
+                  offsetof(GuiPFXHookStopEvent, macName) == 4), "PFX496 native record");
+    CGS_STATIC_ASSERT((sizeof(GuiPFXStartBackgroundHookEvent) == 44 &&
+                  offsetof(GuiPFXStartBackgroundHookEvent, mfMaximumWeight) == 40),
                   "PFX498 native record");
-    static_assert(sizeof(GuiPFXStopBackgroundHookEvent) == 40 &&
-                  offsetof(GuiPFXStopBackgroundHookEvent, macName) == 4,
+    CGS_STATIC_ASSERT((sizeof(GuiPFXStopBackgroundHookEvent) == 40 &&
+                  offsetof(GuiPFXStopBackgroundHookEvent, macName) == 4),
                   "PFX499 native record");
-    static_assert(sizeof(GuiPFXStopMenuHookEvent) == 1 &&
-                  sizeof(GuiPFXHookEnumerationRequest) == 1, "PFX command tags");
+    CGS_STATIC_ASSERT((sizeof(GuiPFXStopMenuHookEvent) == 1 &&
+                  sizeof(GuiPFXHookEnumerationRequest) == 1), "PFX command tags");
 
     // ARTIST8250C4E8 publishes404 bytes: count followed by100 pointers,
     // with no in-payload GUI header. Host pointer alignment/width is native.
@@ -99,7 +99,7 @@ namespace BrnGui
         const char* mapHookNames[100];                // :6049
         s32 GetEventType() const { return 501; }
     };
-    static_assert(sizeof(GuiPFXHookEnumeration) == 101 * sizeof(const char*),
+    CGS_STATIC_ASSERT((sizeof(GuiPFXHookEnumeration) == 101 * sizeof(const char*)),
                   "PFX enumeration is count plus100 native pointers");
 }
 

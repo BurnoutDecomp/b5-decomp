@@ -49,12 +49,12 @@ s32 NetworkAdapterBase::miSendPerfMon = -1;
 // by the first adapter constructed.
 void NetworkAdapterBase::Construct()
 {
-    mpMessageSentCallbackFunction = nullptr;
+    mpMessageSentCallbackFunction = 0;
     meServerType                  = E_SERVER_TYPE_COUNT;
     meLastError                   = E_NET_ERROR_NONE;
-    mpNetworkManager              = nullptr;
-    mpHeapMalloc                  = nullptr;
-    mpRecvBuffer                  = nullptr;
+    mpNetworkManager              = 0;
+    mpHeapMalloc                  = 0;
+    mpRecvBuffer                  = 0;
     mbDuplicateLogin              = false;
 
     if (miSendPerfMon == -1)
@@ -88,18 +88,18 @@ NetworkAdapterBase::ENetworkStatus NetworkAdapterBase::Prepare(NetworkAdapterPre
 // ---- Release -------------------------------------------------------------------------
 bool NetworkAdapterBase::Release()
 {
-    mpNetworkManager = nullptr;
+    mpNetworkManager = 0;
     meServerType     = E_SERVER_TYPE_COUNT;
     mbDuplicateLogin = false;
 
-    if (mpRecvBuffer != nullptr)
+    if (mpRecvBuffer != 0)
     {
         CGS_ASSERT(mpHeapMalloc, "mpHeapMalloc");
         mpHeapMalloc->Free(mpRecvBuffer);
-        mpRecvBuffer = nullptr;
+        mpRecvBuffer = 0;
     }
 
-    mpHeapMalloc = nullptr;
+    mpHeapMalloc = 0;
     return true;
 }
 
@@ -125,7 +125,7 @@ bool NetworkAdapterBase::SendTo(void* lpData, s32 liLength, ConnectionData lConn
 
     if (liSent > 0)
     {
-        if (mpMessageSentCallbackFunction != nullptr)
+        if (mpMessageSentCallbackFunction != 0)
         {
             reinterpret_cast<void (*)(void*)>(mpMessageSentCallbackFunction)(lpData);
         }
@@ -149,7 +149,7 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
     CGS_ASSERT(lppData, "lppData");
     CGS_ASSERT(mpRecvBuffer, "mpRecvBuffer");
 
-    if (lConnectionData.mpNetGameLink == nullptr)
+    if (lConnectionData.mpNetGameLink == 0)
     {
         return 0;
     }

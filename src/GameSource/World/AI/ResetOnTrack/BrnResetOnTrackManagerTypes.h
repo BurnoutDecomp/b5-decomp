@@ -26,7 +26,7 @@ namespace BrnAI
     struct ResetOnTrackManager
     {
         // DWARF BrnResetOnTrackManager.h:78. 32-byte element.
-        struct alignas(16) RecentResetEntry
+        struct CGS_ALIGN(16) RecentResetEntry
         {
             Vector3 mPosition; // +0x00  :94 (16-byte SIMD lane)
             f32     mfTime;    // +0x10  :95 (tail padded to 32 by the 16-byte align)

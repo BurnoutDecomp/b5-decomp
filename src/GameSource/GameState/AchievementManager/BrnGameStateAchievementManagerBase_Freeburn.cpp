@@ -63,7 +63,7 @@ namespace
     // base (X360 unk_82CDBDC4) is modelled as a null pointer with a zero count
     // (X360 dword_82CDBDDC), so the loop no-ops. When the bytes surface, point this at a
     // static const FreeburnChallengeAchievementEntry[] and set the count accordingly.
-    const FreeburnChallengeAchievementEntry* const KAPFREEBURN_CHALLENGE_ACHIEVEMENTS = nullptr;
+    const FreeburnChallengeAchievementEntry* const KAPFREEBURN_CHALLENGE_ACHIEVEMENTS = 0;
     const u32 KU_FREEBURN_CHALLENGE_ACHIEVEMENT_COUNT = 0u; // X360 dword_82CDBDDC (unrecoverable; placeholder 0)
 }
 

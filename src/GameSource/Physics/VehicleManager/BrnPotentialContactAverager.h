@@ -32,7 +32,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    struct alignas(16) PotentialContactAverager
+    struct CGS_ALIGN(16) PotentialContactAverager
     {
         // The console cap; the `>= 0x14` early-out in AddContactPair.
         static const u32 KU_MAX_CONTACT_PAIRS = 20;

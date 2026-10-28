@@ -427,8 +427,8 @@ public:
     // the chase cam, the ICE takes, the aftertouch / deathcam / loose-attachment / orbit cameras) BODIED the same
     // day (piece 6a): the traffic resolution eased, the camera's near clip sized, four frustum-edge line tests, each
     // corner pushed out of its hit; and (piece 6b) the chase cam's lift over the traffic, ResolveVehicleCollisions.
-    void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
-    void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
+    void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) ;
+    void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) ;
 
     // DWARF .cpp:185 / :220 / :251 -- @0x82224948 / @0x8220E4D0 / @0x822405B8. Bodies:
     // BrnCollisionPolicyAttachedToVehicle.cpp. The two radii are |vehicle - camera| before and after
@@ -569,21 +569,21 @@ private:
     // Never called: the static_asserts are evaluated when the body is compiled. See the HOST == CONSOLE note.
     static void _AssertLayout()
     {
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mFrustrumCollisionResolver) == 0x010,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mFrustrumCollisionResolver) == 0x010),
                       "mFrustrumCollisionResolver at the console +0x10");
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mCarToCamera) == 0x170,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mCarToCamera) == 0x170),
                       "mCarToCamera at the console +0x170");
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mGroundConstraint) == 0x1C0,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mGroundConstraint) == 0x1C0),
                       "mGroundConstraint at the console +0x1C0 (its height at +0x210)");
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mAttachedTo) == 0x220,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mAttachedTo) == 0x220),
                       "mAttachedTo at the console +0x220");
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mPitchMover) == 0x230,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mPitchMover) == 0x230),
                       "mPitchMover at the console +0x230");
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mfDesiredNearClip) == 0x23C,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mfDesiredNearClip) == 0x23C),
                       "the tail floats at the console +0x23C");
-        static_assert(offsetof(CollisionPolicyAttachedToVehicle, mbAutoElevate) == 0x248,
+        CGS_STATIC_ASSERT((offsetof(CollisionPolicyAttachedToVehicle, mbAutoElevate) == 0x248),
                       "the eight bools at the console +0x248");
-        static_assert(sizeof(CollisionPolicyAttachedToVehicle) == 0x250,
+        CGS_STATIC_ASSERT((sizeof(CollisionPolicyAttachedToVehicle) == 0x250),
                       "the console stride of the vehicle-attached policy");
     }
 };
@@ -751,8 +751,8 @@ public:
 
     // DWARF BrnCollisionPolicy.cpp:805 / :865 -- @0x822402F8 / @0x82224530. Bodies:
     // BrnVisibilityCollisionPolicy.cpp.
-    void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
-    void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) override;
+    void GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) ;
+    void ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo, Camera& lrCamera) ;
 
     // DWARF :534. mbCanFail is the master gate on every Fail() the policy makes. The seven ICE-anim
     // arbitrator states emit `stb 0, 0x28(behaviour)` right after NewBehaviour<BehaviourIceAnim>

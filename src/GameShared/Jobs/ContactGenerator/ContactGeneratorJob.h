@@ -112,7 +112,7 @@ namespace CgsSceneManager { namespace CgsCollision {
 // the whole rw::collision vocabulary into every includer; the .cpp includes the real header.
 namespace rw { namespace collision { struct GPInstance; } }
 
-struct alignas(16) ContactGeneratorJob
+struct CGS_ALIGN(16) ContactGeneratorJob
 {
     // The scratch arena AllocateMemory bump-allocates out of. The console's overflow tripwire
     // compares against this exact number, so it is the arena's SIZE, not a count:
@@ -326,10 +326,10 @@ struct alignas(16) ContactGeneratorJob
 // is NOT load-bearing on the host (the entry indexes a C array, so the compiler's own stride is
 // used either way) -- it is kept because it costs nothing and because a change to it means
 // somebody edited a member without reading this banner.
-static_assert(offsetof(ContactGeneratorJob, maArena)             == 0x20,    "arena @ +0x20");
-static_assert(offsetof(ContactGeneratorJob, miAllocCursor)       == 0x10280, "cursor @ +0x10280");
-static_assert(offsetof(ContactGeneratorJob, miMemoryRestorePoint)== 0x10284, "restore @ +0x10284");
-static_assert(sizeof(ContactGeneratorJob)                        == 0x10300, "sizeof == 0x10300");
+CGS_STATIC_ASSERT((offsetof(ContactGeneratorJob, maArena)             == 0x20),    "arena @ +0x20");
+CGS_STATIC_ASSERT((offsetof(ContactGeneratorJob, miAllocCursor)       == 0x10280), "cursor @ +0x10280");
+CGS_STATIC_ASSERT((offsetof(ContactGeneratorJob, miMemoryRestorePoint)== 0x10284), "restore @ +0x10284");
+CGS_STATIC_ASSERT((sizeof(ContactGeneratorJob)                        == 0x10300), "sizeof == 0x10300");
 
 // The console's context array: ContactGeneratorEntry indexes `0x831BBF80 + spuId * 0x10300` and
 // asserts spuId < 6 (ContactGenerator.cpp:55). Six contexts, kept at the console's count -- the

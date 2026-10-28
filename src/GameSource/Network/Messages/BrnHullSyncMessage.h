@@ -61,16 +61,16 @@ namespace BrnNetwork
         bool Retrieve(BufferedHullsToActivate* laBufferedHullActivates);
         void Release();
 
-        s32         GetPackedMessageSize() override;
-        bool        OldMessagesAreValid() const override;
-        const char* GetName() const override;
+        s32         GetPackedMessageSize() ;
+        bool        OldMessagesAreValid() const ;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || offsetof(HullSyncMessage, mBufferedHullActivates) == 0x28,
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(HullSyncMessage, mBufferedHullActivates) == 0x28),
                   "HullSyncMessage::mBufferedHullActivates @ +0x28");
-    static_assert(sizeof(void*) != 4 || sizeof(HullSyncMessage) == 0x58, "sizeof(HullSyncMessage) == 0x58");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(HullSyncMessage) == 0x58), "sizeof(HullSyncMessage) == 0x58");
 } // namespace BrnNetwork

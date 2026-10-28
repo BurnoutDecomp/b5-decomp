@@ -1,7 +1,7 @@
 #ifndef RW_RWHASH32STRING_H
 #define RW_RWHASH32STRING_H
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "rw/rwcore_structs.h"  // rw::ResourceDescriptor (for the free operator-)
 

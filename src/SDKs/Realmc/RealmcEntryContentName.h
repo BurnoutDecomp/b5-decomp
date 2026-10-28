@@ -48,7 +48,7 @@
 // RealmcSaveReq.h, maParams[0x138]).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -83,12 +83,12 @@ public:
     friend void RealmcCopyEntryContentParams(void* pDst, const void* pSrc);
 
 private:
-    std::uint8_t  macTitle[0x100];    // +0x000  256-byte title (word @ +0xFE zeroed)
+    uint8_t  macTitle[0x100];    // +0x000  256-byte title (word @ +0xFE zeroed)
     char          macFileName[0x2A];  // +0x100  42-byte file name (NUL @ +0x129)
-    std::uint8_t  maPad12A[2];        // +0x12A  alignment padding before mnSize
-    std::int32_t  mnSize;             // +0x12C  (int)((float)nSizeSeed * 2.8f)
-    std::uint32_t muField130;         // +0x130  copied by sibling helper, not here
-    std::uint32_t muField134;         // +0x134  copied by sibling helper, not here
+    uint8_t  maPad12A[2];        // +0x12A  alignment padding before mnSize
+    int32_t  mnSize;             // +0x12C  (int)((float)nSizeSeed * 2.8f)
+    uint32_t muField130;         // +0x130  copied by sibling helper, not here
+    uint32_t muField134;         // +0x134  copied by sibling helper, not here
 };
 // sizeof(EntryContentName) == 0x138 (312) bytes.
 

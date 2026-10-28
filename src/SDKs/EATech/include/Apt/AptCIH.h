@@ -33,7 +33,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"     // AptValueGC base
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"     // mInstanceName
@@ -84,10 +84,10 @@ struct AptCIH : public AptValueGC
     // the MovieClip methods as lazy AptNativeFunction singletons, the AS event-handler
     // members into the property hash + event mask (+ the director's input set).
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
-                                         const AptNativeString* const pName) const override;
+                                         const AptNativeString* const pName) const ;
     virtual bool objectMemberSet(AptValue* const pThis,
                                  const AptNativeString* const pName,
-                                 AptValue* const pValue) override;
+                                 AptValue* const pValue) ;
 
     // ---- name -------------------------------------------------------------
     const EAStringC& GetInstanceName() const { return mInstanceName; }   // @0x7DF0A8
@@ -116,7 +116,7 @@ struct AptCIH : public AptValueGC
     // ---- native-hash (per-instance AS property table) ops -----------------
     // ContainsNativeHashVirtual @0x82AD74B8 -- AptValue vtbl[3] override: does this
     // node's character instance carry a per-instance property hash?
-    virtual bool ContainsNativeHashVirtual() const override;
+    virtual bool ContainsNativeHashVirtual() const ;
     // HasEventMember @0x82AD74E0 -- walk this value's __proto__ chain, returning the
     // first link whose native-hash event-handler mask intersects nEventMask (the
     // matched bits, non-zero == "has an event member"), else 0.
@@ -259,8 +259,8 @@ struct AptCIH : public AptValueGC
     // ---- AptValue object-model overrides (mFlagsA bit 3) ------------------
     // @0x82AD7438/0x82AD7418 -- whether this CIH has an attached AS class.
     // (x64 sub_140838D50/sub_140841530: mask 0x8.)
-    virtual bool GetHasClass() const override { return (mFlagsA & 0x8u) != 0; }
-    virtual void SetHasClass(int b) override  { mFlagsA = (mFlagsA & ~0x8u) | (b ? 0x8u : 0u); }
+    virtual bool GetHasClass() const  { return (mFlagsA & 0x8u) != 0; }
+    virtual void SetHasClass(int b)   { mFlagsA = (mFlagsA & ~0x8u) | (b ? 0x8u : 0u); }
 
     // ---- behavioural batch 2: delegated transform / flag / native-hash ops -
     // All forward through the char inst's (writable) render item or its property
@@ -286,7 +286,7 @@ struct AptCIH : public AptValueGC
     // Release @0x82AE7390 -- AptValue vtbl[1] override: a CIHState-1, singly-referenced
     // node (only the display list owns it) pins itself -- Release is a no-op; every
     // other state/refcount delegates to AptValue::Release.
-    virtual void Release() override;
+    virtual void Release() ;
 
     // SetMask @0x82AF6650 -- make pMaskSlave the mask for this node (the MASTER), or
     // tear the relationship down: wires the two render items' isMask/hasMask flags +

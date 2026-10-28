@@ -110,7 +110,7 @@ void MapIconManager::ResetOwnerParameter()
 //   (the X360 reaches it at this+0x7090). The pointer is asserted non-null first.
 void MapIconManager::SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules)
 {
-    CGS_ASSERT(lpRoadRules != nullptr, "lpRoadRules");
+    CGS_ASSERT(lpRoadRules != 0, "lpRoadRules");
 
     mRoadSignIconManager.SetRoadRuleBatchData(lpRoadRules);
 }
@@ -184,7 +184,7 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetDriveThroughOrJun
         liRemaining = liIndex - GetNumRivalIcons();
     }
 
-    CGS_ASSERT(mpGuiCache != nullptr, "mpGuiCache");
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
     const bool lbSkipPaintShop =
         (mpGuiCache->GetCurrentGameModeType() == E_MODE_ROAD_RAGE ||
@@ -987,10 +987,10 @@ MapIconBrnBase::IconState MapIconManager::GetCrashNavIconStateForRival(
     if (liType != SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL)
         return MapIconBrnBase::E_ICONSTATE_RIVAL;
 
-    CGS_ASSERT(mpGuiCache != nullptr, "mpGuiCache");   // cpp2419
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp2419
     const EActiveRaceCarIndex leCar =
         static_cast<EActiveRaceCarIndex>(lpIcon->GetActiveRaceCarIndex());
-    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = nullptr;
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = 0;
     for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
     {
         const auto* const lpCandidate = mpGuiCache->GetOnlinePlayerInfo(liPlayer);
@@ -1000,7 +1000,7 @@ MapIconBrnBase::IconState MapIconManager::GetCrashNavIconStateForRival(
             break;
         }
     }
-    if (lpPlayer == nullptr || !lpPlayer->mbIsInLocalGameWorld)
+    if (lpPlayer == 0 || !lpPlayer->mbIsInLocalGameWorld)
         return MapIconBrnBase::E_ICONSTATE_INVISIBLE;
     if (mpGuiCache->GetCurrentOnlinePlayerTeam(leCar) == 2)
         return MapIconBrnBase::E_ICONSTATE_RIVAL_BLUE;

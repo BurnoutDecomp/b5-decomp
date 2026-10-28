@@ -36,34 +36,34 @@ namespace Vehicle
         Vector3 ControlsScale(Vector3 lvValue, float lfScale)
         {
             lfScale = ControlsFlush(lfScale);
-            return Vector3{ControlsFlush(ControlsFlush(lvValue.x) * lfScale),
+            { const Vector3 lResult = {ControlsFlush(ControlsFlush(lvValue.x) * lfScale),
                            ControlsFlush(ControlsFlush(lvValue.y) * lfScale),
                            ControlsFlush(ControlsFlush(lvValue.z) * lfScale),
-                           ControlsFlush(ControlsFlush(lvValue.w) * lfScale)};
+                           ControlsFlush(ControlsFlush(lvValue.w) * lfScale)}; return lResult; }
         }
 
         Vector3 ControlsScaleAdd(Vector3 lvValue, float lfScale, Vector3 lvBase)
         {
-            return Vector3{ControlsMultiplyAdd(lvValue.x, lfScale, lvBase.x),
+            { const Vector3 lResult = {ControlsMultiplyAdd(lvValue.x, lfScale, lvBase.x),
                            ControlsMultiplyAdd(lvValue.y, lfScale, lvBase.y),
                            ControlsMultiplyAdd(lvValue.z, lfScale, lvBase.z),
-                           ControlsMultiplyAdd(lvValue.w, lfScale, lvBase.w)};
+                           ControlsMultiplyAdd(lvValue.w, lfScale, lvBase.w)}; return lResult; }
         }
 
         Vector3 ControlsAdd(Vector3 lvA, Vector3 lvB)
         {
-            return Vector3{ControlsFlush(ControlsFlush(lvA.x) + ControlsFlush(lvB.x)),
+            { const Vector3 lResult = {ControlsFlush(ControlsFlush(lvA.x) + ControlsFlush(lvB.x)),
                            ControlsFlush(ControlsFlush(lvA.y) + ControlsFlush(lvB.y)),
                            ControlsFlush(ControlsFlush(lvA.z) + ControlsFlush(lvB.z)),
-                           ControlsFlush(ControlsFlush(lvA.w) + ControlsFlush(lvB.w))};
+                           ControlsFlush(ControlsFlush(lvA.w) + ControlsFlush(lvB.w))}; return lResult; }
         }
 
         Vector3 ControlsSubtract(Vector3 lvA, Vector3 lvB)
         {
-            return Vector3{ControlsFlush(ControlsFlush(lvA.x) - ControlsFlush(lvB.x)),
+            { const Vector3 lResult = {ControlsFlush(ControlsFlush(lvA.x) - ControlsFlush(lvB.x)),
                            ControlsFlush(ControlsFlush(lvA.y) - ControlsFlush(lvB.y)),
                            ControlsFlush(ControlsFlush(lvA.z) - ControlsFlush(lvB.z)),
-                           ControlsFlush(ControlsFlush(lvA.w) - ControlsFlush(lvB.w))};
+                           ControlsFlush(ControlsFlush(lvA.w) - ControlsFlush(lvB.w))}; return lResult; }
         }
 
         float ControlsNegativeMultiplySubtract(float lfA, float lfB, float lfC)
@@ -75,11 +75,11 @@ namespace Vehicle
 
         Vector3 ConeCross(Vector3 lvA, Vector3 lvB)
         {
-            return Vector3{
+            { const Vector3 lResult = {
                 ControlsNegativeMultiplySubtract(lvA.z, lvB.y, ControlsFlush(ControlsFlush(lvA.y) * ControlsFlush(lvB.z))),
                 ControlsNegativeMultiplySubtract(lvA.x, lvB.z, ControlsFlush(ControlsFlush(lvA.z) * ControlsFlush(lvB.x))),
                 ControlsNegativeMultiplySubtract(lvA.y, lvB.x, ControlsFlush(ControlsFlush(lvA.x) * ControlsFlush(lvB.y))),
-                ControlsNegativeMultiplySubtract(lvA.w, lvB.w, ControlsFlush(ControlsFlush(lvA.w) * ControlsFlush(lvB.w)))};
+                ControlsNegativeMultiplySubtract(lvA.w, lvB.w, ControlsFlush(ControlsFlush(lvA.w) * ControlsFlush(lvB.w)))}; return lResult; }
         }
 
         Vector3 NormalizeConeBasis(Vector3 lvValue)
@@ -101,8 +101,8 @@ namespace Vehicle
         Vector3 lvPosition, const BrnPlayerDriverControls* lpControls,
         CgsDev::Debug3DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(lpControls != nullptr, "lpControls"); // :695
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay");   // :696
+        CGS_ASSERT(lpControls != 0, "lpControls"); // :695
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay");   // :696
 
         const Vector3 lvCentre = ControlsAdd(lvPosition, Vector3{0.0f, 2.5f, 0.0f, 0.0f});
         const Matrix44 lViewProjection = lpDisplay->GetViewProjectionMatrix();
@@ -194,17 +194,17 @@ namespace Vehicle
     void PhysicalTrafficManagerDebugComponent::_AssertLayout()
     {
         typedef PhysicalTrafficManagerDebugComponent D;
-        static_assert(offsetof(D, mbDrawTrafficAirRams) - offsetof(D, mpTrafficManager) == sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawTrafficAirRams) - offsetof(D, mpTrafficManager) == sizeof(void*)),
                       "mbDrawTrafficAirRams follows the manager pointer (X360 +12 -> +16)");
-        static_assert(offsetof(D, mfAirRamLengthScale) - offsetof(D, mbDrawTrafficAirRams) == 4,
+        CGS_STATIC_ASSERT((offsetof(D, mfAirRamLengthScale) - offsetof(D, mbDrawTrafficAirRams) == 4),
                       "mfAirRamLengthScale is one word past the air-ram flag (X360 +16 -> +20)");
-        static_assert(offsetof(D, mbDrawDriverControls)       - offsetof(D, mfAirRamLengthScale)  == 4, "X360 +20 -> +24");
-        static_assert(offsetof(D, mbDrawPhysicalTraffic)      - offsetof(D, mbDrawDriverControls) == 1, "X360 +25");
-        static_assert(offsetof(D, mbDrawJoints)               - offsetof(D, mbDrawDriverControls) == 2, "X360 +26");
-        static_assert(offsetof(D, mbDrawSimpleTraffic)        - offsetof(D, mbDrawDriverControls) == 3, "X360 +27");
-        static_assert(offsetof(D, mbDrawTrafficUsingBoxWorld) - offsetof(D, mbDrawDriverControls) == 4, "X360 +28");
-        static_assert(offsetof(D, mbDrawCatchupTargets)       - offsetof(D, mbDrawDriverControls) == 5, "X360 +29");
-        static_assert(offsetof(D, mbDrawResetOnWaterHeight)   - offsetof(D, mbDrawDriverControls) == 6, "X360 +30");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawDriverControls)       - offsetof(D, mfAirRamLengthScale)  == 4), "X360 +20 -> +24");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawPhysicalTraffic)      - offsetof(D, mbDrawDriverControls) == 1), "X360 +25");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawJoints)               - offsetof(D, mbDrawDriverControls) == 2), "X360 +26");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawSimpleTraffic)        - offsetof(D, mbDrawDriverControls) == 3), "X360 +27");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawTrafficUsingBoxWorld) - offsetof(D, mbDrawDriverControls) == 4), "X360 +28");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawCatchupTargets)       - offsetof(D, mbDrawDriverControls) == 5), "X360 +29");
+        CGS_STATIC_ASSERT((offsetof(D, mbDrawResetOnWaterHeight)   - offsetof(D, mbDrawDriverControls) == 6), "X360 +30");
     }
 
     // @0x827DBA50  BrnPhysics::Vehicle::PhysicalTrafficManagerDebugComponent::GetName
@@ -315,9 +315,9 @@ namespace Vehicle
         const VehiclePhysics::AirRamEffect* lpAirRam, const VehiclePhysics* lpVehicle,
         CgsDev::Debug3DImmediateRender* lpDisplay) const
     {
-        CGS_ASSERT(lpAirRam != nullptr, "lpAirRam"); // :562
-        CGS_ASSERT(lpVehicle != nullptr, "lpVehicle"); // :563
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay"); // :564
+        CGS_ASSERT(lpAirRam != 0, "lpAirRam"); // :562
+        CGS_ASSERT(lpVehicle != 0, "lpVehicle"); // :563
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay"); // :564
 
         const Matrix44Affine lVehicleTransform = lpVehicle->GetTransform();
         Vector3 lImpulse = lpAirRam->mImpulse;
@@ -382,7 +382,7 @@ namespace Vehicle
         CGS_ASSERT(lvfTheta.x == lvfTheta.x && lvfTheta.y == lvfTheta.y
                    && lvfTheta.z == lvfTheta.z && lvfTheta.w == lvfTheta.w,
                    "IsValid( lfTheta )"); // :621
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay"); // :622
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay"); // :622
 
         // The original tests the absolute direction dot with global Y against 0.9. It uses Y as
         // the first basis when the direction is not near vertical and X in the near-parallel arm.
@@ -426,9 +426,9 @@ namespace Vehicle
     void PhysicalTrafficManagerDebugComponent::RenderDriverControls(
         CgsDev::Debug3DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(mpTrafficManager->mpaTrafficDrivers != nullptr,
+        CGS_ASSERT(mpTrafficManager->mpaTrafficDrivers != 0,
                    "mpTrafficManager->mpaTrafficDrivers"); // :668
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL"); // :696
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL"); // :696
 
         for (s32 liTraffic = mpTrafficManager->mUsedTrafficVehicles.GetFirstNonZeroBit();
              liTraffic >= 0;

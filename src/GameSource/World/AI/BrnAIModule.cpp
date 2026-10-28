@@ -46,8 +46,8 @@ AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int)
 }
 
 AIModule::AIModule()
-    : mInputMutex(nullptr, true),
-      mOutputMutex(nullptr, true),
+    : mInputMutex(0, true),
+      mOutputMutex(0, true),
       miActiveRouteRequest(-1),
       miPendingRouteRequest(-1),
       muRouteRequestVTable(0x820CDF80),

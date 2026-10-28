@@ -142,20 +142,20 @@ namespace Vehicle
     void VehicleOutputRequestInterface::_AssertLayout()
     {
         // --- the element strides the chain is built from (each derived in its own home) ------
-        static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InAddRigidBody) == 192,           "InAddRigidBody stride 192");
-        static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InRemoveRigidBody) == 16,         "InRemoveRigidBody stride 16");
-        static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia) == 80,  "InChangeRigidBodyInertia stride 80");
-        static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InAddJoint) == 192,               "InAddJoint stride 192");
-        static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::InRemoveJoint) == 8,              "InRemoveJoint stride 8");
+        CGS_STATIC_ASSERT((sizeof(CgsPhysics::PhysicsSimulationIO::InAddRigidBody) == 192),           "InAddRigidBody stride 192");
+        CGS_STATIC_ASSERT((sizeof(CgsPhysics::PhysicsSimulationIO::InRemoveRigidBody) == 16),         "InRemoveRigidBody stride 16");
+        CGS_STATIC_ASSERT((sizeof(CgsPhysics::PhysicsSimulationIO::InChangeRigidBodyInertia) == 80),  "InChangeRigidBodyInertia stride 80");
+        CGS_STATIC_ASSERT((sizeof(CgsPhysics::PhysicsSimulationIO::InAddJoint) == 192),               "InAddJoint stride 192");
+        CGS_STATIC_ASSERT((sizeof(CgsPhysics::PhysicsSimulationIO::InRemoveJoint) == 8),              "InRemoveJoint stride 8");
 
         // --- and the widths of the fields AddJoint reads by name (an offset gate alone is
         //     blind to a member retyped in place -- the TrafficPhysics tamper test proved that) ---
-        static_assert(sizeof(InAddJoint::mu64Id) == 8,           "mId is an 8-byte handle (ld, not lwz)");
-        static_assert(sizeof(InAddJoint::mu64ParentBodyId) == 8, "mParentBodyId is an 8-byte handle");
-        static_assert(sizeof(InAddJoint::mu64ChildBodyId) == 8,  "mChildBodyId is an 8-byte handle");
-        static_assert(offsetof(InAddJoint, mu64Id) == 0,            "AddJoint's `ld r10, 0(r29)`");
-        static_assert(offsetof(InAddJoint, mu64ParentBodyId) == 8,  "AddJoint's `ld r10, 8(r29)`");
-        static_assert(offsetof(InAddJoint, mu64ChildBodyId) == 16,  "AddJoint's `ld r10, 0x10(r29)`");
+        CGS_STATIC_ASSERT((sizeof(InAddJoint::mu64Id) == 8),           "mId is an 8-byte handle (ld, not lwz)");
+        CGS_STATIC_ASSERT((sizeof(InAddJoint::mu64ParentBodyId) == 8), "mParentBodyId is an 8-byte handle");
+        CGS_STATIC_ASSERT((sizeof(InAddJoint::mu64ChildBodyId) == 8),  "mChildBodyId is an 8-byte handle");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64Id) == 0),            "AddJoint's `ld r10, 0(r29)`");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64ParentBodyId) == 8),  "AddJoint's `ld r10, 8(r29)`");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64ChildBodyId) == 16),  "AddJoint's `ld r10, 0x10(r29)`");
         // ADDED AFTER THE TAMPER TEST FOUND A HOLE: with only the sizeof==192 line above, shrinking
         // the tail 168 -> 160 was **SILENT** -- 24 + 160 == 184 and alignas(16) rounds it right
         // back to 192. That is the standing over-aligned-type trap (the same one that let a u32 be
@@ -167,32 +167,32 @@ namespace Vehicle
         // these pin the SAME closure over the real members, so the trap they were guarding
         // against is still caught: every interior offset is a sum of the widths before it, and
         // shrinking or re-typing any of them moves a later one.
-        static_assert(offsetof(InAddJoint, mJointFrames) == 32,  "mJointFrames @+0x20 (drain `addi r11,r26,0x20`)");
-        static_assert(sizeof(InAddJoint::mJointFrames) == 80,    "JointFrames is 80B -- the FIVE lvx128 lanes");
-        static_assert(offsetof(InAddJoint, mJointLimits) == offsetof(InAddJoint, mJointFrames) + sizeof(InAddJoint::mJointFrames),
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointFrames) == 32),  "mJointFrames @+0x20 (drain `addi r11,r26,0x20`)");
+        CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointFrames) == 80),    "JointFrames is 80B -- the FIVE lvx128 lanes");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointLimits) == offsetof(InAddJoint, mJointFrames) + sizeof(InAddJoint::mJointFrames)),
                                                                  "mJointLimits follows mJointFrames (+0x70)");
-        static_assert(sizeof(InAddJoint::mJointLimits) == 64,    "JointLimits is 64B -- the EIGHT ld/std pairs");
-        static_assert(offsetof(InAddJoint, mbSpy) == offsetof(InAddJoint, mJointLimits) + sizeof(InAddJoint::mJointLimits),
+        CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointLimits) == 64),    "JointLimits is 64B -- the EIGHT ld/std pairs");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy) == offsetof(InAddJoint, mJointLimits) + sizeof(InAddJoint::mJointLimits)),
                                                                  "mbSpy follows mJointLimits (+0xB0, the drain's `lbz 0xB0(event)`)");
-        static_assert(offsetof(InAddJoint, mbSpy) == 176,        "176 + 1 -> 192 is the ONLY alignment slack in this record");
+        CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy) == 176),        "176 + 1 -> 192 is the ONLY alignment slack in this record");
 
         // --- the six queue sizes, each = 16-byte BaseEventQueue header + N * stride -----------
-        static_assert(sizeof(InAddRigidBodyQueue) == 9616,            "16 + 50*192");
-        static_assert(sizeof(InRemoveRigidBodyQueue) == 816,          "16 + 50*16");
-        static_assert(sizeof(OutFineQueryQueue) == 13456,             "VariableEventQueue<13440,16>: 1 + 13440 -> 13444 + 12");
-        static_assert(sizeof(InChangeRigidBodyInertiaQueue) == 16016, "16 + 200*80");
-        static_assert(sizeof(AddArticulatedJointQueue) == 1936,       "16 + 10*192");
-        static_assert(sizeof(RemoveArticulatedJointQueue) == 96,      "16 + 10*8");
+        CGS_STATIC_ASSERT((sizeof(InAddRigidBodyQueue) == 9616),            "16 + 50*192");
+        CGS_STATIC_ASSERT((sizeof(InRemoveRigidBodyQueue) == 816),          "16 + 50*16");
+        CGS_STATIC_ASSERT((sizeof(OutFineQueryQueue) == 13456),             "VariableEventQueue<13440,16>: 1 + 13440 -> 13444 + 12");
+        CGS_STATIC_ASSERT((sizeof(InChangeRigidBodyInertiaQueue) == 16016), "16 + 200*80");
+        CGS_STATIC_ASSERT((sizeof(AddArticulatedJointQueue) == 1936),       "16 + 10*192");
+        CGS_STATIC_ASSERT((sizeof(RemoveArticulatedJointQueue) == 96),      "16 + 10*8");
 
         // --- the chain, ending on the two asm pins -------------------------------------------
-        static_assert(offsetof(VehicleOutputRequestInterface, mRequiredRigidBodiesQueue) == 0,        "DWARF :263 @0");
-        static_assert(offsetof(VehicleOutputRequestInterface, mRemoveRigidBodyQueue) == 9616,         "DWARF :264");
-        static_assert(offsetof(VehicleOutputRequestInterface, mRequestFineLineQueue) == 10432,        "DWARF :265");
-        static_assert(offsetof(VehicleOutputRequestInterface, mChangeRigidBodyInertiaQueue) == 23888, "DWARF :268");
-        static_assert(offsetof(VehicleOutputRequestInterface, mRemoveJointQueue) == 41840,
+        CGS_STATIC_ASSERT((offsetof(VehicleOutputRequestInterface, mRequiredRigidBodiesQueue) == 0),        "DWARF :263 @0");
+        CGS_STATIC_ASSERT((offsetof(VehicleOutputRequestInterface, mRemoveRigidBodyQueue) == 9616),         "DWARF :264");
+        CGS_STATIC_ASSERT((offsetof(VehicleOutputRequestInterface, mRequestFineLineQueue) == 10432),        "DWARF :265");
+        CGS_STATIC_ASSERT((offsetof(VehicleOutputRequestInterface, mChangeRigidBodyInertiaQueue) == 23888), "DWARF :268");
+        CGS_STATIC_ASSERT((offsetof(VehicleOutputRequestInterface, mRemoveJointQueue) == 41840),
                       "PIN 2 -- SendCreateRemoveJointEvents @0x826013C0 `addi r26,r26,-0x5C90` "
                       "(65536-0x5C90 == 41840)");
-        static_assert(sizeof(VehicleOutputRequestInterface) == 41936,
+        CGS_STATIC_ASSERT((sizeof(VehicleOutputRequestInterface) == 41936),
                       "41840 + 96, 16-aligned -- the chain closes with zero slack");
     }
 
@@ -298,7 +298,7 @@ namespace Vehicle
         //   1 (mbIsConstructed) + 1536 (macData) + 3 pad + 4 + 4 + 4 == 1552 == 0x610.
         // If VariableEventQueue ever grows a pointer this fails to COMPILE instead of writing
         // past mGameEventQueueStorage into mAggressiveDrivingFlags.
-        static_assert(sizeof(CgsModule::VariableEventQueue<1536, 16>) == 0x610,
+        CGS_STATIC_ASSERT((sizeof(CgsModule::VariableEventQueue<1536, 16>) == 0x610),
                       "GameEventQueue must fit its size-pinned storage span exactly");
 
         mTrafficStateQueue.Construct();       // +0x2620

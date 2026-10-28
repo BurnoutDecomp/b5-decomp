@@ -19,8 +19,8 @@ namespace Gen
     class streammappings : private Instance
     {
     public:
-        explicit streammappings(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit streammappings(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit streammappings(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit streammappings(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
 
         bool Find(u32 auUserStringHash, RefSpec& arConfiguration) const

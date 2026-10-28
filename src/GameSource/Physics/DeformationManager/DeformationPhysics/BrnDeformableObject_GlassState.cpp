@@ -806,12 +806,12 @@ namespace Deformation
             // lpWheel = SimpleVehiclePhysics::GetWheel(i) (console r30 = vehicle + 0x130 + 0xE0*i,
             // `cmplwi r30,0` @0x825C2040 -> "lpWheel" tripwire, line 0x3B8).
             const Vehicle::Wheel* lpWheel = lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
-            CGS_ASSERT(lpWheel != nullptr, "lpWheel");
+            CGS_ASSERT(lpWheel != 0, "lpWheel");
 
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
 
             const WheelSpec* lpWheelSpec = mpDeformationSpec->GetWheelSpec(liWheel);
-            CGS_ASSERT(lpWheelSpec != nullptr, "lpWheelSpec");
+            CGS_ASSERT(lpWheelSpec != 0, "lpWheelSpec");
             CGS_ASSERT(lpWheelSpec->liTagPointIndex != -1, "lpWheelSpec->liTagPointIndex != -1");
 
             // Wheel::GetPosition (wheel+0x80: 0x825C20DC `addi r29,r30,0x80`, lvx128 v0 @0x825C20F0
@@ -852,7 +852,7 @@ namespace Deformation
     // ===========================================================================================
     void DeformableObject::GetWheelTagPoints(Vector3* lpaOut) const
     {
-        CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");
+        CGS_ASSERT(mpDeformationSpec != 0, "mpDeformationSpec");
 
         const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
         // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
@@ -867,7 +867,7 @@ namespace Deformation
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
 
             const WheelSpec* lpWheelSpec = mpDeformationSpec->GetWheelSpec(liWheel);
-            CGS_ASSERT(lpWheelSpec != nullptr, "lpWheelSpec");
+            CGS_ASSERT(lpWheelSpec != 0, "lpWheelSpec");
 
             const s32 liTagPointIndex = lpWheelSpec->liTagPointIndex;
             if (liTagPointIndex != -1)

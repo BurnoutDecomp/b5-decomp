@@ -49,11 +49,11 @@ int CI420VideoOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
 
             // Lock/unlock once so each descriptor caches the driver's row pitch and
             // backing pointer (the D3DLOCKED_RECT aliases SVideoBuffer {pitch,data}).
-            D3DTexture_LockRect(mpBufferResource[i], 0, &mBuffers[i], nullptr, 0);
+            D3DTexture_LockRect(mpBufferResource[i], 0, &mBuffers[i], 0, 0);
             D3DTexture_UnlockRect(mpBufferResource[i], 0);
-            D3DTexture_LockRect(mpUTexture[i], 0, &mUBuffers[i], nullptr, 0);
+            D3DTexture_LockRect(mpUTexture[i], 0, &mUBuffers[i], 0, 0);
             D3DTexture_UnlockRect(mpUTexture[i], 0);
-            D3DTexture_LockRect(mpVTexture[i], 0, &mVBuffers[i], nullptr, 0);
+            D3DTexture_LockRect(mpVTexture[i], 0, &mVBuffers[i], 0, 0);
             D3DTexture_UnlockRect(mpVTexture[i], 0);
         }
     }
@@ -95,8 +95,8 @@ void CI420VideoOutput::Shutdown()
         // Device path: the U/V slots hold D3D textures.
         for (int i = 0; i < 3; ++i)
         {
-            if (mpUTexture[i]) { D3DResource_Release(mpUTexture[i]); mpUTexture[i] = nullptr; }
-            if (mpVTexture[i]) { D3DResource_Release(mpVTexture[i]); mpVTexture[i] = nullptr; }
+            if (mpUTexture[i]) { D3DResource_Release(mpUTexture[i]); mpUTexture[i] = 0; }
+            if (mpVTexture[i]) { D3DResource_Release(mpVTexture[i]); mpVTexture[i] = 0; }
         }
     }
     else
@@ -104,8 +104,8 @@ void CI420VideoOutput::Shutdown()
         // No-device path: the U/V slots hold raw XMem blocks.
         for (int i = 0; i < 3; ++i)
         {
-            if (mpUTexture[i]) { XMemFree(mpUTexture[i], KU_XCAM_XMEM_FREE_ATTRIBUTES); mpUTexture[i] = nullptr; }
-            if (mpVTexture[i]) { XMemFree(mpVTexture[i], KU_XCAM_XMEM_FREE_ATTRIBUTES); mpVTexture[i] = nullptr; }
+            if (mpUTexture[i]) { XMemFree(mpUTexture[i], KU_XCAM_XMEM_FREE_ATTRIBUTES); mpUTexture[i] = 0; }
+            if (mpVTexture[i]) { XMemFree(mpVTexture[i], KU_XCAM_XMEM_FREE_ATTRIBUTES); mpVTexture[i] = 0; }
         }
     }
 
@@ -146,13 +146,13 @@ void CI420VideoOutput::Render()
     D3DDevice_DrawVertices(pDevice, 6, 0, 4);
 
     // Unbind everything.
-    D3DDevice_SetVertexDeclaration(pDevice, nullptr);
-    D3DDevice_SetVertexShader(pDevice, nullptr);
-    D3DDevice_SetPixelShader(pDevice, nullptr);
-    D3DDevice_SetTexture(pDevice, 0, nullptr, 0x80000000u);
-    D3DDevice_SetTexture(pDevice, 1, nullptr, 0x40000000u);
-    D3DDevice_SetTexture(pDevice, 2, nullptr, 0x20000000u);
-    D3DDevice_SetStreamSource(pDevice, 0, nullptr, 0, 0, 1);
+    D3DDevice_SetVertexDeclaration(pDevice, 0);
+    D3DDevice_SetVertexShader(pDevice, 0);
+    D3DDevice_SetPixelShader(pDevice, 0);
+    D3DDevice_SetTexture(pDevice, 0, 0, 0x80000000u);
+    D3DDevice_SetTexture(pDevice, 1, 0, 0x40000000u);
+    D3DDevice_SetTexture(pDevice, 2, 0, 0x20000000u);
+    D3DDevice_SetStreamSource(pDevice, 0, 0, 0, 0, 1);
 }
 
 // @ 0x82984698

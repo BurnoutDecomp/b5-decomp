@@ -32,7 +32,7 @@ namespace CgsSceneManager
     // ---- DWARF Zone.h:36 / the DWARF ----
     // A neighbouring zone reference plus render/immediate flags. 16-byte aligned to match
     // the console layout (the SceneManager fixes these up as a contiguous array).
-    class alignas(16) Neighbour
+    class CGS_ALIGN(16) Neighbour
     {
     public:
         enum eNeighbourFlags
@@ -70,7 +70,7 @@ namespace CgsSceneManager
     // ---- DWARF Zone.h:69 / the DWARF ----
     // A convex zone polygon: an array of 2D corner points plus safe/unsafe neighbour
     // lists, an id, a type and flags. 16-byte aligned (points must be 16-byte aligned).
-    class alignas(16) Zone
+    class CGS_ALIGN(16) Zone
     {
     public:
         // DECLARE-ONLY: Construct/FixUp/FixDown bodies live in Zone.cpp (separate TUs).

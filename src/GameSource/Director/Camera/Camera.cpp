@@ -76,8 +76,8 @@ f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 10000.0f;
 // same on console and host. The transform stays at the head on both. (The interior member
 // offsets that ride behind the 4-vs-8-byte pointer members are NOT asserted; parity there
 // is by named member -- see Camera.h.)
-static_assert(sizeof(CameraEffects) == 0xBC, "CameraEffects must be 0xBC (camera +0x68..+0x124)");
-static_assert(offsetof(Camera, mTransform) == 0x00, "transform @ +0x00");
+CGS_STATIC_ASSERT((sizeof(CameraEffects) == 0xBC), "CameraEffects must be 0xBC (camera +0x68..+0x124)");
+CGS_STATIC_ASSERT((offsetof(Camera, mTransform) == 0x00), "transform @ +0x00");
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::Construct @0x82255E68

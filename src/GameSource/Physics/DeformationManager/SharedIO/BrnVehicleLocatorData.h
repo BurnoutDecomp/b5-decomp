@@ -40,7 +40,7 @@ namespace Deformation
     static const s32 KI_NUM_LIGHT_LOCATORS   = 24;   // DWARF maLightLocators[24]
     static const s32 KI_NUM_GENERIC_LOCATORS = 15;   // DWARF maGenericLocators[15]
 
-    struct alignas(16) VehicleLocatorData
+    struct CGS_ALIGN(16) VehicleLocatorData
     {
         // ---- camera locators (DWARF :103-105) ----------------------------------------------
         Matrix44Affine maCameraLocators[KI_NUM_CAMERA_LOCATORS];        // :103 world frames

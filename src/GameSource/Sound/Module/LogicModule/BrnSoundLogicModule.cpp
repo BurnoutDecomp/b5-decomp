@@ -821,7 +821,7 @@ void SoundLogicModule::ProcessGameActionQueue(
 {
     typedef CgsSound::Io::MessageHeader MH;
 
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 liType = arEvents.GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent)
@@ -1114,7 +1114,7 @@ void SoundLogicModule::ProcessGameEventQueue(
 
     static s32 siDiagImpactLines = 0;
 
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 liType = apEvents->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent)

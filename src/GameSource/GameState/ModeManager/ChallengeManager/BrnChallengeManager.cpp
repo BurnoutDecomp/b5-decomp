@@ -484,66 +484,66 @@ void ChallengeManager::UpdateStuntScores(const void* lpStuntScoreInfo)
 void ChallengeManager::_AssertLayout()
 {
     // -- pointer-free prefix: absolute X360 offsets hold on x64 --
-    static_assert(offsetof(ChallengeManager, mPotentiallyLeaptCars)   == 0x000, "pool @0x000");
-    static_assert(offsetof(ChallengeManager, mfLeapCarsValidTimer)    == 0x110, "mfLeapCarsValidTimer @0x110");
-    static_assert(offsetof(ChallengeManager, miNumCarsLeapt)          == 0x114, "miNumCarsLeapt @0x114");
-    static_assert(offsetof(ChallengeManager, mbUpdateLeaptCars)       == 0x118, "mbUpdateLeaptCars @0x118");
-    static_assert(offsetof(ChallengeManager, maBillboardsCollected)   == 0x120, "maBillboardsCollected @0x120");
-    static_assert(offsetof(ChallengeManager, maPlayerSuccessUpdateArray) == 0x3A8, "maPlayerSuccessUpdateArray @0x3A8");
-    static_assert(offsetof(ChallengeManager, maaePlayersSuccessStatus)   == 0x428, "maaePlayersSuccessStatus @0x428");
-    static_assert(offsetof(ChallengeManager, maafCurrentActionsScores)   == 0x468, "maafCurrentActionsScores @0x468");
-    static_assert(offsetof(ChallengeManager, maafCumulativeContributions) == 0x4A8, "maafCumulativeContributions @0x4A8");
-    static_assert(offsetof(ChallengeManager, mafBankedActionScores)   == 0x4E8, "mafBankedActionScores @0x4E8");
-    static_assert(offsetof(ChallengeManager, mafCumulativeActionScores) == 0x580, "mafCumulativeActionScores @0x580");
-    static_assert(offsetof(ChallengeManager, maiRemainingTarget)      == 0x588, "maiRemainingTarget @0x588");
-    static_assert(offsetof(ChallengeManager, mabReceivedSuccessUpdates) == 0x590, "mabReceivedSuccessUpdates @0x590");
-    static_assert(offsetof(ChallengeManager, mabPlayerStartedChallenge) == 0x598, "mabPlayerStartedChallenge @0x598");
-    static_assert(offsetof(ChallengeManager, maiCrashedWithChallengePlayer) == 0x5A0, "maiCrashedWithChallengePlayer @0x5A0");
-    static_assert(offsetof(ChallengeManager, mpVehicleList)           == 0x5C0, "mpVehicleList @0x5C0 (first pointer)");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mPotentiallyLeaptCars)   == 0x000), "pool @0x000");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mfLeapCarsValidTimer)    == 0x110), "mfLeapCarsValidTimer @0x110");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, miNumCarsLeapt)          == 0x114), "miNumCarsLeapt @0x114");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mbUpdateLeaptCars)       == 0x118), "mbUpdateLeaptCars @0x118");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maBillboardsCollected)   == 0x120), "maBillboardsCollected @0x120");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maPlayerSuccessUpdateArray) == 0x3A8), "maPlayerSuccessUpdateArray @0x3A8");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maaePlayersSuccessStatus)   == 0x428), "maaePlayersSuccessStatus @0x428");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maafCurrentActionsScores)   == 0x468), "maafCurrentActionsScores @0x468");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maafCumulativeContributions) == 0x4A8), "maafCumulativeContributions @0x4A8");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mafBankedActionScores)   == 0x4E8), "mafBankedActionScores @0x4E8");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mafCumulativeActionScores) == 0x580), "mafCumulativeActionScores @0x580");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maiRemainingTarget)      == 0x588), "maiRemainingTarget @0x588");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mabReceivedSuccessUpdates) == 0x590), "mabReceivedSuccessUpdates @0x590");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mabPlayerStartedChallenge) == 0x598), "mabPlayerStartedChallenge @0x598");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maiCrashedWithChallengePlayer) == 0x5A0), "maiCrashedWithChallengePlayer @0x5A0");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mpVehicleList)           == 0x5C0), "mpVehicleList @0x5C0 (first pointer)");
 
     // -- ABI-coincident run (X360 pointer+pad == x64 pointer): still absolute --
-    static_assert(offsetof(ChallengeManager, maChallengeCompletionData)    == 0x5C8, "maChallengeCompletionData @0x5C8");
-    static_assert(offsetof(ChallengeManager, mLocalChallengeCompletionData) == 0xD00, "mLocalChallengeCompletionData @0xD00");
-    static_assert(offsetof(ChallengeManager, mLastSecondSuccessStatus)     == 0xE00, "mLastSecondSuccessStatus @0xE00");
-    static_assert(offsetof(ChallengeManager, meChallengeManagerStatus)     == 0xE08, "meChallengeManagerStatus @0xE08");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maChallengeCompletionData)    == 0x5C8), "maChallengeCompletionData @0x5C8");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mLocalChallengeCompletionData) == 0xD00), "mLocalChallengeCompletionData @0xD00");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mLastSecondSuccessStatus)     == 0xE00), "mLastSecondSuccessStatus @0xE00");
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, meChallengeManagerStatus)     == 0xE08), "meChallengeManagerStatus @0xE08");
 
     // -- completion record: pointer-free, both ABIs identical --
-    static_assert(sizeof(ChallengeCompletionData) == 0x108, "ChallengeCompletionData stride 0x108");
-    static_assert(offsetof(ChallengeCompletionData, mNetworkPlayerID) == 0x100, "mNetworkPlayerID @+0x100");
-    static_assert(offsetof(ChallengeCompletionData, mbFinalised)      == 0x104, "mbFinalised @+0x104");
+    CGS_STATIC_ASSERT((sizeof(ChallengeCompletionData) == 0x108), "ChallengeCompletionData stride 0x108");
+    CGS_STATIC_ASSERT((offsetof(ChallengeCompletionData, mNetworkPlayerID) == 0x100), "mNetworkPlayerID @+0x100");
+    CGS_STATIC_ASSERT((offsetof(ChallengeCompletionData, mbFinalised)      == 0x104), "mbFinalised @+0x104");
 
     // -- pointer-free run miCurrentChallengeAction(+0xE10 X360)..mbRemoteEndPending(+0xE37):
     //    relative anchors (mpCurrentChallenge widens on x64) --
-    static_assert(offsetof(ChallengeManager, mbRemoteEndPending) - offsetof(ChallengeManager, miCurrentChallengeAction) == 0x27,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mbRemoteEndPending) - offsetof(ChallengeManager, miCurrentChallengeAction) == 0x27),
                   "timer/flag run spans 0x27 (X360 0xE10..0xE37)");
-    static_assert(offsetof(ChallengeManager, mfResultsTimer) - offsetof(ChallengeManager, miCurrentChallengeAction) == 0x18,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mfResultsTimer) - offsetof(ChallengeManager, miCurrentChallengeAction) == 0x18),
                   "mfResultsTimer +0x18 into the run (X360 0xE28)");
-    static_assert(offsetof(ChallengeManager, meLocalChallengeStatus) - offsetof(ChallengeManager, miCurrentChallengeAction) == 0x20,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, meLocalChallengeStatus) - offsetof(ChallengeManager, miCurrentChallengeAction) == 0x20),
                   "meLocalChallengeStatus +0x20 into the run (X360 0xE30)");
 
     // -- pointer-free run mabBankedSkillThisFrame(+0xE50 X360)..miLastChallengeResetFrame(+0x1000):
     //    relative anchors (five back-pointers widen on x64) --
-    static_assert(offsetof(ChallengeManager, mabActiveSkillThisFrame) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x26,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mabActiveSkillThisFrame) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x26),
                   "mabActiveSkillThisFrame +0x26 (X360 0xE76)");
-    static_assert(offsetof(ChallengeManager, mafActiveSkillValue) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x4C,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mafActiveSkillValue) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x4C),
                   "mafActiveSkillValue +0x4C (X360 0xE9C)");
-    static_assert(offsetof(ChallengeManager, mafCachedActiveSkillValueOnLocationEnter) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0xE4,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mafCachedActiveSkillValueOnLocationEnter) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0xE4),
                   "mafCachedActiveSkillValueOnLocationEnter +0xE4 (X360 0xF34)");
-    static_assert(offsetof(ChallengeManager, mScoresSetThisFrameBitArray) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x180,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mScoresSetThisFrameBitArray) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x180),
                   "mScoresSetThisFrameBitArray +0x180 (X360 0xFD0)");
-    static_assert(offsetof(ChallengeManager, mabIsLocationOk) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x188,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mabIsLocationOk) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x188),
                   "mabIsLocationOk +0x188 (X360 0xFD8)");
-    static_assert(offsetof(ChallengeManager, mabIndividualActionsSuccessUpdateSent) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x18A,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mabIndividualActionsSuccessUpdateSent) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x18A),
                   "mabIndividualActionsSuccessUpdateSent +0x18A (X360 0xFDA)");
-    static_assert(offsetof(ChallengeManager, maChallengePlayerCounts) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x18C,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, maChallengePlayerCounts) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x18C),
                   "maChallengePlayerCounts +0x18C (X360 0xFDC)");
-    static_assert(offsetof(ChallengeManager, miFramesSinceNetworkStart) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x1AC,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, miFramesSinceNetworkStart) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x1AC),
                   "miFramesSinceNetworkStart +0x1AC (X360 0xFFC)");
-    static_assert(offsetof(ChallengeManager, miLastChallengeResetFrame) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x1B0,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, miLastChallengeResetFrame) - offsetof(ChallengeManager, mabBankedSkillThisFrame) == 0x1B0),
                   "miLastChallengeResetFrame +0x1B0 (X360 0x1000)");
 
     // -- trailing flags stay adjacent after the embedded debug component --
-    static_assert(offsetof(ChallengeManager, mbWereAllChallengesTwoPlayer) - offsetof(ChallengeManager, mbWereAllChallengesOnePlayer) == 1,
+    CGS_STATIC_ASSERT((offsetof(ChallengeManager, mbWereAllChallengesTwoPlayer) - offsetof(ChallengeManager, mbWereAllChallengesOnePlayer) == 1),
                   "were-all flags adjacent (X360 0x101C/0x101D)");
 }
 
@@ -2339,7 +2339,7 @@ void ChallengeManager::WriteDataToOutput(GameStateModuleIO::OutputBuffer* lpOutp
             WriteDataToOutputForTarget(&loUpdateAction, miCurrentArbitrationIndex);
         }
 
-        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");   // :1778
+        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");   // :1778
         TGameActionQueue* lpActionQueue = lpOutputBuffer->GetGuiOutputQueue();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&loUpdateAction),
                                 GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_UPDATE,

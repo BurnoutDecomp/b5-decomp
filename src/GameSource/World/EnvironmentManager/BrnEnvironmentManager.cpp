@@ -1664,7 +1664,7 @@ namespace
     // irradiance matrices at the FRONT of that object, KU_IRRADIANCE_MATRICES_BYTES.)
     bool PrepareNotFinished(BrnWorld::GlobalIrradianceManager& lrGlobalIrradianceManager)
     {
-        static_assert(KU_IRRADIANCE_MATRICES_BYTES <= sizeof(BrnWorld::GlobalIrradianceManager),
+        CGS_STATIC_ASSERT((KU_IRRADIANCE_MATRICES_BYTES <= sizeof(BrnWorld::GlobalIrradianceManager)),
                       "the console memsets 0xC0 bytes at +0x700 -- must stay inside the manager");
         memset(&lrGlobalIrradianceManager, 0, KU_IRRADIANCE_MATRICES_BYTES);
         return false;

@@ -56,38 +56,38 @@ class  AptValueVector;
 //    registration boot TU (X360 .data off_8324D8xx / off_8324E2xx / E4xx).
 //    Null until those inits run; the bodies short-circuit on null.
 // ===========================================================================
-AptValue* gpUndefinedValue            = nullptr;   // off_8324D814 (the shared AS `undefined`)
-AptCIH*   gpAptEmptyCIH               = nullptr;   // dword_8324D700 (the pinned "EmptyCIH" AptCIHNone placeholder)
-AptValue* gpAptNoneValue              = nullptr;   // off_8324D814 (the AS `null`/none)
-AptValue* gpUndefinedCIH              = nullptr;   // the undefined-CIH sentinel (AptInit)
-AptValue* gpAptDestroyedClipValue     = nullptr;   // dword_8324D818
-AptValue* gpAptCurrentTargetMC        = nullptr;   // dword_8324D818
-AptValue* gpAptRootTargetMC           = nullptr;   // dword_8324D830
-AptValue* gpAptFunctionPrototypeRoot  = nullptr;   // dword_8324E4EC
+AptValue* gpUndefinedValue            = 0;   // off_8324D814 (the shared AS `undefined`)
+AptCIH*   gpAptEmptyCIH               = 0;   // dword_8324D700 (the pinned "EmptyCIH" AptCIHNone placeholder)
+AptValue* gpAptNoneValue              = 0;   // off_8324D814 (the AS `null`/none)
+AptValue* gpUndefinedCIH              = 0;   // the undefined-CIH sentinel (AptInit)
+AptValue* gpAptDestroyedClipValue     = 0;   // dword_8324D818
+AptValue* gpAptCurrentTargetMC        = 0;   // dword_8324D818
+AptValue* gpAptRootTargetMC           = 0;   // dword_8324D830
+AptValue* gpAptFunctionPrototypeRoot  = 0;   // dword_8324E4EC
 // (the AptValue*-typed gpAptGlobalFallback duplicate was RETIRED 2026-07-05: the
 // LIVE off_8324E380 symbol is AptGlobal.cpp's AptValueWithHash* -- the dead
 // AptValue* twin here made findChild's _global arm look up a never-assigned null
 // while the stores landed in the live object.)
-AptValue* gpAptKeyObject              = nullptr;   // off_8324E2A8 (Key)
-AptValue* gpAptStringObject           = nullptr;   // off_8324D82C (String)
-AptValue* gpAptExternObject           = nullptr;   // off_8324E2CC (extern)
-AptValue* gpAptGlobalExtensionObject  = nullptr;   // off_8324E37C (the _global extension object)
-void*     gpAptRenderingContext       = nullptr;   // dword_8324E2AC (the shared AptRenderingContext; opaque view)
+AptValue* gpAptKeyObject              = 0;   // off_8324E2A8 (Key)
+AptValue* gpAptStringObject           = 0;   // off_8324D82C (String)
+AptValue* gpAptExternObject           = 0;   // off_8324E2CC (extern)
+AptValue* gpAptGlobalExtensionObject  = 0;   // off_8324E37C (the _global extension object)
+void*     gpAptRenderingContext       = 0;   // dword_8324E2AC (the shared AptRenderingContext; opaque view)
 // (gpGlobalGlobalObject / gpGlobalExtensionObject RETIRED 2026-07-05: they duplicated
 // off_8324E380 / off_8324E37C under second never-assigned names, so findChild's global
 // arms silently looked up empty objects. Every reader now binds gpAptGlobalFallback /
 // gpAptGlobalExtensionObject above -- the pair AptValueInitialize actually builds.)
-AptValue* gpObjRegistrationFunc       = nullptr;   // the Object-registration native fn
+AptValue* gpObjRegistrationFunc       = 0;   // the Object-registration native fn
 // The AS global-function singletons AptCIH::objectMemberLookup returns for the
 // setInterval/clearInterval/isNaN/unescape/escape/Boolean member names. Created
 // by the deferred sub_82AF6B68 builtin-table init (see AptInit.cpp); null until
 // that init homes -- the lookup's null return continues the findChild resolution.
-AptValue* gpAptFnSetInterval          = nullptr;   // off_8324D828
-AptValue* gpAptFnClearInterval        = nullptr;   // off_8324D81C
-AptValue* gpAptFnIsNaN                = nullptr;   // off_8324D824
-AptValue* gpAptFnUnescape             = nullptr;   // off_8324E1FC
-AptValue* gpAptFnEscape               = nullptr;   // off_8324D80C
-AptValue* gpAptFnBoolean              = nullptr;   // off_8324D74C
+AptValue* gpAptFnSetInterval          = 0;   // off_8324D828
+AptValue* gpAptFnClearInterval        = 0;   // off_8324D81C
+AptValue* gpAptFnIsNaN                = 0;   // off_8324D824
+AptValue* gpAptFnUnescape             = 0;   // off_8324E1FC
+AptValue* gpAptFnEscape               = 0;   // off_8324D80C
+AptValue* gpAptFnBoolean              = 0;   // off_8324D74C
 
 // ===========================================================================
 // 2. The 27 gpAptNativeFn_8324E4xx per-built-in native-function singletons.
@@ -95,33 +95,33 @@ AptValue* gpAptFnBoolean              = nullptr;   // off_8324D74C
 //    each is an AptNativeFunction torn down via the AptValue Release virtual.
 //    Null storage -- the registry installs them.
 // ===========================================================================
-AptValue* gpAptNativeFn_8324E42C = nullptr;
-AptValue* gpAptNativeFn_8324E430 = nullptr;
-AptValue* gpAptNativeFn_8324E434 = nullptr;
-AptValue* gpAptNativeFn_8324E438 = nullptr;
-AptValue* gpAptNativeFn_8324E43C = nullptr;
-AptValue* gpAptNativeFn_8324E440 = nullptr;
-AptValue* gpAptNativeFn_8324E444 = nullptr;
-AptValue* gpAptNativeFn_8324E448 = nullptr;
-AptValue* gpAptNativeFn_8324E44C = nullptr;
-AptValue* gpAptNativeFn_8324E450 = nullptr;
-AptValue* gpAptNativeFn_8324E454 = nullptr;
-AptValue* gpAptNativeFn_8324E458 = nullptr;
-AptValue* gpAptNativeFn_8324E45C = nullptr;
-AptValue* gpAptNativeFn_8324E460 = nullptr;
-AptValue* gpAptNativeFn_8324E464 = nullptr;
-AptValue* gpAptNativeFn_8324E468 = nullptr;
-AptValue* gpAptNativeFn_8324E46C = nullptr;
-AptValue* gpAptNativeFn_8324E470 = nullptr;
-AptValue* gpAptNativeFn_8324E474 = nullptr;
-AptValue* gpAptNativeFn_8324E478 = nullptr;
-AptValue* gpAptNativeFn_8324E47C = nullptr;
-AptValue* gpAptNativeFn_8324E480 = nullptr;
-AptValue* gpAptNativeFn_8324E484 = nullptr;
-AptValue* gpAptNativeFn_8324E488 = nullptr;
-AptValue* gpAptNativeFn_8324E48C = nullptr;
-AptValue* gpAptNativeFn_8324E490 = nullptr;
-AptValue* gpAptNativeFn_8324E494 = nullptr;
+AptValue* gpAptNativeFn_8324E42C = 0;
+AptValue* gpAptNativeFn_8324E430 = 0;
+AptValue* gpAptNativeFn_8324E434 = 0;
+AptValue* gpAptNativeFn_8324E438 = 0;
+AptValue* gpAptNativeFn_8324E43C = 0;
+AptValue* gpAptNativeFn_8324E440 = 0;
+AptValue* gpAptNativeFn_8324E444 = 0;
+AptValue* gpAptNativeFn_8324E448 = 0;
+AptValue* gpAptNativeFn_8324E44C = 0;
+AptValue* gpAptNativeFn_8324E450 = 0;
+AptValue* gpAptNativeFn_8324E454 = 0;
+AptValue* gpAptNativeFn_8324E458 = 0;
+AptValue* gpAptNativeFn_8324E45C = 0;
+AptValue* gpAptNativeFn_8324E460 = 0;
+AptValue* gpAptNativeFn_8324E464 = 0;
+AptValue* gpAptNativeFn_8324E468 = 0;
+AptValue* gpAptNativeFn_8324E46C = 0;
+AptValue* gpAptNativeFn_8324E470 = 0;
+AptValue* gpAptNativeFn_8324E474 = 0;
+AptValue* gpAptNativeFn_8324E478 = 0;
+AptValue* gpAptNativeFn_8324E47C = 0;
+AptValue* gpAptNativeFn_8324E480 = 0;
+AptValue* gpAptNativeFn_8324E484 = 0;
+AptValue* gpAptNativeFn_8324E488 = 0;
+AptValue* gpAptNativeFn_8324E48C = 0;
+AptValue* gpAptNativeFn_8324E490 = 0;
+AptValue* gpAptNativeFn_8324E494 = 0;
 
 // ===========================================================================
 // 3. Operand-stack / register / native-arg state + the deferred-release vector
@@ -129,14 +129,14 @@ AptValue* gpAptNativeFn_8324E494 = nullptr;
 // ===========================================================================
 // (gpAptRegisterBase retired 2026-07-01: off_8324E3D0 is
 //  AptScriptFunctionBase::spRegBlockCurrentFrameBase -- the one canonical global.)
-AptValue**      gppAptNativeArgStack        = nullptr;   // off_8324E768
-AptString*      gpStringPoolFreeList        = nullptr;   // off_8324E4FC (string-pool free list head)
+AptValue**      gppAptNativeArgStack        = 0;   // off_8324E768
+AptString*      gpStringPoolFreeList        = 0;   // off_8324E4FC (string-pool free list head)
 // The ONE deferred-release vector pointer (console symbol gValuesToRelease @
 // off_8324E51C; pool-allocated + family-(B)-constructed by AptCommonInitialize).
 // UNIFIED 2026-08-07 -- replaces the former trio {gpAptDeferredReleaseVector,
 // AptInit's file-local gpAptDeferredVecCommon, the static AptGCReleaseVector
 // gValuesToRelease instance} that modelled this one console slot.
-AptValueVector* gpValuesToRelease           = nullptr;   // off_8324E51C
+AptValueVector* gpValuesToRelease           = 0;   // off_8324E51C
 
 // ===========================================================================
 // 4. The interpreter VM singleton (a value object).  X360 &dword_8324E760.
@@ -170,18 +170,18 @@ AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // 5. The Apt allocator pool pointers (all alias the shared fixed-size DOGMA pool
 //    off_8324D808 at runtime).  Owned by the Apt allocator boot TU; null pre-init.
 // ===========================================================================
-DOGMA_PoolManager* gpAptOperandStackPool  = nullptr;   // off_8324D808 (operand-stack arrays)
-DOGMA_PoolManager* gpAptPseudoDataPool    = nullptr;   // off_8324D808 (pseudo-data nodes)
-DOGMA_PoolManager* gpAptRenderManagerPool = nullptr;   // off_8324D808 (render-manager nodes)
-DOGMA_PoolManager* gpAptSharedPtrPool     = nullptr;   // off_8324D808 (shared-ptr control blocks)
-DOGMA_PoolManager* gpAptSingleListPool    = nullptr;   // off_8324D808 (single-list nodes)
+DOGMA_PoolManager* gpAptOperandStackPool  = 0;   // off_8324D808 (operand-stack arrays)
+DOGMA_PoolManager* gpAptPseudoDataPool    = 0;   // off_8324D808 (pseudo-data nodes)
+DOGMA_PoolManager* gpAptRenderManagerPool = 0;   // off_8324D808 (render-manager nodes)
+DOGMA_PoolManager* gpAptSharedPtrPool     = 0;   // off_8324D808 (shared-ptr control blocks)
+DOGMA_PoolManager* gpAptSingleListPool    = 0;   // off_8324D808 (single-list nodes)
 
 // ===========================================================================
 // 6. Value-typed engine objects (the render manager draw queue).
 //    (The deferred-release vector is the section-3 gpValuesToRelease POINTER --
 //    the static instance here was one of the three retired off_8324E51C homes.)
 // ===========================================================================
-AptRenderManagerQueue gAptRenderManagerQueue = { nullptr, nullptr };// dword_8324E7D8
+AptRenderManagerQueue gAptRenderManagerQueue = { 0, 0 };// dword_8324E7D8
 
 // ===========================================================================
 // 7. Identity matrix / CXForms -- const data with KNOWN-correct values.
@@ -289,7 +289,7 @@ const EAStringC* gpAptThisKey = &gAptKeyThis;
 // FLAG: contents engine-generated (dword_8324E580); X360 vaddr 0x8324E580.
 extern const EAStringC gAptASNameTable[256]       = {};   // dword_8324E580 (AS-name table)
 extern const EAStringC gAptPropertyNameTable[256] = {};   // dword_8324E580 (property-name table, same console addr)
-EAStringC*             gAptEventNameTable         = nullptr;   // event-name table pointer (engine-pointed)
+EAStringC*             gAptEventNameTable         = 0;   // event-name table pointer (engine-pointed)
 
 // gAptPropertyIndexRemap: property-id -> property-name-table index (X360 dword_82F73010).
 // FLAG: rodata contents un-recovered; X360 vaddr 0x82F73010. Zeroed (-> index 0).
@@ -370,24 +370,24 @@ u8    gAptAStickRight[8 * 16] = {};  // unk_8324E2D8 (player stride 16 bytes)
 //     until a host installs them).  Owned by the Apt host-integration layer.
 // ===========================================================================
 typedef void (*AptVarNotFoundCb)(const char* pName);   // matches AptActionInterpreterVariable.cpp:57
-enum AptMaskRenderOperation : int;                     // matches the Apt render headers
+enum AptMaskRenderOperation ;                     // matches the Apt render headers
 
-void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = nullptr;
+void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = 0;
 // (gpAptBackToScriptHook RETIRED 2026-07-12: dword_8324E828 is NOT a standalone
 //  hook -- it is &gAptFuncs (dword_8324E818) + 0x10 == pfnSetBackgroundColour.
 //  The tag-5 arm in AptMovie::doFrameControls now calls the table slot directly.)
-void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
-AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
+void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = 0;   // dword_8324E820
+AptVarNotFoundCb gpAptVarNotFoundCb                                      = 0;
 // (gpAptInputRecorderSink / gpAptInputRecorderTagSink RETIRED 2026-08-07: like
 //  dword_8324E828 above, dword_8324E830/834 are NOT standalone hooks -- they are
 //  &gAptFuncs (dword_8324E818) + 0x18/+0x1C == pfnDebugAddSavedInput /
 //  pfnDebugSetScreenGrabPending. AptUpdate + AptAnimationTarget call the table
 //  slots directly.)
-void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = nullptr;   // dword_8324E898
-void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = nullptr;   // dword_8324E8CC
-void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = nullptr;   // dword_8324E8D0
-void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick) = nullptr;  // dword_8324E868
-void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp)             = nullptr;   // dword_8324E864
+void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = 0;   // dword_8324E898
+void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = 0;   // dword_8324E8CC
+void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = 0;   // dword_8324E8D0
+void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick) = 0;  // dword_8324E868
+void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp)             = 0;   // dword_8324E864
 
 // ===========================================================================
 // 13. bool / byte flags.  false / 0 (the features default OFF).
@@ -408,8 +408,8 @@ int gAptBoundingRectMode       = 0;
 // The saved-input playback stream (AptUpdate's replay driver): the stream base (non-null
 // while a recorded session replays), the read cursor, the stream byte size, and the replay
 // frame counter the record stamps are compared against.
-const unsigned char* gpAptSavedInputStream     = nullptr;
-const unsigned char* gpAptSavedInputCursor     = nullptr;
+const unsigned char* gpAptSavedInputStream     = 0;
+const unsigned char* gpAptSavedInputCursor     = 0;
 int                  gnAptSavedInputStreamSize = 0;
 unsigned int         gnAptSavedInputFrame      = 0;
 int gAptDeferredReleaseCount    = 0;   // dword_8324E508
@@ -445,13 +445,13 @@ uint32_t gAptKeyLastEvent        = 0;   // dword_8324E7A8
 // 15. Pointer / thread-id / mutex scalars (void* and typed).  Null / 0.
 //     gAptRenderThreadId is EA::Thread::ThreadId == typedef void* (same symbol).
 // ===========================================================================
-AptCIH**  gAptMaskAncestorScratch = nullptr;   // mask-ancestor scratch array
-AptTarget* gpCurrentAptTarget     = nullptr;   // off_8324E574
+AptCIH**  gAptMaskAncestorScratch = 0;   // mask-ancestor scratch array
+AptTarget* gpCurrentAptTarget     = 0;   // off_8324E574
 
 // (gAptActionInterpreterVM retired 2026-07-01: dword_8324E760 IS the gAptActionInterpreter
 //  object above -- the null void* "view" was a placeholder from before the VM was live.)
-void* gAptDeferredReleaseQueue = nullptr;   // off_8324E2C8
-void* gAptRenderThreadId       = nullptr;   // dword_8324E504 (EA::Thread::ThreadId == void*)
+void* gAptDeferredReleaseQueue = 0;   // off_8324E2C8
+void* gAptRenderThreadId       = 0;   // dword_8324E504 (EA::Thread::ThreadId == void*)
 
 // The current-target TLS mirror the update/render/unresolve passes publish into and
 // AptTarget::GetTarget reads back. Its dynamic initialiser runs the EAThread ctor

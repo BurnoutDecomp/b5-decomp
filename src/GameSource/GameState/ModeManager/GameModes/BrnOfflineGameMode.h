@@ -81,8 +81,8 @@ private:
 // gate can see the failure mode that made this fix round necessary: an override whose signature
 // does not match its base silently MINTS A NEW vtable slot instead of binding to the console one,
 // and nothing else complains. Slot numbers refer to the 26-slot table in BrnGameMode.h.
-static_assert(sizeof(static_cast<void (OfflineGameMode::*)(ModeManager*)>(&OfflineGameMode::Construct)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OfflineGameMode::*)(ModeManager*)>(&OfflineGameMode::Construct)) != 0),
               "OfflineGameMode::Construct must bind GameMode vtable slot 0");
-static_assert(sizeof(static_cast<CgsSystem::EFrameRateManagerType (OfflineGameMode::*)() const>(&OfflineGameMode::GetFrameRateType)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<CgsSystem::EFrameRateManagerType (OfflineGameMode::*)() const>(&OfflineGameMode::GetFrameRateType)) != 0),
               "OfflineGameMode::GetFrameRateType must bind GameMode vtable slot 7");
 }

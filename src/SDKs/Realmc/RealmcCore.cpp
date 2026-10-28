@@ -21,7 +21,7 @@ namespace RealmcCore
 // The global allocator backend pointer (X360 off_832BE204). Defined here as a
 // null-initialised pointer; the platform Realmc heap layer installs the real
 // backend object at boot. (Owning definition for the `extern` in the header.)
-IRealmcAllocatorBackend* g_pRealmcAllocator = nullptr;
+IRealmcAllocatorBackend* g_pRealmcAllocator = 0;
 
 // ---------------------------------------------------------------------------
 // allocator::allocate @ 0x82C44BC8
@@ -108,7 +108,7 @@ void FreeMemSize(void* lpBlock, u32 luSize)
 // ---------------------------------------------------------------------------
 IRealmcAllocatorBackend* GetMemAllocator(IRealmcAllocatorBackend* pAllocator)
 {
-    if (pAllocator == nullptr)
+    if (pAllocator == 0)
     {
         return g_pRealmcAllocator;
     }
@@ -309,7 +309,7 @@ void RealmcString::Assign(const char* pSrcBegin, const char* pSrcEnd)
 // The eastl::basic_string<char, RealmcCore::allocator> C-string constructor.
 // ---------------------------------------------------------------------------
 RealmcString::RealmcString(const char* pString, const allocator& /*rAllocator*/)
-    : mpBegin(nullptr), mpEnd(nullptr), mpCapEnd(nullptr), mpAllocatorName(nullptr)
+    : mpBegin(0), mpEnd(0), mpCapEnd(0), mpAllocatorName(0)
 {
     const char* pEnd = pString;
     while (*pEnd != '\0')
@@ -331,7 +331,7 @@ RealmcString::RealmcString(const char* pString, const allocator& /*rAllocator*/)
 void RealmcString::Free()
 {
     const std::ptrdiff_t nCapacity = mpCapEnd - mpBegin;
-    if (nCapacity > 1 && mpBegin != nullptr)
+    if (nCapacity > 1 && mpBegin != 0)
     {
         allocator::deallocate(mpBegin, static_cast<std::size_t>(nCapacity));
     }
@@ -349,7 +349,7 @@ void RealmcString::Free()
 // the source string's [begin, end) range into it -- the inlined basic_string
 // copy constructor.
 // ---------------------------------------------------------------------------
-MessageString::MessageString(std::uint32_t uId, const RealmcString& rText)
+MessageString::MessageString(uint32_t uId, const RealmcString& rText)
     : Message(), muId(uId), maText()
 {
     maText.Assign(rText.Begin(), rText.End());
@@ -386,9 +386,9 @@ void MessageString::Apply(IMessageProcessor* pProcessor)
 // The three shared holders (owning definitions for the externs in the header).
 // They start null; ObjectManager::Initialize creates the objects at boot and
 // ObjectManager::Finalize deletes them.
-MessagePtr*  g_pRealmcEmptyMessage       = nullptr;
-ResponsePtr* g_pRealmcEmptyResponse      = nullptr;
-ResponsePtr* g_pRealmcUnfilteredResponse = nullptr;
+MessagePtr*  g_pRealmcEmptyMessage       = 0;
+ResponsePtr* g_pRealmcEmptyResponse      = 0;
+ResponsePtr* g_pRealmcUnfilteredResponse = 0;
 
 // ---------------------------------------------------------------------------
 // MessagePtr::MessagePtr(Message*)
@@ -428,7 +428,7 @@ MessagePtr::~MessagePtr()
     // reads its first argument as the object), so it is invoked through the
     // message itself.
     mpMessage->Release(mpMessage);
-    mpMessage = nullptr;
+    mpMessage = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -640,7 +640,7 @@ int IRunnableTask::operator()()
     int liTaskType = GetTaskType();                // vtable slot +0x10
 
     for (IRunnableTask* lpNext = mpMemcardState->GetWaitingToStartTask();
-         lpNext != nullptr;
+         lpNext != 0;
          lpNext = mpMemcardState->GetWaitingToStartTask())
     {
         mpMemcardState->StopAndStartTask(liTaskType, lpNext->GetTaskType());

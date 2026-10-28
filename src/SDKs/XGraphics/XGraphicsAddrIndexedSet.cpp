@@ -30,7 +30,7 @@ AddrIndexedSet* AddrIndexedSet::NewItem(s32 aiIndex, s32 aiType, CFG* apContext)
     // OOM sentinel; construct in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(AddrIndexedSet));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) AddrIndexedSet(aiIndex, aiType, apContext);
 }

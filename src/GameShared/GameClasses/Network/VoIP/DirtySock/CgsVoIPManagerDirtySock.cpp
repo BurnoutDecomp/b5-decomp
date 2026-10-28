@@ -60,7 +60,7 @@ namespace CgsNetwork
         }
 
         CGS_ASSERT(false, "Failed to find registered talker\n");
-        return nullptr;
+        return 0;
     }
 
     // ---- DisableCommsWithPlayer @ 0x828937B8 ----------------------------------
@@ -137,7 +137,7 @@ namespace CgsNetwork
     void VoIPManager::ClearData()
     {
         meVoIPOutput            = E_NETWORK_HEADSET_OUTPUT_MODE_COUNT;
-        mpVoiceRef              = nullptr;
+        mpVoiceRef              = 0;
         mbIsVoiceAllowed        = false;
         mbLocalPlayerHasHeadset = false;
         mbIsLocalPlayerInGame   = false;
@@ -171,7 +171,7 @@ namespace CgsNetwork
         mbIsLocalPlayerInGame         = false;
         mbGameIsHandlingHeadsetStatus = false;
 
-        if (mpVoiceRef == nullptr)
+        if (mpVoiceRef == 0)
         {
             // The original dev-logs the available memory before and after.
             mpVoiceRef = VoipGetRef();
@@ -210,10 +210,10 @@ namespace CgsNetwork
             lClient.mbCanTalk      = true;
         }
 
-        if (mpVoiceRef != nullptr)
+        if (mpVoiceRef != 0)
         {
             VoipShutdown(mpVoiceRef);
-            mpVoiceRef = nullptr;
+            mpVoiceRef = 0;
         }
 
         meStatus                      = E_VOIP_MANAGER_STATUS_UNPREPARED;
@@ -328,7 +328,7 @@ namespace CgsNetwork
                                                   ENetworkHeadsetPlayerStatus leHeadsetStatus)
     {
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetPlayer == nullptr)
+        if (lpNetPlayer == 0)
         {
             return;
         }
@@ -447,7 +447,7 @@ namespace CgsNetwork
     {
         miVoipVolumePercent = liVoipVolumePercent;
 
-        if (mpVoiceRef != nullptr)
+        if (mpVoiceRef != 0)
         {
             VoipControl(mpVoiceRef, KI_VOIP_CONTROL_VOLUME, liVoipVolumePercent);
         }
@@ -490,7 +490,7 @@ namespace CgsNetwork
         CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
 
         NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer == nullptr)
+        if (lpNetworkPlayer == 0)
         {
             return;
         }
@@ -499,7 +499,7 @@ namespace CgsNetwork
         lpNetworkPlayer->RegisterMessageType(KI_E_MESSAGE_TYPE_HEADSET_STATUS, sizeof(HeadsetStatusMessage),
                                              &maRegisteredTalkers[liIndex].mHeadsetSendMsg,
                                              &maRegisteredTalkers[liIndex].mHeadsetRecMsg,
-                                             nullptr, nullptr, nullptr);
+                                             0, 0, 0);
     }
 
     // ---- UnregisterMessage ------------------------------------------------------
@@ -508,7 +508,7 @@ namespace CgsNetwork
         CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
 
         NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->UnRegisterMessageType(KI_E_MESSAGE_TYPE_HEADSET_STATUS);
         }

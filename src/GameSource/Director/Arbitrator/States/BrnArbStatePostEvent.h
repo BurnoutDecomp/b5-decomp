@@ -60,11 +60,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (vtable order; see base) -----------------
-        void        Construct() override;
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;
-        const char* GetName() const override;
+        void        Construct() ;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;
+        const char* GetName() const ;
 
         // This state declares a Destruct() override so it keeps its own vtable slot, but the
         // console image carries NO separate body for it (no symbol, no call site: the whole
@@ -72,7 +72,7 @@ namespace BrnDirector
         // Prepare / Update / Release). FLAG: the body below is an empty one, matching the
         // "nothing to tear down" shape every other state with the same slot has -- it is NOT
         // a reconstruction of recovered code.
-        void        Destruct() override;
+        void        Destruct() ;
 
     private:
         // RETIRED: this state used to carry its OWN nested five-word BehaviourHandle<> copy.

@@ -67,8 +67,8 @@ struct SoundWorldScene : public BrnSound::Logic::IResourceRequester
               BrnSound::World::StaticSoundEntity* lpEntitiesOut,
               s32 liMaxEntities, bool lbDrawDebug) const;
 
-    virtual void ResourcesAreReady() override;
-    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar() override;
+    virtual void ResourcesAreReady() ;
+    virtual BrnSound::Logic::ResourceRegistrar& GetResourceRegistrar() ;
 
 protected:
     void HandleWorldZoneLoad(u16 lu16Zone);

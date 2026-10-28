@@ -29,7 +29,7 @@ namespace Jobs
     // vtable slot +0x0C, called as Free(this, ptr, 0)). The concrete allocator is
     // installed by the host and lives outside this group; this is the minimal
     // abstract surface the SDK calls BY NAME.
-    using Allocator = EA::Allocator::ICoreAllocator;
+    typedef EA::Allocator::ICoreAllocator Allocator;
 
     // @ 0x82BC9830 sibling -- typed view of the installed allocator (off_8327F280),
     // for the SDK's scalar-deleting destructors. Null until SetAllocator runs.

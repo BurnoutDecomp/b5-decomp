@@ -8,13 +8,13 @@ namespace BrnGui
     class BlackBarRenderer : public CgsGui::CustomRenderComponentInterface
     {
     public:
-        void Construct() override;
-        void RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType) override;
-        CgsID GetID() const override;
-        s32 GetNumTextures() const override { return 1; } // ARTIST vtable820CEB08 +28 ->82C296C8.
+        void Construct() ;
+        void RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType) ;
+        CgsID GetID() const ;
+        s32 GetNumTextures() const  { return 1; } // ARTIST vtable820CEB08 +28 ->82C296C8.
 
     private:
-        void RenderComponent(CgsGui::ImRendererSet* lpRendererSet) override;
+        void RenderComponent(CgsGui::ImRendererSet* lpRendererSet) ;
 
         f32 mfBarHeight;
         bool mbStartedGame;

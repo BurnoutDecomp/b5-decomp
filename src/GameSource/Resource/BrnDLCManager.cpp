@@ -44,10 +44,10 @@ namespace BrnResource
     // Never called -- pins the asm-attested member offsets of DLCFeatureAvailability.
     void DLCFeatureAvailability::_AssertLayout()
     {
-        static_assert(offsetof(DLCFeatureAvailability, muAvailabilityMask) == 0x04, "mask @ +0x04");
-        static_assert(offsetof(DLCFeatureAvailability, mauPackMask)        == 0x08, "pack masks @ +0x08");
-        static_assert(offsetof(DLCFeatureAvailability, maePackForFeature)  == 0x1C, "feature pack @ +0x1C");
-        static_assert(offsetof(DLCFeatureAvailability, mabFeatureEnabled)  == 0x80, "feature flags @ +0x80");
+        CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, muAvailabilityMask) == 0x04), "mask @ +0x04");
+        CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, mauPackMask)        == 0x08), "pack masks @ +0x08");
+        CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, maePackForFeature)  == 0x1C), "feature pack @ +0x1C");
+        CGS_STATIC_ASSERT((offsetof(DLCFeatureAvailability, mabFeatureEnabled)  == 0x80), "feature flags @ +0x80");
     }
 
     // X360 0x82662C48 (store-for-store). Clears the availability mask and the feature table,
@@ -166,8 +166,8 @@ namespace BrnResource
     // every access is BY NAME, so the host stride difference is benign and is NOT asserted here.
     void DLCDebugComponent::_AssertDebugLayout()
     {
-        static_assert(offsetof(PackDetail, mbAvailable)   == 0x00, "pack avail @ +0x00");
-        static_assert(offsetof(PackDetail, mbLastApplied) == 0x01, "pack last @ +0x01");
+        CGS_STATIC_ASSERT((offsetof(PackDetail, mbAvailable)   == 0x00), "pack avail @ +0x00");
+        CGS_STATIC_ASSERT((offsetof(PackDetail, mbLastApplied) == 0x01), "pack last @ +0x01");
     }
 
     // X360 0x826627F8 (store-for-store). The leading folded BaseCollisionGenerator::Destruct(this) is the

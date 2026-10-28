@@ -57,7 +57,7 @@ namespace Props
     // The <<6 stride proves sizeof(T) == 64 for this instantiation.
     void* AddEvent_Stride64(RawEventQueue* lpQueue)
     {
-        CGS_ASSERT(lpQueue->mpEvents != nullptr, "mpEvents != NULL");
+        CGS_ASSERT(lpQueue->mpEvents != 0, "mpEvents != NULL");
         CGS_ASSERT(lpQueue->miLength < lpQueue->miMaxLength,
                    "GetLength() < GetMaxLength()");
         const s32 liSlot = lpQueue->miLength;
@@ -72,7 +72,7 @@ namespace Props
     // The *112 stride proves sizeof(T) == 112 for this instantiation.
     const void* GetEvent_Stride112_Const(const RawEventQueue* lpQueue, s32 liIndex)
     {
-        CGS_ASSERT(lpQueue->mpEvents != nullptr, "mpEvents != NULL");
+        CGS_ASSERT(lpQueue->mpEvents != 0, "mpEvents != NULL");
         CGS_ASSERT(liIndex < lpQueue->miLength, "liIndex < GetLength()");
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
         return lpQueue->mpEvents + 112 * static_cast<u32>(liIndex);
@@ -82,7 +82,7 @@ namespace Props
     // Identical to the const overload but baked at CgsBaseEventQueue.h:292/294/295.
     void* GetEvent_Stride112(RawEventQueue* lpQueue, s32 liIndex)
     {
-        CGS_ASSERT(lpQueue->mpEvents != nullptr, "mpEvents != NULL");
+        CGS_ASSERT(lpQueue->mpEvents != 0, "mpEvents != NULL");
         CGS_ASSERT(liIndex < lpQueue->miLength, "liIndex < GetLength()");
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
         return lpQueue->mpEvents + 112 * static_cast<u32>(liIndex);
@@ -95,7 +95,7 @@ namespace Props
     // is the semantic-parity form already used in the CgsResourcePtr.h generic.)
     void* ResourcePtrDeref_PropInstance(RawResourcePtr* lpPtr)
     {
-        CGS_ASSERT(lpPtr->mpResourceMemory != nullptr,
+        CGS_ASSERT(lpPtr->mpResourceMemory != 0,
                    "Can not instance resource pointer - it has no main memory resource\n");
         return lpPtr->mpResourceMemory;
     }
@@ -106,7 +106,7 @@ namespace Props
     // baked assert FILE string. Bodied identically.
     void* ResourcePtrDeref_PropGraphics(RawResourcePtr* lpPtr)
     {
-        CGS_ASSERT(lpPtr->mpResourceMemory != nullptr,
+        CGS_ASSERT(lpPtr->mpResourceMemory != 0,
                    "Can not instance resource pointer - it has no main memory resource\n");
         return lpPtr->mpResourceMemory;
     }

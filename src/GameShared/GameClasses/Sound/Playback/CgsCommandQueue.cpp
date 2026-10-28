@@ -29,7 +29,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdint> // std::uintptr_t
+#include "types.hpp" // std::uintptr_t
 
 namespace CgsSound
 {
@@ -44,7 +44,7 @@ namespace Playback
 template <unsigned int QUEUE_LENGTH, typename T>
 bool CommandQueue<QUEUE_LENGTH, T>::GetCommand(u32& arCount, T* apWords)
 {
-    CGS_ASSERT(apWords != nullptr, "lpuFirstCommmandOut");
+    CGS_ASSERT(apWords != 0, "lpuFirstCommmandOut");
 
     const u32 luSavedRead = mu32Read; // rolled back on underflow
     const u32 luCapacity  = arCount;  // caller's max payload words
@@ -95,7 +95,7 @@ bool CommandQueue<QUEUE_LENGTH, T>::GetCommand(u32& arCount, T* apWords)
 template <unsigned int QUEUE_LENGTH, typename T>
 bool CommandQueue<QUEUE_LENGTH, T>::PostCommand(unsigned int auCount, const T* apWords)
 {
-    CGS_ASSERT(apWords != nullptr, "lpuFirstCommand");
+    CGS_ASSERT(apWords != 0, "lpuFirstCommand");
 
     const u32 luSavedWrite = mu32Write; // rolled back on overflow
 
@@ -127,7 +127,7 @@ bool CommandQueue<QUEUE_LENGTH, T>::PostCommand(unsigned int auCount, const T* a
 // Explicit instantiation of the queue actually used by the CSIS command family
 // (CsisCommandQueue @ CgsAemsFactory.h:265): the 255-deep uintptr_t ring. Emits the
 // out-of-line GetCommand / PostCommand bodies above.
-template struct CommandQueue<255u, std::uintptr_t>;
+template struct CommandQueue<255u, uintptr_t>;
 
 // AemsPlayerVoice is the SINGLE merged definition in AEMS/CgsAemsPlayerVoice.h
 // (2026-08-25 wave 5; the rival 2-member TU-local class that used to live here --
@@ -140,13 +140,13 @@ CsisCommandQueue& operator<<(CsisCommandQueue& arQueue,
                              const CsisReleaseCommand& arCommand)
 {
     const bool lbPosted = arQueue.mQueue.PostCommand(
-        static_cast<unsigned int>(sizeof(arCommand) / sizeof(std::uintptr_t)),
+        static_cast<unsigned int>(sizeof(arCommand) / sizeof(uintptr_t)),
         arCommand.AsCommand());
     CGS_ASSERT(lbPosted, "Possibly need to increase CsisCommandQueue::E_QUEUE_LENGTH");
     return arQueue;
 }
 
-bool CsisCommandQueue::GetCommand(u32& arCount, std::uintptr_t* apWords)
+bool CsisCommandQueue::GetCommand(u32& arCount, uintptr_t* apWords)
 {
     return mQueue.GetCommand(arCount, apWords);
 }

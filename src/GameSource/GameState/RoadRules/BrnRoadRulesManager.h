@@ -201,15 +201,15 @@ namespace BrnGameState
         static void _AssertLayout()
         {
             typedef RoadRulesManager R;
-            static_assert(offsetof(R, mRoadRulesDebugComponent) == 0, "debug component is the first member");
-            static_assert(offsetof(R, mpStreetManager)   == sizeof(RoadRulesDebugComponent), "console +0x14");
-            static_assert(offsetof(R, mpModeManager)     == offsetof(R, mpStreetManager) + 1 * sizeof(void*), "console +0x18");
-            static_assert(offsetof(R, mpTrainingManager) == offsetof(R, mpStreetManager) + 2 * sizeof(void*), "console +0x1C");
-            static_assert(offsetof(R, miLastRoadIndex)   == offsetof(R, mpStreetManager) + 3 * sizeof(void*), "console +0x20");
-            static_assert(offsetof(R, miLastRoadIndex) % 8 == 0, "tail run starts 8-aligned, as on the console");
+            CGS_STATIC_ASSERT((offsetof(R, mRoadRulesDebugComponent) == 0), "debug component is the first member");
+            CGS_STATIC_ASSERT((offsetof(R, mpStreetManager)   == sizeof(RoadRulesDebugComponent)), "console +0x14");
+            CGS_STATIC_ASSERT((offsetof(R, mpModeManager)     == offsetof(R, mpStreetManager) + 1 * sizeof(void*)), "console +0x18");
+            CGS_STATIC_ASSERT((offsetof(R, mpTrainingManager) == offsetof(R, mpStreetManager) + 2 * sizeof(void*)), "console +0x1C");
+            CGS_STATIC_ASSERT((offsetof(R, miLastRoadIndex)   == offsetof(R, mpStreetManager) + 3 * sizeof(void*)), "console +0x20");
+            CGS_STATIC_ASSERT((offsetof(R, miLastRoadIndex) % 8 == 0), "tail run starts 8-aligned, as on the console");
 
             #define RRM_TAIL(member, consoleOffset) \
-                static_assert(offsetof(R, member) - offsetof(R, miLastRoadIndex) == (consoleOffset) - 0x20, #member)
+                CGS_STATIC_ASSERT((offsetof(R, member) - offsetof(R, miLastRoadIndex) == (consoleOffset) - 0x20), #member)
             RRM_TAIL(maiChallengeRoadIndex,            0x24);
             RRM_TAIL(mLastLimitId,                     0x30);
             RRM_TAIL(meActiveRoadRule,                 0x38);
@@ -229,8 +229,8 @@ namespace BrnGameState
             RRM_TAIL(mbSwitchingActive,                0x70);
             RRM_TAIL(mbIsOnlineMode,                   0x71);
             #undef RRM_TAIL
-            static_assert(sizeof(R) - offsetof(R, miLastRoadIndex) == 0x78 - 0x20, "tail run length");
-            static_assert(sizeof(EActiveRoadRule) == 4, "EActiveRoadRule is a 4-byte field");
+            CGS_STATIC_ASSERT((sizeof(R) - offsetof(R, miLastRoadIndex) == 0x78 - 0x20), "tail run length");
+            CGS_STATIC_ASSERT((sizeof(EActiveRoadRule) == 4), "EActiveRoadRule is a 4-byte field");
         }
     };
 }

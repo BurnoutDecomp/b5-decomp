@@ -43,15 +43,15 @@ namespace CgsNetwork
         void               PrepareNack(Message* lpMessage,
                                        NetworkPlayerID liSendingPlayerID,
                                        NetworkPlayerID liRecvingPlayerID);
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DDF40 -- inline header-homed accessor.
-        const char* GetName() const override { return "Signal Message"; }
+        const char* GetName() const  { return "Signal Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
     };
 
     // Console size (no payload beyond the player-id pair), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(SignalMessage) == 0x28, "sizeof(SignalMessage) == 0x28");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(SignalMessage) == 0x28), "sizeof(SignalMessage) == 0x28");
 
 } // namespace CgsNetwork

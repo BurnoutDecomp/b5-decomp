@@ -42,7 +42,7 @@
 // ===========================================================================
 
 #include <cstddef>
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/Realmc/RealmcCore.h"   // RealmcCore::allocator / g_pRealmcAllocator / MessagePtr
 
@@ -107,7 +107,7 @@ public:
     // Copy constructor (eastl::basic_string(const basic_string&)): a fresh buffer
     // through RangeInitialize over rOther's range, never a shared one.
     String16(const String16& rOther)
-        : mpAllocatorName(nullptr)
+        : mpAllocatorName(0)
     {
         RangeInitialize(rOther.mpBegin, rOther.mpEnd);
     }
@@ -172,7 +172,7 @@ class MessageList
 public:
     // The empty list: sentinel next/prev pointing at itself (the eastl::list
     // default constructor, inlined into the MessageQueue ctor).
-    MessageList() : mpAllocatorName(nullptr)
+    MessageList() : mpAllocatorName(0)
     {
         mSentinel.mpNext = &mSentinel;
         mSentinel.mpPrev = &mSentinel;
@@ -239,7 +239,7 @@ class ResponseList
 {
 public:
     // The empty list (see MessageList's constructor).
-    ResponseList() : mpAllocatorName(nullptr)
+    ResponseList() : mpAllocatorName(0)
     {
         mSentinel.mpNext = &mSentinel;
         mSentinel.mpPrev = &mSentinel;
@@ -330,10 +330,10 @@ public:
     // for defined behaviour, the same host-hygiene divergence String16's ctors
     // already carry.
     IntVector()
-        : mpBegin(nullptr)
-        , mpEnd(nullptr)
-        , mpCapEnd(nullptr)
-        , mpAllocatorName(nullptr)
+        : mpBegin(0)
+        , mpEnd(0)
+        , mpCapEnd(0)
+        , mpAllocatorName(0)
     {
     }
 

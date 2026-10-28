@@ -50,7 +50,7 @@ namespace CgsLanguage
         mapStars[3] = "****";
         mapStars[4] = "********";
 
-        CGS_ASSERT( lpLanguageManager != nullptr, "lpLanguageManager" );
+        CGS_ASSERT( lpLanguageManager != 0, "lpLanguageManager" );
         mpLanguageManager = lpLanguageManager;
 
         // Layout + text style.
@@ -97,7 +97,7 @@ namespace CgsLanguage
             return;
         }
 
-        CGS_ASSERT( mpLanguageManager != nullptr, "mpLanguageManager" );
+        CGS_ASSERT( mpLanguageManager != 0, "mpLanguageManager" );
 
         // Dim full-screen backdrop so the white text reads against any scene. The top-left is the
         // origin (X360 flt_82001CC0 == 0.0, the same .rdata float that zero-inits mrSeconds); the

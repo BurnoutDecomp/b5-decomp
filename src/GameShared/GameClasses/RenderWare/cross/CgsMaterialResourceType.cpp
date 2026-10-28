@@ -203,7 +203,7 @@ namespace CgsResource
                     reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpProgram + luIdArrayFieldOff)) + luOffset);
 
                 const char* const lpcName = lpHashTable->GetName(luConstantId);
-                CGS_ASSERT(lpcName != nullptr, "lpcConstantName");
+                CGS_ASSERT(lpcName != 0, "lpcConstantName");
 
                 renderengine::ProgramVariableHandle lHandle;
                 if (renderengine::ProgramBuffer::GetVariableHandleByName(

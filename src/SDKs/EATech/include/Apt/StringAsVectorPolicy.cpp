@@ -71,8 +71,8 @@ static AptFileSavedInputState* StringAsVector_AllocInputStateArray(uint32_t nNew
     // on failure, so the nothrow form matches the asm's explicit null check.
     int32_t* pBlock = static_cast<int32_t*>(
         ::operator new(static_cast<size_t>(nAlloc), std::nothrow));
-    if (pBlock == nullptr)
-        return nullptr;
+    if (pBlock == 0)
+        return 0;
 
     pBlock[0] = static_cast<int32_t>(nNewCount);   // count prefix (*v16 = v5)
     AptFileSavedInputState* pElems =
@@ -91,7 +91,7 @@ static AptFileSavedInputState* StringAsVector_AllocInputStateArray(uint32_t nNew
 // EAStringC) back-to-front, then free the count-prefixed block.
 static void StringAsVector_DestroyInputStateArray(AptFileSavedInputState* pElems)
 {
-    if (pElems == nullptr)
+    if (pElems == 0)
         return;
     int32_t* pBlock = reinterpret_cast<int32_t*>(pElems) - 1;   // count prefix
     const int32_t nCount = pBlock[0];
@@ -104,10 +104,10 @@ template <>
 AptFileSavedInputState* StringAsVectorPolicy::ReAlloc<AptFileSavedInputState>(
     AptFileSavedInputState* pOld, int32_t nCarryCount, uint32_t nNewCount)
 {
-    if (pOld == nullptr)
+    if (pOld == 0)
         return StringAsVector_AllocInputStateArray(nNewCount);
 
-    AptFileSavedInputState* pNew = nullptr;
+    AptFileSavedInputState* pNew = 0;
     if (nNewCount != 0)
         pNew = StringAsVector_AllocInputStateArray(nNewCount);
 
@@ -164,14 +164,14 @@ static AptSharedPtr<AptFile>* StringAsVector_AllocSharedPtrArray(uint32_t nNewCo
     // Console: DOGMA_PoolManager::Allocate signals failure with the sentinel
     // (void*)-4; portable equivalent is a sentinel guard -> empty array.
     if (reinterpret_cast<intptr_t>(pBlock) == -4)
-        return nullptr;
+        return 0;
 
     pBlock[1] = static_cast<int32_t>(nNewCount);   // count word (v16[1] = v5)
     AptSharedPtr<AptFile>* pElems =
         reinterpret_cast<AptSharedPtr<AptFile>*>(pBlock + 2);
 
     for (uint32_t i = 0; i < nNewCount; ++i)
-        pElems[i].pData = nullptr;   // asm zero-inits each pointer slot
+        pElems[i].pData = 0;   // asm zero-inits each pointer slot
     return pElems;
 }
 
@@ -179,10 +179,10 @@ template <>
 AptSharedPtr<AptFile>* StringAsVectorPolicy::ReAlloc<AptSharedPtr<AptFile> >(
     AptSharedPtr<AptFile>* pOld, int32_t nCarryCount, uint32_t nNewCount)
 {
-    if (pOld == nullptr)
+    if (pOld == 0)
         return StringAsVector_AllocSharedPtrArray(nNewCount);
 
-    AptSharedPtr<AptFile>* pNew = nullptr;
+    AptSharedPtr<AptFile>* pNew = 0;
     if (nNewCount != 0)
         pNew = StringAsVector_AllocSharedPtrArray(nNewCount);
 

@@ -51,8 +51,8 @@ TurboEffect::TurboEffect()
     , mfTurboSpoolScale(0.0f)
     , mu8TurboBlowoff(0)
     , mfTimeAtPeak(0.0f)
-    , mpEngineControl(nullptr)
-    , mpHybridControl(nullptr)
+    , mpEngineControl(0)
+    , mpHybridControl(0)
 {
 }
 
@@ -79,7 +79,7 @@ void TurboEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 
 void TurboEffect::SetupLoadData()
 {
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
     if (!mpHybridControl)
         return;
 
@@ -98,7 +98,7 @@ void TurboEffect::SetupLoadData()
     std::snprintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcAsset);
     mbHasLoadedData = true;
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
-        lacBundle, nullptr, BrnSound::Logic::ResourceRegistrar::E_DATA);
+        lacBundle, 0, BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
 bool TurboEffect::Attach()
@@ -108,7 +108,7 @@ bool TurboEffect::Attach()
     if (!mbHasLoadedData)
         return true;
 
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
     if (!mpHybridControl)
         return false;
 
@@ -145,7 +145,7 @@ void TurboEffect::UpdateParams(f32 afTimeStep)
     SetMixerInputValue(0, 0);
     SetMixerInputValue(1, 0);
     SetMixerInputValue(2, 0);
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
     if (!mpHybridControl)
         return;
 

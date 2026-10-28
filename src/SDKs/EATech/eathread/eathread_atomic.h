@@ -2,7 +2,7 @@
 #define EA_THREAD_EAATOMIC_H
 
 #include "types.hpp"
-#include <cstdint>
+#include "types.hpp"
 
 // ===========================================================================
 // SDKs/EATech/eathread/eathread_atomic.h

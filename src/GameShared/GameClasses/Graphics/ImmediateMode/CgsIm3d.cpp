@@ -127,7 +127,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpPixelProgramBinary, u32 luPixelProgramSize)
 {
     s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != nullptr)
+    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
     {
         li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
         if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
@@ -138,7 +138,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     if (li8ProgramIndex < KI8_MAX_PROGRAMS)
     {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == nullptr,
+        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
                    "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
     }
 
@@ -262,16 +262,16 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     mi8CurrentProgram = 0;
     for (s32 liSlot = 0; liSlot < KI8_MAX_PROGRAMS; ++liSlot)
     {
-        mapVertexProgramBuffer[liSlot] = nullptr;
-        mapPixelProgramBuffer[liSlot]  = nullptr;
+        mapVertexProgramBuffer[liSlot] = 0;
+        mapPixelProgramBuffer[liSlot]  = 0;
     }
 
     // Upload each supplied program pair.
     for (s32 liProgram = 0; liProgram < li8NumberPrograms; ++liProgram)
     {
-        CGS_ASSERT(lapVertexProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapVertexProgramBinary[liProgram] != 0,
                    "lapVertexProgramBinary[ li8ProgramIndex ] != NULL");
-        CGS_ASSERT(lapPixelProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapPixelProgramBinary[liProgram] != 0,
                    "lapPixelProgramBinary[ li8ProgramIndex ] != NULL");
         if (lauVertexProgramSize[liProgram] == 0)
         {
@@ -297,9 +297,9 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
                "mapVertexProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
@@ -345,7 +345,7 @@ template <typename V>
 void ImRenderer<V>::EndRendering()
 {
     CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
-    mgpActiveRenderer = nullptr;
+    mgpActiveRenderer = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -371,13 +371,13 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
 
     // X360 passes `this + 4*(mi8CurrentProgram + 22)` == &maShaderStateBlocks[slot] (the current
     // program's device shader-state block), not plain `this`.
-    void* lpShaderState = nullptr;
+    void* lpShaderState = 0;
     void* lpResult =
         RenderEngineDeviceBeginShaderStates(&this->maShaderStateBlocks[this->mi8CurrentProgram], &lpShaderState);
 
     // Write the matrix into the fetched shader-state block.
     u8* lpDst = reinterpret_cast<u8*>(lpShaderState);
-    if (lpDst != nullptr)
+    if (lpDst != 0)
     {
         for (s32 liByte = 0; liByte < 64; ++liByte)
         {
@@ -392,9 +392,9 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
 template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
-    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[0] != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    CGS_ASSERT(mapVertexProgramBuffer[0] != 0, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0] != 0, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
     mgpActiveRenderer = static_cast<ImRendererBase*>(this);
     shadow::Device::ResetShadowing();
     mi8CurrentProgram = 0;
@@ -409,7 +409,7 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
 {
     CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
     shadow::Device::FlushVertexProgramState();
-    CGS_ASSERT(lpVertices != nullptr, "lpVertices");
+    CGS_ASSERT(lpVertices != 0, "lpVertices");
     if (24u * luCount > 0x80000u)
         D3DDevice_InsertFence(mgpDevice);
     struct PackedVertex
@@ -418,10 +418,10 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
         RGBA8 mColour;
         Vector2F mUv;
     };
-    static_assert(sizeof(PackedVertex) == 24, "ARTIST GPU vertex stride");
+    CGS_STATIC_ASSERT((sizeof(PackedVertex) == 24), "ARTIST GPU vertex stride");
     PackedVertex* lpOutput = static_cast<PackedVertex*>(D3DDevice_BeginVertices(
         mgpDevice, static_cast<u32>(lePrimitiveType), luCount, sizeof(PackedVertex)));
-    if (lpOutput != nullptr)
+    if (lpOutput != 0)
         for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
             lpOutput[luVertex] = {{lpVertices[luVertex].mv3Pos.x, lpVertices[luVertex].mv3Pos.y,
                                    lpVertices[luVertex].mv3Pos.z}, lpVertices[luVertex].mv4Colour,
@@ -539,8 +539,8 @@ void Im3d::Construct(rw::IResourceAllocator* lpAllocator)
     {
         renderengine::ProgramBufferData* const lpVertexProgram =
             reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program]);
-        CGS_ASSERT(lpVertexProgram != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
-        if (lpVertexProgram == nullptr)
+        CGS_ASSERT(lpVertexProgram != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
+        if (lpVertexProgram == 0)
         {
             continue;
         }

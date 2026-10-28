@@ -190,7 +190,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     (void)lpPlayerStatusInterface;
     (void)lbIsOnline;
 
-    CGS_ASSERT(mpCurrentGameMode != nullptr, "mpCurrentGameMode != NULL");   // BrnModeManager.cpp:1814
+    CGS_ASSERT(mpCurrentGameMode != 0, "mpCurrentGameMode != NULL");   // BrnModeManager.cpp:1814
 
     // ---- (1) the delayed showtime mode-switch broadcast (hazards H6 latch 3) -------------------
     // PrepareForMode sets this to 30 for modes 2 / 16 only; it must reach EXACTLY 0 to fire once.
@@ -287,7 +287,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     //   r24 = *(r27+16), f29 = *(r27+20)  == TimerStatus::GetTime()
     // IDA renders the null check as `if (a1 == -28088)`; it is the inlined assert of the accessor.
     const CgsSystem::TimerStatus* lpSimTimerStatus = mTimerStatusInterface.GetSimTimerStatus();
-    CGS_ASSERT(lpSimTimerStatus != nullptr, "lpSimTimerStatus");   // BrnModeManager.cpp:1839
+    CGS_ASSERT(lpSimTimerStatus != 0, "lpSimTimerStatus");   // BrnModeManager.cpp:1839
 
     const f32 lfTimeStepSeconds = lpSimTimerStatus->GetCurrentTimeStep();
 
@@ -522,7 +522,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     // ---- (12) showtime: the crash chain has run out -----------------------------------------------
     if (lbShowtimeMode)
     {
-        if ((mpCurrentGameMode != nullptr) &&
+        if ((mpCurrentGameMode != 0) &&
             (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS))
         {
             // console `addi r3, r31, 0xDD0` == &mScoringSystem + 32 == the embedded CrashModeScoring,
@@ -584,7 +584,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     }
 
     // ---- (14) in-progress: the mode clock has run out (road rage + burning route) -----------------
-    if ((mpCurrentGameMode != nullptr) &&
+    if ((mpCurrentGameMode != 0) &&
         (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS))
     {
         if ((meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE) ||
@@ -627,7 +627,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     // is over, the player has finished the mode.
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK)
     {
-        const bool lbModeIsOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+        const bool lbModeIsOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
         if (mScoringSystem.HasStuntAttackModeEnded(lCurrentTime, lePlayerActiveRaceCarIndex, lbModeIsOnline))
         {
             const GameStateModuleIO::PlayerFinishedModeEvent lEvent =
@@ -640,7 +640,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     // Console: `if (mpCurrentGameMode && mpCurrentGameMode->IsOnline())`, then a fork between the
     // three online-stunt modes (12 / 14 / 17 -- the trio whose mapGameModes slots ALL alias the one
     // OnlineStuntRunMode object) and every other online mode.
-    const bool lbCurrentModeIsOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+    const bool lbCurrentModeIsOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
     if (lbCurrentModeIsOnline)
     {
         const bool lbOnlineStuntFamily =
@@ -785,8 +785,8 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     const BrnTrigger::Landmark* lpDestinationLandmark =
         GetCheckpointTriggerData()->GetLandmarkFromRegionIndex(liDestinationRegionIndex);
 
-    CGS_ASSERT(lpCurrentLandmark != nullptr, "lpCurrentLandmark");           // BrnModeManager.cpp:2297
-    CGS_ASSERT(lpDestinationLandmark != nullptr, "lpDestinationLandmark");   // BrnModeManager.cpp:2298
+    CGS_ASSERT(lpCurrentLandmark != 0, "lpCurrentLandmark");           // BrnModeManager.cpp:2297
+    CGS_ASSERT(lpDestinationLandmark != 0, "lpDestinationLandmark");   // BrnModeManager.cpp:2298
 
     GameStateModuleIO::LandmarkRouteRequestEvent lRouteRequest;
     std::memset(&lRouteRequest, 0, sizeof(lRouteRequest));   // +0x28..+0x2F / +0x46.. are never stored (stack residue)
@@ -881,7 +881,7 @@ void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::Mode
 // FinishCurrentMode for the next update.
 void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedModeEvent* lpEvent)
 {
-    CGS_ASSERT(lpEvent != nullptr, "lpPlayerFinishedModeEvent");   // BrnModeManager.cpp:2875
+    CGS_ASSERT(lpEvent != 0, "lpPlayerFinishedModeEvent");   // BrnModeManager.cpp:2875
 
     // [x] H4 SETTLED (closure round 2026-08-26) -- THIS BODY IS THE WRITER THAT DECIDED IT.
     // The console sets 0x94FD from the event's mbTimedOut and 0x94FE from its mbCarDestroyed, and
@@ -906,7 +906,7 @@ void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedMode
         // + 24 + 16 / +20) straight into the RegisterFinishForCar argument.
         const CgsSystem::Time lFinishTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
 
-        CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");   // BrnModeManager.cpp:5700
+        CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");   // BrnModeManager.cpp:5700
         const EActiveRaceCarIndex lePlayerActiveRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
         mScoringSystem.RegisterFinishForCar(true, lePlayerActiveRaceCarIndex, lFinishTime);

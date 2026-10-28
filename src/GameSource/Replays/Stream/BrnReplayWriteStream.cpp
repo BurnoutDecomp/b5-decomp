@@ -27,12 +27,12 @@ namespace BrnReplays
     void WriteStream::Construct()
     {
         mHeaderMalloc.Construct();
-        mpStreamHeader = nullptr;
+        mpStreamHeader = 0;
         miStallCount = 0;
         miFilePosition = 0;
         mbEnded = true;
         mbPaused = false;
-        mpStream = nullptr;
+        mpStream = 0;
         miBufferPosition = 0;
     }
 
@@ -65,7 +65,7 @@ namespace BrnReplays
         lpHeader->miVersion      = 0;
         lpHeader->miNumFrunks    = 0;
         lpHeader->miFirstFrunk   = 0;
-        lpHeader->mpFrameOffsets = nullptr;
+        lpHeader->mpFrameOffsets = 0;
 
         miCurrentWriteIndex  = 0; // @0x40
         miStallCount         = 0; // @0x44
@@ -193,15 +193,15 @@ namespace BrnReplays
     {
         CGS_ASSERT(!mbEnded, "Stream has ended - need to start it again!\n");
         CGS_ASSERT(!mbPaused, "Stream is paused - must continue it first\n");
-        CGS_ASSERT(lppBuffers != nullptr, "No blocks passed in\n");
-        CGS_ASSERT(lpEntries != nullptr, "No block sizes in\n");
+        CGS_ASSERT(lppBuffers != 0, "No blocks passed in\n");
+        CGS_ASSERT(lpEntries != 0, "No block sizes in\n");
 
         StreamOffset* lpOffset;
         if (miNumFrunksAllocated < KI_MAX_FRUNKS)
         {
             lpOffset = static_cast<StreamOffset*>(mHeaderMalloc.Malloc(sizeof(StreamOffset)));
-            CGS_ASSERT(lpOffset != nullptr, "Failed to allocate memory for new offset entry\n");
-            if (mpStreamHeader->mpFrameOffsets == nullptr)
+            CGS_ASSERT(lpOffset != 0, "Failed to allocate memory for new offset entry\n");
+            if (mpStreamHeader->mpFrameOffsets == 0)
                 mpStreamHeader->mpFrameOffsets = lpOffset;
             ++miNumFrunksAllocated;
         }

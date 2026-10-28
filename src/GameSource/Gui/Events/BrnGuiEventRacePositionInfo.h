@@ -9,6 +9,6 @@ struct GuiEventRacePositionInfo
     bool mabValid[8];
     s32 GetEventType() const { return 238; }
 };
-static_assert(sizeof(GuiEventRacePositionInfo) == 24, "race position event size");
+CGS_STATIC_ASSERT((sizeof(GuiEventRacePositionInfo) == 24), "race position event size");
 
 }

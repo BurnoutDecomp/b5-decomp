@@ -228,7 +228,7 @@ void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicyShared
         // b5 35a5e66c).
         // The producer copies the full 0x80-byte block into its event, as the console's does (its
         // volume slot is 0x80 wide). The SphereVolume record fills the first 0x60 bytes.
-        alignas(16) u8 laVolumeMemory[KU_SPHERE_TEST_VOLUME_BLOCK];   // var_B0
+        CGS_ALIGN(16) u8 laVolumeMemory[KU_SPHERE_TEST_VOLUME_BLOCK];   // var_B0
         rw::Resource lVolumeResource = {};                            // var_E0: zeroed, word 0 = the block
         lVolumeResource.m_baseResources[0] = laVolumeMemory;
         const rw::collision::SphereVolume* lpSphere =

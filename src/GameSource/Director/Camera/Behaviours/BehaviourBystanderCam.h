@@ -136,12 +136,12 @@ public:
     }
 
     // ---- the virtual interface (vtable off_8200A5C0) -----------------------------------------
-    void Construct() override;                                                    // slot 0 (cpp:221)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1 (cpp:251)
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // slot 2 (cpp:270)
-    CollisionPolicy* GetCollisionPolicy() override;                                // slot 5 (cpp:396)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // slot 6 (cpp:410)
-    const char* GetName() const override;                                          // slot 7 (cpp:435)
+    void Construct() ;                                                    // slot 0 (cpp:221)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;        // slot 1 (cpp:251)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;     // slot 2 (cpp:270)
+    CollisionPolicy* GetCollisionPolicy() ;                                // slot 5 (cpp:396)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;                         // slot 6 (cpp:410)
+    const char* GetName() const ;                                          // slot 7 (cpp:435)
 
 private:
     // ---- layout (DWARF :156..:175) ---------------------------------------------------------------

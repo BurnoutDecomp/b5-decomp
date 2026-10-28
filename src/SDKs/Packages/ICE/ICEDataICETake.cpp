@@ -432,7 +432,7 @@ namespace ICE
         // pointers point into the rebuilt variable-data region. Raw-storage stand-in
         // (the FixDown idiom): ICETake is not default-constructible against the frozen
         // header, and SetDataPointers writes every member it later reads.
-        alignas(ICETake) u8 laScratchStorage[sizeof(ICETake)];
+        CGS_ALIGN(ICETake) u8 laScratchStorage[sizeof(ICETake)];
         ICETake& lScratch = *reinterpret_cast<ICETake*>(laScratchStorage);
         lScratch.Construct(mpResourceManager);
         lScratch.SetDataPointers(lpNewData, false);

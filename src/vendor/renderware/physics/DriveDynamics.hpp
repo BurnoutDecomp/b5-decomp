@@ -97,23 +97,23 @@ namespace physics
     // proves nothing. See the block at CgsPhysicsSimulationModule.h.
     inline void _rw_physics_DriveDynamics_AssertLayout()
     {
-        static_assert(offsetof(DriveDynamics::Params, mSpring)   == 0x00, "Params.mSpring   @+0x00 (ctor stfs 0.0f, 0(r11))");
-        static_assert(offsetof(DriveDynamics::Params, mDamping)  == 0x04, "Params.mDamping  @+0x04 (ctor stfs 0.0f, 4(r11))");
-        static_assert(offsetof(DriveDynamics::Params, mStrength) == 0x08, "Params.mStrength @+0x08 (ctor stfs 0.0f, 8(r11))");
-        static_assert(offsetof(DriveDynamics::Params, mType)     == 0x0C, "Params.mType     @+0x0C (ctor stw 0, 0xC(r11))");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mSpring)   == 0x00), "Params.mSpring   @+0x00 (ctor stfs 0.0f, 0(r11))");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mDamping)  == 0x04), "Params.mDamping  @+0x04 (ctor stfs 0.0f, 4(r11))");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mStrength) == 0x08), "Params.mStrength @+0x08 (ctor stfs 0.0f, 8(r11))");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mType)     == 0x0C), "Params.mType     @+0x0C (ctor stw 0, 0xC(r11))");
 
         // Adjacency form -- survives a member WIDENING, which a total-size check would not.
-        static_assert(offsetof(DriveDynamics::Params, mDamping)  == offsetof(DriveDynamics::Params, mSpring)  + sizeof(DriveDynamics::Params::mSpring),   "mDamping follows mSpring");
-        static_assert(offsetof(DriveDynamics::Params, mStrength) == offsetof(DriveDynamics::Params, mDamping) + sizeof(DriveDynamics::Params::mDamping),  "mStrength follows mDamping");
-        static_assert(offsetof(DriveDynamics::Params, mType)     == offsetof(DriveDynamics::Params, mStrength)+ sizeof(DriveDynamics::Params::mStrength), "mType follows mStrength");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mDamping)  == offsetof(DriveDynamics::Params, mSpring)  + sizeof(DriveDynamics::Params::mSpring)),   "mDamping follows mSpring");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mStrength) == offsetof(DriveDynamics::Params, mDamping) + sizeof(DriveDynamics::Params::mDamping)),  "mStrength follows mDamping");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics::Params, mType)     == offsetof(DriveDynamics::Params, mStrength)+ sizeof(DriveDynamics::Params::mStrength)), "mType follows mStrength");
 
-        static_assert(offsetof(DriveDynamics, mLinear)  == 0x00, "DriveDynamics.mLinear  @+0x00 (:261)");
-        static_assert(offsetof(DriveDynamics, mAngular) == 0x10, "DriveDynamics.mAngular @+0x10 (asm second quad at +0x10..+0x1C)");
-        static_assert(offsetof(DriveDynamics, mAngular) == offsetof(DriveDynamics, mLinear) + sizeof(DriveDynamics::mLinear), "mAngular follows mLinear");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics, mLinear)  == 0x00), "DriveDynamics.mLinear  @+0x00 (:261)");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics, mAngular) == 0x10), "DriveDynamics.mAngular @+0x10 (asm second quad at +0x10..+0x1C)");
+        CGS_STATIC_ASSERT((offsetof(DriveDynamics, mAngular) == offsetof(DriveDynamics, mLinear) + sizeof(DriveDynamics::mLinear)), "mAngular follows mLinear");
 
         // The X360-attested ARRAY STRIDE -- DriveData::AddDrive @0x828A0330 reaches
         // maDynamics as `(i+2)<<5` and maScaledDynamics as `(i+3)<<5`, i.e. 32 bytes apart.
-        static_assert(sizeof(DriveDynamics) == 32, "DriveDynamics array stride 32 (AddDrive (i+2)<<5 / (i+3)<<5)");
+        CGS_STATIC_ASSERT((sizeof(DriveDynamics) == 32), "DriveDynamics array stride 32 (AddDrive (i+2)<<5 / (i+3)<<5)");
     }
 }
 }

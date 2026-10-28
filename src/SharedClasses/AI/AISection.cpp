@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT + Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetPortal miss message)
 #include "GameSource/World/AI/BrnAIBoundaryLine.h"           // BrnAI::BoundaryLine (mpaNoGoLines target)
-#include <cstdint>                                           // uintptr_t (relocation arithmetic)
+#include "types.hpp"                                           // uintptr_t (relocation arithmetic)
 
 // BrnAI::AISection member bodies.
 //
@@ -64,7 +64,7 @@ namespace BrnAI
     {
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
 
-        if (mpaPortals != nullptr)
+        if (mpaPortals != 0)
         {
             mpaPortals = reinterpret_cast<Portal*>(
                 reinterpret_cast<uintptr_t>(mpaPortals) + luBase);
@@ -75,7 +75,7 @@ namespace BrnAI
             }
         }
 
-        if (mpaNoGoLines != nullptr)
+        if (mpaNoGoLines != 0)
         {
             mpaNoGoLines = reinterpret_cast<BoundaryLine*>(
                 reinterpret_cast<uintptr_t>(mpaNoGoLines) + luBase);
@@ -89,7 +89,7 @@ namespace BrnAI
     {
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
 
-        if (mpaPortals != nullptr)
+        if (mpaPortals != 0)
         {
             for (u32 luPortal = 0; luPortal < mu8NumPortals; ++luPortal)
             {
@@ -100,7 +100,7 @@ namespace BrnAI
                 reinterpret_cast<uintptr_t>(mpaPortals) - luBase);
         }
 
-        if (mpaNoGoLines != nullptr)
+        if (mpaNoGoLines != 0)
         {
             mpaNoGoLines = reinterpret_cast<BoundaryLine*>(
                 reinterpret_cast<uintptr_t>(mpaNoGoLines) - luBase);

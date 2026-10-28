@@ -81,6 +81,6 @@ public:
 };
 
 // cLionParticleEffect::Serialise @0x82912CA8 does `DataStore(this, 12)`.
-static_assert(sizeof(cLionParticleEffect) == 12,
+CGS_STATIC_ASSERT((sizeof(cLionParticleEffect) == 12),
               "cLionParticleEffect is the 12-byte serialised effect header "
               "(cLionParticleEffect::Serialise @0x82912CA8 DataStore(this, 12))");

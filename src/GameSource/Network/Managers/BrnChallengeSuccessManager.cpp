@@ -161,9 +161,9 @@ namespace BrnNetwork
         mpPlayerManager = lpPlayerManager;
         mpTimeManager   = lpTimeManager;
 
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
@@ -213,9 +213,9 @@ namespace BrnNetwork
         }
 
         // X360 @0x82555D48 zeroes all three pointer members (stw r28=0 to 0x5F4/0x5F8/0x5FC).
-        mpNetworkModule = nullptr;   // +0x5F4
-        mpPlayerManager = nullptr;   // +0x5F8
-        mpTimeManager   = nullptr;   // +0x5FC
+        mpNetworkModule = 0;   // +0x5F4
+        mpPlayerManager = 0;   // +0x5F8
+        mpTimeManager   = 0;   // +0x5FC
     }
 
     // -------------------------------------------------------------------------------------------
@@ -238,7 +238,7 @@ namespace BrnNetwork
     void ChallengeSuccessManager::ProcessAfterSimulation(
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != nullptr, "lpInput");
+        CGS_ASSERT(lpInput != 0, "lpInput");
         ProcessNetworkEvents(lpInput->GetNetworkEventQueue());
         CheckForNewUpdateMessages();
     }
@@ -261,7 +261,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT(false, "lpEntry");
-        return nullptr;
+        return 0;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -271,20 +271,20 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             ChallengeSuccessData* lpEntry = GetChallengeSuccessDataEntry(CgsNetwork::KI_INVALID_PLAYER_ID);
-            CGS_ASSERT(lpEntry != nullptr, "lpEntry");
+            CGS_ASSERT(lpEntry != 0, "lpEntry");
 
             // Unreliable per-frame update message pair (no arrival/delivery callbacks).
             lpNetworkPlayer->RegisterMessageType(KI_UPDATE_MESSAGE_TYPE,
                                                  sizeof(FburnSuccessUpdateMessage),
                                                  &lpEntry->mUpdateMessageSend,
                                                  &lpEntry->mUpdateMessageRecv,
-                                                 nullptr, nullptr, nullptr);
+                                                 0, 0, 0);
             // Reliable challenge-success result pair, with the arrival/delivery callbacks and
             // this manager as their user data.
             lpNetworkPlayer->RegisterMessageType(KI_CHALLENGE_SUCCESS_MESSAGE_TYPE,
@@ -305,16 +305,16 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->UnRegisterMessageType(KI_UPDATE_MESSAGE_TYPE);
             lpNetworkPlayer->UnRegisterMessageType(KI_CHALLENGE_SUCCESS_MESSAGE_TYPE);
 
             ChallengeSuccessData* lpEntry = GetChallengeSuccessDataEntry(lPlayerID);
-            CGS_ASSERT(lpEntry != nullptr, "lpEntry");
+            CGS_ASSERT(lpEntry != 0, "lpEntry");
             lpEntry->mPlayerID = CgsNetwork::KI_INVALID_PLAYER_ID;
         }
     }
@@ -348,22 +348,22 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::HandleSendingUpdateMessage()
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
 
         const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCount();
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             ChallengeSuccessData* lpSuccessData = &maChallengeSuccessData[liIndex];
-            CGS_ASSERT(lpSuccessData != nullptr, "lpSuccessData");
+            CGS_ASSERT(lpSuccessData != 0, "lpSuccessData");
 
             const NetworkPlayerID lPlayerID = lpSuccessData->mPlayerID;
             if (lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID
                 && mpPlayerManager->IsPlayerTurnToSendRoundRobinMessage(lPlayerID, false, 0))
             {
                 FburnSuccessUpdateMessage* lpUpdateMessage = &lpSuccessData->mUpdateMessageSend;
-                CGS_ASSERT(lpUpdateMessage != nullptr, "lpUpdateMessage");
+                CGS_ASSERT(lpUpdateMessage != 0, "lpUpdateMessage");
                 CGS_ASSERT(!lpUpdateMessage->IsMessageValid(), "!lpUpdateMessage->IsMessageValid()");
 
                 const s32 liFramesSinceStart = mpTimeManager->GetFramesSinceStart();
@@ -384,21 +384,21 @@ namespace BrnNetwork
                                                                        const bool* lpaAccumulationThisFrame,
                                                                        const f32*  lpaActionScores)
     {
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
 
         const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCount();
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             ChallengeSuccessData* lpSuccessData = &maChallengeSuccessData[liIndex];
-            CGS_ASSERT(lpSuccessData != nullptr, "lpSuccessData");
+            CGS_ASSERT(lpSuccessData != 0, "lpSuccessData");
 
             if (lpSuccessData->mPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID)
             {
                 FburnChallengeSuccessMessage* lpChallengeSuccessMessage =
                     &lpSuccessData->mChallengeSuccessMessageSend;
-                CGS_ASSERT(lpChallengeSuccessMessage != nullptr, "lpChallengeSuccessMessage");
+                CGS_ASSERT(lpChallengeSuccessMessage != 0, "lpChallengeSuccessMessage");
                 CGS_ASSERT(!lpChallengeSuccessMessage->IsMessageValid(),
                            "!lpChallengeSuccessMessage->IsMessageValid()");
 
@@ -421,10 +421,10 @@ namespace BrnNetwork
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             ChallengeSuccessData* lpSuccessData = &maChallengeSuccessData[liIndex];
-            CGS_ASSERT(lpSuccessData != nullptr, "lpSuccessData");
+            CGS_ASSERT(lpSuccessData != 0, "lpSuccessData");
 
             FburnSuccessUpdateMessage* lpReceivedMessage = &lpSuccessData->mUpdateMessageRecv;
-            CGS_ASSERT(lpReceivedMessage != nullptr, "lpReceivedMessage");
+            CGS_ASSERT(lpReceivedMessage != 0, "lpReceivedMessage");
 
             s32                        liFramesSinceStart = 0;
             s32                        liActionIndex      = 0;
@@ -452,8 +452,8 @@ namespace BrnNetwork
         s32 liActionIndex,
         const LastSecondChallengeSuccess* lpSuccessUpdate)
     {
-        CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr,
+        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
                    "mpNetworkModule->GetNetworkManager()");
 
         const s32 leLocalConsoleFrameRate =
@@ -463,9 +463,9 @@ namespace BrnNetwork
                    "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ) || "
                    "( leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ )");
 
-        CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-        CGS_ASSERT(lpNetworkPlayer != nullptr, "lpNetworkPlayer");
+        CGS_ASSERT(lpNetworkPlayer != 0, "lpNetworkPlayer");
 
         const s32 leRemoteConsoleFrameRate =
             static_cast<s32>(lpNetworkPlayer->GetRemoteConsoleFrameRate());
@@ -486,7 +486,7 @@ namespace BrnNetwork
         {
             // Sender is 60 Hz, we are 50 Hz.
             TranslateSuccessUpdate60HzTo50Hz(&lTranslatedSuccess, lpSuccessUpdate);
-            CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
+            CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
             // Map a 60 Hz frame index onto the 50 Hz timeline (X360: 5 * frame / 6 - 50).
             liTranslatedFrame = 5 * liFramesSinceNetworkStart / 6 - KI_FRAMERATE_50HZ;
         }
@@ -494,7 +494,7 @@ namespace BrnNetwork
         {
             // Sender is 50 Hz, we are 60 Hz.
             TranslateSuccessUpdate50HzTo60Hz(&lTranslatedSuccess, lpSuccessUpdate);
-            CGS_ASSERT(mpTimeManager != nullptr, "mpTimeManager");
+            CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
             // Map a 50 Hz frame index onto the 60 Hz timeline (X360: 6 * frame / 5 - 60).
             liTranslatedFrame = 6 * liFramesSinceNetworkStart / 5 - KI_FRAMERATE_60HZ;
         }
@@ -508,7 +508,7 @@ namespace BrnNetwork
         lOutEvent.miChallengeUpdateFrame  = liTranslatedFrame;
         lOutEvent.miActionIndex           = liActionIndex;
 
-        CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != nullptr,
+        CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0,
                    "mpNetworkModule->GetNetworkEventQueue()");
         AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lOutEvent),
@@ -524,21 +524,21 @@ namespace BrnNetwork
     void ChallengeSuccessManager::ProcessNetworkEvents(
         const BrnNetworkModuleIO::NetworkEventQueue* lpInputNetworkEventQueue)
     {
-        CGS_ASSERT(lpInputNetworkEventQueue != nullptr, "lpInputNetworkEventQueue");
+        CGS_ASSERT(lpInputNetworkEventQueue != 0, "lpInputNetworkEventQueue");
 
         const NetworkEventQueueConcrete* lpQueue = AsConcreteQueue(lpInputNetworkEventQueue);
 
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 leEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
 
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             if (leEventType == KI_INEVENT_FBURN_SUCCESS_UPDATE)
             {
                 const InFburnSuccessUpdateEvent* lpSuccessEvent =
                     reinterpret_cast<const InFburnSuccessUpdateEvent*>(lpEvent);
-                CGS_ASSERT(lpSuccessEvent != nullptr, "lpSuccessEvent");
+                CGS_ASSERT(lpSuccessEvent != 0, "lpSuccessEvent");
                 mbSendUpdateSuccessMessage    = true;
                 mLastSecondChallengeSuccess   = lpSuccessEvent->mChallengeSuccessUpdate;
                 miChallengeSuccessUpdateIndex = lpSuccessEvent->miActionIndex;
@@ -547,7 +547,7 @@ namespace BrnNetwork
             {
                 const InFreeburnChallengeEvent* lpChallengeEvent =
                     reinterpret_cast<const InFreeburnChallengeEvent*>(lpEvent);
-                CGS_ASSERT(lpChallengeEvent != nullptr, "lpChallengeEvent");
+                CGS_ASSERT(lpChallengeEvent != 0, "lpChallengeEvent");
                 if (lpChallengeEvent->meEventType == BrnNetworkModuleIO::E_CHALLENGE_EVENT_ENDED)
                 {
                     mbSendUpdateSuccessMessage = false;
@@ -557,13 +557,13 @@ namespace BrnNetwork
             {
                 const InFburnChallengeSuccessEvent* lpChallengeSuccessEvent =
                     reinterpret_cast<const InFburnChallengeSuccessEvent*>(lpEvent);
-                CGS_ASSERT(lpChallengeSuccessEvent != nullptr, "lpChallengeSuccessEvent");
+                CGS_ASSERT(lpChallengeSuccessEvent != 0, "lpChallengeSuccessEvent");
                 HandleSendingChallengeSuccessMessage(lpChallengeSuccessEvent->mabSuccessfulActions,
                                                      lpChallengeSuccessEvent->mabAccumulationThisFrame,
                                                      lpChallengeSuccessEvent->mafActionScores);
             }
 
-            const CgsModule::Event* lpNextEvent = nullptr;
+            const CgsModule::Event* lpNextEvent = 0;
             leEventType = lpQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
             lpEvent = lpNextEvent;
         }
@@ -660,11 +660,11 @@ namespace BrnNetwork
         void* lpUserData)
     {
         ChallengeSuccessManager* lpChallengeManager = static_cast<ChallengeSuccessManager*>(lpUserData);
-        CGS_ASSERT(lpChallengeManager != nullptr, "lpChallengeManager");
+        CGS_ASSERT(lpChallengeManager != 0, "lpChallengeManager");
 
         FburnChallengeSuccessMessage* lpChallengeSuccessMessage =
             reinterpret_cast<FburnChallengeSuccessMessage*>(lpMessage);
-        CGS_ASSERT(lpChallengeSuccessMessage != nullptr, "lpChallengeSuccessMessage");
+        CGS_ASSERT(lpChallengeSuccessMessage != 0, "lpChallengeSuccessMessage");
 
         OutFburnChallengeSuccessEvent lChallengeSuccessEvent;
         const bool lbRetrieved = lpChallengeSuccessMessage->Retrieve(
@@ -677,7 +677,7 @@ namespace BrnNetwork
                    "lChallengeSucessEvent.mabSuccessfulActions, lChallengeSucessEvent.mabAccumulationThisFrame, "
                    "lChallengeSucessEvent.mafActionScores )");
 
-        CGS_ASSERT(lpChallengeManager->mpNetworkModule != nullptr,
+        CGS_ASSERT(lpChallengeManager->mpNetworkModule != 0,
                    "lpChallengeManager->mpNetworkModule");
 
         BrnNetworkModuleIO::GameStateToNetworkInterface* lpInterface =
@@ -685,7 +685,7 @@ namespace BrnNetwork
         lChallengeSuccessEvent.meActiveRaceCarIndex =
             static_cast<s32>(lpInterface->GetActiveRaceCarIndex(liFromPlayerID));
 
-        CGS_ASSERT(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue() != nullptr,
+        CGS_ASSERT(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue() != 0,
                    "lpChallengeManager->mpNetworkModule->GetNetworkEventQueue()");
         AsConcreteQueue(lpChallengeManager->mpNetworkModule->GetNetworkEventQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lChallengeSuccessEvent),

@@ -4,10 +4,10 @@
 // X360-attested storage shape: both packed IDs are a single 64-bit word (entity word in
 // the high dword, two u16 sub-fields in the low dword). The two `sth` stores at this+4 / +6
 // pin the sub-field offsets; the `std` to this+0 pins the 8-byte size.
-static_assert(sizeof(BrnPhysics::Deformation::BurnoutBodyPartID) == 8,  "BurnoutBodyPartID == 8 bytes");
-static_assert(sizeof(BrnPhysics::Deformation::BurnoutWheelBodyID) == 8, "BurnoutWheelBodyID == 8 bytes");
-static_assert(offsetof(BrnPhysics::Deformation::BurnoutBodyPartID, muSubA) == 4, "muSubA @ +4");
-static_assert(offsetof(BrnPhysics::Deformation::BurnoutBodyPartID, muSubB) == 6, "muSubB @ +6");
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::BurnoutBodyPartID) == 8),  "BurnoutBodyPartID == 8 bytes");
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::BurnoutWheelBodyID) == 8), "BurnoutWheelBodyID == 8 bytes");
+CGS_STATIC_ASSERT((offsetof(BrnPhysics::Deformation::BurnoutBodyPartID, muSubA) == 4), "muSubA @ +4");
+CGS_STATIC_ASSERT((offsetof(BrnPhysics::Deformation::BurnoutBodyPartID, muSubB) == 6), "muSubB @ +6");
 
 // BrnPhysics::Deformation::BurnoutBodyPartID::Set @ 0x825C1A10
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (asm authoritative). Packs the owning

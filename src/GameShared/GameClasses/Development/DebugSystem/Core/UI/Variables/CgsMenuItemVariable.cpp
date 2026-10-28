@@ -15,7 +15,7 @@ namespace CgsDev
     namespace DebugUI
     {
         MenuItemVariable::MenuItemVariable()
-            : mpVariable(nullptr)
+            : mpVariable(0)
         {
         }
 

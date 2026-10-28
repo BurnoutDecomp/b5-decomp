@@ -54,7 +54,7 @@ namespace GuiResourceModuleIO
 {
     void InputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer, mLoadRequests) == 0x0004, "mLoadRequests @0x0004");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mLoadRequests) == 0x0004), "mLoadRequests @0x0004");
     }
 
     // X360 0x8285DA58.

@@ -26,7 +26,7 @@ namespace Jobs
         // job_thread_id.h:26 -- a job-thread id is a 64-bit value.
         typedef u64 JobThreadId;
 
-        JobThreadHandle() : mSchedulerBackend(nullptr),mHandle(0) {}
+        JobThreadHandle() : mSchedulerBackend(0),mHandle(0) {}
         JobThreadHandle(Detail::SchedulerBackend* pBackend, u32 uHandle)
             : mSchedulerBackend(pBackend),mHandle(uHandle) {}
 

@@ -1009,10 +1009,10 @@ namespace CgsGui
             if (lbEventHudProbe)
                 ++siEventHudGetLogs;
             static s32 siPromptGetLogs = 0;
-            const bool lbPromptProbe = sbPromptProbe && lpacCompName != nullptr &&
+            const bool lbPromptProbe = sbPromptProbe && lpacCompName != 0 &&
                 // Map button animators have their own budget. Boot car-selection
                 // HelpItem and per-frame minimap queries must not spend it first.
-                std::strstr(lpacCompName, "ButtonsAnimation") != nullptr;
+                std::strstr(lpacCompName, "ButtonsAnimation") != 0;
             const bool lbPromptWithinBudget = lbPromptProbe && siPromptGetLogs < 1024;
             if (lbPromptProbe && siPromptGetLogs <= 1024)
             {

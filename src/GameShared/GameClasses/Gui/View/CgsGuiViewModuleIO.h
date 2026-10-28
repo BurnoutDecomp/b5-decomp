@@ -73,8 +73,8 @@ namespace ViewIO
 
     // The module and view IO carry the same original CgsGui::ImRendererSet.
     // Five pointer fields widen on the host; Camera follows at its natural alignment.
-    using ImRendererSet = CgsGui::ImRendererSet;
-    using CgsGraphicsCameraStorage = CgsGraphics::Camera;
+    typedef CgsGui::ImRendererSet ImRendererSet;
+    typedef CgsGraphics::Camera CgsGraphicsCameraStorage;
 
     // The view->input buffer. Derives CgsModule::IOBuffer and embeds a large GUI event queue at
     // this+4 (the view-state queue the AddViewState writers Append into under a write lock) plus

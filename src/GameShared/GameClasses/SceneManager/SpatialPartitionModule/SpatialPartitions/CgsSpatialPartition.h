@@ -87,7 +87,7 @@ namespace CgsSceneManager
         // LineTestRecursive @0x828BCF50, which read it back at these offsets (static_asserted after
         // the class). (Until 2026-09-25 this was an opaque `unsigned char maBytes[0x40]` placeholder,
         // 779b479f; the console block is 0x58 bytes and the DWARF names every field.)
-        struct alignas(16) LineTestRecursiveFuncParams
+        struct CGS_ALIGN(16) LineTestRecursiveFuncParams
         {
             Vector3  mLineStart;            // +0x00
             Vector3  mLineEnd;              // +0x10
@@ -215,18 +215,18 @@ namespace CgsSceneManager
     // @0x828CA5F8 stores sp+0x70 + offset; LineTestRecursive @0x828BCF50 loads +0x00 / +0x20 / +0x30
     // / +0x40 / +0x50 / +0x54; TestLineAgainstNodeBoundingBox @0x828B0FC8 loads +0x00 / +0x30). Only
     // the result-buffer pointer moves on x64.
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineStart) == 0x00,
+    CGS_STATIC_ASSERT((offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineStart) == 0x00),
                   "LineTestRecursiveFuncParams::mLineStart is at console +0x00");
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineEnd) == 0x10,
+    CGS_STATIC_ASSERT((offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineEnd) == 0x10),
                   "LineTestRecursiveFuncParams::mLineEnd is at console +0x10");
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineDirection) == 0x20,
+    CGS_STATIC_ASSERT((offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineDirection) == 0x20),
                   "LineTestRecursiveFuncParams::mLineDirection is at console +0x20");
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineReciprocal) == 0x30,
+    CGS_STATIC_ASSERT((offsetof(SpatialPartition::LineTestRecursiveFuncParams, mLineReciprocal) == 0x30),
                   "LineTestRecursiveFuncParams::mLineReciprocal is at console +0x30");
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mfLineLength) == 0x40,
+    CGS_STATIC_ASSERT((offsetof(SpatialPartition::LineTestRecursiveFuncParams, mfLineLength) == 0x40),
                   "LineTestRecursiveFuncParams::mfLineLength is at console +0x40");
-    static_assert(offsetof(SpatialPartition::LineTestRecursiveFuncParams, mx32EntityTypeFlags) == 0x50,
+    CGS_STATIC_ASSERT((offsetof(SpatialPartition::LineTestRecursiveFuncParams, mx32EntityTypeFlags) == 0x50),
                   "LineTestRecursiveFuncParams::mx32EntityTypeFlags is at console +0x50");
-    static_assert(sizeof(SpatialPartition::LineTestRecursiveFuncParams) == 0x60,
+    CGS_STATIC_ASSERT((sizeof(SpatialPartition::LineTestRecursiveFuncParams) == 0x60),
                   "0x58 of console fields rounded to the 16-byte alignment; the widened pointer still fits");
 }

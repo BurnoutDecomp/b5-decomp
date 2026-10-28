@@ -65,7 +65,7 @@ namespace CgsGameTalk
     void GameTalk::Construct()
     {
         mbPrepared        = false;          // stb 0, 0x4034
-        mpGameTalkManager = nullptr;        // stw 0, 0x4030
+        mpGameTalkManager = 0;        // stw 0, 0x4030
 
         // Bring up the transport on the GameTalk listen port (asm passes 0x2694 in r5).
         mProtocol.Construct(true, KI_DEFAULT_GAMETALK_PORT);
@@ -106,9 +106,9 @@ namespace CgsGameTalk
                                          const char* lpacFilter)
     {
         CGS_ASSERT(mbPrepared, "mbPrepared");
-        CGS_ASSERT(lpHandlerFunc != nullptr, "lpHandlerFunc != NULL");
-        CGS_ASSERT(lpacFilter != nullptr, "lpacFilter != NULL");
-        CGS_ASSERT(mpGameTalkManager != nullptr, "mpGameTalkManager != NULL");
+        CGS_ASSERT(lpHandlerFunc != 0, "lpHandlerFunc != NULL");
+        CGS_ASSERT(lpacFilter != 0, "lpacFilter != NULL");
+        CGS_ASSERT(mpGameTalkManager != 0, "mpGameTalkManager != NULL");
 
         return EA::GameTalk::GameTalkManager::RegisterMessageHandler(
             mpGameTalkManager, lpHandlerFunc, lpacFilter);
@@ -117,8 +117,8 @@ namespace CgsGameTalk
     // X360 @0x828DAEE8 (header-inline in the original CgsGameTalk.h:178-179).
     s32 GameTalk::SendMessage(const char* lpTarget, EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        CGS_ASSERT(lpTarget != nullptr, "lpTarget");
-        CGS_ASSERT(lpMessage != nullptr, "lpMessage");
+        CGS_ASSERT(lpTarget != 0, "lpTarget");
+        CGS_ASSERT(lpMessage != 0, "lpMessage");
 
         return EA::GameTalk::GameTalkManager::SendMessage(lpTarget, lpMessage);
     }
@@ -128,12 +128,12 @@ namespace CgsGameTalk
     {
         CGS_ASSERT(mbPrepared,
                    "Call GameTalk::Prepare() before calling GameTalk::Update()\n");
-        CGS_ASSERT(mpGameTalkManager != nullptr, "mpGameTalkManager != NULL");
+        CGS_ASSERT(mpGameTalkManager != 0, "mpGameTalkManager != NULL");
 
         // The asm pumps the process-wide singleton (off_8303577C) rather than the member
         // copy; both reference the same GameTalkManager.
         EA::GameTalk::GameTalkManager* lpManager = EA::GameTalk::GameTalkManager::GetInstance();
-        if (lpManager != nullptr)
+        if (lpManager != 0)
         {
             lpManager->Update();
         }

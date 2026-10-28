@@ -71,17 +71,17 @@ namespace BrnDirector
 
         // Prepare -- allocate the gyro rig on the victim's car (takedown parameter
         // block, record +2112) and the blend that carries the gameplay camera into it.
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Update -- the four-beat flyback; the FLYBACK hand-off allocates the second
         // blend (gyro cam -> gameplay camera) and advances to INTERPOLATING_TO_GAMEPLAY.
-        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Release -- reset the state machine, then drop the three behaviour holds.
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // HasFinished @0x821F6268: return meState == E_STATE_FINISHED.
-        bool HasFinished() const override { return meState == E_STATE_FINISHED; }
+        bool HasFinished() const  { return meState == E_STATE_FINISHED; }
 
     private:
         Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCam;           // console +0x04 (0x14)
@@ -120,17 +120,17 @@ namespace BrnDirector
         // Prepare -- two gyro rigs (default block on the player's car, takedown block
         // on the victim's), both seeded from the player tracker's implicit velocity, plus the
         // blend from a synthesised look-at camera into the first rig.
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Update -- two flyback beats; the FLYBACK1 hand-off allocates the rig-to-rig
         // blend and advances to FLYBACK2.
-        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Release -- reset the state machine, then drop the four behaviour holds.
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // HasFinished @0x821F6280: return meState == E_STATE_FINISHED.
-        bool HasFinished() const override { return meState == E_STATE_FINISHED; }
+        bool HasFinished() const  { return meState == E_STATE_FINISHED; }
 
     private:
         Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCamA;          // console +0x04 (0x14)
@@ -168,17 +168,17 @@ namespace BrnDirector
 
         // Prepare -- allocate BOTH gyro rigs on the victim's car; both adopt the same
         // drive-by parameter block (record +2928) and neither is given a from-car vector seed.
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Update @0x8225A000 -- tractable: picks between the two gyro-cam handles' produced
         // cameras by their dirty-behaviour flag, no interpolate-setup / VMX dependency.
-        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Release -- reset the state machine, then drop the two gyro-cam holds.
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // HasFinished @0x821F6298: return meState == E_STATE_FINISHED.
-        bool HasFinished() const override { return meState == E_STATE_FINISHED; }
+        bool HasFinished() const  { return meState == E_STATE_FINISHED; }
 
     private:
         Camera::BehaviourHandle<Camera::BehaviourGyroCam> mGyroCamDriveByL;  // console +0x04 (0x14)
@@ -222,18 +222,18 @@ namespace BrnDirector
         // Prepare -- allocate the loose-attachment rig (hung off the player's car,
         // aimed at the victim's, adopting this player's OWN parameter block) plus the lookback
         // blend into it.
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Update -- the nine-state sequence. LOOKBACK seeds the gyro rig's from-car
         // vector from the live cars' world positions and sets up the flyback blend; the three
         // zoom beats then run in sequence, each its own loose-attachment behaviour.
-        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // Release -- reset the state machine, then drop all seven behaviour holds.
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) ;
 
         // HasFinished @0x821F62C8: return meState == E_STATE_FINISHED.
-        bool HasFinished() const override { return meState == E_STATE_FINISHED; }
+        bool HasFinished() const  { return meState == E_STATE_FINISHED; }
 
     private:
         Camera::BehaviourHandle<Camera::BehaviourGyroCam>       mGyroCam;         // console +0x04 (0x14)
@@ -289,18 +289,18 @@ namespace BrnDirector
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
         // Construct.
-        void        Construct() override;
+        void        Construct() ;
 
         // Prepare -- pick the owning player off the game state on the first call,
         // then bring up this state's own three behaviours, the moment selector, and the player.
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;
 
         // Update -- the state's own six-state machine, the moment-selector cutting
         // policy for road rage, and the exit edge back to roaming.
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;
 
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x822353B8
-        const char* GetName() const override;                          // @0x821F62E0
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ; // @0x822353B8
+        const char* GetName() const ;                          // @0x821F62E0
 
         // Destruct() is NOT in this TU's recovered function set -- no symbol, and nothing
         // references it -- so the base declaration is kept and no override is declared here

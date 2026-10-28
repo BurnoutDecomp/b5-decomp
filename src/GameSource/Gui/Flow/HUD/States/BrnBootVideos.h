@@ -38,12 +38,12 @@ namespace BrnGui
         {
         }
 
-        void Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm) override;
-        void OnEnter() override;
-        void OnLeave() override;
-        void Update() override;
+        void Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm) ;
+        void OnEnter() ;
+        void OnLeave() ;
+        void Update() ;
         void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                u32* lpuNumberOfResources) const override;
+                                u32* lpuNumberOfResources) const ;
 
     private:
         EUpdateStage meUpdateStage;

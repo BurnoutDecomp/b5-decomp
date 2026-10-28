@@ -222,7 +222,7 @@ private:
 // pointer-free scalar record, so the check is a real check of the console layout rather than a
 // host-only tautology: if it fires, the record has been grown or reordered and every shipped rank
 // now reads garbage.
-static_assert(sizeof(ProgressionRankData) == 112,
+CGS_STATIC_ASSERT((sizeof(ProgressionRankData) == 112),
               "BrnProgression::ProgressionRankData is a 112-byte (0x70) serialised record");
 
 }

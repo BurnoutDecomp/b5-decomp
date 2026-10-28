@@ -19,8 +19,8 @@ namespace CgsDev
     {
         mSize = { 1.0f, 1.0f, 0.0f, 0.0f };
         mColour = 0xFFFFFFFFu;
-        mp2DRenderer = nullptr;
-        mp3DRenderer = nullptr;
+        mp2DRenderer = 0;
+        mp3DRenderer = 0;
     }
 
     void VectorFont::SetSize(Vector2 lSize)
@@ -46,7 +46,7 @@ namespace CgsDev
         {
             // ARTIST 8281F18C..8281F244 widens the screen-space endpoints
             // with zero Z/W and keeps the strokes in the owning 3D debug bank.
-            CGS_ASSERT(mp3DRenderer != nullptr, "mp3DRenderer");
+            CGS_ASSERT(mp3DRenderer != 0, "mp3DRenderer");
             rw::RGBA lColour;
             lColour.m_rgba = luColour;
             mp3DRenderer->Draw2DLineForVectorFont(

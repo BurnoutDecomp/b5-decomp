@@ -104,14 +104,14 @@ public:
     // outputs, then either attaches each output in `apConfig` (recording the
     // count) or, when `apConfig` is null, attaches the single default output.
     // Overrides CVoice's pure vtable slot 9 (wave-D vtable recovery).
-    s32 SetVoiceOutput(const SVoiceOutputConfig* apConfig) override;
+    s32 SetVoiceOutput(const SVoiceOutputConfig* apConfig) ;
 
     // @ 0x82C31AF0 -- set each listed route's output volume by dispatching the
     // per-route effect's SetVolume (CEffect vtable slot at +0x38) with the
     // volume word and a started-state flag. Overrides CVoice's pure vtable
     // slot 10. BLOCKED body (the CEffect vtable slot order is not reconstructed
     // by the CEffect TU); declared so the slot is seated.
-    s32 SetVoiceOutputVolume(const SVoiceOutputVolumeConfig* apConfig) override;
+    s32 SetVoiceOutputVolume(const SVoiceOutputVolumeConfig* apConfig) ;
 
     // @ 0x82C317B0 -- set the base voice format, then rebind the output set
     // through the virtual SetVoiceOutput (own vtable slot 9). This is the ONE

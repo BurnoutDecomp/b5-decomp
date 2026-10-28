@@ -27,7 +27,7 @@ namespace CgsResource
     class Pool;
     class PoolModule;
     struct AllocListSet;
-    using DistributionEntry = CgsMemory::DistributionStreamEntry;
+    typedef CgsMemory::DistributionStreamEntry DistributionEntry;
 
     // CgsBaseDefragPoolModuleState.h:48 - the working set handed to Begin(): the pool to
     // defragment plus the caller-owned scratch arrays and their capacities.

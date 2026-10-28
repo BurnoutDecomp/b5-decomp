@@ -16,7 +16,7 @@
 namespace BrnMassive
 {
 
-static_assert(sizeof(BrnMassiveSubscriber::ImpressionData) == 32,
+CGS_STATIC_ASSERT((sizeof(BrnMassiveSubscriber::ImpressionData) == 32),
               "the impression record SetImpression copies is 32 bytes");
 
 // The texture format the replacement ad must arrive in (DXT1).
@@ -35,7 +35,7 @@ BrnMassiveSubscriber::BrnMassiveSubscriber(const char* lpcZoneName)
     {
         CgsDev::StrStreamBase& lOut = *CgsDev::Log::gpDebugPrint;
         lOut << "Creating Massive Subscriber IE: ";
-        if (lpcZoneName == nullptr)
+        if (lpcZoneName == 0)
         {
             lOut << "<NULLSTRING>";
         }
@@ -78,9 +78,9 @@ int BrnMassiveSubscriber::MediaDownloadComplete(const void* lpData, int liDataSi
 {
     const u32 luPayloadSize = static_cast<u32>(liDataSize - KI_MASSIVE_HEADER_SIZE);
 
-    CGS_ASSERT(mpTextureData != nullptr, "Invalid Pointer for Texture Data to be replaced by Massive");
+    CGS_ASSERT(mpTextureData != 0, "Invalid Pointer for Texture Data to be replaced by Massive");
 
-    if (lpData == nullptr)
+    if (lpData == 0)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {

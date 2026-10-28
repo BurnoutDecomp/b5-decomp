@@ -88,7 +88,7 @@ MemcardState::MemcardState(EA::Thread::Mutex* pMutex)
     , maStartWaitingQueue(0u)   // bl Rea(this + 0x1C, 0) -- capacity-0 deque
     , muMessageSet(0)
     , muMessageClear(0)
-    , mpMessageFilter(nullptr)
+    , mpMessageFilter(0)
 {
     // X360: backend->Allocate(0x10 /* console sizeof(MessageFilter) */, 0,0,0,0)
     // through vtable slot +4, which is exactly what AllocateMem(tag, size) does;
@@ -97,8 +97,8 @@ MemcardState::MemcardState(EA::Thread::Mutex* pMutex)
     // handler is this MemcardState (the compiler inlined
     // MessageFilter::MessageFilter @ 0x82C45F08 here). Same repo idiom as
     // RealmcMemcardInterface.cpp and RealmcIfaceXenonMessageFilter.cpp.
-    void* lpMem = AllocateMem(nullptr, sizeof(MessageFilter));
-    mpMessageFilter = lpMem ? new (lpMem) MessageFilter(this) : nullptr;
+    void* lpMem = AllocateMem(0, sizeof(MessageFilter));
+    mpMessageFilter = lpMem ? new (lpMem) MessageFilter(this) : 0;
 
     maTaskStack.reserve(10);   // X360 0x82C47404..0x82C47410 (li r4, 0xA)
 }
@@ -143,26 +143,26 @@ int MemcardState::SetMessage(int iMode, int iMask)
     mpMutex->Lock();
     if (iMode == 1)
     {
-        muMessageSet   |= static_cast<std::uint32_t>(iMask);
-        muMessageClear &= ~static_cast<std::uint32_t>(iMask);
+        muMessageSet   |= static_cast<uint32_t>(iMask);
+        muMessageClear &= ~static_cast<uint32_t>(iMask);
     }
     else
     {
         if (iMode == 2)
-            muMessageClear |= static_cast<std::uint32_t>(iMask);
+            muMessageClear |= static_cast<uint32_t>(iMask);
         else
-            muMessageClear &= ~static_cast<std::uint32_t>(iMask);
-        muMessageSet &= ~static_cast<std::uint32_t>(iMask);
+            muMessageClear &= ~static_cast<uint32_t>(iMask);
+        muMessageSet &= ~static_cast<uint32_t>(iMask);
     }
     return mpMutex->Unlock();
 }
 
 // Read the hidden-message mask under the lock: lock, load +0x48, unlock,
 //   return the loaded word.
-std::uint32_t MemcardState::GetHiddenMessages()
+uint32_t MemcardState::GetHiddenMessages()
 {
     mpMutex->Lock();
-    const std::uint32_t luMask = muMessageSet;
+    const uint32_t luMask = muMessageSet;
     mpMutex->Unlock();
     return luMask;
 }

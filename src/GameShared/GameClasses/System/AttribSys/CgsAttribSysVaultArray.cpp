@@ -10,9 +10,9 @@ namespace CgsAttribSys
 {
 void VaultArray::Construct(Attrib::IGarbageCollector* lpGarbageCollector)
 {
-    CGS_ASSERT(lpGarbageCollector != nullptr, "lpGarbageCollector != NULL");
+    CGS_ASSERT(lpGarbageCollector != 0, "lpGarbageCollector != NULL");
 
-    mpaSlots = nullptr;
+    mpaSlots = 0;
     mpGarbageCollector = lpGarbageCollector;
     // The X360 build inlines StreamedVaultAllocator::Construct (it is not a
     // separate symbol); restored here as the logical call. Its body — the
@@ -35,12 +35,12 @@ void VaultArray::Prepare(s32 liMaxNumVaults, CgsMemory::LinearMalloc* lpLinearAl
 {
     CGS_ASSERT(!mbPrepared, "Trying to call Prepare() more than once");   // .cpp:75
     CGS_ASSERT(liMaxNumVaults > 0, "liNumSlots > 0");                     // .cpp:76
-    CGS_ASSERT(lpLinearAllocator != nullptr, "lpAllocator != NULL");      // .cpp:77
+    CGS_ASSERT(lpLinearAllocator != 0, "lpAllocator != NULL");      // .cpp:77
 
     miNumSlots = liMaxNumVaults;
     mpaSlots   = static_cast<VaultSlot*>(
         lpLinearAllocator->Malloc(sizeof(VaultSlot) * static_cast<size_t>(liMaxNumVaults)));
-    CGS_ASSERT(mpaSlots != nullptr, "mpaSlots != NULL");                  // .cpp:90
+    CGS_ASSERT(mpaSlots != 0, "mpaSlots != NULL");                  // .cpp:90
 
     for (s32 liSlot = 0; liSlot < miNumSlots; ++liSlot)
         mpaSlots[liSlot].Construct(lpLinearAllocator);

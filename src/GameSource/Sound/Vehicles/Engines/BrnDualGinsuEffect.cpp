@@ -122,9 +122,9 @@ static inline bool IsZero( f32 afValue )
 
 DualGinsuEffect::DualGinsuEffect()
     : BrnSound::Logic::BrnEffectObject()
-    , mpHybridControl(nullptr)
-    , mpPhysicsControl(nullptr)
-    , mpEngineControl(nullptr)
+    , mpHybridControl(0)
+    , mpPhysicsControl(0)
+    , mpEngineControl(0)
     , meDualGinsuPrepareState(E_GINSU_PREPARE_STATE_NONE)
     , mLoopModelVoice()
     , maiVoiceToPartial()
@@ -180,7 +180,7 @@ DualGinsuEffect::DualGinsuEffect()
     for (s32 liPartial = 0; liPartial < KI_MAX_LOOPS; ++liPartial)
     {
         maiPartialToVoice[liPartial] = -1;
-        mapLoopContentSpecs[liPartial] = nullptr;
+        mapLoopContentSpecs[liPartial] = 0;
         for (s32 liAxis = 0; liAxis < LoopOutputs::E_COUNT; ++liAxis)
             mLoopModelOutput[liPartial].mafOutputs[liAxis] = 1.0f;
     }
@@ -328,7 +328,7 @@ void DualGinsuEffect::AttachPartialToVoice(s32 liPartial, s32 liVoice)
 
     CgsSound::Logic::Voice* lpVoice = &mLoopModelVoice[liVoice];
     const CgsSound::Logic::Content* lpContent = mapLoopContentSpecs[liPartial];
-    CGS_ASSERT(lpContent != nullptr, "mapLoopContentSpecs[liPartial]");
+    CGS_ASSERT(lpContent != 0, "mapLoopContentSpecs[liPartial]");
     if (!lpContent)
         return;
     lpVoice->Attach(guLoopModelSlotName, *lpContent);
@@ -420,8 +420,8 @@ void DualGinsuEffect::SetupLoadData()
         return;
     }
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
+    CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
     if (!mpPhysicsControl || !mpHybridControl)
         return;
 
@@ -431,7 +431,7 @@ void DualGinsuEffect::SetupLoadData()
     const Attrib::Gen::vehicleengine& lrAttribs =
         mpHybridControl->GetVehicleEngineAttributes();
     const char* lpcLoopModel = lrAttribs.LoopModel();
-    CGS_ASSERT(lpcLoopModel != nullptr && *lpcLoopModel != '\0', "Bad Engine Data");
+    CGS_ASSERT(lpcLoopModel != 0 && *lpcLoopModel != '\0', "Bad Engine Data");
     if (!lpcLoopModel || !*lpcLoopModel)
         return;
 
@@ -444,7 +444,7 @@ void DualGinsuEffect::SetupLoadData()
 bool DualGinsuEffect::Attach()
 {
     CgsSound::Logic::Module* lpModule = GetLogicModule();
-    CGS_ASSERT(lpModule != nullptr, "mpLogicModule");
+    CGS_ASSERT(lpModule != 0, "mpLogicModule");
     if (!lpModule)
         return false;
 
@@ -540,7 +540,7 @@ bool DualGinsuEffect::Attach()
         mCarSubmix.SetParameter(miCarSubmixPanningLfeLevelIndex, 1.0f,
                                 &guPanningLfeLevelName);
 
-        CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+        CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
         if (!mpHybridControl)
             return false;
         const Attrib::Gen::vehicleengine& lrAttribs =
@@ -555,9 +555,9 @@ bool DualGinsuEffect::Attach()
         mfMinRpm = lrAttribs.MinRpm();
         mfDecelMinRpm = lrAttribs.DecelMinRpm();
 
-        AIVehicleStateManager* lpAIManager = nullptr;
+        AIVehicleStateManager* lpAIManager = 0;
         char lacBundleName[64];
-        const char* lpcBundleName = nullptr;
+        const char* lpcBundleName = 0;
         if (GetStateId() == 2)
         {
             const char* lpcComponent = mpPhysicsControl->GetEngineComponentName(
@@ -568,7 +568,7 @@ bool DualGinsuEffect::Attach()
             lpcBundleName = lacBundleName;
             lpAIManager = static_cast<AIVehicleStateManager*>(
                 lpModule->GetEnvironment().GetStateManager(2));
-            CGS_ASSERT(lpAIManager != nullptr, "lpAIStateManager");
+            CGS_ASSERT(lpAIManager != 0, "lpAIStateManager");
             miAIEngineIndex = (std::max)(0, (std::min)(
                 AIVehicleStateManager::KI_NUMBER_OF_AUDIO_AI_ENGINES - 1,
                 static_cast<s32>(VehicleStateManager::GetAIEngineAssignment(
@@ -675,14 +675,14 @@ bool DualGinsuEffect::Attach()
 
 void DualGinsuEffect::UpdateParams(f32 /*afTimeStep*/)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl || meDualGinsuPrepareState != E_GINSU_PREPARE_STATE_FINISHED ||
         !mCarSubmix.GetVoiceObject())
         return;
 
     // ARTIST @ 0x826B3770 refreshes the authored EQ and RPM thresholds every
     // frame, then writes the six fixed PlayerCarSubmix panning coefficients.
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
+    CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
     if (!mpHybridControl)
         return;
     const Attrib::Gen::vehicleengine& lrAttribs =
@@ -766,7 +766,7 @@ void DualGinsuEffect::ProcessUpdate()
         lSphere.mfHeightOffset = 2.0f;
         lSphere.mfRadius = 2.0f;
         lSphere.mfDurationVisible = 1.0f;
-        lSphere.mpDebugString = nullptr;
+        lSphere.mpDebugString = 0;
 
         CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>
             lMessage(lSphere);
@@ -819,8 +819,8 @@ void DualGinsuEffect::DetachPartialFromVoice(s32 aiVoice)
 
 void DualGinsuEffect::UpdateLoopModelParams()
 {
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpHybridControl != 0, "mpHybridControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpHybridControl || !mpPhysicsControl ||
         mLoopModelResource == CgsResource::NULLResourceHandle)
         return;
@@ -842,15 +842,15 @@ void DualGinsuEffect::UpdateLoopModelParams()
 
     const bool lbPrintLoopOutput = KI_DEBUG_PRINT_LOOP_OUTPUT != 0;
     CgsDev::Log::LogCombined* lpLog = lbPrintLoopOutput
-        ? &BrnSound::Debug::DebugComponent::mLogCombined : nullptr;
-    if (lpLog != nullptr)
+        ? &BrnSound::Debug::DebugComponent::mLogCombined : 0;
+    if (lpLog != 0)
         *lpLog << "[" << ((GetId() & 0x7F0) == 0 ? "Eng]" : "Exh]");
 
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
     mfLoopModelRPM.Update(lfRpm); // ARTIST stores raw history before the local override.
     if (KF_HARDCODE_RPM != 0.0f)
         lfRpm = KF_HARDCODE_RPM;
-    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
+    CGS_ASSERT(mpEngineControl != 0, "mpEngineControl");
     if (!mpEngineControl)
         return;
     const f32 lfAccelerator =
@@ -897,14 +897,14 @@ void DualGinsuEffect::UpdateLoopModelParams()
             DetachPartialFromVoice(maiPartialToVoice[liPartial]);
         }
 
-        if (lpLog != nullptr)
+        if (lpLog != 0)
         {
             *lpLog << "(" << lrOutput.mafOutputs[LoopOutputs::E_PITCH]
                    << "),(" << lrOutput.mafOutputs[LoopOutputs::E_GAIN]
                    << ")\t";
         }
     }
-    if (lpLog != nullptr)
+    if (lpLog != 0)
         *lpLog << "]\n";
 }
 
@@ -916,7 +916,7 @@ void DualGinsuEffect::UpdateAccelGinsu()
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
     if (KF_HARDCODE_RPM != 0.0f)
         lfRpm = KF_HARDCODE_RPM;
-    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
+    CGS_ASSERT(mpEngineControl != 0, "mpEngineControl");
     if (!mpEngineControl)
         return;
     f32 lfPitch = GetRWACMixerOutputValue(3, Nicotine::DMixIO::DMX_PITCH) *
@@ -958,7 +958,7 @@ void DualGinsuEffect::UpdateDecelGinsu()
     f32 lfRpm = mpHybridControl->GetGinsuRPM();
     if (KF_HARDCODE_RPM != 0.0f)
         lfRpm = KF_HARDCODE_RPM;
-    CGS_ASSERT(mpEngineControl != nullptr, "mpEngineControl");
+    CGS_ASSERT(mpEngineControl != 0, "mpEngineControl");
     if (!mpEngineControl)
         return;
     f32 lfPitch =
@@ -1005,7 +1005,7 @@ bool DualGinsuEffect::Detach()
     {
         if (maLoopContentSpecs[liPartial].IsCreated())
             maLoopContentSpecs[liPartial].Destruct();
-        mapLoopContentSpecs[liPartial] = nullptr;
+        mapLoopContentSpecs[liPartial] = 0;
         maiPartialToVoice[liPartial] = -1;
     }
 

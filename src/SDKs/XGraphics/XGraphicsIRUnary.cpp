@@ -50,7 +50,7 @@ IRUnary* IRUnary::NewInst(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRUnary));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRUnary(aiOpcode, apContext);
 }

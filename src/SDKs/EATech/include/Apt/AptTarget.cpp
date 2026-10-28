@@ -45,9 +45,9 @@ extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 //  Homed here (the AptTarget TU) -- the only TU that defines them; every Apt
 //  subsystem reaches the active context through gpAptTarget.
 // =====================================================================
-AptTarget* gpAptTargetCurrent = nullptr;   // off_8324E570
-AptTarget* gpAptTarget        = nullptr;   // off_8324E574
-AptTarget* gpAptTargetTLS     = nullptr;   // off_8324E578
+AptTarget* gpAptTargetCurrent = 0;   // off_8324E570
+AptTarget* gpAptTarget        = 0;   // off_8324E574
+AptTarget* gpAptTargetTLS     = 0;   // off_8324E578
 
 // =====================================================================
 //  Sibling-owned callees/globals referenced below, defined in
@@ -132,18 +132,18 @@ AptTarget::AptTarget(const u32* pParams)
     if (pAnimMem)
         mpAnimationTarget = MakeAptAnimationTarget(pAnimMem, pParams);            // AptAnimationTarget ctor
     else
-        mpAnimationTarget = nullptr;
+        mpAnimationTarget = 0;
 
     // ---- mpLoader (+0x1C): the loader wrapper (console 4-byte slot -> sizeof(AptLoader)) ----
     void* pLoaderMem = gpAptPseudoDataPool->Allocate(sizeof(AptLoader));          // Allocate(pool, 4)
     if (pLoaderMem)
     {
         mpLoader = static_cast<AptLoader*>(pLoaderMem);
-        mpLoader->mpHead = nullptr;   // *v5 = 0
+        mpLoader->mpHead = 0;   // *v5 = 0
     }
     else
     {
-        mpLoader = nullptr;
+        mpLoader = 0;
     }
 
     // ---- mpLinker (+0x20): the 24-byte file linker, constructed inline ----
@@ -157,7 +157,7 @@ AptTarget::AptTarget(const u32* pParams)
     }
     else
     {
-        mpLinker = nullptr;
+        mpLinker = 0;
     }
 
     // ---- mpField2C (+0x2C): the render-root anchor slot (one pointer, zeroed) ----
@@ -168,16 +168,16 @@ AptTarget::AptTarget(const u32* pParams)
     {
         mppRenderRootAnchor =
             static_cast<AptRenderTreeManager::_AptRenderItemRootList**>(pAnchorMem);
-        *mppRenderRootAnchor = nullptr;   // *v8 = 0
+        *mppRenderRootAnchor = 0;   // *v8 = 0
     }
     else
     {
-        mppRenderRootAnchor = nullptr;
+        mppRenderRootAnchor = 0;
     }
 
     // ---- the two TBD slots (+0x24 / +0x28), zeroed last (asm order) ----
-    mpNext = nullptr;
-    mpPrevious = nullptr;
+    mpNext = 0;
+    mpPrevious = 0;
 }
 
 // AptTarget::GetAnimationTarget @0x82AD5770 (`lwz r3,0x18(r3); blr`) and
@@ -222,12 +222,12 @@ AptTarget* AptCreateTargetInstance(const u32* pParams)
     // (off_8324D808 == gpAptPseudoDataPool, wired in the host bring-up step 1) and
     // construct it via the homed AptTarget ctor (== the console sub_82B002A0 @0x82B002A0).
     void* pMem = gpAptPseudoDataPool->Allocate(sizeof(AptTarget));   // Allocate(pool, 48)
-    if (pMem == nullptr)
-        return nullptr;
+    if (pMem == 0)
+        return 0;
     AptTarget* pResult = ::new (pMem) AptTarget(pParams);
 
     // Append to the instance list (head off_8324E570 == gpAptTargetCurrent).
-    if (gpAptTargetCurrent == nullptr)
+    if (gpAptTargetCurrent == 0)
     {
         gpAptTargetCurrent = pResult;   // off_8324E570 = result (first instance)
     }
@@ -357,9 +357,9 @@ void AptTarget::Shutdown()
     gbAptInShutdown = bWasInShutdown;               // byte_8324E7C9 = v4
 
     AptRenderTreeManager::_AptRenderItemRootList** ppAnchor = mppRenderRootAnchor;  // v8 = *(this + 0x2C)
-    mpAnimationTarget = nullptr;                     // *(this + 0x18) = 0
-    mpLoader          = nullptr;                     // *(this + 0x1C) = 0
-    mpLinker          = nullptr;                     // *(this + 0x20) = 0
+    mpAnimationTarget = 0;                     // *(this + 0x18) = 0
+    mpLoader          = 0;                     // *(this + 0x1C) = 0
+    mpLinker          = 0;                     // *(this + 0x20) = 0
 
     // ---- dispose of the render-root anchor ----
     if (ppAnchor)
@@ -372,7 +372,7 @@ void AptTarget::Shutdown()
             if (*pAnchorCell)
             {
                 AptRenderTreeManager::_AptRenderItemRootList::Shutdown(*pAnchorCell);
-                *pAnchorCell = nullptr;
+                *pAnchorCell = 0;
             }
             gpAptPseudoDataPool->Deallocate(
                 mppRenderRootAnchor,
@@ -382,7 +382,7 @@ void AptTarget::Shutdown()
         {
             gAptRenderManagerQueue.Add(mppRenderRootAnchor);             // defer to the render thread
         }
-        mppRenderRootAnchor = nullptr;              // *(this + 0x2C) = 0
+        mppRenderRootAnchor = 0;              // *(this + 0x2C) = 0
     }
 
     // ---- restore the previous context (TLS-side first, then current) ----

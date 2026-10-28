@@ -392,7 +392,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
             continue;
         }
 
-        const AIDriver* lpDriver = (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE) ? lpCar->GetDriver() : nullptr;
+        const AIDriver* lpDriver = (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE) ? lpCar->GetDriver() : 0;
 
         ++liCarColumns;
         StateTableNextColumn();
@@ -422,7 +422,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
 
         // Active index
         lStream.Reset();
-        if (lpDriver != nullptr)
+        if (lpDriver != 0)
         {
             lrStream << lpDriver->GetRelatedActiveCarIndex();
         }
@@ -463,7 +463,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
 
         // Racing line
         lStream.Reset();
-        if (lpDriver != nullptr)
+        if (lpDriver != 0)
         {
             lStream << (lpDriver->mbIsRacingLineInitialised ? "Valid" : "Invalid");
         }
@@ -547,7 +547,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
 
         // Misc state
         lStream.Reset();
-        if (lpDriver != nullptr)
+        if (lpDriver != 0)
         {
             if (lpDriver->mfBrake > 0.1f)
             {
@@ -575,7 +575,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
 
         // Aggression
         lStream.Reset();
-        if (lpDriver != nullptr)
+        if (lpDriver != 0)
         {
             lStream << KAPC_AGGRESSION_STATE_NAMES[lpDriver->GetAggression()->GetAggressionState()];
         }
@@ -652,7 +652,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
         lStream << "s";
         StateTableDrawEntry(lpDisplay, lStream.GetBuffer(), lColour);
 
-        if (mbDrawSpeedCalculationStateOnTable && lpDriver != nullptr)
+        if (mbDrawSpeedCalculationStateOnTable && lpDriver != 0)
         {
             lStream.Reset();
             lStream << lpDriver->mfTopSpeed * KF_MPS_TO_MPH;

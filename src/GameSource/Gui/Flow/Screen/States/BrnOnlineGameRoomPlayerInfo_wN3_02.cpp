@@ -102,10 +102,10 @@ namespace BrnGui
             OutputGuiEventRecord(lpStateInterface, lPayload);
         }
 
-        static_assert(sizeof(GuiAudioTriggerPayload457) == 100, "audio trigger payload is 100 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40>) == 32,
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerPayload457) == 100), "audio trigger payload is 100 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40>) == 32),
                       "573 record is 32 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, 40>) == 492,
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, 40>) == 492),
                       "257 record is 492 bytes");
     }
 

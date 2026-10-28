@@ -13,7 +13,9 @@
 // in-scope renderers reach them only through these calls.
 namespace renderengine
 {
-    enum PrimitiveType : s32;   // platform primitive-topology enum (external API)
+    class Texture;
+    class TextureState;
+    enum PrimitiveType;   // platform primitive-topology enum (external API)
     class VertexDescriptor;     // the per-stream vertex-format descriptor (renderengine/VertexDescriptor.h)
     class ProgramBuffer;        // a single compiled vertex/pixel program (renderengine states/programbuffer.h)
 }

@@ -145,16 +145,16 @@ namespace
             CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen)
     {
-        CGS_ASSERT(lpInputBufferStack != nullptr, "lpInputBufferStack != NULL");        // :1949
-        CGS_ASSERT(lpTractionContactGen != nullptr, "lpTractionContactGen != NULL");    // :1950
-        CGS_ASSERT(mpTractionLineStreamProducer == nullptr,
+        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");        // :1949
+        CGS_ASSERT(lpTractionContactGen != 0, "lpTractionContactGen != NULL");    // :1950
+        CGS_ASSERT(mpTractionLineStreamProducer == 0,
                    "mpTractionLineStreamProducer == NULL");                             // :1951
 
         mpTractionLineStreamProducer =
             lpTractionContactGen->CreateLineWithTriangleListStream(
                 KI_MAX_TRACTION_LINE_STREAM_COMMANDS);
 
-        CGS_ASSERT(mpTractionLineStreamProducer != nullptr,
+        CGS_ASSERT(mpTractionLineStreamProducer != 0,
                    "mpTractionLineStreamProducer != NULL");                             // :1961
     }
 
@@ -171,8 +171,8 @@ namespace
     void VehicleManager::RunTractionLineTestJobs(
             CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen)
     {
-        CGS_ASSERT(lpTractionContactGen != nullptr, "lpTractionContactGen != NULL");    // :2144
-        CGS_ASSERT(mpTractionLineStreamProducer != nullptr,
+        CGS_ASSERT(lpTractionContactGen != 0, "lpTractionContactGen != NULL");    // :2144
+        CGS_ASSERT(mpTractionLineStreamProducer != 0,
                    "mpTractionLineStreamProducer != NULL");                             // :2145
 
         CgsDev::PerfMonCpu::StartMonitor(gs_iLineTestsBeginPM);
@@ -197,11 +197,11 @@ namespace
     void VehicleManager::DoVehicleTractionLineDecallocations(
             CgsModule::IOBufferStack* lpInputBufferStack)
     {
-        CGS_ASSERT(lpInputBufferStack != nullptr, "lpInputBufferStack != NULL");        // :2296
-        CGS_ASSERT(mpTractionLineStreamProducer != nullptr,
+        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");        // :2296
+        CGS_ASSERT(mpTractionLineStreamProducer != 0,
                    "mpTractionLineStreamProducer != NULL");                             // :2297
 
-        mpTractionLineStreamProducer = nullptr;
+        mpTractionLineStreamProducer = 0;
     }
 
     // =============================================================================================
@@ -224,7 +224,7 @@ namespace
     void VehicleManager::ReadRaceCarTractionLineTestResults(
             CgsMemory::SimpleDataStreamResultIterator* lpResultIterator)
     {
-        CGS_ASSERT(mpTractionLineStreamProducer != nullptr,
+        CGS_ASSERT(mpTractionLineStreamProducer != 0,
                    "mpTractionLineStreamProducer != NULL");                             // :2175
 
         for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();
@@ -364,9 +364,9 @@ namespace
             CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen,
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpCacheInterface)
     {
-        CGS_ASSERT(lpTractionContactGen != nullptr, "lpTractionContactGen != NULL");     // :1982
-        CGS_ASSERT(lpCacheInterface != nullptr, "lpCacheInterface != NULL");             // :1983
-        CGS_ASSERT(mpTractionLineStreamProducer != nullptr,
+        CGS_ASSERT(lpTractionContactGen != 0, "lpTractionContactGen != NULL");     // :1982
+        CGS_ASSERT(lpCacheInterface != 0, "lpCacheInterface != NULL");             // :1983
+        CGS_ASSERT(mpTractionLineStreamProducer != 0,
                    "mpTractionLineStreamProducer != NULL");                              // :1984
 
         s32 liNumCommands = 0;
@@ -385,7 +385,7 @@ namespace
 
             // 2. one command, seated with that window.
             CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc::StreamCommand*
-                lpCommand = nullptr;
+                lpCommand = 0;
             mpTractionLineStreamProducer->AllocateCommand(
                 reinterpret_cast<void**>(&lpCommand));
 
@@ -478,7 +478,7 @@ namespace
             Deformation::DeformationManager* lpDeformationManager,
             f32 lfTimeStep)
     {
-        CGS_ASSERT(mpContactGenerator != nullptr, "mpContactGenerator != NULL");          // :2346
+        CGS_ASSERT(mpContactGenerator != 0, "mpContactGenerator != NULL");          // :2346
 
         // 0x82629CFC/0x82629D14: the counter is zeroed BEFORE the assert's fall-through, then the
         // three Add* returns are accumulated into it.
@@ -533,17 +533,17 @@ namespace
         // in any of the 68 instructions -- but the CALLER sets it (`mr r5, r29` @0x8264565C) and
         // the PS3 DWARF types it, so it is declared and deliberately unnamed here rather than
         // deleted. See BrnVehicleManager.h for the retraction of the 2026-08-10 "one parameter".
-        CGS_ASSERT(mpContactGenerator != nullptr, "mpContactGenerator != NULL");          // :2387
+        CGS_ASSERT(mpContactGenerator != 0, "mpContactGenerator != NULL");          // :2387
 
         CgsDev::PerfMonCpu::StartMonitor(gs_iLineTestsFinishPM);
-        if (mpTractionLineTestsJob != nullptr)
+        if (mpTractionLineTestsJob != 0)
         {
             // 0x82633D44..0x82633D50: the console passes r4=0, r5=0, r6=-1 alongside `this`.
             // Those three are the X360 EA::Jobs spin-wait's own defaulted arguments; this tree's
             // job.h models WaitOn() with `this` only (job.h:94, X360 0x82BCB238), which is the
             // same entry the cache-fill wave already calls this way.
             mpTractionLineTestsJob->WaitOn();
-            mpTractionLineTestsJob = nullptr;
+            mpTractionLineTestsJob = 0;
         }
         CgsDev::PerfMonCpu::StopMonitor(gs_iLineTestsFinishPM);
 
@@ -568,13 +568,13 @@ namespace
     // Layout gate for the result record above: the producer is constructed with a 192-byte result
     // stride (CgsCollisionGenerator_LineStream.cpp), and every seat this harvest reads is derived
     // from that record, so a silent size change here would silently mis-seat every wheel.
-    static_assert(sizeof(TractionLineTestResultRecord) == 192,
+    CGS_STATIC_ASSERT((sizeof(TractionLineTestResultRecord) == 192),
                   "the line-test result stride is the 0xC0 the console constructs the stream with");
-    static_assert(offsetof(TractionLineTestResultRecord, mafHitNormal) == 0x50,
+    CGS_STATIC_ASSERT((offsetof(TractionLineTestResultRecord, mafHitNormal) == 0x50),
                   "hit normals sit at 16*(wheel+5) -- lvx128 v2, r10, r29 @0x826181A8");
-    static_assert(offsetof(TractionLineTestResultRecord, mauSurfaceTag) == 0xA0,
+    CGS_STATIC_ASSERT((offsetof(TractionLineTestResultRecord, mauSurfaceTag) == 0xA0),
                   "surface tags sit at 4*(wheel+40) -- lwzx r5, r9, r29 @0x826181AC");
-    static_assert(offsetof(TractionLineTestResultRecord, mau8HitFlags) == 0xB4,
+    CGS_STATIC_ASSERT((offsetof(TractionLineTestResultRecord, mau8HitFlags) == 0xB4),
                   "hit flags sit at 180+wheel -- lbz r11, 0xB4(r11) @0x82618170");
 }
 }

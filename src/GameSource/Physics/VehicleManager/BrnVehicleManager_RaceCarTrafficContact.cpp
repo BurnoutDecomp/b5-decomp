@@ -256,7 +256,7 @@ namespace
     // BrnPhysicalBodyPart_Remove.cpp documents). 16-aligned like the console's .data placement.
     struct PredictBoxStorage
     {
-        alignas(16) unsigned char maBytes[sizeof(rw::collision::BoxVolume)];
+        CGS_ALIGN(16) unsigned char maBytes[sizeof(rw::collision::BoxVolume)];
     };
     PredictBoxStorage gPredictBoxStorageA;   // X360 unk_82FB7980
     PredictBoxStorage gPredictBoxStorageB;   // X360 unk_82FB7CF0
@@ -362,7 +362,7 @@ bool VehicleManager::PredictCarCarIntersection(const SimpleVehiclePhysics* lpBod
 
     rw::collision::PrimitivePairIntersectResult lResult;
     const rw::collision::RwBool lbIntersects = rw::collision::PrimitivePairIntersect(
-        lResult, lpBoxA, &lPoseA, lpBoxB, &lPoseB, 0.0f, nullptr);
+        lResult, lpBoxA, &lPoseA, lpBoxB, &lPoseB, 0.0f, 0);
 
     if (lbIntersects == 0 || lResult.distance > 0.0f)
     {

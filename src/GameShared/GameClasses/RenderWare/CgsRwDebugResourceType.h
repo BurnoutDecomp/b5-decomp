@@ -9,7 +9,7 @@ namespace CgsResource
 class RwDebugResourceType : public Type
 {
 public:
-    uint32_t           GetTypeID() const override;
-    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    uint32_t           GetTypeID() const ;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
 };
 }

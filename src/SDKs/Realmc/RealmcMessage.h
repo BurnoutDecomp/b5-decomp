@@ -38,7 +38,7 @@ class MessageShowAutosaveIcon : public RealmcCore::Message
 public:
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x40 slot.
-    void Apply(RealmcCore::IMessageProcessor* pProcessor) override;
+    void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
 };
 
 } // namespace RealmcIface

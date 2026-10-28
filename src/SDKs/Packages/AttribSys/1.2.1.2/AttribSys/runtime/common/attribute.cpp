@@ -3,7 +3,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h" // Attrib::ClassPrivate (inherited static data area)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabaseprivate.h" // Attrib::DatabasePrivate (Node::GetTypeDesc indexed-type table)
 
-#include <cstdint> // uintptr_t
+#include "types.hpp" // uintptr_t
 #include <cstring> // memset
 #include <new>     // placement new (Collection_Get builds the cursor in the caller's buffer)
 
@@ -151,7 +151,7 @@ namespace Attrib
     // inherited node, from the COLLECTION the value was found in, which is why the X360
     // leaves that collection in r5 across the call (`stw r5,4(r31)` does not clobber it).
     Attribute::Attribute(const Instance& lrInstance, const Collection* lpCollection, Node* lpNode)
-        : mpInstance(&lrInstance), mpCollection(lpCollection), mpNode(lpNode), mpData(nullptr)
+        : mpInstance(&lrInstance), mpCollection(lpCollection), mpNode(lpNode), mpData(0)
     {
         if (lpNode && (lpNode->muFlags & 0x2u) == 0)
             mpData = lpNode->GetPointer(lrInstance.GetLayoutPointer(), lpCollection);

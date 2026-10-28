@@ -87,7 +87,7 @@ namespace BrnGui
 
             s32 GetEventType() const { return 246; }
         };
-        static_assert(sizeof(GuiEventNetworkSelectedPlayerOptionPayload) == 8,
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkSelectedPlayerOptionPayload) == 8),
                       "event 246 payload is 8 bytes");
 
         // OutputGuiEvent<BrnGui::GuiEventNetworkOutputPlayerTexture> @0x82436D40 --
@@ -102,19 +102,17 @@ namespace BrnGui
 
             s32 GetEventType() const { return 264; }
         };
-        static_assert(sizeof(GuiEventNetworkOutputPlayerTexturePayload) == 8,
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkOutputPlayerTexturePayload) == 8),
                       "event 264 payload is 8 bytes");
-        using GuiEventNetworkSelectedPlayerOptionOutputRecord =
-            CgsGui::GuiEventWrapper<GuiEventNetworkSelectedPlayerOptionPayload, KI_CHANNEL_GUI_OUT>;
-        static_assert(sizeof(GuiEventNetworkSelectedPlayerOptionOutputRecord) == 20,
+        typedef CgsGui::GuiEventWrapper<GuiEventNetworkSelectedPlayerOptionPayload, KI_CHANNEL_GUI_OUT> GuiEventNetworkSelectedPlayerOptionOutputRecord;
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkSelectedPlayerOptionOutputRecord) == 20),
                       "event 246 channel-40 record is 12-byte header plus 8-byte payload");
-        static_assert(offsetof(GuiEventNetworkSelectedPlayerOptionOutputRecord, mOutEvent) == 12,
+        CGS_STATIC_ASSERT((offsetof(GuiEventNetworkSelectedPlayerOptionOutputRecord, mOutEvent) == 12),
                       "event 246 payload begins at record offset 12");
-        using GuiEventNetworkOutputPlayerTextureOutputRecord =
-            CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexturePayload, KI_CHANNEL_GUI_OUT>;
-        static_assert(sizeof(GuiEventNetworkOutputPlayerTextureOutputRecord) == 20,
+        typedef CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexturePayload, KI_CHANNEL_GUI_OUT> GuiEventNetworkOutputPlayerTextureOutputRecord;
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkOutputPlayerTextureOutputRecord) == 20),
                       "event 264 channel-40 record is 12-byte header plus 8-byte payload");
-        static_assert(offsetof(GuiEventNetworkOutputPlayerTextureOutputRecord, mOutEvent) == 12,
+        CGS_STATIC_ASSERT((offsetof(GuiEventNetworkOutputPlayerTextureOutputRecord, mOutEvent) == 12),
                       "event 264 payload begins at record offset 12");
 
         // GuiAudioTriggerEvent::Construct's action argument at every site in this TU.

@@ -30,7 +30,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // ctx->mpCIH -> AptValue* upcast
 #include "SDKs/EATech/include/Apt/Apt.h"                   // gAptFuncs (pfnDebugPrint)
 
-#include <cstdint>
+#include "types.hpp"
 
 // AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
 // declared in AptActionInterpreter.h.
@@ -220,10 +220,10 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
     {
         pContext->mpProgramCounter = pAligned + 8;   // consume the qword operand (GUIAPT64)
 
-        AptValue* pObject = nullptr;   // x64 hardening: the console leaves the out slot
+        AptValue* pObject = 0;   // x64 hardening: the console leaves the out slot
                                        // uninitialised on a no-object value and AddRefs it
                                        // regardless; the null init + guard keep that hazard out.
-        pInterp->valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
+        pInterp->valueToObject(pContext->mpCIH, 0, pTarget, &pObject);
         if (pObject)
         {
             pContext->mpPendingReleaseValue = pObject;    // ctx[2] -- the with-scope
@@ -233,7 +233,7 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
     }
     else
     {
-        pContext->mpPendingReleaseValue = nullptr;        // ctx[2] = 0
+        pContext->mpPendingReleaseValue = 0;        // ctx[2] = 0
         pContext->mpProgramCounter      = pBlockEnd;      // skip the whole with-block
     }
 
@@ -386,13 +386,13 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
             }
             else
             {
-                pInterp->setVariable(static_cast<AptValue*>(pContext->mpCIH), nullptr,
+                pInterp->setVariable(static_cast<AptValue*>(pContext->mpCIH), 0,
                                      &catchName, pThrown, 1, 1, 0);
             }
         }
 
         pInterp->mpAbortValue->Release();   // console (*(*a1[24]+4))(a1[24])
-        pInterp->mpAbortValue = nullptr;    // clear the pending throw before the catch runs
+        pInterp->mpAbortValue = 0;    // clear the pending throw before the catch runs
         pInterp->runStream(pCatchStream, pContext->mpCIH, pRecord->mnCatchLen,
                            pContext->mpCharacterInst);
     }
@@ -405,7 +405,7 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
         {
             pPending->AddRef();                 // console (**v12)(v12)
             pInterp->mpAbortValue->Release();   // console (*(*a1[24]+4))(a1[24])
-            pInterp->mpAbortValue = nullptr;
+            pInterp->mpAbortValue = 0;
         }
 
         pInterp->runStream(pFinallyStream, pContext->mpCIH, pRecord->mnFinallyLen,

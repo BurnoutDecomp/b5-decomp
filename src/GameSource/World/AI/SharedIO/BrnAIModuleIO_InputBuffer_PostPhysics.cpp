@@ -36,9 +36,9 @@ namespace AIModuleIO
         // pointer-INVARIANT fact (nothing between the status byte and the interface but
         // alignment padding), not the console literal. This pin is what kept the TU off the
         // build list until 2026-08-15.
-        static_assert(offsetof(InputBuffer_PostPhysics, mContactInterface)
-                          == ((sizeof(CgsModule::IOBuffer) + alignof(ContactSpyInterface) - 1)
-                              & ~(alignof(ContactSpyInterface) - 1)),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_PostPhysics, mContactInterface)
+                          == ((sizeof(CgsModule::IOBuffer) + __alignof(ContactSpyInterface) - 1)
+                              & ~(__alignof(ContactSpyInterface) - 1))),
                       "mContactInterface is the first member after the IOBuffer status byte");
     }
 

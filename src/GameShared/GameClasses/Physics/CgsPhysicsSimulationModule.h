@@ -722,7 +722,7 @@ namespace CgsPhysics
 
         // X360 @0x828A1EE8 (86 instructions, 5 call sites, no asserts). Console
         // vtable slot 0.
-        void Construct() override;
+        void Construct() ;
 
         // X360 @0x828A6A08. Console vtable slot 16 -- the FIRST of this class's own new
         // virtuals, and the one BrnPhysics::PhysicsModule::Prepare stage 3 dispatches
@@ -743,12 +743,12 @@ namespace CgsPhysics
         // X360 @0x828A2048 (54 instructions). Console vtable slot 2. A fall-through
         // release FSM over meReleaseStage; returns false (cursor left on stage 1) when
         // the base's Release has not finished, so the owner re-enters next frame.
-        bool Release() override;
+        bool Release() ;
 
         // X360 @0x828A2120 (16 instructions). Console vtable slot 3. ⚠️ Absent from
         // .ida-exports -- recovered from BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3
         // (the same export-set hole RigidBodyData::RigidBodyData was).
-        void Destruct() override;
+        void Destruct() ;
 
         // =================================================================================
         // ⭐⭐ THE TWO REMAINING VIRTUALS, LANDED 2026-08-06 WITH THEIR BODIES AND THE WHOLE

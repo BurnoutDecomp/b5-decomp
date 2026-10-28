@@ -23,7 +23,7 @@ namespace CgsGraphics
         for (u32 luIndex = 0; luIndex < mu8NumRenderables; ++luIndex)
         {
             const Renderable* lpRenderable = mppRenderables[luIndex].Get();
-            if (lpRenderable != nullptr && lpRenderable->UsesTexture(lpTexture))
+            if (lpRenderable != 0 && lpRenderable->UsesTexture(lpTexture))
                 return true;
         }
         return false;

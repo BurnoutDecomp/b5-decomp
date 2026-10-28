@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>   // intptr_t (the pointer-width ZId handles; XB1-verified)
+#include "types.hpp"   // intptr_t (the pointer-width ZId handles; XB1-verified)
 
 // ===========================================================================
 // EATech Apt -- the Apt -> RenderWare render-callback boundary.
@@ -34,7 +34,7 @@
 
 struct AptCharacter;
 class AptRenderingContext;
-enum AptMaskRenderOperation : int;
+enum AptMaskRenderOperation ;
 
 // ---------------------------------------------------------------------------
 // Custom-control host hooks (AptRenderItemCustomControl). A custom control is a

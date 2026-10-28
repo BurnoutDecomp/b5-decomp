@@ -97,10 +97,10 @@ CEffectManager::CEffectManager(SEffectRegistrationTable* const* appTable,
 // hand-written work is releasing the registered table.
 CEffectManager::~CEffectManager()
 {
-    if (mpRegisteredEffects != nullptr)
+    if (mpRegisteredEffects != 0)
     {
         gXMemMemoryManager.XMemFree(mpRegisteredEffects, KU_XMEM_ATTRIBUTES);
-        mpRegisteredEffects = nullptr;
+        mpRegisteredEffects = 0;
     }
 }
 
@@ -111,8 +111,8 @@ void* CEffectManager::QueryInterface(void** appInterface)
     // byte +8 (past the vptr and refcount); the asm guards against a null object
     // before forming the pointer (COM sub-interface aggregation, not a member
     // poke). Returns the object unchanged.
-    void* lpInterface = nullptr;
-    if (this != nullptr)
+    void* lpInterface = 0;
+    if (this != 0)
         lpInterface = reinterpret_cast<u8*>(this) + 8;
     *appInterface = lpInterface;
     return this;
@@ -121,7 +121,7 @@ void* CEffectManager::QueryInterface(void** appInterface)
 // @ 0x82C2F090
 s32 CEffectManager::QueryEffectSize(const SEffectRequest* apRequest, void* apArg)
 {
-    const SEffectFactory* lpFactory = nullptr;
+    const SEffectFactory* lpFactory = 0;
 
     u32 luId = apRequest->muEffectId;
     if (luId > 0x7F)
@@ -137,8 +137,8 @@ s32 CEffectManager::QueryEffectSize(const SEffectRequest* apRequest, void* apArg
 
     // A usable slot has both functions non-zero; otherwise no factory is
     // registered for the id.
-    if (lpFactory == nullptr ||
-        lpFactory->mpfnCreate == nullptr || lpFactory->mpfnQuerySize == nullptr)
+    if (lpFactory == 0 ||
+        lpFactory->mpfnCreate == 0 || lpFactory->mpfnQuerySize == 0)
     {
         return KI_E_NOTIMPL;
     }
@@ -150,7 +150,7 @@ s32 CEffectManager::QueryEffectSize(const SEffectRequest* apRequest, void* apArg
 s32 CEffectManager::CreateEffect(const SEffectRequest* apRequest,
                                  void* apArg1, void* apArg2)
 {
-    const SEffectFactory* lpFactory = nullptr;
+    const SEffectFactory* lpFactory = 0;
 
     u32 luId = apRequest->muEffectId;
     if (luId > 0x7F)
@@ -164,8 +164,8 @@ s32 CEffectManager::CreateEffect(const SEffectRequest* apRequest,
         lpFactory = &mpBuiltinEffects[luId];
     }
 
-    if (lpFactory == nullptr ||
-        lpFactory->mpfnCreate == nullptr || lpFactory->mpfnQuerySize == nullptr)
+    if (lpFactory == 0 ||
+        lpFactory->mpfnCreate == 0 || lpFactory->mpfnQuerySize == 0)
     {
         return KI_E_NOTIMPL;
     }
@@ -186,15 +186,15 @@ s32 CEffectManager::RegisterEffects(const SEffectRegistrationTable* apTable)
     {
         SEffectFactory* lpBase = mpRegisteredEffects;
         SEffectFactory* lpEnd  = lpBase + muRegisteredCount;
-        SEffectFactory* lpSlot = nullptr;
+        SEffectFactory* lpSlot = 0;
         do
         {
-            lpSlot = (lpSlot == nullptr) ? lpBase : (lpSlot + 1);
+            lpSlot = (lpSlot == 0) ? lpBase : (lpSlot + 1);
             if (lpSlot >= lpEnd)
                 break;
 
             bool lbRanOff = false;
-            while (lpSlot->mpfnCreate != nullptr || lpSlot->mpfnQuerySize != nullptr)
+            while (lpSlot->mpfnCreate != 0 || lpSlot->mpfnQuerySize != 0)
             {
                 ++lpSlot;
                 if (lpSlot >= lpEnd)
@@ -226,17 +226,17 @@ s32 CEffectManager::RegisterEffects(const SEffectRegistrationTable* apTable)
 
     SEffectFactory* lpNewTable = static_cast<SEffectFactory*>(
         gXMemMemoryManager.XMemAlloc(sizeof(SEffectFactory) * luNewCount, KU_XMEM_ATTRIBUTES));
-    if (lpNewTable == nullptr)
+    if (lpNewTable == 0)
         return KI_E_OUTOFMEMORY;
 
     const u32 luOldCount = muRegisteredCount;
     if (luOldCount != 0)
     {
         memcpy(lpNewTable, mpRegisteredEffects, sizeof(SEffectFactory) * luOldCount);
-        if (mpRegisteredEffects != nullptr)
+        if (mpRegisteredEffects != 0)
         {
             gXMemMemoryManager.XMemFree(mpRegisteredEffects, KU_XMEM_ATTRIBUTES);
-            mpRegisteredEffects = nullptr;
+            mpRegisteredEffects = 0;
         }
     }
 
@@ -268,12 +268,12 @@ s32 CEffectManager::UnregisterEffects(const SEffectIdList* apIds)
             SEffectFactory* lpSlot = &mpRegisteredEffects[luId];
             // Only clear a fully-occupied slot (the asm also re-checks the slot
             // pointer, a defensive guard preserved here).
-            if (lpSlot->mpfnCreate != nullptr &&
-                lpSlot->mpfnQuerySize != nullptr &&
-                lpSlot != nullptr)
+            if (lpSlot->mpfnCreate != 0 &&
+                lpSlot->mpfnQuerySize != 0 &&
+                lpSlot != 0)
             {
-                lpSlot->mpfnQuerySize = nullptr;
-                lpSlot->mpfnCreate    = nullptr;
+                lpSlot->mpfnQuerySize = 0;
+                lpSlot->mpfnCreate    = 0;
             }
         }
     }
@@ -283,11 +283,11 @@ s32 CEffectManager::UnregisterEffects(const SEffectIdList* apIds)
 // @ 0x82C2F420
 s32 CEffectManager::GetObjectAdditionalSize(const SEffectRegistrationTable* const* appTable)
 {
-    if (appTable == nullptr)
+    if (appTable == 0)
         return 0;
 
     const SEffectRegistrationTable* lpTable = *appTable;
-    if (lpTable == nullptr)
+    if (lpTable == 0)
         return 0;
 
     return static_cast<s32>(8 * ComputeSlotCount(lpTable));

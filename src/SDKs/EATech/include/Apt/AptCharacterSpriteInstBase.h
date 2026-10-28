@@ -61,7 +61,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCharacterInst base
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"      // embedded child display list (by value)

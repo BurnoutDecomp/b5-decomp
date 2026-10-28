@@ -28,14 +28,14 @@ namespace CgsNetwork
         // Stamps the message type + frame and flags it RELIABLE; chains to the
         // MessageWithPlayerIDs base. liType is an EMessageType.
         void               PrepareForSend(s32 liType, u16 lu16Frame);
-        bool               IsReliable() const override;
-        s32                GetPackedMessageSize() override;
+        bool               IsReliable() const ;
+        s32                GetPackedMessageSize() ;
 
     protected:
         // Serialises the wrapped 16-bit reliable id (stored in the inherited
         // mu16Frame field) through the shared u16 primitive. 0 == success.
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
     };
 
-    static_assert(sizeof(void*) != 4 || sizeof(ReliableMessage) == 0x28, "sizeof(ReliableMessage) == 0x28");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ReliableMessage) == 0x28), "sizeof(ReliableMessage) == 0x28");
 } // namespace CgsNetwork

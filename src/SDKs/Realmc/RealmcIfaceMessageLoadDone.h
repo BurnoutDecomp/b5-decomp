@@ -56,19 +56,19 @@ public:
     // Build the MessageString base from a temporary
     // basic_string<char, RealmcCore::allocator> made from pText (the temporary
     // is freed once the base has copied it), then store the three own words.
-    MessageLoadDone(std::uint32_t uId, int iField24, const char* pText,
+    MessageLoadDone(uint32_t uId, int iField24, const char* pText,
                     u32 uField1C, void* pField20);
 
     // Message vtable +8 -- pProcessor->ProcessMessage(this), the processor's
     //                       +0x30 slot (the thunk swaps its two arguments so
     //                       the processor becomes `this`).
-    void Apply(RealmcCore::IMessageProcessor* pProcessor) override;
+    void Apply(RealmcCore::IMessageProcessor* pProcessor) ;
 
     // Backs the X360 `vector deleting destructor' @0x82B570D8: it restores this
     // class's vtable (off_8214896C), chains the RealmcCore::MessageString base
     // dtor, then frees 40 bytes when the delete flag bit0 is set. The virtual
     // dtor + the class operator delete below reproduce it compiler-generated.
-    ~MessageLoadDone() override {}
+    ~MessageLoadDone()  {}
     static void operator delete(void* lpBlock, size_t luSize)
     {
         RealmcCore::FreeMemSize(lpBlock, static_cast<u32>(luSize));

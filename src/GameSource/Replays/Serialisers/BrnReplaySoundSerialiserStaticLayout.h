@@ -88,16 +88,16 @@ namespace BrnReplays
     // (no pointers; VariableEventQueue<512,16> == 1 + 512 -> pad 516 + 3*s32 == 0x210 on both
     // widths), and the Read/Write bodies reach the record arrays by absolute byte offsets over
     // the reserved spans -- so every named anchor is static_asserted to catch any drift.
-    static_assert(sizeof(CgsModule::VariableEventQueue<512, 16>) == 0x210,
+    CGS_STATIC_ASSERT((sizeof(CgsModule::VariableEventQueue<512, 16>) == 0x210),
                   "VariableEventQueue<512,16> must serialise at 0x210 bytes");
-    static_assert(offsetof(SoundSerialiserStaticLayout, miNumCollisions)      == 0x700, "miNumCollisions @ +0x700");
-    static_assert(offsetof(SoundSerialiserStaticLayout, miNumScrapes)         == 0x810, "miNumScrapes @ +0x810");
-    static_assert(offsetof(SoundSerialiserStaticLayout, mEventQueue)          == 0x814, "mEventQueue @ +0x814");
-    static_assert(offsetof(SoundSerialiserStaticLayout, mfA24)                == 0xA24, "mfA24 @ +0xA24");
-    static_assert(offsetof(SoundSerialiserStaticLayout, miNumTrafficEntities) == 0xC58, "miNumTrafficEntities @ +0xC58");
-    static_assert(offsetof(SoundSerialiserStaticLayout, mfC5C)                == 0xC5C, "mfC5C @ +0xC5C");
-    static_assert(offsetof(SoundSerialiserStaticLayout, muE88)                == 0xE88, "muE88 @ +0xE88");
-    static_assert(offsetof(SoundSerialiserStaticLayout, mfE8C)                == 0xE8C, "mfE8C @ +0xE8C");
-    static_assert(sizeof(SoundSerialiserStaticLayout) == 0xE90,
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, miNumCollisions)      == 0x700), "miNumCollisions @ +0x700");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, miNumScrapes)         == 0x810), "miNumScrapes @ +0x810");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, mEventQueue)          == 0x814), "mEventQueue @ +0x814");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, mfA24)                == 0xA24), "mfA24 @ +0xA24");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, miNumTrafficEntities) == 0xC58), "miNumTrafficEntities @ +0xC58");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, mfC5C)                == 0xC5C), "mfC5C @ +0xC5C");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, muE88)                == 0xE88), "muE88 @ +0xE88");
+    CGS_STATIC_ASSERT((offsetof(SoundSerialiserStaticLayout, mfE8C)                == 0xE8C), "mfE8C @ +0xE8C");
+    CGS_STATIC_ASSERT((sizeof(SoundSerialiserStaticLayout) == 0xE90),
                   "SoundSerialiserStaticLayout spans 0xE90 (<= the 0xF00 static buffer)");
 }

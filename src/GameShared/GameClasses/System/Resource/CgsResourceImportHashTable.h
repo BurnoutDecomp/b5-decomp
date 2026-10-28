@@ -38,13 +38,13 @@ namespace CgsResource
         void* GetTempAddress(ID lId)
         {
             const ImportHashTableValue* lpValue = mHashTable.FindEntry(lId.GetHash());
-            return lpValue ? lpValue->mpTempAddress : nullptr;
+            return lpValue ? lpValue->mpTempAddress : 0;
         }
 
         void* GetDestAddress(ID lId)
         {
             const ImportHashTableValue* lpValue = mHashTable.FindEntry(lId.GetHash());
-            return lpValue ? lpValue->mpDestAddress : nullptr;
+            return lpValue ? lpValue->mpDestAddress : 0;
         }
 
     private:

@@ -56,7 +56,7 @@ struct BaseTrafficJobParams
 };
 
 // DWARF TrafficCommon.h:95 -- offsets pinned by Construct @ 0x82706E28.
-struct alignas(16) UpdateVehiclesJobParams : public BaseTrafficJobParams
+struct CGS_ALIGN(16) UpdateVehiclesJobParams : public BaseTrafficJobParams
 {
     void Construct(
         u32                       luBeginVehicle,

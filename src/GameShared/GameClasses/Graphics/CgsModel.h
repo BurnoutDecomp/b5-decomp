@@ -164,7 +164,7 @@ namespace CgsGraphics
     };
 
     // The console header size ModelResourceType::GetSerialisedResourceDescriptor adds (20).
-    static_assert(sizeof(Model) == 20, "CgsGraphics::Model must be the console's 20-byte on-disc header");
+    CGS_STATIC_ASSERT((sizeof(Model) == 20), "CgsGraphics::Model must be the console's 20-byte on-disc header");
 
     // =========================================================================
     // CgsGraphics::ModelInstanceCollector   (CgsModel.h:279 -- a NAMESPACE, not
@@ -218,11 +218,11 @@ namespace CgsGraphics
             // rather than the console's 0/4/8 so it stays true on the x64 host.
             static void _AssertLayout()
             {
-                static_assert(offsetof(ModelInstanceInfo, mpModel) == 0,
+                CGS_STATIC_ASSERT((offsetof(ModelInstanceInfo, mpModel) == 0),
                               "ModelInstanceInfo::mpModel is the first member");
-                static_assert(offsetof(ModelInstanceInfo, meLodState) == sizeof(Model*),
+                CGS_STATIC_ASSERT((offsetof(ModelInstanceInfo, meLodState) == sizeof(Model*)),
                               "ModelInstanceInfo::meLodState follows mpModel");
-                static_assert(offsetof(ModelInstanceInfo, mpMatrix) == 2 * sizeof(void*),
+                CGS_STATIC_ASSERT((offsetof(ModelInstanceInfo, mpMatrix) == 2 * sizeof(void*)),
                               "ModelInstanceInfo::mpMatrix is the third member");
             }
         };

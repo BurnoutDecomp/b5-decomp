@@ -50,11 +50,11 @@ namespace BrnNetwork
         s32            miFramesSinceStart;    // +0x30
 
         // @ 0x8257D2E8 -- header/name accessor.
-        const char*                    GetName() const override;
+        const char*                    GetName() const ;
         // @ 0x8257D210 -- zero every leaf field then chain to the base packed-size.
-        s32                            GetPackedMessageSize() override;
+        s32                            GetPackedMessageSize() ;
         // @ 0x8257D228 -- (de)serialise the four leaf fields; OR the per-field statuses.
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
         // Stamp this send-slot with the player's current multiplier record sampled on the
         // given frame; the record is stored whole at +0x28.
@@ -66,9 +66,9 @@ namespace BrnNetwork
     };
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || offsetof(StuntMultiplierMessage, mMultiplierInfo) == 0x28,
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(StuntMultiplierMessage, mMultiplierInfo) == 0x28),
                   "StuntMultiplierMessage::mMultiplierInfo @ +0x28");
-    static_assert(sizeof(void*) != 4 || offsetof(StuntMultiplierMessage, miFramesSinceStart) == 0x30,
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(StuntMultiplierMessage, miFramesSinceStart) == 0x30),
                   "StuntMultiplierMessage::miFramesSinceStart @ +0x30");
-    static_assert(sizeof(void*) != 4 || sizeof(StuntMultiplierMessage) == 0x34, "sizeof(StuntMultiplierMessage) == 0x34");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(StuntMultiplierMessage) == 0x34), "sizeof(StuntMultiplierMessage) == 0x34");
 } // namespace BrnNetwork

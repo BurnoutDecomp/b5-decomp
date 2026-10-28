@@ -158,27 +158,27 @@ struct ImpactTimeEndActionRecord
 // shared GameStateModuleIO::StopModeIntroAction, which carries its own == 8 assert in
 // BrnGameActions.h; asserting it a second time here would just duplicate that pin.
 // X360 0x8234C654  `li r6,1`   -- the offline quit post
-static_assert(sizeof(QuitModeOfflineActionRecord) == 1,
+CGS_STATIC_ASSERT((sizeof(QuitModeOfflineActionRecord) == 1),
               "X360 SendModeStopMessages posts action 40 with size 1");
 // X360 0x8234C67C  `li r6,4`   -- the training-tip request
-static_assert(sizeof(RequestGameTrainingActionRecord) == 4,
+CGS_STATIC_ASSERT((sizeof(RequestGameTrainingActionRecord) == 4),
               "X360 SendModeStopMessages posts action 149 with size 4");
 // X360 0x8234C57C  `li r6,8`   -- the online quit post (parked arm)
-static_assert(sizeof(QuitModeOnlineActionRecord) == 8,
+CGS_STATIC_ASSERT((sizeof(QuitModeOnlineActionRecord) == 8),
               "X360 SendModeStopMessages posts action 41 with size 8");
 // X360 0x8234C638  `li r6,8`   -- the online finish post (parked arm)
-static_assert(sizeof(FinishModeOnlineActionRecord) == 8,
+CGS_STATIC_ASSERT((sizeof(FinishModeOnlineActionRecord) == 8),
               "X360 SendModeStopMessages posts action 26 with size 8");
 // X360 0x8234C620  `li r6,4`   -- the online final-round finish post (parked arm)
-static_assert(sizeof(FinishModeFinalOnlineActionRecord) == 4,
+CGS_STATIC_ASSERT((sizeof(FinishModeFinalOnlineActionRecord) == 4),
               "X360 SendModeStopMessages posts action 27 with size 4");
 // X360 0x8234C6F0  `li r6,0x30` -- the 48-byte tail post
-static_assert(sizeof(SetPlayerCarDriverActionRecord) == 48,
+CGS_STATIC_ASSERT((sizeof(SetPlayerCarDriverActionRecord) == 48),
               "X360 SendModeStopMessages posts action 7 with size 48");
-static_assert(offsetof(SetPlayerCarDriverActionRecord, mu8Field2C) == 0x2C,
+CGS_STATIC_ASSERT((offsetof(SetPlayerCarDriverActionRecord, mu8Field2C) == 0x2C),
               "the console's second write into the action-7 record is at +0x2C");
 // X360 0x8234C714  `li r6,1`   -- the final 1-byte post
-static_assert(sizeof(ImpactTimeEndActionRecord) == 1,
+CGS_STATIC_ASSERT((sizeof(ImpactTimeEndActionRecord) == 1),
               "X360 SendModeStopMessages posts actions 25 and 43 with size 1");
 
 // ============================================================================

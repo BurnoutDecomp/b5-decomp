@@ -74,7 +74,7 @@ void LionBlendRenderer::EndRendering()
     CgsGraphics::ImRendererBase* lpBase = static_cast<CgsGraphics::ImRendererBase*>(&mRenderer);
     CGS_ASSERT(CgsGraphics::ImRendererBase::mgpActiveRenderer == lpBase,
                "mgpActiveRenderer == this");
-    CgsGraphics::ImRendererBase::mgpActiveRenderer = nullptr;
+    CgsGraphics::ImRendererBase::mgpActiveRenderer = 0;
 }
 
 // ---------------------------------------------------------------------------------------------

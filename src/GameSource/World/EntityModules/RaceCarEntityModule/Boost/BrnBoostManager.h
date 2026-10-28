@@ -147,15 +147,15 @@ private:
 
     static void _AssertConsoleInvariantPrefix()
     {
-        static_assert(offsetof(BoostManager, meBoostStrategy) == 0x4,
+        CGS_STATIC_ASSERT((offsetof(BoostManager, meBoostStrategy) == 0x4),
                       "Breaker SetBoostStrategy stores the id at +0x4");
-        static_assert(offsetof(BoostManager, mBoostBurnout2) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BoostManager, mBoostBurnout2) == 0x10),
                       "Breaker manager B2 embed is +0x10");
-        static_assert(offsetof(BoostManager, mBoostBurnout3) == 0x160,
+        CGS_STATIC_ASSERT((offsetof(BoostManager, mBoostBurnout3) == 0x160),
                       "Breaker manager B3 embed is +0x160");
-        static_assert(offsetof(BoostManager, mBoostBurnout5) == 0x2A0,
+        CGS_STATIC_ASSERT((offsetof(BoostManager, mBoostBurnout5) == 0x2A0),
                       "Breaker manager B5 embed is +0x2A0");
-        static_assert(offsetof(BoostManager, mpBoostStrategy) == 0x450,
+        CGS_STATIC_ASSERT((offsetof(BoostManager, mpBoostStrategy) == 0x450),
                       "Breaker selected strategy pointer is +0x450");
     }
 };

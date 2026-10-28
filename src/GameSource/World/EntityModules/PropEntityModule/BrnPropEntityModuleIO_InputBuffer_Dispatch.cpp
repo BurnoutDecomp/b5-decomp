@@ -24,14 +24,14 @@ namespace PropEntityIO
         // pointers now (see the header's POINTER WIDTH note), so the queue and the corona word
         // sit past their console offsets. These tripwires state the HOST fact -- transcribing
         // the console's 4 / 8 / 0xC / 0x801C would be exactly the bug the widening fixes.
-        static_assert(offsetof(InputBuffer_Dispatch, mpShadowMap)
-                          == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mpShadowMap)
+                          == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*)),
                       "mpShadowMap immediately follows mpDispatchFrame");
-        static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue)
-                          == offsetof(InputBuffer_Dispatch, mpShadowMap) + sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mSceneResultQueue)
+                          == offsetof(InputBuffer_Dispatch, mpShadowMap) + sizeof(void*)),
                       "mSceneResultQueue immediately follows mpShadowMap");
-        static_assert(offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface)
-                          > offsetof(InputBuffer_Dispatch, mSceneResultQueue),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface)
+                          > offsetof(InputBuffer_Dispatch, mSceneResultQueue)),
                       "mpCoronaSubmissionInterface follows the scene-result queue");
     }
 

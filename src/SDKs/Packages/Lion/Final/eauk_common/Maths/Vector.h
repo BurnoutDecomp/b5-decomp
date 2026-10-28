@@ -30,7 +30,7 @@
 
 #include "types.hpp"
 
-struct alignas(16) cVector
+struct CGS_ALIGN(16) cVector
 {
     f32 x;
     f32 y;

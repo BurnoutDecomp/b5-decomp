@@ -254,8 +254,8 @@ namespace collision
         u32                               m_resCount;            // +0x14
         u32                               m_resMax;              // +0x18
         u32                               m_resBufferSize;       // +0x1C
-        alignas(16) VolRef::Vec4          m_pt1;                 // +0x20  (DWARF Vector3)
-        alignas(16) VolRef::Vec4          m_pt2;                 // +0x30  (DWARF Vector3)
+        CGS_ALIGN(16) VolRef::Vec4          m_pt1;                 // +0x20  (DWARF Vector3)
+        CGS_ALIGN(16) VolRef::Vec4          m_pt2;                 // +0x30  (DWARF Vector3)
         f32                               m_fatness;             // +0x40
         VolRef*                           m_stackVRefBuffer;     // +0x44
         VolRef                            m_currVRef;            // +0x50  (0x80)

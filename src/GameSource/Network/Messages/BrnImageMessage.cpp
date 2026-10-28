@@ -58,7 +58,7 @@ namespace BrnNetwork
     }
 
     // The image message is the largest reliable message: a resend slot must hold a whole copy.
-    static_assert(sizeof(ImageMessage) <= CgsNetwork::ReliableMessageManager::KI_MAX_RELIABLE_MESSAGE_SIZE,
+    CGS_STATIC_ASSERT((sizeof(ImageMessage) <= CgsNetwork::ReliableMessageManager::KI_MAX_RELIABLE_MESSAGE_SIZE),
                   "sizeof(ImageMessage) <= KI_MAX_RELIABLE_MESSAGE_SIZE");
 
     // Check the worst-case packed size still fits a packet, then reset the base reliable
@@ -144,7 +144,7 @@ namespace BrnNetwork
 
         // Bytes and a buffer go together: some bytes from no buffer, or no bytes from a
         // buffer, is reported (the bytes are still copied whenever there is a buffer).
-        if ((lu16NumberOfBytes != 0) != (lpvPhotoData != nullptr))
+        if ((lu16NumberOfBytes != 0) != (lpvPhotoData != 0))
         {
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
@@ -157,7 +157,7 @@ namespace BrnNetwork
             CgsDev::Assert::EndAssert();
         }
 
-        if (lpvPhotoData != nullptr)
+        if (lpvPhotoData != 0)
         {
             std::memcpy(macPhotoBuffer, lpvPhotoData, lu16NumberOfBytes);
         }

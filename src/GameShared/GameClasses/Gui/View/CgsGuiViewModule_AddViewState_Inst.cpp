@@ -33,9 +33,9 @@ namespace CgsGui
     void ViewModule::AddViewState(const GuiEventQueueBase<BUFSIZE, ALIGN>* lpGuiEvents,
                                   ViewIO::InputBuffer* lpInput)
     {
-        CGS_ASSERT(lpGuiEvents != nullptr,
+        CGS_ASSERT(lpGuiEvents != 0,
                    "Invalid gui queue pointer in ViewModule::AddViewState");
-        CGS_ASSERT(lpInput != nullptr,
+        CGS_ASSERT(lpInput != 0,
                    "ViewModule is most likely not locked for output in ViewModule::AddViewState");
 
         ViewIO::InputBuffer::ViewStateQueue& lrViewStateQueue = lpInput->GetViewStateQueue();

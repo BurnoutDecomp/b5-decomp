@@ -59,7 +59,7 @@ namespace BrnResource
         {
             if (liBankId == 0)
                 return KU_GAMEDATA_ROOT_BLOCK_SIZE;
-            const CgsMemory::MemoryBank::Params* lpParams = nullptr;
+            const CgsMemory::MemoryBank::Params* lpParams = 0;
             for (s32 liBank = 0; liBank < lrMap.GetNumBanks(); ++liBank)
             {
                 const CgsMemory::MemoryBank::Params* lpCandidate = lrMap.GetBank(liBank)->GetParams();
@@ -69,7 +69,7 @@ namespace BrnResource
                     break;
                 }
             }
-            CGS_ASSERT(lpParams != nullptr, "Memory-map parent bank was not found");
+            CGS_ASSERT(lpParams != 0, "Memory-map parent bank was not found");
             CGS_ASSERT(lpParams->mauBankBlocks[0] != 0, "Memory-map main bank has no blocks");
             CGS_ASSERT(lpParams->mauBankSize[0] % lpParams->mauBankBlocks[0] == 0,
                 "Memory-map main bank size is not divisible by its block count");
@@ -1300,7 +1300,7 @@ namespace BrnResource
         lrMem.muMaxBlocks = 30000;
         for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
         {
-            lrMem.maResourceSets[liType].mpDataStart = nullptr;
+            lrMem.maResourceSets[liType].mpDataStart = 0;
             lrMem.maResourceSets[liType].muDataSize = 0;
             lrMem.maResourceSets[liType].muNumBlocks = 0;
         }
@@ -3428,11 +3428,11 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
     namespace
     {
-        using InvalidatePoolRequest = CgsResource::Events::InvalidatePoolRequest;
-        using InvalidatePoolResponse = CgsResource::Events::InvalidatePoolResponse;
-        using ValidatePoolResponse = CgsResource::Events::ValidatePoolResponse;
-        using CollisionSwapOutResponse = GameDataIO::SwapOutCollisionWorldResponse;
-        using CollisionSwapInResponse = GameDataIO::SwapInCollisionWorldResponse;
+        typedef CgsResource::Events::InvalidatePoolRequest InvalidatePoolRequest;
+        typedef CgsResource::Events::InvalidatePoolResponse InvalidatePoolResponse;
+        typedef CgsResource::Events::ValidatePoolResponse ValidatePoolResponse;
+        typedef GameDataIO::SwapOutCollisionWorldResponse CollisionSwapOutResponse;
+        typedef GameDataIO::SwapInCollisionWorldResponse CollisionSwapInResponse;
     }
 
     // The shared 40-byte completion-post the X360 inlines in every acquire/load case:

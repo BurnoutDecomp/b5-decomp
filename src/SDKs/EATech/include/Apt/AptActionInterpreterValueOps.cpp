@@ -25,7 +25,7 @@
 #include "SDKs/EATech/include/Apt/AptArray.h"              // AptArray (InitArray)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"    // EAStringC::GetLength
 
-#include <cstdint>
+#include "types.hpp"
 
 // The random source Random draws from (AptRand @0x82AE04F0, homed in AptRandom.cpp).
 extern unsigned int AptRand();

@@ -45,7 +45,7 @@ namespace SceneManagerIO
 
     // mSetPaddingQueue element. 16-byte aligned (carries the trailing Vector3 lane),
     // sizeof 0x20 (32).
-    struct alignas(16) InEventSetPadding : public EventBaseSetPadding
+    struct CGS_ALIGN(16) InEventSetPadding : public EventBaseSetPadding
     {
         VolumeInstanceId mVolInstanceId; // +0x00 (:242)
         // +0x08..0x0F pad to the 16-byte alignment forced by the Vector3 lane.

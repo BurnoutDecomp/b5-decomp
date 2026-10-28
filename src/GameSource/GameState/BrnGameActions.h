@@ -37,7 +37,7 @@ namespace BrnGameState { struct StreetManager; }             // RoadRulesChallen
 
 namespace BrnResource
 {
-enum ECarType : int;
+enum ECarType ;
 }
 
 // [boost-wave2 2026-09-14] Opaque fixed-underlying-type enum declaration, the committed idiom
@@ -45,7 +45,7 @@ enum ECarType : int;
 // GameSource/Physics/VehicleManager/BrnVehicleConstants.h (`enum EImpactType : s32`); the
 // forward declaration avoids dragging the whole physics-constants header into every TU that
 // includes the game-action family, and the two rival-impact records below only need the type.
-namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
+namespace BrnPhysics { namespace Vehicle { enum EImpactType ; } }
 
 // Owning header for the BrnGameState::GameStateModuleIO GameAction<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Each struct is a minimal slice: only the members the
@@ -1108,7 +1108,7 @@ struct GameAction { };
 // DecFIGS BrnGameActions.h:3189. ARTIST 823A58F0..823A5900 copies the
 // empty record's one object-representation byte without assigning it a value.
 struct WaitForStreamingAction : public GameAction<E_ACTION_WAIT_FOR_STREAMING> {};
-static_assert(sizeof(WaitForStreamingAction) == 1, "empty streaming action is one byte");
+CGS_STATIC_ASSERT((sizeof(WaitForStreamingAction) == 1), "empty streaming action is one byte");
 
 // ARTIST PreWorldUpdate @823A5328 publishes pointer/pointer/bool as action193.
 // DecFIGS BrnGameActions.h attests these field names and pointee qualifiers.
@@ -1122,13 +1122,13 @@ struct ProgressionProfileDataAction : public GameAction<E_ACTION_PROGRESSION_PRO
 
 // DWARF BrnGameActions.h: empty action; ARTIST case42 posts size1.
 struct PlayerCrashEndingSoonAction : public GameAction<E_ACTION_PLAYER_CRASH_ENDING_SOON> {};
-static_assert(sizeof(PlayerCrashEndingSoonAction) == 1, "empty crash-ending action");
+CGS_STATIC_ASSERT((sizeof(PlayerCrashEndingSoonAction) == 1), "empty crash-ending action");
 
 // [L4 WORLDVFX 2026-09-27] DWARF BrnGameActions.h:2959 -- an empty action. OnProfileLoaded @0x82397310
 // posts it with size 1 (`AddEvent(a3, v14, 194, 1)`, v14 an untouched stack byte): the world's answer is
 // InputBuffer_PreScene::SendingPropProgression, i.e. "drop every prop, then ask for the profile's".
 struct LoadProfileAction : public GameAction<E_ACTION_LOAD_PROFILE> {};
-static_assert(sizeof(LoadProfileAction) == 1, "empty load-profile action (li r6, 1)");
+CGS_STATIC_ASSERT((sizeof(LoadProfileAction) == 1), "empty load-profile action (li r6, 1)");
 
 // [L4 WORLDVFX 2026-09-27] DWARF BrnGameActions.h:683..:694 -- the profile's hit-prop bits, BY POINTER
 // (`const Profile::HitPropsBitArray* mpabHitPropBitArray`, :694). ProcessGameEvents @0x823A0A18's tail
@@ -1147,7 +1147,7 @@ struct PropSmashReportAction : public GameAction<E_ACTION_PROP_SMASH_PROGRESSION
 private:
     const HitPropsBitArray* mpabHitPropBitArray;                                    // :694
 };
-static_assert(sizeof(PropSmashReportAction) == sizeof(void*), "the record is the one pointer (console size 4)");
+CGS_STATIC_ASSERT((sizeof(PropSmashReportAction) == sizeof(void*)), "the record is the one pointer (console size 4)");
 
 // =============================================================================================
 // ⭐⭐⭐ ShowtimeModeSwitchAction -- action 143, 16 bytes. THE ONLY WRITER, ANYWHERE IN THE IMAGE,
@@ -1259,7 +1259,7 @@ struct AllowCarToJoinRoadRageAction : public GameAction<E_ACTION_ALLOW_CAR_TO_JO
     ::EActiveRaceCarIndex mActiveRaceCarIndex;
     bool mbAllowedInRoadRage;
 };
-static_assert(sizeof(AllowCarToJoinRoadRageAction) == 8, "Allow-car action wire size");
+CGS_STATIC_ASSERT((sizeof(AllowCarToJoinRoadRageAction) == 8), "Allow-car action wire size");
 
 struct RivalStateChangeAction : public GameAction<E_ACTION_RIVAL_STATE_CHANGED>
 {
@@ -1269,7 +1269,7 @@ struct RivalStateChangeAction : public GameAction<E_ACTION_RIVAL_STATE_CHANGED>
     s8                                miRivalIndex;     // +0x74 (DWARF :3065; X360 order)
     u8                                maPad[3];         // +0x75..0x77 -- never written by the console; posted size is 120
 };
-static_assert(sizeof(RivalStateChangeAction) == 120, "X360 posts RivalStateChangeAction as 120 bytes (li r6, 0x78 @0x8238A158)");
+CGS_STATIC_ASSERT((sizeof(RivalStateChangeAction) == 120), "X360 posts RivalStateChangeAction as 120 bytes (li r6, 0x78 @0x8238A158)");
 
 // =============================================================================================
 // The 176-byte E_ACTION_ADD_RIVAL (196) record. PRODUCER: ProgressionManager::AddRivalToWorld
@@ -1293,15 +1293,15 @@ struct AddRivalCarAction : public GameAction<E_ACTION_ADD_RIVAL>
     u8                                    mu8RivalIndex;       // +0xA2  stb r26
     u8                                    mau8Pad[13];         // +0xA3  stack residue on the console; the producer zeroes it
 };
-static_assert(sizeof(AddRivalCarAction) == 0xB0,
+CGS_STATIC_ASSERT((sizeof(AddRivalCarAction) == 0xB0),
               "the AddRivalCar record is the 176 bytes AddEvent is given (li r6, 0xB0)");
-static_assert(offsetof(AddRivalCarAction, mSpawnPosition)     == 0x00, "record +0x00");
-static_assert(offsetof(AddRivalCarAction, mSpawnHeading)      == 0x10, "record +0x10");
-static_assert(offsetof(AddRivalCarAction, mRival)             == 0x20, "record +0x20");
-static_assert(offsetof(AddRivalCarAction, mPersonality)       == 0x58, "record +0x58");
-static_assert(offsetof(AddRivalCarAction, mRivalSavedData)    == 0x68, "record +0x68");
-static_assert(offsetof(AddRivalCarAction, mi16AISectionIndex) == 0xA0, "record +0xA0");
-static_assert(offsetof(AddRivalCarAction, mu8RivalIndex)      == 0xA2, "record +0xA2");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mSpawnPosition)     == 0x00), "record +0x00");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mSpawnHeading)      == 0x10), "record +0x10");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mRival)             == 0x20), "record +0x20");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mPersonality)       == 0x58), "record +0x58");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mRivalSavedData)    == 0x68), "record +0x68");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mi16AISectionIndex) == 0xA0), "record +0xA0");
+CGS_STATIC_ASSERT((offsetof(AddRivalCarAction, mu8RivalIndex)      == 0xA2), "record +0xA2");
 
 // =============================================================================================
 // ⭐ THE THREE CRASH-PLAY ACTION RECORDS (added 2026-08-29 with BrnCrashPlayManager.cpp).
@@ -1378,23 +1378,23 @@ struct JustBouncedAction : public GameAction<E_ACTION_JUST_BOUNCED>
     u8   mu8EventByte7;      // +0x23 DWARF mbGoodImpact (:3442); MainDirector case 144 reads it (+0x1E9)
     u8   maPad24[0x30 - 0x24]; // +0x24..+0x2F -- outside the store run; posted size is 48.
 };
-static_assert(sizeof(JustBouncedAction) == 0x30,                      "action 144 wire size (li r6, 0x30)");
-static_assert(offsetof(JustBouncedAction, mContactPoint)          == 0x00, "rec+0x00  stvx128 (the event's +0x10)");
-static_assert(offsetof(JustBouncedAction, miEventWord0)           == 0x10, "rec+0x10  lwz 0(event)");
-static_assert(offsetof(JustBouncedAction, miCurrentComboCount)    == 0x14, "rec+0x14  lwz 0x20D0(gsm)");
-static_assert(offsetof(JustBouncedAction, miTotalVehiclesCrashed) == 0x18, "rec+0x18  the four-word sum");
-static_assert(offsetof(JustBouncedAction, miEventWord2)           == 0x1C, "rec+0x1C  lwz 8(event)");
-static_assert(offsetof(JustBouncedAction, mbFromStationary)       == 0x20, "rec+0x20  lbz 4(event)");
-static_assert(offsetof(JustBouncedAction, mbOnCar)                == 0x21, "rec+0x21  lbz 5(event)");
-static_assert(offsetof(JustBouncedAction, mbBoostedBounce)        == 0x22, "rec+0x22  lbz 6(event)");
-static_assert(offsetof(JustBouncedAction, mu8EventByte7)          == 0x23, "rec+0x23  lbz 7(event)");
+CGS_STATIC_ASSERT((sizeof(JustBouncedAction) == 0x30),                      "action 144 wire size (li r6, 0x30)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, mContactPoint)          == 0x00), "rec+0x00  stvx128 (the event's +0x10)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, miEventWord0)           == 0x10), "rec+0x10  lwz 0(event)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, miCurrentComboCount)    == 0x14), "rec+0x14  lwz 0x20D0(gsm)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, miTotalVehiclesCrashed) == 0x18), "rec+0x18  the four-word sum");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, miEventWord2)           == 0x1C), "rec+0x1C  lwz 8(event)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, mbFromStationary)       == 0x20), "rec+0x20  lbz 4(event)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, mbOnCar)                == 0x21), "rec+0x21  lbz 5(event)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, mbBoostedBounce)        == 0x22), "rec+0x22  lbz 6(event)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedAction, mu8EventByte7)          == 0x23), "rec+0x23  lbz 7(event)");
 
 // Action 145, 1 byte -- "an extra spin was just applied" (DWARF BrnGameActions.h:3457, no members).
 // [FX-SHOWTIME2 2026-09-24] Producer ProcessGameEvents case 53 @0x823A3E10..0x823A3E20 (`li r6, 1 ;
 // li r5, 0x91`, the byte handed over is an uninitialised stack slot); consumer MainDirector::
 // ProcessInputQueue case 145 @0x822386BC.
 struct JustAppliedExtraSpinAction : public GameAction<E_ACTION_JUST_APPLIED_EXTRA_SPIN> {};
-static_assert(sizeof(JustAppliedExtraSpinAction) == 1, "action 145 wire size (li r6, 1)");
+CGS_STATIC_ASSERT((sizeof(JustAppliedExtraSpinAction) == 1), "action 145 wire size (li r6, 1)");
 
 // Consumer: CrashPlayManager::OnEnterRoad @0x822A7D68 -- `ld r11, 0x10(r30)`, twice, and
 // nothing else. The 8-byte load is what types mRoadId as CgsID (== u64); the assert string the
@@ -1426,8 +1426,8 @@ struct UpcomingRoadChangeAction
     BrnStreetData::RoadIndex miCurrentRoadIndex, miLeftRoadIndex, miRightRoadIndex;
     u8 mu8LeftRoadIsInterstate, mu8RightRoadIsInterstate;
 };
-static_assert(sizeof(RoadRulesEnterRoadAction) == 168, "ARTIST road-enter action");
-static_assert(sizeof(UpcomingRoadChangeAction) == 368, "ARTIST upcoming-road action");
+CGS_STATIC_ASSERT((sizeof(RoadRulesEnterRoadAction) == 168), "ARTIST road-enter action");
+CGS_STATIC_ASSERT((sizeof(UpcomingRoadChangeAction) == 368), "ARTIST upcoming-road action");
 
 // ---- the RoadRulesManager road-rule records -------------------------------------------------
 // Field names from the debug information; offsets and sizes from the stack stores that build
@@ -1439,7 +1439,7 @@ struct RoadRulesLeaveRoadAction : public GameAction<E_ACTION_ROAD_RULES_LEAVE_RO
 {
     CgsID mRoadId;                               // +0x00
 };
-static_assert(sizeof(RoadRulesLeaveRoadAction) == 8, "action 274 wire size (posted size 8)");
+CGS_STATIC_ASSERT((sizeof(RoadRulesLeaveRoadAction) == 8), "action 274 wire size (posted size 8)");
 
 // Action 277, 16 bytes. OnStartRule: road id `std` +0x00, the ScoreType `stw` +0x08, the
 // "no online best to beat, par/default target used" byte `stb` +0x0C.
@@ -1449,9 +1449,9 @@ struct RoadRulesStartRuleAction : public GameAction<E_ACTION_ROAD_RULES_START_RU
     BrnStreetData::ScoreType meScoreType;                  // +0x08
     bool                     mbIdUsingDefaultOnlineScore;  // +0x0C
 };
-static_assert(sizeof(RoadRulesStartRuleAction) == 16, "action 277 wire size (posted size 0x10)");
-static_assert(offsetof(RoadRulesStartRuleAction, meScoreType) == 0x08, "action 277 +0x08");
-static_assert(offsetof(RoadRulesStartRuleAction, mbIdUsingDefaultOnlineScore) == 0x0C, "action 277 +0x0C");
+CGS_STATIC_ASSERT((sizeof(RoadRulesStartRuleAction) == 16), "action 277 wire size (posted size 0x10)");
+CGS_STATIC_ASSERT((offsetof(RoadRulesStartRuleAction, meScoreType) == 0x08), "action 277 +0x08");
+CGS_STATIC_ASSERT((offsetof(RoadRulesStartRuleAction, mbIdUsingDefaultOnlineScore) == 0x0C), "action 277 +0x0C");
 
 // Action 278, 24 bytes. OnEndRule: road id `std` +0x00, ScoreType `stw` +0x08, the score as
 // f32 `stfs` +0x0C (mfTime, or (f32)miCrashScore), lbAllowScoring `stb` +0x10.
@@ -1462,10 +1462,10 @@ struct RoadRulesEndRuleAction : public GameAction<E_ACTION_ROAD_RULES_END_RULE>
     f32                      mfScore;          // +0x0C
     bool                     mbValidAttempt;   // +0x10
 };
-static_assert(sizeof(RoadRulesEndRuleAction) == 24, "action 278 wire size (posted size 0x18)");
-static_assert(offsetof(RoadRulesEndRuleAction, meScoreType) == 0x08, "action 278 +0x08");
-static_assert(offsetof(RoadRulesEndRuleAction, mfScore) == 0x0C, "action 278 +0x0C");
-static_assert(offsetof(RoadRulesEndRuleAction, mbValidAttempt) == 0x10, "action 278 +0x10");
+CGS_STATIC_ASSERT((sizeof(RoadRulesEndRuleAction) == 24), "action 278 wire size (posted size 0x18)");
+CGS_STATIC_ASSERT((offsetof(RoadRulesEndRuleAction, meScoreType) == 0x08), "action 278 +0x08");
+CGS_STATIC_ASSERT((offsetof(RoadRulesEndRuleAction, mfScore) == 0x0C), "action 278 +0x0C");
+CGS_STATIC_ASSERT((offsetof(RoadRulesEndRuleAction, mbValidAttempt) == 0x10), "action 278 +0x10");
 
 // Action 279, 12 bytes. OnUpdateActiveRoadScores builds it through the inlined Construct (both
 // scores 0.0f, both flags false) and SetScore (flag byte first, then the score), per ScoreType.
@@ -1492,28 +1492,28 @@ private:
     f32  mafScores[BrnStreetData::E_SCORE_TYPE_COUNT];          // +0x00
     bool mabScoreIsActive[BrnStreetData::E_SCORE_TYPE_COUNT];   // +0x08
 };
-static_assert(sizeof(RoadRulesUpdateAction) == 12, "action 279 wire size (posted size 0xC)");
+CGS_STATIC_ASSERT((sizeof(RoadRulesUpdateAction) == 12), "action 279 wire size (posted size 0xC)");
 
 // Action 282, 4 bytes. SendActiveRuleState: `stw` of meActiveRoadRule.
 struct RoadRulesActiveRuleChangeAction : public GameAction<E_ACTION_ROAD_RULES_ACTIVE_RULE_CHANGE>
 {
     EActiveRoadRule meActiveRoadRule;   // +0x00
 };
-static_assert(sizeof(RoadRulesActiveRuleChangeAction) == 4, "action 282 wire size (posted size 4)");
+CGS_STATIC_ASSERT((sizeof(RoadRulesActiveRuleChangeAction) == 4), "action 282 wire size (posted size 4)");
 
 // Action 283, 4 bytes. UpdateTimeRule: mfTimeTarget - mfTime `stfs` +0x00.
 struct RoadRulesTimeWarningAction : public GameAction<E_ACTION_ROAD_RULES_TIME_WARNING>
 {
     f32 mfTimeRemaining;   // +0x00
 };
-static_assert(sizeof(RoadRulesTimeWarningAction) == 4, "action 283 wire size (posted size 4)");
+CGS_STATIC_ASSERT((sizeof(RoadRulesTimeWarningAction) == 4), "action 283 wire size (posted size 4)");
 
 // Action 286, 1 byte. SendActiveRuleState: `stb` of (rule is online).
 struct RoadRulesModeSwitchAction : public GameAction<E_ACTION_ROAD_RULES_MODE_SWITCH>
 {
     bool mbIsOnline;   // +0x00
 };
-static_assert(sizeof(RoadRulesModeSwitchAction) == 1, "action 286 wire size (posted size 1)");
+CGS_STATIC_ASSERT((sizeof(RoadRulesModeSwitchAction) == 1), "action 286 wire size (posted size 1)");
 
 // ---- the StreetManager road-rule records ----------------------------------------------------
 // Field names from the debug information. Offsets from the producers' stack stores (the
@@ -1529,9 +1529,9 @@ struct RoadRulesUpdateTargetScoreAction : public GameAction<E_ACTION_ROAD_RULES_
     BrnStreetData::ChallengePlayerScoreEntry mUserScores;     // +0x38 (40)
     CgsID                                    mRoadId;         // +0x60
 };
-static_assert(sizeof(RoadRulesUpdateTargetScoreAction) == 104, "action 280 wire size (posted size 0x68)");
-static_assert(offsetof(RoadRulesUpdateTargetScoreAction, mUserScores) == 0x38, "action 280 +0x38");
-static_assert(offsetof(RoadRulesUpdateTargetScoreAction, mRoadId) == 0x60, "action 280 +0x60");
+CGS_STATIC_ASSERT((sizeof(RoadRulesUpdateTargetScoreAction) == 104), "action 280 wire size (posted size 0x68)");
+CGS_STATIC_ASSERT((offsetof(RoadRulesUpdateTargetScoreAction, mUserScores) == 0x38), "action 280 +0x38");
+CGS_STATIC_ASSERT((offsetof(RoadRulesUpdateTargetScoreAction, mRoadId) == 0x60), "action 280 +0x60");
 
 // Action 281, 48 bytes. The console record leads with the road id (the debug information lists
 // the name first); both producers store it at +0x00 and the name at +0x14.
@@ -1548,9 +1548,9 @@ struct RoadRulesNewHighScoreAction : public GameAction<E_ACTION_ROAD_RULES_NEW_H
     bool                     mbMultipleScores;            // +0x27
     bool                     mbOnlineLossButOfflineWin;   // +0x28
 };
-static_assert(sizeof(RoadRulesNewHighScoreAction) == 48, "action 281 wire size (posted size 0x30)");
-static_assert(offsetof(RoadRulesNewHighScoreAction, mPlayerName) == 0x14, "action 281 +0x14");
-static_assert(offsetof(RoadRulesNewHighScoreAction, mbOnlineLossButOfflineWin) == 0x28, "action 281 +0x28");
+CGS_STATIC_ASSERT((sizeof(RoadRulesNewHighScoreAction) == 48), "action 281 wire size (posted size 0x30)");
+CGS_STATIC_ASSERT((offsetof(RoadRulesNewHighScoreAction, mPlayerName) == 0x14), "action 281 +0x14");
+CGS_STATIC_ASSERT((offsetof(RoadRulesNewHighScoreAction, mbOnlineLossButOfflineWin) == 0x28), "action 281 +0x28");
 
 // Action 284, 48 bytes: one road's ticker line. The offline score is the local player's best
 // (or par when par still stands), the online score the road's best (or par); the two AI bytes
@@ -1567,16 +1567,16 @@ struct RoadRulesRoadScoreAction : public GameAction<E_ACTION_ROAD_RULES_ROAD_SCO
     bool                          mbAIRulesRoadOffline;     // +0x29
     bool                          mbAIRulesRoadOnline;      // +0x2A
 };
-static_assert(sizeof(RoadRulesRoadScoreAction) == 48, "action 284 wire size (posted size 0x30)");
-static_assert(offsetof(RoadRulesRoadScoreAction, meActiveRoadRule) == 0x1C, "action 284 +0x1C");
-static_assert(offsetof(RoadRulesRoadScoreAction, mbLocalPlayerRulesRoad) == 0x28, "action 284 +0x28");
+CGS_STATIC_ASSERT((sizeof(RoadRulesRoadScoreAction) == 48), "action 284 wire size (posted size 0x30)");
+CGS_STATIC_ASSERT((offsetof(RoadRulesRoadScoreAction, meActiveRoadRule) == 0x1C), "action 284 +0x1C");
+CGS_STATIC_ASSERT((offsetof(RoadRulesRoadScoreAction, mbLocalPlayerRulesRoad) == 0x28), "action 284 +0x28");
 
 // Action 285, 8 bytes: the roads whose ruler changed for the active score type.
 struct RoadRulesNewRulersAction : public GameAction<E_ACTION_ROAD_RULES_NEW_RULERS>
 {
     CgsContainers::BitArray<64u> mRoadRulesChangedBitArray;   // +0x00
 };
-static_assert(sizeof(RoadRulesNewRulersAction) == 8, "action 285 wire size (posted size 8)");
+CGS_STATIC_ASSERT((sizeof(RoadRulesNewRulersAction) == 8), "action 285 wire size (posted size 8)");
 
 // Consumer: CrashPlayManager::OnEnterJunction @0x822A7E30 -- `lwz r11, 0(r30)`, three times,
 // and nothing else. Its assert string is "lpJAction->muJunctionID != 0", so again the member
@@ -1603,7 +1603,7 @@ struct SendJunctionPlayerIsAtAction
 //             CarSelectManager builders at 0x82387D38 / 0x82392F78 / 0x82398B3C /
 //             0x82392D64 / 0x82398DDC.
 // Sizeof is pinned at 80 by the AddEvent liSize every producer passes (`li r6, 0x50`).
-struct alignas(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYER_CAR>
+struct CGS_ALIGN(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYER_CAR>
 {
     Vector3 mPosition;                 // +0x00  SpawnLocation::mPosition
     Vector3 mDirection;                // +0x10  SpawnLocation::mDirection
@@ -1644,7 +1644,7 @@ struct alignas(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYE
 
     bool HasToChangeLocation() const;
 };
-static_assert(sizeof(ResetPlayerCarAction) == 80,
+CGS_STATIC_ASSERT((sizeof(ResetPlayerCarAction) == 80),
               "ResetPlayerCarAction must be the 80-byte image every AddEvent(.., 0, 80) posts");
 
 // Game action 64 -- "the player's car selection changed": which junkyard, and where in it.
@@ -1656,7 +1656,7 @@ static_assert(sizeof(ResetPlayerCarAction) == 80,
 //             CarSelectManager::EnterJunkyardAtStartOfGame @0x82393178..0x823931E0 (by pointer)
 //   consumer  MainDirector::ProcessInputQueue case 64 (BrnMainDirector.cpp:753, X360
 //             `lbz r11, 0x30(r30)` @0x82238418 -> maGameState.mbJunkyardPosIsLeft)
-struct alignas(16) CarSelectionChangedAction
+struct CGS_ALIGN(16) CarSelectionChangedAction
 {
     CgsID   mJunkyardId;        // +0x00
     u8      maReserved0x08[8];  // +0x08  never written by any producer
@@ -1666,9 +1666,9 @@ struct alignas(16) CarSelectionChangedAction
     bool    mbReserved0x31;     // +0x31  1 for a model change, 0 on entry
     u8      maReserved0x32[14]; // +0x32..+0x3F  tail of the 64-byte AddEvent image
 };
-static_assert(sizeof(CarSelectionChangedAction) == 64,
+CGS_STATIC_ASSERT((sizeof(CarSelectionChangedAction) == 64),
               "CarSelectionChangedAction must be the 64-byte image AddEvent(.., 64, 64) posts");
-static_assert(offsetof(CarSelectionChangedAction, mbJunkyardPosIsLeft) == 0x30,
+CGS_STATIC_ASSERT((offsetof(CarSelectionChangedAction, mbJunkyardPosIsLeft) == 0x30),
               "CarSelectionChangedAction::mbJunkyardPosIsLeft at +0x30 (the consumer's lbz offset)");
 
 // ARTIST action 69, 88 bytes; DecFIGS BrnGameActions.h:2657.
@@ -1679,7 +1679,7 @@ struct CarSelectionRequestStreamingAction : public GameAction<E_ACTION_CAR_SELEC
     u8 mauExtraInfoFlags[8];
     s8 maiPriorities[8];
 };
-static_assert(sizeof(CarSelectionRequestStreamingAction) == 88, "Car selection streaming action");
+CGS_STATIC_ASSERT((sizeof(CarSelectionRequestStreamingAction) == 88), "Car selection streaming action");
 
 // Game action 79 -- "paint the player's car": the palette (paint finish) and colour indices the
 // car-select / junkyard flow resolved for the car that is now in the world. It is the ONLY route
@@ -1710,11 +1710,11 @@ struct CarSelectChangeColourAction : public GameAction<E_ACTION_CAR_SELECT_CHANG
     u32 muPaletteIndex;   // +0x00
     u32 muColourIndex;    // +0x04
 };
-static_assert(sizeof(CarSelectChangeColourAction) == 8,
+CGS_STATIC_ASSERT((sizeof(CarSelectChangeColourAction) == 8),
               "CarSelectChangeColourAction must be the 8-byte image AddEvent(.., 79, 8) posts");
-static_assert(offsetof(CarSelectChangeColourAction, muPaletteIndex) == 0,
+CGS_STATIC_ASSERT((offsetof(CarSelectChangeColourAction, muPaletteIndex) == 0),
               "the palette index is payload word 0 (ChangePlayerCarColour's first argument)");
-static_assert(offsetof(CarSelectChangeColourAction, muColourIndex) == 4,
+CGS_STATIC_ASSERT((offsetof(CarSelectChangeColourAction, muColourIndex) == 4),
               "the colour index is payload word 1 (ChangePlayerCarColour's second argument)");
 
 // X360 0x82355178 (IsEmpty).
@@ -1749,17 +1749,17 @@ struct CarSelectModificationScreen : public GameAction<E_ACTION_CAR_SELECT_MODIF
     ECarSelectType meCarSelectType;   // +0x00
     bool           mbEntering;        // +0x04
 };
-static_assert(sizeof(CarSelectModificationScreen) == 8, "posted as 8 bytes");
+CGS_STATIC_ASSERT((sizeof(CarSelectModificationScreen) == 8), "posted as 8 bytes");
 
 // Action 77, the car-select exit record (32 bytes). The console build keeps the spawn vector
 // first and the online-car-select byte at +0x10, which is the byte the director reads.
-struct alignas(16) CarSelectExitAction : public GameAction<E_ACTION_CAR_SELECT_FINISHED>
+struct CGS_ALIGN(16) CarSelectExitAction : public GameAction<E_ACTION_CAR_SELECT_FINISHED>
 {
     Vector3 mExitSpawnLocation;   // +0x00
     bool    mbOnlineCarSelect;    // +0x10
 };
-static_assert(offsetof(CarSelectExitAction, mbOnlineCarSelect) == 0x10 &&
-              sizeof(CarSelectExitAction) == 32, "posted as 32 bytes, online byte at +0x10");
+CGS_STATIC_ASSERT((offsetof(CarSelectExitAction, mbOnlineCarSelect) == 0x10 &&
+              sizeof(CarSelectExitAction) == 32), "posted as 32 bytes, online byte at +0x10");
 
 // DecFIGS BrnGameActions.h:2243/2246; ARTIST action 9 has no payload reads,
 // action 10 reads the active race-car index at record+0 (0x827D0E90).
@@ -1770,7 +1770,7 @@ struct ResetRaceCarCrashingAction : public GameAction<E_ACTION_RESET_RACE_CAR_CR
 };
 
 // X360 0x82355088 (Construct). DWARF: 6 members / 0x38 bytes; the console record has a 7th.
-struct alignas(16) SetupNetworkCarAction : public GameAction<E_ACTION_SETUP_NETWORK_CAR>
+struct CGS_ALIGN(16) SetupNetworkCarAction : public GameAction<E_ACTION_SETUP_NETWORK_CAR>
 {
     Vector3             mWorldSpacePosition;   // 0x00
     Vector3             mAt;                   // 0x10
@@ -1795,9 +1795,9 @@ struct alignas(16) SetupNetworkCarAction : public GameAction<E_ACTION_SETUP_NETW
                    CgsID               lWheelModelId,
                    f32                 lfBaseDeformationAmount);
 };
-static_assert(offsetof(SetupNetworkCarAction, mfBaseDeformationAmount) == 0x38,
+CGS_STATIC_ASSERT((offsetof(SetupNetworkCarAction, mfBaseDeformationAmount) == 0x38),
               "Construct @0x82355088 stores the base deformation at +0x38");
-static_assert(sizeof(SetupNetworkCarAction) == 0x40,
+CGS_STATIC_ASSERT((sizeof(SetupNetworkCarAction) == 0x40),
               "ProcessGameEvents posts action 5 with size 0x40 (li r6, 0x40 @0x823A1878)");
 
 // Action 81: the colour and paint finish the profile stores for a car (case 6 fills it through
@@ -1807,7 +1807,7 @@ struct PlayerCarColourResponseAction : public GameAction<E_ACTION_PLAYER_CAR_COL
     u32 muPaletteIndex;   // +0x00
     u32 muColourIndex;    // +0x04
 };
-static_assert(sizeof(PlayerCarColourResponseAction) == 8, "posted with size 8");
+CGS_STATIC_ASSERT((sizeof(PlayerCarColourResponseAction) == 8), "posted with size 8");
 
 // Action 182: the player's name, car and car count for the GUI, and whether that car carries
 // damage (case 81).
@@ -1816,15 +1816,15 @@ struct PlayerInfoResponseAction : public GameAction<E_ACTION_PLAYER_INFO_RESPONS
     PlayerInfo mPlayerInfo;      // +0x00
     bool       mbIsCarDamaged;   // +0x38
 };
-static_assert(offsetof(PlayerInfoResponseAction, mbIsCarDamaged) == 0x38 &&
-              sizeof(PlayerInfoResponseAction) == 64, "posted with size 64, damage byte at +0x38");
+CGS_STATIC_ASSERT((offsetof(PlayerInfoResponseAction, mbIsCarDamaged) == 0x38 &&
+              sizeof(PlayerInfoResponseAction) == 64), "posted with size 64, damage byte at +0x38");
 
 // Action 183: the members of a car's colour-livery family the player may pick (case 82).
 struct UnlockedLiveryResponseAction : public GameAction<E_ACTION_UNLOCKED_LIVERY_RESPONSE>
 {
     Array<CgsID, 8> maCars;   // +0x00, count word at +0x40
 };
-static_assert(sizeof(UnlockedLiveryResponseAction) == 72, "posted with size 72");
+CGS_STATIC_ASSERT((sizeof(UnlockedLiveryResponseAction) == 72), "posted with size 72");
 
 // Action 184: the selectable cars with a driven bit and a wrecked bit each, and the profile's
 // car maximum (case 88).
@@ -1837,10 +1837,10 @@ struct CarSelectionResponseAction : public GameAction<E_ACTION_CAR_SELECTION_RES
     CgsContainers::BitArray<KU_MAX_CARS_IN_RESPONSE_ACTION>  mWreckedArray;           // +0x418
     s32                                                      miMaxAvailableCars;      // +0x428
 };
-static_assert(offsetof(CarSelectionResponseAction, mHasBeenDrivenBitArray) == 0x408 &&
+CGS_STATIC_ASSERT((offsetof(CarSelectionResponseAction, mHasBeenDrivenBitArray) == 0x408 &&
               offsetof(CarSelectionResponseAction, mWreckedArray) == 0x418 &&
               offsetof(CarSelectionResponseAction, miMaxAvailableCars) == 0x428 &&
-              sizeof(CarSelectionResponseAction) == 1072, "posted with size 1072");
+              sizeof(CarSelectionResponseAction) == 1072), "posted with size 1072");
 
 // Action 191: loading starts or stops (ProcessStreamingCompleteEvent and FinishStreaming post
 // false).
@@ -1848,14 +1848,14 @@ struct SetLoadingStateAction : public GameAction<E_ACTION_SET_LOADING_STATE>
 {
     bool mbStartLoading;   // +0x00
 };
-static_assert(sizeof(SetLoadingStateAction) == 1, "posted with size 1");
+CGS_STATIC_ASSERT((sizeof(SetLoadingStateAction) == 1), "posted with size 1");
 
 // Action 67: the online car select spawned the player in this car.
 struct CarSelectionChangedOnlineAction : public GameAction<E_ACTION_CAR_SELECTION_CHANGED_ONLINE>
 {
     CgsID mCarId;   // +0x00
 };
-static_assert(sizeof(CarSelectionChangedOnlineAction) == 8, "posted with size 8");
+CGS_STATIC_ASSERT((sizeof(CarSelectionChangedOnlineAction) == 8), "posted with size 8");
 
 // X360 0x823551F0 (SetPlayerScoringIndex). Layout per the Feb-2007 partial source (this X360 build).
 struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
@@ -1875,7 +1875,7 @@ struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
 
     void SetPlayerScoringIndex(EPlayerScoringIndex lePlayerScoringIndex);
 };
-static_assert(sizeof(OnlinePlayerAddedAction) == 0x28,
+CGS_STATIC_ASSERT((sizeof(OnlinePlayerAddedAction) == 0x28),
               "ProcessGameEvents posts action 219 with size 0x28");
 
 // Action 235, no payload: ProcessGameEvents case 17 posts one byte when a lobby start follows a
@@ -1922,7 +1922,7 @@ struct RegionFromPositionResponseAction : public GameAction<E_ACTION_REGION_FROM
 {
     BrnWorld::WorldRegion mWorldRegion;   // 0x00
 };
-static_assert(sizeof(RegionFromPositionResponseAction) == 8, "case 95 posts action 186 with size 8");
+CGS_STATIC_ASSERT((sizeof(RegionFromPositionResponseAction) == 8), "case 95 posts action 186 with size 8");
 
 // Action 187 (case 117): the player's route changed. No payload; posted as one byte.
 struct UpdateGuiRouteAction : public GameAction<E_ACTION_UPDATE_GUI_ROUTE> {};
@@ -1954,7 +1954,7 @@ struct RivalryOverviewAction : public GameAction<E_ACTION_ALL_RIVALRY_DATA_RESPO
     ERivalryStage mRivalryStatus[KI_MAX_RIVALS];   // 0x400
     s32           miRivalsReturned;                // 0x500
 };
-static_assert(sizeof(RivalryOverviewAction) == 1288, "SendAllRivalryData posts action 188 with size 1288");
+CGS_STATIC_ASSERT((sizeof(RivalryOverviewAction) == 1288), "SendAllRivalryData posts action 188 with size 1288");
 
 // Action 189 (case 102): one rival in depth.
 struct RivalryOneInDepthAction : public GameAction<E_ACTION_ONE_RIVALRY_DATA_RESPONSE>
@@ -1965,7 +1965,7 @@ struct RivalryOneInDepthAction : public GameAction<E_ACTION_ONE_RIVALRY_DATA_RES
     s32               miRaceWins;         // 0x14
     s8                miProgressStatus;   // 0x18
 };
-static_assert(sizeof(RivalryOneInDepthAction) == 32, "case 102 posts action 189 with size 32");
+CGS_STATIC_ASSERT((sizeof(RivalryOneInDepthAction) == 32), "case 102 posts action 189 with size 32");
 
 // Action 237 (case 135): a remote player collected a stunt element the local player has not.
 struct OnlineNetworkPlayerCollectableAction : public GameAction<E_ACTION_NETWORK_COLLECTABLE>
@@ -1974,7 +1974,7 @@ struct OnlineNetworkPlayerCollectableAction : public GameAction<E_ACTION_NETWORK
     BrnNetwork::NetworkPlayerID mNetworkPlayerID;  // 0x08
     StuntElementType            meType;            // 0x0C
 };
-static_assert(sizeof(OnlineNetworkPlayerCollectableAction) == 16, "case 135 posts action 237 with size 16");
+CGS_STATIC_ASSERT((sizeof(OnlineNetworkPlayerCollectableAction) == 16), "case 135 posts action 237 with size 16");
 
 // Three console-only answers: ids 288, 240 and 241 fill gaps of the debug-info enum and have no
 // name anywhere, so each record is named after what it carries and keeps its id beside it.
@@ -1988,7 +1988,7 @@ struct TargetEventDataResponse
     s32                    miScore;       // 0x08
     CgsNetwork::PlayerName mPlayerName;   // 0x0C
 };
-static_assert(sizeof(TargetEventDataResponse) == 32, "case 104 posts action 288 with size 32");
+CGS_STATIC_ASSERT((sizeof(TargetEventDataResponse) == 32), "case 104 posts action 288 with size 32");
 
 // Id 240 (case 152): the holder of the target score just stored or removed, and which it was.
 struct TargetEventScoreChangedResponse
@@ -1998,7 +1998,7 @@ struct TargetEventScoreChangedResponse
     CgsNetwork::PlayerName mPlayerName;   // 0x00
     bool                   mbRemoved;     // 0x10
 };
-static_assert(sizeof(TargetEventScoreChangedResponse) == 17, "case 152 posts action 240 with size 17");
+CGS_STATIC_ASSERT((sizeof(TargetEventScoreChangedResponse) == 17), "case 152 posts action 240 with size 17");
 
 // Id 241 (case 153): the holder of an event's target score, for a downloaded scoreboard.
 struct DldScoreboardResponse
@@ -2007,7 +2007,7 @@ struct DldScoreboardResponse
 
     CgsNetwork::PlayerName mPlayerName;   // 0x00
 };
-static_assert(sizeof(DldScoreboardResponse) == 16, "case 153 posts action 241 with size 16");
+CGS_STATIC_ASSERT((sizeof(DldScoreboardResponse) == 16), "case 153 posts action 241 with size 16");
 
 // X360 element of Array<TrophyUnlockAction,12> @ 0x8235E1F0 / ::Erase @ 0x8235E318. DWARF
 // BrnGameActions.h:2438; 16-byte stride. GameAction<T> base carries only a static type tag (no
@@ -2030,10 +2030,10 @@ struct TrophyUnlockAction : public GameAction<E_ACTION_TROPHY_UNLOCK>
     CgsID                                        mCarToUnlock;  // 0x00  (DWARF BrnGameActions.h:2441)
     BrnProgression::TrophyUnlockData::UnlockType meUnlockType;  // 0x08  (DWARF BrnGameActions.h:2440)
 };
-static_assert(sizeof(TrophyUnlockAction) == 16,
+CGS_STATIC_ASSERT((sizeof(TrophyUnlockAction) == 16),
               "SendTrophyUnlockUpdate posts the record as action 204 with `li r6, 0x10`");
-static_assert(offsetof(TrophyUnlockAction, mCarToUnlock) == 0x00 &&
-              offsetof(TrophyUnlockAction, meUnlockType) == 0x08,
+CGS_STATIC_ASSERT((offsetof(TrophyUnlockAction, mCarToUnlock) == 0x00 &&
+              offsetof(TrophyUnlockAction, meUnlockType) == 0x08),
               "the producer's std/stw pair and the consumer's ld 0(r3) / lwz 8(r3) asserts");
 
 // ---- [progression wave: completion, 2026-09-06] --------------------------------------------
@@ -2052,7 +2052,7 @@ struct AllEventTypeWonAction : public GameAction<E_ACTION_ALL_EVENT_TYPE_WON>
 {
     EGameModeType leGameEventType;   // 0x00  (DWARF BrnGameActions.h:1614)
 };
-static_assert(sizeof(AllEventTypeWonAction) == 4,
+CGS_STATIC_ASSERT((sizeof(AllEventTypeWonAction) == 4),
               "CheckForAllModeTypeCompletion posts the record as action 206 with `li r6, 4`");
 
 // X360 0x8230FDF0 (Construct), 0x822A0198 (GetPlayerDisconnected), 0x8230FD60 (SetPlayerDisconnected).
@@ -2148,9 +2148,9 @@ struct BroadcastModeFinishLinesAction : public GameAction<E_ACTION_BROADCAST_MOD
     BrnTrigger::BoxRegion mBoxRegion;      // +0x00  DWARF :963
     CgsID                 mFinishLineID;   // +0x28  DWARF :964
 };
-static_assert(sizeof(BroadcastModeFinishLinesAction) == 48,
+CGS_STATIC_ASSERT((sizeof(BroadcastModeFinishLinesAction) == 48),
               "X360 PrepareForMode posts action 24 with size 48 (`li r6,0x30` @0x82342F5C)");
-static_assert(offsetof(BroadcastModeFinishLinesAction, mFinishLineID) == 0x28,
+CGS_STATIC_ASSERT((offsetof(BroadcastModeFinishLinesAction, mFinishLineID) == 0x28),
               "X360 ProcessInputQueue case 24 reads the finish-line id with `ld r11,0x28(r30)` @0x8223873C");
 
 // X360 action: Array<DriveThruInfo,46>::Append @ 0x8235C8E8 / ::GetLength @ 0x823AC200. Minimal slice:
@@ -2236,8 +2236,8 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
     s32             maiRoundStuntScores[KI_MAX_ROUNDS];     // +0xB4 (40) stunt score
     s32             maiRoundStuntMultipliers[KI_MAX_ROUNDS];// +0xDC (40) stunt multiplier
 };
-static_assert(sizeof(OnlineGameResults) == 264, "ARTIST action229 payload extent");
-static_assert(sizeof(OnlineRoundResults) == 68, "ARTIST action230 payload extent");
+CGS_STATIC_ASSERT((sizeof(OnlineGameResults) == 264), "ARTIST action229 payload extent");
+CGS_STATIC_ASSERT((sizeof(OnlineRoundResults) == 68), "ARTIST action230 payload extent");
 
 // X360 0x8232CEB0 (StuntModeScoring::DealWithStunt reads it). The "a world stunt element was
 // performed" action: the 64-bit element key plus a stunt-element discriminant. DWARF home
@@ -2457,16 +2457,16 @@ struct VehicleHitAction : public GameAction<E_ACTION_VEHICLE_HIT>
 // miVehicleBaseScore, meVehicleScoreCategory, miScoreMultiplierEarned, miMultiplierTotal,
 // miChainBonusEarned, muVehicleIndex -- the names above are this tree's for the same nine slots).
 // Posted with `li r6, 0x24` @0x82381044.
-static_assert(sizeof(VehicleHitAction) == 36,                            "action 140 wire size (li r6, 0x24)");
-static_assert(offsetof(VehicleHitAction, meVehicleClass)          == 0x00, "rec+0x00  stw var_70");
-static_assert(offsetof(VehicleHitAction, miVehicleTypeCrashed)    == 0x04, "rec+0x04  r7 out");
-static_assert(offsetof(VehicleHitAction, miTotalVehiclesCrashed)  == 0x08, "rec+0x08  stw var_68");
-static_assert(offsetof(VehicleHitAction, miVehicleBaseScore)      == 0x0C, "rec+0x0C  r8 out");
-static_assert(offsetof(VehicleHitAction, meVehicleScoreCategory)  == 0x10, "rec+0x10  r9 out");
-static_assert(offsetof(VehicleHitAction, miScoreMultiplierEarned) == 0x14, "rec+0x14  r10 out");
-static_assert(offsetof(VehicleHitAction, miTotalScoreMultiplier)  == 0x18, "rec+0x18  stw var_58");
-static_assert(offsetof(VehicleHitAction, miComboBonusEarned)      == 0x1C, "rec+0x1C  stack out");
-static_assert(offsetof(VehicleHitAction, muTrafficEntityIndex)    == 0x20, "rec+0x20  sth var_50");
+CGS_STATIC_ASSERT((sizeof(VehicleHitAction) == 36),                            "action 140 wire size (li r6, 0x24)");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, meVehicleClass)          == 0x00), "rec+0x00  stw var_70");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, miVehicleTypeCrashed)    == 0x04), "rec+0x04  r7 out");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, miTotalVehiclesCrashed)  == 0x08), "rec+0x08  stw var_68");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, miVehicleBaseScore)      == 0x0C), "rec+0x0C  r8 out");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, meVehicleScoreCategory)  == 0x10), "rec+0x10  r9 out");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, miScoreMultiplierEarned) == 0x14), "rec+0x14  r10 out");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, miTotalScoreMultiplier)  == 0x18), "rec+0x18  stw var_58");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, miComboBonusEarned)      == 0x1C), "rec+0x1C  stack out");
+CGS_STATIC_ASSERT((offsetof(VehicleHitAction, muTrafficEntityIndex)    == 0x20), "rec+0x20  sth var_50");
 
 // Action 116, 2 bytes -- THE SHOWTIME TRAFFIC-TYPE REQUEST (DWARF BrnGameActions.h:2322-2324).
 // [FX-SHOWTIME2 2026-09-24] Producer GameStateModule::UpdateShowtimeMode @0x823810E8..0x82381110:
@@ -2478,7 +2478,7 @@ struct TrafficTypeRequestAction : public GameAction<E_ACTION_TRAFFIC_TYPE_REQUES
 {
     u16 muTrafficVehicleIndex;   // +0x00 (:2324)
 };
-static_assert(sizeof(TrafficTypeRequestAction) == 2, "action 116 wire size (li r6, 2)");
+CGS_STATIC_ASSERT((sizeof(TrafficTypeRequestAction) == 2), "action 116 wire size (li r6, 2)");
 
 // Action 138, 4 bytes -- the showtime-behaviour toggle broadcast (DWARF BrnGameActions.h:3346-3348).
 // [FX-SHOWTIME2 2026-09-24] Producer UpdateShowtimeMode @0x82380F28..0x82380F74: the new
@@ -2489,7 +2489,7 @@ struct ToggleShowtimeBehaviourAction : public GameAction<E_ACTION_TOGGLE_SHOWTIM
 {
     EShowtimeBehaviour meShowtimeBehaviour;   // +0x00 (:3348)
 };
-static_assert(sizeof(ToggleShowtimeBehaviourAction) == 4, "action 138 wire size (li r6, 4)");
+CGS_STATIC_ASSERT((sizeof(ToggleShowtimeBehaviourAction) == 4), "action 138 wire size (li r6, 4)");
 
 // Action 142, 12 bytes -- THE SHOWTIME SCORE UPDATE. Producer: ProcessGameEvents case 49
 // @0x823A43C0 (and again from UpdateRoadRulesManager with the same id/size):
@@ -2515,14 +2515,14 @@ struct RequestAutoSaveAction : public GameAction<E_ACTION_REQUEST_AUTOSAVE>
 {
     bool mbForceAutosave;   // +0x00
 };
-static_assert(sizeof(RequestAutoSaveAction) == 1, "action 55 is posted with size 1");
+CGS_STATIC_ASSERT((sizeof(RequestAutoSaveAction) == 1), "action 55 is posted with size 1");
 
 // An invite arrived while a mode is running (or the user has to change): ask the player first.
 struct PromptDoInviteAction : public GameAction<E_ACTION_PROMPT_DO_INVITE> {};
-static_assert(sizeof(PromptDoInviteAction) == 1, "action 91 is posted with size 1");
+CGS_STATIC_ASSERT((sizeof(PromptDoInviteAction) == 1), "action 91 is posted with size 1");
 
 struct UpdatePrepareForInviteAction : public GameAction<E_ACTION_UPDATE_PREPARE_FOR_INVITE> {};
-static_assert(sizeof(UpdatePrepareForInviteAction) == 1, "action 93 is posted with size 1");
+CGS_STATIC_ASSERT((sizeof(UpdatePrepareForInviteAction) == 1), "action 93 is posted with size 1");
 
 // A module is ready for the invite. The value is EModulePreparedForInvite (0 game state, 1 network),
 // held as the word the invite manager reads.
@@ -2530,13 +2530,13 @@ struct PreparedForInviteAction : public GameAction<E_ACTION_PREPARED_FOR_INVITE>
 {
     s32 meModulePreparedForInvite;   // +0x00
 };
-static_assert(sizeof(PreparedForInviteAction) == 4, "action 94 is posted with size 4");
+CGS_STATIC_ASSERT((sizeof(PreparedForInviteAction) == 4), "action 94 is posted with size 4");
 
 struct InviteCompleteAction : public GameAction<E_ACTION_INVITE_COMPLETE>
 {
     bool mbSuccess;   // +0x00
 };
-static_assert(sizeof(InviteCompleteAction) == 1, "action 96 is posted with size 1");
+CGS_STATIC_ASSERT((sizeof(InviteCompleteAction) == 1), "action 96 is posted with size 1");
 
 // Set a car's boost. mxFlags says which of the three values apply. The console record carries
 // mfBoostAmount at +0x08 and the infinite-boost byte last (the reference order puts the bool
@@ -2553,8 +2553,8 @@ struct SetBoostAction : public GameAction<E_ACTION_SET_BOOST>
     s32                   miBoostSegments;   // +0x0C
     bool                  mbInfiniteBoost;   // +0x10
 };
-static_assert(sizeof(SetBoostAction) == 20, "action 170 is posted with size 20");
-static_assert(offsetof(SetBoostAction, mbInfiniteBoost) == 0x10, "infinite-boost byte at +0x10");
+CGS_STATIC_ASSERT((sizeof(SetBoostAction) == 20), "action 170 is posted with size 20");
+CGS_STATIC_ASSERT((offsetof(SetBoostAction, mbInfiniteBoost) == 0x10), "infinite-boost byte at +0x10");
 
 // Action 144 (JustBouncedAction) is NOT re-declared here: it already had a home further up in
 // this file -- the CrashPlayManager::OnBounce slice -- and that record was GROWN in place with
@@ -2637,9 +2637,9 @@ struct FinishedModeAction : public GameAction<E_ACTION_FINISHED_MODE>
 
 // Lock the X360-asm-proven convoy offsets (0x24 / 0x44 / 0x64). The GameAction<T> base is the empty
 // tag (no instance data/vtable), so member offsets are measured from the struct base == action base.
-static_assert(offsetof(OnStuntElementCompleteAction, maConvoyLegDistances) == 0x24,
+CGS_STATIC_ASSERT((offsetof(OnStuntElementCompleteAction, maConvoyLegDistances) == 0x24),
               "OnStuntElementCompleteAction::maConvoyLegDistances must be at X360 offset +0x24");
-static_assert(offsetof(OnStuntElementCompleteAction, maConvoyMemberIds) == 0x44,
+CGS_STATIC_ASSERT((offsetof(OnStuntElementCompleteAction, maConvoyMemberIds) == 0x44),
               "OnStuntElementCompleteAction::maConvoyMemberIds must be at X360 offset +0x44");
 
 // ===== Freeburn-challenge actions (ChallengeManager keystone) =====
@@ -2755,15 +2755,15 @@ struct ActiveFburnChallengeAction : public GameAction<E_ACTION_ACTIVE_FREEBURN_C
 
 // Pin the X360-attested offsets of the freeburn action family (all pointer-free -> absolute on
 // the x64 gate too). GameAction<T> is the empty tag base, so struct base == action base.
-static_assert(sizeof(FreeburnChallengeAction) == 0x20, "FreeburnChallengeAction must be 0x20 bytes (AddEvent size)");
-static_assert(offsetof(FreeburnChallengeAction, meEventType) == 0x08, "FreeburnChallengeAction::meEventType at +0x08");
-static_assert(sizeof(FburnChallengeStatusAction) == 0x108, "FburnChallengeStatusAction must be 0x108 bytes (AddEvent size)");
-static_assert(offsetof(FburnChallengeStatusAction, mPlayerID) == 0x100, "FburnChallengeStatusAction::mPlayerID at +0x100");
-static_assert(sizeof(FburnChallengeShowSelectorAction) == 8, "FburnChallengeShowSelectorAction must be 8 bytes (AddEvent size)");
-static_assert(sizeof(ActiveFburnChallengeAction) == 0x30, "ActiveFburnChallengeAction must be 0x30 bytes (AddEvent size)");
-static_assert(offsetof(ActiveFburnChallengeAction, maePlayersInChallengeARCI) == 0x08, "ActiveFburnChallengeAction ARCI block at +0x08");
-static_assert(offsetof(ActiveFburnChallengeAction, mPlayerToSendToID) == 0x24, "ActiveFburnChallengeAction::mPlayerToSendToID at +0x24");
-static_assert(offsetof(ActiveFburnChallengeAction, miNumPlayersInChallenge) == 0x28, "ActiveFburnChallengeAction::miNumPlayersInChallenge at +0x28");
+CGS_STATIC_ASSERT((sizeof(FreeburnChallengeAction) == 0x20), "FreeburnChallengeAction must be 0x20 bytes (AddEvent size)");
+CGS_STATIC_ASSERT((offsetof(FreeburnChallengeAction, meEventType) == 0x08), "FreeburnChallengeAction::meEventType at +0x08");
+CGS_STATIC_ASSERT((sizeof(FburnChallengeStatusAction) == 0x108), "FburnChallengeStatusAction must be 0x108 bytes (AddEvent size)");
+CGS_STATIC_ASSERT((offsetof(FburnChallengeStatusAction, mPlayerID) == 0x100), "FburnChallengeStatusAction::mPlayerID at +0x100");
+CGS_STATIC_ASSERT((sizeof(FburnChallengeShowSelectorAction) == 8), "FburnChallengeShowSelectorAction must be 8 bytes (AddEvent size)");
+CGS_STATIC_ASSERT((sizeof(ActiveFburnChallengeAction) == 0x30), "ActiveFburnChallengeAction must be 0x30 bytes (AddEvent size)");
+CGS_STATIC_ASSERT((offsetof(ActiveFburnChallengeAction, maePlayersInChallengeARCI) == 0x08), "ActiveFburnChallengeAction ARCI block at +0x08");
+CGS_STATIC_ASSERT((offsetof(ActiveFburnChallengeAction, mPlayerToSendToID) == 0x24), "ActiveFburnChallengeAction::mPlayerToSendToID at +0x24");
+CGS_STATIC_ASSERT((offsetof(ActiveFburnChallengeAction, miNumPlayersInChallenge) == 0x28), "ActiveFburnChallengeAction::miNumPlayersInChallenge at +0x28");
 
 // ===== Road-rules batch query (StreetManager keystone, wave B) =====
 // ADDITIVE GROW. DWARF BrnGameActions.h:2833 (members :4808..:4814); the member ORDER
@@ -2787,11 +2787,11 @@ struct RoadRulesBatchQueryAction : public GameAction<E_ACTION_ROAD_RULES_BATCH_Q
 // AddEvent the literal `li r6, 0x308` == 776 at 0x823A4974 -- immediately after
 // StreetManager::FillInRoadRulesQuery filled this very buffer. Nothing was checking that the host
 // layout still matched that size.
-static_assert(sizeof(RoadRulesBatchQueryAction) == 776,
+CGS_STATIC_ASSERT((sizeof(RoadRulesBatchQueryAction) == 776),
               "X360 ProcessGameEvents posts action 275 with size 0x308 (776)");
-static_assert(offsetof(RoadRulesBatchQueryAction, miNumRoads) == 512,
+CGS_STATIC_ASSERT((offsetof(RoadRulesBatchQueryAction, miNumRoads) == 512),
               "RoadRulesBatchQueryAction::miNumRoads at +512 (FillInRoadRulesQuery @0x823365A8)");
-static_assert(offsetof(RoadRulesBatchQueryAction, mbPlayerOwnsAllRoadsOffline) == 772,
+CGS_STATIC_ASSERT((offsetof(RoadRulesBatchQueryAction, mbPlayerOwnsAllRoadsOffline) == 772),
               "RoadRulesBatchQueryAction::mbPlayerOwnsAllRoadsOffline at +772");
 
 // ===== Completed-stunt action (id 15) =====
@@ -2861,17 +2861,17 @@ struct CompletedStuntAction : public GameAction<E_ACTION_COMPLETED_STUNT>
 };
 
 // Pointer-free -> the X360 offsets are absolute on the x64 gate too.
-static_assert(sizeof(CompletedStuntAction) == 32,
+CGS_STATIC_ASSERT((sizeof(CompletedStuntAction) == 32),
               "CompletedStuntAction must be the 32-byte image AddEvent(.., 15, 32) posts");
-static_assert(offsetof(CompletedStuntAction, muStuntActionComplete) == 0x00,
+CGS_STATIC_ASSERT((offsetof(CompletedStuntAction, muStuntActionComplete) == 0x00),
               "the stunt bitfield is the first member (BoostBurnout2::UpdateStuntBoost lwz 0(r30))");
-static_assert(offsetof(CompletedStuntAction, mfCompletedAirSpinAngle) == 0x08,
+CGS_STATIC_ASSERT((offsetof(CompletedStuntAction, mfCompletedAirSpinAngle) == 0x08),
               "air-spin angle at +0x08 (UpdateStuntBoost lfs f13, 8(r30))");
-static_assert(offsetof(CompletedStuntAction, mfCompletedHandbreakTurnAngle) == 0x0C,
+CGS_STATIC_ASSERT((offsetof(CompletedStuntAction, mfCompletedHandbreakTurnAngle) == 0x0C),
               "handbrake-turn angle at +0x0C (UpdateStuntBoost lfs f13, 0xC(r30))");
-static_assert(offsetof(CompletedStuntAction, miCompletedBarrelRolls) == 0x18,
+CGS_STATIC_ASSERT((offsetof(CompletedStuntAction, miCompletedBarrelRolls) == 0x18),
               "barrel-roll COUNT at +0x18 (UpdateStuntBoost lwz+extsw 0x18(r30)) -- not the DWARF's bool");
-static_assert(offsetof(CompletedStuntAction, mbSuccessfulLanding) == 0x1C,
+CGS_STATIC_ASSERT((offsetof(CompletedStuntAction, mbSuccessfulLanding) == 0x1C),
               "landing flag at +0x1C (ProcessGameEvents stb @0x823A1994)");
 
 // ===== The records ProcessGameEvents_Group3 posts =====
@@ -2895,9 +2895,9 @@ struct InProgressStuntAction : public GameAction<E_ACTION_INPROGRESS_STUNT>
     f32 mfConvoyLegDistance;              // +0x18 FLAG name (console-only member)
     s32 miCarInFrontIndex;                // +0x1C FLAG name (console-only member)
 };
-static_assert(sizeof(InProgressStuntAction) == 32, "action 16 is posted with size 32");
-static_assert(offsetof(InProgressStuntAction, mfConvoyLegDistance) == 0x18, "action 16 leg distance at +0x18");
-static_assert(offsetof(InProgressStuntAction, miCarInFrontIndex)   == 0x1C, "action 16 car in front at +0x1C");
+CGS_STATIC_ASSERT((sizeof(InProgressStuntAction) == 32), "action 16 is posted with size 32");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntAction, mfConvoyLegDistance) == 0x18), "action 16 leg distance at +0x18");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntAction, miCarInFrontIndex)   == 0x1C), "action 16 car in front at +0x1C");
 
 // Action 119, 1 byte (case 37): the player car was reset onto the track. No members.
 struct PlayerResetOnTrackAction : public GameAction<E_ACTION_PLAYER_RESET_ON_TRACK> {};
@@ -2914,7 +2914,7 @@ struct TriggerCrashBreakerAction : public GameAction<E_ACTION_TRIGGER_CRASH_BREA
     f32                 mfTimeUntilStart;   // +0x18
     f32                 mfDurationTime;     // +0x1C
 };
-static_assert(sizeof(TriggerCrashBreakerAction) == 32, "action 135 is posted with size 32");
+CGS_STATIC_ASSERT((sizeof(TriggerCrashBreakerAction) == 32), "action 135 is posted with size 32");
 
 // Action 136, 4 bytes (case 45).
 struct CancelCrashBreakerAction : public GameAction<E_ACTION_CANCEL_CRASH_BREAKER>
@@ -2960,13 +2960,13 @@ struct SendCarStatsAction : public GameAction<E_ACTION_UPDATE_CAR_STATS>
     BrnResource::ECarType meCarType;      // +0x14
 };
 
-static_assert(sizeof(SendCarStatsAction) == 24,
+CGS_STATIC_ASSERT((sizeof(SendCarStatsAction) == 24),
               "ARTIST SendCarStatsAction case-198 payload is 24 bytes");
-static_assert(offsetof(SendCarStatsAction, miCarControl) == 0x08,
+CGS_STATIC_ASSERT((offsetof(SendCarStatsAction, miCarControl) == 0x08),
               "HandleGameActions case 198 loads boost-loss from +0x08");
-static_assert(offsetof(SendCarStatsAction, miCarBoost) == 0x0C,
+CGS_STATIC_ASSERT((offsetof(SendCarStatsAction, miCarBoost) == 0x0C),
               "HandleGameActions case 198 loads boost level from +0x0C");
-static_assert(offsetof(SendCarStatsAction, meCarType) == 0x14,
+CGS_STATIC_ASSERT((offsetof(SendCarStatsAction, meCarType) == 0x14),
               "HandleGameActions case 198 loads ECarType from +0x14");
 
 // ===========================================================================================
@@ -3013,7 +3013,7 @@ struct JunctionInfoAction : public GameAction<E_ACTION_EVENT_AT_JUNCTION_AVAILAB
     bool  mbIsAutoUnlockedChallenge;// +0x23
     u8    maPad24[4];              // +0x24 tail padding to the attested 40
 };
-static_assert(sizeof(JunctionInfoAction) == 40,
+CGS_STATIC_ASSERT((sizeof(JunctionInfoAction) == 40),
               "X360 CheckIfPlayerIsAtJunctionWithAnEvent posts action 201 with size 40");
 // ---- 208 ---------------------------------------------------------------------------------
 // [drive-thru wave 2026-08-27] The game-completion results record. Producer
@@ -3033,7 +3033,7 @@ struct GameCompletionResultsAction : public GameAction<E_ACTION_GAME_COMPLETION_
     bool          mbCompletionAlreadyRecorded;  // +0x05 Profile::GetSeen100PercentCompletionSequence()
     u8            maPad06[2];                   // +0x06 never stored; pads to the producer's `li r6,8`
 };
-static_assert(sizeof(GameCompletionResultsAction) == 8,
+CGS_STATIC_ASSERT((sizeof(GameCompletionResultsAction) == 8),
               "X360 SendGameCompletionResults posts action 208 with size 8");
 
 // ---- 146 ---------------------------------------------------------------------------------
@@ -3055,10 +3055,10 @@ struct ShowtimeIntroAction : public GameAction<E_ACTION_SHOWTIME_INTRO_START>
     Vector3 mAimDirection;   // +0x00 RCEntityActiveRaceCarOutputInterface::GetPlayerDirection()
     bool    mbStart;         // +0x10 true == the intro is armed, false == it was cancelled
 };
-static_assert(sizeof(ShowtimeIntroAction) == 32,
+CGS_STATIC_ASSERT((sizeof(ShowtimeIntroAction) == 32),
               "X360 DetectModeStarts posts action 146 with size 32");
-static_assert(offsetof(ShowtimeIntroAction, mAimDirection) == 0x00 &&
-              offsetof(ShowtimeIntroAction, mbStart) == 0x10,
+CGS_STATIC_ASSERT((offsetof(ShowtimeIntroAction, mAimDirection) == 0x00 &&
+              offsetof(ShowtimeIntroAction, mbStart) == 0x10),
               "action-146 field offsets are the producer's var_A0/var_90 stores");
 
 // ---- 272 ---------------------------------------------------------------------------------
@@ -3071,12 +3071,12 @@ struct WrongCarForChallengeAction : public GameAction<E_ACTION_WRONG_CAR_FOR_CHA
 {
     CgsID mSpecialEventCarId;      // +0x00 RaceEventData+0x10
 };
-static_assert(sizeof(WrongCarForChallengeAction) == 8,
+CGS_STATIC_ASSERT((sizeof(WrongCarForChallengeAction) == 8),
               "X360 StartModeAtLights posts action 272 with size 8");
 
-static_assert(offsetof(JunctionInfoAction, mSpecialEventCarId) == 0x10 &&
+CGS_STATIC_ASSERT((offsetof(JunctionInfoAction, mSpecialEventCarId) == 0x10 &&
               offsetof(JunctionInfoAction, meGameModeType) == 0x18 &&
-              offsetof(JunctionInfoAction, mbIsAutoUnlockedChallenge) == 0x23,
+              offsetof(JunctionInfoAction, mbIsAutoUnlockedChallenge) == 0x23),
               "action-201 field offsets are the @0x823EA810 consumer loads");
 
 // ---- 200 ---------------------------------------------------------------------------------
@@ -3093,7 +3093,7 @@ struct UpdatePlayerMedalsAction : public GameAction<E_ACTION_UPDATE_PLAYER_MEDAL
     s16 mi16WinsToNextRank;   // +0x06 GetTotalWinsForNextRank() - total, clamped at 0;
                               //       -1 when the player is already at the top rank
 };
-static_assert(sizeof(UpdatePlayerMedalsAction) == 8,
+CGS_STATIC_ASSERT((sizeof(UpdatePlayerMedalsAction) == 8),
               "X360 UpdatePlayerMedals posts action 200 with size 8");
 
 // ============================================================================================
@@ -3116,8 +3116,8 @@ struct SetLandmarkRacesAction : public GameAction<E_ACTION_SET_LANDMARK_RACES>
     BrnProgression::Race maRaces[6];
     u32 muNumRaces;
 };
-static_assert(sizeof(SetLandmarkRacesAction) == 728, "ARTIST action51 is 0x2D8 bytes");
-static_assert(offsetof(SetLandmarkRacesAction, muNumRaces) == 720,
+CGS_STATIC_ASSERT((sizeof(SetLandmarkRacesAction) == 728), "ARTIST action51 is 0x2D8 bytes");
+CGS_STATIC_ASSERT((offsetof(SetLandmarkRacesAction, muNumRaces) == 720),
               "ARTIST action51 count is +0x2D0");
 
 struct StartModeIntroAction : public GameAction<E_ACTION_START_MODE_INTRO>
@@ -3130,9 +3130,9 @@ struct StartModeIntroAction : public GameAction<E_ACTION_START_MODE_INTRO>
     bool          mbDoIntro;                 // +0x25A  mfDurationSeconds > 0.0f
     u8            maPad25B[1];               // +0x25B  tail padding to the attested 604
 };
-static_assert(sizeof(StartModeIntroAction) == 604,
+CGS_STATIC_ASSERT((sizeof(StartModeIntroAction) == 604),
               "X360 StartModeIntro posts action 29 with size 0x25C");
-static_assert(offsetof(StartModeIntroAction, meGameMode) == 0x254,
+CGS_STATIC_ASSERT((offsetof(StartModeIntroAction, meGameMode) == 0x254),
               "action-29 FlybyData must be the console's 592-byte block at +0x004");
 
 // ---- 30 ----------------------------------------------------------------------------------
@@ -3143,7 +3143,7 @@ struct StopModeIntroAction : public GameAction<E_ACTION_STOP_MODE_INTRO>
     bool          mbMovingBetweenLobbyModes;// +0x04  IsOnlineModeWithInstantIntro()
     u8            maPad05[3];               // +0x05  tail padding to the attested 8
 };
-static_assert(sizeof(StopModeIntroAction) == 8,
+CGS_STATIC_ASSERT((sizeof(StopModeIntroAction) == 8),
               "X360 StopModeIntro posts action 30 with size 8");
 
 // ---- 34 ----------------------------------------------------------------------------------
@@ -3155,9 +3155,9 @@ struct StartPlayingModeAction : public GameAction<E_ACTION_START_PLAYING_MODE>
     u8            maPad04[4];               // +0x04  alignment ahead of the 8-byte id
     CgsID         mDestinationLandmarkID;   // +0x08  zeroed first (`std r27`), then maLandmarkCgsIDs[next]
 };
-static_assert(sizeof(StartPlayingModeAction) == 16,
+CGS_STATIC_ASSERT((sizeof(StartPlayingModeAction) == 16),
               "X360 StartPlayingMode posts action 34 with size 0x10");
-static_assert(offsetof(StartPlayingModeAction, mDestinationLandmarkID) == 8,
+CGS_STATIC_ASSERT((offsetof(StartPlayingModeAction, mDestinationLandmarkID) == 8),
               "action-34 landmark id is the second qword of the 16-byte record");
 
 // ---- 149 ---------------------------------------------------------------------------------
@@ -3170,7 +3170,7 @@ struct RequestGameTrainingAction : public GameAction<E_ACTION_REQUEST_GAME_TRAIN
 {
     BrnProgression::ETrainingType meTrainingType;   // +0x00  DWARF BrnGameActions.h:3525
 };
-static_assert(sizeof(RequestGameTrainingAction) == 4,
+CGS_STATIC_ASSERT((sizeof(RequestGameTrainingAction) == 4),
               "X360 posts action 149 with size 4");
 
 // ---- 47 ----------------------------------------------------------------------------------
@@ -3181,7 +3181,7 @@ struct SetCountdownAction : public GameAction<E_ACTION_SET_COUNTDOWN>
 {
     s32 miCountdownDisplay;   // +0x00
 };
-static_assert(sizeof(SetCountdownAction) == 4,
+CGS_STATIC_ASSERT((sizeof(SetCountdownAction) == 4),
               "X360 CheckCountdownDisplay posts action 47 with size 4");
 
 // ---- 75 ----------------------------------------------------------------------------------
@@ -3194,7 +3194,7 @@ struct CarSelectReadyAction : public GameAction<E_ACTION_CAR_SELECT_READY>
 {
     s32 miCarSelectFlow;      // +0x00  1 == the offline junkyard flow (the only value posted)
 };
-static_assert(sizeof(CarSelectReadyAction) == 4,
+CGS_STATIC_ASSERT((sizeof(CarSelectReadyAction) == 4),
               "X360 StartCarSelectState posts action 75 with size 4");
 
 // ---- 44 ----------------------------------------------------------------------------------
@@ -3208,7 +3208,7 @@ struct SetInModeStartRegionAction : public GameAction<E_ACTION_SET_IN_MODE_START
     u8  mbInStartRegion;      // +0x02 0 == not in a start region (StartModeIntro always posts 0)
     u8  maPad03[1];           // +0x03
 };
-static_assert(sizeof(SetInModeStartRegionAction) == 4,
+CGS_STATIC_ASSERT((sizeof(SetInModeStartRegionAction) == 4),
               "X360 StartModeIntro posts action 44 with size 4");
 
 // ---- 38 ----------------------------------------------------------------------------------
@@ -3219,7 +3219,7 @@ struct FinishedModeResultsAction : public GameAction<E_ACTION_FINISHED_MODE_RESU
 {
     u8 mu8Unused;             // +0x00 posted uninitialised on the console; never read
 };
-static_assert(sizeof(FinishedModeResultsAction) == 1,
+CGS_STATIC_ASSERT((sizeof(FinishedModeResultsAction) == 1),
               "X360 ModeManager::PreWorldUpdate posts action 38 with size 1");
 
 // ---- 39 ----------------------------------------------------------------------------------
@@ -3272,10 +3272,10 @@ struct StopModeAction : public GameAction<E_ACTION_STOP_MODE>
                                    //       (`lbz r10, 0x130(r10) / stb r10, var_FB` @0x8234BF20/2C).
     u8   maPad16[2];               // +0x16 tail padding to the attested 24
 };
-static_assert(sizeof(StopModeAction) == 24,
+CGS_STATIC_ASSERT((sizeof(StopModeAction) == 24),
               "X360 SendModeStopMessages posts action 39 with size 24");
-static_assert(offsetof(StopModeAction, miField0C) == 0x0C &&
-              offsetof(StopModeAction, mu8Field11) == 0x11,
+CGS_STATIC_ASSERT((offsetof(StopModeAction, miField0C) == 0x0C &&
+              offsetof(StopModeAction, mu8Field11) == 0x11),
               "action-39 offsets are the @0x823EABCC consumer loads");
 
 // ---- 37 ----------------------------------------------------------------------------------
@@ -3359,11 +3359,11 @@ struct ShowModeResultsAction : public GameAction<E_ACTION_SHOW_MODE_RESULTS>
                               //       "tail padding" run until that arm was read.
     u8   maPadE6[2];          // +0xE6..+0xE7 tail padding to the attested 232
 };
-static_assert(sizeof(ShowModeResultsAction) == 232,
+CGS_STATIC_ASSERT((sizeof(ShowModeResultsAction) == 232),
               "X360 ModeManager::ShowModeResults posts action 37 with size 232");
-static_assert(offsetof(ShowModeResultsAction, maBlock58) == 0x58 &&
+CGS_STATIC_ASSERT((offsetof(ShowModeResultsAction, maBlock58) == 0x58 &&
               offsetof(ShowModeResultsAction, mu64FieldC8) == 0xC8 &&
-              offsetof(ShowModeResultsAction, mbIsOnlinePostEvent) == 0xE4,
+              offsetof(ShowModeResultsAction, mbIsOnlinePostEvent) == 0xE4),
               "action-37 offsets are the @0x823EA984 consumer loads");
 
 // ---- 103 / 205 / 255 -- the offline road-rage scoring records [2026-09-02] ---------------------
@@ -3373,7 +3373,7 @@ static_assert(offsetof(ShowModeResultsAction, maBlock58) == 0x58 &&
 struct PlayerReachedRoadRageTarget : public GameAction<E_ACTION_PLAYER_REACHED_ROAD_RAGE_TARGET>
 {
 };
-static_assert(sizeof(PlayerReachedRoadRageTarget) == 1,
+CGS_STATIC_ASSERT((sizeof(PlayerReachedRoadRageTarget) == 1),
               "X360 posts action 103 with size 1");
 
 // DecFIGS BrnGameActions.h:2455-2457. Producer ScoringSystem::OnRoadRagePlayerCrashed @0x823444B0:
@@ -3386,9 +3386,9 @@ struct RoadRagePlayerDamageAction : public GameAction<E_ACTION_ROAD_RAGE_PLAYER_
     bool mbPlayerTotalled;          // +0x05
                                     // +0x06..+0x07 tail padding; the console never writes them
 };
-static_assert(sizeof(RoadRagePlayerDamageAction) == 8 &&
+CGS_STATIC_ASSERT((sizeof(RoadRagePlayerDamageAction) == 8 &&
               offsetof(RoadRagePlayerDamageAction, mbOneMoreCrashToTotalled) == 4 &&
-              offsetof(RoadRagePlayerDamageAction, mbPlayerTotalled) == 5,
+              offsetof(RoadRagePlayerDamageAction, mbPlayerTotalled) == 5),
               "X360 posts action 205 with size 8; flags at +4/+5 (@0x82344508/0x8234450C)");
 
 // DecFIGS BrnGameActions.h:4616. Producer RoadRageModeScoring::IncrementPlayerNumTakedowns
@@ -3398,7 +3398,7 @@ struct HUDMessageRoadRageTimeExtensionAction : public GameAction<E_ACTION_HUD_ME
 {
     u32 muExtensionTime;   // +0x00  seconds granted (without the KU_TAKEDOWN_COVER_TIME cover)
 };
-static_assert(sizeof(HUDMessageRoadRageTimeExtensionAction) == 4,
+CGS_STATIC_ASSERT((sizeof(HUDMessageRoadRageTimeExtensionAction) == 4),
               "X360 posts action 255 with size 4");
 
 // [FX-FLOW 2026-09-24, G11-D1 remainder] The race-mode HUD records of HUDMessageLogic's five race
@@ -3412,8 +3412,8 @@ struct HUDMessageTookLeadAction : public GameAction<E_ACTION_HUD_MESSAGE_TOOK_LE
     CgsID                 mCarId;                 // +0x00  DWARF :4375
     ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x08  DWARF :4376
 };
-static_assert(sizeof(HUDMessageTookLeadAction) == 16 &&
-              offsetof(HUDMessageTookLeadAction, meActiveRaceCarIndex) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageTookLeadAction) == 16 &&
+              offsetof(HUDMessageTookLeadAction, meActiveRaceCarIndex) == 8),
               "X360 posts action 242 with size 16; the index at +8");
 
 struct HUDMessageTookLastAction : public GameAction<E_ACTION_HUD_MESSAGE_TOOK_LAST>
@@ -3421,8 +3421,8 @@ struct HUDMessageTookLastAction : public GameAction<E_ACTION_HUD_MESSAGE_TOOK_LA
     CgsID                 mCarId;                 // +0x00  DWARF :4391
     ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x08  DWARF :4392
 };
-static_assert(sizeof(HUDMessageTookLastAction) == 16 &&
-              offsetof(HUDMessageTookLastAction, meActiveRaceCarIndex) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageTookLastAction) == 16 &&
+              offsetof(HUDMessageTookLastAction, meActiveRaceCarIndex) == 8),
               "X360 posts action 243 with size 16; the index at +8");
 
 // 244: GenerateDistanceToFinishMessage @0x82395A88 -- `stfs next-message distance, var+0`
@@ -3432,7 +3432,7 @@ struct HUDMessageDistanceToFinishAction : public GameAction<E_ACTION_HUD_MESSAGE
     f32 mfDistanceToFinish;   // +0x00  DWARF :4408
     s32 miPlayerPosition;     // +0x04  DWARF :4409
 };
-static_assert(sizeof(HUDMessageDistanceToFinishAction) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageDistanceToFinishAction) == 8),
               "X360 posts action 244 with size 8");
 
 // 245: GenerateLeaderMessages @0x82394110 -- `std GetRivalId(), var+0` @0x82394228, `stfs split,
@@ -3448,10 +3448,10 @@ struct HUDMessageLeadingAction : public GameAction<E_ACTION_HUD_MESSAGE_LEADING>
     ::EActiveRaceCarIndex meLeadingCarIndex;        // +0x0C  DWARF :4426
     bool                  mbLocalPlayerIsLeading;   // +0x10  DWARF :4425
 };
-static_assert(sizeof(HUDMessageLeadingAction) == 24 &&
+CGS_STATIC_ASSERT((sizeof(HUDMessageLeadingAction) == 24 &&
               offsetof(HUDMessageLeadingAction, mfLeadTime) == 8 &&
               offsetof(HUDMessageLeadingAction, meLeadingCarIndex) == 0xC &&
-              offsetof(HUDMessageLeadingAction, mbLocalPlayerIsLeading) == 0x10,
+              offsetof(HUDMessageLeadingAction, mbLocalPlayerIsLeading) == 0x10),
               "X360 posts action 245 with size 24; split +8, index +0xC, flag +0x10");
 
 // 247: GenerateFinisherMessage @0x82394258 -- `stw meFinishedRaceCarIndex, var+0` @0x82394314 /
@@ -3461,7 +3461,7 @@ struct HUDMessageXFinishesAction : public GameAction<E_ACTION_HUD_MESSAGE_X_FINI
     ::EActiveRaceCarIndex meRivalRaceCarIndex;   // +0x00  DWARF :4453
     s32                   miFinishPosition;      // +0x04  DWARF :4454
 };
-static_assert(sizeof(HUDMessageXFinishesAction) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageXFinishesAction) == 8),
               "X360 posts action 247 with size 8");
 
 // 248: GenerateRivalCheckpointMessage @0x82394338 -- `std GetRivalId(), var+0` @0x823943EC,
@@ -3472,9 +3472,9 @@ struct HUDMessageXReachesCheckpointAction : public GameAction<E_ACTION_HUD_MESSA
     CgsID                 mLandmarkID;           // +0x08  DWARF :4469
     ::EActiveRaceCarIndex meRivalRaceCarIndex;   // +0x10  DWARF :4470
 };
-static_assert(sizeof(HUDMessageXReachesCheckpointAction) == 24 &&
+CGS_STATIC_ASSERT((sizeof(HUDMessageXReachesCheckpointAction) == 24 &&
               offsetof(HUDMessageXReachesCheckpointAction, mLandmarkID) == 8 &&
-              offsetof(HUDMessageXReachesCheckpointAction, meRivalRaceCarIndex) == 0x10,
+              offsetof(HUDMessageXReachesCheckpointAction, meRivalRaceCarIndex) == 0x10),
               "X360 posts action 248 with size 24; landmark id +8, index +0x10");
 
 // [FX-GS 2026-09-23, crash-parity G11-D1] DecFIGS BrnGameActions.h:4482-4487. Producer
@@ -3487,9 +3487,9 @@ struct HUDMessagePlayerReachesCheckpointAction : public GameAction<E_ACTION_HUD_
     CgsID mNextLandmarkID;           // +0x08  HUDMessageLogic::mNextPlayerCheckpointID
     bool  mbIsPenultimatedLandmark;  // +0x10  HUDMessageLogic::mbIsLastCheckpoint
 };
-static_assert(sizeof(HUDMessagePlayerReachesCheckpointAction) == 24 &&
+CGS_STATIC_ASSERT((sizeof(HUDMessagePlayerReachesCheckpointAction) == 24 &&
               offsetof(HUDMessagePlayerReachesCheckpointAction, mNextLandmarkID) == 8 &&
-              offsetof(HUDMessagePlayerReachesCheckpointAction, mbIsPenultimatedLandmark) == 16,
+              offsetof(HUDMessagePlayerReachesCheckpointAction, mbIsPenultimatedLandmark) == 16),
               "X360 posts action 249 with size 24; next id at +8, flag at +0x10");
 
 // [FX-GS 2026-09-23, crash-parity G11-D1/D2] DecFIGS BrnGameActions.h:4499-4503. Producers
@@ -3501,8 +3501,8 @@ struct HUDMessageXCrashesAction : public GameAction<E_ACTION_HUD_MESSAGE_X_CRASH
     CgsID               mRivalID;             // +0x00
     ::EActiveRaceCarIndex meRivalRaceCarIndex; // +0x08
 };
-static_assert(sizeof(HUDMessageXCrashesAction) == 16 &&
-              offsetof(HUDMessageXCrashesAction, meRivalRaceCarIndex) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageXCrashesAction) == 16 &&
+              offsetof(HUDMessageXCrashesAction, meRivalRaceCarIndex) == 8),
               "X360 posts action 250 with size 16; the index at +8");
 
 // [CP25] ARTIST-consumed payload shapes and DecFIGS field names for actions 252-260.
@@ -3511,8 +3511,8 @@ struct HUDMessageBHRCheckpointAction : public GameAction<E_ACTION_HUD_MESSAGE_BH
     ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
     s32                   miNumCheckpointsToGo; // +0x04
 };
-static_assert(sizeof(HUDMessageBHRCheckpointAction) == 8 &&
-              offsetof(HUDMessageBHRCheckpointAction, miNumCheckpointsToGo) == 4,
+CGS_STATIC_ASSERT((sizeof(HUDMessageBHRCheckpointAction) == 8 &&
+              offsetof(HUDMessageBHRCheckpointAction, miNumCheckpointsToGo) == 4),
               "ARTIST action 252 is two words");
 
 struct HUDMessageBHRRunnerCrashedAction : public GameAction<E_ACTION_HUD_MESSAGE_BHR_RUNNER_CRASHED>
@@ -3520,15 +3520,15 @@ struct HUDMessageBHRRunnerCrashedAction : public GameAction<E_ACTION_HUD_MESSAGE
     ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
     s32                   miNumCrashesToGo;     // +0x04
 };
-static_assert(sizeof(HUDMessageBHRRunnerCrashedAction) == 8 &&
-              offsetof(HUDMessageBHRRunnerCrashedAction, miNumCrashesToGo) == 4,
+CGS_STATIC_ASSERT((sizeof(HUDMessageBHRRunnerCrashedAction) == 8 &&
+              offsetof(HUDMessageBHRRunnerCrashedAction, miNumCrashesToGo) == 4),
               "ARTIST action 253 is two words");
 
 struct HUDMessageOnlineTeamChangeAction : public GameAction<E_ACTION_HUD_MESSAGE_ONLINE_TEAM_CHANGE>
 {
     ::EActiveRaceCarIndex meActiveRaceCarIndex; // +0x00
 };
-static_assert(sizeof(HUDMessageOnlineTeamChangeAction) == 4,
+CGS_STATIC_ASSERT((sizeof(HUDMessageOnlineTeamChangeAction) == 4),
               "ARTIST action 254 is one active-race-car index");
 
 struct HUDMessageFirstHitOnRivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_FIRST_HIT>
@@ -3536,8 +3536,8 @@ struct HUDMessageFirstHitOnRivalAction : public GameAction<E_ACTION_HUD_MESSAGE_
     CgsID mRivalID; // +0x00
     CgsID mCarID;   // +0x08
 };
-static_assert(sizeof(HUDMessageFirstHitOnRivalAction) == 16 &&
-              offsetof(HUDMessageFirstHitOnRivalAction, mCarID) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageFirstHitOnRivalAction) == 16 &&
+              offsetof(HUDMessageFirstHitOnRivalAction, mCarID) == 8),
               "DecFIGS rivalry action carries two CgsIDs");
 
 struct HUDMessageRivalIsARivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_A_RIVAL>
@@ -3545,8 +3545,8 @@ struct HUDMessageRivalIsARivalAction : public GameAction<E_ACTION_HUD_MESSAGE_RI
     CgsID mRivalID; // +0x00
     CgsID mCarID;   // +0x08
 };
-static_assert(sizeof(HUDMessageRivalIsARivalAction) == 16 &&
-              offsetof(HUDMessageRivalIsARivalAction, mCarID) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageRivalIsARivalAction) == 16 &&
+              offsetof(HUDMessageRivalIsARivalAction, mCarID) == 8),
               "DecFIGS rivalry action carries two CgsIDs");
 
 struct HUDMessageRivalIsATargetAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_A_TARGET>
@@ -3554,8 +3554,8 @@ struct HUDMessageRivalIsATargetAction : public GameAction<E_ACTION_HUD_MESSAGE_R
     CgsID mRivalID; // +0x00
     CgsID mCarID;   // +0x08
 };
-static_assert(sizeof(HUDMessageRivalIsATargetAction) == 16 &&
-              offsetof(HUDMessageRivalIsATargetAction, mCarID) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageRivalIsATargetAction) == 16 &&
+              offsetof(HUDMessageRivalIsATargetAction, mCarID) == 8),
               "DecFIGS rivalry action carries two CgsIDs");
 
 struct HUDMessageRivalIsFleeingAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_FLEEING>
@@ -3563,8 +3563,8 @@ struct HUDMessageRivalIsFleeingAction : public GameAction<E_ACTION_HUD_MESSAGE_R
     CgsID mRivalID; // +0x00
     CgsID mCarID;   // +0x08
 };
-static_assert(sizeof(HUDMessageRivalIsFleeingAction) == 16 &&
-              offsetof(HUDMessageRivalIsFleeingAction, mCarID) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageRivalIsFleeingAction) == 16 &&
+              offsetof(HUDMessageRivalIsFleeingAction, mCarID) == 8),
               "DecFIGS rivalry action carries two CgsIDs");
 
 struct HUDMessageRivalIsWreckedAction : public GameAction<E_ACTION_HUD_MESSAGE_RIVAL_IS_WRECKED>
@@ -3572,8 +3572,8 @@ struct HUDMessageRivalIsWreckedAction : public GameAction<E_ACTION_HUD_MESSAGE_R
     CgsID mRivalID; // +0x00
     CgsID mCarID;   // +0x08
 };
-static_assert(sizeof(HUDMessageRivalIsWreckedAction) == 16 &&
-              offsetof(HUDMessageRivalIsWreckedAction, mCarID) == 8,
+CGS_STATIC_ASSERT((sizeof(HUDMessageRivalIsWreckedAction) == 16 &&
+              offsetof(HUDMessageRivalIsWreckedAction, mCarID) == 8),
               "DecFIGS rivalry action carries two CgsIDs");
 
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3256-3260. Producer
@@ -3586,9 +3586,9 @@ struct PlayerEliminatedAction : public GameAction<E_ACTION_PLAYER_ELIMINATED>
     bool                  mbLastBlueTeamMember;   // +0x04
     bool                  mbLocalPlayerEliminated;// +0x05
 };
-static_assert(sizeof(PlayerEliminatedAction) == 8 &&
+CGS_STATIC_ASSERT((sizeof(PlayerEliminatedAction) == 8 &&
               offsetof(PlayerEliminatedAction, mbLastBlueTeamMember) == 4 &&
-              offsetof(PlayerEliminatedAction, mbLocalPlayerEliminated) == 5,
+              offsetof(PlayerEliminatedAction, mbLocalPlayerEliminated) == 5),
               "X360 posts action 165 with size 8; flags at +4/+5");
 
 // The player picked a car in online car select. OnlineCarSelectManager::SendOnlineChangeCarAction
@@ -3603,11 +3603,11 @@ struct CarSelectOnlineSelectCarAction : public GameAction<E_ACTION_CAR_SELECT_ON
     u16   mu16PaintFinishIndex;    // +0x0E
     bool  mbFinalSelection;        // +0x10
 };
-static_assert(sizeof(CarSelectOnlineSelectCarAction) == 24 &&
+CGS_STATIC_ASSERT((sizeof(CarSelectOnlineSelectCarAction) == 24 &&
               offsetof(CarSelectOnlineSelectCarAction, mfDeformationAmount) == 0x08 &&
               offsetof(CarSelectOnlineSelectCarAction, mu16ColourIndex) == 0x0C &&
               offsetof(CarSelectOnlineSelectCarAction, mu16PaintFinishIndex) == 0x0E &&
-              offsetof(CarSelectOnlineSelectCarAction, mbFinalSelection) == 0x10,
+              offsetof(CarSelectOnlineSelectCarAction, mbFinalSelection) == 0x10),
               "action 84 is posted with size 24");
 
 // Carry out an invite or join: GameStateModule::ProcessGameEvents copies the whole 0x9C-byte
@@ -3616,7 +3616,7 @@ struct PerformInviteAction : public GameAction<E_ACTION_PERFORM_INVITE>
 {
     ::BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams mInviteParams;   // +0x00
 };
-static_assert(sizeof(PerformInviteAction) == 0x9C, "action 95 is posted with size 0x9C");
+CGS_STATIC_ASSERT((sizeof(PerformInviteAction) == 0x9C), "action 95 is posted with size 0x9C");
 
 // The achievement count after a write. The console record is the count alone (4 bytes): the
 // reference's earned-bit array is not carried; the achievement manager's WriteAchievements posts
@@ -3625,7 +3625,7 @@ struct AchievementsEarnedAction : public GameAction<E_ACTION_ACHIEVEMENTS_EARNED
 {
     s32 miAchivementCount;   // +0x00 (reference spelling)
 };
-static_assert(sizeof(AchievementsEarnedAction) == 4, "action 209 is posted with size 4");
+CGS_STATIC_ASSERT((sizeof(AchievementsEarnedAction) == 4), "action 209 is posted with size 4");
 
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3242-3244. Producer
 // HandleOnlineTeamTakedowns: `stw aggressor, var+0` @0x82344328, size 4.
@@ -3633,19 +3633,19 @@ struct TraitorousTakedownAction : public GameAction<E_ACTION_TRAITOROUS_TAKEDOWN
 {
     ::EActiveRaceCarIndex meAggrActiveRaceCarIndex;   // +0x00
 };
-static_assert(sizeof(TraitorousTakedownAction) == 4, "X360 posts action 166 with size 4");
+CGS_STATIC_ASSERT((sizeof(TraitorousTakedownAction) == 4), "X360 posts action 166 with size 4");
 
 // ARTIST HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage / ::GenerateOnlineBlueTeamAreBehindYouMessage
 // post only an unwritten byte (AddEvent ids 162/163, size 1). The action type itself carries the meaning.
 struct BlueTeamIsEscapingAction : public GameAction<E_ACTION_BLUE_TEAM_IS_ESCAPING>
 {
 };
-static_assert(sizeof(BlueTeamIsEscapingAction) == 1, "X360 posts action 162 with size 1");
+CGS_STATIC_ASSERT((sizeof(BlueTeamIsEscapingAction) == 1), "X360 posts action 162 with size 1");
 
 struct BlueTeamIsBehindYouAction : public GameAction<E_ACTION_BLUE_TEAM_IS_BEHIND_YOU>
 {
 };
-static_assert(sizeof(BlueTeamIsBehindYouAction) == 1, "X360 posts action 163 with size 1");
+CGS_STATIC_ASSERT((sizeof(BlueTeamIsBehindYouAction) == 1), "X360 posts action 163 with size 1");
 
 // DecFIGS BrnGameActions.h:3272-3276 names the fields. ARTIST
 // GenerateOnlineLeaderMilestoneMessage @0x82395548 writes the X360 order
@@ -3656,10 +3656,10 @@ struct LeaderReachedBoundaryAction : public GameAction<E_ACTION_LEADER_REACHED_B
     ::EActiveRaceCarIndex meRaceCarIndex;       // +0x04 (ARTIST)
     bool                  mbIsBoundaryInMiles;  // +0x08 (ARTIST)
 };
-static_assert(sizeof(LeaderReachedBoundaryAction) == 12 &&
+CGS_STATIC_ASSERT((sizeof(LeaderReachedBoundaryAction) == 12 &&
               offsetof(LeaderReachedBoundaryAction, mfDistanceInMetres) == 0 &&
               offsetof(LeaderReachedBoundaryAction, meRaceCarIndex) == 4 &&
-              offsetof(LeaderReachedBoundaryAction, mbIsBoundaryInMiles) == 8,
+              offsetof(LeaderReachedBoundaryAction, mbIsBoundaryInMiles) == 8),
               "ARTIST action 164 producer record: f32, race-car index, bool");
 
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:5417-5419. Producer
@@ -3668,7 +3668,7 @@ struct SwitchBurningHomeRunRunnerAction : public GameAction<E_ACTION_SWITCH_BURN
 {
     BrnNetwork::NetworkPlayerID mNewRunnerPlayerID;   // +0x00
 };
-static_assert(sizeof(SwitchBurningHomeRunRunnerAction) == 4, "X360 posts action 167 with size 4");
+CGS_STATIC_ASSERT((sizeof(SwitchBurningHomeRunRunnerAction) == 4), "X360 posts action 167 with size 4");
 
 // =============================================================================================
 // [takedown wave 2026-09-02] The five records BrnGameState::TakedownManager posts
@@ -3684,7 +3684,7 @@ struct ResetPlayerCarOnTrackAction : public GameAction<E_ACTION_RESET_PLAYER_CAR
 {
     f32 mfSpeed;   // +0x00  m/s, clamped to [KF_MIN_SPEED_FOR_PLAYER_RESET, KF_MAX_SPEED_FOR_PLAYER_RESET]
 };
-static_assert(sizeof(ResetPlayerCarOnTrackAction) == 4, "X360 posts action 3 with size 4");
+CGS_STATIC_ASSERT((sizeof(ResetPlayerCarOnTrackAction) == 4), "X360 posts action 3 with size 4");
 
 // DWARF BrnGameActions.h:1627-1633 names the four members; the X360 producer puts the INDEX FIRST
 // (the DWARF lists the three bools before it): StartTakedownCamera @0x82388E30 `stw victim, +0x00`,
@@ -3699,9 +3699,9 @@ struct SetTakedownCameraAction : public GameAction<E_ACTION_SET_TAKEDOWN_CAMERA_
     bool                mbIsRevengeTakedown;     // +0x06
     u8                  muPad07;                 // +0x07  tail pad; the console never writes it
 };
-static_assert(sizeof(SetTakedownCameraAction) == 8 &&
+CGS_STATIC_ASSERT((sizeof(SetTakedownCameraAction) == 8 &&
               offsetof(SetTakedownCameraAction, mbActive) == 4 &&
-              offsetof(SetTakedownCameraAction, mbIsRevengeTakedown) == 6,
+              offsetof(SetTakedownCameraAction, mbIsRevengeTakedown) == 6),
               "X360 posts action 6 with size 8; index at +0, flags at +4/+5/+6 (@0x82388E20..E38)");
 
 // DWARF BrnGameActions.h:1645-1650 {meCarControl, mDriveThruBoxRegion, mbIsDriveThru, mfMaxResetSpeed};
@@ -3721,9 +3721,9 @@ struct SetPlayerCarDriverAction : public GameAction<E_ACTION_SET_PLAYER_CAR_DRIV
     bool                 mbIsDriveThru;            // +0x2C
     u8                   maPad2D[3];               // +0x2D  tail pad to 48
 };
-static_assert(sizeof(SetPlayerCarDriverAction) == 48 &&
+CGS_STATIC_ASSERT((sizeof(SetPlayerCarDriverAction) == 48 &&
               offsetof(SetPlayerCarDriverAction, mfMaxResetSpeed) == 0x28 &&
-              offsetof(SetPlayerCarDriverAction, mbIsDriveThru) == 0x2C,
+              offsetof(SetPlayerCarDriverAction, mbIsDriveThru) == 0x2C),
               "X360 posts action 7 with size 48; max speed at +0x28, drive-thru flag at +0x2C");
 
 // DWARF BrnGameActions.h:2136-2138. Producer TakedownManager::StartTakedownCamera @0x82388EBC
@@ -3733,7 +3733,7 @@ struct PlayerInvulnerableAction : public GameAction<E_ACTION_PLAYER_INVULNERABLE
 {
     f32 mfInvulnerableTime;   // +0x00  seconds
 };
-static_assert(sizeof(PlayerInvulnerableAction) == 4, "X360 posts action 111 with size 4");
+CGS_STATIC_ASSERT((sizeof(PlayerInvulnerableAction) == 4), "X360 posts action 111 with size 4");
 
 // DWARF BrnGameActions.h:3586-3589. Producer TakedownManager::EndTakedownCamera @0x82388F80
 // `stw meCurrentVictimActiveRaceCarIndex, +0x00` -> AddEvent(.., 121, 4). Consumer
@@ -3742,7 +3742,7 @@ struct ShutdownFinishedAction : public GameAction<E_ACTION_SHUTDOWN_FINISHED>
 {
     EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00  the rival that was shut down
 };
-static_assert(sizeof(ShutdownFinishedAction) == 4, "X360 posts action 121 with size 4");
+CGS_STATIC_ASSERT((sizeof(ShutdownFinishedAction) == 4), "X360 posts action 121 with size 4");
 
 // ---- [takedown wave 2026-09-02, agent T2] the two records the detect chain itself posts ----------
 
@@ -3752,7 +3752,7 @@ struct OnPlayerTakedownAction : public GameAction<E_ACTION_ON_PLAYER_TAKEDOWN>
 {
     EGlobalRaceCarIndex meVictimGlobalRaceCarIndex;   // +0x00
 };
-static_assert(sizeof(OnPlayerTakedownAction) == 4, "X360 posts action 14 with size 4");
+CGS_STATIC_ASSERT((sizeof(OnPlayerTakedownAction) == 4), "X360 posts action 14 with size 4");
 
 // DWARF BrnGameActions.h:3568-3574 (ShutdownAction). Producer TakedownManager::ProcessTakedownEvent
 // @0x823940AC..0x823940D0: `ld r11,0x10(event)` (the takedown event's mVictimCarID) -> `std record+0`,
@@ -3765,9 +3765,9 @@ struct ShutdownAction : public GameAction<E_ACTION_SHUTDOWN>
     EActiveRaceCarIndex meVictimIndex;   // +0x10
                                          // +0x14..+0x17 tail padding
 };
-static_assert(sizeof(ShutdownAction) == 24 &&
+CGS_STATIC_ASSERT((sizeof(ShutdownAction) == 24 &&
               offsetof(ShutdownAction, mRivalID) == 8 &&
-              offsetof(ShutdownAction, meVictimIndex) == 0x10,
+              offsetof(ShutdownAction, meVictimIndex) == 0x10),
               "X360 posts action 120 with size 24; victim car id @+0, victim index @+0x10");
 
 // =============================================================================================
@@ -3792,7 +3792,7 @@ struct FinishedModeNotifyAction : public GameAction<E_ACTION_FINISHED_MODE_NOTIF
 {
     bool mbPlayerWon;   // +0x00
 };
-static_assert(sizeof(FinishedModeNotifyAction) == 1, "X360 posts action 35 with size 1");
+CGS_STATIC_ASSERT((sizeof(FinishedModeNotifyAction) == 1), "X360 posts action 35 with size 1");
 
 // ---- 114 ------------------------------------------------------------------------------------
 // DWARF BrnAIModule.h:251 names AIModule::OnRaceCarReachedFinish's parameter
@@ -3805,7 +3805,7 @@ struct RaceCarReachedFinishAction : public GameAction<E_ACTION_RACE_CAR_REACHED_
     ::EGlobalRaceCarIndex meGlobalRaceCarIndex;   // +0x00
     u8                    maPad04[4];             // +0x04  unread by the AI consumer
 };
-static_assert(sizeof(RaceCarReachedFinishAction) == 8, "X360 posts action 114 with size 8");
+CGS_STATIC_ASSERT((sizeof(RaceCarReachedFinishAction) == 8), "X360 posts action 114 with size 8");
 
 // ---- 99 -------------------------------------------------------------------------------------
 // AIModule::HandleGameActions jump-table case 92 (== type 99), asm 0x82792504..0x82792534:
@@ -3815,7 +3815,7 @@ struct DriveThruJunkYardAction : public GameAction<E_ACTION_DRIVE_THRU_JUNK_YARD
 {
     bool mbIsInJunkYard;   // +0x00
 };
-static_assert(sizeof(DriveThruJunkYardAction) == 1,
+CGS_STATIC_ASSERT((sizeof(DriveThruJunkYardAction) == 1),
               "the AI consumer of action 99 reads one byte at +0");
 
 // ---- 131 ------------------------------------------------------------------------------------
@@ -3826,7 +3826,7 @@ struct UpdateRoadRageMadnessAction : public GameAction<E_ACTION_UPDATE_ROAD_RAGE
     ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
     f32                   mfMadness;              // +0x04
 };
-static_assert(sizeof(UpdateRoadRageMadnessAction) == 8,
+CGS_STATIC_ASSERT((sizeof(UpdateRoadRageMadnessAction) == 8),
               "the AI consumer of action 131 reads +0 (s32) and +4 (f32)");
 
 // ---- 50 -------------------------------------------------------------------------------------
@@ -3853,11 +3853,11 @@ struct RequestRouteInfoAction : public GameAction<E_ACTION_REQUEST_ROUTE_INFO>
                                    // +0x26 .. +0x27 alignment
     s32     miOwnerId;             // +0x28  (stored into the request's u16 muOwnerId)
 };
-static_assert(offsetof(RequestRouteInfoAction, mEndPosition)        == 0x10 &&
+CGS_STATIC_ASSERT((offsetof(RequestRouteInfoAction, mEndPosition)        == 0x10 &&
               offsetof(RequestRouteInfoAction, muStartSectionIndex) == 0x20 &&
               offsetof(RequestRouteInfoAction, muEndSectionIndex)   == 0x22 &&
               offsetof(RequestRouteInfoAction, muEventId)           == 0x24 &&
-              offsetof(RequestRouteInfoAction, miOwnerId)           == 0x28,
+              offsetof(RequestRouteInfoAction, miOwnerId)           == 0x28),
               "action-50 offsets are the @0x827923E4 consumer loads");
 
 // =============================================================================================
@@ -3872,14 +3872,14 @@ struct GuiUpdatePlayerCarIDAction : public GameAction<E_ACTION_GUI_UPDATE_PLAYER
 {
     CgsID mPlayerCarID;                                        // +0x00
 };
-static_assert(sizeof(GuiUpdatePlayerCarIDAction) == 8, "GuiUpdatePlayerCarIDAction is 8 bytes");
+CGS_STATIC_ASSERT((sizeof(GuiUpdatePlayerCarIDAction) == 8), "GuiUpdatePlayerCarIDAction is 8 bytes");
 
 // 112 -- the district/county the player has just entered.
 struct WorldRegionChangeAction : public GameAction<E_ACTION_WORLD_REGION_CHANGE>
 {
     BrnWorld::WorldRegion mNewWorldRegion;                     // +0x00 (8)
 };
-static_assert(sizeof(WorldRegionChangeAction) == 8, "WorldRegionChangeAction is 8 bytes");
+CGS_STATIC_ASSERT((sizeof(WorldRegionChangeAction) == 8), "WorldRegionChangeAction is 8 bytes");
 
 // 113 -- posted by ModeManager::TransmitAndIncrementCheckPointsReached (size 16). The bridge
 // forwards the checkpoint index (+0x08) when the local-player flag (+0x0E) is set.
@@ -3891,7 +3891,7 @@ struct RaceCarReachedCheckpointAction : public GameAction<E_ACTION_RACE_CAR_REAC
     u16                 muNextCheckpointAISectionIndex;        // +0x0C
     bool                mbIsLocalPlayer;                       // +0x0E
 };
-static_assert(sizeof(RaceCarReachedCheckpointAction) == 16, "RaceCarReachedCheckpointAction is 16 bytes");
+CGS_STATIC_ASSERT((sizeof(RaceCarReachedCheckpointAction) == 16), "RaceCarReachedCheckpointAction is 16 bytes");
 
 // 168 -- a burnout-skillz update. The bridge copies the 56-byte skillz block, the player id at
 // +0x3C, and turns the flags word at +0x38 into the network event's send type.
@@ -3907,8 +3907,8 @@ struct BurnoutSkillzAction : public GameAction<E_ACTION_BURNOUT_SKILLZ>
     BrnNetwork::NetworkPlayerID mNetworkPlayerID;              // +0x3C
     EActiveRaceCarIndex         meActiveRaceCarIndex;          // +0x40
 };
-static_assert(offsetof(BurnoutSkillzAction, miActionFlags) == 0x38 &&
-              offsetof(BurnoutSkillzAction, mNetworkPlayerID) == 0x3C,
+CGS_STATIC_ASSERT((offsetof(BurnoutSkillzAction, miActionFlags) == 0x38 &&
+              offsetof(BurnoutSkillzAction, mNetworkPlayerID) == 0x3C),
               "BurnoutSkillzAction flag / player-id offsets");
 
 // 213 -- the payback-mugshot step (32 bytes). The console puts the road id FIRST (the reference
@@ -3924,9 +3924,9 @@ struct PaybackMugshotAction : public GameAction<E_ACTION_PAYBACK_MUGSHOT>
     bool                mbIsTakedownAggressorLocalPlayer;      // +0x18
     bool                mbMugshotRequiresBroadcast;            // +0x19
 };
-static_assert(sizeof(PaybackMugshotAction) == 32, "PaybackMugshotAction is posted as 32 bytes");
-static_assert(offsetof(PaybackMugshotAction, meMugshotResponse) == 0x10 &&
-              offsetof(PaybackMugshotAction, mbIsTakedownAggressorLocalPlayer) == 0x18,
+CGS_STATIC_ASSERT((sizeof(PaybackMugshotAction) == 32), "PaybackMugshotAction is posted as 32 bytes");
+CGS_STATIC_ASSERT((offsetof(PaybackMugshotAction, meMugshotResponse) == 0x10 &&
+              offsetof(PaybackMugshotAction, mbIsTakedownAggressorLocalPlayer) == 0x18),
               "PaybackMugshotAction console offsets");
 
 // 214 -- abort an in-flight mugshot capture (16 bytes, the MugshotManager's post). The bridge
@@ -3938,7 +3938,7 @@ struct AbortMugshotCaptureAction : public GameAction<E_ACTION_ABORT_MUGSHOT_CAPT
     EImageType          meImageType;                           // +0x08
     bool                mbIsTakedownAggressorLocalPlayer;      // +0x0C
 };
-static_assert(sizeof(AbortMugshotCaptureAction) == 16, "AbortMugshotCaptureAction is posted as 16 bytes");
+CGS_STATIC_ASSERT((sizeof(AbortMugshotCaptureAction) == 16), "AbortMugshotCaptureAction is posted as 16 bytes");
 
 // 215 -- a payback has started (the bridge forwards +0x04 / +0x08).
 struct PaybackActivatedAction : public GameAction<E_ACTION_PAYBACK_ACTIVATED>
@@ -3970,7 +3970,7 @@ struct TelemetryAction : public GameAction<E_ACTION_SEND_TELEMETRY>
 {
     BrnNetwork::BrnNetworkModuleIO::TelemetryData mEventData;  // +0x00 (20)
 };
-static_assert(sizeof(TelemetryAction) == 20, "TelemetryAction is 20 bytes");
+CGS_STATIC_ASSERT((sizeof(TelemetryAction) == 20), "TelemetryAction is 20 bytes");
 
 // 232 -- road-rules scores to fetch. Console 16 bytes; the street-manager pointer at +0x0C is
 // 8 bytes on the host (+0x10).
@@ -3999,14 +3999,14 @@ struct RoadRulesPersonalBestAction : public GameAction<E_ACTION_ROAD_RULES_PERSO
     BrnNetwork::Road::ChallengeIndex         mChallengeIndex;     // +0x28
     bool                                     mbLobbyPersonalBest; // +0x2C
 };
-static_assert(sizeof(RoadRulesPersonalBestAction) == 48, "RoadRulesPersonalBestAction is 48 bytes");
+CGS_STATIC_ASSERT((sizeof(RoadRulesPersonalBestAction) == 48), "RoadRulesPersonalBestAction is 48 bytes");
 
 // 236 -- the traffic hulls to restart with (TranslateNetworkEventsToWorld copies 16 bytes).
 struct RestartTrafficAction : public GameAction<E_ACTION_RESTART_TRAFFIC>
 {
     u16 mau16ActveHulls[8];                                    // +0x00
 };
-static_assert(sizeof(RestartTrafficAction) == 16, "RestartTrafficAction is posted as 16 bytes");
+CGS_STATIC_ASSERT((sizeof(RestartTrafficAction) == 16), "RestartTrafficAction is posted as 16 bytes");
 
 // 239 -- show a player's gamer card, by name.
 struct RequestGamerCardAction : public GameAction<E_ACTION_REQUEST_GAMERCARD>
@@ -4023,7 +4023,7 @@ struct ImageGalleryRenderImageAction : public GameAction<E_ACTION_IMAGE_GALLERY_
     const CgsNetwork::NetworkTexture* mpTexture;                // +0x00 (4B on X360)
     s32                               miTextureIndex;           // +0x04 (X360; native pointer width on PC)
 };
-static_assert(offsetof(ImageGalleryRenderImageAction, miTextureIndex) == sizeof(void*),
+CGS_STATIC_ASSERT((offsetof(ImageGalleryRenderImageAction, miTextureIndex) == sizeof(void*)),
               "render-image slot follows the native-width texture pointer");
 
 struct ImageGalleryImageInfoAction : public GameAction<E_ACTION_IMAGE_GALLERY_IMAGE_INFO>
@@ -4036,33 +4036,33 @@ struct ImageGalleryImageInfoAction : public GameAction<E_ACTION_IMAGE_GALLERY_IM
     bool                   mbLocked;                            // +0x2C
     bool                   mbHasDeleted;                        // +0x2D
 };
-static_assert(offsetof(ImageGalleryImageInfoAction, mCaptureDate) == 0x00, "capture date@0x00");
-static_assert(offsetof(ImageGalleryImageInfoAction, mWorldRegion) == 0x0C, "world region@0x0C");
-static_assert(offsetof(ImageGalleryImageInfoAction, miNumCaptures) == 0x14, "capture count@0x14");
-static_assert(offsetof(ImageGalleryImageInfoAction, miSlotIndex) == 0x18, "slot@0x18");
-static_assert(offsetof(ImageGalleryImageInfoAction, mPlayerName) == 0x1C, "player name@0x1C");
-static_assert(offsetof(ImageGalleryImageInfoAction, mbLocked) == 0x2C, "locked@0x2C");
-static_assert(offsetof(ImageGalleryImageInfoAction, mbHasDeleted) == 0x2D, "deleted@0x2D");
-static_assert(sizeof(ImageGalleryImageInfoAction) == 0x30, "image-info action is 48 bytes");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, mCaptureDate) == 0x00), "capture date@0x00");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, mWorldRegion) == 0x0C), "world region@0x0C");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, miNumCaptures) == 0x14), "capture count@0x14");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, miSlotIndex) == 0x18), "slot@0x18");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, mPlayerName) == 0x1C), "player name@0x1C");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, mbLocked) == 0x2C), "locked@0x2C");
+CGS_STATIC_ASSERT((offsetof(ImageGalleryImageInfoAction, mbHasDeleted) == 0x2D), "deleted@0x2D");
+CGS_STATIC_ASSERT((sizeof(ImageGalleryImageInfoAction) == 0x30), "image-info action is 48 bytes");
 
 struct ImageGalleryCountAction : public GameAction<E_ACTION_IMAGE_GALLERY_COUNT_ACTION>
 {
     EImageGalleryType meImageType;                              // +0x00
     s32               miUsedCount;                              // +0x04
 };
-static_assert(sizeof(ImageGalleryCountAction) == 8, "gallery-count action is 8 bytes");
+CGS_STATIC_ASSERT((sizeof(ImageGalleryCountAction) == 8), "gallery-count action is 8 bytes");
 
 struct ImageGalleryDataAction : public GameAction<E_ACTION_IMAGE_GALLERY_DATA_ACTION>
 {
     EImageGalleryType      meImageType;                         // +0x00
     CgsContainers::FastBitArray<30> mActiveBitArray;             // +0x08 (one u64 field)
 };
-static_assert(offsetof(ImageGalleryDataAction, mActiveBitArray) == 8,
+CGS_STATIC_ASSERT((offsetof(ImageGalleryDataAction, mActiveBitArray) == 8),
               "gallery-data bit array follows the four-byte enum and four-byte alignment gap");
-static_assert(sizeof(ImageGalleryDataAction) == 16, "gallery-data action is 16 bytes");
+CGS_STATIC_ASSERT((sizeof(ImageGalleryDataAction) == 16), "gallery-data action is 16 bytes");
 
 struct ImageGalleryLoadCompleteAction : public GameAction<E_ACTION_IMAGE_GALLERY_LOAD_COMPLETE> {};
-static_assert(sizeof(ImageGalleryLoadCompleteAction) == 1, "gallery-load-complete action is one byte");
+CGS_STATIC_ASSERT((sizeof(ImageGalleryLoadCompleteAction) == 1), "gallery-load-complete action is one byte");
 
 // ARTIST action294 is posted by GameStateImageManagerBase::RequestImageSave. The original
 // {file id, size, 32-bit buffer pointer, trailing word} record is 16 bytes; the pointer widens
@@ -4074,7 +4074,7 @@ struct ImageSaveRequestAction
     char* mpTextureBuffer; // X360 +0x08 (host-native pointer)
     s32   miPad0C;         // X360 +0x0C; producer leaves it unwritten
 };
-static_assert(offsetof(ImageSaveRequestAction, mpTextureBuffer) == 0x08,
+CGS_STATIC_ASSERT((offsetof(ImageSaveRequestAction, mpTextureBuffer) == 0x08),
               "action294 image pointer follows id and size");
 
 // 296 -- decode a received DXT image. Console 20 bytes; the texture pointer is 8 bytes on the
@@ -4091,7 +4091,7 @@ struct MarkedManLoadedAction : public GameAction<E_ACTION_MARKED_MAN_LOADED>
     EGameModeType meGameMode;                                  // +0x00
     bool          mbMovingBetweenLobbyModes;                   // +0x04
 };
-static_assert(sizeof(MarkedManLoadedAction) == 8, "MarkedManLoadedAction is posted as 8 bytes");
+CGS_STATIC_ASSERT((sizeof(MarkedManLoadedAction) == 8), "MarkedManLoadedAction is posted as 8 bytes");
 
 // ---- FLAG: the four console-only records (no reference names; see the enumerators) -----------
 // 18 -- ModeManager::ShowModeResults' score for the leaderboard upload (16 bytes). Named after
@@ -4102,7 +4102,7 @@ struct ModeScoreLeaderboardAction : public GameAction<E_ACTION_EVENT_SCORE_TO_UP
     EGameModeType meGameModeType;                              // +0x08
     s32           miScore;                                     // +0x0C
 };
-static_assert(sizeof(ModeScoreLeaderboardAction) == 16, "ModeScoreLeaderboardAction is posted as 16 bytes");
+CGS_STATIC_ASSERT((sizeof(ModeScoreLeaderboardAction) == 16), "ModeScoreLeaderboardAction is posted as 16 bytes");
 
 // 19 -- the profile's scores still waiting for upload, by pointer (console 4 bytes).
 struct NonUploadedModeScoresAction : public GameAction<E_ACTION_NON_UPLOADED_MODE_SCORES>
@@ -4115,7 +4115,7 @@ struct StuntScoreUpdatedAction : public GameAction<E_ACTION_STUNT_SCORE_UPDATED>
 {
     s32 miStuntScore;                                          // +0x00
 };
-static_assert(sizeof(StuntScoreUpdatedAction) == 4, "StuntScoreUpdatedAction is 4 bytes");
+CGS_STATIC_ASSERT((sizeof(StuntScoreUpdatedAction) == 4), "StuntScoreUpdatedAction is 4 bytes");
 
 // 21 -- the 8-byte stunt-multiplier record StuntModeScoring::PreWorldUpdate copies out of its
 // scorer (+0x6C word, +0x78 / +0x7A halves). The network side sends it whole as the stunt
@@ -4126,13 +4126,13 @@ struct StuntMultiplierAction : public GameAction<E_ACTION_STUNT_MULTIPLIER>
     u16 mu16FlatSpins;                                         // +0x04
     u16 mu16BarrelRolls;                                       // +0x06
 };
-static_assert(sizeof(StuntMultiplierAction) == 8, "StuntMultiplierAction is posted as 8 bytes");
+CGS_STATIC_ASSERT((sizeof(StuntMultiplierAction) == 8), "StuntMultiplierAction is posted as 8 bytes");
 
 // 299 -- show a player's gamer card, by 64-bit player id (8 bytes).
 struct ShowGamerCardForXuidAction : public GameAction<E_ACTION_SHOW_GAMERCARD_FOR_XUID>
 {
     u64 mu64Xuid;                                              // +0x00
 };
-static_assert(sizeof(ShowGamerCardForXuidAction) == 8, "ShowGamerCardForXuidAction is 8 bytes");
+CGS_STATIC_ASSERT((sizeof(ShowGamerCardForXuidAction) == 8), "ShowGamerCardForXuidAction is 8 bytes");
 }
 }

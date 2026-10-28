@@ -138,14 +138,14 @@ namespace CgsCollision
 
     // GATES, not comments -- see the banner. The producer is constructed with
     // sizeof(StreamCommand) and both the poster and the consumer stride the shared buffer by it.
-    static_assert(sizeof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand) % 16 == 0,
+    CGS_STATIC_ASSERT((sizeof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand) % 16 == 0),
                   "the collide-stream families require a 16-multiple command stride "
                   "(DataStreamCommandPoster::Construct tripwire)");
-    static_assert(offsetof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand, mTriangleList)
-                      == sizeof(PrimitivePairList),
+    CGS_STATIC_ASSERT((offsetof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand, mTriangleList)
+                      == sizeof(PrimitivePairList)),
                   "mTriangleList follows mPairList with no gap (console +0x0C after a 12B list)");
-    static_assert(offsetof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand, mpResultsList)
-                      == sizeof(PrimitivePairList) + sizeof(TriangleList),
+    CGS_STATIC_ASSERT((offsetof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand, mpResultsList)
+                      == sizeof(PrimitivePairList) + sizeof(TriangleList)),
                   "mpResultsList follows mTriangleList with no gap (console +0x14 after an 8B list)");
 }
 }

@@ -45,7 +45,7 @@ namespace CgsGuiModuleIO
     {
         // Pin the +0x5024 getter return-offset (mGameActionQueue follows mResourceRequestQueue
         // @+4/sizeof 2064 and mOutEvents/sizeof 18448: 4 + 2064 + 18448 == 20516 == 0x5024).
-        static_assert(offsetof(OutputBuffer, mGameActionQueue) == 0x5024, "mGameActionQueue @0x5024 (20516)");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGameActionQueue) == 0x5024), "mGameActionQueue @0x5024 (20516)");
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mGameActionQueue;
     }

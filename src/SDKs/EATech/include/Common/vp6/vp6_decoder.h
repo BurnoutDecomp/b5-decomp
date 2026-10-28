@@ -21,7 +21,7 @@ namespace EA
 #if defined(_MSC_VER)
     #define VP6_ALIGN16 __declspec(align(16))
 #else
-    #define VP6_ALIGN16 alignas(16)
+    #define VP6_ALIGN16 CGS_ALIGN(16)
 #endif
 
 // ---- bitstream readers ---------------------------------------------------------------------

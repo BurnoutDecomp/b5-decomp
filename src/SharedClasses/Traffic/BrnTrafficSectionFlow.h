@@ -33,5 +33,5 @@ namespace BrnTraffic
         static void _AssertLayout();
     };
 
-    static_assert(sizeof(SectionFlow) == 4, "SectionFlow stride (one record per section)");
+    CGS_STATIC_ASSERT((sizeof(SectionFlow) == 4), "SectionFlow stride (one record per section)");
 }

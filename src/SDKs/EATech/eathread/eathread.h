@@ -2,7 +2,7 @@
 #define EA_THREAD_EATHREAD_H
 
 #include "types.hpp"
-#include <cstdint>
+#include "types.hpp"
 
 // The X360-faithful EA::Thread facade home (ThreadId / HANDLE, the parameter PODs,
 // GetThreadId, and the EA::Thread::{Thread, Futex, IRunnable, ThreadParameters,

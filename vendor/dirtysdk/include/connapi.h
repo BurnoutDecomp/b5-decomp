@@ -109,8 +109,8 @@ namespace CgsNetwork
 }
 
 #if !defined(_WIN64)
-static_assert(sizeof(CgsNetwork::DirtySock::ConnApiUserInfoT) == 0x90, "ConnApiUserInfoT is 0x90 console bytes");
-static_assert(sizeof(CgsNetwork::DirtySock::ConnApiClientT) == 0xBC, "ConnApiClientT is 0xBC console bytes");
+CGS_STATIC_ASSERT((sizeof(CgsNetwork::DirtySock::ConnApiUserInfoT) == 0x90), "ConnApiUserInfoT is 0x90 console bytes");
+CGS_STATIC_ASSERT((sizeof(CgsNetwork::DirtySock::ConnApiClientT) == 0xBC), "ConnApiClientT is 0xBC console bytes");
 #endif
 
 typedef CgsNetwork::DirtySock::ConnApiRefT        ConnApiRefT;

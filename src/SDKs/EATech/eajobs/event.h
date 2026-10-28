@@ -102,7 +102,7 @@ namespace Detail
     // The same alignment places Job's mDependencies at +0x60 and mEvents at +0x1E0, which
     // makes sizeof(Job) 0x350.
     template <typename T, int N>
-    struct alignas(16) BucketListNode
+    struct CGS_ALIGN(16) BucketListNode
     {
         BucketListNode();
         ~BucketListNode();

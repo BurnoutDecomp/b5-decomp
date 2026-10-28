@@ -234,6 +234,6 @@ namespace BrnParticle
     void* VFXPropCollectionResourceType::Serialise(const void* /*lpResource*/, const rw::Resource& /*lrDest*/) const
     {
         CGS_ASSERT(false, "Didn't expect to call this function in non-tool builds.");
-        return nullptr;
+        return 0;
     }
 }

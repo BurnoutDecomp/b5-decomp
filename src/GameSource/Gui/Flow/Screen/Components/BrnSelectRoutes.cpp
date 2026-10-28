@@ -419,7 +419,7 @@ namespace BrnGui
             s32 miOffset;
             GuiAudioTriggerWirePayload457 mPayload;
         };
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "ARTIST GUI audio trigger wrapper");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "ARTIST GUI audio trigger wrapper");
 
         void PostMenuAudio(CgsGui::StateInterface* lpStateInterface, s32 liAction,
                            const char* lpacLabel)
@@ -822,7 +822,7 @@ namespace BrnGui
             s32 miPadId;
             s32 miButtonId;
         };
-        static_assert(sizeof(ControllerButtonPayload) == 8, "state-queue controller payload");
+        CGS_STATIC_ASSERT((sizeof(ControllerButtonPayload) == 8), "state-queue controller payload");
         ControllerButtonPayload lInput;
         std::memcpy(&lInput, lpControllerEvent, sizeof(lInput));
         EChangedItem leChanged = E_CHANGED_ITEM_COUNT;

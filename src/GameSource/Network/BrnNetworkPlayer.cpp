@@ -265,7 +265,7 @@ namespace BrnNetwork
 
         CheckForPlayerPausedTimeout(lu16CurrentFrame);
 
-        if (mpTimeManager == nullptr || !mpTimeManager->HasStartFrameBeenSetValid())
+        if (mpTimeManager == 0 || !mpTimeManager->HasStartFrameBeenSetValid())
         {
             return;
         }
@@ -282,7 +282,7 @@ namespace BrnNetwork
         CheckForNewMessages(lu16FramesSinceStart);
 
         UpdateMessage* lpBufferedMessage = RetrieveBufferedMessage(lu16BufferedFrame);
-        if (lpBufferedMessage != nullptr)
+        if (lpBufferedMessage != 0)
         {
             // Only apply an update sent from the same lobby / round as ours.
             const s32 liRoundNumber = mpNetworkModule->GetNetworkManager()->GetRound();
@@ -424,7 +424,7 @@ namespace BrnNetwork
             lu16MessageThatWeWantFrame = CgsNetwork::TranslateFrame60HzTo50Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
         }
 
-        UpdateMessage* lpUpdateMessage = nullptr;
+        UpdateMessage* lpUpdateMessage = 0;
         for (s32 liIndex = 0; liIndex < miNumUpdateMessagesBuffered; ++liIndex)
         {
             if (maUpdateMessageBuffer[liIndex].GetU16FramesSinceStart() == lu16MessageThatWeWantFrame)
@@ -434,9 +434,9 @@ namespace BrnNetwork
             }
         }
 
-        if (lpUpdateMessage == nullptr)
+        if (lpUpdateMessage == 0)
         {
-            return nullptr;
+            return 0;
         }
 
         CGS_ASSERT(lu16MessageThatWeWantFrame == lpUpdateMessage->GetU16FramesSinceStart(),
@@ -455,7 +455,7 @@ namespace BrnNetwork
         }
 
         // The wanted update may itself have been moved by the removals: find it again.
-        lpUpdateMessage = nullptr;
+        lpUpdateMessage = 0;
         for (s32 liIndex = 0; liIndex < miNumUpdateMessagesBuffered; ++liIndex)
         {
             if (maUpdateMessageBuffer[liIndex].GetU16FramesSinceStart() == lu16MessageThatWeWantFrame)
@@ -464,7 +464,7 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(lpUpdateMessage != nullptr, "lpUpdateMessage");
+        CGS_ASSERT(lpUpdateMessage != 0, "lpUpdateMessage");
 
         return lpUpdateMessage;
     }
@@ -536,7 +536,7 @@ namespace BrnNetwork
     void BrnNetworkPlayer::SendNewBurnoutSkillzData(const BrnGameState::BurnoutSkillzData* lpBurnoutSkillzData,
                                                     bool lbIsInitial)
     {
-        CGS_ASSERT(lpBurnoutSkillzData != nullptr, "lpBurnoutSkillzData");
+        CGS_ASSERT(lpBurnoutSkillzData != 0, "lpBurnoutSkillzData");
 
         mCachedBurnoutSkillzData = *lpBurnoutSkillzData;
 
@@ -582,7 +582,7 @@ namespace BrnNetwork
             const BrnNetworkModuleIO::NetworkInActiveFburnChallengeEvent* lpActiveFreeburnChallengeEvent,
             CgsNetwork::NetworkPlayerID* lpPlayerIDs)
     {
-        CGS_ASSERT(lpActiveFreeburnChallengeEvent != nullptr, "lpActiveFreeburnChallengeEvent");
+        CGS_ASSERT(lpActiveFreeburnChallengeEvent != 0, "lpActiveFreeburnChallengeEvent");
         mActiveFburnChallengeMessageSend.PrepareForSend(mpTimeManager->GetU16FrameCount(),
                                                         lpActiveFreeburnChallengeEvent->mChallengeID,
                                                         lpPlayerIDs,
@@ -676,8 +676,8 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer* lpNetPlayer        = static_cast<BrnNetworkPlayer*>(lpUserData);
         CarSelectMessage* lpCarSelectMessage = static_cast<CarSelectMessage*>(lpMessage);
-        CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
-        CGS_ASSERT(lpCarSelectMessage != nullptr, "lpCarSelectMessage");
+        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
+        CGS_ASSERT(lpCarSelectMessage != 0, "lpCarSelectMessage");
 
         CgsID lCarId;
         CgsID lWheelId;
@@ -705,8 +705,8 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer*   lpNetPlayer           = static_cast<BrnNetworkPlayer*>(lpUserData);
         CollectableMessage* lpCollectabledMessage = static_cast<CollectableMessage*>(lpMessage);
-        CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
-        CGS_ASSERT(lpCollectabledMessage != nullptr, "lpCollectabledMessage");
+        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
+        CGS_ASSERT(lpCollectabledMessage != 0, "lpCollectabledMessage");
 
         BrnNetworkModuleIO::NetworkOutNetworkPlayerCollectableEvent lNetworkPlayerCollectableEvent;
         CollectableMessage::ECollectableType leCollectableType;
@@ -744,8 +744,8 @@ namespace BrnNetwork
         BrnNetworkPlayer* lpNetPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
         BurningHomeRunSwitchRunnerMessage* lpSwitchRunnerMessage =
             static_cast<BurningHomeRunSwitchRunnerMessage*>(lpMessage);
-        CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
-        CGS_ASSERT(lpSwitchRunnerMessage != nullptr, "lpSwitchRunnerMessage");
+        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
+        CGS_ASSERT(lpSwitchRunnerMessage != 0, "lpSwitchRunnerMessage");
 
         BrnNetworkModuleIO::NetworkOutSwitchBurningHomeRunRunner lSwitchRunnerEvent;
         lpSwitchRunnerMessage->Retrieve(&lSwitchRunnerEvent.mNewRunnerID);
@@ -764,8 +764,8 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer*     lpPlayer               = static_cast<BrnNetworkPlayer*>(lpUserData);
         BurnoutSkillzMessage* lpBurnoutSkillzMessage = static_cast<BurnoutSkillzMessage*>(lpMessage);
-        CGS_ASSERT(lpPlayer != nullptr, "lpPlayer");
-        CGS_ASSERT(lpBurnoutSkillzMessage != nullptr, "lpBurnoutSkillzMessage");
+        CGS_ASSERT(lpPlayer != 0, "lpPlayer");
+        CGS_ASSERT(lpBurnoutSkillzMessage != 0, "lpBurnoutSkillzMessage");
 
         BrnNetworkModuleIO::NetworkOutBurnoutSkillzChanged lSkillzEvent;
         lSkillzEvent.mNewSkillzData.Clear();
@@ -785,8 +785,8 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer*      lpPlayer                = static_cast<BrnNetworkPlayer*>(lpUserData);
         ShowtimeSwitchMessage* lpShowtimeSwitchMessage = static_cast<ShowtimeSwitchMessage*>(lpMessage);
-        CGS_ASSERT(lpPlayer != nullptr, "lpPlayer");
-        CGS_ASSERT(lpShowtimeSwitchMessage != nullptr, "lpShowtimeSwitchMessage");
+        CGS_ASSERT(lpPlayer != 0, "lpPlayer");
+        CGS_ASSERT(lpShowtimeSwitchMessage != 0, "lpShowtimeSwitchMessage");
 
         BrnNetworkModuleIO::NetworkOutShowtimeSwitch lShowtimeSwitchEvent;
         lShowtimeSwitchEvent.mPlayerID = lNetworkPlayerID;
@@ -806,8 +806,8 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer*         lpPlayer                   = static_cast<BrnNetworkPlayer*>(lpUserData);
         FreeburnChallengeMessage* lpFreeburnChallengeMessage = static_cast<FreeburnChallengeMessage*>(lpMessage);
-        CGS_ASSERT(lpPlayer != nullptr, "lpPlayer");
-        CGS_ASSERT(lpFreeburnChallengeMessage != nullptr, "lpFreeburnChallengeMessage");
+        CGS_ASSERT(lpPlayer != 0, "lpPlayer");
+        CGS_ASSERT(lpFreeburnChallengeMessage != 0, "lpFreeburnChallengeMessage");
 
         BrnNetworkModuleIO::NetworkOutFreeburnChallenge lChallengeEvent;
         lChallengeEvent.mPlayerID = lNetworkPlayerID;
@@ -831,22 +831,22 @@ namespace BrnNetwork
                                                                        void* lpUserData)
     {
         BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
-        CGS_ASSERT(lpPlayer != nullptr, "lpPlayer");
+        CGS_ASSERT(lpPlayer != 0, "lpPlayer");
 
         FburnChallengeStatusMessage* lpFreeburnChallengeStatusMessage =
             static_cast<FburnChallengeStatusMessage*>(lpMessage);
-        CGS_ASSERT(lpFreeburnChallengeStatusMessage != nullptr, "lpFreeburnChallengeStatusMessage");
+        CGS_ASSERT(lpFreeburnChallengeStatusMessage != 0, "lpFreeburnChallengeStatusMessage");
 
         BrnGameState::GameStateModuleIO::CompletedFburnChallengesData lCompletedChallengesData;
         lCompletedChallengesData.mNetworkPlayerID = lNetworkPlayerID;
         if (lpFreeburnChallengeStatusMessage->Retrieve(&lCompletedChallengesData.mCompletedFreeburnChallenges))
         {
-            CGS_ASSERT(lpPlayer->mpNetworkModule != nullptr, "lpPlayer->mpNetworkModule");
+            CGS_ASSERT(lpPlayer->mpNetworkModule != 0, "lpPlayer->mpNetworkModule");
 
             BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
                 lpPlayer->mpNetworkModule->GetNetworkToGameStateInterface();
-            CGS_ASSERT(lpNetworkToGameStateInterface != nullptr, "lpNetworkToGameStateInterface");
-            CGS_ASSERT(lpNetworkToGameStateInterface->GetCompletedChallengesQueue() != nullptr,
+            CGS_ASSERT(lpNetworkToGameStateInterface != 0, "lpNetworkToGameStateInterface");
+            CGS_ASSERT(lpNetworkToGameStateInterface->GetCompletedChallengesQueue() != 0,
                        "lpNetworkToGameStateInterface->GetCompletedChallengesQueue()");
 
             lpNetworkToGameStateInterface->GetCompletedChallengesQueue()->AddEvent(lCompletedChallengesData);
@@ -862,15 +862,15 @@ namespace BrnNetwork
         BrnNetworkPlayer* lpNetworkPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
         ActiveFburnChallengeMessage* lpActiveChallengeMessage =
             static_cast<ActiveFburnChallengeMessage*>(lpMessage);
-        CGS_ASSERT(lpNetworkPlayer != nullptr, "lpNetworkPlayer");
-        CGS_ASSERT(lpActiveChallengeMessage != nullptr, "lpActiveChallengeMessage");
+        CGS_ASSERT(lpNetworkPlayer != 0, "lpNetworkPlayer");
+        CGS_ASSERT(lpActiveChallengeMessage != 0, "lpActiveChallengeMessage");
 
         BrnNetworkModuleIO::NetworkOutActiveFburnChallengeEvent lActiveChallengeEvent;
         CgsNetwork::NetworkPlayerID laPlayersInChallengeIDs[ActiveFburnChallengeMessage::KI_MAX_NETWORK_PLAYERS];
         if (lpActiveChallengeMessage->Retrieve(&lActiveChallengeEvent.mChallengeID, laPlayersInChallengeIDs,
                                                &lActiveChallengeEvent.miNumPlayersInChallenge))
         {
-            CGS_ASSERT(lpNetworkPlayer->mpNetworkModule != nullptr, "lpNetworkPlayer->mpNetworkModule");
+            CGS_ASSERT(lpNetworkPlayer->mpNetworkModule != 0, "lpNetworkPlayer->mpNetworkModule");
 
             for (s32 liIndex = 0; liIndex < lActiveChallengeEvent.miNumPlayersInChallenge; ++liIndex)
             {
@@ -878,7 +878,7 @@ namespace BrnNetwork
                     lpNetworkPlayer->mpNetworkModule->GetActiveRaceCarIndex(laPlayersInChallengeIDs[liIndex]);
             }
 
-            CGS_ASSERT(lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue() != nullptr,
+            CGS_ASSERT(lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue() != 0,
                        "lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()");
             lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lActiveChallengeEvent),
@@ -893,13 +893,13 @@ namespace BrnNetwork
     {
         CheckpointTriggeredMessage* lpCheckpointTriggeredMessage =
             static_cast<CheckpointTriggeredMessage*>(lpMessage);
-        CGS_ASSERT(lpCheckpointTriggeredMessage != nullptr, "lpCheckpointTriggeredMessage");
+        CGS_ASSERT(lpCheckpointTriggeredMessage != 0, "lpCheckpointTriggeredMessage");
 
         BrnNetworkModuleIO::NetworkOutRemotePlayerHitCheckpoint lCheckpointEvent;
         if (lpCheckpointTriggeredMessage->Retrieve(&lCheckpointEvent.miCheckpointIndex))
         {
             BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
-            CGS_ASSERT(lpPlayer != nullptr, "lpPlayer");
+            CGS_ASSERT(lpPlayer != 0, "lpPlayer");
 
             lCheckpointEvent.mNetworkPlayerID = lNetworkPlayerID;
             lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
@@ -1036,7 +1036,7 @@ namespace BrnNetwork
         // The lengths are the host sizes of the message objects: the reliable-message buffer
         // copies that many bytes of the message (console sizes in the comments).
         RegisterMessageType(KI_MESSAGE_TYPE_UPDATE, static_cast<s32>(sizeof(UpdateMessage)),        // 0xB0
-                            &mUpdateMessageSend, &mUpdateMessageRecv, nullptr, nullptr, nullptr);
+                            &mUpdateMessageSend, &mUpdateMessageRecv, 0, 0, 0);
         RegisterMessageType(KI_MESSAGE_TYPE_CAR_SELECT, static_cast<s32>(sizeof(CarSelectMessage)), // 0x48
                             &mCarSelectMessageSend, &mCarSelectMessageRecv,
                             &_CarSelectMessageArrivedCallback, &_CarSelectMessageDeliveredCallback, this);
@@ -1052,7 +1052,7 @@ namespace BrnNetwork
                             &mBurnoutSkillzMessageSend, &mBurnoutSkillzMessageRecv,
                             &_BurnoutSkillzMessageArrivedCallback, &_BurnoutSkillzMessageDeliveredCallback, this);
         RegisterMessageType(KI_MESSAGE_TYPE_SHOWTIME_UPDATE, static_cast<s32>(sizeof(ShowtimeUpdateMessage)), // 0x24
-                            &mShowtimeUpdateMessageSend, &mShowtimeUpdateMessageRecv, nullptr, nullptr, nullptr);
+                            &mShowtimeUpdateMessageSend, &mShowtimeUpdateMessageRecv, 0, 0, 0);
         RegisterMessageType(KI_MESSAGE_TYPE_SHOWTIME_SWITCH, static_cast<s32>(sizeof(ShowtimeSwitchMessage)), // 0x30
                             &mShowtimeSwitchMessageSend, &mShowtimeSwitchMessageRecv,
                             &_ShowtimeSwitchMessageArrivedCallback, &_ShowtimeSwitchMessageDeliveredCallback, this);
@@ -1377,7 +1377,7 @@ namespace BrnNetwork
     // no home in the tree (not reproduced).
     void BrnNetworkPlayer::HandleSendingUpdateMessage()
     {
-        if (!mbIsPrepared || mpTimeManager == nullptr || !mpTimeManager->HasStartFrameBeenSetValid()
+        if (!mbIsPrepared || mpTimeManager == 0 || !mpTimeManager->HasStartFrameBeenSetValid()
             || !mbIsUpdateMessageSendingEnabled)
         {
             return;
@@ -1403,7 +1403,7 @@ namespace BrnNetwork
 
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
             lpActiveRaceCarInterface->GetRaceCarState(leActiveRaceCarIndex);
-        CGS_ASSERT(lpRaceCarState != nullptr, "lpRaceCarState != NULL");
+        CGS_ASSERT(lpRaceCarState != 0, "lpRaceCarState != NULL");
 
         mbHasResetCarTransformSinceLastUpdateSent = mbHasResetCarTransformSinceLastUpdateSent || lpRaceCarState->mbResetCarTransform;
         mbHasBeenSlammedSinceLastUpdateSent       = mbHasBeenSlammedSinceLastUpdateSent || lpRaceCarState->mbJustBeenSlammed;

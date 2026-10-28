@@ -543,7 +543,7 @@ void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
         giClosestAIStateInstance = -1;
         if (KI_DEBUG_PRINT_CLOSEST_AI_STATES || KI_DEBUG_PRINT_CLOSEST_AI_SKIDS)
         {
-            CgsSound::Logic::State* lpClosestState = nullptr;
+            CgsSound::Logic::State* lpClosestState = 0;
             f32 lfClosestDistanceSquared = 0.0f;
             for (CgsSound::Logic::State* lpState = GetHeadState(); lpState;
                  lpState = lpState->GetNextState())

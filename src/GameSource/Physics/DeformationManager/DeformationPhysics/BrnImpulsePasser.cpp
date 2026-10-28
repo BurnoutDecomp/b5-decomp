@@ -44,7 +44,7 @@ namespace Deformation
     {
         for ( s32 liIndex = 0; liIndex < KI_MAX_COLLIDABLE_BODIES; ++liIndex )
         {
-            mapCollidableBodies[liIndex] = nullptr;
+            mapCollidableBodies[liIndex] = 0;
         }
     }
 
@@ -101,7 +101,7 @@ namespace Deformation
     {
         CGS_ASSERT(static_cast<s32>(lu8Index) < KI_MAX_COLLIDABLE_BODIES,
                    "lu8ReceivingBodyIndex < KI_MAX_NUM_COLLIDABLE_BODIES_PER_DEFORMABLE_OBJECT");   // :156
-        CGS_ASSERT(mapCollidableBodies[lu8Index] != nullptr,
+        CGS_ASSERT(mapCollidableBodies[lu8Index] != 0,
                    "mapCollidableBodies[lu8ReceivingBodyIndex] != NULL");                            // :157
 
         // The console calls through regardless (fire-and-continue past both asserts).

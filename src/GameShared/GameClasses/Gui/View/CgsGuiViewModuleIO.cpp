@@ -22,7 +22,7 @@ namespace ViewIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mGuiEvents) == 0x0004, "mGuiEvents @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGuiEvents) == 0x0004), "mGuiEvents @0x0004");
     }
 
     // X360 0x82858E40: mark the buffer constructed (the IOBuffer status byte), then
@@ -76,14 +76,14 @@ namespace ViewIO
 
     void InputBuffer::_AssertInputLayout()
     {
-        static_assert(offsetof(InputBuffer, mViewStateQueue) == 0x0004,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mViewStateQueue) == 0x0004),
                       "mViewStateQueue @0x0004 -- GetViewStateQueue return-offset");
-        static_assert(offsetof(InputBuffer, mRendererSet) == 0x10020,
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mRendererSet) == 0x10020),
                       "mRendererSet @0x10020 (65568) -- GetImRenderers return-offset");
         // Console interior pins (5 dword slots -> camera @ set+0x20 == buffer+0x10040): the
         // x64 pointer widening moves the camera to set+0x30 (5 x 8B slots + 16-align pad);
         // parity is by named member (see the header note), so only the 16-alignment is pinned.
-        static_assert(offsetof(ImRendererSet, mCamera) % 16 == 0,
+        CGS_STATIC_ASSERT((offsetof(ImRendererSet, mCamera) % 16 == 0),
                       "ImRendererSet.mCamera 16-aligned (console @ set+0x20)");
     }
 

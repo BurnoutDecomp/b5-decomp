@@ -32,7 +32,7 @@ namespace BrnNetwork
 {
     // StatsRequestEvent (BrnStatsRequestEvent.h) is the 20-byte element the queue's Push/Pop
     // copy whole.
-    static_assert(sizeof(StatsRequestEvent) == 20, "StatsRequestEvent element stride (20 bytes)");
+    CGS_STATIC_ASSERT((sizeof(StatsRequestEvent) == 20), "StatsRequestEvent element stride (20 bytes)");
 
     // ------------------------------------------------------------------------
     // EventQueue<StatsRequestEvent, 32> -- the fixed-capacity ring the manager embeds.

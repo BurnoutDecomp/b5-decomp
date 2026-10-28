@@ -21,13 +21,13 @@
 namespace CgsResource
 {
     // X360 off_830EA3F0 -- the process-wide live-update singleton.
-    LiveUpdateModule* LiveUpdateModule::spInstance = nullptr;
+    LiveUpdateModule* LiveUpdateModule::spInstance = 0;
 
     // ---- Construct @ 0x828E6548 ------------------------------------------------
     void LiveUpdateModule::Construct(CgsGameTalk::GameTalk* lpGameTalk)
     {
         // Only one live-update module may exist at a time.
-        CGS_ASSERT(spInstance == nullptr, "spInstance==NULL");
+        CGS_ASSERT(spInstance == 0, "spInstance==NULL");
 
         // Chain the base single-buffered module Construct.
         ModuleSingleBuffered::Construct();
@@ -80,7 +80,7 @@ namespace CgsResource
             return;
 
         const char* lpcFileName = lpMessage->GetKeyContent("ReplaceResourcesFromFile");
-        if (lpcFileName == nullptr)
+        if (lpcFileName == 0)
             return;
 
         // Ignore the request if one is already armed/running (X360: spInstance + 0x44C != 0).
@@ -156,9 +156,9 @@ namespace CgsResource
                 // first event payload (the BundleLoaderEvent base's miPoolId slot, which the
                 // response repurposes as the result code): >= 0 means the replace succeeded.
                 const char* lpcResult = "failed";
-                const CgsModule::Event* lpResponse = nullptr;
+                const CgsModule::Event* lpResponse = 0;
                 s32 liSize = 0;
-                if (mReceiverQueue.GetFirstEvent(&lpResponse, &liSize) >= 0 && lpResponse != nullptr)
+                if (mReceiverQueue.GetFirstEvent(&lpResponse, &liSize) >= 0 && lpResponse != 0)
                 {
                     const Events::BundleLoaderEvent* lpLoaderResponse =
                         reinterpret_cast<const Events::BundleLoaderEvent*>(lpResponse);

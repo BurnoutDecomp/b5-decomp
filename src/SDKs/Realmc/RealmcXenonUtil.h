@@ -69,17 +69,17 @@ struct XCONTENT_DEVICE_DATA
     WCHAR      szDisplayName[28];// +0x18
 };
 
-static_assert(sizeof(XCONTENT_DATA) == 0x134, "XCONTENT_DATA size");
-static_assert(offsetof(XCONTENT_DATA, DeviceID) == 0x000, "XCONTENT_DATA device id offset");
-static_assert(offsetof(XCONTENT_DATA, dwContentType) == 0x004, "XCONTENT_DATA content type offset");
-static_assert(offsetof(XCONTENT_DATA, szDisplayName) == 0x008, "XCONTENT_DATA display name offset");
-static_assert(offsetof(XCONTENT_DATA, szFileName) == 0x108, "XCONTENT_DATA file name offset");
-static_assert(sizeof(XCONTENT_DEVICE_DATA) == 0x50, "XCONTENT_DEVICE_DATA size");
-static_assert(offsetof(XCONTENT_DEVICE_DATA, dwDeviceID) == 0x00, "XCONTENT_DEVICE_DATA device id offset");
-static_assert(offsetof(XCONTENT_DEVICE_DATA, dwDeviceType) == 0x04, "XCONTENT_DEVICE_DATA device type offset");
-static_assert(offsetof(XCONTENT_DEVICE_DATA, ullDeviceBytes) == 0x08, "XCONTENT_DEVICE_DATA capacity offset");
-static_assert(offsetof(XCONTENT_DEVICE_DATA, ullFreeBytes) == 0x10, "XCONTENT_DEVICE_DATA free space offset");
-static_assert(offsetof(XCONTENT_DEVICE_DATA, szDisplayName) == 0x18, "XCONTENT_DEVICE_DATA name offset");
+CGS_STATIC_ASSERT((sizeof(XCONTENT_DATA) == 0x134), "XCONTENT_DATA size");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, DeviceID) == 0x000), "XCONTENT_DATA device id offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, dwContentType) == 0x004), "XCONTENT_DATA content type offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, szDisplayName) == 0x008), "XCONTENT_DATA display name offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, szFileName) == 0x108), "XCONTENT_DATA file name offset");
+CGS_STATIC_ASSERT((sizeof(XCONTENT_DEVICE_DATA) == 0x50), "XCONTENT_DEVICE_DATA size");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, dwDeviceID) == 0x00), "XCONTENT_DEVICE_DATA device id offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, dwDeviceType) == 0x04), "XCONTENT_DEVICE_DATA device type offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, ullDeviceBytes) == 0x08), "XCONTENT_DEVICE_DATA capacity offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, ullFreeBytes) == 0x10), "XCONTENT_DEVICE_DATA free space offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, szDisplayName) == 0x18), "XCONTENT_DEVICE_DATA name offset");
 
 // ---------------------------------------------------------------------------
 // XOVERLAPPED -- the X360 async-op descriptor the device-selector UI / content

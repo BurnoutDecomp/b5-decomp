@@ -14,8 +14,8 @@ namespace BrnGui
         s32 miNumPresetRaces;
         s32 GetEventType() const { return 170; }
     };
-    static_assert(sizeof(GuiEventSetAvailablePresetRaces) == 728,
+    CGS_STATIC_ASSERT((sizeof(GuiEventSetAvailablePresetRaces) == 728),
                   "ARTIST AddGuiEventSetAvailablePresetRaces posts 0x2D8 bytes");
-    static_assert(offsetof(GuiEventSetAvailablePresetRaces, miNumPresetRaces) == 720,
+    CGS_STATIC_ASSERT((offsetof(GuiEventSetAvailablePresetRaces, miNumPresetRaces) == 720),
                   "ARTIST race-count word is at record+0x2D0");
 }

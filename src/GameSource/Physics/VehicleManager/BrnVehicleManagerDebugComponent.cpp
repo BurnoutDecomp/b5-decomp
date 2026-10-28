@@ -638,7 +638,7 @@ namespace Vehicle
     void VehicleManagerDebugComponent::DrawLastRaceCarTrafficContact(
         CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :934
+        CGS_ASSERT(lpRender != 0, "lpDisplay != NULL"); // :934
 
         const Vector3 lvRaceCarHalfExtent = mLastTrafficContact_RaceCarHalfExt;
         const Vector3 lvTrafficHalfExtent = mLastTrafficContact_TrafficHalfExt;
@@ -674,7 +674,7 @@ namespace Vehicle
     // ========================================================================================
     void VehicleManagerDebugComponent::DrawLastCrashContact(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :1006
+        CGS_ASSERT(lpRender != 0, "lpDisplay != NULL"); // :1006
 
         const Vector3 lvHalfExtent = mLastCrashContact_RaceCarHalfExt;
         lpRender->DrawBox(Vector3{ -lvHalfExtent.x, -lvHalfExtent.y,
@@ -695,7 +695,7 @@ namespace Vehicle
     // ========================================================================================
     void VehicleManagerDebugComponent::DrawCatchupTargets(CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :1093
+        CGS_ASSERT(lpRender != 0, "lpDisplay != NULL"); // :1093
 
         const VehicleManager& lrManager = *mpVehicleManager;
         for (s32 liCar = lrManager.mUsedRaceCars.GetFirstNonZeroBit(); liCar >= 0;
@@ -735,7 +735,7 @@ namespace Vehicle
     void VehicleManagerDebugComponent::DrawPlayerStuckInCollisionLineTests(
         CgsDev::Debug3DImmediateRender* lpRender)
     {
-        CGS_ASSERT(lpRender != nullptr, "lpDisplay != NULL"); // :782
+        CGS_ASSERT(lpRender != 0, "lpDisplay != NULL"); // :782
 
         const VehicleManager& lrManager = *mpVehicleManager;
         const s32 liPlayerIndex = static_cast<s32>(lrManager.mePlayerActiveRaceCarIndex);
@@ -774,15 +774,15 @@ namespace Vehicle
 
         rw::math::vpu::Vector2 lv2Position = MakeVector2(lfScreenWidth - 80.0f, 60.0f);
         RenderCarDiagram(lpRender, lv2Position, 0xFFFF0000u,
-                         mbDisplayContact ? &mPlayerCarContactPosition : nullptr,
-                         mbDisplayContact ? &mClosingVelocityPlayerCarSpace : nullptr,
-                         mbDisplayContact ? &mPlayerCarVelocity : nullptr);
+                         mbDisplayContact ? &mPlayerCarContactPosition : 0,
+                         mbDisplayContact ? &mClosingVelocityPlayerCarSpace : 0,
+                         mbDisplayContact ? &mPlayerCarVelocity : 0);
 
         lv2Position.y += 120.0f;
         RenderCarDiagram(lpRender, lv2Position, 0xFF00FF00u,
-                         mbDisplayContact ? &mOtherCarContactPosition : nullptr,
-                         mbDisplayContact ? &mClosingVelocityOtherCarSpace : nullptr,
-                         mbDisplayContact ? &mOtherCarVelocity : nullptr);
+                         mbDisplayContact ? &mOtherCarContactPosition : 0,
+                         mbDisplayContact ? &mClosingVelocityOtherCarSpace : 0,
+                         mbDisplayContact ? &mOtherCarVelocity : 0);
 
         if (mbDisplayContact)
         {
@@ -827,7 +827,7 @@ namespace Vehicle
         lpRender->DrawBox(MakeVector2(lfLeftWheelX, lfRearWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
         lpRender->DrawBox(MakeVector2(lfRightWheelX, lfRearWheelY), lv2WheelSize, KU_WHEEL_COLOUR);
 
-        if (lpContactPosition != nullptr)
+        if (lpContactPosition != 0)
         {
             const f32 lfContactX = (lpContactPosition->x + 0.5f) * (lfRightWheelX - lfLeftWheelX) + lfLeftWheelX;
             const f32 lfContactY = (-lpContactPosition->z + 0.5f) * (lfRearWheelY - lfFrontWheelY) + lfFrontWheelY;
@@ -835,7 +835,7 @@ namespace Vehicle
             lpRender->DrawBox(MakeVector2(lfContactX, lfContactY), lv2WheelSize, 0xFF0000FFu);
         }
 
-        if (lpClosingVelocity != nullptr)
+        if (lpClosingVelocity != 0)
         {
             CGS_ASSERT(lpCarVelocity != NULL, "lpCarVelocity != NULL");
 
@@ -914,7 +914,7 @@ namespace Vehicle
     void VehicleManagerDebugComponent::RecordStuckInCollisionLineTestResult(
         const CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc::StreamResult* lpResult)
     {
-        CGS_ASSERT(lpResult != nullptr, "lpResult != NULL"); // :1197
+        CGS_ASSERT(lpResult != 0, "lpResult != NULL"); // :1197
         for (s32 liLine = 0; liLine < 4; ++liLine) // X360 loop bound 4; the StreamResult has five slots
         {
             if (lpResult->mabHit[liLine] != 0)
@@ -1014,19 +1014,19 @@ namespace Vehicle
         // ---- the spy array: 4 elements at the X360-attested 112-byte stride --------------------
         // (stride from BaseEventQueue<OutContactSpy>::AddEvent @0x825E44C8 / AddEventSafe
         // @0x828A1B78; 16 + 4*112 == 464 == miNumWorldContactSpies is the closure.)
-        static_assert(sizeof(CgsPhysics::PhysicsSimulationIO::OutContactSpy) == 112,
+        CGS_STATIC_ASSERT((sizeof(CgsPhysics::PhysicsSimulationIO::OutContactSpy) == 112),
                       "OutContactSpy stride (X360-attested 112)");
-        static_assert(offsetof(V, miNumWorldContactSpies) - offsetof(V, maWorldContactSpies) == 4 * 112,
+        CGS_STATIC_ASSERT((offsetof(V, miNumWorldContactSpies) - offsetof(V, maWorldContactSpies) == 4 * 112),
                       "maWorldContactSpies[4] fills 448 bytes and ends at miNumWorldContactSpies");
-        static_assert(offsetof(V, mbDisplayWorldContactSpies) - offsetof(V, miNumWorldContactSpies) == 4,
+        CGS_STATIC_ASSERT((offsetof(V, mbDisplayWorldContactSpies) - offsetof(V, miNumWorldContactSpies) == 4),
                       "mbDisplayWorldContactSpies (asm stb 0x1D4) is one word past miNumWorldContactSpies");
-        static_assert(offsetof(V, mpVehicleManager) - offsetof(V, mbDisplayWorldContactSpies) == 4,
+        CGS_STATIC_ASSERT((offsetof(V, mpVehicleManager) - offsetof(V, mbDisplayWorldContactSpies) == 4),
                       "mpVehicleManager (asm stw r29, 0x1D8) is one word past the display flag");
-        static_assert(offsetof(V, mbSlamDebugRenderEnabled) - offsetof(V, mpVehicleManager) == sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(V, mbSlamDebugRenderEnabled) - offsetof(V, mpVehicleManager) == sizeof(void*)),
                       "mbSlamDebugRenderEnabled (asm stb 0x1DC) sits immediately after the manager pointer");
-        static_assert(offsetof(V, mbRenderResetLines)        - offsetof(V, mbSlamDebugRenderEnabled) == 1,
+        CGS_STATIC_ASSERT((offsetof(V, mbRenderResetLines)        - offsetof(V, mbSlamDebugRenderEnabled) == 1),
                       "mbRenderResetLines (asm stb 0x1DD)");
-        static_assert(offsetof(V, mbGrindDebugRenderEnabled) - offsetof(V, mbSlamDebugRenderEnabled) == 2,
+        CGS_STATIC_ASSERT((offsetof(V, mbGrindDebugRenderEnabled) - offsetof(V, mbSlamDebugRenderEnabled) == 2),
                       "mbGrindDebugRenderEnabled (asm stb 0x1DE)");
 
         // ---- the pointer-free tail, anchored at mPlayerCarContactPosition (X360 +480) ----------
@@ -1036,79 +1036,79 @@ namespace Vehicle
         // gates to a different residue and the 16-aligned Vector3 lands 16 bytes later. What IS
         // invariant -- and what the X360 +480 attests -- is that the contact readout opens a
         // fresh 16-byte lane immediately after the three gate bytes.
-        static_assert(KI_HEAD % 16 == 0,
+        CGS_STATIC_ASSERT((KI_HEAD % 16 == 0),
                       "mPlayerCarContactPosition opens a 16-byte lane (X360 +480)");
-        static_assert(KI_HEAD - offsetof(V, mbGrindDebugRenderEnabled) <= 16,
+        CGS_STATIC_ASSERT((KI_HEAD - offsetof(V, mbGrindDebugRenderEnabled) <= 16),
                       "nothing sits between the third gate byte and the contact readout");
 
-        static_assert(offsetof(V, mOtherCarContactPosition)       - KI_HEAD ==  16,  "X360 +496");
-        static_assert(offsetof(V, mbDisplayContact)               - KI_HEAD ==  32,  "X360 +512");
-        static_assert(offsetof(V, mfOtherCarContactAngleRad)      - KI_HEAD ==  36,  "X360 +516");
-        static_assert(offsetof(V, mClosingVelocityPlayerCarSpace) - KI_HEAD ==  48,  "X360 +528");
-        static_assert(offsetof(V, mClosingVelocityOtherCarSpace)  - KI_HEAD ==  64,  "X360 +544");
-        static_assert(offsetof(V, mPlayerCarVelocity)             - KI_HEAD ==  80,  "X360 +560");
-        static_assert(offsetof(V, mOtherCarVelocity)              - KI_HEAD ==  96,  "X360 +576");
+        CGS_STATIC_ASSERT((offsetof(V, mOtherCarContactPosition)       - KI_HEAD ==  16),  "X360 +496");
+        CGS_STATIC_ASSERT((offsetof(V, mbDisplayContact)               - KI_HEAD ==  32),  "X360 +512");
+        CGS_STATIC_ASSERT((offsetof(V, mfOtherCarContactAngleRad)      - KI_HEAD ==  36),  "X360 +516");
+        CGS_STATIC_ASSERT((offsetof(V, mClosingVelocityPlayerCarSpace) - KI_HEAD ==  48),  "X360 +528");
+        CGS_STATIC_ASSERT((offsetof(V, mClosingVelocityOtherCarSpace)  - KI_HEAD ==  64),  "X360 +544");
+        CGS_STATIC_ASSERT((offsetof(V, mPlayerCarVelocity)             - KI_HEAD ==  80),  "X360 +560");
+        CGS_STATIC_ASSERT((offsetof(V, mOtherCarVelocity)              - KI_HEAD ==  96),  "X360 +576");
 
-        static_assert(offsetof(V, mbDrawLastRaceCarTrafficContact)  - KI_HEAD == 112, "X360 +592 (asm stb 0x250)");
-        static_assert(offsetof(V, mbDrawLastSlamInfo)               - KI_HEAD == 113, "X360 +593 (asm stb 0x251)");
-        static_assert(offsetof(V, mbDrawLastShuntInfo)              - KI_HEAD == 114, "X360 +594 (asm stb 0x252)");
-        static_assert(offsetof(V, mbDrawLastCrashContact)           - KI_HEAD == 115, "X360 +595 (asm stb 0x253)");
-        static_assert(offsetof(V, mbDrawCatchupTargets)             - KI_HEAD == 116, "X360 +596 (asm stb 0x254)");
-        static_assert(offsetof(V, mbRenderWallContacts)             - KI_HEAD == 117, "X360 +597 (asm stb 0x255)");
-        static_assert(offsetof(V, mbRenderGroundContacts)           - KI_HEAD == 118, "X360 +598 (asm stb 0x256)");
-        static_assert(offsetof(V, mbDrawPlayerStuckInCollisionTests)- KI_HEAD == 119, "X360 +599 (asm stb 0x257)");
+        CGS_STATIC_ASSERT((offsetof(V, mbDrawLastRaceCarTrafficContact)  - KI_HEAD == 112), "X360 +592 (asm stb 0x250)");
+        CGS_STATIC_ASSERT((offsetof(V, mbDrawLastSlamInfo)               - KI_HEAD == 113), "X360 +593 (asm stb 0x251)");
+        CGS_STATIC_ASSERT((offsetof(V, mbDrawLastShuntInfo)              - KI_HEAD == 114), "X360 +594 (asm stb 0x252)");
+        CGS_STATIC_ASSERT((offsetof(V, mbDrawLastCrashContact)           - KI_HEAD == 115), "X360 +595 (asm stb 0x253)");
+        CGS_STATIC_ASSERT((offsetof(V, mbDrawCatchupTargets)             - KI_HEAD == 116), "X360 +596 (asm stb 0x254)");
+        CGS_STATIC_ASSERT((offsetof(V, mbRenderWallContacts)             - KI_HEAD == 117), "X360 +597 (asm stb 0x255)");
+        CGS_STATIC_ASSERT((offsetof(V, mbRenderGroundContacts)           - KI_HEAD == 118), "X360 +598 (asm stb 0x256)");
+        CGS_STATIC_ASSERT((offsetof(V, mbDrawPlayerStuckInCollisionTests)- KI_HEAD == 119), "X360 +599 (asm stb 0x257)");
 
-        static_assert(offsetof(V, mLastTrafficContact_RaceCarTransform) - KI_HEAD == 128, "X360 +608 (asm r9  = this+0x260)");
-        static_assert(offsetof(V, mLastTrafficContact_TrafficTransform) - KI_HEAD == 192, "X360 +672 (asm r8  = this+0x2A0)");
-        static_assert(offsetof(V, mLastTrafficContact_RaceCarHalfExt)   - KI_HEAD == 256, "X360 +736 (asm r26 = 0x2E0)");
-        static_assert(offsetof(V, mLastTrafficContact_TrafficHalfExt)   - KI_HEAD == 272, "X360 +752 (asm r26 = 0x2F0)");
-        static_assert(offsetof(V, mLastTrafficContact_RaceCarVelocity)  - KI_HEAD == 288, "X360 +768 (not written by Construct)");
-        static_assert(offsetof(V, mLastTrafficContact_TrafficVelocity)  - KI_HEAD == 304, "X360 +784 (not written by Construct)");
-        static_assert(offsetof(V, mLastTrafficContact_Contact)          - KI_HEAD == 320, "X360 +800 (asm r10 = this+0x320)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_RaceCarTransform) - KI_HEAD == 128), "X360 +608 (asm r9  = this+0x260)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_TrafficTransform) - KI_HEAD == 192), "X360 +672 (asm r8  = this+0x2A0)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_RaceCarHalfExt)   - KI_HEAD == 256), "X360 +736 (asm r26 = 0x2E0)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_TrafficHalfExt)   - KI_HEAD == 272), "X360 +752 (asm r26 = 0x2F0)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_RaceCarVelocity)  - KI_HEAD == 288), "X360 +768 (not written by Construct)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_TrafficVelocity)  - KI_HEAD == 304), "X360 +784 (not written by Construct)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastTrafficContact_Contact)          - KI_HEAD == 320), "X360 +800 (asm r10 = this+0x320)");
 
         // Two independent witnesses that the embedded PotentialContact is 80 bytes: 800 -> 880 and
         // 976 -> 1056. That is the committed 76-byte record padded to its alignas(16).
-        static_assert(sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) == 80,
+        CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) == 80),
                       "PotentialContact: 76 bytes at align 16");
-        static_assert(offsetof(V, mLastCrashContact_RaceCarTransform) - offsetof(V, mLastTrafficContact_Contact) == 80,
+        CGS_STATIC_ASSERT((offsetof(V, mLastCrashContact_RaceCarTransform) - offsetof(V, mLastTrafficContact_Contact) == 80),
                       "800 + sizeof(PotentialContact) == 880");
-        static_assert(offsetof(V, meLastSlamImpactSituation)          - offsetof(V, mLastCrashContact_Contact)  == 80,
+        CGS_STATIC_ASSERT((offsetof(V, meLastSlamImpactSituation)          - offsetof(V, mLastCrashContact_Contact)  == 80),
                       "976 + sizeof(PotentialContact) == 1056");
 
-        static_assert(offsetof(V, mLastCrashContact_RaceCarTransform) - KI_HEAD == 400, "X360 +880 (asm r10 = this+0x370)");
-        static_assert(offsetof(V, mLastCrashContact_RaceCarHalfExt)   - KI_HEAD == 464, "X360 +944 (asm r28 = 0x3B0)");
-        static_assert(offsetof(V, mLastCrashContact_RaceCarVelocity)  - KI_HEAD == 480, "X360 +960 (asm r27 = 0x3C0)");
-        static_assert(offsetof(V, mLastCrashContact_Contact)          - KI_HEAD == 496, "X360 +976 (asm r10 = this+0x3D0)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastCrashContact_RaceCarTransform) - KI_HEAD == 400), "X360 +880 (asm r10 = this+0x370)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastCrashContact_RaceCarHalfExt)   - KI_HEAD == 464), "X360 +944 (asm r28 = 0x3B0)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastCrashContact_RaceCarVelocity)  - KI_HEAD == 480), "X360 +960 (asm r27 = 0x3C0)");
+        CGS_STATIC_ASSERT((offsetof(V, mLastCrashContact_Contact)          - KI_HEAD == 496), "X360 +976 (asm r10 = this+0x3D0)");
 
-        static_assert(offsetof(V, meLastSlamImpactSituation)  - KI_HEAD == 576, "X360 +1056 (asm stw -1, 0x420)");
-        static_assert(offsetof(V, miLastSlamNumber)           - KI_HEAD == 580, "X360 +1060 (asm stw 0,  0x424)");
-        static_assert(offsetof(V, mfLastSlamDuration)         - KI_HEAD == 584, "X360 +1064 (asm stfs 0, 0x428)");
-        static_assert(offsetof(V, mfLastSlamBaseDuration)     - KI_HEAD == 588, "X360 +1068 (asm stfs 0, 0x42C)");
-        static_assert(offsetof(V, mfLastSlamMassFactor)       - KI_HEAD == 592, "X360 +1072 (asm stfs 0, 0x430)");
-        static_assert(offsetof(V, meLastShuntImpactSituation) - KI_HEAD == 596, "X360 +1076 (asm stw -1, 0x434)");
-        static_assert(offsetof(V, mfLastShuntMagnitude)       - KI_HEAD == 600, "X360 +1080 (asm stfs 0, 0x438)");
-        static_assert(offsetof(V, mfLastShuntClosingSpeed)    - KI_HEAD == 604, "X360 +1084 (asm stfs 0, 0x43C)");
+        CGS_STATIC_ASSERT((offsetof(V, meLastSlamImpactSituation)  - KI_HEAD == 576), "X360 +1056 (asm stw -1, 0x420)");
+        CGS_STATIC_ASSERT((offsetof(V, miLastSlamNumber)           - KI_HEAD == 580), "X360 +1060 (asm stw 0,  0x424)");
+        CGS_STATIC_ASSERT((offsetof(V, mfLastSlamDuration)         - KI_HEAD == 584), "X360 +1064 (asm stfs 0, 0x428)");
+        CGS_STATIC_ASSERT((offsetof(V, mfLastSlamBaseDuration)     - KI_HEAD == 588), "X360 +1068 (asm stfs 0, 0x42C)");
+        CGS_STATIC_ASSERT((offsetof(V, mfLastSlamMassFactor)       - KI_HEAD == 592), "X360 +1072 (asm stfs 0, 0x430)");
+        CGS_STATIC_ASSERT((offsetof(V, meLastShuntImpactSituation) - KI_HEAD == 596), "X360 +1076 (asm stw -1, 0x434)");
+        CGS_STATIC_ASSERT((offsetof(V, mfLastShuntMagnitude)       - KI_HEAD == 600), "X360 +1080 (asm stfs 0, 0x438)");
+        CGS_STATIC_ASSERT((offsetof(V, mfLastShuntClosingSpeed)    - KI_HEAD == 604), "X360 +1084 (asm stfs 0, 0x43C)");
 
         // The tail loop's three bases are exactly 64 bytes apart -- that IS the loop's [r9-64] /
         // [r9] / [r9+64] addressing, so these three pins are the loop transcription's own proof.
-        static_assert(offsetof(V, maStuckInCollisionLineTestStart) - KI_HEAD == 608, "X360 +1088 == r9 - 64");
-        static_assert(offsetof(V, maStuckInCollisionLineTestEnd)   - KI_HEAD == 672, "X360 +1152 == r9");
-        static_assert(offsetof(V, maStuckInCollisionLineTestPoint) - KI_HEAD == 736, "X360 +1216 == r9 + 64");
-        static_assert(offsetof(V, mabStuckInCollisionIntersection) - KI_HEAD == 800, "X360 +1280 == r27");
+        CGS_STATIC_ASSERT((offsetof(V, maStuckInCollisionLineTestStart) - KI_HEAD == 608), "X360 +1088 == r9 - 64");
+        CGS_STATIC_ASSERT((offsetof(V, maStuckInCollisionLineTestEnd)   - KI_HEAD == 672), "X360 +1152 == r9");
+        CGS_STATIC_ASSERT((offsetof(V, maStuckInCollisionLineTestPoint) - KI_HEAD == 736), "X360 +1216 == r9 + 64");
+        CGS_STATIC_ASSERT((offsetof(V, mabStuckInCollisionIntersection) - KI_HEAD == 800), "X360 +1280 == r27");
 
         // sizeof() ALONE CANNOT PIN THE LAST MEMBER. Growing mabStuckInCollisionIntersection
         // from 4 to 8 bytes leaves sizeof(V) at 1296 (the 16-byte tail padding absorbs it), and a
         // tamper test caught exactly that: the sizeof assert below MISSED the wrong array count.
         // The end-of-DATA pin is what catches it -- 1284 - 480 == 804, the loop's own trip count.
-        static_assert(sizeof(V::mabStuckInCollisionIntersection) == KI_MAX_WORLD_CONTACT_SPIES,
+        CGS_STATIC_ASSERT((sizeof(V::mabStuckInCollisionIntersection) == KI_MAX_WORLD_CONTACT_SPIES),
                       "one intersection flag per line test (the tail loop's stbx count)");
-        static_assert(offsetof(V, mabStuckInCollisionIntersection)
-                          + sizeof(V::mabStuckInCollisionIntersection) - KI_HEAD == 804,
+        CGS_STATIC_ASSERT((offsetof(V, mabStuckInCollisionIntersection)
+                          + sizeof(V::mabStuckInCollisionIntersection) - KI_HEAD == 804),
                       "the class's last DATA byte is X360 +1284");
 
         // The whole tail is 816 bytes (1296 - 480), i.e. the class ends exactly where
         // BrnVehicleManager.h's `mDebugComponent[163264 - 161968]` span ends.
-        static_assert(sizeof(V) - offsetof(V, mPlayerCarContactPosition) == 816,
+        CGS_STATIC_ASSERT((sizeof(V) - offsetof(V, mPlayerCarContactPosition) == 816),
                       "1296 - 480 == 816: the class closes on the 1296-byte VehicleManager span");
     }
 }

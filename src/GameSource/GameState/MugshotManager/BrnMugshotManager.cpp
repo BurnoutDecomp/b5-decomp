@@ -93,9 +93,9 @@ namespace
         bool                          mbZero;               // +0x0C
         u8                            maPad[0x10 - 0x0D];    // +0x0D..0x10
     };
-    static_assert(sizeof(StartMugshotGameAction) ==
-                  sizeof(GameStateModuleIO::PaybackMugshotAction), "start-mugshot payload size");
-    static_assert(offsetof(StartMugshotGameAction, mImageId) ==
+    CGS_STATIC_ASSERT((sizeof(StartMugshotGameAction) ==
+                  sizeof(GameStateModuleIO::PaybackMugshotAction)), "start-mugshot payload size");
+    CGS_STATIC_ASSERT((offsetof(StartMugshotGameAction, mImageId) ==
                   offsetof(GameStateModuleIO::PaybackMugshotAction, mRoadRuleBeatenRoadID) &&
                   offsetof(StartMugshotGameAction, meShowRaceCar) ==
                   offsetof(GameStateModuleIO::PaybackMugshotAction, meTakedownAggressorIndex) &&
@@ -108,18 +108,18 @@ namespace
                   offsetof(StartMugshotGameAction, mbFlagA) ==
                   offsetof(GameStateModuleIO::PaybackMugshotAction, mbIsTakedownAggressorLocalPlayer) &&
                   offsetof(StartMugshotGameAction, mbBroadcast) ==
-                  offsetof(GameStateModuleIO::PaybackMugshotAction, mbMugshotRequiresBroadcast),
+                  offsetof(GameStateModuleIO::PaybackMugshotAction, mbMugshotRequiresBroadcast)),
                   "start-mugshot producer bytes match the shared action offsets");
-    static_assert(sizeof(AbortMugshotGameAction) ==
-                  sizeof(GameStateModuleIO::AbortMugshotCaptureAction), "abort-mugshot payload size");
-    static_assert(offsetof(AbortMugshotGameAction, meAbortedShowRaceCar) ==
+    CGS_STATIC_ASSERT((sizeof(AbortMugshotGameAction) ==
+                  sizeof(GameStateModuleIO::AbortMugshotCaptureAction)), "abort-mugshot payload size");
+    CGS_STATIC_ASSERT((offsetof(AbortMugshotGameAction, meAbortedShowRaceCar) ==
                   offsetof(GameStateModuleIO::AbortMugshotCaptureAction, meTakedownAggressorIndex) &&
                   offsetof(AbortMugshotGameAction, mePlayerRaceCar) ==
                   offsetof(GameStateModuleIO::AbortMugshotCaptureAction, meTakedownVictimIndex) &&
                   offsetof(AbortMugshotGameAction, meImageType) ==
                   offsetof(GameStateModuleIO::AbortMugshotCaptureAction, meImageType) &&
                   offsetof(AbortMugshotGameAction, mbZero) ==
-                  offsetof(GameStateModuleIO::AbortMugshotCaptureAction, mbIsTakedownAggressorLocalPlayer),
+                  offsetof(GameStateModuleIO::AbortMugshotCaptureAction, mbIsTakedownAggressorLocalPlayer)),
                   "abort-mugshot producer bytes match the shared action offsets");
 
     // The GameActionQueue concrete type (forward-declared in BrnGameStateModuleIO.h) is the variable
@@ -255,11 +255,11 @@ bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCar
 // ---------------------------------------------------------------------------
 void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInputBuffer* lpInput)
 {
-    CGS_ASSERT(lpInput != nullptr, "lpInput");
+    CGS_ASSERT(lpInput != 0, "lpInput");
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
         lpInput->GetPlayerStatusInterface();
-    CGS_ASSERT(lpPlayerStatusInterface != nullptr, "lpPlayerStatusInterface");
+    CGS_ASSERT(lpPlayerStatusInterface != 0, "lpPlayerStatusInterface");
 
     s32 liIndex = 0;
     const s32 liNumPlayers = lpPlayerStatusInterface->GetNumPlayers();
@@ -294,8 +294,8 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
                                          ::EActiveRaceCarIndex leMugshotCaptureRaceCarIndex,
                                          bool lbMugshotRequiresBroadcast)
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
-    CGS_ASSERT(mpGameStateModule->GetModeManager() != nullptr, "mpGameStateModule->GetModeManager()");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule->GetModeManager() != 0, "mpGameStateModule->GetModeManager()");
 
     if (mbIsAnythingPaused)
         return;
@@ -334,8 +334,8 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
                 lAbortMugshotAction.meImageType          = meCaptureMugshotType;
                 lAbortMugshotAction.mbZero               = false;
 
-                CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-                CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+                CGS_ASSERT(lpOutput != 0, "lpOutput");
+                CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
                 AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lAbortMugshotAction),
                     KI_GAME_ACTION_ABORT_MUGSHOT, (s32)sizeof(AbortMugshotGameAction));
@@ -377,8 +377,8 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
     lMugshotPrepareCaptureAction.mbFlagA         = false;
     lMugshotPrepareCaptureAction.mbBroadcast     = lbMugshotRequiresBroadcast;
 
-    CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-    CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
     AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lMugshotPrepareCaptureAction),
         KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -411,7 +411,7 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
                    && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "leTakedownVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
-        CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
+        CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
 
         // Only react when the local player is the aggressor or the victim.
         const bool lbPlayerIsParty =
@@ -475,10 +475,10 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
 void MugshotManager::CheckForSuccessfulPayback(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                                                GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpInput != nullptr, "lpInput");
-    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface() != nullptr,
+    CGS_ASSERT(lpInput != 0, "lpInput");
+    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface() != 0,
                "lpInput->GetNetworkToGameStateInterface()");
-    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() != nullptr,
+    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() != 0,
                "lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue()");
 
     const GameStateModuleIO::NetworkToGameStateInterface::DirtyTrickQueue* lpDirtyTrickQueue =
@@ -544,8 +544,8 @@ void MugshotManager::HandleCapturingMugshot(GameStateModuleIO::OutputBuffer* lpO
         lAction.mbFlagA         = false;
         lAction.mbBroadcast     = (meCaptureMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -602,8 +602,8 @@ void MugshotManager::HandleCapturingTheirMugshot(GameStateModuleIO::OutputBuffer
         lAction.mbFlagA         = true;
         lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -633,8 +633,8 @@ void MugshotManager::HandleShowingTheirMugshot(GameStateModuleIO::OutputBuffer* 
         lAction.mbFlagA         = true;
         lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -650,8 +650,8 @@ void MugshotManager::HandleShowingTheirMugshot(GameStateModuleIO::OutputBuffer* 
         lAction.mbFlagA         = true;
         lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != nullptr, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != nullptr, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -744,9 +744,9 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessImageReceivedEvent(const OnlineImageReceivedEvent* lpImageReceivedEvent)
 {
-    CGS_ASSERT(lpImageReceivedEvent != nullptr, "lpImageReceivedEvent");
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
-    CGS_ASSERT(mpGameStateModule->GetModeManager() != nullptr, "mpGameStateModule->GetModeManager()");
+    CGS_ASSERT(lpImageReceivedEvent != 0, "lpImageReceivedEvent");
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule->GetModeManager() != 0, "mpGameStateModule->GetModeManager()");
 
     // console gate: proceed when the show FSM is idle, OR it is in the capture-their state AND the
     // current mode is NOT in a blocked post-event camera state.
@@ -819,7 +819,7 @@ void MugshotManager::ProcessOnlineWin(GameStateModuleIO::OutputBuffer* lpOutput)
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessAbortCaptureEvent(const OnlineImageCaptureAbortedEvent* lpAbortEvent)
 {
-    CGS_ASSERT(lpAbortEvent != nullptr, "lpAbortEvent");
+    CGS_ASSERT(lpAbortEvent != 0, "lpAbortEvent");
 
     if (lpAbortEvent->mbAbortCaptureMachine)
     {

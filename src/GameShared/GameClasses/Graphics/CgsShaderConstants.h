@@ -312,7 +312,7 @@ struct ShaderConstantsInternal
     // CgsShaderConstants.h:912
     CgsGraphics::Ptr32<renderengine::ProgramVariableHandle> mpaProgramStateHandles; // word 4 (offset 0x10)
 };
-static_assert(sizeof(ShaderConstantsInternal) == 20, "Serialized internal constants");
+CGS_STATIC_ASSERT((sizeof(ShaderConstantsInternal) == 20), "Serialized internal constants");
 
 // CgsShaderConstants.h:1044 (DWARF)
 // The CPU-side ("material animation") constant block. Unlike External/Internal this is
@@ -345,6 +345,6 @@ struct ShaderConstantsCPU
     // CgsShaderConstants.h:1050
     CgsGraphics::Ptr32<CgsGraphics::Ptr32<const char>> mppacNames; // word 3 (offset 0x0C)
 };
-static_assert(sizeof(ShaderConstantsCPU) == 16, "Serialized CPU constants");
+CGS_STATIC_ASSERT((sizeof(ShaderConstantsCPU) == 16), "Serialized CPU constants");
 
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }

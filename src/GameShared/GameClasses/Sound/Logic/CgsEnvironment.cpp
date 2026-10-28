@@ -29,13 +29,13 @@ namespace Logic
 
 bool Environment::AddStateManager(StateManager* apStateManager)
 {
-    CGS_ASSERT(apStateManager != nullptr, "lpStateManager");
+    CGS_ASSERT(apStateManager != 0, "lpStateManager");
 
     const s32 liStateType = apStateManager->GetStateType();
     CGS_ASSERT(liStateType < KI_MAX_NUMBER_OF_STATES,
                "lpStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES");
 
-    CGS_ASSERT(mapStateManagers[liStateType] == nullptr,
+    CGS_ASSERT(mapStateManagers[liStateType] == 0,
                "mapStateManagers[lpStateManager->GetStateType()] == NULL");
 
     mapStateManagers[liStateType] = apStateManager;
@@ -76,14 +76,14 @@ StateManager* Environment::GetStateManager(s32 liStateManId) const
 // ---------------------------------------------------------------------------
 void Environment::Construct(const EnvironmentSpec& akrSpec)
 {
-    CGS_ASSERT(akrSpec.mpAllocator != nullptr, "lEnvironmentSpec.mpAllocator");
+    CGS_ASSERT(akrSpec.mpAllocator != 0, "lEnvironmentSpec.mpAllocator");
 
     mpAllocator = akrSpec.mpAllocator;
     mfGameTime  = 0.0f;
     mu32StateManagerCount = akrSpec.mu32StateManagerCount;
 
     for (s32 liSlot = 0; liSlot < KI_MAX_NUMBER_OF_STATES; ++liSlot)
-        mapStateManagers[liSlot] = nullptr;
+        mapStateManagers[liSlot] = 0;
 
     // The mixer's creation descriptor the X360 builds on the stack:
     // {mPrintSelect = 0, NumMixStates = managerCount, MixerAllocator = the

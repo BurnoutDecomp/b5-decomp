@@ -377,7 +377,7 @@ f32 GameMode::GetIntroDurationSeconds() const
     const f32 KF_ONLINE_INTRO_TIME_SECONDS_PER_CAR  = 4.0f;   // flt_820211D4
 
     const GameMode* const lpCurrentGameMode = mpModeManager->GetCurrentGameMode();
-    const bool lbOnlineModeRunning = (lpCurrentGameMode != nullptr) && lpCurrentGameMode->IsOnline();
+    const bool lbOnlineModeRunning = (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
 
     const GameStateModuleIO::EGameModeType leGameModeType = mpModeManager->GetCurrentGameModeType();
     const bool lbFreeBurnLobbyOrShowtime =
@@ -633,7 +633,7 @@ bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
         return false;
     }
 
-    CGS_ASSERT(lpiNewCountdownDisplay != nullptr, "lpiNewCountdownDisplay != NULL");
+    CGS_ASSERT(lpiNewCountdownDisplay != 0, "lpiNewCountdownDisplay != NULL");
 
     *lpiNewCountdownDisplay = miCountdownDisplay;
     mbCountdownDisplayChanged = false;

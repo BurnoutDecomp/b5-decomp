@@ -28,7 +28,7 @@ namespace BrnGame
         mbCalledFunction = true;
 
         // if (v2) { ...assert with the Lua error string... }
-        CGS_ASSERT(liResult == 0, lua_tolstring(mpLuaHandle, -1, nullptr));
+        CGS_ASSERT(liResult == 0, lua_tolstring(mpLuaHandle, -1, 0));
 
         // stw r11(0), 0(r31) -- reset the pushed-parameter count.
         miNumParams = 0;
@@ -78,6 +78,6 @@ namespace BrnGame
         CGS_ASSERT(lua_isstring(mpLuaHandle, liStackIndex), "IsString(liResultIndex)");
 
         // li r5, 0 -- length out-param is null.
-        return lua_tolstring(mpLuaHandle, liStackIndex, nullptr);
+        return lua_tolstring(mpLuaHandle, liStackIndex, 0);
     }
 }

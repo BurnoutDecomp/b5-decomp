@@ -31,9 +31,9 @@ namespace BrnWorld
 
     void TrafficCheckManager::_AssertLayout()
     {
-        static_assert(offsetof(TrafficCheckManager, miCurrentCheckChain)  == 0, "miCurrentCheckChain @0");
-        static_assert(offsetof(TrafficCheckManager, mfTimeSinceLastCheck) == 4, "mfTimeSinceLastCheck @4");
-        static_assert(sizeof(TrafficCheckManager) == 8, "TrafficCheckManager sizeof 8");
+        CGS_STATIC_ASSERT((offsetof(TrafficCheckManager, miCurrentCheckChain)  == 0), "miCurrentCheckChain @0");
+        CGS_STATIC_ASSERT((offsetof(TrafficCheckManager, mfTimeSinceLastCheck) == 4), "mfTimeSinceLastCheck @4");
+        CGS_STATIC_ASSERT((sizeof(TrafficCheckManager) == 8), "TrafficCheckManager sizeof 8");
     }
 
     void TrafficCheckManager::Update(const GameEventQueue* lpInput,

@@ -63,10 +63,10 @@ public:
     // else must SkipField), then require exactly one signature block and a
     // matching HMAC. Logs every step through the MassiveLog hook. Returns 1 on
     // a fully parsed + verified response, else 0.
-    int Parse() override;
+    int Parse() ;
 
     // The exit-zone endpoint path.
-    const char* GetRequestURL() override;
+    const char* GetRequestURL() ;
 
     // @ 0x82BDC8A0. Called by CMassiveZoneManager::Tick. Rejects a null builder
     // or a null zone name (returns -1100); otherwise chains the base

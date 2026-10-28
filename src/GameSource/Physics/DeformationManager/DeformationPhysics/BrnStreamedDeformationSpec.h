@@ -127,7 +127,7 @@ namespace Deformation
     // BrnGlassPaneSpec.h:49 -- one streamed breakable glass pane.
     // sizeof == 112 (0x70): mNormal(16) + maCornerPositionOffsets[4](64) + maiPointIndex[4](8)
     // + mabSkinToControlPoint[4](4) + 3x i16(6) + mePartType(4), 16-byte aligned.
-    struct alignas(16) GlassPaneSpec
+    struct CGS_ALIGN(16) GlassPaneSpec
     {
         static const s8 KI_NUM_POINTS_PER_GLASS_PANE = 4;
 
@@ -287,17 +287,17 @@ namespace Deformation
     // COM/mesh offsets, and ActiveRaceCar::OnResourcesLoaded @0x822EB2FC reading
     // `spec + 96 + 48*i` for wheel i's scale == maWheelSpecs[i].mScale). If one of these
     // fails, a pointer slot has been widened back to host width.
-    static_assert(sizeof(LocatorPointSpecList) == 8, "LocatorPointSpecList is {u32 count, u32 slot}");
-    static_assert(offsetof(StreamedDeformationSpec, maGlassPaneData) == 28, "maGlassPaneData @ +28");
-    static_assert(offsetof(StreamedDeformationSpec, miNumGlassPanes) == 32, "miNumGlassPanes @ +32");
-    static_assert(offsetof(StreamedDeformationSpec, mHandlingBodyDimensions) == 64, "mHandlingBodyDimensions @ +64");
-    static_assert(offsetof(StreamedDeformationSpec, maWheelSpecs) == 80, "maWheelSpecs @ +80");
-    static_assert(sizeof(WheelSpec) == 48, "WheelSpec stride 48 (spec + 96 + 48*i is its mScale)");
-    static_assert(offsetof(StreamedDeformationSpec, maDeformationSensorSpecs) == 272, "sensor grid @ +272");
-    static_assert(offsetof(StreamedDeformationSpec, mCarModelSpaceToHandlingBodySpaceTransform) == 1552,
+    CGS_STATIC_ASSERT((sizeof(LocatorPointSpecList) == 8), "LocatorPointSpecList is {u32 count, u32 slot}");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, maGlassPaneData) == 28), "maGlassPaneData @ +28");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, miNumGlassPanes) == 32), "miNumGlassPanes @ +32");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, mHandlingBodyDimensions) == 64), "mHandlingBodyDimensions @ +64");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, maWheelSpecs) == 80), "maWheelSpecs @ +80");
+    CGS_STATIC_ASSERT((sizeof(WheelSpec) == 48), "WheelSpec stride 48 (spec + 96 + 48*i is its mScale)");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, maDeformationSensorSpecs) == 272), "sensor grid @ +272");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, mCarModelSpaceToHandlingBodySpaceTransform) == 1552),
                   "COM transform @ +1552 (ActiveRaceCar::OnResourcesLoaded reads Def + 1552)");
-    static_assert(offsetof(StreamedDeformationSpec, mu8NumDeformationSensors) == 1618, "sensor count @ +1618");
-    static_assert(offsetof(StreamedDeformationSpec, mCurrentCOMOffset) == 1632, "mCurrentCOMOffset @ +1632");
-    static_assert(offsetof(StreamedDeformationSpec, mMeshOffset) == 1648, "mMeshOffset @ +1648");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, mu8NumDeformationSensors) == 1618), "sensor count @ +1618");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, mCurrentCOMOffset) == 1632), "mCurrentCOMOffset @ +1632");
+    CGS_STATIC_ASSERT((offsetof(StreamedDeformationSpec, mMeshOffset) == 1648), "mMeshOffset @ +1648");
 }
 }

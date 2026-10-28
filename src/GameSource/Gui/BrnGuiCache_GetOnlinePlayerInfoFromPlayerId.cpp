@@ -12,7 +12,7 @@ namespace BrnGui
     // off the end of maPlayerInfo. The 312 is X360-authoritative (the console indexes the bank
     // with `312 * idx`), and BrnNetworkModuleInGamePlayerStatusInterface.h pins the struct to
     // it with an explicit trailing pad -- checked here rather than assumed.
-    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData) == 312,
+    CGS_STATIC_ASSERT((sizeof(BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData) == 312),
                   "InGamePlayerStatusData must match the GuiCache maPlayerInfo lane stride");
 
     // GuiCache::GetOnlinePlayerInfoFromPlayerId -- X360 @0x82482738, exported UNNAMED as

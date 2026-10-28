@@ -26,8 +26,8 @@
 AptLinkerThingy* MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue)
 {
     void* lpMem = gpAptSharedPtrPool->Allocate(sizeof(AptLinkerThingy));   // Allocate(off_8324D808, 0x10)
-    if (lpMem == nullptr)
-        return nullptr;
+    if (lpMem == 0)
+        return 0;
 
     AptLinkerThingy* pThingy = static_cast<AptLinkerThingy*>(lpMem);
 
@@ -35,7 +35,7 @@ AptLinkerThingy* MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue)
 
     AptFile* lpFile = rFile.pData;                 // r11 = *(rFile+0)
     pThingy->mpFile.pData = lpFile;                // *(this+4) = r11
-    if (lpFile != nullptr)
+    if (lpFile != 0)
         AptSharedPtrIncRef(lpFile);                // incref the held file (lwarx/+1/stwcx.)
 
     pThingy->mpValue  = pValue;                    // *(this+8) = r5
@@ -44,7 +44,7 @@ AptLinkerThingy* MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue)
     // Consume the source handle: null it, then dispose its reference (the move's
     // matching decref -- AptSharedPtr<AptFile>::Dispose decrements + frees at zero).
     AptFile* lpSource = rFile.pData;               // r3 = *(rFile+0)
-    rFile.pData = nullptr;                         // *(rFile+0) = 0
+    rFile.pData = 0;                         // *(rFile+0) = 0
     AptSharedPtr<AptFile>::Dispose(lpSource);      // AptSharedPtr<AptFile>::Dispose(r3)
 
     return pThingy;                                // ctor returns `this`
@@ -77,7 +77,7 @@ AptLinkerThingy* MakeLinkerThingy(AptFilePtr& rFile, AptValue* pValue)
 void* AptLinkerThingy::ScalarDeletingDestructor(char flags)
 {
     AptFile* lpFile = mpFile.pData;   // v4 = *(this+4)
-    mpFile.pData = nullptr;     // *(this+4) = 0
+    mpFile.pData = 0;     // *(this+4) = 0
 
     AptSharedPtr<AptFile>::Dispose(lpFile);   // AptFile_::Dispose(v4)
 

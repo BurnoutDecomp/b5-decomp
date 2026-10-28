@@ -144,7 +144,7 @@ namespace
     // decode above is the outstanding shared-header request for that file; it is recorded in
     // scratch/gateui_wave/verify_r3_fix3hud/VERDICT.md (the round-3 banner pointed at a
     // "gateui r3 report" that was never written).
-    struct alignas(8) GuiAudioEventRecord40
+    struct CGS_ALIGN(8) GuiAudioEventRecord40
     {
         s32   miOutEventSize;     // +0x00 = 24  (sizeof the GuiAudioEvent payload)
         s32   miOutEventType;     // +0x04 = 456

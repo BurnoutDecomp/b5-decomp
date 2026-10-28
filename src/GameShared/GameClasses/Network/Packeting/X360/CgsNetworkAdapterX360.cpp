@@ -69,7 +69,7 @@ void NetworkAdapterX360::Construct()
 {
     mePrepareState = E_PREPARE_INIT;   // +0x2C = 0
     mbConnecting   = false;            // +0x30 = 0
-    mpEnvironment  = nullptr;          // +0x28 = 0
+    mpEnvironment  = 0;          // +0x28 = 0
 
     miIdlePerfMon       = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Idle",       CgsDev::E_PMP_8, false, 1.0f, true);
     miConnectPerfMon    = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Connect",    CgsDev::E_PMP_8, false, 1.0f, true);
@@ -107,7 +107,7 @@ NetworkAdapterBase::ENetworkStatus NetworkAdapterX360::Prepare(NetworkAdapterPre
     // Shared tail (asm loc_8288BE8C, reached for states INIT/PREPARING after StartupNetworking AND
     // for FULLY_PREPARED): re-arm the connect timeout, clear the connecting flag, settle as prepared.
     // Calling Prepare again while already FULLY_PREPARED re-arms 'frrt' and clears mbConnecting.
-    NetConnControl(KI_NETCONN_CTRL_FRRT, KI_CONNECT_TIMEOUT_MS, 0, nullptr, nullptr);
+    NetConnControl(KI_NETCONN_CTRL_FRRT, KI_CONNECT_TIMEOUT_MS, 0, 0, 0);
     mbConnecting   = false;
     mePrepareState = E_FULLY_PREPARED;
     return E_NET_STATUS_READY;
@@ -124,7 +124,7 @@ bool NetworkAdapterX360::Release()
         NetConnShutdown(0);
     }
 
-    mpEnvironment  = nullptr;        // +0x28
+    mpEnvironment  = 0;        // +0x28
     mbConnecting   = false;          // +0x30
     mePrepareState = E_PREPARE_INIT; // +0x2C
 
@@ -136,8 +136,8 @@ bool NetworkAdapterX360::Release()
 // ----------------------------------------------------------------------------------------
 void NetworkAdapterX360::StartupNetworking()
 {
-    const char* lpcEnvironment = nullptr;
-    const char* lpcFlags       = nullptr;
+    const char* lpcEnvironment = 0;
+    const char* lpcFlags       = 0;
     bool        lbStart        = true;
 
     switch (meServerType)
@@ -178,9 +178,9 @@ void NetworkAdapterX360::StartupNetworking()
         NetConnStartup(lpcFlags);
     }
 
-    NetConnControl(KI_NETCONN_CTRL_XLSP, 0, 0, nullptr, nullptr);
-    NetConnControl(KI_NETCONN_CTRL_SERV, KI_SERV_VALUE_6, 0, nullptr, nullptr);
-    NetConnControl(KI_NETCONN_CTRL_SERV, KI_SERV_VALUE_7, 0, nullptr, nullptr);
+    NetConnControl(KI_NETCONN_CTRL_XLSP, 0, 0, 0, 0);
+    NetConnControl(KI_NETCONN_CTRL_SERV, KI_SERV_VALUE_6, 0, 0, 0);
+    NetConnControl(KI_NETCONN_CTRL_SERV, KI_SERV_VALUE_7, 0, 0, 0);
 }
 
 // ----------------------------------------------------------------------------------------
@@ -205,9 +205,9 @@ void NetworkAdapterX360::Update()
         const s32 liUserIndex = lpNetworkManager->GetLocalUserControllerPort();
         if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == KI_SIGNIN_STATE_LIVE)
         {
-            CGS_ASSERT(mpEnvironment != nullptr, "Environment to use not set up");
+            CGS_ASSERT(mpEnvironment != 0, "Environment to use not set up");
 
-            const int liConnectResult = NetConnConnect(nullptr, static_cast<const char*>(mpEnvironment));
+            const int liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
             mbConnecting = (liConnectResult == 1);
             if (liConnectResult == 1)
             {
@@ -221,15 +221,15 @@ void NetworkAdapterX360::Update()
     CgsDev::PerfMonCpu::StartMonitor(miDisconnectPerfMon);
     if (mbConnecting)
     {
-        const int liStatus = NetConnStatus(KI_NETCONN_CTRL_CONN, 0, nullptr, 0);
+        const int liStatus = NetConnStatus(KI_NETCONN_CTRL_CONN, 0, 0, 0);
         if (((liStatus >> 24) & 0xFF) == KI_NETCONN_STATUS_DOWN_HIGH_BYTE)
         {
             mbConnecting = false;
             mbDuplicateLogin = (liStatus == KI_NETCONN_STATUS_DUPLICATE_LOGIN);
             NetConnDisconnect();
 
-            CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != nullptr,
+            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0,
                        "mpServerInterface->GetConnectionComponent()");
 
             // mpServerInterface->GetConnectionComponent()->GetServerInterface()->GetLobbyAPIRef()

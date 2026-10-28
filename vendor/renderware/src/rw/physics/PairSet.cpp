@@ -66,7 +66,7 @@ rw::BaseResourceDescriptors<5>* PairSet::GetResourceDescriptor(
     // rather than staying on the console literal -- a 4-aligned block would seat both pointers
     // across an 8-byte boundary.
     lpEntries[0].m_size      = luSize;
-    lpEntries[0].m_alignment = static_cast<u32>(alignof(PairSet));
+    lpEntries[0].m_alignment = static_cast<u32>(__alignof(PairSet));
     return lpResult;
 }
 

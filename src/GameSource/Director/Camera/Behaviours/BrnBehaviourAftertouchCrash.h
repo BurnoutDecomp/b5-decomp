@@ -165,17 +165,17 @@ public:
         // themselves, so each pin is the console offset less the console head.
         static void _AssertLayout()
         {
-            static_assert(offsetof(Parameters, mShakeParams) == sizeof(Behaviour::Parameters),
+            CGS_STATIC_ASSERT((offsetof(Parameters, mShakeParams) == sizeof(Behaviour::Parameters)),
                           "mShakeParams follows the head (console +0x08)");
-            static_assert(offsetof(Parameters, mfSlowDistance) - offsetof(Parameters, mShakeParams) == 0x2C - 0x08,
+            CGS_STATIC_ASSERT((offsetof(Parameters, mfSlowDistance) - offsetof(Parameters, mShakeParams) == 0x2C - 0x08),
                           "mfSlowDistance @ console +0x2C");
-            static_assert(offsetof(Parameters, mfPitch) - offsetof(Parameters, mShakeParams) == 0x3C - 0x08,
+            CGS_STATIC_ASSERT((offsetof(Parameters, mfPitch) - offsetof(Parameters, mShakeParams) == 0x3C - 0x08),
                           "mfPitch @ console +0x3C");
-            static_assert(offsetof(Parameters, mfFOV) - offsetof(Parameters, mShakeParams) == 0x40 - 0x08,
+            CGS_STATIC_ASSERT((offsetof(Parameters, mfFOV) - offsetof(Parameters, mShakeParams) == 0x40 - 0x08),
                           "mfFOV @ console +0x40");
-            static_assert(offsetof(Parameters, mfHeightDistanceVelocityRange) - offsetof(Parameters, mShakeParams) == 0x58 - 0x08,
+            CGS_STATIC_ASSERT((offsetof(Parameters, mfHeightDistanceVelocityRange) - offsetof(Parameters, mShakeParams) == 0x58 - 0x08),
                           "mfHeightDistanceVelocityRange @ console +0x58");
-            static_assert(offsetof(Parameters, mfTimeBetweenDecisions) - offsetof(Parameters, mShakeParams) == 0x6C - 0x08,
+            CGS_STATIC_ASSERT((offsetof(Parameters, mfTimeBetweenDecisions) - offsetof(Parameters, mShakeParams) == 0x6C - 0x08),
                           "mfTimeBetweenDecisions @ console +0x6C");
         }
     };
@@ -196,29 +196,29 @@ public:
 
     // Seed the whole behaviour: the base head, the embedded collision policy plus its four
     // authored flag overrides, the rig sub-objects, and the flag/scalar tail.        (slot 0)
-    void Construct() override;
+    void Construct() ;
 
     // Drop the prepared latch, then seed the running blend/height/distance from the adopted
     // parameter block and re-arm the debug-crash-camera parameter. Cannot fail.      (slot 1)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;
 
     // THE AFTERTOUCH CRASH RIG @0x82228158 (DWARF BrnBehaviourAftertouchCrash.cpp:161). Follows
     // the lagged car: orbits it under the right stick, looks down on it, blends its direction
     // toward the one behind the car's travel, pitches, smooths, shakes (its own shake plus the
     // bounce impact shake), sets the FOV, rolls and finally blends into the slow-mo close-up.
     // Always returns true.                                                           (slot 2)
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) ;
 
     // Hand back the vehicle-attached collision policy embedded after the basis, or null when
     // collision has been disabled on this instance.                                  (slot 5)
-    CollisionPolicy* GetCollisionPolicy() override;
+    CollisionPolicy* GetCollisionPolicy() ;
 
     // Seed the tweaker the debug menu attaches (DWARF .cpp:516). ICF-folded on the console with
     // BehaviourIceAnim::SetupTweaker: `mr r3, r4 ; b Tweaker::Construct`.           (slot 6)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;
 
     //                                                                                (slot 7)
-    const char* GetName() const override;
+    const char* GetName() const ;
 
     // DWARF BrnBehaviourAftertouchCrash.h:104. Inlined by Update at the close-up
     // (0x822294C4..0x82229500): assert the rig has been prepared, then hand back the camera's
@@ -357,62 +357,62 @@ private:
     {
         // mIceCarRelativeBasis sits immediately after the base, rounded up to its own 16-byte
         // alignment -- the step that puts mCollisionPolicy at the attested +0x60 on the console.
-        static_assert(offsetof(BehaviourAftertouchCrash, mIceCarRelativeBasis)
-                          == ((sizeof(Behaviour) + 15u) & ~static_cast<size_t>(15u)),
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mIceCarRelativeBasis)
+                          == ((sizeof(Behaviour) + 15u) & ~static_cast<size_t>(15u))),
                       "mIceCarRelativeBasis follows the Behaviour base, 16-aligned");
 
         // The five flag bytes are contiguous.
-        static_assert(offsetof(BehaviourAftertouchCrash, mbWasFallingDownwards)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x01,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mbWasFallingDownwards)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x01),
                       "mbWasFallingDownwards is the second flag byte");
-        static_assert(offsetof(BehaviourAftertouchCrash, mbDisableCollision)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x02,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mbDisableCollision)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x02),
                       "mbDisableCollision is the third flag byte");
-        static_assert(offsetof(BehaviourAftertouchCrash, mbIsTempDebugCrashCamera)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x03,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mbIsTempDebugCrashCamera)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x03),
                       "mbIsTempDebugCrashCamera is the fourth flag byte");
-        static_assert(offsetof(BehaviourAftertouchCrash, mbIsRandomStartTempDebugCrashCamera)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x04,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mbIsRandomStartTempDebugCrashCamera)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x04),
                       "mbIsRandomStartTempDebugCrashCamera is the fifth flag byte");
 
         // ...and the scalar tail follows them at its attested displacements.
-        static_assert(offsetof(BehaviourAftertouchCrash, mfDebugCrashCameraParam0to1)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x08,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mfDebugCrashCameraParam0to1)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x08),
                       "mfDebugCrashCameraParam0to1 sits at the flag run +0x08");
-        static_assert(offsetof(BehaviourAftertouchCrash, mfRollAngleRads)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mfRollAngleRads)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x10),
                       "mfRollAngleRads sits at the flag run +0x10");
-        static_assert(offsetof(BehaviourAftertouchCrash, mfCloseupAmount0To1)
-                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x14,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mfCloseupAmount0To1)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x14),
                       "mfCloseupAmount0To1 sits at the flag run +0x14");
 
         // The running rig scalars Prepare seeds are a contiguous f32 run.
-        static_assert(offsetof(BehaviourAftertouchCrash, mfDistance)
-                       - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x04,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mfDistance)
+                       - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x04),
                       "mfDistance follows mfHeight");
-        static_assert(offsetof(BehaviourAftertouchCrash, mfBlendFactor)
-                       - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x08,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mfBlendFactor)
+                       - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x08),
                       "mfBlendFactor follows mfDistance");
 
         // The rig sub-object run +0x300 .. +0x383 (none of the four holds a pointer, so these
         // displacements are the console's on the host too).
-        static_assert(offsetof(BehaviourAftertouchCrash, mPositionLag)
-                       - offsetof(BehaviourAftertouchCrash, mCameraPositionLastFrame) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mPositionLag)
+                       - offsetof(BehaviourAftertouchCrash, mCameraPositionLastFrame) == 0x10),
                       "mPositionLag follows mCameraPositionLastFrame (+0x300)");
-        static_assert(offsetof(BehaviourAftertouchCrash, mRandom)
-                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mRandom)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x30),
                       "mRandom @ mPositionLag + 0x30 (+0x330)");
-        static_assert(offsetof(BehaviourAftertouchCrash, mShake)
-                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x60,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mShake)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x60),
                       "mShake @ mPositionLag + 0x60 (+0x360)");
-        static_assert(offsetof(BehaviourAftertouchCrash, mImpactEffect)
-                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x70,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mImpactEffect)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x70),
                       "mImpactEffect @ mPositionLag + 0x70 (+0x370)");
-        static_assert(offsetof(BehaviourAftertouchCrash, mfHeight)
-                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x84,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mfHeight)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x84),
                       "mfHeight @ mPositionLag + 0x84 (+0x384)");
-        static_assert(offsetof(BehaviourAftertouchCrash, mbManualCameraControl)
-                       - offsetof(BehaviourAftertouchCrash, mfManualHeightAdjustment) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(BehaviourAftertouchCrash, mbManualCameraControl)
+                       - offsetof(BehaviourAftertouchCrash, mfManualHeightAdjustment) == 0x10),
                       "mfManualHeightAdjustment is the 16-byte register ahead of the flag run (+0x3B0)");
     }
 };

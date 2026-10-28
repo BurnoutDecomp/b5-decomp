@@ -173,9 +173,9 @@ static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* const gpP
 // ---------------------------------------------------------------------------
 PassbyEffect::PassbyEffect()
     : mVoice()
-    , mAttribs(nullptr, nullptr)
+    , mAttribs(0, 0)
     , meLifetime(E_NOT_PLAYED)
-    , mpPassby3DControl(nullptr)
+    , mpPassby3DControl(0)
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE)
     , muSampleId(0)
     , mfPitchScale(0.0f)
@@ -299,10 +299,10 @@ bool PassbyEffect::Prepare(CgsSound::Logic::State* apState)
             return false;
 
         PassbyState* lpPassbyState = static_cast<PassbyState*>(GetStateBase());
-        CGS_ASSERT(lpPassbyState != nullptr, "lpPassbyState");
+        CGS_ASSERT(lpPassbyState != 0, "lpPassbyState");
         PassbyStateManager* lpStateManager =
             static_cast<PassbyStateManager*>(lpPassbyState->GetStateManager());
-        CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
 
         mVoice.Attach(static_cast<s32>(CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~")),
                       lpStateManager->GetSplicerBank());
@@ -329,7 +329,7 @@ bool PassbyEffect::Prepare(CgsSound::Logic::State* apState)
 const PassbyStateManager::Passby& PassbyEffect::GetPassbyData() const
 {
     const PassbyState* lpState = static_cast<const PassbyState*>(GetStateBase());
-    CGS_ASSERT(lpState != nullptr, "lpState");
+    CGS_ASSERT(lpState != 0, "lpState");
     return lpState->GetPassbyData();
 }
 
@@ -365,7 +365,7 @@ bool PassbyEffect::Attach()
         lpModule->GetGlobalData().mPassbyBins(static_cast<u32>(lrPassby.meType))));
 
     const CgsSound::Logic::Cgs3dEffectControl* lpControl = lrPassby.mp3dControl;
-    if (lpControl != nullptr &&
+    if (lpControl != 0 &&
         lpControl->GetAttachState() == CgsSound::Logic::EffectBase::E_ATTACH_STATE_FINISHED)
     {
         mu16AttachCount = lpControl->GetAttachCount();
@@ -440,7 +440,7 @@ bool PassbyEffect::UpdatePosition()
 {
     const PassbyStateManager::Passby& lrPassby = GetPassbyData();
     const CgsSound::Logic::Cgs3dEffectControl* lpControl = lrPassby.mp3dControl;
-    if (lpControl == nullptr)
+    if (lpControl == 0)
     {
         mPosition = lrPassby.mStaticPos;
         return true;
@@ -602,7 +602,7 @@ void PassbyEffect::ProcessUpdate()
             lSphere.mfHeightOffset = 0.0f;
             lSphere.mfRadius = 2.0f;
             lSphere.mfDurationVisible = 0.5f;
-            lSphere.mpDebugString = nullptr;
+            lSphere.mpDebugString = 0;
             CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage(lSphere);
             lMessage.Construct(1, static_cast<u16>((GetId() >> 16) & 0xFF),
                 static_cast<u16>((GetId() >> 11) & 0x1F), 0,

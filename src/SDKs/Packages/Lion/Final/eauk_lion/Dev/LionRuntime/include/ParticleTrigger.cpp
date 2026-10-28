@@ -8,8 +8,8 @@
 // at exactly those offsets, so sizeof(cTime) is the load-bearing check here.
 namespace
 {
-    static_assert(sizeof(cTime) == 4, "cTime (trigger stamp) is the 4-byte form");
-    static_assert(sizeof(cParticleTrigger) == 0x10,
+    CGS_STATIC_ASSERT((sizeof(cTime) == 4), "cTime (trigger stamp) is the 4-byte form");
+    CGS_STATIC_ASSERT((sizeof(cParticleTrigger) == 0x10),
                   "cParticleTrigger: 3 x 4-byte stamps + bool @ +0x0C, padded to 0x10");
 }
 

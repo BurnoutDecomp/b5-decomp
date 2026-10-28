@@ -113,7 +113,7 @@ struct AptAnimationPoolData
     // complete-class offsetof context).
     static void _AssertLayout()
     {
-        static_assert(offsetof(AptAnimationPoolData, mnInput) == 0x04, "B4: 'input' lives OUTSIDE the union");
+        CGS_STATIC_ASSERT((offsetof(AptAnimationPoolData, mnInput) == 0x04), "B4: 'input' lives OUTSIDE the union");
     }
 };
 

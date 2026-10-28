@@ -45,11 +45,11 @@ public:
     // Two-phase init: latch the owning module and the bring-up params, seed the type-list / sort /
     // render option tables and clear the dump and share-test flags.
     void Construct(ResourceModule* lpResourceModule, const DebugComponentParams* lpParams);
-    void Update() override;
+    void Update() ;
 
 protected:
-    void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
-    void OnActivate() override;
+    void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) ;
+    void OnActivate() ;
     void InitWindows();
     void GenerateStringList();
     void UpdatePoolMenuItems();

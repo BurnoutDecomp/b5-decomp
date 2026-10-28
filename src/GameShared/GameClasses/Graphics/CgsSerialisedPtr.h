@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include <cstdint>
+#include "types.hpp"
 
 // =============================================================================
 // CgsGraphics::Ptr32<T> -- a SERIALISED 32-bit pointer slot.

@@ -151,9 +151,9 @@ private:
 // 16 bytes on the X360 (32-bit mpPtr, slwi ...,4 stride); on a 64-bit host the pointer
 // widens, so we pin the offsets that survive the width change rather than sizeof, exactly
 // as the sibling Attrib::Node / RefSpec reconstructions do.
-static_assert(offsetof(VecHashMap_Attrib_Class_TablePolicy_0_16::Node, mKey) == 0,
+CGS_STATIC_ASSERT((offsetof(VecHashMap_Attrib_Class_TablePolicy_0_16::Node, mKey) == 0),
               "VecHashMap Node mKey must sit at +0 (X360 std/ld doubleword)");
-static_assert(offsetof(VecHashMap_Attrib_Class_TablePolicy_0_16::Node, mpPtr) == 8,
+CGS_STATIC_ASSERT((offsetof(VecHashMap_Attrib_Class_TablePolicy_0_16::Node, mpPtr) == 8),
               "VecHashMap Node mpPtr must sit at +8 (X360 self-pointer sentinel slot)");
 
 namespace Attrib
@@ -244,9 +244,9 @@ namespace Attrib
     // Pin the pointer-free layout facts (X360-attested field offsets); see the note on
     // the <0,16> Node above -- the X360 node is 16 bytes (32-bit mPtr), so we pin the
     // width-stable offsets rather than the host sizeof.
-    static_assert(offsetof(CollectionHashMap::Node, mKey) == 0,
+    CGS_STATIC_ASSERT((offsetof(CollectionHashMap::Node, mKey) == 0),
                   "CollectionHashMap Node mKey must sit at +0 (X360 std/ld doubleword)");
-    static_assert(offsetof(CollectionHashMap::Node, mPtr) == 8,
+    CGS_STATIC_ASSERT((offsetof(CollectionHashMap::Node, mPtr) == 8),
                   "CollectionHashMap Node mPtr must sit at +8 (X360 self-pointer sentinel slot)");
 
     // -------------------------------------------------------------------------

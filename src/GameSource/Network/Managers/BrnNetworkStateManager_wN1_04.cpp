@@ -160,14 +160,14 @@ namespace BrnNetwork
         template <typename TGuiEvent>
         void SetPayloadWord(TGuiEvent* lpEvent, s32 liValue)
         {
-            static_assert(sizeof(lpEvent->maData) == sizeof(s32), "4-byte GUI payload");
+            CGS_STATIC_ASSERT((sizeof(lpEvent->maData) == sizeof(s32)), "4-byte GUI payload");
             std::memcpy(lpEvent->maData, &liValue, sizeof(s32));
         }
 
         template <typename TGuiEvent>
         s32 GetPayloadWord(const TGuiEvent* lpEvent)
         {
-            static_assert(sizeof(lpEvent->maData) == sizeof(s32), "4-byte GUI payload");
+            CGS_STATIC_ASSERT((sizeof(lpEvent->maData) == sizeof(s32)), "4-byte GUI payload");
             s32 liValue;
             std::memcpy(&liValue, lpEvent->maData, sizeof(s32));
             return liValue;
@@ -905,11 +905,11 @@ namespace BrnNetwork
     //
     void StateManager::ProcessGuiEvents(const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
     {
-        const CgsModule::Event* lpEvent     = nullptr;
+        const CgsModule::Event* lpEvent     = 0;
         s32                     liEventSize = 0;
         s32                     liEventId   = lpGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
 
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             const CgsModule::Event* lpRecord  = lpEvent;
             const void*             lpPayload = lpEvent;
@@ -938,12 +938,12 @@ namespace BrnNetwork
                 if (lpTextRemovedEvent->IsThisTheRemovedString("TOS_TEXT"))
                 {
                     CgsNetwork::ServerInterfaceDirtySock::MemFree(mpTOS, 0, 0);
-                    mpTOS = nullptr;
+                    mpTOS = 0;
                 }
                 else if (lpTextRemovedEvent->IsThisTheRemovedString("NEWS_TEXT"))
                 {
                     CgsNetwork::ServerInterfaceDirtySock::MemFree(mpNews, 0, 0);
-                    mpNews = nullptr;
+                    mpNews = 0;
                 }
                 break;
             }
@@ -1143,7 +1143,7 @@ namespace BrnNetwork
                             mpNetworkManager->GetLaunchManager()->Start();
                             mpNetworkManager->OnGameLaunching();
                             meState = E_STATE_LAUNCHING;
-                            mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_STARTED, nullptr);
+                            mpNetworkManager->CaptureTelemetryEvent(E_TELEMETRY_NETWORK_GAME_STARTED, 0);
                         }
                     }
                 }
@@ -1449,7 +1449,7 @@ namespace BrnNetwork
                 {
                     // Offline: show the stats cached for the local player, if they are current.
                     const NetworkPlayerStats* lpPlayerStats = mpNetworkManager->GetStatsManager()->GetLocalPlayerStats();
-                    if (lpPlayerStats != nullptr && lpPlayerStats->GetStatus() == NetworkPlayerStats::E_STATS_AGE_CURRENT)
+                    if (lpPlayerStats != 0 && lpPlayerStats->GetStatus() == NetworkPlayerStats::E_STATS_AGE_CURRENT)
                     {
                         BrnGui::GuiEventNetworkPlayerStats lPlayerStatsEvent;
                         const char* lpcPlayerName = lpPlayerStats->GetName();
@@ -1495,7 +1495,7 @@ namespace BrnNetwork
 
                 if (meOutputPlayerTexture == BrnGui::GuiEventNetworkOutputPlayerTexture::E_OUTPUT_OFF)
                 {
-                    mpNetworkManager->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+                    mpNetworkManager->PackTextureAndSendDisplayEventToGui(0, -1);
                 }
                 break;
             }

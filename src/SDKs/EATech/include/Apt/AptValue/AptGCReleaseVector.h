@@ -37,6 +37,6 @@ extern AptValueVector* gpValuesToRelease;
 // reaches this pre-init. Used by CgsAptCommunicator::UpdateComponentReserved.
 inline bool AptIsDeferredVectorFull()
 {
-    return gpValuesToRelease == nullptr ||
+    return gpValuesToRelease == 0 ||
            gpValuesToRelease->mnCapacity >= gpValuesToRelease->mnTop;
 }

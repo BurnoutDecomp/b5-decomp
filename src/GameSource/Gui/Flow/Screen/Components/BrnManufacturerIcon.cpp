@@ -138,7 +138,7 @@ namespace BrnGui
         // Resolve the list entry for the selected card (null when not present).
         const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lSelectedCardId);
         const BrnResource::VehicleListEntry* lpVehicleData =
-            (liVehicleIndex < 0) ? nullptr : lpVehicleList->GetVehicleData(liVehicleIndex);
+            (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
 
         // ⚠️ MARKED DEVIATION (2026-08-02, and it is not theoretical): the X360 reads
         // entry+0x08 UNCONDITIONALLY on the next line (`ld r11,8(r3)`, no null guard before

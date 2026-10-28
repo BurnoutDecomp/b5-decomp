@@ -52,6 +52,6 @@ namespace BrnTraffic
     // Hull::GetStaticVehicle @0x82705C90 indexes this array with a hard-coded
     // 80-byte stride. Also at namespace scope so a TU that includes only the header
     // still fails if the math types change width.
-    static_assert(sizeof(StaticTrafficVehicle) == 80,
+    CGS_STATIC_ASSERT((sizeof(StaticTrafficVehicle) == 80),
                   "StaticTrafficVehicle stride (Hull::GetStaticVehicle @0x82705C90 uses 80)");
 }

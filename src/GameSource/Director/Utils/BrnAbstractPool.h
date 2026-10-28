@@ -134,7 +134,7 @@ public:
     const void* operator[](IndexType liIndex) const { return mObjectPool[liIndex]; }
 
     // The slot-release callback the AbstractPoolVoidHandle calls (IAbstractPoolFreeObject).
-    void FreeObject(s32 liIndex) override { mObjectPool.FreeObject(static_cast<IndexType>(liIndex)); }
+    void FreeObject(s32 liIndex)  { mObjectPool.FreeObject(static_cast<IndexType>(liIndex)); }
 
     // Allocate a slot, construct a T in it, and hand back a type-erased handle. Faithful to
     // the SHIPPED X360 AllocateVoid<T> shape (returns AbstractPoolVoidHandle): assert the

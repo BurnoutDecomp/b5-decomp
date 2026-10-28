@@ -47,9 +47,9 @@
 // AptCharacterInst gets a real, type-correct render item carrying mpCharacter.
 AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
 {
-    mpProperties = nullptr;
+    mpProperties = 0;
 
-    AptRenderItem* pItem = nullptr;
+    AptRenderItem* pItem = 0;
     if (gpAptTarget)   // off_8324E574 -- create the render item only when an Apt target is active
         pItem = AptRenderItem::Manager_CreateItem(pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
@@ -70,12 +70,12 @@ AptCharacterInst::~AptCharacterInst()
     {
         mpProperties->~AptNativeHash();
         gpNonGCPoolManager->Deallocate(mpProperties, sizeof(AptNativeHash));
-        mpProperties = nullptr;
+        mpProperties = 0;
     }
     if (mpRenderItem)
     {
         AptRenderItem* pItem = mpRenderItem;
-        mpRenderItem = nullptr;
+        mpRenderItem = 0;
         pItem->ReleaseReference();
     }
 }
@@ -107,12 +107,12 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
     {
         // Sprite / movie-clip: the 36-byte AptCharacterSpriteInstBase (mDisplayList + play state).
         void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterSpriteInstBase));   // 36
-        if (pMem == nullptr)
-            return nullptr;
+        if (pMem == 0)
+            return 0;
         return ::new (pMem) AptCharacterSpriteInstBase(pCharacter);
     }
     if (nType == 4)
-        return nullptr;   // button: built elsewhere (the console returns 0 here)
+        return 0;   // button: built elsewhere (the console returns 0 here)
 
     if (nType == 2)
     {
@@ -124,8 +124,8 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
         // corrupting the adjacent DOGMA pool block (a live render item / CIH node) and
         // crashing the render walk.
         void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterTextInst));
-        if (pMem == nullptr)
-            return nullptr;
+        if (pMem == 0)
+            return 0;
         AptCharacterTextInst* const pTextInst =
             static_cast<AptCharacterTextInst*>(::new (pMem) AptCharacterInst(pCharacter));
         // Seed the cached layout scalars. HOST ADDITION (deterministic bring-up):
@@ -146,23 +146,23 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
         // only the base-ctor body). The block MUST be morph-sized: a plain-base 0x20
         // alloc leaves the +0x20 morph member outside the allocation (pool corruption).
         void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterMorphInst));
-        if (pMem == nullptr)
-            return nullptr;
+        if (pMem == 0)
+            return 0;
         return static_cast<AptCharacterMorphInst*>(::new (pMem) AptCharacterInst(pCharacter));
     }
 
-    if (nType == 1 || nType == 10 || pCharacter == nullptr)
+    if (nType == 1 || nType == 10 || pCharacter == 0)
     {
         // Shape / static text / null character: the plain base (console 16; x64 0x20).
         void* const pMem = gpAptPseudoDataPool->Allocate(sizeof(AptCharacterInst));
-        if (pMem == nullptr)
-            return nullptr;
+        if (pMem == 0)
+            return 0;
         return ::new (pMem) AptCharacterInst(pCharacter);
     }
 
     // Any OTHER type: BOTH binaries return null (X360 @0x82AFFF70 switch default;
     // x64 0x140835410 falls through to `return 0`) -- no base-inst fallback exists.
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
 // ---------------------------------------------------------------------------
 void AptCharacterInst::DestroyCharacterInst(AptCharacterInst* pInst)
 {
-    if (pInst == nullptr)
+    if (pInst == 0)
         return;
 
     switch (pInst->GetTypeTag())
@@ -250,7 +250,7 @@ AptRenderItem* AptCharacterInst::GetRenderItemWritable()
     {
         pWritable->AddReference();
         AptRenderItem* pOld = mpRenderItem;
-        mpRenderItem = nullptr;
+        mpRenderItem = 0;
         pOld->ReleaseReference();
         mpRenderItem = pWritable;
     }
@@ -263,7 +263,7 @@ AptRenderItem* AptCharacterInst::SetRenderItem(AptRenderItem* pItem)
     {
         pItem->AddReference();
         AptRenderItem* pOld = mpRenderItem;
-        mpRenderItem = nullptr;
+        mpRenderItem = 0;
         pOld->ReleaseReference();
         mpRenderItem = pItem;
     }
@@ -274,7 +274,7 @@ AptCharacter* AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 {
     // NULL-SAFE (x64 bring-up): no writable render item when the render-tree manager is the null stub.
     AptRenderItem* pItem = GetRenderItemWritable();
-    return pItem ? pItem->SetCharacter(pCharacter) : nullptr;
+    return pItem ? pItem->SetCharacter(pCharacter) : 0;
 }
 
 // ---- const reads (through the render item) --------------------------------
@@ -283,13 +283,13 @@ AptCharacter* AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 // ctor's gpAptTarget guard, faithful to the X360 ctor), when the pool is exhausted,
 // or for a character type Manager_CreateItem does not build (e.g. button). These
 // return safe defaults instead of dereferencing null.
-const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem ? mpRenderItem->GetCharacterConst() : nullptr; }
+const AptCharacter* AptCharacterInst::GetCharacterConst() const { return mpRenderItem ? mpRenderItem->GetCharacterConst() : 0; }
 int16_t AptCharacterInst::GetDepth() const     { return mpRenderItem ? mpRenderItem->GetDepth() : static_cast<int16_t>(0); }
 int16_t AptCharacterInst::GetClipDepth() const { return mpRenderItem ? mpRenderItem->GetClipDepth() : static_cast<int16_t>(0); }
 bool AptCharacterInst::GetIsVisible() const     { return mpRenderItem ? mpRenderItem->GetIsVisible() : false; }
 bool AptCharacterInst::GetIsMask() const        { return mpRenderItem ? mpRenderItem->GetIsMask() : false; }
 bool AptCharacterInst::GetHasMask() const       { return mpRenderItem ? mpRenderItem->GetHasMask() : false; }
-const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRenderItem ? mpRenderItem->GetPositionMatrixConst() : nullptr; }
+const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRenderItem ? mpRenderItem->GetPositionMatrixConst() : 0; }
 const AptCXForm* AptCharacterInst::GetColorMatrixConst() const    { return mpRenderItem->GetColorMatrixConst(); }
 
 // ---- writes (through the writable render item) ----------------------------
@@ -379,7 +379,7 @@ void AptCharacterInst::DestroyGCPointers()
             mpProperties->~AptNativeHash();
             gpNonGCPoolManager->Deallocate(mpProperties, sizeof(AptNativeHash));
         }
-        mpProperties = nullptr;
+        mpProperties = 0;
     }
 }
 
@@ -473,7 +473,7 @@ void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
     // gpAptTarget guard). Move the render data only when both exist; the property-hash
     // ownership below transfers either way.
     AptRenderItem* pDst = GetRenderItemWritable();
-    if (pDst != nullptr && pSource->mpRenderItem != nullptr)
+    if (pDst != 0 && pSource->mpRenderItem != 0)
     {
         pDst->CopyRenderDataFrom(pSource->mpRenderItem);   // vtbl[+0x14]
         pDst->mDepth = pSource->mpRenderItem->mDepth;      // [c:0x14]
@@ -491,7 +491,7 @@ void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
             }
         }
         mpProperties = pSource->mpProperties;
-        pSource->mpProperties = nullptr;
+        pSource->mpProperties = 0;
     }
 }
 

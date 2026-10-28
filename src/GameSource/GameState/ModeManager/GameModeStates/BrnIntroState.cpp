@@ -49,7 +49,7 @@ void IntroState::OnEnter()
 
     const EGameModeType leModeType        = mpModeManager->GetCurrentGameModeType();
     const GameMode*     lpCurrentGameMode = mpModeManager->GetCurrentGameMode();
-    const bool          lbCurrentIsOnline = lpCurrentGameMode != nullptr
+    const bool          lbCurrentIsOnline = lpCurrentGameMode != 0
                                             && lpCurrentGameMode->IsOnline();
 
     mbUseCountdown = lbCurrentIsOnline

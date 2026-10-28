@@ -99,12 +99,12 @@ struct Keyframe
 
 // The pad arithmetic above depends on the exact sizeof of each embedded sub-block;
 // pin them so a future layout change to those types breaks here loudly.
-static_assert(sizeof(BrnEffects::BloomData)    == 0x20, "BloomData size drift breaks Keyframe layout");
-static_assert(sizeof(BrnEffects::VignetteData) == 0x50, "VignetteData size drift breaks Keyframe layout");
-static_assert(sizeof(ScatteringData)           == 0xA8, "ScatteringData size drift breaks Keyframe layout");
-static_assert(sizeof(LightingData)             == 0x84, "LightingData size drift breaks Keyframe layout");
-static_assert(sizeof(CloudsData)               == 0x6C, "CloudsData size drift breaks Keyframe layout");
-static_assert(sizeof(Keyframe)                 == 0x240, "Keyframe serialised size must be 0x240");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::BloomData)    == 0x20), "BloomData size drift breaks Keyframe layout");
+CGS_STATIC_ASSERT((sizeof(BrnEffects::VignetteData) == 0x50), "VignetteData size drift breaks Keyframe layout");
+CGS_STATIC_ASSERT((sizeof(ScatteringData)           == 0xA8), "ScatteringData size drift breaks Keyframe layout");
+CGS_STATIC_ASSERT((sizeof(LightingData)             == 0x84), "LightingData size drift breaks Keyframe layout");
+CGS_STATIC_ASSERT((sizeof(CloudsData)               == 0x6C), "CloudsData size drift breaks Keyframe layout");
+CGS_STATIC_ASSERT((sizeof(Keyframe)                 == 0x240), "Keyframe serialised size must be 0x240");
 
 }
 }

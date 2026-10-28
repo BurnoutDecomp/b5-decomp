@@ -62,7 +62,7 @@ public:
     // @ 0x82BD39D8. Returns the close-session server endpoint. The X360 loads it
     // through the .data pointer off_82F91C30 -> "/adsrv/4/closeSession". Overrides
     // the base slot-2 per-request-type endpoint getter.
-    const char* GetRequestURL() override;
+    const char* GetRequestURL() ;
 
     // @ 0x82BD3A40. Vftable Parse override the response path
     // (CRequestObject::Complete) dispatches. Walks the close-session response
@@ -71,7 +71,7 @@ public:
     // every other field must SkipField; succeeds only with exactly one
     // signature block and a matching HMAC. Returns 1 on success, 0 on any
     // failure.
-    int Parse() override;
+    int Parse() ;
 
     // @ 0x82BD3BA0. Called by CMassiveClientCore::RequestSessionClose. Rejects a
     // null builder (returns -1100); otherwise chains the base

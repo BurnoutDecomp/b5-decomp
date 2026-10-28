@@ -17,7 +17,7 @@ int CDecoderOutput::Initialize(D3DDevice* pDevice, s32 iWidth, s32 iHeight)
     if (iResult != 0)
         return iResult;
 
-    mpDefaultTexture = nullptr;
+    mpDefaultTexture = 0;
     mbStreamStale    = 0;
 
     // Seed every liveness-FIFO slot with the current tick (oldest first).
@@ -42,12 +42,12 @@ void CDecoderOutput::Shutdown()
         if (mpDefaultTexture)
         {
             D3DResource_Release(mpDefaultTexture);
-            mpDefaultTexture = nullptr;
+            mpDefaultTexture = 0;
         }
         if (mpRGBPixelShader)
         {
             D3DResource_Release(mpRGBPixelShader);
-            mpRGBPixelShader = nullptr;
+            mpRGBPixelShader = 0;
         }
     }
 
@@ -62,7 +62,7 @@ void CDecoderOutput::Reset()
     if (mpDefaultTexture)
     {
         D3DResource_Release(mpDefaultTexture);
-        mpDefaultTexture = nullptr;
+        mpDefaultTexture = 0;
     }
 
     CI420VideoOutput::Reset();
@@ -101,11 +101,11 @@ void CDecoderOutput::Render()
     D3DDevice_DrawVertices(pDevice, 6, 0, 4);
 
     // Unbind everything.
-    D3DDevice_SetVertexDeclaration(pDevice, nullptr);
-    D3DDevice_SetVertexShader(pDevice, nullptr);
-    D3DDevice_SetPixelShader(pDevice, nullptr);
-    D3DDevice_SetTexture(pDevice, 0, nullptr, 0x80000000u);
-    D3DDevice_SetStreamSource(pDevice, 0, nullptr, 0, 0, 1);
+    D3DDevice_SetVertexDeclaration(pDevice, 0);
+    D3DDevice_SetVertexShader(pDevice, 0);
+    D3DDevice_SetPixelShader(pDevice, 0);
+    D3DDevice_SetTexture(pDevice, 0, 0, 0x80000000u);
+    D3DDevice_SetStreamSource(pDevice, 0, 0, 0, 0, 1);
 }
 
 // @ 0x82984838

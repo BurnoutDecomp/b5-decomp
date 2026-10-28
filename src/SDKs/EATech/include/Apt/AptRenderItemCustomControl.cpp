@@ -90,7 +90,7 @@ AptRenderItem* AptRenderItemCustomControl::Clone(int nCreatedOnTick, bool bCopyE
 {
     void* pMem = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemCustomControl));
     if (!pMem)
-        return nullptr;
+        return 0;
     return new (pMem) AptRenderItemCustomControl(this, nCreatedOnTick, bCopyExtended);
 }
 
@@ -108,7 +108,7 @@ AptRenderItem* AptRenderItemCustomControl::CopyFromSprite(AptRenderItem* pSource
     AptRenderItemCustomControl* pNew = pMem
         ? new (pMem) AptRenderItemCustomControl(
               static_cast<const AptRenderItemSprite*>(pSourceSprite), nCreatedOnTick, bCopyExtended)
-        : nullptr;
+        : 0;
 
     // Install the new control as the source sprite's next render revision.
     pSourceSprite->Manager_SetNextRevision(pNew);
@@ -150,7 +150,7 @@ void AptRenderItemCustomControl::Render(AptRenderingContext* pCtx, AptMaskRender
 {
     AptRenderItemCustomControl* pThis = const_cast<AptRenderItemCustomControl*>(this);
 
-    if (pThis->mpManagerFirstChild != nullptr)
+    if (pThis->mpManagerFirstChild != 0)
     {
         AptRenderItem* pRevision =
             pThis->mpManagerFirstChild->Manager_GetRenderRevision(gnCurrRenderTickConsumed);
@@ -158,7 +158,7 @@ void AptRenderItemCustomControl::Render(AptRenderingContext* pCtx, AptMaskRender
     }
 
     AptRenderItem* pChild = pThis->mpManagerFirstChild;
-    if (pChild == nullptr || pChild->mpCharacter == nullptr)
+    if (pChild == 0 || pChild->mpCharacter == 0)
         return;
 
     // The child rect shape's host render unit -- the same +0x20 slot AptHook_DrawShape reads.
@@ -170,13 +170,13 @@ void AptRenderItemCustomControl::Render(AptRenderingContext* pCtx, AptMaskRender
 
     if (gbAptCustomControlRenderEnabled && mTypeStr.IsEmpty())
     {
-        if (gAptFuncs.pfnCustomControlRenderWithZid != nullptr)
+        if (gAptFuncs.pfnCustomControlRenderWithZid != 0)
         {
             gAptFuncs.pfnCustomControlRenderWithZid(
                 static_cast<AptAssetCustomControlZId>(mZId), pRenderingUnit, eOp, nTick);
         }
     }
-    else if (gAptFuncs.pfnCustomControlRender != nullptr)
+    else if (gAptFuncs.pfnCustomControlRender != 0)
     {
         gAptFuncs.pfnCustomControlRender(
             const_cast<char*>(mTypeStr.GetBuffer()),

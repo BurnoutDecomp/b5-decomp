@@ -120,25 +120,25 @@ namespace EnvironmentSettings
     inline void Dictionary::SeasonData::_AssertLayout()
     {
         // Pointer-INVARIANT: identical on console and host.
-        static_assert( sizeof( Dictionary::SeasonData ) == 256,
+        CGS_STATIC_ASSERT(( sizeof( Dictionary::SeasonData ) == 256),
                        "SeasonData stride is 256 on both targets (GetSerialisedResourceDescriptor's <<8)" );
-        static_assert( offsetof( Dictionary::SeasonData, macResourceName )      == 0,   "macResourceName @0" );
-        static_assert( offsetof( Dictionary::SeasonData, macBundle )            == 128, "macBundle @128" );
-        static_assert( offsetof( Dictionary::SeasonData, macColourCubesBundle ) == 192, "macColourCubesBundle @192" );
+        CGS_STATIC_ASSERT(( offsetof( Dictionary::SeasonData, macResourceName )      == 0),   "macResourceName @0" );
+        CGS_STATIC_ASSERT(( offsetof( Dictionary::SeasonData, macBundle )            == 128), "macBundle @128" );
+        CGS_STATIC_ASSERT(( offsetof( Dictionary::SeasonData, macColourCubesBundle ) == 192), "macColourCubesBundle @192" );
     }
 
     inline void Dictionary::LocationData::_AssertLayout()
     {
-        static_assert( sizeof( Dictionary::LocationData ) == 64,
+        CGS_STATIC_ASSERT(( sizeof( Dictionary::LocationData ) == 64),
                        "LocationData stride is 64 on both targets (GetSerialisedResourceDescriptor's <<6)" );
     }
 
     inline void Dictionary::_AssertLayout()
     {
-        static_assert( offsetof( Dictionary, muVersion ) == 0,
+        CGS_STATIC_ASSERT(( offsetof( Dictionary, muVersion ) == 0),
                        "Dictionary::muVersion leads the record on both targets (FixUp reads *a2)" );
-        static_assert( offsetof( Dictionary, muSeasonCnt )     == 0x04, "Dictionary::muSeasonCnt @0x04" );
-        static_assert( offsetof( Dictionary, mpSeasonDatii )   == 0x08, "Dictionary::mpSeasonDatii @0x08" );
+        CGS_STATIC_ASSERT(( offsetof( Dictionary, muSeasonCnt )     == 0x04), "Dictionary::muSeasonCnt @0x04" );
+        CGS_STATIC_ASSERT(( offsetof( Dictionary, mpSeasonDatii )   == 0x08), "Dictionary::mpSeasonDatii @0x08" );
     }
 }
 }

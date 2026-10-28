@@ -12,10 +12,10 @@ namespace MapFile
     // prepared reader has every resolvable frame named immediately.
     MinimalMemoryReader::MinimalMemoryReader()
         : mbAsycronous(false)
-        , pFileHandle(nullptr)
+        , pFileHandle(0)
         , mbFinished(true)
     {
-        mpCallstack = nullptr;
+        mpCallstack = 0;
         maacStackNames[0][0] = '\0';
     }
 
@@ -91,7 +91,7 @@ namespace MapFile
         {
             std::fclose(pFileHandle);
             mbFinished  = true;
-            pFileHandle = nullptr;
+            pFileHandle = 0;
         }
 
         const u8* lpCursor = maReadBuffer;
@@ -134,7 +134,7 @@ namespace MapFile
     {
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
         if (liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
-            return nullptr;
+            return 0;
         return maacStackNames[liIndex];
     }
 

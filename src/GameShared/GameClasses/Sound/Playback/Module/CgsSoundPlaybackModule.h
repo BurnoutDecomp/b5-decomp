@@ -285,11 +285,11 @@ public:
     // the environment allocator + null the environment handle; free the stream
     // buffers (only when mbStreamsUsingMainAllocator); release the deferred
     // queue + receiver + base. Returns false while still releasing.
-    bool Release() override;
+    bool Release() ;
 
     // Module::Destruct @ 0x826C1268 (virtual). Queue destruct + receiver clear +
     // base destruct.
-    void Destruct() override;
+    void Destruct() ;
 
     // Module::GetEnvironment @ 0x82694130. Returns the owned environment (asserts
     // the handle is non-null first -- fires CgsHandle.h:305).
@@ -360,7 +360,7 @@ public:
     // the attached output buffer's request queue (event type 4); any other
     // method is refused (returns false).
     virtual bool DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMethod,
-                                             const char* lpcName, void* lpUserData) override;
+                                             const char* lpcName, void* lpUserData) ;
 
     // ---- the IStreamProvider overrides (console sub-object +0x228) ----
     // @ 0x826FA020 (DWARF cpp:1200). Claim the first E_FREE_BUFFER stream record
@@ -372,7 +372,7 @@ public:
     // deferred queue. Returns &record.mReadStream (a pointer INTO the record
     // table -- what FindStreamBuffer/DoCloseStream key on), or null when no
     // buffer is free. All under the stream mutex.
-    virtual CgsFileSystem::ReadStream* DoOpenStream(IStreamProvider::StreamSpec& lrSpec) override;
+    virtual CgsFileSystem::ReadStream* DoOpenStream(IStreamProvider::StreamSpec& lrSpec) ;
 
     // @ 0x826FA2B8 (DWARF cpp:1257). Close a stream by record pointer: find the
     // record (assert "Can't Find this Stream Index" cpp:1262); when the stream
@@ -381,7 +381,7 @@ public:
     // still opening (assert E_USING_BUFFER cpp:1268 + !mbQueuedForClose .h:659)
     // -- queue the close for UpdateStreamBuffers to re-dispatch once open. All
     // under the stream mutex.
-    virtual void DoCloseStream(const CgsFileSystem::ReadStream* lpReadStream) override;
+    virtual void DoCloseStream(const CgsFileSystem::ReadStream* lpReadStream) ;
 
 private:
     // @ 0x826A25C0 (DWARF cpp:~579, `using namespace CgsResource::ResourceIO`).

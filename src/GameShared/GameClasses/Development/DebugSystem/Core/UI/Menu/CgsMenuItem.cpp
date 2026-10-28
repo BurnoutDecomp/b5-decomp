@@ -16,7 +16,7 @@ namespace CgsDev
         MenuItem::MenuItem()
             : mfWidth(0.0f)
             , mfHeight(0.0f)
-            , mpDebugLinkedListNext(nullptr)
+            , mpDebugLinkedListNext(0)
         {
         }
 
@@ -28,7 +28,7 @@ namespace CgsDev
         {
             mfWidth = 0.0f;
             mfHeight = 0.0f;
-            mpDebugLinkedListNext = nullptr;
+            mpDebugLinkedListNext = 0;
         }
 
         f32  MenuItem::GetWidth() const  { return mfWidth; }
@@ -44,7 +44,7 @@ namespace CgsDev
         bool    MenuItem::IsVisible() const { return true; }
         void    MenuItem::GetDisplayName(char* lpcBuffer, s32 liBufferLen) const { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
         void    MenuItem::GetItemString(char* lpcBuffer, s32 liBufferLen) const  { if (liBufferLen > 0) lpcBuffer[0] = '\0'; }
-        Window* MenuItem::OpenAsWindow() { return nullptr; }
+        Window* MenuItem::OpenAsWindow() { return 0; }
 
         // X360 0x828294C0. Selected rows get a one-border highlight spanning the window's full
         // content width; text then uses the selected or ordinary palette colour.

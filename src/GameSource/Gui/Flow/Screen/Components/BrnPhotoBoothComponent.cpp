@@ -261,7 +261,7 @@ namespace BrnGui
                                         const char* lpacParentName)
     {
         // IconComponent::Construct(name, stateInterface, /*stateIdentifiers*/ nullptr, parentName).
-        IconComponent::Construct(lpacName, lpStateInterface, nullptr, lpacParentName);
+        IconComponent::Construct(lpacName, lpStateInterface, 0, lpacParentName);
 
         mPhotoResourceToLoad.muId   = KU_GUI_RESOURCEID_NUM;         // 0x94 <- 0xED (no resource yet)
         mPhotoResourceToLoad.meType = CgsGui::E_GUI_RESOURCETYPE_APT; // 0x98 <- 4
@@ -276,8 +276,8 @@ namespace BrnGui
         meTakePhotoStringType = leTakePhotoStringType; // 0x428
         meBackStringType      = leBackStringType;      // 0x42C
 
-        mpGuiCache  = nullptr;             // 0x404
-        mpProfile   = nullptr;             // 0x408
+        mpGuiCache  = 0;             // 0x404
+        mpProfile   = 0;             // 0x408
         mePhotoState = E_PHOTOSTATE_NONE;  // 0x400
 
         // Wrap the DXT1 (160x120) mugshot buffer: format 0x1A200052 == PIXELFORMAT_DXT1.
@@ -685,7 +685,7 @@ namespace BrnGui
     // waits for them to finish initialising before reporting the flow ready.
     void PhotoBoothComponent::AppendExpectedAptComponents(GuiFlow leFlow)
     {
-        CGS_ASSERT(mpGuiCache != nullptr, "NULL != mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
         CGS_ASSERT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
                    "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)");
 

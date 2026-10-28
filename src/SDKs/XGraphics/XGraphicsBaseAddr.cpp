@@ -30,7 +30,7 @@ BaseAddr* BaseAddr::NewItem(s32 aiIndex, s32 aiType, CFG* apContext)
     // in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(BaseAddr));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) BaseAddr(aiIndex, aiType, apContext);
 }

@@ -43,7 +43,7 @@ namespace
     const CameraDebugController* AsCameraDebugController(
         const BrnWorldIO::DebugController* lpController)
     {
-        static_assert(sizeof(BrnWorldIO::DebugController) == sizeof(CameraDebugController),
+        CGS_STATIC_ASSERT((sizeof(BrnWorldIO::DebugController) == sizeof(CameraDebugController)),
                       "the world IO controller is the director debug-controller snapshot");
         return reinterpret_cast<const CameraDebugController*>(lpController);
     }
@@ -52,7 +52,7 @@ namespace
 // @0x827B1828.
 void WorldDebugComponent::Construct(WorldModule* lpWorldModule)
 {
-    CGS_ASSERT(lpWorldModule != nullptr, "lpWorldModule != NULL");
+    CGS_ASSERT(lpWorldModule != 0, "lpWorldModule != NULL");
 
     mpWorldModule = lpWorldModule;
     mfVehicleVelocity = 100.0f;
@@ -126,8 +126,8 @@ void WorldDebugComponent::OnRegister()
 // @0x827BF818.
 void WorldDebugComponent::Update(const BrnWorldIO::DebugController* lpDebugController)
 {
-    CGS_ASSERT(lpDebugController != nullptr, "lpDebugControls != NULL");
-    if (lpDebugController == nullptr)
+    CGS_ASSERT(lpDebugController != 0, "lpDebugControls != NULL");
+    if (lpDebugController == 0)
     {
         mbHaveDebugController = false;
         return;
@@ -271,29 +271,29 @@ void WorldDebugComponent::ClearStoredFile(void*)
 
 void WorldDebugComponent::UnPrimeGunCallback(void* lpThis)
 {
-    CGS_ASSERT(lpThis != nullptr, "Invalid data in the callback");
-    if (lpThis != nullptr)
+    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    if (lpThis != 0)
         static_cast<WorldDebugComponent*>(lpThis)->UnPrimeGun();
 }
 
 void WorldDebugComponent::PrimeGunCallback(void* lpThis)
 {
-    CGS_ASSERT(lpThis != nullptr, "Invalid data in the callback");
-    if (lpThis != nullptr)
+    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    if (lpThis != 0)
         static_cast<WorldDebugComponent*>(lpThis)->PrimeGun();
 }
 
 void WorldDebugComponent::FireGunCallback(void* lpThis)
 {
-    CGS_ASSERT(lpThis != nullptr, "Invalid data in the callback");
-    if (lpThis != nullptr)
+    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    if (lpThis != 0)
         static_cast<WorldDebugComponent*>(lpThis)->FireGun();
 }
 
 void WorldDebugComponent::TriggerCollWorldValidate(void* lpThis)
 {
-    CGS_ASSERT(lpThis != nullptr, "Invalid data in the callback");
-    if (lpThis != nullptr)
+    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    if (lpThis != 0)
     {
         WorldDebugComponent* lpComponent = static_cast<WorldDebugComponent*>(lpThis);
         lpComponent->mpWorldModule->mWorldEntityModule.mbDebugTriggerValidate = true;
@@ -302,8 +302,8 @@ void WorldDebugComponent::TriggerCollWorldValidate(void* lpThis)
 
 void WorldDebugComponent::TriggerCollWorldInvalidate(void* lpThis)
 {
-    CGS_ASSERT(lpThis != nullptr, "Invalid data in the callback");
-    if (lpThis != nullptr)
+    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    if (lpThis != 0)
     {
         WorldDebugComponent* lpComponent = static_cast<WorldDebugComponent*>(lpThis);
         lpComponent->mpWorldModule->mWorldEntityModule.mbDebugTriggerInvalidate = true;
@@ -313,8 +313,8 @@ void WorldDebugComponent::TriggerCollWorldInvalidate(void* lpThis)
 // @0x827B1FC0.
 void WorldDebugComponent::AIDrivesPlayerChanged(void*, void* lpThis)
 {
-    CGS_ASSERT(lpThis != nullptr, "Invalid data in the callback");
-    if (lpThis == nullptr)
+    CGS_ASSERT(lpThis != 0, "Invalid data in the callback");
+    if (lpThis == 0)
         return;
 
     WorldDebugComponent* lpComponent = static_cast<WorldDebugComponent*>(lpThis);
@@ -345,6 +345,6 @@ void WorldDebugComponent::AIDrivesPlayerChanged(void*, void* lpThis)
 void WorldDebugComponent::HarnessSetAIDrivesPlayer(bool lbEnabled)
 {
     mbAIDrivesPlayer = lbEnabled;
-    AIDrivesPlayerChanged(nullptr, this);
+    AIDrivesPlayerChanged(0, this);
 }
 }

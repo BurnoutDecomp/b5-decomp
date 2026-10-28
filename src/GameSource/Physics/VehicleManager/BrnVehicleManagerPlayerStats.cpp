@@ -69,7 +69,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::ApplyPlayerStats(const f32* lpSendCarStatsAction)
     {
-        CGS_ASSERT(lpSendCarStatsAction != nullptr, "lpSendCarStatsAction");
+        CGS_ASSERT(lpSendCarStatsAction != 0, "lpSendCarStatsAction");
 
         const s32 liPlayerIndex = static_cast<s32>(mePlayerActiveRaceCarIndex);
         CGS_ASSERT(liPlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && liPlayerIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
@@ -122,7 +122,7 @@ namespace Vehicle
     bool VehicleManager::GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe(u32 luGlobalEntityId,
                                                                           EntityId* lpOutPhysicsEntityId)
     {
-        CGS_ASSERT(lpOutPhysicsEntityId != nullptr, "lpOutPhysicsEntityId != NULL");
+        CGS_ASSERT(lpOutPhysicsEntityId != 0, "lpOutPhysicsEntityId != NULL");
 
         const u32 luGlobalIndex = (luGlobalEntityId >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
         // RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member
@@ -316,7 +316,7 @@ namespace Vehicle
         // arithmetic in the mounted VehiclePhysics_layout_check.cpp (KU_B_CARTYPE), which also names
         // the member in an existence check. What is still checkable HERE is that ApplyPlayerStats is
         // writing a member of the real class at all:
-        static_assert(sizeof(decltype(VehicleManager::maRaceCarVehicles[0].meCarType)) == 4,
+        CGS_STATIC_ASSERT((sizeof(decltype(VehicleManager::maRaceCarVehicles[0].meCarType)) == 4),
                       "VehiclePhysics::meCarType is the 4-byte `stw` seat ApplyPlayerStats writes "
                       "(asm 0x8259BFE8), not the f32 the retired record modelled");
         // RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
@@ -326,7 +326,7 @@ namespace Vehicle
         // (16 vs 8, x20) and four 4->8 pointers and EventQueue<s8,50> (72 vs 64) all sit ahead of it
         // inside the manager. What still reproduces exactly is the manager's OWN seat, so that is
         // what is pinned; the map is reached BY NAME through it and needs no offset at all.
-        static_assert(sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600,
+        CGS_STATIC_ASSERT((sizeof(PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap) == 600),
                       "and it is 600 bytes -- the sizeof the console's own assert text names "
                       "(asm cmplwi 0x258)");
     }

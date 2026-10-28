@@ -79,20 +79,20 @@ namespace Vehicle
 
         Vector3 HandlingScale(Vector3 lValue, f32 lfScale)
         {
-            return Vector3{HandlingMultiply(lValue.x, lfScale), HandlingMultiply(lValue.y, lfScale),
-                           HandlingMultiply(lValue.z, lfScale), HandlingMultiply(lValue.w, lfScale)};
+            { const Vector3 lResult = {HandlingMultiply(lValue.x, lfScale), HandlingMultiply(lValue.y, lfScale),
+                           HandlingMultiply(lValue.z, lfScale), HandlingMultiply(lValue.w, lfScale)}; return lResult; }
         }
 
         Vector3 HandlingAdd(Vector3 lA, Vector3 lB)
         {
-            return Vector3{HandlingAdd(lA.x, lB.x), HandlingAdd(lA.y, lB.y),
-                           HandlingAdd(lA.z, lB.z), HandlingAdd(lA.w, lB.w)};
+            { const Vector3 lResult = {HandlingAdd(lA.x, lB.x), HandlingAdd(lA.y, lB.y),
+                           HandlingAdd(lA.z, lB.z), HandlingAdd(lA.w, lB.w)}; return lResult; }
         }
 
         Vector3 HandlingMultiplyAdd(Vector3 lA, f32 lfC, Vector3 lB)
         {
-            return Vector3{HandlingMultiplyAdd(lA.x, lfC, lB.x), HandlingMultiplyAdd(lA.y, lfC, lB.y),
-                           HandlingMultiplyAdd(lA.z, lfC, lB.z), HandlingMultiplyAdd(lA.w, lfC, lB.w)};
+            { const Vector3 lResult = {HandlingMultiplyAdd(lA.x, lfC, lB.x), HandlingMultiplyAdd(lA.y, lfC, lB.y),
+                           HandlingMultiplyAdd(lA.z, lfC, lB.z), HandlingMultiplyAdd(lA.w, lfC, lB.w)}; return lResult; }
         }
 
         Vector3 HandlingNegate(Vector3 lValue)
@@ -109,11 +109,11 @@ namespace Vehicle
         {
             // vmulfp, vnmsubfp, then the YZXW word permutation. Preserve
             // the rounded first product and fused subtraction separately.
-            return Vector3{
+            { const Vector3 lResult = {
                 HandlingNegativeMultiplySubtract(lA.z, lB.y, HandlingMultiply(lA.y, lB.z)),
                 HandlingNegativeMultiplySubtract(lA.x, lB.z, HandlingMultiply(lA.z, lB.x)),
                 HandlingNegativeMultiplySubtract(lA.y, lB.x, HandlingMultiply(lA.x, lB.y)),
-                HandlingNegativeMultiplySubtract(lA.w, lB.w, HandlingMultiply(lA.w, lB.w))};
+                HandlingNegativeMultiplySubtract(lA.w, lB.w, HandlingMultiply(lA.w, lB.w))}; return lResult; }
         }
 
         Vector3 HandlingWorldToBodyDirection(const Matrix44Affine& lrTransform, Vector3 lDirection)
@@ -139,8 +139,8 @@ namespace Vehicle
             const f32 lfX = HandlingMultiply(HandlingMultiply(lDirection.x, -30.0f), lfForceScale);
             const f32 lfZ = HandlingMultiply(HandlingMultiply(lDirection.z, -30.0f), lfForceScale);
             // vperm mask 82CDA350 is {X,Z,X,X}, followed by vaddfp.
-            return Vector2{HandlingAdd(lCentre.x, lfX), HandlingAdd(lCentre.y, lfZ),
-                           HandlingAdd(lCentre.z, lfX), HandlingAdd(lCentre.w, lfX)};
+            { const Vector2 lResult = {HandlingAdd(lCentre.x, lfX), HandlingAdd(lCentre.y, lfZ),
+                           HandlingAdd(lCentre.z, lfX), HandlingAdd(lCentre.w, lfX)}; return lResult; }
         }
 
         void AssertHandlingWheelPosition(Vector3 lPosition)
@@ -257,7 +257,7 @@ namespace Vehicle
     // when it has not received a collision yet; there is no validity gate.
     void DebugComponent::DrawLastWallTriangle(CgsDev::Debug3DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL");
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL");
         static const f32 K_OFFSET = 0.04f; // splat at 82FB9FA0
         const Vector3 lOffset = HandlingScale(mLastWallTriangle.mNormal, K_OFFSET);
         const Vector3 lVertex0 = HandlingAdd(mLastWallTriangle.mVertex0, lOffset);
@@ -276,7 +276,7 @@ namespace Vehicle
     // retain the two reciprocal refinements and the fused endpoint offset.
     void DebugComponent::DrawSuspensionForces(CgsDev::Debug3DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL");
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL");
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
         {
             if (mabSuspensionForceApplied[liWheel])
@@ -296,7 +296,7 @@ namespace Vehicle
     // world-space titles. ARTIST directly calls Debug3D primitives here.
     void DebugComponent::DrawAngularVelocity(CgsDev::Debug3DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(lpDisplay != nullptr, "lpDisplay != NULL");
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL");
         const Vector3 lPosition = mpRaceCarPhysics->GetGraphicsVehicleTransform().wAxis;
         Vector4 lDeterminant;
         const rw::math::vpu::Matrix44 lInverse = rw::math::vpu::Inverse(
@@ -395,7 +395,7 @@ namespace Vehicle
             const Matrix44Affine lTransform = mpRaceCarPhysics->GetTransform();
             const Vector3 lLongDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLongDirection);
             const Vector3 lLatDirection = HandlingWorldToBodyDirection(lTransform, lrWheel.mWheelLatDirection);
-            CGS_ASSERT(lrWheel.mpTireAttribs != nullptr, "mpTireAttribs != NULL");
+            CGS_ASSERT(lrWheel.mpTireAttribs != 0, "mpTireAttribs != NULL");
             const Wheel::TireAttribs& lrTire = *lrWheel.mpTireAttribs;
             CgsDev::RGBA lWheelColour = 0xFFFF0000u;
             if (lrWheel.mRoadContact.mbIsOnGround)
@@ -594,12 +594,12 @@ namespace Vehicle
         // Step 1: the base. Console 12 bytes (vptr + the active flag + the list link) padded to
         // 0x10 by the road-contact array's 16-byte alignment; host 24, padded to 0x20.
         const std::ptrdiff_t KD_AFTER_BASE = 0x10;
-        static_assert(offsetof(D, maRoadContacts) == 0x010 + KD_AFTER_BASE, "maRoadContacts");
+        CGS_STATIC_ASSERT((offsetof(D, maRoadContacts) == 0x010 + KD_AFTER_BASE), "maRoadContacts");
 
         // Step 2: nothing widens across the road-contact mirror -- RoadContact is 0x30 on both
         // sides (two 16-byte vectors, a float, a collision tag and four flag bytes).
-        static_assert(sizeof(Wheel::RoadContact) == 0x30, "RoadContact is width-identical");
-        static_assert(offsetof(D, mFrontWheelsGripCurveWindow) == 0x0D0 + KD_AFTER_BASE,
+        CGS_STATIC_ASSERT((sizeof(Wheel::RoadContact) == 0x30), "RoadContact is width-identical");
+        CGS_STATIC_ASSERT((offsetof(D, mFrontWheelsGripCurveWindow) == 0x0D0 + KD_AFTER_BASE),
                       "mFrontWheelsGripCurveWindow");
 
         // Step 3: one grip-curve window apiece. Each is 0xC0 on the console and 0xD0 on the host:
@@ -608,33 +608,33 @@ namespace Vehicle
         // inside it.
         const std::ptrdiff_t KD_WINDOW_STEP = 0x10;
         const std::ptrdiff_t KD_AFTER_WINDOWS = KD_AFTER_BASE + 2 * KD_WINDOW_STEP;
-        static_assert(offsetof(D, mRearWheelsGripCurveWindow) == 0x190 + KD_AFTER_BASE + KD_WINDOW_STEP,
+        CGS_STATIC_ASSERT((offsetof(D, mRearWheelsGripCurveWindow) == 0x190 + KD_AFTER_BASE + KD_WINDOW_STEP),
                       "mRearWheelsGripCurveWindow");
-        static_assert(offsetof(D, mpRaceCarPhysics) == 0x250 + KD_AFTER_WINDOWS, "mpRaceCarPhysics");
+        CGS_STATIC_ASSERT((offsetof(D, mpRaceCarPhysics) == 0x250 + KD_AFTER_WINDOWS), "mpRaceCarPhysics");
 
         // Step 4: the car pointer itself widens 4 -> 8. Everything from the inertia triple to the
         // clutch factor is float- or int-shaped and moves as one block behind it.
         const std::ptrdiff_t KD_AFTER_CAR_POINTER = KD_AFTER_WINDOWS + 4;
-        static_assert(offsetof(D, mafInertia)     == 0x254 + KD_AFTER_CAR_POINTER, "mafInertia");
-        static_assert(offsetof(D, miCurrentGear)  == 0x260 + KD_AFTER_CAR_POINTER, "miCurrentGear");
-        static_assert(offsetof(D, mfLastFrameRpm) == 0x264 + KD_AFTER_CAR_POINTER, "mfLastFrameRpm");
+        CGS_STATIC_ASSERT((offsetof(D, mafInertia)     == 0x254 + KD_AFTER_CAR_POINTER), "mafInertia");
+        CGS_STATIC_ASSERT((offsetof(D, miCurrentGear)  == 0x260 + KD_AFTER_CAR_POINTER), "miCurrentGear");
+        CGS_STATIC_ASSERT((offsetof(D, mfLastFrameRpm) == 0x264 + KD_AFTER_CAR_POINTER), "mfLastFrameRpm");
 
-        static_assert(sizeof(GearStats) == 28, "GearStats is width-identical (six floats + a flag)");
-        static_assert(offsetof(D, mGearStats) == 0x268 + KD_AFTER_CAR_POINTER, "mGearStats");
-        static_assert(offsetof(D, mfSpeedMPH) == 0x310 + KD_AFTER_CAR_POINTER,
+        CGS_STATIC_ASSERT((sizeof(GearStats) == 28), "GearStats is width-identical (six floats + a flag)");
+        CGS_STATIC_ASSERT((offsetof(D, mGearStats) == 0x268 + KD_AFTER_CAR_POINTER), "mGearStats");
+        CGS_STATIC_ASSERT((offsetof(D, mfSpeedMPH) == 0x310 + KD_AFTER_CAR_POINTER),
                       "mfSpeedMPH -- and therefore that the six gear rows close on it");
 
-        static_assert(offsetof(D, mafHackComOffset)  == 0x314 + KD_AFTER_CAR_POINTER, "mafHackComOffset");
-        static_assert(offsetof(D, mfHackCrashExtraPitchVelocity)  == 0x320 + KD_AFTER_CAR_POINTER, "mfHackCrashExtraPitchVelocity");
-        static_assert(offsetof(D, mfHackCrashExtraYawVelocity)    == 0x324 + KD_AFTER_CAR_POINTER, "mfHackCrashExtraYawVelocity");
-        static_assert(offsetof(D, mfHackCrashExtraRollVelocity)   == 0x328 + KD_AFTER_CAR_POINTER, "mfHackCrashExtraRollVelocity");
-        static_assert(offsetof(D, mfHackCrashExtraLinearVelocity) == 0x32C + KD_AFTER_CAR_POINTER, "mfHackCrashExtraLinearVelocity");
-        static_assert(offsetof(D, mfRPM)                      == 0x330 + KD_AFTER_CAR_POINTER, "mfRPM");
-        static_assert(offsetof(D, mfEngineDrive)              == 0x334 + KD_AFTER_CAR_POINTER, "mfEngineDrive");
-        static_assert(offsetof(D, mfReactionTorque)           == 0x338 + KD_AFTER_CAR_POINTER, "mfReactionTorque");
-        static_assert(offsetof(D, mfFlyWheelAngularVelocity)  == 0x33C + KD_AFTER_CAR_POINTER, "mfFlyWheelAngularVelocity");
-        static_assert(offsetof(D, mfClutchDelay)              == 0x340 + KD_AFTER_CAR_POINTER, "mfClutchDelay");
-        static_assert(offsetof(D, mfClutchFactor)             == 0x344 + KD_AFTER_CAR_POINTER, "mfClutchFactor");
+        CGS_STATIC_ASSERT((offsetof(D, mafHackComOffset)  == 0x314 + KD_AFTER_CAR_POINTER), "mafHackComOffset");
+        CGS_STATIC_ASSERT((offsetof(D, mfHackCrashExtraPitchVelocity)  == 0x320 + KD_AFTER_CAR_POINTER), "mfHackCrashExtraPitchVelocity");
+        CGS_STATIC_ASSERT((offsetof(D, mfHackCrashExtraYawVelocity)    == 0x324 + KD_AFTER_CAR_POINTER), "mfHackCrashExtraYawVelocity");
+        CGS_STATIC_ASSERT((offsetof(D, mfHackCrashExtraRollVelocity)   == 0x328 + KD_AFTER_CAR_POINTER), "mfHackCrashExtraRollVelocity");
+        CGS_STATIC_ASSERT((offsetof(D, mfHackCrashExtraLinearVelocity) == 0x32C + KD_AFTER_CAR_POINTER), "mfHackCrashExtraLinearVelocity");
+        CGS_STATIC_ASSERT((offsetof(D, mfRPM)                      == 0x330 + KD_AFTER_CAR_POINTER), "mfRPM");
+        CGS_STATIC_ASSERT((offsetof(D, mfEngineDrive)              == 0x334 + KD_AFTER_CAR_POINTER), "mfEngineDrive");
+        CGS_STATIC_ASSERT((offsetof(D, mfReactionTorque)           == 0x338 + KD_AFTER_CAR_POINTER), "mfReactionTorque");
+        CGS_STATIC_ASSERT((offsetof(D, mfFlyWheelAngularVelocity)  == 0x33C + KD_AFTER_CAR_POINTER), "mfFlyWheelAngularVelocity");
+        CGS_STATIC_ASSERT((offsetof(D, mfClutchDelay)              == 0x340 + KD_AFTER_CAR_POINTER), "mfClutchDelay");
+        CGS_STATIC_ASSERT((offsetof(D, mfClutchFactor)             == 0x344 + KD_AFTER_CAR_POINTER), "mfClutchFactor");
 
         // Step 5: the wall triangle is 16-aligned, and the block in front of it ends four bytes
         // short of a 16-byte boundary on the console. So the +4 the car pointer cost is ABSORBED by
@@ -642,22 +642,22 @@ namespace Vehicle
         // pointer -- the one place in this class where a widening costs nothing. From here to the
         // end of the object it stays constant.
         const std::ptrdiff_t KD_AFTER_TRIANGLE_ALIGN = KD_AFTER_WINDOWS;
-        static_assert(sizeof(CgsGeometric::Triangle4::AOSTriangle) == 0x50,
+        CGS_STATIC_ASSERT((sizeof(CgsGeometric::Triangle4::AOSTriangle) == 0x50),
                       "AOSTriangle is width-identical (four vectors + three floats, 16-aligned)");
-        static_assert(offsetof(D, mLastWallTriangle) == 0x350 + KD_AFTER_TRIANGLE_ALIGN, "mLastWallTriangle");
+        CGS_STATIC_ASSERT((offsetof(D, mLastWallTriangle) == 0x350 + KD_AFTER_TRIANGLE_ALIGN), "mLastWallTriangle");
 
         // The fourteen toggles are one contiguous run; asserting both ends pins all of them,
         // because a bool array has no padding to hide a missing or extra member in.
-        static_assert(offsetof(D, mbRenderCOMPosition) == 0x3A0 + KD_AFTER_TRIANGLE_ALIGN, "mbRenderCOMPosition");
-        static_assert(offsetof(D, mbStoredPhysics)     == 0x3AD + KD_AFTER_TRIANGLE_ALIGN, "mbStoredPhysics");
+        CGS_STATIC_ASSERT((offsetof(D, mbRenderCOMPosition) == 0x3A0 + KD_AFTER_TRIANGLE_ALIGN), "mbRenderCOMPosition");
+        CGS_STATIC_ASSERT((offsetof(D, mbStoredPhysics)     == 0x3AD + KD_AFTER_TRIANGLE_ALIGN), "mbStoredPhysics");
 
-        static_assert(offsetof(D, maSuspensionForces)        == 0x3B0 + KD_AFTER_TRIANGLE_ALIGN, "maSuspensionForces");
-        static_assert(offsetof(D, mabSuspensionForceApplied) == 0x3F0 + KD_AFTER_TRIANGLE_ALIGN, "mabSuspensionForceApplied");
-        static_assert(offsetof(D, mfDownForceY)              == 0x3F4 + KD_AFTER_TRIANGLE_ALIGN, "mfDownForceY");
+        CGS_STATIC_ASSERT((offsetof(D, maSuspensionForces)        == 0x3B0 + KD_AFTER_TRIANGLE_ALIGN), "maSuspensionForces");
+        CGS_STATIC_ASSERT((offsetof(D, mabSuspensionForceApplied) == 0x3F0 + KD_AFTER_TRIANGLE_ALIGN), "mabSuspensionForceApplied");
+        CGS_STATIC_ASSERT((offsetof(D, mfDownForceY)              == 0x3F4 + KD_AFTER_TRIANGLE_ALIGN), "mfDownForceY");
 
         // And the closure: the console object ends at 1024 with eight bytes of tail pad behind the
         // down-force mirror, so the host object is 1024 + the accumulated term, rounded to 16.
-        static_assert(sizeof(D) == 1024 + KD_AFTER_TRIANGLE_ALIGN,
+        CGS_STATIC_ASSERT((sizeof(D) == 1024 + KD_AFTER_TRIANGLE_ALIGN),
                       "the recovered class closes on the console's 1024-byte object -- this is the "
                       "number VehicleManager's drift term is derived from");
     }
@@ -706,7 +706,7 @@ namespace Vehicle
     //   manager lives in static storage on both sides) and their writers are elsewhere.
     void DebugComponent::Construct(RaceCarPhysics* lpRaceCarPhysics)
     {
-        CGS_ASSERT(lpRaceCarPhysics != nullptr, "lpRaceCarPhysics != NULL");
+        CGS_ASSERT(lpRaceCarPhysics != 0, "lpRaceCarPhysics != NULL");
 
         mpRaceCarPhysics = lpRaceCarPhysics;
         mfLastFrameRpm   = 0.0f;
@@ -855,7 +855,7 @@ namespace Vehicle
     //   whole 80-byte AOSTriangle, which is exactly the member assign.
     void DebugComponent::SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle)
     {
-        CGS_ASSERT(lpTriangle != nullptr, "lpTriangle != NULL");
+        CGS_ASSERT(lpTriangle != 0, "lpTriangle != NULL");
 
         mLastWallTriangle = *lpTriangle;
     }

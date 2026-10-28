@@ -47,13 +47,13 @@ namespace BrnGui
         bool ControllerIsValid() const;
 
     protected:
-        void OnActivate() override;
+        void OnActivate() ;
 
         // @ 0x827DD220 -- debug-menu label.
-        const char* GetName() const override;
+        const char* GetName() const ;
         // @ 0x824ED348 -- debug-menu group path.
-        const char* GetPath() const override;
-        bool        IsSimple() const override;
+        const char* GetPath() const ;
+        bool        IsSimple() const ;
 
         void TriggerMessage(bool lbForce);
         void SelectNextMessage();

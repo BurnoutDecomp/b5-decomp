@@ -59,12 +59,12 @@ namespace Props
     {
         // Porter-contract pins (world_type_transcode.py transcode_propinstancedata): the host
         // layout is the serialised form these relocations walk.
-        static_assert(offsetof(PropZoneData, maCells)          == 0x00, "PropZoneData::maCells @ +0");
-        static_assert(offsetof(PropZoneData, muNumCells)       == 0x08, "PropZoneData::muNumCells @ +8");
-        static_assert(offsetof(PropZoneData, maInstances)      == 0x10, "PropZoneData::maInstances @ +0x10");
-        static_assert(offsetof(PropZoneData, muSizeInBytes)    == 0x18, "PropZoneData::muSizeInBytes @ +0x18");
-        static_assert(offsetof(PropZoneData, muZoneId)         == 0x24, "PropZoneData::muZoneId @ +0x24");
-        static_assert(sizeof(PropZoneData) == 0x28, "PropZoneData header 0x28 (porter contract)");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, maCells)          == 0x00), "PropZoneData::maCells @ +0");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muNumCells)       == 0x08), "PropZoneData::muNumCells @ +8");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, maInstances)      == 0x10), "PropZoneData::maInstances @ +0x10");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muSizeInBytes)    == 0x18), "PropZoneData::muSizeInBytes @ +0x18");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muZoneId)         == 0x24), "PropZoneData::muZoneId @ +0x24");
+        CGS_STATIC_ASSERT((sizeof(PropZoneData) == 0x28), "PropZoneData header 0x28 (porter contract)");
 
         PropZoneData*   lpZone  = static_cast<PropZoneData*>(lpResource);
         const uintptr_t luDelta = CgsResource::GetLoadBase64(lrResource);

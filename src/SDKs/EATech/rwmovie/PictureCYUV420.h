@@ -56,11 +56,11 @@ struct PictureCYUV420
     // Pin the recovered region offsets and the 148-byte console size.
     static void _AssertLayout()
     {
-        static_assert(offsetof(PictureCYUV420, mrcRegion1) == 0x10, "mrcRegion1 @ +0x10");
-        static_assert(offsetof(PictureCYUV420, mrcRegion2) == 0x48, "mrcRegion2 @ +0x48");
-        static_assert(offsetof(PictureCYUV420, mrcRegion3) == 0x60, "mrcRegion3 @ +0x60");
-        static_assert(offsetof(PictureCYUV420, mrcRegion4) == 0x78, "mrcRegion4 @ +0x78");
-        static_assert(sizeof(PictureCYUV420) == 0x94, "PictureCYUV420 size == 148");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion1) == 0x10), "mrcRegion1 @ +0x10");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion2) == 0x48), "mrcRegion2 @ +0x48");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion3) == 0x60), "mrcRegion3 @ +0x60");
+        CGS_STATIC_ASSERT((offsetof(PictureCYUV420, mrcRegion4) == 0x78), "mrcRegion4 @ +0x78");
+        CGS_STATIC_ASSERT((sizeof(PictureCYUV420) == 0x94), "PictureCYUV420 size == 148");
     }
 };
 

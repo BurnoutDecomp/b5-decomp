@@ -51,33 +51,33 @@ namespace BrnWorld
 // everything after it land on the console offsets.
 #define PIN_RP_OFFSETS()                    \
     do {                                                                          \
-        static_assert(offsetof(RenderParams, mBodyTransform) == 0, "mBodyTransform @0");                      \
-        static_assert(offsetof(RenderParams, maVerletOffsets) == 64, "verlet offsets @64");                   \
-        static_assert(offsetof(RenderParams, mWheelTransforms) == 2112, "wheel xforms @2112");                \
-        static_assert(offsetof(RenderParams, mWheelScaleTransforms) == 2496, "wheel scales @2496");           \
-        static_assert(offsetof(RenderParams, maAxlePositions) == 2880, "axle positions @2880");               \
-        static_assert(offsetof(RenderParams, mPaintColour) == 2944, "paint colour @2944");                    \
-        static_assert(offsetof(RenderParams, mPearlescentColour) == 2960, "pearlescent @2960");               \
-        static_assert(offsetof(RenderParams, maLightLocatorPos) == 2976, "light pos[24] @2976");              \
-        static_assert(offsetof(RenderParams, maLightLocatorType) == 3360, "light type[24] @3360");            \
-        static_assert(offsetof(RenderParams, mabWheelExists) == 3456, "wheel exists @3456");                  \
-        static_assert(offsetof(RenderParams, mfDeformationSquared) == 3484, "deform^2 @3484");                \
-        static_assert(offsetof(RenderParams, mBodyPartVisibility) == 3488, "part visibility @3488");          \
-        static_assert(offsetof(RenderParams, maDetachedParts) == 3504, "detached queue @3504");               \
-        static_assert(offsetof(RenderParams, mLOD) == 5120, "mLOD @5120");                                    \
-        static_assert(offsetof(RenderParams, mbCrashing) == 5125, "mbCrashing @5125");                        \
-        static_assert(offsetof(RenderParams, mbIsEngineOff) == 5126, "engine off @5126");                     \
-        static_assert(offsetof(RenderParams, mbIsBraking) == 5127, "braking @5127");                          \
-        static_assert(offsetof(RenderParams, mbIsHidden) == 5131, "hidden @5131");                            \
-        static_assert(offsetof(RenderParams, mfLightOpacityFlipFlop) == 5132, "light flipflop @5132");        \
-        static_assert(offsetof(RenderParams, mfLightSwitchTimeOut) == 5136, "light timeout @5136");           \
-        static_assert(offsetof(RenderParams, mbBluesAndTwosCanSwitchState) == 5140, "b and t can switch @5140");\
-        static_assert(offsetof(RenderParams, mbBluesAndTwosActive) == 5141, "b and t active @5141");          \
-        static_assert(offsetof(RenderParams, mu8RenderDamageFlags) == 5142, "damage flags @5142");            \
-        static_assert(offsetof(RenderParams, mafCrackedGlassFractureAmount) == 5144, "glass fracture @5144"); \
-        static_assert(offsetof(RenderParams, mafCrackedGlassEqualisationFactor) == 5176, "glass equal @5176");\
-        static_assert(offsetof(RenderParams, mavCrackedGlassScaleFactors) == 5208, "glass scale @5208");      \
-        static_assert(sizeof(RenderParams) == 5280, "sizeof == 0x14A0");                                      \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mBodyTransform) == 0), "mBodyTransform @0");                      \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, maVerletOffsets) == 64), "verlet offsets @64");                   \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mWheelTransforms) == 2112), "wheel xforms @2112");                \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mWheelScaleTransforms) == 2496), "wheel scales @2496");           \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, maAxlePositions) == 2880), "axle positions @2880");               \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mPaintColour) == 2944), "paint colour @2944");                    \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mPearlescentColour) == 2960), "pearlescent @2960");               \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, maLightLocatorPos) == 2976), "light pos[24] @2976");              \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, maLightLocatorType) == 3360), "light type[24] @3360");            \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mabWheelExists) == 3456), "wheel exists @3456");                  \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mfDeformationSquared) == 3484), "deform^2 @3484");                \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mBodyPartVisibility) == 3488), "part visibility @3488");          \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, maDetachedParts) == 3504), "detached queue @3504");               \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mLOD) == 5120), "mLOD @5120");                                    \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mbCrashing) == 5125), "mbCrashing @5125");                        \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mbIsEngineOff) == 5126), "engine off @5126");                     \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mbIsBraking) == 5127), "braking @5127");                          \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mbIsHidden) == 5131), "hidden @5131");                            \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mfLightOpacityFlipFlop) == 5132), "light flipflop @5132");        \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mfLightSwitchTimeOut) == 5136), "light timeout @5136");           \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mbBluesAndTwosCanSwitchState) == 5140), "b and t can switch @5140");\
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mbBluesAndTwosActive) == 5141), "b and t active @5141");          \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mu8RenderDamageFlags) == 5142), "damage flags @5142");            \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mafCrackedGlassFractureAmount) == 5144), "glass fracture @5144"); \
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mafCrackedGlassEqualisationFactor) == 5176), "glass equal @5176");\
+        CGS_STATIC_ASSERT((offsetof(RenderParams, mavCrackedGlassScaleFactors) == 5208), "glass scale @5208");      \
+        CGS_STATIC_ASSERT((sizeof(RenderParams) == 5280), "sizeof == 0x14A0");                                      \
     } while (0)
 
 // ----------------------------------------------------------------------------

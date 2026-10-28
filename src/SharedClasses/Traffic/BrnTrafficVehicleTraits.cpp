@@ -12,17 +12,17 @@ namespace BrnTraffic
 {
     void VehicleTraits::_AssertLayout()
     {
-        static_assert(offsetof(VehicleTraits, mfSwervingAmountModifier) == 0x00, "mfSwervingAmountModifier");
-        static_assert(offsetof(VehicleTraits, mfAcceleration)           == 0x04, "mfAcceleration");
-        static_assert(offsetof(VehicleTraits, muCuttingUpChance)        == 0x08, "muCuttingUpChance");
-        static_assert(offsetof(VehicleTraits, muTailgatingChance)       == 0x09, "muTailgatingChance");
-        static_assert(offsetof(VehicleTraits, muPatience)               == 0x0A, "muPatience");
-        static_assert(offsetof(VehicleTraits, muTantrumAttackCumProb)   == 0x0B, "muTantrumAttackCumProb");
-        static_assert(offsetof(VehicleTraits, muTantrumStopCumProb)     == 0x0C, "muTantrumStopCumProb");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, mfSwervingAmountModifier) == 0x00), "mfSwervingAmountModifier");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, mfAcceleration)           == 0x04), "mfAcceleration");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, muCuttingUpChance)        == 0x08), "muCuttingUpChance");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, muTailgatingChance)       == 0x09), "muTailgatingChance");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, muPatience)               == 0x0A), "muPatience");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, muTantrumAttackCumProb)   == 0x0B), "muTantrumAttackCumProb");
+        CGS_STATIC_ASSERT((offsetof(VehicleTraits, muTantrumStopCumProb)     == 0x0C), "muTantrumStopCumProb");
 
         // GetVehicleTraitsForVehicleType @0x82705DF0 addresses the table as
         // `mpaVehicleTraits + traitsId*16` (`slwi r11,r24,4`). Pointer-free record, so
         // the same 16 bytes on the host.
-        static_assert(sizeof(VehicleTraits) == 16, "VehicleTraits stride");
+        CGS_STATIC_ASSERT((sizeof(VehicleTraits) == 16), "VehicleTraits stride");
     }
 }

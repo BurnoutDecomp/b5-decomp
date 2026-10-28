@@ -57,12 +57,12 @@ namespace
 
     Vector3 Add(Vector3 lA, Vector3 lB)
     {
-        return Vector3{lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f};
+        { const Vector3 lResult = {lA.x + lB.x, lA.y + lB.y, lA.z + lB.z, 0.0f}; return lResult; }
     }
 
     Vector3 Scale(Vector3 lValue, f32 lfScale)
     {
-        return Vector3{lValue.x * lfScale, lValue.y * lfScale, lValue.z * lfScale, 0.0f};
+        { const Vector3 lResult = {lValue.x * lfScale, lValue.y * lfScale, lValue.z * lfScale, 0.0f}; return lResult; }
     }
 }
 

@@ -30,7 +30,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
-#include <cstdint>
+#include "types.hpp"
 
 class EAStringC;                  // SDKs/EATech/include/Apt/AptString/EAString.h
 typedef EAStringC AptNativeString;

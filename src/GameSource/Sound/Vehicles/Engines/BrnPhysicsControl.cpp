@@ -296,11 +296,11 @@ PhysicsControl::PhysicsData::PhysicsData()
 
 PhysicsControl::PhysicsControl()
     : BrnSound::Logic::BrnEffectControl()
-    , mpVehiclePhysicsData(nullptr)
+    , mpVehiclePhysicsData(0)
     , mProcessedPhysicsData()
-    , mp3dCarControl(nullptr)
-    , mpWheelControl(nullptr)
-    , mVehicleEngineAttributes(nullptr, nullptr)
+    , mp3dCarControl(0)
+    , mpWheelControl(0)
+    , mVehicleEngineAttributes(0, 0)
     , mAttachInfo()
     , mfOscillator(0.0f)
     , mfAngularVelocityAccumulator(0.0f)
@@ -309,7 +309,7 @@ PhysicsControl::PhysicsControl()
     , mEngineStartLineRPM()
     , mfDiagWitnessTimer(0.0f)      // [DIAG] NOT IN THE X360 BINARY
 {
-    mAttachInfo.mpVehicleAsset = nullptr;
+    mAttachInfo.mpVehicleAsset = 0;
     mAttachInfo.muVehicleIndex = 0;
     mAttachInfo.mAttachToken = 0;
 }
@@ -355,12 +355,12 @@ void PhysicsControl::SetupLoadData()
 {
     BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    CGS_ASSERT(lpVehicleState != 0, "lpVehicleState");
     if (!lpVehicleState)
         return;
 
     mpVehiclePhysicsData = lpVehicleState->GetVehicleData();
-    CGS_ASSERT(mpVehiclePhysicsData != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(mpVehiclePhysicsData != 0, "mpVehiclePhysicsData");
 
     if (GetStateId() != 1)
     {
@@ -401,7 +401,7 @@ bool PhysicsControl::Attach()
 
     BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    CGS_ASSERT(lpVehicleState != 0, "lpVehicleState");
     if (!lpVehicleState)
         return false;
 
@@ -420,7 +420,7 @@ bool PhysicsControl::Attach()
         BrnSound::Vehicles::VehicleStateManager* lpManager =
             static_cast<BrnSound::Vehicles::VehicleStateManager*>(
                 lpVehicleState->GetStateManager());
-        CGS_ASSERT(lpManager != nullptr, "lpVehicleStateManager");
+        CGS_ASSERT(lpManager != 0, "lpVehicleStateManager");
         if (lpManager)
         {
             lpManager->AddRegistry(GetEngineComponentName(BrnSound::Vehicles::VehicleState::E_ENGINE), false);
@@ -613,10 +613,10 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     BrnSound::Module::Io::LogicInputBuffer* lpBrnInput =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
             ->GetBrnInputStructure();
-    CGS_ASSERT(lpBrnInput != nullptr, "mpBrnLogicInputBuffer");
+    CGS_ASSERT(lpBrnInput != 0, "mpBrnLogicInputBuffer");
     const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
         lpGameModeInterface = lpBrnInput->GetGameModeInterface();
-    CGS_ASSERT(lpGameModeInterface != nullptr, "lpGameModeInterface");
+    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");
     const s32 liModeState = lpGameModeInterface->miCurrentGameModeState;
 
     // 0x826CBD20/0x826CBD70/0x826CBDB4/0x826CBDFC -- four speed ramps off
@@ -686,7 +686,7 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     // so they are tested numerically, exactly as IsInJunkyard tests 0x400000.
     {
         const BrnDirector::Camera::Camera* lpCamera = lpBrnInput->GetDirectorCamera();
-        CGS_ASSERT(lpCamera != nullptr, "lpDirectorCamera");
+        CGS_ASSERT(lpCamera != 0, "lpDirectorCamera");
         const s32 liCameraFlags = lpCamera->mState_uFlags;
         s32 liCameraGain = 0;
         if ((liCameraFlags & 0x10) != 0 && (liCameraFlags & 0x8) != 0)
@@ -826,7 +826,7 @@ PhysicsControl::EngRevDataSet PhysicsControl::PickStartLineRevDataSet()
 {
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    CGS_ASSERT(lpModule != nullptr, "lpLogicModule");
+    CGS_ASSERT(lpModule != 0, "lpLogicModule");
 
     CgsNumeric::Random& lrRandom = lpModule->GetRandomGenerator();
     const u64 luOldSeed = lrRandom.muSeed;
@@ -862,13 +862,13 @@ PhysicsControl::EngineRevEntry PhysicsControl::UpdateEngRevDataSet(
     EngRevDataSet& arSet, f32 afTimeStep)
 {
     const EngineRevEntry* lpPoints = arSet.mpDataPoints;
-    if (lpPoints == nullptr || arSet.mnCurrentPoint >= arSet.mnNumPoints)
+    if (lpPoints == 0 || arSet.mnCurrentPoint >= arSet.mnNumPoints)
     {
         // Non-gating tripwire: the console reads mpDataPoints[mnCurrentPoint] on this
         // arm WITHOUT a null check (0x826C8758 `add r11, r11, r9` with r9 possibly 0),
         // and its only caller re-picks the set before every call, so the null half is
         // unreachable. Kept verbatim rather than guarded with an arm the console lacks.
-        CGS_ASSERT(lpPoints != nullptr, "mpDataPoints");
+        CGS_ASSERT(lpPoints != 0, "mpDataPoints");
         return lpPoints[arSet.mnCurrentPoint];
     }
 
@@ -960,7 +960,7 @@ void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
 
     if (!(lfAngularSpeed > 0.25f))
         return;
-    if (mpWheelControl == nullptr)
+    if (mpWheelControl == 0)
         return;
     if (!(mpWheelControl->GetTimeSinceLanding() > 0.5f))
         return;
@@ -980,7 +980,7 @@ void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
     BrnSound::Logic::Passby::PassbyStateManager* lpPassbyStateManager =
         static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
             lpModule->GetEnvironment().GetStateManager(4));
-    if (lpPassbyStateManager == nullptr)
+    if (lpPassbyStateManager == 0)
         return;
 
     const BrnSound::Logic::Passby::PassbyStateManager::Passby lPassby(
@@ -1045,10 +1045,10 @@ void PhysicsControl::UpdateStartLineReving(f32 afTimeStep)
 {
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    CGS_ASSERT(lpModule != nullptr, "lpLogicModule");
+    CGS_ASSERT(lpModule != 0, "lpLogicModule");
     const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
         lpGameModeInterface = lpModule->GetBrnInputStructure()->GetGameModeInterface();
-    CGS_ASSERT(lpGameModeInterface != nullptr, "lpGameModeInterface");
+    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");
     const s32 liModeState = lpGameModeInterface->miCurrentGameModeState;
 
     PhysicsData& lrData = mProcessedPhysicsData;
@@ -1067,7 +1067,7 @@ void PhysicsControl::UpdateStartLineReving(f32 afTimeStep)
     if (meIntroRevingState == E_NIS_REVING_STATE_STARTLINE)          // 0x826CC220
     {
         meIntroRevingState = E_NIS_REVING_STATE_STARTLINE;
-        if (mEngineDataSet.mpDataPoints == nullptr
+        if (mEngineDataSet.mpDataPoints == 0
             || mEngineDataSet.mnCurrentPoint >= mEngineDataSet.mnNumPoints)
         {
             mEngineDataSet = PickStartLineRevDataSet();
@@ -1163,7 +1163,7 @@ const char* PhysicsControl::GetEngineComponentName(
 {
     const BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    CGS_ASSERT(lpVehicleState != 0, "lpVehicleState");
     return lpVehicleState->GetEngineComponentName(aeComponentType);
 }
 
@@ -1185,7 +1185,7 @@ u64 PhysicsControl::GetEngineComponentKey(
 {
     const BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    CGS_ASSERT(lpVehicleState != 0, "lpVehicleState");
     return lpVehicleState->GetEngineComponentKey(aeComponentType);
 }
 
@@ -1196,7 +1196,7 @@ u64 PhysicsControl::GetEngineComponentKey(
 // ---------------------------------------------------------------------------
 const BrnSound::Vehicles::VehicleData* PhysicsControl::GetRawPhysicsData() const
 {
-    CGS_ASSERT(mpVehiclePhysicsData != nullptr, "mpVehiclePhysicsData");
+    CGS_ASSERT(mpVehiclePhysicsData != 0, "mpVehiclePhysicsData");
     return mpVehiclePhysicsData;
 }
 
@@ -1225,8 +1225,8 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* PhysicsControl::
     {
         0,                // ObjectID         (FLAG: EffectControl-side id unrecovered)
         "PhysicsControl", // mpcTypeName      (FLAG: inferred from class / adjacent GetTypeName tag)
-        nullptr,          // mpBaseTypeInfo   (DEFERRED -- EffectControl RTTI chain un-homed)
-        nullptr,          // mpfnCreateObject (DEFERRED -- CreateObject not homed in this slice)
+        0,          // mpBaseTypeInfo   (DEFERRED -- EffectControl RTTI chain un-homed)
+        0,          // mpfnCreateObject (DEFERRED -- CreateObject not homed in this slice)
     };
     return &sTypeInfo;
 }

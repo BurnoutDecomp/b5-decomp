@@ -66,7 +66,7 @@ namespace CgsNetwork
     // Feedback category passed to SendFeedbackOnPlayer (declaration-only method below).
     // Forward-declared with a fixed underlying type so the signature is well-formed; the
     // full enumerator set is not needed by this TU's bodied functions.
-    enum EFeedbackType : s32;
+    enum EFeedbackType ;
 
     class ServerInterfacePlayerInfo : public ServerInterfaceComponent
     {

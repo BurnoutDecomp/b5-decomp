@@ -36,15 +36,15 @@ struct TrafficControl : public BrnSound::Logic::BrnEffectControl
     TrafficControl() {}
     virtual ~TrafficControl();
 
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
-    virtual const char* GetTypeName() const override;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
+    virtual const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject( u32 luType );
 
-    virtual s32  GetController( s32 liIndex ) override;
-    virtual void AttachController( CgsSound::Logic::EffectBase* lpController ) override;
-    virtual bool Attach() override;
-    virtual void UpdateParams( f32 lfTimeStep ) override;
+    virtual s32  GetController( s32 liIndex ) ;
+    virtual void AttachController( CgsSound::Logic::EffectBase* lpController ) ;
+    virtual bool Attach() ;
+    virtual void UpdateParams( f32 lfTimeStep ) ;
 
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* GetTrafficEntity() const
     {

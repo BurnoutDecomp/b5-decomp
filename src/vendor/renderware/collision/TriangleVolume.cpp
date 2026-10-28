@@ -5,7 +5,7 @@
 
 // includes folded in from the TriangleVolume_w*.cpp partfiles (2026-09-15)
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance (CreateGPInstance)
-#include <cstdint>   // uintptr_t (the console 32-bit mVolumeTag pointer image)
+#include "types.hpp"   // uintptr_t (the console 32-bit mVolumeTag pointer image)
 
 // ===========================================================================
 // rw::collision::TriangleVolume -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -165,9 +165,9 @@ TriangleVolume* TriangleVolume::Initialize(TriangleVolume** appVolume,
                                            const Vec4& arP0, const Vec4& arP1, const Vec4& arP2)
 {
     TriangleVolume* lpVolume = *appVolume;
-    if (lpVolume == nullptr)
+    if (lpVolume == 0)
     {
-        return nullptr;
+        return 0;
     }
 
     lpVolume->maVerts[0] = arP0;
@@ -235,7 +235,7 @@ void TriangleVolume::GetNormal(Vec4& arNormal, const Vec4* lpTransform) const
         mNormal = lNormal;
     }
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         lNormal = TransformDirection(lpTransform, lNormal);
     }
@@ -251,7 +251,7 @@ void TriangleVolume::GetNormal(Vec4& arNormal, const Vec4* lpTransform) const
 // ---------------------------------------------------------------------------
 void TriangleVolume::GetPoints(Vec4& arP0, Vec4& arP1, Vec4& arP2, const Vec4* lpTransform) const
 {
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         arP0 = TransformPoint(lpTransform, maVerts[0]);
         arP1 = TransformPoint(lpTransform, maVerts[1]);
@@ -278,7 +278,7 @@ RwBool TriangleVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABB
     Vec4 lV1;
     Vec4 lV2;
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         lV0 = TransformPoint(lpTransform, maVerts[0]);
         lV1 = TransformPoint(lpTransform, maVerts[1]);
@@ -573,13 +573,13 @@ RwBool TriangleVolume::CreateGPInstance(GPInstance& arInst, const Vec4* lpTransf
     // GetNormal is always called with a NULL transform (li r5, 0 @ 0x82BBAA90);
     // this function rotates the result itself with the masked rows below.
     Vec4 lvNormal;
-    GetNormal(lvNormal, nullptr);
+    GetNormal(lvNormal, 0);
 
     Vec4 lvP0;   // v127
     Vec4 lvP1;   // v126
     Vec4 lvP2;   // v125
 
-    if (lpTransform != nullptr)
+    if (lpTransform != 0)
     {
         // The vrlimi128 w-lane masking: rows 0..2 get w = 0, row 3 gets w = 1.
         const Vec4 laRows[4] = {

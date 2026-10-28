@@ -24,7 +24,7 @@ namespace BrnGui
     {
         // @ 0x824157D8 -- base Construct, then clear all three flags.
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpacParentName) override;
+                       const char* lpacParentName) ;
 
         // @ 0x82415818 -- show the prompt: when it was hidden, publish the "visible"
         // apt_state; then set mbActive.

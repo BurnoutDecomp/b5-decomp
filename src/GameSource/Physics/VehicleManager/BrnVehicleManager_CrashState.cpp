@@ -140,7 +140,7 @@ namespace Vehicle
             s32 miAggressorIndex;   // +4  <- ImpactEvent::meAggressorActiveRaceCarIndex (lwz 0x14(ev))
             s32 miVictimIndex;      // +8  <- ImpactEvent::meVictimActiveRaceCarIndex    (lwz 0x18(ev))
         };
-        static_assert(sizeof(ImpactIoEventRecord) == 12, "AddEvent(..., 31, 12): the console posts 12 bytes");
+        CGS_STATIC_ASSERT((sizeof(ImpactIoEventRecord) == 12), "AddEvent(..., 31, 12): the console posts 12 bytes");
         const s32 KI_GAME_EVENT_IMPACT      = 31;
         const s32 KI_GAME_EVENT_IMPACT_SIZE = 12;
 

@@ -32,7 +32,7 @@
 // by the generic std::memcpy(mpEvents + miLength, lpSourceEvents, sizeof(T) * liSourceLength).
 //
 // X360-attested element stride (`slwi r, count, 5` == *32 at 0x827A5980 and 0x827A5988).
-static_assert(sizeof(CgsSceneManager::SceneManagerIO::InEventSetEntityPosition) == 32,
+CGS_STATIC_ASSERT((sizeof(CgsSceneManager::SceneManagerIO::InEventSetEntityPosition) == 32),
               "InEventSetEntityPosition stride 32");
 
 template bool

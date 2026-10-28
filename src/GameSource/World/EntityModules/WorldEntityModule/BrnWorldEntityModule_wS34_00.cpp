@@ -246,7 +246,7 @@ WorldEntityModule::UpdateMassive( BrnUpdateSet lUpdateSet )
     mMassive.SetIsPaused( ( lUpdateSet & KU_UPDATE_SET_IN_GAME ) == 0 ||
                           ( lUpdateSet & KU_UPDATE_SET_MASSIVE_PAUSE ) != 0 );
 
-    if ( MassiveAdClient3::CMassiveClientCore::Instance() != nullptr &&
+    if ( MassiveAdClient3::CMassiveClientCore::Instance() != 0 &&
          !mbMassiveSubscribersCreated &&
          mbDownloadMassiveTextures &&
          mMassive.IsSafeToDownload() )
@@ -258,7 +258,7 @@ WorldEntityModule::UpdateMassive( BrnUpdateSet lUpdateSet )
             const BrnMassive::BrnMassiveSubscriber* lpPrevious =
                 mMassive.GetSubscriberAtIndex( miNumMassiveSubscribersCreated - 1 );
             CGS_ASSERT( lpPrevious, "Invalid Subscriber has been created" );
-            if ( lpPrevious != nullptr && !( lpPrevious->miState == 3 || lpPrevious->miState == 2 ) )
+            if ( lpPrevious != 0 && !( lpPrevious->miState == 3 || lpPrevious->miState == 2 ) )
             {
                 lbCreateNext = false;
             }
@@ -319,13 +319,13 @@ WorldEntityModule::GenerateMassiveImpressionData( Matrix44Affine::InParam lTrans
     }
 
     BrnMassive::MassiveLookupTableItem* lpItem = mMassive.GetSubscriberDataAtIndex( luRenderableIndex );
-    if ( lpItem == nullptr )
+    if ( lpItem == 0 )
     {
         return;
     }
 
     BrnMassive::BrnMassiveSubscriber* lpSubscriber = lpItem->mpSubscriber;
-    if ( lpSubscriber != nullptr )
+    if ( lpSubscriber != 0 )
     {
         lpSubscriber->SetImpressionData( false, 0.0f, 0, KU_IMPRESSION_SCREEN_WIDTH, KU_IMPRESSION_SCREEN_HEIGHT );
     }
@@ -342,7 +342,7 @@ WorldEntityModule::GenerateMassiveImpressionData( Matrix44Affine::InParam lTrans
         return;
     }
 
-    if ( lpSubscriber == nullptr )
+    if ( lpSubscriber == 0 )
     {
         mMassive.mbImpressionFrameStarted = true;
         mMassive.mbSafeToDownload = false;

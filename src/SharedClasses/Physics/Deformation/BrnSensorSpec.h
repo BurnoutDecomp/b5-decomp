@@ -45,7 +45,7 @@ namespace BrnPhysics
 namespace Deformation
 {
     // DWARF BrnSensorSpec.h:48. One streamed deformation-sensor spec.
-    struct alignas(16) SensorSpec
+    struct CGS_ALIGN(16) SensorSpec
     {
         // DWARF BrnSensorSpec.h:123 -- per-direction sensor parameters. The DWARF lists a single
         // member (mCompressionLimits); the six-element array maDirectionParams holds one per
@@ -74,7 +74,7 @@ namespace Deformation
         VecFloat GetCompressionLimit(ENextSensorDirection leDirection) const
         {
             const f32 lfLimit = maDirectionParams[static_cast<s32>(leDirection)].mCompressionLimits;
-            return VecFloat{ lfLimit, lfLimit, lfLimit, lfLimit };
+            { const VecFloat lResult = { lfLimit, lfLimit, lfLimit, lfLimit }; return lResult; }
         } // DWARF :98
         void    FixUp(void* lpBaseAddress);                            // DWARF :105
         void    FixDown(void* lpBaseAddress);                          // DWARF :108

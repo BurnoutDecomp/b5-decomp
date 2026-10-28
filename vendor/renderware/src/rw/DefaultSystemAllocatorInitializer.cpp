@@ -44,6 +44,6 @@ DefaultSystemAllocatorInitializer::DefaultSystemAllocatorInitializer()
 }
 
 // Storage for the additive static slot grown into ResourceAllocatorRegistry.
-IResourceAllocator* ResourceAllocatorRegistry::s_defaultAllocator = nullptr;
+IResourceAllocator* ResourceAllocatorRegistry::s_defaultAllocator = 0;
 
 }  // namespace rw

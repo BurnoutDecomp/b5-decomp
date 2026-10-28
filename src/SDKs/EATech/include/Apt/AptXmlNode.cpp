@@ -29,7 +29,7 @@
 // ---------------------------------------------------------------------------
 void* AptXmlNode::operator new(size_t size)
 {
-    return (gpGCPoolManager != nullptr) ? gpGCPoolManager->AllocateAptValueGC(size) : nullptr;
+    return (gpGCPoolManager != 0) ? gpGCPoolManager->AllocateAptValueGC(size) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ void* AptXmlNode::operator new(size_t size)
 // ---------------------------------------------------------------------------
 void AptXmlNode::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != nullptr)
+    if (gpGCPoolManager != 0)
         gpGCPoolManager->DeallocateAptValueGC(p, size);
 }
 

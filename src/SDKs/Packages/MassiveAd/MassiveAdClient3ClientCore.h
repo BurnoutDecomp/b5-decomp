@@ -86,10 +86,10 @@ public:
     virtual ~CMassiveClientCore();
 
     // CRequestBuilder slot 1: a LocateService / OpenSession / CloseSession request completed.
-    int HandleResponse(CRequestObject* pRequest) override;
+    int HandleResponse(CRequestObject* pRequest) ;
 
     // CRequestBuilder slot 2: one of those requests failed (state -> 0).
-    int HandleError(CRequestObject* pRequest, int nErrorCode) override;
+    int HandleError(CRequestObject* pRequest, int nErrorCode) ;
 
     // ----- process-wide entry points (static; they act on the singleton) ----------
 

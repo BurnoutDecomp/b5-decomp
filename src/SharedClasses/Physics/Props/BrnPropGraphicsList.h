@@ -40,7 +40,7 @@ namespace CgsGraphics { class Model; }
 // DISTINCT, never-defined type, so every consumer that handed mpPropModel to the renderer
 // had to reinterpret_cast across two unrelated types -- the prop draw path cannot. Aliased
 // rather than renamed so BrnPropGraphicsList.cpp / ...ResourceType.cpp keep their spelling.
-using Model = CgsGraphics::Model;
+typedef CgsGraphics::Model Model;
 
 namespace BrnPhysics
 {
@@ -95,21 +95,21 @@ namespace Props
     // Pin the pointer-free prefixes (X360-faithful offsets) AND the widened
     // tail -- the host layout is the platform-4 serialised contract the porter
     // (world_type_transcode.py transcode_propgraphicslist) emits.
-    static_assert(offsetof(PropGraphicsList, muSizeInBytes)            == 0x00, "PropGraphicsList::muSizeInBytes @ +0");
-    static_assert(offsetof(PropGraphicsList, muZoneNumber)            == 0x04, "PropGraphicsList::muZoneNumber @ +4");
-    static_assert(offsetof(PropGraphicsList, muNumberOfPropModels)    == 0x08, "PropGraphicsList::muNumberOfPropModels @ +8");
-    static_assert(offsetof(PropGraphicsList, muNumberOfPropPartModels) == 0x0C, "PropGraphicsList::muNumberOfPropPartModels @ +0xC");
-    static_assert(offsetof(PropGraphicsList, mpaPropGraphics)         == 0x10, "PropGraphicsList::mpaPropGraphics @ +0x10 (porter contract)");
-    static_assert(offsetof(PropGraphicsList, mpaPropPartGraphics)     == 0x18, "PropGraphicsList::mpaPropPartGraphics @ +0x18 (porter contract)");
-    static_assert(sizeof(PropGraphicsList) == 0x20, "PropGraphicsList header 0x20 (porter contract)");
-    static_assert(offsetof(PropGraphics, muTypeId)     == 0x00, "PropGraphics::muTypeId @ +0");
-    static_assert(offsetof(PropGraphics, mpPropModel)  == 0x08, "PropGraphics::mpPropModel @ +8 (porter import slot)");
-    static_assert(offsetof(PropGraphics, mpParts)      == 0x10, "PropGraphics::mpParts @ +0x10 (porter contract)");
-    static_assert(sizeof(PropGraphics) == 24, "PropGraphics stride 24 (porter contract)");
-    static_assert(offsetof(PropPartGraphics, muTypeId) == 0x00, "PropPartGraphics::muTypeId @ +0");
-    static_assert(offsetof(PropPartGraphics, muPartId) == 0x04, "PropPartGraphics::muPartId @ +4");
-    static_assert(offsetof(PropPartGraphics, mpPropModel) == 0x08, "PropPartGraphics::mpPropModel @ +8 (porter import slot)");
-    static_assert(sizeof(PropPartGraphics) == 16, "PropPartGraphics stride 16 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(PropGraphicsList, muSizeInBytes)            == 0x00), "PropGraphicsList::muSizeInBytes @ +0");
+    CGS_STATIC_ASSERT((offsetof(PropGraphicsList, muZoneNumber)            == 0x04), "PropGraphicsList::muZoneNumber @ +4");
+    CGS_STATIC_ASSERT((offsetof(PropGraphicsList, muNumberOfPropModels)    == 0x08), "PropGraphicsList::muNumberOfPropModels @ +8");
+    CGS_STATIC_ASSERT((offsetof(PropGraphicsList, muNumberOfPropPartModels) == 0x0C), "PropGraphicsList::muNumberOfPropPartModels @ +0xC");
+    CGS_STATIC_ASSERT((offsetof(PropGraphicsList, mpaPropGraphics)         == 0x10), "PropGraphicsList::mpaPropGraphics @ +0x10 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(PropGraphicsList, mpaPropPartGraphics)     == 0x18), "PropGraphicsList::mpaPropPartGraphics @ +0x18 (porter contract)");
+    CGS_STATIC_ASSERT((sizeof(PropGraphicsList) == 0x20), "PropGraphicsList header 0x20 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(PropGraphics, muTypeId)     == 0x00), "PropGraphics::muTypeId @ +0");
+    CGS_STATIC_ASSERT((offsetof(PropGraphics, mpPropModel)  == 0x08), "PropGraphics::mpPropModel @ +8 (porter import slot)");
+    CGS_STATIC_ASSERT((offsetof(PropGraphics, mpParts)      == 0x10), "PropGraphics::mpParts @ +0x10 (porter contract)");
+    CGS_STATIC_ASSERT((sizeof(PropGraphics) == 24), "PropGraphics stride 24 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(PropPartGraphics, muTypeId) == 0x00), "PropPartGraphics::muTypeId @ +0");
+    CGS_STATIC_ASSERT((offsetof(PropPartGraphics, muPartId) == 0x04), "PropPartGraphics::muPartId @ +4");
+    CGS_STATIC_ASSERT((offsetof(PropPartGraphics, mpPropModel) == 0x08), "PropPartGraphics::mpPropModel @ +8 (porter import slot)");
+    CGS_STATIC_ASSERT((sizeof(PropPartGraphics) == 16), "PropPartGraphics stride 16 (porter contract)");
 
 } // namespace Props
 } // namespace BrnPhysics

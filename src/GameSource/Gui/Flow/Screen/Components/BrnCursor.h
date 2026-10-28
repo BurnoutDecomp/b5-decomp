@@ -252,25 +252,25 @@ namespace BrnGui
         // deliberately NOT asserted (the base widens underneath this run).
         static void _AssertLayout()
         {
-            static_assert(offsetof(GuiCursor, mfFirstInputTime)
-                        - offsetof(GuiCursor, mfMovementScalar) == 0x04, "cursor scalars");
-            static_assert(offsetof(GuiCursor, mfLastInputTime)
-                        - offsetof(GuiCursor, mfFirstInputTime) == 0x04, "cursor scalars");
-            static_assert(offsetof(GuiCursor, mv2LastDelta)
-                        - offsetof(GuiCursor, mv2Position) == 0x10, "cursor vector lanes");
-            static_assert(offsetof(GuiCursor, mv2LastOutputPosition)
-                        - offsetof(GuiCursor, mv2LastDelta) == 0x10, "cursor vector lanes");
-            static_assert(offsetof(GuiCursor, mv4BoundsRect)
-                        - offsetof(GuiCursor, mv2LastOutputPosition) == 0x10, "cursor vector lanes");
-            static_assert(offsetof(GuiCursor, muLockedToIndex)
-                        - offsetof(GuiCursor, mv4BoundsRect) == 0x10, "cursor state words");
-            static_assert(offsetof(GuiCursor, meDisplayState)
-                        - offsetof(GuiCursor, muLockedToIndex) == 0x04, "cursor state words");
-            static_assert(offsetof(GuiCursor, meAnimationState)
-                        - offsetof(GuiCursor, meDisplayState) == 0x04, "cursor state words");
-            static_assert(offsetof(GuiCursor, mbAlwaysSnap)
-                        - offsetof(GuiCursor, meAnimationState) == 0x04, "cursor state words");
-            static_assert(offsetof(SnapResults, luLockedIndex) == 0x10,
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, mfFirstInputTime)
+                        - offsetof(GuiCursor, mfMovementScalar) == 0x04), "cursor scalars");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, mfLastInputTime)
+                        - offsetof(GuiCursor, mfFirstInputTime) == 0x04), "cursor scalars");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, mv2LastDelta)
+                        - offsetof(GuiCursor, mv2Position) == 0x10), "cursor vector lanes");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, mv2LastOutputPosition)
+                        - offsetof(GuiCursor, mv2LastDelta) == 0x10), "cursor vector lanes");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, mv4BoundsRect)
+                        - offsetof(GuiCursor, mv2LastOutputPosition) == 0x10), "cursor vector lanes");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, muLockedToIndex)
+                        - offsetof(GuiCursor, mv4BoundsRect) == 0x10), "cursor state words");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, meDisplayState)
+                        - offsetof(GuiCursor, muLockedToIndex) == 0x04), "cursor state words");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, meAnimationState)
+                        - offsetof(GuiCursor, meDisplayState) == 0x04), "cursor state words");
+            CGS_STATIC_ASSERT((offsetof(GuiCursor, mbAlwaysSnap)
+                        - offsetof(GuiCursor, meAnimationState) == 0x04), "cursor state words");
+            CGS_STATIC_ASSERT((offsetof(SnapResults, luLockedIndex) == 0x10),
                           "SnapResults locked index follows the 16-byte offset lane (sret+0x10)");
         }
     };

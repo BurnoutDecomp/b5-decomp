@@ -294,7 +294,7 @@ PatchMonitor* AemsFactory::FindPatchMonitor(const char* lpcName)
 {
     if (muPatchMonitorCount == 0)
     {
-        return nullptr; // cmplwi count,0 ; beq -> li r3,0
+        return 0; // cmplwi count,0 ; beq -> li r3,0
     }
 
     for (u32 luI = 0; luI < muPatchMonitorCount; ++luI)
@@ -305,7 +305,7 @@ PatchMonitor* AemsFactory::FindPatchMonitor(const char* lpcName)
             return &maPatchMonitors[luI];
         }
     }
-    return nullptr;
+    return 0;
 }
 
 } // namespace Playback

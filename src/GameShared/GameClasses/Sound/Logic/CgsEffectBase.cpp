@@ -31,8 +31,8 @@ namespace CgsSound
 namespace Logic
 {
 
-static ClassTypeInfo<EffectControl>* gapEffectControlTypeInfo[EffectControl::KU_SIZEOF_CLASS_ARRAY] = { nullptr };
-static ClassTypeInfo<EffectObject>*  gapEffectObjectTypeInfo[EffectObject::KU_SIZEOF_CLASS_ARRAY] = { nullptr };
+static ClassTypeInfo<EffectControl>* gapEffectControlTypeInfo[EffectControl::KU_SIZEOF_CLASS_ARRAY] = { 0 };
+static ClassTypeInfo<EffectObject>*  gapEffectObjectTypeInfo[EffectObject::KU_SIZEOF_CLASS_ARRAY] = { 0 };
 
 // ---------------------------------------------------------------------------
 // AddToClassTypeInfoArray scan helper.
@@ -56,7 +56,7 @@ static ClassTypeInfo<T>* RegisterClassTypeInfo(ClassTypeInfo<T>** apArray,
     // Scan for the first empty slot, capped at the class array size (0x40).
     for (lu32Index = 0; lu32Index < 0x40u; ++lu32Index)
     {
-        if (apArray[lu32Index] == nullptr)
+        if (apArray[lu32Index] == 0)
         {
             apArray[lu32Index] = apTypeInfo;
             return apTypeInfo;
@@ -126,7 +126,7 @@ s32 EffectBase::GetInstanceId() const
 // ---------------------------------------------------------------------------
 f32 EffectBase::GetMixerOutputValue(int aiSlot, int aiPreset)
 {
-    if (mpDynamicMixIo == nullptr) // lwz r3,0x30(this); cmplwi cr6,r3,0; beq
+    if (mpDynamicMixIo == 0) // lwz r3,0x30(this); cmplwi cr6,r3,0; beq
     {
         return 0.0f;               // lfs f1, flt_82001CC0
     }
@@ -170,7 +170,7 @@ f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
 // ---------------------------------------------------------------------------
 void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 {
-    CGS_ASSERT(apDmixIO != nullptr, "lpDmixIO");
+    CGS_ASSERT(apDmixIO != 0, "lpDmixIO");
     mpDynamicMixIo = apDmixIO; // stw r31,0x30(this)
 }
 
@@ -179,7 +179,7 @@ void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 // ---------------------------------------------------------------------------
 ClassTypeInfo<EffectControl>* EffectControl::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<EffectControl> sTypeInfo(0, "EffectControl", nullptr, nullptr);
+    static ClassTypeInfo<EffectControl> sTypeInfo(0, "EffectControl", 0, 0);
     return &sTypeInfo;
 }
 
@@ -215,7 +215,7 @@ void EffectBase::SetMixerInputValue(int aiSlot, int aiValue)
 
 ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)
 {
-    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapEffectControlTypeInfo[auIndex] : nullptr;
+    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapEffectControlTypeInfo[auIndex] : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)
 // ---------------------------------------------------------------------------
 ClassTypeInfo<EffectObject>* EffectObject::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<EffectObject> sTypeInfo(0, "EffectObject", nullptr, nullptr);
+    static ClassTypeInfo<EffectObject> sTypeInfo(0, "EffectObject", 0, 0);
     return &sTypeInfo;
 }
 
@@ -241,7 +241,7 @@ ClassTypeInfo<EffectObject>* EffectObject::AddToClassTypeInfoArray(ClassTypeInfo
 
 ClassTypeInfo<EffectObject>* EffectObject::GetRegisteredTypeInfo(u32 auIndex)
 {
-    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapEffectObjectTypeInfo[auIndex] : nullptr;
+    return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapEffectObjectTypeInfo[auIndex] : 0;
 }
 
 } // namespace Logic

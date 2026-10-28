@@ -116,7 +116,7 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
     lpOutput->GetStreamRequestQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lOpen), 16, sizeof(lOpen));
     miHeaderPos = 0;
-    maStreams[liNextStream] = nullptr;
+    maStreams[liNextStream] = 0;
     return true;
 }
 
@@ -234,7 +234,7 @@ bool BundleLoaderModule::StreamDebugDataFunc() // 829043A0
         return true;
     CgsFileSystem::ReadStream& lrStream = maStreams[miCurrentStream];
     if (static_cast<u32>(miHeaderPos) < luStart) {
-        miHeaderPos += lrStream.Read(luStart - miHeaderPos, nullptr);
+        miHeaderPos += lrStream.Read(luStart - miHeaderPos, 0);
         if (static_cast<u32>(miHeaderPos) < luStart)
             return false;
     }
@@ -248,7 +248,7 @@ bool BundleLoaderModule::StreamEntryListFunc(void* lpOutputBuffer) // 82904478
     const u32 luEnd = mCurrentBundle.mauResourceDataOffset[0];
     CgsFileSystem::ReadStream& lrStream = maStreams[miCurrentStream];
     if (static_cast<u32>(miHeaderPos) < luStart) {
-        miHeaderPos += lrStream.Read(luStart - miHeaderPos, nullptr);
+        miHeaderPos += lrStream.Read(luStart - miHeaderPos, 0);
         if (static_cast<u32>(miHeaderPos) < luStart)
             return false;
     }
@@ -306,7 +306,7 @@ bool BundleLoaderModule::StreamDataFunc() // 82904648
                                + mCurrentBundle.mauResourceDataOffset[miCurrentMemoryType];
         const u32 luPosition = static_cast<u32>(lrStream.Tell());
         if (luDiskOffset > luPosition) {
-            lrStream.Read(luDiskOffset - luPosition, nullptr);
+            lrStream.Read(luDiskOffset - luPosition, 0);
             continue;
         }
         const u32 luRemaining = lrEntry.GetDiskSize(miCurrentMemoryType) - miCurrentResourcePosition;
@@ -324,7 +324,7 @@ bool BundleLoaderModule::StreamDataFunc() // 82904648
 
 void BundleLoaderModule::ProcessReceiverQueue() // 828E2888
 {
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 liTag = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent) {
@@ -340,7 +340,7 @@ void BundleLoaderModule::ProcessReceiverQueue() // 828E2888
         } else {
             CGS_ASSERT(false, "Unexpected event received\n");
         }
-        const CgsModule::Event* lpNext = nullptr;
+        const CgsModule::Event* lpNext = 0;
         liTag = mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
         lpEvent = lpNext;
     }
@@ -395,7 +395,7 @@ bool BundleLoaderModule::StreamClose(void* lpOutputBuffer) // 828FB260
     lRequest.Construct(&mReceiverQueue, miCurrentStream, maStreams[miCurrentStream]);
     const bool lbAdded = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer)->GetStreamRequestQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lRequest), 18, sizeof(lRequest));
-    maStreams[miCurrentStream] = nullptr;
+    maStreams[miCurrentStream] = 0;
     return lbAdded;
 }
 
@@ -406,7 +406,7 @@ void BundleLoaderModule::ProcessPoolResponses()
 {
     // ARTIST828EC148. Partial-fixup replies during DATA are intentionally
     // ignored; the final reply publishes the bundle's retained handle.
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 liTag = mPoolReceiveQueueCache.GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent) {
@@ -438,7 +438,7 @@ void BundleLoaderModule::ProcessPoolResponses()
                 ++miNumLoadedBundles;
             }
         }
-        const CgsModule::Event* lpNext = nullptr;
+        const CgsModule::Event* lpNext = 0;
         liTag = mPoolReceiveQueueCache.GetNextEvent(lpEvent, &lpNext, &liSize);
         lpEvent = lpNext;
     }
@@ -452,12 +452,12 @@ void BundleLoaderModule::RecordPostUpdateEvents(const BundleLoaderIO::InputBuffe
     auto* lpLock = const_cast<BundleLoaderIO::InputBuffer_Record*>(lpInput);
     lpLock->LockForRead();
     const auto* lpQueue = lpInput->GetPoolReceiveQueue();
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent) {
         mPoolReceiveQueueCache.AddEvent(lpEvent, liTag, liSize);
-        const CgsModule::Event* lpNext = nullptr;
+        const CgsModule::Event* lpNext = 0;
         liTag = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
         lpEvent = lpNext;
     }

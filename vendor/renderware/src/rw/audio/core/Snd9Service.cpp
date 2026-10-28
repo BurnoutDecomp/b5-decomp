@@ -41,9 +41,9 @@ extern "C" System *off_83271928;
 //   off_82F90158 -- the registered run-time descriptor record (its +0x00 label is the
 //                   string "Snd9Service").
 // -------------------------------------------------------------------------------------
-static void *const KSND9_ServiceVTable = nullptr; // off_8217F384
-static void *const KSND9_BaseVTable    = nullptr; // off_820AA810
-static char       *g_Snd9ServiceDesc   = nullptr; // off_82F90158 (the "Snd9Service" record)
+static void *const KSND9_ServiceVTable = 0; // off_8217F384
+static void *const KSND9_BaseVTable    = 0; // off_820AA810
+static char       *g_Snd9ServiceDesc   = 0; // off_82F90158 (the "Snd9Service" record)
 
 // The mixer rate every path forces (flt_820AA808) and the per-channel copy span (0x400
 // bytes == a 256-sample f32 frame).

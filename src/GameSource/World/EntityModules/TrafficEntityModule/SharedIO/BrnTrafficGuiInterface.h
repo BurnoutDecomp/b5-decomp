@@ -20,7 +20,7 @@ namespace BrnTrafficIO
     const s32 KI_MAX_CAR_SCORES_TO_SHOW = 20;
 
     // One scorable traffic vehicle as the HUD sees it.
-    struct alignas(16) VehicleScoreData
+    struct CGS_ALIGN(16) VehicleScoreData
     {
         Vector3 mPosition;          // +0x00
         f32     mfDistanceSquared;  // +0x10
@@ -29,11 +29,11 @@ namespace BrnTrafficIO
         u16     muVehicleIndex;     // +0x18
     };
 
-    static_assert(sizeof(VehicleScoreData) == 0x20, "VehicleScoreData stride 0x20");
+    CGS_STATIC_ASSERT((sizeof(VehicleScoreData) == 0x20), "VehicleScoreData stride 0x20");
 
     // The score-target list: the GUI traffic-car-info event IS this array (no event header).
     typedef Array<VehicleScoreData, KI_MAX_CAR_SCORES_TO_SHOW> ScoringVehicleArray;
 
-    static_assert(sizeof(ScoringVehicleArray) == 656, "ScoringVehicleArray is the 656-byte GUI payload");
+    CGS_STATIC_ASSERT((sizeof(ScoringVehicleArray) == 656), "ScoringVehicleArray is the 656-byte GUI payload");
 }
 }

@@ -170,12 +170,12 @@ namespace Native
         const s32 liLastIndex = mnCurrentSize - 1;
         if (liIndex == liLastIndex)
         {
-            mapEmitters[liIndex] = nullptr;
+            mapEmitters[liIndex] = 0;
         }
         else
         {
             mapEmitters[liIndex]            = mapEmitters[liLastIndex];
-            mapEmitters[mnCurrentSize - 1]  = nullptr;
+            mapEmitters[mnCurrentSize - 1]  = 0;
         }
         --mnCurrentSize;
     }

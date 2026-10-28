@@ -20,7 +20,7 @@
 #include "rw/audio/core/Decoder.h"  // Decoder / DecoderRequest / DecoderBuffer
 
 #include <cstddef> // offsetof
-#include <cstdint> // uintptr_t
+#include "types.hpp" // uintptr_t
 
 namespace rw
 {
@@ -41,8 +41,8 @@ static u32 AlignUpDecoderFactory(u32 value, u32 alignment)
     return (value + alignment - 1u) & ~(alignment - 1u);
 }
 
-static std::uintptr_t AlignUpDecoderFactoryPointer(std::uintptr_t value,
-                                                   std::uintptr_t alignment)
+static uintptr_t AlignUpDecoderFactoryPointer(uintptr_t value,
+                                                   uintptr_t alignment)
 {
     return (value + alignment - 1u) & ~(alignment - 1u);
 }
@@ -185,7 +185,7 @@ Decoder *DecoderRegistry::DecoderFactory(DecoderRegistry * /*self*/, void *decod
 
     u8 *decoderBytes = reinterpret_cast<u8 *>(decoder);
     u8 *requestAddress = reinterpret_cast<u8 *>(AlignUpDecoderFactoryPointer(
-        reinterpret_cast<std::uintptr_t>(decoderBytes + codecBytes), 8u));
+        reinterpret_cast<uintptr_t>(decoderBytes + codecBytes), 8u));
     const u32 actualRequestOffset = static_cast<u32>(requestAddress - decoderBytes);
 
     decoder->mpDecoder = decoder;
@@ -204,7 +204,7 @@ Decoder *DecoderRegistry::DecoderFactory(DecoderRegistry * /*self*/, void *decod
     if (blockBased)
     {
         u8 *sampleBufferAddress = reinterpret_cast<u8 *>(AlignUpDecoderFactoryPointer(
-            reinterpret_cast<std::uintptr_t>(requestAddress + requestBytes), 16u));
+            reinterpret_cast<uintptr_t>(requestAddress + requestBytes), 16u));
         const u32 actualSampleBufferOffset =
             static_cast<u32>(sampleBufferAddress - decoderBytes);
         decoder->muSourceBufferOffset =

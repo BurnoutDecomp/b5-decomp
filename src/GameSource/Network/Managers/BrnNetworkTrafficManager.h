@@ -249,14 +249,14 @@ namespace BrnNetwork
     {
         // The embedded message types must match their console widths first; a failure here
         // points at the message header, not at this class.
-        static_assert(sizeof(void*) != 4 || sizeof(HullSyncMessage)        == 0x58,  "HullSyncMessage console size");
-        static_assert(sizeof(void*) != 4 || sizeof(CrashingTrafficMessage) == 0x7B0, "CrashingTrafficMessage console size");
-        static_assert(sizeof(void*) != 4 || sizeof(RestartTrafficMessage)  == 0x5C,  "RestartTrafficMessage console size");
-        static_assert(sizeof(void*) != 4 || sizeof(TrafficHashMessage)     == 0x28,  "TrafficHashMessage console size");
-        static_assert(sizeof(void*) != 4 || sizeof(CrashingTrafficData)    == 0x50,  "CrashingTrafficData console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(HullSyncMessage)        == 0x58),  "HullSyncMessage console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CrashingTrafficMessage) == 0x7B0), "CrashingTrafficMessage console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(RestartTrafficMessage)  == 0x5C),  "RestartTrafficMessage console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(TrafficHashMessage)     == 0x28),  "TrafficHashMessage console size");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CrashingTrafficData)    == 0x50),  "CrashingTrafficData console size");
 
 #define BRN_TM_SLOT_AT(member, off) \
-        static_assert(sizeof(void*) != 4 || offsetof(TrafficSyncData, member) == off, "TrafficSyncData::" #member " @ " #off)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(TrafficSyncData, member) == off), "TrafficSyncData::" #member " @ " #off)
         BRN_TM_SLOT_AT(mPlayerID,                     0x0000);
         BRN_TM_SLOT_AT(mHullSyncMessageSend,          0x0004);
         BRN_TM_SLOT_AT(mHullSyncMessageRecv,          0x005C);
@@ -269,18 +269,18 @@ namespace BrnNetwork
         BRN_TM_SLOT_AT(mBufferedHullActivates,        0x1128);
         BRN_TM_SLOT_AT(mbIsThereCrashingTrafficToSend, 0x1158);
 #undef BRN_TM_SLOT_AT
-        static_assert(sizeof(void*) != 4 || sizeof(TrafficSyncData) == 0x1160, "TrafficSyncData stride 0x1160");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(TrafficSyncData) == 0x1160), "TrafficSyncData stride 0x1160");
 
-        static_assert(offsetof(BufferedMessage, mu16FramesSinceRoundStart)  == 0x00, "BufferedMessage +0x00");
-        static_assert(offsetof(BufferedMessage, mOwningNetworkPlayerID)     == 0x04, "BufferedMessage +0x04");
-        static_assert(offsetof(BufferedMessage, miCrashingTrafficDataCount) == 0x08, "BufferedMessage +0x08");
-        static_assert(offsetof(BufferedMessage, maCrashingTrafficData)      == 0x10, "BufferedMessage +0x10");
-        static_assert(sizeof(void*) != 4 || sizeof(BufferedMessage) == 0x790, "BufferedMessage stride 0x790");
-        static_assert(offsetof(BufferedRestartMessage, mu16RestartFrame) == 0x10, "BufferedRestartMessage +0x10");
-        static_assert(sizeof(TrafficHash) == 4, "TrafficHash stride 4");
+        CGS_STATIC_ASSERT((offsetof(BufferedMessage, mu16FramesSinceRoundStart)  == 0x00), "BufferedMessage +0x00");
+        CGS_STATIC_ASSERT((offsetof(BufferedMessage, mOwningNetworkPlayerID)     == 0x04), "BufferedMessage +0x04");
+        CGS_STATIC_ASSERT((offsetof(BufferedMessage, miCrashingTrafficDataCount) == 0x08), "BufferedMessage +0x08");
+        CGS_STATIC_ASSERT((offsetof(BufferedMessage, maCrashingTrafficData)      == 0x10), "BufferedMessage +0x10");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(BufferedMessage) == 0x790), "BufferedMessage stride 0x790");
+        CGS_STATIC_ASSERT((offsetof(BufferedRestartMessage, mu16RestartFrame) == 0x10), "BufferedRestartMessage +0x10");
+        CGS_STATIC_ASSERT((sizeof(TrafficHash) == 4), "TrafficHash stride 4");
 
 #define BRN_TM_AT(member, off) \
-        static_assert(sizeof(void*) != 4 || offsetof(TrafficManager, member) == off, "TrafficManager::" #member " @ " #off)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(TrafficManager, member) == off), "TrafficManager::" #member " @ " #off)
         BRN_TM_AT(maBufferedCrashingTrafficMessages, 0x00000);
         BRN_TM_AT(maTrafficData,                     0x108B0);
         BRN_TM_AT(mBufferedRestartTrafficMessage,    0x18250);
@@ -308,6 +308,6 @@ namespace BrnNetwork
         BRN_TM_AT(mbShowTrafficDivergence,           0x184B0);
         BRN_TM_AT(miInThePastAmount,                 0x184B4);
 #undef BRN_TM_AT
-        static_assert(sizeof(void*) != 4 || sizeof(TrafficManager) == 0x184C0, "TrafficManager console size 0x184C0");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(TrafficManager) == 0x184C0), "TrafficManager console size 0x184C0");
     }
 }

@@ -28,15 +28,15 @@ namespace BrnGameState
         void RecordTakedown(EActiveRaceCarIndex leAggressorIndex, EActiveRaceCarIndex leVictimIndex);
 
         // "Show last takedown info": one line naming the last recorded aggressor/victim pair.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
         // ARTIST @0x8236F200: draw vulnerability and player-revenge markers for active cars.
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) ;
 
     protected:
-        const char* GetName() const override;   // @ 0x823596C8
+        const char* GetName() const ;   // @ 0x823596C8
         // ARTIST vtable 0x820CDDAC, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Gameplay"; }
-        void        OnActivate() override;       // @ 0x82366378
+        const char* GetPath() const  { return "Gameplay"; }
+        void        OnActivate() ;       // @ 0x82366378
 
     private:
         // The "Force takedown" action callback registered with the debug menu; the void* context

@@ -428,10 +428,10 @@ namespace
         u8  muNumTagBits;                // +0x108 parent tag bit count
     };
 
-    static_assert(offsetof(LineQueryView, muResCursor)  == 0x14,  "view layout");
-    static_assert(offsetof(LineQueryView, muPoolCursor) == 0xE8,  "view layout");
-    static_assert(offsetof(LineQueryView, muTag)        == 0x104, "view layout");
-    static_assert(offsetof(LineQueryView, muNumTagBits) == 0x108, "view layout");
+    CGS_STATIC_ASSERT((offsetof(LineQueryView, muResCursor)  == 0x14),  "view layout");
+    CGS_STATIC_ASSERT((offsetof(LineQueryView, muPoolCursor) == 0xE8),  "view layout");
+    CGS_STATIC_ASSERT((offsetof(LineQueryView, muTag)        == 0x104), "view layout");
+    CGS_STATIC_ASSERT((offsetof(LineQueryView, muNumTagBits) == 0x108), "view layout");
 
     // Copy one 16-byte transform row into the VolRef's cached row (the
     // lvx128/stvx128 pair; VolRef carries its own nested row type).

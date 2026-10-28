@@ -57,7 +57,7 @@
 // declaration below is well-formed and matches the live convention in
 // BrnContactSpyRunList.h. FLAG: forward-declared opaque enum (full enumerator set
 // not pulled in; only the type identity is needed to size/name the array element).
-namespace BrnWorld { enum EEntityTypeID : int; }
+namespace BrnWorld { enum EEntityTypeID ; }
 
 namespace CgsSceneManager
 {

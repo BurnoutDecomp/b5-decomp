@@ -249,7 +249,7 @@ namespace physics
         // on the console the mCom w lane packs mId, and the xyz-only setter below IS that
         // preservation on the host (mId is its own member here).
         rw::math::vpu::Vector3 GetPosition() const
-        { return rw::math::vpu::Vector3{ mCom.x, mCom.y, mCom.z, 0.0f }; }
+        { { const rw::math::vpu::Vector3 lResult = { mCom.x, mCom.y, mCom.z, 0.0f }; return lResult; } }
 
         void SetPosition(const rw::math::vpu::Vector3& lrPosition)
         { mCom.x = lrPosition.x; mCom.y = lrPosition.y; mCom.z = lrPosition.z; }

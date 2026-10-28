@@ -42,22 +42,22 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     void ArticulatedJoint::_AssertLayout()
     {
-        static_assert(sizeof(rw::math::vpu::Matrix44Affine) == 64,
+        CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Matrix44Affine) == 64),
                       "Matrix44Affine is four 16-byte rows; ArticulatedJoint::Set @0x825D7BC0 "
                       "copies it as 4x lvx128/stvx128 at +0x00/+0x10/+0x20/+0x30");
-        static_assert(sizeof(ArticulatedJointId) == 8,
+        CGS_STATIC_ASSERT((sizeof(ArticulatedJointId) == 8),
                       "ArticulatedJointId is one packed u64 (`std r26, 0x40(r28)`)");
-        static_assert(offsetof(ArticulatedJoint, mParentToJointTransform) == 0x00,
+        CGS_STATIC_ASSERT((offsetof(ArticulatedJoint, mParentToJointTransform) == 0x00),
                       "mParentToJointTransform @+0x00 -- Construct @0x825B8DC0 stores row 0 with "
                       "`stvx128 v0, r0, r3` (zero displacement from this)");
-        static_assert(offsetof(ArticulatedJoint, mJointId) == 0x40,
+        CGS_STATIC_ASSERT((offsetof(ArticulatedJoint, mJointId) == 0x40),
                       "mJointId @+0x40 -- Construct @0x825B8DC0 `std r10, 0x40(r3)` and Set "
                       "@0x825D7BC0 `std r26, 0x40(r28)`");
-        static_assert(sizeof(ArticulatedJoint) == 80,
+        CGS_STATIC_ASSERT((sizeof(ArticulatedJoint) == 80),
                       "ArticulatedJointPool::Construct @0x82600938 indexes maJoints with i*80 "
                       "(slwi r11,r31,2 ; add r11,r31,r11 ; slwi r11,r11,4), and the embedded pool "
                       "must stay 832 bytes for BrnPhysicalTrafficManager.h's +103616..+104448 span");
-        static_assert(alignof(ArticulatedJoint) == 16,
+        CGS_STATIC_ASSERT((__alignof(ArticulatedJoint) == 16),
                       "16-aligned via Matrix44Affine -- that alignment is what rounds 72 up to 80");
     }
 

@@ -35,7 +35,7 @@ namespace SceneManagerIO
     // (muId u64): 16+16+8 = +0x28, +mQueryId(4) = +0x2C, +mEntityId(4) = +0x30. mbIntersection
     // trails the tag pair at +0x38; sizeof rounds to 0x40 under alignas(16). The _AssertLayout()
     // below pins the producer-attested offsets.
-    struct alignas(16) OutEventLineTestNearestResult : public Event
+    struct CGS_ALIGN(16) OutEventLineTestNearestResult : public Event
     {
         Vector3          mPosition;          // +0x00 (16B lane)
         Vector3          mNormal;            // +0x10 (16B lane)
@@ -54,10 +54,10 @@ namespace SceneManagerIO
     // never-called function keeps the offsets honest.
     inline void OutEventLineTestNearestResult_AssertLayout()
     {
-        static_assert(offsetof(OutEventLineTestNearestResult, mfLineParam)     == 0x30, "mfLineParam @ +0x30");
-        static_assert(offsetof(OutEventLineTestNearestResult, mu16MaterialTag) == 0x34, "mu16MaterialTag @ +0x34");
-        static_assert(offsetof(OutEventLineTestNearestResult, mu16GroupTag)    == 0x36, "mu16GroupTag @ +0x36");
-        static_assert(sizeof(OutEventLineTestNearestResult)                    == 0x40, "sizeof == 0x40");
+        CGS_STATIC_ASSERT((offsetof(OutEventLineTestNearestResult, mfLineParam)     == 0x30), "mfLineParam @ +0x30");
+        CGS_STATIC_ASSERT((offsetof(OutEventLineTestNearestResult, mu16MaterialTag) == 0x34), "mu16MaterialTag @ +0x34");
+        CGS_STATIC_ASSERT((offsetof(OutEventLineTestNearestResult, mu16GroupTag)    == 0x36), "mu16GroupTag @ +0x36");
+        CGS_STATIC_ASSERT((sizeof(OutEventLineTestNearestResult)                    == 0x40), "sizeof == 0x40");
     }
 
     // Output event: the hit/no-hit result of a fast double-sided line test. DWARF
@@ -77,9 +77,9 @@ namespace SceneManagerIO
     // Pin the X360-attested event size (typed AddEvent @ 0x828D0780 forwards sizeof == 8).
     inline void OutEventLineTestFastDoubleSidedResult_AssertLayout()
     {
-        static_assert(offsetof(OutEventLineTestFastDoubleSidedResult, mQueryId)       == 0x00, "mQueryId @ +0x00");
-        static_assert(offsetof(OutEventLineTestFastDoubleSidedResult, mbIntersection) == 0x04, "mbIntersection @ +0x04");
-        static_assert(sizeof(OutEventLineTestFastDoubleSidedResult)                   == 8,    "sizeof == 8");
+        CGS_STATIC_ASSERT((offsetof(OutEventLineTestFastDoubleSidedResult, mQueryId)       == 0x00), "mQueryId @ +0x00");
+        CGS_STATIC_ASSERT((offsetof(OutEventLineTestFastDoubleSidedResult, mbIntersection) == 0x04), "mbIntersection @ +0x04");
+        CGS_STATIC_ASSERT((sizeof(OutEventLineTestFastDoubleSidedResult)                   == 8),    "sizeof == 8");
     }
 
     // ------------------------------------------------------------------------
@@ -124,13 +124,13 @@ namespace SceneManagerIO
 
     inline void OutEventFineResults_AssertLayout()
     {
-        static_assert(offsetof(OutEventSphereTestFastResult, mbIntersection)    == 0x04, "mbIntersection @ +0x04");
-        static_assert(sizeof(OutEventSphereTestFastResult)                      == 8,    "sizeof == 8 (TakePackage 0x821FF238)");
-        static_assert(offsetof(OutEventVolumeTestDeepestResult, mfDepth)        == 0x04, "mfDepth @ +0x04");
-        static_assert(offsetof(OutEventVolumeTestDeepestResult, mbIntersection) == 0x08, "mbIntersection @ +0x08");
-        static_assert(sizeof(OutEventVolumeTestDeepestResult)                   == 12,   "sizeof == 12 (TakePackage 0x821FF3D8)");
-        static_assert(offsetof(OutEventVolumeTestFineResult, miNumEntities)     == 0x04, "miNumEntities @ +0x04");
-        static_assert(sizeof(OutEventVolumeTestFineResult)                      == 8,    "sizeof == 8 (TakePackage 0x821FF460)");
+        CGS_STATIC_ASSERT((offsetof(OutEventSphereTestFastResult, mbIntersection)    == 0x04), "mbIntersection @ +0x04");
+        CGS_STATIC_ASSERT((sizeof(OutEventSphereTestFastResult)                      == 8),    "sizeof == 8 (TakePackage 0x821FF238)");
+        CGS_STATIC_ASSERT((offsetof(OutEventVolumeTestDeepestResult, mfDepth)        == 0x04), "mfDepth @ +0x04");
+        CGS_STATIC_ASSERT((offsetof(OutEventVolumeTestDeepestResult, mbIntersection) == 0x08), "mbIntersection @ +0x08");
+        CGS_STATIC_ASSERT((sizeof(OutEventVolumeTestDeepestResult)                   == 12),   "sizeof == 12 (TakePackage 0x821FF3D8)");
+        CGS_STATIC_ASSERT((offsetof(OutEventVolumeTestFineResult, miNumEntities)     == 0x04), "miNumEntities @ +0x04");
+        CGS_STATIC_ASSERT((sizeof(OutEventVolumeTestFineResult)                      == 8),    "sizeof == 8 (TakePackage 0x821FF460)");
     }
 
     // ------------------------------------------------------------------------

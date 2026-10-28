@@ -135,28 +135,28 @@ private:
     static void _AssertLayout()
     {
         // Display bands: 6 slots x 8 bytes = 0x30 per band (asm 0x40 / 0x70 / 0xA0).
-        static_assert(sizeof(MeterLevel) == 8, "MeterLevel must be the 8-byte display stride");
-        static_assert(offsetof(VuMeter, mPeakDisplay) - offsetof(VuMeter, mRmsDisplay) == 0x30,
+        CGS_STATIC_ASSERT((sizeof(MeterLevel) == 8), "MeterLevel must be the 8-byte display stride");
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mPeakDisplay) - offsetof(VuMeter, mRmsDisplay) == 0x30),
                       "display band stride (asm 0x40 -> 0x70)");
-        static_assert(offsetof(VuMeter, mHoldDisplay) - offsetof(VuMeter, mPeakDisplay) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mHoldDisplay) - offsetof(VuMeter, mPeakDisplay) == 0x30),
                       "display band stride (asm 0x70 -> 0xA0)");
 
         // Metering columns, all relative to the r11 base self+0xD0 (mRmsAccum).
-        static_assert(offsetof(VuMeter, mRms) - offsetof(VuMeter, mRmsAccum) == 0x18,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mRms) - offsetof(VuMeter, mRmsAccum) == 0x18),
                       "mRms is 0x18(r11) (asm 0xD0 -> 0xE8)");
-        static_assert(offsetof(VuMeter, mPeakCurrent) - offsetof(VuMeter, mRmsAccum) == 0x30,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mPeakCurrent) - offsetof(VuMeter, mRmsAccum) == 0x30),
                       "mPeakCurrent is 0x30(r11) (asm 0xD0 -> 0x100)");
-        static_assert(offsetof(VuMeter, mPeak) - offsetof(VuMeter, mRmsAccum) == 0x48,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mPeak) - offsetof(VuMeter, mRmsAccum) == 0x48),
                       "mPeak is 0x48(r11) (asm 0xD0 -> 0x118)");
-        static_assert(offsetof(VuMeter, mPeakHold) - offsetof(VuMeter, mRmsAccum) == 0x60,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mPeakHold) - offsetof(VuMeter, mRmsAccum) == 0x60),
                       "mPeakHold is 0x60(r11) (asm 0xD0 -> 0x130)");
 
         // Window/state tail packing (asm 0x148 / 0x14A / 0x14C / 0x14D).
-        static_assert(offsetof(VuMeter, mWindowPos) - offsetof(VuMeter, mWindowSize) == 2,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mWindowPos) - offsetof(VuMeter, mWindowSize) == 2),
                       "mWindowPos follows mWindowSize");
-        static_assert(offsetof(VuMeter, mbUpdated) - offsetof(VuMeter, mWindowSize) == 4,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mbUpdated) - offsetof(VuMeter, mWindowSize) == 4),
                       "mbUpdated follows the two halfwords");
-        static_assert(offsetof(VuMeter, mbTimerRegistered) - offsetof(VuMeter, mbUpdated) == 1,
+        CGS_STATIC_ASSERT((offsetof(VuMeter, mbTimerRegistered) - offsetof(VuMeter, mbUpdated) == 1),
                       "mbTimerRegistered follows mbUpdated");
     }
 };

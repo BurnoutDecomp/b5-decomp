@@ -177,8 +177,8 @@ const char* RouteMapDebugComponent::GetPath() const
 // ARTIST inlined in RouteMapModule::Destruct @0x827750E8..0x82775124.
 void RouteMapDebugComponent::Destruct()
 {
-    CGS_ASSERT(mpRouteMapModule != nullptr, "mpRouteMapModule != NULL");
-    mpRouteMapModule = nullptr;
+    CGS_ASSERT(mpRouteMapModule != 0, "mpRouteMapModule != NULL");
+    mpRouteMapModule = 0;
     CgsDev::DebugComponent::Destruct();
 }
 

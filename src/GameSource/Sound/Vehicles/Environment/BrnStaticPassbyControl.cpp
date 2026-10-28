@@ -185,9 +185,9 @@ void StaticPassbyControl::UpdateParams(f32 afTimeStep)
     const Vector3 lPosition = lrPhysics.mPosition3d.GetCurrent();
     const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
     auto* lpStateBase = GetStateBase();
-    CGS_ASSERT(lpStateBase != nullptr, "lpStateBase");
+    CGS_ASSERT(lpStateBase != 0, "lpStateBase");
     auto* lpPlayerStateMan = static_cast<const PlayerVehicleStateManager*>(lpStateBase->GetStateManager());
-    CGS_ASSERT(lpPlayerStateMan != nullptr, "lpPlayerStateMan");
+    CGS_ASSERT(lpPlayerStateMan != 0, "lpPlayerStateMan");
     ProcessPassbys(lPosition, lfSpeed, lpPlayerStateMan);
     UpdateHistory(afTimeStep);
 }
@@ -196,7 +196,7 @@ void StaticPassbyControl::UpdateParams(f32 afTimeStep)
 void StaticPassbyControl::ProcessPassbys(Vector3 lvPosition, f32 afSpeed,
                                        const PlayerVehicleStateManager* apPlayerStateMan)
 {
-    CGS_ASSERT(apPlayerStateMan != nullptr, "lpPlayerStateMan");
+    CGS_ASSERT(apPlayerStateMan != 0, "lpPlayerStateMan");
     BrnSound::World::StaticSoundEntity laEntities[16];
     const s32 liCount = apPlayerStateMan->Query(lvPosition, 30.0f, laEntities, 16,
                                                KB_SHOW_STATIC_ENVIRONMENT);

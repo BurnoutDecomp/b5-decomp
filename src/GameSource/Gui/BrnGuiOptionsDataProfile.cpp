@@ -414,32 +414,32 @@ void OptionsDataProfile::AddReceivedOnlineGameOptions(GuiCache* lpCache,
 // ---------------------------------------------------------------------------
 void OptionsDataProfile::_AssertLayout()
 {
-    static_assert(sizeof(EATraxArrayType) == 16, "EATraxArrayType must be a 128-bit (16-byte) bit set");
+    CGS_STATIC_ASSERT((sizeof(EATraxArrayType) == 16), "EATraxArrayType must be a 128-bit (16-byte) bit set");
 
     // Online-game-option route tables: stride 0x5C0, created @+0x8, received @+0x3988,
     // num counters @+0x7308/+0x730C (all X360-asm-authoritative).
-    static_assert(sizeof(OnlineSaveRoute) == 0x5C0, "OnlineSaveRoute stride must be 0x5C0");
-    static_assert(offsetof(OptionsDataProfile, maCreatedOnlineGameOptions)    == 0x0008, "maCreatedOnlineGameOptions @ 0x0008");
-    static_assert(offsetof(OptionsDataProfile, maReceivedOnlineGameOptions)   == 0x3988, "maReceivedOnlineGameOptions @ 0x3988");
-    static_assert(offsetof(OptionsDataProfile, miNumCreatedOnlineGameOptions) == 0x7308, "miNumCreatedOnlineGameOptions @ 0x7308");
-    static_assert(offsetof(OptionsDataProfile, miNumReceivedOnlineGameOptions) == 0x730C, "miNumReceivedOnlineGameOptions @ 0x730C");
+    CGS_STATIC_ASSERT((sizeof(OnlineSaveRoute) == 0x5C0), "OnlineSaveRoute stride must be 0x5C0");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, maCreatedOnlineGameOptions)    == 0x0008), "maCreatedOnlineGameOptions @ 0x0008");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, maReceivedOnlineGameOptions)   == 0x3988), "maReceivedOnlineGameOptions @ 0x3988");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, miNumCreatedOnlineGameOptions) == 0x7308), "miNumCreatedOnlineGameOptions @ 0x7308");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, miNumReceivedOnlineGameOptions) == 0x730C), "miNumReceivedOnlineGameOptions @ 0x730C");
 
-    static_assert(offsetof(OptionsDataProfile, mTraxAvailableInFreeBurn) == 0x7310, "mTraxAvailableInFreeBurn @ 0x7310");
-    static_assert(offsetof(OptionsDataProfile, mTraxAvailableInEvents)   == 0x7320, "mTraxAvailableInEvents @ 0x7320");
-    static_assert(offsetof(OptionsDataProfile, mTraxFullyPlayed)         == 0x7330, "mTraxFullyPlayed @ 0x7330");
-    static_assert(offsetof(OptionsDataProfile, meTraxPlayOrderMode)      == 0x7340, "meTraxPlayOrderMode @ 0x7340");
-    static_assert(offsetof(OptionsDataProfile, mbDefaultGameCamera)      == 0x734C, "mbDefaultGameCamera @ 0x734C");
-    static_assert(offsetof(OptionsDataProfile, mBrightness)              == 0x7350, "mBrightness @ 0x7350");
-    static_assert(offsetof(OptionsDataProfile, mContrast)                == 0x7354, "mContrast @ 0x7354");
-    static_assert(offsetof(OptionsDataProfile, miVoipVolume)             == 0x7358, "miVoipVolume @ 0x7358");
-    static_assert(offsetof(OptionsDataProfile, mMusicVolume)             == 0x735C, "mMusicVolume @ 0x735C");
-    static_assert(offsetof(OptionsDataProfile, mSFXVolume)               == 0x7360, "mSFXVolume @ 0x7360");
-    static_assert(offsetof(OptionsDataProfile, meCameraFeedSetting)      == 0x7364, "meCameraFeedSetting @ 0x7364");
-    static_assert(offsetof(OptionsDataProfile, mbSixAxisShowtime)        == 0x7369, "mbSixAxisShowtime @ 0x7369");
-    static_assert(offsetof(OptionsDataProfile, mbSixAxisSteering)        == 0x736A, "mbSixAxisSteering @ 0x736A");
-    static_assert(offsetof(OptionsDataProfile, mbForceFeedback)          == 0x736B, "mbForceFeedback @ 0x736B");
-    static_assert(offsetof(OptionsDataProfile, mbTips)                   == 0x736D, "mbTips @ 0x736D");
-    static_assert(offsetof(OptionsDataProfile, mbIsLocked)               == 0x736E, "mbIsLocked @ 0x736E");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mTraxAvailableInFreeBurn) == 0x7310), "mTraxAvailableInFreeBurn @ 0x7310");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mTraxAvailableInEvents)   == 0x7320), "mTraxAvailableInEvents @ 0x7320");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mTraxFullyPlayed)         == 0x7330), "mTraxFullyPlayed @ 0x7330");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, meTraxPlayOrderMode)      == 0x7340), "meTraxPlayOrderMode @ 0x7340");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mbDefaultGameCamera)      == 0x734C), "mbDefaultGameCamera @ 0x734C");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mBrightness)              == 0x7350), "mBrightness @ 0x7350");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mContrast)                == 0x7354), "mContrast @ 0x7354");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, miVoipVolume)             == 0x7358), "miVoipVolume @ 0x7358");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mMusicVolume)             == 0x735C), "mMusicVolume @ 0x735C");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mSFXVolume)               == 0x7360), "mSFXVolume @ 0x7360");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, meCameraFeedSetting)      == 0x7364), "meCameraFeedSetting @ 0x7364");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mbSixAxisShowtime)        == 0x7369), "mbSixAxisShowtime @ 0x7369");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mbSixAxisSteering)        == 0x736A), "mbSixAxisSteering @ 0x736A");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mbForceFeedback)          == 0x736B), "mbForceFeedback @ 0x736B");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mbTips)                   == 0x736D), "mbTips @ 0x736D");
+    CGS_STATIC_ASSERT((offsetof(OptionsDataProfile, mbIsLocked)               == 0x736E), "mbIsLocked @ 0x736E");
 }
 
 // ---------------------------------------------------------------------------
@@ -480,7 +480,7 @@ CgsID OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::GetLandmark(s32
 void OptionsDataProfile::OnlineSaveRoute::Construct()
 {
     for (s32 liEvent = 0; liEvent < 10; ++liEvent)
-        maEvents[liEvent].Construct(0, 0, nullptr, 0);
+        maEvents[liEvent].Construct(0, 0, 0, 0);
 
     meGameMode = BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE;
     miNumRounds = 1;

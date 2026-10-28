@@ -69,9 +69,9 @@ namespace BrnGui
         static const AwardData KA_AWARD_OVERALL[KI_NUM_ONLINE_AWARD_TYPES];
 
         OnlineInstantResultsState();
-        virtual void OnEnter() override;
-        virtual void OnLeave() override;
-        virtual void Update() override;
+        virtual void OnEnter() ;
+        virtual void OnLeave() ;
+        virtual void Update() ;
 
         // Hands the instant-results screen's resource list out.
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,

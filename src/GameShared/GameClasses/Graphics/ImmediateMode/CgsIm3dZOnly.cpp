@@ -105,7 +105,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpPixelProgramBinary, u32 luPixelProgramSize)
 {
     s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != nullptr)
+    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
     {
         li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
         if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
@@ -116,7 +116,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     if (li8ProgramIndex < KI8_MAX_PROGRAMS)
     {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == nullptr,
+        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
                    "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
     }
 
@@ -226,16 +226,16 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     mi8CurrentProgram = 0;
     for (s32 liSlot = 0; liSlot < KI8_MAX_PROGRAMS; ++liSlot)
     {
-        mapVertexProgramBuffer[liSlot] = nullptr;
-        mapPixelProgramBuffer[liSlot]  = nullptr;
+        mapVertexProgramBuffer[liSlot] = 0;
+        mapPixelProgramBuffer[liSlot]  = 0;
     }
 
     // Upload each supplied program pair.
     for (s32 liProgram = 0; liProgram < li8NumberPrograms; ++liProgram)
     {
-        CGS_ASSERT(lapVertexProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapVertexProgramBinary[liProgram] != 0,
                    "lapVertexProgramBinary[ li8ProgramIndex ] != NULL");
-        CGS_ASSERT(lapPixelProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapPixelProgramBinary[liProgram] != 0,
                    "lapPixelProgramBinary[ li8ProgramIndex ] != NULL");
         if (lauVertexProgramSize[liProgram] == 0)
         {
@@ -261,9 +261,9 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
                "mapVertexProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     // ARTIST compares dword_8301095C in the shared shadow device. BeginRendering
@@ -288,9 +288,9 @@ void ImRenderer<V>::BeginRendering()
 {
     // ARTIST 827EF450..827EF548: claim the renderer, reset the shared shadow,
     // select slot zero, then bind its programs and the position-only descriptor.
-    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[0] != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    CGS_ASSERT(mapVertexProgramBuffer[0] != 0, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0] != 0, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
     mgpActiveRenderer = static_cast<ImRendererBase*>(this);
     shadow::Device::ResetShadowing();
     mi8CurrentProgram = 0;
@@ -306,7 +306,7 @@ template <typename V>
 void ImRenderer<V>::EndRendering()
 {
     CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
-    mgpActiveRenderer = nullptr;
+    mgpActiveRenderer = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -332,12 +332,12 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
 
     // X360 passes `this + 4*(mi8CurrentProgram + 22)` == &maShaderStateBlocks[slot] (the current
     // program's device shader-state block), not plain `this`.
-    void* lpShaderState = nullptr;
+    void* lpShaderState = 0;
     void* lpResult = RenderEngineDeviceBeginShaderStates(&this->maShaderStateBlocks[this->mi8CurrentProgram], &lpShaderState);
 
     // Write the matrix into the fetched shader-state block.
     u8* lpDst = reinterpret_cast<u8*>(lpShaderState);
-    if (lpDst != nullptr)
+    if (lpDst != 0)
     {
         for (s32 liByte = 0; liByte < 64; ++liByte)
         {
@@ -393,10 +393,10 @@ void Im3dZOnly::Construct(rw::IResourceAllocator* lpAllocator)
 
     renderengine::ProgramBufferData* const lpVertexProgram =
         reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
-    CGS_ASSERT(lpVertexProgram != nullptr, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    CGS_ASSERT(lpVertexProgram != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
     // Keep the original assertion; avoid a null ProgramBuffer dereference if host
     // allocation/adoption fails with assertions disabled.
-    if (lpVertexProgram == nullptr)
+    if (lpVertexProgram == 0)
     {
         return;
     }

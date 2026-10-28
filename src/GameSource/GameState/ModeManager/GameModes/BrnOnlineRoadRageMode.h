@@ -23,8 +23,8 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (OnlineRoadRageMode::*)() const>(&OnlineRoadRageMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineRoadRageMode::*)() const>(&OnlineRoadRageMode::GetName)) != 0),
               "OnlineRoadRageMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<bool (OnlineRoadRageMode::*)() const>(&OnlineRoadRageMode::HasLoadingScreen)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineRoadRageMode::*)() const>(&OnlineRoadRageMode::HasLoadingScreen)) != 0),
               "OnlineRoadRageMode::HasLoadingScreen must bind GameMode vtable slot 24");
 }

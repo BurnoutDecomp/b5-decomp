@@ -188,7 +188,7 @@ namespace BrnNetwork
     void NetworkInviteManager::DownloadPlayersGameIDFromServer(const PlayerName* lpPlayerName)
     {
         CGS_ASSERT(meGetGameIDState == E_GET_ID_STATE_IDLE, "meGetGameIDState == E_GET_ID_STATE_IDLE");
-        CGS_ASSERT(lpPlayerName != nullptr, "lpPlayerName");
+        CGS_ASSERT(lpPlayerName != 0, "lpPlayerName");
         // X360 checks the first name byte is non-zero (the inlined PlayerName::IsEmpty()).
         CGS_ASSERT(lpPlayerName->macName[0] != '\0', "!lpPlayerName->IsEmpty()");
 
@@ -290,10 +290,10 @@ namespace BrnNetwork
 
         if (meGetGameIDState == E_GET_ID_STATE_START)
         {
-            CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
                        "mpNetworkModule->GetNetworkManager()");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != nullptr,
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
                        "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
 
             BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
@@ -319,10 +319,10 @@ namespace BrnNetwork
             // reports idle.
             meGetGameIDState = E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO; // *(v1 + 432) = 1
 
-            CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
                        "mpNetworkModule->GetNetworkManager()");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != nullptr,
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
                        "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
 
             BrnNetworkManager* lpWaitManager = mpNetworkModule->GetNetworkManager();

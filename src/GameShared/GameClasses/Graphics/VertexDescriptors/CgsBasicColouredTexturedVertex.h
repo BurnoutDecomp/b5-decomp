@@ -35,5 +35,5 @@ namespace CgsGraphics
         // declaration-only here; the three element words come straight from the Construct asm.
         void FillVertexDescriptorParameters(renderengine::VertexDescriptor::Parameters& lrParameters);
     };
-    static_assert(sizeof(BasicColouredTexturedVertex) == 32, "ARTIST CPU vertex stride");
+    CGS_STATIC_ASSERT((sizeof(BasicColouredTexturedVertex) == 32), "ARTIST CPU vertex stride");
 }

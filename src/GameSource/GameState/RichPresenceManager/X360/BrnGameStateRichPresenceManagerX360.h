@@ -68,14 +68,14 @@ public:
 
 protected:
     // The base's per-field presence writers (vtable slots +0x00..+0x1C, in order).
-    void SetRichPresenceState(ERichPresenceStates leNewState) override;
-    void SetCurrentRound(s32 liRound) override;
-    void SetTotalRounds(s32 liTotalRounds) override;
-    void SetCurrentPosition(s32 liFinishPosition) override;
-    void SetLobbyType(ERichPresenceStates leLobbyState) override;
-    void SetRankedStatus(EGameRankedType leRanked) override;
-    void SetDistrict(BrnWorld::EDistrict leDistrict) override;
-    void SetNumberPlayers(s32 liNumberPlayers) override;
+    void SetRichPresenceState(ERichPresenceStates leNewState) ;
+    void SetCurrentRound(s32 liRound) ;
+    void SetTotalRounds(s32 liTotalRounds) ;
+    void SetCurrentPosition(s32 liFinishPosition) ;
+    void SetLobbyType(ERichPresenceStates leLobbyState) ;
+    void SetRankedStatus(EGameRankedType leRanked) ;
+    void SetDistrict(BrnWorld::EDistrict leDistrict) ;
+    void SetNumberPlayers(s32 liNumberPlayers) ;
 
 private:
     typedef CgsContainers::LocklessQueue<PresenceContext*> PresenceContextQueue;

@@ -27,7 +27,7 @@ namespace Gen
         // low word alone would MISS, exactly like the shotgroup/cameradefaults keys.
         static const u64 KU_AFTERTOUCHCAM_CLASS_KEY = 0x75E62FC1632388D6ULL;
 
-        explicit aftertouchcam(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit aftertouchcam(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // ⭐ THE REAL CONSTRUCTOR THE ONE CONSOLE CALL SITE USES. The single aftertouchcam
         // ctor symbol in the image chains Attrib::Instance(const RefSpec&, void*), not the

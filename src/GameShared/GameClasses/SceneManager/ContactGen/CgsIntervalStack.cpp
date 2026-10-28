@@ -8,8 +8,8 @@
 // stride 16 (slwi r11,r11,4), index array stride 2 (slwi r7,r11,1).
 namespace
 {
-    static_assert(sizeof(CgsSceneManager::IntervalStackEntry) == 16, "IntervalStackEntry must be 16 bytes");
-    static_assert(sizeof(CgsSceneManager::Interval) == 0x18, "Interval must be 24 bytes");
+    CGS_STATIC_ASSERT((sizeof(CgsSceneManager::IntervalStackEntry) == 16), "IntervalStackEntry must be 16 bytes");
+    CGS_STATIC_ASSERT((sizeof(CgsSceneManager::Interval) == 0x18), "Interval must be 24 bytes");
 }
 
 // CgsSceneManager::IntervalStack::Push @ 0x828AA158

@@ -58,7 +58,7 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
                        Attrib::IGarbageCollector* lpGarbageCollector)
 {
     CGS_ASSERT(!IsOccupied(), "!IsOccupied()");                                    // .cpp:158
-    CGS_ASSERT(lpGarbageCollector != nullptr, "lpGarbageCollector != NULL");       // .cpp:161
+    CGS_ASSERT(lpGarbageCollector != 0, "lpGarbageCollector != NULL");       // .cpp:161
 
     // Bind the resource memory from the request's handle (the X360 builds the
     // list-linked resource ptr on the stack; the dtor unlinks it exactly as the
@@ -72,10 +72,10 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
         AttribSysMemoryManager::GetAttribSysAllocator();
     void* lpVaultMem = lpAllocator->Malloc(sizeof(Attrib::Vault), 0);
 
-    CGS_ASSERT(mpVault == nullptr, "mpVault == NULL");                             // .cpp:177
+    CGS_ASSERT(mpVault == 0, "mpVault == NULL");                             // .cpp:177
 
     const AttribSysVaultResource* lpResource = lVaultResource.operator->();
-    if (lpVaultMem != nullptr)
+    if (lpVaultMem != 0)
     {
         // The X360 fetches the export policies through the database accessor
         // (the schema made the database live before any data vault registers).
@@ -90,7 +90,7 @@ void VaultSlot::DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterReques
     }
     else
     {
-        mpVault = nullptr;
+        mpVault = 0;
     }
     CGS_ASSERT(mpVault == lpVaultMem, "mpVault == lpVaultMem");                    // .cpp:189
 
@@ -167,7 +167,7 @@ void VaultSlot::DoUnload()
     }
 
     DecreaseRefCount();
-    mpVault = nullptr;
+    mpVault = 0;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {

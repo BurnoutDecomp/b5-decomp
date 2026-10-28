@@ -55,7 +55,7 @@ namespace SceneManagerIO
     // the CgsGeometric::Frustum swizzled-planes layout the 128-byte copy attests)
     // rather than the committed 96-byte rw::collision::Frustum, so the named fields
     // land at the X360-observed offsets without re-sizing a committed type.
-    struct alignas(16) InEventFrustumTestVp : public CgsModule::Event
+    struct CGS_ALIGN(16) InEventFrustumTestVp : public CgsModule::Event
     {
         Matrix44        mViewProjection;     // +0x00
         Vector4         maFrustumPlanes[8];  // +0x40  (mFrustum, 128 bytes)
@@ -81,7 +81,7 @@ namespace SceneManagerIO
     // InEventFrustumTestVp record above (mQueryId / mx32EntityTypeFlags at the same relative
     // seats) and the float's only possible role in a sphere test. FLAG: names inferred from
     // the single emitter.
-    struct alignas(16) InEventSphereTest : public CgsModule::Event
+    struct CGS_ALIGN(16) InEventSphereTest : public CgsModule::Event
     {
         Vector3         mCentre;             // +0x00  (whole 16-byte lane)
         SceneQueryId    mQueryId;            // +0x10
@@ -89,36 +89,36 @@ namespace SceneManagerIO
         f32             mfRadius;            // +0x18
         u32             muPad;               // +0x1C  never written by the emitter
     };
-    static_assert(sizeof(InEventSphereTest) == 32, "InEventSphereTest byte image must match X360 AddEvent liSize (0x20)");
+    CGS_STATIC_ASSERT((sizeof(InEventSphereTest) == 32), "InEventSphereTest byte image must match X360 AddEvent liSize (0x20)");
 
     // The plain frustum query (E_IN_EVENT_FRUSTUM_TEST). DecFIGS declares the query id,
     // entity-type mask, and Frustum in that order; ARTIST 0x828C6918 passes the frustum
     // address from event+0x10. The aligned Frustum type supplies that padding naturally.
-    struct alignas(16) InEventFrustumTest : public CgsModule::Event
+    struct CGS_ALIGN(16) InEventFrustumTest : public CgsModule::Event
     {
         SceneQueryId             mQueryId;            // +0x00
         EntityTypeFlags          mx32EntityTypeFlags; // +0x04
         CgsGeometric::Frustum    mFrustum;            // +0x10 (128-byte swizzled planes)
     };
-    static_assert(offsetof(InEventFrustumTest, mFrustum) == 0x10,
+    CGS_STATIC_ASSERT((offsetof(InEventFrustumTest, mFrustum) == 0x10),
                   "ARTIST 0x828C6918 passes the embedded frustum at event+0x10");
-    static_assert(sizeof(InEventFrustumTest) == 0x90, "plain frustum event has the DecFIGS fields and 16-byte alignment");
+    CGS_STATIC_ASSERT((sizeof(InEventFrustumTest) == 0x90), "plain frustum event has the DecFIGS fields and 16-byte alignment");
 
     // The coarse volume query (E_IN_EVENT_VOLUME_TEST). DecFIGS declares an inline
     // VolumeSlot image followed by Matrix44Affine; ARTIST 0x828C62C0 passes their addresses
     // at event+0x10 and event+0x90 respectively.
-    struct alignas(16) InEventVolumeTest : public CgsModule::Event
+    struct CGS_ALIGN(16) InEventVolumeTest : public CgsModule::Event
     {
         SceneQueryId                 mQueryId;            // +0x00
         s32                           mx32EntityTypeFlags; // +0x04 (DWARF int32_t)
         CgsSceneManager::VolumeSlot   mVolumeBuffer;       // +0x10 (128-byte serialized volume)
         Matrix44Affine                mTransform;          // +0x90
     };
-    static_assert(offsetof(InEventVolumeTest, mVolumeBuffer) == 0x10,
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTest, mVolumeBuffer) == 0x10),
                   "ARTIST 0x828C62C0 passes the embedded volume at event+0x10");
-    static_assert(offsetof(InEventVolumeTest, mTransform) == 0x90,
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTest, mTransform) == 0x90),
                   "ARTIST 0x828C62C0 passes the transform at event+0x90");
-    static_assert(sizeof(InEventVolumeTest) == 0xD0, "coarse volume event is VolumeSlot plus Matrix44Affine");
+    CGS_STATIC_ASSERT((sizeof(InEventVolumeTest) == 0xD0), "coarse volume event is VolumeSlot plus Matrix44Affine");
 
     // Coarse-query input queue. Adds the typed enqueue helpers over the variable
     // event queue base; carries no extra data members (DWARF

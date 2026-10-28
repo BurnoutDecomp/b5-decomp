@@ -96,7 +96,7 @@ struct ClassClientNode
     void* mpClientData;           // +0x18  callback context
 };
 
-static_assert(sizeof(ClassClientNode) == 0x20, "native CSIS class-client node");
+CGS_STATIC_ASSERT((sizeof(ClassClientNode) == 0x20), "native CSIS class-client node");
 
 // ---------------------------------------------------------------------------
 // Csis::Class

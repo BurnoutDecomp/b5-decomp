@@ -33,29 +33,29 @@ namespace BrnTraffic
     // Pointer-free, so the host layout is the console's byte for byte.
     void HashBuffer::_AssertLayout()
     {
-        static_assert(sizeof(ParamData) == 0x50, "HashBuffer::ParamData is 0x50 bytes");
-        static_assert(offsetof(ParamData, maPlans) == 0x14, "ParamData::maPlans at +0x14");
-        static_assert(offsetof(ParamData, muParamInFront) == 0x20, "ParamData::muParamInFront at +0x20");
-        static_assert(offsetof(ParamData, mfListParamAlong) == 0x2C, "ParamData::mfListParamAlong at +0x2C");
-        static_assert(offsetof(ParamData, mPos) == 0x30, "ParamData::mPos at +0x30");
-        static_assert(offsetof(ParamData, mDirAndAccel) == 0x40, "ParamData::mDirAndAccel at +0x40");
-        static_assert(sizeof(StaticParamData) == 6, "HashBuffer::StaticParamData is 6 bytes");
-        static_assert(sizeof(ActiveHullData) == 0x220, "HashBuffer::ActiveHullData is 0x220 bytes");
-        static_assert(offsetof(ActiveHullData, mxStopLineStates) == 0x18, "ActiveHullData::mxStopLineStates at +0x18");
+        CGS_STATIC_ASSERT((sizeof(ParamData) == 0x50), "HashBuffer::ParamData is 0x50 bytes");
+        CGS_STATIC_ASSERT((offsetof(ParamData, maPlans) == 0x14), "ParamData::maPlans at +0x14");
+        CGS_STATIC_ASSERT((offsetof(ParamData, muParamInFront) == 0x20), "ParamData::muParamInFront at +0x20");
+        CGS_STATIC_ASSERT((offsetof(ParamData, mfListParamAlong) == 0x2C), "ParamData::mfListParamAlong at +0x2C");
+        CGS_STATIC_ASSERT((offsetof(ParamData, mPos) == 0x30), "ParamData::mPos at +0x30");
+        CGS_STATIC_ASSERT((offsetof(ParamData, mDirAndAccel) == 0x40), "ParamData::mDirAndAccel at +0x40");
+        CGS_STATIC_ASSERT((sizeof(StaticParamData) == 6), "HashBuffer::StaticParamData is 6 bytes");
+        CGS_STATIC_ASSERT((sizeof(ActiveHullData) == 0x220), "HashBuffer::ActiveHullData is 0x220 bytes");
+        CGS_STATIC_ASSERT((offsetof(ActiveHullData, mxStopLineStates) == 0x18), "ActiveHullData::mxStopLineStates at +0x18");
 
-        static_assert(offsetof(HashBuffer, maParamData) == 0x30, "maParamData at +0x30");
-        static_assert(offsetof(HashBuffer, maStaticParamData) == 0x7D30, "maStaticParamData at +0x7D30");
-        static_assert(offsetof(HashBuffer, muNumFreeParams) == 0x81DC, "muNumFreeParams at +0x81DC");
-        static_assert(offsetof(HashBuffer, mauFreeParams) == 0x81E0, "mauFreeParams at +0x81E0");
-        static_assert(offsetof(HashBuffer, muNumFreeStaticParams) == 0x8500, "muNumFreeStaticParams at +0x8500");
-        static_assert(offsetof(HashBuffer, mauFreeStaticParams) == 0x8504, "mauFreeStaticParams at +0x8504");
-        static_assert(offsetof(HashBuffer, muNumParamsInPurgatory) == 0x85CC, "muNumParamsInPurgatory at +0x85CC");
-        static_assert(offsetof(HashBuffer, maParamPurgatory) == 0x85D0, "maParamPurgatory at +0x85D0");
-        static_assert(offsetof(HashBuffer, muNumStaticParamsInPurgatory) == 0x8C10, "muNumStaticParamsInPurgatory at +0x8C10");
-        static_assert(offsetof(HashBuffer, maStaticParamPurgatory) == 0x8C14, "maStaticParamPurgatory at +0x8C14");
-        static_assert(offsetof(HashBuffer, muNumActiveHulls) == 0x8F30, "muNumActiveHulls at +0x8F30");
-        static_assert(offsetof(HashBuffer, maActiveHullData) == 0x8F38, "maActiveHullData at +0x8F38");
-        static_assert(sizeof(HashBuffer) == 0x12840, "HashState clears and hashes 0x12840 bytes");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, maParamData) == 0x30), "maParamData at +0x30");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, maStaticParamData) == 0x7D30), "maStaticParamData at +0x7D30");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, muNumFreeParams) == 0x81DC), "muNumFreeParams at +0x81DC");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, mauFreeParams) == 0x81E0), "mauFreeParams at +0x81E0");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, muNumFreeStaticParams) == 0x8500), "muNumFreeStaticParams at +0x8500");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, mauFreeStaticParams) == 0x8504), "mauFreeStaticParams at +0x8504");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, muNumParamsInPurgatory) == 0x85CC), "muNumParamsInPurgatory at +0x85CC");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, maParamPurgatory) == 0x85D0), "maParamPurgatory at +0x85D0");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, muNumStaticParamsInPurgatory) == 0x8C10), "muNumStaticParamsInPurgatory at +0x8C10");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, maStaticParamPurgatory) == 0x8C14), "maStaticParamPurgatory at +0x8C14");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, muNumActiveHulls) == 0x8F30), "muNumActiveHulls at +0x8F30");
+        CGS_STATIC_ASSERT((offsetof(HashBuffer, maActiveHullData) == 0x8F38), "maActiveHullData at +0x8F38");
+        CGS_STATIC_ASSERT((sizeof(HashBuffer) == 0x12840), "HashState clears and hashes 0x12840 bytes");
     }
 
     // -------------------------------------------------------------------------

@@ -43,12 +43,12 @@ namespace CgsNetwork
         bool               Retrieve(f32* lpfPingTime);
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DE0C8 -- inline header-homed accessor.
-        const char* GetName() const override { return "Ping Message"; }
+        const char* GetName() const  { return "Ping Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         f32 mfPingTime;     // DWARF h:82 (after 0x20 Message base)
     };
@@ -62,18 +62,18 @@ namespace CgsNetwork
         bool               Retrieve(f32* lpfPingTime);
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize() override;
+        s32                GetPackedMessageSize() ;
 
         // Ledger func @ 0x827DE0D8 -- inline header-homed accessor.
-        const char* GetName() const override { return "Ping Reply Message"; }
+        const char* GetName() const  { return "Ping Reply Message"; }
 
-        PackOrUnpackResult PackOrUnpack() override;
+        PackOrUnpackResult PackOrUnpack() ;
 
         f32 mfPingTime;     // DWARF h:126 (after 0x20 Message base)
     };
 
     // Console sizes (the RegisterMessageType lengths), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(PingMessage) == 0x24, "sizeof(PingMessage) == 0x24");
-    static_assert(sizeof(void*) != 4 || sizeof(PingReplyMessage) == 0x24, "sizeof(PingReplyMessage) == 0x24");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(PingMessage) == 0x24), "sizeof(PingMessage) == 0x24");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(PingReplyMessage) == 0x24), "sizeof(PingReplyMessage) == 0x24");
 
 } // namespace CgsNetwork

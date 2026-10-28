@@ -121,7 +121,7 @@ namespace BrnEffects
         f32 mfCurrentBurstSize;      // +0x14
     };
 
-    static_assert(sizeof(BurstAccumulator) == 0x18, "BurstAccumulator layout drift");
+    CGS_STATIC_ASSERT((sizeof(BurstAccumulator) == 0x18), "BurstAccumulator layout drift");
 
     // -------------------------------------------------------------------------
     // ActiveRaceCarData (DWARF ActiveRaceCarData.h:130).

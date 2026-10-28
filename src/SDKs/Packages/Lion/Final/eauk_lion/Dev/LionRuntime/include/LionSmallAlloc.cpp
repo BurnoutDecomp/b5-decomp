@@ -16,8 +16,8 @@ namespace LionSmallAlloc
 
 // Module statics (LionSmallAlloc.cpp:114/115/117/118). Page list head, backing tagged
 // allocator, and the two page sizes Init binds. See the header for which size is which.
-sLSAPage*                        mpPages     = nullptr;
-EA::Allocator::ITaggedAllocator* mpAllocator = nullptr;
+sLSAPage*                        mpPages     = 0;
+EA::Allocator::ITaggedAllocator* mpAllocator = 0;
 u32                              mMainSize   = 0;
 u32                              mGrowthSize = 0;
 
@@ -53,7 +53,7 @@ const u32 KU_SPLIT_LIMIT = 0x106;  // 262: above this, carve another full 254-by
 // ----------------------------------------------------------------------------
 void Init(EA::Allocator::ITaggedAllocator* apAllocator, u32 aMainSize, u32 aGrowthSize)
 {
-    mpPages     = nullptr;
+    mpPages     = 0;
     mpAllocator = apAllocator;
     mMainSize   = aMainSize;
     mGrowthSize = aGrowthSize;
@@ -108,13 +108,13 @@ void sLSAPage::Init(u32 aPageSize)
 {
     for (s32 lIndex = 0; lIndex < 255; ++lIndex)
     {
-        mpFreeBins[lIndex] = nullptr;
+        mpFreeBins[lIndex] = 0;
     }
 
     mAllocCount = 0;
     mAllocBytes = 0;
     mMainFlag   = 0;
-    mpNext      = nullptr;
+    mpNext      = 0;
 
     // The sub-allocatable region follows the 0x414-byte header inline; mPageSize excludes it.
     mpData    = reinterpret_cast<u8*>(this) + 0x414;

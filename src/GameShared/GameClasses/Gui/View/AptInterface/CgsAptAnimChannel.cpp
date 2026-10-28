@@ -55,7 +55,7 @@ namespace CgsGui
     // Two-phase initialization is separate from the vtable-only C++ constructor.
     void AnimChannel::Construct()
     {
-        mpCurrentInterpolator = nullptr;
+        mpCurrentInterpolator = 0;
         mbActive = false;
         mfCurrentValue = -FLT_MAX;
         mLinearInterpolator.Construct();
@@ -66,7 +66,7 @@ namespace CgsGui
     // any other value falls through to the "could not find" tripwire and returns null.
     Interpolator* AnimChannel::GetInterpolator(AnimChannelData::InterpolateType leInterpolator)
     {
-        Interpolator* lpInterpolator = nullptr;
+        Interpolator* lpInterpolator = 0;
 
         if (leInterpolator != AnimChannelData::E_INTERPOLATE_LINEAR)
         {
@@ -77,7 +77,7 @@ namespace CgsGui
             lpInterpolator = &mLinearInterpolator;
         }
 
-        CGS_ASSERT(lpInterpolator != nullptr, "Could not find a matching interpolator");
+        CGS_ASSERT(lpInterpolator != 0, "Could not find a matching interpolator");
         return lpInterpolator;
     }
 
@@ -87,11 +87,11 @@ namespace CgsGui
         if (mbActive)
         {
             mbActive = false;
-            mpCurrentInterpolator = nullptr;
+            mpCurrentInterpolator = 0;
         }
 
         mpCurrentInterpolator = GetInterpolator(lAnimData.meInterpolator);
-        CGS_ASSERT(mpCurrentInterpolator != nullptr, "Invalid interpolator");
+        CGS_ASSERT(mpCurrentInterpolator != 0, "Invalid interpolator");
 
         mpCurrentInterpolator->SetInterpolator(lAnimData.mStartTime, lAnimData.mEndTime,
                                                lAnimData.mfStartValue, lAnimData.mfEndValue);
@@ -110,7 +110,7 @@ namespace CgsGui
             mfCurrentValue = mpCurrentInterpolator->GetCurrentValue();
             if (lTime > mpCurrentInterpolator->GetEndLambda())
             {
-                mpCurrentInterpolator = nullptr;
+                mpCurrentInterpolator = 0;
             }
         }
         else

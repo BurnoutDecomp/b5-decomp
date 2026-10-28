@@ -59,10 +59,10 @@ Vector3 IKDrivenPoint::ResolveConstraint(Vector3 lPosition, Vector3 lEndpoint, V
     const f32     lfDesiredDistance = lvfDesiredDistance.x;   // broadcast VecFloat -> one lane
 
     // Re-extend from the endpoint along the unit direction by the desired distance.
-    return Vector3{ lEndpoint.x + lDirection.x * lfDesiredDistance,
+    { const Vector3 lResult = { lEndpoint.x + lDirection.x * lfDesiredDistance,
                     lEndpoint.y + lDirection.y * lfDesiredDistance,
                     lEndpoint.z + lDirection.z * lfDesiredDistance,
-                    lPosition.w };
+                    lPosition.w }; return lResult; }
 }
 
 void IKDrivenPoint::Construct(const IKDrivenPointSpec* lpSpec, const TagPoint* lpTagPointArrayBase)

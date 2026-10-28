@@ -167,7 +167,7 @@ namespace
     template <typename T>
     inline uint8_t VFTObjectSize()
     {
-        static_assert(sizeof(T) <= 0xFF, "per-VFT size-table entry must fit its byte slot");
+        CGS_STATIC_ASSERT((sizeof(T) <= 0xFF), "per-VFT size-table entry must fit its byte slot");
         return static_cast<uint8_t>(sizeof(T));
     }
 
@@ -312,11 +312,11 @@ AptValue* AptValueGC_PoolManager::GetFirstAptValue()
             if (ItemIsAllocated(pItem))
                 return reinterpret_cast<AptValue*>(const_cast<uint32_t*>(pItem));
         }
-        pPool = pPool ? pPool->GetNextPool() : nullptr;
+        pPool = pPool ? pPool->GetNextPool() : 0;
     }
     while (pPool);
 
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +348,7 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
         if (pNode)
             return reinterpret_cast<AptValue*>(
                 const_cast<uint8_t*>(pNode + 2 * sizeof(void*)));
-        return nullptr;
+        return 0;
     }
 
     // Step past pCurrent: an ALLOCATED item's word at the size offset is the live
@@ -388,13 +388,13 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
 
     // Pools exhausted -> first outside allocation, if tracked.
     if (!GetTracksOutsideAllocations())
-        return nullptr;
+        return 0;
 
     const void* pFirstOutside = GetFirstOutsideAllocationRaw();
     if (pFirstOutside)
         return reinterpret_cast<AptValue*>(const_cast<uint8_t*>(
             static_cast<const uint8_t*>(pFirstOutside) + 2 * sizeof(void*)));   // x64: node + 16
-    return nullptr;
+    return 0;
 }
 
 //
@@ -412,7 +412,7 @@ void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool, int* pnOutCo
 {
     AptValueGC_PoolManager* const pMgr =
         static_cast<AptValueGC_PoolManager*>(pPool);
-    static void** spSnapshot = nullptr;
+    static void** spSnapshot = 0;
     static size_t snCapacity = 0;
     const size_t nCount = pMgr->mnItemsAllocated;
     if (nCount > snCapacity)
@@ -422,10 +422,10 @@ void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool, int* pnOutCo
         snCapacity = nCount ? nCount : 1;
     }
     size_t i = 0;
-    for (AptValue* p = pMgr->GetFirstAptValue(); p != nullptr && i < snCapacity;
+    for (AptValue* p = pMgr->GetFirstAptValue(); p != 0 && i < snCapacity;
          p = pMgr->GetNextAptValue(p))
         spSnapshot[i++] = p;
-    if (pnOutCount != nullptr)
+    if (pnOutCount != 0)
         *pnOutCount = static_cast<int>(i);
     return spSnapshot;
 }

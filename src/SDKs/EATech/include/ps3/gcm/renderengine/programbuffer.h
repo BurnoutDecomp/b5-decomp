@@ -44,7 +44,7 @@ namespace renderengine
             u32    programFlags;        // e.g. FLAG_PS3PATCHABLE
 
             Parameters()
-                : cgProgramBuffer(nullptr), cgProgramSize(0u)
+                : cgProgramBuffer(0), cgProgramSize(0u)
                 , programType(TYPE_NA), programFlags(0u)
             {}
 
@@ -101,7 +101,7 @@ namespace renderengine
         static const DataType DATATYPE_BOOL    = FLAGS_BOOL;
 
         ProgramVariableHandle()
-            : m_programBuffer(nullptr), m_index(0u)
+            : m_programBuffer(0), m_index(0u)
             , m_numConstants(0u), m_dataFlags(0u)
         {}
 

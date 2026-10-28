@@ -157,48 +157,48 @@ private:
     // Private members are only reachable from inside the class, hence the member function.
     static void AssertLayout()
     {
-        static_assert(offsetof(RoadRageMode, miNumberOfTransmittedRivals) >= sizeof(OfflineGameMode),
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfTransmittedRivals) >= sizeof(OfflineGameMode)),
                       "RoadRageMode's members must follow the complete OfflineGameMode base (console +188)");
-        static_assert(offsetof(RoadRageMode, miNumberOfTransmittedRivals)     < offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals), "order (console +188 < +192)");
-        static_assert(offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals) < offsetof(RoadRageMode, miNumberOfRivals),                "order (console +192 < +196)");
-        static_assert(offsetof(RoadRageMode, miNumberOfRivals)                < offsetof(RoadRageMode, mAddCarPreDelay),                 "order (console +196 < +200)");
-        static_assert(offsetof(RoadRageMode, mAddCarPreDelay)                 < offsetof(RoadRageMode, mfRoadRageMadness),               "order (console +200 < +204)");
-        static_assert(offsetof(RoadRageMode, mfRoadRageMadness)               < offsetof(RoadRageMode, mfRoadRageMadnessRatio),          "order (console +204 < +208)");
-        static_assert(offsetof(RoadRageMode, mfRoadRageMadnessRatio)          < offsetof(RoadRageMode, mfHiddenTime),                    "order (console +208 < +212)");
-        static_assert(offsetof(RoadRageMode, mfHiddenTime)                    < offsetof(RoadRageMode, mbUpdateRivals),                  "order (console +212 < +244)");
-        static_assert(offsetof(RoadRageMode, mbUpdateRivals)                  < offsetof(RoadRageMode, mbUpdateMadnessLevel),            "order (console +244 < +245)");
-        static_assert(offsetof(RoadRageMode, mbUpdateMadnessLevel)            < offsetof(RoadRageMode, mfMadnessBroadcastLevel),         "order (console +245 < +248)");
-        static_assert(offsetof(RoadRageMode, mfMadnessBroadcastLevel)         < offsetof(RoadRageMode, mfProgressionRankAsRatio),        "order (console +248 < +252)");
-        static_assert(sizeof(mfHiddenTime) == 8 * sizeof(f32), "mfHiddenTime is f32[8] (console +212..+243)");
-        static_assert(offsetof(RoadRageMode, mbUpdateMadnessLevel) == offsetof(RoadRageMode, mbUpdateRivals) + 1,
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfTransmittedRivals)     < offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals)), "order (console +188 < +192)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfAllowedRoadRageRivals) < offsetof(RoadRageMode, miNumberOfRivals)),                "order (console +192 < +196)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, miNumberOfRivals)                < offsetof(RoadRageMode, mAddCarPreDelay)),                 "order (console +196 < +200)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mAddCarPreDelay)                 < offsetof(RoadRageMode, mfRoadRageMadness)),               "order (console +200 < +204)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfRoadRageMadness)               < offsetof(RoadRageMode, mfRoadRageMadnessRatio)),          "order (console +204 < +208)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfRoadRageMadnessRatio)          < offsetof(RoadRageMode, mfHiddenTime)),                    "order (console +208 < +212)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfHiddenTime)                    < offsetof(RoadRageMode, mbUpdateRivals)),                  "order (console +212 < +244)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateRivals)                  < offsetof(RoadRageMode, mbUpdateMadnessLevel)),            "order (console +244 < +245)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateMadnessLevel)            < offsetof(RoadRageMode, mfMadnessBroadcastLevel)),         "order (console +245 < +248)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mfMadnessBroadcastLevel)         < offsetof(RoadRageMode, mfProgressionRankAsRatio)),        "order (console +248 < +252)");
+        CGS_STATIC_ASSERT((sizeof(mfHiddenTime) == 8 * sizeof(f32)), "mfHiddenTime is f32[8] (console +212..+243)");
+        CGS_STATIC_ASSERT((offsetof(RoadRageMode, mbUpdateMadnessLevel) == offsetof(RoadRageMode, mbUpdateRivals) + 1),
                       "mbUpdateRivals / mbUpdateMadnessLevel are adjacent bytes (console 0xF4 / 0xF5)");
     }
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (RoadRageMode::*)() const>(&RoadRageMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (RoadRageMode::*)() const>(&RoadRageMode::GetName)) != 0),
               "RoadRageMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<bool (RoadRageMode::*)(const ScoringSystem*) const>(&RoadRageMode::ShouldExit)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (RoadRageMode::*)(const ScoringSystem*) const>(&RoadRageMode::ShouldExit)) != 0),
               "RoadRageMode::ShouldExit must bind GameMode vtable slot 13");
-static_assert(sizeof(static_cast<bool (RoadRageMode::*)() const>(&RoadRageMode::RequiresStreaming)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (RoadRageMode::*)() const>(&RoadRageMode::RequiresStreaming)) != 0),
               "RoadRageMode::RequiresStreaming must bind GameMode vtable slot 23");
-static_assert(sizeof(static_cast<void (RoadRageMode::*)(GameStateModuleIO::OutputBuffer*,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RoadRageMode::*)(GameStateModuleIO::OutputBuffer*,
                                                         const GameStateModuleIO::PreWorldInputBuffer*,
                                                         const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*,
                                                         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*,
                                                         bool,
-                                                        const ScoringSystem*)>(&RoadRageMode::PreWorldUpdate)) != 0,
+                                                        const ScoringSystem*)>(&RoadRageMode::PreWorldUpdate)) != 0),
               "RoadRageMode::PreWorldUpdate must bind GameMode vtable slot 2 (X360 0x823448C0)");
-static_assert(sizeof(static_cast<void (RoadRageMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&RoadRageMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RoadRageMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&RoadRageMode::Start)) != 0),
               "RoadRageMode::Start must bind GameMode vtable slot 5 (X360 0x82330678)");
-static_assert(sizeof(static_cast<void (RoadRageMode::*)()>(&RoadRageMode::OnPlayerInShortCut)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RoadRageMode::*)()>(&RoadRageMode::OnPlayerInShortCut)) != 0),
               "RoadRageMode::OnPlayerInShortCut must bind GameMode vtable slot 10 (X360 0x823160A0)");
-static_assert(sizeof(static_cast<void (RoadRageMode::*)(EGameModeEvent)>(&RoadRageMode::SendEvent)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RoadRageMode::*)(EGameModeEvent)>(&RoadRageMode::SendEvent)) != 0),
               "RoadRageMode::SendEvent must bind GameMode vtable slot 12 (X360 0x82330A38)");
-static_assert(sizeof(static_cast<bool (RoadRageMode::*)(ScoringSystem*)>(&RoadRageMode::ShouldFinish)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (RoadRageMode::*)(ScoringSystem*)>(&RoadRageMode::ShouldFinish)) != 0),
               "RoadRageMode::ShouldFinish must bind GameMode vtable slot 14 (X360 0x82315D60)");
-static_assert(sizeof(static_cast<void (RoadRageMode::*)(const ScoringSystem*, GameStateModuleIO::FinishedModeAction*)>(&RoadRageMode::FillInGameModeSpecificResults)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RoadRageMode::*)(const ScoringSystem*, GameStateModuleIO::FinishedModeAction*)>(&RoadRageMode::FillInGameModeSpecificResults)) != 0),
               "RoadRageMode::FillInGameModeSpecificResults must bind GameMode vtable slot 15 (X360 0x82315D40)");
-static_assert(sizeof(static_cast<void (RoadRageMode::*)(const CgsModule::Event*, s32)>(&RoadRageMode::HandleGameEvents)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (RoadRageMode::*)(const CgsModule::Event*, s32)>(&RoadRageMode::HandleGameEvents)) != 0),
               "RoadRageMode::HandleGameEvents must bind GameMode vtable slot 22 (X360 0x82315FF8)");
 }

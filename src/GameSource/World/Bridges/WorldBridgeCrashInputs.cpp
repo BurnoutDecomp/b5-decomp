@@ -97,11 +97,11 @@ void BridgeInputToCrashModule(
     // The network, game-action and vehicle-driver legs wrap types that DO contain host pointers or
     // address-dependent offsets, which is why they go through their real types, never a cast. (Precedent: BrnWorldModuleIO.h:132 records that the
     // WorldBridgeInputToEntityModules consumer already reinterpret_casts one of these views.)
-    static_assert( sizeof( BrnWorldIO::TimerStatusInterface ) ==
-                   sizeof( CgsSystem::TimerStatusInterface ),
+    CGS_STATIC_ASSERT(( sizeof( BrnWorldIO::TimerStatusInterface ) ==
+                   sizeof( CgsSystem::TimerStatusInterface )),
                    "the world's timer-status placeholder must be layout-identical to the real type" );
-    static_assert( sizeof( BrnWorldIO::PlayerVehicleControls ) ==
-                   sizeof( BrnWorld::PlayerVehicleControls ),
+    CGS_STATIC_ASSERT(( sizeof( BrnWorldIO::PlayerVehicleControls ) ==
+                   sizeof( BrnWorld::PlayerVehicleControls )),
                    "the world's player-controls placeholder must be layout-identical to the real type" );
 
     const BrnWorld::PlayerVehicleControls* lpControls =

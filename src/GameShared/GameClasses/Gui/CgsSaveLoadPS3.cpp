@@ -68,7 +68,7 @@ namespace
     };
     struct ContentInfoProvider { ContentInfoProviderVtbl* mpVtbl; };
 
-    ContentInfoProvider* gpContentInfoProvider = nullptr;   // X360 off_8305A6F8
+    ContentInfoProvider* gpContentInfoProvider = 0;   // X360 off_8305A6F8
 
     NoOpMemcardInterface gNoOpMemcardInterface;
 
@@ -80,7 +80,7 @@ namespace
     // squeezed into a console-width word.)
 
     // The save/load locale-string callback the memory-card interface is given.
-    void* gpfnLocaleGetStrCallback = nullptr;   // CgsGui::SaveLoadSystem::LocaleGetStrCallback
+    void* gpfnLocaleGetStrCallback = 0;   // CgsGui::SaveLoadSystem::LocaleGetStrCallback
 
     // Pending message-display option DISPATCH THUNKS. The X360 stores each handler as a
     // member-function pointer ({func @+0x198, delta @+0x19C}) and HandleOption dispatches it as
@@ -128,8 +128,8 @@ namespace CgsGui
                                    s32 liNumberOfMugshotsPerType, u32 luExtraFilesSizeBytes)
     {
  // drain an earlier native task before reusing this owner
-        CGS_ASSERT(lpMessageDisplay != nullptr, "lpMessageDisplay != NULL");
-        CGS_ASSERT(lpLanguageManager != nullptr, "lpLanguageManager != NULL");
+        CGS_ASSERT(lpMessageDisplay != 0, "lpMessageDisplay != NULL");
+        CGS_ASSERT(lpLanguageManager != 0, "lpLanguageManager != NULL");
 
         ConvertAsciiToWideCharSafe(macwTitle, lpcTitle, 32);
 
@@ -137,9 +137,9 @@ namespace CgsGui
         mpacSaveFilePath        = lpcSaveFilePath;           // +0x17C
         mpLanguageManager       = lpLanguageManager;         // +0x188
         mpMessageDisplay        = lpMessageDisplay;          // +0x134
-        mpMemcardInterface      = nullptr;                   // +0x184 (stw r11,0x184)
-        mpActiveMessageDisplay  = nullptr;                   // +0x130 (stw r11,0x130)
-        mpSystemUserProfile     = nullptr;                   // +0x194 (stw r11,0x194)
+        mpMemcardInterface      = 0;                   // +0x184 (stw r11,0x184)
+        mpActiveMessageDisplay  = 0;                   // +0x130 (stw r11,0x130)
+        mpSystemUserProfile     = 0;                   // +0x194 (stw r11,0x194)
         mMessageDisplayOptionFunc.muFunc  = 0;               // +0x198 (std r10,0x198 zeroes the pair)
         mMessageDisplayOptionFunc.muDelta = 0;               // +0x19C
         mField128               = 0;                         // +0x128 (std r9,0x128)
@@ -155,7 +155,7 @@ namespace CgsGui
 
         // Host-width stored-data view (see the header note): empty until a task starter
         // captures it.
-        mStoredDataView.mpData = nullptr;
+        mStoredDataView.mpData = 0;
         mStoredDataView.miSize = 0;
     }
 
@@ -192,9 +192,9 @@ namespace CgsGui
     bool SaveLoadSystem::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, CgsMemory::LinearMalloc* lpLinearMalloc,
                                  SystemUserProfile* lpSystemUserProfile)
     {
-        CGS_ASSERT(lpHeapMalloc != nullptr, "lpHeapMalloc");
-        CGS_ASSERT(lpLinearMalloc != nullptr, "lpLinearMalloc");
-        CGS_ASSERT(lpSystemUserProfile != nullptr, "lpSystemUserProfile");
+        CGS_ASSERT(lpHeapMalloc != 0, "lpHeapMalloc");
+        CGS_ASSERT(lpLinearMalloc != 0, "lpLinearMalloc");
+        CGS_ASSERT(lpSystemUserProfile != 0, "lpSystemUserProfile");
 
         mpHeapMalloc = lpHeapMalloc;                         // +0x190
 
@@ -203,7 +203,7 @@ namespace CgsGui
         void* lpCallbacks[3];
         lpCallbacks[0] = &mpContentInfoVptr;                 // this+0x18C
         lpCallbacks[1] = gpfnLocaleGetStrCallback;
-        lpCallbacks[2] = nullptr;
+        lpCallbacks[2] = 0;
         gpContentInfoProvider = reinterpret_cast<ContentInfoProvider*>(&mpContentInfoVptr);
 
         mpSystemUserProfile = lpSystemUserProfile;           // +0x194 (low word)
@@ -221,20 +221,20 @@ namespace CgsGui
         // Mugshot buffer = per-mugshot size * mugshots-per-type * type count.
         const s32 liMugshotBytes = miExtraFilesSizeBytes * miNumberOfMugshotsPerType * miNumberOfMugshotTypes;
         mpMugshotBufferData = lpLinearMalloc->Malloc(liMugshotBytes);   // +0x220
-        CGS_ASSERT(mpMugshotBufferData != nullptr, "mpMugshotBufferData");
+        CGS_ASSERT(mpMugshotBufferData != 0, "mpMugshotBufferData");
 
-        HANDLE lhFile = ::CreateFileA(mpacSaveFilePath, 0x80000000u, 1, nullptr, 3, 0, nullptr);
+        HANDLE lhFile = ::CreateFileA(mpacSaveFilePath, 0x80000000u, 1, 0, 3, 0, 0);
         if (lhFile == INVALID_HANDLE_VALUE)
         {
             miContentInfoFileSize   = 0;                     // +0x208
-            mpContentInfoFileBuffer = nullptr;               // +0x20C
+            mpContentInfoFileBuffer = 0;               // +0x20C
             return true;
         }
 
         // Wrap the handle in a XenonFileInputStream { mhFile = lhFile, miSize = GetFileSize }.
         struct { HANDLE mhFile; s32 miSize; } lStream;
         lStream.mhFile = lhFile;
-        lStream.miSize = static_cast<s32>(::GetFileSize(lhFile, nullptr));
+        lStream.miSize = static_cast<s32>(::GetFileSize(lhFile, 0));
 
         const s32 liSize = reinterpret_cast<XenonFileInputStream*>(&lStream)->GetSize();
         miContentInfoFileSize = liSize;                      // +0x208
@@ -255,7 +255,7 @@ namespace CgsGui
         gpContentInfoProvider->mpVtbl->mpfnFree(gpContentInfoProvider,
                                                 mpContentInfoFileBuffer, miContentInfoFileSize);
         miContentInfoFileSize   = 0;     // +0x208
-        mpContentInfoFileBuffer = nullptr; // +0x20C
+        mpContentInfoFileBuffer = 0; // +0x20C
         return true;
     }
 
@@ -265,7 +265,7 @@ namespace CgsGui
     {
         if (mbAsyncOpState == 1)
         {
-            const DWORD luResult = ::XGetOverlappedResult(maOverlapped, nullptr, FALSE);
+            const DWORD luResult = ::XGetOverlappedResult(maOverlapped, 0, FALSE);
             // 997 (ERROR_IO_PENDING) / 996 (ERROR_IO_INCOMPLETE) mean the op is still running.
             const bool lbStillRunning = (luResult == 997u) || (luResult == 996u);
             if (!lbStillRunning)
@@ -274,7 +274,7 @@ namespace CgsGui
             }
         }
 
-        if (mpMemcardInterface != nullptr)
+        if (mpMemcardInterface != 0)
         {
             mpMemcardInterface->Update(0);
         }
@@ -398,7 +398,7 @@ namespace CgsGui
         // Pre-flight check: CheckSave(0, SaveCheckParams(0, NULL)); the X360's explicit
         // ~SaveCheckParams right after the call is the scope-end dtor of the stack object.
         {
-            RealmcIface::SaveCheckParams lCheckParams(0, nullptr);
+            RealmcIface::SaveCheckParams lCheckParams(0, 0);
             mpMemcardInterface->CheckSave(0, &lCheckParams);
         }
 
@@ -502,7 +502,7 @@ namespace CgsGui
                                         const ImageFileInfo* laImageFileInfo)
     {
         CGS_ASSERT(liNumberOfImageFiles > 0, "liNumberOfImageFiles > 0");
-        CGS_ASSERT(laImageFileInfo != nullptr, "lpImageFile != NULL");
+        CGS_ASSERT(laImageFileInfo != 0, "lpImageFile != NULL");
 
         // The X360 walks the array as `r31 = laImageFileInfo + 8` (@0x82852254) stepping by
         // `addi r31,r31,0x10` (@0x828522A4): 0x10 is the CONSOLE sizeof(CgsGui::ImageFileInfo)
@@ -754,7 +754,7 @@ namespace CgsGui
     {
         if (luOption == 1)
         {
-            if (mStoredDataView.mpData != nullptr)
+            if (mStoredDataView.mpData != 0)
             {
             }
 

@@ -27,7 +27,7 @@ namespace BrnPhysics
         };
 
         // BrnContactSpyEvents.h: a single resolved contact between two entities.
-        struct alignas(16) BaseContact : public Event
+        struct CGS_ALIGN(16) BaseContact : public Event
         {
             EntityId     mEntityIdA;
             EntityId     mEntityIdB;
@@ -54,16 +54,16 @@ namespace BrnPhysics
         // copies each element as exactly twelve 64-bit block moves (ctr = 12) at a 96-byte
         // (0x60) stride (`v4*3*32`, `slwi ..,5`), i.e. sizeof(RaceCarContact) == 96 -- identical
         // to BaseContact, so no extra storage; sizeof stays 96.
-        struct alignas(16) RaceCarContact : public BaseContact
+        struct CGS_ALIGN(16) RaceCarContact : public BaseContact
         {
         };
 
-        struct alignas(16) HingedPartContact : public BaseContact
+        struct CGS_ALIGN(16) HingedPartContact : public BaseContact
         {
             EBodyParts meType;
         };
 
-        struct alignas(16) PhysicalCarPartContact : public BaseContact
+        struct CGS_ALIGN(16) PhysicalCarPartContact : public BaseContact
         {
             Vector3    mVelocity;
             EBodyParts meType;
@@ -75,7 +75,7 @@ namespace BrnPhysics
         // as exactly fourteen 64-bit block moves (ctr = 14) at a 112-byte (0x70) stride
         // (`v4*0x70`), i.e. sizeof(PropContact) == 112: BaseContact(96) + the four trailing
         // small fields below, alignas(16) => 112.
-        struct alignas(16) PropContact : public BaseContact
+        struct CGS_ALIGN(16) PropContact : public BaseContact
         {
             static const u16 KU_UNKNOWN_PROP_TYPE = 65535;   // BrnContactSpyEvents.h:167
             static const u8  KU_FLAG_SMASH_GATE   = 1;       // BrnContactSpyEvents.h:169
@@ -88,7 +88,7 @@ namespace BrnPhysics
         };
 
         // A contact that was rejected before becoming a full BaseContact.
-        struct alignas(16) DiscardedContact
+        struct CGS_ALIGN(16) DiscardedContact
         {
             EntityId mEntityIdA;
             EntityId mEntityIdB;
@@ -106,7 +106,7 @@ namespace BrnPhysics
         // @16/32/48/64/80, alignas(16) => 96). The contact carries the same resolved-contact
         // fields as BaseContact and adds no members of its own, so it is modelled as a
         // BaseContact specialisation (no extra storage; sizeof stays 96).
-        struct alignas(16) TrafficContact : public BaseContact
+        struct CGS_ALIGN(16) TrafficContact : public BaseContact
         {
         };
     }

@@ -359,7 +359,7 @@ namespace Vehicle
         // corresponds to. MEASURED: it was one of six such declarations that made VehiclePhysics.cpp
         // unlinkable (LNK2019). The name is now simply INHERITED. SetCrashing stays: it is a real
         // virtual override with a body in this TU. -----
-        void SetCrashing() override;
+        void SetCrashing() ;
 
         // ----- @0x825D5450: the crash-state CLEAR, the twin of SetCrashing above and the occupant
         //       of RaceCarPhysics VTABLE SLOT 1 (0x820D1038). It is an override of the virtual
@@ -367,7 +367,7 @@ namespace Vehicle
         //       identity was PROBED off the image, not reasoned about -- the full working-out lives
         //       on the body in VehiclePhysics.cpp. Its one live caller is the `!mbResetTransform`
         //       arm of VehicleManager::ProcessResetEvents @0x82617E00. -----
-        void ClearCrashing() override;
+        void ClearCrashing() ;
 
         // @0x825D3720 -- the per-frame steering model (577 X360 insns, standalone; also called by
         // UpdateDriving @0x82638354 and UpdateCrashing @0x82638F6C, and by RaceCarPhysics::Update
@@ -1523,7 +1523,7 @@ namespace Vehicle
         VecFloat GetMaxSteeringAngle() const
         {
             const f32 lfAngle = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z;
-            return VecFloat{ lfAngle, lfAngle, lfAngle, lfAngle };
+            { const VecFloat lResult = { lfAngle, lfAngle, lfAngle, lfAngle }; return lResult; }
         }
         void OverrideWheelAngle(VecFloat lvfAngleRadians)
         {
@@ -1634,8 +1634,8 @@ namespace Vehicle
         {
             const f32 lfTimeDrifting =
                 mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z;
-            return VecFloat{ lfTimeDrifting, lfTimeDrifting,
-                             lfTimeDrifting, lfTimeDrifting };
+            { const VecFloat lResult = { lfTimeDrifting, lfTimeDrifting,
+                             lfTimeDrifting, lfTimeDrifting }; return lResult; }
         }
 
         Vector3 GetLinearVelocityDirection() const

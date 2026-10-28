@@ -25,12 +25,12 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (OnlineFreeBurnMode::*)() const>(&OnlineFreeBurnMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineFreeBurnMode::*)() const>(&OnlineFreeBurnMode::GetName)) != 0),
               "OnlineFreeBurnMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineFreeBurnMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineFreeBurnMode::Start)) != 0),
               "OnlineFreeBurnMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnMode::*)(EGameModeEvent)>(&OnlineFreeBurnMode::SendEvent)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnMode::*)(EGameModeEvent)>(&OnlineFreeBurnMode::SendEvent)) != 0),
               "OnlineFreeBurnMode::SendEvent must bind GameMode vtable slot 12");
-static_assert(sizeof(static_cast<bool (OnlineFreeBurnMode::*)() const>(&OnlineFreeBurnMode::RequiresStreaming)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineFreeBurnMode::*)() const>(&OnlineFreeBurnMode::RequiresStreaming)) != 0),
               "OnlineFreeBurnMode::RequiresStreaming must bind GameMode vtable slot 23");
 }

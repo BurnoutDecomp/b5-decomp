@@ -132,7 +132,7 @@ namespace BrnGame
 
         renderengine::Texture::LockInfo lLocked;
         renderengine::Texture::Lock(lpTexture, 0, 0, 0, &lLocked);
-        if (lLocked.mpBits != nullptr && lpcData != nullptr)
+        if (lLocked.mpBits != 0 && lpcData != 0)
         {
             std::memcpy(lLocked.mpBits, lpcData, static_cast<size_t>(liDataSize));
         }
@@ -151,13 +151,13 @@ namespace BrnGame
                                                 const char* lpacPath)
     {
         std::FILE* lpFile = std::fopen(lpacPath, "rb");
-        if (lpFile == nullptr) { return nullptr; }
+        if (lpFile == 0) { return 0; }
 
         u32 luHeader[32] = {};   // 'DDS ' magic + the 124-byte DDS_HEADER
         if (std::fread(luHeader, sizeof(u32), 32, lpFile) != 32 || luHeader[0] != 0x20534444u)
         {
             std::fclose(lpFile);
-            return nullptr;
+            return 0;
         }
 
         const u32 luH = luHeader[3];   // dwHeight
@@ -167,14 +167,14 @@ namespace BrnGame
         if (luFourCC != 0u || luBitCount != 32u)   // not uncompressed 32-bit RGBA
         {
             std::fclose(lpFile);
-            return nullptr;
+            return 0;
         }
 
         const s32 liBytes = static_cast<s32>(luW * luH * 4u);
         void* lpData = std::malloc(static_cast<size_t>(liBytes));
-        if (lpData != nullptr) { std::fread(lpData, 1u, static_cast<size_t>(liBytes), lpFile); }
+        if (lpData != 0) { std::fread(lpData, 1u, static_cast<size_t>(liBytes), lpFile); }
         std::fclose(lpFile);
-        if (lpData == nullptr) { return nullptr; }
+        if (lpData == 0) { return 0; }
 
         renderengine::Texture2D* lpTex = (lRenderer.*lpSetup)(static_cast<f32>(luW), static_cast<f32>(luH), lpData, liBytes);
         std::free(lpData);
@@ -188,7 +188,7 @@ namespace BrnGame
         mpCarTexture   = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/car.dds");
         mpTextTexture  = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/text.dds");
         mpBoxTexture   = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/box.dds");
-        mpDiskErrorTexture = nullptr;
+        mpDiskErrorTexture = 0;
 
         static u8 saReusableData[0x200000];   // 2 MB scratch (X360 reused the car staging region)
         mReusableDataBuffer.Construct();
@@ -293,7 +293,7 @@ namespace BrnGame
         Im2dTransform lScreenXForm;
         lScreenXForm.TransformByAspectRatio();
         lpIm2d->SetTransform(lScreenXForm);
-        lpIm2d->SetState(static_cast<const BlendState*>(nullptr));
+        lpIm2d->SetState(static_cast<const BlendState*>(0));
 
         // --- Fade: one mfFade, two staged outputs (exactly as the source) -------------
         // mfFade ramps IN at KF_FADE_IN_SPEED, OUT at KF_FADE_OUT_SPEED, clamped to
@@ -369,7 +369,7 @@ namespace BrnGame
         Im2dTransform lScreenXForm;
         lScreenXForm.TransformByAspectRatio();
         lpIm2d->SetTransform(lScreenXForm);
-        lpIm2d->SetState(static_cast<const BlendState*>(nullptr));
+        lpIm2d->SetState(static_cast<const BlendState*>(0));
 
         bool lbHideAfterDraw = false;
         if (mbBlackOverlayHiding)
@@ -426,7 +426,7 @@ namespace BrnGame
     {
         using namespace CgsGraphics;
         lpIm2d->BeginRendering();
-        lpIm2d->SetState(static_cast<const BlendState*>(nullptr));
+        lpIm2d->SetState(static_cast<const BlendState*>(0));
         lpIm2d->SetTexture(mpDiskErrorTexture);
         const RGBA8 lWhite = { 255, 255, 255, 255 };
         EmitQuad(lpIm2d, {0.0f,0.0f}, {KF_SCREEN_W,0.0f}, {0.0f,KF_SCREEN_H}, {KF_SCREEN_W,KF_SCREEN_H},

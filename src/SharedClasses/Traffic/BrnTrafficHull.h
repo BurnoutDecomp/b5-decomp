@@ -134,11 +134,11 @@ struct Hull
 };
 
 // Host layout contract with tools/assets/bundles/lane_transcode.py's emitter.
-static_assert(offsetof(Hull, muNumRungs)                    == 0x08, "Hull::muNumRungs");
-static_assert(offsetof(Hull, mpaSections)                   == 0x10, "Hull::mpaSections");
-static_assert(offsetof(Hull, mpaRungs)                      == 0x18, "Hull::mpaRungs");
-static_assert(offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x68, "Hull::mpaLightTriggerJunctionLookup");
-static_assert(offsetof(Hull, mauVehicleAssets)              == 0x70, "Hull::mauVehicleAssets");
+CGS_STATIC_ASSERT((offsetof(Hull, muNumRungs)                    == 0x08), "Hull::muNumRungs");
+CGS_STATIC_ASSERT((offsetof(Hull, mpaSections)                   == 0x10), "Hull::mpaSections");
+CGS_STATIC_ASSERT((offsetof(Hull, mpaRungs)                      == 0x18), "Hull::mpaRungs");
+CGS_STATIC_ASSERT((offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x68), "Hull::mpaLightTriggerJunctionLookup");
+CGS_STATIC_ASSERT((offsetof(Hull, mauVehicleAssets)              == 0x70), "Hull::mauVehicleAssets");
 
 inline const Section* Hull::GetSection(u32 luIndex) const
 {
@@ -154,20 +154,20 @@ inline const SectionSpan* Hull::GetSectionSpan(u32 luIndex) const
 
 inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const
 {
-    CGS_ASSERT(lpSection != nullptr, "lpSection");
+    CGS_ASSERT(lpSection != 0, "lpSection");
     return mpafCumulativeRungLengths + lpSection->muRungOffset;
 }
 
 inline const Neighbour* Hull::GetNeighbour(u32 luIndex) const
 {
-    CGS_ASSERT(mpaNeighbourData != nullptr, "mpaNeighbourData");
+    CGS_ASSERT(mpaNeighbourData != 0, "mpaNeighbourData");
     CGS_ASSERT(luIndex < muNumNeighbours, "luIndex < muNumNeighbours");
     return &mpaNeighbourData[luIndex];
 }
 
 inline const Neighbour* Hull::GetNeighbours() const
 {
-    CGS_ASSERT(mpaNeighbourData != nullptr, "mpaNeighbourData");
+    CGS_ASSERT(mpaNeighbourData != 0, "mpaNeighbourData");
     return mpaNeighbourData;
 }
 

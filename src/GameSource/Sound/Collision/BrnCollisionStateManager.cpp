@@ -366,7 +366,7 @@ bool CollisionStateManager::Prepare()
         {
             BrnSound::Module::SoundLogicModule* lpModule =
                 static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-            CGS_ASSERT(lpModule != nullptr, "lpSoundLogicModule");
+            CGS_ASSERT(lpModule != 0, "lpSoundLogicModule");
             if (!lpModule)
                 return false;
             const Attrib::Gen::burnoutglobaldata& lrGlobalData =
@@ -377,7 +377,7 @@ bool CollisionStateManager::Prepare()
         }
         LoadAsset("Sound\\Splicer\\CollisionSpliceBank.bundle",
                   "CollisionSpliceBank", ResourceRegistrar::E_DATA);
-        LoadAsset("SOUND\\AEMS\\SCRAPEPATCHBANK.BUNDLE", nullptr,
+        LoadAsset("SOUND\\AEMS\\SCRAPEPATCHBANK.BUNDLE", 0,
                   ResourceRegistrar::E_DATA);
         // fall through
     case E_PREPARE_UPDATING:
@@ -463,7 +463,7 @@ void CollisionStateManager::ResourcesAreReady()
     {
         char lacResourceName[KI_CGSID_STRING_LEN] = {};
         CgsIDUnCompress(0xA773D7113DF454BFull, lacResourceName);
-        mPropDataResourceHandle = GetAsset(nullptr, lacResourceName);
+        mPropDataResourceHandle = GetAsset(0, lacResourceName);
         if (mPropDataResourceHandle != CgsResource::NULLResourceHandle)
         {
             BuildPropToMaterialTable();
@@ -473,7 +473,7 @@ void CollisionStateManager::ResourcesAreReady()
 
 void CollisionStateManager::Notify(const CgsSound::Io::MessageHeader* apkMessage)
 {
-    CGS_ASSERT(apkMessage != nullptr, "lpkMessage");
+    CGS_ASSERT(apkMessage != 0, "lpkMessage");
     if (!apkMessage)
         return;
 
@@ -534,7 +534,7 @@ CollisionStateManager::FindInScrapeHistory( const BrnSound::Logic::Collision::Sc
         }
     }
 
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -546,7 +546,7 @@ CollisionStateManager::FindInScrapeHistory( const BrnSound::Logic::Collision::Sc
 // ---------------------------------------------------------------------------
 int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
 {
-    CGS_ASSERT(lpCollision != nullptr, "lpCollision");
+    CGS_ASSERT(lpCollision != 0, "lpCollision");
     if (!lpCollision || lpCollision->miSampleID == -1)
         return 1;
 
@@ -601,7 +601,7 @@ void CollisionStateManager::SetCollisionBinList(
     for (u32 luIndex = 0; luIndex < mCrashBinList.mNumCrashBins(); ++luIndex)
     {
         Attrib::Gen::crashbin lBin(
-            mCrashBinList.GetCrashBinCollectionKey(luIndex), nullptr);
+            mCrashBinList.GetCrashBinCollectionKey(luIndex), 0);
         const s32 liBank = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
         CGS_ASSERT(liBank >= E_COLLISION_SPLICE_BANK_COLLISION &&
                    liBank < E_COLLISION_SPLICE_BANK_MAX,
@@ -614,7 +614,7 @@ void CollisionStateManager::SetCollisionBinList(
     for (u32 luIndex = 0; luIndex < mPropsCrashBinList.mNumCrashBins(); ++luIndex)
     {
         Attrib::Gen::propscrashbin lBin(
-            mPropsCrashBinList.GetCrashBinCollectionKey(luIndex), nullptr);
+            mPropsCrashBinList.GetCrashBinCollectionKey(luIndex), 0);
         const s32 liBank = SelectBin(0, lBin.mSpliceBankAsset(), 0, 0, 0);
         CGS_ASSERT(liBank >= E_COLLISION_SPLICE_BANK_COLLISION &&
                    liBank < E_COLLISION_SPLICE_BANK_MAX,
@@ -632,14 +632,14 @@ void CollisionStateManager::BuildPropToMaterialTable()
     for (u32 luIndex = 0; luIndex < 500u; ++luIndex)
         maPropToMaterialMappings[luIndex] = PropToMaterialMapping();
 
-    const BrnPhysics::Props::PropPhysicsDataHeader* lpPropPhysics = nullptr;
+    const BrnPhysics::Props::PropPhysicsDataHeader* lpPropPhysics = 0;
     if (mPropDataResourceHandle.mpResourceMemory)
     {
         lpPropPhysics = *reinterpret_cast<
             BrnPhysics::Props::PropPhysicsDataHeader* const*>(
                 mPropDataResourceHandle.mpResourceMemory);
     }
-    CGS_ASSERT(lpPropPhysics != nullptr, "lpPropPhysicsData");
+    CGS_ASSERT(lpPropPhysics != 0, "lpPropPhysicsData");
     if (!lpPropPhysics)
         return;
 
@@ -1334,7 +1334,7 @@ bool CollisionStateManager::FindEntity(const EntityId& lEntityId, GenericEntity&
 {
     const LogicInputBuffer* lpInputBuffer =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetBrnInputStructure();
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
 
     const u32 luOwner = GetEntityOwner(lEntityId);
     if (luOwner == KU_ENTITY_OWNER_WORLD)
@@ -1538,8 +1538,8 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
                 lpState->SetLifetime(CollisionState::E_SCRAPE);
                 lrStateScrape = lapContinuing[lu32Scrape]->mScrapeInfo;
                 // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a state keeps a scrape.
-                lpState = nullptr;
-                lapContinuing[lu32Scrape] = nullptr;
+                lpState = 0;
+                lapContinuing[lu32Scrape] = 0;
             }
             lapStates[lu32State] = lpState;
         }
@@ -1554,7 +1554,7 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
         lOutput.mPosition = lpInput->mPosition;
         lOutput.mScrapeInfo = lpInput->mScrapeInfo;
         CollisionState* lpState =
-            static_cast<CollisionState*>(CgsSound::Logic::StateManager::GetFreeState(nullptr));
+            static_cast<CollisionState*>(CgsSound::Logic::StateManager::GetFreeState(0));
         if (!lpState)
             break;
         lpState->Attach(&lOutput);
@@ -1571,7 +1571,7 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
             FindEntity(lpInput->mScrapeInfo.mEntityIdB, lEntityB))
         {
             BrnSound::Logic::Collision::ScrapeInfo* lpScrape = FindOldestScrapeInHistory();
-            CGS_ASSERT(lpScrape != nullptr, "lpScrape");
+            CGS_ASSERT(lpScrape != 0, "lpScrape");
             *lpScrape = lpInput->mScrapeInfo;
             // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a scrape enters the history.
         }
@@ -1990,7 +1990,7 @@ void CollisionStateManager::UpdateGlass(const BrnPhysics::Deformation::Deformati
 {
     const BrnPhysics::Deformation::DeformationOutputInterface::GlassSmashOrCrackQueue* lpQueue =
         &lrDeformation.mGlassSmashOrCrackQueue;
-    CGS_ASSERT(lpQueue != nullptr, "lpQueue");
+    CGS_ASSERT(lpQueue != 0, "lpQueue");
     const u32 lu32Count = static_cast<u32>(lpQueue->GetLength());
     u32 lu32LastVehicle = 0xFFFFFFFFu;
     GenericEntity lEntity;
@@ -2027,7 +2027,7 @@ void CollisionStateManager::UpdateGlass(const BrnPhysics::Deformation::Deformati
 void CollisionStateManager::UpdateHingingBodyParts(
     const BrnPhysics::Deformation::DeformationOutputInterface::JointedPartStateQueue* lpQueue)
 {
-    CGS_ASSERT(lpQueue != nullptr, "lpQueue");
+    CGS_ASSERT(lpQueue != 0, "lpQueue");
     mHingeCache.Update(mfCurrentTime);
 
     const u32 lu32Count = static_cast<u32>(lpQueue->GetLength());
@@ -2701,9 +2701,9 @@ bool CollisionStateManager::LessThanPriority(
 
 CgsSound::Logic::State* CollisionStateManager::GetFreeState(void* apvAttachment)
 {
-    CGS_ASSERT(apvAttachment != nullptr, "lpCollision");
+    CGS_ASSERT(apvAttachment != 0, "lpCollision");
     if (!apvAttachment)
-        return nullptr;
+        return 0;
 
     for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
          lpBase = lpBase->GetNextState())
@@ -2712,7 +2712,7 @@ CgsSound::Logic::State* CollisionStateManager::GetFreeState(void* apvAttachment)
             return lpBase;
     }
 
-    CollisionState* lpLowestPriority = nullptr;
+    CollisionState* lpLowestPriority = 0;
     for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
          lpBase = lpBase->GetNextState())
     {
@@ -2742,14 +2742,14 @@ CgsSound::Logic::State* CollisionStateManager::GetFreeState(void* apvAttachment)
         }
         return lpLowestPriority;
     }
-    return nullptr;
+    return 0;
 }
 
 void CollisionStateManager::UpdateParams(f32 afDeltaTime)
 {
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    CGS_ASSERT(lpModule != nullptr, "lpSoundLogicModule");
+    CGS_ASSERT(lpModule != 0, "lpSoundLogicModule");
     if (lpModule)
     {
         BrnSound::Module::Io::LogicInputBuffer* lpInput =
@@ -2936,7 +2936,7 @@ void CollisionStateManager::SelectCollisionBin(
             continue;
         ++luMaterialBins;
 
-        BinType lBin(lrList.GetCrashBinCollectionKey(luIndex), nullptr);
+        BinType lBin(lrList.GetCrashBinCollectionKey(luIndex), 0);
         if (!lBin.IsValid())
             continue;
         ++luValidBins;
@@ -3134,7 +3134,7 @@ void CollisionStateManager::SelectCollisionBin(
 template <typename BinType>
 void CollisionStateManager::GetRandomSampleID(OutputCollision& lrOutput)
 {
-    BinType lBin(lrOutput.mBinKey, nullptr);
+    BinType lBin(lrOutput.mBinKey, 0);
     CGS_ASSERT(lBin.IsValid(), "lCrashBin.IsValid()");
 
     const int& (BinType::*lpGetCount)() const =

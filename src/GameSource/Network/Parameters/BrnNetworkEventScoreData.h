@@ -95,10 +95,10 @@ namespace BrnNetwork
         // vtable keeps the base GetPatternLength (its slot
         // holds the shared base body), so that virtual is NOT overridden here; GetPattern and
         // both GetData slots hold this class's own (identical-code-folded) bodies.
-        virtual const char* GetPattern() const override;
-        virtual u32         GetDataSize() const override;
-        virtual void*       GetData() override;
-        virtual const void* GetData() const override;
+        virtual const char* GetPattern() const ;
+        virtual u32         GetDataSize() const ;
+        virtual void*       GetData() ;
+        virtual const void* GetData() const ;
 
     private:
         s32 maScoreboardIndex[KI_MAX_EVENT_SCORES_TO_UPLOAD];  // +0x04

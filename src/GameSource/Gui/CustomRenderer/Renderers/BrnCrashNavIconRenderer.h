@@ -424,24 +424,24 @@ namespace BrnGui
             // The InitResources loop runs exactly E_CRASHNAVICON_NUM times over
             // maIconResources / mapIconTextureStates (X360 end-pointer bound
             // &unk_82F25878 == &maResourcesToLoad[2]).
-            static_assert(E_CRASHNAVICON_NUM == 2,
+            CGS_STATIC_ASSERT((E_CRASHNAVICON_NUM == 2),
                           "InitResources walks exactly two icon atlases (ids 204/205)");
             // Construct's five int_5_::Append calls must fit the array (X360 +0x130).
-            static_assert(Array<s32, 5>::KU_SIZE == 5,
+            CGS_STATIC_ASSERT((Array<s32, 5>::KU_SIZE == 5),
                           "Construct appends five online start-points to ignore");
             // The four big UV tables are 2 x 11 entries; the four mini tables 2 x 6.
-            static_assert(KU_ICON_EVENT_TYPE_COUNT == 11,
+            CGS_STATIC_ASSERT((KU_ICON_EVENT_TYPE_COUNT == 11),
                           "InitEventTypeUvs fills 11 event-type columns per icon-type row");
-            static_assert(E_CRASHNAVICON_EVENTTYPE_MINI_INDEX_COUNT == 6,
+            CGS_STATIC_ASSERT((E_CRASHNAVICON_EVENTTYPE_MINI_INDEX_COUNT == 6),
                           "InitEventTypeUvs fills 6 mini-icon columns per icon-type row");
             // RecvEvent case 554 hands GetIgnoreIcons the whole mauIconsToIgnore span.
-            static_assert(GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE == 10,
+            CGS_STATIC_ASSERT((GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE == 10),
                           "mauIconsToIgnore is the event's own 10-entry ignore list");
             // The rival / start-finish icon banks (X360 +0x1D0 and +0x1160).
-            static_assert(KI_MAX_RIVALS == 8, "eight rival icons (X360 +0x1D0, stride 0x1F0)");
-            static_assert(KI_NUM_STARTFINISH_ICONS == 2, "two start/finish icons (X360 +0x1160)");
+            CGS_STATIC_ASSERT((KI_MAX_RIVALS == 8), "eight rival icons (X360 +0x1D0, stride 0x1F0)");
+            CGS_STATIC_ASSERT((KI_NUM_STARTFINISH_ICONS == 2), "two start/finish icons (X360 +0x1160)");
             // The road-sign table (X360 +0x154C, 65 x 104 bytes ending at mTextObject).
-            static_assert(RoadSignList::KI_NUM_ROAD_SIGNS == 65,
+            CGS_STATIC_ASSERT((RoadSignList::KI_NUM_ROAD_SIGNS == 65),
                           "65 authored road signs (X360 +0x154C..+0x2FB4 == 65 x 104)");
             // The 24-byte hover record RecvEvent case 559 copies as three doublewords, and
             // the 32-byte cursor record case 560 copies as four -- both are pointer-free

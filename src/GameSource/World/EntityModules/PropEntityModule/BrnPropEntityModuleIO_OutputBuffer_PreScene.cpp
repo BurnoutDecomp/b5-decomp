@@ -26,23 +26,23 @@ namespace PropEntityIO
         // OutputBuffer_Prepare twin: the four console offsets were only reproducible while the
         // members were opaque spans cut to them. The members are the real DWARF types now, each
         // wider on this LLP64 host, so the gate pins ORDER + NON-OVERLAP + no-shrink instead.
-        static_assert(offsetof(OutputBuffer_PreScene, mResourceRequestInterface) == 4,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mResourceRequestInterface) == 4),
                       "mResourceRequestInterface must follow the status byte (console +4)");
-        static_assert(offsetof(OutputBuffer_PreScene, mSceneInputInterface)
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mSceneInputInterface)
                           >= offsetof(OutputBuffer_PreScene, mResourceRequestInterface)
-                             + sizeof(ResourceRequestInterfaceStorage),
+                             + sizeof(ResourceRequestInterfaceStorage)),
                       "mSceneInputInterface overlaps mResourceRequestInterface");
-        static_assert(offsetof(OutputBuffer_PreScene, mPropInputInterface)
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mPropInputInterface)
                           >= offsetof(OutputBuffer_PreScene, mSceneInputInterface)
-                             + sizeof(SceneInputInterfaceStorage),
+                             + sizeof(SceneInputInterfaceStorage)),
                       "mPropInputInterface overlaps mSceneInputInterface");
-        static_assert(offsetof(OutputBuffer_PreScene, mVisibleOverheadSignArray)
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PreScene, mVisibleOverheadSignArray)
                           >= offsetof(OutputBuffer_PreScene, mPropInputInterface)
-                             + sizeof(PropInputInterfaceStorage),
+                             + sizeof(PropInputInterfaceStorage)),
                       "mVisibleOverheadSignArray overlaps mPropInputInterface");
-        static_assert(sizeof(SceneInputInterfaceStorage) >= 818768 - 16,
+        CGS_STATIC_ASSERT((sizeof(SceneInputInterfaceStorage) >= 818768 - 16),
                       "scene-input interface smaller than the console span -- retype regressed");
-        static_assert(sizeof(PropInputInterfaceStorage) >= 11264,
+        CGS_STATIC_ASSERT((sizeof(PropInputInterfaceStorage) >= 11264),
                       "prop-input interface smaller than the console span -- retype regressed");
         // ⭐ 2026-08-18 (wave Q keystone): VisibleOverheadSignArrayStorage is now the real
         // ::Array<BrnGui::OverheadSignScore,32>, whose miCount is private, so the old
@@ -51,9 +51,9 @@ namespace PropEntityIO
         // is preserved by pinning the element stride and the whole-array extent instead
         // (1024 elements bytes + a 4-byte count, rounded up to the array's 16-byte alignment,
         // which the alignas(16) Vector3 inside OverheadSignScore forces).
-        static_assert(sizeof(BrnGui::OverheadSignScore) == 0x20,
+        CGS_STATIC_ASSERT((sizeof(BrnGui::OverheadSignScore) == 0x20),
                       "overhead-sign element stride 0x20 (console `slwi ...,5`)");
-        static_assert(sizeof(VisibleOverheadSignArrayStorage) == 32 * 0x20 + 16,
+        CGS_STATIC_ASSERT((sizeof(VisibleOverheadSignArrayStorage) == 32 * 0x20 + 16),
                       "overhead-sign array is 32 x 0x20 elements + the count word (console buffer+832128)");
     }
 

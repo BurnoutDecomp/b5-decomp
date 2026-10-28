@@ -41,7 +41,7 @@ namespace CgsLanguage
     public:
         void Construct( const LanguageManager* lpLanguageManager );   // @ 0x82860A68
 
-        void RenderHUD( CgsDev::Debug2DImmediateRender* lpRender ) override;   // @ 0x82863930
+        void RenderHUD( CgsDev::Debug2DImmediateRender* lpRender ) ;   // @ 0x82863930
 
         // DWARF CgsLanguageManagerDebugComponent.h:77 / :80, inlined on X360 (see the banner): the
         // two localisation-QA display modes LanguageManager consults.
@@ -49,9 +49,9 @@ namespace CgsLanguage
         bool ShowLocalisedTextAsStars() const { return mbShowLocalisedTextAsStars; }
 
     protected:
-        const char* GetName() const override;   // @ 0x82860A58 -> "LanguageManager"
+        const char* GetName() const ;   // @ 0x82860A58 -> "LanguageManager"
         // ARTIST vtable 0x820CE2C0, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Gui"; }
+        const char* GetPath() const  { return "Gui"; }
 
     private:
         // Draw a "<label><value>" pair at (lfX, lrY) - label, then value just past the label's width -

@@ -23,7 +23,7 @@
 
 class Mutex;
 namespace CgsDev { namespace Assert { struct AssertData; } }
-using AssertData = CgsDev::Assert::AssertData;
+typedef CgsDev::Assert::AssertData AssertData;
 
 namespace CgsSystem
 {

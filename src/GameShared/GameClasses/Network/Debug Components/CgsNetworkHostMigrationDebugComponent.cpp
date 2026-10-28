@@ -21,7 +21,7 @@ namespace CgsNetwork
     {
         HostMigrationDebugComponent* lpHostMigrationDebugComponent =
             static_cast<HostMigrationDebugComponent*>(lpData);
-        CGS_ASSERT(lpHostMigrationDebugComponent != nullptr, "lpHostMigrationDebugComponent");
+        CGS_ASSERT(lpHostMigrationDebugComponent != 0, "lpHostMigrationDebugComponent");
 
         HostMigrationManager* lpHostMigrationManager =
             lpHostMigrationDebugComponent->mpHostMigrationManager;
@@ -52,12 +52,12 @@ namespace CgsNetwork
     {
         HostMigrationDebugComponent* lpDebugComponent =
             static_cast<HostMigrationDebugComponent*>(lpData);
-        CGS_ASSERT(lpDebugComponent != nullptr, "lpDebugComponent");
+        CGS_ASSERT(lpDebugComponent != 0, "lpDebugComponent");
 
         lpDebugComponent->mLocalPlayerID = -1;
-        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager != nullptr,
+        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager != 0,
                    "lpDebugComponent->mpHostMigrationManager");
-        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager->mpPlayerManager != nullptr,
+        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager->mpPlayerManager != 0,
                    "lpDebugComponent->mpHostMigrationManager->mpPlayerManager");
 
         const NetworkPlayerID liLocalPlayerID =

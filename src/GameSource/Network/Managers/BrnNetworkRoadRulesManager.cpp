@@ -65,7 +65,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT( false, "Unable to find a free road rules data entry\n" );
-        return nullptr;
+        return 0;
     }
 
     // -----------------------------------------------------------------------------
@@ -84,7 +84,7 @@ namespace BrnNetwork
             }
         }
 
-        return nullptr;
+        return 0;
     }
 
     // -----------------------------------------------------------------------------
@@ -98,8 +98,8 @@ namespace BrnNetwork
     {
         if ( meState != E_ROAD_RULES_STATE_BOOTING )
         {
-            CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
                         "mpNetworkModule->GetNetworkManager()" );
 
             mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( 0 );
@@ -119,8 +119,8 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetServerInfoComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetServerInfoComponent() != 0,
                     "mpServerInterface->GetServerInfoComponent()" );
 
         mpServerInterface->GetServerInfoComponent()->GetStringFromClientConfig(
@@ -128,8 +128,8 @@ namespace BrnNetwork
 
         bool lbHasResetDate = true;
 
-        CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-        CGS_ASSERT( mpNetworkModule->GetNetworkEventQueue() != nullptr,
+        CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+        CGS_ASSERT( mpNetworkModule->GetNetworkEventQueue() != 0,
                     "mpNetworkModule->GetNetworkEventQueue()" );
 
         if (lbHasResetDate)
@@ -165,10 +165,10 @@ namespace BrnNetwork
         mpServerInterface  = lpServerInterface;
         mpNetworkModule    = lpNetworkModule;
 
-        CGS_ASSERT( mpTimeManager != nullptr, "mpTimeManager" );
-        CGS_ASSERT( mpPlayerManager != nullptr, "mpPlayerManager" );
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
+        CGS_ASSERT( mpTimeManager != 0, "mpTimeManager" );
+        CGS_ASSERT( mpPlayerManager != 0, "mpPlayerManager" );
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
 
         mBufferedRoadRulesRecvQueue.Clear();
         mbDownloadedLocalScores = false;
@@ -205,8 +205,8 @@ namespace BrnNetwork
              || liPreviousState == E_ROAD_RULES_STATE_DOWNLOADING
              || liPreviousState == E_ROAD_RULES_STATE_DOWNLOADING_LOCAL )
         {
-            CGS_ASSERT( mpNetworkModule != nullptr, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != nullptr,
+            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
                         "mpNetworkModule->GetNetworkManager()" );
 
             mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( 0 );
@@ -221,8 +221,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::OnGameFinish()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
 
         if ( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() )
@@ -239,8 +239,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::OnRoundFinish()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
 
         if ( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() )
@@ -276,8 +276,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     u32 NetworkRoadRulesManager::AttemptToDownloadLocalRoadRulesHighScores()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
 
         const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();
@@ -304,8 +304,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     u32 NetworkRoadRulesManager::AttemptToDownloadRoadRulesHighScores()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
 
         const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();
@@ -332,8 +332,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     s32 NetworkRoadRulesManager::AttemptToUploadNewRoadRulesScores()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
 
         const bool lbInStartedGame =
@@ -342,7 +342,7 @@ namespace BrnNetwork
 
         if ( !lbInStartedGame )
         {
-            CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+            CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                         "mpServerInterface->GetConnectionComponent()" );
 
             if ( mpServerInterface->GetConnectionComponent()->IsLoggedIn() )
@@ -360,10 +360,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::StartDownloadingLocalRoadRulesScoresFromServer()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
                     "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
@@ -381,10 +381,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::StartDownloadingRoadRulesScoresFromServer()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
                     "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
@@ -402,10 +402,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::StartUploadingRoadRulesScoresToServer()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
                     "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
@@ -425,7 +425,7 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::HandleDownloadingRoadRulesScores()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
 
         if ( mpServerInterface->GetStatus( CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS )
              != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE )
@@ -438,9 +438,9 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
                     "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
@@ -460,7 +460,7 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::HandleDownloadingLocalRoadRulesScores()
     {
-        CGS_ASSERT( mpServerInterface != nullptr, "mpServerInterface" );
+        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
 
         if ( mpServerInterface->GetStatus( CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS )
              != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE )
@@ -473,9 +473,9 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
                     "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != nullptr,
+        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
                     "mpServerInterface->GetGameComponent()" );
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
                     "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
@@ -502,20 +502,20 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::ProcessGameActions(
         const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue )
     {
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liActionID = lpGameActionQueue->GetFirstEvent( &lpEvent, &liSize );
 
-        while ( lpEvent != nullptr )
+        while ( lpEvent != 0 )
         {
             if ( liActionID == KI_GAME_ACTION_PREPARE_FOR_MODE )
             {
-                CGS_ASSERT( lpEvent != nullptr, "lpPrepareForModeAction" );
+                CGS_ASSERT( lpEvent != 0, "lpPrepareForModeAction" );
                 mbBufferRoadRulesReceived = false;
             }
             else if ( liActionID == KI_GAME_ACTION_STOP_MODE )
             {
-                CGS_ASSERT( lpEvent != nullptr, "lpStopModeAction" );
+                CGS_ASSERT( lpEvent != 0, "lpStopModeAction" );
                 mbBufferRoadRulesReceived = true;
             }
 

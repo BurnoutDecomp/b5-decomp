@@ -51,7 +51,7 @@ namespace Camera
 
     // Per-frame vehicle info published to the director's camera. See file header for the
     // full layout / provenance.
-    struct alignas(16) VehicleInfo
+    struct CGS_ALIGN(16) VehicleInfo
     {
         BrnPhysics::Vehicle::RaceCarState mRaceCarState;            // @0x000
         Matrix44Affine                    mCrashingCentreOfMass;    // @0x460
@@ -78,7 +78,7 @@ namespace Camera
         // The recovered TU only defines the copy ctor + operator=. Declaring a copy ctor
         // suppresses the implicit default ctor, but RaceCarState (and the rest) are
         // default-constructible, so provide a defaulted one so the type stays usable.
-        VehicleInfo() = default;
+        VehicleInfo() {}
     };
 
     // ------------------------------------------------------------------------
@@ -102,7 +102,7 @@ namespace Camera
     // buffer's own mPlayerCrashInfo (@0x78E0). The console block is 40 bytes and 16-aligned (two
     // Vector3s lead it), which is where the "48-byte block" (6 x ld/std) comes from.
     // ------------------------------------------------------------------------
-    struct alignas(16) PlayerCrashInfo
+    struct CGS_ALIGN(16) PlayerCrashInfo
     {
         // BrnPlayerInfo.h:114 -- seed the record. HEADER INLINE: the X360 ledger has no
         // out-of-line symbol for it, and both console sites fold the same stores --
@@ -131,15 +131,15 @@ namespace Camera
         bool    mbHitWater;          // :131  +0x27  (Arbitrator: the "BlackFade_Water" gate)
     };
 
-    static_assert(offsetof(PlayerCrashInfo, mbWrecked) == 0x26,
+    CGS_STATIC_ASSERT((offsetof(PlayerCrashInfo, mbWrecked) == 0x26),
                   "PlayerCrashInfo::mbWrecked @ +0x26 (ArbStateCrashing::Update's read)");
-    static_assert(offsetof(PlayerCrashInfo, mbHitWater) == 0x27,
+    CGS_STATIC_ASSERT((offsetof(PlayerCrashInfo, mbHitWater) == 0x27),
                   "PlayerCrashInfo::mbHitWater @ +0x27 (Arbitrator::Update's BlackFade_Water gate)");
-    static_assert(offsetof(PlayerCrashInfo, mfSpeedMPH) == 0x20 &&
+    CGS_STATIC_ASSERT((offsetof(PlayerCrashInfo, mfSpeedMPH) == 0x20 &&
                   offsetof(PlayerCrashInfo, mbHardstopVsWall) == 0x24 &&
-                  offsetof(PlayerCrashInfo, mbHardStopVsAI) == 0x25,
+                  offsetof(PlayerCrashInfo, mbHardStopVsAI) == 0x25),
                   "PlayerCrashInfo +0x20 / +0x24 / +0x25 (BridgeWorldToDirector's stores @0x823E4DF8..)");
-    static_assert(sizeof(PlayerCrashInfo) == 48,
+    CGS_STATIC_ASSERT((sizeof(PlayerCrashInfo) == 48),
                   "PlayerCrashInfo is the 48-byte block BridgeWorldToDirector copies (6 x ld/std @0x823E4FC4)");
 }
 }

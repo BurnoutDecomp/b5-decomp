@@ -43,10 +43,10 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<void (OnlineGameMode::*)(ModeManager*)>(&OnlineGameMode::Construct)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineGameMode::*)(ModeManager*)>(&OnlineGameMode::Construct)) != 0),
               "OnlineGameMode::Construct must bind GameMode vtable slot 0");
-static_assert(sizeof(static_cast<CgsSystem::EFrameRateManagerType (OnlineGameMode::*)() const>(&OnlineGameMode::GetFrameRateType)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<CgsSystem::EFrameRateManagerType (OnlineGameMode::*)() const>(&OnlineGameMode::GetFrameRateType)) != 0),
               "OnlineGameMode::GetFrameRateType must bind GameMode vtable slot 7");
-static_assert(sizeof(static_cast<void (OnlineGameMode::*)(EGameModeEvent)>(&OnlineGameMode::SendEvent)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineGameMode::*)(EGameModeEvent)>(&OnlineGameMode::SendEvent)) != 0),
               "OnlineGameMode::SendEvent must bind GameMode vtable slot 12");
 }

@@ -167,7 +167,7 @@ namespace BrnGui
         // HEADER-STRIPPED payload, and the console reads the keyboard pointer straight off
         // its first word. Same idiom as BrnCrashNavEnterOnline_wI_07.cpp's
         // GuiOverlayCompletePayload.
-        using GuiEventKeyboardResponsePayload = GuiEventKeyboardResponse;
+        typedef GuiEventKeyboardResponse GuiEventKeyboardResponsePayload;
 
         // Event 189 ("overlay complete") payload view -- the compressed overlay id at
         // +0x00 then how the overlay was left at +0x08, both read off the stripped

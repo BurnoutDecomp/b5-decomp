@@ -126,7 +126,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpPixelProgramBinary, u32 luPixelProgramSize)
 {
     s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != nullptr)
+    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
     {
         li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
         if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
@@ -137,7 +137,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     if (li8ProgramIndex < KI8_MAX_PROGRAMS)
     {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == nullptr,
+        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
                    "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
     }
 
@@ -246,16 +246,16 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     mi8CurrentProgram = 0;
     for (s32 liSlot = 0; liSlot < KI8_MAX_PROGRAMS; ++liSlot)
     {
-        mapVertexProgramBuffer[liSlot] = nullptr;
-        mapPixelProgramBuffer[liSlot]  = nullptr;
+        mapVertexProgramBuffer[liSlot] = 0;
+        mapPixelProgramBuffer[liSlot]  = 0;
     }
 
     // Upload each supplied program pair.
     for (s32 liProgram = 0; liProgram < li8NumberPrograms; ++liProgram)
     {
-        CGS_ASSERT(lapVertexProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapVertexProgramBinary[liProgram] != 0,
                    "lapVertexProgramBinary[ li8ProgramIndex ] != NULL");
-        CGS_ASSERT(lapPixelProgramBinary[liProgram] != nullptr,
+        CGS_ASSERT(lapPixelProgramBinary[liProgram] != 0,
                    "lapPixelProgramBinary[ li8ProgramIndex ] != NULL");
         if (lauVertexProgramSize[liProgram] == 0)
         {
@@ -280,9 +280,9 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
 template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
-    CGS_ASSERT(mapVertexProgramBuffer[0] != nullptr, "mapVertexProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[0]  != nullptr, "mapPixelProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == nullptr, "mgpActiveRenderer == NULL");
+    CGS_ASSERT(mapVertexProgramBuffer[0] != 0, "mapVertexProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mapPixelProgramBuffer[0]  != 0, "mapPixelProgramBuffer[ 0 ] != NULL");
+    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
 
     // X360 stores `this + 4` (the ImRendererBase subobject pointer past this renderer's vptr).
     mgpActiveRenderer = static_cast<ImRendererBase*>(this);
@@ -331,9 +331,9 @@ void ImRenderer<V>::BeginRendering()
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
-    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
                "mapVertexProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != nullptr,
+    CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
@@ -399,15 +399,15 @@ void* ImRenderer<V>::SetTransform(const void* lpTransform)
     // BY NAME via &maShaderStateBlocks[slot] per row (the LLP64 non-invariant-offset convention) and
     // re-fetches the cursor per row -- the persistent mauTransform store (the real side-effect) is
     // faithful; the per-row block stride + cursor accumulation re-derive when the Device block layout lands.
-    void* lpResult = nullptr;
+    void* lpResult = 0;
     for (s32 liRow = 0; liRow < 4; ++liRow)
     {
-        void* lpShaderState = nullptr;
+        void* lpShaderState = 0;
         lpResult = RenderEngineDeviceBeginShaderStates(
             &this->maShaderStateBlocks[this->mi8CurrentProgram], &lpShaderState);
 
         u8* lpDst = reinterpret_cast<u8*>(lpShaderState);
-        if (lpDst != nullptr)
+        if (lpDst != 0)
         {
             const u8* lpRow = &this->mauTransform[liRow * 16];
             for (s32 liByte = 0; liByte < 16; ++liByte)
@@ -441,7 +441,7 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
 
     D3DDevice* lpDevice = reinterpret_cast<D3DDevice*>(mgpDevice);
 
-    CGS_ASSERT(lpVertices != nullptr, "lpVertices");
+    CGS_ASSERT(lpVertices != 0, "lpVertices");
 
     if ((KU_VERTEX_STRIDE * luCount) > KU_FENCE_BYTE_THRESHOLD)
     {
@@ -453,7 +453,7 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
     void* lpRing = D3DDevice_BeginVertices(lpDevice, luPrimitiveType, luCount, KU_VERTEX_STRIDE);
 
     u32* lpDst = reinterpret_cast<u32*>(lpRing);
-    if (lpDst != nullptr)
+    if (lpDst != 0)
     {
         const u8* lpSrc = reinterpret_cast<const u8*>(lpVertices);
         for (u32 luVertex = 0; luVertex < luCount; ++luVertex)

@@ -188,7 +188,7 @@ namespace CgsNetwork
             if (mpPlayerManager->GetNextRemotePlayerID(&liPlayerID))
             {
                 NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-                CGS_ASSERT(lpNetworkPlayer != nullptr, "lpNetworkPlayer");
+                CGS_ASSERT(lpNetworkPlayer != 0, "lpNetworkPlayer");
 
                 if (miAverageType != CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT)
                 {

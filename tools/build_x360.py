@@ -2,6 +2,7 @@
 """Compile reconstructed source with the original Xbox 360 SDK, without installing it."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import ctypes
 import hashlib
 import json
@@ -23,6 +24,7 @@ DEFAULT_SOURCES = [
 ]
 INCLUDES = [
     "src",
+    "src/SDKs/EATech",
     "vendor/EABase/include/Common",
     "vendor/EASTL/include",
     "vendor/EAThread/include",
@@ -37,22 +39,28 @@ INCLUDES = [
 FLAGS = [
     "/nologo", "/c", "/X", "/O2", "/Oi", "/Ob2", "/GR-", "/GS-",
     "/EHs-c-", "/Gy", "/FAcs", "/D_XBOX", "/DD_PLATFORM_X360=1",
-    "/DCGS_PLATFORM_X360=1",
+    "/DCGS_PLATFORM_X360=1", "/FItypes.hpp",
 ]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", type=Path, help="XDK root containing bin/win32/cl.exe; defaults to XEDK")
-    parser.add_argument("--source", action="append", help="Repository-relative .cpp/.c path; repeat to compile several")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--source", action="append", help="Repository-relative .cpp/.c path; repeat to compile several")
+    selection.add_argument("--all", action="store_true", help="Compile all tracked game and reconstructed middleware sources")
     parser.add_argument("--out", type=Path, default=ROOT / "build/x360/objects")
     parser.add_argument("--compiler-arg", action="append", default=[])
     parser.add_argument("--timeout", type=int, default=60, help="Seconds per translation unit")
+    parser.add_argument("--jobs", type=int, default=1, help="Concurrent compiler processes")
+    parser.add_argument("--quiet", action="store_true", help="Print progress totals instead of per-file diagnostics")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("The SDK's Windows compiler must run on Windows")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    if args.jobs <= 0:
+        parser.error("--jobs must be positive")
 
     sdk = args.sdk or (Path(os.environ["XEDK"]) if os.environ.get("XEDK") else None)
     if sdk is None:
@@ -62,8 +70,16 @@ def main():
     if not compiler.is_file() or not (sdk / "include/xbox/xtl.h").is_file():
         parser.error("SDK must contain bin/win32/cl.exe and include/xbox/xtl.h")
 
+    names = args.source or DEFAULT_SOURCES
+    if args.all:
+        names = subprocess.check_output(
+            ["git", "ls-files", "*.cpp", "*.c"], cwd=ROOT, text=True).splitlines()
+        names = [name for name in names if name.startswith(("src/", "vendor/"))
+                 and not any(part.lower() == "pc" for part in Path(name).parts)]
+        # PS3-named paths can contain ARTIST functions attributed through DecFIGS.
+        # Compile them too; filenames alone are not platform evidence.
     sources = []
-    for name in args.source or DEFAULT_SOURCES:
+    for name in dict.fromkeys(names):
         source = (ROOT / name).resolve()
         try:
             relative = source.relative_to(ROOT)
@@ -89,9 +105,11 @@ def main():
     includes = [ROOT / name for name in INCLUDES if (ROOT / name).is_dir()]
     includes.append(sdk / "include/xbox")
     flags = FLAGS + ["/I" + str(path) for path in includes] + args.compiler_arg
-    report = {"stage": "compile-only", "target": "xbox360-ppc-be", "sdk": str(sdk), "results": []}
+    report = {"stage": "compile-only", "state": "running", "target": "xbox360-ppc-be",
+              "sdk": str(sdk), "requested": len(sources), "results": []}
+    report_path = output / "compile-results.json"
 
-    for source in sources:
+    def compile_source(source):
         key = source.stem + "-" + hashlib.sha256(source.as_posix().lower().encode()).hexdigest()[:8]
         obj, listing, log = (output / (key + ext) for ext in (".obj", ".asm", ".log"))
         obj.unlink(missing_ok=True)
@@ -113,18 +131,32 @@ def main():
         if returncode == 0 and not passed:
             diagnostics += "Expected a PowerPC big-endian COFF object (machine 0x01F2) and assembly listing\n"
         log.write_text(diagnostics, encoding="utf-8")
-        report["results"].append({"source": source.as_posix(), "passed": passed,
-                                  "returncode": returncode, "machine": machine,
-                                  "object": str(obj), "assembly": str(listing), "log": str(log),
-                                  "command": command})
-        print(("PASS " if passed else "FAIL ") + source.as_posix(), flush=True)
-        if not passed:
-            print("\n".join(diagnostics.splitlines()[:14]), flush=True)
+        return {"source": source.as_posix(), "passed": passed,
+                "returncode": returncode, "machine": machine,
+                "object": str(obj), "assembly": str(listing), "log": str(log),
+                "command": command}, diagnostics
 
-    report["passed"] = sum(row["passed"] for row in report["results"])
-    report["failed"] = len(sources) - report["passed"]
-    report_path = output / "compile-results.json"
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    def save_report():
+        report["passed"] = sum(row["passed"] for row in report["results"])
+        report["failed"] = len(report["results"]) - report["passed"]
+        temporary = report_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(report_path)
+
+    save_report()
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        for row, diagnostics in pool.map(compile_source, sources):
+            report["results"].append(row)
+            if not args.quiet:
+                print(("PASS " if row["passed"] else "FAIL ") + row["source"], flush=True)
+                if not row["passed"]:
+                    print("\n".join(diagnostics.splitlines()[:14]), flush=True)
+            if len(report["results"]) % 100 == 0:
+                save_report()
+                print("%d/%d compiled: %d passed, %d failed" %
+                      (len(report["results"]), len(sources), report["passed"], report["failed"]), flush=True)
+    report["state"] = "complete"
+    save_report()
     print("Native objects: %d passed, %d failed; %s" % (report["passed"], report["failed"], report_path))
     return 0 if report["failed"] == 0 else 1
 

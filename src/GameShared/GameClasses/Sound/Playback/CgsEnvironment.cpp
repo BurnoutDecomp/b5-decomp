@@ -202,7 +202,7 @@ Handle<Factory> Environment::GetFactory(Name aName)
         }
     }
 
-    return Handle<Factory>(nullptr);
+    return Handle<Factory>(0);
 }
 
 // @ 0x826BFAF0. Look a voice up by ident. The X360 `*(voice + 0x0C)` is
@@ -228,7 +228,7 @@ Handle<Voice> Environment::GetVoice(u32 au32Id)
             }
         }
     }
-    return Handle<Voice>(nullptr);
+    return Handle<Voice>(0);
 }
 
 // @ 0x826BFE50. Walk the voice table for the tagged factory's player voice whose
@@ -249,7 +249,7 @@ Handle<Voice> Environment::GetRwacVoiceByPlugin(
 {
     if (mu32VoiceCount == 0)
     {
-        return Handle<Voice>(nullptr);
+        return Handle<Voice>(0);
     }
 
     for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
@@ -292,7 +292,7 @@ Handle<Voice> Environment::GetRwacVoiceByPlugin(
         lpVoice->Release();
     }
 
-    return Handle<Voice>(nullptr);
+    return Handle<Voice>(0);
 }
 
 // @ 0x82680F50. Start the DAC plug-in: lock the audio-core System, fire the start

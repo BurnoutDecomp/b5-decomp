@@ -27,5 +27,5 @@ struct AptRenderItemLevel : public AptRenderItem
     // Clone copy-ctor: base clone copy + the level render-type flag.
     AptRenderItemLevel(const AptRenderItemLevel* pSource, int nCreatedOnTick, bool bCopyExtended);
 
-    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;   // @0x82AEC7B0
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) ;   // @0x82AEC7B0
 };

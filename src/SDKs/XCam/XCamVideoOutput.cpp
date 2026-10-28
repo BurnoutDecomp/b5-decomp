@@ -55,19 +55,19 @@ void CVideoOutputBase::Shutdown()
     if (mpDevice)
     {
         D3DDevice_Release(mpDevice);
-        mpDevice = nullptr;
+        mpDevice = 0;
 
-        if (mpVertexDeclaration) { D3DResource_Release(mpVertexDeclaration); mpVertexDeclaration = nullptr; }
-        if (mpVertexShader)      { D3DResource_Release(mpVertexShader);      mpVertexShader      = nullptr; }
-        if (mpResource0C)        { D3DResource_Release(mpResource0C);        mpResource0C        = nullptr; }
-        if (mpVertexBuffer)      { D3DResource_Release(mpVertexBuffer);      mpVertexBuffer      = nullptr; }
+        if (mpVertexDeclaration) { D3DResource_Release(mpVertexDeclaration); mpVertexDeclaration = 0; }
+        if (mpVertexShader)      { D3DResource_Release(mpVertexShader);      mpVertexShader      = 0; }
+        if (mpResource0C)        { D3DResource_Release(mpResource0C);        mpResource0C        = 0; }
+        if (mpVertexBuffer)      { D3DResource_Release(mpVertexBuffer);      mpVertexBuffer      = 0; }
 
         for (int i = 0; i < 3; ++i)
         {
             if (mpBufferResource[i])
             {
                 D3DResource_Release(mpBufferResource[i]);
-                mpBufferResource[i] = nullptr;
+                mpBufferResource[i] = 0;
             }
         }
     }
@@ -79,7 +79,7 @@ void CVideoOutputBase::Shutdown()
             if (mpBufferResource[i])
             {
                 XMemFree(mpBufferResource[i], KU_XCAM_XMEM_FREE_ATTRIBUTES);
-                mpBufferResource[i] = nullptr;
+                mpBufferResource[i] = 0;
             }
         }
     }
@@ -114,7 +114,7 @@ void CVideoOutputBase::UpdateVertexBuffer()
     u32 uOffsetInBytes = 0;
     u32 uStride        = 0;
     D3DVertexBuffer* pPrevStream = D3DDevice_GetStreamSource(mpDevice, 0, &uOffsetInBytes, &uStride);
-    D3DDevice_SetStreamSource(mpDevice, 0, nullptr, 0, 0, 1);
+    D3DDevice_SetStreamSource(mpDevice, 0, 0, 0, 0, 1);
 
     void* pLocked = D3DVertexBuffer_Lock(mpVertexBuffer, 0, 0, 0);
     memcpy(pLocked, mVertices, 80);

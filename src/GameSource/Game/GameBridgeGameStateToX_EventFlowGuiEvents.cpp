@@ -181,7 +181,7 @@ namespace
 
         s32 GetEventType() const { return 93; }
     };
-    static_assert(sizeof(PrepareForModeStartWire93) == 152,
+    CGS_STATIC_ASSERT((sizeof(PrepareForModeStartWire93) == 152),
                   "X360 AddGuiEvent<GuiEventPrepareForModeStart> posts 152 bytes (id 93)");
 
     // id 164 size 1 -- AddGuiEvent<CgsGui::GuiEvent<164>> @0x823D2B68 (`li r6,1` / `li r5,0xA4`
@@ -214,13 +214,13 @@ namespace
         explicit GameModeStartedWire237(s32 liGameMode)
             : CgsGui::GuiEvent<237>(4, 12), miGameMode(liGameMode) {}
     };
-    static_assert(sizeof(GameModeStartedWire237) == 16, "id 237 size 16");
+    CGS_STATIC_ASSERT((sizeof(GameModeStartedWire237) == 16), "id 237 size 16");
 
     struct PreRaceFlyByEndWire164    {
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 164; }
     };
-    static_assert(sizeof(PreRaceFlyByEndWire164) == 1, "id 164 size 1");
+    CGS_STATIC_ASSERT((sizeof(PreRaceFlyByEndWire164) == 1), "id 164 size 1");
 
     // id 269 size 4 -- AddGuiEvent<BrnGui::GuiEventNetworkSplashEvent> @0x823D2C20
     // (`AddEvent(q, ev, 269, 4)`). Store map: one word, `stw r19` (0) @0x823EB344 on the first post
@@ -232,7 +232,7 @@ namespace
         s32 miSplashState;                     // +0x00
         s32 GetEventType() const { return 269; }
     };
-    static_assert(sizeof(NetworkSplashWire269) == 4, "id 269 size 4");
+    CGS_STATIC_ASSERT((sizeof(NetworkSplashWire269) == 4), "id 269 size 4");
 
     // id 279 size 2 -- AddGuiEvent<BrnGui::GuiEventNetworkShowFreeBurnIntro> @0x823D2AB0
     // (`AddEvent(q, ev, 279, 2)`). Store map: `addi r4, r1, var_3568` is the record base and the
@@ -243,7 +243,7 @@ namespace
         u8 maZero[2];                          // +0x00..+0x01
         s32 GetEventType() const { return 279; }
     };
-    static_assert(sizeof(NetworkShowFreeBurnIntroWire279) == 2, "id 279 size 2");
+    CGS_STATIC_ASSERT((sizeof(NetworkShowFreeBurnIntroWire279) == 2), "id 279 size 2");
 
     // id 234 size 4 -- AddGuiEvent<GuiEventUpdateEventCountdown> @0x823D25A8.
     // Store map: `lwz r11,0(r31); stw r11, var_35D8` @0x823EAD50.
@@ -252,7 +252,7 @@ namespace
         s32 miCountdownDisplay;                // +0x00
         s32 GetEventType() const { return 234; }
     };
-    static_assert(sizeof(UpdateEventCountdownWire234) == 4,
+    CGS_STATIC_ASSERT((sizeof(UpdateEventCountdownWire234) == 4),
                   "X360 AddGuiEvent<GuiEventUpdateEventCountdown> posts 4 bytes (id 234)");
 
     // id 81 size 4 -- AddGuiEvent<GuiCarSelectStartEvent> @0x823D1690, whose tail is literally
@@ -266,7 +266,7 @@ namespace
         s32 miCarSelectFlow;                   // +0x00
         s32 GetEventType() const { return 81; }
     };
-    static_assert(sizeof(CarSelectStartWire81) == 4,
+    CGS_STATIC_ASSERT((sizeof(CarSelectStartWire81) == 4),
                   "X360 AddGuiEvent<GuiCarSelectStartEvent> posts 4 bytes (id 81)");
 
     // id 166 size 8 -- AddGuiEvent<GuiEventEnterEventStartLocation> @0x823D1E78.
@@ -279,7 +279,7 @@ namespace
 
         s32 GetEventType() const { return 166; }
     };
-    static_assert(sizeof(EnterEventStartLocationWire166) == 8,
+    CGS_STATIC_ASSERT((sizeof(EnterEventStartLocationWire166) == 8),
                   "X360 AddGuiEvent<GuiEventEnterEventStartLocation> posts 8 bytes (id 166)");
 
     // id 321 size 1 -- AddGuiEvent<GuiEventFinishedModeResults> @0x823D24F0.
@@ -291,7 +291,7 @@ namespace
         u8 mu8Unused;                          // +0x00
         s32 GetEventType() const { return 321; }
     };
-    static_assert(sizeof(FinishedModeResultsWire321) == 1,
+    CGS_STATIC_ASSERT((sizeof(FinishedModeResultsWire321) == 1),
                   "X360 AddGuiEvent<GuiEventFinishedModeResults> posts 1 byte (id 321)");
 
     // id 322 size 12 -- AddGuiEvent<GuiEventStopMode> @0x823D2380.
@@ -307,7 +307,7 @@ namespace
 
         s32 GetEventType() const { return 322; }
     };
-    static_assert(sizeof(StopModeWire322) == 12,
+    CGS_STATIC_ASSERT((sizeof(StopModeWire322) == 12),
                   "X360 AddGuiEvent<GuiEventStopMode> posts 12 bytes (id 322)");
 
     // id 307 size 8 -- AddGuiEvent<GuiEventMedalUpdate> @0x823D1A28.
@@ -321,7 +321,7 @@ namespace
 
         s32 GetEventType() const { return 307; }
     };
-    static_assert(sizeof(MedalUpdateWire307) == 8,
+    CGS_STATIC_ASSERT((sizeof(MedalUpdateWire307) == 8),
                   "X360 AddGuiEvent<GuiEventMedalUpdate> posts 8 bytes (id 307)");
 
     // id 320 size 1 -- AddGuiEvent<GuiEventTriggerOnlinePostEvent> @0x823D1F30.
@@ -330,7 +330,7 @@ namespace
         u8 mu8Flag;                            // +0x00  action+0xE1
         s32 GetEventType() const { return 320; }
     };
-    static_assert(sizeof(TriggerOnlinePostEventWire320) == 1, "id 320 size 1");
+    CGS_STATIC_ASSERT((sizeof(TriggerOnlinePostEventWire320) == 1), "id 320 size 1");
 
     // id 291 size 1 -- AddGuiEvent<CgsGui::GuiEvent<291>> @0x823D1FE8 (`AddEvent(q, ev, 291, 1)`).
     // The OFFLINE post-event request. The mangled name carries no BrnGui type name (the console
@@ -341,7 +341,7 @@ namespace
         u8 mu8Unused;                          // +0x00
         s32 GetEventType() const { return 291; }
     };
-    static_assert(sizeof(PostEventRequestWire291) == 1, "id 291 size 1");
+    CGS_STATIC_ASSERT((sizeof(PostEventRequestWire291) == 1), "id 291 size 1");
 
     // id 356 size 1 -- AddGuiEvent<GuiAutosaveRequestEvent> @0x823D03E0. Posted with r19 == 0.
     struct AutosaveRequestWire356
@@ -349,7 +349,7 @@ namespace
         u8 mu8Zero;                            // +0x00
         s32 GetEventType() const { return 356; }
     };
-    static_assert(sizeof(AutosaveRequestWire356) == 1, "id 356 size 1");
+    CGS_STATIC_ASSERT((sizeof(AutosaveRequestWire356) == 1), "id 356 size 1");
 
     // id 96 size 1 -- AddGuiEvent<GuiSetEasyDriveNotAllowedEvent> @0x823D2158. Posted with r19 == 0.
     struct SetEasyDriveNotAllowedWire96
@@ -357,7 +357,7 @@ namespace
         u8 mu8Zero;                            // +0x00
         s32 GetEventType() const { return 96; }
     };
-    static_assert(sizeof(SetEasyDriveNotAllowedWire96) == 1, "id 96 size 1");
+    CGS_STATIC_ASSERT((sizeof(SetEasyDriveNotAllowedWire96) == 1), "id 96 size 1");
 
     // id 536 size 2 -- AddGuiEvent<GuiEventTickerClearMessages> @0x823D2718.
     // The case-23 arm writes both bytes 0 (`stb r19, var_3564` / `stb r19, var_3563`).
@@ -366,7 +366,7 @@ namespace
         u8 maZero[2];                          // +0x00..+0x01
         s32 GetEventType() const { return 536; }
     };
-    static_assert(sizeof(TickerClearMessagesWire536) == 2, "id 536 size 2");
+    CGS_STATIC_ASSERT((sizeof(TickerClearMessagesWire536) == 2), "id 536 size 2");
 
     // id 289 size 192 -- AddGuiEvent<GuiEventOfflinePostEvent> @0x823D20A0.
     // Store map: the case-37 arm's var_2D10-based frame @0x823EAA74..0x823EAB3C. Every member
@@ -401,7 +401,7 @@ namespace
 
         s32 GetEventType() const { return 289; }
     };
-    static_assert(sizeof(OfflinePostEventWire289) == 192,
+    CGS_STATIC_ASSERT((sizeof(OfflinePostEventWire289) == 192),
                   "X360 AddGuiEvent<GuiEventOfflinePostEvent> posts 192 bytes (id 289)");
 
     // =====================================================================================
@@ -425,7 +425,7 @@ namespace
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 168; }
     };
-    static_assert(sizeof(PlayerReachedRoadRageTargetWire168) == 1,
+    CGS_STATIC_ASSERT((sizeof(PlayerReachedRoadRageTargetWire168) == 1),
                   "X360 AddGuiEvent<GuiEventPlayerReachedRoadRageTarget> posts 1 byte (id 168)");
 
     // id 427 size 4 -- AddGuiEvent<GuiEventRoadRageTimeExtended> @0x823D64E8
@@ -437,7 +437,7 @@ namespace
         u32 muExtensiontime;                   // +0x00  action+0x00
         s32 GetEventType() const { return 427; }
     };
-    static_assert(sizeof(RoadRageTimeExtendedWire427) == 4,
+    CGS_STATIC_ASSERT((sizeof(RoadRageTimeExtendedWire427) == 4),
                   "X360 AddGuiEvent<GuiEventRoadRageTimeExtended> posts 4 bytes (id 427)");
 
     // id 348 size 8 -- AddGuiEvent<GuiEventRoadRagePlayerDamage> @0x823D2210
@@ -460,7 +460,7 @@ namespace
 
         s32 GetEventType() const { return 348; }
     };
-    static_assert(sizeof(RoadRagePlayerDamageWire348) == 8,
+    CGS_STATIC_ASSERT((sizeof(RoadRagePlayerDamageWire348) == 8),
                   "X360 AddGuiEvent<GuiEventRoadRagePlayerDamage> posts 8 bytes (id 348)");
 
     // [stale as of 2026-09-02, verify V2: BrnGameActions.h NOW defines E_ACTION_ROAD_RAGE_PLAYER_DAMAGE (205),
@@ -483,13 +483,13 @@ namespace
         u8  mbPlayerTotalled;                  // +0x05
         u8  maPad06[2];                        // +0x06
     };
-    static_assert(sizeof(RoadRagePlayerDamageActionMirror) == 8, "X360 action 205 size 8");
+    CGS_STATIC_ASSERT((sizeof(RoadRagePlayerDamageActionMirror) == 8), "X360 action 205 size 8");
 
     struct HUDMessageRoadRageTimeExtensionActionMirror
     {
         u32 muExtensionTime;                   // +0x00
     };
-    static_assert(sizeof(HUDMessageRoadRageTimeExtensionActionMirror) == 4, "X360 action 255 size 4");
+    CGS_STATIC_ASSERT((sizeof(HUDMessageRoadRageTimeExtensionActionMirror) == 4), "X360 action 255 size 4");
 
     // =====================================================================================
     // [race wave, lane BR] RACE / BURNING ROUTE / POST-EVENT ARMS -- wire records.
@@ -507,7 +507,7 @@ namespace
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 153; }
     };
-    static_assert(sizeof(WrongWayWire153) == 1, "id 153 size 1");
+    CGS_STATIC_ASSERT((sizeof(WrongWayWire153) == 1), "id 153 size 1");
 
     // id 550 size 1 -- AddGuiEvent<GuiEventTimeUp> (immediates 0x226 / 1). The case-262
     // arm copies the action's one byte (a byte load at +0x00, a byte store). The consumer
@@ -519,7 +519,7 @@ namespace
         u8 mbSucceeded;                        // +0x00  action+0x00
         s32 GetEventType() const { return 550; }
     };
-    static_assert(sizeof(TimeUpWire550) == 1, "id 550 size 1");
+    CGS_STATIC_ASSERT((sizeof(TimeUpWire550) == 1), "id 550 size 1");
 
     // id 305 size 4 -- AddGuiEvent<GuiEventAllOfTypeComplete> (immediates 0x131 / 4).
     // The case-206 arm copies one word (a word load at +0x00, a word store); the consumer
@@ -529,7 +529,7 @@ namespace
         s32 meGameEventType;                   // +0x00  AllEventTypeWonAction::leGameEventType
         s32 GetEventType() const { return 305; }
     };
-    static_assert(sizeof(AllOfTypeCompleteWire305) == 4, "id 305 size 4");
+    CGS_STATIC_ASSERT((sizeof(AllOfTypeCompleteWire305) == 4), "id 305 size 4");
 
     // id 306 size 1 -- AddGuiEvent<GuiEventAllOfRivalsShutdown> (immediates 0x132 / 1).
     // The case-210 arm posts a stack byte it never stores to; the consumer
@@ -539,7 +539,7 @@ namespace
         u8 mu8Unused;                          // +0x00  never written by the arm
         s32 GetEventType() const { return 306; }
     };
-    static_assert(sizeof(AllOfRivalsShutdownWire306) == 1, "id 306 size 1");
+    CGS_STATIC_ASSERT((sizeof(AllOfRivalsShutdownWire306) == 1), "id 306 size 1");
 
     // ids 309 / 310 size 2 -- AddGuiEvent<GuiEventGameCompleted> (immediates 0x135 / 2)
     // and AddGuiEvent<GuiEventGameCompletedOnline> (immediates 0x136 / 2). The case-208
@@ -552,7 +552,7 @@ namespace
         u8 mbCompletionAlreadyRecorded;        // +0x01  action+0x05
         s32 GetEventType() const { return 309; }
     };
-    static_assert(sizeof(GameCompletedWire309) == 2, "id 309 size 2");
+    CGS_STATIC_ASSERT((sizeof(GameCompletedWire309) == 2), "id 309 size 2");
 
     struct GameCompletedOnlineWire310
     {
@@ -560,7 +560,7 @@ namespace
         u8 mbCompletionAlreadyRecorded;        // +0x01  action+0x05
         s32 GetEventType() const { return 310; }
     };
-    static_assert(sizeof(GameCompletedOnlineWire310) == 2, "id 310 size 2");
+    CGS_STATIC_ASSERT((sizeof(GameCompletedOnlineWire310) == 2), "id 310 size 2");
 
     // ---------------------------------------------------------------------------------------
     // GuiEventRunFsm posts through the raw queue (24-byte controller record, not a PushGuiEvent
@@ -1362,7 +1362,7 @@ namespace
         case 274:
         {
             struct RoadLeave { CgsID id; u8 residue[8]; s32 GetEventType() const { return 340; } } event = {};
-            static_assert(sizeof(RoadLeave) == 16, "ARTIST GUI road-leave payload");
+            CGS_STATIC_ASSERT((sizeof(RoadLeave) == 16), "ARTIST GUI road-leave payload");
             event.id = *reinterpret_cast<const CgsID*>(lpAction);
             PushGuiEvent(event, lpGuiInput);
             return true;

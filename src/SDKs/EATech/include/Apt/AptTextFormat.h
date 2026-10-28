@@ -144,7 +144,7 @@ struct AptTextFormat : public AptObject
     // Apply a recognised TextFormat property to the embedded record.
     virtual bool objectMemberSet(AptValue* const pThis,
                                  const AptNativeString* const pName,
-                                 AptValue* const pValue) override;
+                                 AptValue* const pValue) ;
 
     TextFormat mFormat;   // +0x20 (X360) -- the embedded format record
 };

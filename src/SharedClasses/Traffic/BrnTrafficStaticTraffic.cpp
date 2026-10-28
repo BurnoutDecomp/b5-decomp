@@ -32,26 +32,26 @@ namespace BrnTraffic
     // ------------------------------------------------------------------------
     void StaticTrafficVehicle::_AssertLayout()
     {
-        static_assert(sizeof(Matrix44Affine) == 64, "Matrix44Affine must be four 16-byte rows");
-        static_assert(alignof(Matrix44Affine) == 16, "Matrix44Affine must be 16-byte aligned");
+        CGS_STATIC_ASSERT((sizeof(Matrix44Affine) == 64), "Matrix44Affine must be four 16-byte rows");
+        CGS_STATIC_ASSERT((__alignof(Matrix44Affine) == 16), "Matrix44Affine must be 16-byte aligned");
 
-        static_assert(offsetof(StaticTrafficVehicle, mTransform)         == 0x00,
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficVehicle, mTransform)         == 0x00),
                       "StaticTrafficVehicle::mTransform @+0x00");
-        static_assert(offsetof(StaticTrafficVehicle, mFlowTypeID)        == 0x40,
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficVehicle, mFlowTypeID)        == 0x40),
                       "StaticTrafficVehicle::mFlowTypeID @+0x40 (FillNewHull *(rec+64))");
-        static_assert(offsetof(StaticTrafficVehicle, mExistsAtAllChance) == 0x42,
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficVehicle, mExistsAtAllChance) == 0x42),
                       "StaticTrafficVehicle::mExistsAtAllChance @+0x42 (FillNewHull *(rec+66))");
-        static_assert(offsetof(StaticTrafficVehicle, muFlags)            == 0x43,
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficVehicle, muFlags)            == 0x43),
                       "StaticTrafficVehicle::muFlags @+0x43 (FillNewHull *(rec+67))");
 
         // The proximity cull loads the translation row at +0x30 out of the record.
-        static_assert(offsetof(StaticTrafficVehicle, mTransform) + 0x30 == 0x30,
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficVehicle, mTransform) + 0x30 == 0x30),
                       "StaticTrafficVehicle transform translation row @+0x30 (FillNewHull lvx +48)");
 
         // The stride the whole array walk depends on.
-        static_assert(sizeof(StaticTrafficVehicle) == 80,
+        CGS_STATIC_ASSERT((sizeof(StaticTrafficVehicle) == 80),
                       "StaticTrafficVehicle stride 80 (Hull::GetStaticVehicle @0x82705C90)");
-        static_assert(alignof(StaticTrafficVehicle) == 16,
+        CGS_STATIC_ASSERT((__alignof(StaticTrafficVehicle) == 16),
                       "StaticTrafficVehicle inherits the transform's 16-byte alignment");
     }
 }

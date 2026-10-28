@@ -90,31 +90,31 @@ namespace
         s32 GetEventType() const { return 22; }
     };
     typedef CgsGui::GuiEventWrapper<GuiEventSoundTriggerPayload22, 40> GuiEventSoundTriggerRecord22;
-    static_assert(sizeof(GuiEventSoundTriggerPayload22) == 100,
+    CGS_STATIC_ASSERT((sizeof(GuiEventSoundTriggerPayload22) == 100),
                   "ARTIST event 22 copies three 32-byte strings and the layer word");
-    static_assert(offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96,
+    CGS_STATIC_ASSERT((offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96),
                   "ARTIST GuiModule::Update reads the event-22 layer at payload +96");
-    static_assert(offsetof(GuiEventSoundTriggerRecord22, mOutEvent) == 12 &&
-                  sizeof(GuiEventSoundTriggerRecord22) == 112,
+    CGS_STATIC_ASSERT((offsetof(GuiEventSoundTriggerRecord22, mOutEvent) == 12 &&
+                  sizeof(GuiEventSoundTriggerRecord22) == 112),
                   "ARTIST event-22 channel-40 record is {100,22,12}+100");
-    using GuiEventRoadRuleFailRecord40 = CgsGui::GuiEventWrapper<GuiEventRoadRuleFail, 40>;
-    static_assert(sizeof(GuiEventRoadRuleFail) == 48, "ARTIST event 337 payload is 48 bytes");
-    static_assert(alignof(GuiEventRoadRuleFail) == 8, "ARTIST event 337 payload is 8-aligned");
-    static_assert(offsetof(GuiEventRoadRuleFail, mRoadID) == 0 &&
+    typedef CgsGui::GuiEventWrapper<GuiEventRoadRuleFail, 40> GuiEventRoadRuleFailRecord40;
+    CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleFail) == 48), "ARTIST event 337 payload is 48 bytes");
+    CGS_STATIC_ASSERT((__alignof(GuiEventRoadRuleFail) == 8), "ARTIST event 337 payload is 8-aligned");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleFail, mRoadID) == 0 &&
                   offsetof(GuiEventRoadRuleFail, meRuleType) == 8 &&
                   offsetof(GuiEventRoadRuleFail, macCurrentRulerName) == 12 &&
                   offsetof(GuiEventRoadRuleFail, mbRoadRuledByLocalPlayer) == 44 &&
-                  offsetof(GuiEventRoadRuleFail, mbRoadRuledByAI) == 45,
+                  offsetof(GuiEventRoadRuleFail, mbRoadRuledByAI) == 45),
                   "event 337 payload fields retain ARTIST/DWARF offsets");
-    static_assert(offsetof(GuiEventRoadRuleFailRecord40, mOutEvent) == 16 &&
-                  sizeof(GuiEventRoadRuleFailRecord40) == 64,
+    CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleFailRecord40, mOutEvent) == 16 &&
+                  sizeof(GuiEventRoadRuleFailRecord40) == 64),
                   "ARTIST event 337 channel-40 record is {48,337,16}+48");
-    using GuiEventRequestTrainingRecord40 = CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40>;
-    static_assert(sizeof(GuiEventRequestTraining) == 4 &&
-                  offsetof(GuiEventRequestTraining, meTrainingType) == 0,
+    typedef CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40> GuiEventRequestTrainingRecord40;
+    CGS_STATIC_ASSERT((sizeof(GuiEventRequestTraining) == 4 &&
+                  offsetof(GuiEventRequestTraining, meTrainingType) == 0),
                   "ARTIST event 572 payload is one word at offset 0");
-    static_assert(offsetof(GuiEventRequestTrainingRecord40, mOutEvent) == 12 &&
-                  sizeof(GuiEventRequestTrainingRecord40) == 16,
+    CGS_STATIC_ASSERT((offsetof(GuiEventRequestTrainingRecord40, mOutEvent) == 12 &&
+                  sizeof(GuiEventRequestTrainingRecord40) == 16),
                   "ARTIST event 572 channel-40 record is {4,572,12}+4");
 
     // BrnRoadRuleComponent.h:277 (KI_MAX_ROAD_INDEX) -- the miRoadIndex bound the

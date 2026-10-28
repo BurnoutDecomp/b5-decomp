@@ -30,7 +30,7 @@ struct AptRenderItemSprite : public AptRenderItem
     // render-type flag (shared by AptRenderItemAnimation/Button's Clone).
     AptRenderItemSprite(const AptRenderItemSprite* pSource, int nCreatedOnTick, bool bCopyExtended);
 
-    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;                         // @0x82AEC890
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) ;                         // @0x82AEC890
     virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;          // @0x7E49AC (empty)
     virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;  // @0x7F249C
     virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;   // @0x7ECAD0

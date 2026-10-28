@@ -51,7 +51,7 @@ struct SPLICE_SampleRef
     u8  maPad2A[2];      // +0x2A  natural tail padding; sizeof == 44
 };
 
-static_assert( sizeof(SPLICE_SampleRef) == 44,
+CGS_STATIC_ASSERT(( sizeof(SPLICE_SampleRef) == 44),
                "serialized splice sample references must retain their 44-byte stride" );
 
 // SpliceObjects.h:16 (DWARF). One playing splice sample (owns a single RWAC voice).

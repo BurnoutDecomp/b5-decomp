@@ -30,7 +30,7 @@
 
 // @0x82B00DC8
 AptCIHNone::AptCIHNone()
-    : AptCIH(/*pCharacter*/ nullptr, /*pParent*/ nullptr)
+    : AptCIH(/*pCharacter*/ 0, /*pParent*/ 0)
 {
     // Low-7 AptValue flag set (the X360 `bitfield = bitfield & ~0x7F | 0x25`),
     // written by named field. mbIsDefined (bit 4) is cleared here and re-set just

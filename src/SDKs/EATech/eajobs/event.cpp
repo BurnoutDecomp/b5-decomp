@@ -23,14 +23,14 @@ namespace EA
 {
 namespace Jobs
 {
-    Event::Event() : mType(EVENT_TYPE_NONE), mDecrementerLocation(nullptr)
+    Event::Event() : mType(EVENT_TYPE_NONE), mDecrementerLocation(0)
     {
-        mWritePtrValue=nullptr; mWritePtrLocation=nullptr;
+        mWritePtrValue=0; mWritePtrLocation=0;
     }
     Event::Event(Type type,u32 value,u32* location,u32* counter)
         : mType(type),mDecrementerLocation(counter)
     {
-        mWritePtrValue=nullptr; mWriteValue=value; mWriteLocation=location;
+        mWritePtrValue=0; mWriteValue=value; mWriteLocation=location;
     }
     Event::Event(Type type,void (&callback)(void*),void* context,u32* counter)
         : mType(type),mDecrementerLocation(counter)

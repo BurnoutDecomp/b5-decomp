@@ -82,10 +82,10 @@ void NetMessageData::Construct()
 {
     meType                  = -1;
     miLength                = -1;
-    mpMsg                   = nullptr;
-    mpfMsgArrivedCallback   = nullptr;
-    mpfMsgDeliveredCallback = nullptr;
-    mpCallbackUserData      = nullptr;
+    mpMsg                   = 0;
+    mpfMsgArrivedCallback   = 0;
+    mpfMsgDeliveredCallback = 0;
+    mpCallbackUserData      = 0;
     miValidCountdown        = -1;
     mu16Frame               = 0xFFFF;   // KU16_INVALID_FRAME
 }
@@ -96,9 +96,9 @@ void NetMessageData::Prepare(s32 leType, s32 liLength, Message* lpMsg)
     meType                  = leType;
     miLength                = liLength;
     mpMsg                   = lpMsg;
-    mpfMsgArrivedCallback   = nullptr;
-    mpfMsgDeliveredCallback = nullptr;
-    mpCallbackUserData      = nullptr;
+    mpfMsgArrivedCallback   = 0;
+    mpfMsgDeliveredCallback = 0;
+    mpCallbackUserData      = 0;
     mu16Frame               = 0xFFFF;   // KU16_INVALID_FRAME
 }
 
@@ -115,7 +115,7 @@ void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams
     CGS_ASSERT(lpConstructParams, "lpConstructParams");
 
     mPlayerID        = KI_INVALID_PLAYER_ID;          // +0x08 = -1
-    mpNetworkAdapter = nullptr;                        // +0x04 = 0
+    mpNetworkAdapter = 0;                        // +0x04 = 0
 
     CGS_ASSERT(lpConstructParams->mpPlayerManager, "mpPlayerManager");
     mpPlayerManager  = lpConstructParams->mpPlayerManager;   // +0x0C
@@ -179,7 +179,7 @@ Message* NetworkPlayer::GetRegisteredSendMessage(s32 leType)
     *CgsDev::Log::gpDebugPrint << "Failed to find registered message type "
                                << CgsDev::E_PRINTMODE_HEXONCE << leType << "\n";
     CGS_ASSERT(false, "Failed to find registered message type");
-    return nullptr;
+    return 0;
 }
 
 // ---- GetRegisteredRecvMessage @ 0x82872D78 -------------------------------------------
@@ -196,7 +196,7 @@ Message* NetworkPlayer::GetRegisteredRecvMessage(s32 leType)
     *CgsDev::Log::gpDebugPrint << "Failed to find registered message type "
                                << CgsDev::E_PRINTMODE_HEXONCE << leType << "\n";
     CGS_ASSERT(false, "Failed to find registered message type");
-    return nullptr;
+    return 0;
 }
 
 // ---- RegisterMessageType @ 0x828725C0 ------------------------------------------------
@@ -351,7 +351,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
 
     // Reset identity / connection state (same sentinel set Construct writes).
     mPlayerID        = KI_INVALID_PLAYER_ID;
-    mpNetworkAdapter = nullptr;
+    mpNetworkAdapter = 0;
     mConnectionData.Clear();
 
     // Bound-check the name length (the X360 string-copy guard: must fit in 16 chars).
@@ -384,9 +384,9 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
 
     // Register the two built-in ping message types.
     RegisterMessageType(KI_PING_MESSAGE_TYPE, KI_PING_MESSAGE_LENGTH,
-                        &mPingMessageSend, &mPingMessageRecv, nullptr, nullptr, nullptr);
+                        &mPingMessageSend, &mPingMessageRecv, 0, 0, 0);
     RegisterMessageType(KI_PING_REPLY_MESSAGE_TYPE, KI_PING_MESSAGE_LENGTH,
-                        &mPingReplyMessageSend, &mPingReplyMessageRecv, nullptr, nullptr, nullptr);
+                        &mPingReplyMessageSend, &mPingReplyMessageRecv, 0, 0, 0);
 
     // Register the CPU perfmons exactly once (shared across all players).
     if (!s_bRegisteredPerfmons)
@@ -417,7 +417,7 @@ bool NetworkPlayer::Release()
     mpPlayerManager->mReliableMessageManager.ClearPlayersSendReliableMessages(mPlayerID);
 
     mPlayerID        = KI_INVALID_PLAYER_ID;
-    mpNetworkAdapter = nullptr;
+    mpNetworkAdapter = 0;
     mConnectionData.Clear();
 
     meLocalConsoleFrameRate  = static_cast<CgsSystem::EFrameRate>(-1);

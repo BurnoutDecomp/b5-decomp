@@ -67,7 +67,7 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
     // The console folds GetProgressionManager() into a fixed offset off mpGameStateModule and tests
     // the folded address against null, i.e. this is a plain "the module has a progression manager"
     // guard; the answer is never used.
-    CGS_ASSERT(mpGameStateModule->GetProgressionManager() != nullptr,
+    CGS_ASSERT(mpGameStateModule->GetProgressionManager() != 0,
                "mpGameStateModule->GetProgressionManager()");
 
     CGS_ASSERT(lpStartNetworkGameEvent->miNumRaceCars > 0,
@@ -80,12 +80,12 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
 
     lpGameModeParams->mLocalNetworkPlayerID = lpStartNetworkGameEvent->mLocalNetworkPlayerID;
 
-    CGS_ASSERT(mpCurrentGameMode != nullptr, "mpCurrentGameMode");
+    CGS_ASSERT(mpCurrentGameMode != 0, "mpCurrentGameMode");
     CGS_ASSERT(mpCurrentGameMode->IsOnline(), "mpCurrentGameMode->IsOnline()");
 
     const OnlineGameMode* lpCurrentOnlineGameMode =
         static_cast<const OnlineGameMode*>(mpCurrentGameMode);
-    CGS_ASSERT(lpCurrentOnlineGameMode != nullptr, "lpCurrentOnlineGameMode");
+    CGS_ASSERT(lpCurrentOnlineGameMode != 0, "lpCurrentOnlineGameMode");
 
     for (s32 liRaceCar = 0; liRaceCar < GameStateModuleIO::KI_MAX_RACE_CARS; ++liRaceCar)
     {
@@ -158,7 +158,7 @@ void ModeManager::SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 
         lPosAndScore.lpCarData      = lpCarData;
         lPosAndScore.liGridPosition = liCarIndex;
 
-        if (lpCarData != nullptr && lpCarData->GetScoreData()->GetDisconnected())
+        if (lpCarData != 0 && lpCarData->GetScoreData()->GetDisconnected())
         {
             laaiTeamMembers[KI_DISCONNECTED_BUCKET].Append(lPosAndScore);
         }

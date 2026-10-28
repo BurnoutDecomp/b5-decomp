@@ -14,7 +14,7 @@
 // reference only; their bodies live in BrnCollisionStateManager.cpp, which includes the full types.
 namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; struct PhysicalCarPartContact; struct DiscardedContact; } }
 namespace BrnPhysics { namespace Deformation {
-    enum EBodyParts : s32;
+    enum EBodyParts ;
     struct BrokenJointNotificationEvent;
     struct DetachedPartNotificationEvent;
     struct GlassSmashOrCrackEvent;

@@ -373,7 +373,7 @@ namespace BrnGui
     {
         if (!mMoviePlayer.Release())
             return false;
-        if (mResourceAllocatorResource.m_baseResources[0] != nullptr)
+        if (mResourceAllocatorResource.m_baseResources[0] != 0)
         {
             mAllocator.Release();
             DestroyMemoryResourceAndDescriptor();
@@ -382,7 +382,7 @@ namespace BrnGui
             g_movieAudio.Release();                mPlayingMovie.Release();
         mQueuedMovie.Release();
         mReceiverQueue.Clear(); // Retain the selected host Release queue drain with its real receiver.
-        mpVideoDataResource.SetResource(nullptr);
+        mpVideoDataResource.SetResource(0);
         if (mapPoolBacking[0] != 0)
         {
             if (mbBundleLoaded)
@@ -413,7 +413,7 @@ namespace BrnGui
     void MovieManager::Destruct()
     {
         mMoviePlayer.Destruct();
-        if (mResourceAllocatorResource.m_baseResources[0] != nullptr)
+        if (mResourceAllocatorResource.m_baseResources[0] != 0)
         {
             mAllocator.Destruct();
             DestroyMemoryResourceAndDescriptor();
@@ -581,13 +581,13 @@ namespace BrnGui
 
     bool MovieManager::PrepareMovieAllocator()
     {
-        if (mResourceAllocatorResource.m_baseResources[0] == nullptr)
+        if (mResourceAllocatorResource.m_baseResources[0] == 0)
         {
             mDescriptor = rw::ResourceDescriptor();
             // ARTIST 82507E48/7C: the main heap is sixteen MiB, aligned to 128.
             mDescriptor.m_baseResourceDescriptors[0].m_size = 0x1000000;
             mDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
-            if (mResourceAllocatorResource.m_baseResources[0] == nullptr)
+            if (mResourceAllocatorResource.m_baseResources[0] == 0)
                 return false;
         }
         // Reconstructing the real retained arena is the other native GPU
@@ -597,10 +597,10 @@ namespace BrnGui
 
     void MovieManager::DestroyMemoryResourceAndDescriptor()
     {
-        CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != nullptr,
+        CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != 0,
                    "mResourceAllocatorResource.GetMemoryResource()");
         XPhysicalFree(mResourceAllocatorResource.m_baseResources[0]);
-        mResourceAllocatorResource.m_baseResources[0] = nullptr;
+        mResourceAllocatorResource.m_baseResources[0] = 0;
     }
 
     // PendingVideoDataResourceRequest (ARTIST @0x824F7808): the GuiModule polls this each PreWorldUpdate.

@@ -43,9 +43,9 @@ namespace BrnNetwork
         bool Release();    // @ 0x8258B048
 
     protected:
-        const char* GetName() const override;   // @ 0x82586520 -> "Images"
-        const char* GetPath() const override;
-        void        OnActivate() override;        // @ 0x8258AFF0
+        const char* GetName() const ;   // @ 0x82586520 -> "Images"
+        const char* GetPath() const ;
+        void        OnActivate() ;        // @ 0x8258AFF0
 
     private:
         // Static debug-menu action callback ("Encode and save image"). The void* user-data is this

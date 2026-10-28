@@ -184,10 +184,10 @@ EA::Jobs::Job* BaseCollisionGenerator::AllocateJob()
     const size_t lnSavedAlignment = mCollisionResultsAllocator.GetAlignment();
     mCollisionResultsAllocator.SetAlignment(128);
 
-    EA::Jobs::Job* lpJob = nullptr;
+    EA::Jobs::Job* lpJob = 0;
     void* lpvJobMemory = mCollisionResultsAllocator.Malloc(sizeof(EA::Jobs::Job));
     if (lpvJobMemory)
-        lpJob = new (lpvJobMemory) EA::Jobs::Job(nullptr);
+        lpJob = new (lpvJobMemory) EA::Jobs::Job(0);
 
     mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
     return lpJob;
@@ -211,7 +211,7 @@ CgsMemory::SimpleDataStreamProducer* BaseCollisionGenerator::CreateFillTriangleC
     CgsMemory::SimpleDataStreamProducer* lpProducer =
         static_cast<CgsMemory::SimpleDataStreamProducer*>(
             mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer)));
-    CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");
+    CGS_ASSERT(lpProducer != 0, "Failed to allocate stream producer\n");
 
     u32 luCommandBufferSize = 0;
     u32 luResultBufferSize  = 0;
@@ -220,7 +220,7 @@ CgsMemory::SimpleDataStreamProducer* BaseCollisionGenerator::CreateFillTriangleC
 
     void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
     void* lpResultBuffer  = mCollisionResultsAllocator.Malloc(luResultBufferSize);
-    CGS_ASSERT(lpCommandBuffer != nullptr && lpResultBuffer != nullptr,
+    CGS_ASSERT(lpCommandBuffer != 0 && lpResultBuffer != 0,
                "Failed to allocate stream buffers\n");
 
     lpProducer->Construct(liMaxCommands, 32, lpCommandBuffer, liMaxCommands, 16, lpResultBuffer);
@@ -375,7 +375,7 @@ BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream(s32 liM
     CgsMemory::SimpleDataStreamProducer* lpProducer =
         static_cast<CgsMemory::SimpleDataStreamProducer*>(
             mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer))); // li r4, 0x180 (console sizeof)
-    CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");  // :2037
+    CGS_ASSERT(lpProducer != 0, "Failed to allocate stream producer\n");  // :2037
 
     // The producer's stride, and the poster's. NEVER the console's literal 32 -- see the banner.
     const s32 liCommandSize = static_cast<s32>(
@@ -388,7 +388,7 @@ BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream(s32 liM
         &luCommandBufferSize, &luResultBufferSize);
 
     void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
-    CGS_ASSERT(lpCommandBuffer != nullptr, "Failed to allocate stream buffers\n"); // :2049
+    CGS_ASSERT(lpCommandBuffer != 0, "Failed to allocate stream buffers\n"); // :2049
 
     lpProducer->Construct(liMaxTests, liCommandSize, lpCommandBuffer, 0, 0, 0);  // 0x82811F20..F3C
 

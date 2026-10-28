@@ -42,11 +42,11 @@ namespace BrnProgression
         void Construct(ProgressionManager* lpProgressionManager,
                        BrnGameState::ModeManager* lpModeManager);
         void SetProfileReadyForDisplay() { mbProfileReadyForDisplay = true; }
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) ;
 
     protected:
-        const char* GetName() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        void OnActivate() ;
 
     private:
         void DrawRankAsBar(CgsDev::Debug2DImmediateRender* lpDisplay, BrnGameState::GameStateModuleIO::EGameModeType leGameModeType,

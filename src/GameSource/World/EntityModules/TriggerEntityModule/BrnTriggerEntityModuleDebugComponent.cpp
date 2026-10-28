@@ -36,7 +36,7 @@ namespace BrnWorld
     void TriggerEntityModuleDebugComponent::Construct(TriggerEntityModule* lpTriggerEntityModule)
     {
 
-        CGS_ASSERT(lpTriggerEntityModule != nullptr, "lpTriggerEntityModule != NULL");
+        CGS_ASSERT(lpTriggerEntityModule != 0, "lpTriggerEntityModule != NULL");
         mpTriggerEntityModule = lpTriggerEntityModule;
 
         mbRenderTriggers      = true;
@@ -204,7 +204,7 @@ namespace BrnWorld
             {
                 lpcTypeName = "Unknown";
             }
-            else if (liType >= 0 && liType < 4 && KAPC_TRIGGER_TYPE_NAMES[liType] != nullptr)
+            else if (liType >= 0 && liType < 4 && KAPC_TRIGGER_TYPE_NAMES[liType] != 0)
             {
                 lpcTypeName = KAPC_TRIGGER_TYPE_NAMES[liType];
             }

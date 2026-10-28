@@ -31,7 +31,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptRenderItemSprite.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
@@ -64,20 +64,20 @@ struct AptRenderItemCustomControl : public AptRenderItemSprite
     static AptRenderItem* CopyFromSprite(AptRenderItem* pSourceSprite, int nCreatedOnTick, bool bCopyExtended);   // @0x82AEF9F8
 
     // ---- render-item vtable overrides -------------------------------------
-    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;   // @0x82AEFDE8
-    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;   // @0x82AEF8F8
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) ;   // @0x82AEFDE8
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const ;   // @0x82AEF8F8
 
     // PopRenderData @0x82ADB538 / PushRenderDataAbsolute @0x82ADB4F8 -- notify the
     // host render-data hooks for the (inherited) instance name. Unlike the sprite
     // forms these do NOT push/pop the matrix bracket (the host positions the
     // control). The pCtx/eOp/nTick params are part of the inherited signature.
-    virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;   // @0x82ADB538
-    virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const override;   // @0x82ADB4F8
+    virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const ;   // @0x82ADB538
+    virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const ;   // @0x82ADB4F8
     // ⭐ [licence-icon] the console vtable's +0x04 slot ALSO points at 0x82ADB4F8 (both push
     // slots share the non-pushing hook body -- vtable @0x82145944 read from the image). The
     // missing override inherited the sprite's MATRIX-PUSHING form against the non-popping
     // PopRenderData above: +1 context-stack level per frame. See the .cpp banner.
-    virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;   // @0x82ADB4F8 (shared body)
+    virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const ;   // @0x82ADB4F8 (shared body)
 
     // ---- descriptor accessors --------------------------------------------
     const EAStringC& GetTypeStr() const   { return mTypeStr; }     // @0x82AD5038

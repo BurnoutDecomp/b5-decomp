@@ -61,7 +61,7 @@ namespace XGRAPHICS
 class InternalVector; // root-set container (homed in XGraphicsInternalVector.h)
 class VRegTable;      // virtual-register table (homed in XGraphicsVRegTable.h)
 struct VRegInfo;      // virtual-register value node (homed in XGraphicsVReg.h)
-using VReg = VRegInfo;
+typedef VRegInfo VReg;
 struct IRInst;        // IR instruction (homed in XGraphicsIRInst.h)
 
 class CFG

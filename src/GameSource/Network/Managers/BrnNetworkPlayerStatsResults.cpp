@@ -72,7 +72,7 @@ namespace BrnNetwork
             }
         }
 
-        return nullptr;
+        return 0;
     }
 
     // @ 0x82552C20 -- reset the cache to empty and prime the stats debug component.
@@ -126,7 +126,7 @@ namespace BrnNetwork
                 return &maPlayerStatsCache[luCacheLoopCounter];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // Linear player-id lookup into the record cache.
@@ -142,7 +142,7 @@ namespace BrnNetwork
                 return &maPlayerStatsCache[luCacheLoopCounter];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // Store a finished record: over the player's existing record (found by id, then by name), or
@@ -154,17 +154,17 @@ namespace BrnNetwork
         CGS_ASSERT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
                    "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED");
 
-        NetworkPlayerStats* lpPlaceToInsert = nullptr;
+        NetworkPlayerStats* lpPlaceToInsert = 0;
         if (lNewStats.GetPlayerID() != CgsNetwork::K_INVALID_PLAYER_ID)
         {
             lpPlaceToInsert = GetPlayerStats(lNewStats.GetPlayerID());
         }
-        if (lpPlaceToInsert == nullptr)
+        if (lpPlaceToInsert == 0)
         {
             lpPlaceToInsert = GetPlayerStats(lNewStats.GetName());
         }
 
-        if (lpPlaceToInsert == nullptr)
+        if (lpPlaceToInsert == 0)
         {
             lpPlaceToInsert = FindReplaceableRecordSet();
         }
@@ -173,7 +173,7 @@ namespace BrnNetwork
             mStatsDebugComponent.RemoveStats(lpPlaceToInsert);
         }
 
-        CGS_ASSERT(lpPlaceToInsert != nullptr, "lpPlaceToInsert != NULL");
+        CGS_ASSERT(lpPlaceToInsert != 0, "lpPlaceToInsert != NULL");
         *lpPlaceToInsert = lNewStats;
         mStatsDebugComponent.AddStats(lpPlaceToInsert);
         return lpPlaceToInsert;

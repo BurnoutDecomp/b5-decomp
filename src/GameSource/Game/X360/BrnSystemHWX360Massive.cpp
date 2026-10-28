@@ -5,7 +5,7 @@
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"             // EA::Thread::GetThreadId / ThreadId
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h" // CMassiveClientCore + SMassiveClientInit
 
-#include <cstdint>   // std::intptr_t
+#include "types.hpp"   // std::intptr_t
 
 // XDK sign-in query (real prototype lives in the Xbox 360 XDK). Prepare gates Massive
 // initialisation on at least one profile being signed in to LIVE (state == 2).
@@ -49,7 +49,7 @@ namespace BrnMassive
 
     // The single Massive heap global (X360 .data spHeapMalloc). Filled by
     // BrnHW::System360HW::PrepareMassiveMemory; consumed by the custom heap hooks below.
-    CgsMemory::HeapMalloc* gpMassiveHeapMalloc = nullptr;
+    CgsMemory::HeapMalloc* gpMassiveHeapMalloc = 0;
 }
 
 namespace
@@ -59,7 +59,7 @@ namespace
     // second thread never does. Modelled with the EAThread ThreadId (a HANDLE/void*).
     EA::Thread::ThreadId MassiveUnsetThreadId()
     {
-        return reinterpret_cast<EA::Thread::ThreadId>(static_cast<std::intptr_t>(-1));
+        return reinterpret_cast<EA::Thread::ThreadId>(static_cast<intptr_t>(-1));
     }
 
     // dword_82F24138: the first (and only permitted) Massive-allocating thread.
@@ -86,7 +86,7 @@ namespace BrnMassive
     // allocates through the hook, and logs a diagnostic on exhaustion.
     void* System360HWMassive::BurnoutMassiveMalloc(unsigned int luSize)
     {
-        CGS_ASSERT(gpMassiveHeapMalloc != nullptr, "spHeapMalloc != NULL");
+        CGS_ASSERT(gpMassiveHeapMalloc != 0, "spHeapMalloc != NULL");
 
         EA::Thread::ThreadId lThreadId = EA::Thread::GetThreadId();
         if (gsMassiveAllocThreadId == MassiveUnsetThreadId())
@@ -96,7 +96,7 @@ namespace BrnMassive
                        "Massive Allocating From Multiple Threads");
 
         void* lpResult = gpMassiveHeapMalloc->Malloc(static_cast<s32>(luSize), 4);
-        if (lpResult == nullptr && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if (lpResult == 0 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "[Massive] Failed to Alloc " << luSize << " bytes \n";
         }
@@ -107,7 +107,7 @@ namespace BrnMassive
     // MassiveAd custom free hook: return a block to the shared Massive heap.
     void System360HWMassive::BurnoutMassiveFree(void* lpMemory)
     {
-        CGS_ASSERT(gpMassiveHeapMalloc != nullptr, "spHeapMalloc != NULL");
+        CGS_ASSERT(gpMassiveHeapMalloc != 0, "spHeapMalloc != NULL");
         gpMassiveHeapMalloc->Free(lpMemory);
     }
 
@@ -140,7 +140,7 @@ namespace BrnMassive
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "Setting Massive to use Custom Buffer";
 
-                if (gpMassiveHeapMalloc == nullptr)
+                if (gpMassiveHeapMalloc == 0)
                     return 0;
 
                 MassiveAdClient3::CMassiveClientCore::SetCustomMemoryFunctions(
@@ -160,10 +160,10 @@ namespace BrnMassive
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "[Massive] Initialising\n";
 
-                CGS_ASSERT(mpClientCore == nullptr, "Client core not NULL");
+                CGS_ASSERT(mpClientCore == 0, "Client core not NULL");
 
                 mpClientCore = MassiveAdClient3::CMassiveClientCore::Initialize(&lInit);
-                CGS_ASSERT(mpClientCore != nullptr, "Failed to initialise Massive");
+                CGS_ASSERT(mpClientCore != 0, "Failed to initialise Massive");
 
                 MassiveAdClient3::CMassiveClientCore::Instance();
                 MassiveAdClient3::CMassiveClientCore::Log(
@@ -212,7 +212,7 @@ namespace BrnMassive
                                1, KU_MASSIVE_SHUTDOWN_TIMEOUT_MS) != 0,
                            "Failed to Shutdown Massive");
 
-                mpClientCore = nullptr;
+                mpClientCore = 0;
                 break;
             }
 

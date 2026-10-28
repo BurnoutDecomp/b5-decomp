@@ -65,16 +65,16 @@ AptPseudoCIH_t::AptPseudoCIH_t(AptCharacterInfo_t* lpSource,
         }
         else
         {
-            mpPseudoData = nullptr;
+            mpPseudoData = 0;
         }
     }
     else
     {
-        mpPseudoData = nullptr;
+        mpPseudoData = 0;
     }
 
-    mpNext = nullptr;   // this[3] = 0
-    mpPrev = nullptr;   // this[4] = 0
+    mpNext = 0;   // this[3] = 0
+    mpPrev = 0;   // this[4] = 0
 }
 
 // dtor @ 0x82AE5AA0
@@ -82,19 +82,19 @@ AptPseudoCIH_t::~AptPseudoCIH_t()
 {
     AptPseudoData_t* lpSnapshot = mpPseudoData;  // v2 = this[1]
 
-    mpSource = nullptr;   // *this    = 0
-    mpNext   = nullptr;   // this[3]  = 0
-    mpPrev   = nullptr;   // this[4]  = 0
+    mpSource = 0;   // *this    = 0
+    mpNext   = 0;   // this[3]  = 0
+    mpPrev   = 0;   // this[4]  = 0
 
     if (lpSnapshot)
     {
         // Clear the snapshot's first three dwords (mpData/mpMatrix/mpColorTransform)
         // exactly as the X360 dtor does before returning the block to the pool.
-        lpSnapshot->mpData          = nullptr;  // *v2     = 0
-        lpSnapshot->mpMatrix        = nullptr;  // v2[1]   = 0
-        lpSnapshot->mpColorTransform = nullptr; // v2[2]   = 0
+        lpSnapshot->mpData          = 0;  // *v2     = 0
+        lpSnapshot->mpMatrix        = 0;  // v2[1]   = 0
+        lpSnapshot->mpColorTransform = 0; // v2[2]   = 0
 
         gpAptPseudoDataPool->Deallocate(lpSnapshot, sizeof(AptPseudoData_t));  // Deallocate(off_8324D808, v2, 0x1C)
-        mpPseudoData = nullptr;   // this[1] = 0
+        mpPseudoData = 0;   // this[1] = 0
     }
 }

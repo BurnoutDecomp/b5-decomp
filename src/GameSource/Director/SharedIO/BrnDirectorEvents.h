@@ -52,7 +52,7 @@ namespace BrnDirector
     // asset it was spawned from (mAttribsKey) and which world entity slot it occupies
     // (miEntityIndex). 16-byte aligned so the queue element stride matches the X360's 16-byte
     // per-event copy (see header note above).
-    struct alignas(16) NewVehicleEvent
+    struct CGS_ALIGN(16) NewVehicleEvent
     {
         // The car's `burnoutcarasset` COLLECTION key -- the hashed
         // VehicleListEntry::AttribSysCollectionKey the producer reads off the vehicle list.

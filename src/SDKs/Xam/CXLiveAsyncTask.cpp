@@ -76,19 +76,19 @@ s32 CXLiveAsyncTask::Initialize(u32 luField00, u32 luField04, u32 luField08, u32
 // ---------------------------------------------------------------------------
 void CXLiveAsyncTask::_AssertLayout()
 {
-    static_assert(offsetof(CXLiveAsyncTask, muField00) == 0x00, "muField00 @ +0x00");
-    static_assert(offsetof(CXLiveAsyncTask, muField04) == 0x04, "muField04 @ +0x04");
-    static_assert(offsetof(CXLiveAsyncTask, muField08) == 0x08, "muField08 @ +0x08");
-    static_assert(offsetof(CXLiveAsyncTask, muFlags)   == 0x0C, "muFlags @ +0x0C");
-    static_assert(offsetof(CXLiveAsyncTask, muField10) == 0x10, "muField10 @ +0x10");
-    static_assert(offsetof(CXLiveAsyncTask, muField14) == 0x14, "muField14 @ +0x14");
-    static_assert(offsetof(CXLiveAsyncTask, muField18) == 0x18, "muField18 @ +0x18");
-    static_assert(offsetof(CXLiveAsyncTask, muField1C) == 0x1C, "muField1C @ +0x1C");
-    static_assert(offsetof(CXLiveAsyncTask, muField20) == 0x20, "muField20 @ +0x20");
-    static_assert(offsetof(CXLiveAsyncTask, muField24) == 0x24, "muField24 @ +0x24");
-    static_assert(offsetof(CXLiveAsyncTask, muField28) == 0x28, "muField28 @ +0x28");
-    static_assert(offsetof(CXLiveAsyncTask, muField2C) == 0x2C, "muField2C @ +0x2C");
-    static_assert(offsetof(CXLiveAsyncTask, muField30) == 0x30, "muField30 @ +0x30");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField00) == 0x00), "muField00 @ +0x00");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField04) == 0x04), "muField04 @ +0x04");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField08) == 0x08), "muField08 @ +0x08");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muFlags)   == 0x0C), "muFlags @ +0x0C");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField10) == 0x10), "muField10 @ +0x10");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField14) == 0x14), "muField14 @ +0x14");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField18) == 0x18), "muField18 @ +0x18");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField1C) == 0x1C), "muField1C @ +0x1C");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField20) == 0x20), "muField20 @ +0x20");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField24) == 0x24), "muField24 @ +0x24");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField28) == 0x28), "muField28 @ +0x28");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField2C) == 0x2C), "muField2C @ +0x2C");
+    CGS_STATIC_ASSERT((offsetof(CXLiveAsyncTask, muField30) == 0x30), "muField30 @ +0x30");
     // mBuffer sits at X360 +0x34 (13 u32 words), but the embedded buffer's leading
     // pointer forces 8-byte alignment on the host, padding it to +0x38 there -- so
     // its offset is not a pointer-invariant fact and is deliberately not asserted.

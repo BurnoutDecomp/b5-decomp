@@ -224,7 +224,7 @@ namespace Deformation
         // The static debug component joins the debug menu tree (DebugComponent::Register).
         DeformationDebugComponent_Register(&mDebugComponent);
 
-        CGS_ASSERT(lpAllocator != nullptr, "lpAllocator != NULL");
+        CGS_ASSERT(lpAllocator != 0, "lpAllocator != NULL");
 
         // (X360 logs "DeformationManager: array of deformation models required <bytes> bytes" when
         // the message filter bit is set -- a developer-only trace, no observable state.)
@@ -236,7 +236,7 @@ namespace Deformation
         // pointer is bound BY NAME below and each model is constructed via DeformableObject's ctor.
         mpaModels = AllocateDeformableModelPool(lpAllocator, KU_MAX_DEFORMATION_MODELS);
 
-        if (mpaModels != nullptr)
+        if (mpaModels != 0)
         {
             for (s32 li = static_cast<s32>(KU_MAX_DEFORMATION_MODELS) - 1; li >= 0; --li)
             {
@@ -245,12 +245,12 @@ namespace Deformation
             }
         }
 
-        CGS_ASSERT(mpaModels != nullptr, "mpaModels != NULL");
+        CGS_ASSERT(mpaModels != 0, "mpaModels != NULL");
         // [marked deviation, 2026-08-14] the console has no null path here (its carve cannot
         // fail); on the host a failed carve would fall through into the ClearVariables loop and
         // AV (boot-measured before the rw-linear host headroom landed in BrnGameDataModule.cpp).
         // Guard the host: report not-ready so the prepare FSM holds this stage.
-        if (mpaModels == nullptr)
+        if (mpaModels == 0)
             return false;
 
         // Construct every model (crash parity G23-D4, 2026-09-23): 0x826303B4..0x826303CC is the
@@ -313,9 +313,9 @@ namespace Deformation
         if (lpInputInterface->ShouldResetPlayerScratches())
         {
             DeformableObject* lpPlayerModel = GetPlayerCarModel();
-            CGS_ASSERT(lpPlayerModel != nullptr, "lpPlayerModel");
+            CGS_ASSERT(lpPlayerModel != 0, "lpPlayerModel");
 
-            if (lpPlayerModel != nullptr)   // PC-only null guard: the console asserts, then dereferences
+            if (lpPlayerModel != 0)   // PC-only null guard: the console asserts, then dereferences
             {
                 // Zero every deformation sensor's scratch, then re-blend (crash parity G24-D1,
                 // 2026-09-23): 0x82644ED0..0x82644F04 is the inlined DeformableObject::ResetScratching
@@ -682,7 +682,7 @@ namespace Deformation
             }
             else
             {
-                mpaModels[liModelIndex].SetDeformationSpec(nullptr);       // 0x825DB174
+                mpaModels[liModelIndex].SetDeformationSpec(0);       // 0x825DB174
             }
         }
     }

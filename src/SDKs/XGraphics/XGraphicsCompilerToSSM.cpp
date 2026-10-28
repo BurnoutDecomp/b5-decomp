@@ -185,7 +185,7 @@ int (**MemoryInit(int aiCount, int aiNodeSize,
         else
         {
             apfnFree(reinterpret_cast<int>(apfnUser), reinterpret_cast<int>(lpPool));
-            lpPool = nullptr;
+            lpPool = 0;
         }
     }
     return lpPool;
@@ -198,7 +198,7 @@ u32* MemoryNewNode(u32* apHead, int aiTag)
     (void)aiTag;
     CGS_ASSERT(apHead, "pHead");
     u32* lpSeg = apHead;
-    u32* lpNode = nullptr;
+    u32* lpNode = 0;
     while (lpSeg)
     {
         if (lpSeg[6]) // free count in this segment
@@ -233,7 +233,7 @@ u32* MemoryNewNode(u32* apHead, int aiTag)
         }
     }
     CGS_ASSERT(apHead, "pHead");
-    return nullptr;
+    return 0;
 }
 
 // @ 0x82C21108 -- build a base-texture GPU header. Every store immediate

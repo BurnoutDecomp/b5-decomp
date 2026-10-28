@@ -74,13 +74,13 @@ namespace BrnNetwork
                                      bool lbAutobalance, bool lbFinalSelection);
         bool          Retrieve(PlayerTeamInfo* lpaPlayerTeamInfo, s32* lpiNumPlayers,
                                s32* lpiNumTeams, bool* lpbAutobalance, bool* lpbFinalSelection);
-        s32           GetPackedMessageSize() override;
+        s32           GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD70 -- bodied inline below.
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         PlayerTeamInfo maPlayerTeamInfo[KI_TEAM_SELECT_MAX_PLAYERS];   // +0x28 (64 bytes)
@@ -102,5 +102,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(TeamSelectMessage) == 0x74, "sizeof(TeamSelectMessage) == 0x74");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(TeamSelectMessage) == 0x74), "sizeof(TeamSelectMessage) == 0x74");
 } // namespace BrnNetwork

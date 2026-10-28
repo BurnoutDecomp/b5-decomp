@@ -142,7 +142,7 @@ namespace
             laCofactor[liLane] = lfCofactor;
         }
 
-        return Vector4{ laCofactor[0], laCofactor[1], laCofactor[2], laCofactor[3] };
+        { const Vector4 lResult = { laCofactor[0], laCofactor[1], laCofactor[2], laCofactor[3] }; return lResult; }
     }
 } // namespace
 
@@ -196,12 +196,12 @@ Matrix44 Inverse(const Matrix44& lrMatrix, Vector4& lrDeterminant)
 // (+0/+16/+32/+48) are only correct here because Matrix44 is four 16-byte,
 // 16-aligned float4 rows on the host too -- no pointer widens inside these
 // aggregates, so this is one of the rare console strides that survives verbatim.
-static_assert(sizeof(Vector4) == 16, "rw::math::vpu::Vector4 must be one 16-byte lane register");
-static_assert(sizeof(Matrix44) == 64, "rw::math::vpu::Matrix44 must be four 16-byte rows");
-static_assert(offsetof(Matrix44, xAxis) == 0,  "Matrix44::xAxis at +0  (lvx128 r4+0)");
-static_assert(offsetof(Matrix44, yAxis) == 16, "Matrix44::yAxis at +16 (lvx128 r4+0x10)");
-static_assert(offsetof(Matrix44, zAxis) == 32, "Matrix44::zAxis at +32 (lvx128 r4+0x20)");
-static_assert(offsetof(Matrix44, wAxis) == 48, "Matrix44::wAxis at +48 (lvx128 r4+0x30)");
+CGS_STATIC_ASSERT((sizeof(Vector4) == 16), "rw::math::vpu::Vector4 must be one 16-byte lane register");
+CGS_STATIC_ASSERT((sizeof(Matrix44) == 64), "rw::math::vpu::Matrix44 must be four 16-byte rows");
+CGS_STATIC_ASSERT((offsetof(Matrix44, xAxis) == 0),  "Matrix44::xAxis at +0  (lvx128 r4+0)");
+CGS_STATIC_ASSERT((offsetof(Matrix44, yAxis) == 16), "Matrix44::yAxis at +16 (lvx128 r4+0x10)");
+CGS_STATIC_ASSERT((offsetof(Matrix44, zAxis) == 32), "Matrix44::zAxis at +32 (lvx128 r4+0x20)");
+CGS_STATIC_ASSERT((offsetof(Matrix44, wAxis) == 48), "Matrix44::wAxis at +48 (lvx128 r4+0x30)");
 
 } // namespace vpu
 } // namespace math

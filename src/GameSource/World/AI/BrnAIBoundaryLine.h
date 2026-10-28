@@ -17,7 +17,7 @@ namespace BrnAI
     // 16 bytes total: the two 2D endpoints packed into the four lanes of one SIMD register
     // (start at lanes 0,1; end at lanes 2,3). NOT two 16-byte Vector2 members -- the X360
     // loads the whole line as a single `lvx128`, so it is four contiguous floats.
-    struct alignas(16) BoundaryLine
+    struct CGS_ALIGN(16) BoundaryLine
     {
         f32 mfStartX;   // +0  (lane 0)
         f32 mfStartY;   // +4  (lane 1)

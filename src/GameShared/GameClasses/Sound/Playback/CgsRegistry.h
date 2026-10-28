@@ -16,6 +16,8 @@ namespace CgsSound
 namespace Playback
 {
 
+struct Registry;
+
 // CgsDataStructures.h:106. One registry entry: an interned name plus an interned
 // type-name. FLAG: MINIMAL home for the Registry TU only -- the full Entity
 // (CgsDataStructures.h: Entity(Name)/Entity(Name,Name)/operator==/GetName/SetName/
@@ -46,13 +48,13 @@ struct Entity
     // call these as Entity::ResolveMemberPointer<ContentClass>(&slot, registry),
     // etc. FLAG (DEFER): declared-only -- bodied in their own Entity TU.
     template <typename T>
-    static void ResolveMemberPointer(const T** appMember, const class Registry& arRegistry);
+    static void ResolveMemberPointer(const T** appMember, const Registry& arRegistry);
     template <typename T>
     static void UnresolveMemberPointer(const T** appMember);
     template <typename T>
     static void RelocateMemberPointer(const T** appMember, u8* apu8Base,
-                                      const class Registry& arTo,
-                                      const class Registry& arFrom);
+                                      const Registry& arTo,
+                                      const Registry& arFrom);
 };
 
 // CgsDataStructures.h:178/187/198 (DWARF). Namespace-scope free-function template

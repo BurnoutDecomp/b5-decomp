@@ -93,9 +93,9 @@ struct GlobalColourPalette
 // blindly -- both are re-derived above from the shipped platform-4 payload AND from
 // the console's own 12-byte index arithmetic, so pinning them is what keeps a future
 // widening from silently reintroducing the wrong stride.
-static_assert(sizeof(PlayerCarColourPalette) == 12,
+CGS_STATIC_ASSERT((sizeof(PlayerCarColourPalette) == 12),
               "PlayerCarColourPalette is the 12-byte SERIALISED record (32-bit colour-array columns)");
-static_assert(sizeof(GlobalColourPalette) == 48,
+CGS_STATIC_ASSERT((sizeof(GlobalColourPalette) == 48),
               "GlobalColourPalette is 4 x 12 bytes");
 }
 

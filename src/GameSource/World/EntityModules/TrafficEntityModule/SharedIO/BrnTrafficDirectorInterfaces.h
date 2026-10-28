@@ -32,7 +32,7 @@ namespace BrnTrafficIO
     // the director (local transform + velocity + bounds + identity). Member names /
     // order / types verbatim from the DWARF (:63-:67). The two DWARF constructors
     // (:48 default, :55 full) are own-TU/inline-elsewhere and are not declared here.
-    struct alignas(16) TrafficDirectorEntity
+    struct CGS_ALIGN(16) TrafficDirectorEntity
     {
         Matrix44Affine mLocalTransform;   // :63
         Vector3        mVelocity;         // :64

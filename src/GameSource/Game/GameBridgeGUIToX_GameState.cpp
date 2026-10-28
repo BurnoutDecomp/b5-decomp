@@ -92,7 +92,7 @@ namespace BrnGame
                 }
             }
 
-            alignas(16) unsigned char lBuf[512];
+            CGS_ALIGN(16) unsigned char lBuf[512];
             unsigned char* lpOut = lBuf;
             s32 liType = 0;
             s32 liSize = 0;

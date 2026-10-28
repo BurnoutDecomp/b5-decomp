@@ -269,7 +269,7 @@ namespace CgsNetwork
     // The time step is not read on the invalid path.
     void NetworkManager::OnGameFinish(CgsSystem::Time lFinishTime, u16 lu16CurrentFrame)
     {
-        mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_INVALID, nullptr, 0.0f);
+        mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_INVALID, 0, 0.0f);
     }
 
     // The round starts: bookmark the start frame against the agreed start time (none when the
@@ -278,7 +278,7 @@ namespace CgsNetwork
     {
         const StartTime* lpStartTime = mStartTimeManager.GetStartTime();
         mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_PAST,
-                                   lpStartTime ? &lpStartTime->mStartTime : nullptr,
+                                   lpStartTime ? &lpStartTime->mStartTime : 0,
                                    lfTimeStep);
         mPlayerManager.OnRoundStart();
     }
@@ -286,7 +286,7 @@ namespace CgsNetwork
     // The round is over: forget the start frame, as at the end of a game.
     void NetworkManager::OnRoundFinish(CgsSystem::Time lFinishTime, u16 lu16CurrentFrame)
     {
-        mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_INVALID, nullptr, 0.0f);
+        mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_INVALID, 0, 0.0f);
     }
 
     // Registered with the start-time manager; the base class does nothing when the start

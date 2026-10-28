@@ -2683,7 +2683,7 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereListStream()
     // The console's AllocateMemory(0x80, 0x80) is kept verbatim below. ReadCom copies
     // miCommandSize == sizeof(StreamCommand) bytes into it (24 console / 48 host), so 128 is
     // headroom — enforce that rather than trusting the banner.
-    static_assert(sizeof(Desc::StreamCommand) <= 128,
+    CGS_STATIC_ASSERT((sizeof(Desc::StreamCommand) <= 128),
                   "the console's 128-byte command scratch must hold a whole StreamCommand");
 
     const Desc* lpDesc = static_cast<const Desc*>(mpJobDescription);

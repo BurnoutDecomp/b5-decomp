@@ -328,12 +328,12 @@ namespace BrnReplays
 
                 if (liAvailable >= liDataSize)
                 {
-                    if (lpData != nullptr)
+                    if (lpData != 0)
                     {
                         char* lpDest = static_cast<char*>(lpData);
                         for (s32 liOffset = 0; liOffset < liDataSize; liOffset += miBlockSize)
                         {
-                            void* lpBlockData = nullptr;
+                            void* lpBlockData = 0;
                             s32   liBlockSize = 0;
                             bool  lbStarted   = StartAsyncReadInternal(&lpBlockData, &liBlockSize);
                             CGS_ASSERT(lbStarted, "Failed to read data\n");
@@ -367,8 +367,8 @@ namespace BrnReplays
     void DiskReadStream::ReadCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext)
     {
         ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
-        CGS_ASSERT(lpBlock != nullptr, "Invalid stream block\n");
-        CGS_ASSERT(lpBlock->mpOwner != nullptr, "Invalid stream\n");
+        CGS_ASSERT(lpBlock != 0, "Invalid stream block\n");
+        CGS_ASSERT(lpBlock->mpOwner != 0, "Invalid stream\n");
         lpBlock->mpOwner->OnRead(liResult, lHandle, luSize, lpContext);
     }
 
@@ -377,7 +377,7 @@ namespace BrnReplays
     // =====================================================================================
     void DiskReadStream::CloseCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext)
     {
-        CGS_ASSERT(lpContext != nullptr, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, "Invalid stream\n");
         static_cast<DiskReadStream*>(lpContext)->OnClose(liResult, lHandle, luSize, lpContext);
     }
 
@@ -453,7 +453,7 @@ namespace BrnReplays
         CGS_ASSERT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
         CGS_ASSERT(!mbLockedForRead, "Already reading data\n");
 
-        *lppData = nullptr;
+        *lppData = 0;
         *lpiSize = 0;
 
         if (miBlocksUsed == 0 || mbAdjustingRange)

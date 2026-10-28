@@ -100,18 +100,18 @@ void AptActionQueueC::ClearActions()
             switch (lpSlot->mnType)
             {
                 case AptAnimationPoolData::E_ACTION_TYPE_ACTION:
-                    if (lpSlot->action.mpCIH != nullptr)
+                    if (lpSlot->action.mpCIH != 0)
                     {
                         lpSlot->action.mpCIH->Release();
                     }
                     break;
 
                 case AptAnimationPoolData::E_ACTION_TYPE_FUNCTION:
-                    if (lpSlot->function.mpContext != nullptr)
+                    if (lpSlot->function.mpContext != 0)
                     {
                         lpSlot->function.mpContext->Release();
                     }
-                    if (lpSlot->function.mpFuncDef != nullptr)
+                    if (lpSlot->function.mpFuncDef != 0)
                     {
                         lpSlot->function.mpFuncDef->Release();
                     }
@@ -365,16 +365,16 @@ void AptActionQueueC::RegisterReferences()
         if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)
         {
             AptValue::sReferenceRegistrationCb(
-                nullptr, &lpSlot->action.mpCIH,
+                0, &lpSlot->action.mpCIH,
                 "AptAnimationPoolData::action.pCIH", 1);
         }
         else if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_FUNCTION)
         {
             AptValue::sReferenceRegistrationCb(
-                nullptr, &lpSlot->function.mpContext,
+                0, &lpSlot->function.mpContext,
                 "AptAnimationPoolData::function.pContext", 1);
             AptValue::sReferenceRegistrationCb(
-                nullptr, &lpSlot->function.mpFuncDef,
+                0, &lpSlot->function.mpFuncDef,
                 "AptAnimationPoolData::function.pFuncDef", 0);
         }
     }

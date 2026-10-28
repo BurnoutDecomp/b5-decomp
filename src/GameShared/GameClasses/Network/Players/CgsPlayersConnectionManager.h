@@ -94,10 +94,10 @@ namespace CgsNetwork
         // player id to the sentinel and the status to E_NOT_STARTED.
         void Construct()
         {
-            mpPlayerManager                = nullptr;
-            mpServerInterface              = nullptr;
-            mpfConnectionFinalisedCallback = nullptr;
-            mpConnectionFinalisedUserData  = nullptr;
+            mpPlayerManager                = 0;
+            mpServerInterface              = 0;
+            mpfConnectionFinalisedCallback = 0;
+            mpConnectionFinalisedUserData  = 0;
             muLocalPlayerIPAddress         = 0;
             ResetConnectionData();
         }
@@ -110,10 +110,10 @@ namespace CgsNetwork
                      void* lpPlayerDisconnectedCallbackData);
         bool Release()
         {
-            mpPlayerManager                = nullptr;
-            mpServerInterface              = nullptr;
-            mpfConnectionFinalisedCallback = nullptr;
-            mpConnectionFinalisedUserData  = nullptr;
+            mpPlayerManager                = 0;
+            mpServerInterface              = 0;
+            mpfConnectionFinalisedCallback = 0;
+            mpConnectionFinalisedUserData  = 0;
             muLocalPlayerIPAddress         = 0;
             return true;
         }

@@ -178,9 +178,9 @@ private:
     // Byte-layout pin: the relative member offsets are ground truth from the asm.
     static void _AssertLayout()
     {
-        static_assert(offsetof(cParticleRandomSeed, mafRandom) == 0x00, "mafRandom@0");
-        static_assert(offsetof(cParticleRandomSeed, mu64State) == 0x20, "mu64State@0x20");
-        static_assert(offsetof(cParticleRandomSeed, muIndex)   == 0x28, "muIndex@0x28");
-        static_assert(offsetof(cParticleRandomSeed, mSeed)     == 0x30, "mSeed@0x30");
+        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mafRandom) == 0x00), "mafRandom@0");
+        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mu64State) == 0x20), "mu64State@0x20");
+        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, muIndex)   == 0x28), "muIndex@0x28");
+        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mSeed)     == 0x30), "mSeed@0x30");
     }
 };

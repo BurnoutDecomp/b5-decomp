@@ -280,9 +280,9 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                     reinterpret_cast<const char*>(pChar) + KU_AptEmbeddedMovieOff);
                 AptNativeHash* const pLabels = pMovie->mpLabelHash;
                 AptValue* const pHit =
-                    (pStr != nullptr && pLabels != nullptr)
+                    (pStr != 0 && pLabels != 0)
                         ? pLabels->Lookup(*pStr->GetInternalString())
-                        : nullptr;
+                        : 0;
                 const int nLabelFrame = pHit ? pHit->toInteger() : -1;
                 nFrame = nLabelFrame + 1;
             }
@@ -343,7 +343,7 @@ AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSear
     const AptCharacter* const pSourceChar =
         pNode->GetCharacterInst()->GetRenderItem()->mpCharacter;
 
-    for (AptCIH* pWalk = pNode; pWalk != nullptr;
+    for (AptCIH* pWalk = pNode; pWalk != 0;
          pWalk = pWalk->GetDisplayListParent(), bSearchImports = 1)
     {
         const AptCharacter* const pChar =
@@ -361,7 +361,7 @@ AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSear
             {
                 AptCharacter* const pFound =
                     pDef->mpCharacterTable[rEntry.mnIndicator];
-                if (pFound->mpAnimationFile == nullptr)
+                if (pFound->mpAnimationFile == 0)
                 {
                     // The ref-counted AptFilePtr assignment (IncRef the source).
                     reinterpret_cast<AptFilePtr*>(&pFound->mpAnimationFile)
@@ -385,7 +385,7 @@ AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSear
             }
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +403,7 @@ int AptLabelToFrame(AptCIH* pNode, const EAStringC* pLabel)
     const AptMovie* const pMovie = reinterpret_cast<const AptMovie*>(
         reinterpret_cast<const char*>(pChar) + KU_AptEmbeddedMovieOff);
     AptNativeHash* const pLabels = pMovie->mpLabelHash;
-    AptValue* const pHit = pLabels ? pLabels->Lookup(*pLabel) : nullptr;
+    AptValue* const pHit = pLabels ? pLabels->Lookup(*pLabel) : 0;
     return pHit ? pHit->toInteger() : -1;
 }
 
@@ -438,13 +438,13 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_startDrag(AptValue* pContext, int 
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_removeMovieClip(AptValue* pContext, int /*nArgCount*/)
 {
-    AptValue* pResolved = nullptr;
+    AptValue* pResolved = 0;
     // AptActionInterpreter::valueToObject (homed in AptActionInterpreterInterpHelpers.cpp;
     // coerces the value to the object it designates under (scope, target), writing it
     // through the out-param). Canonical signature (scope, target, value, ppOut); the
     // console reaches it here with target == 0 (a null AptValue*), receiver == pContext.
     // AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
-    gAptActionInterpreter.valueToObject(pContext, nullptr, pContext, &pResolved);
+    gAptActionInterpreter.valueToObject(pContext, 0, pContext, &pResolved);
 
     if (pResolved && IsClipHandleOrCIHNone(pResolved))
     {
@@ -500,12 +500,12 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_duplicateMovieClip(AptValue* pCont
 {
     AptValue* const pNameValue = gppAptNativeArgStack[gnAptNativeArgCount - 1];        // arg 0: new name
     AptValue* const pInitObject = (nArgCount < 3)                                       // arg 2: optional init object
-        ? nullptr
+        ? 0
         : gppAptNativeArgStack[gnAptNativeArgCount - 3];
     const int nDepth = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();      // arg 1: AS depth
 
         return gAptActionInterpreter._doCloneSprite(
-                                              static_cast<AptCIH*>(pContext), nullptr, pContext,
+                                              static_cast<AptCIH*>(pContext), 0, pContext,
                                               pNameValue, nDepth + 0x4000, pInitObject);
 }
 
@@ -522,7 +522,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
     {
         EAStringC strURL;                                                     // the X360 &unk_82F72FF8 empty sentinel
         gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strURL);     // arg 0 -> the URL
-        gAptActionInterpreter.loadVariables(pContext, nullptr, &strURL);
+        gAptActionInterpreter.loadVariables(pContext, 0, &strURL);
     }
     return gpUndefinedValue;
 }
@@ -767,7 +767,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setTextFormat(AptValue* pContext, 
         // under the 8-byte EAStringC -- a literal 32 overruns the pool block and
         // corrupts the adjacent free-list node.)
         void* const lpMem = gpAptPseudoDataPool->Allocate(sizeof(TextFormat));
-        TextFormat* const pNewFmt = lpMem ? new (lpMem) TextFormat(pSrc) : nullptr;
+        TextFormat* const pNewFmt = lpMem ? new (lpMem) TextFormat(pSrc) : 0;
         pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
         pItem->SetTextFormat(reinterpret_cast<AptValue*>(pNewFmt));
         uMergedStyle = reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->mnStyleFlags | pSrc->mnStyleFlags;
@@ -852,8 +852,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetDisplayListParent()->GetCharacterInst());
     AptDisplayListState* const pList = pParentSprite->mDisplayList.AsState();
 
-    AptCIH* pTarget = nullptr;   // the resolved node to swap with (X360 v29)
-    AptCIH* pPrevSlot = nullptr; // findInst's insert-after out (X360 v31 scratch)
+    AptCIH* pTarget = 0;   // the resolved node to swap with (X360 v29)
+    AptCIH* pPrevSlot = 0; // findInst's insert-after out (X360 v31 scratch)
 
     if (IsClipHandleOrCIHNone(pArg))
     {
@@ -874,7 +874,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int
         const int nDepth = pArg->toInteger() + 0x4000;
         if (nDepth == pNode->GetCharacterInst()->GetRenderItem()->GetDepth())
             return gpUndefinedValue;
-        pList->findInst(nDepth, nullptr, &pPrevSlot, &pTarget);
+        pList->findInst(nDepth, 0, &pPrevSlot, &pTarget);
     }
 
     // A defined, distinct target node + a sprite(5)/animation(9) PARENT -> swap.
@@ -885,7 +885,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_swapDepths(AptValue* pContext, int
         AptDisplayListState* const pSwapList =
             (nTypeTag == 5 || nTypeTag == 9)
                 ? static_cast<AptCharacterSpriteInstBase*>(pParentInst)->mDisplayList.AsState()
-                : nullptr;
+                : 0;
         if (pSwapList)
             pSwapList->swapDepths(pTarget, pNode);
         return gpUndefinedValue;
@@ -963,8 +963,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createEmptyMovieClip(AptValue* pCo
         AptCharacterHelper::CreateMovieCharacterInst();
 
         AptCIH* const pInserted = pNode->InsertChild(
-        nullptr, AptCharacterHelper::spDefaultMovieCharacter,
-        nDepth + 0x4000, &lName, nullptr);
+        0, AptCharacterHelper::spDefaultMovieCharacter,
+        nDepth + 0x4000, &lName, 0);
 
     if (IsClipHandleOrCIHNone(pInserted))
         static_cast<AptCharacterSpriteInstBase*>(pInserted->GetCharacterInst())->SetCreatedDynamic(true);
@@ -984,7 +984,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     AptValue* const pLibName = gppAptNativeArgStack[gnAptNativeArgCount - 1];
     AptValue* const pNewName = gppAptNativeArgStack[gnAptNativeArgCount - 2];
     AptValue* const pDepth   = gppAptNativeArgStack[gnAptNativeArgCount - 3];
-    AptValue* const pInitObj = (nArgCount < 4) ? nullptr
+    AptValue* const pInitObj = (nArgCount < 4) ? 0
                                                : gppAptNativeArgStack[gnAptNativeArgCount - 4];
 
     EAStringC lLibName;
@@ -1054,8 +1054,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext
 
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
         AptCIH* const pInserted = pNode->InsertChild(
-        nullptr, AptCharacterHelper::spDefaultTextCharacter,
-        nDepth + 0x4000, &lName, nullptr);
+        0, AptCharacterHelper::spDefaultTextCharacter,
+        nDepth + 0x4000, &lName, 0);
 
     AptCharacterInst* const pInst = pInserted->GetCharacterInst();
     if (pInst->GetTypeTag() == 2)   // dynamic-text instance
@@ -1138,7 +1138,7 @@ static void EnsureFieldTextFormat(AptCIH* pNode, AptRenderItemDynamicText* pFiel
 {
     if (pField->mpTextFormat)
         return;
-    TextFormat* pDefault = nullptr;
+    TextFormat* pDefault = 0;
     if (void* pBlock = gpAptPseudoDataPool->Allocate(sizeof(TextFormat)))   // X360 Allocate(32)
         pDefault = ::new (pBlock) TextFormat(
             gpUndefinedValue, KF_TEXTFORMAT_INHERIT_SIZE, -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
@@ -1162,7 +1162,7 @@ static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* 
     // FONT char) texFormat->pFontName = font.szName;` -- on a miss, incl. the
     // setTextFormat negative-id latch, the record's COPIED font name is kept).
     const char* const pcFontName = AptResolveTextFieldFontName(pNode->GetCharacterInst());
-    if (pcFontName != nullptr && pcFontName[0] != '\0')
+    if (pcFontName != 0 && pcFontName[0] != '\0')
     {
         EAStringC lFontName(pcFontName);
         pResult->mFormat.mFontName = lFontName;
@@ -1191,7 +1191,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getNewTextFormat(AptValue* pContex
 
     // Result copy-constructed from the field's current TextFormat record (the field's
     // mpTextFormat is a bare TextFormat record, opaquely typed AptValue* in the header).
-    AptTextFormat* pResult = nullptr;
+    AptTextFormat* pResult = 0;
     if (void* pBlock = AptTextFormat::operator new(sizeof(AptTextFormat)))   // X360 operator new(64)
         pResult = ::new (pBlock) AptTextFormat(reinterpret_cast<const TextFormat*>(pField->mpTextFormat));
 
@@ -1213,7 +1213,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getTextFormat(AptValue* pContext, 
     AptRenderItemDynamicText* const pField =
         static_cast<AptRenderItemDynamicText*>(pNode->GetCharacterInst()->GetRenderItem());
 
-    AptTextFormat* pResult = nullptr;
+    AptTextFormat* pResult = 0;
     if (void* pBlock = AptTextFormat::operator new(sizeof(AptTextFormat)))   // X360 operator new(64)
         pResult = ::new (pBlock) AptTextFormat(   // sub_82AFB2A8 (the AS-object field ctor)
             gpUndefinedValue, 0.0f, -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);

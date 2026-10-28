@@ -106,7 +106,7 @@ namespace CgsGeometric
     {
         // -- 0. Guards + the opening banner --------------------------------------
         // :172 / :173, both strings read out of the X360 image.
-        CGS_ASSERT(lpAllocator != nullptr, "No allocator specified\n");
+        CGS_ASSERT(lpAllocator != 0, "No allocator specified\n");
         CGS_ASSERT(liNumLevels >= 1 && liNumLevels <= KI_MAX_LEVELS,
                    "Num levels must be between 1 and 8\n");
 
@@ -141,7 +141,7 @@ namespace CgsGeometric
                 maiParentNodeCounts[liLevel] = liLevelNodes;
 
                 // :206 "Failed to allocate parent node array "
-                CGS_ASSERT(mapParentNodes[liLevel] != nullptr,
+                CGS_ASSERT(mapParentNodes[liLevel] != 0,
                            "Failed to allocate parent node array ");
 
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -164,7 +164,7 @@ namespace CgsGeometric
         miLeafNodeCount = liTotalPolygonSoups;
 
         // :213 "Failed to allocate " <n> " leaf nodes\n"
-        CGS_ASSERT(lpaLeafNodes != nullptr, "Failed to allocate  leaf nodes\n");
+        CGS_ASSERT(lpaLeafNodes != 0, "Failed to allocate  leaf nodes\n");
 
         if (CgsDev::Message::gxMessageFilterFlags & 1)
         {
@@ -356,7 +356,7 @@ namespace CgsGeometric
                 lpAllocator->Malloc(static_cast<size_t>(lrNode.mu16NumIndices) * sizeof(u16)));
 
             // :311
-            CGS_ASSERT(lrNode.mpaIndices != nullptr,
+            CGS_ASSERT(lrNode.mpaIndices != 0,
                        "Failed to allocate indices for bottom level");
 
             lrNode.mu16NumIndices = 0;
@@ -444,11 +444,11 @@ namespace CgsGeometric
         // -- 8. The query scratch, and publish the partition ---------------------
         mapQueryBuffers[0] = static_cast<u16*>(
             lpAllocator->Malloc(static_cast<size_t>(liQueryBufferSize) * sizeof(u16)));
-        CGS_ASSERT(mapQueryBuffers[0] != nullptr, "Failed to allocate query buffer 0\n");   // :382
+        CGS_ASSERT(mapQueryBuffers[0] != 0, "Failed to allocate query buffer 0\n");   // :382
 
         mapQueryBuffers[1] = static_cast<u16*>(
             lpAllocator->Malloc(static_cast<size_t>(liQueryBufferSize) * sizeof(u16)));
-        CGS_ASSERT(mapQueryBuffers[1] != nullptr, "Failed to allocate query buffer 1\n");   // :384
+        CGS_ASSERT(mapQueryBuffers[1] != 0, "Failed to allocate query buffer 1\n");   // :384
 
         // ⚠️ FLAG, as-shipped: mpOutputQueryBuffer (+0x58) is NOT written here. There
         // are exactly six Mallocs in the whole function and none is for it, so after a

@@ -22,7 +22,7 @@ namespace CgsDev
         {
             mValue = lrValue.mValue;
             meType = leType;
-            mpNextMetadata = nullptr;
+            mpNextMetadata = 0;
             return true;
         }
 
@@ -30,7 +30,7 @@ namespace CgsDev
         {
             mVariant.Copy(lrVariant);
             mpcName    = lpcName;
-            mpMetadata = nullptr;
+            mpMetadata = 0;
             return true;
         }
 
@@ -40,8 +40,8 @@ namespace CgsDev
         void Variable::Release()
         {
             mVariant.Clear();
-            mpcName = nullptr;
-            mpMetadata = nullptr;
+            mpcName = 0;
+            mpMetadata = 0;
         }
 
         bool Variable::Prepare(f32 lfValue, const char* lpcName)   { return Prepare(Variant(lfValue), lpcName); }
@@ -111,7 +111,7 @@ namespace CgsDev
         VariableMetadata* Variable::FindMetadata(VariableMetadata::Type leType) const
         {
             VariableMetadata* lpMetadata = mpMetadata;
-            while (lpMetadata != nullptr)
+            while (lpMetadata != 0)
             {
                 if (lpMetadata->meType == leType)
                     return lpMetadata;
@@ -119,7 +119,7 @@ namespace CgsDev
                 lpMetadata = lpMetadata->mpNextMetadata;
             }
 
-            return nullptr;
+            return 0;
         }
 
         // Read-only flag (DecFIGS CgsVariable.cpp:262, local `lpReadOnly` at :264). Inlined in the X360;
@@ -129,7 +129,7 @@ namespace CgsDev
         bool Variable::IsReadOnly()
         {
             VariableMetadata* lpReadOnly = FindMetadata(VariableMetadata::E_TYPE_READONLY);
-            if (lpReadOnly != nullptr)
+            if (lpReadOnly != 0)
                 return lpReadOnly->mValue.mbBool;
 
             return false;
@@ -143,7 +143,7 @@ namespace CgsDev
         bool Variable::IsSaveEnabled()
         {
             VariableMetadata* lpSaveEnabled = FindMetadata(VariableMetadata::E_TYPE_SAVEENABLED);
-            if (lpSaveEnabled != nullptr)
+            if (lpSaveEnabled != 0)
                 return lpSaveEnabled->mValue.mbBool;
 
             return true;
@@ -158,7 +158,7 @@ namespace CgsDev
         bool Variable::IsVisible()
         {
             VariableMetadata* lpVisible = FindMetadata(VariableMetadata::E_TYPE_VISIBLE);
-            if (lpVisible != nullptr)
+            if (lpVisible != 0)
                 return lpVisible->mValue.mbBool;
 
             return true;
@@ -172,10 +172,10 @@ namespace CgsDev
         const StringList* Variable::GetStringList()
         {
             const VariableMetadata* lpStringList = FindMetadata(VariableMetadata::E_TYPE_STRINGLIST);
-            if (lpStringList != nullptr)
+            if (lpStringList != 0)
                 return lpStringList->mValue.mpInt32StringList;
 
-            return nullptr;
+            return 0;
         }
 
         // X360 0x82823208 (DecFIGS CgsVariable.cpp:548). Push the attribute onto the front of the
@@ -187,7 +187,7 @@ namespace CgsDev
         void Variable::AddMetadata(VariableMetadata* lpMetadata)
         {
             CGS_ASSERT(lpMetadata, "lpMetadata");
-            CGS_ASSERT(FindMetadata(lpMetadata->meType) == nullptr, "same metadata added twice");
+            CGS_ASSERT(FindMetadata(lpMetadata->meType) == 0, "same metadata added twice");
 
             lpMetadata->mpNextMetadata = mpMetadata;
             mpMetadata                 = lpMetadata;
@@ -205,18 +205,18 @@ namespace CgsDev
             if (lpMetadata == mpMetadata)
             {
                 mpMetadata                 = mpMetadata->mpNextMetadata;
-                lpMetadata->mpNextMetadata = nullptr;
+                lpMetadata->mpNextMetadata = 0;
                 return;
             }
 
             for (VariableMetadata* lpPrevMetadata = mpMetadata;
-                 lpPrevMetadata != nullptr;
+                 lpPrevMetadata != 0;
                  lpPrevMetadata = lpPrevMetadata->mpNextMetadata)
             {
                 if (lpPrevMetadata->mpNextMetadata == lpMetadata)
                 {
                     lpPrevMetadata->mpNextMetadata = lpMetadata->mpNextMetadata;
-                    lpMetadata->mpNextMetadata     = nullptr;
+                    lpMetadata->mpNextMetadata     = 0;
                     return;
                 }
             }
@@ -244,21 +244,21 @@ namespace CgsDev
             switch (mVariant.meType)
             {
             case Variant::E_TYPE_PTR_FLOAT:
-                if (lpStep != nullptr)
+                if (lpStep != 0)
                     *mVariant.mValue.mpfFloat += lpStep->mValue.mfFloat;
                 else
                     *mVariant.mValue.mpfFloat += 1.0f;
                 break;
 
             case Variant::E_TYPE_PTR_INT32:
-                if (lpStep != nullptr)
+                if (lpStep != 0)
                     *mVariant.mValue.mpiInt32 += lpStep->mValue.miInt32;
                 else
                     ++*mVariant.mValue.mpiInt32;
                 break;
 
             case Variant::E_TYPE_PTR_UINT32:
-                if (lpStep != nullptr)
+                if (lpStep != 0)
                     *mVariant.mValue.mpuUInt32 += lpStep->mValue.muUInt32;
                 else
                     ++*mVariant.mValue.mpuUInt32;
@@ -290,21 +290,21 @@ namespace CgsDev
             switch (mVariant.meType)
             {
             case Variant::E_TYPE_PTR_FLOAT:
-                if (lpStep != nullptr)
+                if (lpStep != 0)
                     *mVariant.mValue.mpfFloat -= lpStep->mValue.mfFloat;
                 else
                     *mVariant.mValue.mpfFloat -= 1.0f;
                 break;
 
             case Variant::E_TYPE_PTR_INT32:
-                if (lpStep != nullptr)
+                if (lpStep != 0)
                     *mVariant.mValue.mpiInt32 -= lpStep->mValue.miInt32;
                 else
                     --*mVariant.mValue.mpiInt32;
                 break;
 
             case Variant::E_TYPE_PTR_UINT32:
-                if (lpStep != nullptr)
+                if (lpStep != 0)
                     *mVariant.mValue.mpuUInt32 -= lpStep->mValue.muUInt32;
                 else
                     --*mVariant.mValue.mpuUInt32;
@@ -332,10 +332,10 @@ namespace CgsDev
             VariableMetadata* lpSelectCallback      = FindMetadata(VariableMetadata::E_TYPE_SELECT_CALLBACK);
             VariableMetadata* lpSelectCallbackParam = FindMetadata(VariableMetadata::E_TYPE_SELECT_CALLBACK_PARAM);
 
-            if (lpSelectCallback != nullptr && lpSelectCallback->mValue.mpVariableCallbackFunction != nullptr)
+            if (lpSelectCallback != 0 && lpSelectCallback->mValue.mpVariableCallbackFunction != 0)
             {
-                void* lpParameter = nullptr;
-                if (lpSelectCallbackParam != nullptr)
+                void* lpParameter = 0;
+                if (lpSelectCallbackParam != 0)
                     lpParameter = lpSelectCallbackParam->mValue.mpValue;
 
                 lpSelectCallback->mValue.mpVariableCallbackFunction(mVariant.mValue.mpValue, lpParameter);
@@ -364,26 +364,26 @@ namespace CgsDev
             switch (mVariant.meType)
             {
             case Variant::E_TYPE_PTR_FLOAT:
-                if (lpMin != nullptr && *mVariant.mValue.mpfFloat < lpMin->mValue.mfFloat)
+                if (lpMin != 0 && *mVariant.mValue.mpfFloat < lpMin->mValue.mfFloat)
                     *mVariant.mValue.mpfFloat = lpMin->mValue.mfFloat;
 
-                if (lpMax != nullptr && *mVariant.mValue.mpfFloat > lpMax->mValue.mfFloat)
+                if (lpMax != 0 && *mVariant.mValue.mpfFloat > lpMax->mValue.mfFloat)
                     *mVariant.mValue.mpfFloat = lpMax->mValue.mfFloat;
                 break;
 
             case Variant::E_TYPE_PTR_INT32:
-                if (lpMin != nullptr && *mVariant.mValue.mpiInt32 < lpMin->mValue.miInt32)
+                if (lpMin != 0 && *mVariant.mValue.mpiInt32 < lpMin->mValue.miInt32)
                     *mVariant.mValue.mpiInt32 = lpMin->mValue.miInt32;
 
-                if (lpMax != nullptr && *mVariant.mValue.mpiInt32 > lpMax->mValue.miInt32)
+                if (lpMax != 0 && *mVariant.mValue.mpiInt32 > lpMax->mValue.miInt32)
                     *mVariant.mValue.mpiInt32 = lpMax->mValue.miInt32;
                 break;
 
             case Variant::E_TYPE_PTR_UINT32:
-                if (lpMin != nullptr && *mVariant.mValue.mpuUInt32 < lpMin->mValue.muUInt32)
+                if (lpMin != 0 && *mVariant.mValue.mpuUInt32 < lpMin->mValue.muUInt32)
                     *mVariant.mValue.mpuUInt32 = lpMin->mValue.muUInt32;
 
-                if (lpMax != nullptr && *mVariant.mValue.mpuUInt32 > lpMax->mValue.muUInt32)
+                if (lpMax != 0 && *mVariant.mValue.mpuUInt32 > lpMax->mValue.muUInt32)
                     *mVariant.mValue.mpuUInt32 = lpMax->mValue.muUInt32;
                 break;
 
@@ -391,10 +391,10 @@ namespace CgsDev
                 break;
             }
 
-            if (lpChangeCallback != nullptr && lpChangeCallback->mValue.mpVariableCallbackFunction != nullptr)
+            if (lpChangeCallback != 0 && lpChangeCallback->mValue.mpVariableCallbackFunction != 0)
             {
-                void* lpParameter = nullptr;
-                if (lpChangeCallbackParam != nullptr)
+                void* lpParameter = 0;
+                if (lpChangeCallbackParam != 0)
                     lpParameter = lpChangeCallbackParam->mValue.mpValue;
 
                 lpChangeCallback->mValue.mpVariableCallbackFunction(mVariant.mValue.mpValue, lpParameter);
@@ -419,15 +419,15 @@ namespace CgsDev
                 return;
 
             const StringList* lpStringList = GetStringList();
-            if (lpStringList != nullptr)
+            if (lpStringList != 0)
             {
                 CGS_ASSERT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
                            "mVariant.meType == Variant::E_TYPE_PTR_INT32");
 
-                while (lpStringList->mpcName != nullptr && _stricmp(lpStringList->mpcName, lpcValue) != 0)
+                while (lpStringList->mpcName != 0 && _stricmp(lpStringList->mpcName, lpcValue) != 0)
                     ++lpStringList;
 
-                if (lpStringList->mpcName != nullptr)
+                if (lpStringList->mpcName != 0)
                 {
                     if (mVariant.meType == Variant::E_TYPE_PTR_INT32)
                         *mVariant.mValue.mpiInt32 = lpStringList->miValue;
@@ -459,13 +459,13 @@ namespace CgsDev
         void Variable::GetValueAsString(char* lpcValue, int liLength)
         {
             const StringList* lpStringList = GetStringList();
-            if (lpStringList != nullptr)
+            if (lpStringList != 0)
             {
                 CGS_ASSERT(mVariant.meType == Variant::E_TYPE_PTR_INT32,
                            "mVariant.meType == Variant::E_TYPE_PTR_INT32");
                 if (mVariant.meType == Variant::E_TYPE_PTR_INT32)
                 {
-                    while (lpStringList->mpcName != nullptr)
+                    while (lpStringList->mpcName != 0)
                     {
                         if (lpStringList->miValue == *mVariant.mValue.mpiInt32)
                         {

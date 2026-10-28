@@ -18,7 +18,7 @@ namespace Gen
     class physicsvehiclecollisionattribs : private Instance
     {
     public:
-        explicit physicsvehiclecollisionattribs(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit physicsvehiclecollisionattribs(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // Re-exposed from the private Instance base (attribs-data wave, 2026-08-09): the X360
         // consumer (VehicleAttribs::SetupAttribs @0x825F4CD8) reads the record through

@@ -34,7 +34,7 @@ s32 CDynamicBatchAllocator::CreateObject(CDynamicBatchAllocator** appObject)
 {
     void* pRaw = gXMemMemoryManager.XMemAlloc(sizeof(CDynamicBatchAllocator),
                                               KU_XMEM_ALLOC_ATTRIBUTES); // 28, 1
-    if (pRaw == nullptr)                        // cmplwi cr6, r11, 0 ; beq
+    if (pRaw == 0)                        // cmplwi cr6, r11, 0 ; beq
         return KS_OUTOFMEMORY;                  // 0x8007000E
 
     CDynamicBatchAllocator* pObject = new (pRaw) CDynamicBatchAllocator();

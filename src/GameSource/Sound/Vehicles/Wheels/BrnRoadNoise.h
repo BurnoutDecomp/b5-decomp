@@ -89,13 +89,13 @@ struct RoadnoiseEffect : public BrnSound::Logic::BrnEffectObject
     RoadnoiseEffect();               // @ 0x826E56C0
     virtual ~RoadnoiseEffect();      // anchor for the vector deleting destructor @ 0x826E5AC8
 
-    virtual const char* GetTypeName() const override;
-    virtual s32 GetController(s32 aiSlot) override;
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afTimeStep) override;
-    virtual void ProcessUpdate() override;
-    virtual bool Detach() override;
+    virtual const char* GetTypeName() const ;
+    virtual s32 GetController(s32 aiSlot) ;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afTimeStep) ;
+    virtual void ProcessUpdate() ;
+    virtual bool Detach() ;
 
     // ---- members (DWARF-attested; declared order == DWARF BrnRoadNoise.h) ----
     WheelControl*                    mpWheelControl;                       // :157

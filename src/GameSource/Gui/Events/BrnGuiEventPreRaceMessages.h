@@ -37,20 +37,20 @@ struct GuiEventPreRaceMessages
     void AddMessage(ERelationshipTypes,const char*);
     void AddStringToMessage(s32,s32,const char*,s32,const char*);
 };
-using PreEventInfo=GuiEventPreRaceMessages::MessageInfo;
-static_assert(sizeof(PreEventInfo)==580,"ARTIST pre-event row stride244");
-static_assert(offsetof(PreEventInfo,meRelationshipType)==16,"ARTIST relationship+10");
-static_assert(offsetof(PreEventInfo,maacMessageIDs)==20,"ARTIST message IDs+14");
-static_assert(offsetof(PreEventInfo,maacMessageParameters)==404,"ARTIST parameters+194");
-static_assert(offsetof(PreEventInfo,macGamerName)==452,"ARTIST gamer name+1C4");
-static_assert(sizeof(GuiEventPreRaceMessages)==1744,"GUI159 queues1744payload bytes");
-static_assert(offsetof(GuiEventPreRaceMessages,miNumMessages)==1740,"ARTIST count+6CC");
+typedef GuiEventPreRaceMessages::MessageInfo PreEventInfo;
+CGS_STATIC_ASSERT((sizeof(PreEventInfo)==580),"ARTIST pre-event row stride244");
+CGS_STATIC_ASSERT((offsetof(PreEventInfo,meRelationshipType)==16),"ARTIST relationship+10");
+CGS_STATIC_ASSERT((offsetof(PreEventInfo,maacMessageIDs)==20),"ARTIST message IDs+14");
+CGS_STATIC_ASSERT((offsetof(PreEventInfo,maacMessageParameters)==404),"ARTIST parameters+194");
+CGS_STATIC_ASSERT((offsetof(PreEventInfo,macGamerName)==452),"ARTIST gamer name+1C4");
+CGS_STATIC_ASSERT((sizeof(GuiEventPreRaceMessages)==1744),"GUI159 queues1744payload bytes");
+CGS_STATIC_ASSERT((offsetof(GuiEventPreRaceMessages,miNumMessages)==1740),"ARTIST count+6CC");
 
 // ARTIST823A6D40: reset exactly the selected row, copy gamer name, then count.
 inline void GuiEventPreRaceMessages::AddMessage(ERelationshipTypes leType,
                                                const char* lpcGamerName)
 {
-    CGS_ASSERT(lpcGamerName!=nullptr,"Invalid string passed to GuiEventPreRaceMessages::AddMessage");
+    CGS_ASSERT(lpcGamerName!=0,"Invalid string passed to GuiEventPreRaceMessages::AddMessage");
     CGS_ASSERT(leType<E_RELATIONSHIP_COUNT,"Invalid message type passed to GuiPreraceMessage::AddMessage");
     CGS_ASSERT(miNumMessages<KI_MAX_NUM_MESSAGES,"Too many messages added to event in GuiPreraceMessage::AddMessage");
     CGS_ASSERT(std::strlen(lpcGamerName)<128,"Overlong gamer name passed to GuiEventPreRaceMessages::AddMessage");
@@ -70,7 +70,7 @@ inline void GuiEventPreRaceMessages::AddMessage(ERelationshipTypes leType,
 inline void GuiEventPreRaceMessages::AddStringToMessage(s32 liMessageIndex,
     s32 liStringIndex,const char* lpcStringId,s32 liNumParameters,const char* lpcParameter)
 {
-    CGS_ASSERT(lpcStringId!=nullptr,"Invalid string passed to GuiEventPreRaceMessages::AddStringToMessage");
+    CGS_ASSERT(lpcStringId!=0,"Invalid string passed to GuiEventPreRaceMessages::AddStringToMessage");
     CGS_ASSERT(liMessageIndex>=0&&liMessageIndex<=miNumMessages,"Invalid message index passed to GuiPreraceMessage::AddMessage");
     CGS_ASSERT(liStringIndex>=0&&liStringIndex<3,"Invalid string index in GuiPreraceMessage::AddMessage");
     CGS_ASSERT(std::strlen(lpcStringId)<128,"Message stringID too long in GuiPreraceMessage::AddMessage");
@@ -82,7 +82,7 @@ inline void GuiEventPreRaceMessages::AddStringToMessage(s32 liMessageIndex,
     CGS_ASSERT(liNumParameters>=0&&liNumParameters<=1,"Invalid number of parameters passed to GuiPreraceMessage::AddMessage");
     if(liNumParameters==1)
     {
-        CGS_ASSERT(lpcParameter!=nullptr,"Invalid string passed to GuiEventPreRaceMessages::AddStringToMessage");
+        CGS_ASSERT(lpcParameter!=0,"Invalid string passed to GuiEventPreRaceMessages::AddStringToMessage");
         CGS_ASSERT(std::strlen(lpcParameter)<16,"Parameter string too long in GuiPreraceMessage::AddMessage");
         CGS_ASSERT(std::strlen(lpcParameter)<16,"String too long: ");
         std::strncpy(lrMessage.maacMessageParameters[liStringIndex],lpcParameter,16);

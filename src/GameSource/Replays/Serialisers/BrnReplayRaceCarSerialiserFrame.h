@@ -50,8 +50,8 @@ namespace BrnReplays
 
     // Pin the X360-attested sizes so the +0xD7E0 live-frame offset and the 0x1B000 buffer
     // size are exact.
-    static_assert(sizeof(RaceCarSerialiserFrame) == 0xD7E0,
+    CGS_STATIC_ASSERT((sizeof(RaceCarSerialiserFrame) == 0xD7E0),
                   "RaceCarSerialiserFrame must be 0xD7E0 bytes (X360 Read/Write size arg)");
-    static_assert(sizeof(RaceCarEntitySerialiserStaticLayout) == 0x1B000,
+    CGS_STATIC_ASSERT((sizeof(RaceCarEntitySerialiserStaticLayout) == 0x1B000),
                   "RaceCarEntitySerialiserStaticLayout must be 0x1B000 bytes (Construct arg)");
 }

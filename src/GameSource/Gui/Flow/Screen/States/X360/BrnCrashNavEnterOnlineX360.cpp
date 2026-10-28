@@ -47,10 +47,10 @@ namespace BrnGui
     void CrashNavEnterOnlineX360::OnLeave()
     {
         CrashNavEnterOnlineBase::OnLeave();                   // bl ...Base__OnLeave
-        if (mhNotificationListener != nullptr)               // lwz r3, 0x37F0(this) ; beq
+        if (mhNotificationListener != 0)               // lwz r3, 0x37F0(this) ; beq
         {
             CloseHandle(mhNotificationListener);             // bl CloseHandle
-            mhNotificationListener = nullptr;                // li r11, 0 ; stw r11, 0x37F0(this)
+            mhNotificationListener = 0;                // li r11, 0 ; stw r11, 0x37F0(this)
         }
     }
 

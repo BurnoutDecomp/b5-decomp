@@ -27,9 +27,9 @@ namespace WorldEntityIO
 {
     void RequestInterface::InvalidateCollisionWorld()
     {
-        static_assert(offsetof(RequestInterface, mbInvalidateCollisionWorld) == 0,
+        CGS_STATIC_ASSERT((offsetof(RequestInterface, mbInvalidateCollisionWorld) == 0),
                       "mbInvalidateCollisionWorld @0");
-        static_assert(offsetof(RequestInterface, mbValidateCollisionWorld) == 1,
+        CGS_STATIC_ASSERT((offsetof(RequestInterface, mbValidateCollisionWorld) == 1),
                       "mbValidateCollisionWorld @1");
 
         // X360 0x823A7DC8: cannot invalidate while a validate request is pending.

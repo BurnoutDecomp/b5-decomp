@@ -230,7 +230,7 @@ namespace
     inline bool DiagEnvOn(const char* lpcName)
     {
         const char* lpcValue = std::getenv(lpcName);
-        return lpcValue != nullptr && lpcValue[0] != '0';
+        return lpcValue != 0 && lpcValue[0] != '0';
     }
 
     inline f32 MaxAbsRow(const f32* lpafRow)
@@ -255,7 +255,7 @@ namespace
     {
         AIDriverControlsRecord() { meDriverType = BrnPhysics::Vehicle::E_DRIVER_TYPE_AI; }
     };
-    static_assert(sizeof(AIDriverControlsRecord) == 0x50,
+    CGS_STATIC_ASSERT((sizeof(AIDriverControlsRecord) == 0x50),
                   "AIDriverControlsRecord must keep the console's 80-byte BrnAIDriverControls image");
 }
 
@@ -1072,7 +1072,7 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
     // is BrnPhysics::Vehicle::VehicleDriverInputInterface (its first member IS the
     // VariableEventQueue<5040,16> the AddEvent below targets); sizeof on this host is 5296 ==
     // 0x14B0 exactly, pinned here. DELETE-WHEN the OutputBuffer owner types + Constructs the member.
-    static_assert(sizeof(VehicleDriverInputInterface) <= 0x14B0,
+    CGS_STATIC_ASSERT((sizeof(VehicleDriverInputInterface) <= 0x14B0),
                   "VehicleDriverInputInterface must fit the OutputBuffer's 0x14B0 vehicle-driver seat");
     VehicleDriverInputInterface* lpDriverInputInterface =
         reinterpret_cast<VehicleDriverInputInterface*>(lpOutputBuffer->GetVehicleDriverInterface());

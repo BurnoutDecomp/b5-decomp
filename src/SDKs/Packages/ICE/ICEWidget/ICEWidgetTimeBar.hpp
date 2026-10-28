@@ -171,33 +171,33 @@ namespace ICE
     // Pin the offsets the four bodies read/write. The base is empty (EBO), so the
     // leading reserved bytes start at offset 0. sizeof is NOT asserted -- only the
     // fields below are proven; trailing/interleaved members are reserved bytes.
-    static_assert(offsetof(ICEWidgetTimeBar, maMarkers)     == 0x0000, "ICEWidgetTimeBar::maMarkers offset");
-    static_assert(offsetof(ICEWidgetTimeBar, miNumMarkers)  == 0x2EE0, "ICEWidgetTimeBar::miNumMarkers offset (12000)");
-    static_assert(offsetof(ICEWidgetTimeBar, mIcon)        == 0x2EE4, "ICEWidgetTimeBar::mIcon offset (12004)");
-    static_assert(offsetof(ICEWidgetTimeBar, mbShowIcon)    == 0x2EF4, "ICEWidgetTimeBar::mbShowIcon offset (12020)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfScreenLeft)  == 0x2EF8, "ICEWidgetTimeBar::mfScreenLeft offset (12024)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfTrackFlagA)  == 0x2EFC, "ICEWidgetTimeBar::mfTrackFlagA offset (12028)");
-    static_assert(offsetof(ICEWidgetTimeBar, mbHasSelection)== 0x2F00, "ICEWidgetTimeBar::mbHasSelection offset (12032)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfSelFlagB)    == 0x2F04, "ICEWidgetTimeBar::mfSelFlagB offset (12036)");
-    static_assert(offsetof(ICEWidgetTimeBar, mbLoopActive)  == 0x2F08, "ICEWidgetTimeBar::mbLoopActive offset (12040)");
-    static_assert(offsetof(ICEWidgetTimeBar, mbShowAux)     == 0x2F0C, "ICEWidgetTimeBar::mbShowAux offset (12044)");
-    static_assert(offsetof(ICEWidgetTimeBar, miMarkerSelA)  == 0x2F68, "ICEWidgetTimeBar::miMarkerSelA offset (12136)");
-    static_assert(offsetof(ICEWidgetTimeBar, miMarkerSelB)  == 0x2F6C, "ICEWidgetTimeBar::miMarkerSelB offset (12140)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfLoopStart)   == 0x2F70, "ICEWidgetTimeBar::mfLoopStart offset (12144)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfLoopEnd)     == 0x2F74, "ICEWidgetTimeBar::mfLoopEnd offset (12148)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfBarLength)   == 0x2F80, "ICEWidgetTimeBar::mfBarLength offset (12160)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfTimeMin)     == 0x2F84, "ICEWidgetTimeBar::mfTimeMin offset (12164)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfDomainLo)    == 0x2F88, "ICEWidgetTimeBar::mfDomainLo offset (12168)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfDomainHi)    == 0x2F8C, "ICEWidgetTimeBar::mfDomainHi offset (12172)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfBarX)        == 0x2F90, "ICEWidgetTimeBar::mfBarX offset (12176)");
-    static_assert(offsetof(ICEWidgetTimeBar, mfBarY)        == 0x2F94, "ICEWidgetTimeBar::mfBarY offset (12180)");
-    static_assert(offsetof(ICEWidgetTimeBar, mbCompact)     == 0x2F98, "ICEWidgetTimeBar::mbCompact offset (12184)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, maMarkers)     == 0x0000), "ICEWidgetTimeBar::maMarkers offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, miNumMarkers)  == 0x2EE0), "ICEWidgetTimeBar::miNumMarkers offset (12000)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mIcon)        == 0x2EE4), "ICEWidgetTimeBar::mIcon offset (12004)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mbShowIcon)    == 0x2EF4), "ICEWidgetTimeBar::mbShowIcon offset (12020)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfScreenLeft)  == 0x2EF8), "ICEWidgetTimeBar::mfScreenLeft offset (12024)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfTrackFlagA)  == 0x2EFC), "ICEWidgetTimeBar::mfTrackFlagA offset (12028)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mbHasSelection)== 0x2F00), "ICEWidgetTimeBar::mbHasSelection offset (12032)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfSelFlagB)    == 0x2F04), "ICEWidgetTimeBar::mfSelFlagB offset (12036)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mbLoopActive)  == 0x2F08), "ICEWidgetTimeBar::mbLoopActive offset (12040)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mbShowAux)     == 0x2F0C), "ICEWidgetTimeBar::mbShowAux offset (12044)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, miMarkerSelA)  == 0x2F68), "ICEWidgetTimeBar::miMarkerSelA offset (12136)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, miMarkerSelB)  == 0x2F6C), "ICEWidgetTimeBar::miMarkerSelB offset (12140)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfLoopStart)   == 0x2F70), "ICEWidgetTimeBar::mfLoopStart offset (12144)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfLoopEnd)     == 0x2F74), "ICEWidgetTimeBar::mfLoopEnd offset (12148)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfBarLength)   == 0x2F80), "ICEWidgetTimeBar::mfBarLength offset (12160)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfTimeMin)     == 0x2F84), "ICEWidgetTimeBar::mfTimeMin offset (12164)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfDomainLo)    == 0x2F88), "ICEWidgetTimeBar::mfDomainLo offset (12168)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfDomainHi)    == 0x2F8C), "ICEWidgetTimeBar::mfDomainHi offset (12172)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfBarX)        == 0x2F90), "ICEWidgetTimeBar::mfBarX offset (12176)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mfBarY)        == 0x2F94), "ICEWidgetTimeBar::mfBarY offset (12180)");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBar, mbCompact)     == 0x2F98), "ICEWidgetTimeBar::mbCompact offset (12184)");
 
     // The marker element is 80 bytes (the +80 stride the bodies walk); the two fields
     // the bodies read by offset are pinned.
-    static_assert(sizeof(ICEWidgetTimeBarMarker) == 80, "ICEWidgetTimeBarMarker stride must be 80");
-    static_assert(offsetof(ICEWidgetTimeBarMarker, miIsKeyframe) == 0x40, "ICEWidgetTimeBarMarker::miIsKeyframe offset");
-    static_assert(offsetof(ICEWidgetTimeBarMarker, mfTime)       == 0x44, "ICEWidgetTimeBarMarker::mfTime offset");
+    CGS_STATIC_ASSERT((sizeof(ICEWidgetTimeBarMarker) == 80), "ICEWidgetTimeBarMarker stride must be 80");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBarMarker, miIsKeyframe) == 0x40), "ICEWidgetTimeBarMarker::miIsKeyframe offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTimeBarMarker, mfTime)       == 0x44), "ICEWidgetTimeBarMarker::mfTime offset");
 }
 
 #endif // SDKS_PACKAGES_ICE_ICEWIDGET_ICEWIDGETTIMEBAR_HPP

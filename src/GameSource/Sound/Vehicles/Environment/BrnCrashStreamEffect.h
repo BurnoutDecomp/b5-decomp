@@ -51,15 +51,15 @@ struct CrashStreamEffect : public BrnSound::Logic::BrnEffectObject,
     // @ 0x8269B908 (DWARF h:135). Build a rotating content-spec name and intern it.
     const CgsSound::Playback::Name GetContentSpecToPlay( bool bShowTime ) const;
 
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    bool Prepare(CgsSound::Logic::State* apState) override;
-    void UpdateParams(f32 afTimeStep) override;
-    bool Detach() override;
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    bool Prepare(CgsSound::Logic::State* apState) ;
+    void UpdateParams(f32 afTimeStep) ;
+    bool Detach() ;
 
-    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const ;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
-                           f32 afGain, f32 afElapsedTime) override;
+                           f32 afGain, f32 afElapsedTime) ;
 
     // Members in declaration order.
     CgsSound::Logic::VoiceWrapper::CreateParams  mParams;

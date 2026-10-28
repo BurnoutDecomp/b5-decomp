@@ -123,11 +123,11 @@ namespace BrnWorld
     // Pin the pointer-free head of the record (console offsets == host offsets there).
     void PropCellManager::_AssertLayout()
     {
-        static_assert(offsetof(PropCellManager, maCells)          == 0,    "maCells @ +0");
-        static_assert(offsetof(PropCellManager, miNumLoadedCells) == 1800, "miNumLoadedCells @ +1800 (asm 0x708)");
-        static_assert(offsetof(PropCellManager, maActiveCells)    == 1804, "maActiveCells @ +1804 (asm 0x70C)");
-        static_assert(offsetof(PropCellManager, miNumActiveCells) == 1900, "miNumActiveCells @ +1900 (asm 0x76C)");
-        static_assert(offsetof(PropCellManager, mpaProps)         == 1904, "mpaProps @ +1904 (asm 0x770)");
+        CGS_STATIC_ASSERT((offsetof(PropCellManager, maCells)          == 0),    "maCells @ +0");
+        CGS_STATIC_ASSERT((offsetof(PropCellManager, miNumLoadedCells) == 1800), "miNumLoadedCells @ +1800 (asm 0x708)");
+        CGS_STATIC_ASSERT((offsetof(PropCellManager, maActiveCells)    == 1804), "maActiveCells @ +1804 (asm 0x70C)");
+        CGS_STATIC_ASSERT((offsetof(PropCellManager, miNumActiveCells) == 1900), "miNumActiveCells @ +1900 (asm 0x76C)");
+        CGS_STATIC_ASSERT((offsetof(PropCellManager, mpaProps)         == 1904), "mpaProps @ +1904 (asm 0x770)");
 
         // ⭐ ADDED 2026-08-18 (wave Q round 2), from a round-1 verifier NIT on
         // PropEntityModule_wQ_07.cpp. The physical-slot ceiling is spelled THREE ways in this
@@ -139,15 +139,15 @@ namespace BrnWorld
         // scheduled to MOVE to BrnPropConstants.h, by someone with no reason to open this
         // file. A pool resized through only one spelling is a silent out-of-bounds walk over
         // maPhysicalPartParams. These four asserts make the three spellings unable to drift.
-        static_assert(KU_MAX_PHYSICAL_PROPS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS,
+        CGS_STATIC_ASSERT((KU_MAX_PHYSICAL_PROPS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS),
                       "PropCellManager::KU_MAX_PHYSICAL_PROPS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS");
-        static_assert(KU_MAX_PHYSICAL_PARTS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS,
+        CGS_STATIC_ASSERT((KU_MAX_PHYSICAL_PARTS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS),
                       "PropCellManager::KU_MAX_PHYSICAL_PARTS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS");
-        static_assert(sizeof(((PropCellManager*)0)->maPhysicalPropParams) / sizeof(PhysicalParams)
-                          == KU_MAX_PHYSICAL_PROPS,
+        CGS_STATIC_ASSERT((sizeof(((PropCellManager*)0)->maPhysicalPropParams) / sizeof(PhysicalParams)
+                          == KU_MAX_PHYSICAL_PROPS),
                       "maPhysicalPropParams extent == KU_MAX_PHYSICAL_PROPS");
-        static_assert(sizeof(((PropCellManager*)0)->maPhysicalPartParams) / sizeof(PhysicalParams)
-                          == KU_MAX_PHYSICAL_PARTS,
+        CGS_STATIC_ASSERT((sizeof(((PropCellManager*)0)->maPhysicalPartParams) / sizeof(PhysicalParams)
+                          == KU_MAX_PHYSICAL_PARTS),
                       "maPhysicalPartParams extent == KU_MAX_PHYSICAL_PARTS");
     }
 

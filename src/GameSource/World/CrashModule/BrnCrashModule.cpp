@@ -25,7 +25,7 @@ namespace BrnWorld
         using namespace BrnGameState::GameStateModuleIO;
         CGS_ASSERT(lpInput, "lpInput");
         const auto* lpQueue = lpInput->GetGameActionQueue();
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         for (s32 liAction = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
              liAction = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))

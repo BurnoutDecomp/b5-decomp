@@ -162,7 +162,7 @@ bool SeekTableParser::ParseHeader0(u8* apSeekData, s32 aTargetPos)
                           | (static_cast<u32>(apSeekData[5]) << 16)
                           | (static_cast<u32>(apSeekData[6]) << 8)
                           |  static_cast<u32>(apSeekData[7]);
-    mpSeekData = lSeekOffset ? (apSeekData + lSeekOffset) : nullptr;
+    mpSeekData = lSeekOffset ? (apSeekData + lSeekOffset) : 0;
 
     u8* const lpSection = apSeekData + 8;
     if (lSectionKind == 0)
@@ -191,7 +191,7 @@ bool SeekTableParser::Parse(u8* apSeekData, s32 aTargetPos)
 
     if (lNotResolved)
     {
-        mpSeekData       = nullptr;
+        mpSeekData       = 0;
         mStreamSkip      = 0;
         mDecoderSkip     = 0;
         mChunkOffset     = 0;

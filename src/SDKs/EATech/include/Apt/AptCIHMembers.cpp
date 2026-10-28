@@ -115,10 +115,10 @@ static AptMovie* GetClipMovieEmbedded(const AptCharacterInst* pInst)
 static AptValue* LookupMethodSingleton(AptValue*& pSlot,
                                               AptExtFunctionPtr pfnMethod)
 {
-    if (pSlot == nullptr)
+    if (pSlot == 0)
     {
         pSlot = AptExtObject::CreateNewAptFunction(pfnMethod);   // operator new(0x24) + ctor
-        if (pSlot != nullptr)
+        if (pSlot != 0)
         {
             pSlot->setGCRoot(1);
             pSlot->AddRef();   // vtbl[0] -- the permanent singleton pin
@@ -169,12 +169,12 @@ static void AddNodeToInputSet(AptCIH* pNode)
 
     uint32_t luNext = (static_cast<uint32_t>(pSet->mnCount) + 1u) % luCap;
     uint32_t luScanned = 0u;
-    while (luScanned < luCap && pSet->mppSlots[luNext] != nullptr)
+    while (luScanned < luCap && pSet->mppSlots[luNext] != 0)
     {
         luNext = (luNext + 1u) % luCap;
         ++luScanned;
     }
-    if (pSet->mppSlots[luNext] == nullptr)   // found a free slot
+    if (pSet->mppSlots[luNext] == 0)   // found a free slot
     {
         pSet->mnCount = static_cast<uint16_t>(luNext);
         pSet->mppSlots[luNext] = static_cast<AptValue*>(pNode);
@@ -187,10 +187,10 @@ static void RemoveNodeFromInputSet(AptCIH* pNode)   // console sub_82ADBD50
     AptAnimationTargetSet* const pSet = &gpAptTarget->GetAnimationTarget()->mInputSet;
     for (uint32_t i = 0; i < pSet->mnCapacity; ++i)
     {
-        if (pSet->mppSlots != nullptr &&
+        if (pSet->mppSlots != 0 &&
             reinterpret_cast<AptCIH*>(pSet->mppSlots[i]) == pNode)
         {
-            pSet->mppSlots[i] = nullptr;
+            pSet->mppSlots[i] = 0;
             pNode->Release();
             break;
         }
@@ -216,7 +216,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
     {
         const TextMembersIndex::Entry* const pEntry =
             TextMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
-        if (pEntry != nullptr &&
+        if (pEntry != 0 &&
             static_cast<uint32_t>(pEntry->miData) - 1u <= 20u)   // ids 1..21 (byte_82145578)
         {
             AptCharacterTextInst* const pTextInst = static_cast<AptCharacterTextInst*>(pInst);
@@ -361,12 +361,12 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
     }
 
     // ---- the MovieClip members (a live, defined clip value) ----------------
-    const SpriteMembersIndex::Entry* pSprEntry = nullptr;
+    const SpriteMembersIndex::Entry* pSprEntry = 0;
     if (pNode->getVtblIndex() == AptVFT_CharacterInstHandle && pNode->getIsDefined())
     {
         pSprEntry = SpriteMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
     }
-    if (pSprEntry != nullptr &&
+    if (pSprEntry != 0 &&
         static_cast<uint32_t>(pSprEntry->muMemberIndex) - 1u <= 0x82u)   // ids 1..131 (word_82145470)
     {
         switch (pSprEntry->muMemberIndex)
@@ -445,10 +445,10 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
         case 22:  // mouse position pulled into this clip's space (world-matrix walk up)
         {
             AptMatrix worldMatrix = gAptIdentityMatrix;
-            for (AptCIH* pWalk = pNode; pWalk != nullptr; pWalk = pWalk->mpDisplayListParent)
+            for (AptCIH* pWalk = pNode; pWalk != 0; pWalk = pWalk->mpDisplayListParent)
             {
                 const AptMatrix* pPos = pWalk->mpCharacterInst->mpRenderItem->mpPositionMatrix;
-                if (pPos == nullptr)
+                if (pPos == 0)
                     pPos = &gAptIdentityMatrix;
                 AptRenderingContext::multMatrix(&worldMatrix, pPos, &worldMatrix);
             }
@@ -536,7 +536,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
         // 2026-08-02 that no shipped AS in build\game\GUIAPT\*.bundle mentions
         // "prevFrame", "getBytesLoaded" or "unloadMovie" -- re-check before assuming.
         case 108: case 111: case 121:
-            return nullptr;
+            return 0;
 
         case 131: // "_renderflags" @0x82B0E484 -- the render item's render-data hook name
         {
@@ -552,7 +552,7 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
         }
     }
 
-    return nullptr;   // continue the findChild resolution
+    return 0;   // continue the findChild resolution
 }
 
 // ===========================================================================
@@ -573,7 +573,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
     {
         const TextMembersIndex::Entry* const pEntry =
             TextMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
-        if (pEntry != nullptr &&
+        if (pEntry != 0 &&
             static_cast<uint32_t>(pEntry->miData) - 1u <= 19u)   // ids 1..20 (word_82145448)
         {
             AptCharacterTextInst* const pTextInst = static_cast<AptCharacterTextInst*>(pInst);
@@ -693,13 +693,13 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                             const uint32_t nOwnerTag = pOwner->mpCharacterInst->GetTypeTag();
                             if (nOwnerTag == 5 || nOwnerTag == 9)
                                 break;
-                            if (pOwner->mpDisplayListParent == nullptr)
+                            if (pOwner->mpDisplayListParent == 0)
                                 break;
                             pOwner = pOwner->mpDisplayListParent;
                         }
                         AptString* const pBoxed = AptString::Create("");
                         *pBoxed->GetInternalString() = strValue;
-                        gAptActionInterpreter.setVariable(pOwner, nullptr,
+                        gAptActionInterpreter.setVariable(pOwner, 0,
                             pWritable->GetVarValueWritable(), pBoxed, 1, 1, 0);
                     }
 
@@ -715,7 +715,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                 pWritable->mTextColor = static_cast<uint32_t>(nColor) | 0xFF000000u;
                 pWritable->ClearStateFlags(1u);
                 pWritable->SetStateFlags(0x400u);
-                if (pText->mpTextFormat != nullptr)
+                if (pText->mpTextFormat != 0)
                 {
                     // The +0x68 slot holds the embedded TextFormat RECORD (the console
                     // stores straight into its mnColor at +8; the AptValue* typing in
@@ -789,7 +789,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
     {
         const SpriteMembersIndex::Entry* const pSprEntry =
             SpriteMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
-        if (pSprEntry == nullptr)
+        if (pSprEntry == 0)
         {
             // The console compares the unrecognized name against "this" and DISCARDS
             // the result (loc_82B0ABE4 -- a vestigial call kept for fidelity).
@@ -821,7 +821,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                 if (nId == 200 || nId == 203 || nId == 207 || nId == 217)
                 {
                     // onData / onEnterFrame / onLoad / onUnload @loc_82B0A924.
-                    if (pValue != nullptr && pValue->getIsDefined())
+                    if (pValue != 0 && pValue->getIsDefined())
                     {
                         pNode->SetEventHandler(nEventBit);
                         if (nId == 203)   // onEnterFrame drives a per-frame tick
@@ -835,7 +835,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                 }
 
                 // The mouse / key / drag family @loc_82B0A9EC.
-                if (pValue != nullptr && pValue->getIsDefined())
+                if (pValue != 0 && pValue->getIsDefined())
                 {
                     pNode->SetEventHandler(nEventBit);
                     // A responding sprite / custom control / animation joins the
@@ -867,7 +867,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
         {
             AptRenderItemSprite* const pSprite =
                 static_cast<AptRenderItemSprite*>(pInst->GetRenderItemWritable());
-            if (pValue != nullptr && pValue->isString())
+            if (pValue != 0 && pValue->isString())
             {
                 AptValue* pStrValue = pValue;
                 if (pValue->getVtblIndex() != AptVFT_StringValue)   // boxed String object
@@ -926,7 +926,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                 if (!pValue->getIsDefined())
                     return false;
                 AptCIH* const pParent = pNode->mpDisplayListParent;
-                if (pParent != nullptr)
+                if (pParent != 0)
                 {
                     pNode->AddRef();   // keep alive across the un-key / re-key
                     pParent->mpCharacterInst->mpProperties->Unset(pNode->mInstanceName);

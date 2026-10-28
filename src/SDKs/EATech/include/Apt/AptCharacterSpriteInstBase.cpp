@@ -71,14 +71,14 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // + bIsPlaying (bit 25) set, clip-event mask (low 24) clear. (The old 0xC0 seed
     // was the X360 big-endian allocation order.)
     mnClipActionFlags   = 0x03000000u;
-    mpClipEventHandlers = nullptr; // x64 +0x28 (no registered clip-event handlers yet)
+    mpClipEventHandlers = 0; // x64 +0x28 (no registered clip-event handlers yet)
     mnLastActionFrame   = 0;
 
     // Per-instance property hash (AptNativeHash, capacity 8) from the shared Apt
     // pool. The X360 folds AptNativeHash::AptNativeHash(8) inline into the pooled
     // 20-byte block; reconstructed as a placement-new of the same ctor. (Guarded
     // for the null-pool case exactly as the asm guards the Allocate result.)
-    AptNativeHash* pProperties = nullptr;
+    AptNativeHash* pProperties = 0;
     if (void* pMem = gpAptPseudoDataPool->Allocate(sizeof(AptNativeHash)))   // x64: 0x28 bytes (console 20)
         pProperties = ::new (pMem) AptNativeHash(8);
     mpProperties = pProperties;
@@ -93,11 +93,11 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // __proto__ wiring runs on the normal path; the guards only cover an inst built before Apt init
     // (then the instance is built structurally without the AS prototype). Also requires mpProperties
     // (null if the pool alloc above failed).
-    if (gpAptGlobalFallback != nullptr && mpProperties != nullptr)
+    if (gpAptGlobalFallback != 0 && mpProperties != 0)
     {
         AptValue* pClassValue = gpAptGlobalFallback->Lookup(gAptSpriteClassKey);
-        AptNativeHash* pClassHash = (pClassValue != nullptr) ? pClassValue->GetNativeHashVirtual() : nullptr;
-        if (pClassHash != nullptr)
+        AptNativeHash* pClassHash = (pClassValue != 0) ? pClassValue->GetNativeHashVirtual() : 0;
+        if (pClassHash != 0)
             mpProperties->Set__Proto__(pClassHash->mpPrototype);
     }
 }

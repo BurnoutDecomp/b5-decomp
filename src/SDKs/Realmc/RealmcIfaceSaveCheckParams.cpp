@@ -36,7 +36,7 @@ namespace RealmcIface
 SaveCheckParams::SaveCheckParams(s32 nCount, SaveReq* const* paSources)
 {
     mCount  = nCount;                                             // +0x000
-    mppReqs = nullptr;                                            // +0x004
+    mppReqs = 0;                                            // +0x004
     if (nCount)
     {
         mppReqs = static_cast<SaveReq**>(RealmcCore::AllocateMem(
@@ -46,7 +46,7 @@ SaveCheckParams::SaveCheckParams(s32 nCount, SaveReq* const* paSources)
     for (s32 i = 0; i < mCount; ++i)
     {
         void* pMem = RealmcCore::AllocateMem("SaveReq", sizeof(SaveReq));
-        mppReqs[i] = pMem ? new (pMem) SaveReq(*paSources[i]) : nullptr;
+        mppReqs[i] = pMem ? new (pMem) SaveReq(*paSources[i]) : 0;
     }
 }
 

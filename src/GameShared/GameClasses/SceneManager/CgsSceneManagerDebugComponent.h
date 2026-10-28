@@ -23,14 +23,14 @@ namespace CgsSceneManager
         void Construct(const SceneManagerModule* lpSceneManagerModule);
 
         // @ X360 0x828AB500. Clears the query counters exposed by this page each frame.
-        void Update() override;
+        void Update() ;
 
         // @ X360 0x828D04E8. Dispatches the enabled world-space debug draws.
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) ;
 
     protected:
-        const char* GetName() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        void OnActivate() ;
 
     private:
         // Draw every allocated volume instance's collision volume under its world transform.

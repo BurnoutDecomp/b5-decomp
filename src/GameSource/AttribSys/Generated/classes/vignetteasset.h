@@ -52,7 +52,7 @@ namespace Gen
         // the low word (its vaults key collections by that word); this build's vaults and
         // Attrib::FindCollection(u64, u64) compare the whole key, so a truncated key never
         // resolves (POSTFXVAULT.BIN: e.g. FF8129C8E1D9E071, whose low word is the console key).
-        explicit vignetteasset(u64 luCollectionKey = 0, void* lpOwner = nullptr);
+        explicit vignetteasset(u64 luCollectionKey = 0, void* lpOwner = 0);
 
         // The base validity test and the attribute-data slot, re-exported past the PRIVATE
         // inheritance -- the same pair cameradefaults.h:71/:79 and cameraexternalbehaviour.h

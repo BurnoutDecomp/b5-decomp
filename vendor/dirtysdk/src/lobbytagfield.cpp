@@ -15,7 +15,7 @@
 #include "platform.h"   // ds_snzprintf, ds_timeinsecs, ds_secstotime, ds_timetosecs
 
 #include <cstdarg>
-#include <cstdint>
+#include "types.hpp"
 #include <cstring>
 #include <ctime>
 

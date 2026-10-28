@@ -334,7 +334,7 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
         DogmaGuard_DrainRevokes(false);
         const size_t nGuardSize = (nAllocatedSize + 0xFFFu) & ~static_cast<size_t>(0xFFFu);
         unsigned char* pRegion = static_cast<unsigned char*>(
-            ::VirtualAlloc(nullptr, nGuardSize + 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+            ::VirtualAlloc(0, nGuardSize + 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
         DWORD nOld;
         ::VirtualProtect(pRegion + nGuardSize, 0x1000, PAGE_NOACCESS, &nOld);   // tail guard page
         const size_t nOffset = (nGuardSize - nAllocatedSize) & ~static_cast<size_t>(15);

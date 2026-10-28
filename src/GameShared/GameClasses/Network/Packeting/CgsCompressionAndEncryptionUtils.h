@@ -141,8 +141,8 @@ namespace CgsNetwork
                                                   [KI_ALL_PLAYERS + 1][KE_ALL_MESSAGE_TYPES + 1];
     };
 
-    static_assert(sizeof(CompressionAndEncryptionUtils::PackedPacketHeader) == 8,
+    CGS_STATIC_ASSERT((sizeof(CompressionAndEncryptionUtils::PackedPacketHeader) == 8),
                   "PackedPacketHeader is 8 wire bytes");
-    static_assert(sizeof(CompressionAndEncryptionUtils::ReliablePackedPacketHeader) == 16,
+    CGS_STATIC_ASSERT((sizeof(CompressionAndEncryptionUtils::ReliablePackedPacketHeader) == 16),
                   "ReliablePackedPacketHeader is 16 wire bytes");
 }

@@ -31,11 +31,11 @@ namespace BrnGameState
         void Construct(ModeManager* lpModeManager);   // @ BrnModeManagerDebugComponent.cpp:200
 
     protected:
-        const char* GetName() const override;          // @ BrnModeManagerDebugComponent.cpp:231
+        const char* GetName() const ;          // @ BrnModeManagerDebugComponent.cpp:231
         // ARTIST vtable 0x820CDDEC, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Gameplay"; }
-        void        OnActivate() override;             // @ BrnModeManagerDebugComponent.cpp:243
-        void        RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override; // X360 0x8231EC30
+        const char* GetPath() const  { return "Gameplay"; }
+        void        OnActivate() ;             // @ BrnModeManagerDebugComponent.cpp:243
+        void        RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ; // X360 0x8231EC30
 
     private:
         // The "End Current Event" action callback registered with the debug menu; the void*

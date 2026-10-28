@@ -137,7 +137,6 @@ public:
     bool operator==(const ICEParameter& lrOther) const { return muPacked == lrOther.muPacked; }
     bool operator!=(const ICEParameter& lrOther) const { return muPacked != lrOther.muPacked; }
 
-    ICEParameter& operator=(const ICEParameter& lrOther) = default;
 };
 
 // ---------------------------------------------------------------------------

@@ -46,7 +46,7 @@ namespace Csis
 // enum-shaped status; the concrete enumerators live in the vendor Csis headers.
 // Only the type identity is load-bearing here (SetFast forwards SetHandle's
 // return verbatim), so a single placeholder enumerator stands in.
-enum class Result : int
+enum  Result : int
 {
     E_OK = 0
 };
@@ -104,6 +104,6 @@ public:
     u32 muPadding;
 };
 
-static_assert(sizeof(ClassHandle) == 0x10, "native CSIS class handle");
+CGS_STATIC_ASSERT((sizeof(ClassHandle) == 0x10), "native CSIS class handle");
 
 } // namespace Csis

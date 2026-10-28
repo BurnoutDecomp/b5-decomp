@@ -90,7 +90,7 @@ namespace CgsPhysics
     // onto the vendor class now, and the casts are gone. ⛔ Do not spell this field's type out
     // locally to avoid an include -- a duplicated layout here would link silently against the
     // real one and disagree about every offset.
-    struct alignas(16) NewRigidBody
+    struct CGS_ALIGN(16) NewRigidBody
     {
         rw::math::vpu::Matrix44Affine mTransform;        // @+0x00  DWARF :39  (64 bytes)
         rw::math::vpu::Vector3        mVelocity;         // @+0x40  DWARF :40
@@ -98,12 +98,12 @@ namespace CgsPhysics
         rw::physics::Inertia          mInertia;          // @+0x60  DWARF :42  (48 bytes)
         bool                          mbSpy;             // @+0x90  DWARF :43
     };
-    static_assert(sizeof(NewRigidBody) == 160, "NewRigidBody 145 bytes -> 160 at align 16 (makes InAddRigidBody 192)");
-    static_assert(offsetof(NewRigidBody, mTransform)       == 0,   "mTransform @+0x00 (asm lvx128 event+16..+64)");
-    static_assert(offsetof(NewRigidBody, mVelocity)        == 64,  "mVelocity @+0x40 (asm lvx128 event+80 -> mVel)");
-    static_assert(offsetof(NewRigidBody, mAngularVelocity) == 80,  "mAngularVelocity @+0x50 (asm lvx128 event+96 -> mOmega)");
-    static_assert(offsetof(NewRigidBody, mInertia)         == 96,  "mInertia @+0x60 (asm 6x ld/std from event+112)");
-    static_assert(offsetof(NewRigidBody, mbSpy)            == 144, "mbSpy @+0x90 (asm lbz event+160)");
+    CGS_STATIC_ASSERT((sizeof(NewRigidBody) == 160), "NewRigidBody 145 bytes -> 160 at align 16 (makes InAddRigidBody 192)");
+    CGS_STATIC_ASSERT((offsetof(NewRigidBody, mTransform)       == 0),   "mTransform @+0x00 (asm lvx128 event+16..+64)");
+    CGS_STATIC_ASSERT((offsetof(NewRigidBody, mVelocity)        == 64),  "mVelocity @+0x40 (asm lvx128 event+80 -> mVel)");
+    CGS_STATIC_ASSERT((offsetof(NewRigidBody, mAngularVelocity) == 80),  "mAngularVelocity @+0x50 (asm lvx128 event+96 -> mOmega)");
+    CGS_STATIC_ASSERT((offsetof(NewRigidBody, mInertia)         == 96),  "mInertia @+0x60 (asm 6x ld/std from event+112)");
+    CGS_STATIC_ASSERT((offsetof(NewRigidBody, mbSpy)            == 144), "mbSpy @+0x90 (asm lbz event+160)");
 
 namespace PhysicsSimulationIO
 {
@@ -130,7 +130,7 @@ namespace PhysicsSimulationIO
     //
     // ⚠️ The two ids stay u64 rather than RigidBodyId for the same documented reason as
     // InAddDrive/InAddJoint -- a ~30-TU type change that wants its own build + boot test.
-    struct alignas(16) InAddPotentialContact : public Event
+    struct CGS_ALIGN(16) InAddPotentialContact : public Event
     {
         rw::math::vpu::Vector3 mPointOnA;        // @+0x00  DWARF :200 -- contact point on A
         rw::math::vpu::Vector3 mPointOnB;        // @+0x10  DWARF :201 -- contact point on B
@@ -194,7 +194,7 @@ namespace PhysicsSimulationIO
     //
     // ⚠️ The ids stay u64 rather than JointId/RigidBodyId for the same documented reason as
     // InAddDrive/InAddRigidBody -- a ~30-TU type change that wants its own build + boot test.
-    struct alignas(16) InAddJoint : public Event
+    struct CGS_ALIGN(16) InAddJoint : public Event
     {
         u64                       mu64Id;            // @+0x00  DWARF :256 "mId"           (a CgsPhysics::JointId handle)
         u64                       mu64ParentBodyId;  // @+0x08  DWARF :257 "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
@@ -225,7 +225,7 @@ namespace PhysicsSimulationIO
     // ⚠️ The ids are typed u64 rather than DriveId/RigidBodyId for the same documented
     // reason as InAddJoint/InAddRigidBody above: promoting them is a ~30-TU type change
     // that wants its own build + boot test. One u64 in both readings.
-    struct alignas(16) InAddDrive : public Event
+    struct CGS_ALIGN(16) InAddDrive : public Event
     {
         u64                        mu64Id;            // @+0x00  DWARF :304 "mId"           (a CgsPhysics::DriveId handle)
         u64                        mu64ParentBodyId;  // @+0x08  DWARF :305 "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
@@ -271,16 +271,16 @@ namespace PhysicsSimulationIO
     // (task #141) and that collision is gone. Promoting this field is now merely a ~30-TU type
     // change that wants its own build + boot test. It is one u64 in both readings, so the width
     // and the stores are identical meanwhile.
-    struct alignas(16) InAddRigidBody : public Event
+    struct CGS_ALIGN(16) InAddRigidBody : public Event
     {
         u64          mID;          // @+0x00  DWARF :69 (a CgsPhysics::RigidBodyId handle)
         NewRigidBody mRigidBody;   // @+0x10  DWARF :70 (NonConstructedClassContainer -- raw storage)
         rw::physics::BodyState meState;  // @+0xB0 (176) DWARF :71
     };
-    static_assert(sizeof(InAddRigidBody) == 192, "InAddRigidBody stride 192 (AddEvent @0x825A3000)");
-    static_assert(offsetof(InAddRigidBody, mID)       == 0,   "mID @+0x00 (asm ld 0(event))");
-    static_assert(offsetof(InAddRigidBody, mRigidBody) == 16, "mRigidBody @+0x10 (asm lvx128 from event+16)");
-    static_assert(offsetof(InAddRigidBody, meState)   == 176, "meState @+0xB0 (asm lwz 0xB0(event))");
+    CGS_STATIC_ASSERT((sizeof(InAddRigidBody) == 192), "InAddRigidBody stride 192 (AddEvent @0x825A3000)");
+    CGS_STATIC_ASSERT((offsetof(InAddRigidBody, mID)       == 0),   "mID @+0x00 (asm ld 0(event))");
+    CGS_STATIC_ASSERT((offsetof(InAddRigidBody, mRigidBody) == 16), "mRigidBody @+0x10 (asm lvx128 from event+16)");
+    CGS_STATIC_ASSERT((offsetof(InAddRigidBody, meState)   == 176), "meState @+0xB0 (asm lwz 0xB0(event))");
 
     // Apply a force to a body. Queued with capacity 250 in PhysicsSimulationIO::InputBuffer
     // (X360 Construct @ 0x828A6068). The event STRIDE *is* X360-attested: the matching
@@ -297,7 +297,7 @@ namespace PhysicsSimulationIO
     // == 32, the attested stride, nothing invented.
     // ⚠️ mID stays u64, not CgsPhysics::RigidBodyId -- the same documented ~30-TU cost
     // decision as every sibling event.
-    struct alignas(16) InApplyForce : public Event
+    struct CGS_ALIGN(16) InApplyForce : public Event
     {
         u64                    mID;     // @+0x00  DWARF :102 (a CgsPhysics::RigidBodyId handle)
         rw::math::vpu::Vector3 mForce;  // @+0x10  DWARF :103 -- the drain's `lvx128 v0,r30,0x10`
@@ -328,7 +328,7 @@ namespace PhysicsSimulationIO
     // the Inertia by value runs its default ctor per queue slot on the PC. Behaviourally
     // invisible (AddEvent overwrites the slot before any GetEvent reads it) -- the same
     // accepted cost as InUpdateJointLimits' embedded JointLimits.
-    struct alignas(16) InChangeRigidBodyInertia : public Event
+    struct CGS_ALIGN(16) InChangeRigidBodyInertia : public Event
     {
         u64                  mID;        // @+0x00  DWARF :118 (a CgsPhysics::RigidBodyId handle)
         u64                  mIDPad;     // @+0x08  pad to the payload's 16-byte slot
@@ -347,7 +347,7 @@ namespace PhysicsSimulationIO
     // declares exactly ONE member, and the consumer agrees: `ProcessRemoveDriveQueue`
     // @0x8289FF98 issues a single `ld 0(event)` and reads nothing else out of the element.
     // The stride 16 already committed is unchanged (u64 under alignas(16)).
-    struct alignas(16) InRemoveDrive : public Event
+    struct CGS_ALIGN(16) InRemoveDrive : public Event
     {
         u64 mu64Id;  // @+0x00  DWARF :286 "mId" (a CgsPhysics::DriveId handle) -- the drain's only read
     };
@@ -378,7 +378,7 @@ namespace PhysicsSimulationIO
     // four `lvx128` rows from event+0x10..+0x40 into the body's basis/position (the inlined
     // RigidBody::SetTransform), `lvx128` from +0x50 into mVel(+0x20) and from +0x60 into
     // mOmega(+0x30). 0x60 + 16 == 112, the attested stride, nothing invented.
-    struct alignas(16) InUpdateExternalBody : public Event
+    struct CGS_ALIGN(16) InUpdateExternalBody : public Event
     {
         u64                           mID;          // @+0x00  DWARF :151 (a CgsPhysics::RigidBodyId handle)
         u64                           mIDPad;       // @+0x08  pad to the payload's 16-byte slot
@@ -402,7 +402,7 @@ namespace PhysicsSimulationIO
     // DWARF CgsPhysicsSimulationModuleIO.h:290..:295: { DriveId mId; DriveFrames mDriveFrames; }
     // -- note the payload is held BY VALUE here, not in a NonConstructedClassContainer, which
     // is why the drain can `stvx128` straight into it. rw::physics::DriveFrames is 4x16 == 64.
-    struct alignas(16) InUpdateDriveFrames : public Event
+    struct CGS_ALIGN(16) InUpdateDriveFrames : public Event
     {
         u64                     mu64Id;         // @+0x00  "mId" (a CgsPhysics::DriveId handle; u64 -- see InAddJoint)
         u64                     mu64IdPad;      // @+0x08  pad to the payload's 16-byte slot
@@ -432,7 +432,7 @@ namespace PhysicsSimulationIO
     // below is therefore the ADJACENCY form (16 + sizeof(RigidBody)) -- on the console that
     // evaluates to the attested 192, on the host it tracks the widened body -- plus the
     // offsetof pin that catches a transposed id/payload.
-    struct alignas(16) InUpdateRigidBody : public Event
+    struct CGS_ALIGN(16) InUpdateRigidBody : public Event
     {
         u64                    mID;         // @+0x00  DWARF :86 (a CgsPhysics::RigidBodyId handle)
         u64                    mIDPad;      // @+0x08  pad to the payload's 16-byte slot
@@ -457,7 +457,7 @@ namespace PhysicsSimulationIO
     // (Vector3 mPprism, Vector3 mVprism, 6x f32, SwingType, TwistType). The id occupies the
     // leading 16-byte slot, the payload starts at +0x10 -- the same {id, payload@+0x10} shape
     // its two siblings' drain asm proves outright (see InUpdateJointFrames below).
-    struct alignas(16) InUpdateJointLimits : public Event
+    struct CGS_ALIGN(16) InUpdateJointLimits : public Event
     {
         u64                     mu64Id;         // @+0x00  "mId" (a CgsPhysics::JointId handle; u64 -- see InAddJoint)
         u64                     mu64IdPad;      // @+0x08  pad to the payload's 16-byte slot
@@ -487,7 +487,7 @@ namespace PhysicsSimulationIO
     // 5*16 + 8 + 8 + 4 == 100 -> alignas(16) == the attested 112; pointer-free, host == console.
     // The DWARF's SwingType-style helper methods (SwapEntityOrder :379 / Clear :382) have no
     // X360 body or caller in the image and are not declared (the standing gating rule).
-    struct alignas(16) OutContactSpy : public Event
+    struct CGS_ALIGN(16) OutContactSpy : public Event
     {
         rw::math::vpu::Vector3 mFrictionStress;  // @+0x00  DWARF :384 -- tangential impulse / ts
         rw::math::vpu::Vector3 mNormalStress;    // @+0x10  DWARF :385 -- normal impulse / ts
@@ -535,7 +535,7 @@ namespace PhysicsSimulationIO
     // @0x828A5D10 stores `std id` @+0x00, `stvx` spy mForce @+0x10, `stvx` spy mTorque @+0x20,
     // `stfs` spy mSeparation @+0x30, `stfs` spy mAngSeparation @+0x34 (frame slots var_A0/-90/-80/
     // -70/-6C). 16 + 16 + 16 + 4 + 4 -> alignas(16) == the attested 64; pointer-free.
-    struct alignas(16) OutDriveSpy : public Event
+    struct CGS_ALIGN(16) OutDriveSpy : public Event
     {
         u64                    mID;                    // @+0x00  DWARF :423 (a CgsPhysics::DriveId handle)
         u64                    mIDPad;                 // @+0x08  pad to the payload's 16-byte slot
@@ -557,7 +557,7 @@ namespace PhysicsSimulationIO
     // @0x828A58E0 stores `std id` @+0x00 (var_E0), `stvx` spy mForce * (ts*59.999996f) @+0x10
     // (var_D0), `stvx` spy mTorque * (ts*59.999996f) @+0x20 (var_C0).
     // 16 + 16 + 16 == the attested 48; pointer-free, host == console.
-    struct alignas(16) OutJointSpy : public Event
+    struct CGS_ALIGN(16) OutJointSpy : public Event
     {
         u64                    mID;             // @+0x00  DWARF :406 (a CgsPhysics::JointId handle)
         u64                    mIDPad;          // @+0x08  pad to the payload's 16-byte slot
@@ -602,7 +602,7 @@ namespace PhysicsSimulationIO
     // and ProcessRemoveRigidBodyQueue @0x828A2BD0 now pins both offsets: `ld 0(event)` feeds
     // RigidBodyData::GetIndexFromGameID and `lbz 8(event)` gates the "Couldn't find rigid body
     // with id" assert (the not-found-tolerant remove).
-    struct alignas(16) InRemoveRigidBody : public Event
+    struct CGS_ALIGN(16) InRemoveRigidBody : public Event
     {
         u64  mID;                       // @+0x00  DWARF :169 (a CgsPhysics::RigidBodyId handle)
         bool mbFailIfRigidBodyNotFound; // @+0x08  DWARF :170 -- `lbz 8(event)`
@@ -623,7 +623,7 @@ namespace PhysicsSimulationIO
     // ⚠️ The drain stores that byte with a PLAIN `stw` into Drive::m_spy (+0x1C) -- a whole
     // word, not a bit. This is NOT the `ori 8` / `clrlwi ...,29` bitfield fork that the
     // rw::physics `SetSpy(bool)` sibling compiles to; do not import that shape here.
-    struct alignas(16) InSetDriveSpy : public Event
+    struct CGS_ALIGN(16) InSetDriveSpy : public Event
     {
         u64  mu64Id;  // @+0x00  DWARF :313 "mId" (a CgsPhysics::DriveId handle)
         bool mbSpy;   // @+0x08  DWARF :316 -- `lbz 8(event)`, stored whole-word into Drive::m_spy
@@ -643,7 +643,7 @@ namespace PhysicsSimulationIO
     // ⚠️ The drain stores that byte with a PLAIN `stw` into Joint::m_spy (+0x1C) -- a whole word,
     // not a bit. This is NOT the `ori 8` / `clrlwi ...,29` bitfield fork that the rw::physics
     // `SetSpy(bool)` sibling compiles to; do not import that shape here. Same as the drive twin.
-    struct alignas(16) InSetJointSpy : public Event
+    struct CGS_ALIGN(16) InSetJointSpy : public Event
     {
         u64  mu64Id;  // @+0x00  DWARF :293 "mId" (a CgsPhysics::JointId handle)
         bool mbSpy;   // @+0x08  DWARF :294 -- `lbz 8(event)`, stored whole-word into Joint::m_spy
@@ -662,7 +662,7 @@ namespace PhysicsSimulationIO
     // fork -- `ori r11,r11,8` / `clrlwi r11,r11,29` on mState(+0x8C) -- not a plain whole-word
     // spy store. The committed rw/physics/rigidbody.h SetSpy already carries that exact shape.
     // ⚠️ DWARF spells this one `mSpy`, not `mbSpy`; the DWARF's own name is kept.
-    struct alignas(16) InSetRigidBodySpy : public Event
+    struct CGS_ALIGN(16) InSetRigidBodySpy : public Event
     {
         u64  mID;   // @+0x00  DWARF :135 (a CgsPhysics::RigidBodyId handle)
         bool mSpy;  // @+0x08  DWARF :136 -- `lbz 8(event)` -> RigidBody::SetSpy(bool)
@@ -682,7 +682,7 @@ namespace PhysicsSimulationIO
     //     { DriveId mId; NonConstructedClassContainer<rw::physics::DriveDynamics> mDriveDynamics; }
     // rw::physics::DriveDynamics is two 16-byte Params (mLinear, mAngular) == 32; + the leading
     // 16-byte id slot == 48.
-    struct alignas(16) InUpdateDriveDynamics : public Event
+    struct CGS_ALIGN(16) InUpdateDriveDynamics : public Event
     {
         u64                        mu64Id;           // @+0x00  "mId" (a CgsPhysics::DriveId handle; u64 -- see InAddJoint)
         u64                        mu64IdPad;        // @+0x08  pad to the payload's 16-byte slot
@@ -705,7 +705,7 @@ namespace PhysicsSimulationIO
     //
     // DWARF CgsPhysicsSimulationModuleIO.h:231..:236: { JointId mId; JointFrames mJointFrames; }
     // -- by value, like InUpdateDriveFrames and unlike the two Limits/Dynamics siblings.
-    struct alignas(16) InUpdateJointFrames : public Event
+    struct CGS_ALIGN(16) InUpdateJointFrames : public Event
     {
         u64                     mu64Id;         // @+0x00  "mId" (a CgsPhysics::JointId handle; u64 -- see InAddJoint)
         u64                     mu64IdPad;      // @+0x08  pad to the payload's 16-byte slot
@@ -731,7 +731,7 @@ namespace PhysicsSimulationIO
     // a serialized record; the queue machinery is sizeof-driven end to end). The pin below is the
     // ADJACENCY form: 16 (id slot) + sizeof(RigidBody) == the attested 192 on the console's 4-byte
     // ABI, and it tracks the widened body on the host.
-    struct alignas(16) OutUpdateRigidBody : public Event
+    struct CGS_ALIGN(16) OutUpdateRigidBody : public Event
     {
         u64                    mID;         // @+0x00  DWARF :358 (a CgsPhysics::RigidBodyId handle)
         u64                    mIDPad;      // @+0x08  pad to the payload's 16-byte slot
@@ -765,155 +765,155 @@ namespace PhysicsSimulationIO
     // x64, so the host stride is 16 + sizeof(RigidBody) (== the attested 192 ONLY on a 4-byte-
     // pointer target). Every other event in this table is pointer-free and its host size still
     // equals the X360 stride. See the banner on the struct itself.
-    static_assert(sizeof(InUpdateRigidBody) == 16 + sizeof(rw::physics::RigidBody),
+    CGS_STATIC_ASSERT((sizeof(InUpdateRigidBody) == 16 + sizeof(rw::physics::RigidBody)),
                   "InUpdateRigidBody = 16B id slot + the full RigidBody (X360: 16+176 == the attested 192 ((76848-38432-16)/200))");
-    static_assert(sizeof(InApplyForce)             ==  32, "InApplyForce stride 32        ((84864-76848-16)/250)");
-    static_assert(sizeof(InChangeRigidBodyInertia) ==  80, "InChangeRigidBodyInertia 80   ((100880-84864-16)/200)");
-    static_assert(sizeof(InSetRigidBodySpy)        ==  16, "InSetRigidBodySpy stride 16   ((104096-100880-16)/200)");
-    static_assert(sizeof(InRemoveRigidBody)        ==  16, "InRemoveRigidBody stride 16   ((107312-104096-16)/200)");
-    static_assert(sizeof(InAddPotentialContact)    ==  80, "InAddPotentialContact 80      ((189280-107344-16)/1024)");
-    static_assert(sizeof(InUpdateExternalBody)     == 112, "InUpdateExternalBody 112      (Append @0x825A41D8 mulli 0x70)");
+    CGS_STATIC_ASSERT((sizeof(InApplyForce)             ==  32), "InApplyForce stride 32        ((84864-76848-16)/250)");
+    CGS_STATIC_ASSERT((sizeof(InChangeRigidBodyInertia) ==  80), "InChangeRigidBodyInertia 80   ((100880-84864-16)/200)");
+    CGS_STATIC_ASSERT((sizeof(InSetRigidBodySpy)        ==  16), "InSetRigidBodySpy stride 16   ((104096-100880-16)/200)");
+    CGS_STATIC_ASSERT((sizeof(InRemoveRigidBody)        ==  16), "InRemoveRigidBody stride 16   ((107312-104096-16)/200)");
+    CGS_STATIC_ASSERT((sizeof(InAddPotentialContact)    ==  80), "InAddPotentialContact 80      ((189280-107344-16)/1024)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateExternalBody)     == 112), "InUpdateExternalBody 112      (Append @0x825A41D8 mulli 0x70)");
     // InRemoveAllRigidBodies is deliberately NOT pinned by the chain. The 32-byte span between
     // its queue (+107312) and mAddContactQueue (+107344) is 16 + 8*sizeof(T) PLUS alignment
     // padding up to the next queue's 16-aligned start, so sizeof 1 and 2 both fit and the
     // chain cannot decide. DWARF (:154/:156) says one uint8_t over an empty Event base == 1,
     // and the Construct asm's `addi r30, r31, 0xC` independently proves align < 16. Pinning
     // the DWARF answer only; NOT inventing a chain result the arithmetic does not support.
-    static_assert(sizeof(InRemoveAllRigidBodies)   ==   1, "InRemoveAllRigidBodies 1B (DWARF :156; Construct base at this+0xC proves align<16)");
+    CGS_STATIC_ASSERT((sizeof(InRemoveAllRigidBodies)   ==   1), "InRemoveAllRigidBodies 1B (DWARF :156; Construct base at this+0xC proves align<16)");
     // joint group
-    static_assert(sizeof(InAddJoint)               == 192, "InAddJoint stride 192         ((196208-189280-16)/36)");
-    static_assert(sizeof(InRemoveJoint)            ==   8, "InRemoveJoint stride 8        ((196512-196208-16)/36)");
-    static_assert(sizeof(InUpdateJointFrames)      ==  96, "InUpdateJointFrames 96        ((199984-196512-16)/36)  [was 16 -- CORRECTED #142]");
-    static_assert(sizeof(InUpdateJointLimits)      ==  80, "InUpdateJointLimits 80        ((202880-199984-16)/36)  [was 16 -- CORRECTED #142]");
-    static_assert(sizeof(InSetJointSpy)            ==  16, "InSetJointSpy stride 16       ((203472-202880-16)/36)");
+    CGS_STATIC_ASSERT((sizeof(InAddJoint)               == 192), "InAddJoint stride 192         ((196208-189280-16)/36)");
+    CGS_STATIC_ASSERT((sizeof(InRemoveJoint)            ==   8), "InRemoveJoint stride 8        ((196512-196208-16)/36)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateJointFrames)      ==  96), "InUpdateJointFrames 96        ((199984-196512-16)/36)  [was 16 -- CORRECTED #142]");
+    CGS_STATIC_ASSERT((sizeof(InUpdateJointLimits)      ==  80), "InUpdateJointLimits 80        ((202880-199984-16)/36)  [was 16 -- CORRECTED #142]");
+    CGS_STATIC_ASSERT((sizeof(InSetJointSpy)            ==  16), "InSetJointSpy stride 16       ((203472-202880-16)/36)");
     // drive group
-    static_assert(sizeof(InAddDrive)               == 144, "InAddDrive stride 144         ((203632-203472-16)/1)");
-    static_assert(sizeof(InRemoveDrive)            ==  16, "InRemoveDrive stride 16       ((203664-203632-16)/1)");
-    static_assert(sizeof(InUpdateDriveFrames)      ==  80, "InUpdateDriveFrames 80        ((203760-203664-16)/1)   [was 16 -- CORRECTED #142]");
-    static_assert(sizeof(InUpdateDriveDynamics)    ==  48, "InUpdateDriveDynamics 48      ((203824-203760-16)/1)   [was 16 -- CORRECTED #142]");
-    static_assert(sizeof(InSetDriveSpy)            ==  16, "InSetDriveSpy stride 16       ((203856-203824-16)/1)");
+    CGS_STATIC_ASSERT((sizeof(InAddDrive)               == 144), "InAddDrive stride 144         ((203632-203472-16)/1)");
+    CGS_STATIC_ASSERT((sizeof(InRemoveDrive)            ==  16), "InRemoveDrive stride 16       ((203664-203632-16)/1)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateDriveFrames)      ==  80), "InUpdateDriveFrames 80        ((203760-203664-16)/1)   [was 16 -- CORRECTED #142]");
+    CGS_STATIC_ASSERT((sizeof(InUpdateDriveDynamics)    ==  48), "InUpdateDriveDynamics 48      ((203824-203760-16)/1)   [was 16 -- CORRECTED #142]");
+    CGS_STATIC_ASSERT((sizeof(InSetDriveSpy)            ==  16), "InSetDriveSpy stride 16       ((203856-203824-16)/1)");
 
     // The four corrected types now carry real members, so pin WHERE the payload sits as well as
     // how big the whole is -- a size-only pin would still pass if the id slot and the payload
     // were transposed. The +0x10 payload base is the drains' own `_R11 = event + 0x10`.
-    static_assert(offsetof(InUpdateJointFrames,   mJointFrames)   == 16, "JointFrames @+0x10   (drain @0x8289F2F0 _R11 = event+0x10)");
-    static_assert(offsetof(InUpdateDriveFrames,   mDriveFrames)   == 16, "DriveFrames @+0x10   (drain @0x8289FC28 _R11 = event+0x10)");
-    static_assert(offsetof(InUpdateJointLimits,   mJointLimits)   == 16, "JointLimits @+0x10");
-    static_assert(offsetof(InUpdateDriveDynamics, mDriveDynamics) == 16, "DriveDynamics @+0x10");
+    CGS_STATIC_ASSERT((offsetof(InUpdateJointFrames,   mJointFrames)   == 16), "JointFrames @+0x10   (drain @0x8289F2F0 _R11 = event+0x10)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateDriveFrames,   mDriveFrames)   == 16), "DriveFrames @+0x10   (drain @0x8289FC28 _R11 = event+0x10)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateJointLimits,   mJointLimits)   == 16), "JointLimits @+0x10");
+    CGS_STATIC_ASSERT((offsetof(InUpdateDriveDynamics, mDriveDynamics) == 16), "DriveDynamics @+0x10");
     // And pin the payload classes themselves at the sizes the drains' lane counts prove --
     // spelled as the MEMBER, so a re-typing of the member cannot leave the gate passing.
-    static_assert(sizeof(InUpdateJointFrames::mJointFrames)     == 80, "JointFrames 80B  = the FIVE lvx128 lanes at _R17..R20 (0/16/32/48/64) in drain @0x8289F2F0");
-    static_assert(sizeof(InUpdateDriveFrames::mDriveFrames)     == 64, "DriveFrames 64B  = the FOUR lvx128 lanes at _R26..R28 (0/16/32/48) in drain @0x8289FC28");
-    static_assert(sizeof(InUpdateJointLimits::mJointLimits)     == 64, "JointLimits 64B  (Vector3 x2 + 6x f32 + SwingType + TwistType)");
-    static_assert(sizeof(InUpdateDriveDynamics::mDriveDynamics) == 32, "DriveDynamics 32B (two 16-byte Params: mLinear, mAngular)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateJointFrames::mJointFrames)     == 80), "JointFrames 80B  = the FIVE lvx128 lanes at _R17..R20 (0/16/32/48/64) in drain @0x8289F2F0");
+    CGS_STATIC_ASSERT((sizeof(InUpdateDriveFrames::mDriveFrames)     == 64), "DriveFrames 64B  = the FOUR lvx128 lanes at _R26..R28 (0/16/32/48) in drain @0x8289FC28");
+    CGS_STATIC_ASSERT((sizeof(InUpdateJointLimits::mJointLimits)     == 64), "JointLimits 64B  (Vector3 x2 + 6x f32 + SwingType + TwistType)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateDriveDynamics::mDriveDynamics) == 32), "DriveDynamics 32B (two 16-byte Params: mLinear, mAngular)");
 
     // ---- task #143: the three drive events promoted from opaque spans to real members -----
     // Same discipline as above: every term is spelled `sizeof(Class::member)` / `offsetof`, so
     // a re-TYPING of a member (which leaves sizeof(Class) invariant) still fails the gate.
     // Every constant here is the drain's own load offset, not a re-statement of the header.
-    static_assert(offsetof(InAddDrive, mu64Id)           ==   0, "InAddDrive::mId @+0x00           (drain @0x828A4CB8 `ld 0(event)`)");
-    static_assert(offsetof(InAddDrive, mu64ParentBodyId) ==   8, "InAddDrive::mParentBodyId @+0x08 (drain `ld 8(event)`  -> GetIndexFromGameID)");
-    static_assert(offsetof(InAddDrive, mu64ChildBodyId)  ==  16, "InAddDrive::mChildBodyId @+0x10  (drain `ld 0x10(event)` -> GetIndexFromGameID)");
-    static_assert(offsetof(InAddDrive, mDriveFrames)     ==  32, "InAddDrive::mDriveFrames @+0x20  (drain `addi r10,r31,0x20` + 4x lvx128)");
-    static_assert(offsetof(InAddDrive, mDriveDynamics)   ==  96, "InAddDrive::mDriveDynamics @+0x60 (drain `ld 0x60/0x68/0x70/0x78(event)`)");
-    static_assert(offsetof(InAddDrive, mbSpy)            == 128, "InAddDrive::mbSpy @+0x80         (drain `lbz 0x80(event)` -> Drive::m_spy)");
-    static_assert(sizeof(InAddDrive::mDriveFrames)       ==  64, "InAddDrive DriveFrames 64B  (the FOUR lvx128 lanes the drain copies)");
-    static_assert(sizeof(InAddDrive::mDriveDynamics)     ==  32, "InAddDrive DriveDynamics 32B (the FOUR ld/std pairs the drain copies)");
+    CGS_STATIC_ASSERT((offsetof(InAddDrive, mu64Id)           ==   0), "InAddDrive::mId @+0x00           (drain @0x828A4CB8 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InAddDrive, mu64ParentBodyId) ==   8), "InAddDrive::mParentBodyId @+0x08 (drain `ld 8(event)`  -> GetIndexFromGameID)");
+    CGS_STATIC_ASSERT((offsetof(InAddDrive, mu64ChildBodyId)  ==  16), "InAddDrive::mChildBodyId @+0x10  (drain `ld 0x10(event)` -> GetIndexFromGameID)");
+    CGS_STATIC_ASSERT((offsetof(InAddDrive, mDriveFrames)     ==  32), "InAddDrive::mDriveFrames @+0x20  (drain `addi r10,r31,0x20` + 4x lvx128)");
+    CGS_STATIC_ASSERT((offsetof(InAddDrive, mDriveDynamics)   ==  96), "InAddDrive::mDriveDynamics @+0x60 (drain `ld 0x60/0x68/0x70/0x78(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InAddDrive, mbSpy)            == 128), "InAddDrive::mbSpy @+0x80         (drain `lbz 0x80(event)` -> Drive::m_spy)");
+    CGS_STATIC_ASSERT((sizeof(InAddDrive::mDriveFrames)       ==  64), "InAddDrive DriveFrames 64B  (the FOUR lvx128 lanes the drain copies)");
+    CGS_STATIC_ASSERT((sizeof(InAddDrive::mDriveDynamics)     ==  32), "InAddDrive DriveDynamics 32B (the FOUR ld/std pairs the drain copies)");
 
-    static_assert(offsetof(InRemoveDrive, mu64Id)        ==   0, "InRemoveDrive::mId @+0x00        (drain @0x8289FF98 `ld 0(event)`, its only read)");
+    CGS_STATIC_ASSERT((offsetof(InRemoveDrive, mu64Id)        ==   0), "InRemoveDrive::mId @+0x00        (drain @0x8289FF98 `ld 0(event)`, its only read)");
 
-    static_assert(offsetof(InSetDriveSpy, mu64Id)        ==   0, "InSetDriveSpy::mId @+0x00        (drain @0x8289FE88 `ld 0(event)`)");
-    static_assert(offsetof(InSetDriveSpy, mbSpy)         ==   8, "InSetDriveSpy::mbSpy @+0x08      (drain @0x8289FE88 `lbz 8(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InSetDriveSpy, mu64Id)        ==   0), "InSetDriveSpy::mId @+0x00        (drain @0x8289FE88 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InSetDriveSpy, mbSpy)         ==   8), "InSetDriveSpy::mbSpy @+0x08      (drain @0x8289FE88 `lbz 8(event)`)");
 
     // ---- task #144: the joint events promoted from opaque spans to real members ------------
     // Same discipline: every term is spelled `sizeof(Class::member)` / `offsetof`, so a
     // re-TYPING of a member (which leaves sizeof(Class) invariant) still fails the gate. Every
     // constant is the drain's own load offset, not a re-statement of the header.
-    static_assert(offsetof(InAddJoint, mu64Id)           ==   0, "InAddJoint::mId @+0x00           (drain @0x828A40F0 `ld 0(event)`)");
-    static_assert(offsetof(InAddJoint, mu64ParentBodyId) ==   8, "InAddJoint::mParentBodyId @+0x08 (drain `ld 8(event)`  -> GetIndexFromGameID)");
-    static_assert(offsetof(InAddJoint, mu64ChildBodyId)  ==  16, "InAddJoint::mChildBodyId @+0x10  (drain `ld 0x10(event)` -> GetIndexFromGameID)");
-    static_assert(offsetof(InAddJoint, mJointFrames)     ==  32, "InAddJoint::mJointFrames @+0x20  (drain `addi r11,r26,0x20` + 5x lvx128)");
-    static_assert(offsetof(InAddJoint, mJointLimits)     == 112, "InAddJoint::mJointLimits @+0x70  (drain `addi r11,r26,0x70` + 8x ld/std)");
-    static_assert(offsetof(InAddJoint, mbSpy)            == 176, "InAddJoint::mbSpy @+0xB0         (drain `lbz 0xB0(event)` -> Joint::m_spy)");
-    static_assert(sizeof(InAddJoint::mJointFrames)       ==  80, "InAddJoint JointFrames 80B  (the FIVE lvx128 lanes the drain copies)");
-    static_assert(sizeof(InAddJoint::mJointLimits)       ==  64, "InAddJoint JointLimits 64B  (the EIGHT ld/std pairs the drain copies)");
+    CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64Id)           ==   0), "InAddJoint::mId @+0x00           (drain @0x828A40F0 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64ParentBodyId) ==   8), "InAddJoint::mParentBodyId @+0x08 (drain `ld 8(event)`  -> GetIndexFromGameID)");
+    CGS_STATIC_ASSERT((offsetof(InAddJoint, mu64ChildBodyId)  ==  16), "InAddJoint::mChildBodyId @+0x10  (drain `ld 0x10(event)` -> GetIndexFromGameID)");
+    CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointFrames)     ==  32), "InAddJoint::mJointFrames @+0x20  (drain `addi r11,r26,0x20` + 5x lvx128)");
+    CGS_STATIC_ASSERT((offsetof(InAddJoint, mJointLimits)     == 112), "InAddJoint::mJointLimits @+0x70  (drain `addi r11,r26,0x70` + 8x ld/std)");
+    CGS_STATIC_ASSERT((offsetof(InAddJoint, mbSpy)            == 176), "InAddJoint::mbSpy @+0xB0         (drain `lbz 0xB0(event)` -> Joint::m_spy)");
+    CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointFrames)       ==  80), "InAddJoint JointFrames 80B  (the FIVE lvx128 lanes the drain copies)");
+    CGS_STATIC_ASSERT((sizeof(InAddJoint::mJointLimits)       ==  64), "InAddJoint JointLimits 64B  (the EIGHT ld/std pairs the drain copies)");
 
-    static_assert(offsetof(InRemoveJoint, mu64Id)        ==   0, "InRemoveJoint::mId @+0x00        (drain @0x8289F970 `ld 0(event)`, its only read)");
+    CGS_STATIC_ASSERT((offsetof(InRemoveJoint, mu64Id)        ==   0), "InRemoveJoint::mId @+0x00        (drain @0x8289F970 `ld 0(event)`, its only read)");
 
-    static_assert(offsetof(InSetJointSpy, mu64Id)        ==   0, "InSetJointSpy::mId @+0x00        (drain @0x8289F768 `ld 0(event)`)");
-    static_assert(offsetof(InSetJointSpy, mbSpy)         ==   8, "InSetJointSpy::mbSpy @+0x08      (drain @0x8289F768 `lbz 8(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InSetJointSpy, mu64Id)        ==   0), "InSetJointSpy::mId @+0x00        (drain @0x8289F768 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InSetJointSpy, mbSpy)         ==   8), "InSetJointSpy::mbSpy @+0x08      (drain @0x8289F768 `lbz 8(event)`)");
 
     // ---- 2026-08-05: the six rigid-body events promoted from opaque spans ------------------
     // Same discipline as #143/#144: every term is spelled `sizeof(Class::member)` / `offsetof`
     // so a re-TYPING of a member still fails the gate, and every constant is the drain's own
     // load offset, not a re-statement of this header.
-    static_assert(offsetof(InApplyForce, mID)                 ==  0, "InApplyForce::mID @+0x00              (drain @0x828A6B80 `ld 0(event)`)");
-    static_assert(offsetof(InApplyForce, mForce)              == 16, "InApplyForce::mForce @+0x10           (drain `lvx128 v0,r30,0x10`)");
-    static_assert(sizeof(InApplyForce::mForce)                == 16, "InApplyForce::mForce one 16B lane     (single lvx128, xyz consumed)");
+    CGS_STATIC_ASSERT((offsetof(InApplyForce, mID)                 ==  0), "InApplyForce::mID @+0x00              (drain @0x828A6B80 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InApplyForce, mForce)              == 16), "InApplyForce::mForce @+0x10           (drain `lvx128 v0,r30,0x10`)");
+    CGS_STATIC_ASSERT((sizeof(InApplyForce::mForce)                == 16), "InApplyForce::mForce one 16B lane     (single lvx128, xyz consumed)");
 
-    static_assert(offsetof(InChangeRigidBodyInertia, mID)       ==  0, "InChangeRigidBodyInertia::mID @+0x00       (drain @0x828A4A78 `ld 0(event)`)");
-    static_assert(offsetof(InChangeRigidBodyInertia, mInertia)  == 16, "InChangeRigidBodyInertia::mInertia @+0x10  (drain fast path `addi r11,r28,0x10` + 6x ld/std)");
-    static_assert(offsetof(InChangeRigidBodyInertia, mu32Flags) == 64, "InChangeRigidBodyInertia::mu32Flags @+0x40 (drain `lwz 0x40(event)`, every bit test)");
-    static_assert(sizeof(InChangeRigidBodyInertia::mInertia)    == 48, "InChangeRigidBodyInertia::mInertia 48B     (the SIX ld/std pairs the fast path copies)");
+    CGS_STATIC_ASSERT((offsetof(InChangeRigidBodyInertia, mID)       ==  0), "InChangeRigidBodyInertia::mID @+0x00       (drain @0x828A4A78 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InChangeRigidBodyInertia, mInertia)  == 16), "InChangeRigidBodyInertia::mInertia @+0x10  (drain fast path `addi r11,r28,0x10` + 6x ld/std)");
+    CGS_STATIC_ASSERT((offsetof(InChangeRigidBodyInertia, mu32Flags) == 64), "InChangeRigidBodyInertia::mu32Flags @+0x40 (drain `lwz 0x40(event)`, every bit test)");
+    CGS_STATIC_ASSERT((sizeof(InChangeRigidBodyInertia::mInertia)    == 48), "InChangeRigidBodyInertia::mInertia 48B     (the SIX ld/std pairs the fast path copies)");
 
-    static_assert(offsetof(InUpdateExternalBody, mID)         ==  0, "InUpdateExternalBody::mID @+0x00          (drain @0x828A3B30 `ld 0(event)`)");
-    static_assert(offsetof(InUpdateExternalBody, mTransform)  == 16, "InUpdateExternalBody::mTransform @+0x10   (drain `addi r11,r30,0x10` + 4 rows -> SetTransform)");
-    static_assert(offsetof(InUpdateExternalBody, mVel)        == 80, "InUpdateExternalBody::mVel @+0x50         (drain `lvx128 v13,r30,0x50` -> body mVel +0x20)");
-    static_assert(offsetof(InUpdateExternalBody, mAngularVel) == 96, "InUpdateExternalBody::mAngularVel @+0x60  (drain `lvx128 v0,r30,0x60` -> body mOmega +0x30)");
-    static_assert(sizeof(InUpdateExternalBody::mTransform)    == 64, "InUpdateExternalBody::mTransform 64B      (the FOUR w-preserving rows SetTransform copies)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mID)         ==  0), "InUpdateExternalBody::mID @+0x00          (drain @0x828A3B30 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mTransform)  == 16), "InUpdateExternalBody::mTransform @+0x10   (drain `addi r11,r30,0x10` + 4 rows -> SetTransform)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mVel)        == 80), "InUpdateExternalBody::mVel @+0x50         (drain `lvx128 v13,r30,0x50` -> body mVel +0x20)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateExternalBody, mAngularVel) == 96), "InUpdateExternalBody::mAngularVel @+0x60  (drain `lvx128 v0,r30,0x60` -> body mOmega +0x30)");
+    CGS_STATIC_ASSERT((sizeof(InUpdateExternalBody::mTransform)    == 64), "InUpdateExternalBody::mTransform 64B      (the FOUR w-preserving rows SetTransform copies)");
 
-    static_assert(offsetof(InRemoveRigidBody, mID)                       == 0, "InRemoveRigidBody::mID @+0x00                       (drain @0x828A2BD0 `ld 0(event)`)");
-    static_assert(offsetof(InRemoveRigidBody, mbFailIfRigidBodyNotFound) == 8, "InRemoveRigidBody::mbFailIfRigidBodyNotFound @+0x08 (drain `lbz 8(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InRemoveRigidBody, mID)                       == 0), "InRemoveRigidBody::mID @+0x00                       (drain @0x828A2BD0 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InRemoveRigidBody, mbFailIfRigidBodyNotFound) == 8), "InRemoveRigidBody::mbFailIfRigidBodyNotFound @+0x08 (drain `lbz 8(event)`)");
 
-    static_assert(offsetof(InSetRigidBodySpy, mID)  == 0, "InSetRigidBodySpy::mID @+0x00  (drain @0x828A49A8 `ld 0(event)`)");
-    static_assert(offsetof(InSetRigidBodySpy, mSpy) == 8, "InSetRigidBodySpy::mSpy @+0x08 (drain @0x828A49A8 `lbz 8(event)` -> SetSpy fork)");
+    CGS_STATIC_ASSERT((offsetof(InSetRigidBodySpy, mID)  == 0), "InSetRigidBodySpy::mID @+0x00  (drain @0x828A49A8 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InSetRigidBodySpy, mSpy) == 8), "InSetRigidBodySpy::mSpy @+0x08 (drain @0x828A49A8 `lbz 8(event)` -> SetSpy fork)");
 
-    static_assert(offsetof(InUpdateRigidBody, mID)        ==  0, "InUpdateRigidBody::mID @+0x00        (drain @0x828A3A08 `ld 0(event)`)");
-    static_assert(offsetof(InUpdateRigidBody, mRigidBody) == 16, "InUpdateRigidBody::mRigidBody @+0x10 (drain `addi r4,r30,0x10` -> RigidBody::operator=; state cmp `lwz 0x9C(event)` == +0x10 + mState 0x8C)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateRigidBody, mID)        ==  0), "InUpdateRigidBody::mID @+0x00        (drain @0x828A3A08 `ld 0(event)`)");
+    CGS_STATIC_ASSERT((offsetof(InUpdateRigidBody, mRigidBody) == 16), "InUpdateRigidBody::mRigidBody @+0x10 (drain `addi r4,r30,0x10` -> RigidBody::operator=; state cmp `lwz 0x9C(event)` == +0x10 + mState 0x8C)");
 
     // ---- 2026-08-05: the contact event promoted (drain 19 close) ---------------------------
     // Same discipline; every constant is ProcessAddContactQueue @0x828A3458's own load offset.
-    static_assert(offsetof(InAddPotentialContact, mPointOnA)        ==  0, "InAddPotentialContact::mPointOnA @+0x00        (drain `lvx128 v0,r0,r8` -> Contact::mPosA row)");
-    static_assert(offsetof(InAddPotentialContact, mPointOnB)        == 16, "InAddPotentialContact::mPointOnB @+0x10        (drain `lvx128 v12,r8,0x10` -> Contact::mPosB row)");
-    static_assert(offsetof(InAddPotentialContact, mNormal)          == 32, "InAddPotentialContact::mNormal @+0x20          (drain `lvx128 v0,r8,0x20` -> the frame build)");
-    static_assert(offsetof(InAddPotentialContact, mIDA)             == 48, "InAddPotentialContact::mIDA @+0x30             (drain `ld 0x30(event)` -> GetIndexFromGameID)");
-    static_assert(offsetof(InAddPotentialContact, mIDB)             == 56, "InAddPotentialContact::mIDB @+0x38             (drain `ld 0x38(event)` -> GetIndexFromGameID)");
-    static_assert(offsetof(InAddPotentialContact, mStaticFriction)  == 64, "InAddPotentialContact::mStaticFriction @+0x40  (drain `lfs 0x40(event)` -> Contact::mMus)");
-    static_assert(offsetof(InAddPotentialContact, mDynamicFriction) == 68, "InAddPotentialContact::mDynamicFriction @+0x44 (drain `lfs 0x44(event)` -> Contact::mMud)");
-    static_assert(offsetof(InAddPotentialContact, mRestitution)     == 72, "InAddPotentialContact::mRestitution @+0x48     (drain `lfs 0x48(event)` -> Contact::mRes)");
-    static_assert(offsetof(InAddPotentialContact, muTag)            == 76, "InAddPotentialContact::muTag @+0x4C            (NOT read by the drain -- pinned off the producer @0x825A5618 `stw tag,0x12C(sp)` in its event image)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mPointOnA)        ==  0), "InAddPotentialContact::mPointOnA @+0x00        (drain `lvx128 v0,r0,r8` -> Contact::mPosA row)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mPointOnB)        == 16), "InAddPotentialContact::mPointOnB @+0x10        (drain `lvx128 v12,r8,0x10` -> Contact::mPosB row)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mNormal)          == 32), "InAddPotentialContact::mNormal @+0x20          (drain `lvx128 v0,r8,0x20` -> the frame build)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mIDA)             == 48), "InAddPotentialContact::mIDA @+0x30             (drain `ld 0x30(event)` -> GetIndexFromGameID)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mIDB)             == 56), "InAddPotentialContact::mIDB @+0x38             (drain `ld 0x38(event)` -> GetIndexFromGameID)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mStaticFriction)  == 64), "InAddPotentialContact::mStaticFriction @+0x40  (drain `lfs 0x40(event)` -> Contact::mMus)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mDynamicFriction) == 68), "InAddPotentialContact::mDynamicFriction @+0x44 (drain `lfs 0x44(event)` -> Contact::mMud)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, mRestitution)     == 72), "InAddPotentialContact::mRestitution @+0x48     (drain `lfs 0x48(event)` -> Contact::mRes)");
+    CGS_STATIC_ASSERT((offsetof(InAddPotentialContact, muTag)            == 76), "InAddPotentialContact::muTag @+0x4C            (NOT read by the drain -- pinned off the producer @0x825A5618 `stw tag,0x12C(sp)` in its event image)");
 
     // ---- 2026-08-06: the four OUTPUT events promoted from opaque spans (the spy wave) ------
     // Same discipline; the constants are the PRODUCERS' own store offsets (the four
     // PhysicsSimulationModule output emitters) plus the AddEvent-instantiation strides that
     // pinned the old opaque spans. OutUpdateRigidBody is the one ADJACENCY pin, for exactly
     // InUpdateRigidBody's reason (pointer-bearing payload).
-    static_assert(sizeof(OutContactSpy)                     == 112, "OutContactSpy stride 112 (AddEvent @0x825E44C8 / AddEventSafe @0x828A1B78 mulli 0x70)");
-    static_assert(offsetof(OutContactSpy, mFrictionStress)  ==   0, "OutContactSpy::mFrictionStress @+0x00 (emitter @0x828A4ED8 stvx of spy mForceT*ts)");
-    static_assert(offsetof(OutContactSpy, mNormalStress)    ==  16, "OutContactSpy::mNormalStress @+0x10   (emitter stvx of spy mForceN*ts)");
-    static_assert(offsetof(OutContactSpy, mNormal)          ==  32, "OutContactSpy::mNormal @+0x20         (emitter stvx of drain event mNormal)");
-    static_assert(offsetof(OutContactSpy, mPointOnA)        ==  48, "OutContactSpy::mPointOnA @+0x30       (emitter stvx of drain event mPointOnA)");
-    static_assert(offsetof(OutContactSpy, mPointOnB)        ==  64, "OutContactSpy::mPointOnB @+0x40       (emitter stvx of drain event mPointOnB)");
-    static_assert(offsetof(OutContactSpy, mIDA)             ==  80, "OutContactSpy::mIDA @+0x50            (emitter `std` of GetGameID(bodyA tag))");
-    static_assert(offsetof(OutContactSpy, mIDB)             ==  88, "OutContactSpy::mIDB @+0x58            (emitter `std` of GetGameID(bodyB tag))");
-    static_assert(offsetof(OutContactSpy, muTag)            ==  96, "OutContactSpy::muTag @+0x60           (emitter `stw` of drain event muTag +0x4C)");
+    CGS_STATIC_ASSERT((sizeof(OutContactSpy)                     == 112), "OutContactSpy stride 112 (AddEvent @0x825E44C8 / AddEventSafe @0x828A1B78 mulli 0x70)");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mFrictionStress)  ==   0), "OutContactSpy::mFrictionStress @+0x00 (emitter @0x828A4ED8 stvx of spy mForceT*ts)");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mNormalStress)    ==  16), "OutContactSpy::mNormalStress @+0x10   (emitter stvx of spy mForceN*ts)");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mNormal)          ==  32), "OutContactSpy::mNormal @+0x20         (emitter stvx of drain event mNormal)");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mPointOnA)        ==  48), "OutContactSpy::mPointOnA @+0x30       (emitter stvx of drain event mPointOnA)");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mPointOnB)        ==  64), "OutContactSpy::mPointOnB @+0x40       (emitter stvx of drain event mPointOnB)");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mIDA)             ==  80), "OutContactSpy::mIDA @+0x50            (emitter `std` of GetGameID(bodyA tag))");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, mIDB)             ==  88), "OutContactSpy::mIDB @+0x58            (emitter `std` of GetGameID(bodyB tag))");
+    CGS_STATIC_ASSERT((offsetof(OutContactSpy, muTag)            ==  96), "OutContactSpy::muTag @+0x60           (emitter `stw` of drain event muTag +0x4C)");
 
-    static_assert(sizeof(OutJointSpy)                       ==  48, "OutJointSpy stride 48 (AddEvent @0x828A1C30 miLength*3 then *16)");
-    static_assert(offsetof(OutJointSpy, mID)                ==   0, "OutJointSpy::mID @+0x00              (emitter @0x828A58E0 `std` of JointData::GetGameID)");
-    static_assert(offsetof(OutJointSpy, mLinearStress)      ==  16, "OutJointSpy::mLinearStress @+0x10    (emitter stvx of spy mForce  * ts*59.999996f)");
-    static_assert(offsetof(OutJointSpy, mAngularStress)     ==  32, "OutJointSpy::mAngularStress @+0x20   (emitter stvx of spy mTorque * ts*59.999996f)");
+    CGS_STATIC_ASSERT((sizeof(OutJointSpy)                       ==  48), "OutJointSpy stride 48 (AddEvent @0x828A1C30 miLength*3 then *16)");
+    CGS_STATIC_ASSERT((offsetof(OutJointSpy, mID)                ==   0), "OutJointSpy::mID @+0x00              (emitter @0x828A58E0 `std` of JointData::GetGameID)");
+    CGS_STATIC_ASSERT((offsetof(OutJointSpy, mLinearStress)      ==  16), "OutJointSpy::mLinearStress @+0x10    (emitter stvx of spy mForce  * ts*59.999996f)");
+    CGS_STATIC_ASSERT((offsetof(OutJointSpy, mAngularStress)     ==  32), "OutJointSpy::mAngularStress @+0x20   (emitter stvx of spy mTorque * ts*59.999996f)");
 
-    static_assert(sizeof(OutDriveSpy)                       ==  64, "OutDriveSpy stride 64 (AddEvent @0x828A1D90 slwi 6)");
-    static_assert(offsetof(OutDriveSpy, mID)                ==   0, "OutDriveSpy::mID @+0x00                   (emitter @0x828A5D10 `std` of DriveData::GetGameID)");
-    static_assert(offsetof(OutDriveSpy, mLinearStress)      ==  16, "OutDriveSpy::mLinearStress @+0x10         (emitter stvx of spy mForce row)");
-    static_assert(offsetof(OutDriveSpy, mAngularStress)     ==  32, "OutDriveSpy::mAngularStress @+0x20        (emitter stvx of spy mTorque row)");
-    static_assert(offsetof(OutDriveSpy, mLinearDistanceToKey)  == 48, "OutDriveSpy::mLinearDistanceToKey @+0x30  (emitter `stfs` of spy mSeparation +0x20)");
-    static_assert(offsetof(OutDriveSpy, mAngularDistanceToKey) == 52, "OutDriveSpy::mAngularDistanceToKey @+0x34 (emitter `stfs` of spy mAngSeparation +0x24)");
+    CGS_STATIC_ASSERT((sizeof(OutDriveSpy)                       ==  64), "OutDriveSpy stride 64 (AddEvent @0x828A1D90 slwi 6)");
+    CGS_STATIC_ASSERT((offsetof(OutDriveSpy, mID)                ==   0), "OutDriveSpy::mID @+0x00                   (emitter @0x828A5D10 `std` of DriveData::GetGameID)");
+    CGS_STATIC_ASSERT((offsetof(OutDriveSpy, mLinearStress)      ==  16), "OutDriveSpy::mLinearStress @+0x10         (emitter stvx of spy mForce row)");
+    CGS_STATIC_ASSERT((offsetof(OutDriveSpy, mAngularStress)     ==  32), "OutDriveSpy::mAngularStress @+0x20        (emitter stvx of spy mTorque row)");
+    CGS_STATIC_ASSERT((offsetof(OutDriveSpy, mLinearDistanceToKey)  == 48), "OutDriveSpy::mLinearDistanceToKey @+0x30  (emitter `stfs` of spy mSeparation +0x20)");
+    CGS_STATIC_ASSERT((offsetof(OutDriveSpy, mAngularDistanceToKey) == 52), "OutDriveSpy::mAngularDistanceToKey @+0x34 (emitter `stfs` of spy mAngSeparation +0x24)");
 
-    static_assert(sizeof(OutUpdateRigidBody) == 16 + sizeof(rw::physics::RigidBody),
+    CGS_STATIC_ASSERT((sizeof(OutUpdateRigidBody) == 16 + sizeof(rw::physics::RigidBody)),
                   "OutUpdateRigidBody = 16B id slot + the full RigidBody (X360: 16+176 == the attested 192 of AddEvent @0x828A66F8)");
-    static_assert(offsetof(OutUpdateRigidBody, mID)        ==  0, "OutUpdateRigidBody::mID @+0x00        (both emitters `std gameId, frame+0`)");
-    static_assert(offsetof(OutUpdateRigidBody, mRigidBody) == 16, "OutUpdateRigidBody::mRigidBody @+0x10 (both emitters RigidBody::operator=(frame+0x10, body))");
+    CGS_STATIC_ASSERT((offsetof(OutUpdateRigidBody, mID)        ==  0), "OutUpdateRigidBody::mID @+0x00        (both emitters `std gameId, frame+0`)");
+    CGS_STATIC_ASSERT((offsetof(OutUpdateRigidBody, mRigidBody) == 16), "OutUpdateRigidBody::mRigidBody @+0x10 (both emitters RigidBody::operator=(frame+0x10, body))");
     // =====================================================================================
 }
 }

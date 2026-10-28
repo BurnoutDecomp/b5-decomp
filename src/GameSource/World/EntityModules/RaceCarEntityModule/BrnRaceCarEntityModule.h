@@ -78,7 +78,7 @@ namespace BrnWorld
 }
 
 namespace CgsResource { struct ResourceHandle; }
-namespace BrnResource { struct VehicleList; class WheelList; enum ECarType : int; }
+namespace BrnResource { struct VehicleList; class WheelList; enum ECarType ; }
 // The game-action consumer's two argument types (pointer-only here; the .cpp includes both
 // owning headers). ResetPlayerCarAction is game action 0's 80-byte payload,
 // RaceCarAIInterface is the AI publish surface SpawnRaceCar posts its attach event into.
@@ -1405,7 +1405,7 @@ private:
     Vector3 DEBUG_mDebugRaceCarPosition = { 0.0f, 0.0f, 0.0f, 0.0f }; // +0x18750
     Vector3 DEBUG_mDebugRaceCarDirection = { 0.0f, 0.0f, 0.0f, 0.0f }; // +0x18760
     f32     DEBUG_mfDebugRaceCarVelocity = 0.0f;        // +0x18770 (100208)
-    RaceCar* DEBUG_mpDebugRaceCar = nullptr;            // DWARF :469
+    RaceCar* DEBUG_mpDebugRaceCar = 0;            // DWARF :469
 
     // ========================================================================
     // MODELLED members (paint wave 2026-08-02): the two DEBUG COLOUR OVERRIDES
@@ -1831,7 +1831,7 @@ inline void RaceCarEntityModule::LockLayout_()
     // pushes downstream shift. That is exactly the project's named-member parity rule --
     // the console offsets survive as the per-member comments, which is what a later wave
     // needs; no code reads this module by offset.
-    static_assert(offsetof(RaceCarEntityModule, maRaceCars) == 0x250,
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, maRaceCars) == 0x250),
                   "maRaceCars @+0x250 (== 592)");
 }
 

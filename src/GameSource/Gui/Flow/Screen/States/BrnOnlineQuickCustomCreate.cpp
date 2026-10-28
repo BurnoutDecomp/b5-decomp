@@ -148,10 +148,10 @@ namespace BrnGui
         // { 2, 536, 12, <two zero bytes> }, channel 40, 16 bytes.
         typedef CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, 40> GuiEventTickerClearMessagesWire;
 
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "activate-crashnav record is 20 bytes");
-        static_assert(sizeof(GuiEventShowHideHudWire) == 16, "show/hide-hud record is 16 bytes");
-        static_assert(sizeof(GuiEventTickerCustomMessageWire) == 2084, "ticker record is 2084 bytes");
-        static_assert(sizeof(GuiEventTickerClearMessagesWire) == 16, "ticker-clear record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventTickerCustomMessageWire) == 2084), "ticker record is 2084 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventTickerClearMessagesWire) == 16), "ticker-clear record is 16 bytes");
     }
 
     // ================================================================================

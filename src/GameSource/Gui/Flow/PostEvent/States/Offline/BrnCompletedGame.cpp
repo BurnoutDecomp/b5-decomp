@@ -52,27 +52,27 @@
 
 typedef CgsGui::GuiEventWrapper<BrnGui::GuiEvent100PerCentComplete, 40>
     GuiEvent100PerCentCompleteRecord40;
-static_assert(sizeof(BrnGui::GuiEvent100PerCentComplete) == 1,
+CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEvent100PerCentComplete) == 1),
               "ARTIST 0x824C31C8 copies one payload byte");
-static_assert(offsetof(GuiEvent100PerCentCompleteRecord40, mOutEvent) == 12,
+CGS_STATIC_ASSERT((offsetof(GuiEvent100PerCentCompleteRecord40, mOutEvent) == 12),
               "ARTIST 0x824C31C8 payload offset is 12");
-static_assert(sizeof(GuiEvent100PerCentCompleteRecord40) == 16,
+CGS_STATIC_ASSERT((sizeof(GuiEvent100PerCentCompleteRecord40) == 16),
               "ARTIST 0x824C31C8 channel-40 record is 16 bytes");
 typedef CgsGui::GuiEventWrapper<BrnGui::GuiAutosaveRequestEvent, 40>
     GuiAutosaveRequestEventRecord40;
-static_assert(sizeof(BrnGui::GuiAutosaveRequestEvent) == 1,
+CGS_STATIC_ASSERT((sizeof(BrnGui::GuiAutosaveRequestEvent) == 1),
               "ARTIST 0x824937E0 copies one autosave-request byte");
-static_assert(offsetof(GuiAutosaveRequestEventRecord40, mOutEvent) == 12,
+CGS_STATIC_ASSERT((offsetof(GuiAutosaveRequestEventRecord40, mOutEvent) == 12),
               "ARTIST 0x824937E0 payload offset is 12");
-static_assert(sizeof(GuiAutosaveRequestEventRecord40) == 16,
+CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestEventRecord40) == 16),
               "ARTIST 0x824937E0 channel-40 record is 16 bytes");
 typedef CgsGui::GuiEventWrapper<BrnGui::GuiEventAudioVoiceOver, 40>
     GuiEventAudioVoiceOverRecord40;
-static_assert(sizeof(BrnGui::GuiEventAudioVoiceOver) == 4,
+CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventAudioVoiceOver) == 4),
               "ARTIST 0x824C3178 copies a four-byte voice-over name hash");
-static_assert(offsetof(GuiEventAudioVoiceOverRecord40, mOutEvent) == 12,
+CGS_STATIC_ASSERT((offsetof(GuiEventAudioVoiceOverRecord40, mOutEvent) == 12),
               "ARTIST 0x824C3178 payload offset is 12");
-static_assert(sizeof(GuiEventAudioVoiceOverRecord40) == 16,
+CGS_STATIC_ASSERT((sizeof(GuiEventAudioVoiceOverRecord40) == 16),
               "ARTIST 0x824C3178 channel-40 record is 16 bytes");
 
 namespace BrnGui
@@ -493,11 +493,11 @@ void CompletedGame::UpdateEliteLicensePresentation()
 {
     typedef CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40>
         GuiAudioGenericSequenceRecord40;
-    static_assert(sizeof(GuiEventAudioGenericSequence) == 4,
+    CGS_STATIC_ASSERT((sizeof(GuiEventAudioGenericSequence) == 4),
                   "ARTIST 0x824C2DA8 copies one four-byte payload");
-    static_assert(offsetof(GuiAudioGenericSequenceRecord40, mOutEvent) == 12,
+    CGS_STATIC_ASSERT((offsetof(GuiAudioGenericSequenceRecord40, mOutEvent) == 12),
                   "ARTIST 0x824C2DA8 payload offset is 12");
-    static_assert(sizeof(GuiAudioGenericSequenceRecord40) == 16,
+    CGS_STATIC_ASSERT((sizeof(GuiAudioGenericSequenceRecord40) == 16),
                   "ARTIST 0x824C2DA8 channel-40 record is 16 bytes");
 
     switch (meEliteSubstate)
@@ -805,11 +805,11 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
 {
     typedef CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40>
         GuiAudioGenericSequenceRecord40;
-    static_assert(sizeof(GuiEventAudioGenericSequence) == 4,
+    CGS_STATIC_ASSERT((sizeof(GuiEventAudioGenericSequence) == 4),
                   "ARTIST 0x824C2DA8 copies one four-byte payload");
-    static_assert(offsetof(GuiAudioGenericSequenceRecord40, mOutEvent) == 12,
+    CGS_STATIC_ASSERT((offsetof(GuiAudioGenericSequenceRecord40, mOutEvent) == 12),
                   "ARTIST 0x824C2DA8 payload offset is 12");
-    static_assert(sizeof(GuiAudioGenericSequenceRecord40) == 16,
+    CGS_STATIC_ASSERT((sizeof(GuiAudioGenericSequenceRecord40) == 16),
                   "ARTIST 0x824C2DA8 channel-40 record is 16 bytes");
 
     switch (meSecondFinishedSubstate)

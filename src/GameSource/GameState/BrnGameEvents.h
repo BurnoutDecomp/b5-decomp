@@ -366,7 +366,7 @@ struct GameEvent { };
 
 // DWARF BrnGameEvents.h:400; ARTIST posts a one-byte empty signal.
 struct PlayerCrashEndingEvent : public GameEvent<E_EVENT_PLAYER_CRASH_ENDING> {};
-static_assert(sizeof(PlayerCrashEndingEvent) == 1, "empty crash-ending signal");
+CGS_STATIC_ASSERT((sizeof(PlayerCrashEndingEvent) == 1), "empty crash-ending signal");
 
 // ARTIST debug callbacks and ProcessGameEvents cases 1/2; DWARF member names.
 struct TeleportPlayerCarEvent : public GameEvent<E_EVENT_TELEPORT_PLAYER_CAR>
@@ -381,8 +381,8 @@ struct ChangePlayerCarEvent : public GameEvent<E_EVENT_CHANGE_PLAYER_CAR>
     bool mbResetPlayerCamera;
     bool mbKeepResetSection;
 };
-static_assert(sizeof(TeleportPlayerCarEvent) == 32, "ARTIST teleport payload");
-static_assert(sizeof(ChangePlayerCarEvent) == 24, "ARTIST car-change payload");
+CGS_STATIC_ASSERT((sizeof(TeleportPlayerCarEvent) == 32), "ARTIST teleport payload");
+CGS_STATIC_ASSERT((sizeof(ChangePlayerCarEvent) == 24), "ARTIST car-change payload");
 
 // ARTIST ProcessGameEvents cases 4/5/6/82; declaration names from DecFIGS.
 struct SelectPlayerCarEvent : public GameEvent<E_EVENT_SELECT_PLAYER_CAR>
@@ -413,8 +413,8 @@ struct SetupPlayerCarEvent : public GameEvent<E_EVENT_SETUP_PLAYER_CAR>
     CgsID   mCarModelId;    // +0x20
     CgsID   mWheelModelId;  // +0x28
 };
-static_assert(offsetof(SetupPlayerCarEvent, mCarModelId) == 0x20 &&
-              offsetof(SetupPlayerCarEvent, mWheelModelId) == 0x28,
+CGS_STATIC_ASSERT((offsetof(SetupPlayerCarEvent, mCarModelId) == 0x20 &&
+              offsetof(SetupPlayerCarEvent, mWheelModelId) == 0x28),
               "case 0 reads the car id at +0x20 and the wheel id at +0x28");
 
 // The GUI moved the car select to another step (case 94 reads the step at +0 and the car-select
@@ -424,7 +424,7 @@ struct CarSelectStateChangedEvent : public GameEvent<E_EVENT_CARSELECT_STATE_CHA
     ECarSelectState meState;          // +0x00
     ECarSelectType  meCarSelectType;  // +0x04
 };
-static_assert(sizeof(CarSelectStateChangedEvent) == 8, "two words: step, car-select type");
+CGS_STATIC_ASSERT((sizeof(CarSelectStateChangedEvent) == 8), "two words: step, car-select type");
 
 // Add a car to the profile as a sponsor car (case 105 reads the id at +0).
 struct RequestCarUnlockEvent : public GameEvent<E_EVENT_REQUEST_CAR_UNLOCK_EVENT>
@@ -483,11 +483,11 @@ struct RecordPropHitEvent : public GameEvent<E_EVENT_RECORD_PROP_HIT>
 // POINTER-FREE and the empty GameEvent<T> base folds away (EBO), so the leading 16-byte-aligned
 // Vector3 fixes the whole layout. If any of these four ever fires, the prop-hit wire is silently
 // corrupt at the seam and the case-111 arm is reading the wrong halfword.
-static_assert(offsetof(RecordPropHitEvent, mPosition)   == 0x00, "RecordPropHitEvent position at +0x00");
-static_assert(offsetof(RecordPropHitEvent, muZoneId)    == 0x10, "RecordPropHitEvent zone id at +0x10");
-static_assert(offsetof(RecordPropHitEvent, muPropId)    == 0x12, "RecordPropHitEvent prop id at +0x12");
-static_assert(offsetof(RecordPropHitEvent, mbHitBefore) == 0x14, "RecordPropHitEvent hit-before flag at +0x14");
-static_assert(sizeof(RecordPropHitEvent) == 32, "RecordPropHitEvent is the Append<...,50> `li r6,0x20` wire size");
+CGS_STATIC_ASSERT((offsetof(RecordPropHitEvent, mPosition)   == 0x00), "RecordPropHitEvent position at +0x00");
+CGS_STATIC_ASSERT((offsetof(RecordPropHitEvent, muZoneId)    == 0x10), "RecordPropHitEvent zone id at +0x10");
+CGS_STATIC_ASSERT((offsetof(RecordPropHitEvent, muPropId)    == 0x12), "RecordPropHitEvent prop id at +0x12");
+CGS_STATIC_ASSERT((offsetof(RecordPropHitEvent, mbHitBefore) == 0x14), "RecordPropHitEvent hit-before flag at +0x14");
+CGS_STATIC_ASSERT((sizeof(RecordPropHitEvent) == 32), "RecordPropHitEvent is the Append<...,50> `li r6,0x20` wire size");
 
 // [gateui] DWARF BrnGameEvents.h:442 -- EMPTY, exactly as the DWARF declares it (the event id IS
 // the whole payload: "somebody wants the prop-progression census re-sent"). Homed here so owner
@@ -506,20 +506,20 @@ struct LeaveReplayEvent : public GameEvent<E_EVENT_LEAVE_REPLAY>
 struct FinishedSyncingPlayersEvent : public GameEvent<E_EVENT_FINISHED_SYNCING_PLAYERS>
 {
 };
-static_assert(sizeof(FinishedSyncingPlayersEvent) == 1, "posted with size 1");
+CGS_STATIC_ASSERT((sizeof(FinishedSyncingPlayersEvent) == 1), "posted with size 1");
 
 // Online car selection starts (posted once a launch succeeds). Empty signal.
 struct OnlineCarSelectEvent : public GameEvent<E_EVENT_ONLINE_CAR_SELECT>
 {
 };
-static_assert(sizeof(OnlineCarSelectEvent) == 1, "posted with size 1");
+CGS_STATIC_ASSERT((sizeof(OnlineCarSelectEvent) == 1), "posted with size 1");
 
 // The player left the current mode; ProcessGameEvents answers with ModeManager::
 // UserCancelCurrentMode and TakedownManager::ClearRaceCarData. Empty signal.
 struct PlayerExitedModeEvent : public GameEvent<E_EVENT_PLAYER_EXITED_MODE>
 {
 };
-static_assert(sizeof(PlayerExitedModeEvent) == 1, "posted with size 1");
+CGS_STATIC_ASSERT((sizeof(PlayerExitedModeEvent) == 1), "posted with size 1");
 
 // A module finished preparing for an invite. The payload is the module
 // (EModulePreparedForInvite: 0 game state, 1 network); the network state manager posts 1.
@@ -527,11 +527,11 @@ struct PreparedForInviteEvent : public GameEvent<E_EVENT_PREPARED_FOR_INVITE>
 {
     s32 meModulePreparedForInvite;   // +0x00 FLAG: typed s32 until EModulePreparedForInvite has a home
 };
-static_assert(sizeof(PreparedForInviteEvent) == 4, "posted with size 4");
+CGS_STATIC_ASSERT((sizeof(PreparedForInviteEvent) == 4), "posted with size 4");
 
 // The local player lost the connection. Empty signal.
 typedef GameEvent<E_EVENT_LOCAL_PLAYER_DISCONNECTED> LocalPlayerDisconnectedEvent;
-static_assert(sizeof(LocalPlayerDisconnectedEvent) == 1, "posted with size 1");
+CGS_STATIC_ASSERT((sizeof(LocalPlayerDisconnectedEvent) == 1), "posted with size 1");
 
 // mNetworkPlayerID at offset 0. 32 bytes: the network bridge builds it from
 // the network OUT record 18 and ProcessGameEvents case 7 reads it. The float at +0x18 is a
@@ -581,18 +581,18 @@ struct OnlinePlayerRemovedEvent : public GameEvent<E_EVENT_ONLINE_PLAYER_REMOVED
 };
 
 // The three records above are pointer-free, so the console offsets and sizes hold on the host.
-static_assert(offsetof(ChangeNetworkCarEvent, mCarModelId)  == 0x08, "ChangeNetworkCarEvent car model at +0x08");
-static_assert(offsetof(ChangeNetworkCarEvent, mWheelModelId) == 0x10, "ChangeNetworkCarEvent wheel model at +0x10");
-static_assert(offsetof(ChangeNetworkCarEvent, mf18)         == 0x18, "ChangeNetworkCarEvent float at +0x18");
-static_assert(sizeof(ChangeNetworkCarEvent) == 32, "ChangeNetworkCarEvent is posted as 32 bytes");
-static_assert(offsetof(OnlinePlayerAddedEvent, meTeam)                  == 0x14, "OnlinePlayerAddedEvent team at +0x14");
-static_assert(offsetof(OnlinePlayerAddedEvent, mf18)                    == 0x18, "OnlinePlayerAddedEvent float at +0x18");
-static_assert(offsetof(OnlinePlayerAddedEvent, mu16CarColourIndex)      == 0x1C, "OnlinePlayerAddedEvent colour at +0x1C");
-static_assert(offsetof(OnlinePlayerAddedEvent, mu16CarPaintFinishIndex) == 0x1E, "OnlinePlayerAddedEvent paint finish at +0x1E");
-static_assert(offsetof(OnlinePlayerAddedEvent, mbIsLocalPlayer)         == 0x20, "OnlinePlayerAddedEvent local flag at +0x20");
-static_assert(sizeof(OnlinePlayerAddedEvent) == 40, "OnlinePlayerAddedEvent is posted as 40 bytes");
-static_assert(offsetof(OnlinePlayerRemovedEvent, mbIsLocalPlayerInGame) == 0x04, "OnlinePlayerRemovedEvent flag at +0x04");
-static_assert(sizeof(OnlinePlayerRemovedEvent) == 8, "OnlinePlayerRemovedEvent is posted as 8 bytes");
+CGS_STATIC_ASSERT((offsetof(ChangeNetworkCarEvent, mCarModelId)  == 0x08), "ChangeNetworkCarEvent car model at +0x08");
+CGS_STATIC_ASSERT((offsetof(ChangeNetworkCarEvent, mWheelModelId) == 0x10), "ChangeNetworkCarEvent wheel model at +0x10");
+CGS_STATIC_ASSERT((offsetof(ChangeNetworkCarEvent, mf18)         == 0x18), "ChangeNetworkCarEvent float at +0x18");
+CGS_STATIC_ASSERT((sizeof(ChangeNetworkCarEvent) == 32), "ChangeNetworkCarEvent is posted as 32 bytes");
+CGS_STATIC_ASSERT((offsetof(OnlinePlayerAddedEvent, meTeam)                  == 0x14), "OnlinePlayerAddedEvent team at +0x14");
+CGS_STATIC_ASSERT((offsetof(OnlinePlayerAddedEvent, mf18)                    == 0x18), "OnlinePlayerAddedEvent float at +0x18");
+CGS_STATIC_ASSERT((offsetof(OnlinePlayerAddedEvent, mu16CarColourIndex)      == 0x1C), "OnlinePlayerAddedEvent colour at +0x1C");
+CGS_STATIC_ASSERT((offsetof(OnlinePlayerAddedEvent, mu16CarPaintFinishIndex) == 0x1E), "OnlinePlayerAddedEvent paint finish at +0x1E");
+CGS_STATIC_ASSERT((offsetof(OnlinePlayerAddedEvent, mbIsLocalPlayer)         == 0x20), "OnlinePlayerAddedEvent local flag at +0x20");
+CGS_STATIC_ASSERT((sizeof(OnlinePlayerAddedEvent) == 40), "OnlinePlayerAddedEvent is posted as 40 bytes");
+CGS_STATIC_ASSERT((offsetof(OnlinePlayerRemovedEvent, mbIsLocalPlayerInGame) == 0x04), "OnlinePlayerRemovedEvent flag at +0x04");
+CGS_STATIC_ASSERT((sizeof(OnlinePlayerRemovedEvent) == 8), "OnlinePlayerRemovedEvent is posted as 8 bytes");
 
 // X360 0x823A7770. mNetworkPlayerID at offset 0.
 struct RemotePlayerDisconnectedEvent : public GameEvent<E_EVENT_REMOTE_PLAYER_DISCONNECTED>
@@ -613,7 +613,7 @@ struct LocalPlayerConnectedEvent : public GameEvent<E_EVENT_LOCAL_PLAYER_CONNECT
 
 // Case 124: the local player left the lobby. Empty signal (posted with size 1).
 struct LocalPlayerLeftLobby : public GameEvent<E_EVENT_LOCAL_PLAYER_LEFT_LOBBY> {};
-static_assert(sizeof(LocalPlayerLeftLobby) == 1, "posted with size 1");
+CGS_STATIC_ASSERT((sizeof(LocalPlayerLeftLobby) == 1), "posted with size 1");
 
 // Case 125: the lobby's game parameters changed (mode word at +0, ranked byte at +4).
 struct OnlineGameParamsChanged : public GameEvent<E_EVENT_ONLINE_GAME_PARAMS_CHANGED>
@@ -630,9 +630,9 @@ struct NewRemoteBurnoutSkillzEvent : public GameEvent<E_EVENT_ONLINE_NEW_BURNOUT
     BurnoutSkillzData           mNewSkillzData;  // +0x04
     bool                        mbInitialData;   // +0x3C
 };
-static_assert(offsetof(NewRemoteBurnoutSkillzEvent, mNewSkillzData) == 0x04, "skillz table at +0x04");
-static_assert(offsetof(NewRemoteBurnoutSkillzEvent, mbInitialData)  == 0x3C, "initial-data byte at +0x3C");
-static_assert(sizeof(NewRemoteBurnoutSkillzEvent) == 64, "posted as 64 bytes");
+CGS_STATIC_ASSERT((offsetof(NewRemoteBurnoutSkillzEvent, mNewSkillzData) == 0x04), "skillz table at +0x04");
+CGS_STATIC_ASSERT((offsetof(NewRemoteBurnoutSkillzEvent, mbInitialData)  == 0x3C), "initial-data byte at +0x3C");
+CGS_STATIC_ASSERT((sizeof(NewRemoteBurnoutSkillzEvent) == 64), "posted as 64 bytes");
 
 // Case 140: host change. Two bytes (the network bridge's {isLocalNowHost, isFirstHost}).
 struct OnlineNewHostEvent : public GameEvent<E_EVENT_ONLINE_NEW_HOST>
@@ -649,7 +649,7 @@ struct OnlineGameLaunchedEvent : public GameEvent<E_EVENT_ONLINE_GAME_LAUNCHED>
     bool mbHostChoiceCarAndNotHost;   // +0x04
     bool mbSuccessfulLaunch;          // +0x05
 };
-static_assert(offsetof(OnlineGameLaunchedEvent, mbSuccessfulLaunch)        == 0x05, "launch byte at +0x05");
+CGS_STATIC_ASSERT((offsetof(OnlineGameLaunchedEvent, mbSuccessfulLaunch)        == 0x05), "launch byte at +0x05");
 
 // Case 20: the player accepted a mode. The members are the reference build's; their placement is
 // the one the case-20 arm reads: the count byte at +0x4C, the run it passes as AddCheckpoint's
@@ -663,9 +663,9 @@ struct PlayerAcceptedModeEvent : public GameEvent<E_EVENT_PLAYER_ACCEPTED_MODE>
     u16           mauLandmarkSectionIds[16];     // +0x2C
     u8            muNumLandmarks;                // +0x4C
 };
-static_assert(offsetof(PlayerAcceptedModeEvent, maLandmarkIndices)     == 0x08, "landmark run at +0x08");
-static_assert(offsetof(PlayerAcceptedModeEvent, mauLandmarkSectionIds) == 0x2C, "section run at +0x2C");
-static_assert(offsetof(PlayerAcceptedModeEvent, muNumLandmarks)        == 0x4C, "count byte at +0x4C");
+CGS_STATIC_ASSERT((offsetof(PlayerAcceptedModeEvent, maLandmarkIndices)     == 0x08), "landmark run at +0x08");
+CGS_STATIC_ASSERT((offsetof(PlayerAcceptedModeEvent, mauLandmarkSectionIds) == 0x2C), "section run at +0x2C");
+CGS_STATIC_ASSERT((offsetof(PlayerAcceptedModeEvent, muNumLandmarks)        == 0x4C), "count byte at +0x4C");
 
 // ===== Freeburn-challenge selection / remote events (cases 162..164, 168..170) =====
 
@@ -685,8 +685,8 @@ struct FreeburnChallengeSelectedEvent : public GameEvent<E_EVENT_FREEBURN_CHALLE
     EFreeburnChallengeAction meAction;                   // +0x08
     s32                      meFreeburnChallengeStyle;   // +0x0C (ChallengeListEntry::EFreeburnChallengeStyle)
 };
-static_assert(offsetof(FreeburnChallengeSelectedEvent, meAction) == 0x08, "selector action at +0x08");
-static_assert(sizeof(FreeburnChallengeSelectedEvent) == 16, "posted as 16 bytes");
+CGS_STATIC_ASSERT((offsetof(FreeburnChallengeSelectedEvent, meAction) == 0x08), "selector action at +0x08");
+CGS_STATIC_ASSERT((sizeof(FreeburnChallengeSelectedEvent) == 16), "posted as 16 bytes");
 
 // Cases 163 / 164: the challenge id at +0 (8 bytes each).
 struct FreeburnChallengeSelectedRemotelyEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE_SELECTED_REMOTELY>
@@ -704,8 +704,8 @@ struct FreeburnChallengeEndedEvent : public GameEvent<E_EVENT_FREEBURN_CHALLENGE
     CgsID            mChallengeID;        // +0x00
     EChallengeStatus meChallengeStatus;   // +0x08
 };
-static_assert(offsetof(FreeburnChallengeEndedEvent, meChallengeStatus) == 0x08, "status at +0x08");
-static_assert(sizeof(FreeburnChallengeEndedEvent) == 16, "posted as 16 bytes");
+CGS_STATIC_ASSERT((offsetof(FreeburnChallengeEndedEvent, meChallengeStatus) == 0x08), "status at +0x08");
+CGS_STATIC_ASSERT((sizeof(FreeburnChallengeEndedEvent) == 16), "posted as 16 bytes");
 
 // Case 170: empty signal (GUI 580 bridge, size 1).
 struct FreeburnChallengeRequestEveryPlayerStatusEvent : public GameEvent<E_EVENT_REQUEST_EVERY_PLAYER_COMPLETION_STATUS> {};
@@ -1100,9 +1100,9 @@ struct TriggerCrashBreakerEvent : public GameEvent<E_EVENT_TRIGGER_CRASH_BREAKER
     f32                 mfTimeUntilStart;   // +0x18
     f32                 mfDurationTime;     // +0x1C
 };
-static_assert(offsetof(TriggerCrashBreakerEvent, meRaceCarIndex)   == 0x10, "event 44 race car index at +0x10");
-static_assert(offsetof(TriggerCrashBreakerEvent, mfTimeUntilStart) == 0x18, "event 44 start delay at +0x18");
-static_assert(sizeof(TriggerCrashBreakerEvent) == 32, "event 44 is 32 bytes");
+CGS_STATIC_ASSERT((offsetof(TriggerCrashBreakerEvent, meRaceCarIndex)   == 0x10), "event 44 race car index at +0x10");
+CGS_STATIC_ASSERT((offsetof(TriggerCrashBreakerEvent, mfTimeUntilStart) == 0x18), "event 44 start delay at +0x18");
+CGS_STATIC_ASSERT((sizeof(TriggerCrashBreakerEvent) == 32), "event 44 is 32 bytes");
 
 // Cancel a crash breaker (id 45). The arm copies the index into action 136.
 struct CancelCrashBreakerEvent : public GameEvent<E_EVENT_CANCEL_CRASH_BREAKER>
@@ -1171,20 +1171,20 @@ struct JustBouncedEvent : public GameEvent<E_EVENT_JUST_BOUNCED>
     EntityId midImpactEntityId;   // +0x08 (:2789)
     Vector3  mContactPoint;       // +0x10 (:2790)
 };
-static_assert(sizeof(JustBouncedEvent) == 32,                      "event 52 wire size (li r6, 0x20 @0x82633EB0)");
-static_assert(offsetof(JustBouncedEvent, miBounceChain)     == 0x00, "GetRecentBounce r4 / case 52 lwz 0");
-static_assert(offsetof(JustBouncedEvent, mbFromStationary)  == 0x04, "GetRecentBounce r5 / case 52 lbz 4");
-static_assert(offsetof(JustBouncedEvent, mbOnCar)           == 0x05, "GetRecentBounce r6 / case 52 lbz 5");
-static_assert(offsetof(JustBouncedEvent, mbBoostedBounce)   == 0x06, "GetRecentBounce r7 / case 52 lbz 6");
-static_assert(offsetof(JustBouncedEvent, mbGoodImpact)      == 0x07, "GetRecentBounce r8 / case 52 lbz 7");
-static_assert(offsetof(JustBouncedEvent, midImpactEntityId) == 0x08, "GetRecentBounce r9 / case 52 lwz 8");
-static_assert(offsetof(JustBouncedEvent, mContactPoint)     == 0x10, "GetRecentBounce r10 / case 52 lvx128 +0x10");
+CGS_STATIC_ASSERT((sizeof(JustBouncedEvent) == 32),                      "event 52 wire size (li r6, 0x20 @0x82633EB0)");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, miBounceChain)     == 0x00), "GetRecentBounce r4 / case 52 lwz 0");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, mbFromStationary)  == 0x04), "GetRecentBounce r5 / case 52 lbz 4");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, mbOnCar)           == 0x05), "GetRecentBounce r6 / case 52 lbz 5");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, mbBoostedBounce)   == 0x06), "GetRecentBounce r7 / case 52 lbz 6");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, mbGoodImpact)      == 0x07), "GetRecentBounce r8 / case 52 lbz 7");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, midImpactEntityId) == 0x08), "GetRecentBounce r9 / case 52 lwz 8");
+CGS_STATIC_ASSERT((offsetof(JustBouncedEvent, mContactPoint)     == 0x10), "GetRecentBounce r10 / case 52 lvx128 +0x10");
 
 // [FX-SHOWTIME2 2026-09-24] "An extra spin was just applied" (X360 id 53, 1 byte). DWARF :2801 -- no
 // members. The producer posts it once per consumed latch (ProcessAftertouchEvents @0x82633EC4..
 // 0x82633EF0); ProcessGameEvents case 53 relays it as action 145.
 struct JustAppliedExtraSpinEvent : public GameEvent<E_EVENT_JUST_APPLIED_EXTRA_SPIN> {};
-static_assert(sizeof(JustAppliedExtraSpinEvent) == 1, "event 53 wire size (li r6, 1 @0x82633EE0)");
+CGS_STATIC_ASSERT((sizeof(JustAppliedExtraSpinEvent) == 1), "event 53 wire size (li r6, 1 @0x82633EE0)");
 
 // A traffic check landed (X360 id 73) -- the 2-byte vehicle index. Consumed by
 // TrafficCheckManager::Update (which counts the chain) and by ProcessGameEvents case 73,
@@ -1303,10 +1303,10 @@ struct InProgressStuntEvent : public GameEvent<E_EVENT_INPROGRESS_STUNT>
     u8   maReserved0x84[0xC];          // 0x84..0x8F
     bool mbInReverse;                  // 0x90 (:535; selects the _REVERSE twin skill)
 };
-static_assert(offsetof(InProgressStuntEvent, maConvoyLegDistances)        == 0x24, "case 120 reads the leg distances at +0x24");
-static_assert(offsetof(InProgressStuntEvent, maConvoyMemberARCIs)         == 0x44, "convoy members at +0x44");
-static_assert(offsetof(InProgressStuntEvent, mfInProgressBarrelRollAngle) == 0x68, "case 120 copies +0x68..+0x78");
-static_assert(offsetof(InProgressStuntEvent, mfTimeInAir)                 == 0x7C, "air time at +0x7C");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, maConvoyLegDistances)        == 0x24), "case 120 reads the leg distances at +0x24");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, maConvoyMemberARCIs)         == 0x44), "convoy members at +0x44");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, mfInProgressBarrelRollAngle) == 0x68), "case 120 copies +0x68..+0x78");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, mfTimeInAir)                 == 0x7C), "air time at +0x7C");
 
 // ============================================================================================
 // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] PlayerFinishedModeEvent -- RE-HOMED HERE.
@@ -1340,18 +1340,18 @@ struct PlayerFinishedModeEvent : public GameEvent<E_EVENT_PLAYER_FINISHED_MODE>
 };
 
 // Pin the attested offsets (both structs are pointer-free -> absolute on the x64 gate).
-static_assert(offsetof(PlayerFinishedModeEvent, mbTimedOut) == 0x00, "PlayerFinishedModeEvent timed-out byte at +0 (lbz 0(r30) @0x82328118)");
-static_assert(offsetof(PlayerFinishedModeEvent, mbCarDestroyed) == 0x01, "PlayerFinishedModeEvent car-destroyed byte at +1 (lbz 1(r30) @0x82328134)");
-static_assert(offsetof(PlayerFinishedModeEvent, mbCrossedFinishLine) == 0x02, "PlayerFinishedModeEvent crossed-finish byte at +2 (lbz 2(r30) @0x8232814C)");
-static_assert(offsetof(CompletedStuntEvent, mabStuntRunScored) == 0x44, "CompletedStuntEvent stunt-run flags at +0x44");
-static_assert(offsetof(CompletedStuntEvent, miCompletedBarrelRolls) == 0x50, "CompletedStuntEvent barrel rolls at +0x50");
-static_assert(offsetof(CompletedStuntEvent, mfCompletedAirSpinAngle) == 0x5C, "CompletedStuntEvent air-spin angle at +0x5C");
-static_assert(offsetof(CompletedStuntEvent, mbSuccessfulLanding) == 0x80, "CompletedStuntEvent landing flag at +0x80");
-static_assert(offsetof(InProgressStuntEvent, maConvoyMemberARCIs) == 0x44, "InProgressStuntEvent convoy ids at +0x44");
-static_assert(offsetof(InProgressStuntEvent, mfTimeInAir) == 0x7C, "InProgressStuntEvent air time at +0x7C");
-static_assert(offsetof(InProgressStuntEvent, mbInReverse) == 0x90, "InProgressStuntEvent reverse flag at +0x90");
-static_assert(offsetof(ActiveFburnChallengeEvent, mChallengeID) == 0x20, "ActiveFburnChallengeEvent id at +0x20");
-static_assert(offsetof(ActiveFburnChallengeEvent, miNumPlayersInChallenge) == 0x28, "ActiveFburnChallengeEvent count at +0x28");
+CGS_STATIC_ASSERT((offsetof(PlayerFinishedModeEvent, mbTimedOut) == 0x00), "PlayerFinishedModeEvent timed-out byte at +0 (lbz 0(r30) @0x82328118)");
+CGS_STATIC_ASSERT((offsetof(PlayerFinishedModeEvent, mbCarDestroyed) == 0x01), "PlayerFinishedModeEvent car-destroyed byte at +1 (lbz 1(r30) @0x82328134)");
+CGS_STATIC_ASSERT((offsetof(PlayerFinishedModeEvent, mbCrossedFinishLine) == 0x02), "PlayerFinishedModeEvent crossed-finish byte at +2 (lbz 2(r30) @0x8232814C)");
+CGS_STATIC_ASSERT((offsetof(CompletedStuntEvent, mabStuntRunScored) == 0x44), "CompletedStuntEvent stunt-run flags at +0x44");
+CGS_STATIC_ASSERT((offsetof(CompletedStuntEvent, miCompletedBarrelRolls) == 0x50), "CompletedStuntEvent barrel rolls at +0x50");
+CGS_STATIC_ASSERT((offsetof(CompletedStuntEvent, mfCompletedAirSpinAngle) == 0x5C), "CompletedStuntEvent air-spin angle at +0x5C");
+CGS_STATIC_ASSERT((offsetof(CompletedStuntEvent, mbSuccessfulLanding) == 0x80), "CompletedStuntEvent landing flag at +0x80");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, maConvoyMemberARCIs) == 0x44), "InProgressStuntEvent convoy ids at +0x44");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, mfTimeInAir) == 0x7C), "InProgressStuntEvent air time at +0x7C");
+CGS_STATIC_ASSERT((offsetof(InProgressStuntEvent, mbInReverse) == 0x90), "InProgressStuntEvent reverse flag at +0x90");
+CGS_STATIC_ASSERT((offsetof(ActiveFburnChallengeEvent, mChallengeID) == 0x20), "ActiveFburnChallengeEvent id at +0x20");
+CGS_STATIC_ASSERT((offsetof(ActiveFburnChallengeEvent, miNumPlayersInChallenge) == 0x28), "ActiveFburnChallengeEvent count at +0x28");
 
 // ============================================================================================
 // [FX-BRIDGES CC-11, 2026-09-24] THE CHECKPOINT-DISTANCE ROUTE PAIR.
@@ -1364,7 +1364,7 @@ static_assert(offsetof(ActiveFburnChallengeEvent, miNumPlayersInChallenge) == 0x
 // +0x30 (stride 8), positions `lvx128 v127, r0, r29` from +0x00 (stride 16), the event id
 // `lhz 0x44(r30)`. ModeManager::UpdateCheckpointDistanceRequests @0x823279B8 is the producer the
 // mode manager runs (its stores @0x82327AC8..0x82327B84 land on the same offsets).
-struct alignas(16) LandmarkRouteRequestEvent : public GameEvent<E_EVENT_LANDMARK_ROUTE_REQUEST>
+struct CGS_ALIGN(16) LandmarkRouteRequestEvent : public GameEvent<E_EVENT_LANDMARK_ROUTE_REQUEST>
 {
     // DWARF BrnGameEvents.h:1679
     enum ERouteEndPointType
@@ -1384,12 +1384,12 @@ struct alignas(16) LandmarkRouteRequestEvent : public GameEvent<E_EVENT_LANDMARK
     u16                maSectionIndices[KI_MAX_POINTS]; // +0x40  :1694
     u16                mu16EventID;                     // +0x44  :1695
 };
-static_assert(offsetof(LandmarkRouteRequestEvent, mePointTypes)     == 0x20, "node types at +0x20 (lwz 0(r26), r26 = event + 0x20 @0x82381E5C)");
-static_assert(offsetof(LandmarkRouteRequestEvent, muJunctionIDs)    == 0x28, "junction ids at +0x28 (DWARF order)");
-static_assert(offsetof(LandmarkRouteRequestEvent, maLandmarkIDs)    == 0x30, "landmark ids at +0x30 (ld 0(r20), r20 = event + 0x30 @0x82381E58)");
-static_assert(offsetof(LandmarkRouteRequestEvent, maSectionIndices) == 0x40, "section indices at +0x40 (sth @0x82327B7C / 0x82327B84)");
-static_assert(offsetof(LandmarkRouteRequestEvent, mu16EventID)      == 0x44, "event id at +0x44 (lhz 0x44(r30) @0x82381FDC)");
-static_assert(sizeof(LandmarkRouteRequestEvent) == 0x50, "the 16-byte-aligned record the producer builds on its stack");
+CGS_STATIC_ASSERT((offsetof(LandmarkRouteRequestEvent, mePointTypes)     == 0x20), "node types at +0x20 (lwz 0(r26), r26 = event + 0x20 @0x82381E5C)");
+CGS_STATIC_ASSERT((offsetof(LandmarkRouteRequestEvent, muJunctionIDs)    == 0x28), "junction ids at +0x28 (DWARF order)");
+CGS_STATIC_ASSERT((offsetof(LandmarkRouteRequestEvent, maLandmarkIDs)    == 0x30), "landmark ids at +0x30 (ld 0(r20), r20 = event + 0x30 @0x82381E58)");
+CGS_STATIC_ASSERT((offsetof(LandmarkRouteRequestEvent, maSectionIndices) == 0x40), "section indices at +0x40 (sth @0x82327B7C / 0x82327B84)");
+CGS_STATIC_ASSERT((offsetof(LandmarkRouteRequestEvent, mu16EventID)      == 0x44), "event id at +0x44 (lhz 0x44(r30) @0x82381FDC)");
+CGS_STATIC_ASSERT((sizeof(LandmarkRouteRequestEvent) == 0x50), "the 16-byte-aligned record the producer builds on its stack");
 
 // ModeManagerRouteInfoEvent -- DWARF BrnGameEvents.h:3008/3009. The answer to a mode-manager route
 // request: which checkpoint pair it measured and how long the route is. BridgeWorldToGameState
@@ -1403,8 +1403,8 @@ struct ModeManagerRouteInfoEvent : public GameEvent<E_EVENT_MODE_MANAGER_ROUTE_I
     s32 miEventId;          // +0x00  :3008
     f32 mfRouteDistance;    // +0x04  :3009
 };
-static_assert(offsetof(ModeManagerRouteInfoEvent, mfRouteDistance) == 0x04, "distance at +4 (lfs f1, 4(r27) @0x8231E75C)");
-static_assert(sizeof(ModeManagerRouteInfoEvent) == 8, "posted with size 8 (li r6, 8 @0x823E5534)");
+CGS_STATIC_ASSERT((offsetof(ModeManagerRouteInfoEvent, mfRouteDistance) == 0x04), "distance at +4 (lfs f1, 4(r27) @0x8231E75C)");
+CGS_STATIC_ASSERT((sizeof(ModeManagerRouteInfoEvent) == 8), "posted with size 8 (li r6, 8 @0x823E5534)");
 
 // ---- the mode-flow / pause / showtime / invite / online records ProcessGameEvents' group-5 arms
 //      read. Names from the debug info (BrnGameEvents.h); offsets from the arms' loads.
@@ -1414,14 +1414,14 @@ struct ControllerDisconnectedEvent : public GameEvent<E_EVENT_CONTROLLER_DISCONN
 {
     bool mbDisconnected;   // +0x00
 };
-static_assert(sizeof(ControllerDisconnectedEvent) == 1, "one byte, read with lbz 0");
+CGS_STATIC_ASSERT((sizeof(ControllerDisconnectedEvent) == 1), "one byte, read with lbz 0");
 
 // The map menu asks for the preset races of one game mode.
 struct RequestSpecificPreSetRaces : public GameEvent<E_EVENT_REQUEST_SPECIFIC_PRESET_RACES>
 {
     EGameModeType meRequiredGameMode;   // +0x00
 };
-static_assert(sizeof(RequestSpecificPreSetRaces) == 4, "one word, read with lwz 0");
+CGS_STATIC_ASSERT((sizeof(RequestSpecificPreSetRaces) == 4), "one word, read with lwz 0");
 
 // The player paused (mbActivated) or resumed. The two stall flags ride along into RequestPause.
 struct PlayerPauseStateChangedEvent : public GameEvent<E_EVENT_PLAYER_PAUSE_STATE_CHANGED>
@@ -1430,7 +1430,7 @@ struct PlayerPauseStateChangedEvent : public GameEvent<E_EVENT_PLAYER_PAUSE_STAT
     bool mbStalled;      // +0x01
     bool mbWasStalled;   // +0x02
 };
-static_assert(sizeof(PlayerPauseStateChangedEvent) == 3, "three bytes, read with lbz 0/1/2");
+CGS_STATIC_ASSERT((sizeof(PlayerPauseStateChangedEvent) == 3), "three bytes, read with lbz 0/1/2");
 
 // A training tip opened (mbActivated) or closed.
 struct TrainingPauseStateChangedEvent : public GameEvent<E_EVENT_TRAINING_PAUSE_STATE_CHANGED>
@@ -1450,7 +1450,7 @@ struct ShowtimeUpdateEvent : public GameEvent<E_EVENT_SHOWTIME_UPDATE>
     BrnNetwork::NetworkPlayerID mPlayerID;         // +0x00
     s32                         miShowtimeScore;   // +0x04
 };
-static_assert(offsetof(ShowtimeUpdateEvent, miShowtimeScore) == 0x04, "score read with lwz 4");
+CGS_STATIC_ASSERT((offsetof(ShowtimeUpdateEvent, miShowtimeScore) == 0x04), "score read with lwz 4");
 
 // A player entered or left showtime, with the score it finished on.
 struct ShowtimeModeSwitchEvent : public GameEvent<E_EVENT_SHOWTIME_MODE_SWITCH>
@@ -1459,7 +1459,7 @@ struct ShowtimeModeSwitchEvent : public GameEvent<E_EVENT_SHOWTIME_MODE_SWITCH>
     s32                         miFinalScore;         // +0x04
     bool                        mbEnteringShowtime;   // +0x08
 };
-static_assert(offsetof(ShowtimeModeSwitchEvent, mbEnteringShowtime) == 0x08, "flag read with lbz 8");
+CGS_STATIC_ASSERT((offsetof(ShowtimeModeSwitchEvent, mbEnteringShowtime) == 0x08), "flag read with lbz 8");
 
 // The crash player wants (or no longer wants) the bounce prompt on screen.
 struct ShowtimeBouncePromptEvent : public GameEvent<E_EVENT_SHOWTIME_BOUNCE_PROMPT>
@@ -1472,14 +1472,14 @@ struct RequestInviteEvent : public GameEvent<E_EVENT_REQUEST_INVITE>
 {
     BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams mInviteParams;   // +0x00
 };
-static_assert(sizeof(RequestInviteEvent) == 0x9C, "the arm copies 0x9C bytes");
+CGS_STATIC_ASSERT((sizeof(RequestInviteEvent) == 0x9C), "the arm copies 0x9C bytes");
 
 // The invite manager is ready: carry the invite out.
 struct PerformInviteEvent : public GameEvent<E_EVENT_PERFORM_INVITE>
 {
     BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams mInviteParams;   // +0x00
 };
-static_assert(sizeof(PerformInviteEvent) == 0x9C, "the arm copies 0x9C bytes");
+CGS_STATIC_ASSERT((sizeof(PerformInviteEvent) == 0x9C), "the arm copies 0x9C bytes");
 
 // The invite finished, successfully or not.
 struct InviteCompleteEvent : public GameEvent<E_EVENT_INVITE_COMPLETE>
@@ -1493,7 +1493,7 @@ struct RemotePlayerTriggeredCheckpoint : public GameEvent<E_EVENT_REMOTE_PLAYER_
     BrnNetwork::NetworkPlayerID mNetworkPlayerID;     // +0x00
     s32                         miCheckpointIndex;    // +0x04
 };
-static_assert(offsetof(RemotePlayerTriggeredCheckpoint, miCheckpointIndex) == 0x04, "index read with lwz 4");
+CGS_STATIC_ASSERT((offsetof(RemotePlayerTriggeredCheckpoint, miCheckpointIndex) == 0x04), "index read with lwz 4");
 
 // How many rivals the online session has added.
 struct OnlineRivalCount : public GameEvent<E_EVENT_ONLINE_RIVAL_COUNT>
@@ -1516,7 +1516,7 @@ struct StuntScoreUpdatedEvent
     BrnNetwork::NetworkPlayerID mNetworkPlayerID;   // +0x00
     s32                         miStuntScore;       // +0x04
 };
-static_assert(sizeof(StuntScoreUpdatedEvent) == 8, "posted with size 8");
+CGS_STATIC_ASSERT((sizeof(StuntScoreUpdatedEvent) == 8), "posted with size 8");
 
 // Id 143: a remote player's stunt multiplier.
 struct StuntMultiplierEvent
@@ -1525,14 +1525,14 @@ struct StuntMultiplierEvent
     s32                         miStuntMultiplier;    // +0x08
     BrnNetwork::NetworkPlayerID mNetworkPlayerID;     // +0x0C
 };
-static_assert(sizeof(StuntMultiplierEvent) == 16, "posted with size 16");
-static_assert(offsetof(StuntMultiplierEvent, mNetworkPlayerID) == 0x0C, "player read with lwz 0xC");
+CGS_STATIC_ASSERT((sizeof(StuntMultiplierEvent) == 16), "posted with size 16");
+CGS_STATIC_ASSERT((offsetof(StuntMultiplierEvent, mNetworkPlayerID) == 0x0C), "player read with lwz 0xC");
 
 // Id 154: the host's team for each active race car.
 struct TeamSelectionEvent
 {
     EPlayerTeam maePlayerTeam[E_ACTIVE_RACE_CAR_INDEX_COUNT];   // +0x00, one word per car
 };
-static_assert(sizeof(TeamSelectionEvent) == 32, "posted with size 32");
+CGS_STATIC_ASSERT((sizeof(TeamSelectionEvent) == 32), "posted with size 32");
 }
 }

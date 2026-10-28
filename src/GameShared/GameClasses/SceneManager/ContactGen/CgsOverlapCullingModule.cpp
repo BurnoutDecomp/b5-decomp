@@ -83,19 +83,19 @@ namespace
     // These pins are the safety net: if either spelling drifts, this TU stops
     // compiling instead of silently reading the wrong lane.
     typedef rw::collision::PrimitivePairIntersectResult RwPairResult;
-    static_assert(sizeof(Contact::SourceResult) == sizeof(RwPairResult),
+    CGS_STATIC_ASSERT((sizeof(Contact::SourceResult) == sizeof(RwPairResult)),
                   "Contact::SourceResult must be the 0x750 PrimitivePairIntersectResult record");
-    static_assert(offsetof(Contact::SourceResult, muFieldA) == offsetof(RwPairResult, tag1),
+    CGS_STATIC_ASSERT((offsetof(Contact::SourceResult, muFieldA) == offsetof(RwPairResult, tag1)),
                   "Contact::SourceResult::muFieldA is PrimitivePairIntersectResult::tag1");
-    static_assert(offsetof(Contact::SourceResult, muFieldB) == offsetof(RwPairResult, tag2),
+    CGS_STATIC_ASSERT((offsetof(Contact::SourceResult, muFieldB) == offsetof(RwPairResult, tag2)),
                   "Contact::SourceResult::muFieldB is PrimitivePairIntersectResult::tag2");
-    static_assert(offsetof(Contact::SourceResult, mNormal) == offsetof(RwPairResult, normal),
+    CGS_STATIC_ASSERT((offsetof(Contact::SourceResult, mNormal) == offsetof(RwPairResult, normal)),
                   "Contact::SourceResult::mNormal is PrimitivePairIntersectResult::normal");
-    static_assert(offsetof(Contact::SourceResult, maPositions) == offsetof(RwPairResult, pointsOn1),
+    CGS_STATIC_ASSERT((offsetof(Contact::SourceResult, maPositions) == offsetof(RwPairResult, pointsOn1)),
                   "Contact::SourceResult::maPositions is PrimitivePairIntersectResult::pointsOn1");
-    static_assert(offsetof(Contact::SourceResult, maImpulses) == offsetof(RwPairResult, pointsOn2),
+    CGS_STATIC_ASSERT((offsetof(Contact::SourceResult, maImpulses) == offsetof(RwPairResult, pointsOn2)),
                   "Contact::SourceResult::maImpulses is PrimitivePairIntersectResult::pointsOn2");
-    static_assert(offsetof(Contact::SourceResult, muNumPoints) == offsetof(RwPairResult, numPoints),
+    CGS_STATIC_ASSERT((offsetof(Contact::SourceResult, muNumPoints) == offsetof(RwPairResult, numPoints)),
                   "Contact::SourceResult::muNumPoints is PrimitivePairIntersectResult::numPoints");
 
     // -----------------------------------------------------------------------
@@ -174,10 +174,10 @@ namespace
 OverlapCullingModule::OverlapCullingModule()
     : mePrepareStage(PREPARESTAGE_START)
     , meReleaseStage(RELEASESTAGE_DONE)
-    , mpVolumeManager(nullptr)
-    , mpEntityManager(nullptr)
-    , mpContactGenerator(nullptr)
-    , mpVolVolQuery(nullptr)
+    , mpVolumeManager(0)
+    , mpEntityManager(0)
+    , mpContactGenerator(0)
+    , mpVolVolQuery(0)
     , muNumPrimPrimPairs(0)
     , muNumPrimAggPairs(0)
     , muNumOtherPairs(0)
@@ -246,10 +246,10 @@ void OverlapCullingModule::Construct()
 
     void* lpBuffer[5];
     lpBuffer[0] = maVolumeVolumeQueryMem;  // this+576: backing-store base
-    lpBuffer[1] = nullptr;
-    lpBuffer[2] = nullptr;
-    lpBuffer[3] = nullptr;
-    lpBuffer[4] = nullptr;
+    lpBuffer[1] = 0;
+    lpBuffer[2] = 0;
+    lpBuffer[3] = 0;
+    lpBuffer[4] = 0;
     mpVolVolQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
         rw::collision::VolumeVolumeQuery::Initialize(lpBuffer, 100, 100));  // *(this+572)
 
@@ -310,8 +310,8 @@ bool OverlapCullingModule::Prepare(EntityManager* lpEntityManager, VolumeManager
         return false;
     }
 
-    CGS_ASSERT(lpVolumeManager != nullptr, "lpVolManager");
-    CGS_ASSERT(lpEntityManager != nullptr, "lpEntityManager");
+    CGS_ASSERT(lpVolumeManager != 0, "lpVolManager");
+    CGS_ASSERT(lpEntityManager != 0, "lpEntityManager");
 
     mpVolumeManager = lpVolumeManager;  // a1[140]
     mpEntityManager = lpEntityManager;  // a1[141]
@@ -417,8 +417,8 @@ bool OverlapCullingModule::Release()
 void OverlapCullingModule::Update(OverlapCullingIO::InputBuffer* lpInputBuffer,
                                   OverlapCullingIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");    // .cpp:209
-    CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer != NULL");  // .cpp:210
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");    // .cpp:209
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");  // .cpp:210
 
     lpInputBuffer->LockForRead();
     lpOutputBuffer->LockForWrite();
@@ -482,7 +482,7 @@ void OverlapCullingModule::SetContactGenerator(void* lpContactGenerator)
 // ---------------------------------------------------------------------------
 void OverlapCullingModule::ProcessAddInternalVolumeQueue(const OverlapCullingIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");   // :309
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");   // :309
 
     const OverlapCullingIO::InAddInternalVolumeQueue* lpQueue =
         lpInputBuffer->GetAddInternalVolumeQueue();
@@ -538,8 +538,8 @@ void OverlapCullingModule::ProcessAddInternalVolumeQueue(const OverlapCullingIO:
 void OverlapCullingModule::ProcessOverlapsQueue(OverlapCullingIO::OutputBuffer* lpOutputBuffer,
                                                 const OverlapCullingIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");    // :239
-    CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer != NULL");  // :240
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");    // :239
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");  // :240
 
     // Reset the per-frame pair/contact statistics (the six stwx, in the asm's order).
     muNumPrimPrimPairs    = 0;  // this+0x6C278
@@ -577,7 +577,7 @@ void OverlapCullingModule::ProcessOverlapsQueue(OverlapCullingIO::OutputBuffer* 
 // ---------------------------------------------------------------------------
 void OverlapCullingModule::ProcessRemoveInternalVolumeQueue(const OverlapCullingIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");
 }
 
 // ---------------------------------------------------------------------------
@@ -623,7 +623,7 @@ void OverlapCullingModule::ProcessRemoveInternalVolumeQueue(const OverlapCulling
 void OverlapCullingModule::ProcessOverlap(OverlappingPair& lrOverlappingPair,
                                           OverlapCullingIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer != NULL");   // :382
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // :382
 
     const s32 liVolumeInstanceIndexA = static_cast<s32>(lrOverlappingPair.muVolumeInstanceA);
     const s32 liVolumeInstanceIndexB = static_cast<s32>(lrOverlappingPair.muVolumeInstanceB);
@@ -635,16 +635,16 @@ void OverlapCullingModule::ProcessOverlap(OverlappingPair& lrOverlappingPair,
     }
 
     VolumeInstance* lpVolInstA = mpEntityManager->GetVolumeInstance(liVolumeInstanceIndexA);
-    CGS_ASSERT(lpVolInstA != nullptr, "lpVolInstA");   // :400
+    CGS_ASSERT(lpVolInstA != 0, "lpVolInstA");   // :400
 
     VolumeInstance* lpVolInstB = mpEntityManager->GetVolumeInstance(liVolumeInstanceIndexB);
-    CGS_ASSERT(lpVolInstB != nullptr, "lpVolInstB");   // :403
+    CGS_ASSERT(lpVolInstB != 0, "lpVolInstB");   // :403
 
     const VolRef::Volume* lpVolA = mpVolumeManager->GetRwVolume(lpVolInstA->miVolumeIndex);
     const VolRef::Volume* lpVolB = mpVolumeManager->GetRwVolume(lpVolInstB->miVolumeIndex);
 
-    CGS_ASSERT(lpVolA != nullptr, "lpVolA");   // :408
-    CGS_ASSERT(lpVolB != nullptr, "lpVolB");   // :409
+    CGS_ASSERT(lpVolA != 0, "lpVolA");   // :408
+    CGS_ASSERT(lpVolB != 0, "lpVolB");   // :409
 
     // Two volume instances of the SAME entity never reach the narrow phase.
     if (lpVolInstA->mu16EntityIndex == lpVolInstB->mu16EntityIndex)
@@ -778,7 +778,7 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
             lResult,
             lpRwVolumeA, &lpVolumeInstanceA->mWorldSpaceTransform,
             lpRwVolumeB, &lpVolumeInstanceB->mWorldSpaceTransform,
-            lfPadding, nullptr);
+            lfPadding, 0);
 
         if (lbIntersects != 0 && lResult.numPoints != 0)
         {
@@ -804,7 +804,7 @@ void OverlapCullingModule::DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputB
         lpQuery->m_volRefPairCount = 0;                                          // +0x1C
         lpQuery->m_queryVol        = lpRwVolumeB;                                // +0x38
         lpQuery->m_queryMtx        = &lpVolumeInstanceB->mWorldSpaceTransform;   // +0x3C
-        lpQuery->m_cullTable       = nullptr;                                    // +0x10
+        lpQuery->m_cullTable       = 0;                                    // +0x10
 
         const u32 luNumIntersections =
             static_cast<u32>(mpVolVolQuery->GetPrimitiveIntersections());
@@ -865,33 +865,33 @@ void OverlapCullingModule::ProcessAccumulatedQueries(OverlapCullingIO::OutputBuf
 // FineIntersectionTestModule sibling).
 void OverlapCullingModule::_AssertLayout()
 {
-    static_assert(sizeof(u8) == 1, "u8 must be one byte");
-    static_assert(OverlapCullingModule::KU_VOL_QUERY_MEM_SIZE == 401408,
+    CGS_STATIC_ASSERT((sizeof(u8) == 1), "u8 must be one byte");
+    CGS_STATIC_ASSERT((OverlapCullingModule::KU_VOL_QUERY_MEM_SIZE == 401408),
                   "VolumeVolumeQueryMem budget is 0x62000");
     // The host VolumeVolumeQuery(100, 100) -- staging and instancing at the host widths
     // (VolumeQueryHostLayout.hpp) -- still fits the console budget (0x495D8 <= 0x62000).
-    static_assert(OverlapCullingModule::KU_MAX_NUM_VOLUME_INSTANCES == 5048,
+    CGS_STATIC_ASSERT((OverlapCullingModule::KU_MAX_NUM_VOLUME_INSTANCES == 5048),
                   "KI_MAX_NUM_VOLUME_INSTANCES == 0x13B8");
-    static_assert(offsetof(OverlapCullingModule, mePrepareStage) <
-                      offsetof(OverlapCullingModule, meReleaseStage),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, mePrepareStage) <
+                      offsetof(OverlapCullingModule, meReleaseStage)),
                   "mePrepareStage precedes meReleaseStage");
-    static_assert(offsetof(OverlapCullingModule, mpVolumeManager) <
-                      offsetof(OverlapCullingModule, mpEntityManager),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, mpVolumeManager) <
+                      offsetof(OverlapCullingModule, mpEntityManager)),
                   "mpVolumeManager precedes mpEntityManager (X360 word 140 < 141)");
-    static_assert(offsetof(OverlapCullingModule, mpContactGenerator) <
-                      offsetof(OverlapCullingModule, mpVolVolQuery),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, mpContactGenerator) <
+                      offsetof(OverlapCullingModule, mpVolVolQuery)),
                   "mpContactGenerator precedes mpVolVolQuery (X360 word 142 < 143)");
-    static_assert(offsetof(OverlapCullingModule, maVolumeVolumeQueryMem) <
-                      offsetof(OverlapCullingModule, mabIsUsingInternalCollision),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, maVolumeVolumeQueryMem) <
+                      offsetof(OverlapCullingModule, mabIsUsingInternalCollision)),
                   "maVolumeVolumeQueryMem precedes the internal-collision tables");
-    static_assert(offsetof(OverlapCullingModule, mabIsUsingInternalCollision) <
-                      offsetof(OverlapCullingModule, mauInternalVolumeInstanceIndex),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, mabIsUsingInternalCollision) <
+                      offsetof(OverlapCullingModule, mauInternalVolumeInstanceIndex)),
                   "the registration BitArray precedes the internal-volume table");
-    static_assert(offsetof(OverlapCullingModule, mauInternalVolumeInstanceIndex) <
-                      offsetof(OverlapCullingModule, mauEscapeVolumeInstanceIndex),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, mauInternalVolumeInstanceIndex) <
+                      offsetof(OverlapCullingModule, mauEscapeVolumeInstanceIndex)),
                   "the internal-volume table precedes the escape-volume table");
-    static_assert(offsetof(OverlapCullingModule, muNumPrimPrimPairs) <
-                      offsetof(OverlapCullingModule, muNumPrimAggContacts),
+    CGS_STATIC_ASSERT((offsetof(OverlapCullingModule, muNumPrimPrimPairs) <
+                      offsetof(OverlapCullingModule, muNumPrimAggContacts)),
                   "the per-frame counter block is contiguous and ordered");
 }
 

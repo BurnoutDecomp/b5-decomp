@@ -36,7 +36,7 @@ namespace BrnNetwork
     // The wire record must stay the 28 bytes GetDataSize advertises (13+1+1+1 packs
     // to 16, then three naturally-aligned 32-bit words) -- pointer-invariant, so it
     // holds on the x64 host exactly as on X360.
-    static_assert(sizeof(PlayerParamsBase::CLobbyPlayerParamsData) == 28,
+    CGS_STATIC_ASSERT((sizeof(PlayerParamsBase::CLobbyPlayerParamsData) == 28),
                   "CLobbyPlayerParamsData is the 28-byte wire record GetDataSize advertises");
 
     // DWARF declares both; every X360 construction/destruction is inlined (only the
@@ -124,7 +124,7 @@ namespace BrnNetwork
     // through *lpCarId. DWARF-declared return type is void.
     void PlayerParamsBase::GetFreeBurnCarID(CgsID* lpCarId)
     {
-        CGS_ASSERT(lpCarId != nullptr, "lpCarId");
+        CGS_ASSERT(lpCarId != 0, "lpCarId");
 
         // The stored string uses '?' where a space would otherwise sit; measure it in
         // its current form and fire the CgsStringUtils.h:55 length assert if it has

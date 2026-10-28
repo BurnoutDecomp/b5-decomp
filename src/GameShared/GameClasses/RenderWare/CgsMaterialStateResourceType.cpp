@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/RenderWare/CgsMaterialStateResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // CgsResource::MaterialStateResourceType -- the material-state (blend-state) handler (id 0xF).
 // A faithful port of the X360 ARTIST bodies. FixUp/FixDown rebase three main-memory self-pointers

@@ -300,7 +300,7 @@ bool AIAggression::CanSlam()
 // True when the candidate car's speed is below the minimum required to be worth targeting.
 bool AIAggression::CarIsTooSlow(const AICar* lpCar)
 {
-    CGS_ASSERT(lpCar != nullptr, "lpCar");
+    CGS_ASSERT(lpCar != 0, "lpCar");
     return lpCar->GetSpeed() < KF_CAR_TOO_SLOW_SPEED;
 }
 
@@ -931,7 +931,7 @@ void AIAggression::StopAttacking(EStopAttack leStopAttack)
 
         if ( leStopAttack == E_AGGRESSION_ATTACKAGAIN && lfWaitTime < 0.1f )
         {
-            if ( mpTargetCar != nullptr && !mpTargetCar->mbIsCrashing )
+            if ( mpTargetCar != 0 && !mpTargetCar->mbIsCrashing )
             {
                 SetSlowOvertakingSpeed();
                 mfStateTime = 1.0f;
@@ -943,7 +943,7 @@ void AIAggression::StopAttacking(EStopAttack leStopAttack)
         meAggressionState = E_AI_AGGRESSION_STATE_WAIT;
         mfStateTime = (lfWaitTime < 0.0f) ? -1.0f : lfWaitTime;
         mbTargetPosValid = false;
-        mpTargetCar = nullptr;
+        mpTargetCar = 0;
     }
     else
     {
@@ -953,9 +953,9 @@ void AIAggression::StopAttacking(EStopAttack leStopAttack)
 
     mfLastSpeed = -1.0f;
     mfLastSpeedTarget = -1.0f;
-    mpPrevSpeedMatchTarget = nullptr;
+    mpPrevSpeedMatchTarget = 0;
     meSpeedMatchType = ESpeedMatch_Disabled;
-    if ( mpTargetCar != nullptr )
+    if ( mpTargetCar != 0 )
         mfTargetSeparationAlong = GetLeadingSeparation(mpCar, mpTargetCar);
 }
 
@@ -985,13 +985,13 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
     if ( mfStateTime >= 0.0f )
         mfStateTime -= lfTimeStep;
 
-    const bool lbHaveTarget = (mpTargetCar != nullptr);
+    const bool lbHaveTarget = (mpTargetCar != 0);
 
     if ( mpCar->mbIsCrashing )
     {
         // Our car is crashing -- veer out of the way and forget any slam plan.
         mfStateTime = 1.5f;
-        mpPrevSpeedMatchTarget = nullptr;
+        mpPrevSpeedMatchTarget = 0;
         meAggressionState = E_AI_AGGRESSION_STATE_VEER;
         meSpeedMatchType = ESpeedMatch_Disabled;
         mfLastSpeed = -1.0f;
@@ -1100,7 +1100,7 @@ void BrnAI::AIAggression::UpdateAggressionPassive(const AICar* lpTargetCar)
     meSpeedMatchType = ESpeedMatch_Disabled;   // stw r30(0),0x58 @0x82793858
     mbTargetPosValid = false;                   // stb r30,0x44 @0x8279385C
 
-    if (lpTargetCar != nullptr &&
+    if (lpTargetCar != 0 &&
         lpTargetCar != mpCar &&
         (!lpTargetCar->mbIsPlayer || lpTargetCar->mbIsDrivenByPlayer))
     {
@@ -1125,7 +1125,7 @@ void BrnAI::AIAggression::UpdateAggressionPassive(const AICar* lpTargetCar)
 // to overtaking speed and reverts to OVERTAKE_TO_SLAM.
 void BrnAI::AIAggression::UpdateAggressionStateAttackSlam()
 {
-    if (mpTargetCar == nullptr)
+    if (mpTargetCar == 0)
     {
         mfStateTime       = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
@@ -1286,7 +1286,7 @@ void BrnAI::AIAggression::UpdateAggressionStateComeSlowFromBehind()
 // forward to catch up.
 void BrnAI::AIAggression::UpdateAggressionStateDropBackToSlam(const AICar* /*lpPlayerCar*/, f32 /*lfTimeStep*/)
 {
-    if (mpTargetCar == nullptr)
+    if (mpTargetCar == 0)
     {
         mfStateTime       = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
@@ -1480,7 +1480,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOutOfRange(const AICar* lpPlayerC
 
     if (lpThisCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)
     {
-        if (mpPlayerCar != nullptr && mpPlayerCar->mbIsCrashing)
+        if (mpPlayerCar != 0 && mpPlayerCar->mbIsCrashing)
         {
             mfStateTime       = 10.0f;
             meAggressionState = E_AI_AGGRESSION_STATE_SPURT_FORWARD;
@@ -1626,7 +1626,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeFast()
 // timed out, in E_ROUTE_FINDING_ROAD_RAGE/E_ROUTE_FINDING_MARKED_MAN -- spurts forward for a short random burst.
 void BrnAI::AIAggression::UpdateAggressionStateOvertakeToSlam(const AICar* /*lpPlayerCar*/, f32 /*lfTimeStep*/)
 {
-    if (mpTargetCar == nullptr)
+    if (mpTargetCar == 0)
     {
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
         mfStateTime       = -1.0f;
@@ -1709,9 +1709,9 @@ void BrnAI::AIAggression::UpdateAggressionStateVeer()
         }
         lbSpurtForward = true;
     }
-    else if (mpTargetCar == nullptr)
+    else if (mpTargetCar == 0)
     {
-        if (mpPlayerCar == nullptr)
+        if (mpPlayerCar == 0)
             lbSpurtForward = true;
         else
             mpTargetCar = mpPlayerCar;
@@ -1763,7 +1763,7 @@ void BrnAI::AIAggression::UpdateAggressionStateWait()
         mfStateTime             = -1.0f;
         meAggressionState       = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
         mfRelativePositionAhead = 0.0f;
-        mpTargetCar             = nullptr;
+        mpTargetCar             = 0;
         mbTargetPosValid        = false;
         meSpeedMatchType        = ESpeedMatch_Disabled;
     }

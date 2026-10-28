@@ -4,7 +4,7 @@
 // authoritative; there is no leak source / DWARF for this TU). See CsisSystem.h
 // for the layout and the process-global module-data symbols.
 
-#include <cstdint>    // std::uintptr_t (content-base relocation add)
+#include "types.hpp"    // std::uintptr_t (content-base relocation add)
 #include <xtl.h>  // CreateMutexA / WaitForSingleObject / ReleaseMutex / HANDLE
 
 #include "SDKs/Csis/CsisSystem.h"

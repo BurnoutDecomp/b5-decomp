@@ -155,7 +155,7 @@ namespace
 
     f64 LoadAttributeDouble(const PlugIn::Attribute_t& slot)
     {
-        static_assert(sizeof(slot) == sizeof(f64), "RWAC attribute slot");
+        CGS_STATIC_ASSERT((sizeof(slot) == sizeof(f64)), "RWAC attribute slot");
         f64 value;
         std::memcpy(&value, &slot, sizeof(value));
         return value;
@@ -163,7 +163,7 @@ namespace
 
     void StoreAttributeDouble(PlugIn::Attribute_t& slot, f64 value)
     {
-        static_assert(sizeof(slot) == sizeof(f64), "RWAC attribute slot");
+        CGS_STATIC_ASSERT((sizeof(slot) == sizeof(f64)), "RWAC attribute slot");
         std::memcpy(&slot, &value, sizeof(value));
     }
 

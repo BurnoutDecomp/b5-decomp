@@ -548,13 +548,13 @@ const Volume::VTable gVolumeHandler_82F919D0 =                  // type 6 AGGREG
 // addresses the same bytes the target class expects. (CapsuleVolume / CylinderVolume /
 // TriangleVolume also pin their +0x40 / +0x44 / +0x50 / +0x5C members in their own headers.)
 // ===========================================================================================
-static_assert(sizeof(Volume)          == 96, "rw::collision::Volume console stride");
-static_assert(sizeof(BoxVolume)       == 96, "BoxVolume");
-static_assert(sizeof(SphereVolume)    == 96, "SphereVolume");
-static_assert(sizeof(CapsuleVolume)   == 96, "CapsuleVolume");
-static_assert(sizeof(CylinderVolume)  == 96, "CylinderVolume");
-static_assert(sizeof(TriangleVolume)  == 96, "TriangleVolume");
-static_assert(sizeof(AggregateVolume) == 96, "AggregateVolume");
+CGS_STATIC_ASSERT((sizeof(Volume)          == 96), "rw::collision::Volume console stride");
+CGS_STATIC_ASSERT((sizeof(BoxVolume)       == 96), "BoxVolume");
+CGS_STATIC_ASSERT((sizeof(SphereVolume)    == 96), "SphereVolume");
+CGS_STATIC_ASSERT((sizeof(CapsuleVolume)   == 96), "CapsuleVolume");
+CGS_STATIC_ASSERT((sizeof(CylinderVolume)  == 96), "CylinderVolume");
+CGS_STATIC_ASSERT((sizeof(TriangleVolume)  == 96), "TriangleVolume");
+CGS_STATIC_ASSERT((sizeof(AggregateVolume) == 96), "AggregateVolume");
 
 } // namespace collision
 } // namespace rw

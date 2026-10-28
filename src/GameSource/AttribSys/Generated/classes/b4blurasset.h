@@ -51,7 +51,7 @@ namespace Gen
         // the low word (its vaults key collections by that word); this build's vaults and
         // Attrib::FindCollection(u64, u64) compare the whole key, so a truncated key never
         // resolves (POSTFXVAULT.BIN: e.g. FF8129C8E1D9E071, whose low word is the console key).
-        explicit b4blurasset(u64 luCollectionKey = 0, void* lpOwner = nullptr);
+        explicit b4blurasset(u64 luCollectionKey = 0, void* lpOwner = 0);
         using Instance::IsValid;
         using Instance::GetLayoutPointer;
     };

@@ -106,9 +106,9 @@ s32 QuantiseResidual(f32 afScaled)
 // -------------------------------------------------------------------------------------
 Xas1Enc *Xas1Enc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSystem)
 {
-    void *lpMem = System::Alloc(pSystem, static_cast<u32>(sizeof(Xas1Enc)), nullptr, 16, nullptr);
+    void *lpMem = System::Alloc(pSystem, static_cast<u32>(sizeof(Xas1Enc)), 0, 16, 0);
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     Xas1Enc *lpEnc = ::new (lpMem) Xas1Enc; // the v-table store, nothing else
     lpEnc->miBufferedSamples = 0;

@@ -36,7 +36,7 @@ namespace renderengine
 {
     class Texture;        // the bound raster (white fallback + the per-shape sampled pages)
     class TextureState;   // the resolved sampler+raster state the caches memoise
-    enum PrimitiveType : s32;
+    enum PrimitiveType ;
 }
 
 namespace CgsGraphics
@@ -252,7 +252,7 @@ namespace CgsGui
             renderengine::TextureState* Find(u32 luKey)
             {
                 renderengine::TextureState** lppState = mBins.Get(luKey);
-                return lppState ? *lppState : nullptr;
+                return lppState ? *lppState : 0;
             }
         };
 

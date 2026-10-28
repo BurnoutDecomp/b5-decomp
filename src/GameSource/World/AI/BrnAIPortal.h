@@ -46,7 +46,7 @@ namespace BrnAI
         void          FixDown(const void* lpBaseData);                 // :236
         u8            GetNumBoundryLines() const;                      // :243
         // Inlined at ARTIST 82783E68 / 82783E98 (three floats, zero fourth lane).
-        Vector3       GetPosition() const { return Vector3{mPositionX, mPositionY, mPositionZ, 0.0f}; }
+        Vector3       GetPosition() const { { const Vector3 lResult = {mPositionX, mPositionY, mPositionZ, 0.0f}; return lResult; } }
         Vector2       GetPosition2D() const;                          // :253
         f32           GetPositionX() const;                            // :256
         f32           GetPositionY() const;                            // :259

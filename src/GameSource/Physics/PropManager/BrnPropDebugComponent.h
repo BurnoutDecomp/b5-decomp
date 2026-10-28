@@ -68,19 +68,19 @@ namespace Props
         void Destruct();
 
         // 0x82628EB0 -- `if (mbRenderStats) RenderStats(lpRender);`, verbatim.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
     protected:
         // 0x825BADD0 -- returns "Prop Manager".
-        const char* GetName() const override;
+        const char* GetName() const ;
         // ARTIST vtable 0x820CDF60, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "Physics"; }
+        const char* GetPath() const  { return "Physics"; }
 
         // 0x825E3628.
-        void OnActivate() override;
+        void OnActivate() ;
 
         // 0x822A9750 -- a single `b` to the empty (ICF-folded) base OnRegister.
-        void OnRegister() override;
+        void OnRegister() ;
 
     private:
         // 0x826131E8 -- the three-line prop-manager stats block.

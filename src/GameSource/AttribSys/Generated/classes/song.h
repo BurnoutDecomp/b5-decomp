@@ -19,7 +19,7 @@ namespace Gen
     class song : private Instance
     {
     public:
-        explicit song(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit song(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The song's stream NAME, a const char* stored at +0x04 inside the 0x14-byte
         // data area. X360-attested by MusicEffect::UpdateParams @0x826FE5C8 --

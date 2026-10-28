@@ -53,13 +53,13 @@ namespace vpu
     // CgsMicrophone.cpp (lCurrent.maRows[3] - lPrevious.maRows[3]).
     inline Vector3 operator-(Vector3 lLhs, Vector3 lRhs)
     {
-        return Vector3{ lLhs.x - lRhs.x, lLhs.y - lRhs.y, lLhs.z - lRhs.z, lLhs.w - lRhs.w };
+        { const Vector3 lResult = { lLhs.x - lRhs.x, lLhs.y - lRhs.y, lLhs.z - lRhs.z, lLhs.w - lRhs.w }; return lResult; }
     }
 
     // X360 0x825B2620. Full 4-lane vaddfp (binary `vaddfp v1,v1,v2`, SDK Add over mV).
     inline Vector3 operator+(Vector3 lLhs, Vector3 lRhs)
     {
-        return Vector3{ lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w };
+        { const Vector3 lResult = { lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w }; return lResult; }
     }
 
     // SDK Add/Subtract free functions -- the named-call spellings of operator+/operator-.
@@ -70,7 +70,7 @@ namespace vpu
     // Both the free function and the unary operator- the SDK declares are provided.
     inline Vector3 Negate(Vector3 lrVector)
     {
-        return Vector3{ -lrVector.x, -lrVector.y, -lrVector.z, -lrVector.w };
+        { const Vector3 lResult = { -lrVector.x, -lrVector.y, -lrVector.z, -lrVector.w }; return lResult; }
     }
     inline Vector3 operator-(Vector3 lrVector) { return Negate(lrVector); }
 
@@ -79,14 +79,14 @@ namespace vpu
     // SDK component-wise Mult(a,b) (vmaddfp a,b,0). Distinct from Dot (which sums lanes).
     inline Vector3 Mult(Vector3 lLhs, Vector3 lRhs)
     {
-        return Vector3{ lLhs.x * lRhs.x, lLhs.y * lRhs.y, lLhs.z * lRhs.z, lLhs.w * lRhs.w };
+        { const Vector3 lResult = { lLhs.x * lRhs.x, lLhs.y * lRhs.y, lLhs.z * lRhs.z, lLhs.w * lRhs.w }; return lResult; }
     }
 
     // SDK MultAdd(a,b,c) = vmaddfp a,b,c (a*b + c, fused over all 4 lanes).
     inline Vector3 MultAdd(Vector3 lA, Vector3 lB, Vector3 lC)
     {
-        return Vector3{ lA.x * lB.x + lC.x, lA.y * lB.y + lC.y,
-                        lA.z * lB.z + lC.z, lA.w * lB.w + lC.w };
+        { const Vector3 lResult = { lA.x * lB.x + lC.x, lA.y * lB.y + lC.y,
+                        lA.z * lB.z + lC.z, lA.w * lB.w + lC.w }; return lResult; }
     }
 
     // Scalar broadcast Mult/operator* (SDK `operator*(Vector3, VecFloat)` = vmaddfp v,s,0).
@@ -94,16 +94,16 @@ namespace vpu
     // as a convenience for older call sites that de-modelled the broadcast scalar.
     inline Vector3 Mult(Vector3 lrVector, Vector4 lvfScalar)
     {
-        return Vector3{ lrVector.x * lvfScalar.x, lrVector.y * lvfScalar.y,
-                        lrVector.z * lvfScalar.z, lrVector.w * lvfScalar.w };
+        { const Vector3 lResult = { lrVector.x * lvfScalar.x, lrVector.y * lvfScalar.y,
+                        lrVector.z * lvfScalar.z, lrVector.w * lvfScalar.w }; return lResult; }
     }
     inline Vector3 operator*(Vector3 lrVector, Vector4 lvfScalar) { return Mult(lrVector, lvfScalar); }
     inline Vector3 operator*(Vector4 lvfScalar, Vector3 lrVector) { return Mult(lrVector, lvfScalar); }
 
     inline Vector3 Mult(Vector3 lrVector, float lfScalar)
     {
-        return Vector3{ lrVector.x * lfScalar, lrVector.y * lfScalar,
-                        lrVector.z * lfScalar, lrVector.w * lfScalar };
+        { const Vector3 lResult = { lrVector.x * lfScalar, lrVector.y * lfScalar,
+                        lrVector.z * lfScalar, lrVector.w * lfScalar }; return lResult; }
     }
     inline Vector3 operator*(Vector3 lrVector, float lfScalar) { return Mult(lrVector, lfScalar); }
     inline Vector3 operator*(float lfScalar, Vector3 lrVector) { return Mult(lrVector, lfScalar); }
@@ -114,8 +114,8 @@ namespace vpu
     // (mVelocity = (... - ...) / lfFrameTime).
     inline Vector3 Divide(Vector3 lrVector, float lfScalar)
     {
-        return Vector3{ lrVector.x / lfScalar, lrVector.y / lfScalar,
-                        lrVector.z / lfScalar, lrVector.w / lfScalar };
+        { const Vector3 lResult = { lrVector.x / lfScalar, lrVector.y / lfScalar,
+                        lrVector.z / lfScalar, lrVector.w / lfScalar }; return lResult; }
     }
     inline Vector3 operator/(Vector3 lrVector, float lfScalar) { return Divide(lrVector, lfScalar); }
 
@@ -133,11 +133,11 @@ namespace vpu
     // BrnMathUnity attests rw::math::vpu::Cross over Vector3.
     inline Vector3 Cross(Vector3 lLhs, Vector3 lRhs)
     {
-        return Vector3{
+        { const Vector3 lResult = {
             lLhs.y * lRhs.z - lLhs.z * lRhs.y,
             lLhs.z * lRhs.x - lLhs.x * lRhs.z,
             lLhs.x * lRhs.y - lLhs.y * lRhs.x,
-            0.0f };
+            0.0f }; return lResult; }
     }
 
     // SDK MagnitudeSquared returns a broadcast VecFloat; scalar here, xyz lanes only.
@@ -165,11 +165,11 @@ namespace vpu
     {
         const float lfMagnitudeSquared = MagnitudeSquared(lrVector);
         if (lfMagnitudeSquared <= 0.0f)
-            return Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            { const Vector3 lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
 
         const float lfInverseMagnitude = 1.0f / std::sqrt(lfMagnitudeSquared);
-        return Vector3{ lrVector.x * lfInverseMagnitude, lrVector.y * lfInverseMagnitude,
-                        lrVector.z * lfInverseMagnitude, lrVector.w * lfInverseMagnitude };
+        { const Vector3 lResult = { lrVector.x * lfInverseMagnitude, lrVector.y * lfInverseMagnitude,
+                        lrVector.z * lfInverseMagnitude, lrVector.w * lfInverseMagnitude }; return lResult; }
     }
 
     // ADDITIVE GROW (consumed by BrnLooker.cpp): the SDK's NormalizeFast(v) -- on console a
@@ -210,7 +210,7 @@ namespace vpu
     inline Vector4 SqrtFast(Vector4 lvValue)
     {
         const float lfResult = (lvValue.x > 0.0f) ? std::sqrt(lvValue.x) : 0.0f;
-        return Vector4{ lfResult, lfResult, lfResult, lfResult };
+        { const Vector4 lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
     }
 
     // -- lane accessors -----------------------------------------------------------------
@@ -227,19 +227,19 @@ namespace vpu
     // SDK Min/Max/Clamp = vminfp / vmaxfp / vmaxfp-then-vminfp, lane-wise over all 4 lanes.
     inline Vector3 Min(Vector3 lLhs, Vector3 lRhs)
     {
-        return Vector3{
+        { const Vector3 lResult = {
             lLhs.x < lRhs.x ? lLhs.x : lRhs.x,
             lLhs.y < lRhs.y ? lLhs.y : lRhs.y,
             lLhs.z < lRhs.z ? lLhs.z : lRhs.z,
-            lLhs.w < lRhs.w ? lLhs.w : lRhs.w };
+            lLhs.w < lRhs.w ? lLhs.w : lRhs.w }; return lResult; }
     }
     inline Vector3 Max(Vector3 lLhs, Vector3 lRhs)
     {
-        return Vector3{
+        { const Vector3 lResult = {
             lLhs.x > lRhs.x ? lLhs.x : lRhs.x,
             lLhs.y > lRhs.y ? lLhs.y : lRhs.y,
             lLhs.z > lRhs.z ? lLhs.z : lRhs.z,
-            lLhs.w > lRhs.w ? lLhs.w : lRhs.w };
+            lLhs.w > lRhs.w ? lLhs.w : lRhs.w }; return lResult; }
     }
     inline Vector3 Clamp(Vector3 lrValue, Vector3 lrMin, Vector3 lrMax)
     {
@@ -249,8 +249,8 @@ namespace vpu
     // SDK Abs(v) = vandc against the sign-bit mask, lane-wise over all 4 lanes.
     inline Vector3 Abs(Vector3 lrVector)
     {
-        return Vector3{ std::fabs(lrVector.x), std::fabs(lrVector.y),
-                        std::fabs(lrVector.z), std::fabs(lrVector.w) };
+        { const Vector3 lResult = { std::fabs(lrVector.x), std::fabs(lrVector.y),
+                        std::fabs(lrVector.z), std::fabs(lrVector.w) }; return lResult; }
     }
 
     // -- interpolation -------------------------------------------------------------------
@@ -259,11 +259,11 @@ namespace vpu
     // plain float; xyz lanes interpolated (w follows the same lane arithmetic).
     inline Vector3 Lerp(Vector3 lV0, Vector3 lV1, float lfT)
     {
-        return Vector3{
+        { const Vector3 lResult = {
             lV0.x + (lV1.x - lV0.x) * lfT,
             lV0.y + (lV1.y - lV0.y) * lfT,
             lV0.z + (lV1.z - lV0.z) * lfT,
-            lV0.w + (lV1.w - lV0.w) * lfT };
+            lV0.w + (lV1.w - lV0.w) * lfT }; return lResult; }
     }
 
     // -- predicates ----------------------------------------------------------------------
@@ -349,7 +349,7 @@ namespace vpu
     //    reduction `MaskScalar CompAllTrue(Mask3)` (mask3_operation_inline.h:73); none of
     //    those is consumed by reconstructed game code yet, so none is reproduced -- this is
     //    the operation vocabulary the tree actually uses, not a full SDK port.
-    struct alignas(16) Mask3
+    struct CGS_ALIGN(16) Mask3
     {
         float x, y, z, w;
 
@@ -357,9 +357,9 @@ namespace vpu
         // the lane broadcast into all four lanes of a MaskScalar. HandleContactWithLeanProp
         // inlines exactly these six broadcasts at 0x82610018/0x8261001C/0x82610020 (the
         // less-than mask) and 0x82610028/0x8261002C/0x82610034 (the greater-than mask).
-        MaskScalar GetX() const { return MaskScalar{ x, x, x, x }; }
-        MaskScalar GetY() const { return MaskScalar{ y, y, y, y }; }
-        MaskScalar GetZ() const { return MaskScalar{ z, z, z, z }; }
+        MaskScalar GetX() const { { const MaskScalar lResult = { x, x, x, x }; return lResult; } }
+        MaskScalar GetY() const { { const MaskScalar lResult = { y, y, y, y }; return lResult; } }
+        MaskScalar GetZ() const { { const MaskScalar lResult = { z, z, z, z }; return lResult; } }
     };
 
     // CompLessThan(a, b) -- Feb-2007 vector3_operation_inline.h:693-699. ⚠️ THE SDK DOES NOT
@@ -400,11 +400,11 @@ namespace vpu
     // tree yet and is not reproduced.
     inline Vector3 Select(MaskScalar lMask, Vector3 lTrueValue, Vector3 lFalseValue)
     {
-        return Vector3{
+        { const Vector3 lResult = {
             lMask.x != 0.0f ? lTrueValue.x : lFalseValue.x,
             lMask.y != 0.0f ? lTrueValue.y : lFalseValue.y,
             lMask.z != 0.0f ? lTrueValue.z : lFalseValue.z,
-            lMask.w != 0.0f ? lTrueValue.w : lFalseValue.w };
+            lMask.w != 0.0f ? lTrueValue.w : lFalseValue.w }; return lResult; }
     }
 
     // The three world basis vectors -- Feb-2007 constants_operation.h:42-44, whose bodies
@@ -420,9 +420,9 @@ namespace vpu
     //
     // ⚠️ CANONICAL SDK HOME is rw/math/vpu/constants_operation.h, absent from this tree;
     //    same "until that header exists" footing as Mask3 above.
-    inline Vector3 GetVector3_XAxis() { return Vector3{ 1.0f, 0.0f, 0.0f, 0.0f }; }
-    inline Vector3 GetVector3_YAxis() { return Vector3{ 0.0f, 1.0f, 0.0f, 0.0f }; }
-    inline Vector3 GetVector3_ZAxis() { return Vector3{ 0.0f, 0.0f, 1.0f, 0.0f }; }
+    inline Vector3 GetVector3_XAxis() { { const Vector3 lResult = { 1.0f, 0.0f, 0.0f, 0.0f }; return lResult; } }
+    inline Vector3 GetVector3_YAxis() { { const Vector3 lResult = { 0.0f, 1.0f, 0.0f, 0.0f }; return lResult; } }
+    inline Vector3 GetVector3_ZAxis() { { const Vector3 lResult = { 0.0f, 0.0f, 1.0f, 0.0f }; return lResult; } }
 }
 }
 }

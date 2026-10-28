@@ -169,27 +169,27 @@ namespace physics
     // member fails at least one pin.
     inline void _rw_physics_Inertia_AssertLayout()
     {
-        static_assert(offsetof(Inertia, mInvTens)     == 0x00, "mInvTens @+0x00 (ctor stvx128 v0,r0,r11)");
-        static_assert(offsetof(Inertia, mInvMass)     == 0x10, "mInvMass @+0x10 (ctor stfs f0(1.0f),0x10(r11))");
-        static_assert(offsetof(Inertia, mSpherical)   == 0x14, "mSpherical @+0x14 (ctor stfs f0(1.0f),0x14; DynamicUpdate lfs 0x14)");
-        static_assert(offsetof(Inertia, mMaxVelocity) == 0x18, "mMaxVelocity @+0x18 (ctor stfs f12(FLT_MAX); DynamicUpdate lfs 0x18)");
-        static_assert(offsetof(Inertia, mMaxOmega)    == 0x1C, "mMaxOmega @+0x1C (ctor stfs f12(FLT_MAX); DynamicUpdate lfs 0x1C)");
-        static_assert(offsetof(Inertia, mLinearDrag)  == 0x20, "mLinearDrag @+0x20 (ctor stfs f13(0.0f); DynamicUpdate lvlx +0x20)");
-        static_assert(offsetof(Inertia, mAngularDrag) == 0x24, "mAngularDrag @+0x24 (ctor stfs f13(0.0f); DynamicUpdate lvlx +0x24)");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mInvTens)     == 0x00), "mInvTens @+0x00 (ctor stvx128 v0,r0,r11)");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mInvMass)     == 0x10), "mInvMass @+0x10 (ctor stfs f0(1.0f),0x10(r11))");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mSpherical)   == 0x14), "mSpherical @+0x14 (ctor stfs f0(1.0f),0x14; DynamicUpdate lfs 0x14)");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mMaxVelocity) == 0x18), "mMaxVelocity @+0x18 (ctor stfs f12(FLT_MAX); DynamicUpdate lfs 0x18)");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mMaxOmega)    == 0x1C), "mMaxOmega @+0x1C (ctor stfs f12(FLT_MAX); DynamicUpdate lfs 0x1C)");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mLinearDrag)  == 0x20), "mLinearDrag @+0x20 (ctor stfs f13(0.0f); DynamicUpdate lvlx +0x20)");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mAngularDrag) == 0x24), "mAngularDrag @+0x24 (ctor stfs f13(0.0f); DynamicUpdate lvlx +0x24)");
 
         // Adjacency form of the same six scalars -- survives a member WIDENING, which the
         // absolute offsets above would too, but which a total-size check would not.
-        static_assert(offsetof(Inertia, mInvMass)     == offsetof(Inertia, mInvTens)     + sizeof(rw::math::vpu::Vector3), "mInvMass follows mInvTens");
-        static_assert(offsetof(Inertia, mSpherical)   == offsetof(Inertia, mInvMass)     + sizeof(f32), "mSpherical follows mInvMass");
-        static_assert(offsetof(Inertia, mMaxVelocity) == offsetof(Inertia, mSpherical)   + sizeof(f32), "mMaxVelocity follows mSpherical");
-        static_assert(offsetof(Inertia, mMaxOmega)    == offsetof(Inertia, mMaxVelocity) + sizeof(f32), "mMaxOmega follows mMaxVelocity");
-        static_assert(offsetof(Inertia, mLinearDrag)  == offsetof(Inertia, mMaxOmega)    + sizeof(f32), "mLinearDrag follows mMaxOmega");
-        static_assert(offsetof(Inertia, mAngularDrag) == offsetof(Inertia, mLinearDrag)  + sizeof(f32), "mAngularDrag follows mLinearDrag");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mInvMass)     == offsetof(Inertia, mInvTens)     + sizeof(rw::math::vpu::Vector3)), "mInvMass follows mInvTens");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mSpherical)   == offsetof(Inertia, mInvMass)     + sizeof(f32)), "mSpherical follows mInvMass");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mMaxVelocity) == offsetof(Inertia, mSpherical)   + sizeof(f32)), "mMaxVelocity follows mSpherical");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mMaxOmega)    == offsetof(Inertia, mMaxVelocity) + sizeof(f32)), "mMaxOmega follows mMaxVelocity");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mLinearDrag)  == offsetof(Inertia, mMaxOmega)    + sizeof(f32)), "mLinearDrag follows mMaxOmega");
+        CGS_STATIC_ASSERT((offsetof(Inertia, mAngularDrag) == offsetof(Inertia, mLinearDrag)  + sizeof(f32)), "mAngularDrag follows mLinearDrag");
 
         // The X360-attested ARRAY STRIDE (GetInertia @0x8289D0C0: 48*(idx+50)). This one IS
         // a total size, and it is legitimate here because it is a stride claim about
         // CgsPhysics::RigidBodyData::maInertias[200], not a field-coverage claim.
-        static_assert(sizeof(Inertia) == 48, "Inertia array stride 48 (GetInertia 48*(idx+50))");
+        CGS_STATIC_ASSERT((sizeof(Inertia) == 48), "Inertia array stride 48 (GetInertia 48*(idx+50))");
     }
 
 } // namespace physics

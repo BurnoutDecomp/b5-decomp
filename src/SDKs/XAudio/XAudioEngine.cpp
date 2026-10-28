@@ -27,6 +27,6 @@ namespace XAUDIO
 // here (`stw r31, off_832BB944@l(r11)`) and the dtor @0x82C2E2D0 clears it; the
 // processing-thread entry points and the CRoutedVoice attach path read the
 // default output / effect manager through it. Null until an engine is created.
-CEngine* gpEngine = nullptr;
+CEngine* gpEngine = 0;
 
 } // namespace XAUDIO

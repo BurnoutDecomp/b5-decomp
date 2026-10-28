@@ -146,8 +146,8 @@ namespace CgsGraphics
         OcclusionQueryList* mpQueryList;           // +0x33C (Construct @0x827F1E00)
     };
 
-    static_assert(sizeof(Im3dUntexVertex) == 0x20,
+    CGS_STATIC_ASSERT((sizeof(Im3dUntexVertex) == 0x20),
                   "ARTIST Construct advances Im3dUntexVertex by 0x20 bytes");
-    static_assert(sizeof(PositionOnlyVertex) == 0x10,
+    CGS_STATIC_ASSERT((sizeof(PositionOnlyVertex) == 0x10),
                   "ARTIST Construct advances PositionOnlyVertex by 0x10 bytes");
 }

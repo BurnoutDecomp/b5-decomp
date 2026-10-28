@@ -200,7 +200,7 @@ namespace Vehicle
                 lfMinHeight = lfHeight;
         }
 
-        return VecFloat{ lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight };
+        { const VecFloat lResult = { lfMinHeight, lfMinHeight, lfMinHeight, lfMinHeight }; return lResult; }
     }
 
     // =========================================================================================
@@ -445,7 +445,7 @@ namespace Vehicle
         {
             for (RaceCarPhysics::TdSlamGateSample& lrSample : gaTdSlamGate)
             {
-                if (lrSample.mpCar != lpCar && lrSample.mpCar != nullptr)
+                if (lrSample.mpCar != lpCar && lrSample.mpCar != 0)
                     continue;
                 lrSample.mpCar                = lpCar;
                 ++lrSample.muUpdates;
@@ -466,7 +466,7 @@ namespace Vehicle
             if (lrSample.mpCar == lpCar)
                 return &lrSample;
         }
-        return nullptr;
+        return 0;
     }
 
     namespace
@@ -484,7 +484,7 @@ namespace Vehicle
 
     void RaceCarPhysics::TdReactWatch(const RaceCarPhysics* lpCar, s32 liImpactId, s32 liRole)
     {
-        TdReactWatchSlot* lpFree = nullptr;
+        TdReactWatchSlot* lpFree = 0;
         for (TdReactWatchSlot& lrSlot : gaTdReactWatch)
         {
             if (lrSlot.mpCar == lpCar)
@@ -492,10 +492,10 @@ namespace Vehicle
                 lpFree = &lrSlot;   // re-arm the car's own slot
                 break;
             }
-            if (lpFree == nullptr && lrSlot.mpCar == nullptr)
+            if (lpFree == 0 && lrSlot.mpCar == 0)
                 lpFree = &lrSlot;
         }
-        if (lpFree == nullptr)
+        if (lpFree == 0)
             return;
         lpFree->mpCar      = lpCar;
         lpFree->miImpactId = liImpactId;
@@ -520,7 +520,7 @@ namespace Vehicle
                 const f32 lfAlong = lvShunt.x * lvPlanar.x + lvShunt.y * lvPlanar.y + lvShunt.z * lvPlanar.z;
             }
             if (++lrSlot.miStep >= KI_TD_REACT_STEPS)
-                lrSlot.mpCar = nullptr;
+                lrSlot.mpCar = 0;
             return;
         }
     }
@@ -2070,31 +2070,31 @@ namespace Vehicle
     // offsets (the offsets the asm reads). If a member moves, this fails to compile.
     static void _AssertPlayerParamsLayout()
     {
-        static_assert(offsetof(PlayerParameters, mbBounceBoosting)     == 0x00, "lbBounceBoosting");
-        static_assert(offsetof(PlayerParameters, mbJustBounced)        == 0x01, "byte_82FB8481");
-        static_assert(offsetof(PlayerParameters, mbBouncedThisFrame)   == 0x02, "byte_82FB8482");
-        static_assert(offsetof(PlayerParameters, muBounceChainCount)   == 0x06, "word_82FB8486");
-        static_assert(offsetof(PlayerParameters, mbBounceBoostPending) == 0x09, "byte_82FB8489");
-        static_assert(offsetof(PlayerParameters, miOtherEntityId)      == 0x0C, "dword_82FB848C");
-        static_assert(offsetof(PlayerParameters, mBounceDirection)     == 0x10, "+0x10 vector");
-        static_assert(offsetof(PlayerParameters, mAimDirection)        == 0x20, "+0x20 aim (SetShowtimeAimDirection stvx128)");
-        static_assert(offsetof(PlayerParameters, mbDisableShowtime)    == 0x30, "byte_82FB84B0");
-        static_assert(offsetof(PlayerParameters, mbLaunchActive)       == 0x32, "byte_82FB84B2");
-        static_assert(offsetof(PlayerParameters, mfDeformationScale)   == 0x34, "flt_82FB84B4");
-        static_assert(offsetof(PlayerParameters, mfDamageBudget)       == 0x38, "flt_82FB84B8");
-        static_assert(offsetof(PlayerParameters, mfUncappedSpeedTimer) == 0x3C, "flt_82FB84BC");
-        static_assert(offsetof(PlayerParameters, mfTimeUntilPush)      == 0x44, "flt_82FB84C4");
-        static_assert(offsetof(PlayerParameters, mfPlayerCarStrength)  == 0x40, "lfShowtimePlayerCarStrength (0x82FB84C0)");
-        static_assert(offsetof(PlayerParameters, maTargetPositions)    == 0x50, "unk_82FB84D0 (UpdateDrivers' GetTargetAssistParams arg 1)");
-        static_assert(offsetof(PlayerParameters, maTargetIds)          == 0xD0, "dword_82FB8550");
-        static_assert(offsetof(PlayerParameters, miNumTargets)         == 0xF0, "dword_82FB8570");
-        static_assert(offsetof(PlayerParameters, miCurrentTargetId)    == 0xF4, "dword_82FB8574");
-        static_assert(offsetof(PlayerParameters, mAssistStrength)      == 0x100, "unk_82FB8580 (assist envelope)");
-        static_assert(offsetof(PlayerParameters, mu8NumBounceSensors)  == 0x110, "byte_82FB8590");
-        static_assert(offsetof(PlayerParameters, maBounceSensors)      == 0x120, "unk_82FB85A0 (32B-stride sensor scratch)");
-        static_assert(sizeof(PlayerParameters::BounceSensor)           == 0x20, "slwi r31, 5 -- 32-byte stride");
-        static_assert(offsetof(PlayerParameters::BounceSensor, mfSpecScalar)  == 0x10, "flt_82FB85B0 - unk_82FB85A0");
-        static_assert(offsetof(PlayerParameters::BounceSensor, mfCrushFactor) == 0x14, "flt_82FB85B4 - unk_82FB85A0");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mbBounceBoosting)     == 0x00), "lbBounceBoosting");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mbJustBounced)        == 0x01), "byte_82FB8481");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mbBouncedThisFrame)   == 0x02), "byte_82FB8482");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, muBounceChainCount)   == 0x06), "word_82FB8486");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mbBounceBoostPending) == 0x09), "byte_82FB8489");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, miOtherEntityId)      == 0x0C), "dword_82FB848C");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mBounceDirection)     == 0x10), "+0x10 vector");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mAimDirection)        == 0x20), "+0x20 aim (SetShowtimeAimDirection stvx128)");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mbDisableShowtime)    == 0x30), "byte_82FB84B0");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mbLaunchActive)       == 0x32), "byte_82FB84B2");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mfDeformationScale)   == 0x34), "flt_82FB84B4");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mfDamageBudget)       == 0x38), "flt_82FB84B8");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mfUncappedSpeedTimer) == 0x3C), "flt_82FB84BC");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mfTimeUntilPush)      == 0x44), "flt_82FB84C4");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mfPlayerCarStrength)  == 0x40), "lfShowtimePlayerCarStrength (0x82FB84C0)");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, maTargetPositions)    == 0x50), "unk_82FB84D0 (UpdateDrivers' GetTargetAssistParams arg 1)");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, maTargetIds)          == 0xD0), "dword_82FB8550");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, miNumTargets)         == 0xF0), "dword_82FB8570");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, miCurrentTargetId)    == 0xF4), "dword_82FB8574");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mAssistStrength)      == 0x100), "unk_82FB8580 (assist envelope)");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, mu8NumBounceSensors)  == 0x110), "byte_82FB8590");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters, maBounceSensors)      == 0x120), "unk_82FB85A0 (32B-stride sensor scratch)");
+        CGS_STATIC_ASSERT((sizeof(PlayerParameters::BounceSensor)           == 0x20), "slwi r31, 5 -- 32-byte stride");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters::BounceSensor, mfSpecScalar)  == 0x10), "flt_82FB85B0 - unk_82FB85A0");
+        CGS_STATIC_ASSERT((offsetof(PlayerParameters::BounceSensor, mfCrushFactor) == 0x14), "flt_82FB85B4 - unk_82FB85A0");
     }
 }
 }

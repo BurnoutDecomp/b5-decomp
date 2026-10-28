@@ -43,18 +43,18 @@ namespace BrnDirector
         // Draws the camera HUD debug overlay (camera X/Y/Z, FOV, lens length, look-at,
         // near clip) from MainDirector::CameraDebugInfo. Bodied in
         // BrnDirectorModuleDebugCompononent_wS34_00.cpp.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
         // Advances the panorama screenshot state machine (pitch/yaw step grid) each time
         // a panorama shot is requested. Bodied in BrnDirectorModuleDebugCompononent_wS34_00.cpp.
         void UpdatePanoramaScreenshots(Camera::Camera* lpCamera);
 
     protected:
-        const char* GetName() const override;
+        const char* GetName() const ;
 
         // Registers every camera/testbed/crash debug variable and action with the debug
         // menu. Bodied in BrnDirectorModuleDebugCompononent_wS34_02.cpp.
-        void OnActivate() override;
+        void OnActivate() ;
 
     private:
         // Registered with the debug menu as DebugUI::Function::DebugCallbackFunction

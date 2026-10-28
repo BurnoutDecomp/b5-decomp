@@ -108,7 +108,7 @@ namespace BrnGui
             E_ICONSTATE_COUNT = 53,
         };
 
-        virtual ~MapIconBrnBase() = default;
+        virtual ~MapIconBrnBase() {}
 
         // [H3c] the X360 vtable (image @0x820CEB40 crash-nav / @0x820CEB68 sat-nav) pins the
         // FULL base virtual set + order: Construct, SetPosition, SetRotation, SetAlpha,
@@ -144,7 +144,7 @@ namespace BrnGui
         u32 muId;                       // X360 +44
 
         // @ 0x827DD568 - only flags dirty when the position actually changes.
-        void SetPosition(Vector2 lv2Position) override
+        void SetPosition(Vector2 lv2Position)
         {
             if (lv2Position.x != mv2Position.x || lv2Position.y != mv2Position.y ||
                 lv2Position.z != mv2Position.z || lv2Position.w != mv2Position.w)
@@ -155,7 +155,7 @@ namespace BrnGui
         }
 
         // @ 0x827DD5B0
-        void SetRotation(f32 lfRotationInRadians) override
+        void SetRotation(f32 lfRotationInRadians)
         {
             if (lfRotationInRadians != mfRotationInRadians)
             {
@@ -165,7 +165,7 @@ namespace BrnGui
         }
 
         // @ 0x827DD5D0
-        void SetAlpha(f32 lfAlpha) override
+        void SetAlpha(f32 lfAlpha)
         {
             if (lfAlpha != mfAlpha)
             {
@@ -175,7 +175,7 @@ namespace BrnGui
         }
 
         // @ 0x827DD5F0 - a state change dirties both the icon and its icon-state.
-        void SetState(IconState leState) override
+        void SetState(IconState leState)
         {
             if (leState != meState)
             {
@@ -192,7 +192,7 @@ namespace BrnGui
         // console reaches the component as `this - 0x90`; the body uses the host's own
         // container offset (see the SatNavMapIcon::SetState note above). Defined in
         // BrnSatNavIcon.cpp, below CrashNavIconComponent.
-        void Update() override;
+        void Update() ;
 
         f32 GetAlpha() const { return mfAlpha; }        // @ 0x827DD... (BrnSatNavIcon.h:511)
         f32 GetRotation() const { return mfRotationInRadians; }
@@ -210,7 +210,7 @@ namespace BrnGui
         // so the two spellings collapse into this one override. The `ConstructAdjustor144`
         // name is retired; nothing outside this file referenced it.
         void Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpcParentName) override;
+                       const char* lpcParentName) ;
 
         // @ 0x8244BA18 -- copy-assign from lrSource. The X360 byte-copies the icon EXCEPT
         // the +0x00 vtable slot (copy anchor is this+0x04), copies the embedded TextField
@@ -271,7 +271,7 @@ namespace BrnGui
         // holds the `adjustor{144}` thunk into here (CrashNavMapIcon::Construct above).
         // Body in BrnSatNavIcon.cpp.
         void Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpcParentName) override;
+                       const char* lpcParentName) ;
     };
 
     // Sat-nav map icon. Set* changes push straight through the hosting Flapt component's
@@ -288,20 +288,20 @@ namespace BrnGui
         // always pushes through to the clip. Body in BrnSatNavIcon.cpp (needs the
         // component type complete).
         void Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpcParentName) override;
+                       const char* lpcParentName) ;
 
         // @ 0x827DD7C8 - push a changed position through to the apt clip (the X360
         // compares the {x,y} lanes -- the vrlimi merge replicates them across the
         // vector -- and on a change stores the full lane + MovieClipRef::SetPosition).
-        void SetPosition(Vector2 lv2Position) override;
+        void SetPosition(Vector2 lv2Position) ;
 
         // @ 0x827DD748 - push a changed rotation through to the apt clip.
-        void SetRotation(f32 lfRotationInRadians) override;
+        void SetRotation(f32 lfRotationInRadians) ;
 
         // @ 0x827DD768 - store a changed alpha. The X360 tail re-dispatches through its
         // OWN vtable slot (+0xC == SetAlpha itself); the second pass compares equal and
         // returns, so the net behaviour is the store -- the alpha never reaches the clip.
-        void SetAlpha(f32 lfAlpha) override;
+        void SetAlpha(f32 lfAlpha) ;
 
         // @ 0x8284CB38 (both) [H3c] -- the sat-nav vtable's SetIconText and Update slots
         // hold the same ICF-folded empty function (bare blr): both are no-ops. The
@@ -310,10 +310,10 @@ namespace BrnGui
         // so no override is declared here.
 
         // @ 0x8280FFC0
-        Vector2 GetPosition() const override { return mv2Position; }
+        Vector2 GetPosition() const  { return mv2Position; }
 
         // @ 0x827DD7C0
-        IconState GetState() const override { return meState; }
+        IconState GetState() const  { return meState; }
 
         // @ 0x827DD790 - on a state change, drive the hosting Flapt component to the new state's
         // animation label. The icon is embedded inside a SatNavIconComponent (X360 at +32), so
@@ -321,7 +321,7 @@ namespace BrnGui
         // below the host type (it needs SatNavIconComponent complete). ⭐ H3b: the console's
         // literal `this - 32` is replaced by the HOST layout's own offset -- a raw console
         // offset applied to a host object is exactly the wheel-blanking defect class.
-        void SetState(IconState leState) override;
+        void SetState(IconState leState) ;
 
     private:
         // [H3c] DWARF BrnSatNavIcon.h:378 -- the icon's text-field handle (X360 icon

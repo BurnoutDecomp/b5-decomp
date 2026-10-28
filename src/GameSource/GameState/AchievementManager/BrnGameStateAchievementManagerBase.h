@@ -253,8 +253,8 @@ protected:
 class AchievementManagerPS3 : public AchievementManagerBase
 {
 protected:
-    void AchievementEarnt(EAchievement leAchievement) override;
-    bool IsAchievementEarnt(EAchievement leAchievement) override;
+    void AchievementEarnt(EAchievement leAchievement) ;
+    bool IsAchievementEarnt(EAchievement leAchievement) ;
 };
 
 }

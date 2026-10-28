@@ -287,10 +287,10 @@ namespace BrnGameState
         // Game-action event-type discriminants (the queue returns the action id as the type):
         //   37 -> the pause action  (breaks the scan and forces the rumble paused)
         //   39 -> the resume action (mirrors the current pause request into mbRumblePaused)
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liType = lpGameActionQueue->GetFirstEvent(&lpEvent, &liSize);
-        if (lpEvent != nullptr)
+        if (lpEvent != 0)
         {
             while (liType != 37)
             {
@@ -298,7 +298,7 @@ namespace BrnGameState
                     mbRumblePaused = lbPaused;
 
                 liType = lpGameActionQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
-                if (lpEvent == nullptr)
+                if (lpEvent == 0)
                     return;
             }
             mbRumblePaused = true;
@@ -354,7 +354,7 @@ namespace BrnGameState
 
         {
             void* lpSampleSurfaceRef = mSurfaceList.Surfaces(1);
-            if (lpSampleSurfaceRef == nullptr)
+            if (lpSampleSurfaceRef == 0)
             {
                 lpSampleSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
             }
@@ -394,7 +394,7 @@ namespace BrnGameState
                     (static_cast<u16>(lrRoadContact.mCollisionTag.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK);
 
                 void* lpSurfaceRef = mSurfaceList.Surfaces(lu8SurfaceId);
-                if (lpSurfaceRef == nullptr)
+                if (lpSurfaceRef == 0)
                 {
                     lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
                 }
@@ -462,7 +462,7 @@ namespace BrnGameState
                 else
                 {
                     void* lpSurfaceRef = mSurfaceList.Surfaces(static_cast<u32>(manRumbleID[leRumbleListIndex]));
-                    if (lpSurfaceRef == nullptr)
+                    if (lpSurfaceRef == 0)
                     {
                         lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
                     }
@@ -528,7 +528,7 @@ namespace BrnGameState
                         manRumbleID[leRumbleListIndex] = mau8SurfaceID[leSurfaceListIndex];
 
                         void* lpSurfaceRef = mSurfaceList.Surfaces(mau8SurfaceID[leSurfaceListIndex]);
-                        if (lpSurfaceRef == nullptr)
+                        if (lpSurfaceRef == 0)
                         {
                             lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
                         }
@@ -610,7 +610,7 @@ namespace BrnGameState
             lpContactSpyInterface->GetRaceCarContacts();
         const BrnPhysics::ContactSpy::ContactSpyRunData* lpRunData =
             lpContactSpyInterface->GetRaceCarContactRunList()->GetRunDataWithEntityID(lpState->mEntityId);
-        if (lpRunData == nullptr)
+        if (lpRunData == 0)
         {
             return;
         }

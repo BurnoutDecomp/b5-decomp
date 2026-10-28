@@ -1,6 +1,6 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 
-#include <cstdint>  // uintptr_t
+#include "types.hpp"  // uintptr_t
 #include <cstring>  // strlen, strncpy, memset
 #include <ctime>    // tm, _localtime64, __time64_t
 #include <cctype>   // tolower
@@ -585,7 +585,7 @@ int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
 
     // %8.8x takes the out-slot address (only its low 32 bits on the 64-bit host).
     return MassiveFormatString(*ppcOut, 0x25, "%8.8x-%I64d-%d",
-                               static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(ppcOut)),
+                               static_cast<unsigned int>(reinterpret_cast<uintptr_t>(ppcOut)),
                                static_cast<unsigned long long>(luTickCount),
                                lSystemTime.wMilliseconds * lSystemTime.wSecond);
 }

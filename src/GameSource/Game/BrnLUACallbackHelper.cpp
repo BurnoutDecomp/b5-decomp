@@ -64,6 +64,6 @@ namespace BrnGame
                    "IsParamString(liParamIndex)");
 
         // lua_tolstring(L, idx, len) with a null length pointer (li r5,0).
-        return lua_tolstring(mpLUAHandle, liStackIndex, nullptr);
+        return lua_tolstring(mpLUAHandle, liStackIndex, 0);
     }
 }

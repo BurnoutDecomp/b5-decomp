@@ -47,6 +47,6 @@ private:
     f32 mScale;   // +0x00 -- the whole record
 };
 
-static_assert(sizeof(cParticleScaler) == 4,
+CGS_STATIC_ASSERT((sizeof(cParticleScaler) == 4),
               "cParticleScaler is one float (cParticleSystem::AppInit @0x82913810 sizes the "
               "scaler pool's items at 4 bytes)");

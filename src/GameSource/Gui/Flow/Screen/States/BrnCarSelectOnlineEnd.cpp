@@ -132,9 +132,9 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiActivateCarSelectWire) == 20, "activate car-select record is 20 bytes");
-        static_assert(sizeof(GuiChangeCarWire) == 24, "change-car record is 24 bytes");
-        static_assert(sizeof(GuiEventNetworkLobbyPlayerListPayload) >= 0x1C4,
+        CGS_STATIC_ASSERT((sizeof(GuiActivateCarSelectWire) == 20), "activate car-select record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiChangeCarWire) == 24), "change-car record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkLobbyPlayerListPayload) >= 0x1C4),
                       "lobby roster count sits at +0x1C0");
     }
 

@@ -311,7 +311,7 @@ namespace PhysicsSimulationIO
     bool InputBuffer::AppendAddRigidBodyQueue(CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
+        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
         return mAddRigidBodyQueue.Append(*lpSourceQueue);
     }
 
@@ -319,7 +319,7 @@ namespace PhysicsSimulationIO
     bool InputBuffer::AppendAddJointQueue(CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
+        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
         return mAddJointQueue.Append(*lpSourceQueue);
     }
 
@@ -327,7 +327,7 @@ namespace PhysicsSimulationIO
     bool InputBuffer::AppendChangeRigidBodyInertiaQueue(CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
+        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
         return mChangeRigidBodyInertiaQueue.Append(*lpSourceQueue);
     }
 
@@ -341,7 +341,7 @@ namespace PhysicsSimulationIO
     bool InputBuffer::AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
+        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
         return mRemoveJointQueue.Append(*lpSourceQueue);
     }
 
@@ -349,7 +349,7 @@ namespace PhysicsSimulationIO
     bool InputBuffer::AppendRemoveRigidBodyQueue(CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
+        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
         return mRemoveRigidBodyQueue.Append(*lpSourceQueue);
     }
 
@@ -357,7 +357,7 @@ namespace PhysicsSimulationIO
     bool InputBuffer::AppendUpdateExternalBodyQueue(CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != nullptr, "lpSourceQueue != NULL");
+        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
         return mUpdateExternalBodyQueue.Append(*lpSourceQueue);
     }
 

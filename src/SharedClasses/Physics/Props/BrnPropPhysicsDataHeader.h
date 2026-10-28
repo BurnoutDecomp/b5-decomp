@@ -139,16 +139,16 @@ inline void PropPhysicsDataHeader::_AssertLayout()
 {
     PropTypeData::_AssertLayout();
     PropPartTypeData::_AssertLayout();
-    static_assert(KU_MAX_PROP_TYPES == 500,           "mapPropTypes[500] (FixUp bases)");
-    static_assert(KU_MAX_PROP_PART_TYPES == 300,      "mapPropPartTypes[300] (FixUp bases)");
-    static_assert(KU_MAX_PROP_PHYSICS_VOLUMES == 2048, "mapVolumeTypes[2048]");
-    static_assert(offsetof(PropPhysicsDataHeader, muSizeInBytes)    == 0x0C,   "muSizeInBytes @0x0C");
-    static_assert(offsetof(PropPhysicsDataHeader, mapPropTypes)     == 0x10,   "mapPropTypes @0x10");
-    static_assert(offsetof(PropPhysicsDataHeader, mapPropPartTypes) == 0xFB0,
+    CGS_STATIC_ASSERT((KU_MAX_PROP_TYPES == 500),           "mapPropTypes[500] (FixUp bases)");
+    CGS_STATIC_ASSERT((KU_MAX_PROP_PART_TYPES == 300),      "mapPropPartTypes[300] (FixUp bases)");
+    CGS_STATIC_ASSERT((KU_MAX_PROP_PHYSICS_VOLUMES == 2048), "mapVolumeTypes[2048]");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muSizeInBytes)    == 0x0C),   "muSizeInBytes @0x0C");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapPropTypes)     == 0x10),   "mapPropTypes @0x10");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapPropPartTypes) == 0xFB0),
                   "mapPropPartTypes @0xFB0 (console +0x7E0)");
-    static_assert(offsetof(PropPhysicsDataHeader, mapVolumeTypes)   == 0x1910,
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapVolumeTypes)   == 0x1910),
                   "mapVolumeTypes @0x1910 (console +0xC90)");
-    static_assert(offsetof(PropPhysicsDataHeader, muTimeStamp)      == 0x5910,
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muTimeStamp)      == 0x5910),
                   "muTimeStamp @0x5910 (console +0x2C90)");
 }
 

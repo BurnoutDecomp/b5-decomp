@@ -26,21 +26,30 @@ can corroborate declarations. Do not import Xbox One pointer widths or file layo
 The parent `BP-Decomp_Workflow` repository retains the references, exports and
 ledger. Do not publish experimental coverage to the shared production ledger.
 
-## Native compile bootstrap
+## Native build tools
 
 The extracted XDK 6534.4 compiler (14.00.6502) works without running setup or
 changing system settings. From this repository, use its extracted `XDK` directory:
 
 ```powershell
-python tools/build_x360.py --sdk "path\to\XDK"
+python tools/build_x360.py --sdk "path\to\XDK" --all --jobs 8 --quiet
 ```
 
-This compiles six core translation units into Xbox 360 PowerPC objects and emits
-assembly, logs and `compile-results.json` under `build/x360/objects/`. Use repeated
-`--source src/...cpp` arguments for other files. PC sources are rejected.
+This sweeps the tracked game and reconstructed middleware sources. It emits
+PowerPC objects, assembly, logs and `compile-results.json` under
+`build/x360/objects/`, including every compile failure. Without `--all`, it builds
+six core files; repeated `--source src/...cpp` arguments select specific files.
+PC sources are rejected.
 
-The wider startup code still uses headers and language features unsupported by
-this compiler, including `<cstdint>` and `static_assert`. The portable linker
-also currently stalls on this host before producing diagnostics. Linking and
-booting remain separate work; setup has not been run. SDK files and build output
-stay outside Git under `build/`.
+The extracted linker needs its bundled CRT declared in its manifest. Prepare a
+local copy with the installed Windows SDK's `mt.exe` (auto-detected):
+
+```powershell
+python tools/prepare_x360_linker.py --sdk "path\to\XDK"
+```
+
+The prepared linker is `build/x360/tool-host/link.exe`. Original SDK files stay
+unchanged; neither command installs software or changes system settings. Native
+linking works for the CRC objects. The game still has source compatibility,
+console layout and missing implementation work before it can link or boot.
+SDK files and build output stay outside Git under `build/`.

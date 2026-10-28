@@ -15,17 +15,17 @@ public:
         bool mbTitle;
     };
     enum ECreditsType { E_CREDITS_TYPE_END = 0, E_CREDITS_TYPE_REPLAY = 1 };
-    void Construct() override;
-    bool Prepare(CgsGui::GuiEventQueueSmall*, rw::IResourceAllocator*, rw::IResourceAllocator*) override;
-    void RecvEvent(const CgsModule::Event*, s32) override;
-    void Update() override;
-    CgsID GetID() const override;
-    s32 GetNumTextures() const override { return 1; } // ARTIST vtable820CF910 +28 ->82C296C8.
+    void Construct() ;
+    bool Prepare(CgsGui::GuiEventQueueSmall*, rw::IResourceAllocator*, rw::IResourceAllocator*) ;
+    void RecvEvent(const CgsModule::Event*, s32) ;
+    void Update() ;
+    CgsID GetID() const ;
+    s32 GetNumTextures() const  { return 1; } // ARTIST vtable820CF910 +28 ->82C296C8.
     virtual void SetTextRenderer(CgsGraphics::TextRenderer*);
     virtual void SetLanguageManager(CgsLanguage::LanguageManager*);
-    void SetRenderEnabled(bool) override;
+    void SetRenderEnabled(bool) ;
 private:
-    void RenderComponent(CgsGui::ImRendererSet*) override;
+    void RenderComponent(CgsGui::ImRendererSet*) ;
     void RecalculateParagraphs();
     rw::IResourceAllocator* mpHeapAllocator;
     CgsGraphics::Im2dTransform mScreenTransform;

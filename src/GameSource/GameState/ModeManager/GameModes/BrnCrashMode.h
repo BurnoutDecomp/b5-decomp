@@ -51,16 +51,16 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (CrashMode::*)() const>(&CrashMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (CrashMode::*)() const>(&CrashMode::GetName)) != 0),
               "CrashMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<f32 (CrashMode::*)() const>(&CrashMode::GetIntroDurationSeconds)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (CrashMode::*)() const>(&CrashMode::GetIntroDurationSeconds)) != 0),
               "CrashMode::GetIntroDurationSeconds must bind GameMode vtable slot 8");
-static_assert(sizeof(static_cast<void (CrashMode::*)(EGameModeEvent)>(&CrashMode::SendEvent)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (CrashMode::*)(EGameModeEvent)>(&CrashMode::SendEvent)) != 0),
               "CrashMode::SendEvent must bind GameMode vtable slot 12");
-static_assert(sizeof(static_cast<void (CrashMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&CrashMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (CrashMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&CrashMode::Start)) != 0),
               "CrashMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<bool (CrashMode::*)(const ScoringSystem*) const>(&CrashMode::ShouldExit)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (CrashMode::*)(const ScoringSystem*) const>(&CrashMode::ShouldExit)) != 0),
               "CrashMode::ShouldExit must bind GameMode vtable slot 13");
-static_assert(sizeof(static_cast<bool (CrashMode::*)() const>(&CrashMode::RequiresStreaming)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (CrashMode::*)() const>(&CrashMode::RequiresStreaming)) != 0),
               "CrashMode::RequiresStreaming must bind GameMode vtable slot 23");
 }

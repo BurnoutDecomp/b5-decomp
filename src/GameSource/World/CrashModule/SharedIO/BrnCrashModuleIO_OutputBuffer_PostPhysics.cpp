@@ -27,7 +27,7 @@ namespace CrashIO
     {
         // The interface offset is load-bearing for this getter (the X360 returns this+0x10).
         // Pinned from inside the member so offsetof can see the private member.
-        static_assert(offsetof(OutputBuffer_PostPhysics, mNetworkOutputInterface) == 0x10,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mNetworkOutputInterface) == 0x10),
                       "mNetworkOutputInterface @0x10");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mNetworkOutputInterface;

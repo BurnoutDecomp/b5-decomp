@@ -88,12 +88,12 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (base vtable order; DO NOT REORDER) --------
-        void        Construct() override;                                 // @0x82259EA0
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;   // @0x822655E8
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;    // @0x8226BFB0
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;   // @0x82234F70
-        bool        CanRun(ArbStateSharedInfo& lrSharedInfo) const override; // @0x821F6258
-        const char* GetName() const override;                             // @0x821F6248
+        void        Construct() ;                                 // @0x82259EA0
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ;   // @0x822655E8
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;    // @0x8226BFB0
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ;   // @0x82234F70
+        bool        CanRun(ArbStateSharedInfo& lrSharedInfo) const ; // @0x821F6258
+        const char* GetName() const ;                             // @0x821F6248
 
         // Destruct is in the DWARF (:735) but has NO X360 export in this build's ledger, so the
         // base declaration stands and no override is added here (the same rule the sibling

@@ -103,17 +103,17 @@ namespace BrnNetwork
     // X360 0x82543808
     void LoginManagerBase::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != nullptr, "lpNetworkModule");
+        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
         mpNetworkModule = lpNetworkModule;
 
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
         meSignInState        = E_SIGN_IN_STATE_COUNT;
         meSubState           = E_SUBSTATE_COUNT;
         meSignInType         = E_SIGN_IN_TYPE_COUNT;
         meCompletedSignInType = E_SIGN_IN_TYPE_COUNT;
-        mpTOS                = nullptr;
+        mpTOS                = 0;
     }
 
     // X360 0x8256CC60
@@ -225,10 +225,10 @@ namespace BrnNetwork
         mbAgreeShare1        = false;
         mbAgreeShare2        = false;
 
-        if (lpTos != nullptr)
+        if (lpTos != 0)
         {
             CgsNetwork::ServerInterfaceDirtySock::MemFree(lpTos, 0, 0);
-            mpTOS = nullptr;
+            mpTOS = 0;
         }
     }
 
@@ -396,7 +396,7 @@ namespace BrnNetwork
     // X360 0x8254FEC8
     void LoginManagerBase::PrepareConnectTelemetry()
     {
-        CGS_ASSERT(mpNetworkManager != nullptr, "NULL != mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, "NULL != mpNetworkManager");
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         BrnServerInterfaceDownloadableConfig* lpConfig = lpServerInterface->GetDownloadableConfigComponent();
@@ -420,7 +420,7 @@ namespace BrnNetwork
     // X360 0x82543D88
     void LoginManagerBase::PrepareLoadSettings()
     {
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO) == BrnServerInterface::E_STATUS_IDLE)
@@ -433,7 +433,7 @@ namespace BrnNetwork
     // X360 0x82543E08
     void LoginManagerBase::PreparePingRegions()
     {
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PING_REGIONS) == BrnServerInterface::E_STATUS_IDLE)
@@ -479,7 +479,7 @@ namespace BrnNetwork
     // X360 0x8254F880
     void LoginManagerBase::UpdateConnectingOnline()
     {
-        if (NetConnStatus(KI_NETCONNSTATUS_ONLINE_SELECTOR, 0, nullptr, 0) == 1)
+        if (NetConnStatus(KI_NETCONNSTATUS_ONLINE_SELECTOR, 0, 0, 0) == 1)
         {
             BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
             meSubState = E_SUBSTATE_CONNECTING_DS;
@@ -490,7 +490,7 @@ namespace BrnNetwork
             lpServerInterface->GetConnectionComponent()->ConnectToServer(lpcServerIP, liServerPort,
                                                                          KI_DS_CONNECT_TIMEOUT_MS);
         }
-        else if ((NetConnStatus(KI_NETCONNSTATUS_CONNECT_SELECTOR, 0, nullptr, 0) >> 24) == KI_NETCONNSTATUS_ERROR_HIGH_BYTE)
+        else if ((NetConnStatus(KI_NETCONNSTATUS_CONNECT_SELECTOR, 0, 0, 0) >> 24) == KI_NETCONNSTATUS_ERROR_HIGH_BYTE)
         {
             Finished(false);
         }
@@ -619,10 +619,10 @@ namespace BrnNetwork
                 ++lpText;
             }
 
-            if (mpTOS != nullptr)
+            if (mpTOS != 0)
             {
                 CgsNetwork::ServerInterfaceDirtySock::MemFree(mpTOS, 0, 0);
-                mpTOS = nullptr;
+                mpTOS = 0;
             }
 
             const s32 liBufferSize = lpServerInterface->GetDownloadableConfigComponent()->TOSBufferSize();

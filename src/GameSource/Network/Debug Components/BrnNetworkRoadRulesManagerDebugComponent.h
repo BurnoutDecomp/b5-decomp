@@ -26,9 +26,9 @@ namespace BrnNetwork
         void Destruct();
 
     protected:
-        const char* GetName() const override;   // @ 0x82586398 -> "Road Rules"
-        const char* GetPath() const override;   // "Network"
-        void        OnActivate() override;       // @ 0x8258AF90
+        const char* GetName() const ;   // @ 0x82586398 -> "Road Rules"
+        const char* GetPath() const ;   // "Network"
+        void        OnActivate() ;       // @ 0x8258AF90
 
     private:
         // Static debug-menu action callbacks registered in OnActivate; the void* user-data the menu

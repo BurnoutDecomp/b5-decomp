@@ -41,9 +41,9 @@ f32 KF_MAX_REVERSE_PITCH = 1.2f;   // ARTIST flt_82F2CD0C
 BrnSound::Logic::IResourceRequester* DualGinsuExhaustEffect::Creat( s32 /*aiFlavour*/ )
 {
     DualGinsuExhaustEffect* lpEffect = new DualGinsuExhaustEffect();
-    if ( lpEffect == nullptr )
+    if ( lpEffect == 0 )
     {
-        return nullptr;
+        return 0;
     }
     // addi r3, r3, 4 -- hand the object back as its IResourceRequester sub-object.
     return static_cast<BrnSound::Logic::IResourceRequester*>(lpEffect);
@@ -186,7 +186,7 @@ void DualGinsuExhaustEffect::ProcessUpdate()
     if (!mCarSubmix.GetVoiceObject())
         return;
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 

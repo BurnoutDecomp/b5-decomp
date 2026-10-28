@@ -26,8 +26,8 @@ namespace Gen
     class languagestreamconfiguration : private Instance
     {
     public:
-        explicit languagestreamconfiguration(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit languagestreamconfiguration(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit languagestreamconfiguration(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit languagestreamconfiguration(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner) {}
 
         // Resolve the per-index data pointer for this instance's ContentSpecs array

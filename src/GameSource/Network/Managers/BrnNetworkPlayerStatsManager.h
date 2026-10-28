@@ -175,13 +175,13 @@ namespace BrnNetwork
 
     inline void NetworkPlayerStatsManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, maStatsUpdateEntry) == 0x28C, "maStatsUpdateEntry @ +0x28C");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mPlayerStatsCache) == 0x578, "mPlayerStatsCache @ +0x578");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mBufferedOnlineStats) == 0x1620, "mBufferedOnlineStats @ +0x1620");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mBufferedOfflineProgression) == 0x1728, "mBufferedOfflineProgression @ +0x1728");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mpNetworkModule) == 0x176C, "mpNetworkModule @ +0x176C");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, meCurrentStatus) == 0x177C, "meCurrentStatus @ +0x177C");
-        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mbWaitingToUploadStats) == 0x1784, "mbWaitingToUploadStats @ +0x1784");
-        static_assert(sizeof(void*) != 4 || sizeof(NetworkPlayerStatsManager) == 0x1788, "NetworkPlayerStatsManager is 0x1788 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, maStatsUpdateEntry) == 0x28C), "maStatsUpdateEntry @ +0x28C");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mPlayerStatsCache) == 0x578), "mPlayerStatsCache @ +0x578");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mBufferedOnlineStats) == 0x1620), "mBufferedOnlineStats @ +0x1620");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mBufferedOfflineProgression) == 0x1728), "mBufferedOfflineProgression @ +0x1728");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mpNetworkModule) == 0x176C), "mpNetworkModule @ +0x176C");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, meCurrentStatus) == 0x177C), "meCurrentStatus @ +0x177C");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mbWaitingToUploadStats) == 0x1784), "mbWaitingToUploadStats @ +0x1784");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(NetworkPlayerStatsManager) == 0x1788), "NetworkPlayerStatsManager is 0x1788 bytes");
     }
 }

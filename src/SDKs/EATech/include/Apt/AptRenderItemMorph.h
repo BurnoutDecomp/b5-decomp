@@ -31,7 +31,7 @@
 
 struct AptCharacter;
 class AptRenderingContext;
-enum AptMaskRenderOperation : int;
+enum AptMaskRenderOperation ;
 
 struct AptRenderItemMorph : public AptRenderItem
 {
@@ -46,8 +46,8 @@ struct AptRenderItemMorph : public AptRenderItem
     // render-type flag. (mfRatio is likewise set by the per-tick update.)
     AptRenderItemMorph(const AptRenderItemMorph* pSource, int nCreatedOnTick, bool bCopyExtended);
 
-    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;   // @0x82AECA30
-    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;  // @0x82AFEEC0
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) ;   // @0x82AECA30
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const ;  // @0x82AFEEC0
     virtual ~AptRenderItemMorph();   // @0x82AECAA8 (trivial; base frees the pool block)
 
     // GetRatio @0x82AD5058 -- the current morph blend ratio.

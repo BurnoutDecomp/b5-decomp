@@ -197,5 +197,5 @@ namespace BrnGameState
         TakedownManagerDebugComponent      mTakedownManagerDebugComponent;      // +676
     };
 
-    static_assert(sizeof(TakedownManager::RaceCarData) == 80, "TakedownManager::RaceCarData is 80 B on X360 and must stay so here (maRaceCarData stride)");
+    CGS_STATIC_ASSERT((sizeof(TakedownManager::RaceCarData) == 80), "TakedownManager::RaceCarData is 80 B on X360 and must stay so here (maRaceCarData stride)");
 }

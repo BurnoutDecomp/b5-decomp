@@ -194,7 +194,7 @@ namespace BrnNetwork
     inline void MatchMakingManager::_AssertLayout()
     {
 #define BRN_MMM_AT(member, off) \
-        static_assert(sizeof(void*) != 4 || offsetof(MatchMakingManager, member) == (off), #member " @ " #off)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(MatchMakingManager, member) == (off)), #member " @ " #off)
         BRN_MMM_AT(maUpdateFunctions,     0x080);
         BRN_MMM_AT(maActionFunctions,     0x090);
         BRN_MMM_AT(maeComponentToUse,     0x0C0);
@@ -213,9 +213,9 @@ namespace BrnNetwork
         BRN_MMM_AT(mun8NextAction,        0x1610);
         BRN_MMM_AT(mbCreateGameServerGame, 0x1611);
 #undef BRN_MMM_AT
-        static_assert(sizeof(void*) != 4 || sizeof(GameParams) == 0x5D0, "GameParams is 0x5D0 bytes");
-        static_assert(sizeof(void*) != 4 || sizeof(GameSearchParams) == 0x390, "GameSearchParams is 0x390 bytes");
-        static_assert(sizeof(void*) != 4 || sizeof(MatchMakingManager) == 0x1614, "MatchMakingManager is 0x1614 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(GameParams) == 0x5D0), "GameParams is 0x5D0 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(GameSearchParams) == 0x390), "GameSearchParams is 0x390 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(MatchMakingManager) == 0x1614), "MatchMakingManager is 0x1614 bytes");
     }
 
     inline void MatchMakingManager::SearchForGames(const GameSearchParams* lpSearchParams,

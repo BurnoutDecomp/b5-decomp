@@ -17,7 +17,7 @@ namespace CgsAttribSys
 // sbSchemaLoaded enforces "only one schema loaded at a time"; spVaultArray is published by
 // Construct (X360 dword_83011BB4) and handed back by GetVaultArray.
 bool        AttribSysModule::sbSchemaLoaded = false;
-VaultArray* AttribSysModule::spVaultArray   = nullptr;
+VaultArray* AttribSysModule::spVaultArray   = 0;
 // ARTIST off_82F31050 is shared with AttribSysDebugComponent::OnActivate.
 CgsDev::DebugUI::LogWindow sLogWindow;
 
@@ -78,7 +78,7 @@ void AttribSysModule::Construct()
     siLogLineCount = 0;
 
     mGarbageCollector.Construct();
-    mpSchemaVault  = nullptr;
+    mpSchemaVault  = 0;
     mePrepareStage = E_PREPARESTAGE_START;
     meReleaseStage = E_RELEASESTAGE_DONE;
 
@@ -118,7 +118,7 @@ void AttribSysModule::AttribulatorGameTalkHandler(EA::GameTalk::GameTalkMessage*
     // bl sub_82837E08(msg, "Update") == GameTalkMessage::GetKeyContent("Update"); its result
     // (NULL when the key is absent) is the r3 forwarded straight into DecodeLiveLinkMessage.
     const char* lpcUpdate = lpMessage->GetKeyContent("Update");
-    if (lpcUpdate != nullptr)
+    if (lpcUpdate != 0)
     {
         Attrib::DecodeLiveLinkMessage(lpcUpdate);
     }
@@ -146,10 +146,10 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
         case E_PREPARESTAGE_MEMORY:
             mePrepareStage = E_PREPARESTAGE_MEMORY;
 
-            CGS_ASSERT(lpLinearAlloc   != nullptr, "lpLinearAlloc != NULL");
-            CGS_ASSERT(lpAttribSysHeap != nullptr, "lpAttribSysHeap != NULL");
-            CGS_ASSERT(lpGameTalkHeap  != nullptr, "lpGameTalkHeap != NULL");
-            CGS_ASSERT(lpEastlHeap     != nullptr, "lpEastlHeap != NULL");
+            CGS_ASSERT(lpLinearAlloc   != 0, "lpLinearAlloc != NULL");
+            CGS_ASSERT(lpAttribSysHeap != 0, "lpAttribSysHeap != NULL");
+            CGS_ASSERT(lpGameTalkHeap  != 0, "lpGameTalkHeap != NULL");
+            CGS_ASSERT(lpEastlHeap     != 0, "lpEastlHeap != NULL");
             CGS_ASSERT(liMaxNumVaults > 0,         "liMaxNumVaults > 0");
 
             AttribSysMemoryManager::Prepare(lpLinearAlloc, lpAttribSysHeap,
@@ -158,7 +158,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
 
             mpSchemaVault = static_cast<Attrib::Vault*>(
                 lpLinearAlloc->Malloc(KI_SCHEMA_VAULT_BYTES));
-            CGS_ASSERT(mpSchemaVault != nullptr, "mpSchemaVault != NULL");
+            CGS_ASSERT(mpSchemaVault != 0, "mpSchemaVault != NULL");
 
             mePrepareStage++;
             // fall through
@@ -210,7 +210,7 @@ void AttribSysModule::Destruct()
 // run an attribute-database garbage-collect pass.
 void AttribSysModule::Update(const AttribSysIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");
 
     ProcessInputs(lpInputBuffer);
 
@@ -225,13 +225,13 @@ void AttribSysModule::Update(const AttribSysIO::InputBuffer* lpInputBuffer)
 // the event type id (0 RegisterVault, 1 RegisterSchema, 2 UnregisterVault).
 void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");
 
     lpInputBuffer->LockForRead();
 
     const AttribSysIO::AttribSysEventQueue* lpQueue = AttribSysIO::Inp(lpInputBuffer);
 
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     for (s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
          liEventType >= 0;
@@ -296,8 +296,8 @@ void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegis
 {
     CGS_ASSERT(!IsSchemaLoaded(), "!IsSchemaLoaded()");
 
-    Attrib::Vault* lpNewVault = nullptr;
-    if (mpSchemaVault != nullptr)
+    Attrib::Vault* lpNewVault = 0;
+    if (mpSchemaVault != 0)
     {
         // Placement-construct the schema vault over the request's serialised image. (The X360
         // build passes the schema-vault storage in as the Vault ctor's `this`.)

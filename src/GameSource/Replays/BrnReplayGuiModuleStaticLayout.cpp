@@ -22,21 +22,21 @@ namespace BrnReplays
 {
     void GuiModuleStaticLayout::_AssertLayout()
     {
-        static_assert(offsetof(GuiModuleStaticLayout, mbMessageStart) == 0x0180,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, mbMessageStart) == 0x0180),
                       "mbMessageStart @0x0180 (StartMessage/Reset store)");
-        static_assert(offsetof(GuiModuleStaticLayout, mbMessageActive) == 0x0181,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, mbMessageActive) == 0x0181),
                       "mbMessageActive @0x0181 (EndMessage byte 0x181)");
-        static_assert(offsetof(GuiModuleStaticLayout, maCarRecordsA) == 0x0190,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, maCarRecordsA) == 0x0190),
                       "maCarRecordsA @0x0190 (Reset/SetupStartOfFrame loop base)");
-        static_assert(offsetof(GuiModuleStaticLayout, mauCarRecordsC) == 0x0290,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, mauCarRecordsC) == 0x0290),
                       "mauCarRecordsC @0x0290 (std qword loop base)");
-        static_assert(offsetof(GuiModuleStaticLayout, maCarFlagsBuffer0) == 0x02D0,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, maCarFlagsBuffer0) == 0x02D0),
                       "maCarFlagsBuffer0 @0x02D0 (parity==0 buffer)");
-        static_assert(offsetof(GuiModuleStaticLayout, maCarFlagsBuffer1) == 0x0350,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, maCarFlagsBuffer1) == 0x0350),
                       "maCarFlagsBuffer1 @0x0350 (parity==1 buffer)");
-        static_assert(offsetof(GuiModuleStaticLayout, mbFrameParity) == 0x03D0,
+        CGS_STATIC_ASSERT((offsetof(GuiModuleStaticLayout, mbFrameParity) == 0x03D0),
                       "mbFrameParity @0x03D0 (SetupStartOfFrame toggle)");
-        static_assert(sizeof(GuiModuleStaticLayout) == 0x03E0,
+        CGS_STATIC_ASSERT((sizeof(GuiModuleStaticLayout) == 0x03E0),
                       "GuiModuleStaticLayout == 992 bytes (GuiModuleSerialiser static size)");
     }
 

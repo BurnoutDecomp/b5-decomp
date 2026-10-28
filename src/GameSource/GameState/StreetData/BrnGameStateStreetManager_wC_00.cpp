@@ -71,7 +71,7 @@ namespace
         s32                                      miSaveGameSlotIndex;   // +0x28
         u8                                       mu8Flag;               // +0x2C
     };
-    static_assert( sizeof(NewRoadScoreRecord) == 48, "new-road-score record is 0x30" );
+    CGS_STATIC_ASSERT(( sizeof(NewRoadScoreRecord) == 48), "new-road-score record is 0x30" );
 }
 
 namespace BrnGameState

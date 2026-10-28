@@ -34,7 +34,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (the layout static_asserts below)
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptCharacter.h"    // AptCharacter (table entries)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"     // AptFilePtr (import + IncCharacterList)
@@ -183,6 +183,6 @@ struct AptCharacterAnimation
 // def+0x30 is the authored frame period, def+0x50 the resolve walk's accumulator -- the
 // XB1 CompleteLoad sub_1408348B0 clears ONLY the latter (`mov qword ptr [r10+50h], 0`).
 
-static_assert(sizeof(AptImportEntry) == 16, "ARTIST import entry");
-static_assert(sizeof(AptInitEntry) == 8, "ARTIST init entry");
-static_assert(offsetof(AptCharacterAnimation, mnParsedValueCount) == 0x30, "ARTIST resolve counter");
+CGS_STATIC_ASSERT((sizeof(AptImportEntry) == 16), "ARTIST import entry");
+CGS_STATIC_ASSERT((sizeof(AptInitEntry) == 8), "ARTIST init entry");
+CGS_STATIC_ASSERT((offsetof(AptCharacterAnimation, mnParsedValueCount) == 0x30), "ARTIST resolve counter");

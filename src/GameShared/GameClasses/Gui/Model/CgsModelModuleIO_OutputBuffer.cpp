@@ -78,10 +78,10 @@ namespace ModelIO
 
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mResourceRequestQueue) == 0x00004, "mResourceRequestQueue @0x0004");
-        static_assert(offsetof(OutputBuffer, mGuiOutEvents)        == 0x00814, "mGuiOutEvents @0x0814 (2068)");
-        static_assert(offsetof(OutputBuffer, mViewOutEvents)       == 0x05024, "mViewOutEvents @0x5024 (20516)");
-        static_assert(offsetof(OutputBuffer, mLoadNotifications)   == 0x15034, "mLoadNotifications @0x15034 (86068)");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mResourceRequestQueue) == 0x00004), "mResourceRequestQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGuiOutEvents)        == 0x00814), "mGuiOutEvents @0x0814 (2068)");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mViewOutEvents)       == 0x05024), "mViewOutEvents @0x5024 (20516)");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mLoadNotifications)   == 0x15034), "mLoadNotifications @0x15034 (86068)");
     }
 
     // X360 0x8284F940: read-lock (bit 4) const handle to the GUI resource-request queue (this+4).

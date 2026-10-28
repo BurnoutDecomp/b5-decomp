@@ -128,7 +128,7 @@ namespace BrnNetwork
     void LiveRevengeDebugComponent::AddPlayer(LiveRevengeRelationship* lpRelationship)
     {
         const CgsNetwork::PlayerName* lpRivalName = lpRelationship->GetRivalName();
-        CGS_ASSERT(lpRivalName != nullptr, "lpRelationship->GetRivalName()");
+        CGS_ASSERT(lpRivalName != 0, "lpRelationship->GetRivalName()");
 
         const char* lpcRivalName = lpRivalName->GetPlayerName();
         if (lpcRivalName[0] != '\0')
@@ -184,9 +184,9 @@ namespace BrnNetwork
 
         UnregisterAll(lpDebugComponent);
 
-        CGS_ASSERT(lpDebugComponent != nullptr, "lpDebugComponent");
-        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != nullptr, "lpDebugComponent->mpLiveRevengeManager");
-        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager->GetProfile() != nullptr,
+        CGS_ASSERT(lpDebugComponent != 0, "lpDebugComponent");
+        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != 0, "lpDebugComponent->mpLiveRevengeManager");
+        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager->GetProfile() != 0,
                    "lpDebugComponent->mpLiveRevengeManager->mpLiveRevengeProfile");
 
         LiveRevengeProfile* lpProfile = lpDebugComponent->mpLiveRevengeManager->GetProfile();
@@ -202,9 +202,9 @@ namespace BrnNetwork
     {
         LiveRevengeDebugComponent* lpDebugComponent = static_cast<LiveRevengeDebugComponent*>(lpUserData);
 
-        CGS_ASSERT(lpDebugComponent != nullptr, "lpDebugComponent");
-        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != nullptr, "lpDebugComponent->mpLiveRevengeManager");
-        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager->GetProfile() != nullptr,
+        CGS_ASSERT(lpDebugComponent != 0, "lpDebugComponent");
+        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != 0, "lpDebugComponent->mpLiveRevengeManager");
+        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager->GetProfile() != 0,
                    "lpDebugComponent->mpLiveRevengeManager->mpLiveRevengeProfile");
 
         LiveRevengeProfile* lpProfile = lpDebugComponent->mpLiveRevengeManager->GetProfile();
@@ -225,8 +225,8 @@ namespace BrnNetwork
     {
         LiveRevengeDebugComponent* lpDebugComponent = static_cast<LiveRevengeDebugComponent*>(lpUserData);
 
-        CGS_ASSERT(lpDebugComponent != nullptr, "lpDebugComponent");
-        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != nullptr, "lpDebugComponent->mpLiveRevengeManager");
+        CGS_ASSERT(lpDebugComponent != 0, "lpDebugComponent");
+        CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != 0, "lpDebugComponent->mpLiveRevengeManager");
 
         lpDebugComponent->mpLiveRevengeManager->SendLiveRevengeRivalsToServer();
     }

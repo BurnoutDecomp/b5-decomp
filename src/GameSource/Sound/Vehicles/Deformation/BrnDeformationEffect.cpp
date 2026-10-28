@@ -87,7 +87,7 @@ const char* DeformationEffect::GetTypeName() const
 void DeformationEffect::SetupLoadData()
 {
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
-        "sound\\aems\\CRUMPLEPATCHBANK.BUNDLE", nullptr,
+        "sound\\aems\\CRUMPLEPATCHBANK.BUNDLE", 0,
         BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
@@ -215,11 +215,11 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
     if (mbDeforming.GetCurrent())
     {
         const auto* lpDeformation = lpInput->GetDeformationInterface().mpDeformationState;
-        if (lpDeformation != nullptr)
+        if (lpDeformation != 0)
         {
             const auto* lpCar = lpDeformation->GetCarStateF(
                 mpPhysicsControl->GetRawPhysicsData()->mEntityId.muValue);
-            if (lpCar != nullptr)
+            if (lpCar != 0)
             {
                 const bool lbRising = !mbDeforming.GetPrevious();
                 if (lbRising)

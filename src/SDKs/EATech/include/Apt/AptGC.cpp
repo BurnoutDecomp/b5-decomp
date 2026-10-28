@@ -82,14 +82,14 @@ void* AptGC::sReferenceRegistrationCb(const AptValue* /*pOwner*/, void* pSlot,
 void AptGC::CleanAll()
 {
     // 1. Flush anything queued for deferred release.
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
 
     // 2. Pre-destroy every live value (drop its GC pointers) with refcount-driven
     //    deletion suspended, so the graph stays walkable while it is dismantled.
     const bool bWasSuspended = AptValue::sbSuspendRefcountDeletions;
     AptValue::sbSuspendRefcountDeletions = true;
-    if (gpGCPoolManager != nullptr)
+    if (gpGCPoolManager != 0)
     {
         for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue;
              pValue = gpGCPoolManager->GetNextAptValue(pValue))
@@ -102,9 +102,9 @@ void AptGC::CleanAll()
 
     // 3. Flush again (PreDestroy may have queued more), then delete every value
     //    (fetching the next link before deleting the current one).
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
-    if (gpGCPoolManager != nullptr)
+    if (gpGCPoolManager != 0)
     {
         for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue; )
         {
@@ -115,7 +115,7 @@ void AptGC::CleanAll()
     }
 
     // 4. Final flush, then clear the value free-lists / temporary string pool.
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
     AptInteger::ClearPool();
     AptFloat::ClearPool();
@@ -138,7 +138,7 @@ void AptGC::CleanAll()
 // live count@+4 (mnCapacity member), items@+8} allocated by AptUpdateInitialize
 // from config word [14] (default 8) -- see AptInit.cpp.
 // ===========================================================================
-AptValueVector* gpAptZombieVector = nullptr;    // off_8324E528 / qword_14147A398
+AptValueVector* gpAptZombieVector = 0;    // off_8324E528 / qword_14147A398
 
 // byte_8324E38F / XB1 byte_14147A0F2 -- "zombies changed this frame": set by the
 // zombie push + every reap that frees one; the per-frame update tail uses it to
@@ -153,7 +153,7 @@ bool gbAptZombiesDirty = false;
 // customization hook that defaults OFF on the console too; the null check is
 // the shipped form.
 void (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
-                              const char* pInstanceName, const char* pFileName) = nullptr;
+                              const char* pInstanceName, const char* pFileName) = 0;
 
 // ---------------------------------------------------------------------------
 // AptUpdateZombieVector -- the zombie reap (XB1 sub_140830A40; the X360 body is
@@ -170,8 +170,8 @@ void (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
 void* AptUpdateZombieVector(char bClear)
 {
     AptValueVector* pVec = gpAptZombieVector;
-    if (pVec == nullptr)
-        return nullptr;
+    if (pVec == 0)
+        return 0;
 
     // Family-(B) fields: capacity == mnTop (+0), live count == mnCapacity (+4).
     for (int i = pVec->mnCapacity - 1; i >= 0; --i)
@@ -192,10 +192,10 @@ void* AptUpdateZombieVector(char bClear)
         if (nNewCount != 0 && i != nNewCount)
             std::memmove(&pVec->mppItems[i], &pVec->mppItems[i + 1],
                          sizeof(AptValue*) * static_cast<size_t>(nNewCount - i));
-        pVec->mppItems[nNewCount] = nullptr;
+        pVec->mppItems[nNewCount] = 0;
 
         AptCharacterInst* pInst = pZombie->GetCharacterInst();
-        if (pInst != nullptr)
+        if (pInst != 0)
         {
             pZombie->SetCIHState(0);
 
@@ -205,7 +205,7 @@ void* AptUpdateZombieVector(char bClear)
             // type-9 animation insts ever enter the vector).
             AptFile* pFile =
                 static_cast<AptCharacterAnimationInst*>(pInst)->mAnimationFilePtr.pData;
-            if (pFile != nullptr)
+            if (pFile != 0)
             {
                 pFile->mnField12 = pFile->mnState;
                 pFile->mnState   = 4;
@@ -216,7 +216,7 @@ void* AptUpdateZombieVector(char bClear)
             gbAptZombiesDirty = true;
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ void* AptUpdateZombieVector(char bClear)
 // ---------------------------------------------------------------------------
 void AptFlushDeferredReleases()
 {
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -276,17 +276,17 @@ void AptPartialGarbageCollection()
 void AptGC::CleanUnreachable()
 {
     // 1. Flush anything already queued for deferred release.
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
 
-    if (gpGCPoolManager == nullptr)
+    if (gpGCPoolManager == 0)
         return;
 
     // 2. Mark every value reachable from a GC root.
     uint32_t luRoots = 0u;   // [aptlife] instrumentation only (see the witness below)
     AptValue::ReferenceRegistrationCb pPrevCb = AptValue::sReferenceRegistrationCb;
     AptValue::sReferenceRegistrationCb = &AptGC::sReferenceRegistrationCb;
-    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr;
+    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != 0;
          pValue = gpGCPoolManager->GetNextAptValue(pValue))
     {
         if (pValue->getGCRoot() == 0u || pValue->getGCMark())
@@ -302,7 +302,7 @@ void AptGC::CleanUnreachable()
     //    so tearing one down cannot free another mid-walk.
     const bool bWasSuspended = AptValue::sbSuspendRefcountDeletions;
     AptValue::sbSuspendRefcountDeletions = true;
-    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr;
+    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != 0;
          pValue = gpGCPoolManager->GetNextAptValue(pValue))
     {
         if (pValue->getGCMark())
@@ -317,7 +317,7 @@ void AptGC::CleanUnreachable()
     uint32_t luVisited = 0u;
     uint32_t luDeleted = 0u;
     uint32_t luMarked  = 0u;   // [aptlife] instrumentation only
-    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr; )
+    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != 0; )
     {
         AptValue* const pNext = gpGCPoolManager->GetNextAptValue(pValue);
         ++luVisited;
@@ -346,7 +346,7 @@ void AptGC::CleanUnreachable()
     // EVERY pass prints (the rate limit hid exactly the passes that mattered).
 
     // 5. Final flush, then the value free-lists / temporary string pool.
-    if (gpValuesToRelease != nullptr)
+    if (gpValuesToRelease != 0)
         gpValuesToRelease->ReleaseValues();
     AptInteger::ClearPool();
     AptFloat::ClearPool();
@@ -359,11 +359,11 @@ void AptGC::CleanUnreachable()
 // ---------------------------------------------------------------------------
 void AptFlushInputQueue()
 {
-    if (gpAptSavedInputStream != nullptr)
+    if (gpAptSavedInputStream != 0)
         return;
 
     AptAnimationTarget* pAnimationTarget =
-        (gpAptTarget != nullptr) ? gpAptTarget->mpAnimationTarget : nullptr;
-    if (pAnimationTarget != nullptr)
+        (gpAptTarget != 0) ? gpAptTarget->mpAnimationTarget : 0;
+    if (pAnimationTarget != 0)
         pAnimationTarget->SetQueuedInputsSize(0);
 }

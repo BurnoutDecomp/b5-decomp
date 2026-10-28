@@ -363,8 +363,8 @@ void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1
     const bool labThreadOk[3]  = { lbThread0, lbThread1, lbThread2 };
 
     mIm2dRenderer.BeginRendering();
-    mIm2dRenderer.SetState(static_cast<const CgsGraphics::BlendState*>(nullptr));
-    mIm2dRenderer.SetTexture(nullptr);   // untextured -> solid vertex colour
+    mIm2dRenderer.SetState(static_cast<const CgsGraphics::BlendState*>(0));
+    mIm2dRenderer.SetTexture(0);   // untextured -> solid vertex colour
     for (s32 liThread = 0; liThread < 3; ++liThread)
     {
         const CgsGraphics::RGBA8 lColour = labThreadOk[liThread] ? KC_GREEN : KC_RED;
@@ -516,18 +516,18 @@ namespace
     // during the loading screen (before renderengine::gDevice exists) would burn the single
     // attempt and the target would never be built. The pointer below only becomes non-null once
     // a real CgsRenderTarget is in pool slot 1.
-    CgsRenderTarget* gpShadowMapTarget = nullptr;
+    CgsRenderTarget* gpShadowMapTarget = 0;
 
     bool EnsureShadowMapTarget(BrnRendererMemory& lrRendererMemory)
     {
-        if (gpShadowMapTarget != nullptr)
+        if (gpShadowMapTarget != 0)
             return true;
               // no device yet -- retry next frame
         if (!EnsureWorldDispatchAllocator())
             return false;
 
         gpShadowMapTarget = lrRendererMemory.GetShadowMapBuffer(0);
-        return gpShadowMapTarget != nullptr;
+        return gpShadowMapTarget != 0;
     }
 
    // X360 flt_82004014 (DATA_DUMP.md)
@@ -550,7 +550,7 @@ namespace
     // ⚠️ ORDER IS LOAD-BEARING: PCBringUpCreateShadowMapBufferOnly NULLS EVERY POOL SLOT before it
     // fills the shadow one, so it must run FIRST. EnsureShadowMapTarget is called before this on every
     // path below, and this function additionally refuses to run until that target exists.
-    CgsRenderTarget* gpAntiAliasTarget = nullptr;
+    CgsRenderTarget* gpAntiAliasTarget = 0;
 
     // lbEnableMSAA is BrnRendererModule::mbMultisampledBackbuffer, threaded from the caller instead
     // of re-derived here: on the console that ONE byte both selects the anti-alias buffer's tiling
@@ -559,10 +559,10 @@ namespace
     // multisampled target ends up driven by the untiled bracket, which nothing would report.
     bool EnsurePostFxSceneTargets(BrnRendererMemory& lrRendererMemory, bool lbEnableMSAA)
     {
-        if (gpAntiAliasTarget != nullptr)
+        if (gpAntiAliasTarget != 0)
             return true;
               // no device yet -- retry next frame
-        if (gpShadowMapTarget == nullptr)
+        if (gpShadowMapTarget == 0)
             return false;              // the slot-nulling pass has not run yet (see above)
         if (!EnsureWorldDispatchAllocator())
             return false;
@@ -584,8 +584,8 @@ namespace
         // failure where every other PC bring-up guard in this file already lives: the bracket simply
         // never opens, the world keeps drawing straight to the back buffer, and the frame degrades
         // instead of crashing.
-        const bool lbTargetsReady = gpAntiAliasTarget != nullptr
-            && gpAntiAliasTarget->GetRenderTarget() != nullptr;
+        const bool lbTargetsReady = gpAntiAliasTarget != 0
+            && gpAntiAliasTarget->GetRenderTarget() != 0;
 
 #if BRN_POSTFX_COMPOSITE_AVAILABLE
         // The console's BrnPostFx::Construct runs from BrnRendererModule::Construct @0x8240A778
@@ -629,32 +629,32 @@ namespace
     // neighbours above carry the same note. `gbEnvMapTargetRefused` is a SEPARATE latch and is only
     // ever set after a real creation attempt has been made and judged.
     // =============================================================================================
-    CgsRenderTarget* gpEnvMapTarget       = nullptr;
+    CgsRenderTarget* gpEnvMapTarget       = 0;
     bool             gbEnvMapTargetRefused = false;
 
     bool EnsureEnvMapTarget(BrnRendererMemory& lrRendererMemory)
     {
-        if (gpEnvMapTarget != nullptr)
+        if (gpEnvMapTarget != 0)
             return true;
         if (gbEnvMapTargetRefused)
             return false;
               // no device yet -- retry next frame
-        if (gpShadowMapTarget == nullptr)
+        if (gpShadowMapTarget == 0)
             return false;              // the slot-nulling pass has not run yet (see the note above it)
         if (!EnsureWorldDispatchAllocator())
             return false;
 
         CgsRenderTarget* const lpTarget = lrRendererMemory.GetEnvMapBuffer();
         rw::graphics::postfx::RenderTarget* const lpRenderTarget =
-            (lpTarget != nullptr) ? lpTarget->GetRenderTarget() : nullptr;
+            (lpTarget != 0) ? lpTarget->GetRenderTarget() : 0;
         renderengine::Texture* const lpColourTexture =
-            (lpRenderTarget != nullptr) ? lpRenderTarget->GetTexture(0) : nullptr;
+            (lpRenderTarget != 0) ? lpRenderTarget->GetTexture(0) : 0;
 
-        const u32 luWidth  = (lpTarget != nullptr) ? lpTarget->GetWidth()  : 0u;
-        const u32 luHeight = (lpTarget != nullptr) ? lpTarget->GetHeight() : 0u;
+        const u32 luWidth  = (lpTarget != 0) ? lpTarget->GetWidth()  : 0u;
+        const u32 luHeight = (lpTarget != 0) ? lpTarget->GetHeight() : 0u;
         const s32 lnMultisampleRequested =
-            (lpTarget != nullptr) ? lpTarget->GetMultisampleFormat() : 0;
-        const s32 lnTextureType = (lpColourTexture != nullptr)
+            (lpTarget != 0) ? lpTarget->GetMultisampleFormat() : 0;
+        const s32 lnTextureType = (lpColourTexture != 0)
             ? static_cast<s32>(renderengine::Texture::GetType(lpColourTexture))
             : -1;
         // The D3D object itself, reported as a pointer rather than as a D3DRTYPE. Reading
@@ -664,10 +664,10 @@ namespace
         // What this line owes, and pays, is the OTHER half of rule 9: a non-degenerate EXTENT and a
         // real object, or a refusal.
         void* const lpD3DObject =
-            (lpColourTexture != nullptr) ? static_cast<void*>(lpColourTexture->mpD3DTexture) : 0;
+            (lpColourTexture != 0) ? static_cast<void*>(lpColourTexture->mpD3DTexture) : 0;
 
-        const bool lbUsable = (lpTarget != nullptr) && (lpRenderTarget != nullptr)
-                           && (lpColourTexture != nullptr)
+        const bool lbUsable = (lpTarget != 0) && (lpRenderTarget != 0)
+                           && (lpColourTexture != 0)
                            && (lpD3DObject != 0)
                            && (lnTextureType == static_cast<s32>(renderengine::Texture::E_TYPE_CUBE))
                            && (luWidth != 0u) && (luHeight != 0u);
@@ -676,11 +676,11 @@ namespace
         {
             *CgsDev::Log::gpDebugPrint
                 << "[envmap] target " << static_cast<s32>(luWidth) << "x" << static_cast<s32>(luHeight)
-                << " sections=" << static_cast<s32>((lpTarget != nullptr) ? lpTarget->GetNumSections() : 0u)
+                << " sections=" << static_cast<s32>((lpTarget != 0) ? lpTarget->GetNumSections() : 0u)
                 << " msaaReqFormat=" << lnMultisampleRequested << "(console; 2==4x)"
                 << " colourTexture=type" << lnTextureType << " (3==E_TYPE_CUBE, create-time metadata)"
                 << " depthTex=" << static_cast<void*>(
-                       (lpRenderTarget != nullptr) ? lpRenderTarget->GetDepthStencilTexture() : 0)
+                       (lpRenderTarget != 0) ? lpRenderTarget->GetDepthStencilTexture() : 0)
                 << " d3dObject=" << lpD3DObject
                 << " -> "
                 << (lbUsable ? "USABLE" : "REFUSED -- the env-map pass and sampler 13 stay off")
@@ -978,7 +978,7 @@ void BrnRendererModule::Construct()
     rw::ResourceDescriptor lTextureStateDescriptor;
     renderengine::TextureState::GetResourceDescriptor(&lTextureStateDescriptor);
     mTextureStateResource = BrnResource::Allocators::GetGlobalGraphicsAllocator()->DoAllocate(
-        lTextureStateDescriptor, nullptr);
+        lTextureStateDescriptor, 0);
 
     // ARTIST @8240BF30..BF54 initializes the inlined shadow manager before the loading screen.
     mShadowMapRenderManager.Construct(2);
@@ -1101,7 +1101,7 @@ CgsGraphics::DispatchFrame* BrnRendererModule::GetDispatchFrameForWrite()
 void BrnRendererModule::StartOfFrame()
 {
 
-    if (mpInterpreter != nullptr)
+    if (mpInterpreter != 0)
         mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
 
     // Original seven write-buffer rewinds, in their original order.
@@ -1113,7 +1113,7 @@ void BrnRendererModule::StartOfFrame()
     mIm3dBufferRacePosition.Clear();
     mIm3dBufferMenusAndHud.Clear();
 
-    if (mpInterpreter != nullptr)
+    if (mpInterpreter != 0)
         CgsGraphics::mShaderConstantTable.BeginFrame(
             &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
     // ARTIST 823FC2D0..2F0 clears the cache word of all seven purposes.
@@ -1127,7 +1127,7 @@ void BrnRendererModule::StartOfFrame()
 void BrnRendererModule::SwapBuffers()
 {
 
-    if (mpInterpreter != nullptr)
+    if (mpInterpreter != 0)
     {
         mDoubleBufferedDispatchFrame.Swap();
     }
@@ -1203,7 +1203,7 @@ namespace
     // submission and does not reclaim the bin until every conversion has joined.
     CgsGraphics::DispatchCommand* spObjectToMeshSharedMemory;
     u32 suObjectToMeshSharedBlockMax;
-    alignas(128) u32 suObjectToMeshNextBlock;
+    CGS_ALIGN(128) u32 suObjectToMeshNextBlock;
 }
 
 // ARTIST 823F5670: copy the job record, clear the job, then set code/data/name.
@@ -1211,8 +1211,8 @@ static void FillInObjectToMeshJobData(EA::Jobs::Job* lpOutJob,
                                      ObjectToMeshJobInfo* lpOutJobData,
                                      const ObjectToMeshJobInfo* lpInput)
 {
-    CGS_ASSERT(lpOutJobData != nullptr, "lpOutJobData");
-    CGS_ASSERT(lpOutJob != nullptr, "lpOutJob");
+    CGS_ASSERT(lpOutJobData != 0, "lpOutJobData");
+    CGS_ASSERT(lpOutJob != 0, "lpOutJob");
     *lpOutJobData = *lpInput;
     lpOutJob->Clear();
     lpOutJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
@@ -1436,8 +1436,8 @@ void BrnRendererModule::RenderShadowMapPasses(CgsGraphics::DispatchObjectContext
 void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLevel)
 {
     CgsRenderTarget* const lpEnvMapBuffer = mAllocatedRenderTargets.GetEnvMapBuffer();
-    CGS_ASSERT(lpEnvMapBuffer != nullptr, "mAllocatedRenderTargets.GetEnvMapBuffer()");
-    CGS_ASSERT(lpEnvMapBuffer != nullptr && lpEnvMapBuffer->GetRenderTarget() != nullptr,
+    CGS_ASSERT(lpEnvMapBuffer != 0, "mAllocatedRenderTargets.GetEnvMapBuffer()");
+    CGS_ASSERT(lpEnvMapBuffer != 0 && lpEnvMapBuffer->GetRenderTarget() != 0,
                "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()");
 
     // Bind the cube target's surfaces + an INVERTED-depth viewport (see the banner).
@@ -1475,8 +1475,8 @@ void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 luFace, f32 lfWhiteLev
 void BrnRendererModule::EndRenderEnvironmentMapFace(u32 luFace)
 {
     CgsRenderTarget* const lpEnvMapBuffer = mAllocatedRenderTargets.GetEnvMapBuffer();
-    CGS_ASSERT(lpEnvMapBuffer != nullptr, "mAllocatedRenderTargets.GetEnvMapBuffer()");
-    CGS_ASSERT(lpEnvMapBuffer != nullptr && lpEnvMapBuffer->GetRenderTarget() != nullptr,
+    CGS_ASSERT(lpEnvMapBuffer != 0, "mAllocatedRenderTargets.GetEnvMapBuffer()");
+    CGS_ASSERT(lpEnvMapBuffer != 0 && lpEnvMapBuffer->GetRenderTarget() != 0,
                "mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()");
 
     lpEnvMapBuffer->GetRenderTarget()->maColourTargets[0].Resolve(luFace);
@@ -1932,8 +1932,8 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
             // that cannot express a partial depth resolve, not to this body.
             renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrTile,
                                             mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
-                                            &lDestPoint, 0u, 0u, nullptr,
-                                            KF_CLEAR_Z, luStencilValue, nullptr);
+                                            &lDestPoint, 0u, 0u, 0,
+                                            KF_CLEAR_Z, luStencilValue, 0);
 
             // ...then colour target 0 with the samples averaged (that IS the downsample), clearing
             // both EDRAM surfaces behind it to the background colour / Z 1.0 / the caller's stencil.
@@ -1942,7 +1942,7 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
             renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_COLOUR_AND_CLEAR, &lrTile,
                                             mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0u),
                                             &lDestPoint, 0u, 0u, &lvClearColour,
-                                            KF_CLEAR_Z, luStencilValue, nullptr);
+                                            KF_CLEAR_Z, luStencilValue, 0);
         }
 
         // StopMonitor comes BEFORE EndTiling (@0x823FFD38 then @0x823FFD5C) -- the tiling close is
@@ -1954,8 +1954,8 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
         // Close the tiling pass. Nothing is left to resolve or clear at this level -- the per-tile
         // resolves above did both -- so every pointer argument is null and only ClearZ and the
         // stencil value ride along.
-        renderengine::D3DDevice_EndTiling(lpDevice, 0u, nullptr, nullptr, nullptr,
-                                          KF_CLEAR_Z, luStencilValue, nullptr);
+        renderengine::D3DDevice_EndTiling(lpDevice, 0u, 0, 0, 0,
+                                          KF_CLEAR_Z, luStencilValue, 0);
     }
     else
     {
@@ -1978,13 +1978,13 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
 
         renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_DEPTH_STENCIL_FRAGMENT0, &lrScreen,
                                         mAllocatedRenderTargets.GetDownSampleBuffer()->GetDepthTexture(),
-                                        &lDestPoint, 0u, 0u, nullptr,
-                                        KF_CLEAR_Z, luStencilValue, nullptr);
+                                        &lDestPoint, 0u, 0u, 0,
+                                        KF_CLEAR_Z, luStencilValue, 0);
 
         renderengine::D3DDevice_Resolve(lpDevice, KU_RESOLVE_COLOUR_AND_CLEAR, &lrScreen,
                                         mAllocatedRenderTargets.GetDownSampleBuffer()->GetTexture(0u),
                                         &lDestPoint, 0u, 0u, &lvClearColour,
-                                        KF_CLEAR_Z, luStencilValue, nullptr);
+                                        KF_CLEAR_Z, luStencilValue, 0);
 
 #if BRN_GPU_PERFMON_AVAILABLE
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miResolveMSAAFromEDRAM);
@@ -2091,13 +2091,13 @@ void BrnRendererModule::ComputeSunCoronaVisibility()
 void BrnRendererModule::BeginQuarterResBuffer()
 {
     CgsRenderTarget* const lpParticleBuffer = mAllocatedRenderTargets.GetParticleBuffer();
-    CGS_ASSERT(lpParticleBuffer != nullptr,
+    CGS_ASSERT(lpParticleBuffer != 0,
                "mAllocatedRenderTargets.GetParticleBuffer() != NULL");
-    if (lpParticleBuffer == nullptr || lpParticleBuffer->GetRenderTarget() == nullptr)
+    if (lpParticleBuffer == 0 || lpParticleBuffer->GetRenderTarget() == 0)
     {
         return;
     }
-    CGS_ASSERT(lpParticleBuffer->GetRenderTarget() != nullptr,
+    CGS_ASSERT(lpParticleBuffer->GetRenderTarget() != 0,
                "mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL");
 
     lpParticleBuffer->SetRenderTargetState(0);
@@ -2116,7 +2116,7 @@ void BrnRendererModule::BeginQuarterResBuffer()
         CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
     renderengine::BlendMaterialState* const lpBlend =
         CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_NO_ALPHA_TEST);
-    if (lpDepthStencil == nullptr || lpRasterizer == nullptr || lpBlend == nullptr)
+    if (lpDepthStencil == 0 || lpRasterizer == 0 || lpBlend == 0)
     {
         if (!sbLoggedStates)
         {
@@ -2167,8 +2167,8 @@ void BrnRendererModule::EndRenderAntiAliased()
 {
     CgsRenderTarget* const lpSceneTarget    = mAllocatedRenderTargets.GetDownSampleBuffer();
     CgsRenderTarget* const lpParticleBuffer = mAllocatedRenderTargets.GetParticleBuffer();
-    if (lpSceneTarget == nullptr || lpSceneTarget->GetRenderTarget() == nullptr
-        || lpParticleBuffer == nullptr)
+    if (lpSceneTarget == 0 || lpSceneTarget->GetRenderTarget() == 0
+        || lpParticleBuffer == 0)
     {
         return;
     }
@@ -2181,7 +2181,7 @@ void BrnRendererModule::EndRenderAntiAliased()
         CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
     renderengine::BlendMaterialState* const lpBlend =
         CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA);
-    if (lpDepthStencil == nullptr || lpRasterizer == nullptr || lpBlend == nullptr)
+    if (lpDepthStencil == 0 || lpRasterizer == 0 || lpBlend == 0)
     {
         static bool sbLoggedStates = false;
         if (!sbLoggedStates)
@@ -3505,7 +3505,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // ARTIST 8240C4B0..C4C4: conversion uses time zero, then ALL mesh draw
     // passes use the completed shader frame's game time (+0x314). Publish it
     // after the draw gate so retained/stalled command banks keep their clock.
-    if (mpInterpreter != nullptr)
+    if (mpInterpreter != 0)
         mpInterpreter->SetTime(maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetGameTime());
 
     CgsDev::PerfMonGpu::StartProfiling(); // ARTIST8240C4C8.

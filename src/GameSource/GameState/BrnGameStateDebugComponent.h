@@ -25,13 +25,13 @@ namespace BrnGameState
     public:
         void Construct(GameStateModule* lpGameStateModule);
         void Destruct();
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
         void RenderLandmarkDebug() const;
         void DrawRankNumber(s32 liRank);
 
     protected:
-        const char* GetName() const override;
-        void OnActivate() override;
+        const char* GetName() const ;
+        void OnActivate() ;
 
     private:
         void RenderCurrentLandmarkInfo(CgsDev::DebugRender& lrRender,

@@ -100,5 +100,5 @@ namespace Attrib
         u16 muElementSize;         // +0x4
         u16 muTypeInfo;            // +0x6
     };
-    static_assert(sizeof(Array) == 8, "Attrib::Array header must be 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(Array) == 8), "Attrib::Array header must be 8 bytes");
 }

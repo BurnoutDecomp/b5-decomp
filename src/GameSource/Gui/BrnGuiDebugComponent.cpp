@@ -96,7 +96,7 @@ namespace
         { 343, 0.5f },
         { 335, 1.0f },
     };
-    static_assert(sizeof(WorstCaseHudScheduleEntry) == 8, "ARTIST schedule rows are 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(WorstCaseHudScheduleEntry) == 8), "ARTIST schedule rows are 8 bytes");
 
     // These POD records reproduce the original raw payloads. The event-144 wire record
     // has no CgsGui header and the six-button row is only its two 32-bit payload words.
@@ -107,14 +107,14 @@ namespace
         BrnGui::EHUDFSMs meFsmToRun;
         BrnGui::GuiFlow meFlowToUse;
     };
-    static_assert(sizeof(WorstCaseRunFsmPayload) == 24, "ARTIST id-144 payload is 24 bytes");
+    CGS_STATIC_ASSERT((sizeof(WorstCaseRunFsmPayload) == 24), "ARTIST id-144 payload is 24 bytes");
 
     struct WorstCaseControllerInputPayload
     {
         u32 muPadId;       // ARTIST leaves +0 unwritten.
         s32 miButtonId;
     };
-    static_assert(sizeof(WorstCaseControllerInputPayload) == 8, "ARTIST id-6 payload is 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(WorstCaseControllerInputPayload) == 8), "ARTIST id-6 payload is 8 bytes");
 
     // The X360 reuses one stack region for ids 93, 333, and 239. Default-initialize this
     // union without braces so stores remain limited to the exact native fields.
@@ -124,8 +124,8 @@ namespace
         BrnGui::GuiEventRoadRuleEnter mRoadRuleEnter;
         BrnGui::GuiEventRaceDistanceRemaining mRaceDistanceRemaining;
     };
-    static_assert(sizeof(WorstCaseHudSharedPayload) == 152, "shared native stack region is 152 bytes");
-    static_assert(sizeof(BrnGui::GuiEventRoadRuleEnter) == 112, "ARTIST id-333 payload is 112 bytes");
+    CGS_STATIC_ASSERT((sizeof(WorstCaseHudSharedPayload) == 152), "shared native stack region is 152 bytes");
+    CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventRoadRuleEnter) == 112), "ARTIST id-333 payload is 112 bytes");
 }
 
 namespace BrnGui
@@ -133,7 +133,7 @@ namespace BrnGui
 
 // X360 off_82FB5080 -- the live singleton instance, populated when the debug component
 // is constructed. Defaults to null until then.
-GuiDebugComponent* GuiDebugComponent::mspSingletonThis = nullptr;
+GuiDebugComponent* GuiDebugComponent::mspSingletonThis = 0;
 
 // ARTIST827E5D38/40. No module, singleton, display, PFX, base-active or link field reset.
 GuiDebugComponent::GuiDebugComponent()
@@ -452,7 +452,7 @@ const char* GuiDebugComponent::GetPath() const
 GuiDebugComponent* GuiDebugComponent::GetSingletonPtr()
 {
     GuiDebugComponent* lpSingleton = mspSingletonThis;
-    CGS_ASSERT( lpSingleton != nullptr, "mspSingletonThis" );
+    CGS_ASSERT( lpSingleton != 0, "mspSingletonThis" );
     return lpSingleton;
 }
 
@@ -1083,7 +1083,7 @@ void GuiDebugComponent::TriggerPFX()
     std::strncpy(lEvent.macName, lpcHookName, KI_MAX_PFX_ID_LENGTH);
 
     // ARTIST8250D408..18 posts this complete64-byte payload.
-    static_assert(sizeof(GuiPFXHookEvent) == 64, "event495 payload is64 bytes");
+    CGS_STATIC_ASSERT((sizeof(GuiPFXHookEvent) == 64), "event495 payload is64 bytes");
     mInputQueue.AddEvent(&lEvent, 495, sizeof(lEvent));
 }
 

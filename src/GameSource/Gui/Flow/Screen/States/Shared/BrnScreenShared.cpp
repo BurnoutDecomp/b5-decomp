@@ -18,8 +18,8 @@ namespace BrnGui
     // -------------------------------------------------------------------------------
     const char* const KAC_SPLASH_SCREEN_IDS[18] =
     {
-        nullptr, nullptr, nullptr, nullptr, nullptr,            // [0]..[4]  offline modes
-        nullptr, nullptr, nullptr, nullptr, nullptr,            // [5]..[9]  offline modes
+        0, 0, 0, 0, 0,            // [0]..[4]  offline modes
+        0, 0, 0, 0, 0,            // [5]..[9]  offline modes
         "OnSplshRace",                                          // [10]
         "OnSplshRoadR",                                         // [11]
         "OnSplshFug",                                           // [12]
@@ -38,7 +38,7 @@ namespace BrnGui
     // are dropped per project convention).
     const char* GetSplashScreenIDForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode)
     {
-        CGS_ASSERT(KAC_SPLASH_SCREEN_IDS[leGameMode] != nullptr,
+        CGS_ASSERT(KAC_SPLASH_SCREEN_IDS[leGameMode] != 0,
                    "Can't find splash screen Id from game mode (");
         return KAC_SPLASH_SCREEN_IDS[leGameMode];
     }

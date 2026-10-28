@@ -31,7 +31,7 @@ namespace RealmcIface
 // (RealmcString::~RealmcString) right after the base is built, before the own
 // words are stored -- the console order.
 // ---------------------------------------------------------------------------
-MessageLoadDone::MessageLoadDone(std::uint32_t uId, int iField24, const char* pText,
+MessageLoadDone::MessageLoadDone(uint32_t uId, int iField24, const char* pText,
                                  u32 uField1C, void* pField20)
     : RealmcCore::MessageString(uId, RealmcCore::RealmcString(pText, RealmcCore::allocator()))
     , muField1C(uField1C)

@@ -25,7 +25,7 @@ namespace BrnGui { class GuiCache; }
 // -- the same order as this TU's KAAC_COMPASS_DIRECTION string table @0x82F27820
 // ("DIRECTION_N","DIRECTION_NW",...). A shared_header_request adds the definition to
 // GameSource/Gui/BrnGuiShared.h **with this exact fixed underlying type** (`: s32`).
-namespace BrnGui { enum ECompassPoints : s32; }
+namespace BrnGui { enum ECompassPoints ; }
 
 // BrnGui::PreRaceFlyByState - the pre-event fly-by flow state (event titles, map intro,
 // medals). Owns the title/mode/description TextFields, the destination IconComponent,
@@ -182,23 +182,23 @@ namespace BrnGui
         // complete-class context.
         void _AssertLayout()
         {
-            static_assert(offsetof(PreRaceFlyByState, meCurrentState)
-                              - offsetof(PreRaceFlyByState, mLargeIconResource) == 8,
+            CGS_STATIC_ASSERT((offsetof(PreRaceFlyByState, meCurrentState)
+                              - offsetof(PreRaceFlyByState, mLargeIconResource) == 8),
                           "sResourceTuple is {u32,enum} == 8 bytes ahead of meCurrentState");
-            static_assert(offsetof(PreRaceFlyByState, mfTimeRemaining)
-                              - offsetof(PreRaceFlyByState, meCurrentState) == 4,
+            CGS_STATIC_ASSERT((offsetof(PreRaceFlyByState, mfTimeRemaining)
+                              - offsetof(PreRaceFlyByState, meCurrentState) == 4),
                           "mfTimeRemaining follows meCurrentState");
-            static_assert(offsetof(PreRaceFlyByState, mbEndRequestSent)
-                              - offsetof(PreRaceFlyByState, mfTimeRemaining) == 4,
+            CGS_STATIC_ASSERT((offsetof(PreRaceFlyByState, mbEndRequestSent)
+                              - offsetof(PreRaceFlyByState, mfTimeRemaining) == 4),
                           "mbEndRequestSent follows mfTimeRemaining");
-            static_assert(offsetof(PreRaceFlyByState, mbDoMapPan)
-                              - offsetof(PreRaceFlyByState, mbEndRequestSent) == 1,
+            CGS_STATIC_ASSERT((offsetof(PreRaceFlyByState, mbDoMapPan)
+                              - offsetof(PreRaceFlyByState, mbEndRequestSent) == 1),
                           "mbDoMapPan is the byte after mbEndRequestSent");
-            static_assert(offsetof(PreRaceFlyByState, mfIconAnimationStartTime)
-                              - offsetof(PreRaceFlyByState, mbEndRequestSent) == 4,
+            CGS_STATIC_ASSERT((offsetof(PreRaceFlyByState, mfIconAnimationStartTime)
+                              - offsetof(PreRaceFlyByState, mbEndRequestSent) == 4),
                           "mfIconAnimationStartTime closes the scalar run");
-            static_assert(offsetof(PreRaceFlyByState, miPreviousIconCount)
-                              - offsetof(PreRaceFlyByState, mbHiddenDueToPause) == 4,
+            CGS_STATIC_ASSERT((offsetof(PreRaceFlyByState, miPreviousIconCount)
+                              - offsetof(PreRaceFlyByState, mbHiddenDueToPause) == 4),
                           "miPreviousIconCount is the word after mbHiddenDueToPause");
         }
     };

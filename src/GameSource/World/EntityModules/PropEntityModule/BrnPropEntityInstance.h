@@ -85,7 +85,7 @@ namespace BrnWorld
     };
 
     // BrnPropEntityInstance.h:57 (DWARF) -- one loaded prop instance.
-    struct alignas(16) PropEntityInstance
+    struct CGS_ALIGN(16) PropEntityInstance
     {
     public:
         // Lifecycle / queries the X360 ledger attests (bodies in this type's own TU).
@@ -185,10 +185,10 @@ namespace BrnWorld
         u8             mu8NextState;           // +78
         u8             mu8Pad0;                // +79  -> sizeof 80
     };
-    static_assert(sizeof(PropEntityInstance) == 80, "PropEntityInstance sizeof 80");
+    CGS_STATIC_ASSERT((sizeof(PropEntityInstance) == 80), "PropEntityInstance sizeof 80");
 
     // BrnPropPartEntityInstance.h:33 (DWARF) -- one loaded prop *part* instance.
-    struct alignas(16) PropPartEntityInstance
+    struct CGS_ALIGN(16) PropPartEntityInstance
     {
     public:
         void Construct();
@@ -205,7 +205,7 @@ namespace BrnWorld
         bool           mbPhysical;        // +71
         u8             mu8Pad0[8];        // +72 -> sizeof 80
     };
-    static_assert(sizeof(PropPartEntityInstance) == 80, "PropPartEntityInstance sizeof 80");
+    CGS_STATIC_ASSERT((sizeof(PropPartEntityInstance) == 80), "PropPartEntityInstance sizeof 80");
 
     // Feb-2007 InstanceIndex helper (kept for GetProp/GetPart shape; not embedded by
     // the shipped X360 PropZoneManager layout). A packed { isPart, index } pair.

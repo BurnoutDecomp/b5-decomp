@@ -25,7 +25,7 @@ namespace LiveUpdateIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mOutputQueue) == 0x0004, "mOutputQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mOutputQueue) == 0x0004), "mOutputQueue @0x0004");
     }
 
     // X360 0x828EEF98: set the IOBuffer constructed bit (this+0), Construct the +4 request

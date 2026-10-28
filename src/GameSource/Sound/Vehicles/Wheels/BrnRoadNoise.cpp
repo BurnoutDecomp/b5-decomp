@@ -219,13 +219,13 @@ bool RoadnoiseEffect::Attach()
 
     mSurfaceList.ChangeWithDefault(KU_SURFACE_LIST_COLLECTION);
 
-    CgsSound::Logic::Content* lpSurfaceContent = nullptr;
+    CgsSound::Logic::Content* lpSurfaceContent = 0;
     if (GetStateBase() && GetStateBase()->GetStateManager())
     {
         const CgsSound::Playback::Name lContentName("surface_patch_bank.abi");
         lpSurfaceContent = GetStateBase()->GetStateManager()->GetContent(lContentName);
     }
-    CGS_ASSERT(lpSurfaceContent != nullptr,
+    CGS_ASSERT(lpSurfaceContent != 0,
                "lpPlayerStateManager->GetContent( K_SURFACES_BANK_NAME )");
 
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
@@ -255,7 +255,7 @@ void RoadnoiseEffect::UpdateParams(f32 afTimeStep)
 {
     SetMixerInputValue(0, 0);
 
-    CGS_ASSERT(mpWheelControl != nullptr, "mpWheelControl");
+    CGS_ASSERT(mpWheelControl != 0, "mpWheelControl");
     if (!mpWheelControl)
         return;
 
@@ -324,7 +324,7 @@ void RoadnoiseEffect::DrawDebug() const
 
 void RoadnoiseEffect::ProcessUpdate()
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 

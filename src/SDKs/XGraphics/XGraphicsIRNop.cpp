@@ -60,7 +60,7 @@ IRNop* IRNop::NewInst(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRNop));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRNop(aiOpcode, apContext);
 }

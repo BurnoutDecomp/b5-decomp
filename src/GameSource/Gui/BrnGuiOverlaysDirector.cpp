@@ -147,7 +147,7 @@ void GuiOverlaysDirector::HandleWaitFinishRequest(const GuiOverlayWaitFinishRequ
 void GuiOverlaysDirector::SetUpOverlayInfo(GuiOverlayFullInfoResponse* lpOverlay,
                                            const GuiOverlayRequest* lpEvent)
 {
-    static_assert(sizeof(GuiOverlayRequest::ParamOut) == sizeof(CgsGui::GuiPopupParameter),
+    CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest::ParamOut) == sizeof(CgsGui::GuiPopupParameter)),
                   "a request param copies into a GuiPopupParameter slot");
 
     lpOverlay->mNameId            = lpEvent->GetOverlayId();

@@ -35,7 +35,7 @@ namespace BootLegalFlag
     // off_830102D0 -- the BrnGameModule singleton pointer. The soft-reboot queries below
     // only read it to answer "was this a soft reboot"; on a normal cold boot the answer is
     // no, so a null module + false answers are the faithful runtime values.
-    void* gpBrnGameModule = nullptr;
+    void* gpBrnGameModule = 0;
 
     // byte_82FFA7F0 -- the DLC "beat the team" enable flag (off by default).
     // PC bring-up (FLAG): default ON so the title's 2-entry selection menu

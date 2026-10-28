@@ -74,13 +74,13 @@ namespace
         u8  mau8UnreadTail[7];                                 // +0xB9 (never read by this leg)
     };
 
-    static_assert(sizeof(TrafficTractionLineResultRecord) == 192,
+    CGS_STATIC_ASSERT((sizeof(TrafficTractionLineResultRecord) == 192),
                   "the line-test result stride is the 0xC0 the producer is constructed with");
-    static_assert(offsetof(TrafficTractionLineResultRecord, mafHitNormal) == 0x50,
+    CGS_STATIC_ASSERT((offsetof(TrafficTractionLineResultRecord, mafHitNormal) == 0x50),
                   "hit normals at 16*(line+5) -- lvx128 v2, r11, r30 @0x8262D4FC");
-    static_assert(offsetof(TrafficTractionLineResultRecord, mauSurfaceTag) == 0xA0,
+    CGS_STATIC_ASSERT((offsetof(TrafficTractionLineResultRecord, mauSurfaceTag) == 0xA0),
                   "surface tags at 4*(line+40) -- lwzx r5, r9, r30 @0x8262D500");
-    static_assert(offsetof(TrafficTractionLineResultRecord, mau8HitFlags) == 0xB4,
+    CGS_STATIC_ASSERT((offsetof(TrafficTractionLineResultRecord, mau8HitFlags) == 0xB4),
                   "hit flags at 180+line -- lbz r11, 0xB4(r11) @0x8262D4D0; line 4 at 0xB8");
 }
 

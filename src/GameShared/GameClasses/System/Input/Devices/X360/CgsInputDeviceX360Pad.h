@@ -209,24 +209,24 @@ namespace CgsInput
 {
     inline void _DeviceX360Pad_AssertLayout()
     {
-        static_assert(sizeof(DeviceX360PadVibration) == 4, "XINPUT_VIBRATION-shaped record must be 4 bytes");
-        static_assert(offsetof(DeviceX360Pad, mCachedRumble) == 0xF4, "mCachedRumble @ +0xF4");
-        static_assert(sizeof(DeviceX360PadOverlapped) == 28, "overlapped block must be 28 bytes");
-        static_assert(sizeof(DeviceX360PadFFEffect)   == 116, "FF effect must be 116 bytes (0x74)");
-        static_assert(offsetof(DeviceX360Pad, meType)              == 0x04, "meType @ +0x04");
-        static_assert(offsetof(DeviceX360Pad, mbConnected)         == 0x10, "mbConnected @ +0x10");
-        static_assert(offsetof(DeviceX360Pad, mbWheelStopped)      == 0x11, "mbWheelStopped @ +0x11");
-        static_assert(offsetof(DeviceX360Pad, mabPrevButtons)      == 0x12, "mabPrevButtons @ +0x12");
-        static_assert(offsetof(DeviceX360Pad, mabButtons)          == 0x2E, "mabButtons @ +0x2E");
-        static_assert(offsetof(DeviceX360Pad, mafControls)         == 0x4C, "mafControls @ +0x4C");
-        static_assert(offsetof(DeviceX360Pad, mafAxisValues)       == 0xBC, "mafAxisValues @ +0xBC");
-        static_assert(offsetof(DeviceX360Pad, mfDeadzoneOuter)     == 0xE8, "mfDeadzoneOuter @ +0xE8");
-        static_assert(offsetof(DeviceX360Pad, mfDeadzoneInner)     == 0xEC, "mfDeadzoneInner @ +0xEC");
-        static_assert(offsetof(DeviceX360Pad, mePort)              == 0xF0, "mePort @ +0xF0");
-        static_assert(offsetof(DeviceX360Pad, mFFOverlappedRumble) == 0xF8, "rumble overlapped @ +0xF8");
-        static_assert(offsetof(DeviceX360Pad, mFFOverlappedSpring) == 0x130, "spring overlapped @ +0x130");
-        static_assert(offsetof(DeviceX360Pad, mFFEffect)           == 0x14C, "FF effect @ +0x14C");
-        static_assert(offsetof(DeviceX360Pad, mfGain)              == 0x1C0, "mfGain @ +0x1C0");
-        static_assert(sizeof(DeviceX360Pad) == 452, "DeviceX360Pad must be 452 bytes (0x1C4)");
+        CGS_STATIC_ASSERT((sizeof(DeviceX360PadVibration) == 4), "XINPUT_VIBRATION-shaped record must be 4 bytes");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mCachedRumble) == 0xF4), "mCachedRumble @ +0xF4");
+        CGS_STATIC_ASSERT((sizeof(DeviceX360PadOverlapped) == 28), "overlapped block must be 28 bytes");
+        CGS_STATIC_ASSERT((sizeof(DeviceX360PadFFEffect)   == 116), "FF effect must be 116 bytes (0x74)");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, meType)              == 0x04), "meType @ +0x04");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mbConnected)         == 0x10), "mbConnected @ +0x10");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mbWheelStopped)      == 0x11), "mbWheelStopped @ +0x11");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mabPrevButtons)      == 0x12), "mabPrevButtons @ +0x12");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mabButtons)          == 0x2E), "mabButtons @ +0x2E");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mafControls)         == 0x4C), "mafControls @ +0x4C");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mafAxisValues)       == 0xBC), "mafAxisValues @ +0xBC");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mfDeadzoneOuter)     == 0xE8), "mfDeadzoneOuter @ +0xE8");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mfDeadzoneInner)     == 0xEC), "mfDeadzoneInner @ +0xEC");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mePort)              == 0xF0), "mePort @ +0xF0");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mFFOverlappedRumble) == 0xF8), "rumble overlapped @ +0xF8");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mFFOverlappedSpring) == 0x130), "spring overlapped @ +0x130");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mFFEffect)           == 0x14C), "FF effect @ +0x14C");
+        CGS_STATIC_ASSERT((offsetof(DeviceX360Pad, mfGain)              == 0x1C0), "mfGain @ +0x1C0");
+        CGS_STATIC_ASSERT((sizeof(DeviceX360Pad) == 452), "DeviceX360Pad must be 452 bytes (0x1C4)");
     }
 }

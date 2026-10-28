@@ -28,7 +28,7 @@ namespace Log
         // (PhysicsSimulationModule::AddContactSpiesToOutputQueue's contact-dump lines).
         using StrStreamBase::operator<<;
 
-        StrStreamBase& operator<<(const char* lpcText) override;
+        StrStreamBase& operator<<(const char* lpcText) ;
 
     protected:
     };

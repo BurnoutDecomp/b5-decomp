@@ -115,8 +115,8 @@ namespace BrnGui
         // { 24, 242, 12, the six totals }, channel 40, 36 bytes.
         typedef CgsGui::GuiEventWrapper<GuiEventOnlineStatsResponse, 40> OnlineStatsResponseWire;
 
-        static_assert(sizeof(OnlineStatsRequestWire) == 16, "stats request record is 16 bytes");
-        static_assert(sizeof(OnlineStatsResponseWire) == 36, "stats response record is 36 bytes");
+        CGS_STATIC_ASSERT((sizeof(OnlineStatsRequestWire) == 16), "stats request record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(OnlineStatsResponseWire) == 36), "stats response record is 36 bytes");
     }
 
     // ================================================================================

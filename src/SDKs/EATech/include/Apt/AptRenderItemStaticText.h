@@ -18,7 +18,7 @@
 
 struct AptCharacter;
 class AptRenderingContext;
-enum AptMaskRenderOperation : int;
+enum AptMaskRenderOperation ;
 
 struct AptRenderItemStaticText : public AptRenderItem
 {
@@ -28,6 +28,6 @@ struct AptRenderItemStaticText : public AptRenderItem
     // Clone copy-ctor: base clone copy + the static-text render-type flag.
     AptRenderItemStaticText(const AptRenderItemStaticText* pSource, int nCreatedOnTick, bool bCopyExtended);
 
-    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) override;   // @0x82AEC950
-    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;  // @0x82AFEC18
+    virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) ;   // @0x82AEC950
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const ;  // @0x82AFEC18
 };

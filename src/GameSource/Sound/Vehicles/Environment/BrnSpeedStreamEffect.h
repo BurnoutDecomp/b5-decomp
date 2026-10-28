@@ -35,14 +35,14 @@ struct SpeedStreamEffect : public BrnSound::Logic::BrnEffectObject,
     // @ 0x826D13D8 -- static allocate+construct factory. Returns the +4 IResourceRequester view.
     static BrnSound::Logic::IResourceRequester* Create( int aiFlavour );
 
-    s32 GetController(s32 aiIndex) override;
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    void UpdateParams(f32 afTimeStep) override;
-    bool Detach() override;
+    s32 GetController(s32 aiIndex) ;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    void UpdateParams(f32 afTimeStep) ;
+    bool Detach() ;
 
-    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const ;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
-                           f32 afGain, f32 afElapsedTime) override;
+                           f32 afGain, f32 afElapsedTime) ;
 
     CgsSound::Logic::VoiceWrapper::CreateParams mParams;
     SpeedStreamControl* mpSpeedStreamControl;

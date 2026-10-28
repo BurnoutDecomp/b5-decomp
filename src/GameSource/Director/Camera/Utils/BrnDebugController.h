@@ -105,17 +105,17 @@ namespace BrnDirector
             };
 
             // Pin the offsets the bodied functions' attested behaviour proves.
-            static_assert(offsetof(DebugController::DebugControllerInfo, mafControlValue) == 0,
+            CGS_STATIC_ASSERT((offsetof(DebugController::DebugControllerInfo, mafControlValue) == 0),
                           "DebugControllerInfo value array must be at +0x00");
-            static_assert(offsetof(DebugController::DebugControllerInfo, mabControlState) == 88,
+            CGS_STATIC_ASSERT((offsetof(DebugController::DebugControllerInfo, mabControlState) == 88),
                           "DebugControllerInfo state array must be at +0x58 (GetIsPressed)");
-            static_assert(offsetof(DebugController::DebugControllerInfo, mabControlJustPressed) == 110,
+            CGS_STATIC_ASSERT((offsetof(DebugController::DebugControllerInfo, mabControlJustPressed) == 110),
                           "DebugControllerInfo just-pressed array must be at +0x6E (GetJustPressed)");
-            static_assert(offsetof(DebugController::DebugControllerInfo, mabControlJustReleased) == 132,
+            CGS_STATIC_ASSERT((offsetof(DebugController::DebugControllerInfo, mabControlJustReleased) == 132),
                           "DebugControllerInfo just-released array must be at +0x84 (GetJustReleased)");
-            static_assert(offsetof(DebugController::DebugControllerInfo, mfLeftStickXAxis) == 156,
+            CGS_STATIC_ASSERT((offsetof(DebugController::DebugControllerInfo, mfLeftStickXAxis) == 156),
                           "DebugControllerInfo stick axes must follow at +0x9C");
-            static_assert(sizeof(DebugController) == sizeof(DebugController::DebugControllerInfo),
+            CGS_STATIC_ASSERT((sizeof(DebugController) == sizeof(DebugController::DebugControllerInfo)),
                           "DebugController is just its info block (no base / extra members)");
         }
     }

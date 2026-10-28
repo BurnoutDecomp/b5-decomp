@@ -24,7 +24,7 @@
 
 #include <cstring>   // memset (zero-install the gAptFuncs slots), strstr (ControlRender)
 #include <cstdlib>   // atoi (ControlRender's "_index=" parse)
-#include <cstdint>   // uintptr_t / uint64_t (x64 header-field resolution)
+#include "types.hpp"   // uintptr_t / uint64_t (x64 header-field resolution)
 #include <cstdarg>   // va_list (AptCallbackDebug::Print)
 #include <cstdio>    // vsnprintf (AptCallbackDebug::Print)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::gpDebugPrint (Print)
@@ -97,7 +97,7 @@ namespace CgsGui
 {
     // The singleton AptAux* the render callbacks load (guest _ZN6CgsGui13AptAuxPointer12mpAptAuxInstE).
     // AptAux::Construct @0x5C4B6C publishes the constructed instance here. Starts null.
-    AptAux* AptAuxPointer::mpAptAuxInst = nullptr;
+    AptAux* AptAuxPointer::mpAptAuxInst = 0;
 
     // -------------------------------------------------------------------------
     // AptAux::Construct - PS3 0x5C4B6C. Bring up the AptAux singleton.
@@ -121,11 +121,11 @@ namespace CgsGui
         // The two leading state words the guest seeds (`*(a1+4) = 3; *a1 = 0`).
         miState4 = 3;
         miState0 = 0;
-        mpAptTargetInstance = nullptr;
+        mpAptTargetInstance = 0;
 
         // The communicator ext object does not exist yet (InitializeApt's ext phase
         // creates + registers it); null until then so UpdateComponents can gate on it.
-        mpAptCommunicator = nullptr;
+        mpAptCommunicator = 0;
 
         // Construct the embedded APT data registry/allocator front-end (guest a1+12).
         // FLAG: AptDataHandler::Construct is homed by the data-handler's own ledger TU (the DWARF
@@ -429,9 +429,9 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptAux::UpdateComponents()
     {
-        CGS_ASSERT(mpAptCommunicator != nullptr,
+        CGS_ASSERT(mpAptCommunicator != 0,
                    "Invalid pointer to apt communicator");
-        if (mpAptCommunicator != nullptr)
+        if (mpAptCommunicator != 0)
             mpAptCommunicator->UpdateAllComponents();
     }
 
@@ -454,15 +454,15 @@ namespace CgsGui
                                       const char* lpacViewState, const char* lpacParam,
                                       bool lbReserved)
     {
-        CGS_ASSERT(lpacAptName != nullptr,
+        CGS_ASSERT(lpacAptName != 0,
                    "Invalid Name sent to AptAux::UpdateFlashComponent");
-        CGS_ASSERT(lpacViewState != nullptr,
+        CGS_ASSERT(lpacViewState != 0,
                    "Invalid key sent to AptAux::UpdateFlashComponent");
-        CGS_ASSERT(lpacParam != nullptr,
+        CGS_ASSERT(lpacParam != 0,
                    "Invalid value sent to AptAux::UpdateFlashComponent");
-        CGS_ASSERT(lpAptAux->mpAptCommunicator != nullptr,
+        CGS_ASSERT(lpAptAux->mpAptCommunicator != 0,
                    "Invalid pointer to apt communicator in AptAux::UpdateFlashComponent");
-        if (lpAptAux->mpAptCommunicator == nullptr)
+        if (lpAptAux->mpAptCommunicator == 0)
             return;
 
         if (lbReserved)
@@ -497,7 +497,7 @@ namespace CgsGui
     void AptCallbackMemory::Free(void* lpBlock)
     {
         AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
-        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptDataHandler in AptCallbackMemory::Free");
+        CGS_ASSERT(lpAptAux != 0, "Invalid AptDataHandler in AptCallbackMemory::Free");
         lpAptAux->mAptDataHandler.AptFree(lpBlock);
     }
 
@@ -508,9 +508,9 @@ namespace CgsGui
     void* AptCallbackMemory::Alloc(size_t lnSize)
     {
         AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
-        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptDataHandler in AptCallbackMemory::Alloc");
+        CGS_ASSERT(lpAptAux != 0, "Invalid AptDataHandler in AptCallbackMemory::Alloc");
         void* lpMemory = lpAptAux->mAptDataHandler.AptAlloc(lnSize);
-        CGS_ASSERT(lpMemory != nullptr, "lpMemory != NULL");
+        CGS_ASSERT(lpMemory != 0, "lpMemory != NULL");
         return lpMemory;
     }
 
@@ -580,7 +580,7 @@ namespace CgsGui
     // exists, then remove the unloading movieclip from the communicator component table.
     void AptCallbackFile::OnUnload(AptValue* lpValue)
     {
-        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != nullptr, "AptAuxPointer::mpAptAuxInst");
+        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0, "AptAuxPointer::mpAptAuxInst");
         AptCommunicator::RemoveExpiredAptComponent(lpValue);
     }
 
@@ -617,12 +617,12 @@ namespace CgsGui
     void AptCallbackFile::LoadAnimation(const char* lpacName, AptFilePtr* lpHandle)
     {
         AptAux* lpAptAux = AptAuxPointer::mpAptAuxInst;
-        CGS_ASSERT(lpAptAux != nullptr, "Invalid AptDataHandler in AptCallbackFile::LoadAnimation");
+        CGS_ASSERT(lpAptAux != 0, "Invalid AptDataHandler in AptCallbackFile::LoadAnimation");
 
         AptDataHeader* lpAptData = lpAptAux->mAptDataHandler.FindAptData(lpacName);
-        CGS_ASSERT(lpAptData != nullptr,
+        CGS_ASSERT(lpAptData != 0,
                    "Could not locate AptDataHeader in AptCallbackFile::LoadAnimation Check file has been loaded");
-        if (lpAptData == nullptr)
+        if (lpAptData == 0)
             return;
 
         CGS_ASSERT(lpAptData->meCurrentState == AptDataHeader::E_APTDATASTATE_LOADED ||
@@ -660,7 +660,7 @@ namespace CgsGui
 
         // Drop the caller's original handle reference (the asm's trailing DecRef + null on *a2).
         AptFile* lpConsumed = lpHandle->pData;
-        lpHandle->pData = nullptr;
+        lpHandle->pData = 0;
         if (lpConsumed && AptSharedPtrDecRef(lpConsumed) == 0)
             AptSharedPtrDelete(lpConsumed);
     }
@@ -676,7 +676,7 @@ namespace CgsGui
     AptValue* AptCallbackVariable::GetExternVariable(const char* /*lpacName*/)
     {
         CGS_ASSERT(false, "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.");
-        return nullptr;
+        return 0;
     }
 
     // ---- Deprecated ---------------------------------------------------------
@@ -698,14 +698,14 @@ namespace CgsGui
     AptValue* AptCallbackDeprecated::LoadVariables(const char* /*lpacUrl*/)
     {
         CGS_ASSERT(false, "LoadVariables() has not been implemented but is being used, please implement before utilising.");
-        return nullptr;
+        return 0;
     }
 
     // X360 0x828497A0 (CgsGui::AptCallbackDeprecated::LoadVariablesNULL). Guarded not-yet-implemented.
     AptValue* AptCallbackDeprecated::LoadVariablesNULL()
     {
         CGS_ASSERT(false, "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.");
-        return nullptr;
+        return 0;
     }
 
     // X360 0x828497E0 (CgsGui::AptCallbackDeprecated::PointHitTest). Guarded not-yet-implemented.

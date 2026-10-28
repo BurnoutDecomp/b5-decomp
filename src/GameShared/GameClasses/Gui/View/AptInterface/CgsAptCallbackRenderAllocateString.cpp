@@ -25,8 +25,8 @@ namespace CgsGui
     {
         // The opaque-world half: free the previous string (per flags), carve a free pool slot +
         // its char buffer, and surface the text-layout inputs Prepare needs.
-        CgsUnicode::CgsUtf8* lpStringBuffer = nullptr;
-        const void*          lpFonts        = nullptr;
+        CgsUnicode::CgsUtf8* lpStringBuffer = 0;
+        const void*          lpFonts        = 0;
         s32                  liEffect       = 0;
         f32                  lfSizeScale    = 1.0f;
         s32                  liZID          = 0;
@@ -36,7 +36,7 @@ namespace CgsGui
         // Guard the shape-only bring-up: when no FontCollection is wired (title-screen shapes
         // don't need text layout), the slot has nothing to lay out -- return the unresolved
         // handle rather than asserting in CgsAptString::Prepare (which requires lpFonts).
-        if (lpSlot == nullptr || lpFonts == nullptr)
+        if (lpSlot == 0 || lpFonts == 0)
             return reinterpret_cast<AptAssetString>(static_cast<intptr_t>(0));
 
         // Lay the parametrised string out into the slot's char buffer with the font collection,

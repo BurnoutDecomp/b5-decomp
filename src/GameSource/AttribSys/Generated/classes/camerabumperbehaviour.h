@@ -17,7 +17,7 @@ namespace Gen
     class camerabumperbehaviour : private Instance
     {
     public:
-        explicit camerabumperbehaviour(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit camerabumperbehaviour(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // ADDED 2026-08-02 (camera parameter-chain wave) -- see the identical note on the
         // sibling cameraexternalbehaviour.h. The console reads `lwz r11,0(inst)` (IsValid)

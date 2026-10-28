@@ -94,7 +94,7 @@ EntryContentName::EntryContentName(const void* pTitleSource,
 
     // (double)(__int64)nSizeSeed -> float -> * 2.8f -> truncate toward zero.
     const float lfScaled = static_cast<float>(static_cast<long long>(nSizeSeed)) * 2.8f;
-    mnSize = static_cast<std::int32_t>(lfScaled);
+    mnSize = static_cast<int32_t>(lfScaled);
 }
 
 // ---------------------------------------------------------------------------

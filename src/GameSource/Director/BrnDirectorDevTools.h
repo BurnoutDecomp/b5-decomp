@@ -18,7 +18,7 @@ namespace BrnDirector
     // them. Layout asm-derived from GameTalkMsgHandler @0x822095A0 /
     // LiveCamUpdate @0x82239C80 (X360 offsets in the comments; the PC layout
     // keeps the ORDER -- the pointer members widen).
-    class alignas(16) DirectorDevTools
+    class CGS_ALIGN(16) DirectorDevTools
     {
     public:
         // The live-camera request latch (X360 +0x00): the GameTalk handler raises

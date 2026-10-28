@@ -33,7 +33,7 @@ const u32 KU_SEND01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send0
 WhineEffect::WhineEffect()
     : BrnSound::Logic::BrnEffectObject()
     , mWhineVoice()
-    , mpPhysicsControl(nullptr)
+    , mpPhysicsControl(0)
     , mfWhineVolume(0.0f)
 {
 }
@@ -59,7 +59,7 @@ void WhineEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 
 void WhineEffect::SetupLoadData()
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return;
 
@@ -77,7 +77,7 @@ void WhineEffect::SetupLoadData()
     std::snprintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcAsset);
     mbHasLoadedData = true;
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
-        lacBundle, nullptr, BrnSound::Logic::ResourceRegistrar::E_DATA);
+        lacBundle, 0, BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
 bool WhineEffect::Attach()
@@ -87,7 +87,7 @@ bool WhineEffect::Attach()
     if (!mbHasLoadedData)
         return true;
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return false;
 

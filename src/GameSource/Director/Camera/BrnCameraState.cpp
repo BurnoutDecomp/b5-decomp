@@ -23,8 +23,8 @@ namespace Camera
 // The X360 places the two 64-bit bit fields at +0x08 (current) and +0x10 (previous):
 // SetFlag/ClearFlag use `addi r,this,8` then a qword ldx/stdx; HasChanged reads the
 // adjacent qword at +0x10 as the previous-frame comparand.
-static_assert(offsetof(CameraState, mCurrentFlags)  == 0x08, "current flag set @ +0x08");
-static_assert(offsetof(CameraState, mPreviousFlags) == 0x10, "previous flag set @ +0x10");
+CGS_STATIC_ASSERT((offsetof(CameraState, mCurrentFlags)  == 0x08), "current flag set @ +0x08");
+CGS_STATIC_ASSERT((offsetof(CameraState, mPreviousFlags) == 0x10), "previous flag set @ +0x10");
 
 // X360 0x82CDA568: KAAC_FLAG_NAMES is the 30-pointer table indexed by EFlag.
 // The pointer entries and strings were read from the ARTIST raw image (4-byte big-endian

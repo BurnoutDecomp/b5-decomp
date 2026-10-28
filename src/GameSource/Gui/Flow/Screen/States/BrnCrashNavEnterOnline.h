@@ -191,23 +191,23 @@ namespace BrnGui
             // The cached 132-byte disconnect record plus miNumFilesToLoad exactly fill the
             // X360 gap from +0x3750 to mfTimeInState at +0x37D8 -- every byte in it is a
             // scalar or a char, so the console delta must survive the host.
-            static_assert(offsetof(CrashNavEnterOnlineBase, mfTimeInState)
-                        - offsetof(CrashNavEnterOnlineBase, mCachedHandleDisconnectEvent) == 136,
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mfTimeInState)
+                        - offsetof(CrashNavEnterOnlineBase, mCachedHandleDisconnectEvent) == 136),
                           "cached disconnect record + miNumFilesToLoad == 136 bytes");
-            static_assert(offsetof(CrashNavEnterOnlineBase, mfScrollAmount)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 4, "scroll after time");
-            static_assert(offsetof(CrashNavEnterOnlineBase, mfLastAxisValue)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 8, "axis after scroll");
-            static_assert(offsetof(CrashNavEnterOnlineBase, meSubState)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 12, "substate after axis");
-            static_assert(offsetof(CrashNavEnterOnlineBase, mbJunkyardEntered)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 16, "junkyard byte");
-            static_assert(offsetof(CrashNavEnterOnlineBase, mbIgnoreDisconnectedPopup)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 17, "ignore-popup byte");
-            static_assert(offsetof(CrashNavEnterOnlineBase, mbIsInvalidatingCollisionWorld)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 18, "invalidating byte");
-            static_assert(offsetof(CrashNavEnterOnlineBase, mbCachedDisconnectEventToHandle)
-                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 19, "cached-disconnect byte");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mfScrollAmount)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 4), "scroll after time");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mfLastAxisValue)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 8), "axis after scroll");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, meSubState)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 12), "substate after axis");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mbJunkyardEntered)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 16), "junkyard byte");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mbIgnoreDisconnectedPopup)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 17), "ignore-popup byte");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mbIsInvalidatingCollisionWorld)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 18), "invalidating byte");
+            CGS_STATIC_ASSERT((offsetof(CrashNavEnterOnlineBase, mbCachedDisconnectEventToHandle)
+                        - offsetof(CrashNavEnterOnlineBase, mfTimeInState) == 19), "cached-disconnect byte");
         }
     };
 }

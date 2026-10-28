@@ -49,7 +49,7 @@ namespace BrnDirector
     class DirectorResourceManager;
     struct GameState;
 
-    struct alignas(16) CameraFinaliser
+    struct CGS_ALIGN(16) CameraFinaliser
     {
         // X360 @0x82250440 (caller: MainDirector::Update, its only caller). Apply the frame's
         // camera inertia + shake. lrCameraInOut is finalised in place.

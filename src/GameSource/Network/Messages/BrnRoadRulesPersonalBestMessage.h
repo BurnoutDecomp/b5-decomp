@@ -45,13 +45,13 @@ namespace BrnNetwork
                                      BrnStreetData::ChallengeData lPbScore);
         bool          Retrieve(PlayerName* lpPlayerName, Road::ChallengeIndex* lpChallengeIndex,
                                BrnStreetData::ChallengeHighScoreEntry* lpChallengeHighScoreEntry);
-        s32   GetPackedMessageSize() override;
+        s32   GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD60 -- bodied in this TU (DWARF BrnRoadRulesPersonalBestMessage.h:99).
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
 
     private:
         s32                 maiScores[2];          // DWARF :85
@@ -68,5 +68,5 @@ namespace BrnNetwork
 
     // Console size (the send/receive slot stride; the registration passes the
     // RoadRulesMessage length instead), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(RoadRulesPersonalBestMessage) == 0x38, "sizeof(RoadRulesPersonalBestMessage) == 0x38");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(RoadRulesPersonalBestMessage) == 0x38), "sizeof(RoadRulesPersonalBestMessage) == 0x38");
 } // namespace BrnNetwork

@@ -126,22 +126,22 @@ namespace BrnNetworkModuleIO
     // Layout pins (console offsets and AddEvent sizes). Never called.
     inline void AssertNetworkOutPlayerEventLayouts()
     {
-        static_assert(offsetof(NetworkPlayerDisconnectedEvent, meDisconnectStatus) == 0x04, "tag 23 +0x04");
-        static_assert(offsetof(NetworkPlayerDisconnectedEvent, meActiveRaceCarIndex) == 0x08, "tag 23 +0x08");
-        static_assert(sizeof(NetworkPlayerDisconnectedEvent) == 12, "tag 23 size");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, mWheelID) == 0x08, "tag 16 +0x08");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, mNetworkPlayerID) == 0x10, "tag 16 +0x10");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, meTeam) == 0x14, "tag 16 +0x14");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, mf18) == 0x18, "tag 16 +0x18");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, mu16CarColourIndex) == 0x1C, "tag 16 +0x1C");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, mu16CarPaintFinishIndex) == 0x1E, "tag 16 +0x1E");
-        static_assert(offsetof(NetworkOutPlayerAddedEvent, mbIsLocalPlayer) == 0x20, "tag 16 +0x20");
-        static_assert(sizeof(NetworkOutPlayerAddedEvent) == 40, "tag 16 size");
-        static_assert(sizeof(NetworkOutPlayerFinalisedEvent) == 4, "tag 20 size");
-        static_assert(offsetof(NetworkOutPlayerRemovedEvent, mPlayerName) == 0x04, "tag 17 +0x04");
-        static_assert(offsetof(NetworkOutPlayerRemovedEvent, mbIsLocalPlayerInGame) == 0x14, "tag 17 +0x14");
-        static_assert(offsetof(NetworkOutPlayerRemovedEvent, mbLocalPlayerLeavingGame) == 0x15, "tag 17 +0x15");
-        static_assert(sizeof(NetworkOutPlayerRemovedEvent) == 24, "tag 17 size");
+        CGS_STATIC_ASSERT((offsetof(NetworkPlayerDisconnectedEvent, meDisconnectStatus) == 0x04), "tag 23 +0x04");
+        CGS_STATIC_ASSERT((offsetof(NetworkPlayerDisconnectedEvent, meActiveRaceCarIndex) == 0x08), "tag 23 +0x08");
+        CGS_STATIC_ASSERT((sizeof(NetworkPlayerDisconnectedEvent) == 12), "tag 23 size");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, mWheelID) == 0x08), "tag 16 +0x08");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, mNetworkPlayerID) == 0x10), "tag 16 +0x10");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, meTeam) == 0x14), "tag 16 +0x14");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, mf18) == 0x18), "tag 16 +0x18");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, mu16CarColourIndex) == 0x1C), "tag 16 +0x1C");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, mu16CarPaintFinishIndex) == 0x1E), "tag 16 +0x1E");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerAddedEvent, mbIsLocalPlayer) == 0x20), "tag 16 +0x20");
+        CGS_STATIC_ASSERT((sizeof(NetworkOutPlayerAddedEvent) == 40), "tag 16 size");
+        CGS_STATIC_ASSERT((sizeof(NetworkOutPlayerFinalisedEvent) == 4), "tag 20 size");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerRemovedEvent, mPlayerName) == 0x04), "tag 17 +0x04");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerRemovedEvent, mbIsLocalPlayerInGame) == 0x14), "tag 17 +0x14");
+        CGS_STATIC_ASSERT((offsetof(NetworkOutPlayerRemovedEvent, mbLocalPlayerLeavingGame) == 0x15), "tag 17 +0x15");
+        CGS_STATIC_ASSERT((sizeof(NetworkOutPlayerRemovedEvent) == 24), "tag 17 size");
     }
 }
 }

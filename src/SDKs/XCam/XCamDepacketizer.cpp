@@ -1,7 +1,7 @@
 #include "SDKs/XCam/XCamDepacketizer.h"
 
 #include <cstring>  // memset
-#include <cstdint>  // uintptr_t
+#include "types.hpp"  // uintptr_t
 
 // ===========================================================================
 // XCAM depacketizer, reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
@@ -114,7 +114,7 @@ int CDepacketizer::Initialize(int iReserved, int iPayloadSize)
         return 8;
     }
 
-    mpCurrentHeader = nullptr;
+    mpCurrentHeader = 0;
     std::memset(mpFrameSlots, 0, 6000);
 
     // Carve the recovery allocation into a pointer table (muRecoveryCount 4-byte
@@ -136,7 +136,7 @@ int CDepacketizer::Initialize(int iReserved, int iPayloadSize)
 int CDepacketizer::Reset()
 {
     ReleasePacketsFromPacketBuffer(0, 299);
-    mpCurrentHeader = nullptr;
+    mpCurrentHeader = 0;
 
     // X360 literal sizes: the 15 embedded reorder nodes (600 bytes), the 300-slot
     // frame table (6000 bytes) and every recovery packet body (contiguous).
@@ -323,7 +323,7 @@ int CDepacketizer::SubmitPacket_Correction(const u8* pPacket, int iLength)
 
     if (pRec->miRemaining == 0)
     {
-        pSlot->mpRecovery = nullptr;
+        pSlot->mpRecovery = 0;
         return 0;
     }
 
@@ -364,7 +364,7 @@ int CDepacketizer::SubmitPacket_Correction(const u8* pPacket, int iLength)
 // @ 0x82987C30
 int CDepacketizer::SubmitPacket(const u8* pPacket, int iLength, XOVERLAPPED* pOverlapped)
 {
-    if (mpCurrentHeader == nullptr)
+    if (mpCurrentHeader == 0)
         SubmitPacket_Init(pPacket);
 
     // Advance the reorder head past filled nodes at/behind the incoming sequence.
@@ -500,7 +500,7 @@ int CDepacketizer::FrameReadyToDecode(int* piCodecType)
     pNode->mReceiveTime = 0;
 
     FrameSlot* pSlot = &mpFrameSlots[WrapSlot(pNode->muSeq)];
-    if (pNode->mpData == nullptr)
+    if (pNode->mpData == 0)
     {
         ReleaseOldPacketFromPacketBuffer(pNode->muSeq);
         u32 uNext = muCurrentSeq + 1u;

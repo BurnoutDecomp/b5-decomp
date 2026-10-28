@@ -286,7 +286,7 @@ namespace Deformation
         lrSensor.ValidateAndAddContact(
             lWorldTransform,
             reinterpret_cast<const CgsSceneManager::PotentialContact&>(lrPotentialContact),
-            lContactId, nullptr, nullptr);
+            lContactId, 0, 0);
     }
 
     // ==========================================================================================
@@ -710,7 +710,7 @@ namespace Deformation
             return;
         }
         PhysicalBodyPart* lpPart = mDetachedPartManager.GetPartFromIndex(lu16PoolSlot);
-        if (lpPart == nullptr || lpPart->IsJoinedToVehicle())
+        if (lpPart == 0 || lpPart->IsJoinedToVehicle())
         {
             return;
         }
@@ -830,7 +830,7 @@ namespace Deformation
             return;
         }
         const PhysicalWheel* lpWheel = mDetachedWheelManager.GetWheel(lu16WheelSlot);
-        if (lpWheel == nullptr)
+        if (lpWheel == 0)
         {
             return;
         }

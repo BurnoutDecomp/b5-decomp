@@ -26,12 +26,12 @@ namespace CgsDev
         // the owning window's line ring. mpWindow points back at that LogWindow.
         struct LogWindowStrStream : public StrStreamBase
         {
-            LogWindowStrStream() : mpWindow(nullptr) {}
+            LogWindowStrStream() : mpWindow(0) {}
 
             // The sink (X360 CgsLogWindow.cpp:56): hand the text to mpWindow->Append. operator<<(const
             // char*) forwards here; while unbound (the freshly default-constructed state this TU's
             // LogWindow ctor leaves it in, before mpWindow is wired) it is a no-op.
-            StrStreamBase& operator<<(const char* lpcText) override;
+            StrStreamBase& operator<<(const char* lpcText) ;
 
             // Wire the back-pointer to the owning window (the ctor's `mLog.mpWindow = this`).
             void SetWindow(LogWindow* lpWindow) { mpWindow = lpWindow; }
@@ -62,8 +62,8 @@ namespace CgsDev
             void Construct(s32 liMaxLines);
             bool Prepare(const char* lpcMenuPath, const char* lpcCaption, s32 lxFlags);
 
-            virtual void Update(f32 lfTimeStep, InputEvent leEvent) override;
-            virtual void Render(Debug2DImmediateRender* lpRender) override;
+            virtual void Update(f32 lfTimeStep, InputEvent leEvent) ;
+            virtual void Render(Debug2DImmediateRender* lpRender) ;
 
             void Print(const char* lpcText);
             void Append(const char* lpcText);

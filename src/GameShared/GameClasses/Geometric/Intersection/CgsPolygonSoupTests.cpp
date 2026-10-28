@@ -87,7 +87,7 @@ namespace CgsGeometric
     // PolySoupAddToTriangleBuffer @0xB65074 spells the third parameter
     // `PNS_21IntermediateTrianglesE`.
     // ------------------------------------------------------------------------
-    struct alignas(16) IntermediateTriangles
+    struct CGS_ALIGN(16) IntermediateTriangles
     {
         Vector3  mVertex0[4];       // +0x000
         Vector3  mVertex1[4];       // +0x040
@@ -685,8 +685,8 @@ namespace CgsGeometric
         // previous wave is that a widened pointer silently moved a 16-aligned
         // buffer and the first aligned load faulted, with no gate able to see it.
         // Vector3 already carries alignas(16), but the intent is written down.
-        alignas(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];
-        alignas(16) IntermediateTriangles lAccumulator;   // var_17C0
+        CGS_ALIGN(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];
+        CGS_ALIGN(16) IntermediateTriangles lAccumulator;   // var_17C0
 
         UnpackPolygonSoupVertices(laVertices, lPolygonSoup);
 
@@ -873,7 +873,7 @@ namespace CgsGeometric
         const u16 lu16NumTriangleQuartets = static_cast<u16>(lu8NumTriangles >> 2);
         const u16 lu16NumOddTriangles     = static_cast<u16>(lu8NumTriangles & 3);
 
-        alignas(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];   // sp+0xC0
+        CGS_ALIGN(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];   // sp+0xC0
         UnpackPolygonSoupVertices(laVertices, lPolygonSoup);
 
         const PolygonSoupPoly* lpPoly =
@@ -1121,7 +1121,7 @@ namespace CgsGeometric
         const u16 lu16NumQuartets     = static_cast<u16>(lu8NumTriangles >> 2);
         const u16 lu16NumOddTriangles = static_cast<u16>(lu8NumTriangles - 4u * lu16NumQuartets);
 
-        alignas(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];
+        CGS_ALIGN(16) Vector3 laVertices[KI_MAX_POLYGON_SOUP_VERTICES];
         UnpackPolygonSoupVertices(laVertices, lPolygonSoup);
 
         const PolygonSoupPoly* lpPoly =

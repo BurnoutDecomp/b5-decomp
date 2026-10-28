@@ -317,7 +317,7 @@ s32 ModeManager::GetPlayersFinishPosition()
 // override is armed (in which case the console swallows the broadcast entirely).
 void ModeManager::SendFinishedModeAction(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");   // BrnModeManager.cpp:3258
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");   // BrnModeManager.cpp:3258
 
     // The console calls GetPlayerActiveRaceCarIndex here and leaves the answer in r3 (it becomes
     // the suppressed path's return value; this method is void in the DWARF signature). The call
@@ -678,14 +678,14 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
 
     // ---- stop the mode timer -------------------------------------------------------------------
     // Console: `if (mpCurrentGameMode) v22 = *(mode + 0xAC); else v22 = 0;` == GameMode::IsOnline().
-    const bool lbIsOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+    const bool lbIsOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
     mScoringSystem.StopModeTimer(lrTime, mpGameStateModule->GetPlayerActiveRaceCarIndex(), lbIsOnline);
 
     // ---- ship the results (both committed bodies -- hazards H2, CALLED not re-implemented) ------
     SendModeResults(lpOutputBuffer->GetGameActionQueue());        // BrnModeManager.cpp:347
     SendFinishedModeAction(lpOutputBuffer->GetGameActionQueue()); // this file
 
-    CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");   // :1670
+    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");   // :1670
 
     // ✅ LANDED 2026-09-10 (was: PARKED CALL, conductor decision #6). Console: `GameStateModule::
     // OnModeFinish(mpGameStateModule, lpOutputBuffer)` @0x82390EE0 -- the module-level end-of-mode
@@ -709,7 +709,7 @@ void ModeManager::ShowModeResults(
     // read after the prologue). Kept in the signature because the DWARF and the caller pass it.
     (void)lpGlobalRaceCarOutput;
 
-    CGS_ASSERT(lpGameActionQueue != nullptr, "lpGameActionQueue != NULL");   // :3297
+    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue != NULL");   // :3297
 
     const ::EActiveRaceCarIndex lePlayerRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
     CGS_ASSERT(lePlayerRaceCarIndex >= 0,
@@ -721,7 +721,7 @@ void ModeManager::ShowModeResults(
     // assert tests -- i.e. GetCurrentGameModeParams() != NULL, which for an embedded member is
     // always true. Kept as the console's own diagnostic.
     GameModeParams* lpGameModeParams = &mCurrentGameModeParams;
-    CGS_ASSERT(lpGameModeParams != nullptr, "GetCurrentGameModeParams()");           // :3304
+    CGS_ASSERT(lpGameModeParams != 0, "GetCurrentGameModeParams()");           // :3304
 
     // ------------------------------------------------------------------------------------------
     // The 232-byte results record.
@@ -755,7 +755,7 @@ void ModeManager::ShowModeResults(
 
     lAction.meGameModeType = meCurrentGameModeType;                       // record+0x00
 
-    const bool lbIsOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
+    const bool lbIsOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
     lAction.mbIsOnlinePostEvent = static_cast<u8>(lbIsOnline ? 1 : 0);    // record+0xE4  (mode+0xAC)
     lAction.mbHasBlock58        = 0;                                      // record+0xDF
     lAction.mu8FieldDB          = 0;                                      // record+0xDB
@@ -833,14 +833,14 @@ void ModeManager::ShowModeResults(
 
         const BrnProgression::ProgressionData* lpProgressionData =
             mpProgressionManager->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != nullptr, "lpProgressionData");   // :3341
+        CGS_ASSERT(lpProgressionData != 0, "lpProgressionData");   // :3341
 
         // The console walks the event-junction table inline: count at ProgressionData+0x1C, base at
         // +0x18, 16-byte stride, entry+0x00 == the id, entry+0x04 == the offline event pointer.
         // Reached here through the named accessors ProgressionData already declares for exactly
         // that table (GetEventJunctionCount / GetEventJunction).
-        const BrnProgression::RaceEventData* lpEventData = nullptr;
-        if (lpProgressionData != nullptr)
+        const BrnProgression::RaceEventData* lpEventData = 0;
+        if (lpProgressionData != 0)
         {
             const u32 luJunctionCount = lpProgressionData->GetEventJunctionCount();
             for (u32 luJunction = 0; luJunction < luJunctionCount; ++luJunction)
@@ -854,7 +854,7 @@ void ModeManager::ShowModeResults(
                 }
             }
         }
-        CGS_ASSERT(lpEventData != nullptr, "lpEventData");   // :3343
+        CGS_ASSERT(lpEventData != 0, "lpEventData");   // :3343
 
         // record+0xDA == !HasEventBeenWonPreviously(eventId) -- i.e. "this is a first win".
         lAction.mu8FieldDA =
@@ -905,7 +905,7 @@ void ModeManager::ShowModeResults(
         lAction.mfField0C = ((lfFinishTime - mfModeTimeLimit) >= 0.0f) ? mfModeTimeLimit : lfFinishTime;
     }
 
-    CGS_ASSERT(lpGameModeParams != nullptr, "lpGameModeParams");   // :3388
+    CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams");   // :3388
 
     // ---- THE PROGRESSION PAYOFF -----------------------------------------------------------------
     // Console gate: `if (!record[+0xE1] || meCurrentGameModeType == 3)` -- i.e. run the progression
@@ -951,7 +951,7 @@ void ModeManager::ShowModeResults(
                             ? static_cast<s32>(lAction.mfField0C * KF_SECONDS_TO_MILLISECONDS)
                             : lAction.miField08;
 
-                    CGS_ASSERT(lpGameActionQueue != nullptr, "lpGameActionQueue");   // :3439
+                    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue");   // :3439
 
                     // The 16-byte payload the console builds on the stack before the AddEvent.
                     // FLAG: no homed record type for action 18 (see E_ACTION_EVENT_SCORE_TO_UPLOAD);
@@ -966,13 +966,13 @@ void ModeManager::ShowModeResults(
                         reinterpret_cast<const CgsModule::Event*>(lacEventScoreToUpload),
                         GameStateModuleIO::E_ACTION_EVENT_SCORE_TO_UPLOAD, 16);
 
-                    CGS_ASSERT(mpProgressionManager != nullptr, "mpProgressionManager");   // :3443
+                    CGS_ASSERT(mpProgressionManager != 0, "mpProgressionManager");   // :3443
                     mpProgressionManager->GetProfile()->SetEventScoreToUpload(lEventId, liScoreToUpload,
                                                                              leGameModeType);
                 }
 
-                CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");            // :3449
-                CGS_ASSERT(mpGameStateModule->GetDeveloperChallengeManager() != nullptr,
+                CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");            // :3449
+                CGS_ASSERT(mpGameStateModule->GetDeveloperChallengeManager() != 0,
                            "mpGameStateModule->GetDeveloperChallengeManager()");          // :3450
                 mpGameStateModule->GetDeveloperChallengeManager()->OnEventEnd(
                     static_cast<s32>(meCurrentGameModeType),

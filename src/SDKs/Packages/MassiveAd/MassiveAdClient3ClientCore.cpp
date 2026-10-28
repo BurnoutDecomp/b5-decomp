@@ -5,7 +5,7 @@
 
 #include <new>      // placement new over the heap-hook allocation
 #include <cstdarg>  // va_list
-#include <cstdint>  // std::uintptr_t
+#include "types.hpp"  // std::uintptr_t
 #include <cstdio>   // vsnprintf, vsprintf_s
 #include <cstdlib>  // std::malloc, std::free
 #include <cstring>  // std::memset, std::strlen, std::strncpy
@@ -299,7 +299,7 @@ int CMassiveClientCore::Shutdown(int bWait, unsigned int nTimeoutMs)
         return ShutdownComplete();
     }
 
-    void* lpTimeoutParam = reinterpret_cast<void*>(static_cast<std::uintptr_t>(nTimeoutMs));
+    void* lpTimeoutParam = reinterpret_cast<void*>(static_cast<uintptr_t>(nTimeoutMs));
     if (bWait)
     {
         ShutdownTick(lpTimeoutParam);
@@ -1143,7 +1143,7 @@ unsigned long ShutdownTick(void* pTimeoutMs)
 {
     using namespace MassiveAdClient3;
 
-    const unsigned int lnTimeoutMs = static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(pTimeoutMs));
+    const unsigned int lnTimeoutMs = static_cast<unsigned int>(reinterpret_cast<uintptr_t>(pTimeoutMs));
     CMassiveClientCore* lpCore = CMassiveClientCore::spInstance;
     if (!lpCore)
         return 0;

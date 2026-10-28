@@ -89,7 +89,7 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
 
     struct EngRevDataSet
     {
-        EngRevDataSet() : mnNumPoints(0), mpDataPoints(nullptr), mfTime(0.0f), mnCurrentPoint(0) {}
+        EngRevDataSet() : mnNumPoints(0), mpDataPoints(0), mfTime(0.0f), mnCurrentPoint(0) {}
         // ADDITIVE: the four-field init the console's six static records at
         // unk_82F2F508 carry on disk (see BrnPhysicsControl.cpp).
         EngRevDataSet(s32 aiNumPoints, const EngineRevEntry* apPoints, f32 afTime, s32 aiCurrent)

@@ -11,7 +11,7 @@ class LogOutput : public StrStreamBase
 {
 public:
     using StrStreamBase::operator<<;
-    StrStreamBase& operator<<(const char* lpcText) override
+    StrStreamBase& operator<<(const char* lpcText)
     {
         Append(lpcText);
         return *this;

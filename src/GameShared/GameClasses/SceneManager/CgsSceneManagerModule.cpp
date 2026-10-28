@@ -216,7 +216,7 @@ void CullingGroupManager::CreateCullingTable(rw::IResourceAllocator* lpSceneAllo
     mpCullingTable = rw::BitTable::Initialize(&lpStorage, 24, 24);
 
     // Clear every packed word (the asm's zeroing loop over muWordCount).
-    if (mpCullingTable != nullptr)
+    if (mpCullingTable != 0)
     {
         for (u32 luWord = 0; luWord < mpCullingTable->muWordCount; ++luWord)
             mpCullingTable->maBits[luWord] = 0;
@@ -350,7 +350,7 @@ void SceneManagerModule::Construct()
     // ARTIST 0x828D13CC..0x828D13D0 marks the module "new" then clears the per-frame
     // cached collision-generator pointer (X360 [+0x3A84D0] <- 0).
     mbIsNewModule = true;
-    mpTriangleCacheCollisionGenerator = nullptr;
+    mpTriangleCacheCollisionGenerator = 0;
 }
 
 // ===========================================================================
@@ -628,9 +628,9 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
     CgsModule::IOBufferStack* lpOutStack = lpOutputBufferStack;
 
     // --- allocate the pipeline IO buffers on the in/out stacks ---
-    OverlapCullingIO::InputBuffer*     lpCullInput   = nullptr;
-    OverlapCullingIO::OutputBuffer*    lpCullOutput  = nullptr;
-    OverlapGenerationIO::OutputBuffer* lpGenOutput   = nullptr;
+    OverlapCullingIO::InputBuffer*     lpCullInput   = 0;
+    OverlapCullingIO::OutputBuffer*    lpCullOutput  = 0;
+    OverlapGenerationIO::OutputBuffer* lpGenOutput   = 0;
     {
         ScopedPerfMon lIoBuffers(siContactGen_IOBuffersPerfMon);
         lpInStack->CreateIOBuffer(&lpCullInput,  "OverlapCulling");
@@ -664,7 +664,7 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
     }
 
     // --- the query accumulator the culler writes alongside its output ---
-    ContactGenerator::QueryAccumulator* lpQueryAccumulator = nullptr;
+    ContactGenerator::QueryAccumulator* lpQueryAccumulator = 0;
     {
         ScopedPerfMon lIoBuffers(siContactGen_IOBuffersPerfMon);
         lpInStack->CreateIOBuffer(&lpQueryAccumulator, "QueryAccumulator");
@@ -1303,7 +1303,7 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
     // possible on the host (the buffer is ~2.4 MB of event queues and the stack is finite);
     // CreateIOBuffer nulls the pointer and returns false, and the bridge's own guard then
     // skips the legs that need it rather than firing one assert per queued event.
-    OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput = nullptr;
+    OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput = 0;
     lpInputBufferStack->CreateIOBuffer(&lpOverlapGenerationInput, "OverlapGeneration");
 
     // NOTE the WRITE lock on the SCENE input: InputBuffer_Update::GetInSceneUpdateInterface
@@ -1318,7 +1318,7 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
     // wedged boot when it used the wrong overload). Flipping BOTH halves at once is the only
     // correct move and it is not this cluster's mandate -- recorded, not changed.
     lpSceneInputBuffer->LockForWrite();
-    if (lpOverlapGenerationInput != nullptr)
+    if (lpOverlapGenerationInput != 0)
     {
         lpOverlapGenerationInput->LockForWrite();
     }
@@ -1326,7 +1326,7 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
     BridgeInputSceneUpdateInterfaceToSubModules(lpOverlapGenerationInput, NULL,
                                                 lpSceneInputBuffer, lbPrepare);
 
-    if (lpOverlapGenerationInput != nullptr)
+    if (lpOverlapGenerationInput != 0)
     {
         lpOverlapGenerationInput->UnlockForWrite();
     }
@@ -1343,7 +1343,7 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
 
     // Step 6: replay this frame's add/update/remove/force-no-padding queues into the
     // sweep-and-prune broad phase (see the STEP 6 note in the banner).
-    if (lpOverlapGenerationInput != nullptr)
+    if (lpOverlapGenerationInput != 0)
     {
         mOverlapGenerator.Update(lpOverlapGenerationInput);
     }
@@ -1357,7 +1357,7 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
 
     // Step 8 (the half this function pushes): pop the generator input buffer. The console
     // destroys it first of the four (0x828D4E2C).
-    if (lpOverlapGenerationInput != nullptr)
+    if (lpOverlapGenerationInput != 0)
     {
         lpInputBufferStack->DestroyIOBuffer(&lpOverlapGenerationInput);
     }
@@ -1570,8 +1570,8 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
     // The octree writes its frustum-test results into a SpatialPartition output buffer
     // pushed on the output stack; the SceneManagerModule reads the resolved entity ids
     // out and re-emits them into the scene output event queue.
-    SpatialPartitionIO::OutputBuffer* lpResultBuffer = nullptr;
-    if (lpOutStack != nullptr)
+    SpatialPartitionIO::OutputBuffer* lpResultBuffer = 0;
+    if (lpOutStack != 0)
     {
         lpOutStack->CreateIOBuffer(&lpResultBuffer, "SpacialPartition");
     }
@@ -1585,7 +1585,7 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
         }
         lpResultBuffer = &sStandInResultBuffer;
     }
-    if (lpResultBuffer == nullptr)
+    if (lpResultBuffer == 0)
     {
         return;
     }
@@ -1669,7 +1669,7 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneInputBuffer)->UnlockForRead();
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->UnlockForWrite();
 
-    if (lpOutStack != nullptr)
+    if (lpOutStack != 0)
     {
         lpOutStack->DestroyIOBuffer(&lpResultBuffer);
     }
@@ -2634,8 +2634,8 @@ namespace CgsSceneManager
             u32                                  mauPad[3];       // +0x04
             CgsGeometric::PolySoupLineNearestResult maFirstResult; // +0x10
         };
-        static_assert(offsetof(LineStreamResultBlock, maFirstResult) == 0x10, "the hit record follows a 16-byte header");
-        static_assert(sizeof(CgsGeometric::Line) == 32, "a line command is the stream's 32-byte record");
+        CGS_STATIC_ASSERT((offsetof(LineStreamResultBlock, maFirstResult) == 0x10), "the hit record follows a 16-byte header");
+        CGS_STATIC_ASSERT((sizeof(CgsGeometric::Line) == 32), "a line command is the stream's 32-byte record");
 
         // The console's empty-result line parameter (flt_82001CC0).
         const f32 KF_NO_HIT_LINE_PARAM = 0.0f;
@@ -3641,7 +3641,7 @@ namespace CgsSceneManager
                    "World volume tests not currently supported\n");
 
         const VolRef::Volume* lpVolume = lrQuery.mVolumeBuffer.GetVolume();
-        CGS_ASSERT(lpVolume != nullptr, "lpVolume != NULL");
+        CGS_ASSERT(lpVolume != 0, "lpVolume != NULL");
 
         lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
 
@@ -4033,10 +4033,10 @@ namespace CgsSceneManager
         static const f32 KF_NO_DEPTH                = 0.0f;
         // The results-queue event type of the deepest result (`li r5, 5` @0x828D45A4 / 0x828D486C).
         static const s32 KI_VOLUME_TEST_DEEPEST_RESULT_EVENT = 5;
-        static_assert(sizeof(FineIntersectionTestIO::InEventVolumeTestDeepest().mVolumeBuffer) == KU_EVENT_VOLUME_SIZE,
+        CGS_STATIC_ASSERT((sizeof(FineIntersectionTestIO::InEventVolumeTestDeepest().mVolumeBuffer) == KU_EVENT_VOLUME_SIZE),
                       "the fine query's volume slot is the event's 0x80-byte volume image");
-        static_assert(sizeof(lpQuery->mVolumeBuffer) == KU_EVENT_VOLUME_SIZE, "the event's volume image is 0x80 bytes");
-        static_assert(sizeof(lpQuery->mTransform) == sizeof(Matrix44Affine), "the event's transform is a Matrix44Affine");
+        CGS_STATIC_ASSERT((sizeof(lpQuery->mVolumeBuffer) == KU_EVENT_VOLUME_SIZE), "the event's volume image is 0x80 bytes");
+        CGS_STATIC_ASSERT((sizeof(lpQuery->mTransform) == sizeof(Matrix44Affine)), "the event's transform is a Matrix44Affine");
 
         // mTransform holds the DWARF Matrix44Affine's four rows (see the header), so it is viewed as one, in place: the
         // console hands the event's own transform (r31 + 0) to VolumeTest.
@@ -4188,9 +4188,9 @@ namespace CgsSceneManager
         static const u32 KU_EVENT_VOLUME_SIZE = 0x80;
         // The results-queue event type of the fine volume result.
         static const s32 KI_VOLUME_TEST_FINE_RESULT_EVENT = 6;
-        static_assert(sizeof(FineIntersectionTestIO::InEventVolumeTestFine().mVolumeBuffer) == KU_EVENT_VOLUME_SIZE,
+        CGS_STATIC_ASSERT((sizeof(FineIntersectionTestIO::InEventVolumeTestFine().mVolumeBuffer) == KU_EVENT_VOLUME_SIZE),
                       "the fine query's volume slot is the event's 0x80-byte volume image");
-        static_assert(sizeof(lpQuery->mTransform) == sizeof(Matrix44Affine), "the event's transform is a Matrix44Affine");
+        CGS_STATIC_ASSERT((sizeof(lpQuery->mTransform) == sizeof(Matrix44Affine)), "the event's transform is a Matrix44Affine");
 
         CGS_ASSERT((lpQuery->mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
                    "World volume tests not currently supported\n");

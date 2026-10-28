@@ -28,6 +28,6 @@ AptRenderItem* AptRenderItemLevel::Clone(int nCreatedOnTick, bool bCopyExtended)
 {
     void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemLevel));
     if (!p)
-        return nullptr;
+        return 0;
     return new (p) AptRenderItemLevel(this, nCreatedOnTick, bCopyExtended);
 }

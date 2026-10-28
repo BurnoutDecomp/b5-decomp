@@ -51,7 +51,7 @@ MemcardInterface* MemcardInterface::CreateInstance(const CreateParams* pParams,
         static bool s_bDefaultConfigured = false;
         if (!s_bDefaultConfigured)
         {
-            s_defaultParams.mpStack     = nullptr;              // +0x00
+            s_defaultParams.mpStack     = 0;              // +0x00
             s_defaultParams.mnStackSize = 0x10000;             // +0x04  64KB
             s_defaultParams.mnPriority  = 0;                   // +0x08
             s_defaultParams.mnProcessor = -1;                  // +0x0C
@@ -66,15 +66,15 @@ MemcardInterface* MemcardInterface::CreateInstance(const CreateParams* pParams,
     RealmcCore::ObjectManager::Initialize();
 
     // Lazily construct the single MemcardInterfaceImpl (a module-static singleton).
-    static MemcardInterface* s_pInstance = nullptr;
+    static MemcardInterface* s_pInstance = 0;
     if (!s_pInstance)
     {
         // The raw object storage (0x528 == 1320 bytes, the impl's fixed size) is
         // allocated with a null tag, then the impl is constructed in place.
-        void* pMem = RealmcCore::AllocateMem(nullptr, 1320);
+        void* pMem = RealmcCore::AllocateMem(0, 1320);
         s_pInstance = pMem
                           ? new (pMem) MemcardInterfaceImpl(pThreadParams, liParam2, liParam3)
-                          : nullptr;
+                          : 0;
     }
     return s_pInstance;
 }

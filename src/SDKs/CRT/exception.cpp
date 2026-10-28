@@ -25,7 +25,7 @@ exception::~exception() noexcept
 // the literal message pointer; an owning source is deep-copied via malloc +
 // strcpy_s (strlen was inlined in the X360 asm).
 exception::exception(const exception& rOther) noexcept
-    : mpWhat(nullptr)
+    : mpWhat(0)
     , miDoFree(rOther.miDoFree)
 {
     if (!miDoFree)
@@ -44,7 +44,7 @@ exception::exception(const exception& rOther) noexcept
     }
     else
     {
-        mpWhat = nullptr;
+        mpWhat = 0;
     }
 }
 

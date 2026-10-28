@@ -21,7 +21,7 @@
 //     BrnWorld::WorldEntityModule::PreSceneUpdate.
 
 // Lock the element stride (64) the X360 AddEvent attests (`miLength << 6` / 8-qword copy).
-static_assert(sizeof(BrnWorld::PVSIO::GetZoneRequest) == 64, "GetZoneRequest stride drift");
+CGS_STATIC_ASSERT((sizeof(BrnWorld::PVSIO::GetZoneRequest) == 64), "GetZoneRequest stride drift");
 
 template void
 CgsModule::EventQueue<BrnWorld::PVSIO::GetZoneRequest, 8>::Construct();

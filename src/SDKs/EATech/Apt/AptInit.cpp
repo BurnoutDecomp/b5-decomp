@@ -35,7 +35,7 @@
 #include "SDKs/EATech/Apt/AptInit.h"
 
 #include <cstring>   // memcpy / memset
-#include <cstdint>   // intptr_t
+#include "types.hpp"   // intptr_t
 #include <new>       // placement new (AptTarget)
 
 // ---- the shared fixed-size pool + the value pools --------------------------
@@ -122,7 +122,7 @@ namespace
     int gbAptUpdateInitDone = 0;   // dword_8324E50C
 
     // ---- the render-item pointer pool (off_8324E2C8) -----------------------
-    void* gpAptRenderItemPool = nullptr;   // off_8324E2C8
+    void* gpAptRenderItemPool = 0;   // off_8324E2C8
 
     // (the deferred-release vector: the ONE off_8324E51C global gpValuesToRelease
     //  lives in AptGlobals.cpp -- declared below, OUTSIDE this anonymous namespace.)
@@ -135,10 +135,10 @@ namespace
 
     // ---- off_82F733B0 / unk_82F72FF8 (the config "empty default" sentinel) --
     unsigned char gAptEmptyDefaultSentinel[8] = { 0 };   // unk_82F72FF8
-    void*         gpAptConfigDefault = nullptr;           // off_82F733B0
+    void*         gpAptConfigDefault = 0;           // off_82F733B0
 
     // ---- dword_8324E4F0 (the common-init gAptFuncs self-registration slot) -
-    void* gpAptCommonFuncsSlot = nullptr;   // dword_8324E4F0
+    void* gpAptCommonFuncsSlot = 0;   // dword_8324E4F0
 
     EA::Thread::Mutex& AptUpdateRenderMutex()
     {
@@ -250,8 +250,8 @@ extern int  gAptDeferredReleaseCount;       // dword_8324E508 (AptGlobals.cpp)
 // ===========================================================================
 namespace
 {
-    DOGMA_PoolManager*      s_pDogmaPool = nullptr;   // off_8324D808
-    AptValueGC_PoolManager* s_pGCPool    = nullptr;   // off_8324D834
+    DOGMA_PoolManager*      s_pDogmaPool = 0;   // off_8324D808
+    AptValueGC_PoolManager* s_pGCPool    = 0;   // off_8324D834
 
     void WireAllocatorGlobals()
     {
@@ -289,11 +289,11 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
                                                             /*bStoreFreeBlockSize*/ false,
                                                             /*nOffsetToStoreSizeInFreeItem*/ 0,
                                                             /*bTrackOutsideAllocations*/ true)
-                       : nullptr;
+                       : 0;
 
     // mem2 = dword_8324E818(48); off_8324D834 = AptValueGC_PoolManager(mem2, gcMain, gcOvf).
     void* lpGCMem = gAptFuncs.pfnMemAlloc(sizeof(AptValueGC_PoolManager));   // console 48; x64 sizeof
-    s_pGCPool = lpGCMem ? ::new (lpGCMem) AptValueGC_PoolManager(nGcMain, nGcOvf) : nullptr;
+    s_pGCPool = lpGCMem ? ::new (lpGCMem) AptValueGC_PoolManager(nGcMain, nGcOvf) : 0;
 
     WireAllocatorGlobals();
     return s_pGCPool;
@@ -338,15 +338,15 @@ void* AptCommonInitialize(void* pConfig)
     //  that header is sizeof(AptValueVector) -- allocate that. The ctor then allocates
     //  the item array from the operand-stack pool.)
     void* lpVecMem = gpAptPseudoDataPool->Allocate(sizeof(AptValueVector));   // console 12; x64 sizeof
-    if (lpVecMem != nullptr)
+    if (lpVecMem != 0)
     {
         AptValueVector* lpVec = static_cast<AptValueVector*>(lpVecMem);
         *lpVec = AptValueVector::ConstructAptValueVector(static_cast<int>(lpCfg[10]));
         gpValuesToRelease = lpVec;
         return lpVec;
     }
-    gpValuesToRelease = nullptr;
-    return nullptr;
+    gpValuesToRelease = 0;
+    return 0;
 }
 
 // ===========================================================================
@@ -416,14 +416,14 @@ static const EAStringC gAptErrorClassName     ("Error");        // unk_8324E61C 
 
 // off_8324E378 -- the ASSetPropFlags native-fn singleton slot (X360-xref'd only by
 // this TU's init/teardown pair, so file-local).
-static AptValue* gpAptFnASSetPropFlags = nullptr;
+static AptValue* gpAptFnASSetPropFlags = 0;
 
 // The registerClass native is AptObject::RegisterClassNative (AptObject.cpp;
 // X360 sub_82AF6A38); its declaration arrives with AptObject.h below.
 
 int AptValueInitialize()
 {
-    if (gpUndefinedValue == nullptr)
+    if (gpUndefinedValue == 0)
         gpUndefinedValue = new AptNone();   // pooled operator new (gpNonGCPoolManager)
     gpAptNoneValue = gpUndefinedValue;      // off_8324D814: AptGlobals.cpp's second view of
                                             // the SAME console slot (one object, two names)
@@ -434,13 +434,13 @@ int AptValueInitialize()
 
     // off_8324E498 / off_8324E49C = 0 -- reset the cached default text/movie character
     // templates (rebuilt lazily by AptCharacterHelper; Shutdown frees them on teardown).
-    AptCharacterHelper::spDefaultTextCharacter  = nullptr;
-    AptCharacterHelper::spDefaultMovieCharacter = nullptr;
+    AptCharacterHelper::spDefaultTextCharacter  = 0;
+    AptCharacterHelper::spDefaultMovieCharacter = 0;
 
     // dword_8324D700 -- the shared "EmptyCIH" placeholder handle: a pinned AptCIHNone
     // (X360: AptCIH::operator new(40) + AptCIHNone(); then InitFromBuffer("EmptyCIH")
     // assigned into the node's instance-name slot [+8] with the RAII temp released).
-    if (gpAptEmptyCIH == nullptr)
+    if (gpAptEmptyCIH == 0)
     {
         gpAptEmptyCIH = new AptCIHNone();
         gpAptEmptyCIH->mInstanceName = EAStringC("EmptyCIH");
@@ -448,19 +448,19 @@ int AptValueInitialize()
 
     // dword_8324E2AC -- the shared AptRenderingContext (console Allocate(off_8324D808,
     // 1096) + placement ctor; x64 uses sizeof over the same pool).
-    if (gpAptRenderingContext == nullptr)
+    if (gpAptRenderingContext == 0)
     {
         void* lpBlock = gpAptPseudoDataPool->Allocate(sizeof(AptRenderingContext));
-        gpAptRenderingContext = lpBlock ? new (lpBlock) AptRenderingContext() : nullptr;
+        gpAptRenderingContext = lpBlock ? new (lpBlock) AptRenderingContext() : 0;
     }
 
     // off_8324E2CC -- the extern-interface singleton (console Allocate(8) + placement;
     // the class's pooled operator new reproduces it).
-    if (gpAptExternObject == nullptr)
+    if (gpAptExternObject == 0)
         gpAptExternObject = new AptExtern();
 
     // off_8324E2A8 -- the Key manager singleton (+AddRef, faithful to the asm's vtbl[0]).
-    if (gpAptKeyObject == nullptr)
+    if (gpAptKeyObject == 0)
     {
         gpAptKeyObject = new AptKey();
         gpAptKeyObject->AddRef();
@@ -469,14 +469,14 @@ int AptValueInitialize()
     // off_8324E380 -- the _global fallback scope (+AddRef). The console wraps these in
     // interlocked one-shot latches (unk_8324E71C/..E720); single-threaded init here, so
     // the idempotent null-checks are the equivalent one-time guard.
-    if (gpAptGlobalFallback == nullptr)
+    if (gpAptGlobalFallback == 0)
     {
         gpAptGlobalFallback = new AptGlobal();
         gpAptGlobalFallback->AddRef();
     }
 
     // off_8324E37C -- the _global extension object (+AddRef).
-    if (gpAptGlobalExtensionObject == nullptr)
+    if (gpAptGlobalExtensionObject == 0)
     {
         AptGlobalExtensionObject* const pExt = new AptGlobalExtensionObject();
         gpAptGlobalExtensionObject = pExt;
@@ -490,7 +490,7 @@ int AptValueInitialize()
     // off_8324D82C -- the shared empty AptString (Create(&unk_820046A7) == Create("")),
     // GC-rooted then AddRef'd (asm @0x82B02A34..54: store; setGCRoot(slot, 1); vtbl[0]
     // on the reloaded slot).
-    if (gpAptStringObject == nullptr)
+    if (gpAptStringObject == 0)
     {
         gpAptStringObject = AptString::Create("");
         if (gpAptStringObject)
@@ -502,7 +502,7 @@ int AptValueInitialize()
 
     // dword_8324E2D4 = 0 -- clear the AS export-name class registry before the
     // AS-globals bootstrap runs (Object.registerClass lazily rebuilds it).
-    gpAptClassRegistry = nullptr;
+    gpAptClassRegistry = 0;
 
     // ---- sub_82AF6B68 -- the AS-globals bootstrap (tail-called; wired IN FULL) ----
     // Drain the shared deferred-release vector, install the NINE builtin class
@@ -518,10 +518,10 @@ int AptValueInitialize()
     // dword_8324D818 (both reconstruction views written). Class + prototype are
     // GC-rooted per entry, then the Object.registerClass native is wrapped LAST and
     // the vector is drained again on the way out.
-    if (gpAptGlobalFallback != nullptr)
+    if (gpAptGlobalFallback != 0)
     {
         AptNativeHash* const pGlobals = gpAptGlobalFallback->GetNativeHashVirtual();
-        if (pGlobals != nullptr && pGlobals->Lookup(gAptObjectClassName) == nullptr)
+        if (pGlobals != 0 && pGlobals->Lookup(gAptObjectClassName) == 0)
         {
             gpValuesToRelease->ReleaseValues();   // bootstrap-entry drain (off_8324E51C)
 
@@ -551,7 +551,7 @@ int AptValueInitialize()
             for (int li = 0; li < 9; ++li)
             {
                 AptValue* const pClass = pGlobals->Lookup(*lakNames[li]);
-                if (pClass == nullptr)
+                if (pClass == 0)
                     continue;
                 AptPrototype* const pProto = new AptPrototype();
                 if (li == 5)
@@ -562,7 +562,7 @@ int AptValueInitialize()
                     gpAptCurrentTargetMC    = pProto;
                 }
                 AptNativeHash* const pClassHash = pClass->GetNativeHashVirtual();
-                if (pClassHash != nullptr)
+                if (pClassHash != 0)
                 {
                     pClassHash->SetPrototype(pProto);
                     if (li == 0)
@@ -586,7 +586,7 @@ int AptValueInitialize()
             // AptObject::RegisterClassNative in AptObject.cpp), wrapped LAST by the
             // console: new AptNativeFunction; store; setGCRoot(1); AddRef (vtbl[0] on
             // the reloaded slot -- asm 0x82AF7228..0x82AF7270).
-            if (gpObjRegistrationFunc == nullptr)
+            if (gpObjRegistrationFunc == 0)
             {
                 gpObjRegistrationFunc = AptExtObject::CreateNewAptFunction(
                     reinterpret_cast<AptExtFunctionPtr>(&AptObject::RegisterClassNative));
@@ -607,7 +607,7 @@ int AptValueInitialize()
             {
                 AptValue* const pObjectClass = pGlobals->Lookup(gAptObjectClassName);
                 AptNativeHash* const pObjHash =
-                    pObjectClass ? pObjectClass->GetNativeHashVirtual() : nullptr;
+                    pObjectClass ? pObjectClass->GetNativeHashVirtual() : 0;
                 if (pObjHash && gpObjRegistrationFunc)
                 {
                     EAStringC lRegKey("registerClass");
@@ -645,7 +645,7 @@ int AptValueInitialize()
     };
     for (int li = 0; li < 7; ++li)
     {
-        if (*lakNativeFns[li].mppSlot != nullptr)
+        if (*lakNativeFns[li].mppSlot != 0)
             continue;   // idempotent re-init (the singletons survive until AptValueShutdown)
         AptNativeFunction* const pFn = AptExtObject::CreateNewAptFunction(lakNativeFns[li].mpFunc);
         *lakNativeFns[li].mppSlot = pFn;
@@ -790,7 +790,7 @@ int AptRenderShutdown()
             do
             {
                 gAptFuncs.pfnFreeTexture(lppItems[liFreed]);
-                lppItems[liFreed] = nullptr;          // *(off_8324E2C8 + v2) = 0
+                lppItems[liFreed] = 0;          // *(off_8324E2C8 + v2) = 0
                 ++liFreed;
             }
             while (liFreed < static_cast<unsigned int>(gAptDeferredReleaseCount));
@@ -803,7 +803,7 @@ int AptRenderShutdown()
     // off_8324E2C8 = pool->Deallocate(4 * 1024) -- release the render-item pointer pool.
     bool lbResult = gpAptPseudoDataPool->Deallocate(gpAptRenderItemPool,
                                                     sizeof(void*) * gnAptRenderItemPoolCount);
-    gpAptRenderItemPool      = nullptr;      // off_8324E2C8 = 0
+    gpAptRenderItemPool      = 0;      // off_8324E2C8 = 0
     gAptDeferredReleaseCount = 0;            // dword_8324E508 = 0
     return lbResult;
 }
@@ -860,7 +860,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     gAptLookupPoolSize = static_cast<int>(lpParams[13]);
 
     // if (!off_82F733B0) off_82F733B0 = &unk_82F72FF8.
-    if (gpAptConfigDefault == nullptr)
+    if (gpAptConfigDefault == 0)
         gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];
 
     // byte_8324E392 = 0; byte_8324E393 = params byte[0x3D].
@@ -868,7 +868,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     gbAptUpdateFlag393 = reinterpret_cast<const unsigned char*>(lpParams)[0x3D];
 
     // if (!dword_8324E820) dword_8324E820 = sub_82AD9030 (the DOGMA sized-free hook).
-    if (gpAptGCTableFree == nullptr)
+    if (gpAptGCTableFree == 0)
         gpAptGCTableFree = &AptDogmaFreeSizedHook;
 
     // dword_8324E4E8 -- the GC reference-registration callback: the console ships the
@@ -877,7 +877,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     // RegisterReferences @0x82ADA3C0 -- and the XB1 partial sweep sub_140832E70
     // save/stamps/restores the same slot, qword_141479F80 = sub_14085CB40, around its
     // mark walk). The boot install reproduces that never-null initialised state.
-    if (AptValue::sReferenceRegistrationCb == nullptr)
+    if (AptValue::sReferenceRegistrationCb == 0)
         AptValue::sReferenceRegistrationCb = &AptGC::sReferenceRegistrationCb;
 
     // if (!dword_8324E6E0) AptCommonInitialize(&unk_82F733B8).
@@ -888,7 +888,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     if (lpParams[14] != 0)
     {
         void* lpVecMem = gpAptPseudoDataPool->Allocate(sizeof(AptValueVector));   // console 12; x64 sizeof
-        if (lpVecMem != nullptr)
+        if (lpVecMem != 0)
         {
             AptValueVector* lpVec = static_cast<AptValueVector*>(lpVecMem);
             *lpVec = AptValueVector::ConstructAptValueVector(static_cast<int>(lpParams[14]));
@@ -896,12 +896,12 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
         }
         else
         {
-            gpAptZombieVector = nullptr;
+            gpAptZombieVector = 0;
         }
     }
     else
     {
-        gpAptZombieVector = nullptr;
+        gpAptZombieVector = 0;
     }
 
     // AptValueInitialize() -- the full AS value-singleton bootstrap (its body above).
@@ -930,7 +930,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     void* lpListMem = gpAptPseudoDataPool->Allocate(sizeof(AptFileSavedInputStateVector));   // console 28; x64 sizeof
     gpAptSavedInputCheckpoints = lpListMem
                                      ? new (lpListMem) AptFileSavedInputStateVector()
-                                     : nullptr;
+                                     : 0;
 
     // if (a2) create + select the initial AptTarget context; else null the three
     // context globals. NB: InitializeApt calls AptUpdateInitialize with a2 == 0 (it
@@ -939,25 +939,25 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     if (a2)
     {
         void* lpTgtMem = gpAptPseudoDataPool->Allocate(sizeof(AptTarget));
-        AptTarget* lpTgt = lpTgtMem ? new (lpTgtMem) AptTarget(lpParams) : nullptr;
+        AptTarget* lpTgt = lpTgtMem ? new (lpTgtMem) AptTarget(lpParams) : 0;
         gpAptTargetCurrent = lpTgt;   // off_8324E570 (list head)
         // off_8324E574/578 + the TLS mirror (unk_8324E814) via AptChangeTargetInstance
         // (which AptTarget.cpp owns) -- it sets gpAptTarget/gpAptTargetTLS + the TLS
         // slot GetTarget() reads. (Setting gpAptTargetCurrent above covers the list head
         // AptChangeTargetInstance does not touch.)
-        if (lpTgt != nullptr)
+        if (lpTgt != 0)
             AptChangeTargetInstance(lpTgt);
         else
         {
-            gpAptTarget    = nullptr;
-            gpAptTargetTLS = nullptr;
+            gpAptTarget    = 0;
+            gpAptTargetTLS = 0;
         }
     }
     else
     {
-        gpAptTargetCurrent = nullptr;
-        gpAptTarget        = nullptr;
-        gpAptTargetTLS     = nullptr;
+        gpAptTargetCurrent = 0;
+        gpAptTarget        = 0;
+        gpAptTargetTLS     = 0;
     }
 
     gbAptUpdateInitDone = 1;   // dword_8324E50C = 1
@@ -979,11 +979,11 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 // ===========================================================================
 void AptActionInterpreter::shutdown()
 {
-    if (mpStack != nullptr)
+    if (mpStack != 0)
         gpAptOperandStackPool->Deallocate(mpStack, sizeof(AptValue*) * mnStackCapacity);
     mnStackCapacity = 0;
     mnStackTop      = 0;
-    mpStack         = nullptr;
+    mpStack         = 0;
 }
 
 // ===========================================================================
@@ -1022,7 +1022,7 @@ int AptUpdateShutdown(int /*a1*/)
     AptTarget* lpCurrent = gpAptTargetCurrent;   // r4 = off_8324E570
     gpAptTarget    = lpCurrent;                   // off_8324E574 = off_8324E570
     gpAptTargetTLS = lpCurrent;                   // off_8324E578 = off_8324E570
-    if (lpCurrent != nullptr)
+    if (lpCurrent != 0)
     {
         gpAptTarget = lpCurrent;                       // off_8324E574 (console re-store)
         AptTarget* lpPrevTarget = lpCurrent;           // r27 -- gpAptTarget restore value
@@ -1053,12 +1053,12 @@ int AptUpdateShutdown(int /*a1*/)
     // heap backing -- then the header block goes back to the pool (console 28 bytes;
     // x64 sizeof).
     AptFileSavedInputStateVector* lpList = gpAptSavedInputCheckpoints;   // v10 = dword_8324D810
-    if (lpList != nullptr)
+    if (lpList != 0)
     {
         lpList->Clear();                                                                 // StringAsVec(v10)
         gpAptPseudoDataPool->Deallocate(lpList, sizeof(AptFileSavedInputStateVector));   // Deallocate(pool, v10, 28)
     }
-    gpAptSavedInputCheckpoints = nullptr;   // dword_8324D810 = 0
+    gpAptSavedInputCheckpoints = 0;   // dword_8324D810 = 0
 
     // The GC's full value-pool clean (the console r3 into it is the dead reap/Deallocate
     // leftover; CleanAll takes no args).
@@ -1071,12 +1071,12 @@ int AptUpdateShutdown(int /*a1*/)
     // Free the per-target zombie vector (off_8324E528): item array (4*capacity) + 12-byte
     // header (family-(B) vector -- the +0 word / mnTop member holds the capacity).
     AptValueVector* lpZombie = gpAptZombieVector;   // v11 = off_8324E528
-    if (lpZombie != nullptr)
+    if (lpZombie != 0)
     {
         gpAptPseudoDataPool->Deallocate(lpZombie->mppItems, sizeof(AptValue*) * lpZombie->mnTop);  // 4 * *v11
         gpAptPseudoDataPool->Deallocate(lpZombie, sizeof(AptValueVector));                          // 12
     }
-    gpAptZombieVector = nullptr;   // off_8324E528 = 0
+    gpAptZombieVector = 0;   // off_8324E528 = 0
 
     // Shut the interpreter (operand stack) down; the console keeps its r3 (void -> 0).
     gAptActionInterpreter.shutdown();   // AptActionInterpreter::shutdown(&dword_8324E760)

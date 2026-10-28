@@ -77,9 +77,9 @@ namespace CgsGui
         s32 miBlockingEventId;
     };
 
-    static_assert(sizeof(GuiEventPriorityRemoval) == 4, "ARTIST priority-removal payload");
-    static_assert(sizeof(GuiEventPriorityBlocking) == 4, "ARTIST priority-blocking payload");
-    static_assert(sizeof(CgsContainers::BitArray<KI_MAX_EVENTS_PER_OBSERVER>) == 80,
+    CGS_STATIC_ASSERT((sizeof(GuiEventPriorityRemoval) == 4), "ARTIST priority-removal payload");
+    CGS_STATIC_ASSERT((sizeof(GuiEventPriorityBlocking) == 4), "ARTIST priority-blocking payload");
+    CGS_STATIC_ASSERT((sizeof(CgsContainers::BitArray<KI_MAX_EVENTS_PER_OBSERVER>) == 80),
         "ARTIST Interpreter masks contain ten u64 words");
 
     class EventInterpreterModule : public CgsModule::ModuleSingleBuffered
@@ -112,10 +112,10 @@ namespace CgsGui
         };
 
         // ----- module virtuals (DWARF order) -------------------------------------------
-        void Construct() override;
-        bool Prepare() override;
-        bool Release() override;
-        void Destruct() override;
+        void Construct() ;
+        bool Prepare() ;
+        bool Release() ;
+        void Destruct() ;
 
         virtual void PreWorldUpdate(InputBuffer* lpInput, OutputBuffer* lpOutput);
         virtual void Update(InputBuffer* lpInput, OutputBuffer* lpOutput);

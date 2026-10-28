@@ -23,7 +23,7 @@ namespace rw { namespace collision
         static void* GetResourceDescriptor(void* pOut, u32 a1, u32 a2, u32 a3, void* pTree, u32 a5, int a6);
     };
     int   TriangleKDTreeProcedural::Fixup(void*, void*) { __debugbreak(); return 0; }
-    void* TriangleKDTreeProcedural::GetResourceDescriptor(void*, u32, u32, u32, void*, u32, int) { __debugbreak(); return nullptr; }
+    void* TriangleKDTreeProcedural::GetResourceDescriptor(void*, u32, u32, u32, void*, u32, int) { __debugbreak(); return 0; }
 }}
 
 namespace CgsResource

@@ -81,12 +81,12 @@ namespace CgsGameTalk
 
         // IGameTalkProtocol override (vtable slot 1): connected iff Connect()
         // established the socket. X360 @0x827DB688.
-        virtual bool IsConnected() override;
+        virtual bool IsConnected() ;
 
     private:
         // IGameTalkProtocol override (vtable slot 2): send liMsgSize bytes over the
         // active socket, pumping select() when the socket would block. X360 @0x82838158.
-        virtual bool Send(void* lpaBuffer, s32 liMsgSize) override;
+        virtual bool Send(void* lpaBuffer, s32 liMsgSize) ;
 
         // Create/bind/listen a non-blocking listening socket on liPort. X360 @0x82837230.
         void SetListeningMode(s32 liPort);

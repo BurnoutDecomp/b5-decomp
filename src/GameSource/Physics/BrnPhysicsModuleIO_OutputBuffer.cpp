@@ -25,11 +25,11 @@ namespace PhysicsModuleIO
 {
     void OutputBuffer::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer, mVehicleOutputRequestInterface) == 16,     "mVehicleOutputRequestInterface @16");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mVehicleOutputRequestInterface) == 16),     "mVehicleOutputRequestInterface @16");
         // the :378 manager seat, previously folded into
         // padding, is a real member now -- 16 + 41936 == 41952 (the request interface is
         // byte-identical on both targets, so this pin stays ABSOLUTE).
-        static_assert(offsetof(OutputBuffer, mVehicleManagerOutputInterface) == 41952,  "mVehicleManagerOutputInterface @41952");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mVehicleManagerOutputInterface) == 41952),  "mVehicleManagerOutputInterface @41952");
         // From here down the buffer GROWS on the host (12- vs 16-byte console queue
         // headers inside the two vehicle interfaces -- see the header note), so the gates
         // are the console DELTAS between seats, not absolutes. Console deltas: 44128-41952
@@ -56,8 +56,8 @@ namespace PhysicsModuleIO
         // Console delta 818,768; measured host 818,944 (the 16-vs-12-byte queue headers). The
         // `>=` is what makes the promotion safe: if a later wave ever SHRINKS the interface
         // below the console span this gate fails instead of silently re-seating the spy.
-        static_assert(offsetof(OutputBuffer, mContactSpyInterface)
-                    - offsetof(OutputBuffer, mSceneInputInterface)           >= 998192 - 179424,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mContactSpyInterface)
+                    - offsetof(OutputBuffer, mSceneInputInterface)           >= 998192 - 179424),
                       "scene -> contact-spy console delta (>=: the spy seat 8-aligns)");
     }
 

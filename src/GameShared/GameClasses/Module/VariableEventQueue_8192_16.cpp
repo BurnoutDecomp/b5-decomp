@@ -107,7 +107,7 @@ template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Me
 // X360 typed-AddEvent thunk @0x826DF9B8 (li r6,0x20), posted by the 3-D effect controls
 // (Traffic::TrafficEngine::ProcessUpdate, Collision::CollisionControl::UpdateParams,
 // Passby::PassbyEffect::ProcessUpdate, Vehicles::Engines::DualGinsuEffect::ProcessUpdate).
-static_assert(sizeof(CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>) == 0x20,
+CGS_STATIC_ASSERT((sizeof(CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>) == 0x20),
               "Message<Brn3DEffectControl::DrawSphere> must be 32 bytes (X360 AddEvent li r6,0x20)");
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> >(const CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>*, s32);
 

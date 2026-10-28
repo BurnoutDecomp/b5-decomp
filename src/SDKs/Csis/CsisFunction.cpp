@@ -63,7 +63,7 @@ Result Function::SubscribeFast(Subscriber* pNode)
     Subscriber** ppHead = reinterpret_cast<Subscriber**>(miPayload);
     Subscriber* pHead = *ppHead;
 
-    pNode->mpPrev = nullptr;
+    pNode->mpPrev = 0;
     pNode->mpNext = pHead;
     if (pHead)
         pHead->mpPrev = pNode;

@@ -3,7 +3,7 @@
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 
-#include <cstdint>   // uintptr_t (the full-width x64 load-base delta)
+#include "types.hpp"   // uintptr_t (the full-width x64 load-base delta)
 
 namespace BrnStreetData
 {
@@ -20,9 +20,9 @@ struct StreetData
 class StreetDataResourceType : public CgsResource::Type
 {
 public:
-    uint32_t GetTypeID() const override;
-    void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t GetTypeID() const ;
+    void     FixDown(void* lpResource, const rw::Resource& lrResource) const ;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 

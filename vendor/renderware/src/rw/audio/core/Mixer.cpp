@@ -16,7 +16,7 @@
 #include "rw/audio/core/PlugIn.h" // System (the full layout) + PlugIn::mCpuTicks
 #include "rw/audio/core/Voice.h"  // Voice / VoiceActiveNode / VoiceStageData
 
-#include <cstdint> // uintptr_t (the console's clrrwi alignment at host width)
+#include "types.hpp" // uintptr_t (the console's clrrwi alignment at host width)
 #include <cstring> // memcpy / memset (the console XMemCpy / XMemSet)
 
 namespace rw
@@ -51,7 +51,7 @@ namespace
     u8 *AlignDown128(u8 *apAddress)
     {
         return reinterpret_cast<u8 *>(
-            reinterpret_cast<std::uintptr_t>(apAddress) & ~static_cast<std::uintptr_t>(0x7F));
+            reinterpret_cast<uintptr_t>(apAddress) & ~static_cast<uintptr_t>(0x7F));
     }
 
     // The stage process callback shape Execute dispatches out of the copied

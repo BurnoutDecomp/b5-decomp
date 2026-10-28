@@ -25,7 +25,7 @@ namespace BrnReplays
         if (GetMode() == E_MODE_PLAYING)
         {
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
-            CGS_ASSERT(lpStaticLayout != nullptr, "lpStaticLayout");
+            CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
             BaseSerialiser::Read(lpStaticLayout, 992);
         }
 
@@ -51,7 +51,7 @@ namespace BrnReplays
 
             // The X360 fetches the layout a second time after the reset branch.
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
-            CGS_ASSERT(lpStaticLayout != nullptr, "lpStaticLayout");
+            CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
             BaseSerialiser::Write(lpStaticLayout, 992);
         }
 

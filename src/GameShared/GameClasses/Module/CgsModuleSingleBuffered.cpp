@@ -12,8 +12,8 @@ void CgsModule::ModuleSingleBuffered::Construct()
     mInputBuffer.Construct();
     mOutputBuffer.Construct();
 
-    this->mpInputStructure = nullptr;
-    this->mpOutputStructure = nullptr;
+    this->mpInputStructure = 0;
+    this->mpOutputStructure = 0;
 }
 
 bool CgsModule::ModuleSingleBuffered::Prepare()
@@ -22,8 +22,8 @@ bool CgsModule::ModuleSingleBuffered::Prepare()
     {
         case EManagerPrepareStage::E_MANAGERPREPARESTAGE_START:
             mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_START;
-            mpInputStructure  = nullptr;
-            mpOutputStructure = nullptr;
+            mpInputStructure  = 0;
+            mpOutputStructure = 0;
         case EManagerPrepareStage::E_MANAGERPREPARESTAGE_INPUT:
             mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_INPUT;
             if (!mbIsNewModule)
@@ -90,8 +90,8 @@ bool CgsModule::ModuleSingleBuffered::Release()
     {
         case EManagerReleaseStage::E_MANAGERRELEASESTAGE_START:
             meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_START;
-            mpInputStructure  = nullptr;
-            mpOutputStructure = nullptr;
+            mpInputStructure  = 0;
+            mpOutputStructure = 0;
         case EManagerReleaseStage::E_MANAGERRELEASESTAGE_DATASTRUCTURES:
             meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_DATASTRUCTURES;
             if (!mbIsNewModule)
@@ -114,7 +114,7 @@ bool CgsModule::ModuleSingleBuffered::Release()
                 CgsModule::DataStructure* lpDataStructure = mInputBuffer.GetDataStructure();
                 if (!DestroyInputDataStructure(lpDataStructure))
                     return false;
-                mInputBuffer.SetDataStructure(nullptr);
+                mInputBuffer.SetDataStructure(0);
             }
         case EManagerReleaseStage::E_MANAGERRELEASESTAGE_INPUT:
             meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_INPUT;
@@ -129,7 +129,7 @@ bool CgsModule::ModuleSingleBuffered::Release()
                 CgsModule::DataStructure *lpDataStructure = mOutputBuffer.GetDataStructure();
                 if (!DestroyOutputDataStructure(lpDataStructure))
                     return false;
-                mOutputBuffer.SetDataStructure(nullptr);
+                mOutputBuffer.SetDataStructure(0);
             }
         case EManagerReleaseStage::E_MANAGERRELEASESTAGE_OUTPUT:
             meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_OUTPUT;
@@ -150,8 +150,8 @@ bool CgsModule::ModuleSingleBuffered::Release()
 
 void CgsModule::ModuleSingleBuffered::Destruct()
 {
-    this->mpInputStructure = nullptr;
-    this->mpOutputStructure = nullptr;
+    this->mpInputStructure = 0;
+    this->mpOutputStructure = 0;
     mInputBuffer.Destruct();
     mOutputBuffer.Destruct();
 }
@@ -179,7 +179,7 @@ void CgsModule::ModuleSingleBuffered::UnlockForInput()
 {
     CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
     mInputBuffer.UnlockForWrite();
-    mpInputStructure = nullptr;
+    mpInputStructure = 0;
 }
 
 void CgsModule::ModuleSingleBuffered::LockForOutput()
@@ -193,7 +193,7 @@ void CgsModule::ModuleSingleBuffered::UnlockForOutput()
 {
     CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
     mOutputBuffer.UnlockForRead();
-    mpOutputStructure = nullptr;
+    mpOutputStructure = 0;
 }
 
 CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::GetInputStructure() const
@@ -212,14 +212,14 @@ CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::CreateInputDataStruct
 {
     CGS_ASSERT(mbIsNewModule, "This is a new module type - can't lock/unlock etc etc\n");
 
-    return nullptr; // Placeholder for derived classes to implement
+    return 0; // Placeholder for derived classes to implement
 }
 
 CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::CreateOutputDataStructure()
 {
     CGS_ASSERT(mbIsNewModule, "This is a new module type - can't lock/unlock etc etc\n");
 
-    return nullptr; // Placeholder for derived classes to implement
+    return 0; // Placeholder for derived classes to implement
 }
 
 bool CgsModule::ModuleSingleBuffered::DestroyInputDataStructure(DataStructure* lpDataStructure)
@@ -262,7 +262,7 @@ void CgsModule::ModuleSingleBuffered::UnlockInputForRead()
 {
     CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
     mInputBuffer.UnlockForRead();
-    mpInputStructure = nullptr;
+    mpInputStructure = 0;
 }
 
 CgsModule::DataStructure *CgsModule::ModuleSingleBuffered::LockOutputForWrite()
@@ -277,7 +277,7 @@ void CgsModule::ModuleSingleBuffered::UnlockOutputForWrite()
 {
     CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
     mOutputBuffer.UnlockForWrite();
-    mpOutputStructure = nullptr;
+    mpOutputStructure = 0;
 }
 
 CgsModule::DataStructure *CgsModule::ModuleSingleBuffered::LockInputForWrite()
@@ -292,7 +292,7 @@ void CgsModule::ModuleSingleBuffered::UnlockInputForWrite()
 {
     CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
     mInputBuffer.UnlockForWrite();
-    mpInputStructure = nullptr;
+    mpInputStructure = 0;
 }
 
 CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::LockOutputForRead()
@@ -307,5 +307,5 @@ void CgsModule::ModuleSingleBuffered::UnlockOutputForRead()
 {
     CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
     mOutputBuffer.UnlockForRead();
-    mpOutputStructure = nullptr;
+    mpOutputStructure = 0;
 }

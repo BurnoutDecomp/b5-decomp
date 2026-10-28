@@ -348,7 +348,7 @@ namespace BrnDirector
         // +0x00000  BrnDirector::DirectorDevTools -- occupies the head (its Construct takes
         //           `this`, i.e. the dev-tools object IS at MainDirector +0).
         //           FLAG: un-homed; named opaque storage (console span 0x00 .. 0x40).
-        alignas(16) u8 maDirectorDevTools[0x40];
+        CGS_ALIGN(16) u8 maDirectorDevTools[0x40];
 
         // +0x00040  the DirectorModule's DebugComponent back-pointer.
         DebugComponent* mpDebugComponent;
@@ -451,7 +451,7 @@ namespace BrnDirector
         //           on the 8-aligned host offset this span used to land on (the deathcam's
         //           first Update: ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF). The next
         //           member (mLastCamera) is already 16-aligned, so nothing after it moves.
-        alignas(16) u8 maRandom[0x32F10 - 0x32EE0];
+        CGS_ALIGN(16) u8 maRandom[0x32F10 - 0x32EE0];
 
         // +0x32F10  the frame camera the director carries over between frames.
         Camera::Camera mLastCamera;
@@ -542,7 +542,7 @@ namespace BrnDirector
         //           the action here when it cannot run it immediately, and replays it from here
         //           when the post-event ends. Over-aligned so the record can be read back as
         //           its own type. FLAG: the trailing debug scratch has no recovered role.
-        alignas(16) u8 maModeActionAndDebugBlock[0x35420 - 0x34B40];
+        CGS_ALIGN(16) u8 maModeActionAndDebugBlock[0x35420 - 0x34B40];
 
         // ⭐ THESE ARE TWO SEPARATE STAGE MACHINES, not a stage + a counter. Corrected
         // 2026-07-29 (fly-by campaign) against the asm; the previous reading had the two words

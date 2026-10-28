@@ -63,7 +63,7 @@ void AptRenderManagerItem::Clean()
     if (*mppRootListHead)
     {
         AptRenderTreeManager::_AptRenderItemRootList::Shutdown(*mppRootListHead);
-        *mppRootListHead = nullptr;
+        *mppRootListHead = 0;
     }
 
     // Free the 4-byte anchor cell itself back to the shared Apt pool (X360: the
@@ -72,6 +72,6 @@ void AptRenderManagerItem::Clean()
     gpAptRenderManagerPool->Deallocate(
         mppRootListHead, sizeof(AptRenderTreeManager::_AptRenderItemRootList*));
 
-    mppRootListHead = nullptr;
-    mpNext          = nullptr;
+    mppRootListHead = 0;
+    mpNext          = 0;
 }

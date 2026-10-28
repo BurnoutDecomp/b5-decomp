@@ -23,13 +23,13 @@ namespace BrnMassive
         void Construct(const char* const* lpapcMassiveNames, s32 liNumMassiveNames,
                        s32* lpaiSubscriberStates, BrnMassiveSubscriber** lpapSubscribers);
 
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
     protected:
-        const char* GetName() const override;
+        const char* GetName() const ;
         // ARTIST vtable 0x820CDF40, slot +0x10: original menu hierarchy.
-        const char* GetPath() const override { return "World"; }
-        void        OnActivate() override;
+        const char* GetPath() const  { return "World"; }
+        void        OnActivate() ;
 
     private:
         friend class BrnMassive;   // Update feeds the impression count and the selected subscriber

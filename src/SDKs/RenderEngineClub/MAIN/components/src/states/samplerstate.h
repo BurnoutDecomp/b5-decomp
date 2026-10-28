@@ -67,6 +67,6 @@ namespace renderengine
         static SamplerStateData* Initialize(SamplerStateData** lppState, const SamplerStateParameters* lpParams);
     };
 
-    static_assert(sizeof(SamplerStateData) == 0x20, "Original sampler runtime block");
-    static_assert(sizeof(SamplerStateParameters) == 0x48, "Original parameter prefix");
+    CGS_STATIC_ASSERT((sizeof(SamplerStateData) == 0x20), "Original sampler runtime block");
+    CGS_STATIC_ASSERT((sizeof(SamplerStateParameters) == 0x48), "Original parameter prefix");
 }

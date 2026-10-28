@@ -456,7 +456,7 @@ namespace Vehicle
             lpOtherHalf->meArticulatedJointState  = PhysicalTrafficVehicle::E_ARTICULATE_JOINT_NONE;
             lpOtherHalf->miJointIndex             = -1;
 
-            CGS_ASSERT(mpArticulatedJointCreateBuffer != nullptr,
+            CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
                        "mpArticulatedJointCreateBuffer != NULL");                            // :702
             mArticulatedJointPool.RemoveJoint(mpArticulatedJointCreateBuffer, liJointIndex);  // 0x8261CFBC
         }

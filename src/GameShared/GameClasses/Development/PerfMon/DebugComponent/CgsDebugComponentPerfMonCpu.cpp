@@ -52,7 +52,7 @@ namespace CgsDev
             maStringList[liPage + 1].mpcName = "Unused";
         }
         maStringList[E_PMP_MAX + 1].miValue = 0;
-        maStringList[E_PMP_MAX + 1].mpcName = nullptr;
+        maStringList[E_PMP_MAX + 1].mpcName = 0;
 
         mfMaxCpu              = 0.0f;
         mbResetMonitors       = false;
@@ -64,13 +64,13 @@ namespace CgsDev
         maTraceModeList[1].miValue = 1;
         maTraceModeList[1].mpcName = "XBPerf";
         maTraceModeList[2].miValue = 0;
-        maTraceModeList[2].mpcName = nullptr;
+        maTraceModeList[2].mpcName = 0;
         PerfMonCpu::Construct(liMaxMonitors, GetAllocator());
 
         if (lpLogBuffer)
             LogBufferEnable(lpLogBuffer, static_cast<s32>(luLogBufferSize));
         else
-            mpLogBuffer = nullptr;
+            mpLogBuffer = 0;
     }
 
     // Faithful port of X360 LogBufferEnable @0x82826C20: wire the CPU-trace log region. The usable
@@ -80,7 +80,7 @@ namespace CgsDev
     {
         if (!lpBuffer)
         {
-            mpLogBuffer = nullptr;
+            mpLogBuffer = 0;
             return;
         }
 

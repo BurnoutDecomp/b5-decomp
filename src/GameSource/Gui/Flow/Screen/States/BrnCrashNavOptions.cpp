@@ -24,7 +24,7 @@ namespace BrnGui
     // profile getters, in the X360 call order (each getter self-asserts !mbIsLocked).
     void CrashNavOptionsData::SetFromProfile(OptionsDataProfile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != nullptr, "lpOptionsData");
+        CGS_ASSERT(lpProfile != 0, "lpOptionsData");
 
         meCameraUserOption = static_cast<s32>(lpProfile->GetCameraFeed());
         meVoipVolume       = static_cast<EOptionsVoipVolumes>(lpProfile->GetVoipVolume());
@@ -42,7 +42,7 @@ namespace BrnGui
     // profile setters, in the X360 call order (DefaultGameCamera loaded before Tips).
     void CrashNavOptionsData::SetToProfile(OptionsDataProfile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != nullptr, "lpOptionsData");
+        CGS_ASSERT(lpProfile != 0, "lpOptionsData");
 
         lpProfile->SetCameraFeed(
             static_cast<BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions>(meCameraUserOption));

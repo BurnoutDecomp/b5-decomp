@@ -143,9 +143,9 @@ namespace CgsInput
         }
 
         // CreateEventA(NULL, FALSE, FALSE, NULL) x3; results land in each block's hEvent slot.
-        mFFOverlappedRumble.mhEvent = reinterpret_cast<u32>(CreateEventA(nullptr, 0, 0, nullptr));
-        mFFOverlappedSpring.mhEvent = reinterpret_cast<u32>(CreateEventA(nullptr, 0, 0, nullptr));
-        mFFOverlappedGain.mhEvent   = reinterpret_cast<u32>(CreateEventA(nullptr, 0, 0, nullptr));
+        mFFOverlappedRumble.mhEvent = reinterpret_cast<u32>(CreateEventA(0, 0, 0, 0));
+        mFFOverlappedSpring.mhEvent = reinterpret_cast<u32>(CreateEventA(0, 0, 0, 0));
+        mFFOverlappedGain.mhEvent   = reinterpret_cast<u32>(CreateEventA(0, 0, 0, 0));
 
         CGS_ASSERT(mFFOverlappedRumble.mhEvent != 0, "mFFOverlappedRumble.hEvent != NULL");   // line 127
         CGS_ASSERT(mFFOverlappedGain.mhEvent   != 0, "mFFOverlappedGain.hEvent != NULL");     // line 128
@@ -364,7 +364,7 @@ namespace CgsInput
             const u32 luStart = GetTickCount();
             while (true)
             {
-                const u32 luReset = XInputFFResetDevice(static_cast<u32>(mePort), nullptr);
+                const u32 luReset = XInputFFResetDevice(static_cast<u32>(mePort), 0);
                 if (GetTickCount() - luStart > KU_FF_TIMEOUT_MS)
                     break;
                 if (luReset != 0)
@@ -373,16 +373,16 @@ namespace CgsInput
                 const u32 luGain = XInputFFSetDeviceGain(
                     static_cast<u32>(mePort),
                     static_cast<u32>(mfGain * KF_GAIN_SCALE),
-                    nullptr);
+                    0);
                 CGS_ASSERT(luGain == 0, "Wheel Error");                   // line 1155
 
-                const u32 luMotors = XInputFFEnableMotors(static_cast<u32>(mePort), 1, nullptr);
+                const u32 luMotors = XInputFFEnableMotors(static_cast<u32>(mePort), 1, 0);
                 CGS_ASSERT(luMotors == 0, "Wheel Error");                 // line 1159
 
                 while (true)
                 {
                     const u32 luSetEffect = XInputFFSetEffect(
-                        static_cast<u32>(mePort), &mFFEffect, 1u, nullptr);
+                        static_cast<u32>(mePort), &mFFEffect, 1u, 0);
                     if (GetTickCount() - luStart > KU_FF_TIMEOUT_MS)
                         return true;
                     if (luSetEffect != KU_ERROR_TIMEOUT)
@@ -390,7 +390,7 @@ namespace CgsInput
                         // dwOperation buffer { 1, 3 } (op start, loop count) per the asm v27[0]/v27[1].
                         const u32 lauOp[2] = { 1u, 3u };
                         const u32 luOp = XInputFFEffectOperation(
-                            static_cast<u32>(mePort), lauOp, 1u, 1u, nullptr);
+                            static_cast<u32>(mePort), lauOp, 1u, 1u, 0);
                         CGS_ASSERT(luOp == 0, "Wheel Error");             // line 1185
                         return true;
                     }

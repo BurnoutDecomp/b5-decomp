@@ -29,8 +29,8 @@ namespace core
 // off_8217F444 -- the LowPassButterworth v-table installed at construction; off_820AA810 --
 // the base PlugIn v-table the deleting destructor reinstalls. Opaque data symbols in the
 // XEX; modelled as honest placeholders so the bodies link without fabricating contents.
-static void *const KLB_BasePlugInVTable = nullptr;          // off_820AA810
-static void *const KLB_LowPassButterworthVTable = nullptr;  // off_8217F444
+static void *const KLB_BasePlugInVTable = 0;          // off_820AA810
+static void *const KLB_LowPassButterworthVTable = 0;  // off_8217F444
 
 // CreateInstance immediates, re-read big-endian from the decrypted XEX:
 static const f32 KF_INIT_CUTOFF = 96000.0f;      // flt_820AA8F0 -- ⭐ the high-pass seeds 0.0

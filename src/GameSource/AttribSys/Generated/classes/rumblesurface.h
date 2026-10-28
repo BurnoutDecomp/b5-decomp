@@ -55,9 +55,9 @@ namespace Gen
             f32 mfLeftMotorAttackTime;     // +0x38  LeftMotorAttackTime
         };
 
-        explicit rumblesurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit rumblesurface(Collection* lpCollection = 0, void* lpOwner = 0);
         // @0x82364828 -- DWARF rumblesurface.h:21 `rumblesurface(const Attrib::RefSpec&, uint32_t)`.
-        explicit rumblesurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+        explicit rumblesurface(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         // The generated const accessors (DWARF rumblesurface.h:75..:173): each returns the layout
         // field by reference, as the X360's inlined reads do (a plain load off mpAttributeData).
@@ -84,10 +84,10 @@ namespace Gen
         }
     };
 
-    static_assert(sizeof(rumblesurface::_LayoutStruct) == 0x3C, "rumblesurface layout is 0x3C bytes (DefaultDataArea(0x3C) @0x823648B4)");
-    static_assert(offsetof(rumblesurface::_LayoutStruct, mfMinSpeedForRumble) == 0x1C, "MinSpeedForRumble @+0x1C (lfs 0x1C @0x82378F18)");
-    static_assert(offsetof(rumblesurface::_LayoutStruct, mfMaxSpeedForRumble) == 0x20, "MaxSpeedForRumble @+0x20 (lfs 0x20 @0x82378F80)");
-    static_assert(offsetof(rumblesurface::_LayoutStruct, mfLeftMotorAttackTime) == 0x38, "LeftMotorAttackTime @+0x38 (lfs 0x38 @0x82378F1C)");
+    CGS_STATIC_ASSERT((sizeof(rumblesurface::_LayoutStruct) == 0x3C), "rumblesurface layout is 0x3C bytes (DefaultDataArea(0x3C) @0x823648B4)");
+    CGS_STATIC_ASSERT((offsetof(rumblesurface::_LayoutStruct, mfMinSpeedForRumble) == 0x1C), "MinSpeedForRumble @+0x1C (lfs 0x1C @0x82378F18)");
+    CGS_STATIC_ASSERT((offsetof(rumblesurface::_LayoutStruct, mfMaxSpeedForRumble) == 0x20), "MaxSpeedForRumble @+0x20 (lfs 0x20 @0x82378F80)");
+    CGS_STATIC_ASSERT((offsetof(rumblesurface::_LayoutStruct, mfLeftMotorAttackTime) == 0x38), "LeftMotorAttackTime @+0x38 (lfs 0x38 @0x82378F1C)");
 
     // Chain the Instance ctor, assert the collection's class is ClassName::rumblesurface,
     // then give the instance a default data area (0x3C bytes) if it has none. (DWARF

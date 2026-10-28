@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsIntQuantiser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // Reconstructed from BURNOUT_X360_*.XEX
 //   CgsNetwork::SmartBitStream::AddRawData @ 0x82882ED8 — copy a raw byte block
@@ -62,7 +62,7 @@ namespace
 
     bool SmartBitStream::AddRawData(const char* lpcData, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcData != nullptr, "lpcData != NULL");
+        CGS_ASSERT(lpcData != 0, "lpcData != NULL");
         CGS_ASSERT(liNumBytes >= 0, "liNumBytes >= 0");
 
         const char* lpcRemaining = lpcData;
@@ -109,7 +109,7 @@ namespace
 
     void SmartBitStream::GetRawData(char* lpcBuffer, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcBuffer != nullptr, "lpcBuffer != NULL");
+        CGS_ASSERT(lpcBuffer != 0, "lpcBuffer != NULL");
         CGS_ASSERT(liNumBytes >= 0, "liNumBytes >= 0");
 
         char* lpcDst = lpcBuffer;

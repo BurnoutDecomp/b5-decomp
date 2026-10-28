@@ -112,8 +112,8 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
     if (BrnGraphics::gbCombinedShadowMapViewport)
     {
         CgsRenderTarget* lpShadowBuffer = lpAllocatedRenderTargets->GetShadowMapBuffer(0);
-        CGS_ASSERT(lpShadowBuffer != nullptr, "lpAllocatedRenderTargets->GetShadowMapBuffer(0)");
-        CGS_ASSERT(lpShadowBuffer->GetRenderTarget() != nullptr,
+        CGS_ASSERT(lpShadowBuffer != 0, "lpAllocatedRenderTargets->GetShadowMapBuffer(0)");
+        CGS_ASSERT(lpShadowBuffer->GetRenderTarget() != 0,
                    "lpAllocatedRenderTargets->GetShadowMapBuffer(0)->GetRenderTarget()");
 
         if (lpShadowBuffer->GetNumSections() > 1)
@@ -176,9 +176,9 @@ void BrnGraphics::ShadowMapRenderManager::BeginRenderShadowMap(s32 liIndex, bool
     else
     {
         // Separate per-face targets: face liIndex owns its render target.
-        CGS_ASSERT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex) != nullptr,
+        CGS_ASSERT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex) != 0,
                    "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)");
-        CGS_ASSERT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget() != nullptr,
+        CGS_ASSERT(lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget() != 0,
                    "lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->GetRenderTarget()");
 
         lpAllocatedRenderTargets->GetShadowMapBuffer(liIndex)->SetRenderTargetState(0);

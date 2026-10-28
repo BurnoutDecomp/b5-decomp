@@ -26,13 +26,13 @@ namespace BrnGameState
         void Construct(CrashModeScoring* lpCrashScoring);   // DecFIGS 0x1CC3D4; inlined at X360 ScoringSystem::Construct
         void Destruct();                                    // DecFIGS 0x1CC43C; X360 body/caller not yet pinned
 
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;   // @ 0x8231EB90
-        void Update() override;                                             // @ 0x82312168
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;   // @ 0x8231EB90
+        void Update() ;                                             // @ 0x82312168
 
     protected:
-        const char* GetName() const override;   // @ 0x823121B0
-        const char* GetPath() const override;    // DecFIGS 0x1CC534; X360 ICF-shared Gameplay leaf
-        void        OnActivate() override;       // @ 0x823121C0
+        const char* GetName() const ;   // @ 0x823121B0
+        const char* GetPath() const ;    // DecFIGS 0x1CC534; X360 ICF-shared Gameplay leaf
+        void        OnActivate() ;       // @ 0x823121C0
 
     private:
         void DisplayScores(CgsDev::Debug2DImmediateRender* lpRender);   // @ 0x82312210

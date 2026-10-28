@@ -45,18 +45,18 @@ namespace BrnNetwork
     // X360-authoritative (li r8,6 / 0xC350 / li r4,5).
     void EventScoresManagerDebugComponent::SetCalvalryBurningRouteBest( void* lpData )
     {
-        CGS_ASSERT( lpData != nullptr, "lpData" );
+        CGS_ASSERT( lpData != 0, "lpData" );
         EventScoresManagerDebugComponent* lpThis = static_cast<EventScoresManagerDebugComponent*>( lpData );
-        CGS_ASSERT( lpThis != nullptr, "lpEventScoresManagerDebugCmpt" );
+        CGS_ASSERT( lpThis != 0, "lpEventScoresManagerDebugCmpt" );
 
         EventScoreData lEventScoreData;
         lEventScoreData.AddEventScore( 6, 50000, 5 );
 
         EventScoresManager* lpManager = lpThis->mpEventScoresManager;
         BrnServerInterfaceBase* lpServerInterface = lpManager->GetServerInterface();
-        CGS_ASSERT( lpServerInterface != nullptr,
+        CGS_ASSERT( lpServerInterface != 0,
                     "lpEventScoresManagerDebugCmpt->mpEventScoresManager->mpServerInterface" );
-        CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != nullptr,
+        CGS_ASSERT( lpServerInterface->GetCustomCommandsComponent() != 0,
                     "lpEventScoresManagerDebugCmpt->mpEventScoresManager->mpServerInterface->GetCustomCommandsComponent()" );
 
         lpServerInterface->GetCustomCommandsComponent()->UploadEventScoreData(

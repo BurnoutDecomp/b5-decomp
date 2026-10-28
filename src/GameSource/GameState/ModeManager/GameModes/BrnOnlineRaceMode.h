@@ -44,17 +44,17 @@ public:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (OnlineRaceMode::*)() const>(&OnlineRaceMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineRaceMode::*)() const>(&OnlineRaceMode::GetName)) != 0),
               "OnlineRaceMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<void (OnlineRaceMode::*)(GameStateModuleIO::OutputBuffer*,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineRaceMode::*)(GameStateModuleIO::OutputBuffer*,
                                                           const GameStateModuleIO::PreWorldInputBuffer*,
                                                           const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*,
                                                           const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*,
                                                           bool,
-                                                          const ScoringSystem*)>(&OnlineRaceMode::PreWorldUpdate)) != 0,
+                                                          const ScoringSystem*)>(&OnlineRaceMode::PreWorldUpdate)) != 0),
               "OnlineRaceMode::PreWorldUpdate must bind GameMode vtable slot 2");
-static_assert(sizeof(static_cast<f32 (OnlineRaceMode::*)() const>(&OnlineRaceMode::GetOutroTimeout)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<f32 (OnlineRaceMode::*)() const>(&OnlineRaceMode::GetOutroTimeout)) != 0),
               "OnlineRaceMode::GetOutroTimeout must bind GameMode vtable slot 16");
-static_assert(sizeof(static_cast<bool (OnlineRaceMode::*)() const>(&OnlineRaceMode::HasLoadingScreen)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineRaceMode::*)() const>(&OnlineRaceMode::HasLoadingScreen)) != 0),
               "OnlineRaceMode::HasLoadingScreen must bind GameMode vtable slot 24");
 }

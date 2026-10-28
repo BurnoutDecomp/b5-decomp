@@ -89,8 +89,8 @@ namespace BrnPhysics
         const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
         VecFloat lvfTimeStep )
     {
-        CGS_ASSERT(lpRawContactSpies != nullptr, "lpRawContactSpies != NULL");                     // :1051
-        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL"); // :1052
+        CGS_ASSERT(lpRawContactSpies != 0, "lpRawContactSpies != NULL");                     // :1051
+        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL"); // :1052
 
         for (s32 liIndex = 0; liIndex < lpRawContactSpies->GetLength(); ++liIndex)
         {
@@ -125,7 +125,7 @@ namespace BrnPhysics
         const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
         VecFloat /*lvfTimeStep*/ )
     {
-        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL");   // :1096
+        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL");   // :1096
 
         const u32 luEntityTypeA = GetIdOwner(lContactSpy.mIDA);
         const u32 luEntityTypeB = GetIdOwner(lContactSpy.mIDB);
@@ -395,8 +395,8 @@ namespace BrnPhysics
         const PotentialContact* lpPotentialContact,
         const Props::PropRaceCarContactBuffer* /*lpPropRaceCarContactBuffer*/ )
     {
-        CGS_ASSERT(lpRawContact != nullptr, "lpRawContact != NULL");               // :1208
-        CGS_ASSERT(lpPotentialContact != nullptr, "lpPotentialContact != NULL");   // :1209
+        CGS_ASSERT(lpRawContact != 0, "lpRawContact != NULL");               // :1208
+        CGS_ASSERT(lpPotentialContact != 0, "lpPotentialContact != NULL");   // :1209
 
         // ============================================================================================
         // [DIAG] NOT IN THE X360 BINARY -- the CONTACT-QUEUE FILL WITNESS. BRN_VFXFEED_PROBE=1.
@@ -540,7 +540,7 @@ namespace BrnPhysics
     void PhysicsModule::ValidateSimulationContacts(
         const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue )
     {
-        CGS_ASSERT(lpContactQueue != nullptr, "lpContactQueue != NULL");   // :608
+        CGS_ASSERT(lpContactQueue != 0, "lpContactQueue != NULL");   // :608
 
         for (s32 liIndex = 0; liIndex < lpContactQueue->GetLength(); ++liIndex)
         {
@@ -652,8 +652,8 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
         const Vehicle::VehicleOutputRequestInterface* lpRequestInterface )
     {
-        CGS_ASSERT(lpSimModuleInputBuffer != nullptr, "lpSimModuleInputBuffer != NULL");   // :1315
-        CGS_ASSERT(lpRequestInterface != nullptr, "lpRequestInterface != NULL");           // :1316
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :1315
+        CGS_ASSERT(lpRequestInterface != 0, "lpRequestInterface != NULL");           // :1316
 
         CGS_ASSERT(lpRequestInterface->GetAddJointQueue()->GetLength() == 0,
                    "lpRequestInterface->GetAddJointQueue()->GetLength() == 0");            // :1322
@@ -743,9 +743,9 @@ namespace BrnPhysics
         const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
         VecFloat lvfTimeStep )
     {
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer != NULL");                             // :834
-        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL"); // :835
-        CGS_ASSERT(lpSimModuleOutputBuffer != nullptr, "lpSimModuleOutputBuffer != NULL");           // :836
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");                             // :834
+        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL"); // :835
+        CGS_ASSERT(lpSimModuleOutputBuffer != 0, "lpSimModuleOutputBuffer != NULL");           // :836
 
         // The output buffer's contact-spy interface must be empty (or unbound) before we
         // repopulate it (ContactSpyInterface::IsEmpty inlined at 0x825B04EC..0x825B0514).
@@ -836,8 +836,8 @@ namespace BrnPhysics
     {
         typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
 
-        CGS_ASSERT(lpSimModuleInputBuffer != nullptr, "lpSimModuleInputBuffer != NULL");   // :49
-        CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer != NULL");                     // :50
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :49
+        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");                     // :50
 
         // Write-locked GetTimeStep (the accessor's own "Not locked for writing" +
         // "mfTimeStep > 0.0f" tripwires, CgsPhysicsSimulationModuleIO.h:848/:849).
@@ -1203,8 +1203,8 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpSimContactQueue,
         const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface )
     {
-        CGS_ASSERT(lpSimContactQueue != nullptr, "lpSimContactQueue != NULL");                       // :500
-        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL"); // :501
+        CGS_ASSERT(lpSimContactQueue != 0, "lpSimContactQueue != NULL");                       // :500
+        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL"); // :501
 
         const PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue& lrQueue =
             lpPotentialContactsInterface->GetSimpleTrafficWithWorldQueue();

@@ -102,7 +102,7 @@ namespace CgsCollision
         CgsMemory::SimpleDataStreamProducer* lpProducer =
             static_cast<CgsMemory::SimpleDataStreamProducer*>(
                 mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer)));
-        CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");
+        CGS_ASSERT(lpProducer != 0, "Failed to allocate stream producer\n");
 
         u32 luCommandBufferSize = 0;
         u32 luResultBufferSize  = 0;
@@ -113,7 +113,7 @@ namespace CgsCollision
 
         void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
         void* lpResultBuffer  = mCollisionResultsAllocator.Malloc(luResultBufferSize);
-        CGS_ASSERT(lpCommandBuffer != nullptr && lpResultBuffer != nullptr,
+        CGS_ASSERT(lpCommandBuffer != 0 && lpResultBuffer != 0,
                    "Failed to allocate stream buffers\n");
 
         lpProducer->Construct(liMaxCommands, KI_LINE_STREAM_COMMAND_SIZE, lpCommandBuffer,
@@ -148,7 +148,7 @@ namespace CgsCollision
         CgsMemory::SimpleDataStreamProducer* lpProducer =
             static_cast<CgsMemory::SimpleDataStreamProducer*>(
                 mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer)));
-        CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");
+        CGS_ASSERT(lpProducer != 0, "Failed to allocate stream producer\n");
 
         u32 luCommandBufferSize = 0;
         u32 luResultBufferSize  = 0;
@@ -159,7 +159,7 @@ namespace CgsCollision
 
         void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
         void* lpResultBuffer  = mCollisionResultsAllocator.Malloc(luResultBufferSize);
-        CGS_ASSERT(lpCommandBuffer != nullptr && lpResultBuffer != nullptr,
+        CGS_ASSERT(lpCommandBuffer != 0 && lpResultBuffer != 0,
                    "Failed to allocate stream buffers\n");
 
         lpProducer->Construct(liMaxCommands, KI_LINE_POLYSOUP_COMMAND_SIZE, lpCommandBuffer,

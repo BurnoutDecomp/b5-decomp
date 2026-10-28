@@ -34,7 +34,7 @@ namespace BrnTrafficIO
     // ConvertSceneResultsToTrafficDataForAI memcpy stride is 176 bytes / 44 dwords). The two
     // Vector2 lanes and the Vector3[8] corner buffer are 16-byte SIMD, so:
     //   mVelocity @0, mCentre @16, meNearbyRaceCarIndex @32, maBBCorners @48 (8*16=128) -> 176.
-    struct alignas(16) TrafficAIEntity
+    struct CGS_ALIGN(16) TrafficAIEntity
     {
         Vector2             mVelocity;             // :74
         Vector2             mCentre;               // :75
@@ -46,7 +46,7 @@ namespace BrnTrafficIO
     // EventQueue<RivalInTrafficUpdateEvent,34>::Construct (X360 0x82760750) points the base
     // queue at maEvents at struct offset 16, i.e. the 12-byte BaseEventQueue base is padded to
     // 16 by this element's 16-byte (Vector3 SIMD) alignment.
-    struct alignas(16) RivalInTrafficUpdateEvent
+    struct CGS_ALIGN(16) RivalInTrafficUpdateEvent
     {
     public:
         void                Construct(Vector3 lTargetPosition, Vector3 lTargetDirection,

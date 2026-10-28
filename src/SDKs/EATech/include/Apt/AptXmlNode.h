@@ -45,7 +45,7 @@
 // ===========================================================================
 
 #include <cstddef>   // size_t
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptObject.h"   // AptObject base (AptValueWithHash + mClassFlags) + AptVFT_XmlNode
                                                 // (transitively: AptValueWithHash, AptValue, AptNativeString)

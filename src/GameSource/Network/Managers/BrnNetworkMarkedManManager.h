@@ -97,7 +97,7 @@ namespace BrnNetwork
 
     inline void MarkedManManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || sizeof(DataEntry) == 4 + 2 * sizeof(MarkedManMessage), "DataEntry is the id plus two messages");
-        static_assert(sizeof(void*) != 4 || sizeof(MarkedManManager) == KI_MAX_MARKED_MAN_PLAYERS * sizeof(DataEntry) + 8, "MarkedManManager tail is 8 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(DataEntry) == 4 + 2 * sizeof(MarkedManMessage)), "DataEntry is the id plus two messages");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(MarkedManManager) == KI_MAX_MARKED_MAN_PLAYERS * sizeof(DataEntry) + 8), "MarkedManManager tail is 8 bytes");
     }
 } // namespace BrnNetwork

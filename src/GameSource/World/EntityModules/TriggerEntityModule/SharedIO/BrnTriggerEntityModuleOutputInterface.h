@@ -11,5 +11,5 @@ struct OutLineTestResultEvent : public CgsModule::Event
     s32 miNumTriggers;
     const TriggerId* GetTriggerIds() const { return reinterpret_cast<const TriggerId*>(this + 1); }
 };
-static_assert(sizeof(OutLineTestResultEvent) == 8, "trigger result prefix");
+CGS_STATIC_ASSERT((sizeof(OutLineTestResultEvent) == 8), "trigger result prefix");
 }}

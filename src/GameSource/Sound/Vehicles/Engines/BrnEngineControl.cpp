@@ -34,11 +34,11 @@ f32 KF_REDLINING_VOLUME_DUCK = 0.9f;             // flt_82F2CC50
 bool KB_TURN_ON_RPM_RAMPING = false;             // byte_82FFB84B
 
 EngineControl::EngineControl()
-    : mpPhysicsControl(nullptr)
-    , mpShiftControl(nullptr)
-    , mpClutchControl(nullptr)
-    , mpCar3DControl(nullptr)
-    , mpWheelControl(nullptr)
+    : mpPhysicsControl(0)
+    , mpShiftControl(0)
+    , mpClutchControl(0)
+    , mpCar3DControl(0)
+    , mpWheelControl(0)
     , mfAudioRpm(0.0f)
     , mfAudioThrottle(0.0f)
     , mfAudioEngineVolume(0.0f)
@@ -123,7 +123,7 @@ bool EngineControl::Attach()
     if (!CgsSound::Logic::EffectBase::Attach())
         return false;
 
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
+    CGS_ASSERT(mpPhysicsControl != 0, "mpPhysicsControl");
     if (!mpPhysicsControl)
         return false;
 

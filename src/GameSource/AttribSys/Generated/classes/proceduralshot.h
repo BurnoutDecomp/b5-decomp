@@ -18,7 +18,7 @@ namespace Gen
     class proceduralshot : private Instance
     {
     public:
-        explicit proceduralshot(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit proceduralshot(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The 64-bit class-key tag identifying a proceduralshot ShotList element
         // (ShotSelector::GetCrashShot @0x82239900 builds 0x9B2E3C86_E02737B0 with

@@ -193,13 +193,13 @@ namespace BrnGui
             }
         };
 
-        static_assert(sizeof(GuiCommandWire16<92>) == 16, "command record is 16 bytes");
-        static_assert(sizeof(GuiTickerClearWire) == 16, "ticker-clear record is 16 bytes");
-        static_assert(sizeof(GuiAutosaveRequestWire) == 16, "autosave record is 16 bytes");
-        static_assert(sizeof(GuiAudioTriggerWire) == 112, "audio trigger record is 112 bytes");
-        static_assert(sizeof(GuiOverlayRequestWire) == 304, "overlay request record is 304 bytes");
-        static_assert(sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8, "the roster is 456 bytes");
-        static_assert(sizeof(LobbyPlayerListPayload) <= 0x1C8, "the roster view fits the roster");
+        CGS_STATIC_ASSERT((sizeof(GuiCommandWire16<92>) == 16), "command record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiTickerClearWire) == 16), "ticker-clear record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestWire) == 16), "autosave record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8), "the roster is 456 bytes");
+        CGS_STATIC_ASSERT((sizeof(LobbyPlayerListPayload) <= 0x1C8), "the roster view fits the roster");
 
         template <typename TWire>
         void PostWire(CgsGui::StateInterface* lpStateInterface, const TWire& lrWire)

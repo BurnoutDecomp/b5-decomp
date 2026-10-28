@@ -111,7 +111,7 @@ namespace BrnReplays
         // static buffer pointer is non-null; return it.
         CGS_ASSERT(GetStaticBufferSize() >= static_cast<s32>(KU_STATIC_BUFFER_SIZE),
                    "Static buffer size is too small\n");
-        CGS_ASSERT(mpStaticBuffer != nullptr, "GetStaticBuffer()");
+        CGS_ASSERT(mpStaticBuffer != 0, "GetStaticBuffer()");
         return reinterpret_cast<TrafficEntitySerialiserStaticLayout*>(mpStaticBuffer);
     }
 
@@ -121,7 +121,7 @@ namespace BrnReplays
     // bit arrays / info-valid words and mark it cleared.
     TrafficEntitySerialiserStaticLayout* TrafficEntitySerialiser::CheckStaticLayoutCleared()
     {
-        if (!mbStaticLayoutCleared && mpStaticBuffer != nullptr)
+        if (!mbStaticLayoutCleared && mpStaticBuffer != 0)
         {
             TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
             std::memset(lpLayout, 0, KU_STATIC_BUFFER_SIZE);
@@ -194,7 +194,7 @@ namespace BrnReplays
     // Copy the 148-byte active-hull header for the local player into the static layout.
     void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const void* lpActiveHulls)
     {
-        CGS_ASSERT(lpActiveHulls != nullptr, "lpActiveHulls");
+        CGS_ASSERT(lpActiveHulls != 0, "lpActiveHulls");
         std::memcpy(GetStaticLayout(), lpActiveHulls, 148);
     }
 
@@ -203,7 +203,7 @@ namespace BrnReplays
     // ids at +151..).
     void TrafficEntitySerialiser::SetBonusAssets(const u8* lpauBonusAssets, u32 luNumBonusAssets)
     {
-        CGS_ASSERT(lpauBonusAssets != nullptr, "lpauBonusAssets");
+        CGS_ASSERT(lpauBonusAssets != 0, "lpauBonusAssets");
         CGS_ASSERT(luNumBonusAssets <= KU_MAX_BONUS_STREAMED_ASSETS,
                    "luNumBonusAssets <= BrnTraffic::KU_MAX_BONUS_STREAMED_ASSETS");
 
@@ -223,8 +223,8 @@ namespace BrnReplays
     // memcpy size in r31; there is no high-dword rewrite in the raw asm.)
     void TrafficEntitySerialiser::SetPhysicsData(const u64* lpBits, const void* lpaPhysicsInfo)
     {
-        CGS_ASSERT(lpBits != nullptr, "lpBits");
-        CGS_ASSERT(lpaPhysicsInfo != nullptr, "lpaPhysicsInfo");
+        CGS_ASSERT(lpBits != 0, "lpBits");
+        CGS_ASSERT(lpaPhysicsInfo != 0, "lpaPhysicsInfo");
 
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         // asm: ld r10,0(a2) ; std r10,0xF0(layout) -- copy all 8 bytes of *lpBits as-is.
@@ -257,7 +257,7 @@ namespace BrnReplays
     // chunks' transform regions.
     void TrafficEntitySerialiser::SetVehicleTransforms(const void* lpaTransforms)
     {
-        CGS_ASSERT(lpaTransforms != nullptr, "lpaTransforms");
+        CGS_ASSERT(lpaTransforms != 0, "lpaTransforms");
 
         u8* lpDest = reinterpret_cast<u8*>(GetStaticLayout()) + KU_OFFSET_VEHICLE_TRANSFORM;
         const u8* lpSource = static_cast<const u8*>(lpaTransforms);
@@ -312,7 +312,7 @@ namespace BrnReplays
     // GetFirstBitSet / GetNextBitSet.
     void TrafficEntitySerialiser::ReadFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3)
     {
-        CGS_ASSERT(lpFrame != nullptr, "lpFrame");
+        CGS_ASSERT(lpFrame != 0, "lpFrame");
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265DD9C-0x8265DE18), each citing a distinct member.
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
@@ -376,7 +376,7 @@ namespace BrnReplays
     // Record one whole frame buffer (the write mirror of ReadFrame).
     void TrafficEntitySerialiser::WriteFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3)
     {
-        CGS_ASSERT(lpFrame != nullptr, "lpFrame");
+        CGS_ASSERT(lpFrame != 0, "lpFrame");
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265D2EC-0x8265D368), each citing a distinct member.
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
@@ -441,7 +441,7 @@ namespace BrnReplays
     s32 TrafficEntitySerialiser::Read()
     {
         Lock();
-        CGS_ASSERT(GetStaticLayout() != nullptr, "GetStaticLayout()");
+        CGS_ASSERT(GetStaticLayout() != 0, "GetStaticLayout()");
 
         const EMode leMode = meMode;
 
@@ -494,9 +494,9 @@ namespace BrnReplays
     s32 TrafficEntitySerialiser::Write()
     {
         Lock();
-        CGS_ASSERT(GetStaticLayout() != nullptr, "GetStaticLayout()");
+        CGS_ASSERT(GetStaticLayout() != 0, "GetStaticLayout()");
 
-        if (mpStaticBuffer != nullptr)
+        if (mpStaticBuffer != 0)
         {
             const EMode leMode = meMode;
             // asm: proceed for modes {1,2,3} (recording family).
@@ -540,7 +540,7 @@ namespace BrnReplays
                                             s32 liPhysicalPartsIndex)
     {
         // Leading asserts (asm 0x82713E5C / 0x82713E88 / 0x82713EC4).
-        CGS_ASSERT(lpVehicle != nullptr, "lpVehicle");
+        CGS_ASSERT(lpVehicle != 0, "lpVehicle");
         CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");
         CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");
 

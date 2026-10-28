@@ -708,31 +708,31 @@ namespace BrnGameState
         static void _AssertLayout()
         {
             // prefix -- absolute (no pointers anywhere before mpStreetData)
-            static_assert( sizeof(BrnStreetData::ChallengeHighScoreEntry) == 56,  "net challenge row stride 0x38" );
-            static_assert( sizeof(BrnStreetData::ChallengePlayerScoreEntry) == 40, "player challenge row stride 0x28" );
-            static_assert( sizeof(BufferedNewHighScore) == 32,                    "buffered high score stride 0x20" );
-            static_assert( offsetof(StreetManager, maChallengeData)             == 0x0E00, "player table @ +0xE00" );
-            static_assert( offsetof(StreetManager, maaParRivalIds)              == 0x1800, "par rival ids @ +0x1800" );
-            static_assert( offsetof(StreetManager, mNewHighScoreBuffer)         == 0x1C00, "high score buffer @ +0x1C00" );
-            static_assert( offsetof(StreetManager, maRoadRulesChangedBitArrays) == 0x1CA8, "changed bits @ +0x1CA8" );
-            static_assert( offsetof(StreetManager, mfUnbufferTimer)             == 0x1CB8, "unbuffer timer @ +0x1CB8" );
-            static_assert( offsetof(StreetManager, miNumScoresLost)             == 0x1CBC, "scores lost @ +0x1CBC" );
-            static_assert( offsetof(StreetManager, meActiveRoadRuleType)        == 0x1CC0, "active rule type @ +0x1CC0" );
-            static_assert( offsetof(StreetManager, mbTooManyHighScoresToBuffer) == 0x1CC4, "too-many flag @ +0x1CC4" );
-            static_assert( offsetof(StreetManager, mbFirstDownload)             == 0x1CC5, "first download @ +0x1CC5" );
-            static_assert( offsetof(StreetManager, mpStreetData)                == 0x1CC8, "street data ptr @ +0x1CC8" );
+            CGS_STATIC_ASSERT(( sizeof(BrnStreetData::ChallengeHighScoreEntry) == 56),  "net challenge row stride 0x38" );
+            CGS_STATIC_ASSERT(( sizeof(BrnStreetData::ChallengePlayerScoreEntry) == 40), "player challenge row stride 0x28" );
+            CGS_STATIC_ASSERT(( sizeof(BufferedNewHighScore) == 32),                    "buffered high score stride 0x20" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, maChallengeData)             == 0x0E00), "player table @ +0xE00" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, maaParRivalIds)              == 0x1800), "par rival ids @ +0x1800" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mNewHighScoreBuffer)         == 0x1C00), "high score buffer @ +0x1C00" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, maRoadRulesChangedBitArrays) == 0x1CA8), "changed bits @ +0x1CA8" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mfUnbufferTimer)             == 0x1CB8), "unbuffer timer @ +0x1CB8" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, miNumScoresLost)             == 0x1CBC), "scores lost @ +0x1CBC" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, meActiveRoadRuleType)        == 0x1CC0), "active rule type @ +0x1CC0" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mbTooManyHighScoresToBuffer) == 0x1CC4), "too-many flag @ +0x1CC4" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mbFirstDownload)             == 0x1CC5), "first download @ +0x1CC5" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mpStreetData)                == 0x1CC8), "street data ptr @ +0x1CC8" );
 
             // pointer-free tail run -- relative anchors (base: miCurrentPlayerRoadIndex,
             // X360 +0x1D1C). Deltas hold on any LP/LLP model.
-            static_assert( offsetof(StreetManager, miOriginalInterStateRoadIndex) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x20, "nine RoadIndex run" );
-            static_assert( offsetof(StreetManager, mCurrentPlayerSectionExitRight) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x24, "vectors follow the road indices" );
-            static_assert( offsetof(StreetManager, mLastNode)              - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x3C, "12-byte Vector3 stride" );
-            static_assert( offsetof(StreetManager, miNewRoadNodeIndex)     - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x54, "post-vector scalars" );
-            static_assert( offsetof(StreetManager, miNextFreeSectionSlot)  - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x74, "walk slot @ X360 +0x1D90" );
-            static_assert( offsetof(StreetManager, mauWalkedSections)      - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x78, "walked sections @ X360 +0x1D94" );
-            static_assert( offsetof(StreetManager, mbNeedToUpdateUpcomingRoads) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0xAA, "bool block @ X360 +0x1DC6" );
-            static_assert( offsetof(StreetManager, meLoadStage)            - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0xB4, "load stages @ X360 +0x1DD0" );
-            static_assert( offsetof(StreetManager, miUpcomingRoadsPM)      - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0xC0, "perfmon ids @ X360 +0x1DDC" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, miOriginalInterStateRoadIndex) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x20), "nine RoadIndex run" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mCurrentPlayerSectionExitRight) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x24), "vectors follow the road indices" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mLastNode)              - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x3C), "12-byte Vector3 stride" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, miNewRoadNodeIndex)     - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x54), "post-vector scalars" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, miNextFreeSectionSlot)  - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x74), "walk slot @ X360 +0x1D90" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mauWalkedSections)      - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0x78), "walked sections @ X360 +0x1D94" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, mbNeedToUpdateUpcomingRoads) - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0xAA), "bool block @ X360 +0x1DC6" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, meLoadStage)            - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0xB4), "load stages @ X360 +0x1DD0" );
+            CGS_STATIC_ASSERT(( offsetof(StreetManager, miUpcomingRoadsPM)      - offsetof(StreetManager, miCurrentPlayerRoadIndex) == 0xC0), "perfmon ids @ X360 +0x1DDC" );
         }
     };
 }

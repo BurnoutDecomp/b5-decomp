@@ -228,7 +228,7 @@ namespace Deformation
 		}
 		inline Vector3 Sub3(const Vector3& lA, const Vector3& lB)
 		{
-			return Vector3{ lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f };
+			{ const Vector3 lResult = { lA.x - lB.x, lA.y - lB.y, lA.z - lB.z, 0.0f }; return lResult; }
 		}
 
 		// RwMathVPU::IsValid(vec) -- the asm spells this as a per-lane self-compare (vspltw +
@@ -268,7 +268,7 @@ namespace Deformation
 	// =============================================================================================
 	DeformationSensor::DeformationSensor()
 	{
-		mpSpec = nullptr;
+		mpSpec = 0;
 		mPointDisplacement_BiggestImpulseThisFrame.SetZero();
 
 		mImpulseContact.mfImpactTimeInFrame = 100.0f;   // PS3 ClearVariables @0x6B5F28: *(this+0x118) = 100.0 (disarm; walls leg 4 rename)
@@ -280,8 +280,8 @@ namespace Deformation
 		mSpyContactId = 0;   // spy reset (walls leg 4 rename)
 
 		mi32NumStoredContacts = 0;
-		mpLocalSpaceSphere = nullptr;
-		mpWorldSpaceSphere = nullptr;
+		mpLocalSpaceSphere = 0;
+		mpWorldSpaceSphere = 0;
 		mfScratchAmount = 0.0f;
 	}
 
@@ -1353,7 +1353,7 @@ namespace Deformation
 			}
 		}
 
-		if ( lpSolver == nullptr || lpDefObjBase == nullptr )
+		if ( lpSolver == 0 || lpDefObjBase == 0 )
 		{
 			return;
 		}
@@ -1417,7 +1417,7 @@ namespace Deformation
 			// subtracts the centre when it stores). The miss was a constant per-contact depth bias
 			// (22 x ~0.31m == the measured +6.8m at-rest pop).
 			Vector3 lPointA = lContact.mLocalPointOnA;
-			if ( mpLocalSpaceSphere != nullptr )
+			if ( mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrC = *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere);
 				lPointA.x += lrC.x; lPointA.y += lrC.y; lPointA.z += lrC.z;
@@ -1436,8 +1436,8 @@ namespace Deformation
 
 			// asm order: lbz +0x3C (mbValid), lwz +0x38 (mpOtherSensor), lwz +0x34 (mpOtherVehicle).
 			CGS_ASSERT(lContact.mbValid, "lContact.mbValid");                          // line 842
-			CGS_ASSERT(lContact.mpOtherSensor != nullptr, "lContact.mpOtherSensor");    // line 843
-			CGS_ASSERT(lContact.mpOtherVehicle != nullptr, "lContact.mpOtherVehicle");  // line 844
+			CGS_ASSERT(lContact.mpOtherSensor != 0, "lContact.mpOtherSensor");    // line 843
+			CGS_ASSERT(lContact.mpOtherVehicle != 0, "lContact.mpOtherVehicle");  // line 844
 
 			// (mpOtherVehicle - lpDefObjBase) / sizeof(DeformableObject) -- the other car's index into
 			// the solver's body array.
@@ -1454,13 +1454,13 @@ namespace Deformation
 			// sensor's LOCAL centre to a WORLD point would be meaningless. Storing a raw world point
 			// here made Solve() transform it a second time: the +-1667 m launch.
 			Vector3 lPointA = lContact.mLocalPointOnA;
-			if ( mpLocalSpaceSphere != nullptr )
+			if ( mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrC = *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere);
 				lPointA.x += lrC.x; lPointA.y += lrC.y; lPointA.z += lrC.z;
 			}
 			Vector3 lPointB = lContact.mLocalPointOnB;
-			if ( lContact.mpOtherSensor != nullptr && lContact.mpOtherSensor->mpLocalSpaceSphere != nullptr )
+			if ( lContact.mpOtherSensor != 0 && lContact.mpOtherSensor->mpLocalSpaceSphere != 0 )
 			{
 				const Vector4& lrC =
 					*reinterpret_cast<const Vector4*>(lContact.mpOtherSensor->mpLocalSpaceSphere);
@@ -1489,8 +1489,8 @@ namespace Deformation
 			// host spelling is a plain scalar `if`.
 			Vector3 lNormal = lContact.mNormal;
 			const Vehicle::VehiclePhysics* lpOtherPhysics =
-				( lContact.mpOtherVehicle != nullptr ) ? lContact.mpOtherVehicle->GetVehiclePhysics() : nullptr;
-			if ( lbVehicleWheelsAllHaveTraction && lpOtherPhysics != nullptr
+				( lContact.mpOtherVehicle != 0 ) ? lContact.mpOtherVehicle->GetVehiclePhysics() : 0;
+			if ( lbVehicleWheelsAllHaveTraction && lpOtherPhysics != 0
 			     && lpOtherPhysics->GetAllWheelsHaveTraction() )
 			{
 				const Vector3& lrOtherUp = lpOtherPhysics->GetTransform().Up();

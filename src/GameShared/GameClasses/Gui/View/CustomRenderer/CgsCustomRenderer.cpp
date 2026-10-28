@@ -22,10 +22,10 @@ namespace CgsGui
     void ImRendererSet::Construct()
     {
         mCamera.Construct();
-        mpIm2dRenderBuffer = nullptr;
-        mpIm3dRenderBufferUntex = nullptr;
-        mpIm3dRenderBufferRacePosition = nullptr;
-        mpIm3dRenderBufferMenusAndHud = nullptr;
+        mpIm2dRenderBuffer = 0;
+        mpIm3dRenderBufferUntex = 0;
+        mpIm3dRenderBufferRacePosition = 0;
+        mpIm3dRenderBufferMenusAndHud = 0;
     }
 
     // ---- GetRenderOutput @ 0x828476C0 -----------------------------------------------

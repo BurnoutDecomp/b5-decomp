@@ -32,18 +32,18 @@ namespace CgsFileSystem
     {
     public:
         // Init @0x828DE658 mapped to the worker-start Connect() hook (prints a debug trace).
-        int Connect() override;
+        int Connect() ;
         // The forwarders pass straight through to the wrapped device (X360: vtable thunks,
         // e.g. mpWrappedDevice->vtable[2] == Close; GetFileSize via the wrapped vtable +0x18).
-        int Close(Handle::DeviceHandle lpHandle) override
+        int Close(Handle::DeviceHandle lpHandle)
             { return mpWrappedDevice->Close(lpHandle); }
-        int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize, u32* lpuOutResult) override
+        int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize, u32* lpuOutResult)
             { return mpWrappedDevice->Read(lpHandle, lpBuffer, luSize, lpuOutResult); }
-        int Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize, u32* lpuOutResult) override
+        int Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize, u32* lpuOutResult)
             { return mpWrappedDevice->Write(lpHandle, lpBuffer, luSize, lpuOutResult); }
-        int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset, u64* lpu64OutPosition) override
+        int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset, u64* lpu64OutPosition)
             { return mpWrappedDevice->Seek(lpHandle, lu64Offset, lpu64OutPosition); }
-        int GetFileSize(Handle::DeviceHandle lpHandle, u64* lpu64OutSize) override
+        int GetFileSize(Handle::DeviceHandle lpHandle, u64* lpu64OutSize)
             { return mpWrappedDevice->GetFileSize(lpHandle, lpu64OutSize); }
 
     private:

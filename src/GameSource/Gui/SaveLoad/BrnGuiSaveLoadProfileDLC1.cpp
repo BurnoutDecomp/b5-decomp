@@ -19,7 +19,7 @@ namespace BrnGuiSaveLoad
 {
     // Compile-time pin: the object spans the whole serialised DLC1 image, so the clear in
     // ConstructImage is a plain object-sized memset rather than an over-length write.
-    static_assert(sizeof(ProfileDLC1) == ProfileDLC1::KI_IMAGE_SIZE_BYTES,
+    CGS_STATIC_ASSERT((sizeof(ProfileDLC1) == ProfileDLC1::KI_IMAGE_SIZE_BYTES),
                   "BrnGuiSaveLoad::ProfileDLC1 must span the 9800-byte serialised image");
 
     // Outlined from BrnProgression::Profile::Serialise @0x8237C1F0 (prologue

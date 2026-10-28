@@ -31,7 +31,7 @@ namespace Gen
             u32 mMaterialNamePointers[64];
             s32 mNumCrashBins;
         };
-        static_assert(sizeof(SerializedLayout) == 0x4D8, "propscrashbinlist serialized layout");
+        CGS_STATIC_ASSERT((sizeof(SerializedLayout) == 0x4D8), "propscrashbinlist serialized layout");
 
         const char* mMaterialNames(u32 luIndex) const
         {
@@ -40,7 +40,7 @@ namespace Gen
         }
 
         static const u64 KU_CLASS_KEY = 0x963577B14F10D01Full;
-        explicit propscrashbinlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit propscrashbinlist(Collection* lpCollection = 0, void* lpOwner = 0);
 
         Collection* ChangeWithDefault(u64 luCollectionKey)
         {

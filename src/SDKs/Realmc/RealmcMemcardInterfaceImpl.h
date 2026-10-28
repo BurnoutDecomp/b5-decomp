@@ -37,27 +37,27 @@ public:
 
     // Interface overrides (bodies owned by the impl TU). Declared here so the class
     // is concrete and CreateInstance can construct it; each matches the base slot.
-    ~MemcardInterfaceImpl() override;
-    void Reserved01() override;
-    int  Update(int liArg) override;
-    void Reserved03() override;
+    ~MemcardInterfaceImpl() ;
+    void Reserved01() ;
+    int  Update(int liArg) ;
+    void Reserved03() ;
     // Wave B: slots 4/5/6/9 were renamed in the base to their consumer-attested
     // shapes (UserSignedIn/MessageChoice/SetSilent/Bootup) and slot 14 (ReadSave)
     // was appended -- the override decls track the base so the class stays concrete.
-    void UserSignedIn() override;
-    void MessageChoice(int liChoice) override;
-    void SetSilent(int liSilent, int liArg) override;
-    void Reserved07() override;
-    void Reserved08() override;
+    void UserSignedIn() ;
+    void MessageChoice(int liChoice) ;
+    void SetSilent(int liSilent, int liArg) ;
+    void Reserved07() ;
+    void Reserved08() ;
     void Bootup(void* lpSaveInfo, int liNumEntries, void* lpEntries,
-                void* lpTitleInfo) override;
-    void Reserved10() override;
+                void* lpTitleInfo) ;
+    void Reserved10() ;
     void WriteSave(void* lpSaveInfo, int liCount, void* lpEntries,
-                   int liFlags, void* lpTitleInfo) override;
-    void CheckSave(int liArg, void* lpCheckParams) override;
-    void SetActive(int liActive) override;
+                   int liFlags, void* lpTitleInfo) ;
+    void CheckSave(int liArg, void* lpCheckParams) ;
+    void SetActive(int liActive) ;
     void ReadSave(void* lpEntryContentName, int liNumEntries, void* lpEntries,
-                  int liFlags, void* lpTitleInfo) override;
+                  int liFlags, void* lpTitleInfo) ;
 };
 
 } // namespace RealmcIface

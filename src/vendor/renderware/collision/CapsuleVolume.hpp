@@ -127,10 +127,10 @@ public:
                         //         GPInstance::mFlags (+0x94) by CreateGPInstance
 };
 
-static_assert(offsetof(CapsuleVolume, maFrame)     == 0x00, "CapsuleVolume::maFrame");
-static_assert(offsetof(CapsuleVolume, mfHalfHeight)== 0x44, "CapsuleVolume::mfHalfHeight");
-static_assert(offsetof(CapsuleVolume, mfRadius)    == 0x50, "CapsuleVolume::mfRadius");
-static_assert(offsetof(CapsuleVolume, muFlags)     == 0x5C, "CapsuleVolume::muFlags");
+CGS_STATIC_ASSERT((offsetof(CapsuleVolume, maFrame)     == 0x00), "CapsuleVolume::maFrame");
+CGS_STATIC_ASSERT((offsetof(CapsuleVolume, mfHalfHeight)== 0x44), "CapsuleVolume::mfHalfHeight");
+CGS_STATIC_ASSERT((offsetof(CapsuleVolume, mfRadius)    == 0x50), "CapsuleVolume::mfRadius");
+CGS_STATIC_ASSERT((offsetof(CapsuleVolume, muFlags)     == 0x5C), "CapsuleVolume::muFlags");
 
 } // namespace collision
 } // namespace rw

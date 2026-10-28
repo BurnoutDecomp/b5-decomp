@@ -60,7 +60,7 @@ public:
     void Construct() { miTotalFreedSoFar = 0; }
 
     // Out-of-line so MSVC emits the ??_G scalar deleting destructor @ X360 0x827DD340.
-    ~AttribSysGarbageCollector() override;
+    ~AttribSysGarbageCollector() ;
 
     // @ 0x827DD330 (16-byte body, dumped from the ARTIST .i64 via the GC vtable
     // @0x820CEA34): lwz miTotalFreedSoFar / add r6 / stw / blr -- the debug
@@ -69,7 +69,7 @@ public:
     // the diagnostic counter, reproduced as the truncated add). The asset id is
     // the 64-bit vault AssetID (attribloadandgo.h).
     void ReleaseData(u8 luType, Attrib::Vault::AssetID lAssetId,
-                     void* lpData, unsigned int luSize) override;
+                     void* lpData, unsigned int luSize) ;
 
 private:
     s32 miTotalFreedSoFar;   // CgsAttribSysModule.h:99
@@ -98,7 +98,7 @@ public:
     };
 
     // --- module lifecycle (AttribSysModule's own virtual interface) ---
-    void Construct() override;
+    void Construct() ;
 
     // Resumable bring-up: base module, then the AttribSys memory managers, vault array and
     // a freshly-allocated schema vault. liMaxNumVaults > 0. X360 0x82807620.
@@ -108,8 +108,8 @@ public:
                  CgsMemory::HeapMalloc* lpEastlHeap,
                  s32 liMaxNumVaults);
 
-    bool Release() override;                     // X360 0x82802520
-    void Destruct() override;                    // X360 0x82804380
+    bool Release() ;                     // X360 0x82802520
+    void Destruct() ;                    // X360 0x82804380
     void Update(const AttribSysIO::InputBuffer* lpInputBuffer);   // X360 0x8280FC60
 
     // Drain every queued vault/schema request from the read-locked input buffer. X360 0x8280FB60.

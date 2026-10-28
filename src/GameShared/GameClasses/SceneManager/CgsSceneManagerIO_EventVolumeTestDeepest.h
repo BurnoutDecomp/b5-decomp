@@ -67,7 +67,7 @@ namespace SceneManagerIO
     // EventQueue<InEventVolumeTestDeepest, N> element. 16-byte aligned (carries four SIMD
     // lanes), X360-attested stride 224 (0xE0) -- opaque payload, no field layout recovered.
     // (2026-09-25: the DWARF layout IS recovered now -- the named members beside the payload; see the banner.)
-    struct alignas(16) InEventVolumeTestDeepest : public EventBaseVolumeTestDeepest
+    struct CGS_ALIGN(16) InEventVolumeTestDeepest : public EventBaseVolumeTestDeepest
     {
         union   // [2026-09-25, REVIEW-K] the DWARF members (CgsSceneManagerIO_FineQuery.h:103..:109) beside the payload
         {
@@ -87,17 +87,17 @@ namespace SceneManagerIO
 
     // The pins (REVIEW-K): every named member sits at the producer's store offset, beside the unchanged payload,
     // and the element keeps its X360-attested stride and alignment.
-    static_assert(offsetof(InEventVolumeTestDeepest, macOpaquePayload)    == 0x00, "the payload spans the element");
-    static_assert(offsetof(InEventVolumeTestDeepest, mTransform)          == 0x00, "stvx128 @0x82217150 (+0x00)");
-    static_assert(offsetof(InEventVolumeTestDeepest, mQueryId)            == 0x40, "stw @0x82217154 (+0x40)");
-    static_assert(offsetof(InEventVolumeTestDeepest, mx32EntityTypeFlags) == 0x44, "stw @0x82217160 (+0x44)");
-    static_assert(offsetof(InEventVolumeTestDeepest, mExcludeEntityId)    == 0x48, "stw @0x82217188 (+0x48)");
-    static_assert(offsetof(InEventVolumeTestDeepest, meExclusionMode)     == 0x4C, "stw @0x82217190 (+0x4C)");
-    static_assert(offsetof(InEventVolumeTestDeepest, mVolumeBuffer)       == 0x50, "memcpy @0x82217194 (+0x50)");
-    static_assert(offsetof(InEventVolumeTestDeepest, mxVolumeTypeFlags)   == 0xD0, "stb @0x82217178 (+0xD0)");
-    static_assert(sizeof(InEventVolumeTestDeepest().mTransform)    == 0x40, "four 16-byte rows (Matrix44Affine)");
-    static_assert(sizeof(InEventVolumeTestDeepest().mVolumeBuffer) == 0x80, "the 0x80-byte memcpy @0x82217194");
-    static_assert(sizeof(InEventVolumeTestDeepest)  == 0xE0, "AddEvent @0x82210870 `mulli r10, r11, 0xE0`");
-    static_assert(alignof(InEventVolumeTestDeepest) == 16,   "Construct @0x8222DBD8 `addi r30, this, 0x10`");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, macOpaquePayload)    == 0x00), "the payload spans the element");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, mTransform)          == 0x00), "stvx128 @0x82217150 (+0x00)");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, mQueryId)            == 0x40), "stw @0x82217154 (+0x40)");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, mx32EntityTypeFlags) == 0x44), "stw @0x82217160 (+0x44)");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, mExcludeEntityId)    == 0x48), "stw @0x82217188 (+0x48)");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, meExclusionMode)     == 0x4C), "stw @0x82217190 (+0x4C)");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, mVolumeBuffer)       == 0x50), "memcpy @0x82217194 (+0x50)");
+    CGS_STATIC_ASSERT((offsetof(InEventVolumeTestDeepest, mxVolumeTypeFlags)   == 0xD0), "stb @0x82217178 (+0xD0)");
+    CGS_STATIC_ASSERT((sizeof(InEventVolumeTestDeepest().mTransform)    == 0x40), "four 16-byte rows (Matrix44Affine)");
+    CGS_STATIC_ASSERT((sizeof(InEventVolumeTestDeepest().mVolumeBuffer) == 0x80), "the 0x80-byte memcpy @0x82217194");
+    CGS_STATIC_ASSERT((sizeof(InEventVolumeTestDeepest)  == 0xE0), "AddEvent @0x82210870 `mulli r10, r11, 0xE0`");
+    CGS_STATIC_ASSERT((__alignof(InEventVolumeTestDeepest) == 16),   "Construct @0x8222DBD8 `addi r30, this, 0x10`");
 }
 }

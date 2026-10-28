@@ -42,7 +42,7 @@ namespace ICE
     typedef rw::math::vpu::Vector4 Vector4;
     typedef rw::math::vpu::Matrix44 Matrix44;
 
-    struct alignas(16) Matrix4
+    struct CGS_ALIGN(16) Matrix4
     {
         Vector4 maRows[4];
     };

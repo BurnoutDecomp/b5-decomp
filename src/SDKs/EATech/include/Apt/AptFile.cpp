@@ -40,7 +40,7 @@
 // registered "free a loaded .apt data block" user-function.
 typedef void (*AptFreeAnimationHook)(void* pDataBlock);
 extern AptFreeAnimationHook gpAptFreeAnimationHook;   // dword_1071B1F4 / off_1059C66C
-AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;
+AptFreeAnimationHook gpAptFreeAnimationHook = 0;
 
 AptFile::~AptFile()
 {
@@ -116,9 +116,9 @@ AptFile* MakeAptFile(void* pMem, EAStringC* pName)
     // refcount (the empty-string sentinel guard is inside the EAStringC copy ctor).
     ::new (static_cast<void*>(&pFile->mFileName)) EAStringC(*pName);   // *(this+4) = *(pName+0) + IncRef
 
-    pFile->mpResolveContext = nullptr;                     // *(this+0x10) = 0
-    pFile->mpData           = nullptr;                     // *(this+0x14) = 0
-    pFile->mpDataBlock      = nullptr;                     // *(this+0x18) = 0
+    pFile->mpResolveContext = 0;                     // *(this+0x10) = 0
+    pFile->mpData           = 0;                     // *(this+0x14) = 0
+    pFile->mpDataBlock      = 0;                     // *(this+0x18) = 0
     pFile->mnState          = 1;                           // *(this+8)   = 1 (requested)
     pFile->mnField12        = 1;                           // *(this+0xC) = 1
 
@@ -143,7 +143,7 @@ AptCharacter* AptFile::FindExport(const char* pName) const
 
     const int32_t nExportCount = pMovie->mnExportCount;
     if (nExportCount <= 0)
-        return nullptr;
+        return 0;
 
     for (int32_t iExport = 0; iExport < nExportCount; ++iExport)
     {
@@ -165,7 +165,7 @@ AptCharacter* AptFile::FindExport(const char* pName) const
         if (nDiff == 0)   // names matched up to a shared terminator
             return pMovie->mpCharacterTable[pMovie->mpExportTable[iExport].mnCharacterId];
     }
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ bool AptFile::isFileImported(AptFile** ppCandidate) const
     // Consume the candidate either way: dispose the AptFile and null the slot (the asm
     // does this on both the matched and the exhausted exit).
     AptFile* pConsumed = *ppCandidate;
-    *ppCandidate = nullptr;
+    *ppCandidate = 0;
     AptSharedPtr<AptFile>::Dispose(pConsumed);
     return bImported;
 }

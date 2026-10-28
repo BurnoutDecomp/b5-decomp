@@ -1,7 +1,7 @@
 #include "GameSource/World/AI/BrnAIPortal.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include <cstdint>                                   // uintptr_t (relocation arithmetic)
+#include "types.hpp"                                   // uintptr_t (relocation arithmetic)
 
 // BrnAI::Portal::GetBoundaryLine @0x82764480.
 //
@@ -49,7 +49,7 @@ namespace BrnAI
     // ------------------------------------------------------------------------------
     void Portal::FixUp(const void* lpBaseData)
     {
-        if (mpaBoundaryLines != nullptr)
+        if (mpaBoundaryLines != 0)
         {
             mpaBoundaryLines = reinterpret_cast<BoundaryLine*>(
                 reinterpret_cast<uintptr_t>(mpaBoundaryLines)
@@ -59,7 +59,7 @@ namespace BrnAI
 
     void Portal::FixDown(const void* lpBaseData)
     {
-        if (mpaBoundaryLines != nullptr)
+        if (mpaBoundaryLines != 0)
         {
             mpaBoundaryLines = reinterpret_cast<BoundaryLine*>(
                 reinterpret_cast<uintptr_t>(mpaBoundaryLines)

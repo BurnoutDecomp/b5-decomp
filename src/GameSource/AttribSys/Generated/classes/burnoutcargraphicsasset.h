@@ -41,7 +41,7 @@ namespace Gen
         // The attribute table hashes the WHOLE doubleword, so the low word alone MISSES.
         static const u64 KU_RANDOM_TRAFFIC_COLOURS_ATTRIBUTE_KEY = 0xABD23719B1EE8062ull;
 
-        explicit burnoutcargraphicsasset(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit burnoutcargraphicsasset(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // DWARF burnoutcargraphicsasset.h:98 `unsigned int Num_RandomTrafficColours() const`.
         // Inlined at VehicleTypeRuntime::Prepare @0x82761FE0 as the standard generated

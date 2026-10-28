@@ -54,7 +54,7 @@ struct HybridExhaustControl : public CgsSound::Logic::EffectBase
 // BrnSingleGinsuEffect.h:41 (DWARF). Single-voice Ginsu engine effect.
 struct SingleGinsuEffect : public BrnSound::Logic::BrnEffectObject
 {
-    SingleGinsuEffect() : mpHybridControl(nullptr) {}
+    SingleGinsuEffect() : mpHybridControl(0) {}
 
     // @ 0x826AFAF0 — the X360 `scalar deleting destructor'. Bodied out-of-line in
     // BrnSingleGinsuEffect.cpp. Its teardown is the inherited BrnEffectObject

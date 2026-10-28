@@ -107,7 +107,7 @@ namespace rw { namespace core { namespace debug {
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4u;
 
         // DoAllocate carves the Resource; the formatter lives in the first base region.
-        ::rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, nullptr);
+        ::rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
         return lResource.m_baseResources[0];
     }
 

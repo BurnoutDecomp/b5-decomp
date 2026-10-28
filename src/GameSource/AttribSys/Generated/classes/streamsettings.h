@@ -23,7 +23,7 @@ namespace Gen
     class streamsettings : private Instance
     {
     public:
-        explicit streamsettings(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit streamsettings(Collection* lpCollection = 0, void* lpOwner = 0);
 
         unsigned int Num_ContentSpecs() const
         {

@@ -9,7 +9,7 @@ namespace BrnGameState
 bool ModeManager_EmbedGate_Probe(GameStateModule* lpModule)
 {
     ModeManager* lpModeManager = lpModule->GetModeManager();
-    if (lpModeManager == nullptr)
+    if (lpModeManager == 0)
     {
         return false;
     }

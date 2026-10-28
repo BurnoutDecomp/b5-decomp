@@ -68,7 +68,7 @@ public:
     template<class T>
     void Serialise(const char* /*lpcName*/, T& lrParams)
     {
-        if (mpFile != nullptr)
+        if (mpFile != 0)
         {
             char lacBuffer[KI_CHARBUFFERLENGTH];   // the header token, read and discarded
             std::fscanf(mpFile, "%s\n", lacBuffer);

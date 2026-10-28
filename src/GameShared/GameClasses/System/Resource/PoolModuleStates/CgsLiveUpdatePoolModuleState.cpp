@@ -35,12 +35,12 @@ namespace CgsResource
     void LiveUpdatePoolModuleState::Construct(PoolModule* lpPoolModule)
     {
         meState = E_STATE_IDLE;
-        mpPool = nullptr;
+        mpPool = 0;
         mListId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(""))));
-        mpEntries = nullptr;
+        mpEntries = 0;
         miNumEntries = 0;
-        mpOutNeeds = nullptr;
-        mpOutResources = nullptr;
+        mpOutNeeds = 0;
+        mpOutResources = 0;
         mpPoolModule = lpPoolModule;
     }
 
@@ -61,8 +61,8 @@ namespace
 
         static void AssertLayout()
         {
-            static_assert(offsetof(EntryListResourceData, muNumEntries) == 0x100, "count @ +0x100");
-            static_assert(offsetof(EntryListResourceData, maEntryIds)   == 0x108, "ids @ +0x108");
+            CGS_STATIC_ASSERT((offsetof(EntryListResourceData, muNumEntries) == 0x100), "count @ +0x100");
+            CGS_STATIC_ASSERT((offsetof(EntryListResourceData, maEntryIds)   == 0x108), "ids @ +0x108");
         }
     };
 }
@@ -116,10 +116,10 @@ namespace
         case E_STATE_FREE_SOURCE_ENTRIES:
             meState = E_STATE_FREE_SOURCE_ENTRIES;
 
-            if (mpPool == nullptr)
+            if (mpPool == 0)
             {
                 FindPoolToUpdate();
-                if (mpPool == nullptr)
+                if (mpPool == 0)
                 {
                     // No resident copy of any list resource -> nothing to live-update.
                     memset(mpOutNeeds, 0, miNumEntries);
@@ -160,14 +160,14 @@ namespace
             }
 
             Entry* lpListEntry = CreateEntryListResource();
-            if (lpListEntry != nullptr)
+            if (lpListEntry != 0)
             {
                 mpOutListEntry = lpListEntry;
                 meState = E_STATE_IDLE;
                 return E_RESULT_DONE;
             }
 
-            CGS_ASSERT(lpListEntry != nullptr, "Could not create resource to hold entry list with entries\n");   // :179
+            CGS_ASSERT(lpListEntry != 0, "Could not create resource to hold entry list with entries\n");   // :179
             meState = E_STATE_IDLE;
             return E_RESULT_ERROR;
         }
@@ -186,7 +186,7 @@ namespace
         Events::AllocateResourceListResponse* lpResponse =
             static_cast<Events::AllocateResourceListResponse*>(lpOutResponse);
 
-        lpResponse->mpUser    = nullptr;                              // +0x00  stw 0
+        lpResponse->mpUser    = 0;                              // +0x00  stw 0
         lpResponse->miEventId = 0;                                    // +0x04  stw 0 (driver re-stamps)
         lpResponse->miPoolId  = mpPool ? mpPool->GetId() : -1;        // +0x08  (GetId inlined; -1 if no pool)
         lpResponse->mListId       = mListId;         // +0x10
@@ -210,7 +210,7 @@ namespace
             s32    liResourceIndex;
             Entry* lpResource = mpPool->FindResourceWithDependencies(mpEntries[i].mResourceId, &lpContainingPool,
                                                                      false, 2, &liResourceIndex);
-            mpOutNeeds[i] = (lpResource == nullptr);
+            mpOutNeeds[i] = (lpResource == 0);
             ++liCount;
         }
 
@@ -251,7 +251,7 @@ namespace
             }
         }
 
-        mpPool = lbResourceFound ? &mpPoolModule->GetPoolByIndex(liHighestPoolIndex) : nullptr;
+        mpPool = lbResourceFound ? &mpPoolModule->GetPoolByIndex(liHighestPoolIndex) : 0;
     }
 
     // -------- DeleteOriginalResources @ 0x828FFAF0 --------
@@ -345,7 +345,7 @@ namespace
                 s32    liResourceIndex;
                 Entry* lpFound = mpPool->FindResourceWithDependencies(lrEntry.mResourceId, &lpContainingPool,
                                                                       false, 2, &liResourceIndex);
-                CGS_ASSERT(lpFound != nullptr, "Failed to find entry to delete memory for\n");                        // :423
+                CGS_ASSERT(lpFound != 0, "Failed to find entry to delete memory for\n");                        // :423
                 CGS_ASSERT(lpFound->mpResourceType->GetCachedId() == lrEntry.muResourceTypeId, "Type mismatch during live upate\n");   // :425
 
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -440,7 +440,7 @@ namespace
         s32    liOutIndex;
         if (mpPool->CreateEntry(&lNewResource, &lpOutEntry, &liOutIndex, true) != Pool::CREATERESULT_OK)
         {
-            return nullptr;
+            return 0;
         }
 
         EntryListResourceData* lpData =

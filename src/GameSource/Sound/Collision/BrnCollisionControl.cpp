@@ -32,8 +32,8 @@ s32 KI_DEBUG_RENDER_COLLISIONS = 0; // ARTIST 0x82FFB8E4
 
 CollisionControl::CollisionControl()
     : BrnSound::Logic::BrnEffectControl()
-    , mpCollision3DControl(nullptr)
-    , mpCollisionState(nullptr)
+    , mpCollision3DControl(0)
+    , mpCollisionState(0)
     , mScrapeInfo()
     , mbCollisionFinished(false)
 {
@@ -111,7 +111,7 @@ s32 CollisionControl::GetController(s32 aiIndex)
 
 void CollisionControl::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    CGS_ASSERT(apController != nullptr, "lpController");
+    CGS_ASSERT(apController != 0, "lpController");
     if (!apController)
         return;
 
@@ -126,8 +126,8 @@ bool CollisionControl::Attach()
 {
     CgsSound::Logic::EffectBase::Attach();
     mpCollisionState = static_cast<CollisionState*>(GetStateBase());
-    CGS_ASSERT(mpCollisionState != nullptr, "mpCollisionState");
-    CGS_ASSERT(mpCollision3DControl != nullptr, "mpCollision3DControl");
+    CGS_ASSERT(mpCollisionState != 0, "mpCollisionState");
+    CGS_ASSERT(mpCollision3DControl != 0, "mpCollision3DControl");
     if (!mpCollisionState || !mpCollision3DControl)
         return false;
 
@@ -175,7 +175,7 @@ void CollisionControl::UpdateParams(f32 /*afDeltaTime*/)
         lSphere.mfHeightOffset = 0.0f;
         lSphere.mfRadius = 0.25f;
         lSphere.mfDurationVisible = 1.0f;
-        lSphere.mpDebugString = nullptr;
+        lSphere.mpDebugString = 0;
         CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> lMessage(lSphere);
         lMessage.Construct(1, 5,
             static_cast<u16>((mpCollision3DControl->GetId() >> 11) & 0x1F), 1,

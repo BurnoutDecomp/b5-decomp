@@ -76,10 +76,10 @@ namespace BrnWorld
 
     void TrafficCrash::_AssertLayout()
     {
-        static_assert(offsetof(TrafficCrash, miOwner) == 0, "miOwner @0");
-        static_assert(offsetof(TrafficCrash, mxFlags) == 1, "mxFlags @1");
-        static_assert(offsetof(TrafficCrash, muVehicleIndex) == 2, "muVehicleIndex @2");
-        static_assert(offsetof(TrafficCrash, mfTimeTillClearup) == 4, "mfTimeTillClearup @4");
-        static_assert(sizeof(TrafficCrash) == 8, "TrafficCrash size 8");
+        CGS_STATIC_ASSERT((offsetof(TrafficCrash, miOwner) == 0), "miOwner @0");
+        CGS_STATIC_ASSERT((offsetof(TrafficCrash, mxFlags) == 1), "mxFlags @1");
+        CGS_STATIC_ASSERT((offsetof(TrafficCrash, muVehicleIndex) == 2), "muVehicleIndex @2");
+        CGS_STATIC_ASSERT((offsetof(TrafficCrash, mfTimeTillClearup) == 4), "mfTimeTillClearup @4");
+        CGS_STATIC_ASSERT((sizeof(TrafficCrash) == 8), "TrafficCrash size 8");
     }
 }

@@ -56,7 +56,7 @@ void RichPresenceManagerBase::Construct(GameStateModule* lpGameStateModule,
     mpModeManager        = lpModeManager;
     // The ScoringSystem is embedded by value inside the ModeManager (X360 pModeManager + 0xDB0);
     // GetScoringSystem() is the named accessor for that embedded sub-object.
-    mpScoringSystem      = lpModeManager ? lpModeManager->GetScoringSystem() : nullptr;
+    mpScoringSystem      = lpModeManager ? lpModeManager->GetScoringSystem() : 0;
 
     CGS_ASSERT(mpGameStateModule, "mpGameStateModule");
     CGS_ASSERT(mpNetworkRoundManager, "mpNetworkRoundManager");

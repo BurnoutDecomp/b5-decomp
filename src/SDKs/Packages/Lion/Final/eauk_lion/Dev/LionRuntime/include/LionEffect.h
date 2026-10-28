@@ -88,10 +88,10 @@ struct cLionEffectDefinition
 
 // cLionFX::BinSave @0x82914438 does `DataStore(this, 84)`; the record IS 84 bytes and the
 // host must agree, because BinLoad reads a .lef image of exactly this shape.
-static_assert(sizeof(cLionEffectDefinition) == 84,
+CGS_STATIC_ASSERT((sizeof(cLionEffectDefinition) == 84),
               "cLionEffectDefinition is the 84-byte serialised .lef header "
               "(cLionFX::BinSave @0x82914438 DataStore(this, 84))");
-static_assert(offsetof(cLionEffectDefinition, mpParticles) == 0x48,
+CGS_STATIC_ASSERT((offsetof(cLionEffectDefinition, mpParticles) == 0x48),
               "mpParticles is the word cLionFX::BinLoad @0x82914388 rebases");
 
 // ============================================================================

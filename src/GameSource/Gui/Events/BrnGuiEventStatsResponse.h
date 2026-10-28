@@ -148,6 +148,6 @@ namespace BrnGui
     };
 
     // AddGuiEvent<GuiEventStatsResponse> @0x823D71D8: `li r6, 0x1B0 / li r5, 0x1B4`.
-    static_assert(sizeof(GuiEventStatsResponse) == 432,
+    CGS_STATIC_ASSERT((sizeof(GuiEventStatsResponse) == 432),
                   "X360 AddGuiEvent<GuiEventStatsResponse> posts 432 bytes (id 436)");
 }

@@ -105,7 +105,7 @@ void BridgeInputToAIModule(
     // the world's timer block as its own 48-byte pointer-free POD while the AI buffer holds the
     // canonical CgsSystem::TimerStatusInterface (the DWARF member type). Same X360 member, same
     // flat 0x30 block; the sizes are pinned equal so the copy can never be partial.
-    static_assert(sizeof(BrnWorldIO::TimerStatusInterface) == sizeof(CgsSystem::TimerStatusInterface),
+    CGS_STATIC_ASSERT((sizeof(BrnWorldIO::TimerStatusInterface) == sizeof(CgsSystem::TimerStatusInterface)),
                   "world/AI timer-status blocks must be the same 48-byte X360 member");
     lpAIInputBuffer->SetTimerInterface(
         reinterpret_cast<const CgsSystem::TimerStatusInterface*>(lpWorldInput->GetTimerStatusInterface()));
@@ -113,8 +113,8 @@ void BridgeInputToAIModule(
     // FLAG cross-home cast, same reason: BrnWorldIO::RaceCarRaceDistanceInterface is `s32[10]`,
     // the AI buffer holds GameStateModuleIO::RaceCarRaceDistanceInterface (whose Clear the AI
     // buffer's Construct calls @0x8278AC1C). The console copies 10 words between them.
-    static_assert(sizeof(BrnWorldIO::RaceCarRaceDistanceInterface)
-                      == sizeof(BrnAI::AIModuleIO::InputBuffer::RaceCarRaceDistanceInterface),
+    CGS_STATIC_ASSERT((sizeof(BrnWorldIO::RaceCarRaceDistanceInterface)
+                      == sizeof(BrnAI::AIModuleIO::InputBuffer::RaceCarRaceDistanceInterface)),
                   "world/AI race-distance blocks must be the same 10-word X360 member");
     lpAIInputBuffer->SetRaceCarRaceDistanceInterface(
         reinterpret_cast<const BrnAI::AIModuleIO::InputBuffer::RaceCarRaceDistanceInterface*>(
@@ -125,8 +125,8 @@ void BridgeInputToAIModule(
 
     // FLAG cross-home cast, same reason: BrnWorldIO::PlayerVehicleControls is a 60-byte blob,
     // the AI buffer holds the DWARF-canonical BrnWorld::PlayerVehicleControls (13 floats + 8 bools).
-    static_assert(sizeof(BrnWorldIO::PlayerVehicleControls)
-                      == sizeof(BrnAI::AIModuleIO::InputBuffer::PlayerVehicleControls),
+    CGS_STATIC_ASSERT((sizeof(BrnWorldIO::PlayerVehicleControls)
+                      == sizeof(BrnAI::AIModuleIO::InputBuffer::PlayerVehicleControls)),
                   "world/AI player-vehicle-controls blocks must be the same 60-byte X360 member");
     lpAIInputBuffer->SetPlayerVehicleControls(
         reinterpret_cast<const BrnAI::AIModuleIO::InputBuffer::PlayerVehicleControls*>(
@@ -343,7 +343,7 @@ namespace RaceCarEntityModuleIO
     void InputBuffer_PostPhysics::SetAIRaceCarInterface( const AIRaceCarInterface* lpInterface )
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        static_assert(sizeof(AIRaceCarInterface) == 0x490,
+        CGS_STATIC_ASSERT((sizeof(AIRaceCarInterface) == 0x490),
                       "AIRaceCarInterface is the console's pointer-free 0x490-byte block");
         mAIRaceCarInterface = *lpInterface;
     }

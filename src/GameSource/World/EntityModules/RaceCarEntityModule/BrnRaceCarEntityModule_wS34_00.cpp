@@ -102,6 +102,6 @@ namespace BrnWorld
         DEBUG_mDebugRaceCarPosition.SetZero();
         DEBUG_mDebugRaceCarDirection.SetZero();
         DEBUG_mfDebugRaceCarVelocity       = 0.0f;
-        DEBUG_mpDebugRaceCar               = nullptr;
+        DEBUG_mpDebugRaceCar               = 0;
     }
 }

@@ -11,10 +11,10 @@ class GuiCache;
 struct OnlineViewChallenges : public CgsGui::State
 {
     OnlineViewChallenges();
-    void OnEnter() override;
-    void OnLeave() override;
-    void Update() override;
-    void GetResourcesToLoad(const CgsGui::sResourceTuple** resources, u32* count) const override
+    void OnEnter() ;
+    void OnLeave() ;
+    void Update() ;
+    void GetResourcesToLoad(const CgsGui::sResourceTuple** resources, u32* count) const
     { *resources = maResourceTuplesToLoad; *count = miNumResourcesToLoad; }
 private:
     enum ESubState { E_SUBSTATE_LOADING_SCREEN, E_SUBSTATE_LOADING_COMPONENTS, E_SUBSTATE_SELECTING_PARAMS };

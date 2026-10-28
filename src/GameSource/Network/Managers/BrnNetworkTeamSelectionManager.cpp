@@ -683,18 +683,18 @@ namespace BrnNetwork
     // (they alias each other in ActionBroadcastFinalTeamSelection), and the per-slot field order.
     void TeamSelectionManager_AssertLayout()
     {
-        static_assert(sizeof(TeamSelectionManager::ActiveRaceCarTeam) == 8,
+        CGS_STATIC_ASSERT((sizeof(TeamSelectionManager::ActiveRaceCarTeam) == 8),
                       "ActiveRaceCarTeam is an 8-byte {NetworkPlayerID, s32 team} pair");
-        static_assert(offsetof(TeamSelectionManager::ActiveRaceCarTeam, mPlayerID) == 0,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectionManager::ActiveRaceCarTeam, mPlayerID) == 0),
                       "ActiveRaceCarTeam.mPlayerID @ +0x00");
-        static_assert(offsetof(TeamSelectionManager::ActiveRaceCarTeam, miTeam) == 4,
+        CGS_STATIC_ASSERT((offsetof(TeamSelectionManager::ActiveRaceCarTeam, miTeam) == 4),
                       "ActiveRaceCarTeam.miTeam @ +0x04");
         // The broadcast aliases maActiveRaceCarTeam onto the message PlayerTeamInfo payload, so the
         // two records must share their size + field order.
-        static_assert(sizeof(TeamSelectMessage::PlayerTeamInfo) == sizeof(TeamSelectionManager::ActiveRaceCarTeam),
+        CGS_STATIC_ASSERT((sizeof(TeamSelectMessage::PlayerTeamInfo) == sizeof(TeamSelectionManager::ActiveRaceCarTeam)),
                       "ActiveRaceCarTeam aliases the wire PlayerTeamInfo record in the broadcast");
-        static_assert(offsetof(TeamSelectionManager::TeamSelectionData, mMessageRecv)
-                          == offsetof(TeamSelectionManager::TeamSelectionData, mMessageSend) + sizeof(TeamSelectMessage),
+        CGS_STATIC_ASSERT((offsetof(TeamSelectionManager::TeamSelectionData, mMessageRecv)
+                          == offsetof(TeamSelectionManager::TeamSelectionData, mMessageSend) + sizeof(TeamSelectMessage)),
                       "the recv message immediately follows the send message in a TeamSelectionData slot");
     }
 } // namespace BrnNetwork

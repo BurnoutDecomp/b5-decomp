@@ -20,7 +20,7 @@ namespace CgsDev
 // stores r4 into *r3 (offset 0) regardless of the assert outcome.
 void DebugGameTalkInterface::Construct(CgsGameTalk::GameTalk* lpGameTalk)
 {
-    CGS_ASSERT(lpGameTalk != nullptr, "lpGameTalk");
+    CGS_ASSERT(lpGameTalk != 0, "lpGameTalk");
     mpGameTalk = lpGameTalk;
 }
 
@@ -59,7 +59,7 @@ void DebugGameTalkInterface::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* l
     }
 
     const char* lpcScript = lpMessage->GetKeyContent("ExecuteScript");
-    if (lpcScript == nullptr)
+    if (lpcScript == 0)
     {
         return;
     }

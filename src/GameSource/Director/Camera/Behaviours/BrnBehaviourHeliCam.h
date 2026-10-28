@@ -95,20 +95,20 @@ public:
 
     // ---- the Behaviour virtual interface ---------------------------------------------------
     // Seed the base head, the shake, the looker and the random ring.                   (slot 0)
-    void Construct() override;
+    void Construct() ;
 
     // Reset the rig to the identity and arm the position seed for the next Update.    (slot 1)
-    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;
 
     // Seed the position off the player car once, fly it along the velocity, look at the car and
     // shake. Always returns true.                                                      (slot 2)
-    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;
 
     // Reset the tweaker it is handed; the heli cam maps nothing onto it.              (slot 6)
-    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+    void SetupTweaker(Utils::Tweaker& lrTweaker) ;
 
     //                                                                                  (slot 7)
-    const char* GetName() const override;
+    const char* GetName() const ;
 
     // Adopt a heli-cam parameter block: assert it carries the heli-cam type tag, then store the
     // pointer. Declared over the derived Parameters, so it hides the base's pair.
@@ -130,19 +130,19 @@ public:
     static void _AssertLayout()
     {
         typedef BehaviourHeliCam T;
-        static_assert(offsetof(T, mTransform) < offsetof(T, mLooker) &&
+        CGS_STATIC_ASSERT((offsetof(T, mTransform) < offsetof(T, mLooker) &&
                       offsetof(T, mLooker) < offsetof(T, mPosition) &&
                       offsetof(T, mPosition) < offsetof(T, mTarget) &&
                       offsetof(T, mTarget) < offsetof(T, mVelocity) &&
                       offsetof(T, mVelocity) < offsetof(T, mRandom) &&
                       offsetof(T, mRandom) < offsetof(T, mpParameters) &&
                       offsetof(T, mpParameters) < offsetof(T, mCameraShake) &&
-                      offsetof(T, mCameraShake) < offsetof(T, mbCalculatePosition),
+                      offsetof(T, mCameraShake) < offsetof(T, mbCalculatePosition)),
                       "BehaviourHeliCam: members in console order");
-        static_assert(offsetof(T, mLooker) - offsetof(T, mTransform) == 0x40 &&
+        CGS_STATIC_ASSERT((offsetof(T, mLooker) - offsetof(T, mTransform) == 0x40 &&
                       offsetof(T, mPosition) - offsetof(T, mLooker) == 0x20 &&
                       offsetof(T, mRandom) - offsetof(T, mPosition) == 0x30 &&
-                      offsetof(T, mpParameters) - offsetof(T, mRandom) == 0x30,
+                      offsetof(T, mpParameters) - offsetof(T, mRandom) == 0x30),
                       "BehaviourHeliCam: the pointer-free run +0x20..+0xE0 keeps the console spacing");
     }
 };

@@ -141,7 +141,7 @@ namespace BrnAI
         mfAngleToBrakingTarget = 0.0f;      // 0x1CFC
         mfInvulnerableTime    = -1.0f;      // 0x1D0C
         mfStartLineWheelSpinTime = -1.0f;   // 0x1D20 (stfs flt_820037C8)
-        mpCarHost             = nullptr;    // 0x1CE0
+        mpCarHost             = 0;    // 0x1CE0
         mbIsRacingLineInitialised = 0;      // 0x1D68
         mbIsActive            = 0;          // 0x1D69
         mbCurrentRouteComplete = 0;         // 0x1D6A
@@ -178,8 +178,8 @@ namespace BrnAI
     // ====================================================================================
     void AIDriver::SetAICar(AICar* lpCar)
     {
-        CGS_ASSERT(lpCar != nullptr, "Driver given NULL car");
-        CGS_ASSERT(mpCarHost == nullptr,
+        CGS_ASSERT(lpCar != 0, "Driver given NULL car");
+        CGS_ASSERT(mpCarHost == 0,
                    "Shouldn't be reassigning an AI driver directly to another car.");
 
         mpCarHost = lpCar;
@@ -259,7 +259,7 @@ namespace BrnAI
         mbBoosting                = 0;               // 0x1D6B
         mfPlayerTimeSinceAIDriven = 0.0f;            // 0x1D38
         mfPlayerSlowSpeedTime     = 0.0f;            // 0x1D58
-        SetAggressionVictimCar(nullptr);             // 0x1CE8 -- mpAggressionVictim = NULL
+        SetAggressionVictimCar(0);             // 0x1CE8 -- mpAggressionVictim = NULL
         meAggressionVictimHost        = -1;             // 0x1CF0 -- EGlobalRaceCarIndex victim = none
     }
 
@@ -1094,7 +1094,7 @@ namespace BrnAI
     // ====================================================================================
     bool AIDriver::IsInvulnerable() const
     {
-        CGS_ASSERT(mpCarHost != nullptr, "mpCar != NULL");
+        CGS_ASSERT(mpCarHost != 0, "mpCar != NULL");
 
         if (mpCarHost->meRelativeLocation < 2)          // car+0x14D4 (behind player: 0 or 1)
         {

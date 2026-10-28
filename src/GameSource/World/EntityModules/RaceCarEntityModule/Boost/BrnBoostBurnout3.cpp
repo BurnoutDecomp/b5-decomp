@@ -1116,7 +1116,7 @@ void BoostBurnout3::ApplyUpdate(f32 lfTimeStep)
     // `bl Attrib__StringToKey` @0x822C1A58 -> `mr r4, r3` @0x822C1A5C: the FULL
     // 64-bit hash, moved whole (no clrldi), is the ctor's collection key.
     // `li r5, 0` @0x822C1A60 is the owner.
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), nullptr);
+    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), 0);
 
     // The console loads the layout block once (`lwz r11, 4(inst)` @0x822C1A6C --
     // Attrib::Instance::mpAttributeData) and then reads it at fixed offsets.
@@ -1536,7 +1536,7 @@ bool BoostBurnout3::Prepare()
 
     // 0x822C1708-1714: `mr r4,r3` (the whole doubleword, no clrldi), `li r5,0`
     // for the owner, then the ctor.
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), nullptr);
+    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), 0);
 
     // 0x822C1718-1858 -- the 34 record -> member stores, in ascending member
     // order (which is the order the X360 emits them). Each one goes through the

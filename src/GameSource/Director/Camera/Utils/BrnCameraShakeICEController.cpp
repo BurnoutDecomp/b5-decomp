@@ -248,7 +248,7 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
         Vector3 v = {mShakeTake.GetValueFloat(22,k), mShakeTake.GetValueFloat(23,k), mShakeTake.GetValueFloat(24,k),0};
         v = v * (lfShakeAmplitude / kfShakeFocalDistance);
         const f32 remainder = 1.0f - Magnitude(v);
-        return Quaternion{v.x,v.y,v.z,remainder == 0.0f ? 0.0f : std::sqrt(remainder)};
+        { const Quaternion lResult = {v.x,v.y,v.z,remainder == 0.0f ? 0.0f : std::sqrt(remainder)}; return lResult; }
     };
     Quaternion a = sampleRotation(current), b = sampleRotation(next);
     f32 dot = a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;

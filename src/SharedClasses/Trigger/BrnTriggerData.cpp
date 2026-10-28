@@ -7,7 +7,7 @@
 #include "SharedClasses/Trigger/BrnRoamingLocation.h" // complete RoamingLocation (GetRoamingLocation stride == 0x20)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetOnlineLandmark / FixUp message build)
-#include <cstdint>                                   // uintptr_t (load-time pointer relocation arithmetic)
+#include "types.hpp"                                   // uintptr_t (load-time pointer relocation arithmetic)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnTrigger::TriggerData::GetRegion                 @ 0x8230E490

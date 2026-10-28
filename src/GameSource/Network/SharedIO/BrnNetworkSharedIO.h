@@ -251,6 +251,6 @@ namespace BrnNetwork
             ETelemetryHook meHook;                       // +0x00
             char           macBuffer[16];                // +0x04
         };
-        static_assert(sizeof(TelemetryData) == 20, "X360 posts TelemetryData as 20 bytes (li r6, 0x14 @0x8238FF7C)");
+        CGS_STATIC_ASSERT((sizeof(TelemetryData) == 20), "X360 posts TelemetryData as 20 bytes (li r6, 0x14 @0x8238FF7C)");
     }
 }

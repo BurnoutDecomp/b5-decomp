@@ -68,9 +68,9 @@ namespace AIModuleIO
     //  separate function group.)
 
     // The two members retyped 2026-09-03 (aiwave lane A4): console extents == host sizes.
-    static_assert(sizeof(OutputBuffer::VehicleDriverInputInterface) == 0x14B0,
+    CGS_STATIC_ASSERT((sizeof(OutputBuffer::VehicleDriverInputInterface) == 0x14B0),
                   "mVehicleDriverInterface is the console's 0x14B0-byte VehicleDriverInputInterface");
-    static_assert(sizeof(AIRaceCarInterface) == 0x490,
+    CGS_STATIC_ASSERT((sizeof(AIRaceCarInterface) == 0x490),
                   "mAIRaceCarInterface is the console's 0x490-byte AIRaceCarInterface");
 
     // X360 0x8276D9C8 (W, :402) -- write-lock handle at this+0x15120.

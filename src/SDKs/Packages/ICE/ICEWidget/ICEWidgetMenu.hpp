@@ -139,13 +139,13 @@ namespace ICE
     // the two trailing floats shift +4 there (the same pointer-widening caveat the
     // committed ICEData.hpp records for its post-pointer members). The 32-bit
     // layout the bodies encode is unchanged.
-    static_assert(offsetof(ICEWidgetMenu, miStyle)          == 0x00, "ICEWidgetMenu::miStyle offset");
-    static_assert(offsetof(ICEWidgetMenu, miNumRows)        == 0x04, "ICEWidgetMenu::miNumRows offset");
-    static_assert(offsetof(ICEWidgetMenu, miNumColumns)     == 0x08, "ICEWidgetMenu::miNumColumns offset");
-    static_assert(offsetof(ICEWidgetMenu, miMaxVisibleRows) == 0x0C, "ICEWidgetMenu::miMaxVisibleRows offset");
-    static_assert(offsetof(ICEWidgetMenu, miScrollTop)      == 0x10, "ICEWidgetMenu::miScrollTop offset");
-    static_assert(offsetof(ICEWidgetMenu, miSelectedRow)    == 0x14, "ICEWidgetMenu::miSelectedRow offset");
-    static_assert(offsetof(ICEWidgetMenu, maSelectBox)      == 0x20, "ICEWidgetMenu::maSelectBox offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, miStyle)          == 0x00), "ICEWidgetMenu::miStyle offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, miNumRows)        == 0x04), "ICEWidgetMenu::miNumRows offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, miNumColumns)     == 0x08), "ICEWidgetMenu::miNumColumns offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, miMaxVisibleRows) == 0x0C), "ICEWidgetMenu::miMaxVisibleRows offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, miScrollTop)      == 0x10), "ICEWidgetMenu::miScrollTop offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, miSelectedRow)    == 0x14), "ICEWidgetMenu::miSelectedRow offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetMenu, maSelectBox)      == 0x20), "ICEWidgetMenu::maSelectBox offset");
 }
 
 #endif // SDKS_PACKAGES_ICE_ICEWIDGET_ICEWIDGETMENU_HPP

@@ -39,7 +39,7 @@ namespace CgsDev
 
             // X360 0x8282FC68. Resize to the current line count, then advance the slide animation
             // toward the visible/hidden target; when fully retracted, drop out of the window stack.
-            virtual void Update(f32 lfTimeStep, InputEvent leEvent) override;
+            virtual void Update(f32 lfTimeStep, InputEvent leEvent) ;
 
             // X360 0x828292A0. Flip visibility (and add to the window stack if it is not already in
             // it) - but only while the console is enabled.

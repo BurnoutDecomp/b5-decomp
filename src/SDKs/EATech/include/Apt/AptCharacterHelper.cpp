@@ -55,8 +55,8 @@ static const uint32_t KU_TEXT_CHARACTER_FLAG    = 0x8000u;
 static const int32_t  KI_CHARACTER_TYPE_TEXT    = 2;
 
 // ---- the cached default-character template singletons (X360 .data) ------------
-AptCharacterDynamicText* AptCharacterHelper::spDefaultTextCharacter  = nullptr;  // off_8324E498
-AptCharacter*            AptCharacterHelper::spDefaultMovieCharacter = nullptr;  // off_8324E49C
+AptCharacterDynamicText* AptCharacterHelper::spDefaultTextCharacter  = 0;  // off_8324E498
+AptCharacter*            AptCharacterHelper::spDefaultMovieCharacter = 0;  // off_8324E49C
 
 // ---------------------------------------------------------------------------
 // CreateTextCharacterInst @0x82B010C0
@@ -83,8 +83,8 @@ AptCIH* AptCharacterHelper::CreateTextCharacterInst()
     pTemplate->mnAuthoredReserved2 = 0;                          // [c:0x30]
     pTemplate->mnAuthoredReserved3 = 0;                          // [c:0x34]
     pTemplate->mnAuthoredReserved4 = 0;                          // [c:0x38]
-    pTemplate->mpDefaultText = nullptr;                          // [c:0x3C] szInitialText
-    pTemplate->mpVariableName = nullptr;                         // [c:0x40] szVariable (a char*, not a dword)
+    pTemplate->mpDefaultText = 0;                          // [c:0x3C] szInitialText
+    pTemplate->mpVariableName = 0;                         // [c:0x40] szVariable (a char*, not a dword)
     // No default glyph resolved yet (the X360 seeds the index to -1 before the walk).
     pTemplate->mnDefaultGlyphIndex = -1;                         // [c:0x20]
 
@@ -185,8 +185,8 @@ void AptCharacterHelper::Shutdown()
         gpNonGCPoolManager->Deallocate(spDefaultMovieCharacter, sizeof(AptCharacterDynamicText));
     }
 
-    spDefaultTextCharacter  = nullptr;
-    spDefaultMovieCharacter = nullptr;
+    spDefaultTextCharacter  = 0;
+    spDefaultMovieCharacter = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,42 +215,42 @@ void AptCharacterHelper::Shutdown()
 // never mints a level node.
 AptCIH* AptFindAnimationAtLevel(int nLevel)
 {
-    if (gpAptTarget == nullptr || gpAptTarget->mpAnimationTarget == nullptr)
-        return nullptr;
+    if (gpAptTarget == 0 || gpAptTarget->mpAnimationTarget == 0)
+        return 0;
 
     AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();
-    AptDisplayListState* pState = (pRoot != nullptr) ? pRoot->AsState() : nullptr;
-    if (pState == nullptr)
-        return nullptr;
+    AptDisplayListState* pState = (pRoot != 0) ? pRoot->AsState() : 0;
+    if (pState == 0)
+        return 0;
 
-    for (AptCIH* pNode = pState->mpFirst; pNode != nullptr; pNode = pNode->mpDisplayListNext)
+    for (AptCIH* pNode = pState->mpFirst; pNode != 0; pNode = pNode->mpDisplayListNext)
     {
-        if (pNode->mpCharacterInst == nullptr || pNode->mpCharacterInst->mpRenderItem == nullptr)
+        if (pNode->mpCharacterInst == 0 || pNode->mpCharacterInst->mpRenderItem == 0)
             continue;
         if (pNode->mpCharacterInst->mpRenderItem->GetDepth() == nLevel)
             return pNode;
     }
-    return nullptr;
+    return 0;
 }
 
 AptCIH* AptGetAnimationAtLevel(int nLevel)
 {
     // No active target / director / root display list -> nothing mounted.
-    if (gpAptTarget == nullptr || gpAptTarget->mpAnimationTarget == nullptr)
-        return nullptr;
+    if (gpAptTarget == 0 || gpAptTarget->mpAnimationTarget == 0)
+        return 0;
 
     AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();   // *(target+0x18)+0x20
-    AptDisplayListState* pState = (pRoot != nullptr) ? pRoot->AsState() : nullptr;
+    AptDisplayListState* pState = (pRoot != 0) ? pRoot->AsState() : 0;
     // The root display list's head node (mpHead, which AsState() returns) is nullable -- the ctor may
     // fail to allocate it. Bail rather than deref pState->mpFirst.
-    if (pState == nullptr)
-        return nullptr;
+    if (pState == 0)
+        return 0;
 
     // Search the placed children for the node at depth nLevel. GUARDED: skip any node whose
     // charInst / renderItem is null (a partially-built node would AV on the GetDepth() chain).
-    for (AptCIH* pNode = pState->mpFirst; pNode != nullptr; pNode = pNode->mpDisplayListNext)
+    for (AptCIH* pNode = pState->mpFirst; pNode != 0; pNode = pNode->mpDisplayListNext)
     {
-        if (pNode->mpCharacterInst == nullptr || pNode->mpCharacterInst->mpRenderItem == nullptr)
+        if (pNode->mpCharacterInst == 0 || pNode->mpCharacterInst->mpRenderItem == 0)
             continue;
         if (pNode->mpCharacterInst->mpRenderItem->GetDepth() == nLevel)
             return pNode;
@@ -268,15 +268,15 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
     // in SetGeneralizedProcessDirtyState during the first frame-0 place). Use sizeof(AptCIH), the
     // same size AptCreateInstAtDepth already uses for the placed child nodes.
     void* pMem = AptCIH::operator new(sizeof(AptCIH));  // AptValueGC pool (x64 size)
-    if (pMem == nullptr)
-        return nullptr;                                  // GC carve failed -> bail (no AV)
+    if (pMem == 0)
+        return 0;                                  // GC carve failed -> bail (no AV)
 
-    AptCIH* pNew = ::new (pMem) AptCIH(nullptr, nullptr);
+    AptCIH* pNew = ::new (pMem) AptCIH(0, 0);
 
     // GUARDED post-create derefs: a partial render-tree manager can leave mpCharacterInst /
     // mpRenderItem null. Bail (the node exists but is not fully wired) rather than AV.
-    if (pNew == nullptr || pNew->mpCharacterInst == nullptr)
-        return nullptr;
+    if (pNew == 0 || pNew->mpCharacterInst == 0)
+        return 0;
 
     AptRenderItem* pRI = pNew->mpCharacterInst->GetRenderItemWritable();
     // The render-tree manager is LIVE (AptCurrentRenderTreeManager reads the target's
@@ -284,7 +284,7 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
     // checked at entry), so SetDepth stamps the render item's depth faithfully. pRI is
     // null only when the pool alloc failed -- then the node is still created +
     // GC-rooted + inserted so the display tree survives the exhaustion.
-    if (pRI != nullptr)
+    if (pRI != 0)
         pRI->SetDepth(nLevel);
     pNew->setGCRoot(1);
     pState->insert(nLevel, pNew);
@@ -323,8 +323,8 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
 // ---------------------------------------------------------------------------
 AptCharacter* AptResolveDefaultTextFont(AptCharacter* pFontOwner, int32_t* pnDefaultGlyphIndex)
 {
-    if (pFontOwner == nullptr)
-        return nullptr;
+    if (pFontOwner == 0)
+        return 0;
 
     // v2 = the movie def-base embedded at pFontOwner + KU_AptEmbeddedMovieOff [c:0x10].
     AptCharacterAnimation* const pMovieRoot = AptGetMovieCharacterAnimation(pFontOwner);

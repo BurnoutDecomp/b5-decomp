@@ -45,8 +45,8 @@ namespace core
 // storage here rather than fabricating an address. These are opaque data symbols in the XEX
 // (no exported contents); modelled as placeholders so the bodies below link without fabricating
 // their contents.
-static void *const KCM_BasePlugInVTable = nullptr;   // off_820AA810
-static void *const KCM_Compressor1VTable = nullptr;  // the Compressor1 v-table (installed by Initialize)
+static void *const KCM_BasePlugInVTable = 0;   // off_820AA810
+static void *const KCM_Compressor1VTable = 0;  // the Compressor1 v-table (installed by Initialize)
 
 // CreateInstance immediates.
 static const f32 KF_THRESHOLD_DEFAULT = 120.0f; // flt_82004A28

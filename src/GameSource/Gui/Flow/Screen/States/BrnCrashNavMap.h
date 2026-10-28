@@ -307,21 +307,21 @@ namespace BrnGui
         static void _AssertLayout()
         {
             // run A: the State-adjacent scalar block +56..+70 (X360 deltas exact)
-            static_assert(offsetof(CrashNavMap, mePreviousMapState) - offsetof(CrashNavMap, meMapState) == 4,  "run A order");
-            static_assert(offsetof(CrashNavMap, meWaitforData)      - offsetof(CrashNavMap, meMapState) == 8,  "run A order");
-            static_assert(offsetof(CrashNavMap, mbIsScreenLoaded)   - offsetof(CrashNavMap, meMapState) == 12, "run A order");
-            static_assert(offsetof(CrashNavMap, mbIsExiting)        - offsetof(CrashNavMap, meMapState) == 13, "run A order");
-            static_assert(offsetof(CrashNavMap, mi8CurrentEventIndex) - offsetof(CrashNavMap, meMapState) == 14, "run A order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mePreviousMapState) - offsetof(CrashNavMap, meMapState) == 4),  "run A order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, meWaitforData)      - offsetof(CrashNavMap, meMapState) == 8),  "run A order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mbIsScreenLoaded)   - offsetof(CrashNavMap, meMapState) == 12), "run A order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mbIsExiting)        - offsetof(CrashNavMap, meMapState) == 13), "run A order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mi8CurrentEventIndex) - offsetof(CrashNavMap, meMapState) == 14), "run A order");
             // run B: the bool/enum cluster +24704..+24712 (X360 deltas exact)
-            static_assert(offsetof(CrashNavMap, mbUseRoadSigns)     - offsetof(CrashNavMap, mbSelectRivals) == 1, "run B order");
-            static_assert(offsetof(CrashNavMap, mbDrawDriveThrus)   - offsetof(CrashNavMap, mbSelectRivals) == 2, "run B order");
-            static_assert(offsetof(CrashNavMap, mbSelectDriveThrus) - offsetof(CrashNavMap, mbSelectRivals) == 3, "run B order");
-            static_assert(offsetof(CrashNavMap, meEventIconDisplayType) - offsetof(CrashNavMap, mbSelectRivals) == 4, "run B order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mbUseRoadSigns)     - offsetof(CrashNavMap, mbSelectRivals) == 1), "run B order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mbDrawDriveThrus)   - offsetof(CrashNavMap, mbSelectRivals) == 2), "run B order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mbSelectDriveThrus) - offsetof(CrashNavMap, mbSelectRivals) == 3), "run B order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, meEventIconDisplayType) - offsetof(CrashNavMap, mbSelectRivals) == 4), "run B order");
             // run C: the screen-type tail +24792..+24804 (X360 deltas exact)
-            static_assert(offsetof(CrashNavMap, mbIsInEvent)  - offsetof(CrashNavMap, mbLocalPlayerSelected) == 1, "run C order");
-            static_assert(offsetof(CrashNavMap, meScreenType) - offsetof(CrashNavMap, mbLocalPlayerSelected) == 4, "run C order");
-            static_assert(offsetof(CrashNavMap, meTitleButtonsState) - offsetof(CrashNavMap, mbLocalPlayerSelected) == 8, "run C order");
-            static_assert(offsetof(CrashNavMap, meNavigationButtonsState) - offsetof(CrashNavMap, mbLocalPlayerSelected) == 12, "run C order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, mbIsInEvent)  - offsetof(CrashNavMap, mbLocalPlayerSelected) == 1), "run C order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, meScreenType) - offsetof(CrashNavMap, mbLocalPlayerSelected) == 4), "run C order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, meTitleButtonsState) - offsetof(CrashNavMap, mbLocalPlayerSelected) == 8), "run C order");
+            CGS_STATIC_ASSERT((offsetof(CrashNavMap, meNavigationButtonsState) - offsetof(CrashNavMap, mbLocalPlayerSelected) == 12), "run C order");
         }
 
     };

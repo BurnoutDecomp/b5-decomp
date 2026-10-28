@@ -904,7 +904,7 @@ void fdxt(u8* lpDst, const u8* lpSrc, s32 liSrcPitch, s32 liNumBlocks, u32 luFla
 
     s32 liBlockPitch = liSrcPitch;   // pitch of the block the compressors read
     s32 liSrcAdvance = 0;            // source bytes per block
-    const u8* lpBlock = nullptr;
+    const u8* lpBlock = 0;
 
     if (leFormat == KI_FORMAT_A1R5G5B5)
     {

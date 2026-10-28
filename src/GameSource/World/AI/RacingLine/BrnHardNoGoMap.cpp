@@ -584,10 +584,10 @@ Vector3 HardNoGoMap::GetSquareTopLeft(u32 luWidth, u32 luHeight, f32 lfHeight)
         (lCurrentRight.y - lPreviousRight.y) * lfHeightInterp + lPreviousRight.y,
         0.0f };
 
-    return Vector3{ (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
+    { const Vector3 lResult = { (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
                     (lRight.y - lLeft.y) * lfWidthInterp + lLeft.y,
                     (lRight.z - lLeft.z) * lfWidthInterp + lLeft.z,
-                    0.0f };
+                    0.0f }; return lResult; }
 }
 
 // @0x82783228 (assert at BrnHardNoGoMap.cpp:918)
@@ -616,10 +616,10 @@ Vector3 HardNoGoMap::GetSquareTopRight(u32 luWidth, u32 luHeight, f32 lfHeight)
         (lCurrentRight.y - lPreviousRight.y) * lfHeightInterp + lPreviousRight.y,
         0.0f };
 
-    return Vector3{ (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
+    { const Vector3 lResult = { (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
                     (lRight.y - lLeft.y) * lfWidthInterp + lLeft.y,
                     (lRight.z - lLeft.z) * lfWidthInterp + lLeft.z,
-                    0.0f };
+                    0.0f }; return lResult; }
 }
 
 // @0x827833D0 (assert at BrnHardNoGoMap.cpp:939)
@@ -648,10 +648,10 @@ Vector3 HardNoGoMap::GetSquareCentre(u32 luWidth, u32 luHeight, f32 lfHeight)
         (lCurrentRight.y - lPreviousRight.y) * lfHeightInterp + lPreviousRight.y,
         0.0f };
 
-    return Vector3{ (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
+    { const Vector3 lResult = { (lRight.x - lLeft.x) * lfWidthInterp + lLeft.x,
                     (lRight.y - lLeft.y) * lfWidthInterp + lLeft.y,
                     (lRight.z - lLeft.z) * lfWidthInterp + lLeft.z,
-                    0.0f };
+                    0.0f }; return lResult; }
 }
 
 // @0x82782BC0

@@ -439,7 +439,7 @@ namespace
         // SafeGetInputStructure() inline-expands the first tripwire CGS_ASSERT(lpBuffer,
         // "lpBuffer != NULL") (template line 73); then the PVS-level assert (.h:122).
         PVSIO::InputBuffer* lpInputBuffer = SafeGetInputStructure();
-        CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
         return lpInputBuffer;
     }
 
@@ -449,7 +449,7 @@ namespace
         // SafeGetOutputStructure() inline-expands the first "lpBuffer != NULL" tripwire
         // (template line 82); then the PVS-level assert (.h:130).
         PVSIO::OutputBuffer* lpOutputBuffer = SafeGetOutputStructure();
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer");
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
         return lpOutputBuffer;
     }
 
@@ -460,7 +460,7 @@ namespace
         // SafeGetOutputStructure() inline-expands the first "lpBuffer != NULL" tripwire
         // (template line 82); then the PVS-level assert (.h:138).
         PVSIO::OutputBuffer* lpOutputBuffer = SafeGetOutputStructure();
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer");
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
         return &lpOutputBuffer->mGameDataRequestInterface;   // addi r3, OutputStructure, 0x1718
     }
 }

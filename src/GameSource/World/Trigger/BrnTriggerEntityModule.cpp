@@ -69,12 +69,12 @@ namespace
 //   * the gameplay handle sits at Trigger +8 (the (idx<<7)+568 read-back).
 void TriggerEntityModule::_AssertLayout()
 {
-    static_assert(sizeof(Trigger) == 128, "Trigger record stride must be 128 (array index << 7)");
-    static_assert(offsetof(TriggerEntityModule, mUsedTriggerList)
-                  - offsetof(TriggerEntityModule, mTriggers) == 512 * 128,
+    CGS_STATIC_ASSERT((sizeof(Trigger) == 128), "Trigger record stride must be 128 (array index << 7)");
+    CGS_STATIC_ASSERT((offsetof(TriggerEntityModule, mUsedTriggerList)
+                  - offsetof(TriggerEntityModule, mTriggers) == 512 * 128),
                   "mUsedTriggerList must follow mTriggers[512] (stride 128)");
-    static_assert(offsetof(Trigger, mHandle) == 8, "Trigger gameplay handle must be at +8");
-    static_assert(offsetof(Trigger, meType) == 12, "Trigger meType must be at +12");
+    CGS_STATIC_ASSERT((offsetof(Trigger, mHandle) == 8), "Trigger gameplay handle must be at +8");
+    CGS_STATIC_ASSERT((offsetof(Trigger, meType) == 12), "Trigger meType must be at +12");
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
 
         f32  lfEntityBoundingSphereRadius = 0.0f;
         u8   lu8TriggerTypeFlag           = 0;
-        alignas(16) u8 laVolumeStorage[128];   // staged rw::collision volume image (block-copied by AddDynamicVolume)
+        CGS_ALIGN(16) u8 laVolumeStorage[128];   // staged rw::collision volume image (block-copied by AddDynamicVolume)
         bool lbVolumeOk                   = false;
 
         switch (liType)

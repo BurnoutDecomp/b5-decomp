@@ -152,11 +152,11 @@ namespace BrnNetwork
         CgsNetwork::NetworkTexture* GetLocalPlayerGamerPictureTexture()
         {
             GamerPictureData* lpDataEntry = &mLocalPlayerGamerPictureData;
-            if (lpDataEntry != nullptr && lpDataEntry->mbReady)
+            if (lpDataEntry != 0 && lpDataEntry->mbReady)
             {
                 return &lpDataEntry->mTexture;
             }
-            return nullptr;
+            return 0;
         }
 
         // Mark the local player's picture as not ready (inlined into the notification manager's

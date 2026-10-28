@@ -77,7 +77,7 @@ namespace Deformation
         // 0x8262178C..0x82621798 `mtctr 28 ; stw r5(-1),0(r7) ; addi r7,r7,4 ; bdnz` from
         // this+0x12888 == maGlobalEntityIDs[0..27] = 0xFFFFFFFF. PS3 0x744208 `stw 0,0x2900` and the
         // 0x74420C..0x744228 28-word -1 loop are the same two stores.
-        mpaModels = nullptr;
+        mpaModels = 0;
         for (s32 li = 0; li < static_cast<s32>(KU_MAX_DEFORMATION_MODELS); ++li)
             maGlobalEntityIDs[li].muValue = 0xFFFFFFFFu;
 
@@ -171,23 +171,23 @@ namespace Deformation
     void DeformationManager::_AssertLayout()
     {
         // mModelsAdded is one 64-bit BitArray field (CgsBitArray.h:22, 28 bits -> 1 field).
-        static_assert(75904u + sizeof(DeformationManager::mModelsAdded) == 75912u,
+        CGS_STATIC_ASSERT((75904u + sizeof(DeformationManager::mModelsAdded) == 75912u),
                       "DeformationManager: maGlobalEntityIDs must abut mModelsAdded at +75912");
 
         // 28 scene-entity ids, 4 bytes each.
-        static_assert(sizeof(DeformationManager::maGlobalEntityIDs) == 112u,
+        CGS_STATIC_ASSERT((sizeof(DeformationManager::maGlobalEntityIDs) == 112u),
                       "DeformationManager: maGlobalEntityIDs is 28 * 4 bytes");
-        static_assert(75912u + sizeof(DeformationManager::maGlobalEntityIDs) == 76024u,
+        CGS_STATIC_ASSERT((75912u + sizeof(DeformationManager::maGlobalEntityIDs) == 76024u),
                       "DeformationManager: mWorldRigidBodyId must abut maGlobalEntityIDs at +76024");
 
         // ⭐ THE LOAD-BEARING PAIR. The rigid-body handle packs the owning EntityId in the HIGH
         // dword and the body index in the LOW dword (CgsRigidBody.h:3-5), so a 4-byte seat keeps
         // the index and discards the owning entity with no diagnostic at all. These are the two
         // asserts the 4-byte stand-in must fail.
-        static_assert(sizeof(DeformationManager::mWorldRigidBodyId) == 8u,
+        CGS_STATIC_ASSERT((sizeof(DeformationManager::mWorldRigidBodyId) == 8u),
                       "DeformationManager: mWorldRigidBodyId is EIGHT bytes -- it is "
                       "CgsPhysics::RigidBodyId, not the 4-byte BrnCommonTypes.h stand-in");
-        static_assert(76024u + sizeof(DeformationManager::mWorldRigidBodyId) == 76032u,
+        CGS_STATIC_ASSERT((76024u + sizeof(DeformationManager::mWorldRigidBodyId) == 76032u),
                       "DeformationManager: mpaModels sits at its attested +76032 ONLY if "
                       "mWorldRigidBodyId is 8 bytes; at 4 the chain lands on +76028");
     }

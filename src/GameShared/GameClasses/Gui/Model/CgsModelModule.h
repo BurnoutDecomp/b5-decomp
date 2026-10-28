@@ -42,8 +42,8 @@ namespace CgsGui
         virtual bool Prepare(s32 liAptPersistentBundleBank, s32 liAptStreamedBundleBank,
             s32 liFontBundleBank, s32 liFSMBundleBank, s32 liLanguageBundleBank,
             s32 liTexturesBundlePoolId, s32 liGlobalTexturePoolId);
-        bool Release() override;
-        void Destruct() override;
+        bool Release() ;
+        void Destruct() ;
 
         virtual void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
             CgsModule::IOBufferStack* lpOutputBufferStack, ModelIO::OutputBuffer* lpOutput);

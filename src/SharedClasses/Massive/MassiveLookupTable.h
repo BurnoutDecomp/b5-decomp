@@ -51,13 +51,13 @@ namespace BrnMassive
 
     inline void MassiveLookupTable::_AssertLayout()
     {
-        static_assert(sizeof(MassiveLookupTableItem) == 0x40, "MassiveLookupTableItem is a 64-byte record");
-        static_assert(offsetof(MassiveLookupTableItem, mSceneID) == 0x20, "mSceneID at +0x20");
-        static_assert(offsetof(MassiveLookupTableItem, mpSubscriber) == 0x28, "mpSubscriber at +0x28");
-        static_assert(offsetof(MassiveLookupTableItem, miIEIndex) == 0x30, "miIEIndex at +0x30");
-        static_assert(offsetof(MassiveLookupTableItem, muRenderableIndex) == 0x34, "muRenderableIndex at +0x34");
-        static_assert(offsetof(MassiveLookupTable, mpItems) == 0x08, "mpItems at +0x08");
-        static_assert(sizeof(MassiveLookupTable) == 0x10, "the table header is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(MassiveLookupTableItem) == 0x40), "MassiveLookupTableItem is a 64-byte record");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, mSceneID) == 0x20), "mSceneID at +0x20");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, mpSubscriber) == 0x28), "mpSubscriber at +0x28");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, miIEIndex) == 0x30), "miIEIndex at +0x30");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, muRenderableIndex) == 0x34), "muRenderableIndex at +0x34");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTable, mpItems) == 0x08), "mpItems at +0x08");
+        CGS_STATIC_ASSERT((sizeof(MassiveLookupTable) == 0x10), "the table header is 16 bytes");
     }
 }
 

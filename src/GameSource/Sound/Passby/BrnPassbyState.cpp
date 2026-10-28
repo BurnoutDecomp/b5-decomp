@@ -80,7 +80,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTy
     {
         0x40000,       // ObjectID        (PS3 0x85FA1C: PassbyState id = 0x40000)
         "PassbyState", // mpcTypeName
-        nullptr,       // mpBaseTypeInfo  (DEFERRED -- BrnState descriptor chain)
+        0,       // mpBaseTypeInfo  (DEFERRED -- BrnState descriptor chain)
         &PassbyState::CreateObject,  // mpfnCreateObject @ 0x826D4978
     };
     return &sTypeInfo;
@@ -123,7 +123,7 @@ static const f32 KF_TIMEOUT_TIMER = 5.0f;
 // ---------------------------------------------------------------------------
 void PassbyState::Attach(void* apvAttachment)
 {
-    CGS_ASSERT(apvAttachment != nullptr, "lpvAttachment");
+    CGS_ASSERT(apvAttachment != 0, "lpvAttachment");
     mPassbyData = *static_cast<const PassbyStateManager::Passby*>(apvAttachment);
     mfTimeOutTimer = 0.0f;
     CgsSound::Logic::State::Attach(apvAttachment);

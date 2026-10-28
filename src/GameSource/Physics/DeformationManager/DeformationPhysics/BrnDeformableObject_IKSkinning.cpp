@@ -18,9 +18,9 @@ namespace Deformation
                                          const rw::math::vpu::Matrix44Affine& lrInverseVehicleGraphics,
                                          DetachedPartManager* lpPartMgr)
     {
-        CGS_ASSERT(lpSpec != nullptr, "lpLocator");
+        CGS_ASSERT(lpSpec != 0, "lpLocator");
         CGS_ASSERT(lpSpec->mu8SkinPoint < 128, "lpLocator->mu8SkinPoint < 128");
-        CGS_ASSERT(lpPartMgr != nullptr, "lpDetachedPartManager");
+        CGS_ASSERT(lpPartMgr != 0, "lpDetachedPartManager");
 
         const s32 liPartIndex = lpSpec->miIkPartIndex;
         CGS_ASSERT(liPartIndex < mpDeformationSpec->GetNumberOfIKParts(),

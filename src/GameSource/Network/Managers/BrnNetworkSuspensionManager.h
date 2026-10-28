@@ -42,8 +42,8 @@ namespace BrnNetwork
             Callback lpfCallback = mCallback;
             void* lpUserData = mpUserData;
 
-            mCallback = nullptr;
-            mpUserData = nullptr;
+            mCallback = 0;
+            mpUserData = 0;
             meSubState = E_SUBSTATE_COUNT;
 
             lpfCallback(lbSuccess, lpUserData);

@@ -138,10 +138,10 @@ namespace BrnAI
         // are accessible; never called).
         static void _AssertLayout()
         {
-            static_assert(offsetof(BuzzBy, mfTimeInFreeRoam)  == 0x000, "BuzzBy::mfTimeInFreeRoam @ +0x000");
-            static_assert(offsetof(BuzzBy, mbIsInGameMode)    == 0x004, "BuzzBy::mbIsInGameMode @ +0x004");
-            static_assert(offsetof(BuzzBy, mbIsInJunkyard)    == 0x005, "BuzzBy::mbIsInJunkyard @ +0x005");
-            static_assert(offsetof(BuzzBy, mbResetBuzzTimers) == 0x006, "BuzzBy::mbResetBuzzTimers @ +0x006");
+            CGS_STATIC_ASSERT((offsetof(BuzzBy, mfTimeInFreeRoam)  == 0x000), "BuzzBy::mfTimeInFreeRoam @ +0x000");
+            CGS_STATIC_ASSERT((offsetof(BuzzBy, mbIsInGameMode)    == 0x004), "BuzzBy::mbIsInGameMode @ +0x004");
+            CGS_STATIC_ASSERT((offsetof(BuzzBy, mbIsInJunkyard)    == 0x005), "BuzzBy::mbIsInJunkyard @ +0x005");
+            CGS_STATIC_ASSERT((offsetof(BuzzBy, mbResetBuzzTimers) == 0x006), "BuzzBy::mbResetBuzzTimers @ +0x006");
         }
     };
 }

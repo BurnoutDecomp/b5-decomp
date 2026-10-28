@@ -57,7 +57,7 @@ void ProgressBarRenderer::Construct()
     mRenderProgressBarEvent.mfProgressPercent = KF_NO_PROGRESS;  // guest *(this+0x14) = -1.0f
     mePrepareStage  = E_PREPARESTAGE_START;                      // guest *(this+0x08) = 0
     meReleaseStage  = E_RELEASESTAGE_START;                      // guest *(this+0x0C) = 0
-    mpHeapAllocator = nullptr;                                   // guest *(this+0x10) = 0
+    mpHeapAllocator = 0;                                   // guest *(this+0x10) = 0
 }
 
 // 0x82446E50 -- the renderer's content id (a fixed 64-bit CgsID baked into the function).
@@ -114,7 +114,7 @@ bool ProgressBarRenderer::Release()
 // render-progress-bar event id -- caches the event's progress percent.
 void ProgressBarRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent != nullptr, " null event passed ");
+    CGS_ASSERT(lpEvent != 0, " null event passed ");
 
     if (liEventType == KI_EVENT_RENDER_PROGRESS_BAR)
     {

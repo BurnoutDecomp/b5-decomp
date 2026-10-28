@@ -226,7 +226,7 @@ namespace Deformation
         // still spell the +0x14 name; they are NOT changed here because their own dispatch offsets
         // have not been read out of the image -- do that before touching them.)
         const Vehicle::RaceCarPhysics* lpRaceCarPhysics = AsRaceCarPhysics();
-        const bool lbPredicate = (lpRaceCarPhysics != nullptr) &&
+        const bool lbPredicate = (lpRaceCarPhysics != 0) &&
                                  lpRaceCarPhysics->IsPlayerVehicleInShowtime();
 
         // ---- [restit] NOT IN THE X360 BINARY. OPT-IN (BRN_ROLL_PROBE=1). Read-only census of THIS
@@ -276,7 +276,7 @@ namespace Deformation
         }
 
         if (!lbPredicate)
-            return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+            { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
 
         // abs(normal.y) (asm: vspltw word-1 then vandc the sign bit) compared against the rodata
         // threshold. asm @0x825E0C78: vcmpgefp(absY, threshold) then vnot -> mask = (absY < threshold),
@@ -284,7 +284,7 @@ namespace Deformation
         // BELOW the threshold and the rodata restitution VALUE when absY >= threshold (Select).
         const f32 lfAbsNormalY = std::fabs(lContact.mNormal.y);
         if (lfAbsNormalY < KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD)
-            return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+            { const VecFloat lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
 
         return KVF_WORLD_RESTITUTION_VALUE;
     }
@@ -828,7 +828,7 @@ namespace Deformation
             EntityId lWheelLookupEntityId;
             lWheelLookupEntityId.muValue = static_cast<u32>(static_cast<u64>(mHandlingBodyID) >> 32);
             const PhysicalWheel* lpWheel = lpWheelMgr->GetWheel(lWheelLookupEntityId, liWheel);
-            if (lpWheel == nullptr)
+            if (lpWheel == 0)
             {
                 continue;
             }

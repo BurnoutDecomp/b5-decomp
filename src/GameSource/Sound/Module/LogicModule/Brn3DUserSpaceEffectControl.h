@@ -51,7 +51,7 @@ struct Brn3DUserSpaceEffectControl : public BrnSound::Logic::Brn3DEffectControl
     // default ctor is a VMX swizzle (NOT guaranteed zero), so SetZero() is called
     // explicitly to reproduce the zero-stores.
     Brn3DUserSpaceEffectControl()
-        : mpTransform(nullptr)              // stw 0, +0xD0
+        : mpTransform(0)              // stw 0, +0xD0
     {
         mPositionInUserSpace.SetZero();     // stvx128 v0, +0xE0
         mDirectionInUserSpace.SetZero();    // stvx128 v0, +0xF0
@@ -62,9 +62,9 @@ struct Brn3DUserSpaceEffectControl : public BrnSound::Logic::Brn3DEffectControl
     // Vector deleting destructor @ 0x826E0D60 -- out-of-line; see .cpp (empty body).
     virtual ~Brn3DUserSpaceEffectControl();
 
-    virtual void UpdateParams(f32 afDeltaTime) override;
-    virtual void AttachEmitterPosition(const Vector3* apPosition) override;
-    virtual void AttachEmitterDirection(const Vector3* apDirection) override;
+    virtual void UpdateParams(f32 afDeltaTime) ;
+    virtual void AttachEmitterPosition(const Vector3* apPosition) ;
+    virtual void AttachEmitterDirection(const Vector3* apDirection) ;
     virtual void AttachTransform(const Matrix44Affine* apTransform);
 
     // BrnEffectControl.cpp:46 -- the RTTI factory hook (@ 0x826E0E10). Non-virtual;

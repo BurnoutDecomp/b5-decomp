@@ -111,7 +111,7 @@ namespace
         f32 lfSin;
         f32 lfCos;
         XboxMath::XMVectorSinCos(&lfSin, &lfCos, lfAngleRads);
-        return Vector3{ lfSin, 0.0f, lfCos, 0.0f };
+        { const Vector3 lResult = { lfSin, 0.0f, lfCos, 0.0f }; return lResult; }
     }
 
     // The pitch: rows (1,0,0) / (0,c,s) / (0,-s,c) / (0,0,0).
@@ -208,8 +208,8 @@ namespace
     // vmaddfp over four lanes, a * b + c with ONE rounding per lane (ROUNDING_RULE 3), b a full vector.
     Vector3 MultiplyAddLanes(const Vector3& lrA, const ::VecFloat& lrB, const Vector3& lrC)
     {
-        return Vector3{ std::fmaf(lrA.x, lrB.x, lrC.x), std::fmaf(lrA.y, lrB.y, lrC.y),
-                        std::fmaf(lrA.z, lrB.z, lrC.z), std::fmaf(lrA.w, lrB.w, lrC.w) };
+        { const Vector3 lResult = { std::fmaf(lrA.x, lrB.x, lrC.x), std::fmaf(lrA.y, lrB.y, lrC.y),
+                        std::fmaf(lrA.z, lrB.z, lrC.z), std::fmaf(lrA.w, lrB.w, lrC.w) }; return lResult; }
     }
 
     // The height / distance ease (both arms of the framing): target = (fast - slow) * framing + slow (fmadds),

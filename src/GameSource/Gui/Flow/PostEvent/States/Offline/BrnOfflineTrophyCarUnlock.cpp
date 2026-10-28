@@ -102,7 +102,7 @@ namespace
             mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
         }
     };
-    static_assert(sizeof(GuiEventCarbonCarSequence) == 16,
+    CGS_STATIC_ASSERT((sizeof(GuiEventCarbonCarSequence) == 16),
                   "the console posts a 16-byte record for GUI 470");
 
     void PostCarbonCarSequence(CgsGui::StateInterface* lpStateInterface, bool lbEntered)

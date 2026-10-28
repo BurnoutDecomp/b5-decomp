@@ -17,7 +17,7 @@
 // VehicleManager::Process{Remove,Reset,CrashingNetworkCars}Events,
 // PhysicalTrafficManager::PhysicallyUncrashTrafficCar.
 // X360-attested element stride (`slwi r,len,4` == *16; two 64-bit `std` copies).
-static_assert(sizeof(BrnPhysics::Deformation::DeactivateDeformationModelEvent) == 16,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::DeactivateDeformationModelEvent) == 16),
               "DeactivateDeformationModelEvent stride 16");
 
 template bool

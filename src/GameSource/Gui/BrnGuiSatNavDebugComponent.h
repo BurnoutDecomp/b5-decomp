@@ -58,12 +58,12 @@ namespace BrnGui
         void Update(CgsGui::CgsGuiModuleIO::InputBuffer* lpInputBuffer);
 
         // @ 0x824F7F28 -- draw the SatNav rect outline when mbDrawSatNavOutline is set.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
     protected:
-        const char* GetName() const override;   // @0x824ED338 -> "Sat Nav"
-        const char* GetPath() const override;   // @0x824ED348 -- ICF-shared "Gui" body; the SatNav vtable attests this slot.
-        void OnActivate() override;             // @0x82513280 -- register every editable
+        const char* GetName() const ;   // @0x824ED338 -> "Sat Nav"
+        const char* GetPath() const ;   // @0x824ED348 -- ICF-shared "Gui" body; the SatNav vtable attests this slot.
+        void OnActivate() ;             // @0x82513280 -- register every editable
 
         void TriggerSatNavParamUpdate();     // BrnGuiSatNavDebugComponent.cpp:223 (out of batch)
         void TriggerSatNavPositionUpdate();  // @0x8250DA58 -- republish rect + tint, rebuild transform

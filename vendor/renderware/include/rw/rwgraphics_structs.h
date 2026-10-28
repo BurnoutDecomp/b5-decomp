@@ -4,7 +4,7 @@
 // pointers, sizeof noted per type); the Burnout PC build is x64, so pointer fields widen
 // (field order/types stay faithful, exact offsets/sizeof are the x64 target's).
 #pragma once
-#include <cstdint>
+#include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource / rw::ResourceDescriptor
 
 namespace rw {

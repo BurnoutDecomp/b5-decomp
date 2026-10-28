@@ -254,7 +254,7 @@ namespace BrnWorld
         // :239 -- opaque placeholder; see the class-header FLAG re: rw::Resource having no
         // reconstructed complete-type home yet. Sized/aligned generously (rw::Resource is a
         // small fixed POD descriptor on X360; this is provenance-honest storage, not a cast).
-        struct OpaqueResourcePlaceholder { alignas(8) u8 maBytes[16]; } mTextureStateResource; // :239
+        struct OpaqueResourcePlaceholder { CGS_ALIGN(8) u8 maBytes[16]; } mTextureStateResource; // :239
 
         TsmBBInfo maTsmBBInfo[KU_NUM_SHADOW_MAPS];                // :242
 

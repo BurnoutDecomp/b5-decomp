@@ -19,7 +19,7 @@ namespace BrnGameState
     // (BrnScoringSystem.h:132 `enum ECurrentMedalTargetTime : s32`). Cannot #include
     // BrnScoringSystem.h here -- it includes THIS header (cycle). A fixed-underlying-type
     // enum is complete for the by-value ScoringOutputInterface members below.
-    enum ECurrentMedalTargetTime : s32;
+    enum ECurrentMedalTargetTime ;
 }
 
 namespace BrnGameState
@@ -387,8 +387,8 @@ namespace BrnGameState
             // Layout pin. NEVER CALLED; in-class because the member it measures is private.
             static void _AssertLayout()
             {
-                static_assert(sizeof(Event) == 44, "Event stride -- 16 LandmarkIndex + 3 words");
-                static_assert(sizeof(SpecificGameModeEventInterface) == 0x1E18,
+                CGS_STATIC_ASSERT((sizeof(Event) == 44), "Event stride -- 16 LandmarkIndex + 3 words");
+                CGS_STATIC_ASSERT((sizeof(SpecificGameModeEventInterface) == 0x1E18),
                               "SpecificGameModeEventInterface -- the 0x1E18 the producer memcpys "
                               "and AddGuiEvent<GuiEventSpecificPresetRaces> sizes");
             }
@@ -491,9 +491,9 @@ namespace BrnGameState
             // Layout pin. NEVER CALLED; in-class because the member it measures is private.
             static void _AssertLayout()
             {
-                static_assert(sizeof(EventStart) == 0x30,
+                CGS_STATIC_ASSERT((sizeof(EventStart) == 0x30),
                               "EventStart stride -- the X360 append copies 6 QWORDs");
-                static_assert(sizeof(SetUpAllEventStartsInterface) == 0x20E0,
+                CGS_STATIC_ASSERT((sizeof(SetUpAllEventStartsInterface) == 0x20E0),
                               "SetUpAllEventStartsInterface -- the 0x20E0 the console memcpys "
                               "(0x82375E44) and AddGuiEvent<GuiEventUpdateEventStarts> sizes (0x823D1394)");
             }
@@ -673,8 +673,8 @@ namespace BrnGameState
             FlybyRivalData mRivalsToShow[FlybyRivalData::KI_MAX_CARS_IN_FLYBY]; // +0x04, 196-byte stride
         }; // sizeof == 592
 
-        static_assert(sizeof(FlybyRivalData) == 196, "FlybyRivalData layout drift");
-        static_assert(sizeof(FlybyData)      == 592, "FlybyData layout drift");
+        CGS_STATIC_ASSERT((sizeof(FlybyRivalData) == 196), "FlybyRivalData layout drift");
+        CGS_STATIC_ASSERT((sizeof(FlybyData)      == 592), "FlybyData layout drift");
 
         // ===== CarScoreData (per-car scoring record) =====
         //
@@ -698,7 +698,7 @@ namespace BrnGameState
                 s32 miSuppliedValue;    // elem +8  (the caller-supplied a3)
                 s32 miMultiplier;       // elem +12 (CarScoreData +0xD0)
             };
-            static_assert(sizeof(ChainableMultiplierInfo) == 16, "ChainableMultiplierInfo stride");
+            CGS_STATIC_ASSERT((sizeof(ChainableMultiplierInfo) == 16), "ChainableMultiplierInfo stride");
 
             CarScoreData();                                       // 0x822A45A8
             void ClearData();                                     // 0x821F2B28
@@ -1029,39 +1029,39 @@ namespace BrnGameState
             // fire at compile time. Do NOT change the offsets -- they pin the on-disk record layout.
             static void _AssertLayout()
             {
-                static_assert(offsetof(CarScoreData, mfDistanceToPlayer)          == 0x1C, "CarScoreData::mfDistanceToPlayer offset");
-                static_assert(offsetof(CarScoreData, mfDistanceToNextCheckpointLive) == 0x20, "CarScoreData::mfDistanceToNextCheckpointLive offset");
-                static_assert(offsetof(CarScoreData, mbRacePositionImproved)      == 0x44, "CarScoreData::mbRacePositionImproved offset");
-                static_assert(offsetof(CarScoreData, mfDistanceToFinish)          == 0x48, "CarScoreData::mfDistanceToFinish offset");
-                static_assert(offsetof(CarScoreData, mfDistanceAccumulator)       == 0xDC, "CarScoreData::mfDistanceAccumulator offset");
-                static_assert(offsetof(CarScoreData, mfLongestDrift)              == 0xF8, "CarScoreData::mfLongestDrift offset");
-                static_assert(offsetof(CarScoreData, miTakedowns)                 == 0x4C, "CarScoreData::miTakedowns offset");
-                static_assert(offsetof(CarScoreData, miOnlineFinishPositionScore) == 0x58, "CarScoreData::miOnlineFinishPositionScore offset");
-                static_assert(offsetof(CarScoreData, miOnlineStandingsPosition)   == 0x5C, "CarScoreData::miOnlineStandingsPosition offset");
-                static_assert(offsetof(CarScoreData, mbTimedOut)                  == 0x68, "CarScoreData::mbTimedOut offset");
-                static_assert(offsetof(CarScoreData, mbDisconnected)              == 0x69, "CarScoreData::mbDisconnected offset");
-                static_assert(offsetof(CarScoreData, mTimeAsRunner)               == 0x84, "CarScoreData::mTimeAsRunner offset");
-                static_assert(offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC, "CarScoreData::mbCompletedBurningHomeRun offset");
-                static_assert(offsetof(CarScoreData, muOnlinePostEventValueC0)    == 0xC0, "CarScoreData::online result value offset");
-                static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
-                static_assert(offsetof(CarScoreData, miChainableScore)            == 0xC8, "CarScoreData::miChainableScore offset");
-                static_assert(offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4, "CarScoreData::miOnlineStuntScore offset");
-                static_assert(offsetof(CarScoreData, miBarrelRollCount)           == 0xFC, "CarScoreData::miBarrelRollCount offset");
-                static_assert(offsetof(CarScoreData, miMarkedManTakedownsFor)     == 0x54,  "CarScoreData::miMarkedManTakedownsFor offset");
-                static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsFor)     == 0x108, "CarScoreData::miMarkedManTakedownEventsFor offset");
-                static_assert(offsetof(CarScoreData, miMarkedManTakedownEventsAgainst) == 0x10C, "CarScoreData::miMarkedManTakedownEventsAgainst offset");
-                static_assert(offsetof(CarScoreData, miPaybackTakedownsType2For)       == 0x110, "CarScoreData::miPaybackTakedownsType2For offset");
-                static_assert(offsetof(CarScoreData, miPaybackTakedownsType2Against)   == 0x114, "CarScoreData::miPaybackTakedownsType2Against offset");
-                static_assert(offsetof(CarScoreData, miPaybackTakedownsType4For)       == 0x118, "CarScoreData::miPaybackTakedownsType4For offset");
-                static_assert(offsetof(CarScoreData, miPaybackTakedownsType4Against)   == 0x11C, "CarScoreData::miPaybackTakedownsType4Against offset");
-                static_assert(offsetof(CarScoreData, miTraitorousTakedownsFor)    == 0x120, "CarScoreData::miTraitorousTakedownsFor offset");
-                static_assert(offsetof(CarScoreData, miTraitorousTakedownsAgainst)== 0x124, "CarScoreData::miTraitorousTakedownsAgainst offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mfDistanceToPlayer)          == 0x1C), "CarScoreData::mfDistanceToPlayer offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mfDistanceToNextCheckpointLive) == 0x20), "CarScoreData::mfDistanceToNextCheckpointLive offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mbRacePositionImproved)      == 0x44), "CarScoreData::mbRacePositionImproved offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mfDistanceToFinish)          == 0x48), "CarScoreData::mfDistanceToFinish offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mfDistanceAccumulator)       == 0xDC), "CarScoreData::mfDistanceAccumulator offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mfLongestDrift)              == 0xF8), "CarScoreData::mfLongestDrift offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miTakedowns)                 == 0x4C), "CarScoreData::miTakedowns offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miOnlineFinishPositionScore) == 0x58), "CarScoreData::miOnlineFinishPositionScore offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miOnlineStandingsPosition)   == 0x5C), "CarScoreData::miOnlineStandingsPosition offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mbTimedOut)                  == 0x68), "CarScoreData::mbTimedOut offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mbDisconnected)              == 0x69), "CarScoreData::mbDisconnected offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mTimeAsRunner)               == 0x84), "CarScoreData::mTimeAsRunner offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC), "CarScoreData::mbCompletedBurningHomeRun offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, muOnlinePostEventValueC0)    == 0xC0), "CarScoreData::online result value offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4), "CarScoreData::miCumulativeCheckpoints offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miChainableScore)            == 0xC8), "CarScoreData::miChainableScore offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miOnlineStuntScore)          == 0xD4), "CarScoreData::miOnlineStuntScore offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miBarrelRollCount)           == 0xFC), "CarScoreData::miBarrelRollCount offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miMarkedManTakedownsFor)     == 0x54),  "CarScoreData::miMarkedManTakedownsFor offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miMarkedManTakedownEventsFor)     == 0x108), "CarScoreData::miMarkedManTakedownEventsFor offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miMarkedManTakedownEventsAgainst) == 0x10C), "CarScoreData::miMarkedManTakedownEventsAgainst offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miPaybackTakedownsType2For)       == 0x110), "CarScoreData::miPaybackTakedownsType2For offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miPaybackTakedownsType2Against)   == 0x114), "CarScoreData::miPaybackTakedownsType2Against offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miPaybackTakedownsType4For)       == 0x118), "CarScoreData::miPaybackTakedownsType4For offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miPaybackTakedownsType4Against)   == 0x11C), "CarScoreData::miPaybackTakedownsType4Against offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miTraitorousTakedownsFor)    == 0x120), "CarScoreData::miTraitorousTakedownsFor offset");
+                CGS_STATIC_ASSERT((offsetof(CarScoreData, miTraitorousTakedownsAgainst)== 0x124), "CarScoreData::miTraitorousTakedownsAgainst offset");
             }
         };
         // Per-member offset guards live in CarScoreData::_AssertLayout above (offsetof on the private
         // members needs the complete-class context a member-function body provides). This file-scope
         // assert needs no member access, so it stays here to pin the total record size.
-        static_assert(sizeof(CarScoreData) == 296, "CarScoreData layout drift (0x128)");
+        CGS_STATIC_ASSERT((sizeof(CarScoreData) == 296), "CarScoreData layout drift (0x128)");
 
         // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
         // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
@@ -1174,14 +1174,14 @@ namespace BrnGameState
             void operator=(const ScoringOutputInterface&);      // :583 (declare-only)
         };
 
-        static_assert(sizeof(CarCheckpointData) == 8, "ARTIST per-car checkpoint mask width");
-        static_assert(offsetof(ScoringOutputInterface, maCarCheckpointData) == 0x940,
+        CGS_STATIC_ASSERT((sizeof(CarCheckpointData) == 8), "ARTIST per-car checkpoint mask width");
+        CGS_STATIC_ASSERT((offsetof(ScoringOutputInterface, maCarCheckpointData) == 0x940),
                       "ARTIST checkpoint mask array offset");
-        static_assert(offsetof(ScoringOutputInterface, maiCumulativeScoreData) == 0x980,
+        CGS_STATIC_ASSERT((offsetof(ScoringOutputInterface, maiCumulativeScoreData) == 0x980),
                       "ARTIST cumulative score array offset");
-        static_assert(offsetof(ScoringOutputInterface, meGameModeType) == 0xA3C,
+        CGS_STATIC_ASSERT((offsetof(ScoringOutputInterface, meGameModeType) == 0xA3C),
                       "ARTIST game mode sentinel offset");
-        static_assert(sizeof(ScoringOutputInterface) == 2736,
+        CGS_STATIC_ASSERT((sizeof(ScoringOutputInterface) == 2736),
                       "ARTIST complete scoring snapshot width");
 
         // Network output interface for the online-mode scoring results. Embedded BY VALUE in
@@ -1203,9 +1203,9 @@ namespace BrnGameState
             EBlueTeamFinishType maeBlueTeamFinishTypes[8];    // +0x80
             bool                mbRedTeamWon;                 // +0xA0
         };
-        static_assert(offsetof(OnlineScoringOutputInterface, maOnlineAwards)          == 0x20, "OnlineScoringOutputInterface +0x20 drift");
-        static_assert(offsetof(OnlineScoringOutputInterface, maiOnlineAwardVariables) == 0x40, "OnlineScoringOutputInterface +0x40 drift");
-        static_assert(offsetof(OnlineScoringOutputInterface, maePlayerTeam)           == 0x60, "OnlineScoringOutputInterface +0x60 drift");
-        static_assert(offsetof(OnlineScoringOutputInterface, maeBlueTeamFinishTypes)  == 0x80, "OnlineScoringOutputInterface +0x80 drift");
+        CGS_STATIC_ASSERT((offsetof(OnlineScoringOutputInterface, maOnlineAwards)          == 0x20), "OnlineScoringOutputInterface +0x20 drift");
+        CGS_STATIC_ASSERT((offsetof(OnlineScoringOutputInterface, maiOnlineAwardVariables) == 0x40), "OnlineScoringOutputInterface +0x40 drift");
+        CGS_STATIC_ASSERT((offsetof(OnlineScoringOutputInterface, maePlayerTeam)           == 0x60), "OnlineScoringOutputInterface +0x60 drift");
+        CGS_STATIC_ASSERT((offsetof(OnlineScoringOutputInterface, maeBlueTeamFinishTypes)  == 0x80), "OnlineScoringOutputInterface +0x80 drift");
     }
 }

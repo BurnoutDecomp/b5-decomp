@@ -73,7 +73,7 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(AptCharacter* pCharacter, int
 
     mZID         = 0;          // no render-data handle yet
     mScroll      = 1;          // console seeds the scroll offset to 1
-    mpTextFormat = nullptr;    // no TextFormat object yet
+    mpTextFormat = 0;    // no TextFormat object yet
     mStateFlags  = 4;          // console seeds the state flags to 4
 
     // Authored colour + font from the character.
@@ -140,10 +140,10 @@ AptRenderItemDynamicText::AptRenderItemDynamicText(const AptRenderItemDynamicTex
         mpTextFormat = pMem
             ? reinterpret_cast<AptValue*>(
                   new (pMem) TextFormat(reinterpret_cast<const TextFormat*>(pSource->mpTextFormat)))
-            : nullptr;
+            : 0;
     }
     else
-        mpTextFormat = nullptr;
+        mpTextFormat = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ AptRenderItemDynamicText::~AptRenderItemDynamicText()
         // pool (x64 sizeof(TextFormat) == the console 0x20 size-class).
         reinterpret_cast<EAStringC*>(mpTextFormat)->~EAStringC();
         gpNonGCPoolManager->Deallocate(mpTextFormat, sizeof(TextFormat));
-        mpTextFormat = nullptr;                              // stw 0 -> +0x68
+        mpTextFormat = 0;                              // stw 0 -> +0x68
     }
 
     if (mZID && mZID != gAptEmptyTextRenderDataZID)          // lwz 0x3C; the sentinel compare
@@ -193,7 +193,7 @@ AptRenderItem* AptRenderItemDynamicText::Clone(int nCreatedOnTick, bool bCopyExt
 {
     void* p = gpNonGCPoolManager->Allocate(sizeof(AptRenderItemDynamicText));
     if (!p)
-        return nullptr;
+        return 0;
     return new (p) AptRenderItemDynamicText(this, nCreatedOnTick, bCopyExtended);
 }
 

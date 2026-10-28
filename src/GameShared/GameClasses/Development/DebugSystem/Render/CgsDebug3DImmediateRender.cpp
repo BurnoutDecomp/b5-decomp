@@ -113,7 +113,7 @@ namespace CgsDev
         mPointBoxRadius = { 0.05f, 0.05f, 0.05f, 0.0f };
         mfVirtualScreenWidth = lfVirtualScreenWidth;
         mfVirtualScreenHeight = lfVirtualScreenHeight;
-        mpRenderBuffer = nullptr;
+        mpRenderBuffer = 0;
         CreateDebugRenderStates(lpAllocator);
         mpFont.Clear();
         mVectorFont.Construct();
@@ -179,7 +179,7 @@ namespace CgsDev
         mViewProjectionMatrix = lrViewProjection;
         mCameraPosition = lCameraPosition;
         miIm3dVertsHead = 0;
-        CGS_ASSERT(mpRenderBuffer != nullptr, "mpRenderBuffer");
+        CGS_ASSERT(mpRenderBuffer != 0, "mpRenderBuffer");
         CGS_ASSERT(!mpRenderBuffer->IsInARenderingBlock(), "!mpRenderBuffer->IsInARenderingBlock()");
         mpRenderBuffer->BeginRendering();
         mpRenderBuffer->SetState(reinterpret_cast<const renderengine::BlendState*>(&sgDebug3DRenderStates.mBlend));
@@ -193,7 +193,7 @@ namespace CgsDev
     {
         if (miIm3dVertsHead > 0) DispatchVertices();
         miIm3dVertsHead = 0;
-        CGS_ASSERT(mpRenderBuffer != nullptr, "mpRenderBuffer");
+        CGS_ASSERT(mpRenderBuffer != 0, "mpRenderBuffer");
         CGS_ASSERT(mpRenderBuffer->IsInARenderingBlock(), "mpRenderBuffer->IsInARenderingBlock()");
         mpRenderBuffer->EndRendering();
     }

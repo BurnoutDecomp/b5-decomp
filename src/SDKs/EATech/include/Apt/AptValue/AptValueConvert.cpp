@@ -65,7 +65,7 @@ extern unsigned int AptGetSwfVersion();
 // decimal/exponent, hex) rounded to single precision.
 float Apt_atoff(const char* pStr)
 {
-    return static_cast<float>(strtod(pStr, nullptr));
+    return static_cast<float>(strtod(pStr, 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ AptString* AptValue::c_string() const
     if (getVtblIndex() == AptVFT_StringObject)
         return reinterpret_cast<AptString*>(
             static_cast<const AptStringObject*>(this)->GetBoxedString());
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +479,7 @@ void AptValue::Append_ToString(EAStringC* pOut) const
         // the named accessor (c_string()->GetInternalString()) which resolves the right
         // member for both the primitive value and the boxed StringObject.
         AptString* const pStr = pThis->c_string();
-        if (pStr != nullptr)
+        if (pStr != 0)
             *pOut += *pStr->GetInternalString();
         return;
     }

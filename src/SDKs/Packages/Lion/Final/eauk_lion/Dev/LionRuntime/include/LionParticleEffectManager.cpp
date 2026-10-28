@@ -85,7 +85,7 @@ void cLionParticleEffectManager::BindingsAttach(const cLionParticleEffect* apEff
 
     // Walk the effect's descriptor chain; register + bind an emitter for each
     // descriptor that is not flagged as a sub/child descriptor.
-    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         if ((lpDes->mFlags & KU_DESC_FLAG_SKIP_AUTO_EMITTER) != 0)
@@ -94,7 +94,7 @@ void cLionParticleEffectManager::BindingsAttach(const cLionParticleEffect* apEff
         }
 
         cParticleEmitter* lpEmitter = cParticleEmitterManager::Instance().Register(lpDes);
-        if (lpEmitter != nullptr)
+        if (lpEmitter != 0)
         {
             // X360 folds cParticleEmitter::Bind inline (emitter->mpBindings = &bindings;
             // bindings.SetEmitter(emitter)); re-outlined here as the Bind() call.
@@ -114,7 +114,7 @@ void cLionParticleEffectManager::BindingsRemove(const cLionParticleEffect* apEff
     }
 
     // Unregister the emitter bound to every descriptor of the effect.
-    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != nullptr;
+    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != 0;
          lpDes = lpDes->GetNextDescriptor())
     {
         cParticleEmitterManager::Instance().UnRegister(*lpDes, arBindings, apBindBase);
@@ -159,11 +159,11 @@ void cLionParticleEffectManager::AppInit(EA::Allocator::ITaggedAllocator* apAllo
     mAllocator.Init(apAllocator, KU_CONSOLE_EFFECT_MANAGER_ITEM_SIZE, auCount);
 
     mpAllocator = apAllocator;
-    mpEffects   = nullptr;
+    mpEffects   = 0;
 
     for (u32 lu = 0; lu < 64; ++lu)
     {
-        mpEffectGroups[lu] = nullptr;
+        mpEffectGroups[lu] = 0;
     }
 }
 

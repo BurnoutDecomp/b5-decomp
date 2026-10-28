@@ -5,7 +5,7 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsCommandQueue.h"
 
-#include <cstdint> // std::uintptr_t
+#include "types.hpp" // std::uintptr_t
 
 // =============================================================================
 // CgsSound::Playback::CsisCommandQueue -- the typed enqueue (operator<<) family.
@@ -51,14 +51,14 @@ namespace Playback
 // Type tag E_CSIS_COMMAND_SET_CLASS_HANDLE (== 0). Word count posted: 5.
 struct CsisSetClassHandleCommand : public CsisCommand
 {
-    std::uintptr_t maOperands[4]; // +4  words 1..4 -- carried verbatim through the queue
+    uintptr_t maOperands[4]; // +4  words 1..4 -- carried verbatim through the queue
 
-    CsisSetClassHandleCommand(std::uintptr_t apHandle, const char* apcName,
+    CsisSetClassHandleCommand(uintptr_t apHandle, const char* apcName,
                               u32 auSystemId, u32 auClassId)
         : CsisCommand(E_CSIS_COMMAND_SET_CLASS_HANDLE)
     {
         maOperands[0] = apHandle;
-        maOperands[1] = reinterpret_cast<std::uintptr_t>(apcName);
+        maOperands[1] = reinterpret_cast<uintptr_t>(apcName);
         maOperands[2] = auSystemId;
         maOperands[3] = auClassId;
     }
@@ -68,10 +68,10 @@ struct CsisSetClassHandleCommand : public CsisCommand
 // Type tag E_CSIS_COMMAND_CREATE (== 1). Word count posted: 4.
 struct CsisCreateCommand : public CsisCommand
 {
-    std::uintptr_t maOperands[3]; // +4  words 1..3 -- carried verbatim through the queue
+    uintptr_t maOperands[3]; // +4  words 1..3 -- carried verbatim through the queue
 
-    CsisCreateCommand(std::uintptr_t ahClass, std::uintptr_t apParameters,
-                      std::uintptr_t apRequestHandle)
+    CsisCreateCommand(uintptr_t ahClass, uintptr_t apParameters,
+                      uintptr_t apRequestHandle)
         : CsisCommand(E_CSIS_COMMAND_CREATE)
     {
         maOperands[0] = ahClass;
@@ -84,9 +84,9 @@ struct CsisCreateCommand : public CsisCommand
 // Type tag E_CSIS_COMMAND_UPDATE (== 3). Word count posted: 3.
 struct CsisUpdateCommand : public CsisCommand
 {
-    std::uintptr_t maOperands[2]; // +4  words 1..2 -- carried verbatim through the queue
+    uintptr_t maOperands[2]; // +4  words 1..2 -- carried verbatim through the queue
 
-    CsisUpdateCommand(std::uintptr_t ahRequest, std::uintptr_t apParameters)
+    CsisUpdateCommand(uintptr_t ahRequest, uintptr_t apParameters)
         : CsisCommand(E_CSIS_COMMAND_UPDATE)
     {
         maOperands[0] = ahRequest;

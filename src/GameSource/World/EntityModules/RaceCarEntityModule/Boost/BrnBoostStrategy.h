@@ -78,7 +78,7 @@
 // Opaque fixed-underlying-type enum declaration (committed idiom, same as
 // BrnScoringSystem.h / BrnGuiEventTypeDefs.h); the home is
 // GameSource/Physics/VehicleManager/BrnVehicleConstants.h (`enum EImpactType : s32`).
-namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
+namespace BrnPhysics { namespace Vehicle { enum EImpactType ; } }
 
 // Pointer-only param of UpdateStuntBoost -- forward declaration (documented
 // exception: pointer-only use; the type's home, the BrnGameActions.h action
@@ -532,38 +532,38 @@ private:
     // pointer-invariant on this class (single leading vptr + explicit pad).
     static void _AssertLayout()
     {
-        static_assert(offsetof(BoostStrategy, mfNearMissBoostEarning) == 0x10, "params must start at 0x10 (B2::Prepare @0x822C0FA8)");
-        static_assert(offsetof(BoostStrategy, mfSpeedForMinEarning)   == 0x1C, "AddBoost @0x822C0E34 lerp lo");
-        static_assert(offsetof(BoostStrategy, mfSpeedForMaxEarning)   == 0x20, "AddBoost @0x822C0E44 lerp hi");
-        static_assert(offsetof(BoostStrategy, mfTrafficCheck)         == 0x48, "B2::Prepare rec+0x00 -> +0x48");
-        static_assert(offsetof(BoostStrategy, mfOnWrecked)            == 0x94, "last attrib param");
-        static_assert(offsetof(BoostStrategy, mfTimeSpentCheating)    == 0x98, "Prepare @0x822A5CF8");
-        static_assert(offsetof(BoostStrategy, mePreviousOncomingState)== 0x9C, "Prepare @0x822A5D0C (stw E_ONCOMING_STATE_FALSE)");
-        static_assert(offsetof(BoostStrategy, mfBoostAmount)          == 0xA0, "GetBoostAmount @0x822A5EF0");
-        static_assert(offsetof(BoostStrategy, mfMaxBoost)             == 0xA4, "GetMaxBoost @0x822A5EF8");
-        static_assert(offsetof(BoostStrategy, mfBoostModifier)        == 0xA8, "Update @0x822F8158");
-        static_assert(offsetof(BoostStrategy, mfSpeed)                == 0xB4, "SetSpeed @0x822A5FC0");
-        static_assert(offsetof(BoostStrategy, mfOncomingFade)         == 0xB8, "Update @0x822F8154");
-        static_assert(offsetof(BoostStrategy, mbCrashing)             == 0xBC, "SetCrashing @0x822A5F44");
-        static_assert(offsetof(BoostStrategy, mbWrecking)             == 0xBD, "Prepare @0x822A5C74");
-        static_assert(offsetof(BoostStrategy, mbIsTailgating)         == 0xC1, "IsTailgating @0x822A5EE8");
-        static_assert(offsetof(BoostStrategy, mbIsBoostFull)          == 0xC3, "IsBoostFull @0x822A5EE0");
-        static_assert(offsetof(BoostStrategy, mbBoosting)             == 0xC5, "IsBoosting @0x822A5E58");
-        static_assert(offsetof(BoostStrategy, mbBoostEarningEnabled)  == 0xC8, "SetBoostEarningEnabled @0x822A6208");
-        static_assert(offsetof(BoostStrategy, mbChainNotifyPending)   == 0xCB, "Update @0x822F81A4");
-        static_assert(offsetof(BoostStrategy, mbForceBoost)           == 0xCC, "SetForceBoost @0x822A5DE8");
-        static_assert(offsetof(BoostStrategy, mfDriftingDistance)     == 0xD0, "Update @0x822F829C");
-        static_assert(offsetof(BoostStrategy, mfSpinAngle)            == 0xE0, "SetSpinAngle @0x822A6130");
-        static_assert(offsetof(BoostStrategy, miCombinedBoostLevel)   == 0xE8, "SetCarStatBoostLevel @0x822D52AC");
-        static_assert(offsetof(BoostStrategy, mfCurrentCarBoostLossLevel) == 0xF0, "SetCarStatBoostLevel @0x822D52D0");
-        static_assert(offsetof(BoostStrategy, mfCurrentBoostingTime)  == 0xF8, "GetCurrentBoostingTime @0x822A5E50");
-        static_assert(offsetof(BoostStrategy, mfMinBoostAllowedAmount)== 0x100, "SetCarStatBoostLevel @0x822D5304");
-        static_assert(offsetof(BoostStrategy, miBoostLevel)           == 0x104, "SetBoostSegments @0x822C0F30");
-        static_assert(offsetof(BoostStrategy, meTailgatedCarIndex)    == 0x108, "SetTailgating @0x822A6114");
-        static_assert(offsetof(BoostStrategy, mStartPosition)         == 0x110, "Prepare stvx128 @0x822A5C7C");
-        static_assert(offsetof(BoostStrategy, mfTotalDistanceTraveled)== 0x120, "Prepare @0x822A5CF0");
-        static_assert(sizeof(BoostStrategy) == 0x130, "B2's first subclass member lands at +0x130 (B2::Prepare @0x822C10E4)");
-        static_assert(alignof(BoostStrategy) == 16, "Vector3 member forces 16-byte alignment (console stvx128)");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfNearMissBoostEarning) == 0x10), "params must start at 0x10 (B2::Prepare @0x822C0FA8)");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfSpeedForMinEarning)   == 0x1C), "AddBoost @0x822C0E34 lerp lo");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfSpeedForMaxEarning)   == 0x20), "AddBoost @0x822C0E44 lerp hi");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfTrafficCheck)         == 0x48), "B2::Prepare rec+0x00 -> +0x48");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfOnWrecked)            == 0x94), "last attrib param");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfTimeSpentCheating)    == 0x98), "Prepare @0x822A5CF8");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mePreviousOncomingState)== 0x9C), "Prepare @0x822A5D0C (stw E_ONCOMING_STATE_FALSE)");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfBoostAmount)          == 0xA0), "GetBoostAmount @0x822A5EF0");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfMaxBoost)             == 0xA4), "GetMaxBoost @0x822A5EF8");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfBoostModifier)        == 0xA8), "Update @0x822F8158");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfSpeed)                == 0xB4), "SetSpeed @0x822A5FC0");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfOncomingFade)         == 0xB8), "Update @0x822F8154");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbCrashing)             == 0xBC), "SetCrashing @0x822A5F44");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbWrecking)             == 0xBD), "Prepare @0x822A5C74");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbIsTailgating)         == 0xC1), "IsTailgating @0x822A5EE8");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbIsBoostFull)          == 0xC3), "IsBoostFull @0x822A5EE0");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbBoosting)             == 0xC5), "IsBoosting @0x822A5E58");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbBoostEarningEnabled)  == 0xC8), "SetBoostEarningEnabled @0x822A6208");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbChainNotifyPending)   == 0xCB), "Update @0x822F81A4");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mbForceBoost)           == 0xCC), "SetForceBoost @0x822A5DE8");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfDriftingDistance)     == 0xD0), "Update @0x822F829C");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfSpinAngle)            == 0xE0), "SetSpinAngle @0x822A6130");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, miCombinedBoostLevel)   == 0xE8), "SetCarStatBoostLevel @0x822D52AC");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfCurrentCarBoostLossLevel) == 0xF0), "SetCarStatBoostLevel @0x822D52D0");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfCurrentBoostingTime)  == 0xF8), "GetCurrentBoostingTime @0x822A5E50");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfMinBoostAllowedAmount)== 0x100), "SetCarStatBoostLevel @0x822D5304");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, miBoostLevel)           == 0x104), "SetBoostSegments @0x822C0F30");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, meTailgatedCarIndex)    == 0x108), "SetTailgating @0x822A6114");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mStartPosition)         == 0x110), "Prepare stvx128 @0x822A5C7C");
+        CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfTotalDistanceTraveled)== 0x120), "Prepare @0x822A5CF0");
+        CGS_STATIC_ASSERT((sizeof(BoostStrategy) == 0x130), "B2's first subclass member lands at +0x130 (B2::Prepare @0x822C10E4)");
+        CGS_STATIC_ASSERT((__alignof(BoostStrategy) == 16), "Vector3 member forces 16-byte alignment (console stvx128)");
     }
 };
 

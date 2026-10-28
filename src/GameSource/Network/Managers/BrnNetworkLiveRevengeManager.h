@@ -253,10 +253,10 @@ namespace BrnNetwork
 
     inline void LiveRevengeManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeMappingEntry, mSendMessage) == 0x8, "LiveRevengeMappingEntry::mSendMessage @ +0x8");
-        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeMappingEntry) == 8 + 2 * sizeof(LiveRevengeSyncMessage), "LiveRevengeMappingEntry is two ids plus two messages");
-        static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, maPlayerToTableIndexData) == 0x10, "maPlayerToTableIndexData @ +0x10");
-#define BRN_LRM_AT(member, off)         static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, member) == 0x10 + KI_MAX_NETWORK_PLAYERS * sizeof(LiveRevengeMappingEntry) + (off), #member)
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(LiveRevengeMappingEntry, mSendMessage) == 0x8), "LiveRevengeMappingEntry::mSendMessage @ +0x8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(LiveRevengeMappingEntry) == 8 + 2 * sizeof(LiveRevengeSyncMessage)), "LiveRevengeMappingEntry is two ids plus two messages");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(LiveRevengeManager, maPlayerToTableIndexData) == 0x10), "maPlayerToTableIndexData @ +0x10");
+#define BRN_LRM_AT(member, off)         CGS_STATIC_ASSERT(sizeof(void*) != 4 || offsetof(LiveRevengeManager, member) == 0x10 + KI_MAX_NETWORK_PLAYERS * sizeof(LiveRevengeMappingEntry) + (off), #member)
         BRN_LRM_AT(maTopIndexes,              0x00);   // +0x908
         BRN_LRM_AT(mpLiveRevengeProfile,      0x2C);   // +0x934
         BRN_LRM_AT(mTakedownEventQueue,       0x30);   // +0x938
@@ -265,8 +265,8 @@ namespace BrnNetwork
         BRN_LRM_AT(maDirtyTopRivals,          0x190);  // +0xA98
         BRN_LRM_AT(mbAreWeInOnlineGame,       0x198);  // +0xAA0
 #undef BRN_LRM_AT
-        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeManager) == 0x10 + KI_MAX_NETWORK_PLAYERS * sizeof(LiveRevengeMappingEntry) + 0x1A0, "LiveRevengeManager tail is 0x1A0 bytes");
-        static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeProfile, maRelationshipTable) == 0x8, "LiveRevengeProfile::maRelationshipTable @ +0x8");
-        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeProfile) == 0x7540, "sizeof(LiveRevengeProfile) == 0x7540");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(LiveRevengeManager) == 0x10 + KI_MAX_NETWORK_PLAYERS * sizeof(LiveRevengeMappingEntry) + 0x1A0), "LiveRevengeManager tail is 0x1A0 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(LiveRevengeProfile, maRelationshipTable) == 0x8), "LiveRevengeProfile::maRelationshipTable @ +0x8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(LiveRevengeProfile) == 0x7540), "sizeof(LiveRevengeProfile) == 0x7540");
     }
 }

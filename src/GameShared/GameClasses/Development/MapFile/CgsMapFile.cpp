@@ -23,7 +23,7 @@ namespace MapFile
             else
                 return &lrRecord;
         }
-        return nullptr;
+        return 0;
     }
 
     // CgsMapFile.h:81/82 - the X360 byte-swaps the file (big-endian target) and turns the on-disk record

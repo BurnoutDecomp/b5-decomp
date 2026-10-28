@@ -429,19 +429,19 @@ namespace BrnGame
         BrnGameModule();
         ~BrnGameModule();
 
-        void Construct() override;   // @ BrnGameModule.cpp:155 - construct the owned modules
+        void Construct() ;   // @ BrnGameModule.cpp:155 - construct the owned modules
 
         // @ BrnGameModule.cpp:1047 - tear down the owned modules + the module base. Overrides
         // CgsModule::Module::Destruct. Destructs all 11 engine modules (in the X360's destruct
         // order) then the module base. Not on the boot/loading path (the game doesn't shut down
         // during the loading screen).
-        void Destruct() override;
+        void Destruct() ;
 
         // @ BrnGameModule.cpp:925 - resumable staged release (counterpart of Prepare). Each call
         // advances meReleaseStage, releasing GUI -> sound -> hardware(+input) -> game-data ->
         // module base -> network; returns false to be re-driven, true at DONE. Not on the
         // boot/loading path.
-        bool Release() override;
+        bool Release() ;
 
         // Debug helper: fill liNumBytes at lpDest with the repeating 32-bit pattern luValue.
         void DebugSetMemoryToInt(void* lpDest, s32 liNumBytes, u32 luValue);  // @ BrnGameModule.cpp:3872
@@ -457,13 +457,13 @@ namespace BrnGame
 
         // IThreadClass implementation (the engine drives these on their threads).
         virtual void Update();                                      // ARTIST 0x823C5480
-        bool UpdateThread() override;
-        void DispatchThread() override;                               // @ BrnGameModule.cpp:1221
-        void ResourceUpdateThread(Mutex* lpMutex) override;
-        void OnStartOfUpdateFrame() override;
-        void OnEndOfUpdateFrame() override;
-        void OnCompletionOfVsyncWait() override;
-        void RenderAssert(const AssertData* lpAssertData) override;
+        bool UpdateThread() ;
+        void DispatchThread() ;                               // @ BrnGameModule.cpp:1221
+        void ResourceUpdateThread(Mutex* lpMutex) ;
+        void OnStartOfUpdateFrame() ;
+        void OnEndOfUpdateFrame() ;
+        void OnCompletionOfVsyncWait() ;
+        void RenderAssert(const AssertData* lpAssertData) ;
 
         // ⭐ ADDITIVE 2026-08-09 (feed wave; header-only inline, no out-of-line symbol).
         // The console reads this member as the raw `gm+10095372` when it stages the world

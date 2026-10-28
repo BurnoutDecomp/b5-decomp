@@ -168,7 +168,7 @@ void DebugComponent::Construct(CgsSound::Playback::Module::Module* lpPlaybackMod
     miSpliceBankIndex = 0;
     miSpliceIndexTens = 0;
     miSpliceIndexUnits = 0;
-    mpSpliceAuditionVoice = nullptr;
+    mpSpliceAuditionVoice = 0;
 }
 
 // ARTIST 0x826893A0: r3=value pointer, r4=user data; load enum then tail call.
@@ -190,7 +190,7 @@ void DebugComponent::InstallConsole(EConsole)
         maConsoleNames[0] = { E_AUDIO, "Audio Only" }; // table 0x82F2FCF0
         maConsoleNames[1] = { E_GAME, "Game Only" }; // 0x82F2FCF4
         maConsoleNames[2] = { E_AUDIO_AND_GAME, "Audio AND Game" }; // 0x82F2FCF8
-        maConsoleNames[3] = { E_MAX_CONSOLES, nullptr }; // 0x82F2FCFC
+        maConsoleNames[3] = { E_MAX_CONSOLES, 0 }; // 0x82F2FCFC
         SetOptions(&meOutput, maConsoleNames);
         SetChangeCallback(&meOutput, &ConsoleChangeCallback, this);
         sbConsoleRegistered = true;
@@ -698,7 +698,7 @@ void DebugComponent::BuildMaterialNames()
 {
     for (s32 liIndex = 0; liIndex < 25; ++liIndex)
         maCollisionMaterialNames[liIndex] = { liIndex, KA_COLLISION_MATERIAL_NAMES[liIndex] };
-    maCollisionMaterialNames[25] = { 0, nullptr };
+    maCollisionMaterialNames[25] = { 0, 0 };
 
     SetOptions(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_MATERIAL, maCollisionMaterialNames);
     SetRange(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_MATERIAL, 0, 25);
@@ -710,7 +710,7 @@ void DebugComponent::BuildActionNames()
     for (s32 liIndex = 0; liIndex < 6; ++liIndex)
         maCollisionActionNames[liIndex] = { liIndex + 1, KA_COLLISION_ACTION_NAMES[liIndex] };
     maCollisionActionNames[6] = { 0, "Off" };
-    maCollisionActionNames[7] = { 0, nullptr };
+    maCollisionActionNames[7] = { 0, 0 };
 
     SetOptions(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_ACTION, maCollisionActionNames);
     SetRange(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_ACTION, 0, 7);
@@ -731,7 +731,7 @@ void DebugComponent::BuildSplicerBankNames()
             ->GetContentSpec().GetName().GetCString();
         ++liIndex;
     }
-    maSpliceBankNames[liIndex] = { 0, nullptr };
+    maSpliceBankNames[liIndex] = { 0, 0 };
 
     SetOptions(&miSpliceBankIndex, maSpliceBankNames);
     SetRange(&miSpliceBankIndex, 0, liIndex - 1);
@@ -775,7 +775,7 @@ void DebugComponent::UpdateSpliceAudition()
             {
                 mpSpliceAuditionVoice->~Splice();
                 Splice::operator delete(mpSpliceAuditionVoice);
-                mpSpliceAuditionVoice = nullptr;
+                mpSpliceAuditionVoice = 0;
                 if (mbSpliceAuditionAutoCycle)
                     ++miSpliceIndexUnits;
             }

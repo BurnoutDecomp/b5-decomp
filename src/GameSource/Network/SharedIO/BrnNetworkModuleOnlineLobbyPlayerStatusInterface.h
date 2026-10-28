@@ -122,10 +122,10 @@ namespace BrnNetwork
             // the console stride exactly).
             static void _AssertLayout()
             {
-                static_assert(sizeof(LobbyPlayerStatusData) == 56, "X360 row stride");
-                static_assert(offsetof(LobbyPlayerStatusData, mPlayerID)     == 16, "mPlayerID @row+16");
-                static_assert(offsetof(LobbyPlayerStatusData, meReadyStatus) == 20, "meReadyStatus @row+20");
-                static_assert(offsetof(LobbyPlayerStatusData, mbLocalPlayer) == 48, "mbLocalPlayer @row+48");
+                CGS_STATIC_ASSERT((sizeof(LobbyPlayerStatusData) == 56), "X360 row stride");
+                CGS_STATIC_ASSERT((offsetof(LobbyPlayerStatusData, mPlayerID)     == 16), "mPlayerID @row+16");
+                CGS_STATIC_ASSERT((offsetof(LobbyPlayerStatusData, meReadyStatus) == 20), "meReadyStatus @row+20");
+                CGS_STATIC_ASSERT((offsetof(LobbyPlayerStatusData, mbLocalPlayer) == 48), "mbLocalPlayer @row+48");
             }
         };
     }

@@ -143,7 +143,7 @@ public:
 
     void SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex);   // 0x822A1030
     void ClearActiveRaceCarIndex() { miActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID; }
-    void ClearActiveRaceCar() { mpActiveRaceCar = nullptr; }
+    void ClearActiveRaceCar() { mpActiveRaceCar = 0; }
 
     s8 GetStartingGridPosition() { return miStartingGridPosition; }
     s8 IsInRace();

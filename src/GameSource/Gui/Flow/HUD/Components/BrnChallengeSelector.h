@@ -40,7 +40,7 @@ namespace BrnGui
         // @ 0x824158F0 -- base Construct, then construct the embedded "Text_mc" field and
         // clear the challenge/index/pointer/flag members.
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpacParentName) override;
+                       const char* lpacParentName) ;
 
         // ---- ledger TU `class:BrnGui::ChallengeSelector`, but DEFINED in this TU's
         //      BrnChallengeSelector.cpp (do not add second definitions) ----

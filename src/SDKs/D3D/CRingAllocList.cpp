@@ -134,11 +134,11 @@ void CRingAllocList::Finalize()
 // pointer and its own offset (0x10 == 4 * u32) is invariant too.
 void _CRingAllocListAssertLayout()
 {
-    static_assert(offsetof(CRingAllocList, muHeadChunk)   == 0x00, "head chunk @ word[0]");
-    static_assert(offsetof(CRingAllocList, muCurrentNode) == 0x04, "current node @ word[1]");
-    static_assert(offsetof(CRingAllocList, muWritePtr)    == 0x08, "write cursor @ word[2]");
-    static_assert(offsetof(CRingAllocList, muWriteEnd)    == 0x0C, "write end @ word[3]");
-    static_assert(offsetof(CRingAllocList, mpDevice)      == 0x10, "device back-pointer @ word[4]");
+    CGS_STATIC_ASSERT((offsetof(CRingAllocList, muHeadChunk)   == 0x00), "head chunk @ word[0]");
+    CGS_STATIC_ASSERT((offsetof(CRingAllocList, muCurrentNode) == 0x04), "current node @ word[1]");
+    CGS_STATIC_ASSERT((offsetof(CRingAllocList, muWritePtr)    == 0x08), "write cursor @ word[2]");
+    CGS_STATIC_ASSERT((offsetof(CRingAllocList, muWriteEnd)    == 0x0C), "write end @ word[3]");
+    CGS_STATIC_ASSERT((offsetof(CRingAllocList, mpDevice)      == 0x10), "device back-pointer @ word[4]");
 }
 
 } // namespace D3D

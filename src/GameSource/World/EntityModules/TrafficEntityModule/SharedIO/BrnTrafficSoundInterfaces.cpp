@@ -45,14 +45,14 @@ u16 TrafficSoundOutputInterface::GetTrafficEntityCount() const
 const TrafficSoundEntity* TrafficSoundOutputInterface::GetTrafficEntityIndex(u16 lu16Index) const
 {
     if (mu16EntityCount == 0)
-        return nullptr;
+        return 0;
 
     u32 luIndex = 0;
     while (maActiveEntityList[luIndex].mu16EntityIndex != lu16Index)
     {
         ++luIndex;
         if (luIndex >= mu16EntityCount)
-            return nullptr;
+            return 0;
     }
     return &maActiveEntityList[luIndex];
 }

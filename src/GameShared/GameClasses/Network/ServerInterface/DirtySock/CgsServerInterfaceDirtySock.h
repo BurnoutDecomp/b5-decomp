@@ -114,8 +114,8 @@ namespace CgsNetwork
     class ServerInterfaceUsersets;
     class ServerInterfacePingRegions;
 
-    enum EServerInterfaceEvent : int;
-    enum EServerInterfaceError : int;
+    enum EServerInterfaceEvent ;
+    enum EServerInterfaceError ;
 
     // ---- FLAGGED: the DirtySock->game error mapping table type (CgsNetwork-owned;
     // home CgsServerInterfaceDirtySockErrorHelpers.h). LobbyApiRefT / LobbyApiMsgT are

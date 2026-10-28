@@ -45,7 +45,7 @@ namespace CgsDev
 
         void VariableManager::RegisterVariable(const Variant& lrVariant, const char* lpcPath, const char* lpcName)
         {
-            Menu* lpMenu = GetUI().GetMenuManager().CreateMenuPath(lpcPath, nullptr);
+            Menu* lpMenu = GetUI().GetMenuManager().CreateMenuPath(lpcPath, 0);
             if (!lpMenu)
             {
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -77,7 +77,7 @@ namespace CgsDev
                 if (lpVariable->GetValue().mValue.mpValue == lpValue)
                     return lpVariable;
             }
-            return nullptr;
+            return 0;
         }
 
         MenuItemVariable* VariableManager::FindMenuItem(Variable* lpVariable)
@@ -88,13 +88,13 @@ namespace CgsDev
                 if (lpMenuItem->GetVariable() == lpVariable)
                     return lpMenuItem;
             }
-            return nullptr;
+            return 0;
         }
 
         Variable* VariableManager::FindVariableFromPath(const char* lpcPath)
         {
             if (!lpcPath)
-                return nullptr;
+                return 0;
             if (*lpcPath == '/')
                 ++lpcPath;
 
@@ -112,7 +112,7 @@ namespace CgsDev
                 if (_stricmp(lpcCompare, lpcPath) == 0)
                     return lpMenuItem->GetVariable();
             }
-            return nullptr;
+            return 0;
         }
 
         VariableMetadata* VariableManager::SetMetadata(Variable* lpVariable,
@@ -252,7 +252,7 @@ namespace CgsDev
         void VariableManager::SetCustomMenuItem(void* lpValue, MenuItemVariable* lpCustom)
         {
             Variable* v = FindVariable(lpValue);
-            MenuItemVariable* lpOriginal = v ? FindMenuItem(v) : nullptr;
+            MenuItemVariable* lpOriginal = v ? FindMenuItem(v) : 0;
             if (!v || !lpOriginal || !lpCustom)
                 return;
             lpCustom->Prepare(v);

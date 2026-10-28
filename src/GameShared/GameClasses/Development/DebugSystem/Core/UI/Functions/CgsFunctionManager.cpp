@@ -38,7 +38,7 @@ namespace CgsDev
 
         void FunctionManager::RegisterFunction(Function::DebugCallbackFunction lpfCallback, void* lpUserData, const char* lpcPath, const char* lpcName)
         {
-            Menu* lpMenu = GetUI().GetMenuManager().CreateMenuPath(lpcPath, nullptr);
+            Menu* lpMenu = GetUI().GetMenuManager().CreateMenuPath(lpcPath, 0);
             if (!lpMenu)
                 return;
 
@@ -62,7 +62,7 @@ namespace CgsDev
                 if (f->GetFunction() == lpfCallback && f->GetParameter() == lpUserData)
                     return f;
             }
-            return nullptr;
+            return 0;
         }
 
         MenuItemFunction* FunctionManager::FindMenuItem(Function* lpFunction)
@@ -73,12 +73,12 @@ namespace CgsDev
                 if (lpItem->GetFunction() == lpFunction)
                     return lpItem;
             }
-            return nullptr;
+            return 0;
         }
 
         Function* FunctionManager::FindFunctionFromPath(const char* lpcPath)
         {
-            if (!lpcPath) return nullptr;
+            if (!lpcPath) return 0;
             if (*lpcPath == '/') ++lpcPath;
             char path[512];
             for (s32 i = 0; i < mMenuItemPool.GetActiveCount(); ++i)
@@ -93,7 +93,7 @@ namespace CgsDev
                 if (_stricmp(compare, lpcPath) == 0)
                     return item->GetFunction();
             }
-            return nullptr;
+            return 0;
         }
 
         void FunctionManager::CallFunction(const char* lpcPath)

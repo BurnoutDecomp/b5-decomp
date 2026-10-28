@@ -38,8 +38,8 @@ namespace BrnGameState
         // toggles, then CgsDev::DebugComponent::Register() (the base Construct is not called).
         void Construct(RoadRulesManager* lpRoadRulesManager);
 
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) ;
 
         // Menu-action bodies; each is inlined into its static callback below.
         void DecreaseCurrentTime();
@@ -47,9 +47,9 @@ namespace BrnGameState
         void AddCrashScore();
 
     protected:
-        const char* GetName() const override;
-        const char* GetPath() const override;
-        void        OnActivate() override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
+        void        OnActivate() ;
 
     private:
         // Static callbacks registered with the debug menu via RegisterFunction(&cb, this, name).
@@ -76,13 +76,13 @@ namespace BrnGameState
         // stated against sizeof(CgsDev::DebugComponent) and sizeof(void*), not the console numbers.
         static void _AssertLayout()
         {
-            static_assert(offsetof(RoadRulesDebugComponent, mpRoadRulesManager) == sizeof(CgsDev::DebugComponent),
+            CGS_STATIC_ASSERT((offsetof(RoadRulesDebugComponent, mpRoadRulesManager) == sizeof(CgsDev::DebugComponent)),
                           "mpRoadRulesManager directly follows the DebugComponent base (console +0x0C)");
-            static_assert(offsetof(RoadRulesDebugComponent, mbRenderInfo) ==
-                          offsetof(RoadRulesDebugComponent, mpRoadRulesManager) + sizeof(void*),
+            CGS_STATIC_ASSERT((offsetof(RoadRulesDebugComponent, mbRenderInfo) ==
+                          offsetof(RoadRulesDebugComponent, mpRoadRulesManager) + sizeof(void*)),
                           "mbRenderInfo follows mpRoadRulesManager (console +0x10)");
-            static_assert(offsetof(RoadRulesDebugComponent, mbRenderTimes) ==
-                          offsetof(RoadRulesDebugComponent, mbRenderInfo) + 1,
+            CGS_STATIC_ASSERT((offsetof(RoadRulesDebugComponent, mbRenderTimes) ==
+                          offsetof(RoadRulesDebugComponent, mbRenderInfo) + 1),
                           "mbRenderTimes follows mbRenderInfo (console +0x11)");
         }
     };

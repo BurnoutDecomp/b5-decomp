@@ -106,7 +106,7 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     const NetworkPlayerStats* NetworkPlayerStatsManager::GetPlayerStatsByName(const char* lpcName)
     {
-        CGS_ASSERT(lpcName != nullptr, "lpcName");
+        CGS_ASSERT(lpcName != 0, "lpcName");
 
         return mPlayerStatsCache.GetPlayerStats(lpcName);
     }
@@ -147,8 +147,8 @@ namespace BrnNetwork
         {
             meCurrentStatus = E_STATS_STATUS_OFFLINE_PROGRESSION;
 
-            CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
                        "mpServerInterface->GetCustomCommandsComponent()");
 
             // The event's OfflineProgressionT record sits at offset 0, so the event pointer
@@ -219,10 +219,10 @@ namespace BrnNetwork
     // empty the request queue, reset the scalar state and every per-player update entry.
     void NetworkPlayerStatsManager::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != nullptr, "lpNetworkModule");
+        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
         mpNetworkModule  = lpNetworkModule;
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
         mPlayerStatsCache.Construct(mpNetworkManager);
 
@@ -230,8 +230,8 @@ namespace BrnNetwork
         mEventQueue.miWriteIndex = 0;
         mEventQueue.miLength     = 0;
 
-        mpServerInterface                        = nullptr;
-        mpServerInterfacePlayerInfo              = nullptr;
+        mpServerInterface                        = 0;
+        mpServerInterfacePlayerInfo              = 0;
         meCurrentStatus                          = E_STATS_STATUS_UNPREPARED;
         mbWaitingToUploadStats                   = false;
         mbWaitingToUploadOfflineProgress         = false;
@@ -250,11 +250,11 @@ namespace BrnNetwork
             return false;
         }
 
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager != NULL");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager != NULL");
         mpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface != NULL");
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface != NULL");
         mpServerInterfacePlayerInfo = mpServerInterface->GetPlayerInfoComponent();
-        CGS_ASSERT(mpServerInterfacePlayerInfo != nullptr, "mpServerInterfacePlayerInfo != NULL");
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo != NULL");
 
         mEventQueue.miReadIndex  = 0;
         meCurrentStatus          = E_STATS_STATUS_IDLE;
@@ -276,8 +276,8 @@ namespace BrnNetwork
         mEventQueue.miWriteIndex = 0;
         mEventQueue.miLength     = 0;
 
-        mpServerInterfacePlayerInfo = nullptr;
-        mpServerInterface           = nullptr;
+        mpServerInterfacePlayerInfo = 0;
+        mpServerInterface           = 0;
         meCurrentStatus             = E_STATS_STATUS_UNPREPARED;
 
         mbWaitingToUploadStats                   = false;
@@ -336,7 +336,7 @@ namespace BrnNetwork
 
     void NetworkPlayerStatsManager::AddEvent(const StatsRequestEvent* lpStatsRequestEvent)
     {
-        CGS_ASSERT(lpStatsRequestEvent != nullptr, "lpStatsRequestEvent");
+        CGS_ASSERT(lpStatsRequestEvent != 0, "lpStatsRequestEvent");
         CGS_ASSERT(mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength(),
                    "mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength()");
         mEventQueue.Push(lpStatsRequestEvent);
@@ -367,7 +367,7 @@ namespace BrnNetwork
     // Queue a stats request for a player known only by name.
     void NetworkPlayerStatsManager::RequestPlayerStats(const char* lpcPlayerName)
     {
-        CGS_ASSERT(lpcPlayerName != nullptr, "lpcPlayerName");
+        CGS_ASSERT(lpcPlayerName != 0, "lpcPlayerName");
 
         StatsRequestEvent lEvent;
         lEvent.Construct(lpcPlayerName, CgsNetwork::K_INVALID_PLAYER_ID);
@@ -389,7 +389,7 @@ namespace BrnNetwork
                 return &maStatsUpdateEntry[liEntryIndex];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // A player joined: ask for their stats, claim a free update entry for them and register its
@@ -403,10 +403,10 @@ namespace BrnNetwork
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lNetworkPlayerId);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             StatsUpdateEntry* lpStatsEntry = GetStatsUpdateEntry(CgsNetwork::K_INVALID_PLAYER_ID);
-            if (lpStatsEntry == nullptr)
+            if (lpStatsEntry == 0)
             {
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
@@ -421,7 +421,7 @@ namespace BrnNetwork
             lpStatsEntry->mRecieveMessage.Construct();
             lpNetworkPlayer->RegisterMessageType(KI_STATS_UPDATE_MESSAGE_TYPE, sizeof(StatsUpdateMessage),
                                                  &lpStatsEntry->mSendMessage, &lpStatsEntry->mRecieveMessage,
-                                                 nullptr, nullptr, nullptr);
+                                                 0, 0, 0);
         }
     }
 
@@ -433,10 +433,10 @@ namespace BrnNetwork
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lNetworkPlayerId);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             StatsUpdateEntry* lpStatsEntry = GetStatsUpdateEntry(lNetworkPlayerId);
-            if (lpStatsEntry == nullptr)
+            if (lpStatsEntry == 0)
             {
                 char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                 CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
@@ -495,7 +495,7 @@ namespace BrnNetwork
         if (mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID))
         {
             NetworkPlayerStats* lpPlayerStats = mPlayerStatsCache.GetPlayerStats(lLocalPlayerID);
-            if (lpPlayerStats != nullptr)
+            if (lpPlayerStats != 0)
             {
                 CGS_ASSERT(leStatType >= NetworkPlayerStats::E_STATS_VALUE_START,
                            "leStatType >= NetworkPlayerStats::E_STATS_VALUE_START");
@@ -519,16 +519,16 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::UploadFreeBurnLobbyStats(
         const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults)
     {
-        CGS_ASSERT(lpResults != nullptr, "lpResults");
+        CGS_ASSERT(lpResults != 0, "lpResults");
 
         if (meCurrentStatus == E_STATS_STATUS_IDLE
             && mpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS)
                    == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
         {
-            CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
                        "mpServerInterface->GetCustomCommandsComponent()");
-            CGS_ASSERT(mpNetworkManager->GetLiveRevengeManager() != nullptr,
+            CGS_ASSERT(mpNetworkManager->GetLiveRevengeManager() != 0,
                        "mpNetworkManager->GetLiveRevengeManager()");
 
             meCurrentStatus = E_STATS_STATUS_UPLOADING_FREE_BURN_STATS;
@@ -548,14 +548,14 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::HandleGameResults(
         const BrnGameState::GameStateModuleIO::OnlineGameResults* /*lpResults*/)
     {
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != nullptr,
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0,
                    "mpServerInterface->GetConnectionComponent()");
 
         if (mpServerInterface->GetConnectionComponent()->IsLoggedIn())
         {
             CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-            CGS_ASSERT(lpPlayerManager != nullptr, "lpPlayerManager");
+            CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
 
             NetworkPlayerID lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
             CGS_ASSERT(lpPlayerManager->GetNextLocalPlayerID(&lPlayerID),
@@ -585,16 +585,16 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::ProcessAfterSimulation(
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != nullptr, "lpInput");
-        CGS_ASSERT(lpInput->GetStatsInputInterface() != nullptr, "lpInput->GetStatsInputInterface()");
+        CGS_ASSERT(lpInput != 0, "lpInput");
+        CGS_ASSERT(lpInput->GetStatsInputInterface() != 0, "lpInput->GetStatsInputInterface()");
         CopyEvents(lpInput->GetStatsInputInterface()->GetStatsInputQueue());
 
-        CGS_ASSERT(lpInput->GetNetworkEventQueue() != nullptr, "lpInput->GetNetworkEventQueue()");
+        CGS_ASSERT(lpInput->GetNetworkEventQueue() != 0, "lpInput->GetNetworkEventQueue()");
 
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
         s32 liEventType = lpInput->GetNetworkEventQueue()->GetFirstEvent(&lpEvent, &liEventSize);
-        while (lpEvent != nullptr)
+        while (lpEvent != 0)
         {
             if (liEventType == BrnNetworkModuleIO::NetworkInOfflineProgression::KI_EVENT_TYPE)
             {
@@ -613,20 +613,20 @@ namespace BrnNetwork
     // view-download -> view-select -> stats-download -> results.
     void NetworkPlayerStatsManager::ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer)
     {
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer");
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
         CGS_ASSERT(meCurrentStatus != E_STATS_STATUS_UNPREPARED,
                    "Trying to use the stats manager before it's prepared");
 
         ValidateQueueAndPostGettingStatsEvents(lpOutputBuffer);
 
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetStateManager() != nullptr, "mpNetworkManager->GetStateManager()");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetStateManager() != 0, "mpNetworkManager->GetStateManager()");
         if (!mpNetworkManager->GetStateManager()->IsIdle())
         {
             return;
         }
 
-        CGS_ASSERT(mpServerInterfacePlayerInfo != nullptr, "mpServerInterfacePlayerInfo");
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo");
 
         switch (meCurrentStatus)
         {
@@ -690,8 +690,8 @@ namespace BrnNetwork
         {
             bool lbFinished = false;
 
-            CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != nullptr,
+            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
                        "mpServerInterface->GetCustomCommandsComponent()");
 
             ServerInterfaceCustomCommands* lpCustomCommands = mpServerInterface->GetCustomCommandsComponent();
@@ -730,7 +730,7 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::CopyEvents(
         const BrnNetworkModuleIO::StatsInputInterface::StatsInputQueue* lpStatsEventQueue)
     {
-        CGS_ASSERT(lpStatsEventQueue != nullptr, "lpStatsEventQueue");
+        CGS_ASSERT(lpStatsEventQueue != 0, "lpStatsEventQueue");
 
         for (s32 liEventIndex = 0; liEventIndex < lpStatsEventQueue->GetLength(); ++liEventIndex)
         {
@@ -741,8 +741,8 @@ namespace BrnNetwork
     // Hand the record just downloaded for the current request to the game.
     void NetworkPlayerStatsManager::CopyResultsToOutputBuffer(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer)
     {
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer");
-        CGS_ASSERT(lpOutputBuffer->GetStatsOutputInterface() != nullptr,
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
+        CGS_ASSERT(lpOutputBuffer->GetStatsOutputInterface() != 0,
                    "lpOutputBuffer->GetStatsOutputInterface()");
 
         NetworkPlayerStats* lpStats = mPlayerStatsCache.GetPlayerStats(mCurrentEventBeingProcessed.GetName());
@@ -757,10 +757,10 @@ namespace BrnNetwork
     {
         const s32 liNumberOfEvents = mEventQueue.GetLength();
 
-        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer");
-        CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface() != nullptr, "mpNetworkManager->GetServerInterface()");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent() != nullptr,
+        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, "mpNetworkManager->GetServerInterface()");
+        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent() != 0,
                    "mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent()");
 
         const f32 lfTimeTillStatsExpire =
@@ -772,7 +772,7 @@ namespace BrnNetwork
             mEventQueue.Pop(&lEvent);
 
             NetworkPlayerStats* lpStats = mPlayerStatsCache.GetPlayerStats(lEvent.GetName());
-            if (lpStats == nullptr)
+            if (lpStats == 0)
             {
                 NetworkPlayerStats lStats;
                 lStats.Construct();
@@ -789,7 +789,7 @@ namespace BrnNetwork
             {
                 lpStats->SetPlayerID(lEvent.GetPlayerID());
 
-                CGS_ASSERT(mpNetworkManager != nullptr, "mpNetworkManager");
+                CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
                 const Time lExpiryTime(lfTimeTillStatsExpire);
                 if ((mpNetworkManager->GetTime() - lpStats->GetTimeStamp()) > lExpiryTime
                     || lpStats->IsCalculated())
@@ -867,7 +867,7 @@ namespace BrnNetwork
     // A server-interface component failed: log its error, clear it and drop back to idle.
     bool NetworkPlayerStatsManager::CheckForAndHandleServerErrors(CgsNetwork::EComponents leComponent)
     {
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
 
         if (mpServerInterface->GetStatus(leComponent) != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
         {
@@ -891,9 +891,9 @@ namespace BrnNetwork
     {
         PlayerInfoData lPlayerInfo;
 
-        CGS_ASSERT(mpServerInterface != nullptr, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetGameComponent() != nullptr, "mpServerInterface->GetGameComponent()");
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != nullptr, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, "mpServerInterface->GetGameComponent()");
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
         CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
                    "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
@@ -901,7 +901,7 @@ namespace BrnNetwork
         {
             CgsNetwork::PlayerMenuData* lpMenuData =
                 mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lNetworkPlayerID);
-            if (lpMenuData != nullptr)
+            if (lpMenuData != 0)
             {
                 CGS_ASSERT(lpMenuData->macName[0] != '\0', "lpMenuData->macName[0] != '\\0'");
                 return lpMenuData->macName;
@@ -909,7 +909,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()");
-        CGS_ASSERT(mpServerInterfacePlayerInfo != nullptr, "mpServerInterfacePlayerInfo");
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo");
         mpServerInterfacePlayerInfo->GetLocalPlayerInfo(&lPlayerInfo);
         CGS_ASSERT(lPlayerInfo.GetID() == lNetworkPlayerID, "lPlayerInfo.GetID() == lNetworkPlayerID");
 
@@ -922,7 +922,7 @@ namespace BrnNetwork
     {
         PlayerInfoData lPlayerInfo;
         CGS_ASSERT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()");
-        CGS_ASSERT(mpServerInterfacePlayerInfo != nullptr, "mpServerInterfacePlayerInfo");
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo");
         mpServerInterfacePlayerInfo->GetLocalPlayerInfo(&lPlayerInfo);
         return ::LobbyNameCmp(lpcName, lPlayerInfo.GetName()) == 0;
     }
@@ -935,7 +935,7 @@ namespace BrnNetwork
         CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
         NetworkPlayerStats* lpPlayerStats = mPlayerStatsCache.GetPlayerStats(lPlayerID);
-        if (lpPlayerStats != nullptr)
+        if (lpPlayerStats != 0)
         {
             lpPlayerStats->SetStatAsInt(NetworkPlayerStats::E_STATS_VALUE_CHALLENGES_COMPLETED, liNumberOfChallenges,
                                         NetworkPlayerStats::E_STAT_TYPE_NUMBER);
@@ -968,8 +968,8 @@ namespace BrnNetwork
             if (lAggressorID != CgsNetwork::K_INVALID_PLAYER_ID && lAggressorID == lLocalPlayerID)
             {
                 NetworkPlayerStats* lpLocalPlayersStats = mPlayerStatsCache.GetPlayerStats(lLocalPlayerID);
-                CGS_ASSERT(lpLocalPlayersStats != nullptr, "lpLocalPlayersStats");
-                if (lpLocalPlayersStats != nullptr)
+                CGS_ASSERT(lpLocalPlayersStats != 0, "lpLocalPlayersStats");
+                if (lpLocalPlayersStats != 0)
                 {
                     lpLocalPlayersStats->SetStatAsInt(
                         NetworkPlayerStats::E_STATS_VALUE_TAKEDOWNS,
@@ -997,7 +997,7 @@ namespace BrnNetwork
                 && mpNetworkManager->GetPlayerManager()->IsPlayerTurnToSendRoundRobinMessage(lEntry.mPlayerID, true, 0))
             {
                 const NetworkPlayerStats* lpLocalPlayerStats = GetLocalPlayerStats();
-                CGS_ASSERT(lpLocalPlayerStats != nullptr, "lpLocalPlayerStats");
+                CGS_ASSERT(lpLocalPlayerStats != 0, "lpLocalPlayerStats");
 
                 lEntry.mSendMessage.PrepareForSend(
                     mpNetworkManager->GetTimeManager()->GetU16FrameCount(),

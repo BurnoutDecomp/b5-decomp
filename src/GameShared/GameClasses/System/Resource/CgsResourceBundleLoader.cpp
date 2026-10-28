@@ -25,7 +25,7 @@ namespace CgsResource
             return 0;   // engine could not be brought up (catastrophic)
 
         u32   luSize = 0;
-        void* lpBuf = nullptr;
+        void* lpBuf = 0;
         {
             lpBuf = lpManager->ReadWholeFile(lpcFileName, &luSize);
         }
@@ -61,13 +61,13 @@ namespace CgsResource
     static const EntryListResource* GetBundleList(const Entry* lpEntry)
     {
         if (!lpEntry || !lpEntry->mpResourceType || lpEntry->mpResourceType->GetTypeID() != 29)
-            return nullptr;
+            return 0;
         const u32 luSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size;
         const EntryListResource* lpList =
             static_cast<const EntryListResource*>(lpEntry->mResource.m_baseResources[0]);
         if (!lpList || luSize < EntryListResource::KI_HEADERSIZE
             || lpList->muNumEntries > (luSize - EntryListResource::KI_HEADERSIZE) / sizeof(ID))
-            return nullptr;
+            return 0;
         return lpList;
     }
 

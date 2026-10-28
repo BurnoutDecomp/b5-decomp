@@ -232,7 +232,7 @@ namespace Attrib
             // (X360 0x82803298)
             void ReleaseAsset(Vault::AssetID lAssetId, IGarbageCollector* lpGC);
 
-            bool         Inited()  const { return mpData != nullptr; }
+            bool         Inited()  const { return mpData != 0; }
             void*        GetData() const { return mpData; }
             unsigned int GetSize() const { return muKindAndSize & 0x00FFFFFFu; }
             u8           GetKind() const { return static_cast<u8>(muKindAndSize >> 24); }

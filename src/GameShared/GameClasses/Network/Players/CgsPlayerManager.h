@@ -282,8 +282,8 @@ namespace CgsNetwork
             miNumEventCallbacks = 0;
             for (s32 liIndex = 0; liIndex < KI_NUM_EVENT_CALLBACKS; ++liIndex)
             {
-                maEventCallbacks[liIndex].mCallback  = nullptr;
-                maEventCallbacks[liIndex].mpUserData = nullptr;
+                maEventCallbacks[liIndex].mCallback  = 0;
+                maEventCallbacks[liIndex].mpUserData = 0;
             }
         }
         bool AreAnyPlayersConnected() const;

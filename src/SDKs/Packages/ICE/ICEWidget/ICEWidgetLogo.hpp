@@ -51,9 +51,9 @@ namespace ICE
 
     // Pin the offsets the Render body reads (`lfs 0/4`, `lwz 8` off `this`). The
     // base is empty (EBO), so mfX must land at offset 0.
-    static_assert(offsetof(ICEWidgetLogo, mfX)     == 0x00, "ICEWidgetLogo::mfX offset");
-    static_assert(offsetof(ICEWidgetLogo, mfY)     == 0x04, "ICEWidgetLogo::mfY offset");
-    static_assert(offsetof(ICEWidgetLogo, miTimer) == 0x08, "ICEWidgetLogo::miTimer offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetLogo, mfX)     == 0x00), "ICEWidgetLogo::mfX offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetLogo, mfY)     == 0x04), "ICEWidgetLogo::mfY offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetLogo, miTimer) == 0x08), "ICEWidgetLogo::miTimer offset");
 }
 
 #endif // SDKS_PACKAGES_ICE_ICEWIDGET_ICEWIDGETLOGO_HPP

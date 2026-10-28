@@ -52,8 +52,8 @@ namespace
     // The default render-target state global (X360 dword_83271614, installed by Device::Start) and the
     // last render-target state bound on the device (X360 dword_83010A30, the back-to-back-bind skip).
     // Both are file-scope globals on the X360 image.
-    const renderengine::RenderTargetState* gpDefaultRenderTargetState = nullptr;
-    const renderengine::RenderTargetState* gpLastRenderTargetState    = nullptr;
+    const renderengine::RenderTargetState* gpDefaultRenderTargetState = 0;
+    const renderengine::RenderTargetState* gpLastRenderTargetState    = 0;
 
     // The two engine "shared" state blocks the build copies in when a colour/depth mode is
     // USE_DEVICE_FOR_WRITE (X360 unk_83271100 / unk_83271140). HONEST PLACEHOLDERS: engine-resident
@@ -135,7 +135,7 @@ namespace postfx
         mpTexture = lpTexture;
 
         // --- a sampler texture-state for that texture (only when the texture was created) ------------
-        if (lpTexture != nullptr)
+        if (lpTexture != 0)
         {
             renderengine::TextureState::Parameters lStateParams;
             std::memset(&lStateParams, 0, sizeof(lStateParams));
@@ -157,7 +157,7 @@ namespace postfx
 
             rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
             rw::Resource lStateResource = lpAllocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), 0);
             mpTextureState =
                 renderengine::TextureState::Initialize(&lStateResource, &lStateParams);
         }
@@ -175,7 +175,7 @@ namespace postfx
 
         rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
         rw::Resource lBufferResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lBufferParams), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lBufferParams), 0);
         mpPixelBuffer = renderengine::PixelBuffer::Initialize(
             reinterpret_cast<renderengine::PixelBuffer::Wrapper*>(&lBufferResource), &lBufferParams);
 
@@ -205,7 +205,7 @@ namespace postfx
         lTextureParams.miFormat    = static_cast<s32>(lrParams.mTextureFormat);  // v21 = a2[5]
 
         mpTexture    = AllocateAndInitializeTexture(lrParams, lTextureParams);
-        mpHiZTexture = nullptr;
+        mpHiZTexture = 0;
 
         // When the parameters request a hierarchical-Z surface (*(a2+36) != 0), build a second texture
         // and rebase its EDRAM tile word onto the depth surface's high 20 bits.
@@ -245,7 +245,7 @@ namespace postfx
 
         rw::IResourceAllocator* lpAllocator = lrParams.mpAllocator;
         rw::Resource lBufferResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lBufferParams), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lBufferParams), 0);
         mpPixelBuffer = renderengine::PixelBuffer::Initialize(
             reinterpret_cast<renderengine::PixelBuffer::Wrapper*>(&lBufferResource), &lBufferParams);
 
@@ -260,14 +260,14 @@ namespace postfx
     void Target::Resolve()
     {
         // *(result + 8) != 0 -> resolve the surface's PixelBuffer (+0x04) out to its texture.
-        if (mpTexture != nullptr)
+        if (mpTexture != 0)
         {
             // Trailing arguments updated 2026-08-13 for Xbox2ResolveTo's corrected signature: the
             // 8th is the clear-colour POINTER (null here) and the 10th is ClearStencil, which the
             // X360 passes in the first outgoing overflow slot -- `li r5, 0` @0x823F9130 then
             // `stw r5, 0x70+var_14(r1)` = r1+0x5C @0x823F914C. Zero, from this caller's own asm.
-            renderengine::PixelBuffer::Xbox2ResolveTo(mpPixelBuffer, nullptr, 0, 0, 0, 0, 0,
-                                                      nullptr, 1.0f, 0u);
+            renderengine::PixelBuffer::Xbox2ResolveTo(mpPixelBuffer, 0, 0, 0, 0, 0, 0,
+                                                      0, 1.0f, 0u);
         }
     }
 
@@ -333,14 +333,14 @@ namespace postfx
     {
         // Colour: resolve the colour Target's PixelBuffer (+0x24) out to its texture when it has one
         // (+0x28 != 0). (The X360 reads the colour Target at this + 0x24/0x28: maColourTargets[0].)
-        if (lbResolveColour && maColourTargets[0].mpTexture != nullptr)
+        if (lbResolveColour && maColourTargets[0].mpTexture != 0)
         {
             // Trailing arguments updated 2026-08-13 for Xbox2ResolveTo's corrected signature: the
             // 8th is the clear-colour POINTER (null here) and the 10th is ClearStencil, passed in
             // the first outgoing overflow slot -- `li r5, 0` @0x823F936C then
             // `stw r5, 0x80+var_24(r1)` = r1+0x5C @0x823F9388. Zero, from this caller's own asm.
             renderengine::PixelBuffer::Xbox2ResolveTo(
-                maColourTargets[0].mpPixelBuffer, nullptr, 0, 0, 0, 0, 0, nullptr, 1.0f, 0u);
+                maColourTargets[0].mpPixelBuffer, 0, 0, 0, 0, 0, 0, 0, 1.0f, 0u);
         }
 
         // Depth: when the target has a colour section (+0x18) and a depth resolve was asked, resolve the
@@ -376,7 +376,7 @@ namespace postfx
             laTargetWords[0] = static_cast<u32>(reinterpret_cast<uintptr_t>(maColourTargets[0].mpPixelBuffer));
 
             // The shared-state companion for the colour target (engine block / provided block).
-            const void* lpCompanion = nullptr;
+            const void* lpCompanion = 0;
             if (muDepthStencilMode == 1 || muDepthStencilMode == 4)
                 lpCompanion = mpProvidedState;        // result[33]
             else if (muDepthStencilMode == 2)
@@ -388,7 +388,7 @@ namespace postfx
                 reinterpret_cast<u32*>(&lDescriptor), laTargetWords);
 
             rw::Resource lResource = lpAllocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             mpSection0State = renderengine::RenderTargetState__Initialize(
                 reinterpret_cast<renderengine::RenderTargetState**>(&lResource), laTargetWords);
         }
@@ -397,7 +397,7 @@ namespace postfx
             std::memset(laTargetWords, 0, sizeof(laTargetWords));
             laTargetWords[0] = static_cast<u32>(reinterpret_cast<uintptr_t>(maColourTargets[0].mpPixelBuffer));
 
-            const void* lpCompanion = nullptr;
+            const void* lpCompanion = 0;
             if (muDepthStencilMode == 1 || muDepthStencilMode == 4)
                 lpCompanion = mpProvidedState;
             else if (muDepthStencilMode == 2)
@@ -409,7 +409,7 @@ namespace postfx
                 reinterpret_cast<u32*>(&lDescriptor), laTargetWords);
 
             rw::Resource lResource = lpAllocator->DoAllocate(
-                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             mpSection0State = renderengine::RenderTargetState__Initialize(
                 reinterpret_cast<renderengine::RenderTargetState**>(&lResource), laTargetWords);
 
@@ -426,7 +426,7 @@ namespace postfx
         // depth-stencil mode is USE_PROVIDED (== 4).
         if (mu8HasColour == 0 || muDepthStencilMode == 4)
         {
-            mpColourTextureState = nullptr;
+            mpColourTextureState = 0;
             return;
         }
 
@@ -443,7 +443,7 @@ namespace postfx
         // target's own resolved texture.
         renderengine::TextureState* lpBoundTexture =
             reinterpret_cast<renderengine::TextureState*>(mpProvidedColourState);
-        if (lpBoundTexture == nullptr)
+        if (lpBoundTexture == 0)
             lpBoundTexture = reinterpret_cast<renderengine::TextureState*>(mpColourTextureState);
         lStateParams.mpTexture = reinterpret_cast<renderengine::Texture*>(lpBoundTexture);
 
@@ -466,7 +466,7 @@ namespace postfx
         renderengine::TextureState::GetResourceDescriptor(reinterpret_cast<u32*>(&lStateDescriptor));
 
         rw::Resource lStateResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lStateDescriptor), 0);
         mpColourTextureState = reinterpret_cast<renderengine::TextureState*>(
             renderengine::TextureState::Initialize(&lStateResource, &lStateParams));
     }
@@ -478,7 +478,7 @@ namespace postfx
     {
         const Target::Parameters& lrParams = *lpParameters;
 
-        mpAllocator        = nullptr;                       // *a1 = 0 (filled below)
+        mpAllocator        = 0;                       // *a1 = 0 (filled below)
         muWidth            = lrParams.mu32Width;              // a1[1] = a2[1]
         muHeight           = lrParams.mu32Height;            // a1[2] = a2[2]
         muColourMode       = lrParams.mBufferFormat;            // a1[4] = a2[4]
@@ -490,27 +490,27 @@ namespace postfx
         {
             Target& lTarget = maColourTargets[luTarget];
             lTarget.mpReserved0    = 0;
-            lTarget.mpPixelBuffer  = nullptr;
-            lTarget.mpTexture      = nullptr;
-            lTarget.mpTextureState = nullptr;
-            lTarget.mpHiZTexture   = nullptr;
+            lTarget.mpPixelBuffer  = 0;
+            lTarget.mpTexture      = 0;
+            lTarget.mpTextureState = 0;
+            lTarget.mpHiZTexture   = 0;
             lTarget.mu8NumSections = 0;
         }
         // Zero the depth Target.
         mDepthTarget.mpReserved0    = 0;
-        mDepthTarget.mpPixelBuffer  = nullptr;
-        mDepthTarget.mpTexture      = nullptr;
-        mDepthTarget.mpTextureState = nullptr;
+        mDepthTarget.mpPixelBuffer  = 0;
+        mDepthTarget.mpTexture      = 0;
+        mDepthTarget.mpTextureState = 0;
         mDepthTarget.mu8NumSections = 0;
 
-        mpProvidedState       = nullptr;   // a1[34]
-        mpColourTextureState  = nullptr;   // a1[35]
-        mpProvidedColourState = nullptr;   // a1[36]
+        mpProvidedState       = 0;   // a1[34]
+        mpColourTextureState  = 0;   // a1[35]
+        mpProvidedColourState = 0;   // a1[36]
         mu8UsesProvidedState  = 0;         // *(a1+149)
         muProvidedTextureId   = 0;         // a1[33]
 
         // The allocator: the parameters' own, or the registry default.
-        if (lrParams.mpAllocator != nullptr)
+        if (lrParams.mpAllocator != 0)
             mpAllocator = lrParams.mpAllocator;
         else
             mpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
@@ -550,7 +550,7 @@ namespace postfx
             mu8UsesProvidedState = 1;
         }
 
-        mpSection0State = nullptr;   // a1[7] = 0
+        mpSection0State = 0;   // a1[7] = 0
 
         CreateStates(lpParameters);
         return this;
@@ -566,18 +566,18 @@ namespace postfx
 
         // The allocator: the parameters' own when set, else the registry default.
         rw::IResourceAllocator* lpAllocator;
-        if (lpParameters->mpAllocator != nullptr)
+        if (lpParameters->mpAllocator != 0)
             lpAllocator = lpParameters->mpAllocator;
         else
             lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
 
         rw::Resource lResource = lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
 
         RenderTarget* lpRenderTarget = static_cast<RenderTarget*>(lResource.m_baseResources[0]);
-        if (lpRenderTarget != nullptr)
+        if (lpRenderTarget != 0)
             return lpRenderTarget->Construct(lpParameters);
-        return nullptr;
+        return 0;
     }
 }
 }

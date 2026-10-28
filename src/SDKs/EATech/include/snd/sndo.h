@@ -93,7 +93,7 @@ namespace Snd9
 
     // The X360 stride between Input records is 12 bytes (the search advances r10 by
     // 0xC and reads value at +8); lock the reconstructed layout to that.
-    static_assert(sizeof(AemsPlayerInputAccessor::Input) == 12,
+    CGS_STATIC_ASSERT((sizeof(AemsPlayerInputAccessor::Input) == 12),
                   "AemsPlayerInputAccessor::Input must match the 12-byte X360 stride");
 
     // sndo.h. Abstract sample-player FACTORY interface. A platform/middleware backend

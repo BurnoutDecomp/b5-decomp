@@ -161,7 +161,7 @@ AptValue* AptLookupScopeChain(AptActionInterpreter* /*pInterp*/,
                                      const EAStringC* pName)
 {
     AptFrameStack* const pFrame = AptScriptFunctionBase::GetActiveFrameStack();
-    return pFrame ? pFrame->GetInScopeChain(*pName) : nullptr;
+    return pFrame ? pFrame->GetInScopeChain(*pName) : 0;
 }
 
 // (AptScriptFunctionBase_GetActiveFrameStack RETIRED 2026-07-06: callers invoke the

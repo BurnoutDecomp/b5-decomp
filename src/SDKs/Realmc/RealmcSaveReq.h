@@ -38,7 +38,7 @@
 // ===========================================================================
 
 #include <cstddef>
-#include <cstdint>
+#include "types.hpp"
 
 namespace RealmcIface
 {
@@ -60,19 +60,19 @@ public:
     //                 32-byte head from pHeadSource, then zero maHead[0x1F].
     SaveReq(const void* pHeadSource,
             const void* pParamsSource,
-            std::uint32_t uField158,
-            std::uint32_t uField15C,
-            const std::uint32_t* pField160Source);
+            uint32_t uField158,
+            uint32_t uField15C,
+            const uint32_t* pField160Source);
 
     // Copy-construct: the params block through RealmcCopyEntryContentParams, the
     // three trailing words, then the 32-byte head with maHead[0x1F] zeroed last.
     SaveReq(const SaveReq& rOther);
 
-    std::uint8_t  maHead[0x20];    // +0x000  32-byte head (last byte zeroed)
-    std::uint8_t  maParams[0x138]; // +0x020  embedded entry-content params
-    std::uint32_t muField158;      // +0x158
-    std::uint32_t muField15C;      // +0x15C
-    std::uint32_t muField160;      // +0x160
+    uint8_t  maHead[0x20];    // +0x000  32-byte head (last byte zeroed)
+    uint8_t  maParams[0x138]; // +0x020  embedded entry-content params
+    uint32_t muField158;      // +0x158
+    uint32_t muField15C;      // +0x15C
+    uint32_t muField160;      // +0x160
 };
 // sizeof(SaveReq) == 0x164 (356) bytes.
 

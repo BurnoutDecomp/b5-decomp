@@ -37,7 +37,7 @@ void BrnMassiveDebugComponent::Construct(const char* const* lpapcMassiveNames, s
     mpSubscriberStates = lpaiSubscriberStates;
     miNumImpressions   = 0;
     mfTextScale        = 18.0f;
-    mpDebugSubscriber  = nullptr;
+    mpDebugSubscriber  = 0;
     mbPaused           = false;
     mfLineSpacing      = 1.5f;
     miDebugSubscriber  = -1;
@@ -85,7 +85,7 @@ void BrnMassiveDebugComponent::DrawText(CgsDev::Debug2DImmediateRender* lpRender
 void BrnMassiveDebugComponent::DrawSubscriber(const BrnMassiveSubscriber* lpSubscriber,
                                               CgsDev::Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY)
 {
-    if (lpSubscriber == nullptr)
+    if (lpSubscriber == 0)
     {
         return;
     }
@@ -136,7 +136,7 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
     for (s32 liName = 0; liName < miNumMassiveNames; ++liName)
     {
         s32 liInvElementID = -1;
-        if (mapSubscribers[liName] != nullptr)
+        if (mapSubscribers[liName] != 0)
         {
             liInvElementID = mapSubscribers[liName]->miInvElementID;
         }

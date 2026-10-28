@@ -25,24 +25,24 @@ namespace BrnTrafficIO
 {
     void InputBuffer_Dispatch::_AssertLayout()
     {
-        static_assert(sizeof(SceneResultQueue) == 32768 + 4 * sizeof(s32),
+        CGS_STATIC_ASSERT((sizeof(SceneResultQueue) == 32768 + 4 * sizeof(s32)),
                       "original pointer-free scene queue capacity and control words");
-        static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue)
-                          == (sizeof(CgsModule::IOBuffer) + alignof(SceneResultQueue) - 1)
-                             / alignof(SceneResultQueue) * alignof(SceneResultQueue),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mSceneResultQueue)
+                          == (sizeof(CgsModule::IOBuffer) + __alignof(SceneResultQueue) - 1)
+                             / __alignof(SceneResultQueue) * __alignof(SceneResultQueue)),
                       "scene-result queue immediately follows the naturally aligned IO base");
-        static_assert(offsetof(InputBuffer_Dispatch, mpDispatchFrame)
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mpDispatchFrame)
                           == (offsetof(InputBuffer_Dispatch, mSceneResultQueue) + sizeof(SceneResultQueue)
-                              + alignof(void*) - 1) / alignof(void*) * alignof(void*),
+                              + __alignof(void*) - 1) / __alignof(void*) * __alignof(void*)),
                       "dispatch frame immediately follows the real queue at native pointer alignment");
-        static_assert(offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer)
-                          == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer)
+                          == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*)),
                       "mpBlobbyShadowBuffer immediately follows mpDispatchFrame");
-        static_assert(offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface)
-                          == offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer) + sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface)
+                          == offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer) + sizeof(void*)),
                       "mpCoronaSubmissionInterface immediately follows mpBlobbyShadowBuffer");
-        static_assert(offsetof(InputBuffer_Dispatch, mpShadowMap)
-                          == offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface) + sizeof(void*),
+        CGS_STATIC_ASSERT((offsetof(InputBuffer_Dispatch, mpShadowMap)
+                          == offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface) + sizeof(void*)),
                       "mpShadowMap immediately follows mpCoronaSubmissionInterface");
     }
 

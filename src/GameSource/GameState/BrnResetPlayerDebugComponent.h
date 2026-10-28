@@ -40,17 +40,17 @@ namespace BrnGameState
 
     protected:
         // X360 @ 0x823579C8. The menu label for this component.
-        const char* GetName() const override;
+        const char* GetName() const ;
 
         // X360 @ 0x82390F50. Build every menu list (locations, car filter, cars, car versions, wheels)
         // off the loaded track + vehicle/wheel resources and register the variables + action callbacks
         // with the debug UI.
-        void OnActivate() override;
+        void OnActivate() ;
 
     public:
         // While the debug UI is up and "show car info" is set: name, id, default wheel, the race /
         // trailer flags and (race vehicles only) the four player stats of the selected car.
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
 
     private:
         // ---- action callbacks (registered with the debug menu) -------------------------------------

@@ -80,10 +80,10 @@ namespace ICE
     // starts at offset 0; the count lands exactly after the 15 row slots. Total
     // sizeof is NOT asserted: only fields up to +0x260 are proven, so trailing
     // members (if any) are left unmodelled.
-    static_assert(offsetof(ICEWidgetInfoList, macItemText)  == 0x000, "ICEWidgetInfoList::macItemText offset");
-    static_assert(offsetof(ICEWidgetInfoList, miItemCount)  == 0x258, "ICEWidgetInfoList::miItemCount offset");
-    static_assert(offsetof(ICEWidgetInfoList, mfBaseY)      == 0x25C, "ICEWidgetInfoList::mfBaseY offset");
-    static_assert(offsetof(ICEWidgetInfoList, mfFirstLineY) == 0x260, "ICEWidgetInfoList::mfFirstLineY offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetInfoList, macItemText)  == 0x000), "ICEWidgetInfoList::macItemText offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetInfoList, miItemCount)  == 0x258), "ICEWidgetInfoList::miItemCount offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetInfoList, mfBaseY)      == 0x25C), "ICEWidgetInfoList::mfBaseY offset");
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetInfoList, mfFirstLineY) == 0x260), "ICEWidgetInfoList::mfFirstLineY offset");
 }
 
 #endif // SDKS_PACKAGES_ICE_ICEWIDGET_ICEWIDGETINFOLIST_HPP

@@ -79,9 +79,9 @@ namespace CgsGui
     // AptRenderHandler() - X360 0x827DFBD8.
     // -------------------------------------------------------------------------
     AptRenderHandler::AptRenderHandler()
-        : mpWhiteTexture(nullptr)
-        , mpImRenderers(nullptr)
-        , mpTextRenderer(nullptr)
+        : mpWhiteTexture(0)
+        , mpImRenderers(0)
+        , mpTextRenderer(0)
     {
         // The stage clear colour + resolution start cleared (AptAux::Construct fills the
         // resolution from the display mode; SetBackgroundColour sets the clear colour).
@@ -90,11 +90,11 @@ namespace CgsGui
 
         // The text-layout inputs start empty (AptAux::Construct seeds the font collection / effect
         // / size scale from its construction arguments).
-        mpFontCollection      = nullptr;
+        mpFontCollection      = 0;
         miTextEffect          = 0;
         mfFontSizeScale       = 1.0f;
-        mpLanguageManager     = nullptr;
-        mpAlternateTextColours = nullptr;
+        mpLanguageManager     = 0;
+        mpAlternateTextColours = 0;
         miNumAlternateColours  = 0;
         // Both per-shape texture-state caches are left RAW here (X360 0x827DFBD8 stores the
         // BaseLinkedList uninitialised sentinel into every bin and stamps muNodeCount to -1
@@ -232,7 +232,7 @@ namespace CgsGui
         rw::IResourceAllocator* lpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
         rw::ResourceDescriptor lAllocDescriptor;
         renderengine::TextureState::GetResourceDescriptor(&lAllocDescriptor);
-        rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, nullptr);
+        rw::Resource lResource = lpAllocator->DoAllocate(lAllocDescriptor, 0);
 
         // Initialize the sampler+raster state in the carved memory (the guest's
         // renderengine::TextureState::Initialize). [PC: the committed Initialize keeps the sampler
@@ -385,7 +385,7 @@ namespace CgsGui
                 return &maAptStrings[luSlot];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // -------------------------------------------------------------------------
@@ -410,7 +410,7 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     int AptRenderHandler::AptStringToZID(const CgsAptString* lpAptString) const
     {
-        if (lpAptString == nullptr)
+        if (lpAptString == 0)
             return 0;
         const CgsAptString* lpBase = &maAptStrings[0];
         if (lpAptString < lpBase || lpAptString >= lpBase + KU_NUM_APT_STRINGS)
@@ -421,7 +421,7 @@ namespace CgsGui
     CgsAptString* AptRenderHandler::ZIDToAptString(int liZID)
     {
         if (liZID <= 0 || static_cast<u32>(liZID) > KU_NUM_APT_STRINGS)
-            return nullptr;
+            return 0;
         return &maAptStrings[static_cast<u32>(liZID) - 1u];
     }
 }

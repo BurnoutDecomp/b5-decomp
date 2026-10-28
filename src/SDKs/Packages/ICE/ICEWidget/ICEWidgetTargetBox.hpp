@@ -61,7 +61,7 @@ namespace ICE
 
     // Pin the offset the Render body passes to DrawBox (`addi r31, r31, 0x10`).
     // The base ICEWidget is empty (EBO), so the first member sits at offset 0.
-    static_assert(offsetof(ICEWidgetTargetBox, mTransform) == 0x10,
+    CGS_STATIC_ASSERT((offsetof(ICEWidgetTargetBox, mTransform) == 0x10),
                   "ICEWidgetTargetBox::mTransform offset");
 }
 

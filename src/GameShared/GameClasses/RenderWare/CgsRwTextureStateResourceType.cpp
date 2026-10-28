@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"                   // rw::Resource, rw::BaseResourceDescriptors<5>
 #include <cstddef>   // offsetof
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // CgsResource::RwTextureStateResourceType -- the texture-state (sampler) handler (id 0xE).
 // A faithful port of the X360 ARTIST bodies: fixed descriptor, one raster import at the state's

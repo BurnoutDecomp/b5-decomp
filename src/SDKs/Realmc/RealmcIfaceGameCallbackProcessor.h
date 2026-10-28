@@ -70,7 +70,7 @@ public:
     //                 stack ResponsePtr down (Release), then rebind the held
     //                 MessagePtr to the empty message. This is the processor's
     //                 +0x50 slot, the one Response::Apply dispatches into.
-    void ProcessMessage(RealmcCore::Response* pResponse) override;
+    void ProcessMessage(RealmcCore::Response* pResponse) ;
 
     // @ 0x82B54340 -- the embedded MessagePtr member's destructor (Release the held
     //                 message + null it) runs as the member is destroyed; the vtable
@@ -78,7 +78,7 @@ public:
     //                 the X360 `vector deleting destructor' @0x82B549B8, which frees
     //                 20 bytes (sizeof) when the delete flag bit0 is set -- the
     //                 virtual dtor + the class operator delete reproduce it.
-    ~GameCallbackProcessor() override;
+    ~GameCallbackProcessor() ;
 
     static void operator delete(void* lpBlock, size_t luSize)
     {

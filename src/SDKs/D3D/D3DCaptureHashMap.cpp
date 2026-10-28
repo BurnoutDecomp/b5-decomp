@@ -1,7 +1,7 @@
 #include "SDKs/D3D/D3DCaptureHashMap.h"
 
 #include <cstddef> // offsetof (uncalled _CCaptureHashMapAssertLayout), size_t
-#include <cstdint> // uintptr_t (X360 CPU-address -> host pointer for the page payload)
+#include "types.hpp" // uintptr_t (X360 CPU-address -> host pointer for the page payload)
 #include <cstring> // memcpy / memset (WriteData bounce buffer, End record)
 
 // ===========================================================================
@@ -24,7 +24,7 @@ CCapture::HashMap::HashMap()
 {
     for (s32 i = 0; i < KI_BUCKET_COUNT; ++i)
     {
-        maBuckets[i].mpData  = nullptr;
+        maBuckets[i].mpData  = 0;
         maBuckets[i].muWord1 = 0;
         maBuckets[i].muWord2 = 0;
     }
@@ -38,7 +38,7 @@ CCapture::HashMap::~HashMap()
 {
     for (s32 i = KI_BUCKET_COUNT - 1; i >= 0; --i)
     {
-        if (maBuckets[i].mpData != nullptr)
+        if (maBuckets[i].mpData != 0)
             XMemFree(maBuckets[i].mpData, KU_FREE_ATTRIBUTES);
     }
 }
@@ -320,7 +320,7 @@ s32 CCapture::MarkUsedPages(u32 uAddress, u32 uSize, s32 uTag)
             {
                 HashMap::Bucket& rBucket =
                     mHashMap.maBuckets[(uPage >> 12) & 0x3Fu];
-                u32* pEntry = nullptr;
+                u32* pEntry = 0;
                 bool bFound = false;
 
                 // Single status slot shared by Reserve and AddEntry, mirroring the
@@ -369,7 +369,7 @@ s32 CCapture::MarkUsedPages(u32 uAddress, u32 uSize, s32 uTag)
                 }
 
                 u32* pFlags = &pEntry[1];
-                if (pFlags == nullptr)             // degenerate (null data) -> fail
+                if (pFlags == 0)             // degenerate (null data) -> fail
                 {
                     muFlags |= 0x80000000u;
                     break;
@@ -430,13 +430,13 @@ void CCapture::ShadowShaderProgram()
 // table starts at offset 0 with 64 buckets.
 void _CCaptureHashMapAssertLayout()
 {
-    static_assert(CCapture::HashMap::KI_BUCKET_COUNT == 64, "64 buckets (loop 0x3F..0)");
-    static_assert(offsetof(CCapture::HashMap::Bucket, mpData) == 0,
+    CGS_STATIC_ASSERT((CCapture::HashMap::KI_BUCKET_COUNT == 64), "64 buckets (loop 0x3F..0)");
+    CGS_STATIC_ASSERT((offsetof(CCapture::HashMap::Bucket, mpData) == 0),
                   "bucket data pointer heads the slot (word[0], the freed word)");
-    static_assert(offsetof(CCapture::HashMap::Bucket, muWord2)
-                  - offsetof(CCapture::HashMap::Bucket, muWord1) == 4,
+    CGS_STATIC_ASSERT((offsetof(CCapture::HashMap::Bucket, muWord2)
+                  - offsetof(CCapture::HashMap::Bucket, muWord1) == 4),
                   "two contiguous 32-bit metadata words");
-    static_assert(offsetof(CCapture::HashMap, maBuckets) == 0,
+    CGS_STATIC_ASSERT((offsetof(CCapture::HashMap, maBuckets) == 0),
                   "bucket table starts at offset 0");
 }
 

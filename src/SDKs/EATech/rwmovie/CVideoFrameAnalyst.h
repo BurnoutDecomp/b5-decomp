@@ -84,14 +84,14 @@ public:
     // Pin the byte layout: the array stride and the live fields must land exactly.
     static void _AssertLayout()
     {
-        static_assert(offsetof(CVideoFrameAnalyst, muSourceId) == 0x10, "muSourceId @ +0x10");
-        static_assert(offsetof(CVideoFrameAnalyst, miAvailable) == 0x14, "miAvailable @ +0x14");
-        static_assert(offsetof(CVideoFrameAnalyst, maActivityHistogram) == 0x18, "histogram @ +0x18");
-        static_assert(offsetof(CVideoFrameAnalyst, muArea) == 0x4018, "muArea @ +0x4018");
-        static_assert(offsetof(CVideoFrameAnalyst, muAreaHalf) == 0x401C, "muAreaHalf @ +0x401C");
-        static_assert(offsetof(CVideoFrameAnalyst, muField4020) == 0x4020, "muField4020 @ +0x4020");
-        static_assert(offsetof(CVideoFrameAnalyst, muField4024) == 0x4024, "muField4024 @ +0x4024");
-        static_assert(offsetof(CVideoFrameAnalyst, muWidthInBlocks) == 0x4028, "muWidthInBlocks @ +0x4028");
-        static_assert(sizeof(CVideoFrameAnalyst) == 0x402C, "CVideoFrameAnalyst stride == 16428");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, muSourceId) == 0x10), "muSourceId @ +0x10");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, miAvailable) == 0x14), "miAvailable @ +0x14");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, maActivityHistogram) == 0x18), "histogram @ +0x18");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, muArea) == 0x4018), "muArea @ +0x4018");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, muAreaHalf) == 0x401C), "muAreaHalf @ +0x401C");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, muField4020) == 0x4020), "muField4020 @ +0x4020");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, muField4024) == 0x4024), "muField4024 @ +0x4024");
+        CGS_STATIC_ASSERT((offsetof(CVideoFrameAnalyst, muWidthInBlocks) == 0x4028), "muWidthInBlocks @ +0x4028");
+        CGS_STATIC_ASSERT((sizeof(CVideoFrameAnalyst) == 0x402C), "CVideoFrameAnalyst stride == 16428");
     }
 };

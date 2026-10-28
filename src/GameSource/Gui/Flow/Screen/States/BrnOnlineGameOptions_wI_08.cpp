@@ -96,7 +96,7 @@ namespace BrnGui
 
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host.
-        static_assert(sizeof(GuiEventShowHideWire) == 24, "show/hide record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideWire) == 24), "show/hide record is 24 bytes");
     }
 
     // ---- ShowLoadScreen @ 0x8249C760 -----------------------------------------------

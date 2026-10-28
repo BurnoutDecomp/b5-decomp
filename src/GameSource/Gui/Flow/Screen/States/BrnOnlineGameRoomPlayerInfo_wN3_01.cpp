@@ -76,13 +76,13 @@ namespace BrnGui
 
         // Record-size pins: every payload here is pointer-free, so the wrapper must come
         // out at the console's AddEvent size.
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHud, 40>) == 16, "148 record is 16 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiRequestCarControlChangeEvent, 40>) == 16, "65 record is 16 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventScreenFlowCommandPayload, 40>) == 16, "533 record is 16 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventRequestChallengeStatusPayload, 40>) == 16, "580 record is 16 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexture, 40>) == 20, "264 record is 20 bytes");
-        static_assert(sizeof(CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40>) == 16, "572 record is 16 bytes");
-        static_assert(sizeof(GuiEventActivateCrashNav) == 20, "191 record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventShowHideHud, 40>) == 16), "148 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiRequestCarControlChangeEvent, 40>) == 16), "65 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventScreenFlowCommandPayload, 40>) == 16), "533 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventRequestChallengeStatusPayload, 40>) == 16), "580 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexture, 40>) == 20), "264 record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40>) == 16), "572 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "191 record is 20 bytes");
 
         // ---- the shared command sequences ---------------------------------------------
         void PostActivateCrashNav(CgsGui::StateInterface* lpStateInterface, bool lbActivate)

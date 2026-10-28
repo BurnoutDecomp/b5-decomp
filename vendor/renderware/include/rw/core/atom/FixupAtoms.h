@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "types.hpp"
 
 // ===========================================================================
 // rw::core::atom::FixupAtoms -- a polymorphic RenderWare core "atom" helper

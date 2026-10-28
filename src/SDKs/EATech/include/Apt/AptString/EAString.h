@@ -18,7 +18,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 #include <cstdarg>   // va_list
 
 struct AptUserFunctions;   // Apt.h -- the allocator/callback table (held by ptr only)
@@ -52,7 +52,7 @@ public:
 private:
     // The shared string header: refcount + sizes + cached hash, followed in memory
     // by the char buffer (GetInternalBuffer = this + sizeof(StringDataC)).
-    class alignas(4) StringDataC   // leak: __attribute__((aligned(4))) -> portable alignas (sizeof stays 8)
+    class CGS_ALIGN(4) StringDataC   // leak: __attribute__((aligned(4))) -> portable alignas (sizeof stays 8)
     {
     public:
         volatile uint16_t m_uRefCount;

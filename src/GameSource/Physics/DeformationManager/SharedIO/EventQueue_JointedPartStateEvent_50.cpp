@@ -21,7 +21,7 @@ template void CgsModule::EventQueue<BrnPhysics::Deformation::JointedPartStateEve
 // The 16-byte stride matches sizeof(JointedPartStateEvent) == { EntityId mVehicleId(4) +
 // EBodyParts meType(4) + f32 mfCurrentOrientation(4) + f32 mfHingeVelocity(4) } == 16 (plain
 // 4-byte aligned, no alignas).
-static_assert(sizeof(BrnPhysics::Deformation::JointedPartStateEvent) == 16,
+CGS_STATIC_ASSERT((sizeof(BrnPhysics::Deformation::JointedPartStateEvent) == 16),
               "JointedPartStateEvent stride 16");
 
 template bool

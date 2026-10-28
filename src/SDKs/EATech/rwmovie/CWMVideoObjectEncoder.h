@@ -43,11 +43,11 @@ public:
     // Pin the named members to their console offsets.
     static void _AssertLayout()
     {
-        static_assert(offsetof(CWMVideoObjectEncoder, muMBWidth) == 0x2D0, "muMBWidth @ +0x2D0");
-        static_assert(offsetof(CWMVideoObjectEncoder, muMBHeight) == 0x2D4, "muMBHeight @ +0x2D4");
-        static_assert(offsetof(CWMVideoObjectEncoder, miPQuant) == 0x588, "miPQuant @ +0x588");
-        static_assert(offsetof(CWMVideoObjectEncoder, miField6D54) == 0x6D54, "miField6D54 @ +0x6D54");
-        static_assert(offsetof(CWMVideoObjectEncoder, miField7B34) == 0x7B34, "miField7B34 @ +0x7B34");
-        static_assert(offsetof(CWMVideoObjectEncoder, miField7B38) == 0x7B38, "miField7B38 @ +0x7B38");
+        CGS_STATIC_ASSERT((offsetof(CWMVideoObjectEncoder, muMBWidth) == 0x2D0), "muMBWidth @ +0x2D0");
+        CGS_STATIC_ASSERT((offsetof(CWMVideoObjectEncoder, muMBHeight) == 0x2D4), "muMBHeight @ +0x2D4");
+        CGS_STATIC_ASSERT((offsetof(CWMVideoObjectEncoder, miPQuant) == 0x588), "miPQuant @ +0x588");
+        CGS_STATIC_ASSERT((offsetof(CWMVideoObjectEncoder, miField6D54) == 0x6D54), "miField6D54 @ +0x6D54");
+        CGS_STATIC_ASSERT((offsetof(CWMVideoObjectEncoder, miField7B34) == 0x7B34), "miField7B34 @ +0x7B34");
+        CGS_STATIC_ASSERT((offsetof(CWMVideoObjectEncoder, miField7B38) == 0x7B38), "miField7B38 @ +0x7B38");
     }
 };

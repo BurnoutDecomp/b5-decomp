@@ -17,7 +17,7 @@ namespace Gen
     class physicsvehiclesteeringattribs : private Instance
     {
     public:
-        explicit physicsvehiclesteeringattribs(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit physicsvehiclesteeringattribs(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // Re-exposed from the private Instance base (attribs-data wave, 2026-08-09): the X360
         // consumer (VehicleAttribs::SetupAttribs @0x825F4CD8) reads the record through

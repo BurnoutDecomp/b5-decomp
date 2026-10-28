@@ -24,8 +24,8 @@ namespace Gen
     class sampletags : private Instance
     {
     public:
-        explicit sampletags(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit sampletags(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+        explicit sampletags(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit sampletags(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner)
         {
             static const int KI_SAMPLETAGS_CLASS = -1630207590;

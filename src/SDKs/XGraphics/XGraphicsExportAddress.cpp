@@ -42,7 +42,7 @@ ExportAddress* ExportAddress::NewItem(s32 aiIndex, s32 aiType, CFG* apContext)
     // in place only on success.
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(ExportAddress));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) ExportAddress(aiIndex, aiType, apContext);
 }

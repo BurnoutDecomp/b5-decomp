@@ -53,7 +53,7 @@ namespace Gen
         using Instance::Change;
         using Instance::GetAttributePointer;
 
-        explicit surfacelist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit surfacelist(Collection* lpCollection = 0, void* lpOwner = 0);
 
         // The number of surfaces in this instance's "Surfaces" array attribute. REAL X360
         // function @0x82278C40.

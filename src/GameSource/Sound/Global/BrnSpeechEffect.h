@@ -35,20 +35,20 @@ public:
     SpeechEffect();
     virtual ~SpeechEffect();
 
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
-    bool Attach() override;
-    bool Detach() override;
-    void UpdateParams(f32 afDeltaTime) override;
-    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
+    bool Attach() ;
+    bool Detach() ;
+    void UpdateParams(f32 afDeltaTime) ;
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) ;
 
-    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const ;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
-                           f32 afGain, f32 afElapsedTime) override;
-    void StreamStopped() override;
+                           f32 afGain, f32 afElapsedTime) ;
+    void StreamStopped() ;
 
     bool PlaySpeechMapping(u32 auMappingName, bool abFirstTimeTip = false);
     bool PlayFirstTimeTip(s32 aiTrainingType);

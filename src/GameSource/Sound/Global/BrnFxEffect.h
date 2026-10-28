@@ -125,8 +125,8 @@ struct FxEffect : public BrnEffectObject
     // @ 0x826F7248 -- the FX message (sound message 4) entry point.
     virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);
 
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 

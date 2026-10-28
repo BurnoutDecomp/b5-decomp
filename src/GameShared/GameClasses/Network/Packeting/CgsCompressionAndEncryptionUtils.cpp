@@ -275,9 +275,9 @@ bool CompressionAndEncryptionUtils::Pack(NetworkPlayerID liPlayerID,
     lHeader.mRecvingPlayerID = K_INVALID_PLAYER_ID;
     lHeader.mSendingPlayerID = K_INVALID_PLAYER_ID;
 
-    alignas(8) u8 lacPackedTypes[KI_SIZE_PACKED_TYPES_BUFFER];
-    alignas(8) u8 lacPackedSignalMessages[KI_PACKED_SIGNAL_MESSAGES_BUFFER_SIZE];
-    alignas(8) u8 lacPackedMessageBodies[KI_PACKED_MESSAGE_BODIES_BUFFER_SIZE];
+    CGS_ALIGN(8) u8 lacPackedTypes[KI_SIZE_PACKED_TYPES_BUFFER];
+    CGS_ALIGN(8) u8 lacPackedSignalMessages[KI_PACKED_SIGNAL_MESSAGES_BUFFER_SIZE];
+    CGS_ALIGN(8) u8 lacPackedMessageBodies[KI_PACKED_MESSAGE_BODIES_BUFFER_SIZE];
 
     // ---- signal messages: one bit stream, no size limit beyond the whole packet ----
     s32 liPackedSignalMessageBufferOffestInBits = 0;
@@ -478,12 +478,12 @@ void CompressionAndEncryptionUtils::UnPack(NetworkPlayerID liPlayerID,
     {
         const s32 leMessageType = lpPackedTypes[liMessageIndex];
 
-        Message* lpMessageToUnpackInto = nullptr;
+        Message* lpMessageToUnpackInto = 0;
         s32 liMessageToUnPackInto = 0;
         for (; liMessageToUnPackInto < liNumMessagesInArray; ++liMessageToUnPackInto)
         {
             lpMessageToUnpackInto = lpaMessagesToUnPackInto[liMessageToUnPackInto].mpMessage;
-            if (lpMessageToUnpackInto != nullptr && lpMessageToUnpackInto->GetType() == leMessageType)
+            if (lpMessageToUnpackInto != 0 && lpMessageToUnpackInto->GetType() == leMessageType)
             {
                 break;
             }

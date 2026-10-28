@@ -27,16 +27,16 @@ namespace BrnNetwork
         virtual ~UsersetParams();
 
         // Chain to the platform Prepare; true on success.
-        virtual bool Prepare() override;
+        virtual bool Prepare() ;
 
         // The (empty) serialisation pattern.
-        virtual const char* GetPattern() const override;
+        virtual const char* GetPattern() const ;
 
         // No replicated payload: size 0 and no data (all three slots share one folded
         // `return 0` body).
-        virtual u32         GetDataSize() const override;
-        virtual void*       GetData() override;
-        virtual const void* GetData() const override;
+        virtual u32         GetDataSize() const ;
+        virtual void*       GetData() ;
+        virtual const void* GetData() const ;
     };
 }
 

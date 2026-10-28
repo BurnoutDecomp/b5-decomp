@@ -41,7 +41,7 @@
 
 namespace CgsGeometric
 {
-    struct alignas(16) Cylinder
+    struct CGS_ALIGN(16) Cylinder
     {
         // --------------------------------------------------------------------
         // Set(Matrix44Affine, float32_t, float32_t) -- DWARF CgsCylinder.h:48.

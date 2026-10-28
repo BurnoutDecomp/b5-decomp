@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 
-#include <cstdint> // std::uintptr_t
+#include "types.hpp" // std::uintptr_t
 
 // =============================================================================
 // GameShared/GameClasses/Sound/Playback/CgsCommandQueue.h  (DWARF home)
@@ -77,16 +77,16 @@ enum ECsisCommandType
 // CgsAemsFactory.h:40 (DWARF). Base of the CSIS command family: just the type word.
 struct CsisCommand
 {
-    std::uintptr_t muCommandType; // +0
+    uintptr_t muCommandType; // +0
 
     explicit CsisCommand(ECsisCommandType aeType)
-        : muCommandType(static_cast<std::uintptr_t>(aeType)) {}
+        : muCommandType(static_cast<uintptr_t>(aeType)) {}
 
     ECsisCommandType GetCommandType() const
     {
         return static_cast<ECsisCommandType>(muCommandType);
     }
-    const std::uintptr_t* AsCommand() const { return &muCommandType; }
+    const uintptr_t* AsCommand() const { return &muCommandType; }
 
 protected:
     explicit CsisCommand(u32 auType) : muCommandType(auType) {}
@@ -97,9 +97,9 @@ protected:
 // uses can store it directly, mirroring the {type, handle} pair Stop builds).
 struct CsisReleaseCommand : public CsisCommand
 {
-    std::uintptr_t mhClass; // +4  the Csis::Class* / request handle to release
+    uintptr_t mhClass; // +4  the Csis::Class* / request handle to release
 
-    explicit CsisReleaseCommand(std::uintptr_t ahClass)
+    explicit CsisReleaseCommand(uintptr_t ahClass)
         : CsisCommand(E_CSIS_COMMAND_RELEASE), mhClass(ahClass) {}
 };
 
@@ -108,10 +108,10 @@ struct CsisCommandQueue
 {
     static const unsigned int E_QUEUE_LENGTH = 255u;
 
-    CommandQueue<E_QUEUE_LENGTH, std::uintptr_t> mQueue; // CgsAemsFactory.h:265
+    CommandQueue<E_QUEUE_LENGTH, uintptr_t> mQueue; // CgsAemsFactory.h:265
 
     // CgsAemsFactory.h:256. Pop one command's words.
-    bool GetCommand(u32& arCount, std::uintptr_t* apWords);
+    bool GetCommand(u32& arCount, uintptr_t* apWords);
 };
 
 // CgsAemsFactory.h:240 (DWARF). Free operator that posts a typed command onto the

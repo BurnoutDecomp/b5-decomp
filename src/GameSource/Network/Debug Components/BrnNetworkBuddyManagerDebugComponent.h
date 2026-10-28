@@ -66,12 +66,12 @@ namespace BrnNetwork
 
     protected:
         // ARTIST vtable 820CE3C4, slot +0x10 -> 827DBBE0.
-        const char* GetPath() const override { return "Network"; }
-        const char* GetName() const override;   // @ 0x825856F0 -> "Buddies"
+        const char* GetPath() const  { return "Network"; }
+        const char* GetName() const ;   // @ 0x825856F0 -> "Buddies"
 
         // Register the buddy actions + selection indices with the debug menu and, on first
         // activation, carve the outgoing event queue from the debug allocator.
-        void OnActivate() override;
+        void OnActivate() ;
 
     private:
         // ---- static debug-menu action callbacks (registered with the debug menu; lpData is this) ----

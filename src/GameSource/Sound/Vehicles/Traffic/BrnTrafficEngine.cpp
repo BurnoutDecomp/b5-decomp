@@ -116,8 +116,8 @@ const char* Traffic3DControl::GetTypeName() const
 TrafficEngine::TrafficEngine()
     : BrnEffectObject()
     , mu16AemsPatchTrafficIndex( 0 )
-    , mpTrafficControl( nullptr )
-    , mpTraffic3DControl( nullptr )
+    , mpTrafficControl( 0 )
+    , mpTraffic3DControl( 0 )
     , mTrafficEngineVoice()
 {
 }
@@ -270,7 +270,7 @@ void TrafficEngine::ProcessUpdate()
         lSphere.mfHeightOffset = 1.0f;
         lSphere.mfRadius = 1.0f;
         lSphere.mfDurationVisible = 0.1f;
-        lSphere.mpDebugString = nullptr;
+        lSphere.mpDebugString = 0;
         CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage( lSphere );
         lMessage.Construct( 1, 3, static_cast<u16>( ( GetId() >> 11 ) & 0x1F ), 1,
                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL );

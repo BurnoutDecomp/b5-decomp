@@ -144,7 +144,7 @@ namespace BrnDirector
             bool mbDoForceAdditiveAftertouch;   // +0x04  DWARF :1666
             bool mbEnteringShowtime;            // +0x05  DWARF :1667
         };
-        static_assert(sizeof(ImpactTimeStartActionRecord) == 8,
+        CGS_STATIC_ASSERT((sizeof(ImpactTimeStartActionRecord) == 8),
                       "X360 UpdateRoadRulesManager posts action 42 with size 8");
 
         // Action 223's record, E_ACTION_CAR_ADDITION_PRESENTATION_START (DWARF 215): a TU-local
@@ -160,9 +160,9 @@ namespace BrnDirector
             f32                 mfPresentationDuration;    // +0x14  DWARF :4217
             bool                mbDoCamera;                // +0x18  DWARF :4220
         };
-        static_assert(offsetof(CarAdditionPresentationStartActionRecord, meAddedCarGlobalIndex) == 0x10 &&
+        CGS_STATIC_ASSERT((offsetof(CarAdditionPresentationStartActionRecord, meAddedCarGlobalIndex) == 0x10 &&
                       offsetof(CarAdditionPresentationStartActionRecord, mfPresentationDuration) == 0x14 &&
-                      offsetof(CarAdditionPresentationStartActionRecord, mbDoCamera) == 0x18,
+                      offsetof(CarAdditionPresentationStartActionRecord, mbDoCamera) == 0x18),
                       "the console reads action 223's global index / duration / camera flag at +0x10 / +0x14 / +0x18");
 
         // [DIAG] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. One line per director
@@ -1241,7 +1241,7 @@ namespace BrnDirector
         // event state alone. The copy is the console's `memcpy(this + <block>, action, 0x8E0)`.
         if (maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT])
         {
-            static_assert(sizeof(BrnGameState::GameStateModuleIO::PrepareForModeAction) <= sizeof(maModeActionAndDebugBlock),
+            CGS_STATIC_ASSERT((sizeof(BrnGameState::GameStateModuleIO::PrepareForModeAction) <= sizeof(maModeActionAndDebugBlock)),
                           "the deferred prepare-for-mode record must fit the block the console copies it into");
             std::memcpy(maModeActionAndDebugBlock, &lrAction, sizeof(BrnGameState::GameStateModuleIO::PrepareForModeAction));
             maStateFlagTail[E_FLAG_TAIL_MODE_ACTION_DEFERRED] = 1;
@@ -2233,7 +2233,7 @@ namespace BrnDirector
             // Read by offset: the record is alignas(16) and the queue does not align payloads.
             case 0:
             {
-                static_assert(offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42) == 0x42,
+                CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42) == 0x42),
                               "the console reads the reset-camera byte at record +0x42");
                 maGameState.mbShouldResetPlayerCameraThisFrame =
                     (lpacPayload[offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42)] != 0);
@@ -2287,7 +2287,7 @@ namespace BrnDirector
             // 0xC(r31)`). Producer: HUDMessageLogic::GenerateStuntMessage (`li r5, 0x84`). Per-frame.
             case 132:
             {
-                static_assert(offsetof(BrnGameState::StuntInfo, miStuntMultiplier) == 0x0C,
+                CGS_STATIC_ASSERT((offsetof(BrnGameState::StuntInfo, miStuntMultiplier) == 0x0C),
                               "the console reads the stunt multiplier at record +0x0C");
                 const BrnGameState::StuntInfo& lrStunt =
                     *reinterpret_cast<const BrnGameState::StuntInfo*>(lpacPayload);
@@ -2350,9 +2350,9 @@ namespace BrnDirector
             // (0x8239F848, `li r5, 0xDA`).
             case 218:
             {
-                static_assert(offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, mEntityId) == 0x10 &&
+                CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, mEntityId) == 0x10 &&
                               offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, meResultType) == 0x14 &&
-                              offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, muActiveTriggers) == 0x18,
+                              offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, muActiveTriggers) == 0x18),
                               "the console reads the sound trigger's entity / type / bits at +0x10 / +0x14 / +0x18");
                 const BrnGameState::GameStateModuleIO::SoundTriggerAction& lrTrigger =
                     *reinterpret_cast<const BrnGameState::GameStateModuleIO::SoundTriggerAction*>(lpacPayload);
@@ -2395,8 +2395,8 @@ namespace BrnDirector
             // "Checkpoint" hook, in event types 10 / 11 / 13 / 15 / 16. Per-frame (ResetPerFrameData).
             case 113:
             {
-                static_assert(offsetof(BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction,
-                                       meGlobalRaceCarIndex) == 0x04,
+                CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction,
+                                       meGlobalRaceCarIndex) == 0x04),
                               "the console reads the checkpoint action's global race-car index at +0x04");
                 const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction& lrCheckpoint =
                     *reinterpret_cast<const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction*>(lpacPayload);

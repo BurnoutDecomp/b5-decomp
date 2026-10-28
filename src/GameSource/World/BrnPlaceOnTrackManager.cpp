@@ -102,9 +102,9 @@ static Vector3 RotateAboutAxis( const Vector3& lrV, const Vector3& lrAxis, f32 l
     const Vector3 lRow1 = Vector3{ lfT * lfX * lfY - lfS * lfZ, lfT * lfY * lfY + lfC,       lfT * lfY * lfZ + lfS * lfX, 0.0f };
     const Vector3 lRow2 = Vector3{ lfT * lfX * lfZ + lfS * lfY, lfT * lfY * lfZ - lfS * lfX, lfT * lfZ * lfZ + lfC,       0.0f };
 
-    return Vector3{ lRow0.x * lrV.x + lRow1.x * lrV.y + lRow2.x * lrV.z,
+    { const Vector3 lResult = { lRow0.x * lrV.x + lRow1.x * lrV.y + lRow2.x * lrV.z,
                     lRow0.y * lrV.x + lRow1.y * lrV.y + lRow2.y * lrV.z,
-                    lRow0.z * lrV.x + lRow1.z * lrV.y + lRow2.z * lrV.z, 0.0f };
+                    lRow0.z * lrV.x + lRow1.z * lrV.y + lRow2.z * lrV.z, 0.0f }; return lResult; }
 }
 
 // ---------------------------------------------------------------------------

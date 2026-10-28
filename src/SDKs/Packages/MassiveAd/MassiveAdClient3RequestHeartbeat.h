@@ -63,14 +63,14 @@ public:
     // @ 0x82BD8650. Returns the heartbeat server endpoint. The X360 loads it
     // through the .data pointer off_82F91D10 -> "/impsrv/4/heartbeat". Overrides
     // the base slot-2 per-request-type endpoint getter.
-    const char* GetRequestURL() override;
+    const char* GetRequestURL() ;
 
     // @ 0x82BD86B8. Vftable Parse override the response path
     // (CRequestObject::Complete) dispatches. Walks the heartbeat response:
     // protocol version, response-type byte 215, remaining-byte total, then the
     // fields -- exactly one signature block (wire tag 30, pulled back out of
     // the buffer by ReadRemoveSignature) and a matching HMAC make it succeed.
-    int Parse() override;
+    int Parse() ;
 
     // @ 0x82BD8818. Called by CNetworkManager::CreateHeartbeat (the manager
     // passes itself). Rejects a null builder (returns -1100); otherwise chains

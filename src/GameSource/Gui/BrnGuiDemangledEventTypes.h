@@ -63,8 +63,8 @@ namespace CgsNetwork { class NetworkTexture; }
 // GuiEventCamStatus names the camera status by its enum; its home is
 // BrnNetworkModuleInGamePlayerStatusInterface.h (an opaque declaration keeps that network
 // header out of this one).
-namespace BrnNetwork { enum ECameraStatus : s32; struct LiveRevengeProfile; }
-namespace BrnNetwork { enum EBuddyNotification : s32; }
+namespace BrnNetwork { enum ECameraStatus ; struct LiveRevengeProfile; }
+namespace BrnNetwork { enum EBuddyNotification ; }
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
 namespace BrnReplays { class BaseSerialiser; }
@@ -90,7 +90,7 @@ namespace BrnGui
         u8  mau8UnwrittenTail[12];    // +20..+31: ARTIST leaves these bytes untouched
         s32 GetEventType() const { return 403; }
     };
-    static_assert(sizeof(GuiAftertouchEvent) == 32, "ARTIST AddGuiEvent size 32 (id 403)");
+    CGS_STATIC_ASSERT((sizeof(GuiAftertouchEvent) == 32), "ARTIST AddGuiEvent size 32 (id 403)");
     // [E1 event-status wave 2026-08-26] GuiAttackScoreUpdate (id 428) has been RECOVERED and
     // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape (the opaque
     // `GuiEvent<428> + u8[28]` shell that stood here read the 40-byte record as "12-byte
@@ -142,10 +142,10 @@ namespace BrnGui
 
         s32 GetEventType() const { return 390; }
     };
-    static_assert(sizeof(GuiCompletedStuntEvent) == 32, "X360 AddGuiEvent size 32 (id 390)");
-    static_assert(__builtin_offsetof(GuiCompletedStuntEvent, muStuntActionComplete) == 0x00 &&
+    CGS_STATIC_ASSERT((sizeof(GuiCompletedStuntEvent) == 32), "X360 AddGuiEvent size 32 (id 390)");
+    CGS_STATIC_ASSERT((__builtin_offsetof(GuiCompletedStuntEvent, muStuntActionComplete) == 0x00 &&
                   __builtin_offsetof(GuiCompletedStuntEvent, mfCompletedBarrelRollAngle) == 0x04 &&
-                  __builtin_offsetof(GuiCompletedStuntEvent, miCompletedBarrelRolls) == 0x18,
+                  __builtin_offsetof(GuiCompletedStuntEvent, miCompletedBarrelRolls) == 0x18),
                   "X360 handler reads @0x82411CC8");
     struct GuiCrashComboEvent { u8 maData[8]; s32 GetEventType() const { return 347; } };  // id 347 size 8 (raw; size not GuiEvent-shaped)
     // [showtime score wave 2026-08-29] GuiCrashScoreUpdate (id 434) has been RECOVERED and now
@@ -190,10 +190,10 @@ namespace BrnGui
         CgsNetwork::PlayerName mBuddyName;
         s32 GetEventType() const { return 105; }
     };
-    static_assert(sizeof(GuiEventBuddyNotification) == 24, "ARTIST tag105 payload is24 bytes");
-    static_assert(offsetof(GuiEventBuddyNotification, meBuddyNotification) == 0 &&
+    CGS_STATIC_ASSERT((sizeof(GuiEventBuddyNotification) == 24), "ARTIST tag105 payload is24 bytes");
+    CGS_STATIC_ASSERT((offsetof(GuiEventBuddyNotification, meBuddyNotification) == 0 &&
         offsetof(GuiEventBuddyNotification, miNumBuddies) == 4 &&
-        offsetof(GuiEventBuddyNotification, mBuddyName) == 8, "ARTIST tag105 field order");
+        offsetof(GuiEventBuddyNotification, mBuddyName) == 8), "ARTIST tag105 field order");
     // The compressed still is ready (network -> GUI). AddGuiEvent posts the object itself; the
     // pixel pointer is a 4-byte slot on the console and native width here.
     struct GuiEventCamPicCompressed
@@ -339,7 +339,7 @@ namespace BrnGui
         bool mbConnected;
         s32 GetEventType() const { return 102; }
     };
-    static_assert(sizeof(GuiEventOnlineReceiveFriendInfo) == 672, "friend batch payload");
+    CGS_STATIC_ASSERT((sizeof(GuiEventOnlineReceiveFriendInfo) == 672), "friend batch payload");
     struct GuiEventOnlineTimeout { u8 maData[4]; s32 GetEventType() const { return 108; } };  // id 108 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventPlayerReachedRoadRageTarget { u8 maData[1]; s32 GetEventType() const { return 168; } };  // id 168 size 1 (raw; size not GuiEvent-shaped)
     // GuiEventPreRaceMessages159 is the canonical1744-byte raw payload above.
@@ -377,12 +377,12 @@ namespace BrnGui
 
         s32 GetEventType() const { return 444; }
     };
-    static_assert(sizeof(GuiEventRivalInfoResponse) == 32, "ARTIST AddGuiEvent id 444 size 32");
-    static_assert(offsetof(GuiEventRivalInfoResponse, mRivalId) == 0x00, "id 444 rival id @+0x00");
-    static_assert(offsetof(GuiEventRivalInfoResponse, mCarId) == 0x08, "id 444 car id @+0x08");
-    static_assert(offsetof(GuiEventRivalInfoResponse, meCountyIndex) == 0x10, "id 444 county @+0x10");
-    static_assert(offsetof(GuiEventRivalInfoResponse, miRaceWins) == 0x14, "id 444 race wins @+0x14");
-    static_assert(offsetof(GuiEventRivalInfoResponse, miProgressStatus) == 0x18, "id 444 progress @+0x18");
+    CGS_STATIC_ASSERT((sizeof(GuiEventRivalInfoResponse) == 32), "ARTIST AddGuiEvent id 444 size 32");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalInfoResponse, mRivalId) == 0x00), "id 444 rival id @+0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalInfoResponse, mCarId) == 0x08), "id 444 car id @+0x08");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalInfoResponse, meCountyIndex) == 0x10), "id 444 county @+0x10");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalInfoResponse, miRaceWins) == 0x14), "id 444 race wins @+0x14");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalInfoResponse, miProgressStatus) == 0x18), "id 444 progress @+0x18");
 
     // ARTIST case 188 sets this cap with the count assert and then still loops the supplied count.
     // DecFIGS names KI_MAX_NUM_RIVALS_IN_EVENT; the X360 writes pin the wire offsets and types.
@@ -397,11 +397,11 @@ namespace BrnGui
 
         s32 GetEventType() const { return 442; }
     };
-    static_assert(sizeof(GuiEventRivalryFullInfoResponse) == 688, "ARTIST AddGuiEvent id 442 size 688");
-    static_assert(offsetof(GuiEventRivalryFullInfoResponse, maRivalIds) == 0x000, "id 442 rival ids @+0x000");
-    static_assert(offsetof(GuiEventRivalryFullInfoResponse, maRivalCarIds) == 0x110, "id 442 car ids @+0x110");
-    static_assert(offsetof(GuiEventRivalryFullInfoResponse, miRivalsReturned) == 0x220, "id 442 count @+0x220");
-    static_assert(offsetof(GuiEventRivalryFullInfoResponse, maRivalryStatus) == 0x224, "id 442 statuses @+0x224");
+    CGS_STATIC_ASSERT((sizeof(GuiEventRivalryFullInfoResponse) == 688), "ARTIST AddGuiEvent id 442 size 688");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalryFullInfoResponse, maRivalIds) == 0x000), "id 442 rival ids @+0x000");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalryFullInfoResponse, maRivalCarIds) == 0x110), "id 442 car ids @+0x110");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalryFullInfoResponse, miRivalsReturned) == 0x220), "id 442 count @+0x220");
+    CGS_STATIC_ASSERT((offsetof(GuiEventRivalryFullInfoResponse, maRivalryStatus) == 0x224), "id 442 statuses @+0x224");
     struct GuiEventRoadRagePlayerDamage { u8 maData[8]; s32 GetEventType() const { return 348; } };  // id 348 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRageTimeExtended { u8 maData[4]; s32 GetEventType() const { return 427; } };  // id 427 size 4 (raw; size not GuiEvent-shaped)
     // [road-rules GUI wave 2026-09-25] GuiEventRoadRuleBatchDataResponse (344),
@@ -483,7 +483,7 @@ namespace BrnGui
             maeStringTypes[mi8NumStrings++] = type;
         }
     };
-    static_assert(sizeof(GuiEventTickerCustomMessage) == 2072, "ARTIST ticker payload");
+    CGS_STATIC_ASSERT((sizeof(GuiEventTickerCustomMessage) == 2072), "ARTIST ticker payload");
     struct GuiEventTimeUp { u8 maData[1]; s32 GetEventType() const { return 550; } };  // id 550 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventToggleChangeCarMessage { u8 maData[1]; s32 GetEventType() const { return 540; } };  // id 540 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventTogglePictureParadise { u8 maData[1]; s32 GetEventType() const { return 222; } };  // id 222 size 1 (raw; size not GuiEvent-shaped)
@@ -533,7 +533,7 @@ namespace BrnGui
 
         s32 GetEventType() const { return 394; }
     };
-    static_assert(sizeof(GuiHitVehicleEvent) == 24, "X360 AddGuiEvent size 24 (id 394)");
+    CGS_STATIC_ASSERT((sizeof(GuiHitVehicleEvent) == 24), "X360 AddGuiEvent size 24 (id 394)");
     // ImageGalleryState::UpdateRunning reads ids 518/520/522 as payloads from offset 0.
     // ARTIST 0x823E9CE0 copies the action fields into the same byte offsets before posting:
     // action 290 -> 518 (48 bytes), 291 -> 520 (8 bytes), and 292 -> 522 (16 bytes).
@@ -544,7 +544,7 @@ namespace BrnGui
         s32                                                 miCollectedCount;        // +0x04
         s32 GetEventType() const { return 520; }
     };
-    static_assert(sizeof(GuiImageGalleryCollectedCountEvent) == 8, "id 520 is an 8-byte flat payload");
+    CGS_STATIC_ASSERT((sizeof(GuiImageGalleryCollectedCountEvent) == 8), "id 520 is an 8-byte flat payload");
 
     struct GuiImageGalleryCollectedDataEvent : public CgsModule::Event
     {
@@ -552,9 +552,9 @@ namespace BrnGui
         CgsContainers::FastBitArray<30>                    mActiveBitArray;          // +0x08
         s32 GetEventType() const { return 522; }
     };
-    static_assert(offsetof(GuiImageGalleryCollectedDataEvent, mActiveBitArray) == 8,
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryCollectedDataEvent, mActiveBitArray) == 8),
                   "id 522 bit array starts at +0x08");
-    static_assert(sizeof(GuiImageGalleryCollectedDataEvent) == 16, "id 522 is a 16-byte flat payload");
+    CGS_STATIC_ASSERT((sizeof(GuiImageGalleryCollectedDataEvent) == 16), "id 522 is a 16-byte flat payload");
 
     struct GuiImageGalleryImageInfoEvent : public CgsModule::Event
     {
@@ -567,14 +567,14 @@ namespace BrnGui
         bool                   mbHasDeleted;    // +0x2D
         s32 GetEventType() const { return 518; }
     };
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, mCaptureDate) == 0x00, "id 518 date@0x00");
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, mWorldRegion) == 0x0C, "id 518 region@0x0C");
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, miNumCaptures) == 0x14, "id 518 count@0x14");
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, miSlotIndex) == 0x18, "id 518 slot@0x18");
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, mPlayerName) == 0x1C, "id 518 player@0x1C");
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, mbLocked) == 0x2C, "id 518 locked@0x2C");
-    static_assert(offsetof(GuiImageGalleryImageInfoEvent, mbHasDeleted) == 0x2D, "id 518 deleted@0x2D");
-    static_assert(sizeof(GuiImageGalleryImageInfoEvent) == 0x30, "id 518 is a 48-byte flat payload");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, mCaptureDate) == 0x00), "id 518 date@0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, mWorldRegion) == 0x0C), "id 518 region@0x0C");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, miNumCaptures) == 0x14), "id 518 count@0x14");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, miSlotIndex) == 0x18), "id 518 slot@0x18");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, mPlayerName) == 0x1C), "id 518 player@0x1C");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, mbLocked) == 0x2C), "id 518 locked@0x2C");
+    CGS_STATIC_ASSERT((offsetof(GuiImageGalleryImageInfoEvent, mbHasDeleted) == 0x2D), "id 518 deleted@0x2D");
+    CGS_STATIC_ASSERT((sizeof(GuiImageGalleryImageInfoEvent) == 0x30), "id 518 is a 48-byte flat payload");
     // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4460 {mfCumulativeAirTime,
     // mfCurrentJumpAirTime}; the manager's RecvEvent case 387 latches the CURRENT jump time
     // from +0x04 (@0x82420BB8).
@@ -611,7 +611,7 @@ namespace BrnGui
 
         s32 GetEventType() const { return 391; }
     };
-    static_assert(sizeof(GuiInProgressStuntEvent) == 24, "X360 AddGuiEvent size 24 (id 391)");
+    CGS_STATIC_ASSERT((sizeof(GuiInProgressStuntEvent) == 24), "X360 AddGuiEvent size 24 (id 391)");
     struct GuiLastBlueTeamMemberEvent { u8 maData[1]; s32 GetEventType() const { return 452; } };  // id 452 size 1 (raw; size not GuiEvent-shaped)
     // [gateui] GuiLeaderPassedKMBoundaryEvent (449) and GuiLeaderPassedMileBoundaryEvent
     // (448) have been RECOVERED and now live in BrnGuiEventTypeDefs.h as
@@ -669,11 +669,11 @@ namespace BrnGui
         s32 miValue;
         s32 GetEventType() const { return 491; }
     };
-    static_assert(sizeof(GuiNetworkStuntRunEliminationEvent) == 12 &&
+    CGS_STATIC_ASSERT((sizeof(GuiNetworkStuntRunEliminationEvent) == 12 &&
                   sizeof(GuiNetworkStuntRunLeadingEvent) == 12 &&
-                  sizeof(GuiNetworkStuntRunVictoryEvent) == 12,
+                  sizeof(GuiNetworkStuntRunVictoryEvent) == 12),
                   "ARTIST GUI 487..489 records are 12 bytes with two unwritten tail bytes");
-    static_assert(sizeof(GuiNetworkSuntRunInfoMessageEvent) == 12,
+    CGS_STATIC_ASSERT((sizeof(GuiNetworkSuntRunInfoMessageEvent) == 12),
                   "ARTIST GUI 491 message record is three words");
     // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4472 {f32 mfDistance};
     // RecvEvent case 388 latches it with a single float load (@0x82420B38).
@@ -752,7 +752,7 @@ namespace BrnGui
 
         s32 GetEventType() const { return 402; }
     };
-    static_assert(sizeof(GuiShowtimeJustBounced) == 2, "X360 AddGuiEvent size 2 (id 402)");
+    CGS_STATIC_ASSERT((sizeof(GuiShowtimeJustBounced) == 2), "X360 AddGuiEvent size 2 (id 402)");
 
     // [showtime-score wave 2026-08-29] RECOVERED (was the bare `GuiEvent<396>` shell, whose
     // three inherited words are the queue header -- NOT this record's payload). DWARF
@@ -769,7 +769,7 @@ namespace BrnGui
 
         s32 GetEventType() const { return 396; }
     };
-    static_assert(sizeof(GuiShowtimeScoreUpdate) == 12, "X360 AddGuiEvent size 12 (id 396)");
+    CGS_STATIC_ASSERT((sizeof(GuiShowtimeScoreUpdate) == 12), "X360 AddGuiEvent size 12 (id 396)");
     struct GuiShowtimeTriggered { u8 maData[1]; s32 GetEventType() const { return 392; } };  // id 392 size 1 (raw; size not GuiEvent-shaped)
     // [boost-msg wave] NEW HOME (no committed record existed). DWARF
     // BrnGuiEventTypeDefs.h:3694 {s32 miChainCount}; PS3 GuiEvent<362>, X360 id 367.
@@ -821,7 +821,7 @@ namespace BrnGui
     // written by the producer. There is NO GuiEvent header inside the record: the producer
     // writes the first position lane at +0x00. The member ORDER is the console's (landmark
     // ids before the end types), not the declaration order of the older game-side twin.
-    struct alignas(16) CalculateRoute
+    struct CGS_ALIGN(16) CalculateRoute
     {
         enum ERouteEndPointType
         {
@@ -842,13 +842,13 @@ namespace BrnGui
 
         s32 GetEventType() const { return 494; }
     };
-    static_assert(sizeof(CalculateRoute) == 0x50, "CalculateRoute is the 80-byte record GuiTracker::Update publishes");
-    static_assert(offsetof(CalculateRoute, maLandmarkIDs)    == 0x20, "landmark ids at +0x20 (stdx, 8-byte stride)");
-    static_assert(offsetof(CalculateRoute, mePointTypes)     == 0x30, "end types at +0x30 (stwx, 4-byte stride)");
-    static_assert(offsetof(CalculateRoute, muJunctionIDs)    == 0x38, "junction ids at +0x38");
-    static_assert(offsetof(CalculateRoute, maSectionIndices) == 0x40, "section indices at +0x40");
-    static_assert(offsetof(CalculateRoute, mu16EventID)      == 0x44, "leg number at +0x44 (sth)");
-    struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
+    CGS_STATIC_ASSERT((sizeof(CalculateRoute) == 0x50), "CalculateRoute is the 80-byte record GuiTracker::Update publishes");
+    CGS_STATIC_ASSERT((offsetof(CalculateRoute, maLandmarkIDs)    == 0x20), "landmark ids at +0x20 (stdx, 8-byte stride)");
+    CGS_STATIC_ASSERT((offsetof(CalculateRoute, mePointTypes)     == 0x30), "end types at +0x30 (stwx, 4-byte stride)");
+    CGS_STATIC_ASSERT((offsetof(CalculateRoute, muJunctionIDs)    == 0x38), "junction ids at +0x38");
+    CGS_STATIC_ASSERT((offsetof(CalculateRoute, maSectionIndices) == 0x40), "section indices at +0x40");
+    CGS_STATIC_ASSERT((offsetof(CalculateRoute, mu16EventID)      == 0x44), "leg number at +0x44 (sth)");
+    struct CGS_ALIGN(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
     // GuiAudioTriggerEvent: NO placeholder here -- the real hand-reconstructed home is
     // BrnGuiEventTypeDefs.h (macComponent/meAction/macLabel/macMovie, id 201, sizeof 112).
     // FLAG / OPEN: this catalogue read the id as 457 size 100 from the AddGuiEvent<T>
@@ -865,7 +865,7 @@ namespace BrnGui
     // CgsID at offset 0, i.e. there is NO GuiEvent header inside the payload). sizeof == 16, align 8
     // and GetEventType() == 573 are preserved, so the AddGuiEvent<T> / OutputGuiEvent<T> template
     // instantiations are unaffected.
-    struct alignas(8) GuiChallengeSelectedEvent
+    struct CGS_ALIGN(8) GuiChallengeSelectedEvent
     {
         u64 mChallengeID;      // +0x00  highlighted challenge id (CgsID)
         s32 miSelectorAction;  // +0x08  selector/action code (Hide posts 3; Close posts 3 then 1; SelectPrevious posts 2)
@@ -891,7 +891,7 @@ namespace BrnGui
     // opaque `GuiEvent<458> + u8[20]` mirror that stood here had the WRONG shape and was a
     // hard C2011 against the profile header's slice, so it is DELETED rather than left to
     // shadow the real home -- the same move GuiAutosaveRequestEvent got above.
-    struct alignas(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[12]; };  // id 459 size 24 [8-aligned: OGE off16]
+    struct CGS_ALIGN(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[12]; };  // id 459 size 24 [8-aligned: OGE off16]
     struct GuiEventAudioTraxPreview { u8 maData[8]; s32 GetEventType() const { return 460; } };  // id 460 size 8
     struct GuiEventAudioVoiceOver { u8 maData[4]; s32 GetEventType() const { return 466; } };  // id 466 size 4
     // The local camera's status (network -> GUI). The network module posts the object itself.
@@ -900,7 +900,7 @@ namespace BrnGui
         BrnNetwork::ECameraStatus meCamStatus;   // +0x00
         s32 GetEventType() const { return 570; }
     };  // id 570 size 4
-    struct alignas(8) GuiEventChallengedEventDataRequest { u8 maData[8]; s32 GetEventType() const { return 331; } };  // id 331 size 8 [8-aligned: OGE off16]
+    struct CGS_ALIGN(8) GuiEventChallengedEventDataRequest { u8 maData[8]; s32 GetEventType() const { return 331; } };  // id 331 size 8 [8-aligned: OGE off16]
     struct GuiEventControllerSettings { u8 maData[3]; s32 GetEventType() const { return 472; } };  // id 472 size 3
     // =============================================================================
     // [p0 map-event wave, 2026-09-08] THE CUSTOM-EVENT TRIO, RECOVERED.
@@ -923,13 +923,13 @@ namespace BrnGui
     // SIZE and the wrong SHAPE; reshaped in place rather than forked, because
     // CgsGuiStateInterface_OutputGuiEvent_Inst.cpp already instantiates the template on it.
     // =============================================================================
-    struct alignas(8) GuiEventCustomeEventCreate                        // id 172 size 120
+    struct CGS_ALIGN(8) GuiEventCustomeEventCreate                        // id 172 size 120
     {
         BrnProgression::Race mRace;   // +0x00 -- the authored race, name and all
         s32 GetEventType() const { return 172; }
     };
 
-    struct alignas(8) GuiEventCustomeEventDelete                        // id 174 size 120
+    struct CGS_ALIGN(8) GuiEventCustomeEventDelete                        // id 174 size 120
     {
         BrnProgression::Race mRace;   // +0x00 -- the preset race being retired
         s32 GetEventType() const { return 174; }
@@ -937,7 +937,7 @@ namespace BrnGui
 
     // id 167. The route the player just accepted, flattened out of the preset race: the
     // race id, the ordered landmark list, the matching AI-section list and the live count.
-    struct alignas(8) GuiEventAcceptEventStart                          // id 167 size 80
+    struct CGS_ALIGN(8) GuiEventAcceptEventStart                          // id 167 size 80
     {
         CgsID                       mId;                    // +0x00  from BaseRace::mId
         BrnGameState::LandmarkIndex maLandmarkIndices[16];   // +0x08  Race::maLandmarkIndices
@@ -948,9 +948,9 @@ namespace BrnGui
         s32 GetEventType() const { return 167; }
     };
 
-    static_assert(sizeof(GuiEventCustomeEventCreate) == 120, "id 172 publishes 120 bytes");
-    static_assert(sizeof(GuiEventCustomeEventDelete) == 120, "id 174 publishes 120 bytes");
-    static_assert(sizeof(GuiEventAcceptEventStart)   == 80,  "id 167 publishes 80 bytes");
+    CGS_STATIC_ASSERT((sizeof(GuiEventCustomeEventCreate) == 120), "id 172 publishes 120 bytes");
+    CGS_STATIC_ASSERT((sizeof(GuiEventCustomeEventDelete) == 120), "id 174 publishes 120 bytes");
+    CGS_STATIC_ASSERT((sizeof(GuiEventAcceptEventStart)   == 80),  "id 167 publishes 80 bytes");
 
     // GuiEventKeyboardResponse is recovered in BrnGuiEventTypeDefs.h (native pointer payload).
     // id 272. The payload word is the sign-in flavour the producer asks for (0 = full
@@ -1018,7 +1018,7 @@ namespace BrnGui
     };  // id 254, record 604 bytes (headerless -- AddOutputGuiEvent posts the object itself)
     // The record size IS the X360 AddEvent literal, and the whole record is a pointer-free
     // scalar run, so it is host-stable and worth pinning.
-    static_assert(sizeof(GuiEventNetworkCustomMatchResults) == 604,
+    CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCustomMatchResults) == 604),
                   "GuiEventNetworkCustomMatchResults is the 604-byte AddOutputGuiEvent record");
     // id 252, record 24 bytes: { 12, 252, 12 } + a 12-byte payload. MEASURED at
     // OutputGuiEvent<GuiEventNetworkCustomMatchSearch> @0x82493BE8, which stack-builds
@@ -1060,7 +1060,7 @@ namespace BrnGui
             , meGameMode(0), meSearchOpponentTypes(0), mbRanked(false), mbFreeburn(false)
         { maPad[0] = 0; maPad[1] = 0; }
     };  // id 252, record 24 bytes
-    static_assert(sizeof(GuiEventNetworkCustomMatchSearch) == 24,
+    CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCustomMatchSearch) == 24),
                   "GuiEventNetworkCustomMatchSearch is the 24-byte OutputGuiEvent record");
     struct GuiEventNetworkLeavingGameFailed { u8 maData[1]; s32 GetEventType() const { return 275; } };  // id 275 size 1
     // News / terms-of-service download requests and results. The network state manager
@@ -1136,7 +1136,7 @@ namespace BrnGui
         s32 GetEventType() const { return 99; }
     }; // ARTIST 0x82436B30: 16-byte payload
 
-    struct alignas(8) GuiEventPostEventFreeCarSequenceStart { u8 maData[8]; s32 GetEventType() const { return 302; } };  // id 302 size 8 [8-aligned: OGE off16]
+    struct CGS_ALIGN(8) GuiEventPostEventFreeCarSequenceStart { u8 maData[8]; s32 GetEventType() const { return 302; } };  // id 302 size 8 [8-aligned: OGE off16]
     struct GuiEventPostEventRankUpSequenceStart { u8 maData[8]; s32 GetEventType() const { return 303; } };  // id 303 size 8
     // Ask the network camera for a compressed still. OutputGuiEvent wraps it as
     // { 12, 568, 12 } + three payload words; the third is a pointer (4-byte slot on the
@@ -1155,7 +1155,7 @@ namespace BrnGui
     // witness: RoadRuleComponent::SetUpcomingRoadAnimation @0x82438650 stack-builds
     // { 4, 572, 12, 9 } -- the suggested-road transin fires training message 9.
     struct GuiEventRequestTraining { s32 meTrainingType; s32 GetEventType() const { return 572; } };  // id 572 size 4
-    struct alignas(8) GuiEventRoadRuleDataRequest { u8 maData[8]; s32 GetEventType() const { return 327; } };  // id 327 size 8 [8-aligned: OGE off16]
+    struct CGS_ALIGN(8) GuiEventRoadRuleDataRequest { u8 maData[8]; s32 GetEventType() const { return 327; } };  // id 327 size 8 [8-aligned: OGE off16]
     struct GuiEventRoadRuleModeRequest { u8 maData[8]; s32 GetEventType() const { return 326; } };  // id 326 size 8
     // X360 instantiation @0x82493F88: record { 36, 121, 12, score, category, index,
     // variation, name[16], isCurrentTarget, pad[3] }, ch40, 48 bytes (GameBridgeGUIToX
@@ -1221,7 +1221,7 @@ namespace BrnGui
         BrnReplays::BaseSerialiser* mpSerialiser;
         s32 GetEventType() const { return 595; }
     };
-    static_assert(sizeof(GuiReplayRegisterSerialiser) == sizeof(BrnReplays::BaseSerialiser*),
+    CGS_STATIC_ASSERT((sizeof(GuiReplayRegisterSerialiser) == sizeof(BrnReplays::BaseSerialiser*)),
                   "GUI replay registration carries one full native pointer");
     struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4
     struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
@@ -1305,7 +1305,7 @@ namespace BrnGui
         f32     mfFadeTime;   // payload +0x04 (DWARF :2043)
         bool    mbShow;       // payload +0x08 (DWARF :2044; pads out to the attested 12)
     };  // id 213, payload 12 bytes -> wrapped record 24 on channel 41 / 42
-    static_assert(sizeof(GuiEventShowHideSatNav) == 12,
+    CGS_STATIC_ASSERT((sizeof(GuiEventShowHideSatNav) == 12),
                   "GuiEventShowHideSatNav is the 12-byte OutputViewState/InternalState payload");
     // ===============================================================================
     // id 559 -- the hovered crash-nav icon. CORRECTED 2026-08-29 (mainmenu wave): this
@@ -1333,7 +1333,7 @@ namespace BrnGui
     // on the x64 host (payload 32, record 48). Never write those console numbers as
     // literals -- every poster takes sizeof().
     // ===============================================================================
-    struct alignas(8) GuiEventSetHoveredEventIcon
+    struct CGS_ALIGN(8) GuiEventSetHoveredEventIcon
     {
         CgsID       mHoveredDriveThroughID;  // +0x00 (DWARF :2826)
         CgsID       mHoveredPlayerID;        // +0x08 (DWARF :2827; the producer's rival id)

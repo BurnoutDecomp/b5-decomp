@@ -138,13 +138,13 @@ public:
     // X360: Construct @0x82255FC8, Prepare @0x82252A10, Update @0x82244998,
     //       PostCollisionUpdate @0x82252AB8, Release @0x82252CB8, GetName @0x821F9F00.
     // ------------------------------------------------------------------------
-    void        Construct() override;                                                 // slot 0
-    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;     // slot 1
-    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;  // slot 2
+    void        Construct() ;                                                 // slot 0
+    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;     // slot 1
+    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) ;  // slot 2
     bool        PostCollisionUpdate(Camera& lrCamera,
-                                    const BehaviourSharedInfo& lrInfo) override;       // slot 3
-    void        Release(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;      // slot 4
-    const char* GetName() const override;                                              // slot 9
+                                    const BehaviourSharedInfo& lrInfo) ;       // slot 3
+    void        Release(const BehaviourSharedPrepareReleaseInfo& lrInfo) ;      // slot 4
+    const char* GetName() const ;                                              // slot 9
 
     // The blend's timestep flavour, as the consumers spell it: 0 == E_WORLD (the blend stops
     // with the world clock), 2 == E_GAME (it keeps running while the game is paused). It is a

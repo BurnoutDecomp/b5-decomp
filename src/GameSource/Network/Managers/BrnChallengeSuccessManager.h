@@ -154,10 +154,10 @@ namespace BrnNetwork
 
     inline void ChallengeSuccessManager::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || sizeof(ChallengeSuccessData) == 0xD8, "ChallengeSuccessData stride is 0xD8");
-        static_assert(sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mLastSecondChallengeSuccess) == 0x5E8, "mLastSecondChallengeSuccess @ +0x5E8");
-        static_assert(sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mpNetworkModule) == 0x5F4, "mpNetworkModule @ +0x5F4");
-        static_assert(sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mbSendUpdateSuccessMessage) == 0x600, "mbSendUpdateSuccessMessage @ +0x600");
-        static_assert(sizeof(void*) != 4 || sizeof(ChallengeSuccessManager) == 0x608, "ChallengeSuccessManager is 0x608 bytes");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ChallengeSuccessData) == 0xD8), "ChallengeSuccessData stride is 0xD8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mLastSecondChallengeSuccess) == 0x5E8), "mLastSecondChallengeSuccess @ +0x5E8");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mpNetworkModule) == 0x5F4), "mpNetworkModule @ +0x5F4");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mbSendUpdateSuccessMessage) == 0x600), "mbSendUpdateSuccessMessage @ +0x600");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(ChallengeSuccessManager) == 0x608), "ChallengeSuccessManager is 0x608 bytes");
     }
 } // namespace BrnNetwork

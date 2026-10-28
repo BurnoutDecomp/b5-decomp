@@ -21,7 +21,7 @@ namespace Gen
     class vehicleengine : private Instance
     {
     public:
-        explicit vehicleengine(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit vehicleengine(Collection* lpCollection = 0, void* lpOwner = 0);
 
         void Change(Collection* lpCollection) { Instance::Change(lpCollection); }
         u64 CollectionKey() const { return Instance::GetCollection(); }
@@ -114,7 +114,7 @@ namespace Gen
         const char* Text(u32 auOffset) const
         {
             if (!mpAttributeData)
-                return nullptr;
+                return 0;
 
             // The ARTIST vehicleengine data area retains its 32-bit generated layout on
             // disk.  Vault::Initialize resolves each PtrN entry into one of these four-byte

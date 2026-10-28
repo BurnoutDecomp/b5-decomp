@@ -17,11 +17,8 @@
 // call sites (no standalone symbol) and are kept as trivial inline members below.
 struct BrnShaderConstantsFrame
 {
-    BrnShaderConstantsFrame() = default;
-    // X360 0x823FC338: compiler-emitted copy constructor (address-taken by
-    // BrnRendererModule::Render's frame swap). The console body is a memberwise byte copy of
-    // the whole object 0x000..0x31C -- exactly the defaulted copy constructor.
-    BrnShaderConstantsFrame(const BrnShaderConstantsFrame&) = default;
+    // ARTIST 0x823FC338 is the compiler-generated memberwise copy.
+    // Leave the copy constructor implicit for the original C++03 compiler.
 
     void Construct();
 
@@ -118,5 +115,5 @@ public:
 // it the host size must be the console's to the byte. Its five sibling console-attested strides
 // (BrnEffectsFrame 0x1F0, BrnBlobbyShadowBuffer 0x1010, sParticleNucleus 0xE0, SparkFrameData 0xD0,
 // ShadowStruct 0x40) all carry a pin like this one; this one did not.
-static_assert(sizeof(BrnShaderConstantsFrame) == 0x320,
+CGS_STATIC_ASSERT((sizeof(BrnShaderConstantsFrame) == 0x320),
               "BrnShaderConstantsFrame stride drift (X360 0x320 == 800; see the mulli sites above)");

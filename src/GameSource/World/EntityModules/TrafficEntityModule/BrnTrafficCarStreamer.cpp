@@ -454,36 +454,36 @@ void TrafficCarStreamer::_AssertLayout()
     // console's own arithmetic (9080 + 512 == 9592 == maxLoadFlags, + 64 ==
     // mauLoadStates, + 64 == maAssetIds, + 512 == maGraphicsStubs) holds here as
     // a RELATIVE fact even though every absolute offset has moved.
-    static_assert( sizeof( u64 ) * KU_MAX_VEHICLE_ASSETS == 512,
+    CGS_STATIC_ASSERT(( sizeof( u64 ) * KU_MAX_VEHICLE_ASSETS == 512),
                    "mauRenderingHistory is 64 x u64 == the console's 9592-9080 span" );
-    static_assert( sizeof( CgsID ) * KU_MAX_VEHICLE_ASSETS == 512,
+    CGS_STATIC_ASSERT(( sizeof( CgsID ) * KU_MAX_VEHICLE_ASSETS == 512),
                    "maAssetIds is 64 x CgsID == the console's 10232-9720 span "
                    "(Update @0x8274F740 walks it at an 8-byte stride)" );
 
-    static_assert( offsetof( TrafficCarStreamer, maxLoadFlags )
-                     - offsetof( TrafficCarStreamer, mauRenderingHistory ) == 512,
+    CGS_STATIC_ASSERT(( offsetof( TrafficCarStreamer, maxLoadFlags )
+                     - offsetof( TrafficCarStreamer, mauRenderingHistory ) == 512),
                    "maxLoadFlags follows mauRenderingHistory immediately (console +9592)" );
-    static_assert( offsetof( TrafficCarStreamer, mauLoadStates )
-                     - offsetof( TrafficCarStreamer, maxLoadFlags ) == KU_MAX_VEHICLE_ASSETS,
+    CGS_STATIC_ASSERT(( offsetof( TrafficCarStreamer, mauLoadStates )
+                     - offsetof( TrafficCarStreamer, maxLoadFlags ) == KU_MAX_VEHICLE_ASSETS),
                    "mauLoadStates follows maxLoadFlags immediately (console +9656; the two "
                    "byte tables are exactly 0x40 apart in every exported body)" );
-    static_assert( offsetof( TrafficCarStreamer, maAssetIds )
-                     - offsetof( TrafficCarStreamer, mauLoadStates ) == KU_MAX_VEHICLE_ASSETS,
+    CGS_STATIC_ASSERT(( offsetof( TrafficCarStreamer, maAssetIds )
+                     - offsetof( TrafficCarStreamer, mauLoadStates ) == KU_MAX_VEHICLE_ASSETS),
                    "maAssetIds follows mauLoadStates immediately (console +9720)" );
 
     // ORDER ONLY past this point -- maGraphicsStubs holds pointers, so its stride
     // is 32 on the console and larger here. Pinning its span would be precisely
     // the X360-offsets-on-x64 bug this project keeps re-learning.
-    static_assert( offsetof( TrafficCarStreamer, maGraphicsStubs )
-                     > offsetof( TrafficCarStreamer, maAssetIds ),
+    CGS_STATIC_ASSERT(( offsetof( TrafficCarStreamer, maGraphicsStubs )
+                     > offsetof( TrafficCarStreamer, maAssetIds )),
                    "maGraphicsStubs follows maAssetIds (console +10232)" );
-    static_assert( offsetof( TrafficCarStreamer, muNumAssets )
-                     > offsetof( TrafficCarStreamer, maGraphicsStubs ),
+    CGS_STATIC_ASSERT(( offsetof( TrafficCarStreamer, muNumAssets )
+                     > offsetof( TrafficCarStreamer, maGraphicsStubs )),
                    "muNumAssets is the last member (console +12280)" );
 
     // The catalogue capacity itself, which IsTrafficAssetLoaded @0x82706160 bakes
     // as the literal 0x40 in its first assert.
-    static_assert( KU_MAX_VEHICLE_ASSETS == 64,
+    CGS_STATIC_ASSERT(( KU_MAX_VEHICLE_ASSETS == 64),
                    "KU_MAX_VEHICLE_ASSETS == 64 (cmplwi r28,0x40 @0x82706178)" );
 }
 

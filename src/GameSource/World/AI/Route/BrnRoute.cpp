@@ -135,18 +135,18 @@ bool Route::Prepare(s32 liDefaultStartNode)
 // Never called: pins the offsets the Construct/Prepare/AddNode asm touches.
 void Route::_AssertLayout()
 {
-    static_assert(offsetof(Route, miNodeCount)        == 0x1400, "miNodeCount must be at guest 0x1400");
-    static_assert(offsetof(Route, miDefaultStartNode) == 0x1404, "miDefaultStartNode must be at guest 0x1404");
-    static_assert(offsetof(Route, meStatus)           == 0x1408, "meStatus must be at guest 0x1408");
+    CGS_STATIC_ASSERT((offsetof(Route, miNodeCount)        == 0x1400), "miNodeCount must be at guest 0x1400");
+    CGS_STATIC_ASSERT((offsetof(Route, miDefaultStartNode) == 0x1404), "miDefaultStartNode must be at guest 0x1404");
+    CGS_STATIC_ASSERT((offsetof(Route, meStatus)           == 0x1408), "meStatus must be at guest 0x1408");
     // GetDistance()/Prepare mirror the total into Route+8 == maNodes[0].mfDistanceLeft.
-    static_assert(offsetof(Route, maNodes) == 0, "maNodes must start the object");
-    static_assert(sizeof(RouteNode) == 16, "original scalar node stride");
-    static_assert(alignof(RouteNode) == 4, "scalar node alignment");
-    static_assert(offsetof(RouteNode, mfPositionX) == 0, "position X @0");
-    static_assert(offsetof(RouteNode, mfPositionZ) == 4, "position Z @4");
-    static_assert(offsetof(RouteNode, mfDistanceLeft) == 8, "distance @8");
-    static_assert(offsetof(RouteNode, muSectionIndex) == 12, "section @12");
-    static_assert(offsetof(RouteNode, muPortalIndex) == 14, "portal @14");
-    static_assert(sizeof(Route) == 0x140C && alignof(Route) == 4, "original route extent and alignment");
+    CGS_STATIC_ASSERT((offsetof(Route, maNodes) == 0), "maNodes must start the object");
+    CGS_STATIC_ASSERT((sizeof(RouteNode) == 16), "original scalar node stride");
+    CGS_STATIC_ASSERT((__alignof(RouteNode) == 4), "scalar node alignment");
+    CGS_STATIC_ASSERT((offsetof(RouteNode, mfPositionX) == 0), "position X @0");
+    CGS_STATIC_ASSERT((offsetof(RouteNode, mfPositionZ) == 4), "position Z @4");
+    CGS_STATIC_ASSERT((offsetof(RouteNode, mfDistanceLeft) == 8), "distance @8");
+    CGS_STATIC_ASSERT((offsetof(RouteNode, muSectionIndex) == 12), "section @12");
+    CGS_STATIC_ASSERT((offsetof(RouteNode, muPortalIndex) == 14), "portal @14");
+    CGS_STATIC_ASSERT((sizeof(Route) == 0x140C && __alignof(Route) == 4), "original route extent and alignment");
 }
 }

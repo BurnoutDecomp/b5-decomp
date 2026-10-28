@@ -121,7 +121,7 @@ void AmbienceControl::DrawDebug(Vector3 lrPosition) const
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     const BrnSound::Module::Io::RootInputBuffer* lpInputBuffer =
         lpLogicModule->GetBrnInputStructure();
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
     if (!lpInputBuffer)
         return;
 
@@ -192,7 +192,7 @@ void AmbienceControl::SetupLoadData()
 // ---------------------------------------------------------------------------
 bool AmbienceControl::SelectSpecialAmbience(u8& aru8Ambience) const
 {
-    CGS_ASSERT(mpEnclosureControl != nullptr, "mpEnclosureControl");
+    CGS_ASSERT(mpEnclosureControl != 0, "mpEnclosureControl");
     if (mpEnclosureControl->GetTriggerInfo(E_TRIGGER_POSITION_AT_ENTITY)
             .IsTypeActive(BrnTrigger::GenericRegion::E_TYPE_TUNNEL))
     {
@@ -210,7 +210,7 @@ bool AmbienceControl::SelectSpecialAmbience(u8& aru8Ambience) const
 
     const BrnSound::Module::Io::RootInputBuffer* lpInputBuffer =
         lpLogicModule->GetBrnInputStructure();
-    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
     const BrnSound::Module::Io::RootInputBuffer::TrafficSoundOutputInterface& lrTraffic =
         lpInputBuffer->GetTrafficOutputInterface();
     if (static_cast<s32>(lrTraffic.GetTrafficEntityCount()) > KI_HEAVY_TRAFFIC_THRESHOLD)

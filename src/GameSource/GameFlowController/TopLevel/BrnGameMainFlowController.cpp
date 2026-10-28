@@ -4,7 +4,7 @@
 namespace BrnGameMainFlowController
 {
     // Option B bridge to the active controller (X360 reaches it via the game-module global).
-    GameMainFlowController* gpMainGameFlowController = nullptr;
+    GameMainFlowController* gpMainGameFlowController = 0;
 
     // @ 0x823C6440 - wire the per-state pointer table (indexed by EMainGameFlowState) to the
     // owned state objects, then start with no active state (SetState enters the first one).

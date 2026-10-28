@@ -101,11 +101,11 @@ namespace CgsMemory
     // ARTIST CreateBank reads size[0] at +0x28, blockCount[0] at +0x3C, and the two flags
     // at +0x50/+0x51; CreateBankRequest::Construct (0x82663A68) likewise initializes five lanes.
     // The native struct rounds its 82 bytes of fields to 84 bytes for 4-byte alignment.
-    static_assert(offsetof(MemoryBank::Params, mauBankSize) == 40, "X360 Params size offset");
-    static_assert(offsetof(MemoryBank::Params, mauBankBlocks) == 60, "X360 Params block-count offset");
-    static_assert(offsetof(MemoryBank::Params, mbIsLeaf) == 80, "X360 Params leaf-flag offset");
-    static_assert(offsetof(MemoryBank::Params, mbAllowFragmentation) == 81, "X360 Params fragmentation-flag offset");
-    static_assert(sizeof(MemoryBank::Params) == 84, "X360 Params size");
+    CGS_STATIC_ASSERT((offsetof(MemoryBank::Params, mauBankSize) == 40), "X360 Params size offset");
+    CGS_STATIC_ASSERT((offsetof(MemoryBank::Params, mauBankBlocks) == 60), "X360 Params block-count offset");
+    CGS_STATIC_ASSERT((offsetof(MemoryBank::Params, mbIsLeaf) == 80), "X360 Params leaf-flag offset");
+    CGS_STATIC_ASSERT((offsetof(MemoryBank::Params, mbAllowFragmentation) == 81), "X360 Params fragmentation-flag offset");
+    CGS_STATIC_ASSERT((sizeof(MemoryBank::Params) == 84), "X360 Params size");
 
     // A single allocatable block; free blocks form a doubly-linked list by index. DWARF CgsMemoryBank.h:234
     // (12 bytes on X360). KU_INVALID_BLOCK (-1) terminates the free list.

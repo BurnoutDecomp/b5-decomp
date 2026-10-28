@@ -9,12 +9,12 @@ namespace CgsMemory
 {
     // ARTIST 0x8305F500 and 0x8305F50C: canonical zero-initialized class storage.
     RwMemoryFunctions LinearMalloc::mCachedMemoryFuncs = {};
-    LinearMalloc* LinearMalloc::mpActiveRWAllocator = nullptr;
+    LinearMalloc* LinearMalloc::mpActiveRWAllocator = 0;
 
     // ARTIST 0x828690E0. mpLastAlloc is not part of this reset.
     void LinearMalloc::Construct()
     {
-        mpAlloc = nullptr;
+        mpAlloc = 0;
         mbCreated = false;
         mnStartAddress = 0;
         mnEndAddress = 0;
@@ -25,7 +25,7 @@ namespace CgsMemory
     // ARTIST 0x82869108. The assertions continue into borrowed-region stores.
     void LinearMalloc::Create(void* lpBuffer, size_t lnSize)
     {
-        if (mpAlloc != nullptr)
+        if (mpAlloc != 0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
@@ -43,7 +43,7 @@ namespace CgsMemory
                 165);
             CgsDev::Assert::EndAssert();
         }
-        if (lpBuffer == nullptr)
+        if (lpBuffer == 0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
@@ -73,8 +73,8 @@ namespace CgsMemory
             mpLastAlloc = reinterpret_cast<void*>(lnAligned);
             return mpLastAlloc;
         }
-        mpLastAlloc = nullptr;
-        return nullptr;
+        mpLastAlloc = 0;
+        return 0;
     }
 
     // 0x82866E60 - reset the bump pointer to the region start (X360: next = start), freeing
@@ -90,10 +90,10 @@ namespace CgsMemory
         if (mpActiveRWAllocator == this)
             StopRWAllocation();
 
-        if (mpAlloc != nullptr)
+        if (mpAlloc != 0)
         {
             ::rwMemoryFunctions.rwfree(mpAlloc);
-            mpAlloc = nullptr;
+            mpAlloc = 0;
         }
 
         mnStartAddress = 0;
@@ -141,7 +141,7 @@ namespace CgsMemory
             CgsDev::Assert::EndAssert();
         }
 
-        mpActiveRWAllocator = nullptr;
+        mpActiveRWAllocator = 0;
         ::rwMemoryFunctions = mCachedMemoryFuncs;
     }
 }

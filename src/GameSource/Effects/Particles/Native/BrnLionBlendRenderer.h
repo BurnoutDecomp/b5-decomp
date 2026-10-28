@@ -241,12 +241,12 @@ namespace BrnGraphics
     // the asm word that says otherwise.
     struct LionBlendRendererLayoutCheck
     {
-        static_assert(sizeof(rw::math::vpu::Matrix44) == 0x40,
+        CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Matrix44) == 0x40),
                       "Matrix44 is the console's four 16-byte rows");
-        static_assert(sizeof(rw::math::vpu::Matrix44Affine) == 0x40,
+        CGS_STATIC_ASSERT((sizeof(rw::math::vpu::Matrix44Affine) == 0x40),
                       "Matrix44Affine is FOUR rows here, not three -- SetCameraData asm words "
                       "43-58 copy r4/r5 at +0x00/+0x10/+0x20/+0x30 (four lvx128/stvx128 pairs)");
-        static_assert(sizeof(cMatrix) == 0x40, "cMatrix is the Lion 4x4 (Matrix.h)");
+        CGS_STATIC_ASSERT((sizeof(cMatrix) == 0x40), "cMatrix is the Lion 4x4 (Matrix.h)");
 
 #define LBR_DELTA(a, b) \
     (offsetof(LionBlendRenderer, b) - offsetof(LionBlendRenderer, a))
@@ -254,25 +254,25 @@ namespace BrnGraphics
         // mCameraTransform starts where mRenderer ends -- the console's 0xE0, with no gap. This
         // is the join the whole class hangs on: Im3dBlend's own witness proves its tail is the
         // eight handles, and this proves the matrix block starts immediately after it.
-        static_assert(offsetof(LionBlendRenderer, mCameraTransform) == sizeof(Im3dBlend),
+        CGS_STATIC_ASSERT((offsetof(LionBlendRenderer, mCameraTransform) == sizeof(Im3dBlend)),
                       "SetCameraData asm word 8 (0x82282518 stfs f10, 0xE0(r3)) == sizeof(Im3dBlend)");
 
-        static_assert(LBR_DELTA(mCameraTransform, mBackMat) == 0x120 - 0x0E0,
+        CGS_STATIC_ASSERT((LBR_DELTA(mCameraTransform, mBackMat) == 0x120 - 0x0E0),
                       "SetCameraData asm word 15 (0x82282534 addi r11, r3, 0x120)");
-        static_assert(LBR_DELTA(mBackMat, mViewMat) == 0x160 - 0x120,
+        CGS_STATIC_ASSERT((LBR_DELTA(mBackMat, mViewMat) == 0x160 - 0x120),
                       "SetCameraData asm word 38 (0x82282590 addi r10, r3, 0x160)");
-        static_assert(LBR_DELTA(mViewMat, mViewProjection) == 0x1A0 - 0x160,
+        CGS_STATIC_ASSERT((LBR_DELTA(mViewMat, mViewProjection) == 0x1A0 - 0x160),
                       "SetCameraData asm word 22 (0x8228254C addi r9, r3, 0x1A0)");
 
         // The four matrices are the whole tail: nothing follows mViewProjection. On the console
         // this is 0x1E0 - 0xE0 == 0x100, and 0x1E0 is the exact slot ParticleModule reserves
         // between mLionImmediateModeRenderer (+0x92E0) and mSparkRenderer (+0x94C0).
-        static_assert(sizeof(LionBlendRenderer) - offsetof(LionBlendRenderer, mCameraTransform)
-                        == 0x1E0 - 0x0E0,
+        CGS_STATIC_ASSERT((sizeof(LionBlendRenderer) - offsetof(LionBlendRenderer, mCameraTransform)
+                        == 0x1E0 - 0x0E0),
                       "ParticleModule::Prepare bounds the object: 0x94C0 (asm word 79, "
                       "stwx r27,r31,r11) - 0x92E0 (asm word 55, addi r30,r30,-0x6D20) == 0x1E0");
 
-        static_assert(alignof(LionBlendRenderer) == 16,
+        CGS_STATIC_ASSERT((__alignof(LionBlendRenderer) == 16),
                       "the matrix rows are VMX lane registers (lvx128/stvx128 in SetCameraData)");
 
 #undef LBR_DELTA

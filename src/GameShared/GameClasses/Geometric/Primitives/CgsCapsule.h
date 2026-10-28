@@ -40,7 +40,7 @@
 
 namespace CgsGeometric
 {
-    struct alignas(16) Capsule
+    struct CGS_ALIGN(16) Capsule
     {
         // --------------------------------------------------------------------
         // Set(Vector3, Vector3, VecFloat, VecFloat) -- DWARF CgsCapsule.h:49.

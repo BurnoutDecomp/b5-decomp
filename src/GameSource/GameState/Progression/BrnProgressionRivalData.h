@@ -46,5 +46,5 @@ namespace BrnProgression
         bool   mbHasBeenHit;                  // +0x34
     };
 
-    static_assert(sizeof(RivalData) == 0x38, "RivalData must be the 0x38 maRivals stride");
+    CGS_STATIC_ASSERT((sizeof(RivalData) == 0x38), "RivalData must be the 0x38 maRivals stride");
 }

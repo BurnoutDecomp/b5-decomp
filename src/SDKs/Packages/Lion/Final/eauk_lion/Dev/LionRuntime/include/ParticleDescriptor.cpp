@@ -24,7 +24,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleParser.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleWaveForm.h"
 
-#include <cstdint>
+#include "types.hpp"
 
 // Out-of-line body for cParticleDescriptor::GetRequiredBucketType.
 //
@@ -107,7 +107,7 @@ namespace
 // ----------------------------------------------------------------------------
 void cParticleDescriptor::Relocate()
 {
-    if (this == nullptr)
+    if (this == 0)
         return;
 
     // The eight owned links, in the asm's order. Each is a 32-bit serialised slot and the
@@ -125,7 +125,7 @@ void cParticleDescriptor::Relocate()
     // The behaviour chain, re-based in place. The X360 INLINES cParticleBehaviour::
     // Relocate here (the asm loop over i[178]..i[183]); reproduced as the same six
     // re-bases so the walk follows each node's freshly re-based mpNext, as the asm does.
-    for (cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != nullptr;
+    for (cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != 0;
          lpBeh = lpBeh->mpNext.Get())
     {
         lpBeh->mpWaveFormX.Relocate(lpBeh);
@@ -141,7 +141,7 @@ void cParticleDescriptor::Relocate()
     if (mpMaterial)
         mpMaterial->Relocate();
 
-    for (cParticleDescriptor* lpChild = mpChild.Get(); lpChild != nullptr;
+    for (cParticleDescriptor* lpChild = mpChild.Get(); lpChild != 0;
          lpChild = lpChild->mpNext.Get())
     {
         lpChild->Relocate();
@@ -171,11 +171,11 @@ void cParticleDescriptor::Relocate()
 // ----------------------------------------------------------------------------
 void cParticleDescriptor::Delocate(u32 aEndianTwiddleFlag)
 {
-    if (this == nullptr)
+    if (this == 0)
         return;
 
     cParticleBehaviour* lpBeh = mpBehaviours.Get();
-    while (lpBeh != nullptr)
+    while (lpBeh != 0)
     {
         cParticleBehaviour* lpBehNext = lpBeh->mpNext.Get();
         lpBeh->Delocate(aEndianTwiddleFlag);
@@ -188,7 +188,7 @@ void cParticleDescriptor::Delocate(u32 aEndianTwiddleFlag)
         mpMaterial->Delocate(aEndianTwiddleFlag);
 
     cParticleDescriptor* lpChild = mpChild.Get();
-    while (lpChild != nullptr)
+    while (lpChild != 0)
     {
         cParticleDescriptor* lpChildNext = lpChild->mpNext.Get();
         lpChild->Delocate(aEndianTwiddleFlag);
@@ -241,7 +241,7 @@ void cParticleDescriptor::Delocate(u32 aEndianTwiddleFlag)
 f32 cParticleDescriptor::GetDurationMax() const
 {
     f32 lfBehaviourMax = 0.0f;
-    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != nullptr;
+    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != 0;
          lpBeh = lpBeh->mpNext.Get())
     {
         const f32 lfLife = lpBeh->mLifeBase + lpBeh->mLifeVariance;
@@ -277,7 +277,7 @@ f32 cParticleDescriptor::GetDurationMax() const
 // ----------------------------------------------------------------------------
 void cParticleDescriptor::GetSerialiseSize(cLionSerialiser& aSer) const
 {
-    if (this == nullptr)
+    if (this == 0)
         return;
 
     aSer.mDataSize += 96;
@@ -292,7 +292,7 @@ void cParticleDescriptor::GetSerialiseSize(cLionSerialiser& aSer) const
         aSer.mStringSize += luLength + 1;
     }
 
-    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != nullptr;
+    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != 0;
          lpBeh = lpBeh->mpNext.Get())
         lpBeh->GetSerialiseSize(aSer);
 
@@ -301,7 +301,7 @@ void cParticleDescriptor::GetSerialiseSize(cLionSerialiser& aSer) const
     if (mpMaterial)
         mpMaterial->GetSerialiseSize(aSer);
 
-    for (const cParticleDescriptor* lpChild = mpChild.Get(); lpChild != nullptr;
+    for (const cParticleDescriptor* lpChild = mpChild.Get(); lpChild != 0;
          lpChild = lpChild->mpNext.Get())
         lpChild->GetSerialiseSize(aSer);
 }
@@ -319,14 +319,14 @@ void cParticleDescriptor::GetSerialiseSize(cLionSerialiser& aSer) const
 // ----------------------------------------------------------------------------
 cParticleDescriptor* cParticleDescriptor::Serialise(cLionSerialiser& aSer) const
 {
-    if (this == nullptr)
-        return nullptr;
+    if (this == 0)
+        return 0;
 
     cParticleDescriptor* lpCopy =
         reinterpret_cast<cParticleDescriptor*>(aSer.DataStore(this, 96));
 
     tLionSerialisedPtr<cParticleBehaviour>* lppLastBeh = &lpCopy->mpBehaviours;
-    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != nullptr;
+    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != 0;
          lpBeh = lpBeh->mpNext.Get())
     {
         cParticleBehaviour* lpBehCopy = lpBeh->Serialise(aSer);
@@ -340,7 +340,7 @@ cParticleDescriptor* cParticleDescriptor::Serialise(cLionSerialiser& aSer) const
         lpCopy->mpMaterial.Set(mpMaterial->Serialise(aSer));
 
     tLionSerialisedPtr<cParticleDescriptor>* lppLastChild = &lpCopy->mpChild;
-    for (const cParticleDescriptor* lpChild = mpChild.Get(); lpChild != nullptr;
+    for (const cParticleDescriptor* lpChild = mpChild.Get(); lpChild != 0;
          lpChild = lpChild->mpNext.Get())
     {
         cParticleDescriptor* lpChildCopy = lpChild->Serialise(aSer);

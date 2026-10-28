@@ -29,7 +29,7 @@ namespace CgsDev
 {
     DebugComponent::DebugComponent()
         : mbActive(false)
-        , mpDebugLinkedListNext(nullptr)
+        , mpDebugLinkedListNext(0)
     {
     }
 
@@ -45,7 +45,7 @@ namespace CgsDev
     void DebugComponent::Construct()
     {
         mbActive = false;
-        mpDebugLinkedListNext = nullptr;
+        mpDebugLinkedListNext = 0;
     }
 
     // Base teardown (CgsDebugComponent.cpp:79). Marks the component inactive; the X360 keeps no
@@ -343,7 +343,7 @@ namespace CgsDev
         char lacPath[256];
         lpComponent->GetComponentPath(lacPath, sizeof(lacPath));
         DebugUI::MenuManager& lrMenuManager = lpManager->GetUI().GetMenuManager();
-        DebugUI::Menu* lpMenu = lrMenuManager.GetMenuFromPath(lacPath, nullptr);
+        DebugUI::Menu* lpMenu = lrMenuManager.GetMenuFromPath(lacPath, 0);
         if (lpMenu)
             lrMenuManager.Open(lpMenu);
     }

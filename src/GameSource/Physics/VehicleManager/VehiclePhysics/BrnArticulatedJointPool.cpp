@@ -103,11 +103,11 @@ namespace
                 JointMultiplyAdd(lvNegativePosition.y, lvY.w, JointMultiply(lvNegativePosition.z, lvZ.w)))};
         const auto Rotate = [&](Vector3 lvRow)
         {
-            return Vector3{
+            { const Vector3 lResult = {
                 JointMultiplyAdd(lvRow.z, lvZ.x, JointMultiplyAdd(lvRow.y, lvY.x, JointMultiply(lvRow.x, lvX.x))),
                 JointMultiplyAdd(lvRow.z, lvZ.y, JointMultiplyAdd(lvRow.y, lvY.y, JointMultiply(lvRow.x, lvX.y))),
                 JointMultiplyAdd(lvRow.z, lvZ.z, JointMultiplyAdd(lvRow.y, lvY.z, JointMultiply(lvRow.x, lvX.z))),
-                JointMultiplyAdd(lvRow.z, lvZ.w, JointMultiplyAdd(lvRow.y, lvY.w, JointMultiply(lvRow.x, lvX.w)))};
+                JointMultiplyAdd(lvRow.z, lvZ.w, JointMultiplyAdd(lvRow.y, lvY.w, JointMultiply(lvRow.x, lvX.w)))}; return lResult; }
         };
         const Vector3 lvPosition = lrJoint.wAxis;
         Matrix44Affine lResult;
@@ -142,47 +142,47 @@ void ArticulatedJointPool::_AssertLayout()
     // --- the element stride the console's index math uses -------------------------------
     // Construct @0x82600938 walks maJoints with `slwi r11,r31,2 ; add r11,r31,r11 ; slwi r11,r11,4`
     // == i*80, and GetJoint @0x825C2B40 ends with the same sequence.
-    static_assert(sizeof(ArticulatedJoint) == 80,
+    CGS_STATIC_ASSERT((sizeof(ArticulatedJoint) == 80),
                   "maJoints is strided i*80 by Construct @0x82600938 and GetJoint @0x825C2B40");
 
     // --- the four member offsets PhysicalTrafficManager::Construct's neighbours pin ------
     // The pool sits at PhysicalTrafficManager+103616 and the next member it writes is at
     // +104448, so the pool is exactly 832 bytes; inside it, ArticulatedJointPool::Construct
     // clears two 64-bit masks and then stores four floats at the offsets below.
-    static_assert(offsetof(ArticulatedJointPool, maJoints) == 0,   "maJoints @0");
-    static_assert(offsetof(ArticulatedJointPool, mUsedJoints) == 800,
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, maJoints) == 0),   "maJoints @0");
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, mUsedJoints) == 800),
                   "mUsedJoints @800 -- Construct's first `std 0`, and the word IsJointInUse "
                   "@0x825C29C8 bit-tests");
-    static_assert(offsetof(ArticulatedJointPool, mJointsBrokenThisFrame) == 808,
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, mJointsBrokenThisFrame) == 808),
                   "mJointsBrokenThisFrame @808 -- Construct's second `std 0`");
-    static_assert(offsetof(ArticulatedJointPool, mfSwingAngleDegrees) == 816,       "@816 = 30.0f");
-    static_assert(offsetof(ArticulatedJointPool, mfMaxSwingVelocityDegrees) == 820, "@820 = 10.0f");
-    static_assert(offsetof(ArticulatedJointPool, mfTwistAngleDegrees) == 824,       "@824 = 15.0f");
-    static_assert(offsetof(ArticulatedJointPool, mfMaxTwistVelocityDegrees) == 828, "@828 = 10.0f");
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, mfSwingAngleDegrees) == 816),       "@816 = 30.0f");
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, mfMaxSwingVelocityDegrees) == 820), "@820 = 10.0f");
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, mfTwistAngleDegrees) == 824),       "@824 = 15.0f");
+    CGS_STATIC_ASSERT((offsetof(ArticulatedJointPool, mfMaxTwistVelocityDegrees) == 828), "@828 = 10.0f");
 
     // --- widths, because an offset gate alone is blind to a member retyped in place ------
     // (the TrafficPhysics tamper test proved this: u8 -> u32 in a 3-byte pad hole is SILENT to
     //  every offset and size assert around it)
-    static_assert(sizeof(ArticulatedJointPool::ArticulatedJointBitArray) == 8, "BitArray<10> is one u64 field");
+    CGS_STATIC_ASSERT((sizeof(ArticulatedJointPool::ArticulatedJointBitArray) == 8), "BitArray<10> is one u64 field");
     // ADDED AFTER THE TAMPER TEST FOUND A HOLE. `sizeof(f32) == 4` is a tautology, and with only
     // that line case 6 (`mfSwingAngleDegrees` f32 -> u32) was **SILENT**: same width, same offset,
     // same class size -- and semantically wrong, because the console stores these four with `stfsx`,
     // a FLOAT store. The type check is what actually catches it.
-    static_assert(std::is_floating_point<decltype(ArticulatedJointPool::mfSwingAngleDegrees)>::value,
+    CGS_STATIC_ASSERT((std::is_floating_point<decltype(ArticulatedJointPool::mfSwingAngleDegrees)>::value),
                   "mfSwingAngleDegrees is written by `stfsx` -- a float, not an integer word");
-    static_assert(std::is_floating_point<decltype(ArticulatedJointPool::mfMaxSwingVelocityDegrees)>::value,
+    CGS_STATIC_ASSERT((std::is_floating_point<decltype(ArticulatedJointPool::mfMaxSwingVelocityDegrees)>::value),
                   "mfMaxSwingVelocityDegrees is written by `stfsx`");
-    static_assert(std::is_floating_point<decltype(ArticulatedJointPool::mfTwistAngleDegrees)>::value,
+    CGS_STATIC_ASSERT((std::is_floating_point<decltype(ArticulatedJointPool::mfTwistAngleDegrees)>::value),
                   "mfTwistAngleDegrees is written by `stfsx`");
-    static_assert(std::is_floating_point<decltype(ArticulatedJointPool::mfMaxTwistVelocityDegrees)>::value,
+    CGS_STATIC_ASSERT((std::is_floating_point<decltype(ArticulatedJointPool::mfMaxTwistVelocityDegrees)>::value),
                   "mfMaxTwistVelocityDegrees is written by `stfsx`");
-    static_assert(sizeof(decltype(ArticulatedJointPool::mfSwingAngleDegrees)) == 4,
+    CGS_STATIC_ASSERT((sizeof(decltype(ArticulatedJointPool::mfSwingAngleDegrees)) == 4),
                   "...and a SINGLE-precision one (stfsx, not stfdx)");
 
     // --- and the total, which is what BrnPhysicalTrafficManager.h embeds ------------------
     // 10*80 + 8 + 8 + 4*4 == 832, with zero slack: 828 + 4 == 832 and the class is 16-aligned
     // via ArticulatedJoint, 832 % 16 == 0, so there is no tail pad hiding a mistake here.
-    static_assert(sizeof(ArticulatedJointPool) == 832,
+    CGS_STATIC_ASSERT((sizeof(ArticulatedJointPool) == 832),
                   "PhysicalTrafficManager::Construct @0x82636CA8 pins the pool at this+103616 and "
                   "its successor at this+104448");
 }
@@ -249,7 +249,7 @@ s32 ArticulatedJointPool::CreateJoint(
     const Matrix44Affine& lrTrailerWorldTransform,
     Vector3 lArticulationPointWorldSpace)
 {
-    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpAddJointEvent != NULL"); // :149
+    CGS_ASSERT(lpJointWorkingBuffer != 0, "lpAddJointEvent != NULL"); // :149
     CGS_ASSERT(rw::math::vpu::IsValid(lrCabWorldTransform),
                "RwMathVPU::IsValid( lCabWorldTransform )");
     CGS_ASSERT(rw::math::vpu::IsValid(lrTrailerWorldTransform),
@@ -288,7 +288,7 @@ void ArticulatedJointPool::ConstructArticulatedJoint(
     const Matrix44Affine& lrTrailerWorldTransform,
     Vector3 lWorldSpaceJointPos)
 {
-    CGS_ASSERT(lpOutAddJointEvent != nullptr, "lpOutAddJointEvent != NULL"); // :223
+    CGS_ASSERT(lpOutAddJointEvent != 0, "lpOutAddJointEvent != NULL"); // :223
     CGS_ASSERT(mfSwingAngleDegrees > 0.0f, "mfSwingAngleDegrees > 0.0f");   // :224
 
     lpOutAddJointEvent->mu64Id = lJointId.mu64RawId;
@@ -393,8 +393,8 @@ void ArticulatedJointPool::SendCreateRemoveJointEvents(
         VehicleOutputRequestInterface* lpRequestInterface,
         const ArticulatedJointCreateBuffer* lpJointWorkingBuffer)
 {
-    CGS_ASSERT(lpRequestInterface != nullptr, "lpRequestInterface != NULL");        // :431
-    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpJointWorkingBuffer != NULL");    // :432
+    CGS_ASSERT(lpRequestInterface != 0, "lpRequestInterface != NULL");        // :431
+    CGS_ASSERT(lpJointWorkingBuffer != 0, "lpJointWorkingBuffer != NULL");    // :432
 
     const ArticulatedJointCreateBuffer::CreatedJointBitArray* lpCreatedJoints =
         lpJointWorkingBuffer->GetCreatedJointBitArray();
@@ -434,7 +434,7 @@ void ArticulatedJointPool::SendCreateRemoveJointEvents(
 // ---------------------------------------------------------------------------------------
 void ArticulatedJointPool::RemoveJoint(ArticulatedJointCreateBuffer* lpJointWorkingBuffer, s32 liJointIndex)
 {
-    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpJointWorkingBuffer != NULL");          // :322
+    CGS_ASSERT(lpJointWorkingBuffer != 0, "lpJointWorkingBuffer != NULL");          // :322
     CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_NUM_JOINTS,
                "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");    // :323
     CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "invalid index : ");       // CgsBitArray.h:203
@@ -461,7 +461,7 @@ void ArticulatedJointPool::RemoveJoint(ArticulatedJointCreateBuffer* lpJointWork
 // ---------------------------------------------------------------------------------------
 void ArticulatedJointPool::RemoveBrokenJointsFromSimulation(ArticulatedJointCreateBuffer* lpJointWorkingBuffer)
 {
-    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpJointWorkingBuffer != NULL");
+    CGS_ASSERT(lpJointWorkingBuffer != 0, "lpJointWorkingBuffer != NULL");
 
     for (s32 liJointIndex = mJointsBrokenThisFrame.GetFirstNonZeroBit();
          liJointIndex >= 0;

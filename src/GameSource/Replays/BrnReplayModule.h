@@ -105,7 +105,7 @@ namespace BrnReplays
         };
 
         ReplayModule();
-        void Construct() override;
+        void Construct() ;
 
         // ARTIST 0x82660E78; the public virtual pre-sim entry owns IO locks and dispatch.
         virtual void Update_PreSim(const ReplayIO::InputBuffer_PreSim* lpInputBuffer,
@@ -124,7 +124,7 @@ namespace BrnReplays
 
         // Vtable slot 3 : tear down the debug component and the game-event cache,
         // then the module base.
-        void Destruct() override;
+        void Destruct() ;
 
         // . Drain the game-data receiver queue for the header file's open response,
         // then report whether the replay files are open: a primary stream (read or write) open

@@ -17,7 +17,7 @@ namespace
                                   const CgsResource::ResourceDescriptor& lrDescriptor)
     {
         return lpAllocator->DoAllocate(
-            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), nullptr);
+            reinterpret_cast<const rw::ResourceDescriptor&>(lrDescriptor), 0);
     }
 }
 
@@ -464,7 +464,7 @@ namespace
     // the descriptor writes it. Element 0 owns stream 0, which is the stream being bound.
     u32 GetVertexStreamStride(const renderengine::VertexDescriptorData* lpDescriptor)
     {
-        if (lpDescriptor == nullptr || lpDescriptor->muElementCount == 0u)
+        if (lpDescriptor == 0 || lpDescriptor->muElementCount == 0u)
         {
             return 0u;
         }
@@ -613,10 +613,10 @@ namespace
 // DrawIndexedParameters blocks are deliberately left alone -- CreateGeometry fills them.
 void BrnSkyDomeManager::Construct()
 {
-    mpMainVertexBuffer = nullptr;
-    mpMainIndexBuffer  = nullptr;
-    mpCubeVertexBuffer = nullptr;
-    mpCubeIndexBuffer  = nullptr;
+    mpMainVertexBuffer = 0;
+    mpMainIndexBuffer  = 0;
+    mpCubeVertexBuffer = 0;
+    mpCubeIndexBuffer  = 0;
     mrHorizonDistance  = 0.0f;
     mrZenithDistance   = 0.0f;
 }
@@ -640,7 +640,7 @@ void BrnSkyDomeManager::Render(
     const BrnShaderConstantsFrame* lpShaderConstants)
 {
     // Both cloud textures must be resident; otherwise the whole pass is skipped.
-    if (lpLayer0Density == nullptr || lpLayer0Lighting == nullptr)
+    if (lpLayer0Density == 0 || lpLayer0Lighting == 0)
     {
         return;
     }
@@ -721,7 +721,7 @@ void BrnSkyDomeManager::RenderToEnvironmentMap(
     const renderengine::Texture* lpLayer0Lighting,
     const BrnShaderConstantsFrame* lpShaderConstants)
 {
-    if (lpLayer0Density == nullptr || lpLayer0Lighting == nullptr)
+    if (lpLayer0Density == 0 || lpLayer0Lighting == 0)
     {
         return;
     }

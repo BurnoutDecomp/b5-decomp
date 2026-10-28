@@ -52,7 +52,7 @@ IRZeroary* IRZeroary::NewInst(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRZeroary));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRZeroary(aiOpcode, apContext);
 }

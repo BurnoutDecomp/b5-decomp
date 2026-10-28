@@ -19,12 +19,12 @@ namespace BrnTraffic
     // mxFlags last.
     void StaticTrafficParam::_AssertLayout()
     {
-        static_assert(offsetof(StaticTrafficParam, muHull) == 0x00, "muHull");
-        static_assert(offsetof(StaticTrafficParam, muStaticTrafficIndexOnHull) == 0x02,
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficParam, muHull) == 0x00), "muHull");
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficParam, muStaticTrafficIndexOnHull) == 0x02),
                       "muStaticTrafficIndexOnHull");
-        static_assert(offsetof(StaticTrafficParam, mxFlags) == 0x03, "mxFlags");
-        static_assert(offsetof(StaticTrafficParam, muVehicleType) == 0x04, "muVehicleType");
-        static_assert(sizeof(StaticTrafficParam) == 6, "sizeof(StaticTrafficParam)");
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficParam, mxFlags) == 0x03), "mxFlags");
+        CGS_STATIC_ASSERT((offsetof(StaticTrafficParam, muVehicleType) == 0x04), "muVehicleType");
+        CGS_STATIC_ASSERT((sizeof(StaticTrafficParam) == 6), "sizeof(StaticTrafficParam)");
     }
 
     // @0x82751EF8 (Feb-2007 leak) - reset to "no vehicle".

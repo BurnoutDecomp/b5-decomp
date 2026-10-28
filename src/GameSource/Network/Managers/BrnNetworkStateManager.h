@@ -277,27 +277,27 @@ namespace BrnNetwork
 
         static void _AssertLayout()
         {
-            static_assert(offsetof(StateManager, mCurrentPlayerXUIDs) == 0x00, "mCurrentPlayerXUIDs @ +0x00");
-            static_assert(sizeof(CurrentPlayerXUIDs) == 0x80, "CurrentPlayerXUIDs is 8 x 16 bytes");
-            static_assert(offsetof(StateManager, mpNetworkModule) == 0x80, "mpNetworkModule @ +0x80");
-            static_assert(sizeof(CachedNewCarData) == 0x18, "CachedNewCarData 0x18");
-            static_assert(sizeof(CachedMarkedManData) == 0x08, "CachedMarkedManData 0x08");
-            static_assert(sizeof(CachedDistrictData) == 0x0C, "CachedDistrictData 0x0C");
-            static_assert(sizeof(CachedCarColourData) == 0x0C, "CachedCarColourData 0x0C");
-            static_assert(sizeof(CachedFeverData) == 0x02, "CachedFeverData 0x02");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mCurrentPlayerXUIDs) == 0x00), "mCurrentPlayerXUIDs @ +0x00");
+            CGS_STATIC_ASSERT((sizeof(CurrentPlayerXUIDs) == 0x80), "CurrentPlayerXUIDs is 8 x 16 bytes");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mpNetworkModule) == 0x80), "mpNetworkModule @ +0x80");
+            CGS_STATIC_ASSERT((sizeof(CachedNewCarData) == 0x18), "CachedNewCarData 0x18");
+            CGS_STATIC_ASSERT((sizeof(CachedMarkedManData) == 0x08), "CachedMarkedManData 0x08");
+            CGS_STATIC_ASSERT((sizeof(CachedDistrictData) == 0x0C), "CachedDistrictData 0x0C");
+            CGS_STATIC_ASSERT((sizeof(CachedCarColourData) == 0x0C), "CachedCarColourData 0x0C");
+            CGS_STATIC_ASSERT((sizeof(CachedFeverData) == 0x02), "CachedFeverData 0x02");
             // Pointer-free run from meState: relative offsets equal the console ones.
-            static_assert(offsetof(StateManager, meOutputPlayerTexture)    - offsetof(StateManager, meState) == 0x94 - 0x90, "+0x94");
-            static_assert(offsetof(StateManager, mNetworkPlayerIDToOutput) - offsetof(StateManager, meState) == 0x98 - 0x90, "+0x98");
-            static_assert(offsetof(StateManager, mNewCarData)              - offsetof(StateManager, meState) == 0xA0 - 0x90, "+0xA0");
-            static_assert(offsetof(StateManager, mMarkedManData)           - offsetof(StateManager, meState) == 0xB8 - 0x90, "+0xB8");
-            static_assert(offsetof(StateManager, mDistrictData)            - offsetof(StateManager, meState) == 0xC0 - 0x90, "+0xC0");
-            static_assert(offsetof(StateManager, mCarColourData)           - offsetof(StateManager, meState) == 0xCC - 0x90, "+0xCC");
-            static_assert(offsetof(StateManager, mFeverData)               - offsetof(StateManager, meState) == 0xD8 - 0x90, "+0xD8");
-            static_assert(offsetof(StateManager, meLeftReason)             - offsetof(StateManager, meState) == 0xDC - 0x90, "+0xDC");
-            static_assert(offsetof(StateManager, meKickReason)             - offsetof(StateManager, meState) == 0xE0 - 0x90, "+0xE0");
-            static_assert(offsetof(StateManager, mbSetNotPlaying)          - offsetof(StateManager, meState) == 0xE4 - 0x90, "+0xE4");
-            static_assert(offsetof(StateManager, mbCloseLimboGameWhenIdle) - offsetof(StateManager, meState) == 0xED - 0x90, "+0xED");
-            static_assert(offsetof(StateManager, mbRefreshingFreeburnLobbyThisFrame) - offsetof(StateManager, meState) == 0xF2 - 0x90, "+0xF2");
+            CGS_STATIC_ASSERT((offsetof(StateManager, meOutputPlayerTexture)    - offsetof(StateManager, meState) == 0x94 - 0x90), "+0x94");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mNetworkPlayerIDToOutput) - offsetof(StateManager, meState) == 0x98 - 0x90), "+0x98");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mNewCarData)              - offsetof(StateManager, meState) == 0xA0 - 0x90), "+0xA0");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mMarkedManData)           - offsetof(StateManager, meState) == 0xB8 - 0x90), "+0xB8");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mDistrictData)            - offsetof(StateManager, meState) == 0xC0 - 0x90), "+0xC0");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mCarColourData)           - offsetof(StateManager, meState) == 0xCC - 0x90), "+0xCC");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mFeverData)               - offsetof(StateManager, meState) == 0xD8 - 0x90), "+0xD8");
+            CGS_STATIC_ASSERT((offsetof(StateManager, meLeftReason)             - offsetof(StateManager, meState) == 0xDC - 0x90), "+0xDC");
+            CGS_STATIC_ASSERT((offsetof(StateManager, meKickReason)             - offsetof(StateManager, meState) == 0xE0 - 0x90), "+0xE0");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mbSetNotPlaying)          - offsetof(StateManager, meState) == 0xE4 - 0x90), "+0xE4");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mbCloseLimboGameWhenIdle) - offsetof(StateManager, meState) == 0xED - 0x90), "+0xED");
+            CGS_STATIC_ASSERT((offsetof(StateManager, mbRefreshingFreeburnLobbyThisFrame) - offsetof(StateManager, meState) == 0xF2 - 0x90), "+0xF2");
         }
 
         // ---- data ------------------------------------------------------------------------

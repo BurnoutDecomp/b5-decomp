@@ -84,13 +84,13 @@ public:
     // @ 0x82BD4DF0. Returns the open-session server endpoint. The X360 loads it
     // through the .data pointer off_82F91CAC -> "/adsrv/4/openSession". Overrides
     // the base slot-2 per-request-type endpoint getter.
-    const char* GetRequestURL() override;
+    const char* GetRequestURL() ;
 
     // @ 0x82BD4E58 (body pending -- see the file header for the resolved
     // collaborator facts). Vftable slot-1 Parse override the response path
     // (CRequestObject::Complete) dispatches: walks the 204-response block and
     // fills the two response IDs below.
-    int Parse() override;
+    int Parse() ;
 
     // @ 0x82BD53C8. Called by CMassiveClientCore::RequestSessionOpen. Rejects a
     // null builder, SKU name or SKU version (returns -1100); otherwise chains the

@@ -52,20 +52,20 @@ public:
     enum EPrepareStage { E_PREPARESTAGE_START, E_PREPARESTAGE_DONE };
     enum EReleaseStage { E_RELEASESTAGE_START, E_RELEASESTAGE_DONE };
 
-    void Construct() override;
+    void Construct() ;
     bool Prepare(CgsGui::GuiEventQueueSmall*, rw::IResourceAllocator*,
-                 rw::IResourceAllocator*) override;
-    bool Release() override;
-    void RecvEvent(const CgsModule::Event*, s32 liEventType) override;
-    void Update() override;
-    CgsID GetID() const override;
-    s32 GetNumTextures() const override { return 1; }
+                 rw::IResourceAllocator*) ;
+    bool Release() ;
+    void RecvEvent(const CgsModule::Event*, s32 liEventType) ;
+    void Update() ;
+    CgsID GetID() const ;
+    s32 GetNumTextures() const  { return 1; }
     void SetTextRenderer(CgsGraphics::TextRenderer* lpRenderer) { mpTextRenderer = lpRenderer; }
     void SetLanguageManager(CgsLanguage::LanguageManager* lpManager) { mpLanguageManager = lpManager; }
     void SetReplaySerialiser(BrnReplays::GuiModuleSerialiser* lpSerialiser) { mpGuiModuleSerialiser = lpSerialiser; }
 
 private:
-    void RenderComponent(CgsGui::ImRendererSet*) override;
+    void RenderComponent(CgsGui::ImRendererSet*) ;
     void RenderTrafficCarScores(CgsGui::ImRendererSet*);
     void RenderBankingScores(CgsGui::ImRendererSet*);
     void RenderReplayAboveCar(CgsGui::ImRendererSet*);

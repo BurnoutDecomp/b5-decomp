@@ -39,13 +39,13 @@ namespace BrnNetwork
         void Destruct();
         void PrepareForSend(u16 lu16Frame, NetworkPlayerID lMarkedMan, bool lbFinalAnswer);
         bool Retrieve(NetworkPlayerID* lpMarkedMan, bool* lpbFinalAnswer);
-        s32 GetPackedMessageSize() override;
+        s32 GetPackedMessageSize() ;
 
         // LEDGER func @ 0x827DFD40 -- bodied in this TU.
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
     };
 
     // BrnNetwork::MarkedManMessage::GetName  @ 0x827DFD40
@@ -55,5 +55,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(MarkedManMessage) == 0x30, "sizeof(MarkedManMessage) == 0x30");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(MarkedManMessage) == 0x30), "sizeof(MarkedManMessage) == 0x30");
 } // namespace BrnNetwork

@@ -198,8 +198,8 @@ struct GridPositionAndScoreData
     // to the sort or to its caller.
     bool operator>(const GridPositionAndScoreData& lRhs) const
     {
-        CGS_ASSERT(lpCarData != nullptr, "lpCarData");
-        CGS_ASSERT(lRhs.lpCarData != nullptr, "lRhs.lpCarData");
+        CGS_ASSERT(lpCarData != 0, "lpCarData");
+        CGS_ASSERT(lRhs.lpCarData != 0, "lRhs.lpCarData");
         return lpCarData->GetCumulativePoints() > lRhs.lpCarData->GetCumulativePoints();
     }
 };
@@ -414,7 +414,7 @@ public:
     // `mpCurrentGameMode != NULL && (muFlags & (1 << 35)) != 0` (`extldi r12,r12,64,35`).
     bool CurrentGameModeAllowsRevengeTakedowns() const
     {
-        return mpCurrentGameMode != nullptr &&
+        return mpCurrentGameMode != 0 &&
                mCurrentGameModeParams.GetFlag(GameModeParams::KU_FLAG_ALLOW_REVENGE_TAKEDOWNS);
     }
 

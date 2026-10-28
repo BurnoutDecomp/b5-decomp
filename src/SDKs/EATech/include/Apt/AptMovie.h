@@ -20,7 +20,7 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 struct AptConstFile;   // the serialised const chunk (the resolve64 parse ctx)
 

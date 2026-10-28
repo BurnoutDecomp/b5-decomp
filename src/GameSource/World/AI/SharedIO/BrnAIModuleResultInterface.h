@@ -34,7 +34,7 @@ namespace BrnAI
         // base, EBO -> zero bytes). Field order/offsets:
         //   mResetPosition @+0x0 (V3), mResetDirection @+0x10 (V3), meState @+0x20,
         //   meGlobalRaceCarIndex @+0x24, mfResetSpeed @+0x28. 16-byte aligned; sizeof == 48.
-        struct alignas(16) ResetOnTrackResult
+        struct CGS_ALIGN(16) ResetOnTrackResult
         {
             // DWARF BrnAIModuleResultInterface.h:41.
             enum State
@@ -67,7 +67,7 @@ namespace BrnAI
         // BrnAIModuleResultInterface.h:81 (`: public Event`, EBO). Field order/offsets:
         //   mResetPosition @+0x0 (V3), mResetDirection @+0x10 (V3), meGlobalRaceCarIndex @+0x20,
         //   mfResetSpeed @+0x24. 16-byte aligned; sizeof == 48.
-        struct alignas(16) PlaceOnTrackRequest
+        struct CGS_ALIGN(16) PlaceOnTrackRequest
         {
             void Construct(EGlobalRaceCarIndex leGlobalRaceCarIndex,
                            f32 lfResetSpeed,

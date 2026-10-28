@@ -41,7 +41,7 @@
 //     +0x58  msField58       (u16, 0)
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 
@@ -91,35 +91,35 @@ public:
     // expose the accumulator slots BY NAME so the asset does not reach into the
     // private members by offset.
     int                GetField18() const { return mnField18; }
-    std::uint16_t      GetField1C() const { return msField1C; }
+    uint16_t      GetField1C() const { return msField1C; }
     float              GetField20() const { return mfField20; }
-    std::uint16_t      GetField24() const { return msField24; }
+    uint16_t      GetField24() const { return msField24; }
     float              GetField28() const { return mfField28; }
-    std::uint16_t      GetField2C() const { return msField2C; }
+    uint16_t      GetField2C() const { return msField2C; }
     int                GetField34() const { return mnField34; }
-    std::int64_t       GetField40() const { return mnField40; }
-    std::int64_t       GetField48() const { return mnField48; }
-    std::uint16_t      GetField58() const { return msField58; }
+    int64_t       GetField40() const { return mnField40; }
+    int64_t       GetField48() const { return mnField48; }
+    uint16_t      GetField58() const { return msField58; }
 
 private:
     int           mnParentRecord; // +0x14 (a2)
     int           mnField18;      // +0x18
-    std::uint16_t msField1C;      // +0x1C
-    std::uint8_t  maPad1E[2];     // +0x1E (alignment before mfField20)
+    uint16_t msField1C;      // +0x1C
+    uint8_t  maPad1E[2];     // +0x1E (alignment before mfField20)
     float         mfField20;      // +0x20 (flt_82001CC0 == 0.0f)
-    std::uint16_t msField24;      // +0x24
-    std::uint8_t  maPad26[2];     // +0x26 (alignment before mfField28)
+    uint16_t msField24;      // +0x24
+    uint8_t  maPad26[2];     // +0x26 (alignment before mfField28)
     float         mfField28;      // +0x28 (flt_82001CC0 == 0.0f)
-    std::uint16_t msField2C;      // +0x2C
-    std::uint8_t  maPad2E[2];     // +0x2E (alignment before mnField30)
+    uint16_t msField2C;      // +0x2C
+    uint8_t  maPad2E[2];     // +0x2E (alignment before mnField30)
     int           mnField30;      // +0x30
     int           mnField34;      // +0x34
     int           mnField38;      // +0x38
-    std::uint8_t  maPad3C[4];     // +0x3C (X360 gap; aligns the +0x40 i64)
-    std::int64_t  mnField40;      // +0x40
-    std::int64_t  mnField48;      // +0x48
-    std::int64_t  mnField50;      // +0x50
-    std::uint16_t msField58;      // +0x58
+    uint8_t  maPad3C[4];     // +0x3C (X360 gap; aligns the +0x40 i64)
+    int64_t  mnField40;      // +0x40
+    int64_t  mnField48;      // +0x48
+    int64_t  mnField50;      // +0x50
+    uint16_t msField58;      // +0x58
 };
 
 } // namespace MassiveAdClient3

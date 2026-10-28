@@ -35,8 +35,8 @@ namespace BrnWorld
         // surface-colour helper, and registers the polygon callback.
         void Construct(const WorldEntityModule* lpWorldEntityModule);
 
-        const char* GetName() const override { return "Collision draw mode"; }
-        const char* GetPath() const override { return "World"; }
+        const char* GetName() const  { return "Collision draw mode"; }
+        const char* GetPath() const  { return "World"; }
 
         // Static callback registered with the shared triangle-collision component by
         // Construct. The callback type and argument order are from DecFIGS, with ARTIST
@@ -51,7 +51,7 @@ namespace BrnWorld
             s32 liPolyIndex);
 
     protected:
-        virtual void OnActivate() override;
+        virtual void OnActivate() ;
 
     private:
         static u32 GetPolyColour(CollisionTag lCollisionTag, s32 liPolyIndex);

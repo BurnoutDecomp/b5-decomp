@@ -128,7 +128,7 @@ void EmitterState::Attach(void* lpvAttachment)
 {
     CGS_ASSERT(lpvAttachment != 0, "lpvAttachment");
     mEntity = *static_cast<const BrnSound::World::StaticSoundEntity*>(lpvAttachment);
-    State::Attach(nullptr);
+    State::Attach(0);
 }
 
 void EmitterState::UpdateParams(f32 lfDeltaTime)

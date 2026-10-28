@@ -344,11 +344,11 @@ namespace BrnNetwork
         if ( !lpMugshotDataEntry )
         {
             CGS_ASSERT(lpMugshotDataEntry, "lpMugshotDataEntry");
-            return nullptr;
+            return 0;
         }
 
         if ( lpMugshotDataEntry->mTakedownVictimPlayerID == -1 || !lpMugshotDataEntry->mbPictureValid )
-            return nullptr;
+            return 0;
 
         return &lpMugshotDataEntry->mPicture;
     }
@@ -471,11 +471,11 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
     {
-        const CgsModule::Event* lpEvent = nullptr;
+        const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 leEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
 
-        while ( lpEvent != nullptr )
+        while ( lpEvent != 0 )
         {
             switch ( leEventType )
             {
@@ -495,7 +495,7 @@ namespace BrnNetwork
                 break;
             }
 
-            const CgsModule::Event* lpNextEvent = nullptr;
+            const CgsModule::Event* lpNextEvent = 0;
             leEventType = lpQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
             lpEvent = lpNextEvent;
         }
@@ -553,7 +553,7 @@ namespace BrnNetwork
         mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
                                                           lAbortEvent.GetEventType(), sizeof(lAbortEvent));
 
-        mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+        mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
         mbBroadcastCurrentImage    = false;
         mRoadRuleBeatenID          = 0;
@@ -576,7 +576,7 @@ namespace BrnNetwork
         mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
                                                           lAbortEvent.GetEventType(), sizeof(lAbortEvent));
 
-        mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+        mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
         mbBroadcastCurrentImage    = false;
         mRoadRuleBeatenID          = 0;
@@ -657,7 +657,7 @@ namespace BrnNetwork
             if ( mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID) )
             {
                 const CgsNetwork::NetworkTexture* lpTexture = lpCamera->GetCameraPicture(lLocalPlayerID);
-                if ( lpTexture == nullptr )
+                if ( lpTexture == 0 )
                 {
                     CGS_ASSERT(meImageTypeToSend != BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT,
                                "meImageTypeToSend != GsmIO::E_IMAGE_TYPE_COUNT");
@@ -698,7 +698,7 @@ namespace BrnNetwork
                        "meImageTypeToSend != GsmIO::E_IMAGE_TYPE_COUNT");
 
             const CgsNetwork::NetworkTexture* lpTexture = lpCamera->GetCameraPicture(lLocalPlayerID);
-            if ( lpTexture != nullptr )
+            if ( lpTexture != 0 )
             {
                 CGS_ASSERT(mTakedownAggressorPlayerID != -1,
                            "mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
@@ -773,7 +773,7 @@ namespace BrnNetwork
                                                                                       bool* lpbAlreadyShowingPhotoFinish)
     {
         if ( !mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetConnectionComponent()->IsLoggedIn() )
-            return nullptr;
+            return 0;
 
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lRoundWinnerID);
         CGS_ASSERT(lpMugshotDataEntry, "lpMugshotDataEntry");
@@ -799,11 +799,11 @@ namespace BrnNetwork
 
         *lpbAlreadyShowingPhotoFinish = ( meState != E_IMAGE_MANAGER_STATE_COUNT );
 
-        if ( lpMugshotDataEntry == nullptr ||
+        if ( lpMugshotDataEntry == 0 ||
              lpMugshotDataEntry->mTakedownVictimPlayerID == -1 ||
              !lpMugshotDataEntry->mbPhotoFinishValid )
         {
-            return nullptr;
+            return 0;
         }
 
         return &lpMugshotDataEntry->mPicture;
@@ -956,7 +956,7 @@ namespace BrnNetwork
             CGS_ASSERT(E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT == meState,
                        "E_IMAGE_MANAGER_STATE_SHOW_MY_MUGSHOT == meState");
 
-            mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+            mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
             mbBroadcastCurrentImage    = false;
             mRoadRuleBeatenID          = 0;
@@ -970,7 +970,7 @@ namespace BrnNetwork
         case BrnGameState::GameStateModuleIO::E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT:
             if ( meState == E_IMAGE_MANAGER_STATE_SHOW_MUGSHOT || meState == E_IMAGE_MANAGER_STATE_COUNT )
             {
-                mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+                mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
                 mbBroadcastCurrentImage    = false;
                 mRoadRuleBeatenID          = 0;
@@ -1029,7 +1029,7 @@ namespace BrnNetwork
     void NetworkImageManager::SendNextSegment()
     {
         MugshotData* lpRemoteMugshotData = GetImageDataToSend();
-        if ( lpRemoteMugshotData == nullptr )
+        if ( lpRemoteMugshotData == 0 )
             return;
 
         CGS_ASSERT(mTakedownAggressorPlayerID != -1,
@@ -1084,7 +1084,7 @@ namespace BrnNetwork
         if ( lpRemoteMugshotData->miLastPacketSent == lpRemoteMugshotData->miNumberOfPacketsToSend )
         {
             lpRemoteMugshotData->miNumberOfPacketsToSend = 0;
-            if ( GetImageDataToSend() == nullptr )
+            if ( GetImageDataToSend() == 0 )
                 meImageTypeToSend = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT;
         }
     }
@@ -1136,7 +1136,7 @@ namespace BrnNetwork
                 / ImageMessage::KI_PHOTO_SEGMENT_SIZE;
 
             CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
-            mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_PHOTO, nullptr);
+            mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_PHOTO, 0);
 
             BrnNetworkModuleIO::NetworkOutSentMugshot lMugshotSentEvent;
             mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lMugshotSentEvent),
@@ -1149,10 +1149,10 @@ namespace BrnNetwork
         if ( KAB_IMAGE_TRANSMITS_GAMERPIC[meImageTypeToSend] )
         {
             lpImageMessage->PrepareForSend(lu16CurrentFrame, lTakedownVictimPlayerID, lTakedownAggressorPlayerID,
-                                           meImageTypeToSend, mRoadRuleBeatenID, 0, 0, 0, nullptr);
+                                           meImageTypeToSend, mRoadRuleBeatenID, 0, 0, 0, 0);
 
             CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
-            mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_GAMERPIC, nullptr);
+            mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_GAMERPIC, 0);
         }
 
         meImageTypeToSend = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT;
@@ -1520,7 +1520,7 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     NetworkImageManager::ImageMessageData* NetworkImageManager::GetImageMessageDataEntry(NetworkPlayerID lPlayerID)
     {
-        ImageMessageData* lpEntry = nullptr;
+        ImageMessageData* lpEntry = 0;
 
         for ( s32 liIndex = 0; liIndex < KI_MAX_IMAGE_PLAYERS; ++liIndex )
         {
@@ -1545,7 +1545,7 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     NetworkImageManager::MugshotData* NetworkImageManager::GetMugshotDataEntry(NetworkPlayerID lPlayerID)
     {
-        MugshotData* lpEntry = nullptr;
+        MugshotData* lpEntry = 0;
 
         for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
         {

@@ -37,20 +37,20 @@ namespace PropEntityIO
         // What is still gated, and still has teeth: the member ORDER, that nothing is inserted
         // between the two, and that the interface has not silently shrunk back below its
         // console extent.
-        static_assert(offsetof(OutputBuffer_PrePhysics, mPropInputInterface) >= 4,
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PrePhysics, mPropInputInterface) >= 4),
                       "mPropInputInterface must follow the status byte (console +4)");
-        static_assert(sizeof(PropInputInterfaceStorage) >= 11296 - 4 - 12,
+        CGS_STATIC_ASSERT((sizeof(PropInputInterfaceStorage) >= 11296 - 4 - 12),
                       "prop-input span smaller than the console span -- retype regressed");
-        static_assert(offsetof(OutputBuffer_PrePhysics, mPropToTrafficInterface)
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PrePhysics, mPropToTrafficInterface)
                           >= offsetof(OutputBuffer_PrePhysics, mPropInputInterface)
-                             + sizeof(PropInputInterfaceStorage),
+                             + sizeof(PropInputInterfaceStorage)),
                       "mPropToTrafficInterface must follow mPropInputInterface (console +11296)");
         // ⭐ ADDED 2026-08-12 (prop-BOOT wave, agent B8): mPropToTrafficInterface is the real
         // PropToTrafficInterface now, not a 1-byte span. Console extent 140 + 332 == the two
         // embedded queues (EventQueue<TrafficLightKnockDownEvent,32> at +0, 12 + 32*4 == 140,
         // and EventQueue<TrafficLightRestoreEvent,80> at +140, 12 + 80*4 == 332) -- pinned by
         // Construct @0x822EFCF0's two calls at buffer+11296 and buffer+11436.
-        static_assert(sizeof(PropToTrafficInterfaceStorage) >= 140 + 332,
+        CGS_STATIC_ASSERT((sizeof(PropToTrafficInterfaceStorage) >= 140 + 332),
                       "prop-to-traffic interface smaller than the console span -- retype regressed");
     }
 

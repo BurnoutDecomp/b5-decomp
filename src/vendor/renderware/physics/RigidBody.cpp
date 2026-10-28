@@ -110,12 +110,12 @@ rw::math::vpu::Matrix44Affine RigidBody::GetTransform() const
 
 rw::math::vpu::Vector3 RigidBody::GetLinearVelocity() const
 {
-    return rw::math::vpu::Vector3{ mVel.x, mVel.y, mVel.z, mVel.w };            // +0x20
+    { const rw::math::vpu::Vector3 lResult = { mVel.x, mVel.y, mVel.z, mVel.w }; return lResult; }            // +0x20
 }
 
 rw::math::vpu::Vector3 RigidBody::GetAngularVelocity() const
 {
-    return rw::math::vpu::Vector3{ mOmega.x, mOmega.y, mOmega.z, mOmega.w };    // +0x30
+    { const rw::math::vpu::Vector3 lResult = { mOmega.x, mOmega.y, mOmega.z, mOmega.w }; return lResult; }    // +0x30
 }
 
 // ---------------------------------------------------------------------------

@@ -14,12 +14,12 @@ namespace CgsResource
 class ClusteredMeshResourceType : public Type
 {
 public:
-    uint32_t           GetTypeID() const override;
-    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
-    void               FixDown(void* lpResource, const rw::Resource& lrResource) const override;
-    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void               GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
-    void               ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest, ResourceDescriptor& lrSize, s32 liMemType) const override;
+    uint32_t           GetTypeID() const ;
+    ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const ;
+    void               FixDown(void* lpResource, const rw::Resource& lrResource) const ;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void               GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const ;
+    void               ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest, ResourceDescriptor& lrSize, s32 liMemType) const ;
 };
 }
 

@@ -185,7 +185,7 @@ namespace CgsResource
                 }
                 // X360 assembly[0] = the technique-table pointer (mappMaterials); its first
                 // entry must be a non-NULL MaterialTechnique*.
-                if (lpAssembly->mappMaterials[0] == nullptr)                 // if (!**v4)
+                if (lpAssembly->mappMaterials[0] == 0)                 // if (!**v4)
                 {
                     // X360 breaks out of the loop here, then fires the NULL-material
                     // assert; flattened to the in-loop assert + return (same result).

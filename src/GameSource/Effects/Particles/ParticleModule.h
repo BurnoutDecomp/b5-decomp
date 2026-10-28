@@ -262,17 +262,17 @@ namespace BrnParticle
         // faithful body would need a guessed tag->alignment mapping. Both were wrong:
         // Alloc @0x82289810 is a ledger row with pseudocode, and the console maps nothing --
         // the tagged form ignores its tag list and passes a literal 16.)
-        virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags) override;
+        virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags) ;
         virtual void* Alloc(size_t anSize, const char* apName, u32 auFlags,
-                            u32 auAlign, u32 auAlignOffset) override;
-        virtual void* Alloc(size_t anSize, const EA::TagValuePair& arTags) override;
+                            u32 auAlign, u32 auAlignOffset) ;
+        virtual void* Alloc(size_t anSize, const EA::TagValuePair& arTags) ;
 
         // X360 0x822898A0 (adjustor{4} thunk @0x82289898 tail-calls this).
-        virtual void  Free(void* apData, size_t anSize) override;
+        virtual void  Free(void* apData, size_t anSize) ;
 
         // AddRef/Release: DECLARE-ONLY (not X360-ledger-attested for this TU).
-        virtual s32   AddRef() override;
-        virtual s32   Release() override;
+        virtual s32   AddRef() ;
+        virtual s32   Release() ;
 
     private:
         CgsMemory::HeapMalloc* mpHeapMalloc;   // ParticleModule.cpp:155 -- the backing heap
@@ -417,7 +417,7 @@ namespace BrnParticle
 
         // ---- the module lifecycle (ParticleModule_Lifecycle.cpp) ----------------------------
         // X360 0x82294220 -- CgsModule::Module::Construct override (vtable slot 0 on the console).
-        void Construct() override;
+        void Construct() ;
         // DWARF :425 `bool Prepare(const AllocatorList*)` -- X360 0x8229BEA0. The heap / RW
         // allocators, the Im3d renderers, the Lion renderer, the buckets, the trail system,
         // the debris / simple-particle arrays. Returns false while still preparing.
@@ -829,7 +829,7 @@ namespace BrnParticle
         // pointers). Without this the compiler inserts four bytes of its own in front of the
         // first frame set and SIX of the eight tail asserts fail -- which is exactly how this
         // was found. This member forces the residue; the asserts prove it stayed forced.
-        alignas(16) u32 muTailAlignmentAnchor;
+        CGS_ALIGN(16) u32 muTailAlignmentAnchor;
 
         // +0x231D4 (143812): DWARF :136 LionBatchArray mLionBatchArray .. +0x249C8 (its trailing
         // count word at +0x249C4 is the -1 the ctor stamps / the 0 BuildLionVertexBuffers

@@ -23,8 +23,8 @@ namespace Gen
             bool mbIsWater;
         };
 
-        explicit gameplaysurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
-        explicit gameplaysurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+        explicit gameplaysurface(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit gameplaysurface(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         const void* GetAttributeData() const { return GetLayoutPointer(); }
         const bool& IsWater() const

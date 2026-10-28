@@ -103,7 +103,7 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     // The table base is formed once and a nine-iteration loop stores 0 through it, four
     // bytes at a time.
     for (u32 luSlot = 0; luSlot < E_FACTORY_BLEND_STATE_COUNT; ++luSlot)
-        saBlendStates[luSlot] = nullptr;
+        saBlendStates[luSlot] = 0;
 
     // The allocator is passed straight through to the TU-local single-entry-point shim.
     // reinterpret_cast, not static_cast, because the shim is not related to

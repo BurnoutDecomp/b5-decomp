@@ -49,8 +49,8 @@ namespace Debug
         void Construct(CgsSound::Playback::Module::Module* lpPlaybackModule,
                        BrnSound::Module::SoundLogicModule* lpLogicModule);
         void InstallConsole(EConsole leConsole);
-        void Update() override;
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+        void Update() ;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;
         static void Render3dControl(
             const CgsSound::Logic::Cgs3dEffectControl* lp3dControl);
         void UpdateMaxRpmDisplay();
@@ -62,9 +62,9 @@ namespace Debug
         static CgsDev::Log::LogCombined mLogCombined;
 
     protected:
-        const char* GetName() const override { return "Sound"; }
-        const char* GetPath() const override { return "Sound Module"; }
-        void OnActivate() override;
+        const char* GetName() const  { return "Sound"; }
+        const char* GetPath() const  { return "Sound Module"; }
+        void OnActivate() ;
 
     private:
         CgsDev::Log::LogNull mLogNull;       // ARTIST +0x0C

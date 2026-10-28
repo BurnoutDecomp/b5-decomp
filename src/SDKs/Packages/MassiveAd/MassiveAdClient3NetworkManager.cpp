@@ -3,7 +3,7 @@
 #include <new>       // placement new (raw heap-hook allocation + explicit construction)
 #include <cstring>   // std::memset / std::strlen / std::strncpy
 #include <cstdlib>   // std::srand / std::rand
-#include <cstdint>   // std::intptr_t
+#include "types.hpp"   // std::intptr_t
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestManager.h"
@@ -741,7 +741,7 @@ int CNetworkManager::PrepareForShutdown()
         }
     }
     // Incidental r3 carry-over (the in-flight request pointer, or 0).
-    return static_cast<int>(reinterpret_cast<std::intptr_t>(lpRequest));
+    return static_cast<int>(reinterpret_cast<intptr_t>(lpRequest));
 }
 
 // ---------------------------------------------------------------------------

@@ -43,14 +43,14 @@ CAltTablesEncoder::CAltTablesEncoder(int liCapacity, u32* lpuError)
     muNumTables = KI_NUM_TABLES;
     muFrameFlag = 0;
     for (u32 luTable = 0; luTable < muNumTables; ++luTable)
-        mpaTables[luTable] = nullptr;
-    mpSymbolBase     = nullptr;
+        mpaTables[luTable] = 0;
+    mpSymbolBase     = 0;
     muSymbolCapacity = 0;
 
     if (liCapacity >= 0)
     {
         muSymbolCapacity = static_cast<u32>(liCapacity);
-        mpSymbolCursor   = nullptr;
+        mpSymbolCursor   = 0;
 
         // Guard the 32-bit byte-size computation: 4*capacity overflowing 0x3FFFFFFF requests
         // an impossible -1 so the allocation fails deterministically.
@@ -60,7 +60,7 @@ CAltTablesEncoder::CAltTablesEncoder(int liCapacity, u32* lpuError)
 
         mpSymbolBase   = static_cast<u32*>(XMemAlloc(luByteSize, KU_HUFFMAN_XMEM_ATTRIBUTES));
         mpSymbolCursor = mpSymbolBase;
-        if (mpSymbolBase == nullptr)
+        if (mpSymbolBase == 0)
         {
             *lpuError = 1;
             return;
@@ -74,7 +74,7 @@ CAltTablesEncoder::CAltTablesEncoder(int liCapacity, u32* lpuError)
             void* lpMem = XMemAlloc(sizeof(CLocalHuffmanEncoder), KU_HUFFMAN_XMEM_ATTRIBUTES);
             mpaTables[liTable] = lpMem
                 ? new (lpMem) CLocalHuffmanEncoder(liTable, this, lpuError)
-                : nullptr;
+                : 0;
             if (*lpuError != 0)
                 break;
         }
@@ -95,14 +95,14 @@ void CAltTablesEncoder::allocateSymbolArray(u32 luCount, u32* lpuError)
     if (luCount < muSymbolCapacity)
         return;
 
-    if (mpSymbolBase != nullptr)
+    if (mpSymbolBase != 0)
     {
         XMemFree(mpSymbolBase, KU_HUFFMAN_XMEM_ATTRIBUTES);
-        mpSymbolBase = nullptr;
+        mpSymbolBase = 0;
     }
 
     muSymbolCapacity = luCount;
-    mpSymbolCursor   = nullptr;
+    mpSymbolCursor   = 0;
 
     u32 luByteSize = luCount * sizeof(u32);
     if (luCount > 0x3FFFFFFFu)
@@ -110,7 +110,7 @@ void CAltTablesEncoder::allocateSymbolArray(u32 luCount, u32* lpuError)
 
     mpSymbolBase   = static_cast<u32*>(XMemAlloc(luByteSize, KU_HUFFMAN_XMEM_ATTRIBUTES));
     mpSymbolCursor = mpSymbolBase;
-    if (mpSymbolBase == nullptr)
+    if (mpSymbolBase == 0)
         *lpuError = 1;
 }
 
@@ -272,27 +272,27 @@ CAltTablesEncoder::~CAltTablesEncoder()
     for (int liTable = 0; liTable < static_cast<int>(muNumTables); ++liTable)
     {
         CLocalHuffmanEncoder* lpEnc = mpaTables[liTable];
-        if (lpEnc != nullptr)
+        if (lpEnc != 0)
         {
-            if (lpEnc->mpauCodeData != nullptr)
+            if (lpEnc->mpauCodeData != 0)
             {
                 XMemFree(lpEnc->mpauCodeData, KU_HUFFMAN_XMEM_ATTRIBUTES);
-                lpEnc->mpauCodeData = nullptr;
+                lpEnc->mpauCodeData = 0;
             }
-            if (lpEnc->mpauCodeBuffer != nullptr)
+            if (lpEnc->mpauCodeBuffer != 0)
             {
                 XMemFree(lpEnc->mpauCodeBuffer, KU_HUFFMAN_XMEM_ATTRIBUTES);
-                lpEnc->mpauCodeBuffer = nullptr;
+                lpEnc->mpauCodeBuffer = 0;
             }
             lpEnc->CLocalHuffman::~CLocalHuffman();
             XMemFree(lpEnc, KU_HUFFMAN_XMEM_ATTRIBUTES);
-            mpaTables[liTable] = nullptr;
+            mpaTables[liTable] = 0;
         }
     }
 
-    if (mpSymbolBase != nullptr)
+    if (mpSymbolBase != 0)
     {
         XMemFree(mpSymbolBase, KU_HUFFMAN_XMEM_ATTRIBUTES);
-        mpSymbolBase = nullptr;
+        mpSymbolBase = 0;
     }
 }

@@ -122,10 +122,10 @@ public:
     }
     void ResetVoiceStages() { mu32VoiceUpdateStage = 0; mu32PrevVoiceUpdateStage = 0; }
 
-    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
+    const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const ;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
-                           f32 afGain, f32 afElapsedTime) override;
-    void StreamStopped() override;
+                           f32 afGain, f32 afElapsedTime) ;
+    void StreamStopped() ;
 
 private:
     u32 mu32VoiceUpdateStage;       // +0x04 (see HasVoiceStartedPlaying)
@@ -267,24 +267,24 @@ public:
 
     MusicEffect();
     virtual ~MusicEffect();
-    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
-    const char* GetTypeName() const override;
+    CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const ;
+    const char* GetTypeName() const ;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
-    bool Attach() override;
-    void UpdateParams(f32 afDeltaTime) override;
-    void ProcessUpdate() override;
-    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
+    bool Attach() ;
+    void UpdateParams(f32 afDeltaTime) ;
+    void ProcessUpdate() ;
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) ;
 
     // @ 0x82685D38: `return (a2 == 0) - 1;` -- controller slot 0 is effect-control id 0
     // (MixerControl, whose ClassTypeInfo ObjectID is 0), every other slot ends the
     // State::CreateSFXCtrls walk.
-    s32 GetController(s32 aiIndex) override;
+    s32 GetController(s32 aiIndex) ;
     // @ 0x826873A0: assert the control's effect id is 0 ("Unexpected control.",
     // BrnMusicEffect.cpp:483 -- the console tests `(*(ctrl+20) & 0x7F0) != 0`, which is
     // GetEffectID() != 0), then store it at this+0x230 (`result[140] = a2 - 4`, the
     // primary-base adjustment of the EffectBase sub-object pointer).
-    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+    void AttachController(CgsSound::Logic::EffectBase* apController) ;
 
     // X360 0x82687408. True while the player's own soundtrack (the dashboard music
     // player) owns playback, in which case the game must not start a song of its own.

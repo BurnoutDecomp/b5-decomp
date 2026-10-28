@@ -76,9 +76,9 @@ namespace Vehicle
         void Update(f32 lfTimeStep);
         // ARTIST vtable slot 820CF988 -> unnamed 825DA4A8. The active debug
         // component tick mirrors engine/inertia state and drives its windows.
-        void Update() override;
-        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) override;
-        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
+        void Update() ;
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay) ;
+        void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) ;
 
         // Mirror the magnitude of the down force VehiclePhysics::UpdateDownForce just applied, for
         // the suspension page of the debug menu. Inlined by the console at its one call site.
@@ -88,11 +88,11 @@ namespace Vehicle
         // The debug-menu leaf name and the group it is filed under: "Physics/Handling".
         // DebugComponent::Register reads both through the vtable when it threads this component
         // onto the debug manager's list.
-        const char* GetName() const override;
-        const char* GetPath() const override;
+        const char* GetName() const ;
+        const char* GetPath() const ;
         // The X360 page registers the per-car handling/suspension state and then prepares its two
         // grip-curve windows. The body is recovered from ARTIST @0x82620730.
-        void OnActivate() override;
+        void OnActivate() ;
 
     private:
         // ARTIST ApplySuspensionForces records directly into the four wheel

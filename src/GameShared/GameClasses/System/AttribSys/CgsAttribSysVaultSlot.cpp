@@ -15,7 +15,7 @@ namespace CgsAttribSys
 // The static streamed-vault-allocator registry (X360 dword_83011B60): published by
 // VaultArray::Construct (which inlines this setter as a direct store), read by DoLoad's
 // streamed-vault path.
-StreamedVaultAllocator* VaultSlot::spVaultAllocator = nullptr;
+StreamedVaultAllocator* VaultSlot::spVaultAllocator = 0;
 
 void VaultSlot::SetVaultAllocator(StreamedVaultAllocator* lpAllocator)
 {
@@ -29,8 +29,8 @@ void VaultSlot::SetVaultAllocator(StreamedVaultAllocator* lpAllocator)
 // (CgsAttribSysVaultSlot.cpp:52 "lpAllocator != NULL").
 void VaultSlot::Construct(CgsMemory::LinearMalloc* lpAllocator)
 {
-    CGS_ASSERT(lpAllocator != nullptr, "lpAllocator != NULL");   // .cpp:52
-    mpVault              = nullptr;
+    CGS_ASSERT(lpAllocator != 0, "lpAllocator != NULL");   // .cpp:52
+    mpVault              = 0;
     miRefCount           = 0;
     miStreamedVaultIndex = -1;
     mResourceId.SetHash(0);
@@ -60,8 +60,8 @@ bool VaultSlot::ContainsVaultResource(CgsResource::ResourceHandle lVaultResHandl
 s32 VaultSlot::RegisterVault(const AttribSysIO::RegisterVaultRequest* lpRegisterRequest,
                             Attrib::IGarbageCollector* lpGarbageCollector)
 {
-    CGS_ASSERT(lpRegisterRequest != nullptr, "lpRegisterRequest != NULL");
-    CGS_ASSERT(lpGarbageCollector != nullptr, "lpGarbageCollector != NULL");
+    CGS_ASSERT(lpRegisterRequest != 0, "lpRegisterRequest != NULL");
+    CGS_ASSERT(lpGarbageCollector != 0, "lpGarbageCollector != NULL");
 
     CgsResource::ResourceHandle lVaultResHandle = lpRegisterRequest->mVaultResourceHandle;
 

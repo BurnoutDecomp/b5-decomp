@@ -66,7 +66,7 @@ void BrnMassive::Destruct()
     for (s32 liSlot = mnNumActiveSubscribers; liSlot < KI_MAX_SUBSCRIBERS; ++liSlot)
     {
         BrnMassiveSubscriber* lpSubscriber = mapSubscribers[liSlot];
-        if (lpSubscriber != nullptr)
+        if (lpSubscriber != 0)
         {
             lpSubscriber->MassiveAdClient3::CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber();
             ::operator delete(lpSubscriber);
@@ -101,7 +101,7 @@ bool BrnMassive::Prepare(MassiveLookupTable* lpLookupTable)
 // ---------------------------------------------------------------------------
 void BrnMassive::Update()
 {
-    if (MassiveAdClient3::CMassiveClientCore::Instance() != nullptr)
+    if (MassiveAdClient3::CMassiveClientCore::Instance() != 0)
     {
         for (s32 liSlot = 0; liSlot < mnNumActiveSubscribers; ++liSlot)
         {
@@ -166,7 +166,7 @@ void BrnMassive::Update()
         const u32 luDebugSubscriber = static_cast<u32>(mDebugComponent.miDebugSubscriber);
         if (luDebugSubscriber > static_cast<u32>(KI_MAX_SUBSCRIBERS - 1))
         {
-            mDebugComponent.mpDebugSubscriber = nullptr;
+            mDebugComponent.mpDebugSubscriber = 0;
         }
         else
         {
@@ -188,8 +188,8 @@ BrnMassiveSubscriber* BrnMassive::CreateSubscriber(s32 liIE, void* lpTextureData
                "Non Enough Slots for Subscribers for Massive, please increase this number");
 
     BrnMassiveSubscriber* lpSlot = GetPoolSlot(mnNumActiveSubscribers);
-    BrnMassiveSubscriber* lpSubscriber = nullptr;
-    if (lpSlot != nullptr)
+    BrnMassiveSubscriber* lpSubscriber = 0;
+    if (lpSlot != 0)
     {
         lpSubscriber = new (lpSlot) BrnMassiveSubscriber(gapcMassiveZoneNames[liIE]);
     }
@@ -198,7 +198,7 @@ BrnMassiveSubscriber* BrnMassive::CreateSubscriber(s32 liIE, void* lpTextureData
     BrnMassiveSubscriber* lpNew = mapSubscribers[mnNumActiveSubscribers];
     lpNew->muCrexID             = 0;
     lpNew->miInvElementID       = 0;
-    lpNew->mpTextureData        = nullptr;
+    lpNew->mpTextureData        = 0;
     lpNew->miState              = 0;
     lpNew->mbImpressionReported = true;
     lpNew->muIdleFrames         = 0;
@@ -238,7 +238,7 @@ BrnMassiveSubscriber* BrnMassive::GetSubscriberWithIE(s32 liIE)
             return mapSubscribers[liSlot];
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,14 +255,14 @@ MassiveLookupTableItem* BrnMassive::GetSubscriberDataAtIndex(u8 luRenderableInde
         MassiveLookupTableItem* lpItem = &lpItems[luItem];
         if (lpItem->muRenderableIndex == luRenderableIndex)
         {
-            if (lpItem->mpSubscriber == nullptr)
+            if (lpItem->mpSubscriber == 0)
             {
                 lpItem->mpSubscriber = GetSubscriberWithIE(lpItem->miIEIndex);
             }
             return lpItem;
         }
     }
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ bool BrnMassive::IsSafeToDownload()
 // ---------------------------------------------------------------------------
 void BrnMassive::SetIsPaused(bool lbPaused)
 {
-    if (mbIsPaused != lbPaused && MassiveAdClient3::CMassiveClientCore::Instance() != nullptr)
+    if (mbIsPaused != lbPaused && MassiveAdClient3::CMassiveClientCore::Instance() != 0)
     {
         if (lbPaused)
         {

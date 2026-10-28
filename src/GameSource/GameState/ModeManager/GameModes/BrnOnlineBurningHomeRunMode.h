@@ -47,8 +47,8 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<const char* (OnlineBurningHomeRunMode::*)() const>(&OnlineBurningHomeRunMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineBurningHomeRunMode::*)() const>(&OnlineBurningHomeRunMode::GetName)) != 0),
               "OnlineBurningHomeRunMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<bool (OnlineBurningHomeRunMode::*)() const>(&OnlineBurningHomeRunMode::HasLoadingScreen)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineBurningHomeRunMode::*)() const>(&OnlineBurningHomeRunMode::HasLoadingScreen)) != 0),
               "OnlineBurningHomeRunMode::HasLoadingScreen must bind GameMode vtable slot 24");
 }

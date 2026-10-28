@@ -74,8 +74,8 @@ namespace CgsGui
         GuiModule();
         virtual void Construct(ViewModule* lpViewModule, bool lbHighDef);
         virtual bool Prepare(GuiModuleConfig& lrConfig);
-        bool Release() override;
-        void Destruct() override;
+        bool Release() ;
+        void Destruct() ;
         virtual void PreWorldUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
             CgsModule::IOBufferStack* lpOutputBufferStack,
             CgsGuiModuleIO::OutputBuffer* lpOutput, ModelIO::OutputBuffer* lpModelOutput);

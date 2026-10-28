@@ -672,29 +672,29 @@ namespace BrnWorld
     {
         // The module IS the single-buffered module -- Construct/Prepare/Release all
         // delegate to the base, and Release's ladder is meaningless without it.
-        static_assert(sizeof(PropEntityModule) > sizeof(CgsModule::ModuleSingleBuffered),
+        CGS_STATIC_ASSERT((sizeof(PropEntityModule) > sizeof(CgsModule::ModuleSingleBuffered)),
                       "PropEntityModule must derive from CgsModule::ModuleSingleBuffered");
 
         // Construct's 500-slot loops and CachePropGraphicsLists' walk share one bound.
-        static_assert(KU_MAX_ZONES == 500, "mapGraphicsLists / mab*Zones are 500 wide");
-        static_assert(sizeof(reinterpret_cast<PropEntityModule*>(0)->mapGraphicsLists) /
-                      sizeof(reinterpret_cast<PropEntityModule*>(0)->mapGraphicsLists[0]) == KU_MAX_ZONES,
+        CGS_STATIC_ASSERT((KU_MAX_ZONES == 500), "mapGraphicsLists / mab*Zones are 500 wide");
+        CGS_STATIC_ASSERT((sizeof(reinterpret_cast<PropEntityModule*>(0)->mapGraphicsLists) /
+                      sizeof(reinterpret_cast<PropEntityModule*>(0)->mapGraphicsLists[0]) == KU_MAX_ZONES),
                       "mapGraphicsLists[KU_MAX_ZONES]");
 
         // The three LOD-distance slots the debug block and the init loop share.
-        static_assert(KI_NUM_LODS == 3, "mauOverrideLodDistances[3]");
+        CGS_STATIC_ASSERT((KI_NUM_LODS == 3), "mauOverrideLodDistances[3]");
 
         // Both bit arrays are per-zone, one bit per zone -- 500 bits == 8 x u64.
-        static_assert(CgsContainers::BitArray<KU_MAX_ZONES>::kuNumberOfBitFields == 8,
+        CGS_STATIC_ASSERT((CgsContainers::BitArray<KU_MAX_ZONES>::kuNumberOfBitFields == 8),
                       "BitArray<500> is 8 x u64 (the 8 x std 0 clears in Construct)");
 
         // The event queue Construct binds: 1024-byte buffer, 16-byte record alignment.
-        static_assert(sizeof(CgsModule::EventReceiverQueue<1024, 16>) >
-                      sizeof(CgsModule::BaseEventReceiverQueue),
+        CGS_STATIC_ASSERT((sizeof(CgsModule::EventReceiverQueue<1024, 16>) >
+                      sizeof(CgsModule::BaseEventReceiverQueue)),
                       "EventReceiverQueue<1024,16> carries its own backing buffer");
 
         // 8 car velocity lanes (the 8 x stvx128 in Construct), each a 16-byte SIMD lane.
-        static_assert(sizeof(reinterpret_cast<PropEntityModule*>(0)->maRaceCarVelocity) == 8 * 16,
+        CGS_STATIC_ASSERT((sizeof(reinterpret_cast<PropEntityModule*>(0)->maRaceCarVelocity) == 8 * 16),
                       "maRaceCarVelocity[8] of 16-byte lanes");
     }
 }
@@ -4782,7 +4782,7 @@ namespace BrnWorld
 
         // Both tripwires are NON-GATING, exactly as shipped (the console branches only around
         // the assert bodies and carries on either way).
-        CGS_ASSERT( lpPartInstance != nullptr, "lpPartInstance != NULL" );          // ...cpp:1382
+        CGS_ASSERT( lpPartInstance != 0, "lpPartInstance != NULL" );          // ...cpp:1382
         CGS_ASSERT( lPropEntityId.GetPartIndex() != 0, "lEntityId.IsPart()" );      // ...cpp:1383
 
         // ⭐ ROUND 2: KVF_PROP_FLOOR is now homed at BrnPropConstants.h:56; the parked body's

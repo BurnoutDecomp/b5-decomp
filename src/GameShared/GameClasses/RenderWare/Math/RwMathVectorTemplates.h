@@ -6,8 +6,7 @@
 // translation unit's include path and rw/math/vpu/types.h is a leaf header (no further includes).
 #include "rw/math/vpu/types.h"
 
-namespace rw::math::fpu
-{
+namespace rw { namespace math { namespace fpu {
 template <typename Type>
 class Vector3Template;
 
@@ -456,9 +455,9 @@ inline Type Determinant(const Matrix44Template<Type>& lrMatrix)
     Inverse(lrMatrix, lfDeterminant);
     return lfDeterminant;
 }
-}
+} } }
 
-namespace rw::math::fpu {
+namespace rw { namespace math { namespace fpu {
 // ARTIST 0x8231A570. Preserve the individual branch comparisons, including
 // unordered inputs: the first two reject on >, the final axis returns <=.
 template<typename Type>
@@ -476,4 +475,4 @@ inline bool IsZero(const Vector3Template<Type>& v, Type tolerance)
     if (v.Y() > tolerance || !(v.Y() >= -tolerance)) return false;
     return !(v.Z() > tolerance) && v.Z() >= -tolerance;
 }
-}
+} } }

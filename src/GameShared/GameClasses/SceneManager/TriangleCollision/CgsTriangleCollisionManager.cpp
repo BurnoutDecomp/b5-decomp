@@ -21,7 +21,7 @@ namespace CgsSceneManager
 // the manager address. mSpacialAllocator is constructed later by Prepare @0x828B2FF0.
 void TriangleCollisionManager::Construct()
 {
-    mpaPolySoupListHandles = nullptr;
+    mpaPolySoupListHandles = 0;
     miMaxNumSoupLists = 0;
     miNumSoupListsAdded = 0;
     mPolySoupListSpacialMap.Construct();
@@ -42,7 +42,7 @@ void TriangleCollisionManager::Construct()
 // Returns true.
 bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32 liMaxNumPolySoupLists)
 {
-    CGS_ASSERT(lpAllocator != nullptr, "lpAllocator != NULL");
+    CGS_ASSERT(lpAllocator != 0, "lpAllocator != NULL");
     CGS_ASSERT(liMaxNumPolySoupLists >= 0 && liMaxNumPolySoupLists < KI_MAX_NUM_ZONES,
                "liMaxNumPolySoupLists >= 0 && liMaxNumPolySoupLists < KI_MAX_NUM_ZONES");
 
@@ -51,7 +51,7 @@ bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32
     // Inlined MallocArray<CgsResource::ResourceHandle>: 8 bytes/handle on the X360.
     mpaPolySoupListHandles = static_cast<CgsResource::ResourceHandle*>(
         lpAllocator->Malloc(sizeof(CgsResource::ResourceHandle) * static_cast<size_t>(liMaxNumPolySoupLists)));
-    CGS_ASSERT(mpaPolySoupListHandles != nullptr, "mpaPolySoupListHandles != NULL");
+    CGS_ASSERT(mpaPolySoupListHandles != 0, "mpaPolySoupListHandles != NULL");
 
     for (s32 liZone = 0; liZone < miMaxNumSoupLists; ++liZone)
     {
@@ -85,7 +85,7 @@ bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32
 void TriangleCollisionManager::ProcessAddPolySoupListEvents(
     const InAddPolySoupListQueue& lAddPolySoupListQueue)
 {
-    CGS_ASSERT(mpaPolySoupListHandles != nullptr, "mpaPolySoupListHandles != NULL");
+    CGS_ASSERT(mpaPolySoupListHandles != 0, "mpaPolySoupListHandles != NULL");
 
     bool lbNeedToRebuild = false;
     for (s32 liEventIndex = 0; liEventIndex < lAddPolySoupListQueue.GetLength(); ++liEventIndex)

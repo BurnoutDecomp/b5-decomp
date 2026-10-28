@@ -42,7 +42,7 @@ namespace Native
             }
             else
             {
-                lpBucket->mpPreviousBucket = nullptr;
+                lpBucket->mpPreviousBucket = 0;
             }
 
             lrpHead = lpBucket;
@@ -62,7 +62,7 @@ namespace Native
         CGS_ASSERT( mpParams->mnNumParticles > 0, "mpParams->mnNumParticles > 0" );
 
         mpBucketManager = lpBucketManager;
-        mpBuckets       = nullptr;
+        mpBuckets       = 0;
         muNumBuckets    = 0;
     }
 
@@ -106,7 +106,7 @@ namespace Native
                     if ( lpManager->mpFreeList )
                         lpManager->mpFreeList->mpPreviousBucket = lpBucket;
                     lpManager->mpFreeList     = lpBucket;
-                    lpBucket->mpPreviousBucket = nullptr;
+                    lpBucket->mpPreviousBucket = 0;
                     ++lpManager->muNumFreeBuckets;
 
                     --muNumBuckets;
@@ -143,7 +143,7 @@ namespace Native
                 if ( lpManager->mpFreeList )
                     lpManager->mpFreeList->mpPreviousBucket = lpBucket;
                 lpManager->mpFreeList      = lpBucket;
-                lpBucket->mpPreviousBucket = nullptr;
+                lpBucket->mpPreviousBucket = 0;
                 ++lpManager->muNumFreeBuckets;
             }
             while ( mpBuckets );
@@ -176,7 +176,7 @@ namespace Native
     // ------------------------------------------------------------------------
     BrnDebris* BrnDebrisArray::GetNewDebris(f32 lfBirthTime)
     {
-        static_assert( DebrisBucket::KuMaxNumParticles == 96,
+        CGS_STATIC_ASSERT(( DebrisBucket::KuMaxNumParticles == 96),
                        "the debris bucket holds 96 particles (the console's own immediate)" );
 
         DebrisBucket* lpBucket = mpBuckets;
@@ -192,7 +192,7 @@ namespace Native
                 DebrisBucket* lpNewBucket =
                     mpBucketManager->AllocateBucket<DebrisBucket>();
                 if ( !lpNewBucket )
-                    return nullptr;
+                    return 0;
 
                 LinkBucketAtFront( mpBuckets, lpNewBucket );
                 ++muNumBuckets;
@@ -202,7 +202,7 @@ namespace Native
             {
                 // (c) Budget spent: recycle the oldest bucket, which is the list's tail.
                 if ( !lpBucket )
-                    return nullptr;
+                    return 0;
 
                 DebrisBucket* lpOldestBucket = lpBucket;
                 while ( lpOldestBucket->mpNextBucket )
@@ -213,8 +213,8 @@ namespace Native
                 if ( lpOldestBucket->mpNextBucket )
                     lpOldestBucket->mpNextBucket->mpPreviousBucket = lpOldestBucket->mpPreviousBucket;
 
-                lpOldestBucket->mpNextBucket     = nullptr;
-                lpOldestBucket->mpPreviousBucket = nullptr;
+                lpOldestBucket->mpNextBucket     = 0;
+                lpOldestBucket->mpPreviousBucket = 0;
 
                 LinkBucketAtFront( mpBuckets, lpOldestBucket );
 

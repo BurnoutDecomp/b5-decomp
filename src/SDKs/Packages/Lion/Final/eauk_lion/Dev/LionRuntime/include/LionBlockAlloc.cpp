@@ -62,12 +62,12 @@ void cLionBlockAlloc::DeInit()
     if (mpBits)
     {
         mpAllocator->Free(mpBits, 0);
-        mpBits = nullptr;
+        mpBits = 0;
     }
     if (mpData)
     {
         mpAllocator->Free(mpData, 0);
-        mpData = nullptr;
+        mpData = 0;
     }
 }
 
@@ -77,7 +77,7 @@ void* cLionBlockAlloc::Alloc()
     s32 lLeft  = mBitBlockCount;
     if (!lLeft)
     {
-        return nullptr;
+        return 0;
     }
 
     s32 lBits;
@@ -94,7 +94,7 @@ void* cLionBlockAlloc::Alloc()
         }
         if (!--lLeft)
         {
-            return nullptr;
+            return 0;
         }
     }
 

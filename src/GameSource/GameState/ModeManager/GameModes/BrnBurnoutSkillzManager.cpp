@@ -143,10 +143,10 @@ struct RoadRuleBeatenNetEvent
     BurnoutSkillzData::EBurnoutSkillType meSkill;
     EActiveRaceCarIndex meNewOwner;
 };
-static_assert(offsetof(RoadRuleBeatenNetEvent, miActionValue) == 8 &&
+CGS_STATIC_ASSERT((offsetof(RoadRuleBeatenNetEvent, miActionValue) == 8 &&
               offsetof(RoadRuleBeatenNetEvent, meSkill) == 12 &&
               offsetof(RoadRuleBeatenNetEvent, meNewOwner) == 16 &&
-              sizeof(RoadRuleBeatenNetEvent) == 24, "ARTIST action169 producer layout");
+              sizeof(RoadRuleBeatenNetEvent) == 24), "ARTIST action169 producer layout");
 
 // ----------------------------------------------------------------------------
 // Construct.
@@ -375,7 +375,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
     const GameEventQueueImpl* lpQueueImpl = reinterpret_cast<const GameEventQueueImpl*>(lpQueue);
 
     bool lbInAirReceived = false;
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liEventSize = 0;
     s32 liEventType = lpQueueImpl->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent)
@@ -552,7 +552,7 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
     {
         BrnStreetData::ChallengeHighScoreEntry lExistingEntry;
         lpCarData->GetRoadRulesScores(liChallengeIndex, &lExistingEntry);
-        const bool lbUpdated = lExistingEntry.UpdateEntry(&lHighScoreEntry, nullptr);
+        const bool lbUpdated = lExistingEntry.UpdateEntry(&lHighScoreEntry, 0);
         lpCarData->SetRoadRulesScores(liChallengeIndex, &lExistingEntry);
 
         if (lbUpdated)
@@ -656,7 +656,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
     lStoredEntry.Construct();
     if (GetRoadRuleHighScore(lpEventView->mPlayerID, liChallengeIndex, &lStoredEntry))
     {
-        lStoredEntry.UpdateEntry(&lReceivedEntry, nullptr);
+        lStoredEntry.UpdateEntry(&lReceivedEntry, 0);
         SetRoadRuleHighScore(lpEventView->mPlayerID, liChallengeIndex, &lStoredEntry);
     }
 
@@ -698,7 +698,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
     const GameEventQueueImpl* lpEventQueueImpl = reinterpret_cast<const GameEventQueueImpl*>(lpEventQueue);
     GameActionQueueImpl*      lpActionQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpActionQueue);
 
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liEventSize = 0;
     s32 liEventType = lpEventQueueImpl->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent)
@@ -856,7 +856,7 @@ void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
                 lStoredEntry.Construct();
                 if (GetRoadRuleHighScore(lPlayerID, static_cast<BrnNetwork::Road::ChallengeIndex>(luChallengeIndex), &lStoredEntry))
                 {
-                    lStoredEntry.UpdateEntry(&lReceivedEntry, nullptr);
+                    lStoredEntry.UpdateEntry(&lReceivedEntry, 0);
                     SetRoadRuleHighScore(lPlayerID, static_cast<BrnNetwork::Road::ChallengeIndex>(luChallengeIndex), &lStoredEntry);
                 }
 

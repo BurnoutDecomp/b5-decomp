@@ -27,5 +27,5 @@ namespace BrnProgression
         f32   mfDistanceDriven;    // +0x10  distance driven in this livery
     };
 
-    static_assert(sizeof(LiveryData) == 0x18, "LiveryData must be the 0x18 maLiveryChoices stride");
+    CGS_STATIC_ASSERT((sizeof(LiveryData) == 0x18), "LiveryData must be the 0x18 maLiveryChoices stride");
 }

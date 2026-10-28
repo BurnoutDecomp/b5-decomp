@@ -17,7 +17,7 @@
 
 namespace BrnDirector
 {
-    DirectorDevTools* DirectorDevTools::mpInstance = nullptr;
+    DirectorDevTools* DirectorDevTools::mpInstance = 0;
 
     void DirectorDevTools::Construct(MainDirector* lpDirectorModule,
                                      DirectorResourceManager* lpDirectorResourceManager)
@@ -74,7 +74,7 @@ namespace BrnDirector
     // -----------------------------------------------------------------------
     void DirectorDevTools::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        CGS_ASSERT(mpInstance != nullptr, "mpInstance!=NULL");   // :130 (non-fatal on the X360; the dispatch runs regardless)
+        CGS_ASSERT(mpInstance != 0, "mpInstance!=NULL");   // :130 (non-fatal on the X360; the dispatch runs regardless)
 
         if (lpMessage->GetNumKeys() != 1)
             return;
@@ -142,7 +142,7 @@ namespace BrnDirector
 
             ICE::ICETakeData* lpTakeData = mpInstance->mpDirectorResourceManager
                                                ->GetKeyAnimFromGuid(mpInstance->miCurrentTakeGuid);
-            if (lpTakeData == nullptr)
+            if (lpTakeData == 0)
             {
                 lpTakeData = mpInstance->mpDirectorModule->GetICEWrapper().GetAuthor()
                                  .CreateNewTake("New Take", mpInstance->miCurrentTakeGuid);
@@ -161,7 +161,7 @@ namespace BrnDirector
 
             ICE::ICETakeData* lpTakeData = mpInstance->mpDirectorResourceManager
                                                ->GetKeyAnimFromGuid(mpInstance->miCurrentTakeGuid);
-            if (lpTakeData == nullptr)
+            if (lpTakeData == 0)
             {
                 lpTakeData = mpInstance->mpDirectorModule->GetICEWrapper().GetAuthor()
                                  .CreateNewTake("New Assembly", mpInstance->miCurrentTakeGuid);
@@ -174,7 +174,7 @@ namespace BrnDirector
             const s32 liGuid = rw::core::stdc::ConvertAToI(
                 static_cast<const char*>(lpMessage->GetKeyContent("ICETakeBrowse")));
 
-            if (mpInstance->mpDirectorResourceManager->GetKeyAnimFromGuid(liGuid) != nullptr)
+            if (mpInstance->mpDirectorResourceManager->GetKeyAnimFromGuid(liGuid) != 0)
             {
                 ICEWrapper& lrICEWrapper = mpInstance->mpDirectorModule->GetICEWrapper();
                 if (lrICEWrapper.GetEditor().miState > 0)   // editor up (AreMenusActive)

@@ -34,7 +34,7 @@
 //                             SetMessageFilter swaps it; the dtor releases it).
 // ===========================================================================
 
-#include <cstdint>
+#include "types.hpp"
 
 #include <eathread/eathread_mutex.h>              // EA::Thread::Mutex (the linked EAThread)
 #include "SDKs/Realmc/RealmcContainers.h"          // RealmcCore::IntVector (embedded task stack)
@@ -89,7 +89,7 @@ public:
     // Read the hidden-message mask (+0x48, the word SetMessage mode 1 sets)
     //   under the lock. RealmcIface::XenonMessageFilter's MessageClear handler
     //   tests it.
-    std::uint32_t GetHiddenMessages();
+    uint32_t GetHiddenMessages();
 
     // @ 0x82C44FA8 -- install pNewFilter as the message filter (+0x50), deleting
     //   the previously installed one (its vtable slot +0 deleting destructor).
@@ -135,8 +135,8 @@ private:
     int                miMonitorState;      // +0x08
     IntVector          maTaskStack;         // +0x0C  running task-type stack
     Allocator64        maStartWaitingQueue; // +0x1C  tasks waiting to start
-    std::uint32_t      muMessageSet;        // +0x48
-    std::uint32_t      muMessageClear;      // +0x4C
+    uint32_t      muMessageSet;        // +0x48
+    uint32_t      muMessageClear;      // +0x4C
     MessageFilter*     mpMessageFilter;     // +0x50
 };
 

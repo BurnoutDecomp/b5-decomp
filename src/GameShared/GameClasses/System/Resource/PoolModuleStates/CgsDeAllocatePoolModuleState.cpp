@@ -38,7 +38,7 @@ namespace CgsResource
 
         s32 liListIndex;
         Entry* lpListEntry = lpPool->FindResource(lListId, false, 2, &liListIndex);
-        CGS_ASSERT(lpListEntry != nullptr, "Dynamically created list resource is not loaded\n");
+        CGS_ASSERT(lpListEntry != 0, "Dynamically created list resource is not loaded\n");
         const EntryListResource* lpList = static_cast<const EntryListResource*>(
             lpListEntry->mResource.m_baseResources[0]);
         CGS_ASSERT(lpPool->GetEntryRefCount(liListIndex) > 0, "Decrementing ref count on zero count resource\n");
@@ -46,11 +46,11 @@ namespace CgsResource
 
         for (u32 lu = 0; lu < lpList->muNumEntries; ++lu)
         {
-            Pool* lpOwner = nullptr;
+            Pool* lpOwner = 0;
             s32 liIndex;
             Entry* lpEntry = lpPool->FindResourceWithDependencies(
                 lpList->mIds[lu], &lpOwner, false, 2, &liIndex);
-            CGS_ASSERT(lpEntry != nullptr, "Could not unload resource as it wasn't found in the pool\n");
+            CGS_ASSERT(lpEntry != 0, "Could not unload resource as it wasn't found in the pool\n");
             CGS_ASSERT(lpOwner->GetEntryRefCount(liIndex) > 0, "Decrementing ref count on zero count resource\n");
             lpOwner->DecEntryRefCount(liIndex);
         }

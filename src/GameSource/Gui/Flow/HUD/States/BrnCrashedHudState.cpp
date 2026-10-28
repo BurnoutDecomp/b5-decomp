@@ -37,7 +37,7 @@ namespace {
         lClear.maData[0] = 0;
         lClear.maData[1] = 1;
         CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, KI_CHANNEL_GUI_OUT> lRecord(lClear);
-        static_assert(sizeof(lRecord) == 16, "the ticker-clear record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(lRecord) == 16), "the ticker-clear record is 16 bytes");
         lpInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT, sizeof(lRecord));
     }
@@ -124,11 +124,11 @@ void CrashedHudState::OnEnter()
 {
     meInternalState = E_CRASHINTERNALSTATE_GETCACHE;
     mbInImpactTime = false;
-    mpCache = nullptr;
+    mpCache = 0;
     auto* lpAccess = mpStateInterface->GetAccessPointers();
-    CGS_ASSERT(lpAccess != nullptr, "mpAccessPointers != NULL");
+    CGS_ASSERT(lpAccess != 0, "mpAccessPointers != NULL");
     auto* lpFlapt = lpAccess->GetFlaptManager();
-    CGS_ASSERT(lpFlapt != nullptr, "NULL != mpFlaptManager");
+    CGS_ASSERT(lpFlapt != 0, "NULL != mpFlaptManager");
     BrnFlapt::FileRef lFile;
     lpFlapt->GetFile(&lFile, 0);
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
@@ -139,25 +139,25 @@ void CrashedHudState::OnEnter()
     lRoot.FindChildMovieClip(&mCrashHudAnimator, "CrashHUD_mc");
     CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
     mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
-    mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, nullptr);
+    mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, 0);
     GuiCache* lpCache = lpAccess->GetGuiCache();
-    CGS_ASSERT(lpCache != nullptr, "mpGuiCache");
+    CGS_ASSERT(lpCache != 0, "mpGuiCache");
     mHudMessageComponent.SetInGameMessagesQueue(lpCache->GetInGameMessagesQueue());
     mHudMessageComponent.Prepare("crashHudMessages_mc", lFile);
-    mImpactTimePageChanger.Construct("ImpactOption_mc", mpStateInterface, nullptr);
-    mImpactTimeButton.Construct("ImpactButton_mc", mpStateInterface, nullptr);
-    mShowTimeButton1.Construct("ShowTimeButton1_mc", mpStateInterface, nullptr);
-    mShowTimeButton2.Construct("ShowTimeButton2_mc", mpStateInterface, nullptr);
-    mShowTimeAnimator.Construct("ShowHideComp_mc", mpStateInterface, nullptr);
-    mMudAnimator.Construct("DirtAnimator_mc", mpStateInterface, nullptr);
-    mMugShotComponent.Construct("CrashMugShot_mc", mpStateInterface, nullptr);
-    mMugShotComponent.Prepare("CrashMugShot_mc", lFile, nullptr);
+    mImpactTimePageChanger.Construct("ImpactOption_mc", mpStateInterface, 0);
+    mImpactTimeButton.Construct("ImpactButton_mc", mpStateInterface, 0);
+    mShowTimeButton1.Construct("ShowTimeButton1_mc", mpStateInterface, 0);
+    mShowTimeButton2.Construct("ShowTimeButton2_mc", mpStateInterface, 0);
+    mShowTimeAnimator.Construct("ShowHideComp_mc", mpStateInterface, 0);
+    mMudAnimator.Construct("DirtAnimator_mc", mpStateInterface, 0);
+    mMugShotComponent.Construct("CrashMugShot_mc", mpStateInterface, 0);
+    mMugShotComponent.Prepare("CrashMugShot_mc", lFile, 0);
     mMugshotOpponentGamertag = {};
     AttachToTextFieldComponent(&mMugshotOpponentGamertag, "Gamertag_txt", "Gamertag_mc", "CrashMugShot_mc", lFile);
     // FLAG deferred: online RoadRuleShotComponent name/data and mugshot event handlers.
-    mSkipPromptAnimator.Construct("skipAnim_cpt", mpStateInterface, nullptr);
-    mSkipPromptButton.Construct("skipButton", mpStateInterface, nullptr);
-    mSkipPromptAnimator.Prepare("skipAnim_cpt", lFile, nullptr);
+    mSkipPromptAnimator.Construct("skipAnim_cpt", mpStateInterface, 0);
+    mSkipPromptButton.Construct("skipButton", mpStateInterface, 0);
+    mSkipPromptAnimator.Prepare("skipAnim_cpt", lFile, 0);
     mSkipPromptButton.Prepare("skipButton", lFile);
     mbSkipPrompt = false;
     mbCrashIsSkippable = false;
@@ -221,21 +221,21 @@ void CrashedHudState::Update()
 void CrashedHudState::UpdateGetCache()
 {
     auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
-    CGS_ASSERT(mpCache == nullptr, "mpCache == NULL");
+    CGS_ASSERT(mpCache == 0, "mpCache == NULL");
     for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
          liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         if (liId == 64)
         {
             GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-            CGS_ASSERT(lpCache != nullptr, "Invalid cache in CrashedHudState::Update");
+            CGS_ASSERT(lpCache != 0, "Invalid cache in CrashedHudState::Update");
             mpCache = lpCache;
             break;
         }
     }
-    CGS_ASSERT(mpCache != nullptr, "mpCache != NULL");
+    CGS_ASSERT(mpCache != 0, "mpCache != NULL");
 }
 
 // ARTIST 0x8247CE98.
@@ -257,7 +257,7 @@ bool CrashedHudState::UpdateLoading()
 // ARTIST 0x824753A8 / 0x82475428.
 bool CrashedHudState::UpdateWFInit()
 {
-    CGS_ASSERT(mpCache != nullptr, "mpCache");
+    CGS_ASSERT(mpCache != 0, "mpCache");
     return mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD);
 }
 void CrashedHudState::SetExpectedAptComponentList()
@@ -276,7 +276,7 @@ void CrashedHudState::SetExpectedAptComponentList()
 // ARTIST 0x8247CF60, offline crash presentation. Online road-rule-shot arm remains deferred.
 bool CrashedHudState::UpdateSetupState()
 {
-    CGS_ASSERT(mpCache != nullptr, "Cache pointer should be valid by now as its used in the WFInit stage");
+    CGS_ASSERT(mpCache != 0, "Cache pointer should be valid by now as its used in the WFInit stage");
     mbBoostBar = false;
     mbShowTime = false;
     mbSkipPrompt = false;
@@ -320,7 +320,7 @@ bool CrashedHudState::UpdateSetupState()
 void CrashedHudState::UpdateRunning()
 {
     auto* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = nullptr;
+    const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
          liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
@@ -552,7 +552,7 @@ void CrashedHudState::UpdateRunning()
         for (s32 liPost = 0; liPost < KI_TICKER_MESSAGE_POST_COUNT; ++liPost)
         {
             CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, KI_CHANNEL_GUI_OUT> lRecord(lMessage);
-            static_assert(sizeof(lRecord) == 0x824, "the ticker message record is 0x824 bytes");
+            CGS_STATIC_ASSERT((sizeof(lRecord) == 0x824), "the ticker message record is 0x824 bytes");
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
                 static_cast<s32>(sizeof(lRecord)));

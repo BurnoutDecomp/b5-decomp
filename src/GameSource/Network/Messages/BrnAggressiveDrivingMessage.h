@@ -99,16 +99,16 @@ namespace BrnNetwork
         void PrepareForSend(u16 lu16Frame, s32 liNumberOfMoves, AggressiveMoveData* lpMoves);
         void Release();
         void Destruct();
-        s32  GetPackedMessageSize() override;
+        s32  GetPackedMessageSize() ;
         s32          GetNumberOfAggressiveMoves();
         const AggressiveMoveData* GetAggressiveMove(s32 liIndex);
         bool         Retrieve(s32* lpiNumberOfMoves, AggressiveMoveData* lpMoves);
 
         // LEDGER func @ 0x827DE0A8 -- bodied in this TU.
-        const char* GetName() const override;
+        const char* GetName() const ;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() ;
     };
 
     // BrnNetwork::AggressiveDrivingMessage::GetName  @ 0x827DE0A8
@@ -118,5 +118,5 @@ namespace BrnNetwork
     }
 
     // Console size (the RegisterMessageType length), checked on a 32-bit build.
-    static_assert(sizeof(void*) != 4 || sizeof(AggressiveDrivingMessage) == 0x1C0, "sizeof(AggressiveDrivingMessage) == 0x1C0");
+    CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(AggressiveDrivingMessage) == 0x1C0), "sizeof(AggressiveDrivingMessage) == 0x1C0");
 } // namespace BrnNetwork

@@ -698,7 +698,7 @@ namespace Deformation
         // (== spec+456 by layout order), FLAGGED, so the control flow (required gate, no inverted-
         // polarity substitution of GetNumberOfJoints/spec+452) is faithful and re-homable.
         bool lbProceed = false;
-        if ( lpSpec != nullptr && lrPart.GetMeshId() != -1 )         // *(_R29 + 456) != -1 (FLAG: +456 proxy)
+        if ( lpSpec != 0 && lrPart.GetMeshId() != -1 )         // *(_R29 + 456) != -1 (FLAG: +456 proxy)
         {
             // Exhaust-count shortcut: more than one attached exhaust always proceeds
             // (asm: `if (*(_R31+26400) > 1) goto LABEL_11`). +26400 == miNumAttachedExhausts.
@@ -839,7 +839,7 @@ namespace Deformation
         // [detach-probe] BOTH outcomes -- a null return (pool full) is a different failure from
         // "the call site was never reached", and printing only the successes would hide it.
 
-        if ( lpPhysicalBodyPart != nullptr )
+        if ( lpPhysicalBodyPart != 0 )
         {
             // The new part must point back at THIS IK part, and the slot must still be ATTACHED_IK.
             CGS_ASSERT(lpPhysicalBodyPart->GetIKPartIndex() == liPartIndex,

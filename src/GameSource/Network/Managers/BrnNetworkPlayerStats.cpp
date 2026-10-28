@@ -93,7 +93,7 @@ namespace BrnNetwork
         {
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "String too long: " << (lpcName != nullptr ? lpcName : "<NULLSTRING>");
+            lStrStream << "String too long: " << (lpcName != 0 ? lpcName : "<NULLSTRING>");
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
             CgsDev::Assert::EndAssert();
@@ -112,7 +112,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(leValue >= E_STATS_VALUE_START, "leValue >= E_STATS_VALUE_START");
         CGS_ASSERT(leValue < E_STATS_VALUE_COUNT, "leValue < E_STATS_VALUE_COUNT");
-        CGS_ASSERT(lpcStat != nullptr, "lpcStat");
+        CGS_ASSERT(lpcStat != 0, "lpcStat");
 
         maiValues[leValue]   = std::atoi(lpcStat);
         maeStatType[leValue] = leType;

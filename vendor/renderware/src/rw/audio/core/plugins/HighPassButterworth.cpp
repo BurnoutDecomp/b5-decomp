@@ -65,8 +65,8 @@ static PlugInDescRunTime g_HighPassButterworthDesc = {
     4, 0, 3, 0, 0, 0,
     0
 };
-static void *const KHB_BasePlugInVTable = nullptr;       // off_820AA810
-static void *const KHB_HighPassButterworthVTable = nullptr; // off_8217F3F4 (installed by Initialize)
+static void *const KHB_BasePlugInVTable = 0;       // off_820AA810
+static void *const KHB_HighPassButterworthVTable = 0; // off_8217F3F4 (installed by Initialize)
 
 // CreateInstance immediates (single numeric rodata constants; values grounded by the
 // pseudocode's direct stores and the shared rwaudio plug-in family).

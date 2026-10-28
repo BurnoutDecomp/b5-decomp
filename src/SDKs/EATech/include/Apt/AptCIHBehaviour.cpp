@@ -81,14 +81,14 @@ AptCIH* AptCIH::GetFirstChild() const
     const uint32_t nType = mpCharacterInst->GetTypeTag();
     const bool bSpriteBase = (nType == 5 || nType == 9);   // IsSpriteInstBase
     if (!bSpriteBase)
-        return nullptr;
+        return 0;
 
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
 
     const AptDisplayListNode* pHead = pSpriteInst->mDisplayList.mpHead;
     if (!pHead)
-        return nullptr;   // head node not yet pool-allocated (empty list)
+        return 0;   // head node not yet pool-allocated (empty list)
 
     return pHead->mpFirst;
 }
@@ -101,7 +101,7 @@ AptCIH* AptCIH::GetFirstChild() const
 // ---------------------------------------------------------------------------
 bool AptCIH::ContainsNativeHashVirtual() const
 {
-    return GetNativeHash() != nullptr;
+    return GetNativeHash() != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ bool AptCIH::ContainsNativeHashVirtual() const
 // ---------------------------------------------------------------------------
 int AptCIH::HasEventMember(int nEventMask)
 {
-    for (AptValue* pValue = this; pValue != nullptr; )
+    for (AptValue* pValue = this; pValue != 0; )
     {
         AptNativeHash* pHash = pValue->GetNativeHashVirtual();
         if (!pHash)
@@ -150,7 +150,7 @@ void AptCIH::ForceCleanNativeHash()
         pHash->DestroyGCPointers();
         pHash->~AptNativeHash();
         gpNonGCPoolManager->Deallocate(pHash, sizeof(AptNativeHash));
-        pCharacterInst->mpProperties = nullptr;
+        pCharacterInst->mpProperties = 0;
     }
 }
 
@@ -195,8 +195,8 @@ int AptCIH::FindAndSetEvents()
     // mpProperties home AssociateInstToClass writes the prototype into; the CIH
     // value hash is null for placed clips -- was an AV here). x64 FIX 2026-07-05.
     AptCharacterInst* const pOwnInst = GetCharacterInst();
-    AptNativeHash* const pHash = pOwnInst ? pOwnInst->mpProperties : nullptr;
-    if (pHash == nullptr)
+    AptNativeHash* const pHash = pOwnInst ? pOwnInst->mpProperties : 0;
+    if (pHash == 0)
         return 0;
 
     for (const AptEventDescriptor& desc : KaAptEventDescriptors)
@@ -207,7 +207,7 @@ int AptCIH::FindAndSetEvents()
             // The name table is the INTERNED AS-name pool (console dword_8324E580
             // == StringPool::saConstant, fully populated; the separate zeroed
             // gAptEventNameTable alias is retired from this reader).
-            if (findChild(&StringPool::saConstant[desc.nNameIndex], nullptr) != nullptr)
+            if (findChild(&StringPool::saConstant[desc.nNameIndex], 0) != 0)
             {
                 pHash->mnEventHandlerMask |= desc.nEventMask;
                 if ((desc.nEventMask & KU_AptEventNeedsUpdateTick) != 0)
@@ -252,8 +252,8 @@ AptCharacterAnimationInst* AptCIH::GetAnimationInst() const
 void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRenderData)
 {
     AptCharacterInst* pNew = pCharacterInst;
-    if (pNew == nullptr)
-        pNew = AptCharacterInst::CreateCharacterInst(nullptr);   // base "none" instance
+    if (pNew == 0)
+        pNew = AptCharacterInst::CreateCharacterInst(0);   // base "none" instance
 
     AptCharacterInst* pOld = mpCharacterInst;
     if (pNew == pOld)
@@ -261,14 +261,14 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
 
     mpCharacterInst = pNew;
 
-    if (pOld != nullptr)
+    if (pOld != 0)
     {
         if (bMoveRenderData)
             pNew->MoveRenderDataFrom(pOld);
 
         // The freshly installed instance is an animation node (type tag 9) -> drop its
         // registered per-frame timer functions from the animation director.
-        if ((mpCharacterInst->GetTypeTag() == 9u) && gpAptTarget != nullptr)
+        if ((mpCharacterInst->GetTypeTag() == 9u) && gpAptTarget != 0)
             gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
 
         // GC-tear-down + free the old instance (the X360's DestroyGCPointers + the
@@ -362,7 +362,7 @@ void AptCIH::Remove(bool bClearGCRoots)
 // ---------------------------------------------------------------------------
 AptCIH* AptCIH::ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie)
 {
-    AptDisplayListState* pChildList = nullptr;
+    AptDisplayListState* pChildList = 0;
     AptCharacterInst* pCharInst = mpCharacterInst;
     const uint32_t nType = pCharInst->GetTypeTag();
     if (nType == 5 || nType == 9)   // movie-clip / animation == IsSpriteInstBase
@@ -494,7 +494,7 @@ void AptCIH::SetHasMask(bool bHasMask, AptRenderItem* pMask)
 // mpCharacterInst from the node, so `this` is passed); a null inst short-circuits.
 AptCIH* AptCIH::SetIsInserted()
 {
-    if (GetCharacterInst() == nullptr)
+    if (GetCharacterInst() == 0)
         return this;
     return AptCharacterInst::ItemInserted(this);
 }
@@ -509,8 +509,8 @@ AptCIH* AptCIH::SetIsInserted()
 // new (AptPrototype/AptArray/...) for the pre-AptInit startup window.
 void* AptCIH::operator new(size_t size)
 {
-    if (gpGCPoolManager == nullptr)
-        return nullptr;
+    if (gpGCPoolManager == 0)
+        return 0;
     void* pMem = gpGCPoolManager->Allocate(size);
     reinterpret_cast<AptValueGC_MemItem*>(pMem)->SetIsAllocated(gAptValueGCSizeOffset, true);
     return pMem;
@@ -568,7 +568,7 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
     {
         if (AptCIH* pCurrentSlave = GetMask())
         {
-            pCurrentSlave->mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+            pCurrentSlave->mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, 0);
             pCurrentSlave->SetGeneralizedProcessDirtyState(false);
             if (pManager)
                 pManager->Update_ItemSetMaskState(pMaskSlave, nTick, false);
@@ -586,7 +586,7 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
     AptCharacterInst* pSlaveCharInst = pMaskSlave->mpCharacterInst;
     if (pSlaveCharInst->mpRenderItem->GetIsMask())
     {
-        pSlaveCharInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+        pSlaveCharInst->GetRenderItemWritable()->SetIsMask(false, 0);
         pMaskSlave->SetGeneralizedProcessDirtyState(false);
         if (pManager)
             pManager->Update_ItemSetMaskState(pMaskSlave, nTick, false);
@@ -594,9 +594,9 @@ void AptCIH::SetMask(AptCIH* pMaskSlave)
         AptNativeHash* pSlaveHash = pMaskSlave->GetNativeHash();
         AptCIH* pOldMaster = pSlaveHash
             ? static_cast<AptCIH*>(pSlaveHash->Lookup(strMaskSlave))
-            : nullptr;
+            : 0;
 
-        pOldMaster->mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, nullptr);
+        pOldMaster->mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, 0);
         if (AptNativeHash* pOldMasterHash = pOldMaster->GetNativeHash())
             pOldMasterHash->Unset(strMaskMaster);
         if (pSlaveHash)
@@ -699,7 +699,7 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
         return (fHeight >= 0.0f) ? fHeight : 0.0f;
     }
     case 6:   // _rotation (degrees) -- cached authored angle (mpAssetString dual-use) or derived
-        if (mpAssetString != nullptr)
+        if (mpAssetString != 0)
             return *reinterpret_cast<const float*>(mpAssetString);
         if (!(fabsf(pPos->b) >= kSkewEpsilon) && !(fabsf(pPos->c) >= kSkewEpsilon))
             return 0.0f;
@@ -743,7 +743,7 @@ float AptCIH::GetProceduralProperty(uint32_t nPropertyIndex) const
 // node is hidden -> not visible. Reaching the root (null parent) means all visible.
 bool AptCIH::IsVisible() const
 {
-    for (const AptCIH* pNode = this; pNode != nullptr; pNode = pNode->mpDisplayListParent)
+    for (const AptCIH* pNode = this; pNode != 0; pNode = pNode->mpDisplayListParent)
     {
         if (pNode->GetProceduralProperty(11) == 0.0f)
             return false;
@@ -820,7 +820,7 @@ AptCIH* AptCIH::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
 AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, AptRect* pAccumulator)
 {
     AptCharacterInst* pCharInst = mpCharacterInst;
-    if (pCharInst != nullptr && pCharInst->GetTypeTag() != 15)   // 15 == the null-char "level" node
+    if (pCharInst != 0 && pCharInst->GetTypeTag() != 15)   // 15 == the null-char "level" node
     {
         // scratch = pParentTransform concat this node's position transform (identity if none).
         const AptMatrix* pPos = pCharInst->GetRenderItem()->GetPositionMatrixConst();
@@ -835,7 +835,7 @@ AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, A
         }
         else
         {
-            const AptRect* pLeafBounds = nullptr;
+            const AptRect* pLeafBounds = 0;
             if (nType == 2)   // dynamic text -> the render item's baked bounds
             {
                 pLeafBounds = static_cast<AptRenderItemDynamicText*>(pCharInst->GetRenderItem())->GetBoundsConst();
@@ -846,7 +846,7 @@ AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, A
                 if (pChar->mnType == 1 || pChar->mnType == 10)   // shape / static-text
                     pLeafBounds = &static_cast<AptCharacterShape*>(pChar)->mBounds;
             }
-            if (pLeafBounds != nullptr)
+            if (pLeafBounds != 0)
                 AptRenderingContext::expandBoundingRect(pLeafBounds, &scratch, pAccumulator);
         }
     }
@@ -950,7 +950,7 @@ bool AptCIH::ProcessMaskMatricies()
         --ppCursor;
         --nAncestorCount;
         AptCIH* pAncestor = *ppCursor;
-        *ppCursor = nullptr;
+        *ppCursor = 0;
 
         const AptMatrix* pPos = pAncestor->mpCharacterInst->GetRenderItem()->mpPositionMatrix;
         if (!pPos)
@@ -1165,7 +1165,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
 
         // Cache the authored angle in the lazily-allocated mpAssetString slot (the
         // X360 reuses it as a single-float store; allocated from the DOGMA pool).
-        if (mpAssetString == nullptr)
+        if (mpAssetString == 0)
             mpAssetString = gpNonGCPoolManager->Allocate(4);   // console off_8324D808 == gpNonGCPoolManager (AptInit wires both DOGMA-pool aliases to the same pool)
         *reinterpret_cast<float*>(mpAssetString) = f31;
 
@@ -1307,7 +1307,7 @@ void AptCIH::CleanNativeFunctions()
         if (*ppSlot)
         {
             (*ppSlot)->Release();
-            *ppSlot = nullptr;
+            *ppSlot = 0;
         }
     }
 }
@@ -1374,11 +1374,11 @@ unsigned int AptProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx
 
 void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 {
-    if (pRoot == nullptr)
+    if (pRoot == 0)
         return;
     unsigned int (*pPrev)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb;
     AptCIH_sCIHProcessCb = &AptProcessTextInstCb;
-    pRoot->GeneralisedProcess(pRoot, nullptr);
+    pRoot->GeneralisedProcess(pRoot, 0);
     AptCIH_sCIHProcessCb = pPrev;
 }
 
@@ -1422,12 +1422,12 @@ AptCIH* AptCIH::GetMask() const
         !pRenderItem->GetMask() ||
         !const_cast<AptCIH*>(this)->ContainsNativeHashVirtual())
     {
-        return nullptr;
+        return 0;
     }
 
     const EAStringC strMaskMaster("#!MASKMASTER!#");
-    AptNativeHash* pHash = mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
-    return pHash ? static_cast<AptCIH*>(pHash->Lookup(strMaskMaster)) : nullptr;
+    AptNativeHash* pHash = mpCharacterInst ? mpCharacterInst->mpProperties : 0;
+    return pHash ? static_cast<AptCIH*>(pHash->Lookup(strMaskMaster)) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1490,18 +1490,18 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
     int nResult = 0;
     // The same malformed-record pointer gate as _addToSetCaches (see there): a
     // 4-byte-straddled record-array slot marks an unusable (never-relocated) block.
-    if (pList != nullptr)
+    if (pList != 0)
     {
         const uintptr_t luRecs = reinterpret_cast<uintptr_t>(pList->mpHandlers);
         if (luRecs < 0x10000u || (luRecs >> 47) != 0u ||
             (luRecs & 0xFFFFFFFFull) == 0u)   // the straddle leaves the low dword zero
-            pList = nullptr;
+            pList = 0;
     }
-    if (pList != nullptr && pList->mnCount > 0)
+    if (pList != 0 && pList->mnCount > 0)
     {
         AptActionQueueC* const pQueue =
-            (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
-                ? gpAptTarget->mpAnimationTarget->mpActionQueue : nullptr;
+            (gpAptTarget != 0 && gpAptTarget->mpAnimationTarget != 0)
+                ? gpAptTarget->mpAnimationTarget->mpActionQueue : 0;
 
         for (int32_t i = 0; i < pList->mnCount; ++i)
         {
@@ -1523,12 +1523,12 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
                 // qword_1059C588: the static (zero-init) constant-pool descriptor
                 // the console passes by value -- a clip-event block has no pool of
                 // its own (its streams use the movie dictionary via op 0x88).
-                AptConstantPool lEmptyPool = { nullptr, 0 };
+                AptConstantPool lEmptyPool = { 0, 0 };
 
                 AptScriptFunctionByteCodeBlock* pBlock = new AptScriptFunctionByteCodeBlock(
                     const_cast<unsigned char*>(rRec.mpActionStream), -1, lEmptyPool,
-                    pName->GetBuffer(), static_cast<AptValue*>(pNode), nullptr);
-                if (pBlock != nullptr)
+                    pName->GetBuffer(), static_cast<AptValue*>(pNode), 0);
+                if (pBlock != 0)
                 {
                     // PrepareForExecution == PushStaticData (the register window).
                     AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();
@@ -1540,7 +1540,7 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
                     pBlock->AddRef();
 
                     gAptActionInterpreter.callFunction(
-                        static_cast<AptValue*>(pNode), pBlock, 0, nullptr, nullptr);
+                        static_cast<AptValue*>(pNode), pBlock, 0, 0, 0);
 
                     pBlock->Release();
                     // Pop the CIH stack (Release the pinned node) -- the {count,cap,array}
@@ -1553,7 +1553,7 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
                 return 1;
             }
 
-            if (pQueue == nullptr)
+            if (pQueue == 0)
                 continue;
 
             if (nEventMask == 2)
@@ -1613,9 +1613,9 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
             return nResult;
 
         AptActionQueueC* const pQueue =
-            (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
-                ? gpAptTarget->mpAnimationTarget->mpActionQueue : nullptr;
-        if (pQueue == nullptr)
+            (gpAptTarget != 0 && gpAptTarget->mpAnimationTarget != 0)
+                ? gpAptTarget->mpAnimationTarget->mpActionQueue : 0;
+        if (pQueue == 0)
             return nResult;
 
         const EAStringC* pName = &StringPool::saConstant[skAptClipEvents[nPair].mnNameCode];   // GetString(code)
@@ -1623,8 +1623,8 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
 
         // Own-hash lookup first (the objectMemberLookup vtbl route's fast path).
         AptNativeHash* pHash = pNode->GetNativeHashVirtual();
-        AptValue* pHandler = (pHash != nullptr) ? pHash->Lookup(*pName) : nullptr;
-        if (pHandler != nullptr)
+        AptValue* pHandler = (pHash != 0) ? pHash->Lookup(*pName) : 0;
+        if (pHandler != 0)
         {
             // Found on this node: masks 0x4000/0x2000 queue at the BACK, the rest
             // jump the queue at the FRONT (the console's two exits).
@@ -1639,8 +1639,8 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
 
         // Not on the own hash: resolve up the chain (findChild). Only a DEFINED
         // value dispatches (the console tests the value's defined bit).
-        AptValue* pChild = pNode->findChild(pName, nullptr);
-        if (pChild == nullptr || !pChild->getIsDefined())
+        AptValue* pChild = pNode->findChild(pName, 0);
+        if (pChild == 0 || !pChild->getIsDefined())
             return nResult;
 
         // FLAG (deferred sub-branch, console-faithful gate): when the resolved
@@ -1697,9 +1697,9 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 // initialised data (1): nothing in the image ever clears it, so the early-return screen is
 // always armed.
 bool AptCIH_sbGeneralisedProcessEarlyReturn = true;                                    // bEarlyReturn
-unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = nullptr;              // sCIHProcessCb
-unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = nullptr;              // sCIHProcessCb1
-unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;              // sCIHProcessCb2
+unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = 0;              // sCIHProcessCb
+unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = 0;              // sCIHProcessCb1
+unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = 0;              // sCIHProcessCb2
 int AptCIH_snGeneralisedProcessTreeDepth = 0;                                           // nTreeDepth
 
 unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
@@ -1802,16 +1802,16 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 {
     // ---- the director-set / event-slot / new-inst DRAIN --------------------
     AptAnimationTarget* const pDir =
-        (gpAptTarget != nullptr) ? gpAptTarget->mpAnimationTarget : nullptr;
-    if (pDir != nullptr)
+        (gpAptTarget != 0) ? gpAptTarget->mpAnimationTarget : 0;
+    if (pDir != 0)
     {
         // sub_82ADBD50(&director->mInputSet, node): find + clear + Release.
         for (uint32_t i = 0; i < pDir->mInputSet.mnCapacity; ++i)
         {
-            if (pDir->mInputSet.mppSlots != nullptr &&
+            if (pDir->mInputSet.mppSlots != 0 &&
                 reinterpret_cast<AptCIH*>(pDir->mInputSet.mppSlots[i]) == pNode)
             {
-                pDir->mInputSet.mppSlots[i] = nullptr;
+                pDir->mInputSet.mppSlots[i] = 0;
                 pNode->Release();
                 break;
             }
@@ -1825,10 +1825,10 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
         // listener adds do not AddRef -- the console remove releases nothing).
         for (uint32_t i = 0; i < pDir->mListenerSet.mnCapacity; ++i)
         {
-            if (pDir->mListenerSet.mppSlots != nullptr &&
+            if (pDir->mListenerSet.mppSlots != 0 &&
                 reinterpret_cast<AptCIH*>(pDir->mListenerSet.mppSlots[i]) == pNode)
             {
-                pDir->mListenerSet.mppSlots[i] = nullptr;
+                pDir->mListenerSet.mppSlots[i] = 0;
                 break;
             }
         }
@@ -1839,12 +1839,12 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
         AptValue** const ppInsts =
             static_cast<AptValue**>(AptAnimationTarget::GetNewInsts());
         const int nCount = AptAnimationTarget::GetNewInstSize();
-        for (int i = 0; ppInsts != nullptr && i < nCount; ++i)
+        for (int i = 0; ppInsts != 0 && i < nCount; ++i)
         {
             if (reinterpret_cast<AptCIH*>(ppInsts[i]) == pNode)
             {
                 pNode->Release();     // (*(*v11 + 4))()
-                ppInsts[i] = nullptr;
+                ppInsts[i] = 0;
             }
         }
     }
@@ -1870,7 +1870,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     AptClearCIHDrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
-    if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != nullptr)
+    if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != 0)
         gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
 
     // ---- mask MASTER teardown: this node owns a mask (render item hasMask + a slave) --
@@ -1883,16 +1883,16 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         {
             if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
                 pManager->Update_ItemSetMaskState(pSlave, gnCurrUpdateTick, false);
-            pSlave->mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+            pSlave->mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, 0);
             pSlave->SetGeneralizedProcessDirtyState(false);
             if (AptNativeHash* pSlaveHash =
-                    pSlave->mpCharacterInst ? pSlave->mpCharacterInst->mpProperties : nullptr)
+                    pSlave->mpCharacterInst ? pSlave->mpCharacterInst->mpProperties : 0)
                 pSlaveHash->Unset(strMaskSlave);
         }
         if (AptNativeHash* pMasterHash =
-                mpCharacterInst ? mpCharacterInst->mpProperties : nullptr)
+                mpCharacterInst ? mpCharacterInst->mpProperties : 0)
             pMasterHash->Unset(strMaskMaster);
-        mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, nullptr);
+        mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, 0);
     }
 
     // ---- mask SLAVE teardown: this node IS a mask (render item isMask) -----------------
@@ -1901,19 +1901,19 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         const EAStringC strMaskMaster("#!MASKMASTER!#");
         const EAStringC strMaskSlave("#!MASKSLAVE!#");
         AptNativeHash* pSlaveHash =
-            mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
+            mpCharacterInst ? mpCharacterInst->mpProperties : 0;
         AptCIH* pMaster = pSlaveHash
             ? static_cast<AptCIH*>(pSlaveHash->Lookup(strMaskSlave))
-            : nullptr;
+            : 0;
         if (pMaster)
         {
-            pMaster->mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, nullptr);
-            mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, nullptr);
+            pMaster->mpCharacterInst->GetRenderItemWritable()->SetHasMask(false, 0);
+            mpCharacterInst->GetRenderItemWritable()->SetIsMask(false, 0);
             SetGeneralizedProcessDirtyState(false);
             if (pSlaveHash)
                 pSlaveHash->Unset(strMaskSlave);
             if (AptNativeHash* pMasterHash =
-                    pMaster->mpCharacterInst ? pMaster->mpCharacterInst->mpProperties : nullptr)
+                    pMaster->mpCharacterInst ? pMaster->mpCharacterInst->mpProperties : 0)
                 pMasterHash->Unset(strMaskMaster);
         }
     }
@@ -1929,7 +1929,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     if (!gbAptInShutdown)
     {
         AptCharacterInst* const pInstU = mpCharacterInst;
-        const uint32_t nTagU = (pInstU != nullptr) ? pInstU->GetTypeTag() : 0u;
+        const uint32_t nTagU = (pInstU != 0) ? pInstU->GetTypeTag() : 0u;
         if (nTagU == 5u || nTagU == 16u)
         {
             AptCharacterSpriteInstBase* const pSprite =
@@ -1940,15 +1940,15 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                 queueClipEvents(4, 0, 0);
                 // findChild(&saConstant[69] == the interned "onUnload" key).
                 AptValue* const pChild =
-                    findChild(&StringPool::saConstant[69], nullptr);
-                if (pChild != nullptr && pChild->getIsDefined())
+                    findChild(&StringPool::saConstant[69], 0);
+                if (pChild != 0 && pChild->getIsDefined())
                 {
                     // A callable function value (vtbl indices 34..36).
                     const int nVtbl = static_cast<int>(pChild->getVtblIndex());
                     if (nVtbl >= 34 && nVtbl <= 36)
                     {
                         gAptActionInterpreter.callFunction(
-                            static_cast<AptValue*>(this), pChild, 0, nullptr, nullptr);
+                            static_cast<AptValue*>(this), pChild, 0, 0, 0);
                         // Pop the call result off the operand stack.
                         // x64 FIX (2026-07-05, the AptValueVector member-pun class):
                         // named-member pop instead of the console triple pun.
@@ -1974,14 +1974,14 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         && (mpCharacterInst->mTypeFlags & 0x3Fu) == 9u
         && this != AptGetAnimationAtLevel(0))
     {
-        if (gpAptZombieVector == nullptr ||
+        if (gpAptZombieVector == 0 ||
             gpAptZombieVector->mnCapacity >= gpAptZombieVector->mnTop)
         {
             // No vector (config word 14 == 0) or full: the node cannot be kept.
             // Mark it CIHState 2 (dead-transition), fire the notify hook with
             // bImmediate=1, and fall through to the immediate clear.
             SetCIHState(2);   // X360 `flagsA = 0x40000000 | (flagsA & 0x9FFFFFFF)`
-            if (gpAptZombieNotifyHook != nullptr)
+            if (gpAptZombieNotifyHook != 0)
             {
                 const AptFile* pFile =
                     static_cast<AptCharacterAnimationInst*>(mpCharacterInst)
@@ -2003,7 +2003,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                 ->mDisplayList.clear(true);                     // charInst+28, arg 1
             if (AptNativeHash* pHash = GetNativeHashVirtual())  // vtbl[2]
                 pHash->ClearData();
-            if (gpValuesToRelease != nullptr &&
+            if (gpValuesToRelease != 0 &&
                 gpValuesToRelease->mnCapacity != 0)    // family-(B) live count
                 gpValuesToRelease->ReleaseValues();
 
@@ -2024,13 +2024,13 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                 AptFile* pFile =
                     static_cast<AptCharacterAnimationInst*>(mpCharacterInst)
                         ->mAnimationFilePtr.pData;
-                if (pFile != nullptr)
+                if (pFile != 0)
                 {
                     const int32_t nOldState = pFile->mnState;
                     pFile->mnState   = 5;
                     pFile->mnField12 = nOldState;
                 }
-                if (gpAptZombieNotifyHook != nullptr)
+                if (gpAptZombieNotifyHook != 0)
                     gpAptZombieNotifyHook(0, 0, GetInstanceName().GetBuffer(),
                                           pFile ? pFile->mFileName.GetBuffer() : "");
                 gbAptZombiesDirty = true;
@@ -2043,7 +2043,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
     // ---- char-instance teardown -------------------------------------------------------
     AptCharacterInst* pOld = mpCharacterInst;
-    if (pOld == nullptr)
+    if (pOld == 0)
     {
         // X360/XB1 tail: clear the AS-changed flag inline (x64 mFlagsA bit 0, the
         // X360 `rlwinm 1,31`), then tail-call vtable slot 5 == SetHasClass(0)
@@ -2062,28 +2062,28 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         if (bClearGCRoots)
         {
             // Replace the old instance with a fresh "none" + carry the render data across.
-            AptCharacterInst* pNone = AptCharacterInst::CreateCharacterInst(nullptr);
+            AptCharacterInst* pNone = AptCharacterInst::CreateCharacterInst(0);
             mpCharacterInst = pNone;
             pNone->MoveRenderDataFrom(pOld);
         }
         else
         {
-            mpCharacterInst = nullptr;
+            mpCharacterInst = 0;
         }
 
         // Notify the render tree the old item was removed (when it still had one), tear
         // down its property hash, then GC-destroy + free it.
-        if (pOld->mpRenderItem != nullptr)
+        if (pOld->mpRenderItem != 0)
         {
             if (AptRenderTreeManager* pManager = AptCurrentRenderTreeManager())
                 pManager->Update_ItemRemoved(pOld->GetRenderItemWritable(), gnCurrUpdateTick);
         }
-        if (pOld->mpProperties != nullptr)
+        if (pOld->mpProperties != 0)
         {
             pOld->mpProperties->DestroyGCPointers();
             pOld->mpProperties->~AptNativeHash();
             gpNonGCPoolManager->Deallocate(pOld->mpProperties, sizeof(AptNativeHash));
-            pOld->mpProperties = nullptr;
+            pOld->mpProperties = 0;
         }
         pOld->DestroyGCPointers();
         // The console's manual-vtable slot-0 scalar deleting destructor (see
@@ -2138,15 +2138,15 @@ AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
     // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
     // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) == AptCharacterSpriteInstBase::mpClipEventHandlers
     // (the sprite-base subclass slot; NOT the render-item mFlags).
-    const void* pPlacementClipActions = nullptr;
-    if (pSource != nullptr)
+    const void* pPlacementClipActions = 0;
+    if (pSource != 0)
         pPlacementClipActions =
             static_cast<AptCharacterSpriteInstBase*>(pSource->GetCharacterInst())->mpClipEventHandlers;
 
     return pChildList->placeObject(
-        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, this,
+        /*pExistingNode*/ 0, nDepth, pCharacter, pName, this,
         /*bForceRemove*/ 1, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
-        /*pColorXForm*/ nullptr, /*pPositionMatrix*/ nullptr,
+        /*pColorXForm*/ 0, /*pPositionMatrix*/ 0,
         pPlacementClipActions, /*pClassObject*/ pInitObject);
 }
 
@@ -2201,7 +2201,7 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
     pItem->Remove(bDelay);
 
     // refcount > 1 (an outside reference survives) -> queue on the director's rem list.
-    if (pItem->getRefCount() > 1u && gpAptTarget != nullptr)
+    if (pItem->getRefCount() > 1u && gpAptTarget != 0)
         AptAnimationTargetAddToRemList(gpAptTarget->mpAnimationTarget, pItem);
 
     pItem->Release();   // X360 vtable[1]
@@ -2268,19 +2268,19 @@ bool AptCIH::ProcessCustomControls()
         // key is the pooled constant (unk_8324E5C8 == StringPool "_type").
         EAStringC strCustomControlTypeKey("_CustomControlType");
 
-        AptValue* pTypeVar = (pInst->mpProperties != nullptr)
+        AptValue* pTypeVar = (pInst->mpProperties != 0)
             ? pInst->mpProperties->Lookup(StringPool::saConstant[18])   // "_type"
-            : nullptr;
-        AptValue* pZidVar = (pInst->mpProperties != nullptr)
+            : 0;
+        AptValue* pZidVar = (pInst->mpProperties != 0)
             ? pInst->mpProperties->Lookup(strCustomControlTypeKey)
-            : nullptr;
+            : 0;
 
         const uint32_t uFlags = pSprite->mnClipActionFlags;
-        if (pTypeVar != nullptr)
+        if (pTypeVar != 0)
         {
             pSprite->mnClipActionFlags = (uFlags & ~0x0C000000u) | 0x04000000u;  // string-style
         }
-        else if (pZidVar != nullptr)
+        else if (pZidVar != 0)
         {
             pSprite->mnClipActionFlags = uFlags | 0x0C000000u;                   // zid-style
         }
@@ -2304,7 +2304,7 @@ bool AptCIH::ProcessCustomControls()
         AptRenderItem* pOriginal = pInst->mpRenderItem;
         // `(*(*(v2+4)+24) & 0xFC0000) == 0x140000` -- render-type SPRITE (x64
         // mFlags bits 8-13 == 5, the same test AptRenderWalk uses).
-        if (pOriginal != nullptr && (pOriginal->mFlags & 0x3F00u) == 0x0500u)
+        if (pOriginal != 0 && (pOriginal->mFlags & 0x3F00u) == 0x0500u)
         {
             AptRenderItem* pPromoted =
                 AptRenderItemCustomControl::CopyFromSprite(pOriginal, gnCurrUpdateTick,
@@ -2318,13 +2318,13 @@ bool AptCIH::ProcessCustomControls()
     // ---- refresh the descriptor strings ------------------------------------------
     // `v12 = **(v2+28)` -- the control's single child, the rectangle shape whose host
     // render unit the update/create hooks receive.
-    AptCIH* pRectObject = (pSprite->mDisplayList.mpHead != nullptr)
+    AptCIH* pRectObject = (pSprite->mDisplayList.mpHead != 0)
         ? pSprite->mDisplayList.mpHead->mpFirst
-        : nullptr;
+        : 0;
 
     // getVariable(&gAptActionInterpreter, this, 0, "_target", 1, 1, 0).
     AptValue* pTargetVar =
-        gAptActionInterpreter.getVariable(this, nullptr, &StringPool::saConstant[16], 1, 1, 0);
+        gAptActionInterpreter.getVariable(this, 0, &StringPool::saConstant[16], 1, 1, 0);
 
     AptRenderItemCustomControl* pItem =
         static_cast<AptRenderItemCustomControl*>(pInst->GetRenderItemWritable());
@@ -2332,11 +2332,11 @@ bool AptCIH::ProcessCustomControls()
     // The child rect shape's host render unit (character +0x20 -- the same slot
     // AptHook_DrawShape reads; see KU_SHAPE_GEOMETRY_OFFSET there). The console
     // dereferences unconditionally; the SDK asserts the child is a single shape.
-    void* pRenderingUnit = nullptr;
-    if (pRectObject != nullptr &&
-        pRectObject->GetCharacterInst() != nullptr &&
-        pRectObject->GetCharacterInst()->mpRenderItem != nullptr &&
-        pRectObject->GetCharacterInst()->mpRenderItem->mpCharacter != nullptr)
+    void* pRenderingUnit = 0;
+    if (pRectObject != 0 &&
+        pRectObject->GetCharacterInst() != 0 &&
+        pRectObject->GetCharacterInst()->mpRenderItem != 0 &&
+        pRectObject->GetCharacterInst()->mpRenderItem->mpCharacter != 0)
     {
         pRenderingUnit = *reinterpret_cast<void**>(
             reinterpret_cast<char*>(pRectObject->GetCharacterInst()->mpRenderItem->mpCharacter)
@@ -2346,13 +2346,13 @@ bool AptCIH::ProcessCustomControls()
     const uint32_t uMode = (pSprite->mnClipActionFlags >> 26) & 3u;
     if (uMode == 1u)   // the string-descriptor control
     {
-        AptValue* pModeTypeVar = (pInst->mpProperties != nullptr)
+        AptValue* pModeTypeVar = (pInst->mpProperties != 0)
             ? pInst->mpProperties->Lookup(StringPool::saConstant[18])   // "_type"
-            : nullptr;
+            : 0;
 
         // `if (!pfnCustomControlUpdate || pfnCustomControlUpdate(unit) == 1)` --
         // a null slot means "always refresh the properties blob".
-        if (gAptFuncs.pfnCustomControlUpdate == nullptr ||
+        if (gAptFuncs.pfnCustomControlUpdate == 0 ||
             gAptFuncs.pfnCustomControlUpdate(pRenderingUnit))
         {
             pItem->SetCustomPropertiesStr(urlEncodeCustomRender());
@@ -2362,12 +2362,12 @@ bool AptCIH::ProcessCustomControls()
         // resolve == c_string(); the console then copies the AptString's embedded
         // EAStringC (record +8). A non-string value would have crashed the console;
         // skipped by the null guard here.
-        AptString* pTargetStr = (pTargetVar != nullptr) ? pTargetVar->c_string() : nullptr;
-        if (pTargetStr != nullptr)
+        AptString* pTargetStr = (pTargetVar != 0) ? pTargetVar->c_string() : 0;
+        if (pTargetStr != 0)
             pItem->SetTargetStr(*pTargetStr->GetInternalString());
 
-        AptString* pTypeStr = (pModeTypeVar != nullptr) ? pModeTypeVar->c_string() : nullptr;
-        if (pTypeStr != nullptr)
+        AptString* pTypeStr = (pModeTypeVar != 0) ? pModeTypeVar->c_string() : 0;
+        if (pTypeStr != 0)
             pItem->SetTypeStr(*pTypeStr->GetInternalString());
     }
     else if (gbAptCustomControlRenderEnabled && uMode == 3u)   // the zid-style control
@@ -2378,8 +2378,8 @@ bool AptCIH::ProcessCustomControls()
         const bool bForce = (pItem->mCreatedOnTick == gnCurrUpdateTick) ||
                             ((pItem->mFlags & 0x40u) != 0);
 
-        AptString* pTargetStr = (pTargetVar != nullptr) ? pTargetVar->c_string() : nullptr;
-        if (gAptFuncs.pfnCreateCustomControlZid != nullptr && pTargetStr != nullptr)
+        AptString* pTargetStr = (pTargetVar != 0) ? pTargetVar->c_string() : 0;
+        if (gAptFuncs.pfnCreateCustomControlZid != 0 && pTargetStr != 0)
         {
             const AptAssetCustomControlZId nZId = gAptFuncs.pfnCreateCustomControlZid(
                 pRenderingUnit, pTargetStr->GetInternalString()->GetBuffer(),

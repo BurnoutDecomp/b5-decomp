@@ -43,7 +43,7 @@
 // ===========================================================================
 
 #include <cstddef>   // size_t
-#include <cstdint>
+#include "types.hpp"
 
 #include "SDKs/EATech/include/Apt/AptValueWithHash.h"            // AptValueWithHash base + AptVFT_NativeFunction
 #include "SDKs/EATech/include/Apt/AptDefine.h"                    // gpGCPoolManager

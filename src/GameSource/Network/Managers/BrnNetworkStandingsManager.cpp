@@ -137,7 +137,7 @@ namespace BrnNetwork
                 return &maStandingsData[liIndex];
             }
         }
-        return nullptr;
+        return 0;
     }
 
     // ---------------------------------------------------------------------------------
@@ -148,11 +148,11 @@ namespace BrnNetwork
     void StandingsManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != nullptr, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(lpPlayerManager != 0, "mpNetworkManager->GetPlayerManager()");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
 
-        StandingsData* lpDataEntry = nullptr;
+        StandingsData* lpDataEntry = 0;
         s32 liIndex = 0;
         for (; liIndex < KI_MAX_PLAYERS; ++liIndex)
         {
@@ -164,7 +164,7 @@ namespace BrnNetwork
         }
         CGS_ASSERT(liIndex < KI_MAX_PLAYERS, "liIndex < KI_MAX_PLAYERS");
 
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->RegisterMessageType(KI_PLAYER_FINISHED_ROUND_MESSAGE_TYPE,
                                                  static_cast<s32>(sizeof(PlayerFinishedRoundMessage)),   // console 0x40
@@ -186,16 +186,16 @@ namespace BrnNetwork
     void StandingsManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != nullptr, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(lpPlayerManager != 0, "mpNetworkManager->GetPlayerManager()");
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
-        if (lpNetworkPlayer != nullptr)
+        if (lpNetworkPlayer != 0)
         {
             lpNetworkPlayer->UnRegisterMessageType(KI_PLAYER_FINISHED_ROUND_MESSAGE_TYPE);
         }
 
         StandingsData* lpDataEntry = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpDataEntry != nullptr, "lpDataEntry");
+        CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
 
         lpDataEntry->mPlayerID = K_INVALID_PLAYER_ID;
         lpDataEntry->mFinishTime.SetFloatVal(0.0f);
@@ -227,11 +227,11 @@ namespace BrnNetwork
                                                     const BrnGameState::GameStateModuleIO::FinishedModeAction* lpFinishedModeAction)
     {
         CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
-        CGS_ASSERT(lpFinishedModeAction != nullptr, "lpModeResultsAction");
+        CGS_ASSERT(lpFinishedModeAction != 0, "lpModeResultsAction");
 
         StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpStandingsData != nullptr, "lpStandingsData");
-        if (lpStandingsData == nullptr)
+        CGS_ASSERT(lpStandingsData != 0, "lpStandingsData");
+        if (lpStandingsData == 0)
         {
             return;
         }
@@ -270,10 +270,10 @@ namespace BrnNetwork
     void StandingsManager::SendPlayerFinishedRoundMessage()
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != nullptr, "lpPlayerManager");
+        CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
 
         // Only relay once the round's start frame has been set (mu16StartFrame != 0xFFFF).
-        if (mpTimeManager == nullptr || !mpTimeManager->HasStartFrameBeenSetValid())
+        if (mpTimeManager == 0 || !mpTimeManager->HasStartFrameBeenSetValid())
         {
             return;
         }
@@ -284,7 +284,7 @@ namespace BrnNetwork
         CGS_ASSERT(lLocalPlayerID != K_INVALID_PLAYER_ID, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
         StandingsData* lpLocalPlayerStandingsData = GetStandingsDataEntry(lLocalPlayerID);
-        CGS_ASSERT(lpLocalPlayerStandingsData != nullptr, "lpLocalPlayerStandingsData");
+        CGS_ASSERT(lpLocalPlayerStandingsData != 0, "lpLocalPlayerStandingsData");
 
         CGS_ASSERT(lpLocalPlayerStandingsData->mfDistanceFromFinish >= KF_INVALID_DISTANCE_FROM_FINISH,
                    "Bad distance reported #1, dist from finish");
@@ -296,7 +296,7 @@ namespace BrnNetwork
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             CgsNetwork::NetworkPlayer* lpNetPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
-            if (lpNetPlayer != nullptr)
+            if (lpNetPlayer != 0)
             {
                 PlayerFinishedRoundMessage* lpMessage = static_cast<PlayerFinishedRoundMessage*>(
                     lpNetPlayer->GetRegisteredSendMessage(KI_PLAYER_FINISHED_ROUND_MESSAGE_TYPE));
@@ -324,18 +324,18 @@ namespace BrnNetwork
                                                                 void* lpUserData)
     {
         StandingsManager* lpStandingsManager = static_cast<StandingsManager*>(lpUserData);
-        CGS_ASSERT(lpStandingsManager != nullptr, "lpStandingsManager");
+        CGS_ASSERT(lpStandingsManager != 0, "lpStandingsManager");
 
         PlayerFinishedRoundMessage* lpPlayerFinishedRoundMessage =
             static_cast<PlayerFinishedRoundMessage*>(lpMessage);
-        CGS_ASSERT(lpPlayerFinishedRoundMessage != nullptr, "lpPlayerFinishedRoundMessage");
+        CGS_ASSERT(lpPlayerFinishedRoundMessage != 0, "lpPlayerFinishedRoundMessage");
 
         CgsNetwork::PlayerManager* lpPlayerManager = lpStandingsManager->mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != nullptr, "lpPlayerManager");
+        CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
 
         StandingsData* lpStandings = lpStandingsManager->GetStandingsDataEntry(lSendingPlayerID);
-        CGS_ASSERT(lpStandings != nullptr, "lpStandings");
-        if (lpStandings == nullptr)
+        CGS_ASSERT(lpStandings != 0, "lpStandings");
+        if (lpStandings == 0)
         {
             return;
         }
@@ -369,7 +369,7 @@ namespace BrnNetwork
                 // sets the won-round flag at the derived +0x2232 (this+8754).
                 BrnNetworkPlayer* lpNetPlayer =
                     static_cast<BrnNetworkPlayer*>(lpPlayerManager->GetPlayerByID(lSendingPlayerID));
-                if (lpNetPlayer != nullptr)
+                if (lpNetPlayer != 0)
                 {
                     lpNetPlayer->SetEliminated(true);
                 }
@@ -386,7 +386,7 @@ namespace BrnNetwork
     bool StandingsManager::ArePlayersResultsValid(NetworkPlayerID lPlayerID)
     {
         StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
-        if (lpStandingsData != nullptr)
+        if (lpStandingsData != 0)
         {
             return lpStandingsData->mbResultsReceived;
         }
@@ -404,10 +404,10 @@ namespace BrnNetwork
     void StandingsManager::FillOutResultsData(BrnNetworkModuleIO::PlayerResultsData* lpResultsData,
                                               NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lpResultsData != nullptr, "lpResultsData");
+        CGS_ASSERT(lpResultsData != 0, "lpResultsData");
 
         StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpStandingsData != nullptr, "lpStandingsData");
+        CGS_ASSERT(lpStandingsData != 0, "lpStandingsData");
 
         // Clear the record to its empty defaults (matches the inlined PlayerResultsData::Clear:
         // distance -1.0, both car indices -1, finish time 0, everything else zeroed/false).

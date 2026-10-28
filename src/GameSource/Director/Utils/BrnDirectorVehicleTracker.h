@@ -218,7 +218,7 @@ VehicleTracker::GetImplicitVelocity() const
     }
     else
     {
-        return rw::math::vpu::Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        { const rw::math::vpu::Vector3 lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
     }
 }
 
@@ -243,7 +243,7 @@ VehicleTracker::GetImplicitAcceleration() const
     }
     else
     {
-        return rw::math::vpu::Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        { const rw::math::vpu::Vector3 lResult = { 0.0f, 0.0f, 0.0f, 0.0f }; return lResult; }
     }
 }
 

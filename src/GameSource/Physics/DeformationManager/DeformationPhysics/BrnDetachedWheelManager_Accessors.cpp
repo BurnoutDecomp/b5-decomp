@@ -102,7 +102,7 @@ namespace Deformation
             return &maWheels[liSlot];
         }
 
-        return nullptr;
+        return 0;
     }
 
 }

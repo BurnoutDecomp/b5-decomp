@@ -70,34 +70,34 @@ namespace
     typedef BrnGameState::GameStateModuleIO::FburnChallengeSuccessUpdateEvent     PinSuccessUpdate;
     typedef BrnGameState::GameStateModuleIO::FburnChallengeSuccessEvent           PinSuccess;
     typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData                PinStatus;
-    static_assert(offsetof(PinAdded, mModelID)               == 0x00, "OnlinePlayerAddedEvent mModelID @ +0x00");
-    static_assert(offsetof(PinAdded, mWheelID)               == 0x08, "OnlinePlayerAddedEvent mWheelID @ +0x08");
-    static_assert(offsetof(PinAdded, mNetworkPlayerID)       == 0x10, "OnlinePlayerAddedEvent mNetworkPlayerID @ +0x10");
-    static_assert(sizeof(PinAdded)        == 40, "event 127 is posted as 40 bytes");
-    static_assert(sizeof(PinRemoved)      == 8,  "event 129 is posted as 8 bytes");
-    static_assert(sizeof(PinFinalised)    == 4,  "event 128 is posted as 4 bytes");
-    static_assert(sizeof(PinChangeCar)    == 32, "event 7 is posted as 32 bytes");
-    static_assert(sizeof(PinDisconnected) == 4,  "event 121 is posted as 4 bytes");
-    static_assert(sizeof(PinBuddyRemoved) == 16, "event 150 is posted as 16 bytes");
-    static_assert(offsetof(PinRoadRulesPB, mPersonalBestPlayerID)       == 0x38, "event 130 player id @ +0x38");
-    static_assert(offsetof(PinRoadRulesPB, mPersonalBestChallengeIndex) == 0x3C, "event 130 challenge index @ +0x3C");
-    static_assert(offsetof(PinRoadRulesPB, mbWasPBByFriend)             == 0x40, "event 130 friend flag @ +0x40");
-    static_assert(sizeof(PinRoadRulesPB)         == 72, "event 130 is posted as 72 bytes");
-    static_assert(sizeof(PinRoadRulesUploaded)   == 8,  "event 131 is posted as 8 bytes");
-    static_assert(sizeof(PinRoadRulesDownloaded) == 4,  "event 132 is posted as 4 bytes");
-    static_assert(sizeof(PinRoadRulesConnect)    == 4,  "event 133 is posted as 4 bytes");
-    static_assert(sizeof(PinActionSuccess)       == 16, "event 165 is posted as 16 bytes");
-    static_assert(sizeof(PinReset)               == 16, "events 166 / 167 are posted as 16 bytes");
-    static_assert(sizeof(PinActiveChallenge)     == 48, "event 173 is posted as 48 bytes");
-    static_assert(sizeof(PinSuccessUpdate)       == 24, "event 171 is posted as 24 bytes");
-    static_assert(sizeof(PinSuccess)             == 20, "event 172 is posted as 20 bytes");
-    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams) == 0x9C, "event 57 is posted as 156 bytes");
-    static_assert(sizeof(PinStatus) == 312, "InGamePlayerStatusData record stride (0x138)");
-    static_assert(offsetof(PinStatus, mPlayerName)          == 0x100, "mPlayerName @ +0x100");
-    static_assert(offsetof(PinStatus, mNetworkPlayerID)     == 0x110, "mNetworkPlayerID @ +0x110");
-    static_assert(offsetof(PinStatus, meActiveRaceCarIndex) == 0x114, "meActiveRaceCarIndex @ +0x114");
-    static_assert(offsetof(PinStatus, mbIsInLocalGameWorld) == 0x12F, "mbIsInLocalGameWorld @ +0x12F");
-    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData) == 56, "LobbyPlayerStatusData record stride (0x38)");
+    CGS_STATIC_ASSERT((offsetof(PinAdded, mModelID)               == 0x00), "OnlinePlayerAddedEvent mModelID @ +0x00");
+    CGS_STATIC_ASSERT((offsetof(PinAdded, mWheelID)               == 0x08), "OnlinePlayerAddedEvent mWheelID @ +0x08");
+    CGS_STATIC_ASSERT((offsetof(PinAdded, mNetworkPlayerID)       == 0x10), "OnlinePlayerAddedEvent mNetworkPlayerID @ +0x10");
+    CGS_STATIC_ASSERT((sizeof(PinAdded)        == 40), "event 127 is posted as 40 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinRemoved)      == 8),  "event 129 is posted as 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinFinalised)    == 4),  "event 128 is posted as 4 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinChangeCar)    == 32), "event 7 is posted as 32 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinDisconnected) == 4),  "event 121 is posted as 4 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinBuddyRemoved) == 16), "event 150 is posted as 16 bytes");
+    CGS_STATIC_ASSERT((offsetof(PinRoadRulesPB, mPersonalBestPlayerID)       == 0x38), "event 130 player id @ +0x38");
+    CGS_STATIC_ASSERT((offsetof(PinRoadRulesPB, mPersonalBestChallengeIndex) == 0x3C), "event 130 challenge index @ +0x3C");
+    CGS_STATIC_ASSERT((offsetof(PinRoadRulesPB, mbWasPBByFriend)             == 0x40), "event 130 friend flag @ +0x40");
+    CGS_STATIC_ASSERT((sizeof(PinRoadRulesPB)         == 72), "event 130 is posted as 72 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinRoadRulesUploaded)   == 8),  "event 131 is posted as 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinRoadRulesDownloaded) == 4),  "event 132 is posted as 4 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinRoadRulesConnect)    == 4),  "event 133 is posted as 4 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinActionSuccess)       == 16), "event 165 is posted as 16 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinReset)               == 16), "events 166 / 167 are posted as 16 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinActiveChallenge)     == 48), "event 173 is posted as 48 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinSuccessUpdate)       == 24), "event 171 is posted as 24 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinSuccess)             == 20), "event 172 is posted as 20 bytes");
+    CGS_STATIC_ASSERT((sizeof(BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams) == 0x9C), "event 57 is posted as 156 bytes");
+    CGS_STATIC_ASSERT((sizeof(PinStatus) == 312), "InGamePlayerStatusData record stride (0x138)");
+    CGS_STATIC_ASSERT((offsetof(PinStatus, mPlayerName)          == 0x100), "mPlayerName @ +0x100");
+    CGS_STATIC_ASSERT((offsetof(PinStatus, mNetworkPlayerID)     == 0x110), "mNetworkPlayerID @ +0x110");
+    CGS_STATIC_ASSERT((offsetof(PinStatus, meActiveRaceCarIndex) == 0x114), "meActiveRaceCarIndex @ +0x114");
+    CGS_STATIC_ASSERT((offsetof(PinStatus, mbIsInLocalGameWorld) == 0x12F), "mbIsInLocalGameWorld @ +0x12F");
+    CGS_STATIC_ASSERT((sizeof(BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData) == 56), "LobbyPlayerStatusData record stride (0x38)");
 
     // Queue one game-state record: the whole object, its own size, under the console event id.
     template <class Q, class T>
@@ -505,8 +505,8 @@ namespace BrnGame
                         reinterpret_cast<const NetIO::NetworkOutMugshotToSaveEvent*>(lpEvent);
                     CGS_ASSERT(lpMugshotToSaveEvent != 0, "lpMugshotToSaveEvent");
                     BrnGameState::ImageToSaveEvent lImageToSave;
-                    static_assert(offsetof(BrnGameState::ImageToSaveEvent, meImageType) ==
-                                  sizeof(lpMugshotToSaveEvent->mUniquePlayerID),
+                    CGS_STATIC_ASSERT((offsetof(BrnGameState::ImageToSaveEvent, meImageType) ==
+                                  sizeof(lpMugshotToSaveEvent->mUniquePlayerID)),
                                   "the unique player id fills the record up to the image type");
                     std::memcpy(&lImageToSave, &lpMugshotToSaveEvent->mUniquePlayerID,
                                 sizeof(lpMugshotToSaveEvent->mUniquePlayerID));
@@ -882,7 +882,7 @@ namespace BrnGame
                     lEvent.mbTrafficCheckingOn = lpParamsChangedEvent->mbTrafficCheckingOn;
                     lEvent.meVehicleChoice     = lpParamsChangedEvent->meVehicleChoice;
                     lEvent.miTimeLimit         = lpParamsChangedEvent->miTimeLimit;
-                    static_assert(sizeof(lEvent.maEvents) == sizeof(lpParamsChangedEvent->maEvents),
+                    CGS_STATIC_ASSERT((sizeof(lEvent.maEvents) == sizeof(lpParamsChangedEvent->maEvents)),
                                   "the ten round events span 440 bytes on both sides");
                     std::memcpy(lEvent.maEvents, lpParamsChangedEvent->maEvents, sizeof(lEvent.maEvents));
                     PushGuiEvent(lEvent, lpGuiInput);

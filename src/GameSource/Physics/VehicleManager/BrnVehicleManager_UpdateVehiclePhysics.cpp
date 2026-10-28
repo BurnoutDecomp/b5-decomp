@@ -384,28 +384,28 @@ namespace Vehicle
 
     // [FX-SHOWTIME2 2026-09-24] What ProcessAftertouchEvents writes, tied to the records the
     // game-state consumer reads (ProcessGameEvents cases 52 / 53 @0x823A3D74 / 0x823A3E10).
-    static_assert(BrnGameState::GameStateModuleIO::E_EVENT_JUST_BOUNCED == 0x34,
+    CGS_STATIC_ASSERT((BrnGameState::GameStateModuleIO::E_EVENT_JUST_BOUNCED == 0x34),
                   "event 52: li r5, 0x34 @0x82633EB4");
-    static_assert(sizeof(BrnGameState::GameStateModuleIO::JustBouncedEvent) == 0x20,
+    CGS_STATIC_ASSERT((sizeof(BrnGameState::GameStateModuleIO::JustBouncedEvent) == 0x20),
                   "event 52: li r6, 0x20 @0x82633EB0");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, miBounceChain) == 0x00,
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, miBounceChain) == 0x00),
                   "GetRecentBounce r4 = record+0x00 (addi r4, r1, 0x70)");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbFromStationary) == 0x04,
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbFromStationary) == 0x04),
                   "GetRecentBounce r5 = record+0x04 (addi r5, r1, 0x74)");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbOnCar) == 0x05,
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbOnCar) == 0x05),
                   "GetRecentBounce r6 = record+0x05 (addi r6, r1, 0x75)");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbBoostedBounce) == 0x06,
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbBoostedBounce) == 0x06),
                   "GetRecentBounce r7 = record+0x06 (addi r7, r1, 0x76)");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbGoodImpact) == 0x07,
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbGoodImpact) == 0x07),
                   "GetRecentBounce r8 = record+0x07 (addi r8, r1, 0x77)");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, midImpactEntityId) == 0x08
-                      && sizeof(EntityId) == sizeof(s32),
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, midImpactEntityId) == 0x08
+                      && sizeof(EntityId) == sizeof(s32)),
                   "GetRecentBounce r9 = record+0x08, one word (addi r9, r1, 0x78)");
-    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mContactPoint) == 0x10,
+    CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mContactPoint) == 0x10),
                   "GetRecentBounce r10 = record+0x10 (addi r10, r1, 0x80)");
-    static_assert(BrnGameState::GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN == 0x35,
+    CGS_STATIC_ASSERT((BrnGameState::GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN == 0x35),
                   "event 53: li r5, 0x35 @0x82633EE4");
-    static_assert(sizeof(BrnGameState::GameStateModuleIO::JustAppliedExtraSpinEvent) == 1,
+    CGS_STATIC_ASSERT((sizeof(BrnGameState::GameStateModuleIO::JustAppliedExtraSpinEvent) == 1),
                   "event 53: li r6, 1 @0x82633EE0");
 
     // ------------------------------------------------------------------------------------
@@ -658,7 +658,7 @@ namespace Vehicle
             if (siCrashRespDiag == 1 && liCar == mePlayerActiveRaceCarIndex)
             {
                 gpCrashResponseDiagBody =
-                    maRaceCarVehicles[liCar].IsCrashing() ? &maRaceCarVehicles[liCar] : nullptr;
+                    maRaceCarVehicles[liCar].IsCrashing() ? &maRaceCarVehicles[liCar] : 0;
             }
 
             // ---- [dv] arm the one-step velocity witness on the PLAYER's body (opt-in; the
@@ -748,7 +748,7 @@ namespace Vehicle
                         << " mass=" << lrCar.GetMass().x
                         << " half=(" << lHalf.x << "," << lHalf.y << "," << lHalf.z << ")"
                         << " Iinv=(" << lrCar.mLocalInverseInertia.xAxis.x << "," << lrCar.mLocalInverseInertia.yAxis.y << "," << lrCar.mLocalInverseInertia.zAxis.z << ")";
-                    if (lpA != nullptr)
+                    if (lpA != 0)
                     {
                         *CgsDev::Log::gpDebugPrint
                             << " com=(" << lpA->mBaseAttribs.mCOMOffset.x << "," << lpA->mBaseAttribs.mCOMOffset.y << "," << lpA->mBaseAttribs.mCOMOffset.z << ")"

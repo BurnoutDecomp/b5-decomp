@@ -25,13 +25,13 @@ struct SkidEffect : public BrnSound::Logic::BrnEffectObject
     SkidEffect();
     virtual ~SkidEffect();
 
-    virtual const char* GetTypeName() const override;
-    virtual s32 GetController(s32 aiSlot) override;
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afTimeStep) override;
-    virtual void ProcessUpdate() override;
-    virtual bool Detach() override;
+    virtual const char* GetTypeName() const ;
+    virtual s32 GetController(s32 aiSlot) ;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afTimeStep) ;
+    virtual void ProcessUpdate() ;
+    virtual bool Detach() ;
 
     void OnPostInit(CgsSound::Logic::VoiceWrapper& arVoice);
 

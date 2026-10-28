@@ -1860,7 +1860,7 @@ namespace BrnGui
         // ⚠ FLAG payload field NAMES: BrnGui::GuiAudioEvent is still `u8 maPayload[12]` in
         // BrnGuiDemangledEventTypes.h, so the leading words have no recovered names and are
         // spelled by role here rather than forked into that header.
-        struct alignas(8) GuiAudioEventRecord40
+        struct CGS_ALIGN(8) GuiAudioEventRecord40
         {
             s32   miOutEventSize;     // +0x00 = 24
             s32   miOutEventType;     // +0x04 = 456
@@ -1962,9 +1962,8 @@ namespace BrnGui
                     lModeRequest.maData[2] = 0; lModeRequest.maData[3] = 0;
                     lModeRequest.maData[4] = 0; lModeRequest.maData[5] = 0;
                     lModeRequest.maData[6] = 0; lModeRequest.maData[7] = 0;
-                    using RoadRuleModeOutRecord =
-                        CgsGui::GuiEventWrapper<GuiEventRoadRuleModeRequest, 40>;
-                    static_assert(sizeof(RoadRuleModeOutRecord) == 20,
+                    typedef CgsGui::GuiEventWrapper<GuiEventRoadRuleModeRequest, 40> RoadRuleModeOutRecord;
+                    CGS_STATIC_ASSERT((sizeof(RoadRuleModeOutRecord) == 20),
                                   "ARTIST channel-40 event 326 is {8,326,12}+8");
                     RoadRuleModeOutRecord lModeRequestOut(lModeRequest);
                     mpStateInterface->GetOutputEventQueue()->AddEvent(

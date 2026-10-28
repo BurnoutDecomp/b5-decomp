@@ -55,11 +55,11 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        void        Construct() override;                              // @0x8225B1C8
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x8225B220
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x822361F0
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x82236320
-        const char* GetName() const override;                          // @0x821F6700
+        void        Construct() ;                              // @0x8225B1C8
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) ; // @0x8225B220
+        void        Update(ArbStateSharedInfo& lrSharedInfo) ;  // @0x822361F0
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) ; // @0x82236320
+        const char* GetName() const ;                          // @0x821F6700
 
         // Destruct() is NOT in this TU's X360 function set; the base declaration is kept, no
         // override added here.

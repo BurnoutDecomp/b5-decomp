@@ -64,7 +64,7 @@ HingeStateCache::CacheNode* HingeStateCache::FindInCache(const CacheNode::Jointe
             lrNode.mEvent.mVehicleId.muValue == lrEvent.mVehicleId.muValue)
             return &lrNode;
     }
-    return nullptr;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ HingeStateCache::CacheNode* HingeStateCache::Insert(const CacheNode::JointedPart
             return &lrNode;
         }
     }
-    return nullptr;
+    return 0;
 }
 
 } // namespace Collision

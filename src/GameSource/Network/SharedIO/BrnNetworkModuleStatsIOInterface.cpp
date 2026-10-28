@@ -20,9 +20,9 @@ namespace BrnNetwork
     {
         void StatsInputInterface::Construct()
         {
-            static_assert(sizeof(StatsRequestEvent) == KI_STATS_REQUEST_EVENT_SIZE,
+            CGS_STATIC_ASSERT((sizeof(StatsRequestEvent) == KI_STATS_REQUEST_EVENT_SIZE),
                           "StatsRequestEvent is the 20-byte element the storage is sized for");
-            static_assert(sizeof(StatsInputQueue) == sizeof(maStatsEventQueueStorage),
+            CGS_STATIC_ASSERT((sizeof(StatsInputQueue) == sizeof(maStatsEventQueueStorage)),
                           "StatsInputQueue must fill its storage exactly");
 
             reinterpret_cast<StatsInputQueue*>(&maStatsEventQueueStorage[0])->Construct();

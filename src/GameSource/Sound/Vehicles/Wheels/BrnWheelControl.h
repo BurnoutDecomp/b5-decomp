@@ -120,10 +120,10 @@ struct WheelControl : public BrnSound::Logic::BrnEffectControl,
     WheelControl();
     virtual ~WheelControl();   // anchor for the vector deleting destructor @ 0x826D00A0
 
-    virtual s32 GetController(s32 aiSlot) override;
-    virtual void AttachController(CgsSound::Logic::EffectBase* apController) override;
-    virtual bool Attach() override;
-    virtual void UpdateParams(f32 afTimeStep) override;
+    virtual s32 GetController(s32 aiSlot) ;
+    virtual void AttachController(CgsSound::Logic::EffectBase* apController) ;
+    virtual bool Attach() ;
+    virtual void UpdateParams(f32 afTimeStep) ;
 
     bool IsActive() const { return meInAirRevState != E_IN_AIR_REV_STATE_NONE; }
     const WheelData& GetWheelData() const { return mWheelData; }
@@ -143,9 +143,9 @@ struct WheelControl : public BrnSound::Logic::BrnEffectControl,
         mWheelData.maSide[auSide].muRoadnoiseLoop = aiLoop;
     }
 
-    virtual f32 GetStartRPM() override;
-    virtual f32 GetTargetRPM() override;
-    virtual f32 GetRiseFromRPM() override;
+    virtual f32 GetStartRPM() ;
+    virtual f32 GetTargetRPM() ;
+    virtual f32 GetRiseFromRPM() ;
 
 private:
     void UpdateDriftingRPM();

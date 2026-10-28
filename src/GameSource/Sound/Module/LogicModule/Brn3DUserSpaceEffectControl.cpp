@@ -93,8 +93,8 @@ void Brn3DUserSpaceEffectControl::AttachTransform(const Matrix44Affine* apTransf
 // camera translation twice and places audible collisions kilometres away.
 void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPosition)
 {
-    CGS_ASSERT(mpTransform != nullptr, "mpTransform");
-    CGS_ASSERT(apPosition != nullptr, "lpPosition");
+    CGS_ASSERT(mpTransform != 0, "mpTransform");
+    CGS_ASSERT(apPosition != 0, "lpPosition");
     CGS_ASSERT(rw::math::vpu::IsValid(*mpTransform), "IsValid( *mpTransform )");
     CGS_ASSERT(rw::math::vpu::IsValid(*apPosition), "IsValid( *lpPosition )");
 
@@ -128,8 +128,8 @@ void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPositio
 // ARTIST @0x82696C20. Direction transformation deliberately excludes translation.
 void Brn3DUserSpaceEffectControl::AttachEmitterDirection(const Vector3* apDirection)
 {
-    CGS_ASSERT(mpTransform != nullptr, "mpTransform");
-    CGS_ASSERT(apDirection != nullptr, "lpDirection");
+    CGS_ASSERT(mpTransform != 0, "mpTransform");
+    CGS_ASSERT(apDirection != 0, "lpDirection");
     if (!mpTransform || !apDirection)
         return;
 

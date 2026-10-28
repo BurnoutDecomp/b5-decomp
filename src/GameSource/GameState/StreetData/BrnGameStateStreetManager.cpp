@@ -2299,7 +2299,7 @@ namespace
     // 0x82348868 / 0x82348874 -- both fed from the SAME staging copy of
     // mFirstJunctionPosition (w lane zeroed).
     // -----------------------------------------------------------------------
-    using UpcomingRoadMessage = BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction;
+    typedef BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction UpcomingRoadMessage;
 
     // The interstate sentinel road id both sides store for a -2 road index. The
     // X360 materialises it inline (lis 0x6845 / ori 0x61A1 / lis 0x6800 /

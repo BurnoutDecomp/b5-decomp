@@ -44,7 +44,7 @@
 #include <eathread/eathread_mutex.h> // vendor EA::Thread::Mutex (see the System.cpp vendor-mutex note)
 #include "SDKs/XAudio/XmaHardware.h"              // XMACreateContext / XMADisableContext / XMAReleaseContext
 
-#include <cstdint> // uintptr_t
+#include "types.hpp" // uintptr_t
 #include <cstring> // memcpy
 #include <new>     // placement new
 
@@ -129,7 +129,7 @@ static const u32 KU_XMA_INPUT_BYTES_PER_CONTEXT =
 static u8 *AlignUp8(u8 *pAddress)
 {
     return reinterpret_cast<u8 *>(
-        (reinterpret_cast<std::uintptr_t>(pAddress) + 7) & ~static_cast<std::uintptr_t>(7));
+        (reinterpret_cast<uintptr_t>(pAddress) + 7) & ~static_cast<uintptr_t>(7));
 }
 
 // -------------------------------------------------------------------------------------

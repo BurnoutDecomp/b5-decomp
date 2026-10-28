@@ -14,9 +14,9 @@ namespace EnvironmentSettings
 // are concrete, so overriding just these three keeps the type concrete.
 struct TimeLineResourceType : public CgsResource::Type
 {
-    uint32_t GetTypeID() const override;
-    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    uint32_t GetTypeID() const ;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const ;
+    void     FixDown(void* lpResource, const rw::Resource& lrResource) const ;
 };
 }
 }

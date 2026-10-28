@@ -123,13 +123,13 @@ public:
     // Never called; pins the offsets the X360 asm and the EnvironmentManager header attest.
     static void _AssertLayout()
     {
-        static_assert(offsetof(GlobalIrradianceManager, maIrradianceMatrix)      == 0x000,
+        CGS_STATIC_ASSERT((offsetof(GlobalIrradianceManager, maIrradianceMatrix)      == 0x000),
                       "maIrradianceMatrix must sit at +0x00 (GetIrradianceMatrix indexes colour<<6 from this)");
-        static_assert(offsetof(GlobalIrradianceManager, mAverageIrradianceColour) == 0x0C0,
+        CGS_STATIC_ASSERT((offsetof(GlobalIrradianceManager, mAverageIrradianceColour) == 0x0C0),
                       "mAverageIrradianceColour must sit at +0xC0 (ComputeIrradiance stvx128 r31+0xC0)");
-        static_assert(offsetof(GlobalIrradianceManager, maFrameIrradianceCoeffs) == 0x0D0,
+        CGS_STATIC_ASSERT((offsetof(GlobalIrradianceManager, maFrameIrradianceCoeffs) == 0x0D0),
                       "maFrameIrradianceCoeffs must sit at +0xD0 (UpdateCoefficients +0xD0..+0x150)");
-        static_assert(sizeof(GlobalIrradianceManager) == 0x160,
+        CGS_STATIC_ASSERT((sizeof(GlobalIrradianceManager) == 0x160),
                       "GlobalIrradianceManager is 0x160 (EnvironmentManager +0x700 .. +0x860)");
     }
 };

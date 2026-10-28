@@ -81,8 +81,8 @@ struct EffectBase : public CgsSound::MemBase
     };
 
     EffectBase()
-        : mpNextEffectBase(nullptr)
-        , mpState(nullptr)
+        : mpNextEffectBase(0)
+        , mpState(0)
         , mu16RefCount(0)
         , mu16AttachCount(0)
         , mu16AllocatorIndex(0)
@@ -91,10 +91,10 @@ struct EffectBase : public CgsSound::MemBase
         , mfDeltaTime(0.0f)
         , meAttachState(E_ATTACH_STATE_NONE)
         , meDetachState(E_DETACH_STATE_NONE)
-        , mpLogicModule(nullptr)
+        , mpLogicModule(0)
         , mbEnabled(true)
         , mbHasLoadedData(false)
-        , mpDynamicMixIo(nullptr)
+        , mpDynamicMixIo(0)
     {
     }
 

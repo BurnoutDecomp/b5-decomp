@@ -100,24 +100,24 @@ private:
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(ModeManager*)>(&OnlineFreeBurnLobbyMode::Construct)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(ModeManager*)>(&OnlineFreeBurnLobbyMode::Construct)) != 0),
               "OnlineFreeBurnLobbyMode::Construct must bind GameMode vtable slot 0");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(GameStateModuleIO::OutputBuffer*, const GameStateModuleIO::PreWorldInputBuffer*, const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*, const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*, bool, const ScoringSystem*)>(&OnlineFreeBurnLobbyMode::PreWorldUpdate)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(GameStateModuleIO::OutputBuffer*, const GameStateModuleIO::PreWorldInputBuffer*, const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*, const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*, bool, const ScoringSystem*)>(&OnlineFreeBurnLobbyMode::PreWorldUpdate)) != 0),
               "OnlineFreeBurnLobbyMode::PreWorldUpdate must bind GameMode vtable slot 2");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(const GameStateModuleIO::PostWorldInputBuffer*)>(&OnlineFreeBurnLobbyMode::PostWorldUpdate)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(const GameStateModuleIO::PostWorldInputBuffer*)>(&OnlineFreeBurnLobbyMode::PostWorldUpdate)) != 0),
               "OnlineFreeBurnLobbyMode::PostWorldUpdate must bind GameMode vtable slot 3");
-static_assert(sizeof(static_cast<const char* (OnlineFreeBurnLobbyMode::*)() const>(&OnlineFreeBurnLobbyMode::GetName)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<const char* (OnlineFreeBurnLobbyMode::*)() const>(&OnlineFreeBurnLobbyMode::GetName)) != 0),
               "OnlineFreeBurnLobbyMode::GetName must bind GameMode vtable slot 6");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineFreeBurnLobbyMode::Start)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineFreeBurnLobbyMode::Start)) != 0),
               "OnlineFreeBurnLobbyMode::Start must bind GameMode vtable slot 5");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(EGameModeEvent)>(&OnlineFreeBurnLobbyMode::SendEvent)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(EGameModeEvent)>(&OnlineFreeBurnLobbyMode::SendEvent)) != 0),
               "OnlineFreeBurnLobbyMode::SendEvent must bind GameMode vtable slot 12");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(::EActiveRaceCarIndex)>(&OnlineFreeBurnLobbyMode::PlayerHasSpawned)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(::EActiveRaceCarIndex)>(&OnlineFreeBurnLobbyMode::PlayerHasSpawned)) != 0),
               "OnlineFreeBurnLobbyMode::PlayerHasSpawned must bind GameMode vtable slot 19");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(GameStateModuleIO::OutputBuffer*, BrnStreetData::ChallengePlayerScoreEntry, BrnStreetData::ScoreType, BrnStreetData::ChallengeIndex, ::EActiveRaceCarIndex)>(&OnlineFreeBurnLobbyMode::ProcessNewRoadScore)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(GameStateModuleIO::OutputBuffer*, BrnStreetData::ChallengePlayerScoreEntry, BrnStreetData::ScoreType, BrnStreetData::ChallengeIndex, ::EActiveRaceCarIndex)>(&OnlineFreeBurnLobbyMode::ProcessNewRoadScore)) != 0),
               "OnlineFreeBurnLobbyMode::ProcessNewRoadScore must bind GameMode vtable slot 20");
-static_assert(sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(BrnStreetData::RoadIndex)>(&OnlineFreeBurnLobbyMode::OnEnterRoad)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(BrnStreetData::RoadIndex)>(&OnlineFreeBurnLobbyMode::OnEnterRoad)) != 0),
               "OnlineFreeBurnLobbyMode::OnEnterRoad must bind GameMode vtable slot 21");
-static_assert(sizeof(static_cast<bool (OnlineFreeBurnLobbyMode::*)() const>(&OnlineFreeBurnLobbyMode::RequiresStreaming)) != 0,
+CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineFreeBurnLobbyMode::*)() const>(&OnlineFreeBurnLobbyMode::RequiresStreaming)) != 0),
               "OnlineFreeBurnLobbyMode::RequiresStreaming must bind GameMode vtable slot 23");
 }

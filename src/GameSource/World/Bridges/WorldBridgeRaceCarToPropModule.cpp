@@ -108,11 +108,11 @@ static const BrnUpdateSet KU_UPDATESET_USE_REPLAY_INTERFACE = 0x100;
 // ----------------------------------------------------------------------------
 static void _AssertLayout()
 {
-    static_assert(sizeof(Vector3) == 16,
+    CGS_STATIC_ASSERT((sizeof(Vector3) == 16),
                   "Vector3 must be the 16-byte quadword: maRaceCarVelocity's w lane carries speed in MPH");
-    static_assert(offsetof(BrnPhysics::Vehicle::RaceCarState, mLinearVelocity) == 816,
+    CGS_STATIC_ASSERT((offsetof(BrnPhysics::Vehicle::RaceCarState, mLinearVelocity) == 816),
                   "X360 RaceCarState::mLinearVelocity @+0x330 (the bridge's `lvx128 v0, r3, 0x330`)");
-    static_assert(E_ACTIVE_RACE_CAR_INDEX_COUNT == 8,
+    CGS_STATIC_ASSERT((E_ACTIVE_RACE_CAR_INDEX_COUNT == 8),
                   "X360 velocity loop runs 8 iterations (`cmpwi r31, 8`)");
 }
 

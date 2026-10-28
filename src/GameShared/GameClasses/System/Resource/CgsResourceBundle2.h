@@ -21,11 +21,8 @@ namespace CgsResource
     {
         // CgsResourceBundle2.h:153-157
         static const u32 KU_VERSION                          = 2;
-        // Our bundle "platform" tag (muPlatform): the x64 PC reconstruction. Stock Burnout bundles use
-        // 1=PC(x86), 2=X360, 3=PS3 -- all with layouts that DON'T match our x64 structs (pointer widths
-        // differ). 4 marks a bundle whose resource payloads are this build's native little-endian x64
-        // images, so BundleLoader can refuse stock bundles it can't safely fix up. YAP writes this.
-        static const u32 KU_PLATFORM                         = 4;
+        // ARTIST ProcessBundleHeader 0x828D7AE4 requires platform 2 (X360).
+        static const u32 KU_PLATFORM                         = 2;
         static const u32 KU_MAINMEM_OPTIMISATION_ALIGNMENT   = 16;
         static const u32 KU_GRAPHICSMEM_OPTIMISATION_ALIGNMENT = 128;
         static const u32 KU_SIZE_MASK                        = 0x0FFFFFFFu;   // low 28 bits = size
@@ -34,12 +31,12 @@ namespace CgsResource
         // The bundle stores size/alignment/offset per memory pool; the resource mem-type count is 3.
         static const u32 E_MEMTYPE_NUMTYPES = 3;
 
-        enum class Flags : u32
+        enum  Flags : u32
         {
-            IsCompressed           = 0x1,
-            IsMainMemOptimised     = 0x2,
-            IsGraphicsMemOptimised = 0x4,
-            ContainsDebugData      = 0x8,
+            KU_FLAG_IS_COMPRESSED           = 0x1,
+            KU_FLAG_MAIN_MEM_OPTIMISED     = 0x2,
+            KU_FLAG_GRAPHICS_MEM_OPTIMISED = 0x4,
+            KU_FLAG_CONTAINS_DEBUG_DATA      = 0x8,
         };
 
         // CgsResourceBundle2.h:63 - one packed resource. A size/alignment word packs the size in the low

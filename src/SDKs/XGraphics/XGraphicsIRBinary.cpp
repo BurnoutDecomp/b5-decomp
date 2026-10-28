@@ -52,7 +52,7 @@ IRBinary* IRBinary::NewInst(s32 aiOpcode, CFG* apContext)
 {
     void* lpMem = ArenaAllocPrefixed(apContext->mpArena, sizeof(IRBinary));
     if (!lpMem)
-        return nullptr;
+        return 0;
 
     return new (lpMem) IRBinary(aiOpcode, apContext);
 }

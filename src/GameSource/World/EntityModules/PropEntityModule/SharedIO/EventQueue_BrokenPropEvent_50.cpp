@@ -18,7 +18,7 @@
 // The matching BaseEventQueue<BrokenPropEvent>::AddEvent @ 0x822C9838 (a single
 // `lbz/stbx` byte copy at stride 1, its own ledger TU) confirms sizeof == 1.
 
-static_assert(sizeof(BrnWorld::PropEntityIO::BrokenPropEvent) == 1, "BrokenPropEvent stride drift (asm lbz/stbx, stride 1)");
+CGS_STATIC_ASSERT((sizeof(BrnWorld::PropEntityIO::BrokenPropEvent) == 1), "BrokenPropEvent stride drift (asm lbz/stbx, stride 1)");
 
 template void
 CgsModule::EventQueue<BrnWorld::PropEntityIO::BrokenPropEvent, 50>::Construct();

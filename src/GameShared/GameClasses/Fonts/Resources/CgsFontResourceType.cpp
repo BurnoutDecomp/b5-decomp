@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::BaseResourceDescriptors<5>
 
-#include <cstdint>   // uintptr_t
+#include "types.hpp"   // uintptr_t
 
 // CgsResource::FontResourceType -- the font handler (id 0x21). A faithful port of the X360 ARTIST
 // bodies. The font's glyph table + atlas-page-pointer array are main-memory self-references
