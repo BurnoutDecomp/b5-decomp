@@ -4,7 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (rw::math::vpu::Vector3), CgsID
 #include "types.hpp"            // uintptr_t (relocation delta)
-#include <cstddef>            // offsetof (host layout static_asserts)
+#include <cstddef>            // native layout checks
 #include "SharedClasses/Trigger/BrnKillzone.h"   // complete BrnTrigger::Killzone (GetKillzone 16B stride)
 #include "SharedClasses/Trigger/BrnRoamingLocation.h" // unchecked array indexing needs the complete element
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"
@@ -37,16 +37,9 @@
 // inline accessors. Only GetLandmarkFromRegionIndex is forward-declared here (its body lives in
 // the BrnTriggerData TU); everything OfflineGameMode needs is inline below.
 //
-// FixUp/FixDown CONTRACT: the PS3 DWARF declares these as `void FixUp(MemoryResource)`. The X360
-// ARTIST binary (0x8267FC08 / 0x8267F800) takes the load-base DELTA in a register and returns it,
-// and TriggerResourceType::FixUp @0x826800D8 (`mr r3,r4; lwz r4,0(r5); b ...`) supplies the
-// rw::Resource's segment-0 base.
-//
-// ⚠️ WIDENED 2026-07-29 (lane-data port). These were modelled as `int FixUp(int)`, which is only
-// correct while pointers are 32 bits: on the x64 host `static_cast<int>(GetLoadBase(...))` throws
-// away the top half of the allocation address, so every rebased pointer would land in the wrong
-// 4 GB — bug class (a). The delta is now uintptr_t end to end, fed by GetLoadBase64. The
-// serialised slots themselves are 64 bits wide too (tools/assets/bundles/lane_transcode.py).
+// ARTIST8267FC08/8267F800 take a native32-bit load-base delta.
+// Both methods return void in the declaration reference; the residual r3 value
+// in the instruction stream is not a return-value contract.
 
 namespace BrnTrigger
 {
@@ -143,9 +136,9 @@ struct TriggerData
 
     // X360 0x8267F800 / 0x8267FC08. Load-time pointer relocation. luDelta is the load base; FixUp
     // ADDS it (offset -> absolute address), FixDown SUBTRACTS it (absolute -> offset). See the
-    // widening note in the header comment above.
-    uintptr_t FixDown(uintptr_t luDelta);
-    uintptr_t FixUp(uintptr_t luDelta);
+    // native load-base contract above.
+    void FixDown(uintptr_t luDelta);
+    void FixUp(uintptr_t luDelta);
 
 private:
     // Full X360 layout (DWARF order). Trailing members past miLandmarkCount were absent from the
@@ -175,20 +168,33 @@ private:
     TriggerRegion**  mppRegions;              // 0x74
     int32_t          miRegionCount;           // 0x78
 
-    // ---- host layout contract with tools/assets/bundles/lane_transcode.py -------------
-    // The offsets in the member comments above are the CONSOLE (4-byte pointer) ones; on
-    // the host every pointer widens and the counts that follow shift with it. These pins
-    // are the other end of the transcoder's CONSOLE_PIN table for TriggerData. Declared
-    // in-class because the members are private (the project's _AssertIoLayout idiom).
+    // Native file layout, read directly by ARTIST FixUp/Down and the accessors.
     static void _AssertLayout()
     {
-        CGS_STATIC_ASSERT((offsetof(TriggerData, mPlayerStartPosition) == 0x10), "TriggerData::mPlayerStartPosition");
-        CGS_STATIC_ASSERT((offsetof(TriggerData, mpLandmarks)          == 0x30), "TriggerData::mpLandmarks");
-        CGS_STATIC_ASSERT((offsetof(TriggerData, miLandmarkCount)      == 0x38), "TriggerData::miLandmarkCount");
-        CGS_STATIC_ASSERT((offsetof(TriggerData, mpSignatureStunts)    == 0x40), "TriggerData::mpSignatureStunts");
-        CGS_STATIC_ASSERT((offsetof(TriggerData, mpKillzones)          == 0x60), "TriggerData::mpKillzones");
-        CGS_STATIC_ASSERT((offsetof(TriggerData, mppRegions)           == 0xB0), "TriggerData::mppRegions");
-        CGS_STATIC_ASSERT((offsetof(TriggerData, miRegionCount)        == 0xB8), "TriggerData::miRegionCount");
+        CGS_STATIC_ASSERT((sizeof(TriggerData) == 0x80), "X360 trigger header size");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miVersionNumber) == 0x0), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, muSize) == 0x4), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mPlayerStartPosition) == 0x10), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mPlayerStartDirection) == 0x20), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpLandmarks) == 0x30), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miLandmarkCount) == 0x34), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miOnlineLandmarkCount) == 0x38), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpSignatureStunts) == 0x3C), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miSignatureStuntCount) == 0x40), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpGenericRegions) == 0x44), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miGenericRegionCount) == 0x48), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpKillzones) == 0x4C), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miKillzoneCount) == 0x50), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpBlackspots) == 0x54), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miBlackspotCount) == 0x58), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpVFXBoxRegions) == 0x5C), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miVFXBoxRegionCount) == 0x60), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpRoamingLocations) == 0x64), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miRoamingLocationCount) == 0x68), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mpSpawnLocations) == 0x6C), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miSpawnLocationCount) == 0x70), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, mppRegions) == 0x74), "ARTIST trigger header member");
+        CGS_STATIC_ASSERT((offsetof(TriggerData, miRegionCount) == 0x78), "ARTIST trigger header member");
     }
 };
 

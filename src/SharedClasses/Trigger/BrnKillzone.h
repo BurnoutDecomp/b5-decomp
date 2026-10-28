@@ -1,6 +1,7 @@
 #ifndef BRN_KILLZONE_H
 #define BRN_KILLZONE_H
 
+#include <cstddef>
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID
 
@@ -43,10 +44,19 @@ public:
     void SetRegionId( int32_t liIndex, CgsID lId ) const;
 
 private:
+    friend struct TriggerData;
     const GenericRegion** mppTriggers;     // 0x00
     int32_t               miTriggerCount;  // 0x04
     CgsID*                mpRegionIds;      // 0x08
     int32_t               miRegionIdCount;  // 0x0C  (total 16B == X360 stride)
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(Killzone) == 16), "X360 table stride");
+        CGS_STATIC_ASSERT((offsetof(Killzone, mppTriggers) == 0x0), "ARTIST table member");
+        CGS_STATIC_ASSERT((offsetof(Killzone, miTriggerCount) == 0x4), "ARTIST table member");
+        CGS_STATIC_ASSERT((offsetof(Killzone, mpRegionIds) == 0x8), "ARTIST table member");
+        CGS_STATIC_ASSERT((offsetof(Killzone, miRegionIdCount) == 0xC), "ARTIST table member");
+    }
 };
 }
 
