@@ -14,7 +14,7 @@
 // FontCollection::FindFont, CgsAptString::Prepare) still resolves by name.
 char* CGSSTRNLOWER(char* pcString, u32 uMaxLen)
 {
-    CGS_ASSERT(pcString != nullptr, "Passed a null string to CGSSTRNLOWER");
+    CGS_ASSERT(pcString != 0, "Passed a null string to CGSSTRNLOWER");
 
     char* pc = pcString;
     for (u32 i = 0; *pc; ++i)
@@ -32,7 +32,7 @@ void CgsCore::SPrintf(char* buffer, u32 len, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    auto result = _vsnprintf(buffer, len, fmt, args);
+    int result = _vsnprintf(buffer, len, fmt, args);
     if (result == len || result < 0)
     {
         // If the result is equal to len, it means the string was truncated.
@@ -46,7 +46,7 @@ void CgsCore::SnPrintf(char* buffer, u32 len, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    auto result = _vsnprintf(buffer, len, fmt, args);
+    int result = _vsnprintf(buffer, len, fmt, args);
     if (result == len || result < 0)
     {
         // If the result is equal to len, it means the string was truncated.

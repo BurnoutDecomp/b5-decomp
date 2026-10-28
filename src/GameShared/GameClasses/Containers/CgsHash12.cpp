@@ -7,7 +7,7 @@
 // This is a 12-bit hash (CRC-12 variant) processing 4 bits (a nibble) at a time.
 // It uses a 16-entry table at VA 0x82F314C0.
 //
-// If the input length count <= 0, the function early-outs and returns the
+// If the input length count == 0, the function early-outs and returns the
 // initial hash value 4095 (0xFFF).
 
 namespace CgsContainers
@@ -17,7 +17,7 @@ namespace CgsContainers
         namespace
         {
             // Extracted from BURNOUT_X360_ARTIST.XEX @ 0x82F314C0
-            constexpr u32 kHash12Table[16] = {
+            const u32 kHash12Table[16] = {
                 0,      // 0x000
                 641,    // 0x281
                 1282,   // 0x502
@@ -40,14 +40,12 @@ namespace CgsContainers
         unsigned int CalculateHash(char* a1, int a2)
         {
             u32 result = 4095; // 0xFFF
-            if (a2 <= 0)
+            u32 luRemaining = static_cast<u32>(a2);
+            const char* lpcInput = a1;
+            while (luRemaining != 0)
             {
-                return result;
-            }
-
-            for (int i = 0; i < a2; ++i)
-            {
-                const s8 val = static_cast<s8>(a1[i]); // extsb: char is signed
+                const s8 val = static_cast<s8>(*lpcInput++); // extsb: char is signed
+                --luRemaining;
                 
                 // First step: process low nibble
                 const u32 idx1 = (static_cast<u32>(val) ^ result) & 0xFu;
