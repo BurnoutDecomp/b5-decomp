@@ -41,7 +41,6 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                      // BrnResource::GameDataIO::Input/OutputBuffer (the colour-calibration screen's IO)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // AllocatorList::GetRWLinearResourceAllocator (mGuiConfig.mpTextureAllocator)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h" // GetScriptedLoadGameData{Input,Output} (the PC stand-in for the scheduler's GameData IO pair)
-#include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h"      // BrnNetwork::LiveRevengeProfile (the PC live-revenge block)
 
 // Existing PC platform providers in System/PC/CgsXboxLivePC.cpp.
 extern "C" void* XNotifyCreateListener(unsigned long long luAreas);
@@ -208,14 +207,6 @@ namespace
     u8 s_profileHeapBacking[192u * 1024u];
     u8 s_profileLinearBacking[2u * 1024u * 1024u];
 
-    // FLAG PC-platform leaf: the live-revenge profile block the console's NETWORK module
-    // installs on the ProfileManager via GUI event 351 (SetLiveRevengeProfile). That
-    // subsystem is not wired on PC, so mpLiveRevengeProfile stays null and
-    // ProfileManager::Bootup->ReadProfileData faults (memcpy from mpLiveRevengeProfile).
-    // This stand-in is a Clear()ed profile -- the current version and an empty relationship
-    // table, what the console's network module installs before any save loads -- installed in
-    // Prepare below. Its size is the real segment width (BrnGuiProfile.h: live-revenge is
-    // memcpy'd 30016 B), asserted below.
     //
     // ⛔⛔ [one-profile wave 2026-08-28] s_pcProgressionProfileBacking (sizeof(Profile)) and
     // s_pcProgressionManifestBacking (4096 "ExpectedManifest") ARE DELETED, not moved. They
@@ -227,9 +218,6 @@ namespace
     // ⛔ DO NOT RE-ADD either one to "guard" a null: the console's ProfileManager::Construct
     // zeroes both members too, and nothing dereferences them before BF_PROFILE -- which runs
     // hundreds of log lines after the first sub-step's event-350 post.
-    BrnNetwork::LiveRevengeProfile s_pcLiveRevengeProfile;
-    static_assert(sizeof(BrnNetwork::LiveRevengeProfile) == 30016,
-                  "the live-revenge block is the 30016-byte segment the profile manager copies");
 
     // The subscription record the states post through StateInterface::RegisterForEvents
     // (X360 wire records 34/35: { s32 miEventType; EventObserver* } -- only the leading
@@ -1997,6 +1985,15 @@ void GuiModule::Destruct()
                         CGS_ASSERT(mbTrafficPoolEmptied, "mbTrafficPoolEmptied");
                         mbTrafficPoolEmptied = false;
                     }
+                    break;
+                }
+
+                case 351:   // ARTIST 0x8252811C/0x82528C08: receive the network-owned profile pointer.
+                {
+                    const BrnGui::GuiEventLiveRevengeProfileData* lpLiveRevengeProfileData =
+                        reinterpret_cast<const BrnGui::GuiEventLiveRevengeProfileData*>(lpEvent);
+                    mProfileHost.GetProfileManager().SetLiveRevengeProfile(
+                        lpLiveRevengeProfileData->mpLiveRevengeProfile);
                     break;
                 }
 
