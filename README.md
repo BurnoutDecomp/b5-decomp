@@ -6,11 +6,10 @@ This experiment removes the PC port from the reconstructed source so work can
 move toward byte matching `BURNOUT_X360_ARTIST.XEX`: 32-bit PowerPC, big-endian.
 `main` and `dev` continue to carry the PC project.
 
-PC platform sources, desktop entry point, renderer hooks, input/audio/storage
-adapters, FFmpeg playback, test harnesses, diagnostics, frame interpolation and
-native-8 Apt conversion paths are removed from the shared code. Existing Xbox
-branches are selected directly. `src/pc/` stays as an unbuilt reference; shared
-sources must not include it.
+This branch removes the desktop entry point, PC build paths and host adapters,
+and selects existing Xbox branches directly. `src/pc/` stays as an unbuilt
+reference; shared sources must not include it. Some PC diagnostic and movie I/O
+blocks remain in shared code and still need cleanup or console reconstruction.
 
 This is an incomplete source experiment. The complete game does not build or boot
 yet and has not produced a byte match. The executable build, missing platform and
