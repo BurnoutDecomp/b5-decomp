@@ -6889,7 +6889,7 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
 // Live legs: KillOutOfAreaTraffic, SpawnNewTraffic, SpawnShowtimeTraffic (_wT1_07.cpp),
 // UpdateJunctions (crash parity FX-TRAFFICLIGHTS, 2026-09-25), UpdateParams, UpdateVehicles,
 // UpdateLerpedParamTransforms, UpdateParams_DoTimeSlicedLogic and KillTrafficOnStartGridWholeSale
-// (_wW_01.cpp). Still gated: UpdateTrailers, NukeTrafficJams; each gate names its own blocker and cost.
+// (_wW_01.cpp), and UpdateTrailers. NukeTrafficJams remains gated by its named blocker.
 // ============================================================================
 
 
@@ -7264,13 +7264,7 @@ void TrafficEntityModule::UpdateDecisionFrame(
     // alive static VEHICLE via Vehicle::InitialiseAsStatic.
     StaticVehicles_UpdateVehicles(lpInput);
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body; the single "
-            "trailer slot follows its cab, which only exists once driving traffic does "
-            "(wave 2)");
-    }
+    UpdateTrailers(lpInput, lpOutput);
 
     // 0x8274E648..0x8274E674, in the console's order: clear the time-slice cursor, then raise
     // the jam-nuker request that UpdateNonDecisionFrame consumes on a later frame.
@@ -7509,11 +7503,7 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
 
     StaticVehicles_UpdateVehicles(lpInput);
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateNonDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body (wave 2)");
-    }
+    UpdateTrailers(lpInput, lpOutput);
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateParamNonDecision);
 
@@ -11667,14 +11657,15 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  PARTIAL  (.cpp 13477)
+// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  (online reject still partial)
 //
 // Every param that is alive, not a zombie, and has no live vehicle
 // becomes a standard Vehicle. The candidate set is three FastBitArray terms, not a linear
 // scan (0x8273A468..0x8273A52C): mAliveParams & ~mZombieParams & ~mAliveVehicles.
 //
 // The two RNG draws come off mEffectRand in this order and both must stay: draw 1 is the
-// across-lane offset, draw 2 is mfRandomVal. Swapping them re-phases every car's lights.
+// across-lane offset, draw 2 is mfRandomVal. A valid trailer adds draw 3 for its mfRandomVal.
+// Swapping them re-phases every car's lights.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
@@ -11764,16 +11755,7 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
         if (lpVehicleType->mxVehicleFlags != 0
             && lpVehicleType->muTrailerFlowTypeId != 0xFFFFu)
         {
-            // GATE: the trailer half @0x8273ACA4. BLOCKERS: TryAllocateTrailerId is undeclared
-            // and InitialiseAsTrailer reaches the trapped Vehicle::CalcTowBarPos.
-            // DELETE-WHEN articulated traffic lands.
-            static bool sbLogged = false;
-            LogMissingLeg_T2(sbLogged,
-                "UpdateVehicles_CreateNewVehicles trailer half (TryAllocateTrailerId / "
-                "Vehicle::InitialiseAsTrailer / the muOtherHalfIndex cross-link) -- "
-                "TryAllocateTrailerId is undeclared and InitialiseAsTrailer reaches the "
-                "trapped Vehicle::CalcTowBarPos. luTrailerIndex stays KU_INVALID_VEHICLE, "
-                "which is the console's own no-trailer-available path");
+            luTrailerIndex = static_cast<u16>(TryAllocateTrailerId());
         }
 
         const f32 lfRandomVal = mEffectRand.RandomFloat();
@@ -11798,6 +11780,38 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
 
         maRenderPosesPC[luParam].Reset(); // New driving vehicle in a reused slot.
         SetVehicleTransform(luParam, lOutMatrix);
+
+        if (luTrailerIndex != KU_INVALID_VEHICLE)
+        {
+            Vehicle* lpTrailer = GetVehicle(luTrailerIndex);
+            CGS_ASSERT(!lpTrailer->IsAlive(), "!lpVehicle->IsAlive()");
+            VehicleAxles* lpTrailerAxles = GetVehicleAxles(luTrailerIndex);
+            const u8 luTrailerType = PickVehicleToSpawn(lpVehicleType->muTrailerFlowTypeId);
+            const VehicleTypeUpdateData* lpTrailerTypeUpdate =
+                &mpData->mpaVehicleTypesUpdate[luTrailerType];
+            const VehicleTypeRuntime* lpTrailerTypeRuntime = GetVehicleTypeRuntime(luTrailerType);
+            const f32 lfTrailerRandomVal = mEffectRand.RandomFloat();
+            Matrix44Affine lTrailerMatrix;
+            lpTrailer->InitialiseAsTrailer(lpTrailerAxles,
+                                           lTrailerMatrix,
+                                           lpParam,
+                                           lfTrailerRandomVal,
+                                           mpData->mpapHulls,
+                                           luTrailerType,
+                                           lpTrailerTypeRuntime,
+                                           lpTrailerTypeUpdate,
+                                           lpVehicle,
+                                           lOutMatrix,
+                                           lpVehicleTypeUpdate,
+                                           lpVehicleTypeRuntime,
+                                           luTrailerIndex,
+                                           mVehicleSoaData,
+                                           static_cast<u16>(luParam));
+            // FLAG PC-platform leaf: reset the host render interpolation cache for a new slot,
+            // as the existing standard-vehicle birth immediately above already does.
+            maRenderPosesPC[luTrailerIndex].Reset();
+            SetVehicleTransform(luTrailerIndex, lTrailerMatrix);
+        }
     }
 
     mbDontCreateVehiclesNearAnyPlayers = false;
