@@ -54,6 +54,5 @@ namespace Deformation
         virtual void RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude);
     };
 
-    extern CarCarDvArrivalTap gCarCarDvArrivalTap;
 }
 }

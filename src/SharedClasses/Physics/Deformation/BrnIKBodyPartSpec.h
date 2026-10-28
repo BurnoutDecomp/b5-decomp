@@ -5,7 +5,6 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"   // EBodyParts (committed home)
 #include "SharedClasses/Physics/Deformation/BrnDeformationJointSpec.h"             // DeformationJointSpec (GetJointSpec indexes the array -- complete type needed)
 #include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"                 // BodyPartBBoxSpec (the embedded bbox skin record -- held BY VALUE)
-#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"                      // CgsGraphics::Ptr32 (the serialised 4-byte joint-array slot)
 #include <cstddef>                                                                 // offsetof (the layout tripwires)
 
 // BrnPhysics::Deformation::IKBodyPartSpec — MINIMAL OWNING SLICE.
@@ -26,18 +25,7 @@
 //   * mpaJointSpecs @console spec+448 + miNumJoints (GetJointSpec / GetActiveJointSpec);
 //   * mGraphicsTransform (GetPartGraphicsTransform).
 //
-// LAYOUT NOTE (project rule — LAYOUT RECOVERY, members BY NAME): members carry their DWARF
-// source line for provenance. The absolute console offsets the X360 asm uses (spec+448 /
-// +464 / +472 / +476) are 32-bit-pointer offsets that do NOT (and need not) reproduce
-// byte-for-byte on the 64-bit host — every access is BY MEMBER NAME, so the host compiler
-// recomputes the addresses and semantic parity (which field, which count) is exact. The full
-// DWARF struct also defines the BBoxPointSkinData / BodyPartBBoxSpec skin-data helpers and
-// the FixUp/FixDown/GetBBoxSpec API; those are LEFT for IKBodyPartSpec's own TU (this slice
-// only homes what IKBodyPart needs to compile). GROW this header — do not fork it.
-//
-// FORWARD-DECL: DeformationJointSpec is homed by another agent (BrnDeformationJointSpec.h /
-// the full BrnIKBodyPartSpec TU). Here it is a pointer member + a const* return type, so a
-// forward declaration suffices and avoids redefining a type another agent owns.
+// Native pointer/count slots and stride are checked below against ARTIST.
 
 namespace BrnPhysics
 {
@@ -120,13 +108,8 @@ namespace Deformation
         // IKBodyPartSpec is a VIEW over the streamed _AT payload (GetDrivenPartSpec returns
         // &maIKPartData[i] straight into the resource bytes), and the shipped record keeps the
         // CONSOLE layout: a 4-BYTE joint-array slot at +448 with miNumJoints at +452, stride 480.
-        // This member was a raw DeformationJointSpec* -- 8 bytes on the host -- which silently
-        // shifted every following field by 4 against the data AND made readers pull 8 bytes over
-        // the slot. BOOT-MEASURED (2026-08-14 04:38 run): TransformToNewCOMSpace's joint walk
-        // read the slot+count pair as one pointer and AV'd on 0x00000003_052160D0 -- the high
-        // dword IS miNumJoints (3). serialized ==> 4-byte slot (Ptr32, the StreamedDeformationSpec
-        // convention); FixUp rebases it in place; the low-4GB PointerFromU32 pool makes Get() whole.
-        CgsGraphics::Ptr32<DeformationJointSpec> mpaJointSpecs;   // :218 (console spec+448, 4-byte slot)
+        // ARTIST joint array pointer at+448; count follows at+452.
+        DeformationJointSpec* mpaJointSpecs;   // :218 (console spec+448, 4-byte slot)
         s32                   miNumJoints;                 // :219
         s32                   miPartGraphics;              // :221 (mesh id)
         s32                   miStartIndexOfDrivenPoints;  // :223
@@ -137,7 +120,7 @@ namespace Deformation
 
     public:
         // ⭐ Layout tripwires (2026-08-14): with the joint slot at its serialised 4 bytes, the
-        // host view sits EXACTLY on the shipped record -- these are the offsets every reader
+        // native declaration matches the shipped record -- these are the offsets every reader
         // (GetDrivenPartSpec's view, TransformToNewCOMSpace's strides, PrepareIKPart's field
         // reads) indexes the payload with. Inside a static member so offsetof can see the
         // private members; never called, compile-time only.
