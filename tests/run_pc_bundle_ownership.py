@@ -25,7 +25,7 @@ if args.omit_apt_retain:
     source = source.replace(retain, 'static s32 RetainBundle(Bundle&) { return 0; }')
 code = 'namespace CgsResource {\n'
 for name, signatures in [
-    ('CgsResourceID.cpp', ['s32 ID::HashString(']),
+    ('CgsResourceID.cpp', ['u64 ID::HashString(']),
     ('CgsResourceBundle2.cpp', ['u32 BundleV2::ResourceEntry::GetUncompressedSize(',
                               'u32 BundleV2::ResourceEntry::GetUncompresssedAlignment(']),
     ('CgsResourcePool.cpp', ['Entry* Pool::FindResource(', 'Entry* Pool::FindResourceWithDependencies(',

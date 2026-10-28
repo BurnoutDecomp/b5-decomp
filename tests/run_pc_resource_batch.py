@@ -34,7 +34,7 @@ for name in names:
     source = Tree('64f9b755').read(base + 'CgsResourcePool.cpp') if args.old_init and name == 'InitPool' else pool
     code += definition(source, signature) + '\n'
 code += definition(pool, 'void AllocListSet::ClearCountsAndResults(') + '\n'
-code += definition(tree.read(base + 'CgsResourceID.cpp'), 's32 ID::HashString(') + '\n'
+code += definition(tree.read(base + 'CgsResourceID.cpp'), 'u64 ID::HashString(') + '\n'
 bundle = tree.read(base + 'CgsResourceBundle2.cpp')
 for name in ['GetUncompressedSize', 'GetUncompresssedAlignment']:
     code += definition(bundle, f'u32 BundleV2::ResourceEntry::{name}(') + '\n'

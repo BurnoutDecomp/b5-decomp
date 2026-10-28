@@ -38,7 +38,7 @@ adapter='namespace CgsResource {\n'+definition(driver,'void BundleLoaderModule::
 adapter+=definition(driver,'bool BundleLoaderModule::Update(')+'\n}\n'
 hash_code='#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"\nnamespace CgsResource {\n'
 hash_code='#include "GameShared/GameClasses/Core/CgsAssert.h"\n'+hash_code
-hash_code+=definition(tree.read(resource+'CgsResourceID.cpp'),'s32 ID::HashString(')+'\n}\n'
+hash_code+=definition(tree.read(resource+'CgsResourceID.cpp'),'u64 ID::HashString(')+'\n}\n'
 # Module base lifecycle and compression are outside this uncompressed protocol
 # test. Compression aborts, so accidentally selecting it cannot fake a pass.
 shadow={
