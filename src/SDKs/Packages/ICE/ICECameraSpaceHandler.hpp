@@ -146,7 +146,7 @@ public:
     Vector3 TransformToWorld(Vector3 lvPoint, u8 lu8A, u8 lu8B, u8 lu8C, u8 lu8D, f32 lfBlend) const;
 
     void GetSpaceTransformationMatrix(Matrix4* lpMatrix, u8 lu8Space) const;
-    void GetWorldOrientationMatrix(Matrix4* lpMatrix, u8 lu8SpaceA, u8 lu8SpaceB) const;
+    void GetWorldOrientationMatrix(Matrix4* lpOrientMat, u8 lu8Space, u8 lu8Avatar) const;
 
     // ⭐ BODIED 2026-09-27 (OWNERLIST lane L5) as the header inline the console expands: it has no
     // ARTIST symbol, and ICECameraMover reads the rows it returns straight off the handler (mCarToWorld
