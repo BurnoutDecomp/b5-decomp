@@ -11868,24 +11868,17 @@ void TrafficEntityModule::UpdateVehicles(
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateLerpedParamTransforms  @ 0x82739CD8   (EXPORT HOLE)
-//
-// The between-decision-frames interpolator: one ParamTransform::UpdateLerpedPosition
-// @0x82712968 per live param, stepped by mfSimTimeStepVec.
-//
-// FLAG: the loop SHAPE is reasoned, not attested -- the function has no per-function JSON and
-// no Feb-2007 counterpart, and its only caller (UpdateNonDecisionFrame @0x8274C21C) passes
-// nothing but `this`. mAliveParams is the module's own liveness set and the only one a
-// per-param sweep could use. DELETE-WHEN the export hole is filled.
+// ARTIST 0x82739CD8..0x8273A304. Walk the actual 600-bit SoA iterator; each yielded
+// index still goes through the original 400-slot param/transform bounds and liveness guards.
+// The owner timestep vector is loaded at 82739E38/8273A00C before the real leaf call.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateLerpedParamTransforms()
 {
-    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIt = mParamSoaData.mAliveParams.Begin();
+         lIt != mParamSoaData.mAliveParams.End(); ++lIt)
     {
-        if (!mParamSoaData.mAliveParams.IsBitSet(luParam))
-        {
-            continue;
-        }
+        const u32 luParam = static_cast<u32>(lIt.GetIndex());
+        CGS_ASSERT(GetParam(luParam)->IsAlive(), "GetParam( luParam )->IsAlive()");
         GetParamTransform(luParam)->UpdateLerpedPosition(mfSimTimeStepVec);
     }
 }
