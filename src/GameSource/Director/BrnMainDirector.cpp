@@ -470,10 +470,7 @@ namespace BrnDirector
     // buffer). Both are named members now, so there is no window to overrun and both run.
     // `ICEWrapper::Construct` runs for the same reason.
     //
-    // ⚠️ STILL DOCUMENTED QUIET GATES -- every one is an un-homed aggregate, not a size issue:
-    //   * DirectorDevTools::Construct -- un-homed (maDirectorDevTools). CONSEQUENCE: the
-    //     GameTalk "Camera" dev-tools commands have no handler state. Nothing in the game path
-    //     uses them.
+    // Remaining quiet gates are separate un-homed aggregates, not a DevTools lifecycle gate:
     //   * AllVehicleData::Construct + the five flag bytes -- un-homed (maAllVehicleData).
     //     CONSEQUENCE: the per-frame vehicle tracker starts zeroed; the arbitrator states that
     //     read it are the gameplay ones, not the attract/flyby path.
@@ -506,7 +503,10 @@ namespace BrnDirector
         // +0x35428 `stfs f31, 0(r27)` (0x8225B498): DWARF mDisplayAspectRatio, a FLOAT.
         mfDisplayAspectRatio = lfTime;
 
-        // ⚠️ GATE: DirectorDevTools::Construct( this, this, lpResourceManager );
+        // ARTIST 0x8225B490..0x8225B4A0 sets args and calls DevTools::Construct(this,this,resourceMgr).
+        // The tool retains this pointer for const resource-manager queries.
+        mDirectorDevTools.Construct(
+            this, const_cast<DirectorResourceManager*>(lpResourceManager));
 
         // The published graphics camera (+0x349D0).
         mCgsCamera.Construct();
@@ -667,11 +667,8 @@ namespace BrnDirector
     // the 20-entry descending seed + count + head is a pool free-queue refill, i.e. the
     // moment-bucket pool's. Written through this class's three named fields.
     //
-    // ⚠️ ONE DOCUMENTED QUIET GATE REMAINS: stage 0's GameTalk registration --
-    //   EA::GameTalk::GameTalkManager has no reconstructed home. CONSEQUENCE: the "Camera"
-    //   dev-tools commands (Start/StopRenderMetrics, the ICE editor hooks) are not reachable
-    //   from GameTalk. Nothing in the game path uses them.
-    //   DELETE-WHEN: the GameTalk manager is homed.
+    // Stage 0 registers the X360 Camera GameTalk channel and clears the embedded
+    // DevTools request latch before the DirectorModule reaches its per-frame Update path.
     // ------------------------------------------------------------------------
     bool MainDirector::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
                                const BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
@@ -681,10 +678,13 @@ namespace BrnDirector
         {
         case 0:
             lpAsCollisionGenerator(&mCgsCamera)->Destruct();
-            // ⚠️ GATE: EA::GameTalk::GameTalkManager::GetInstance()->RegisterMessageHandler(
-            //              BrnDirector::DirectorDevTools::GameTalkMsgHandler, "Camera" );
-            //   -- un-homed GameTalk API (see the banner). The `*this = 0` dev-tools head
-            //   store that follows it belongs to the same un-homed object.
+            // ARTIST 0x8224FBB0..0x8224FBD0 registers the Camera-channel handler,
+            // then stores zero to MainDirector +0 == DirectorDevTools::muLiveCamRequest.
+            EA::GameTalk::GameTalkManager::RegisterMessageHandler(
+                EA::GameTalk::GameTalkManager::GetInstance(),
+                &DirectorDevTools::GameTalkMsgHandler,
+                "Camera");
+            mDirectorDevTools.muLiveCamRequest = 0;
             // fall through
         case 1:
             miPrepareStage = 1;
@@ -3576,7 +3576,7 @@ namespace BrnDirector
 
             // ⭐ (2026-09-25, FX-DIRECTOR2 CC-16) @0x82274524..0x82274554 -- THE EVENT-WIN SCREEN EFFECT. The
             // console runs it on every live frame: it is the join point after the ICE-editor preview block
-            // (gated on +0x12160, dev-only, not reconstructed), before DirectorDevTools::Update. An ICE take
+            // (gated on +0x12160, dev-only, not reconstructed), before the DevTools frame pump. An ICE take
             // keys POSTFX_HOOK into the frame camera (KeyAnimController::UpdateCameraFromICE ->
             // CameraEffects::muRequestedPostFxId, camera +0xE4). 578869 is authored in 26 retail takes:
             // Event_Win2..5, the 21 World_Win_*, Online_End_Win, and Takedown_ICE_Shut's fourth interval.
@@ -3600,6 +3600,11 @@ namespace BrnDirector
             // one-way set (the retail code does not clear the camera's bit when the toggle is off).
             if (maStateFlagTail[E_FLAG_TAIL_ALWAYS_SUPER_WIDE] != 0)
                 lCamera.GetState().SetFlag(Camera::CameraState::E_FLAG_SUPER_WIDE, true);
+
+            // ARTIST 0x822745C0..0x822745CC passes this, the Director input buffer,
+            // and this frame camera to the already reconstructed DevTools pump.
+            // It runs after Construct + Prepare; its real ICEWrapper dependency is retained.
+            mDirectorDevTools.Update(lpIO->mpInputBuffer, lCamera);
 
             // ARTIST 0x822745D0..0x82274628: a change of the camera's producing behaviour
             // (Camera +0x50) raises NEW_THIS_FRAME before blending/finalising the camera.
