@@ -171,19 +171,9 @@ namespace BrnGui
 
         // X360 records are 20 bytes with 4-byte pointers; the record carries a pointer,
         // so the x64 gate posts with sizeof (the pointer widens).
-        CgsGui::GuiEventPlayAptMovie lUnloadLevel3;
-        lUnloadLevel3.mpacMovieName = "";
-        lUnloadLevel3.miLevelNum    = 3;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnloadLevel3), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(CgsGui::GuiEventPlayAptMovie)));
+        mpStateInterface->PlayAptMovie("", 3);
 
-        CgsGui::GuiEventPlayAptMovie lUnloadLevel1;
-        lUnloadLevel1.mpacMovieName = "";
-        lUnloadLevel1.miLevelNum    = 1;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnloadLevel1), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(CgsGui::GuiEventPlayAptMovie)));
+        mpStateInterface->PlayAptMovie("", 1);
 
         mpGuiCache                    = 0;
         mbInviteInProgress            = false;

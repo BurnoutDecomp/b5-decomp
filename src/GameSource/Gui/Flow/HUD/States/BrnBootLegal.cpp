@@ -143,13 +143,7 @@ namespace
     // s32) payload. The X360 OnLeave posts { 8, 18, 12, &unk_820046A7 ("" sentinel), 1 } on
     // channel 41, size 20 (0x82477EAC-0x82477EE8) -- NOT the GuiOptionEvent20/{reserved,float}
     // shape (event type 18, not 25).
-    struct GuiAptNameFlagEvent20 : public CgsGui::GuiEvent<18>
-    {
-        const char* mpacAptName;   // +0x0C (&unk_820046A7, the empty-name sentinel)
-        s32         miFlag;        // +0x10 (1)
-        explicit GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
-            : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
-    };
+    // Event18 posts use the canonical StateInterface payload/wrapper.
 
     // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
     template <s32 N>
@@ -390,15 +384,10 @@ namespace BrnGui
         // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41 -- the
         // X360 packs the empty apt-name pointer + a 1 flag at size 20 with 4-byte
         // pointers; on the PC/x64 gate the name pointer widens, so the copied payload is
-        // sizeof(GuiAptNameFlagEvent20) -- the standard x64 record-width rule (a 20-byte
+        // the native payload/wrapper size -- the standard x64 record-width rule (a 20-byte
         // copy truncates the pointer and drops the level word, which the view-module
         // dispatch then reads as garbage).
-        {
-            GuiAptNameFlagEvent20 lOption("", 1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE,
-                static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
-        }
+        mpStateInterface->PlayAptMovie("", 1);
 
         // Unload the legal screen's resources from the cache and clear its expected apt list.
         if (mpGuiCache != 0)

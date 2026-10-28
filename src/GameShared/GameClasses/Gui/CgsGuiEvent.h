@@ -184,6 +184,20 @@ namespace CgsGui
         s32 miOutEventOffset;  // +0x08  offsetof(mOutEvent)
         T   mOutEvent;         // +0x0C  payload (aligned to alignof(T))
 
+        // Original default construction leaves the record unwritten until SetRawEvent.
+        GuiEventWrapper() = default;
+
+        // DecFIGS CgsGuiEvent.h:217; ARTIST82436F30..58 copies the raw
+        // payload, then records its actual size/type/record-relative offset.
+        void SetRawEvent(T& lrEvent)
+        {
+            mOutEvent = lrEvent;
+            miOutEventSize = static_cast<s32>(sizeof(T));
+            miOutEventType = lrEvent.GetEventType();
+            miOutEventOffset = static_cast<s32>(
+                reinterpret_cast<size_t>(&mOutEvent) - reinterpret_cast<size_t>(this));
+        }
+
         // Box the payload: copy it in and capture its size / type / record-relative offset. The
         // X360 body copies the event bytes into the record then writes the three header words; this
         // copy-constructs mOutEvent (so payloads without a default constructor still work -- the asm

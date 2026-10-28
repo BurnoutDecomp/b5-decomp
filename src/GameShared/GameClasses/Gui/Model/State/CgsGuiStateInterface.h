@@ -22,12 +22,19 @@ namespace CgsGui
     // the GuiEvent<N> type; the queue "channel" id (passed to AddEvent) selects the
     // output wrapper: 40 = GuiEventOut, 41 = GuiOutViewState, 42 = internal,
     // 39 = resource request.
-    struct GuiEventPlayAptMovie : public GuiEvent<18>
+    // Original GuiEvent<18> is empty; the wrapper owns the three protocol
+    // words. ARTIST82436F30/38 fills only this pointer/level payload.
+    struct GuiEventPlayAptMovie : public CgsModule::Event
     {
         const char* mpacMovieName;
         s32         miLevelNum;
-        GuiEventPlayAptMovie() : GuiEvent<18>(8, 12) {}
+        s32 GetEventType() const { return 18; }
     };
+    static_assert(offsetof(GuiEventPlayAptMovie, mpacMovieName) == 0 &&
+                  offsetof(GuiEventPlayAptMovie, miLevelNum) == sizeof(void*),
+                  "PlayAptMovie is the original flat pointer/level payload");
+    static_assert(sizeof(GuiEventPlayAptMovie) == (sizeof(void*) == 8 ? 16 : 8),
+                  "PlayAptMovie preserves the complete native pointer and level");
 
     // Empty payload tags boxed by GuiEventWrapper<...,40>.  On X360 sizeof(T)
     // is 1, producing the exact 16-byte {1,type,12,payload/pad} wire record in
@@ -182,7 +189,7 @@ namespace CgsGui
         // channel. It is kept as-is deliberately, because the payload-type population is SPLIT
         // between two encodings (BrnGuiDemangledEventTypes.h alone: 94 GuiEvent<N>-derived vs 152
         // raw). The GuiEvent<N>-derived ones -- this header's GuiEventPlayMusicOnMenuStream(8,12) /
-        // GuiEventNetworkSuspension(4,12) / GuiEventPlayAptMovie(8,12) included -- set
+        // GuiEventNetworkSuspension(4,12) included -- set
         // muHeader0/muHeader2 to the wrapper's own size/offset words, i.e. they bake the wrapper
         // header INTO the type, so direct-pass reproduces the right record bytes for them and
         // switching to the wrapper would emit a DOUBLE header. The raw ones (`u8 maData[N]` +

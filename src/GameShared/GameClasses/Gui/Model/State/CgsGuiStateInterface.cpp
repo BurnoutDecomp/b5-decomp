@@ -58,7 +58,10 @@ namespace CgsGui
         GuiEventPlayAptMovie lEvent;
         lEvent.mpacMovieName = lpacMovieName;
         lEvent.miLevelNum    = liLevelNum;
-        mOutEventQueue.AddEvent(&lEvent, 41, sizeof(lEvent));   // X360 size 20
+        GuiEventWrapper<GuiEventPlayAptMovie, 41> lWrapper;
+        lWrapper.SetRawEvent(lEvent);
+        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                                41, static_cast<s32>(sizeof(lWrapper))); // X36020; native32
     }
 
     // @ 0x82476F98 - queue a "play apt loading movie" event (type 19, channel 40).

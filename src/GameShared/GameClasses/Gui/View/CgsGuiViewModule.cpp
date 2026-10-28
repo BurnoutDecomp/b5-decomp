@@ -64,10 +64,9 @@ namespace CgsGui
 
     namespace
     {
-        // The view-state payload BODIES (the AddViewState writers queue the event body
-        // -- the fields after the GuiEvent<N> 12-byte header; the X360 dispatch reads
-        // the first payload field at +0). Local views of the CgsGuiStateInterface.h
-        // GuiEvent bodies.
+        // Flat view-state payload bodies extracted from GuiEventWrapper by the
+        // interpreter. The wrapper offset follows the native payload alignment;
+        // the consumer reads the first actual payload field at +0.
         struct PlayAptMovieBody { const char* mpacMovieName; s32 miLevelNum; };
         struct ClearScreenBody  { s32 miMode; f32 mfAlpha; };
     }
@@ -325,7 +324,7 @@ namespace CgsGui
             case 18:
             case 19:
             case 20:
-                ProcessIncomingAptEvent(lpEvent, liEventId);
+                ProcessIncomingAptEvent(lpEvent, liSize, liEventId);
                 break;
 
             case 25:
@@ -449,8 +448,10 @@ namespace CgsGui
     }
 
     // ProcessIncomingAptEvent @0x8285EAE8 -- the apt view events.
-    void ViewModule::ProcessIncomingAptEvent(const void* lpEvent, s32 liEventId)
+    void ViewModule::ProcessIncomingAptEvent(const CgsModule::Event* lpEvent,
+        s32 liEventSize, s32 liEventId)
     {
+        (void)liEventSize; // ARTIST8285EAE8 switches on r6; incoming r5 is unused.
         switch (liEventId)
         {
         case 17:

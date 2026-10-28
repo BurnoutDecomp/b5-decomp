@@ -93,13 +93,7 @@ namespace BrnGui
 
         // 20-byte GuiEvent<18> "apt name + flag" record { 8, 18, 12, name, 1 } on the view
         // channel -- the OnLeave unload post (empty-name sentinel; same as BrnBootLegal's).
-        struct GuiAptNameFlagEvent20 : public CgsGui::GuiEvent<18>
-        {
-            const char* mpacAptName;   // +0x0C ("" sentinel)
-            s32         miFlag;        // +0x10 (1)
-            GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
-                : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
-        };
+        // Event18 posts use the canonical StateInterface payload/wrapper.
 
         // The cache watcher is the ARTIST component-initialisation handshake:
         // register the five expected SaveLoad clips by name, then wait until their
@@ -380,10 +374,7 @@ namespace BrnGui
         // ARTIST 0x82478558: the empty-name sentinel targets the same display level
         // used by SaveLoadComponent (level 3), so that prompt is gone before the
         // post-title intro state can begin.
-        GuiAptNameFlagEvent20 lUnload("", 3);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnload), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
+        mpStateInterface->PlayAptMovie("", 3);
         if (!mbCheckDiskSpace)
         {
             if (mpGuiCache != 0)
