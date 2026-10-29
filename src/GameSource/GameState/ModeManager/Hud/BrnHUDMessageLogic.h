@@ -176,6 +176,7 @@ public:
     // X360 0x82366478. Re-seeds every message edge-tracker. Called by Construct and by
     // PostWorldUpdate the first frame the game mode changes.
     void Prepare();
+    void Destruct(); // ARTIST 0x8236F5E8
 
     // X360 0x82389248. Drains a frame of notifications into the module's outgoing game-action
     // queue and empties the local one. ModeManager::PreWorldUpdate calls it (console 0x82353CF4).
