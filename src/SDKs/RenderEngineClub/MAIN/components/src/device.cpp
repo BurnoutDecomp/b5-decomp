@@ -9,6 +9,20 @@ namespace renderengine
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
 
+    void Device::BeginShaderStates(const ProgramVariableHandle& lrHandle,
+                                  FloatShaderStateIterator& lrIterator)
+    {
+        D3DVECTOR4* lpConstants;
+        if (lrHandle.mu8ShaderType)
+            D3DDevice_BeginPixelShaderConstantF1(gpD3DDevice, lrHandle.mu8RegisterSet,
+                &lpConstants, lrHandle.mu8RegisterCount);
+        else
+            D3DDevice_BeginVertexShaderConstantF1(gpD3DDevice, lrHandle.mu8RegisterSet,
+                &lpConstants, lrHandle.mu8RegisterCount);
+        lrIterator.m_dest = reinterpret_cast<rw::math::vpu::Vector4*>(lpConstants);
+        lrIterator.m_handle = lrHandle;
+    }
+
     // ARTIST 82B61F08..82B61F8C. GetTexture adds a reference; release it before
     // comparing the returned pointer and clearing each matching sampler.
     void Device::UnSetResource(D3DResource* lpResource)
