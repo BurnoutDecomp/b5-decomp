@@ -31,6 +31,7 @@ public:
 private:
     // Start writes the rival count at +0xBC.
     s32 miNumRivalsInRace;
+    bool mbPlayerBeatMainRival; // DecFIGS declaration; constructor placements bound the containing extent.
 
     // DWARF: BrnFaceOffMode.cpp:27. The mode's fixed outro timeout; the X360 GetOutroTimeout body
     // returns 0.0, so this constant is 0.0f for this build (same shape as RaceMode).
