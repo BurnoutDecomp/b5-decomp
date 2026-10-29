@@ -21,6 +21,7 @@
 // than forked.
 
 #include "types.hpp"
+#include <cstddef>
 // Committed vendor Futex: CRITICAL_SECTION-backed fast mutex (Lock/Unlock).
 #include "eathread/eathread_futex.h"
 
@@ -152,6 +153,13 @@ namespace CgsFileSystem
         void Prepare();                                                        // :208
         void Release();                                                        // :212
         void Destruct();                                                       // :216
+
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(offsetof(BaseFile, mFutex) == 56, "ARTIST file lock");
+            CGS_STATIC_ASSERT(offsetof(BaseFile, miIndex) == 88, "ARTIST file index");
+            CGS_STATIC_ASSERT(sizeof(BaseFile) == 96, "ARTIST base-file span");
+        }
 
         // The X360 file-system debug component pokes BaseFile internals directly.
         friend class DebugComponentFileSystem;
