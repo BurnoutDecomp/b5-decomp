@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // DrawBox
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT (LogBufferEnable)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                                       // SPrintf / SnPrintf
 
 #include <cstdio>
 #include <cstring>
@@ -182,19 +183,19 @@ namespace CgsDev
             lpDebug2DRender->DrawText(lData.mpcName, lfX + KAF_COLUMN_OFFSETS[0],
                                       lfY, lfFontSize, lNameColour);
 
-            std::snprintf(acValue, sizeof(acValue), "%.03f", lData.mfCurrentValue);
+            CgsCore::SPrintf(acValue, sizeof(acValue), "%.03f", lData.mfCurrentValue);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[1], lfY, lfFontSize,
                                       lData.mfCurrentValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
-            std::snprintf(acValue, sizeof(acValue), "%.03f", lData.mfAverageValue);
+            CgsCore::SPrintf(acValue, sizeof(acValue), "%.03f", lData.mfAverageValue);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[2], lfY, lfFontSize,
                                       lData.mfAverageValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
-            std::snprintf(acValue, sizeof(acValue), "%.03f", lData.mfMinMaxValue);
+            CgsCore::SPrintf(acValue, sizeof(acValue), "%.03f", lData.mfMinMaxValue);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[3], lfY, lfFontSize,
                                       lData.mfMinMaxValue > lData.mfCpuBudget ? KC_OVER_BUDGET : KC_WHITE);
-            std::snprintf(acValue, sizeof(acValue), "%d", lData.miNumCalls);
+            CgsCore::SPrintf(acValue, sizeof(acValue), "%d", lData.miNumCalls);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[4],
                                       lfY, lfFontSize, KC_WHITE);
-            std::snprintf(acValue, sizeof(acValue), "%d", lData.miMaxCalls);
+            CgsCore::SPrintf(acValue, sizeof(acValue), "%d", lData.miMaxCalls);
             lpDebug2DRender->DrawText(acValue, lfX + KAF_COLUMN_OFFSETS[5],
                                       lfY, lfFontSize, KC_WHITE);
             lfY += lfFontSize;
@@ -210,8 +211,9 @@ namespace CgsDev
 
         lpDebug2DRender->DrawFrame(32.0f, 408.0f, 608.0f, 412.0f,
                                    0xFF000000u, 2.0f);
-        lpDebug2DRender->DrawBox(Vector2{32.0f, 408.0f, 0, 0},
-                                Vector2{mfMaxCpu * 2.8799999f, 4.0f, 0, 0}, 0xFF252525u);
+        const Vector2 lv2TrackPosition = { 32.0f, 408.0f, 0.0f, 0.0f };
+        const Vector2 lv2TrackSize = { mfMaxCpu * 2.8799999f, 4.0f, 0.0f, 0.0f };
+        lpDebug2DRender->DrawBox(lv2TrackPosition, lv2TrackSize, 0xFF252525u);
 
         f32 lfX = 32.0f;
         f32 lfTotal = 0.0f;
@@ -228,8 +230,9 @@ namespace CgsDev
                 continue;
 
             const f32 lfWidth = lData.mfCurrentValue * 2.8800001f;
-            lpDebug2DRender->DrawBox(Vector2{lfX, 408.0f, 0, 0},
-                                    Vector2{lfWidth, 4.0f, 0, 0}, 0xFFCC59CCu);
+            const Vector2 lv2BarPosition = { lfX, 408.0f, 0.0f, 0.0f };
+            const Vector2 lv2BarSize = { lfWidth, 4.0f, 0.0f, 0.0f };
+            lpDebug2DRender->DrawBox(lv2BarPosition, lv2BarSize, 0xFFCC59CCu);
             lfX += lfWidth;
             lfTotal += lData.mfCurrentValue;
         }
@@ -324,8 +327,8 @@ namespace CgsDev
         for (s32 liPage = 0; liPage < E_PMP_MAX; ++liPage)
         {
             char acFileName[256];
-            std::snprintf(acFileName, sizeof(acFileName), "%s_%s.csv", lpcFileName,
-                          maStringList[liPage + 1].mpcName);
+            CgsCore::SnPrintf(acFileName, sizeof(acFileName), "%s_%s.csv", lpcFileName,
+                              maStringList[liPage + 1].mpcName);
             std::FILE* lpFile = std::fopen(acFileName, "w");
             if (!lpFile)
                 break;
