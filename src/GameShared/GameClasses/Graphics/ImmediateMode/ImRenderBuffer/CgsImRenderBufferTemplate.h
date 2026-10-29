@@ -351,7 +351,27 @@ namespace CgsGraphics
         typedef V VertexType;
 
         // ----- lifecycle -----
-        void Construct();                                                                    // @0x1EA6F0
+        // ARTIST8240AA20..ACCC: stream reset belongs to engine Construct.
+        // The native code preserves miNumRendersStarted and natural padding here.
+        void Construct()
+        {
+            for (u32 i = 0; i != 2; ++i)
+            {
+                maBuffers[i].mpu8VertexBuffer = 0;
+                maBuffers[i].mpu8CommandBuffer = 0;
+                maBuffers[i].muCommandBufferWritePos = 0;
+                maBuffers[i].muVertexBufferWritePos = 0;
+            }
+            mpWriteBuffer = 0;
+            mpDispatchBuffer = 0;
+            miWriteBufferIndex = 0;
+            muVertexBufferSize = 0;
+            muCommandBufferSize = 0;
+            mbInRenderBlock = false;
+            muLastEndRenderPos = 0;
+            mbBufferIsFull = false;
+            mbFailGracefully = false;
+        }
         bool Prepare(u32 luCommandBufferSizeBytes, u32 luVertexBufferSizeBytes,
                      rw::IResourceAllocator* lpAllocator, bool lbFailGracefully);            // @0x1EC844
         bool Release();

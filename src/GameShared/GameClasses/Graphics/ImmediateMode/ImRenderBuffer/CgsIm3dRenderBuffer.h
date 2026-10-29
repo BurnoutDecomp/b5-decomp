@@ -23,7 +23,7 @@ template<class V>
 class Im3dRenderBufferBase : public ImRenderBuffer<V>
 {
 public:
-    Im3dRenderBufferBase() { this->Construct(); }
+    Im3dRenderBufferBase() {}
     void Dispatch(Im3dBase<V>* lpRenderer) const;
     void SetTransform(Matrix44::InParam lViewProjection);
     void SetTransform(Matrix44::InParam lModelToWorld, Matrix44::InParam lViewProjection);
