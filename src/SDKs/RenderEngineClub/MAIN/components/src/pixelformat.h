@@ -28,5 +28,6 @@ namespace renderengine
         PIXELFORMAT_A1R5G5B5  = 0x18280043,   // 16bpp ARGB1555 (low6 = 0x03)
         PIXELFORMAT_G8B8      = 0x1A20000B,    // 16bpp two-channel (low6 = 0x0B)
         PIXELFORMAT_DXT1      = 0x1A200052,    // block-compressed BC1 (low6 = 0x12)
+        PIXELFORMAT_DXT5      = 0x1A200154,    // tiled BC3; ARTIST loading-screen textures
     };
 }
