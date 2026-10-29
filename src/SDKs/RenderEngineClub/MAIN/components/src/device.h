@@ -21,6 +21,32 @@ namespace renderengine
     class RenderTargetState;
     enum PrimitiveType;
 
+    // Native X360 descriptor: SkyRender82400540..554 passes these four words
+    // directly as primitive,base vertex,start index,index count. The PS3 form
+    // omits the base-vertex word; its smaller shape does not apply here.
+    struct DrawIndexedParameters
+    {
+        // ARTIST827E0368..3BC, before engine Construct.
+        DrawIndexedParameters()
+            : m_primitiveType(0), m_baseVertexIndex(0), m_startIndex(0), m_indexCount(0) {}
+
+        void SetPrimitiveType(PrimitiveType value) { m_primitiveType = static_cast<u32>(value); }
+        void SetBaseVertexIndex(u32 value) { m_baseVertexIndex = value; }
+        void SetStartIndex(u32 value) { m_startIndex = value; }
+        void SetIndexCount(u32 value) { m_indexCount = value; }
+        PrimitiveType GetPrimitiveType() const { return static_cast<PrimitiveType>(m_primitiveType); }
+        u32 GetBaseVertexIndex() const { return m_baseVertexIndex; }
+        u32 GetStartIndex() const { return m_startIndex; }
+        u32 GetIndexCount() const { return m_indexCount; }
+
+    protected:
+        u32 m_primitiveType;
+        u32 m_baseVertexIndex;
+        u32 m_startIndex;
+        u32 m_indexCount;
+    };
+    CGS_STATIC_ASSERT((sizeof(DrawIndexedParameters) == 16), "ARTIST indexed draw parameters");
+
     // ARTIST 822768D0 writes the destination followed by the complete handle.
     struct FloatShaderStateIterator
     {
