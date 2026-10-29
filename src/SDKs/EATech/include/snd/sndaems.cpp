@@ -73,10 +73,9 @@ namespace
 struct InstanceDestroySubscriber
 {
     ModuleRecord* mpModule; // +0x00
-    void* mpInstance;       // +0x08
-    Csis::Class* mpClass;   // +0x10
-    s32 miDestroyPending;   // +0x18
-    u32 muPadding;
+    void* mpInstance;       // +0x04
+    Csis::Class* mpClass;   // +0x08
+    s32 miDestroyPending;   // +0x0C
 };
 
 struct InstanceLink
@@ -115,35 +114,60 @@ void Unlink(InstanceLink*& arpHead, InstanceLink* apNode)
         apNode->mpNext->mpPrev = apNode->mpPrev;
 }
 
+struct ClassDestructorBlock
+{
+    Csis::ClassClientNode mClient;
+    u32 muTriggered;
+};
+
+struct ClassDataBlock
+{
+    Csis::ClassClientNode mClient;
+    u8 muParameterCount;
+    s32 maParameters[1];
+};
+
+struct GlobalSubscriptionBlock
+{
+    Csis::GlobalVariableHandle mHandle;
+    Csis::GlobalVariableSubscriber mClient;
+    CsisDef::Parameter mValue;
+};
+struct FunctionSubscriptionBlock
+{
+    Csis::Function mFunction;
+    Csis::Function::Subscriber mClient;
+    u8 muParameterCount;
+    u8 mbTriggered;
+    Csis::Parameter maParameters[1];
+};
+CGS_STATIC_ASSERT(offsetof(ClassDestructorBlock, muTriggered) == 0x10, "ARTIST destructor flag");
+CGS_STATIC_ASSERT(offsetof(ClassDataBlock, maParameters) == 0x14, "ARTIST class data");
+CGS_STATIC_ASSERT(offsetof(GlobalSubscriptionBlock, mValue) == 0x18, "ARTIST global value");
+CGS_STATIC_ASSERT(offsetof(FunctionSubscriptionBlock, maParameters) == 0x1C, "ARTIST function parameters");
+
+// ARTIST 82B71370 / 82B71360 / 82B71380 / 82B713C0.
 void AemsDestructorCallback(Csis::Class*, void* apClientData)
 {
-    *reinterpret_cast<u32*>(reinterpret_cast<u8*>(apClientData) + 0x20) = 1;
+    static_cast<ClassDestructorBlock*>(apClientData)->muTriggered = 1;
 }
-
 void AemsGlobalCallback(CsisDef::Parameter* apValue, void* apClientData)
 {
-    *reinterpret_cast<u32*>(reinterpret_cast<u8*>(apClientData) + 0x30) =
-        static_cast<u32>(apValue->intVal);
+    static_cast<GlobalSubscriptionBlock*>(apClientData)->mValue.intVal = apValue->intVal;
 }
-
 void AemsMemberDataCallback(void* apParameters, void* apClientData)
 {
-    u8* lpBlock = static_cast<u8*>(apClientData);
-    const u8 luCount = lpBlock[0x20];
-    if (luCount)
-        std::memcpy(lpBlock + 0x28, apParameters, sizeof(u32) * luCount);
+    ClassDataBlock* block = static_cast<ClassDataBlock*>(apClientData);
+    const s32* parameters = static_cast<const s32*>(apParameters);
+    for (u32 i = 0; i < block->muParameterCount; ++i)
+        block->maParameters[i] = parameters[i];
 }
-
-void AemsFunctionCallback(uintptr_t auParameters, void* apClientData)
+void AemsFunctionCallback(Csis::Parameter* apParameters, void* apClientData)
 {
-    u8* lpBlock = static_cast<u8*>(apClientData);
-    const u8 luCount = lpBlock[0x30];
-    if (luCount && auParameters)
-    {
-        std::memcpy(lpBlock + 0x38, reinterpret_cast<const void*>(auParameters),
-                    sizeof(u32) * luCount);
-    }
-    lpBlock[0x31] = 1;
+    FunctionSubscriptionBlock* block = static_cast<FunctionSubscriptionBlock*>(apClientData);
+    for (u32 i = 0; i < block->muParameterCount; ++i)
+        block->maParameters[i].iVal = apParameters[i].iVal;
+    block->mbTriggered = 1;
 }
 
 void AemsConstructorCallback(Csis::Class* apClass, void* apParameters,
@@ -238,26 +262,11 @@ inline s32 RoundAems(f32 afValue)
     return static_cast<s32>(afValue < 0.0f ? afValue - 0.5f : afValue + 0.5f);
 }
 
-struct ClassDestructorBlock
-{
-    Csis::ClassClientNode mClient;
-    u32 muTriggered;
-};
-
-struct ClassDataBlock
-{
-    Csis::ClassClientNode mClient;
-    u8 muParameterCount;
-    u8 maPadding[7];
-    s32 maParameters[1];
-};
-
 struct FunctionCallBlock
 {
     Csis::Function mFunction;
     u8 mbEnabled;
     u8 muParameterCount;
-    u8 maPadding[6];
     s32 maRangeAndRuntime[1];
 };
 
@@ -462,18 +471,20 @@ s32 UpdateCallFunction(void* apData)
 {
     FunctionCallBlock* lpBlock = static_cast<FunctionCallBlock*>(apData);
     s32* lpRanges = lpBlock->maRangeAndRuntime;
-    s32* lpRuntime = lpRanges + 2 * lpBlock->muParameterCount;
+    s32* lpRuntime = lpBlock->mbEnabled ? lpRanges + 2 * lpBlock->muParameterCount : lpRanges;
     s32* lpParameters = lpRuntime + 1;
     if (lpBlock->mbEnabled)
     {
         for (u8 luIndex = 0; luIndex < lpBlock->muParameterCount; ++luIndex)
         {
-            lpParameters[luIndex] = (std::max)(lpRanges[2 * luIndex],
-                (std::min)(lpRanges[2 * luIndex + 1], lpParameters[luIndex]));
+            s32 value = lpParameters[luIndex];
+            if (value < lpRanges[2 * luIndex]) value = lpRanges[2 * luIndex];
+            else if (value > lpRanges[2 * luIndex + 1]) value = lpRanges[2 * luIndex + 1];
+            lpParameters[luIndex] = value;
         }
     }
     if (*lpRuntime)
-        lpBlock->mFunction.CallFast(reinterpret_cast<uintptr_t>(lpParameters));
+        lpBlock->mFunction.CallFast(reinterpret_cast<Csis::Parameter*>(lpParameters));
     return 0;
 }
 
@@ -875,7 +886,7 @@ struct AemsPlayerBlock
 };
 
 CGS_STATIC_ASSERT((sizeof(AemsPlayerInput) == 12), "native AEMS player input");
-CGS_STATIC_ASSERT((offsetof(AemsPlayerBlock, maInputs) == 0x28),
+CGS_STATIC_ASSERT((offsetof(AemsPlayerBlock, maInputs) == 0x1C),
               "native AEMS player block");
 
 // The native loader expands byte_140C3D3D8 into these 36 fixed-point values
@@ -1188,8 +1199,8 @@ s32 UpdateAdd2(void* apData)
 s32 UpdateFunction(void* apData)
 {
     u8* lpBytes = static_cast<u8*>(apData);
-    const s32 liResult = lpBytes[49];
-    lpBytes[49] = 0;
+    const s32 liResult = lpBytes[25];
+    lpBytes[25] = 0;
     return liResult;
 }
 
@@ -1199,7 +1210,6 @@ struct ControlClassBlock
     Csis::Class* mpClass;
     u8 mbHasParameters;
     u8 muParameterCount;
-    u8 maPadding[6];
     s32 maRangeAndRuntime[1];
 };
 
@@ -1207,7 +1217,7 @@ s32 UpdateControlClass(void* apData)
 {
     ControlClassBlock* lpBlock = static_cast<ControlClassBlock*>(apData);
     s32* lpRanges = lpBlock->maRangeAndRuntime;
-    s32* lpRuntime = lpRanges + 2 * lpBlock->muParameterCount;
+    s32* lpRuntime = lpBlock->mbHasParameters ? lpRanges + 2 * lpBlock->muParameterCount : lpRanges;
     s32* lpParameters = lpRuntime + 2;
     if (lpRuntime[1])
     {
@@ -1390,19 +1400,29 @@ void RemoveAemsTimer()
 }
 }
 
+// C++03 form of the existing admission rollback; same subscribed prefix/order.
+void RollbackConstructors(ModuleBank* bank, u16 count)
+{
+    ModuleRecord* module = reinterpret_cast<ModuleRecord*>(reinterpret_cast<u8*>(bank) + bank->muModuleTableOffset);
+    for (u16 i = 0; i < count; ++i)
+    {
+        Csis::Class::UnsubscribeConstructorFast(&module->mClassHandle, &module->mConstructorNode);
+        module = NextModuleRecord(module);
+    }
+}
+
 // One record slot queued into the audio System's deferred-command ring by
 // BeginRemoveModuleBank; replayed on the audio thread by Snd9::RemoveModuleBankHandler.
-// The X360 lays it out in 12 bytes (4-byte handler pointer); on the host it is 16.
+// ARTIST uses three native words: handler, reserved, bank handle.
 // Offsets in the member comments are the console ones the asm encodes.
 struct RemoveModuleBankCommand
 {
     int (*mpfnHandler)(void* apCommand); // +0x00  &Snd9::RemoveModuleBankHandler
-    u64   muReserved;                    // +0x08  always 0
-    s32   miBankHandle;                  // +0x10  the removed bank's handle
-    u32   muPadding;
+    u32   muReserved;                    // +0x04  always 0
+    s32   miBankHandle;                  // +0x08  the removed bank's handle
 };
 
-CGS_STATIC_ASSERT((sizeof(RemoveModuleBankCommand) == 0x18),
+CGS_STATIC_ASSERT((sizeof(RemoveModuleBankCommand) == 12),
               "native AEMS remove command");
 
 // ----------------------------------------------------------------------------
@@ -1435,8 +1455,7 @@ s32 BeginRemoveModuleBank(s32 aiBankHandle)
     {
         ModuleRecord* lpRecord = reinterpret_cast<ModuleRecord*>(
             reinterpret_cast<u8*>(lpBank) + lpBank->muModuleTableOffset);
-        const u32 luModuleCount = lpBank->muModuleCount;
-        for (u32 luModule = 0; luModule < luModuleCount; ++luModule)
+        for (u32 luModule = 0; luModule < lpBank->muModuleCount; ++luModule)
         {
             Csis::Class::UnsubscribeConstructorFast(
                 &lpRecord->mClassHandle, &lpRecord->mConstructorNode);
@@ -1467,17 +1486,12 @@ s32 BeginRemoveModuleBank(s32 aiBankHandle)
         const u32 luCursor = lpSystem->muDeferredRingCursor;
         RemoveModuleBankCommand* lpCmd = reinterpret_cast<RemoveModuleBankCommand*>(
             lpSystem->mpDeferredRingBase + luCursor);
-        // RECORD STRIDE (X360-literal trap): the asm's `addi r10,r10,0xC` @0x82B72358 IS
-        // the console sizeof(RemoveModuleBankCommand) ({int(*)(void*), u32, s32} = 4+4+4).
-        // The x64 ABI arbiter lays the widened command out as 24 bytes with the bank
-        // handle at +0x10. The ring consumer advances by the handler's return, so the
-        // enqueue stride is the native host sizeof rather than the literal console 12.
+        // ARTIST 82B72358 advances by the native 12-byte command.
         lpSystem->muDeferredRingCursor =
             luCursor + static_cast<u32>(sizeof(RemoveModuleBankCommand)); // X360: +0xC
         lpCmd->mpfnHandler  = &Snd9::RemoveModuleBankHandler;
         lpCmd->muReserved   = 0;
         lpCmd->miBankHandle = aiBankHandle;
-        lpCmd->muPadding    = 0;
         liResult = 0;
     }
 
@@ -1540,10 +1554,12 @@ int RemoveModuleBankHandler(void* apCommand)
         if (lpBank->miBankHandle != lpCommand->miBankHandle)
             continue;
 
-        if (lpLink->mppPrev)
-            *lpLink->mppPrev = lpLink->mpNext;
+        if (lpLink == Aems::gpModuleBankListHead)
+            Aems::gpModuleBankListHead = lpLink->mpNext;
+        if (lpLink->mpPrev)
+            lpLink->mpPrev->mpNext = lpLink->mpNext;
         if (lpLink->mpNext)
-            lpLink->mpNext->mppPrev = lpLink->mppPrev;
+            lpLink->mpNext->mpPrev = lpLink->mpPrev;
         break;
     }
     if (!Aems::gpModuleBankListHead)
@@ -1571,7 +1587,7 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
     Snd9::Aems::ModuleBank* lpSource =
         static_cast<Snd9::Aems::ModuleBank*>(apBank);
     if (std::memcmp(lpSource->maFileHeader, "ABKC", 4) != 0 ||
-        lpSource->maFileHeader[8] != 10 ||
+        lpSource->maFileHeader[8] != 5 ||
         lpSource->muTotalSize < sizeof(Snd9::Aems::ModuleBank) ||
         lpSource->muResidentSize < sizeof(Snd9::Aems::ModuleBank) ||
         lpSource->muResidentSize > lpSource->muTotalSize ||
@@ -1635,19 +1651,6 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
         reinterpret_cast<Snd9::Aems::ModuleRecord*>(
             reinterpret_cast<u8*>(lpBank) + lpBank->muModuleTableOffset);
     u16 luSubscribedModules = 0;
-    const auto RollbackConstructors = [&]()
-    {
-        Snd9::Aems::ModuleRecord* lpRollback =
-            reinterpret_cast<Snd9::Aems::ModuleRecord*>(
-                reinterpret_cast<u8*>(lpBank) + lpBank->muModuleTableOffset);
-        for (u16 luModule = 0; luModule < luSubscribedModules; ++luModule)
-        {
-            Csis::Class::UnsubscribeConstructorFast(
-                &lpRollback->mClassHandle, &lpRollback->mConstructorNode);
-            lpRollback = Snd9::Aems::NextModuleRecord(lpRollback);
-        }
-        luSubscribedModules = 0;
-    };
     for (u16 luModule = 0; luModule < lpBank->muModuleCount; ++luModule)
     {
         const size_t luRecordOffset = reinterpret_cast<u8*>(lpRecord) -
@@ -1657,7 +1660,7 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
         if (luRecordOffset > lpBank->muResidentSize ||
             luRecordSize > lpBank->muResidentSize - luRecordOffset)
         {
-            RollbackConstructors();
+            Snd9::Aems::RollbackConstructors(lpBank, luSubscribedModules);
             return -6;
         }
 
@@ -1684,7 +1687,7 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
             if (liOffset < 0 || static_cast<u32>(liOffset) + sizeof(void*) >
                     lpRecord->muInstanceSize)
             {
-                RollbackConstructors();
+                Snd9::Aems::RollbackConstructors(lpBank, luSubscribedModules);
                 return -6;
             }
             *reinterpret_cast<void**>(
@@ -1694,9 +1697,9 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
     }
 
     lpBank->mLink.mpNext = Snd9::Aems::gpModuleBankListHead;
-    lpBank->mLink.mppPrev = &Snd9::Aems::gpModuleBankListHead;
+    lpBank->mLink.mpPrev = 0;
     if (lpBank->mLink.mpNext)
-        lpBank->mLink.mpNext->mppPrev = &lpBank->mLink.mpNext;
+        lpBank->mLink.mpNext->mpPrev = &lpBank->mLink;
     Snd9::Aems::gpModuleBankListHead = &lpBank->mLink;
     // Native sub_14096C510 returns the timer-manager status to its caller, but
     // SNDAEMS_addmodulebank (sub_14096C960) ignores that value and returns the
@@ -1716,7 +1719,7 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
     rw::audio::core::System::Lock(lpSystem);
 
     if (!lpModule || lpModule->muCurrentInstances >= lpModule->muMaxInstances ||
-        !lpModule->mpInstanceTemplate || lpModule->muInstanceSize < 0x30)
+        !lpModule->mpInstanceTemplate || lpModule->muInstanceSize < 0x18)
     {
         rw::audio::core::System::Unlock(lpSystem);
         return;
@@ -1765,7 +1768,7 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
         lpNode->mpfnDestructor = &AemsDestructorCallback;
         lpNode->mpClientData = lpCursor;
         apClass->SubscribeDestructorFast(lpNode);
-        lpCursor += 0x28;
+        lpCursor += 0x14;
     }
 
     for (u16 luGlobal = 0; luGlobal < lpModule->muGlobalCount; ++luGlobal)
@@ -1773,11 +1776,11 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
         Csis::GlobalVariableHandle* lpHandle =
             reinterpret_cast<Csis::GlobalVariableHandle*>(lpCursor);
         Csis::GlobalVariableSubscriber* lpNode =
-            reinterpret_cast<Csis::GlobalVariableSubscriber*>(lpCursor + 0x10);
+            reinterpret_cast<Csis::GlobalVariableSubscriber*>(lpCursor + 8);
         lpNode->pfnCallback = &AemsGlobalCallback;
         lpNode->pUserData = lpCursor;
         Csis::GlobalVariable::SubscribeFast(lpHandle, lpNode);
-        lpCursor += 0x38;
+        lpCursor += 0x1C;
     }
 
     if (lpModule->mbHasClassData)
@@ -1787,20 +1790,18 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
         lpNode->mpfnMemberData = &AemsMemberDataCallback;
         lpNode->mpClientData = lpCursor;
         apClass->SubscribeMemberDataFast(lpNode);
-        lpCursor += 0x28 + sizeof(u32) * lpCursor[0x20];
+        lpCursor += 0x14 + sizeof(u32) * lpCursor[0x10];
     }
 
-    lpCursor = reinterpret_cast<u8*>((reinterpret_cast<uintptr_t>(lpCursor) + 7u) & ~uintptr_t(7));
     for (u16 luFunction = 0; luFunction < lpModule->muFunctionCount; ++luFunction)
     {
         Csis::Function* lpFunction = reinterpret_cast<Csis::Function*>(lpCursor);
         Csis::Function::Subscriber* lpNode =
-            reinterpret_cast<Csis::Function::Subscriber*>(lpCursor + 0x10);
+            reinterpret_cast<Csis::Function::Subscriber*>(lpCursor + 8);
         lpNode->mpfnCallback = &AemsFunctionCallback;
         lpNode->mpContext = lpCursor;
         lpFunction->SubscribeFast(lpNode);
-        lpCursor += 0x38 + sizeof(u32) * lpCursor[0x30];
-        lpCursor = reinterpret_cast<u8*>((reinterpret_cast<uintptr_t>(lpCursor) + 7u) & ~uintptr_t(7));
+        lpCursor += 0x1C + sizeof(u32) * lpCursor[0x18];
     }
 
     ++lpModule->muCurrentInstances;
@@ -1824,36 +1825,34 @@ extern "C" int SNDAEMSI_updatedestroy(void* apSubscriber)
     InstanceLink* lpModuleHead = static_cast<InstanceLink*>(lpModule->mpInstanceList);
     Unlink(lpModuleHead, reinterpret_cast<InstanceLink*>(lpInstance));
     lpModule->mpInstanceList = lpModuleHead;
-    Unlink(gpInstanceUpdateList, reinterpret_cast<InstanceLink*>(lpInstance + 0x10));
+    Unlink(gpInstanceUpdateList, reinterpret_cast<InstanceLink*>(lpInstance + 8));
 
-    u8* lpCursor = lpInstance + 0x30;
+    u8* lpCursor = lpInstance + 0x18;
     if (lpModule->mbHasDestructor)
     {
         lpClass->UnsubscribeDestructorFast(
             reinterpret_cast<Csis::ClassClientNode*>(lpCursor));
-        lpCursor += 0x28;
+        lpCursor += 0x14;
     }
     for (u16 luGlobal = 0; luGlobal < lpModule->muGlobalCount; ++luGlobal)
     {
         Csis::GlobalVariable::UnsubscribeFast(
             reinterpret_cast<Csis::GlobalVariableHandle*>(lpCursor),
-            reinterpret_cast<Csis::GlobalVariableSubscriber*>(lpCursor + 0x10));
-        lpCursor += 0x38;
+            reinterpret_cast<Csis::GlobalVariableSubscriber*>(lpCursor + 8));
+        lpCursor += 0x1C;
     }
     if (lpModule->mbHasClassData)
     {
         lpClass->UnsubscribeMemberDataFast(
             reinterpret_cast<Csis::ClassClientNode*>(lpCursor));
-        lpCursor += 0x28 + sizeof(u32) * lpCursor[0x20];
+        lpCursor += 0x14 + sizeof(u32) * lpCursor[0x10];
     }
-    lpCursor = reinterpret_cast<u8*>((reinterpret_cast<uintptr_t>(lpCursor) + 7u) & ~uintptr_t(7));
     for (u16 luFunction = 0; luFunction < lpModule->muFunctionCount; ++luFunction)
     {
         Csis::Function* lpFunction = reinterpret_cast<Csis::Function*>(lpCursor);
         lpFunction->UnsubscribeFast(
-            reinterpret_cast<Csis::Function::Subscriber*>(lpCursor + 0x10));
-        lpCursor += 0x38 + sizeof(u32) * lpCursor[0x30];
-        lpCursor = reinterpret_cast<u8*>((reinterpret_cast<uintptr_t>(lpCursor) + 7u) & ~uintptr_t(7));
+            reinterpret_cast<Csis::Function::Subscriber*>(lpCursor + 8));
+        lpCursor += 0x1C + sizeof(u32) * lpCursor[0x18];
     }
 
     s32* lpOffsets = ModuleRecordOffsets(lpModule);
@@ -1880,8 +1879,7 @@ extern "C" int SNDAEMSI_updatedestroy(void* apSubscriber)
         }
     }
 
-    if (lpModule->muCurrentInstances)
-        --lpModule->muCurrentInstances;
+    --lpModule->muCurrentInstances;
     rw::audio::core::System::Free(off_83271928, lpInstance, 0);
     return 0;
 }
