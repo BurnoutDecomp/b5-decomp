@@ -45,10 +45,8 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleTrigger.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/ParticleRender.h"
 #include "GameSource/Effects/Particles/LionParticleRender.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include "types.hpp"
-#include <cstdio>
 
 // ----------------------------------------------------------------------------
 // The three per-emitter sub-object pools (see LionFX.h). cParticleSystem::AppInit sizes
@@ -163,23 +161,6 @@ void cLionFX::Init(EA::Allocator::ITaggedAllocator* apAllocator,
 
     gpLionParticleRender = static_cast<BrnParticle::LionParticleRender*>(apRenderer);
 
-    // ---- [lionfx] witness. NOT console behaviour: ours, one line, once. --------------------
-    // ⭐ WHY. The whole point of this function is that four pools and one pointer come into
-    // existence; every one of those is invisible from outside. In particular
-    // gpLionParticleRender going non-null is what lets cParticleMaterial::Build register a
-    // texture at all -- and a build where Init never ran and a build where it ran and every
-    // pool came back empty produce the same silence. This line prints the numbers that would
-    // be WRONG in either case. DELETE-WHEN-STABLE.
-    {
-        char lacMsg[320];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-            "[lionfx] Init emitters=%u particles=%u dynamic=%u -> buckets=%u matBuckets=%u "
-            "renderer=%p smallAllocPages=%p mainSize=%u\n",
-            auEmitterCount, auParticleCount, auDynamicParticleCount,
-            lBucketCount, lMatBucketCount, static_cast<void*>(gpLionParticleRender),
-            static_cast<void*>(LionSmallAlloc::mpPages), LionSmallAlloc::mMainSize);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
 }
 
 // ================================================================================================
@@ -274,36 +255,6 @@ cLionEffectDefinition* cLionFX::BinLoad(void* apData)
     if (lpDefinition->mVersion != cLionEffectDefinition::KU_VERSION)
         return 0;
 
-    // ------------------------------------------------------------------------
-    // The one assumption the whole .lef graph rests on, said out loud.
-    //
-    // Every link in this blob is a 32-bit slot (see LionSerialisedPtr.h) and every
-    // Relocate below rebases it with `slot += (u32)&owner`. That is the console's own
-    // arithmetic and it is correct on the host ONLY while the resource heap stays below
-    // 4 GB -- the same convention ParticleDescriptionResourceType::FixUp @0x8267DF60
-    // already relies on. Above 4 GB the truncation is SILENT: the graph would relocate
-    // to plausible-looking addresses in the wrong place and fault somewhere unrelated.
-    // So say it once, here, at the one point where the whole payload is in hand. The
-    // console has no such test; this only writes a log line and changes nothing.
-    // DELETE-WHEN-STABLE (or when the resource heap gains a hard below-4 GB guarantee
-    // of its own).
-    // ------------------------------------------------------------------------
-    {
-        static bool sbAnnouncedHighBlob = false;
-        const uintptr_t lBlob = reinterpret_cast<uintptr_t>(lpDefinition);
-        if (!sbAnnouncedHighBlob && lBlob > 0xFFFFFFFFull)
-        {
-            sbAnnouncedHighBlob = true;
-            char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[lion] .lef payload at %p is ABOVE 4 GB -- every 32-bit link in it will "
-                "relocate to a truncated address. The LION records model serialised links "
-                "as u32 by design (they are 4 bytes in the file); what is broken is the "
-                "heap placement, not the records.\n", apData);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-
     // Self-relative byte offset -> pointer.
     lpDefinition->mpParticles.Relocate(lpDefinition);
 
@@ -324,66 +275,6 @@ cLionEffectDefinition* cLionFX::BinLoad(void* apData)
         cLionParticleEffectManager& lrManager = cLionParticleEffectManager::Instance();
         lpEffect->mpNext.Set(lrManager.GetpEffects());
         lrManager.SetpEffects(lpEffect);
-    }
-
-    // ---- [lionload] witness. NOT console behaviour: ours, bounded, log-only. ---------
-    // ⭐ WHY A *SUCCESS* WITNESS. The sibling failure line (ParticleDescriptionResourceType::
-    // DeSerialise's "[particles] BinLoad returned NULL") is one-shot and silent when nothing
-    // goes wrong -- so its ABSENCE proves nothing: a build where the resource type was never
-    // registered, and one where all 41 .lefs loaded perfectly, produce byte-identical logs.
-    // This line is the discriminator, and it is deliberately made of the things that would be
-    // WRONG if the record layout were wrong: the descriptor chain is walked to a count, and
-    // the first descriptor's name and its material's texture name are printed -- both reached
-    // through 32-bit slots at +0x38 and +0x4C/+0x10. A layout that had drifted would give a
-    // garbage count or an unreadable name here rather than nothing at all.
-    // DELETE-WHEN-STABLE.
-    {
-        static u32 suLoadWitness = 0;
-        const u32 KU_LOAD_WITNESS_LIMIT = 6;
-        if (suLoadWitness < KU_LOAD_WITNESS_LIMIT)
-        {
-            ++suLoadWitness;
-
-            u32 luDescriptors = 0;
-            const char* lpcFirstName = "<no descriptors>";
-            const char* lpcFirstTex  = "<none>";
-            if (lpEffect != 0)
-            {
-                for (cParticleDescriptor* lpDes = lpEffect->GetDescriptors(); lpDes != 0;
-                     lpDes = lpDes->GetNextDescriptor())
-                {
-                    if (luDescriptors == 0)
-                    {
-                        if (lpDes->mpName)
-                            lpcFirstName = lpDes->mpName.Get();
-                        if (lpDes->mpMaterial && lpDes->mpMaterial->mpTextureName)
-                            lpcFirstTex = lpDes->mpMaterial->mpTextureName.Get();
-                    }
-                    ++luDescriptors;
-                }
-            }
-
-            // The .lef name is LionChar (UTF-16); narrow it for the log.
-            char lacName[cLionEffectDefinition::KU_MAX_NAME_LENGTH + 1];
-            u32 luChar = 0;
-            for (; luChar < cLionEffectDefinition::KU_MAX_NAME_LENGTH; ++luChar)
-            {
-                const u16 lu16 = lpDefinition->m_name[luChar];
-                if (lu16 == 0)
-                    break;
-                lacName[luChar] = (lu16 < 0x80u) ? static_cast<char>(lu16) : '?';
-            }
-            lacName[luChar] = 0;
-
-            char lacMsg[512];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[lionload] #%u LOADED \"%s\" key=%08X def=%p effect=%p hash=%08X "
-                "descriptors=%u first=\"%s\" firstTexture=\"%s\"\n",
-                suLoadWitness, lacName, lpDefinition->Key(), lpDefinition, lpEffect,
-                (lpEffect != 0) ? lpEffect->mHash : 0u,
-                luDescriptors, lpcFirstName, lpcFirstTex);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
     }
 
     return lpDefinition;

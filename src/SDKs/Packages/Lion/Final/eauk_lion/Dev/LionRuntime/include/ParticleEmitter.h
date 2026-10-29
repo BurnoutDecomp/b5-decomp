@@ -472,17 +472,5 @@ private:
     // rather than silently changing that type's size for every other user of it.
 };
 
-// The three specialisations the console emitted, and the only three that exist -- one per bucket
-// kind. Declared `extern` here so cParticleRender::EmitterRender / ::EmitterCubeRender can call
-// them against the single copy ParticleEmitter.cpp instantiates, which is exactly the arrangement
-// the X360 image has (@0x829120C0 / @0x829123E0 / @0x82912610, one body each, called from
-// @0x82913928 and @0x82913C80).
-extern template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<MatrixSimulationHelper>(
-    MatrixSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
-    const cMatrix&);
-extern template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<VectorSimulationHelper>(
-    VectorSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
-    const cMatrix&);
-extern template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<LocalSimulationHelper>(
-    LocalSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
-    const cMatrix&);
+// ParticleEmitter.cpp explicitly instantiates the three native helper variants.
+// Callers see the template declaration above; its body stays in that owning TU.

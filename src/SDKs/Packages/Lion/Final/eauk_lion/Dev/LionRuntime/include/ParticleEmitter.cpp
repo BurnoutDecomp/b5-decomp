@@ -35,10 +35,9 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/RenderedParticle.h"   // the per-particle RENDER record the behaviour processors write
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleWaveForm.h"    // ParticleBuild samples the three position wave forms
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>   // floorf / fabsf -- Blend's de-optimised magic-number floor
 
-#include <cstdio>
+#include <vectorintrinsics.h>   // native VMX round-to-nearest (vrfin)
 #include <cstdlib>   // rand -- InitialiseParticle's random start frame is the C library's
 
 namespace
@@ -169,7 +168,8 @@ namespace
 
     inline cVector LaneCast(const rw::math::vpu::Vector3Plus& arV)
     {
-        return cVector{ arV.x, arV.y, arV.z, arV.w };
+        const cVector lResult = { arV.x, arV.y, arV.z, arV.w };
+        return lResult;
     }
 
     // One `lvx128 v2,<variance>` / `lvx128 v1,<base>` / `bl sub_8290A648` / `stvx128` triple.
@@ -247,7 +247,8 @@ void cParticleEmitter::InitialiseParticle(sParticleNucleus& arParticleNucleus,
     // ---- the packed life / frame / FPS / birth vector (nucleus + 0xD0) ----------------------
     // Cleared first (0x829116FC), then three of its four lanes filled. FrameTime (word 1) is
     // deliberately left at zero -- the console never writes it here.
-    arParticleNucleus.mvLifeTimeAndFrameTimeAndFPSAndBirthTime = cVector{ 0.0f, 0.0f, 0.0f, 0.0f };
+    const cVector lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    arParticleNucleus.mvLifeTimeAndFrameTimeAndFPSAndBirthTime = lZero;
     arParticleNucleus.BirthTime() = arTime.GetTimeSeconds();                             // SetW
     arParticleNucleus.LifeTime()  = arSeed.Build(lrBhv.mLifeBase, lrBhv.mLifeVariance);  // SetX
 
@@ -693,53 +694,6 @@ s32 giEmitterBlendMonitor = -1;   // X360 dword_82FAB63C
 // flt_82002138 / flt_8201FDB8 -- the blend snap epsilon and its negation.
 const f32 KF_BLEND_EPSILON = 0.009999999776482582f;
 
-// ------------------------------------------------------------------------------------------
-// [diag] DELETE-WHEN-STABLE, with the [lionblend] witness in Blend below.
-// How many of a representative sample of the fields cParticleBehaviour::Lerp @0x8290B1F8
-// interpolates actually DIFFER between two adjacent behaviour layers. Without this the
-// witness cannot tell "the interpolator works" from "the two layers were identical".
-// Twelve scalars, four vectors (x/y/z only -- the w lane is not interpolated, see Vector.h),
-// three packed colours.
-// ------------------------------------------------------------------------------------------
-bool VectorXYZDiffers(const cVector& arA, const cVector& arB)
-{
-    return (arA.x != arB.x) || (arA.y != arB.y) || (arA.z != arB.z);
-}
-
-bool Colour8Differs(const cColour8& arA, const cColour8& arB)
-{
-    return (arA.r != arB.r) || (arA.g != arB.g) || (arA.b != arB.b) || (arA.a != arB.a);
-}
-
-void CountBlendDifferences(const cParticleBehaviour& arA, const cParticleBehaviour& arB,
-                           u32& aruScalars, u32& aruVectors, u32& aruColours)
-{
-    aruScalars = 0;
-    if (arA.mLifeBase != arB.mLifeBase)                   ++aruScalars;
-    if (arA.mLifeVariance != arB.mLifeVariance)           ++aruScalars;
-    if (arA.mSizeBase != arB.mSizeBase)                   ++aruScalars;
-    if (arA.mSizeVariance != arB.mSizeVariance)           ++aruScalars;
-    if (arA.mEmissionRateBase != arB.mEmissionRateBase)   ++aruScalars;
-    if (arA.mScale != arB.mScale)                         ++aruScalars;
-    if (arA.mAlphaFadeIn != arB.mAlphaFadeIn)             ++aruScalars;
-    if (arA.mAlphaFadeOut != arB.mAlphaFadeOut)           ++aruScalars;
-    if (arA.mDragFactor != arB.mDragFactor)               ++aruScalars;
-    if (arA.mMass != arB.mMass)                           ++aruScalars;
-    if (arA.mCellSize != arB.mCellSize)                   ++aruScalars;
-    if (arA.mTimeScale != arB.mTimeScale)                 ++aruScalars;
-
-    aruVectors = 0;
-    if (VectorXYZDiffers(arA.mPosBase, arB.mPosBase))         ++aruVectors;
-    if (VectorXYZDiffers(arA.mVelBase, arB.mVelBase))         ++aruVectors;
-    if (VectorXYZDiffers(arA.mAccBase, arB.mAccBase))         ++aruVectors;
-    if (VectorXYZDiffers(arA.mSizeXYZBase, arB.mSizeXYZBase)) ++aruVectors;
-
-    aruColours = 0;
-    if (Colour8Differs(arA.mColour[0], arB.mColour[0])) ++aruColours;
-    if (Colour8Differs(arA.mRGBA0, arB.mRGBA0))         ++aruColours;
-    if (Colour8Differs(arA.mRGBA1, arB.mRGBA1))         ++aruColours;
-}
-
 // The console walks the behaviour chain link by link FIVE times in this one function
 // (0x8290F874, 0x8290F8FC, 0x8290F950, 0x8290F984, 0x8290F9A8), each time with the same
 // null-tolerant "advance auCount links" shape. That is one helper inlined five times, so it is
@@ -829,74 +783,9 @@ void cParticleEmitter::Blend()
                         AdvanceBehaviours(lpHead, static_cast<u32>(liLayer));
                     const cParticleBehaviour* lpHi =
                         AdvanceBehaviours(lpHead, static_cast<u32>(liLayerN));
-                    // ⛔ BRN_LION_NOBLEND=1 -- DELETE-WHEN-STABLE A/B BYPASS. Skipping the
-                    // call reproduces EXACTLY the state this build was in before
-                    // cParticleBehaviour::Lerp @0x8290B1F8 was bodied: lpChosen is still
-                    // mpTempBehaviour, but mpTempBehaviour still holds whatever
-                    // cParticleEmitter::Init left in it. It exists so the landing can be
-                    // FILMED against its own absence on ONE exe, instead of comparing two
-                    // builds. Off by default; the console has no such branch.
+                    // ARTIST 0x8290F9B8..0x8290F9C0: interpolate, then publish the temp layer.
+                    mpTempBehaviour->Lerp(lpLo, lpHi, lfFraction);
                     lpChosen = mpTempBehaviour;
-
-                    // ------------------------------------------------------------------
-                    // [lionblend] DELETE-WHEN-STABLE. The witness for cParticleBehaviour::
-                    // Lerp @0x8290B1F8 landing: it prints BOTH layers' own values and the
-                    // interpolated result for one field of each kind the body handles --
-                    // a scalar, a vector lane, a fixed-point colour, and one of the eleven
-                    // SNAPPED words -- so "it blends instead of snapping" is a number.
-                    //
-                    // ⚠ IT ALSO COUNTS HOW MANY FIELDS ACTUALLY DIFFER between the two
-                    // layers, because a lerp between two IDENTICAL layers is invisible and
-                    // would otherwise read as a pass. If diff= is 0/0/0 the line proves the
-                    // body ran and NOTHING ELSE -- that is the diagnostic-that-lies trap
-                    // this counter exists to close.
-                    // Capped at KU_LIONBLEND_SHOTS lines; call= keeps counting past the cap.
-                    {
-                        static u32 suShots = 0;
-                        static u32 suCalls = 0;
-                        const u32 KU_LIONBLEND_SHOTS = 24u;
-                        ++suCalls;
-                        if (suShots < KU_LIONBLEND_SHOTS)
-                        {
-                            ++suShots;
-                            u32 luDiffScalar = 0;
-                            u32 luDiffVector = 0;
-                            u32 luDiffColour = 0;
-                            CountBlendDifferences(*lpLo, *lpHi,
-                                                  luDiffScalar, luDiffVector, luDiffColour);
-
-                            char lacMsg[512];
-                            std::snprintf(lacMsg, sizeof(lacMsg),
-                                "[lionblend] call=%u layer=%d->%d t=%.4f diff(s12/v4/c3)=%u/%u/%u"
-                                " life=%.4f|%.4f->%.4f size=%.4f|%.4f->%.4f"
-                                " rate=%.3f|%.3f->%.3f vel.y=%.4f|%.4f->%.4f"
-                                " col0=%02X%02X%02X%02X|%02X%02X%02X%02X->%02X%02X%02X%02X"
-                                " flags=%08X|%08X->%08X\n",
-                                suCalls, static_cast<int>(liLayer), static_cast<int>(liLayerN),
-                                static_cast<double>(lfFraction),
-                                luDiffScalar, luDiffVector, luDiffColour,
-                                static_cast<double>(lpLo->mLifeBase),
-                                static_cast<double>(lpHi->mLifeBase),
-                                static_cast<double>(mpTempBehaviour->mLifeBase),
-                                static_cast<double>(lpLo->mSizeBase),
-                                static_cast<double>(lpHi->mSizeBase),
-                                static_cast<double>(mpTempBehaviour->mSizeBase),
-                                static_cast<double>(lpLo->mEmissionRateBase),
-                                static_cast<double>(lpHi->mEmissionRateBase),
-                                static_cast<double>(mpTempBehaviour->mEmissionRateBase),
-                                static_cast<double>(lpLo->mVelBase.y),
-                                static_cast<double>(lpHi->mVelBase.y),
-                                static_cast<double>(mpTempBehaviour->mVelBase.y),
-                                lpLo->mColour[0].r, lpLo->mColour[0].g,
-                                lpLo->mColour[0].b, lpLo->mColour[0].a,
-                                lpHi->mColour[0].r, lpHi->mColour[0].g,
-                                lpHi->mColour[0].b, lpHi->mColour[0].a,
-                                mpTempBehaviour->mColour[0].r, mpTempBehaviour->mColour[0].g,
-                                mpTempBehaviour->mColour[0].b, mpTempBehaviour->mColour[0].a,
-                                lpLo->mFlags, lpHi->mFlags, mpTempBehaviour->mFlags);
-                            CgsDev::Log::WriteToLog(lacMsg);
-                        }
-                    }
                 }
             }
 
@@ -2141,7 +2030,9 @@ void LionSinCos(f32 afAngle, f32& arSin, f32& arCos)
 {
     // asm 0x82910540..0x8291056C: x = angle - 2pi * round(angle / 2pi), i.e. fold to [-pi, pi].
     // `vrfin` is round-to-NEAREST (not trunc, not floor), which is what makes the fold symmetric.
-    const f32 lfRounded = std::nearbyintf(afAngle * KF_ONE_OVER_2PI);
+    const __vector4 lScaled = { afAngle * KF_ONE_OVER_2PI, 0.0f, 0.0f, 0.0f };
+    const __vector4 lRounded = __vrfin(lScaled);
+    const f32 lfRounded = lRounded.x;
     const f32 lfX       = afAngle - KF_TWO_PI * lfRounded;
 
     const f32 lfX2 = lfX * lfX;
@@ -2645,13 +2536,13 @@ u32 cParticleEmitter::Update(const cTime& arTime)
                 {
                     // asm 0x82915508..0x8291556C -- identity, then the locator's translation
                     // with w forced to 1 (see the banner's vsel note).
-                    mParentBaseMatrix.xa = { 1.0f, 0.0f, 0.0f, 0.0f };
-                    mParentBaseMatrix.ya = { 0.0f, 1.0f, 0.0f, 0.0f };
-                    mParentBaseMatrix.za = { 0.0f, 0.0f, 1.0f, 0.0f };
-                    mParentBaseMatrix.wa = { lLocatorMatrix.wa.x,
+                    { const cVector lRow = { 1.0f, 0.0f, 0.0f, 0.0f }; mParentBaseMatrix.xa = lRow; }
+                    { const cVector lRow = { 0.0f, 1.0f, 0.0f, 0.0f }; mParentBaseMatrix.ya = lRow; }
+                    { const cVector lRow = { 0.0f, 0.0f, 1.0f, 0.0f }; mParentBaseMatrix.za = lRow; }
+                    { const cVector lRow = { lLocatorMatrix.wa.x,
                                              lLocatorMatrix.wa.y,
                                              lLocatorMatrix.wa.z,
-                                             1.0f };
+                                             1.0f }; mParentBaseMatrix.wa = lRow; }
                 }
                 else
                 {
@@ -2821,10 +2712,10 @@ void cParticleEmitter::ParentMatrixCurrentBuild(cMatrix& arOutMatrix,
 
     // asm 0x829115B4..0x829115F4 -- the basis, w lanes masked to 0 and the translation to 1.
     cMatrix lBasis;
-    lBasis.xa = { lvRight.x,   lvRight.y,   lvRight.z,   0.0f };
-    lBasis.ya = { lvUp.x,      lvUp.y,      lvUp.z,      0.0f };
-    lBasis.za = { lvForward.x, lvForward.y, lvForward.z, 0.0f };
-    lBasis.wa = { lParticle.mPos.x, lParticle.mPos.y, lParticle.mPos.z, 1.0f };
+    { const cVector lRow = { lvRight.x,   lvRight.y,   lvRight.z,   0.0f }; lBasis.xa = lRow; }
+    { const cVector lRow = { lvUp.x,      lvUp.y,      lvUp.z,      0.0f }; lBasis.ya = lRow; }
+    { const cVector lRow = { lvForward.x, lvForward.y, lvForward.z, 0.0f }; lBasis.za = lRow; }
+    { const cVector lRow = { lParticle.mPos.x, lParticle.mPos.y, lParticle.mPos.z, 1.0f }; lBasis.wa = lRow; }
 
     // asm 0x829115F8..0x8291169C -- out = lBasis * mParentBaseMatrix, all four rows.
     const cMatrix& lrBase = mParentBaseMatrix;
@@ -2930,27 +2821,6 @@ void cParticleEmitter::Emit(cParticleRandomSeed& arSeed,
     lMatrix.wa.y = lvVelocity.y * lfElapsed + lMatrix.wa.y;
     lMatrix.wa.z = lvVelocity.z * lfElapsed + lMatrix.wa.z;
     lMatrix.wa.w = 1.0f;
-
-    // [lionspawn] ONE-SHOT bring-up witness. NOT console behaviour. The particle's SPAWN point,
-    // beside the locator row it was derived from, and the velocity it inherits (before the
-    // behaviour's mEmitterVelWeight) -- the first half of the "(carY, carZ, 0) where
-    // (carX, carY, carZ) belongs" split. DELETE-WHEN-STABLE.
-    {
-        static bool sbSpawnOnce = false;
-        if (!sbSpawnOnce)
-        {
-            sbSpawnOnce = true;
-            const cMatrix& lrLocNow = mpBindings->GetpLocator()->GetMat(arTime);
-            char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[lionspawn] spawn.wa=(%.2f,%.2f,%.2f,%.2f) locator.wa=(%.2f,%.2f,%.2f,%.2f)"
-                " vel=(%.2f,%.2f,%.2f)\n",
-                lMatrix.wa.x, lMatrix.wa.y, lMatrix.wa.z, lMatrix.wa.w,
-                lrLocNow.wa.x, lrLocNow.wa.y, lrLocNow.wa.z, lrLocNow.wa.w,
-                lvVelocity.x, lvVelocity.y, lvVelocity.z);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
 
     // asm 0x82914EDC..0x82914F68 -- walk this emitter's bucket list for a free slot.
     cParticleBucket* lpBucket = mpBucket;
@@ -3474,10 +3344,7 @@ u32 cParticleEmitter::SimulateParticlesInBucketGeneral(T lHelper,
     return luOutCount;
 }
 
-// The three the console emitted, and the only three that exist. `extern template` in the header
-// lets cParticleRender::EmitterRender / ::EmitterCubeRender call them without dragging this body
-// (and cParticleBucketManager) into ParticleRender.cpp -- which is also how the console ended up
-// with exactly one copy of each, in this TU.
+// Emit the three native helper variants here (ARTIST 0x829120C0 / 0x829123E0 / 0x82912610).
 template u32 cParticleEmitter::SimulateParticlesInBucketGeneral<MatrixSimulationHelper>(
     MatrixSimulationHelper, RenderedParticle*, cParticleBucket*, const cTime&, const cTime&,
     const cMatrix&);
