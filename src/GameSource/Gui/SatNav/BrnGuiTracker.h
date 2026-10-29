@@ -48,6 +48,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // GuiTracker::Update's out queue
 
 namespace CgsModule { struct Event; }   // GuiTracker::RecEvent payload base (pointer-only)
+namespace CgsGui { namespace CgsGuiModuleIO { struct OutputBuffer; } } // Update out-buffer (pointer-only; actual home: CgsGuiModuleIO.h)
 
 namespace BrnGui
 {
