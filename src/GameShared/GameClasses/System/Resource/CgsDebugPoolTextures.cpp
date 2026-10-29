@@ -237,11 +237,11 @@ namespace CgsResource
         MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
 
         lfY += KF_TEXT_LINE_STEP;
-        CgsCore::SPrintf(lacText, sizeof(lacText), "Width: %d", renderengine::Texture::GetWidth(lpTexture));
+        CgsCore::SPrintf(lacText, sizeof(lacText), "Width: %d", lpTexture->GetWidth());
         MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
 
         lfY += KF_TEXT_LINE_STEP;
-        CgsCore::SPrintf(lacText, sizeof(lacText), "Height: %d", renderengine::Texture::GetHeight(lpTexture));
+        CgsCore::SPrintf(lacText, sizeof(lacText), "Height: %d", lpTexture->GetHeight());
         MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
 
         lfY += KF_TEXT_LINE_STEP;
@@ -350,8 +350,8 @@ namespace CgsResource
     void DebugPoolTextures::RenderTextureActualSize(renderengine::Texture* lpTexture,
                                                     Vector2 lv2Position, Vector2 lv2Size)
     {
-        const u32 luWidth  = renderengine::Texture::GetWidth(lpTexture);
-        const u32 luHeight = renderengine::Texture::GetHeight(lpTexture);
+        const u32 luWidth  = lpTexture->GetWidth();
+        const u32 luHeight = lpTexture->GetHeight();
 
         // lv2Size carries the box limits: x = max width (a27), y = max height (a28).
         if (luWidth > static_cast<u32>(lv2Size.x) || luHeight > static_cast<u32>(lv2Size.y))
@@ -362,8 +362,8 @@ namespace CgsResource
         // Centre the actual-size quad inside the box: position + (size - texelSize) * 0.5.
         const Vector2 lv2TexelSize =
         {
-            static_cast<f32>(renderengine::Texture::GetWidth(lpTexture)),
-            static_cast<f32>(renderengine::Texture::GetHeight(lpTexture)),
+            static_cast<f32>(lpTexture->GetWidth()),
+            static_cast<f32>(lpTexture->GetHeight()),
             0.0f, 0.0f,
         };
         const Vector2 lv2Centre =
@@ -385,8 +385,8 @@ namespace CgsResource
                                                    Vector2 lv2Position, Vector2 lv2Size,
                                                    bool lbFlag0, bool lbFlag1)
     {
-        const f32 lfTexWidth  = static_cast<f32>(renderengine::Texture::GetWidth(lpTexture));
-        const f32 lfTexHeight = static_cast<f32>(renderengine::Texture::GetHeight(lpTexture));
+        const f32 lfTexWidth  = static_cast<f32>(lpTexture->GetWidth());
+        const f32 lfTexHeight = static_cast<f32>(lpTexture->GetHeight());
 
         // Centre of the box (position + size*0.5).
         const Vector2 lv2Centre =
@@ -559,10 +559,10 @@ namespace CgsResource
     {
         const TextureEntry* lpEntryA = static_cast<const TextureEntry*>(lpA);
         const TextureEntry* lpEntryB = static_cast<const TextureEntry*>(lpB);
-        const u32 luAreaA = renderengine::Texture::GetWidth(lpEntryA->mpTexture)
-                          * renderengine::Texture::GetHeight(lpEntryA->mpTexture);
-        const u32 luAreaB = renderengine::Texture::GetWidth(lpEntryB->mpTexture)
-                          * renderengine::Texture::GetHeight(lpEntryB->mpTexture);
+        const u32 luAreaA = lpEntryA->mpTexture->GetWidth()
+                          * lpEntryA->mpTexture->GetHeight();
+        const u32 luAreaB = lpEntryB->mpTexture->GetWidth()
+                          * lpEntryB->mpTexture->GetHeight();
         if (luAreaA < luAreaB)
             return -1;
         return (luAreaA > luAreaB) ? 1 : 0;
@@ -572,8 +572,8 @@ namespace CgsResource
     {
         const TextureEntry* lpEntryA = static_cast<const TextureEntry*>(lpA);
         const TextureEntry* lpEntryB = static_cast<const TextureEntry*>(lpB);
-        const u32 luWidthA = renderengine::Texture::GetWidth(lpEntryA->mpTexture);
-        const u32 luWidthB = renderengine::Texture::GetWidth(lpEntryB->mpTexture);
+        const u32 luWidthA = lpEntryA->mpTexture->GetWidth();
+        const u32 luWidthB = lpEntryB->mpTexture->GetWidth();
         if (luWidthA < luWidthB)
             return -1;
         return (luWidthA > luWidthB) ? 1 : 0;
@@ -583,8 +583,8 @@ namespace CgsResource
     {
         const TextureEntry* lpEntryA = static_cast<const TextureEntry*>(lpA);
         const TextureEntry* lpEntryB = static_cast<const TextureEntry*>(lpB);
-        const u32 luHeightA = renderengine::Texture::GetHeight(lpEntryA->mpTexture);
-        const u32 luHeightB = renderengine::Texture::GetHeight(lpEntryB->mpTexture);
+        const u32 luHeightA = lpEntryA->mpTexture->GetHeight();
+        const u32 luHeightB = lpEntryB->mpTexture->GetHeight();
         if (luHeightA < luHeightB)
             return -1;
         return (luHeightA > luHeightB) ? 1 : 0;
