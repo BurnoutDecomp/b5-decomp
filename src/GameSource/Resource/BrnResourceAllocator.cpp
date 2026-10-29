@@ -20,6 +20,31 @@
 // init (it points at the allocator object) so the ICE null-check passes regardless of init order.
 namespace BrnResource
 {
+    // Native startup wrappers. ARTIST mRuntimeAllocator is 82F2C854 and
+    // mEmbeddedTextureAllocator is 82F2C870; ConstructChildAllocators supplies
+    // their backing allocators. Static zero initialization is not backing memory.
+    HeapResourceAllocator Allocators::mRuntimeAllocator;
+    LinearResourceAllocator Allocators::mEmbeddedTextureAllocator;
+
+    // ARTIST82666E48/50/68: Runtime backing allocator, name and print level.
+    void HeapResourceAllocator::Construct(rw::core::GeneralResourceAllocator* lpAllocator,
+                                          const char* lpcName, s32 liPrintLevel)
+    {
+        mpGeneralAllocator = lpAllocator;
+        mpcName = lpcName;
+        miPrintLevel = liPrintLevel;
+    }
+
+    HeapResourceAllocator* GetRuntimeAllocator()
+    {
+        return &Allocators::mRuntimeAllocator;
+    }
+
+    LinearResourceAllocator* GetEmbeddedTextureAllocator()
+    {
+        return &Allocators::mEmbeddedTextureAllocator;
+    }
+
     namespace
     {
         // the PC bring-up routes the 27 pools' memory (~266 MB) through the MemoryModule's root banks (a
