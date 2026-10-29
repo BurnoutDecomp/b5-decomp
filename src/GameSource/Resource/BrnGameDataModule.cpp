@@ -5,8 +5,6 @@
 #include "rw/rwcore_structs.h"                                // rw::IResourceAllocator / Resource / ResourceDescriptor
 #include "rw/rwcore_general_alloc.h"                          // rw::core::GeneralResourceAllocator (CreateAllocators)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [5b trace] (Construct runs at runtime, gpDebugPrint ready)
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h" // RegisterAllResourceTypes (bridge)
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"     // ResolveResourceType (bridge)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"             // Pool::InitOptions (CreatePools)
 #include "GameShared/GameClasses/Memory/CgsMemoryBank.h"                        // MemoryBank::Params (CreatePoolBank)
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"                    // MemoryIO Input/OutputBuffer (async pump)
@@ -27,10 +25,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
 #include <cstring>                                                              // memset / memcmp / strncmp
 #include <cstdlib>                                                              // atoi (prop-instance zone number)
-#include <numeric>                                                              // lcm (native bank block geometry)
-#include <cstdio>                                                               // fopen/fread (PC schema-file leaf)
-#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator (schema blob carve)
-#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator::Malloc
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+
 
 // BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
@@ -38,46 +35,6 @@
 // stages, Construct, Update, Destruct and the ProcessXxxRequest handlers are DEFERRED.
 namespace BrnResource
 {
-    namespace
-    {
-
-        void ApplyHostPoolHeapAllowance(CgsResource::Events::CreatePoolRequest& lrRequest)
-        {
-            // Retain the existing measured allowance for converted WorldMapData.
-            // The same request adjustment feeds both sizing and actual creation.
-            if (lrRequest.miPoolId == 5)
-                lrRequest.mDescriptor.m_baseResourceDescriptors[0].m_size *= 2u;
-        }
-
-        u64 RoundMemoryBankSize(u64 luSize, u64 luGranule)
-        {
-            CGS_ASSERT(luGranule != 0, "Memory bank allocation granule must be nonzero");
-            return ((luSize + luGranule - 1u) / luGranule) * luGranule;
-        }
-
-        u32 GetMapMainBlockSize(const CgsMemory::MemoryMap& lrMap, s32 liBankId)
-        {
-            if (liBankId == 0)
-                return KU_GAMEDATA_ROOT_BLOCK_SIZE;
-            const CgsMemory::MemoryBank::Params* lpParams = 0;
-            for (s32 liBank = 0; liBank < lrMap.GetNumBanks(); ++liBank)
-            {
-                const CgsMemory::MemoryBank::Params* lpCandidate = lrMap.GetBank(liBank)->GetParams();
-                if (lpCandidate->mnBankId == liBankId)
-                {
-                    lpParams = lpCandidate;
-                    break;
-                }
-            }
-            CGS_ASSERT(lpParams != 0, "Memory-map parent bank was not found");
-            CGS_ASSERT(lpParams->mauBankBlocks[0] != 0, "Memory-map main bank has no blocks");
-            CGS_ASSERT(lpParams->mauBankSize[0] % lpParams->mauBankBlocks[0] == 0,
-                "Memory-map main bank size is not divisible by its block count");
-            return lpParams->mauBankSize[0] / lpParams->mauBankBlocks[0];
-        }
-
-    }
-
     // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
     // value, so this ctor runs at STATIC INIT (before gpDebugPrint is initialized); logging here would
     // deref an uninitialized gpDebugPrint and crash before the window opens.
@@ -86,8 +43,10 @@ namespace BrnResource
         mbIsNewModule = true;
     }
 
-    bool GameDataModule::Prepare(void* lpInputBuffer, void* lpOutputBuffer)
+    bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                                 const GameDataIO::InputBuffer* lpInputBuffer, GameDataIO::OutputBuffer* lpOutputBuffer)
     {
+        mFileSystemStatus.Construct();
         mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePrepareStage)
         {
@@ -95,7 +54,7 @@ namespace BrnResource
         case E_PREPARE_BASE:
             mePrepareStage = E_PREPARE_BASE;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
-                return false;
+                goto Pending;
             // X360 0x8267402C-0x82674040 registers these embedded pages in this
             // order after the base Prepare succeeds.
             mDebugComponent.Register();
@@ -104,23 +63,23 @@ namespace BrnResource
         case E_PREPARE_RESOURCE:
             mePrepareStage = E_PREPARE_RESOURCE;
             if (!mResourceModule.Prepare())
-                return false;
+                goto Pending;
             mReceiverQueue.Clear();
             // fall through
         case E_PREPARE_BANKS:
             mePrepareStage = E_PREPARE_BANKS;
-            if (!CreateBanks(lpInputBuffer, lpOutputBuffer))
-                return false;
+            if (!CreateBanks(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_POOLS:
             mePrepareStage = E_PREPARE_POOLS;
-            if (!CreatePools(lpInputBuffer, lpOutputBuffer))
-                return false;
+            if (!CreatePools(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_ALLOCATORS:
             mePrepareStage = E_PREPARE_ALLOCATORS;
-            if (!CreateAllocators(lpInputBuffer, lpOutputBuffer))
-                return false;
+            if (!CreateAllocators(lpInputStack, lpOutputStack))
+                goto Pending;
             // (X360: DLC stages 16-18 run between the allocators and stage 6 - deferred)
             // fall through
         case E_PREPARE_ATTRIBSYS:
@@ -138,7 +97,13 @@ namespace BrnResource
             CgsMemory::LinearMalloc* lpLinearAlloc  = mAllocatorList.GetLinearAllocator(22);
             if (!mAttribSysModule.Prepare(lpLinearAlloc, lpAttribHeap, lpGameTalkHeap,
                                           lpEastlHeap, 80))
-                return false;
+                goto Pending;
+            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput = 0;
+            lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib");
+            const bool lbSchemaReady = PrepareAttribSysSchemaResource(lpInputStack, lpOutputStack, lpAttribInput);
+            lpInputStack->DestroyIOBuffer(&lpAttribInput);
+            if (!lbSchemaReady)
+                goto Pending;
 
             // fall through
         }
@@ -146,8 +111,8 @@ namespace BrnResource
             // X360 stage 9 (LABEL_26): PrepareVehicleList. (Stage 7 GameTalk and stage 8's
             // module prepare stay deferred between ATTRIBSYS and here.)
             mePrepareStage = E_PREPARE_VEHICLE_LIST;
-            if (!PrepareVehicleList())
-                return false;
+            if (!PrepareVehicleList(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_CHALLENGE_LIST:
             // [challenge-list wave 2026-08-27] X360 stage 10 (LABEL_27):
@@ -158,52 +123,61 @@ namespace BrnResource
             // every readiness-gated accessor -- GetEventInfoFromEventId included -- fired
             // "E_WORLDDATACONTROLLERSTATE_READY <= meState" in live play near an event junction.
             mePrepareStage = E_PREPARE_CHALLENGE_LIST;
-            if (!PrepareFreeburnChallengeList())
-                return false;
+            if (!PrepareFreeburnChallengeList(lpInputStack, lpOutputStack))
+                goto Pending;
+            miICEListPrepareStage = 0;
             // fall through
         case E_PREPARE_ICE_LIST:
             // X360 stage 11 (LABEL_28): PrepareICEList.
             mePrepareStage = E_PREPARE_ICE_LIST;
-            if (!PrepareICEList())
-                return false;
+            if (!PrepareICEList(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_WHEEL_LIST:
             // X360 stage 12 (LABEL_30): PrepareWheelList.
             mePrepareStage = E_PREPARE_WHEEL_LIST;
-            if (!PrepareWheelList())
-                return false;
+            if (!PrepareWheelList(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_HUD_MESSAGES:
             // [gateui r3] X360 stage 13: PrepareHudMessages @0x8266C8E0 -- "HudMessages.hm"
             // into pool 11, then acquire + HudMessageController::AddMessages. This is what
             // gives GuiCache::mpHudMessageController something to point at.
             mePrepareStage = E_PREPARE_HUD_MESSAGES;
-            if (!PrepareHudMessages())
-                return false;
+            if (!PrepareHudMessages(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_POPUPS:
             // Stage 14: PreparePopups -- "Popups.pup" into pool 11, then acquire +
             // PopupController::AddPopupResource. This is what gives GuiCache's popup
             // controller (and so the overlays director) a table to resolve overlays against.
             mePrepareStage = E_PREPARE_POPUPS;
-            if (!PreparePopups())
-                return false;
+            if (!PreparePopups(lpInputStack, lpOutputStack))
+                goto Pending;
             // fall through
         case E_PREPARE_DONE:
-            meReleaseStage = E_PREPARE_START;
-            mePrepareStage = E_PREPARE_DONE;
+            meReleaseStage = E_RELEASE_START;
+            mePrepareStage = E_PREPARE_BASE;
+            lpOutputBuffer->LockForWrite();
+            lpOutputBuffer->SetAllocatorList(&mAllocatorList);
+            lpOutputBuffer->UnlockForWrite();
             return true;
         default:
             CGS_ASSERT(false, "Invalid stage");
-            return false;
+            goto Pending;
         }
+    Pending:
+        lpOutputBuffer->LockForWrite();
+        lpOutputBuffer->SetFileSystemStatusInterface(&mFileSystemStatus);
+        lpOutputBuffer->UnlockForWrite();
+        return false;
     }
 
-    // ARTIST8266DA28. Current GamePrepare has no IO stacks, so only the scratch
-    // transport is a PC adaptation; map rows, request identities and waits are original.
-    bool GameDataModule::CreateBanks(void*, void*)
+    // ARTIST8266DA28: per-pass Resource input carve, original map requests and response wait.
+    bool GameDataModule::CreateBanks(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        lResourceInput.Construct();
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         if (miNumBankCreationRequests == 0)
         {
             CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
@@ -215,14 +189,12 @@ namespace BrnResource
                 const s32 liEventId = miNumBankCreationRequests++;
                 lRequest.Construct(&mReceiverQueue, liEventId);
                 CgsMemory::MemoryBank::Params lParams = *mpMemoryMap->GetBank(liBank)->GetParams();
-                lParams.mauBankSize[0] = GetHostMainBankSize(*mpMemoryMap, lParams);
-                lParams.mauBankBlocks[0] = lParams.mauBankSize[0] / luMainBlockSize;
                 lRequest.SetParams(&lParams);
                 lRequests.AddEvent(&lRequest, 9);
             }
-            lResourceInput.LockForWrite();
-            lResourceInput.AppendResourceQueue(&lRequests);
-            lResourceInput.UnlockForWrite();
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequests);
+            lpResourceInput->UnlockForWrite();
         }
         else if (mReceiverQueue.GetLength() == miNumBankCreationRequests)
         {
@@ -232,15 +204,17 @@ namespace BrnResource
         }
         // Existing ResourceModule transport owns the real memory request/response
         // pump. One pass per Prepare call; there is no direct creation fallback.
-        mResourceModule.Update(&lResourceInput, 0);
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
         return false;
     }
 
     // ARTIST8266DB88. Every created object is owned by PoolModule::maPools; the
     // memory map already contains each bank, parent, dependency and heap record.
-    bool GameDataModule::CreatePools(void*, void*)
+    bool GameDataModule::CreatePools(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        lResourceInput.Construct();
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         if (miNumPoolCreationRequests == 0)
         {
             CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
@@ -256,9 +230,9 @@ namespace BrnResource
                 lRequest.miEventId = miNumPoolCreationRequests++;
                 lRequests.AddEvent(&lRequest, 0);
             }
-            lResourceInput.LockForWrite();
-            lResourceInput.AppendResourceQueue(&lRequests);
-            lResourceInput.UnlockForWrite();
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequests);
+            lpResourceInput->UnlockForWrite();
         }
         else if (mReceiverQueue.GetLength() == miNumPoolCreationRequests)
         {
@@ -266,278 +240,134 @@ namespace BrnResource
             mReceiverQueue.Clear();
             return true;
         }
-        mResourceModule.Update(&lResourceInput, 0);
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
         return false;
     }
 
-    // ------------------------------------------------------------------------------------------
-    // The rw allocator OBJECTS the registry's pointer rows reference. On the X360 the create
-    // requests are serviced by CgsMemory::MemoryModule (ProcessCreateLinearAllocatorRequest
-    // @0x8286D130 / the rw-general sibling), which carves a leaf memory bank per allocator and
-    // materialises the allocator object service-side, returning its pointer in the response the
-    // CreateAllocators drain stores into mapGeneratedRW*Allocators. [marked deviation: the async
-    // memory dispatch is deferred (CreatePools precedent), so the objects live here, TU-local.]
-    static rw::LinearResourceAllocator        s_aRWLinearAllocators[5];
-    static rw::core::GeneralResourceAllocator s_aRWGeneralAllocators[5];
-
-    // @ 0x8266DD00 - create the memory map's allocator set and publish it through the
-    // bank->allocator registry (mAllocatorList) the OutputBuffer hands to every module Prepare.
-    //
-    // The X360 is a resumable two-phase machine: phase 1 walks the memory map's five allocator
-    // record tables (mpMemoryMap +16..+32 counts / +44..+60 tables) and publishes one create
-    // request per record into the ResourceModule input (event types 10 raw-resource / 14 linear +
-    // heap / 11 rw-linear / 12 rw-general; each request carries &mReceiverQueue as mpUser, the
-    // slot index, and - for the type-14s - the module-embedded LinearMalloc/HeapMalloc object the
-    // service constructs in place), registering each record's bank id in the AllocatorList
-    // (maiAllocatorMap[bank] = per-type slot, maeAllocatorType[bank] = family) as it goes; later
-    // calls pump UpdateResourceModule until every response is back in mReceiverQueue, then drain:
-    // case 10 stores the returned rw::Resource + descriptor into maGeneratedRawResources /
-    // ...Descriptors, cases 11/12 store the returned allocator pointers into
-    // mapGeneratedRW{Linear,General}Allocators AND the AllocatorList rows, case 14 has nothing to
-    // store (the embedded objects were constructed in place). [marked deviation, CreatePools
-    // precedent: the request/response round-trip through the ResourceModule + the per-allocator
-    // leaf-bank carve (CreateBanks' bank tree is not stood up on PC) are deferred - the same
-    // memory-map records (BrnMemoryMapData.h allocator tables, dumped from unk_82F2A788) are
-    // driven synchronously here, backing memory comes from the root debug allocator, and the
-    // registry/embedded-object stores are the faithful part.] Runs once (the Prepare stage
-    // machine re-enters until done).
-    bool GameDataModule::CreateAllocators(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
+    // ARTIST8266DD00: publish canonical map requests, then wait for every original response.
+    bool GameDataModule::CreateAllocators(CgsModule::IOBufferStack* lpInputStack,
+                                          CgsModule::IOBufferStack* lpOutputStack)
     {
-        // X360 (every call, before the outstanding-request check): wire the audio-stream
-        // allocator row at the module-embedded LinearMalloc (`a1[106765] = a1 + 109814`).
-        // ⭐ 2026-08-16 (boot audit F-P7-22). Construct @0x82671C94-9C runs
-        // CgsMemory::LinearMalloc::Construct on this member (gm-data + 0x6B3D8) before
-        // publishing it. We published the pointer without ever constructing the object --
-        // which only works because the module happens to live in static storage and is
-        // therefore zero-initialised, and stops working the moment it is heap-hosted (which
-        // is what the console does: the boot allocator carves the whole game module).
-        mAudioStreamAllocator.Construct();
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         mAllocatorList.mpAudioStreamAllocator = &mAudioStreamAllocator;
-
-        static bool s_bAllocatorsCreated = false;
-        if (s_bAllocatorsCreated)
-            return true;
-        s_bAllocatorsCreated = true;
-
-        rw::IResourceAllocator* lpAllocator =
-            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
-        if (lpAllocator == 0)
-            return true;
-
-        miNumAllocatorCreationRequests = 0;
-        s32 lNumCreated = 0;
-
-        // Carve one memory-type lane from the root debug allocator (the deviation's stand-in for
-        // the per-allocator leaf-bank carve).
-        struct LaneAlloc
+        if (miNumAllocatorCreationRequests == 0)
         {
-            static void* Carve(rw::IResourceAllocator* lpRoot, u32 luSize, u32 luAlign,
-                               const char* lpcName)
+            CgsResource::ResourceIO::ResourceRequestQueue<16384> lRequests;
+            lRequests.Construct();
+            for (s32 li = 0; li < mpMemoryMap->GetNumRawResources(); ++li)
             {
-                rw::ResourceDescriptor lDesc;
-                for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
+                CgsMemory::MemoryIO::CreateResourceRequest lRequest = *mpMemoryMap->GetRawResource(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequests.AddEvent(&lRequest, 10);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
+                mAllocatorList.mapRawResources[li] = &maGeneratedRawResources[li];
+                mAllocatorList.mapRawResourceDescriptors[li] = &maGeneratedRawResourceDescriptors[li];
+            }
+            for (s32 li = 0; li < mpMemoryMap->GetNumLinearAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest lRequest = *mpMemoryMap->GetLinearAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequest.SetHeapAllocator(0);
+                lRequest.SetLinearAllocator(&maGeneratedLinearAllocators[li]);
+                lRequests.AddEvent(&lRequest, 14);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
+                mAllocatorList.mapLinearAllocators[li] = &maGeneratedLinearAllocators[li];
+            }
+            for (s32 li = 0; li < mpMemoryMap->GetNumHeapAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateAllocatorRequest lRequest = *mpMemoryMap->GetHeapAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequest.SetHeapAllocator(&maGeneratedHeapAllocators[li]);
+                lRequest.SetLinearAllocator(0);
+                lRequests.AddEvent(&lRequest, 14);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
+                mAllocatorList.mapHeapAllocators[li] = &maGeneratedHeapAllocators[li];
+            }
+            for (s32 li = 0; li < mpMemoryMap->GetNumRWLinearAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateLinearAllocatorRequest lRequest = *mpMemoryMap->GetRWLinearAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequests.AddEvent(&lRequest, 11);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
+            }
+            for (s32 li = 0; li < mpMemoryMap->GetNumRWGeneralAllocators(); ++li)
+            {
+                CgsMemory::MemoryIO::CreateGeneralAllocatorRequest lRequest = *mpMemoryMap->GetRWGeneralAllocator(li)->GetRequest();
+                lRequest.SetReceiverQueue(&mReceiverQueue);
+                lRequest.SetEventId(li);
+                lRequests.AddEvent(&lRequest, 12);
+                ++miNumAllocatorCreationRequests;
+                mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
+                mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;
+            }
+            lpResourceInput->LockForWrite();
+            lpResourceInput->AppendResourceQueue(&lRequests);
+            lpResourceInput->UnlockForWrite();
+        }
+        else if (mReceiverQueue.GetLength() == miNumAllocatorCreationRequests)
+        {
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (liSize > 0)
+            {
+                switch (liType)
                 {
-                    lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
-                    lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
+                case 10:
+                {
+                    const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse =
+                        static_cast<const CgsMemory::MemoryIO::CreateResourceResponse*>(lpEvent);
+                    maGeneratedRawResources[lpResponse->GetEventId()] = lpResponse->GetResource();
+                    maGeneratedRawResourceDescriptors[lpResponse->GetEventId()] = lpResponse->GetDescriptor();
+                    break;
                 }
-                lDesc.m_baseResourceDescriptors[0].m_size      = luSize;
-                lDesc.m_baseResourceDescriptors[0].m_alignment = luAlign < 1 ? 1 : luAlign;
-                rw::Resource lRes = lpRoot->DoAllocate(lDesc, lpcName);
-                return lRes.m_baseResources[0];
+                case 11:
+                {
+                    const CgsMemory::MemoryIO::CreateLinearAllocatorResponse* lpResponse =
+                        static_cast<const CgsMemory::MemoryIO::CreateLinearAllocatorResponse*>(lpEvent);
+                    lpResponse->GetAllocator(&mapGeneratedRWLinearAllocators[lpResponse->GetEventId()]);
+                    mAllocatorList.mapRWLinearAllocators[lpResponse->GetEventId()] =
+                        mapGeneratedRWLinearAllocators[lpResponse->GetEventId()];
+                    break;
+                }
+                case 12:
+                {
+                    const CgsMemory::MemoryIO::CreateGeneralAllocatorResponse* lpResponse =
+                        static_cast<const CgsMemory::MemoryIO::CreateGeneralAllocatorResponse*>(lpEvent);
+                    lpResponse->GetAllocator(&mapGeneratedRWGeneralAllocators[lpResponse->GetEventId()]);
+                    mAllocatorList.mapRWGeneralAllocators[lpResponse->GetEventId()] =
+                        mapGeneratedRWGeneralAllocators[lpResponse->GetEventId()];
+                    break;
+                }
+                case 14:
+                    break;
+                default:
+                    CGS_ASSERT(false, "Invalid event type\n");
+                    break;
+                }
+                liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
             }
-        };
-
-        // ---- type-10 records: raw resources (the drain's case 10 fills the embedded pair) ----
-        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RAW_ALLOCATORS && li < 2; ++li)
-        {
-            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RAW_ALLOCATORS[li];
-            ++miNumAllocatorCreationRequests;
-
-            rw::Resource&           lrRes  = maGeneratedRawResources[li];
-            rw::ResourceDescriptor& lrDesc = maGeneratedRawResourceDescriptors[li];
-            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-            {
-                lrRes.m_baseResources[lu] = 0;
-                lrDesc.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
-                lrDesc.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
-                if (lrDef.mauSize[lu] != 0)
-                    lrRes.m_baseResources[lu] =
-                        LaneAlloc::Carve(lpAllocator, lrDef.mauSize[lu], lrDef.mauAlign[lu],
-                                         lrDef.mpcName);
-            }
-
-            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
-            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
-            mAllocatorList.mapRawResources[li]              = &lrRes;
-            mAllocatorList.mapRawResourceDescriptors[li]    = &lrDesc;
-            ++lNumCreated;
+            miNumAllocatorCreationRequests = 0;
+            mReceiverQueue.Clear();
+            return true;
         }
-
-        // ---- type-14 records, linear family: LinearMalloc constructed over the module-embedded
-        //      objects (the service side does `LinearMalloc::Create(record.mpLinear, bankMem,
-        //      size)` @0x8286D9F0; the publisher passed &maGeneratedLinearAllocators[i]) --------
-        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_LINEAR_ALLOCATORS && li < 7; ++li)
-        {
-            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_LINEAR_ALLOCATORS[li];
-            ++miNumAllocatorCreationRequests;
-
-            void* lpMem = LaneAlloc::Carve(lpAllocator, lrDef.mauSize[0], lrDef.mauAlign[0],
-                                           lrDef.mpcName);
-            if (lpMem == 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for linear "
-                                          << lrDef.mpcName << "\n";
-                continue;
-            }
-            maGeneratedLinearAllocators[li].Construct();
-            maGeneratedLinearAllocators[li].Create(lpMem, lrDef.mauSize[0]);
-
-            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
-            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
-            mAllocatorList.mapLinearAllocators[li]          = &maGeneratedLinearAllocators[li];
-            ++lNumCreated;
-        }
-
-        // ---- type-14 records, heap family: HeapMalloc constructed over the embedded objects
-        //      (service side: `HeapMalloc::Construct(record.mpHeap, bankMem, size)`) ------------
-        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_HEAP_ALLOCATORS && li < 8; ++li)
-        {
-            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_HEAP_ALLOCATORS[li];
-            ++miNumAllocatorCreationRequests;
-
-            void* lpMem = LaneAlloc::Carve(lpAllocator, lrDef.mauSize[0], lrDef.mauAlign[0],
-                                           lrDef.mpcName);
-            if (lpMem == 0)
-            {
-                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for heap "
-                                          << lrDef.mpcName << "\n";
-                continue;
-            }
-            maGeneratedHeapAllocators[li].Construct(lpMem, static_cast<s32>(lrDef.mauSize[0]));
-
-            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
-            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
-            mAllocatorList.mapHeapAllocators[li]            = &maGeneratedHeapAllocators[li];
-            ++lNumCreated;
-        }
-
-        // ---- type-11 records: rw linear resource allocators (service @0x8286D130: bank carve
-        //      per non-zero descriptor lane, then LinearResourceAllocator::Initialize(resource,
-        //      capacity); the drain's case 11 stores the returned pointer) --------------------
-        // ⚠️ [marked deviation, 2026-08-14 deformation-mount wave] HOST HEADROOM x2 on the
-        // rw-linear lane sizes. The memory map's budgets are CONSOLE truth sized for 32-bit
-        // objects; the host's widened types must carve MORE from the same banks. The first
-        // measured overflow: bank 23 "PhysicsAlloc" (pool-0 budget 0x3ED800) already holds the
-        // sim module's widened carve, and DeformationManager::Prepare's 28-model pool (console
-        // 28 x 26496 = 0xB5200; host 28 x sizeof(DeformableObject), pointer-widened) tipped it --
-        // LinearResourceAllocator::DoAllocate returned a null lane and the boot died on the
-        // "mpaModels != NULL" tripwire + an AV in ClearVariables. The budgets scale, the map
-        // data itself stays untouched (the carve comes from the host debug allocator).
-        static const u32 KU_HOST_RWLINEAR_HEADROOM = 2u;
-        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RWLINEAR_ALLOCATORS && li < 5; ++li)
-        {
-            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RWLINEAR_ALLOCATORS[li];
-            ++miNumAllocatorCreationRequests;
-
-            rw::Resource           lRes;
-            rw::ResourceDescriptor lCapacity;
-            bool lbAllocOk = true;
-            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-            {
-                const u32 luHostSize = lrDef.mauSize[lu] * KU_HOST_RWLINEAR_HEADROOM;
-                lCapacity.m_baseResourceDescriptors[lu].m_size      = luHostSize;
-                lCapacity.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
-                lRes.m_baseResources[lu] = 0;
-                if (lrDef.mauSize[lu] == 0)
-                    continue;
-                lRes.m_baseResources[lu] =
-                    LaneAlloc::Carve(lpAllocator, luHostSize, lrDef.mauAlign[lu],
-                                     lrDef.mpcName);
-                if (lRes.m_baseResources[lu] == 0)
-                    lbAllocOk = false;
-            }
-            if (!lbAllocOk)
-            {
-                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for rw linear "
-                                          << lrDef.mpcName << "\n";
-                continue;
-            }
-            // (LinearResourceAllocator::GetResourceDescriptor is the identity - a linear
-            // allocator keeps its bookkeeping in its own object - so the carve == the capacity.)
-            s_aRWLinearAllocators[li].AdoptMemory(lRes, lCapacity);
-
-            mapGeneratedRWLinearAllocators[li]              = &s_aRWLinearAllocators[li];
-            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
-            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
-            mAllocatorList.mapRWLinearAllocators[li]        = &s_aRWLinearAllocators[li];
-            ++lNumCreated;
-        }
-
-        // ---- type-12 records: rw general resource allocators (EA GeneralAllocator pair). The
-        //      X360 service sizes the carve via GetResourceDescriptor (lane 0 grows by the
-        //      in-heap bookkeeping overhead, rounded to the lane alignment) then Initializes
-        //      with the ORIGINAL capacity - mirrored here; the drain's case 12 stores the
-        //      returned pointer. -----------------------------------------------------------
-        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS && li < 5; ++li)
-        {
-            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RWGENERAL_ALLOCATORS[li];
-            ++miNumAllocatorCreationRequests;
-
-            rw::BaseResourceDescriptors<5> lWanted, lCarve;
-            for (u32 lu = 0; lu < 5; ++lu)
-            {
-                lWanted.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
-                lWanted.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
-            }
-            rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lCarve, &lWanted);
-
-            rw::Resource           lRes;
-            rw::ResourceDescriptor lCapacity;
-            bool lbAllocOk = true;
-            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-            {
-                lCapacity.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
-                lCapacity.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
-                lRes.m_baseResources[lu] = 0;
-                if (lCarve.m_baseResourceDescriptors[lu].m_size == 0)
-                    continue;
-                lRes.m_baseResources[lu] =
-                    LaneAlloc::Carve(lpAllocator,
-                                     lCarve.m_baseResourceDescriptors[lu].m_size,
-                                     lCarve.m_baseResourceDescriptors[lu].m_alignment,
-                                     lrDef.mpcName);
-                if (lRes.m_baseResources[lu] == 0)
-                    lbAllocOk = false;
-            }
-            if (!lbAllocOk)
-            {
-                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for rw general "
-                                          << lrDef.mpcName << "\n";
-                continue;
-            }
-            s_aRWGeneralAllocators[li].AdoptMemory(lRes, lCapacity);
-
-            mapGeneratedRWGeneralAllocators[li]             = &s_aRWGeneralAllocators[li];
-            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
-            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;
-            mAllocatorList.mapRWGeneralAllocators[li]       = &s_aRWGeneralAllocators[li];
-            ++lNumCreated;
-        }
-
-        *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] created " << lNumCreated << " of "
-                                  << miNumAllocatorCreationRequests
-                                  << " memory-map allocators (raw "
-                                  << KI_NUM_MEMORY_MAP_RAW_ALLOCATORS << ", linear "
-                                  << KI_NUM_MEMORY_MAP_LINEAR_ALLOCATORS << ", heap "
-                                  << KI_NUM_MEMORY_MAP_HEAP_ALLOCATORS << ", rw linear "
-                                  << KI_NUM_MEMORY_MAP_RWLINEAR_ALLOCATORS << ", rw general "
-                                  << KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS << ")\n";
-
-        // X360 (end of the drain): the outstanding counter is zeroed and the receiver cleared
-        // once every response has been stored.
-        miNumAllocatorsCreated         = lNumCreated;   // FLAG: updater outside this fn's asm
-        miNumAllocatorCreationRequests = 0;
-        return true;
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return false;
     }
 
     // @ 0x82673258 -- the staged schema registration (Prepare stage 6 helper). X360:
@@ -550,81 +380,48 @@ namespace BrnResource
     //            Clear + stage = 2 (still returns false through the tail).
     //   stage 2: return true (complete). stage >= 3 asserts "Invalid resource prepare stage.\n".
     //
-    namespace { CgsResource::ResourceIO::InputBuffer* GetListPrepareResourceInput(); }
+    extern u8 gaNativeSchemaVlt[5664];
+    extern u8 gaNativeSchemaBin[20352];
 
-    bool GameDataModule::PrepareAttribSysSchemaResource(
-            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
+    // ARTIST82673258: stage requests and both IO-stack lifetimes are per invocation.
+    bool GameDataModule::PrepareAttribSysSchemaResource(CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack, CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");   // X360 line 1481
-
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpResourceInput->LockForWrite();
         switch (miResourcePrepareStage)
         {
         case 0:
-        {
-            // [PC seam] the schema pair is exe-baked rodata on the X360; the PC
-            // build loads the LE-ported files the schema port tool stages
-            // (build/game/schema.vlt + schema.bin -- the filenames the vault's
-            // own DepN dependency table records). One-time load into the
-            // AttribSys package allocator (the blobs stay live for the process
-            // exactly like the X360 rodata). Gated on KB_PC_ATTRIB_SCHEMA_FILES
-            // until the Attrib SDK runtime cluster is linked (see the constant's
-            // note in CgsAttribSysModule.h).
-            static void* s_pSchemaVlt = 0;
-            static void* s_pSchemaBin = 0;
-            static s32   s_iSchemaVltSize = 0;
-            static s32   s_iSchemaBinSize = 0;
-
-            {
-                static bool s_bLoggedSchemaGate = false;
-                if (!s_bLoggedSchemaGate)
-                {
-                    s_bLoggedSchemaGate = true;
-                }
-                // X360: RegisterSchema(&mReceiverQueue, schemaVlt, 5664, schemaBin, 20352);
-                // mReceiverQueue.Clear(); miResourcePrepareStage = 1; + the ProcessInputs tail.
-                miResourcePrepareStage = 2;   // gated jump (see the seam note above)
-                return false;
-            }
-
-            // X360 stage 0: push RegisterSchema (event type 1) with the two blobs
-            // (exe-baked there, the ported LE files here), clear the receiver, advance.
+            lpAttribModuleInputBuffer->LockForWrite();
             lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterSchema(
-                &mReceiverQueue, s_pSchemaVlt, s_iSchemaVltSize, s_pSchemaBin, s_iSchemaBinSize);
+                &mReceiverQueue, gaNativeSchemaVlt, sizeof(gaNativeSchemaVlt),
+                gaNativeSchemaBin, sizeof(gaNativeSchemaBin));
+            lpAttribModuleInputBuffer->UnlockForWrite();
             mReceiverQueue.Clear();
             miResourcePrepareStage = 1;
-
-            // The shared X360 per-pass tail @0x826733B0-E4, in the console's order:
-            // unlock, UpdateResourceModule @0x826663B0, destroy the carve, then a DIRECT
-            // AttribSysModule::ProcessInputs on the attrib input (the schema request is
-            // consumed synchronously; the SchemaRegisteredResponse lands on mReceiverQueue
-            // for stage 1).
-            //
-            // ⭐ THE RESOURCE PUMP IS RESTORED, 2026-08-17 (boot audit F-P7-17). Only the
-            // ProcessInputs half was here. Latent while the schema blobs come from files --
-            // nothing is queued for the resource module to service -- and wrong the moment
-            // the schema arrives as a resource, which is the shape the console is written
-            // for. Same pump the list-prepare tail below already calls.
-            mResourceModule.Update(GetListPrepareResourceInput(), 0);
-            mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
-            return false;
-        }
+            break;
         case 1:
-            if (mReceiverQueue.GetLength() <= 0)
+            if (mReceiverQueue.GetLength() > 0)
             {
-                // Keep draining while the reply is pending (the X360 tail runs
-                // ProcessInputs on every stage-0/1 pass).
-                mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
-                return false;
+                mReceiverQueue.Clear();
+                miResourcePrepareStage = 2;
             }
-            mReceiverQueue.Clear();
-            miResourcePrepareStage = 2;
-            return false;
+            break;
         case 2:
+            lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
             return true;
         default:
-            CGS_ASSERT(false, "Invalid resource prepare stage.\n");   // X360 line 1534
-            return false;
+            CGS_ASSERT(false, "Invalid resource prepare stage.\n");
+            break;
         }
+        lpResourceInput->UnlockForWrite();
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
+        return false;
     }
 
     // ====================================================================================
@@ -661,22 +458,6 @@ namespace BrnResource
     // ====================================================================================
     namespace
     {
-        // The X360 carves a "Resource" ResourceIO::InputBuffer off the IOBufferStack on every
-        // pass and destroys it at the end. [marked deviation] the IOBufferStack is deferred,
-        // so the two prepares share one function-local static, exactly like Update's own
-        // s_ResourceInput and the CreatePools bring-up path.
-        CgsResource::ResourceIO::InputBuffer* GetListPrepareResourceInput()
-        {
-            static CgsResource::ResourceIO::InputBuffer s_ListPrepareInput;
-            static bool s_bConstructed = false;
-            if (!s_bConstructed)
-            {
-                s_bConstructed = true;
-                s_ListPrepareInput.Construct();
-            }
-            return &s_ListPrepareInput;
-        }
-
         const s32 KI_DATA_LIST_POOL_ID = 5;   // X360 immediate (the "GameData" pool)
 
         // [gateui r3] PrepareHudMessages @0x8266C8E0 uses a DIFFERENT pool: `li r26, 0xB`
@@ -695,12 +476,14 @@ namespace BrnResource
         const s32 KI_FREEBURN_CHALLENGE_POOL_ID = 26;  // X360 immediate (`li r25, 0x1A`)
     }
 
-    bool GameDataModule::PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
+    bool GameDataModule::PrepareDataListResource(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                                                 s32& lriStage, const char* lpcBundleFileName,
                                                  const char* lpcResourceName, bool lbAllowFailure,
                                                  s32 liPoolId,
                                                  CgsResource::ResourceHandle* lpOutHandle)
     {
-        CgsResource::ResourceIO::InputBuffer* lpResourceInput = GetListPrepareResourceInput();
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         lpResourceInput->LockForWrite();
 
         bool lbComplete = false;
@@ -794,6 +577,7 @@ namespace BrnResource
             lbFallThrough = false;
             lbComplete = false;
             lpResourceInput->UnlockForWrite();
+            lpInputStack->DestroyIOBuffer(&lpResourceInput);
             mReceiverQueue.Clear();
             return true;
         default:
@@ -803,12 +587,12 @@ namespace BrnResource
         }
         (void)lbFallThrough;
 
-        // The shared X360 tail: unlock the input, then UpdateResourceModule @0x826663B0
-        // (which on the PC is the embedded streaming engine's own pump), then destroy the
-        // carve. Runs on EVERY pass, completing or not -- that pump is what actually services
-        // the LoadBundle / AcquireResource this pass just published.
+        // ARTIST: only a pending pass pumps the resource module; terminal passes
+        // destroy their input carve and return after the response has been consumed.
         lpResourceInput->UnlockForWrite();
-        mResourceModule.Update(lpResourceInput, 0);
+        if (!lbComplete)
+            UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
 
         if (lbComplete)
         {
@@ -819,11 +603,11 @@ namespace BrnResource
     }
 
     // @ 0x8266C410 -- Prepare stage 9.
-    bool GameDataModule::PrepareVehicleList()
+    bool GameDataModule::PrepareVehicleList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
         CgsResource::ResourceHandle lHandle;
         lHandle.Clear();
-        if (!PrepareDataListResource(miVehicleListPrepareStage,
+        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miVehicleListPrepareStage,
                                      "Vehicles/VehicleList.bundle", "B5VehicleList",
                                      true /*mbAllowFailiure -- the X360 sets 1 here*/,
                                      KI_DATA_LIST_POOL_ID,
@@ -898,11 +682,11 @@ namespace BrnResource
     // BrnGui::WorldDataController::Prepare stage 9 waits on -- see the stage-10 comment in
     // Prepare above.
     // ========================================================================================
-    bool GameDataModule::PrepareFreeburnChallengeList()
+    bool GameDataModule::PrepareFreeburnChallengeList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
         CgsResource::ResourceHandle lHandle;
         lHandle.Clear();
-        if (!PrepareDataListResource(miChallengeListPrepareStage,
+        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miChallengeListPrepareStage,
                                      "OnlineChallenges.bndl", "B5ChallengeList",
                                      true /*mbAllowFailiure -- the X360 stores 1 here*/,
                                      KI_FREEBURN_CHALLENGE_POOL_ID,
@@ -974,11 +758,11 @@ namespace BrnResource
     // (DictionaryResourceType<ICE::ICETakeData> is registered in
     // CgsResourceTypeRegistration.cpp), so the bind is the console's own again.
     // ========================================================================================
-    bool GameDataModule::PrepareICEList()
+    bool GameDataModule::PrepareICEList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
         CgsResource::ResourceHandle lHandle;
         lHandle.Clear();
-        if (!PrepareDataListResource(miICEListPrepareStage,
+        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miICEListPrepareStage,
                                      "Cameras.bundle", "StandardICETakes",
                                      false /*mbAllowFailiure -- the X360 leaves it 0*/,
                                      KI_DATA_LIST_POOL_ID,
@@ -1026,11 +810,11 @@ namespace BrnResource
 
     // @ 0x8266D1F8 -- Prepare stage 12. (This one is NOT in the .ida-exports set -- the gap
     // rule applies: it was recovered straight from the ARTIST database with headless IDA.)
-    bool GameDataModule::PrepareWheelList()
+    bool GameDataModule::PrepareWheelList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
         CgsResource::ResourceHandle lHandle;
         lHandle.Clear();
-        if (!PrepareDataListResource(miWheelListPrepareStage,
+        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miWheelListPrepareStage,
                                      "Wheels/WheelList.bundle", "B5WheelList",
                                      false /*mbAllowFailiure -- the X360 sets 0 here*/,
                                      KI_DATA_LIST_POOL_ID,
@@ -1082,11 +866,11 @@ namespace BrnResource
     // console's AddMessages @0x8267D580 reads exactly ONE thing out of the response --
     // `CreateFromHandle(this + 4, response + 24)`, i.e. the {mpResourceMemory, mpSourceEntry}
     // handle pair -- so the two forms are observationally identical.
-    bool GameDataModule::PrepareHudMessages()
+    bool GameDataModule::PrepareHudMessages(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
         CgsResource::ResourceHandle lHandle;
         lHandle.Clear();
-        if (!PrepareDataListResource(miHudMessagesPrepareStage,
+        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miHudMessagesPrepareStage,
                                      "HudMessages.hm", "HudMessages.hm",
                                      false /*mbAllowFailiure -- the X360 stores 0 @0x8266C9C8*/,
                                      KI_GUI_DATA_POOL_ID,
@@ -1181,11 +965,11 @@ namespace BrnResource
     // PopupController::AddPopupResource instead of AddMessages. As in the HUD sibling, the
     // shared helper returns the resolved handle, and the response AddPopupResource reads is
     // rebuilt from it (AddPopupResource reads only the handle pair).
-    bool GameDataModule::PreparePopups()
+    bool GameDataModule::PreparePopups(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
         CgsResource::ResourceHandle lHandle;
         lHandle.Clear();
-        if (!PrepareDataListResource(miPopupsPrepareStage,
+        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miPopupsPrepareStage,
                                      "Popups.pup", "Popups.pup",
                                      false /*mbAllowFailiure*/,
                                      KI_GUI_DATA_POOL_ID,
@@ -1222,8 +1006,14 @@ namespace BrnResource
         CgsModule::ModuleSingleBuffered::Construct();
 
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
+        mePrepareStage = E_PREPARE_START;
+        meReleaseStage = E_RELEASE_DONE;
         miNumBankCreationRequests = 0;
+        miNumBanksCreated = 0;
         miNumPoolCreationRequests = 0;
+        miNumPoolsCreated = 0;
+        miNumAllocatorCreationRequests = 0;
+        miNumAllocatorsCreated = 0;
 
         // X360 0x82671B90: wire the in-flight event-slot pool -- capacity 96
         // (`*(a1+439324) = 96`), the module-embedded element array (a1+439328) and
@@ -1280,149 +1070,9 @@ namespace BrnResource
         // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
         mAllocatorList.Construct();
 
-        // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the
-        // X360 ConstructResourceModule (0x8266D570): it now builds the real CgsResource::ResourceModule::
-        // InitOptions composite (memory + pool + bundle-loader option blocks) instead of a bare
-        // MemoryModule InitOptions, carves the root region from the debug allocator, and constructs the
-        // ResourceModule. The MemoryModule block is fully populated (so MemoryModule carves its bank/block
-        // tables, as before); the Pool/BundleLoader blocks are minimal for now (PoolModule front half
-        // ignores them; the type-list + defrag/heap params land with the PoolModule back half + the full
-        // RegisterResourceTypes).
-        rw::IResourceAllocator* lpAllocator =
-            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
-        if (lpAllocator == 0)
-            return;
-
-        static CgsResource::ResourceModule::InitOptions s_InitOptions;   // outlives Construct (module keeps the region)
-        CgsMemory::MemoryModule::InitOptions& lrMem = s_InitOptions.mMemoryInitOptions;
-        lrMem.muMaxBanks  = 128;
-        lrMem.muHighestId = 1024;
-        lrMem.muMaxBlocks = 30000;
-        for (s32 liType = 0; liType < CgsMemory::MemoryBank::KI_NUM_TYPES; ++liType)
-        {
-            lrMem.maResourceSets[liType].mpDataStart = 0;
-            lrMem.maResourceSets[liType].muDataSize = 0;
-            lrMem.maResourceSets[liType].muNumBlocks = 0;
-        }
-
-        const u32 KU_TYPE0    = 0x0A000000u;   // 160 MB main  (2560 blocks)
-        const u32 KU_TYPE1    = 0x0E000000u;   // 224 MB gfx   (3584 blocks)
-        rw::ResourceDescriptor lRegionDesc;
-        for (u32 li = 0; li < rw::KU_RESOURCE_LANE_COUNT; ++li)
-        {
-            lRegionDesc.m_baseResourceDescriptors[li].m_size      = 0;
-            lRegionDesc.m_baseResourceDescriptors[li].m_alignment = 1;
-        }
-        // Align the root regions to the block size (64 KB): leaf-bank memory is root + N*blockSize, so a
-        // block-aligned root keeps every pool's per-type heap memory aligned to its heap alignment (16 main
-        // / 4096 graphics, both <= 64 KB) -- else Heap::Prepare asserts (lpHeapMemory % heapAlign == 0).
-        lRegionDesc.m_baseResourceDescriptors[0].m_alignment = KU_BLOCK;
-
-        lRegionDesc.m_baseResourceDescriptors[0].m_size = KU_TYPE0;
-        rw::Resource lType0 = lpAllocator->DoAllocate(lRegionDesc, "GameDataRoot0");
-        lrMem.maResourceSets[0].mpDataStart = lType0.m_baseResources[0];
-        lrMem.maResourceSets[0].muDataSize  = KU_TYPE0;
-        lrMem.maResourceSets[0].muNumBlocks = static_cast<u16>(KU_TYPE0 / KU_BLOCK);
-
-        lRegionDesc.m_baseResourceDescriptors[0].m_size = KU_TYPE1;
-        rw::Resource lType1 = lpAllocator->DoAllocate(lRegionDesc, "GameDataRoot1");
-        lrMem.maResourceSets[2].mpDataStart = lType1.m_baseResources[0];
-        lrMem.maResourceSets[2].muDataSize  = KU_TYPE1;
-        lrMem.maResourceSets[2].muNumBlocks = static_cast<u16>(KU_TYPE1 / KU_BLOCK);
-        // RW lanes 1/3/4 remain empty; SmallResource maps RW0/2 to its main/graphics heaps.
-
-        // [PC diagnostic] the serialised resource format stores pointers in FOUR-BYTE slots
-        // (the PointerFromU32 convention); on x64 that only round-trips while the pointee is
-        // below 4 GB, which is what BrnResourceAllocator's LowMemory::Reserve guarantees for
-        // this root. Log the carved bases so a regression is visible in BrnGame.log rather
-        // than as a truncated-pointer access violation deep in a FixUp consumer.
-        {
-            const u64 lu0 = reinterpret_cast<u64>(lType0.m_baseResources[0]);
-            const u64 lu1 = reinterpret_cast<u64>(lType1.m_baseResources[0]);
-            const bool lbLow = (lu0 + KU_TYPE0) <= 0x100000000ull && (lu1 + KU_TYPE1) <= 0x100000000ull;
-            *CgsDev::Log::gpDebugPrint << "[5b ROOT] GameDataRoot0="
-                                      << CgsDev::E_PRINTMODE_HEXONCE << lu0
-                                      << " GameDataRoot1="
-                                      << CgsDev::E_PRINTMODE_HEXONCE << lu1
-                                      << (lbLow ? " (below 4GB: OK for PointerFromU32)"
-                                                : " *** ABOVE 4GB -- PointerFromU32 slots WILL TRUNCATE ***")
-                                      << "\n";
-        }
-
-        // [BRIDGE -- marked deviation from X360 RegisterResourceTypes 0x82667EA8] Populate the pool type
-        // list from our existing singleton resource-type handlers. The X360 operator-new's 76 Type objects
-        // into a GSResourceType array, but that path's prerequisites (Type::operator new / InitCachedValues
-        // + the 76 subclasses) are deferred, and our tree already registers handler SINGLETONS into a
-        // CgsResource::TypeRegistry (RegisterAllResourceTypes). So reuse those: register them (idempotent),
-        // then forward the WHOLE registered set into the GSResourceType list. The PoolModule type-registry
-        // loop then copies them into maTypes (keyed by GetTypeID()).
-        //
-        // ⭐ CORRECTED 2026-08-14 (boot audit F-P7-18). This forwarded a HARDCODED FIVE ids
-        // (raster/texture-state/material-state/font/videodata) while the engine had ~45 handlers
-        // registered, so every other type reaching a pool took CgsResourcePool.cpp's "no registered
-        // type handler -- allocating raw, FixUp will be skipped" path. A resource whose FixUp never
-        // runs keeps its file-relative pointers, so the first consumer to walk one dereferences an
-        // unrelocated offset -- which is exactly how EnvironmentSettings::Dictionary (0x10014) crashed
-        // EnvironmentManager::StreamIn the moment the scripted world load was restored to its console
-        // position (F3). The console registers every handler it owns; so do we now.
-        CgsResource::RegisterAllResourceTypes();
-        enum { KI_MAX_GAME_TYPES = CgsResource::TypeRegistry::KU_MAX_REGISTERED_RESOURCE_TYPES };
-        static CgsResource::PoolModule::InitOptions::GSResourceType s_aGameTypes[KI_MAX_GAME_TYPES];
-        s32 lNumGameTypes = 0;
-        {
-            const u32 luRegistered = CgsResource::TypeRegistry::GetCount();
-            for (u32 lu = 0; lu < luRegistered && lNumGameTypes < KI_MAX_GAME_TYPES; ++lu)
-            {
-                const CgsResource::Type* lpType = CgsResource::TypeRegistry::GetByIndex(lu);
-                if (lpType == 0)
-                    continue;
-                s_aGameTypes[lNumGameTypes].mpType = lpType;
-                // The name column is the console's parallel string table; it is debug-only.
-                s_aGameTypes[lNumGameTypes].mpcName = CgsResource::TypeRegistry::GetNameByIndex(lu);
-                ++lNumGameTypes;
-            }
-        }
-        s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = s_aGameTypes;
-        s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = lNumGameTypes;
-
-        // ARTIST8266D5DC..D61C: reusable loader buffers and table capacities.
-        // The former synchronous adapter never consumed these option fields.
-        auto& lrLoaderOptions = s_InitOptions.mLoaderInitOptions;
-        lrLoaderOptions.miBundleHeaderBufferSize = 0x80000;
-        lrLoaderOptions.miDebugDataBufferSize = 0x200000;
-        lrLoaderOptions.miStreamBufferSize = 0x400000;
-        lrLoaderOptions.miMaxBundles = 512;
-        lrLoaderOptions.miMaxResourcesPerBundle = 10240;
-        lrLoaderOptions.mbForceUpperCaseFileNames = true;
-
-        // ARTIST ConstructResourceModule 8266D570: 768 staged resources,
-        // 1 MiB main scratch and 2 MiB graphics scratch, both 128-byte aligned.
-        CgsResource::PoolModule::InitOptions& lrPoolOptions = s_InitOptions.mPoolInitOptions;
-        lrPoolOptions.miMaxResourceToDefrag = 768;
-        lrPoolOptions.muDebugBufferSize = 0x800000;
-        const u32 lauScratchSizes[] = { 0x100000, 0x200000 };
-        const u32 lauScratchLanes[] = { 0, 2 };
-        for (u32 lu = 0; lu < 2; ++lu)
-        {
-            const u32 luLane = lauScratchLanes[lu];
-            lrPoolOptions.mDefragBufferDescriptor.m_baseResourceDescriptors[luLane].m_size = lauScratchSizes[lu];
-            lrPoolOptions.mDefragBufferDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 128;
-            lScratchDescriptor.m_baseResourceDescriptors[0].m_size = lauScratchSizes[lu];
-            lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
-            lrPoolOptions.mDefragBufferResource.m_baseResources[luLane] =
-                lpAllocator->DoAllocate(lScratchDescriptor, "ResourceDefragScratch").m_baseResources[0];
-        }
-        s_InitOptions.mDebugParams.mpDebugAllocator           = lpAllocator;
-        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: registered "
-                                  << (s32)lNumGameTypes << " resource types into the pool registry\n";
-
-        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: root type0="
-                                  << (s32)(u32)(size_t)lType0.m_baseResources[0]
-                                  << " -> ResourceModule::Construct\n";
-        // X360 ConstructResourceModule stores the already-fixed ARTIST map pointer.
-        mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
-        mResourceModule.Construct(&s_InitOptions, lpAllocator);
-        *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: ResourceModule constructed ok\n";
+        mAudioStreamAllocator.Construct();
+        ConstructResourceModule();
+        rw::IResourceAllocator* lpAllocator = GetDebugAllocator();
 
         // ARTIST 82671E84/90 constructs the manager before the DLC debug page,
         // establishing the shared availability table that its variables reference.
@@ -1430,8 +1080,84 @@ namespace BrnResource
         mDLCManager.Construct();
         mDLCDebugComponent.Construct();
     }
-    bool GameDataModule::Release() { return true; }
-    void GameDataModule::Destruct() {}
+    // ARTIST8266D570. Every allocation preserves its original resource lane;
+    // no debug-heap substitution or host-sized memory allowance participates.
+    void GameDataModule::ConstructResourceModule()
+    {
+        mpMemoryMap = &MemoryMapImageInitializer::GetMemoryMap();
+        CgsResource::ResourceModule::InitOptions lOptions;
+        memset(&lOptions, 0, sizeof(lOptions));
+        RegisterResourceTypes();
+        lOptions.mDebugParams.mpTextureRenderCallback = TextureRenderCallback;
+        lOptions.mDebugParams.mpTextureRenderUserData = this;
+        lOptions.mDebugParams.mpDebugAllocator = GetDebugAllocator();
+
+        CgsMemory::MemoryModule::InitOptions& lrMemory = lOptions.mMemoryInitOptions;
+        lrMemory.muMaxBanks = 128;
+        lrMemory.muHighestId = 1024;
+        lrMemory.muMaxBlocks = 30000;
+        const CgsMemory::MemoryBank::Params* lpRoot =
+            MemoryMapImageInitializer::GetImage().maBanks[0].GetParams();
+        rw::ResourceDescriptor lRootDescriptor;
+        lRootDescriptor.m_baseResourceDescriptors[0].m_size = lpRoot->mauBankSize[0];
+        lRootDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
+        lRootDescriptor.m_baseResourceDescriptors[2].m_size = lpRoot->mauBankSize[2];
+        lRootDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        rw::IResourceAllocator* lpAllocator = GetGlobalResourceAllocator();
+        const rw::Resource lRootResource = lpAllocator->DoAllocate(lRootDescriptor, 0);
+        lrMemory.maResourceSets[0].mpDataStart = lRootResource.m_baseResources[0];
+        lrMemory.maResourceSets[0].muDataSize = lpRoot->mauBankSize[0];
+        lrMemory.maResourceSets[0].muNumBlocks = static_cast<u16>(lpRoot->mauBankBlocks[0]);
+        lrMemory.maResourceSets[2].mpDataStart = lRootResource.m_baseResources[2];
+        lrMemory.maResourceSets[2].muDataSize = lpRoot->mauBankSize[2];
+        lrMemory.maResourceSets[2].muNumBlocks = static_cast<u16>(lpRoot->mauBankBlocks[2]);
+
+        CgsResource::BundleLoaderModule::InitOptions& lrLoader = lOptions.mLoaderInitOptions;
+        lrLoader.miBundleHeaderBufferSize = 0x80000;
+        lrLoader.miDebugDataBufferSize = 0x200000;
+        lrLoader.miStreamBufferSize = 0x400000;
+        lrLoader.miMaxBundles = 512;
+        lrLoader.miMaxResourcesPerBundle = 10240;
+        lrLoader.mbForceUpperCaseFileNames = true;
+
+        CgsResource::PoolModule::InitOptions& lrPool = lOptions.mPoolInitOptions;
+        lrPool.miMaxResourceToDefrag = 768;
+        lrPool.muDebugBufferSize = 0x800000;
+        lrPool.mpGameSpecificTypes = maTypes;
+        lrPool.miNumGameSpecificTypes = miNumTypes;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[0].m_size = 0x100000;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[2].m_size = 0x200000;
+        lrPool.mDefragBufferDescriptor.m_baseResourceDescriptors[2].m_alignment = 128;
+        lrPool.mDefragBufferResource = lpAllocator->DoAllocate(lrPool.mDefragBufferDescriptor, 0);
+
+        const char* lpcPath = CgsSystem::HardwareInit::GetFOPENDirectory();
+        CGS_ASSERT(strlen(lpcPath) < sizeof(lOptions.macFileSearchPath), "File search path is too long");
+        strcpy(lOptions.macFileSearchPath, lpcPath);
+        mResourceModule.Construct(&lOptions, lpAllocator, GetDebugAllocator());
+
+        rw::ResourceDescriptor lAudioDescriptor;
+        lAudioDescriptor.m_baseResourceDescriptors[0].m_size = 0xC0000;
+        lAudioDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        const rw::Resource lAudioResource = lpAllocator->DoAllocate(lAudioDescriptor, 0);
+        CGS_ASSERT(lAudioResource.m_baseResources[0] != 0, "Failed to allocate audio buffer\n");
+        mAudioStreamAllocator.Create(lAudioResource.m_baseResources[0], 0xC0000);
+    }
+
+    // Native Release82664380 also releases the embedded GameTalk subsystem;
+    // its implementation remains unresolved until that original member is recovered.
+
+    // ARTIST82664508: original teardown order and receiver rewind.
+    void GameDataModule::Destruct()
+    {
+        mAttribSysModule.Destruct();
+        mVehicleList.Destruct();
+        mWheelList.Destruct();
+        mResourceModule.Destruct();
+        mReceiverQueue.Clear();
+        mChallengeList.Destruct();
+        CgsModule::ModuleSingleBuffered::Destruct();
+    }
 
     // ====================================================================================
     // The world-request service path (THIS BATCH): the Update request pump + the GameData
@@ -1545,41 +1271,39 @@ namespace BrnResource
         const char* const KPC_WHEEL_FILE_FORMAT            = "Wheels/%s_%s.bndl";
     }
 
+    CgsResource::ResourceModule::EUpdateResult GameDataModule::UpdateResourceModule(
+        CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+        const CgsResource::ResourceIO::InputBuffer* lpInput)
+    {
+        CgsModule::IOHelper<CgsResource::ResourceIO::OutputBuffer> lOutput(lpOutputStack, "ResourceOutput");
+        const CgsResource::ResourceModule::EUpdateResult leResult =
+            mResourceModule.Update(lpInputStack, lpOutputStack, lpInput, lOutput);
+        const CgsResource::ResourceIO::OutputBuffer* lpOutput = lOutput;
+        lpOutput->LockForRead();
+        mFileSystemStatus = *lpOutput->GetFileSystemStatusInterface();
+        lpOutput->UnlockForRead();
+        return leResult;
+    }
+
     // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
     // (raw CgsResource requests forward verbatim into the embedded ResourceModule's input;
     // GameData-level requests route through ProcessGameDataEvent), the drained-input clear,
     // the output allocator-list publish and the ResourceModule pump. DEFERRED stages are
     // marked inline (each with its X360 anchor) -- their subsystems are not committed yet.
-    bool GameDataModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    GameDataModule::EUpdateResult GameDataModule::Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+        const GameDataIO::InputBuffer* lpInputBuffer, GameDataIO::OutputBuffer* lpOutputBuffer)
     {
-        GameDataIO::InputBuffer*  lpInput  = static_cast<GameDataIO::InputBuffer*>(lpInputBuffer);
+        GameDataIO::InputBuffer*  lpInput  = const_cast<GameDataIO::InputBuffer*>(lpInputBuffer);
         GameDataIO::OutputBuffer* lpOutput = static_cast<GameDataIO::OutputBuffer*>(lpOutputBuffer);
 
         // [deferred] dev slot-usage dump toggles (byte_82FFAD00/01 -> AllocatorList::
         // DebugDumpStats + the "Slot <n> is used" walk over the event-slot free list).
         // [deferred] CgsGameTalk::GameTalk::Update (X360 a1+399624; module not committed).
 
-        // The per-frame CgsResource input the pump publishes into. The X360 carves it from
-        // the CgsModule::IOBufferStack (CreateIOBuffer<ResourceIO::InputBuffer>("Resource"));
-        // [marked deviation] the IOBufferStack is deferred, so the module reuses one
-        // function-local static buffer, exactly like the committed CreatePools bring-up path.
-        static CgsResource::ResourceIO::InputBuffer s_ResourceInput;
-        static bool s_bResourceInputConstructed = false;
-        if (!s_bResourceInputConstructed) { s_ResourceInput.Construct(); s_bResourceInputConstructed = true; }
-
-        // The per-frame AttribSys module input. The X360 carves it from the IOBufferStack
-        // (CreateIOBuffer<AttribSysIO::InputBuffer>("Attrib")); [marked deviation] same
-        // one-static-buffer pattern as the ResourceIO input below.
-        static CgsAttribSys::AttribSysIO::InputBuffer s_AttribInput;
-        static bool s_bAttribInputConstructed = false;
-        if (!s_bAttribInputConstructed)
-        {
-            s_bAttribInputConstructed = true;
-            s_AttribInput.CgsModule::IOBuffer::Construct();
-            s_AttribInput.LockForWrite();
-            s_AttribInput.GetVaultRequestInterface()->mRequestQueue.Construct();
-            s_AttribInput.UnlockForWrite();
-        }
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
+        CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput = 0;
+        lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
+        lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib");
 
         if (lpOutput != 0)
         {
@@ -1591,12 +1315,11 @@ namespace BrnResource
             // SetAllocatorList(out, &mAllocatorList), then the LiveUpdateIO status copy
             // (SetLiveUpdateStatus from the LiveUpdate output).
             //
-            // [FLAG] we Construct the WHOLE output buffer where the console constructs only
-            // that one member -- wider than the console, and it stays that way until the
-            // OutputBuffer's filesystem-status member is homed. The LiveUpdate module is
-            // deferred (F-P7-4); the allocator-list publish is the live part.
             lpOutput->LockForWrite();
-            lpOutput->Construct();
+            // ARTIST82674820 resets the +9 filesystem interface, then publishes the allocator list.
+            CgsResource::ResourceIO::FileSystemStatusInterface lStatus;
+            lStatus.Construct();
+            lpOutput->SetFileSystemStatusInterface(&lStatus);
             lpOutput->SetAllocatorList(&mAllocatorList);
             lpOutput->UnlockForWrite();
         }
@@ -1604,7 +1327,7 @@ namespace BrnResource
         if (lpInput != 0)
             lpInput->LockForRead();
 
-        s_ResourceInput.LockForWrite();
+        lpResourceInput->LockForWrite();
 
         // [deferred] LiveUpdateIO::OutputBuffer request append (X360 Append<512,16> of the
         // live-update output's request queue into the resource input; module not committed).
@@ -1629,29 +1352,30 @@ namespace BrnResource
             while (lpEvent != 0)
             {
                 if (liType >= 26)
-                    ProcessGameDataEvent(&s_ResourceInput, lpEvent, liType);
+                    ProcessGameDataEvent(lpResourceInput, lpEvent, liType);
                 else
-                    s_ResourceInput.GetResourceQueue()->AddEvent(lpEvent, liType, liSize);
+                    lpResourceInput->GetResourceQueue()->AddEvent(lpEvent, liType, liSize);
 
                 liType = lpRequestInterface->mRequestQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
             }
             // X360 (0x82674670, still under the input read lock): bulk-append the GameData
             // input's AttribSys request queue into the module input ("Attrib") --
             // AttribSysIO::InputBuffer::AppendRequestInterface<32768> @0x82671948.
-            s_AttribInput.LockForWrite();
-            s_AttribInput.AppendRequestInterface<
+            lpAttribInput->LockForWrite();
+            lpAttribInput->AppendRequestInterface<
                 GameDataIO::InputBuffer::kiAttribSysRequestInterfaceQueueSize>(
                     lpInputRead->GetAttribSysRequestInterface());
-            s_AttribInput.UnlockForWrite();
+            lpAttribInput->UnlockForWrite();
 
             lpInput->UnlockForRead();
 
             // X360: re-lock the input for write and clear the drained request state (the
             // 32768-byte request queue, the AttribSys request queue @a4+8197 and the debug
-            // Im2d pointer @a4[16393]). The Im2d member is deferred with its subsystem.
+            // Im2d pointer @a4[16393]). The Im2d pointer is reset with those queues.
             lpInput->LockForWrite();
             lpInput->GetRequestInterface()->mRequestQueue.Clear();
             lpInput->GetAttribSysRequestInterface()->mRequestQueue.Clear();
+            lpInput->SetIm2dDebugRenderBuffer(0);
             lpInput->UnlockForWrite();
         }
 
@@ -1669,23 +1393,23 @@ namespace BrnResource
                 switch (liType)
                 {
                 case 2:
-                    ProcessInternalLoadBundleResponse(&s_ResourceInput,
+                    ProcessInternalLoadBundleResponse(lpResourceInput,
                         reinterpret_cast<const CgsResource::Events::LoadBundleResponse*>(lpEvent));
                     break;
                 case 3:
-                    ProcessInternalUnloadResponse(&s_ResourceInput,
+                    ProcessInternalUnloadResponse(lpResourceInput,
                         reinterpret_cast<const CgsResource::Events::UnloadBundleResponse*>(lpEvent));
                     break;
                 case 4:
-                    ProcessInternalAcquireResponse(&s_ResourceInput,
+                    ProcessInternalAcquireResponse(lpResourceInput,
                         reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent),
-                        &s_AttribInput);
+                        lpAttribInput);
                     break;
                 case 7:
-                    ProcessInternalInvalidateResponse(&s_ResourceInput, lpEvent);
+                    ProcessInternalInvalidateResponse(lpResourceInput, lpEvent);
                     break;
                 case 8:
-                    ProcessInternalValidateResponse(&s_ResourceInput, lpEvent);
+                    ProcessInternalValidateResponse(lpResourceInput, lpEvent);
                     break;
                 default:
                     CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1904
@@ -1698,7 +1422,7 @@ namespace BrnResource
             mReceiverQueue.Clear();
         }
 
-        s_ResourceInput.UnlockForWrite();
+        lpResourceInput->UnlockForWrite();
 
         // ---- the AttribSys module pump (X360 0x82674670: `(*(module vtbl+68))(module,
         // attribIn)` right after the resource-input unlock) + the attrib reply receiver
@@ -1706,13 +1430,8 @@ namespace BrnResource
         // request received\n" line 1946). Handlers that need the resource input re-lock it
         // themselves (the X360 passes it unlocked here too). ------------------------------
         {
-            mAttribSysModule.Update(&s_AttribInput);
+            mAttribSysModule.Update(lpAttribInput);
         }
-        // [PC placement] the X360 destroys the per-frame "Attrib" carve at the end of
-        // Update; the persistent static must drop the drained requests itself.
-        s_AttribInput.LockForWrite();
-        s_AttribInput.GetVaultRequestInterface()->mRequestQueue.Clear();
-        s_AttribInput.UnlockForWrite();
         {
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
@@ -1720,9 +1439,9 @@ namespace BrnResource
             while (lpEvent != 0)
             {
                 if (liType == 3)
-                    ProcessAttribSysRegisterVaultResponse(&s_ResourceInput, lpEvent);
+                    ProcessAttribSysRegisterVaultResponse(lpResourceInput, lpEvent);
                 else if (liType == 5)
-                    ProcessUnregisterVehicleAttribsResponse(&s_ResourceInput, lpEvent);
+                    ProcessUnregisterVehicleAttribsResponse(lpResourceInput, lpEvent);
                 else
                     CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1946
                 liType = mAttribSysReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
@@ -1730,15 +1449,14 @@ namespace BrnResource
             mAttribSysReceiverQueue.Clear();   // X360 ring-rewind, same as mReceiverQueue
         }
 
-        // Pump the embedded streaming engine with the requests published above. The X360
-        // wraps this in UpdateResourceModule @0x826663B0, which also carves a ResourceIO::
-        // OutputBuffer from the IOBufferStack and copies the filesystem status out
-        // (a1+475952) -- both deferred with their consumers.
-        const bool lbResult = mResourceModule.Update(&s_ResourceInput, 0);
-
-        // [deferred] final output publish of the filesystem status interface (X360
-        // SetFileSystemStatusInterface(out, a1+475952); member not committed).
-        return lbResult;
+        const EUpdateResult leResult = UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput)
+            == CgsResource::ResourceModule::E_RESULT_REQUIRE_STALL ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
+        lpOutput->LockForWrite();
+        lpOutput->SetFileSystemStatusInterface(&mFileSystemStatus);
+        lpOutput->UnlockForWrite();
+        lpInputStack->DestroyIOBuffer(&lpAttribInput);
+        lpInputStack->DestroyIOBuffer(&lpResourceInput);
+        return leResult;
     }
 
     // @ 0x826744F0 -- route one queued GameData-level event by its queue type id.
@@ -2230,7 +1948,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                    "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
         strcat(lacResourceName, "_AttribSys");
 
-        CgsResource::Events::AcquireResourceRequest lRequest = {};
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser = &mReceiverQueue;
         lRequest.miEventId = liSlotIndex;
         lRequest.miPoolId = lpEvent->miPoolId;
@@ -2286,7 +2005,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 CgsCore::SPrintf(lacFileName, 128, KPC_VEHICLE_FILE_FORMAT,
                                  lacVehicleID, KAPC_ASSET_SET_SUFFIXES[luBundleAssetSet]);
 
-            CgsResource::Events::UnloadBundleRequest lRequest = {};
+            CgsResource::Events::UnloadBundleRequest lRequest;
+            memset(&lRequest, 0, sizeof(lRequest));
             lRequest.mpUser = &mReceiverQueue;
             lRequest.miEventId = liSlotIndex;
             lRequest.SetFileName(lacFileName);
@@ -2461,7 +2181,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         CgsCore::SPrintf(lacFileName, 128, KPC_VEHICLE_FILE_FORMAT, lacTrafficVehicleID,
                          KAPC_ASSET_SET_SUFFIXES[static_cast<u32>(lpEvent->meType)]);
 
-        CgsResource::Events::UnloadBundleRequest lRequest = {};
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser              = &mReceiverQueue;
         lRequest.miEventId           = liSlotIndex;
         lRequest.SetFileName(lacFileName);
@@ -2484,7 +2205,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacFileName[128];
         CgsCore::SPrintf(lacFileName, 128, KPC_WHEEL_FILE_FORMAT, lacWheelID,
                          KAPC_ASSET_SET_SUFFIXES[lpEvent->meType]);
-        CgsResource::Events::UnloadBundleRequest lRequest = {};
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser = &mReceiverQueue;
         lRequest.miEventId = liSlotIndex;
         lRequest.SetFileName(lacFileName);
@@ -3924,7 +3646,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacFileName[128];
         CgsCore::SPrintf(lacFileName, 128, KPC_VEHICLE_FILE_FORMAT,
                          lacVehicleID, KAPC_ASSET_SET_SUFFIXES[lpSlot->mEvent.meType]);
-        CgsResource::Events::UnloadBundleRequest lRequest = {};
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser = &mReceiverQueue;
         lRequest.miEventId = static_cast<s16>(liSlotIndex);
         lRequest.SetFileName(lacFileName);
