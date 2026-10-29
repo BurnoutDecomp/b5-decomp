@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "eathread/eathread.h"                       // EA::Thread::ThreadSleep
 #include "eathread/eathread_atomic.h"                // EA::Thread::AtomicInt
-#include "eathread/eathread_sync.h"                  // EAWriteBarrier
+#include <xtl.h>                                     // MemoryBarrier (__lwsync)
 
 // CgsContainers::LocklessQueue<T> -- a bounded multi-producer / multi-consumer ring of T whose
 // whole state lives in one 64-bit status word, changed only by compare-and-swap:
@@ -150,7 +150,7 @@ bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
 
         const u16 lu16NewWriteIndex = static_cast<u16>((lu16WriteIndex + 1) % muBufferSize);
         mpBuffer[lu16WriteIndex] = *lpItem;
-        EAWriteBarrier();
+        MemoryBarrier();
 
         if (SetStatusConditional(lu16ReadIndex, lu16NewWriteIndex, static_cast<u16>(lu16NumItems + 1), lu16Lock,
                                  lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock))
@@ -187,7 +187,7 @@ bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
         }
 
         const u16 lu16NewReadIndex = static_cast<u16>((lu16ReadIndex + 1) % muBufferSize);
-        EAWriteBarrier();
+        MemoryBarrier();
         *lpItem = mpBuffer[lu16ReadIndex];
 
         if (SetStatusConditional(lu16NewReadIndex, lu16WriteIndex, static_cast<u16>(lu16NumItems - 1), lu16Lock,
