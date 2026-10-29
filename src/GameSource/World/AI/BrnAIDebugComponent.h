@@ -52,6 +52,11 @@ namespace BrnAI
 class AIDebugComponent : public CgsDev::DebugComponent
 {
 public:
+#if defined(_XBOX) && defined(_M_PPCBE)
+    AIDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::AIConstructorTag()),
+        mPIDCoefficientsGraph(CgsDev::DebugUI::MenuItemVariableLineGraph::AIConstructorTag()),
+        mSteerAngleVsPIDOutputGraph(CgsDev::DebugUI::MenuItemVariableLineGraph::AIConstructorTag()) {}
+#endif
     // @0x827671?? Two-phase init (DWARF :199): wires up the AI module pointer and seeds the toggle
     // defaults. Bodied in its own TU; declared here for the surface.
     void Construct(AIModule* lpAIModule);

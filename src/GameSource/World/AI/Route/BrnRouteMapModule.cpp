@@ -23,6 +23,7 @@ namespace BrnAI
 {
 namespace
 {
+#if !defined(_XBOX) || !defined(_M_PPCBE)
     const s32 KI_ROUTE_WITNESS_TOTAL     = 64;
 
     // Consumes one line from luEventId's quota; returns true when a line may be printed.
@@ -38,9 +39,10 @@ namespace
         ++lpaiPerEvent[luBucket];
         return true;
     }
+#endif
 }
 
-RouteMapModule::RouteMapModule() = default;
+RouteMapModule::RouteMapModule() {}
 
 // DecFIGS .cpp:46. ARTIST inlines this in AIModule::Construct @0x82794D08:
 // base Construct, the two halfword stores at +0x65C0/+0x65C2, debug Construct,
@@ -257,6 +259,7 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
 
         lpRouteResponseQueue->AddEvent(lRouteResponse);
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
         {
             static s32 siRaceRouteWitnessTotal = 0;
             if (RouteMapWitnessBudget(saiRaceRouteWitness, siRaceRouteWitnessTotal, muEventId)
@@ -270,6 +273,7 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
                     << " distance " << lpRoute->GetDistance() << "\n";
             }
         }
+#endif
     }
 }
 
@@ -425,6 +429,7 @@ void RouteMapModule::ProcessExtrapolatedRoute(
     lpRoute->Prepare(liDefaultStartNode);
     lpRouteResponseQueue->AddEvent(lRouteResponse);
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
     {
         static s32 siExtrapolatedWitnessTotal = 0;
         static s32 saiEmptyRouteWitness[36]   = { 0 };
@@ -451,5 +456,6 @@ void RouteMapModule::ProcessExtrapolatedRoute(
                 << " distance " << ((liNodeCount > 0) ? lpRoute->GetDistance() : 0.0f) << "\n";
         }
     }
+#endif
 }
 }

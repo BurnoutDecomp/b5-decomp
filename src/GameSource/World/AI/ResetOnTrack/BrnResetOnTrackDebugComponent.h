@@ -23,6 +23,9 @@ namespace BrnAI
     // named member/type shape. Pointer-bearing ring-buffer headers widen naturally on PC.
     struct ResetOnTrackDebugComponent : public CgsDev::DebugComponent
     {
+#if defined(_XBOX) && defined(_M_PPCBE)
+        ResetOnTrackDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::AIConstructorTag()) {}
+#endif
         struct CGS_ALIGN(16) ResetEntry
         {
             AIModuleIO::ResetOnTrackRequest mRequest;
