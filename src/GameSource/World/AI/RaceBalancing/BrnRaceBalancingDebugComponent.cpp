@@ -29,6 +29,15 @@
 
 namespace BrnAI
 {
+// ARTIST AIModule::Construct 0x82794D7C..0x82794D88.
+void RaceBalancingDebugComponent::Construct(AIModule* lpAIModule, RaceBalancingManager* lpManager)
+{
+    mpAIModule = lpAIModule;
+    mpRaceBalancingManager = lpManager;
+    miCurrentRival = 0;
+    mbShowData = true;
+}
+
 namespace
 {
     // Source path reproduced verbatim for the asserts (matches the X360 string literal).

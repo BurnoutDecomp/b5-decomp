@@ -2,6 +2,8 @@
 #define BRN_AI_DEBUG_COMPONENT_H
 
 #include "types.hpp"
+#include "GameSource/World/AI/PID/BrnAutoTunedPIDDebugData.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/MenuItems/CgsMenuItemVariableLineGraph.h"
 #include "BrnCommonTypes.h"                                                       // Vector2 / Vector3 (rw::math::vpu aliases)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (base), Debug2D/3DImmediateRender fwd
 
@@ -43,17 +45,6 @@ namespace BrnAI
     typedef u32 RGBA;
 }
 
-namespace CgsDev
-{
-    namespace DebugUI
-    {
-        // Heavy menu-item type (a MenuItem subclass holding a 5x360 history ring). The DWARF holds
-        // two of these by value as layout-tail members; this TU bodies nothing that touches them, so
-        // they are forward-declared and reached by pointer to avoid reconstructing the whole
-        // MenuItemVariableLineGraph subsystem here (out of scope for this TU).
-        struct MenuItemVariableLineGraph;
-    }
-}
 
 namespace BrnAI
 {
@@ -193,13 +184,10 @@ private:
     f32             mfStateTableX;                      // :282
     f32             mfStateTableY;                      // :283
 
-    // Layout-tail UI/PID members (DWARF :289-293). Held here to complete the declaration surface; no
-    // function bodied in this TU touches them. The two line-graph menu items are by-value in the
-    // DWARF but their subsystem is not reconstructed (out of scope), so they are reached by pointer;
-    // the PID debug data is forward-declared (struct defined in the PID subsystem TU).
-    CgsDev::DebugUI::MenuItemVariableLineGraph* mpPIDCoefficientsGraph;     // :289
-    CgsDev::DebugUI::MenuItemVariableLineGraph* mpSteerAngleVsPIDOutputGraph; // :290
-    AutoTunedPIDDebugData*                      mpPIDDebugData;             // :293
+    CgsDev::DebugUI::MenuItemVariableLineGraph mPIDCoefficientsGraph;
+    CgsDev::DebugUI::MenuItemVariableLineGraph mSteerAngleVsPIDOutputGraph;
+    AutoTunedPIDDebugData mPIDDebugData;
+
 };
 
 }

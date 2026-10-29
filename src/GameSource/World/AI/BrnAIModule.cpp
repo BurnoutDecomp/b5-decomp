@@ -45,40 +45,42 @@ AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int)
     return leOldValue;
 }
 
-AIModule::AIModule()
-    : mInputMutex(0, true),
-      mOutputMutex(0, true),
-      miActiveRouteRequest(-1),
-      miPendingRouteRequest(-1),
-      muRouteRequestVTable(0x820CDF80),
-      muOpenListVTable(0x820CE988),
-      muClosedListVTable(0x820CDFA0),
-      muScratchListVTable(0x820CDFA0),
-      miLastRouteId(-1),
-      muAnchorState(0),
-      muAnchorPrev(0),
-      muAnchorNext(0),
-      mpAnchorHead(&muAnchorState),
-      mpAnchorTail(&muAnchorState),
-      mpAnchorCursor(&muAnchorState),
-      muAnchorFlags(0),
-      muAllocatorVTable(0x820CF9B4),
-      mRouteMapModule(),
-      miWorldRouteRequest(-1),
-      mePrepareStage(E_PREPARESTAGE_START),
-      meReleaseStage(E_RELEASESTAGE_DONE),
-      meLoadMapDataStage(E_LOADMAPDATA_REQUEST_BUNDLE)
+#if defined(_XBOX) && defined(_M_PPCBE)
+void AIModule::AssertNativeLayout()
 {
-    for (RouteRequestSlot& lSlot : maRouteRequestSlots)
-    {
-        lSlot.miRouteId = -1;
-    }
+    CGS_STATIC_ASSERT((offsetof(AIModule, maAICars) == 0x230), "maAICars native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, maAIDrivers) == 0x2EE50), "maAIDrivers native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mRaceBalancingManager) == 0x3D9D0), "mRaceBalancingManager native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mRouteRequestManager) == 0x42268), "mRouteRequestManager native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mAIDebugComponent) == 0x424AC), "mAIDebugComponent native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mResetOnTrackManager) == 0x45DB0), "mResetOnTrackManager native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mMasterRoute) == 0x46B60), "mMasterRoute native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mePrepareStage) == 0x47F6C), "mePrepareStage native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, meReleaseStage) == 0x47F70), "meReleaseStage native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, meLoadMapDataStage) == 0x47F74), "meLoadMapDataStage native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mRandom) == 0x47F80), "mRandom native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mResourceReceiverQueue) == 0x47FB0), "mResourceReceiverQueue native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mMapDataHandle) == 0x483C8), "mMapDataHandle native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mLuaDataHandle) == 0x483D0), "mLuaDataHandle native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mRouteMapModule) == 0x483D8), "mRouteMapModule native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mePlayerActiveRaceCarIndex) == 0x4E9F8), "mePlayerActiveRaceCarIndex native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mCamera) == 0x4EA00), "mCamera native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, miLineUpdateTokenCounter) == 0x4EB60), "miLineUpdateTokenCounter native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mContactSpyInterface) == 0x4EB68), "mContactSpyInterface native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, muNumAggressiveCars) == 0x4EB78), "muNumAggressiveCars native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, maWayPointDistance) == 0x4EB84), "maWayPointDistance native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, meCurrentRoundRobin) == 0x4EBC8), "meCurrentRoundRobin native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, meAggressorIndex) == 0x4EBD0), "meAggressorIndex native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, meVictimIndex) == 0x4EBD4), "meVictimIndex native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, meProximityGlobalRaceCarIndexRoundRobin) == 0x4EBD8), "meProximityGlobalRaceCarIndexRoundRobin native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mBuzzBy) == 0x4EBDC), "mBuzzBy native offset");
+    CGS_STATIC_ASSERT((offsetof(AIModule, mpClosestCar) == 0x4ED10), "mpClosestCar native offset");
+    CGS_STATIC_ASSERT((sizeof(AIModule) == 0x4ED20), "AIModule native size");
+}
+#endif
 
-    // The console gets this from zeroed .bss (the module is static storage there); this build
-    // embeds the module inside WorldModule, so the null state is stated rather than inherited.
-    // Not a defensive arm: LoadMapData writes it before anything reads it, and it is the same
-    // value the console starts from.
-    mMapDataHandle.Clear();
+AIModule::AIModule()
+{
 }
 
 // =================================================================================================
@@ -118,11 +120,16 @@ void AIModule::Construct()
     meLoadMapDataStage = E_LOADMAPDATA_REQUEST_BUNDLE;
     meReleaseStage     = E_RELEASESTAGE_DONE;
 
+    mRaceBalancingManager.Construct(this);
+    mRouteRequestManager.Construct();
     mResourceReceiverQueue.Construct();
 
     // ARTIST inlines RouteMapModule::Construct(this) here: base init, ids,
     // embedded Route Map debug owner, then the module's new-module flag.
     mRouteMapModule.Construct(this);
+
+    mRandom.Construct();
+    mAIDebugComponent.Construct(this);
 
     // THE 35 AI CARS. AICar::Construct @0x82792620 NOW RUNS (2026-09-04, R1 lane): the
     // function was parked here as an "ARTIST export HOLE", which it is -- it has no JSON in
@@ -154,7 +161,6 @@ void AIModule::Construct()
         maAICars[leCar].Construct(leCar);
     }
 
-    mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
 
     // The rest of the console Construct: the +322400..+322435 flag block, the +294784 Random prime,
     // RouteRequestManager::Construct(+270952) and the 8x AIDriver::Construct.
@@ -166,18 +172,25 @@ void AIModule::Construct()
     mbEnableDrivingInput     = true;
     mbIsInOnlineGameMode     = false;
     mbIsInGameMode           = false;
+    mbFullRollingStart       = false;
     mbHighTakenDownPenalty   = false;
     mbAIDrivesPlayer         = false;
     mbAIPlayerInvulnerable   = true;
-    mRandom.Construct();
-    mRouteRequestManager.Construct();
     for (s32 liDriver = 0; liDriver < KI_MAX_ACTIVE_RACE_CARS; ++liDriver)
     {
         maAIDrivers[liDriver].Construct();
     }
 
-    // 0x82795... `stw r11(1), 4(r3)` -- the base Construct above cleared it. LOAD-BEARING.
     mbIsNewModule = true;
+    mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+    mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+    meSpeedSelectionMethod = static_cast<EAISpeedSelectionMethod>(0);
+    meDefaultPlayerRouteFindingStyle = static_cast<ERouteFindingStyle>(0);
+    meDefaultAIRouteFindingStyle = static_cast<ERouteFindingStyle>(0);
+    mContactSpyInterface.Construct();
+    mMasterRoute.meStatus = Route::E_STATUS_UNINITIALISED;
+    mMasterRoute.miNodeCount = 0;
+    mMasterRoute.miDefaultStartNode = 0;
 }
 
 // =================================================================================================
@@ -246,6 +259,7 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
         {
             mePrepareStage++;
             mResourceReceiverQueue.Clear();
+            mAIDebugComponent.Register();
         }
         // fall through
 
@@ -285,6 +299,8 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
             // ⭐ 2026-09-03 (aiwave): stage 4 un-parked -- AIDriver::Prepare over the 8 active race cars
             // (BrnAIDriver.cpp is mounted), the round-robin / proximity cursors, the closest-car pair and
             // BuzzBy::Prepare (lane A1's member map of the +322400..+322832 block).
+            meAggressorIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+            meVictimIndex = E_ACTIVE_RACE_CAR_INDEX_0;
             for (s32 liDriver = 0; liDriver < KI_MAX_ACTIVE_RACE_CARS; ++liDriver)
             {
                 maAIDrivers[liDriver].Prepare(GetAISectionsData(), liDriver, &mRandom);
@@ -295,12 +311,9 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
             meCurrentRoundRobin[1] = E_ACTIVE_RACE_CAR_INDEX_0;             // 0x827982C4
             meProximityGlobalRaceCarIndexRoundRobin = E_GLOBAL_RACE_CAR_INDEX_0;   // 0x827982E0 +0x4EBD8
             mBuzzBy.Prepare(maAICars, &mResetOnTrackManager);               // 0x827982EC..0x82798380 (inlined)
-            mfClosestDistance = 3.4028235e38f;                              // 0x82798384 flt_8204F664 (FLT_MAX)
+            mfClosestDistance = 3.4028234663852886e+38f;                              // 0x82798384 flt_8204F664 (FLT_MAX)
             mpClosestCar      = 0;                                          // 0x82798388
             mbHighTakenDownPenalty = false;                                 // 0x8279838C stbx +0x4EB81
-            // (0x82798218/0x82798224 also zero +0x4EBD0/+0x4EBD4 -- the DWARF's meAggressorIndex /
-            //  meVictimIndex (:389/:390); no console body reads either and this host class does not
-            //  carry them.)
             mePrepareStage++;
         }
         // fall through

@@ -86,7 +86,7 @@ namespace BrnAI
     const f32 KF_SECTION_SPEED_TO_BUZZ_RATIO      = 0.0076923077f;   // flt_820C5E94 (1/130)
     const f32 KF_MPH_TO_MPS                       = 0.44704f;        // flt_82F31928
     const f32 KF_MAX_PLAYER_SPEED_SCALE           = 1.1f;            // flt_820C3D90
-    const f32 KF_AICAR_FLT_MAX                    = 3.4028235e+38f;  // flt_82F302F4 (0x7F7FFFFF)
+    const f32 KF_AICAR_FLT_MAX                    = 3.4028234663852886e+38f;  // flt_82F302F4 (0x7F7FFFFF)
     // DWARF BrnAICar.cpp:32 KF_DEFAULT_OUT_OF_RANGE_SPEED. flt_8300D7FC is .bss (hence the 0
     // in image.bin); its ONLY writer is the start-up leaf initialiser at 0x82C68580, which does
     //   lfs f0, flt_82F31928(=0.44704) ; lfs f13, flt_82004A18(=80.0) ; fmuls ; stfs flt_8300D7FC
@@ -556,7 +556,7 @@ namespace BrnAI
         const f32 lfNodeX = lpNode->GetX();
         const f32 lfNodeZ = lpNode->GetY();                                                 // lfs f31,4(node)
         const f32 lfNodeY = GetCurrentNodeY(lpAISectionsData);                              // 0x8276F138
-        const Vector3 lTarget{ lfNodeX, lfNodeY, lfNodeZ, 0.0f };
+        const Vector3 lTarget = { lfNodeX, lfNodeY, lfNodeZ, 0.0f };
 
         muDefaultSectionIndex = lpNode->GetSectionIndex();                                  // sth 0x1532
         muBestSectionIndex    = lpNode->GetSectionIndex();                                  // sth 0x1534
@@ -618,7 +618,7 @@ namespace BrnAI
             liNode = lpThisRoute->GetNodeCount() - 1;
         const RouteNode* lpNode = lpThisRoute->GetNode(liNode);
 
-        const Vector3 lNodePos{ lpNode->GetX(), 0.0f, lpNode->GetY(), 0.0f };
+        const Vector3 lNodePos = { lpNode->GetX(), 0.0f, lpNode->GetY(), 0.0f };
         const Vector3 lToNode = lNodePos - GetPosition();                                   // vsubfp128 v0 = node - pos
         const f32 lfAhead = vpu::Dot(GetDirection(), lToNode);                              // vmsum3fp128
         return 0.0f > lfAhead;                                                              // vcmpgtfp. zero > dot
@@ -641,7 +641,7 @@ namespace BrnAI
             return true;
 
         const RouteNode* lpLast = lpThisRoute->GetNode(lpThisRoute->GetNodeCount() - 1);
-        const Vector3 lLastPos{ lpLast->GetX(), 0.0f, lpLast->GetY(), 0.0f };
+        const Vector3 lLastPos = { lpLast->GetX(), 0.0f, lpLast->GetY(), 0.0f };
         const f32 lfDistance = vpu::Magnitude(lLastPos - GetPosition());
         // `fcmpu dist, flt_820C4160 (300.0) ; bge -> return false` 0x8276FD0C/0x8276FD10: a NaN
         // distance is "not old" and keeps its destination (FX-AINAN2; `>=` invalidated it).

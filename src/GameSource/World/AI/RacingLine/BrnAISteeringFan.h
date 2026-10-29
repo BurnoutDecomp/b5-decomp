@@ -106,7 +106,9 @@ namespace BrnAI
         s32   GetBestIndex();                              // @0x82768D48
         f32   GetSpeedRatio();                             // @0x82779B90
 
-                                    // @0x82779C30 (DWARF :112)
+        Vector2 GetDrivingTarget(AICar* lpCar, RacingLine* lpRacingLine,
+                                 RacingLineGenerator* lpRacingLineGenerator,
+                                 const NearbyVehicles* lpNearbyVehicles, bool lbRenderThinking); // 0x82779C30
         void  UpdateWeightings(AICar* lpCar, RacingLine* lpRacingLine,
                                RacingLineGenerator* lpRacingLineGenerator,
                                const NearbyVehicles* lpNearbyVehicles,

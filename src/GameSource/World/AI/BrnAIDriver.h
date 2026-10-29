@@ -31,15 +31,7 @@
 // == mpCar in every body); the DecFIGS BrnAIDriver.h DWARF gives names/types/order. The layout
 // below is pinned member-by-member by the static_asserts at the bottom.
 //
-// HOST-WIDTH RULE (never carry console widths onto the x64 host):
-//   * The pointer-free sub-objects (NearbyVehicles, SteeringFan, PIDController x2) have identical
-//     host and console sizes, so they sit IN PLACE at their guest offsets as real named members.
-//   * The pointer-bearing sub-objects (RacingLine::SectionData has two pointers; AIAggression has
-//     five) would be WIDER on the host and overrun the members after them, so their guest spans
-//     stay as opaque pads and the usable objects live as HOST-ONLY trailing members
-//     (mRacingLineHost / mAggressionHost), exactly like the guest pointer/enum block @0x1CE0
-//     (mPtrEnumBlock + mpCarHost / meDriftStateHost / ...). Reach them by name through the
-//     accessors -- that is the de-inlined form of the X360's `addi r3, this, 0xF20` / `0x1C00`.
+// Native storage uses the original embedded objects and 32-bit pointers.
 //
 // VISIBILITY: the touched members are public here so the de-inlined bodies can read/write them by
 // name. The real class keeps them private behind inlined-away accessors.
@@ -52,10 +44,10 @@
 #include "GameSource/World/AI/BrnAISharedConstants.h"                // ENearbyType, ERoundRobinType, EAIBehaviour
 #include "GameSource/World/AI/BrnAIBoundaryLine.h"                   // BoundaryLine (NearbyVehicle::maHNGLines)
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan.h"         // SteeringFan (BY VALUE @0x710)
-#include "GameSource/World/AI/Route/BrnRacingLine.h"                  // RacingLine (host-side member)
+#include "GameSource/World/AI/Route/BrnRacingLine.h"                  // RacingLine (native embedded member)
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"   // RacingLineGenerator (BY VALUE @0x1B30)
 #include "GameSource/World/AI/PID/BrnPIDController.h"                // PIDController (BY VALUE @0x1B34 / @0x1B98)
-#include "GameSource/World/AI/BrnAIAggression.h"                     // AIAggression (host-side member)
+#include "GameSource/World/AI/BrnAIAggression.h"                     // AIAggression (native embedded member)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                // CgsNumeric::Random (Prepare draws one float)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (NearbyVehicles::GetCount)
 
@@ -220,14 +212,14 @@ namespace BrnAI
         bool UseForcedSpeed() const    { return mbUseForcedSpeed != 0; }     // :229
         f32  GetForcedSpeed() const    { return mfForcedSpeed; }             // :232
         f32  GetDesiredSpeed() const   { return mfDesiredSpeed; }            // :269
-        bool HasCar() const            { return mpCarHost != 0; }            // :251
+        bool HasCar() const            { return mpCar != 0; }            // :251
         void ResetStuckTime()          { mfStuckTime = 0.0f; }               // :266 (UpdateBehaviour stores it inline)
-        s32  GetRelatedActiveCarIndex() const { return meRelatedActiveCarIndexHost; }   // :216
-        void SetRelatedActiveCarIndex(s32 leIndex) { meRelatedActiveCarIndexHost = leIndex; } // :220
+        s32  GetRelatedActiveCarIndex() const { return meRelatedActiveCarIndex; }   // :216
+        void SetRelatedActiveCarIndex(s32 leIndex) { meRelatedActiveCarIndex = leIndex; } // :220
         f32  GetCalcualtedSteeringAngle() const { return mfCalculatedSteeringAngle; }   // :318 (sic)
-        AIAggression*       GetAggression()       { return &mAggressionHost; }          // :333
-        const AIAggression* GetAggression() const { return &mAggressionHost; }
-        RacingLine&         GetRacingLine()       { return mRacingLineHost; }
+        AIAggression*       GetAggression()       { return &mAggression; }          // :333
+        const AIAggression* GetAggression() const { return &mAggression; }
+        RacingLine&         GetRacingLine()       { return mRacingLine; }
         RacingLineGenerator& GetRacingLineGenerator() { return mRacingLineGenerator; }  // :315
         void SetPerpendicularTarget(f32 lfTarget) { mfPerpendicularTarget = lfTarget; } // :289
         f32  GetPerpendicularTarget() const       { return mfPerpendicularTarget; }     // :292
@@ -244,23 +236,17 @@ namespace BrnAI
             mfHandBrake   = 0.0f;  mbWantToEnterDrift = 0;
         }
         // DWARF :480 SetDriftState -- the `stw N, 0x1CEC(this)` stores.
-        void        SetDriftState(EDriftState leState) { meDriftStateHost = leState; }
-        EDriftState GetDriftState() const              { return meDriftStateHost; }
+        void        SetDriftState(EDriftState leState) { meDriftState = leState; }
+        EDriftState GetDriftState() const              { return meDriftState; }
 
         // ---- storage (declaration order == layout order; pinned by the static_asserts) ------
         NearbyVehicles      mNearbyVehicles;            // +0x0000 DWARF :539 (16 x 0x70 + count)
         SteeringFan         mSteeringFan;               // +0x0710 DWARF :540 (0x810, pointer-free)
-        // Guest span of mRacingLine (DWARF :541, 0xC10 bytes). Pointer-bearing on the host, so the
-        // usable object is mRacingLineHost below. NEVER read this pad.
-        u8                  mRacingLineGuest[0xC10];    // +0x0F20 .. +0x1B2F
+        RacingLine mRacingLine;                         // +0x0F20
         RacingLineGenerator mRacingLineGenerator;       // +0x1B30 DWARF :542 (no data; 4-byte slot)
         PIDController       mPIDController;             // +0x1B34 DWARF :544 (0x64, pointer-free)
         PIDController       mPIDControllerDrift;        // +0x1B98 DWARF :545 (0x64, pointer-free)
-        u8                  mPad1BFC[4];                // +0x1BFC .. +0x1BFF
-        // Guest span of mAggression (DWARF :547, 0x70 bytes). Pointer-bearing on the host, so the
-        // usable object is mAggressionHost below. NEVER read this pad.
-        u8                  mAggressionGuest[0x70];     // +0x1C00 .. +0x1C6F
-
+        AIAggression mAggression;                       // +0x1C00
         // The seven 2D vectors (16-byte SIMD slots) the steering math reads/writes.
         Vector2 mSteeringTargetVector;                  // +0x1C70 (7280) DWARF :550
         Vector2 mTargetRacingLinePos;                   // +0x1C80 (7296) DWARF :552
@@ -270,14 +256,12 @@ namespace BrnAI
         Vector2 mFinalFacing;                           // +0x1CC0 (7360) DWARF :557
         Vector2 m2DCarPos;                              // +0x1CD0 (7376) DWARF :559
 
-        // The pointer/enum block @ guest 0x1CE0..0x1CF7 (24 bytes):
-        //   mpCar @+0x1CE0 (AICar*), mpSectionsData @+0x1CE4, mpAggressionVictim @+0x1CE8 (all
-        //   GUEST 4-byte pointers), meDriftState @+0x1CEC, meAggressionVictim @+0x1CF0
-        //   (EGlobalRaceCarIndex; -1 == none), meRelatedActiveCarIndex @+0x1CF4.
-        // On the x64 host a real pointer is 8 bytes, which would shift every following offset, so
-        // this block is represented as raw guest-width storage and accessed through the typed
-        // host members below (the de-inlined form of the X360's `lwz 0x1CE0(this)` etc.).
-        u8 mPtrEnumBlock[0x18];                          // [0x1CE0 .. 0x1CF7]
+        AICar* mpCar;                                   // +0x1CE0
+        AISectionsData* mpSectionsData;                 // +0x1CE4
+        AICar* mpAggressionVictimCar;                   // +0x1CE8
+        EDriftState meDriftState;                       // +0x1CEC
+        s32 meAggressionVictim;                         // +0x1CF0
+        s32 meRelatedActiveCarIndex;                    // +0x1CF4
 
         // The scalar tail (all f32 unless noted).
         f32 mQuickTurnSteeringLock;                     // +0x1CF8 (7416) DWARF :570
@@ -316,28 +300,13 @@ namespace BrnAI
         u8  mbCurrentRouteComplete;                     // +0x1D6A (7530) DWARF :617
         u8  mbBoosting;                                 // +0x1D6B (7531) DWARF :619 -- AttemptToDriveAtDesiredSpeed sets it
 
-        // ---- HOST-ONLY trailing members (NOT part of the guest layout) ----------------------
-        // The guest pointers/enums that live inside mPtrEnumBlock are 4-byte on the X360 but
-        // 8-byte on the x64 host; to keep the guest offsets above exact, the usable typed values
-        // are stored here (after the pinned guest tail) and reached through the accessors below.
-        // On the console these ARE the mPtrEnumBlock words.
-        AICar*          mpCarHost;                      // == guest mpCar @+0x1CE0
-        s32             meAggressionVictimHost;         // == guest meAggressionVictim @+0x1CF0
-        s32             meRelatedActiveCarIndexHost;    // == guest meRelatedActiveCarIndex @+0x1CF4
-        AISectionsData* mpSectionsDataHost;             // == guest mpSectionsData @+0x1CE4
-        AICar*          mpAggressionVictimCarHost;      // == guest mpAggressionVictim @+0x1CE8
-        EDriftState     meDriftStateHost;               // == guest meDriftState @+0x1CEC
-        // The two pointer-bearing embedded sub-objects (see the file banner).
-        RacingLine      mRacingLineHost;                // == guest mRacingLine @+0x0F20
-        AIAggression    mAggressionHost;                // == guest mAggression @+0x1C00
-
         // Typed accessors -- the de-inlined form of the X360 `*(this+0x1CE0)` etc.
-        AICar* GetCar() const               { return mpCarHost; }
-        void   SetCar(AICar* lpCar)         { mpCarHost = lpCar; }
-        s32    GetAggressionVictim() const  { return meAggressionVictimHost; }
-        void   SetAggressionVictim(s32 li)  { meAggressionVictimHost = li; }
-        AICar* GetAggressionVictimCar() const     { return mpAggressionVictimCarHost; }
-        void   SetAggressionVictimCar(AICar* lpCar) { mpAggressionVictimCarHost = lpCar; }
+        AICar* GetCar() const               { return mpCar; }
+        void   SetCar(AICar* lpCar)         { mpCar = lpCar; }
+        s32    GetAggressionVictim() const  { return meAggressionVictim; }
+        void   SetAggressionVictim(s32 li)  { meAggressionVictim = li; }
+        AICar* GetAggressionVictimCar() const     { return mpAggressionVictimCar; }
+        void   SetAggressionVictimCar(AICar* lpCar) { mpAggressionVictimCar = lpCar; }
 
     private:
         // Never called: documents the offset contract. Every touched member is public, so the
@@ -345,22 +314,23 @@ namespace BrnAI
         static void _AssertLayout();
     };
 
+    CGS_STATIC_ASSERT((sizeof(AIDriver) == 0x1D70), "AIDriver native stride");
     // Pin every guest offset -- the compile gate fails if the layout ever drifts.
     CGS_STATIC_ASSERT((sizeof(NearbyVehicle)  == 0x70),  "NearbyVehicle is 0x70 bytes (16 x 0x70 == 0x700)");
     CGS_STATIC_ASSERT((sizeof(NearbyVehicles) == 0x710), "NearbyVehicles is 0x710 bytes (AIDriver @0x000 .. @0x710)");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mSteeringFan)                 == 0x0710), "AIDriver::mSteeringFan @ +0x710");
-    CGS_STATIC_ASSERT((offsetof(AIDriver, mRacingLineGuest)             == 0x0F20), "AIDriver::mRacingLine (guest span) @ +0xF20");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, mRacingLine)             == 0x0F20), "AIDriver::mRacingLine  @ +0xF20");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mRacingLineGenerator)         == 0x1B30), "AIDriver::mRacingLineGenerator @ +0x1B30");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mPIDController)               == 0x1B34), "AIDriver::mPIDController @ +0x1B34 (ResetPIDTuningState this+6964)");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mPIDControllerDrift)          == 0x1B98), "AIDriver::mPIDControllerDrift @ +0x1B98 (this+7064)");
-    CGS_STATIC_ASSERT((offsetof(AIDriver, mAggressionGuest)             == 0x1C00), "AIDriver::mAggression (guest span) @ +0x1C00");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, mAggression)             == 0x1C00), "AIDriver::mAggression  @ +0x1C00");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mSteeringTargetVector)        == 0x1C70), "AIDriver::mSteeringTargetVector @ +0x1C70");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mTargetRacingLinePos)         == 0x1C80), "AIDriver::mTargetRacingLinePos @ +0x1C80");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mTargetRoadDir)              == 0x1C90), "AIDriver::mTargetRoadDir @ +0x1C90");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mBrakingAnticipationPos)     == 0x1CA0), "AIDriver::mBrakingAnticipationPos @ +0x1CA0");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mBrakingRoadDir)            == 0x1CB0), "AIDriver::mBrakingRoadDir @ +0x1CB0");
     CGS_STATIC_ASSERT((offsetof(AIDriver, m2DCarPos)                  == 0x1CD0), "AIDriver::m2DCarPos @ +0x1CD0");
-    CGS_STATIC_ASSERT((offsetof(AIDriver, mPtrEnumBlock)             == 0x1CE0), "AIDriver::mPtrEnumBlock (guest mpCar) @ +0x1CE0");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, mpCar)             == 0x1CE0), "AIDriver::mpCar (guest mpCar) @ +0x1CE0");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mQuickTurnSteeringLock)    == 0x1CF8), "AIDriver::mQuickTurnSteeringLock @ +0x1CF8");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mfAngleToBrakingTarget)    == 0x1CFC), "AIDriver::mfAngleToBrakingTarget @ +0x1CFC");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mfCarSpeed)               == 0x1D00), "AIDriver::mfCarSpeed @ +0x1D00");
