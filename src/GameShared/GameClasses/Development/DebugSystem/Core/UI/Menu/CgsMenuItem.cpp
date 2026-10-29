@@ -59,10 +59,10 @@ namespace CgsDev
             if (lbSelected)
             {
                 const f32 lfBorder = lrMetrics.mfWindowBorderSize;
-                lpRender->DrawBox(Vector2{lfX - lfBorder, lfY - lfBorder, 0, 0},
-                                  Vector2{lfItemWidth + lfBorder * 2.0f,
-                                          lfHeight + lfBorder * 2.0f, 0, 0},
-                                  lrPalette.mColourHighlight);
+                const Vector2 lv2Position = {lfX - lfBorder, lfY - lfBorder, 0, 0};
+                const Vector2 lv2Size = {lfItemWidth + lfBorder * 2.0f,
+                                         lfHeight + lfBorder * 2.0f, 0, 0};
+                lpRender->DrawBox(lv2Position, lv2Size, lrPalette.mColourHighlight);
                 lTextColour = lrPalette.mColourHighlightText;
             }
 
@@ -77,10 +77,10 @@ namespace CgsDev
                 return;
 
             const f32 lfBorder = GetMetrics().mfWindowBorderSize;
-            lpRender->DrawBox(Vector2{lfX - lfBorder, lfY - lfBorder, 0, 0},
-                              Vector2{lfItemWidth + lfBorder * 2.0f,
-                                      lfHeight + lfBorder * 2.0f, 0, 0},
-                              GetPalette().mColourHighlight);
+            const Vector2 lv2Position = {lfX - lfBorder, lfY - lfBorder, 0, 0};
+            const Vector2 lv2Size = {lfItemWidth + lfBorder * 2.0f,
+                                     lfHeight + lfBorder * 2.0f, 0, 0};
+            lpRender->DrawBox(lv2Position, lv2Size, GetPalette().mColourHighlight);
         }
 
         void MenuItem::ComputeSizeFromText(const char* lpcText)

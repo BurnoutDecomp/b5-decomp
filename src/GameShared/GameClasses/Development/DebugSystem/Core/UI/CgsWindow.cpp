@@ -341,9 +341,9 @@ namespace CgsDev
                 {
                     const f32 lfRight = mfWidth + mfX;
                     const f32 lfBottom = mfHeight + mfY;
-                    lpRender->DrawBox(Vector2{mfX, mfY, 0, 0},
-                                      Vector2{lfRight - mfX, lfBottom - mfY, 0, 0},
-                                      lBackgroundColour);
+                    const Vector2 lv2Position = {mfX, mfY, 0, 0};
+                    const Vector2 lv2Size = {lfRight - mfX, lfBottom - mfY, 0, 0};
+                    lpRender->DrawBox(lv2Position, lv2Size, lBackgroundColour);
                 }
                 if ((mxFlags & KX_FLAGNOBORDER) == 0)
                     lpRender->DrawFrame(mfX, mfY, mfX + mfWidth, mfY + mfHeight,
@@ -356,9 +356,9 @@ namespace CgsDev
             {
                 const f32 lfRight = mfWidth + mfX;
                 const f32 lfBottom = mfHeight + mfY;
-                lpRender->DrawBox(Vector2{mfX, mfY, 0, 0},
-                                  Vector2{lfRight - mfX, lfBottom - mfY, 0, 0},
-                                  lBackgroundColour);
+                const Vector2 lv2Position = {mfX, mfY, 0, 0};
+                const Vector2 lv2Size = {lfRight - mfX, lfBottom - mfY, 0, 0};
+                lpRender->DrawBox(lv2Position, lv2Size, lBackgroundColour);
             }
 
             if ((mxFlags & KX_FLAGNOBORDER) == 0)
@@ -367,9 +367,9 @@ namespace CgsDev
 
             const f32 lfCaptionTop = mfY - lfCaptionHeight;
             const f32 lfCaptionRight = mfX + mfWidth;
-            lpRender->DrawBox(Vector2{mfX, lfCaptionTop, 0, 0},
-                              Vector2{lfCaptionRight - mfX, mfY - lfCaptionTop, 0, 0},
-                              lCaptionColour);
+            const Vector2 lv2CaptionPosition = {mfX, lfCaptionTop, 0, 0};
+            const Vector2 lv2CaptionSize = {lfCaptionRight - mfX, mfY - lfCaptionTop, 0, 0};
+            lpRender->DrawBox(lv2CaptionPosition, lv2CaptionSize, lCaptionColour);
             lpRender->DrawText(mpcCaption, mfX,
                                mfY - lfCaptionHeight + lrMetrics.mfWindowBorderSize,
                                lrMetrics.mfTextSize, lCaptionTextColour);
