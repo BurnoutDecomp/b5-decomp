@@ -63,6 +63,14 @@ namespace CgsFileSystem
         bool Close();
 
     private:
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(offsetof(File, mpHandle) == 96, "ARTIST native file handle");
+            CGS_STATIC_ASSERT(offsetof(File, muCacheId) == 100, "ARTIST file cache id");
+            CGS_STATIC_ASSERT(offsetof(File, macFileName) == 124, "ARTIST file name");
+            CGS_STATIC_ASSERT(sizeof(File) == 384, "ARTIST file stride");
+        }
+
         // ---- device-completion handlers (this TU; run under mFutex) ----
         void OnOpen(rw::core::filesys::AsyncOp* lpOp);   // @0x828E83E0
         void OnRead(rw::core::filesys::AsyncOp* lpOp);   // @0x828E8670

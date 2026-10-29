@@ -224,12 +224,9 @@ namespace Thread
         void Unlock();
 
     private:
-        // Pointer-aligned native EAThread critical-section storage.
-        union
-        {
-            u8     mCRITICAL_SECTION[32];
-            void*  mAlign;
-        };
+        // EAThread's Microsoft native declaration is four uint64_t words.
+        // ARTIST BaseFile requires this8-byte alignment at its+56 lock.
+        u64 mCRITICAL_SECTION[4];
 
         // Not copyable (the embedded critical section is not copyable).
         Futex(const Futex&);
@@ -237,6 +234,7 @@ namespace Thread
     };
 
     CGS_STATIC_ASSERT((sizeof(Futex) == 32), "ARTIST Futex platform span");
+    CGS_STATIC_ASSERT((__alignof(Futex) == 8), "ARTIST Futex native alignment");
 
     // ---- IRunnable + RunnableFunction (EATech DWARF eathread_thread.h) ------
 
