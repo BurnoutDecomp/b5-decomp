@@ -27,7 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <type_traits>
+#include <vectorintrinsics.h>
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionStateManager -- out-of-line bodies.
@@ -757,16 +757,23 @@ Vector3 KV_DIRECTION_BIAS = { 1.0f, 1.0f, 1.0f, 0.0f };
 
 namespace
 {
-    // One lane of `vminfp vD, vA, vB` (AltiVec PEM): a NaN in EITHER operand comes back (vA's when
-    // both are), and -0 is the smaller zero. std::min(a, b) instead keeps `a` when only `b` is NaN.
-    // The side distance below is `vminfp v10, v7, v8` at 0x8269EF10 (crash parity FX-GATE).
-    // Not modelled: the VMX non-Java mode's flush of denormal operands to zero.
+    // ARTIST8269EF10: use the original VMX minimum, including NaN,
+    // signed-zero and denormal behavior.
     f32 VminfpLane(f32 lfA, f32 lfB)
     {
-        if (lfA != lfA) return lfA;
-        if (lfB != lfB) return lfB;
-        if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
-        return (lfA < lfB) ? lfA : lfB;
+        const Vector3 lA = {lfA, lfA, lfA, lfA};
+        const Vector3 lB = {lfB, lfB, lfB, lfB};
+        return __vminfp(__lvx(&lA, 0), __lvx(&lB, 0)).x;
+    }
+
+    f32 NormalLane(const Vector3& lrRow, const Vector3& lrNormal)
+    {
+        const __vector4 lvRow = __lvx(&lrRow, 0);
+        const __vector4 lvNormal = __lvx(&lrNormal, 0);
+        __vector4 lvValue = __vmulfp(__vspltw(lvRow, 0), __vspltw(lvNormal, 0));
+        lvValue = __vmaddfp(__vspltw(lvRow, 1), __vspltw(lvNormal, 1), lvValue);
+        lvValue = __vmaddfp(__vspltw(lvRow, 2), __vspltw(lvNormal, 2), lvValue);
+        return lvValue.x;
     }
 }
 
@@ -846,18 +853,14 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
         const Vector3 lBoxMax = {lMax.x+lComOffset.x, lMax.y+lComOffset.y,
                                 lMax.z+lComOffset.z, lMax.w+lComOffset.w};
         lDebug.GetRender().DrawBox(lBoxMin, lBoxMax, lTransform, 0xFF00FFA0u);
-        const auto TransformLane = [&](f32 lfRight, f32 lfUp, f32 lfAt, f32 lfPos)
-        {
-            f32 lfValue = std::fma(lfRight, lfLocalX, lfPos);
-            lfValue = std::fma(lfUp, lfLocalY, lfValue);
-            return std::fma(lfAt, lfLocalZ, lfValue);
-        };
-        const Vector3 lDrawPosition = {
-            TransformLane(lTransform.Right().x,lTransform.Up().x,lTransform.At().x,lTransform.Pos().x),
-            TransformLane(lTransform.Right().y,lTransform.Up().y,lTransform.At().y,lTransform.Pos().y),
-            TransformLane(lTransform.Right().z,lTransform.Up().z,lTransform.At().z,lTransform.Pos().z),
-            TransformLane(lTransform.Right().w,lTransform.Up().w,lTransform.At().w,lTransform.Pos().w)
-        };
+        const Vector3 lLocal = {lfLocalX, lfLocalY, lfLocalZ, 0.0f};
+        const __vector4 lvLocal = __lvx(&lLocal, 0);
+        __vector4 lvDrawPosition = __vmaddfp(__lvx(&lTransform.Right(), 0),
+            __vspltw(lvLocal, 0), __lvx(&lTransform.Pos(), 0));
+        lvDrawPosition = __vmaddfp(__lvx(&lTransform.Up(), 0), __vspltw(lvLocal, 1), lvDrawPosition);
+        lvDrawPosition = __vmaddfp(__lvx(&lTransform.At(), 0), __vspltw(lvLocal, 2), lvDrawPosition);
+        Vector3 lDrawPosition;
+        __stvx(lvDrawPosition, &lDrawPosition, 0);
         const Vector3 lArrowEnd = {lDrawPosition.x+lNormal.x, lDrawPosition.y+lNormal.y,
                                   lDrawPosition.z+lNormal.z, lDrawPosition.w+lNormal.w};
         lDebug.GetRender().DrawSphere(lDrawPosition, 0.33f, 0xFFFFFFFFu);
@@ -869,13 +872,8 @@ AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
         lrLog << "Orienation: " << "Orientation: " << KAPC_ORIENTATION_NAMES[DebugFlagIndex(leOrientation)] << "\tPosition: ";
         lrLog.AppendFormat("(%f, %f, %f)", lfLocalX, lfLocalY, lfLocalZ);
         lrLog << "\tNormal: ";
-        const auto NormalLane = [&](const Vector3& lrRow)
-        {
-            const f32 lfValue = lrRow.x*lNormal.x;
-            return std::fma(lrRow.z,lNormal.z,std::fma(lrRow.y,lNormal.y,lfValue));
-        };
-        lrLog.AppendFormat("(%f, %f, %f)", NormalLane(lTransform.Right()),
-                           NormalLane(lTransform.Up()), NormalLane(lTransform.At()));
+        lrLog.AppendFormat("(%f, %f, %f)", NormalLane(lTransform.Right(), lNormal),
+                           NormalLane(lTransform.Up(), lNormal), NormalLane(lTransform.At(), lNormal));
         lrLog << "\tFrontDist: " << lfFrontDist << "\tBackDist: " << lfBackDist
               << "\tLeftDist: " << lfLeftDist << "\tRightDist: " << lfRightDist
               << "\tTopDist: " << lfTopDist << "\tBottomDist: " << lfBottomDist << "\tAt: ";
@@ -1019,14 +1017,14 @@ f32 NormalisedImpulse(const Vector3& lrNormalStress, f32 lfTimeStep)
 InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                                const InputContactSpy& lSpy, const LogicInputBuffer& lInput,
                                f32 lfTimeStamp, f32 lfTimeStep)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Collision)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lSpy.mPointOnA;
 
@@ -1119,14 +1117,14 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
 InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                                const InputPropSpy& lSpy, const LogicInputBuffer& lInput,
                                f32 lfTimeStamp, f32 lfTimeStep)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Collision)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_PROP)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lSpy.mPointOnA;
     maEntityID[0] = lSpy.mEntityIdA;
@@ -1202,14 +1200,14 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
 InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                                const BrnPhysics::ContactSpy::DiscardedContact& lSpy,
                                const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 /*lfTimeStep*/)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Collision)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lSpy.mPointOnA;
     maEntityID[0] = lSpy.mEntityIdA;
@@ -1763,14 +1761,14 @@ EeMaterialType MapBodyPartEnumToMateral(BrnPhysics::Deformation::EBodyParts leBo
 InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                                const BrnPhysics::ContactSpy::PhysicalCarPartContact& lContact,
                                const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 lfTimeStep)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Collision)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lContact.mPointOnA;
     maEntityID[0] = lContact.mEntityIdA;
@@ -1830,14 +1828,14 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
 InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                                const BrnPhysics::Deformation::BrokenJointNotificationEvent& lEvent,
                                const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 /*lfTimeStep*/)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Detach)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lEvent.mPointOnA;
     maEntityID[1].muValue = 0;
@@ -1853,14 +1851,14 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
 InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                                const BrnPhysics::Deformation::DetachedPartNotificationEvent& lEvent,
                                const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 /*lfTimeStep*/)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Detach)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lEvent.mPointOnA;
     maEntityID[1].muValue = 0;
@@ -1887,14 +1885,14 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
 InputCollision::InputCollision(CollisionStateManager& lMgr, BrnPhysics::Deformation::EBodyParts leBodyPart,
                                EntityId lEntityId, const GenericEntity& lEntity,
                                AttribSys::Enums::eAction::eAction leAction, f32 lfVelocity)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(leAction)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lEntity.mPosition;
     maMaterial[0] = static_cast<u64>(static_cast<s64>(MapBodyPartEnumToMateral(leBodyPart)));
@@ -1927,14 +1925,14 @@ InputCollision::InputCollision(CollisionStateManager& lMgr, BrnPhysics::Deformat
 InputCollision::InputCollision(CollisionStateManager& lMgr,
                                const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lEvent,
                                const GenericEntity& lEntity)
-    : maMaterial{0, 0}
-    , maEntityID{{0}, {0}}
-    , mfPriorityAddition(0.0f)
+    : mfPriorityAddition(0.0f)
     , meAction(AttribSys::Enums::eAction::Collision)
     , meOrientation(AttribSys::Enums::eOrientation::Front)
     , mePipeline(E_REGULAR)
     , mbCull(false)
 {
+    maMaterial[0] = maMaterial[1] = 0;
+    maEntityID[0].muValue = maEntityID[1].muValue = 0;
     mScrapeInfo.mbValid = false;
     mPosition = lEntity.mPosition;
     CGS_ASSERT(lEvent.meNewState < BrnPhysics::Deformation::NUM_GLASS_STATES,
@@ -2493,87 +2491,19 @@ void CollisionStateManager::UpdateResolver(
         // frame one of them is non-empty, and each glass event's state and suppression flag -- the
         // glass builder culls everything but an unsuppressed smash (0x826BE544..0x826BE564).
         // Per leg: up to 8 culled inputs and, separately, up to 24 live ones.
-        struct LegBudget { u32 mu32Culled; u32 mu32Live; };
-        auto DiagLeg = [this, lbDeformDiag](const char* lpcLeg, u32 lu32From, LegBudget& lrBudget)
-        {
-            if (!lbDeformDiag)
-                return;
-            for (u32 lu32Index = lu32From; lu32Index < mu32InputCollisionCount; ++lu32Index)
-            {
-                const InputCollision& lrAdded = maInputCollision[lu32Index];
-                u32& lru32Budget = lrAdded.mbCull ? lrBudget.mu32Culled : lrBudget.mu32Live;
-                if (lru32Budget >= (lrAdded.mbCull ? 8u : 24u))
-                    continue;
-                ++lru32Budget;
-                char lacLine[192];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] deform leg=%s action=%d mat=%llx/%llx cull=%d impulse=%g\n",
-                              lpcLeg, static_cast<s32>(lrAdded.meAction),
-                              static_cast<unsigned long long>(lrAdded.maMaterial[0]),
-                              static_cast<unsigned long long>(lrAdded.maMaterial[1]),
-                              lrAdded.mbCull ? 1 : 0, static_cast<double>(lrAdded.maParameter[0].x));
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        };
-        if (lbDeformDiag)
-        {
-            const s32 liGlass = static_cast<s32>(lrDeformation.mGlassSmashOrCrackQueue.GetLength());
-            const s32 liHinge = static_cast<s32>(lrDeformation.mJointedPartStateQueue.GetLength());
-            const s32 liJoint = static_cast<s32>(lrDeformation.mBrokenJointNotificationQueue.GetLength());
-            const s32 liDetached = static_cast<s32>(lrDeformation.mDetachedPartNotificationQueue.GetLength());
-            const s32 liCarPart = static_cast<s32>(lrContacts.GetPhysicalCarPartContacts()->GetLength());
-            static u32 suCensusCount = 0;
-            if ((liGlass | liHinge | liJoint | liDetached | liCarPart) != 0 && suCensusCount < 48u)
-            {
-                ++suCensusCount;
-                char lacLine[160];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] deform queues glass=%d hinge=%d joint=%d detached=%d carpart=%d\n",
-                              liGlass, liHinge, liJoint, liDetached, liCarPart);
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-            static u32 su32CrackEventCount = 0;
-            static u32 su32SmashEventCount = 0;
-            for (s32 liIndex = 0; liIndex < liGlass; ++liIndex)
-            {
-                const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lrEvent =
-                    lrDeformation.mGlassSmashOrCrackQueue.GetEvent(liIndex);
-                u32& lru32EventBudget = lrEvent.meNewState == BrnPhysics::Deformation::E_GLASS_STATE_SMASHED
-                                            ? su32SmashEventCount : su32CrackEventCount;
-                if (lru32EventBudget >= 16u)
-                    continue;
-                ++lru32EventBudget;
-                char lacLine[160];
-                std::snprintf(lacLine, sizeof(lacLine),
-                              "[collision-audio] glass event vehicle=%08x part=%d state=%d dontplay=%d crack=%g fatal=%d impact=%d\n",
-                              static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue),
-                              static_cast<s32>(lrEvent.meGlassPart), static_cast<s32>(lrEvent.meNewState),
-                              lrEvent.mbDontPlaySmashEffect ? 1 : 0, static_cast<double>(lrEvent.mfCrackAmount),
-                              static_cast<s32>(mFrameInformation.meFatality.GetCurrent()),
-                              static_cast<s32>(mFrameInformation.meImpactTime.GetCurrent()));
-                *CgsDev::Log::gpDebugPrint << lacLine;
-            }
-        }
-        static LegBudget sGlassBudget = {0, 0}, sHingeBudget = {0, 0}, sJointBudget = {0, 0};
-        static LegBudget sDetachedBudget = {0, 0}, sCarPartBudget = {0, 0};
-        u32 lu32LegStart = mu32InputCollisionCount;
         if (!KI_DEBUG_FILTER_NO_GLASS)
             UpdateGlass(lrDeformation);
-        DiagLeg("glass", lu32LegStart, sGlassBudget);
-        lu32LegStart = mu32InputCollisionCount;
+
         if (!KI_DEBUG_FILTER_NO_BODY_PARTS)
         {
             UpdateHingingBodyParts(&lrDeformation.mJointedPartStateQueue);
-            DiagLeg("hinge", lu32LegStart, sHingeBudget);
-            lu32LegStart = mu32InputCollisionCount;
+
             ImportContactSpies(lrDeformation.mBrokenJointNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
-            DiagLeg("joint", lu32LegStart, sJointBudget);
-            lu32LegStart = mu32InputCollisionCount;
+
             ImportContactSpies(lrDeformation.mDetachedPartNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
-            DiagLeg("detached", lu32LegStart, sDetachedBudget);
-            lu32LegStart = mu32InputCollisionCount;
+
             ImportContactSpies(*lrContacts.GetPhysicalCarPartContacts(), lrInput, mfCurrentTime, afDeltaTime);
-            DiagLeg("carpart", lu32LegStart, sCarPartBudget);
+
         }
 
         if (!KI_DEBUG_FILTER_NO_PROPS)
