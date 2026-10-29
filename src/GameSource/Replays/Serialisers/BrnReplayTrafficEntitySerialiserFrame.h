@@ -17,7 +17,7 @@
 //
 // REGION MAP (static-base offsets, all from the accessor ASM):
 //   +0x00000 (0)       mHeader              148 bytes  (Read/Write a2,148)
-//   +0x00094 (148)     mTrafficLightState   2 bytes    (Read/Write a2+148,2)
+//   +0x00094 (148)     muLocalPlayerHull    2 bytes    (Read/Write a2+148,2)
 //   +0x00096 (150)     muNumBonusAssets     1 byte     (SetBonusAssets stores count here)
 //   +0x00097 (151)     maBonusAssets[ . ]   2 bytes    (SetBonusAssets stores assets +151+i; Read/Write a2+151,2)
 //   +0x000A0 (160)     mVehicleUpdateBits   FastBitArray<600> (80 bytes / 10 u64; Read/Write a2+160,80)
@@ -34,6 +34,7 @@
 //     GetPhysicsInfo: 4112*index + base + 40480.
 
 #include "types.hpp"
+#include "GameSource/Replays/Serialisers/BrnReplayTrafficSerialiserFrame.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 
 namespace BrnTraffic { class Vehicle; }
@@ -128,32 +129,13 @@ namespace BrnReplays
 
     // The 251008-byte static-layout buffer GetStaticLayout returns. Only the regions the
     // accessors prove are named; the spans between them are explicit padding.
-    struct TrafficEntitySerialiserStaticLayout
+    struct TrafficEntitySerialiserStaticLayout : TrafficSerialiserFrame
     {
-        u8                       maHeader[148];               // @0x00000  mHeader
-        u8                       maTrafficLightState[2];      // @0x00094
-        u8                       muNumBonusAssets;            // @0x00096
-        u8                       maBonusAssets[2];            // @0x00097  (count at +150, assets +151..)
-        u8                       maPad0099[160 - 153];        // @0x00099  -> +0xA0
-        CgsContainers::FastBitArray<600> mVehicleUpdateBits;  // @0x000A0  80 bytes
-        CgsContainers::FastBitArray<25>  mPhysicsBits;        // @0x000F0  8 bytes
-        // @0x000F8 .. @0x00100 : 8 undecoded bytes before the vehicle chunks.
-        u8                       maPad00F8[256 - 248];        // @0x000F8
         // 3 vehicle chunks, each KU_VEHICLE_CHUNK_STRIDE (13408) bytes.
         u8                       maVehicleChunks[KU_NUM_VEHICLE_CHUNKS * KU_VEHICLE_CHUNK_STRIDE]; // @0x00100
         // @0x100 + 3*13408 == 40480 == KU_OFFSET_PHYSICS_INFO (the chunks run right up to it).
         TrafficPhysicsInfoRecord maPhysicsInfo[KU_NUM_PHYSICS_INFO]; // @0x09E20  25 * 4112 == 102800
-        // @0x9E20 + 102800 == 143280; the slot table begins +5 bytes later, at +143285.
-        u8                       maPad22FB0[KU_OFFSET_SLOT_TABLE - (KU_OFFSET_PHYSICS_INFO + KU_PHYSICS_INFO_TOTAL)]; // @0x22FB0  5 bytes
-        // The slot table: KU_NUM_SLOTS one-byte entries at stride KU_SLOT_STRIDE
-        // (only byte 0 of each 8-byte slot is used; ReadFrame/WriteFrame walk these).
-        // Held as a flat byte region so the strided access lands at maSlotTable[i*8];
-        // the read-side trailing scalars below reuse this region's tail bytes.
-        u8                       maSlotTable[KU_OFFSET_READ_SLOTS_VALID - KU_OFFSET_SLOT_TABLE]; // @0x22FB5
-        u8                       muReadSlotsValid;            // @0x242B0  read-side (cntlzw>>5 ^1)
-        u8                       maPad242B1[KU_OFFSET_READ_SLOTS_WORD - (KU_OFFSET_READ_SLOTS_VALID + 1)]; // 3 bytes
-        u32                      muReadSlotsWord;             // @0x242B4  read-side BaseSerialiser::Read(_,4)
-        u8                       maPad242B8[KU_OFFSET_INFO_VALID - (KU_OFFSET_READ_SLOTS_WORD + 4)]; // -> +0x242C0
+        u8                       maTrafficLightManager[4816]; // @143280, original span includes four reserved tail bytes
         // The info-valid qword (@0x242C0). Read() snapshots the whole 8 bytes from mPhysicsBits;
         // Block-A and the Write path memset it to 0. It is NOT a write-side trailing-scalar source:
         // WriteFrame writes the SAME +148080/+148084 slots-valid scalars the read side uses (the

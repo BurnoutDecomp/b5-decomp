@@ -22,77 +22,24 @@
 //     to those container methods (reverse-inlining).
 //
 // Callee declarations (BaseSerialiser, the frame structs, the Quantised packers, the
-// Vehicle, ReadPhysicsInfo) live in their own TUs; included / declared here for the
+// Vehicle) live in their own TUs; the physics record codec is recovered below for the
 // compile-only gate.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameSource/Replays/BrnReplayBaseSerialiser.h"
+#include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h"
 #include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiserFrame.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"
 
 #include <cstring>
+#include <cmath>
+#include "vendor/renderware/physics/JointFrames.hpp"
+#include "GameSource/Replays/BrnReplayQuantisedVector4.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 
 namespace BrnReplays
 {
-    // DWARF home: GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h.
-    class TrafficEntitySerialiser : public BaseSerialiser
-    {
-    public:
-        // @0x8264C978
-        s32 Construct();
-        // @0x8264C710 -- returns the static-layout buffer, asserting it is big enough.
-        TrafficEntitySerialiserStaticLayout* GetStaticLayout();
-
-        // @0x82653418 -- lazily clear the static layout on the first frame, mark it done.
-        TrafficEntitySerialiserStaticLayout* CheckStaticLayoutCleared();
-
-        // @0x8265F2D8 / @0x8265F4E8 -- playback / record one frame (top-level dispatch).
-        s32 Read();
-        s32 Write();
-
-        // @0x8265DD38 / @0x8265D288 -- playback / record one whole frame buffer.
-        void ReadFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3);
-        void WriteFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3);
-
-        // @0x82658D98 / @0x82658B50 -- read / write a quat+pos transform record.
-        void ReadAsQuatPos(void* lpTransform);
-        void WriteAsQuatPos(const void* lpTransform);
-
-        // @ ReadPhysicsInfo (external TU) / @0x8265AE98 WritePhysicsInfo.
-        void ReadPhysicsInfo(TrafficPhysicsInfoRecord* lpInfo, u32 luIndex, s32 liArg4);
-        void WritePhysicsInfo(const u8* lpInfo, u8 luIndex);
-
-        // --- per-vehicle accessors (return pointers into the chunked static layout) ---
-        // @0x82714118
-        TrafficPhysicsInfoRecord* GetPhysicsInfo(u32 luPhysicsInfo);
-        // @0x82707280
-        TrafficVehicleDataRecord* GetVehicleData(u32 luVehicle);
-        // @0x827071E8
-        TrafficVehicleTransformRecord* GetVehicleTransform(u32 luVehicle);
-
-        // --- record-side setters (TrafficEntityModule::UpdateSerialiser drives these) ---
-        // @0x827073C8
-        void SetActiveHullsForLocalPlayer(const void* lpActiveHulls);
-        // @0x82707438
-        void SetBonusAssets(const u8* lpauBonusAssets, u32 luNumBonusAssets);
-        // @0x82707320
-        void SetPhysicsData(const u64* lpBits, const void* lpaPhysicsInfo);
-        // @0x82714060
-        void SetVehicleData(u32 luVehicle, BrnTraffic::Vehicle* lpVehicle);
-        // @0x82707168
-        void SetVehicleTransforms(const void* lpaTransforms);
-
-    private:
-        // X360: two bytes at this+0x5C / this+0x5D, both cleared by Construct.
-        // mbStaticLayoutCleared (+0x5C) is set by CheckStaticLayoutCleared once the
-        // static layout has been zeroed; mbDeltaActive (+0x5D) tracks whether a delta
-        // chain is in progress across Read frames.
-        bool mbStaticLayoutCleared; // @0x5C
-        bool mbDeltaActive;         // @0x5D
-    };
-
     // -------------------------------------------------------------------------
 
     s32 TrafficEntitySerialiser::Construct()
@@ -119,7 +66,7 @@ namespace BrnReplays
     // On the first frame after (re)start, when the static layout has not yet been
     // cleared and the static buffer exists, zero the whole layout, reset the frame's
     // bit arrays / info-valid words and mark it cleared.
-    TrafficEntitySerialiserStaticLayout* TrafficEntitySerialiser::CheckStaticLayoutCleared()
+    void TrafficEntitySerialiser::CheckStaticLayoutCleared()
     {
         if (!mbStaticLayoutCleared && mpStaticBuffer != nullptr)
         {
@@ -134,12 +81,10 @@ namespace BrnReplays
             lpLayout->mVehicleUpdateBits.UnSetAll();
             lpLayout->mPhysicsBits.UnSetAll();
             std::memset(&lpLayout->mInfoValid, 0, sizeof(lpLayout->mInfoValid));
-            lpLayout->maTrafficLightState[0] = 0xFF;
-            lpLayout->maTrafficLightState[1] = 0xFF;
+            lpLayout->muLocalPlayerHull = 0xFFFF;
 
             mbStaticLayoutCleared = true;
         }
-        return GetStaticLayout();
     }
 
     // @0x82714118
@@ -192,7 +137,7 @@ namespace BrnReplays
 
     // @0x827073C8
     // Copy the 148-byte active-hull header for the local player into the static layout.
-    void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const void* lpActiveHulls)
+    void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const ::Set<u16, 72>* lpActiveHulls)
     {
         CGS_ASSERT(lpActiveHulls != nullptr, "lpActiveHulls");
         std::memcpy(GetStaticLayout(), lpActiveHulls, 148);
@@ -221,14 +166,15 @@ namespace BrnReplays
     // 64-bit *lpBits is copied unchanged. (The Hex-Rays `HIDWORD(v7) = 0x10000` is a
     // decompiler mis-model of `lis r9,1; ori r31,r9,0x9190` building the 0x19190 == 102800
     // memcpy size in r31; there is no high-dword rewrite in the raw asm.)
-    void TrafficEntitySerialiser::SetPhysicsData(const u64* lpBits, const void* lpaPhysicsInfo)
+    void TrafficEntitySerialiser::SetPhysicsData(const CgsContainers::BitArray<25>* lpBits, const BrnTraffic::TrafficPhysicsInfo* lpaPhysicsInfo)
     {
         CGS_ASSERT(lpBits != nullptr, "lpBits");
         CGS_ASSERT(lpaPhysicsInfo != nullptr, "lpaPhysicsInfo");
 
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         // asm: ld r10,0(a2) ; std r10,0xF0(layout) -- copy all 8 bytes of *lpBits as-is.
-        const u64 lu64Bits = *lpBits;
+        u64 lu64Bits;
+        std::memcpy(&lu64Bits, lpBits, sizeof(lu64Bits));
         std::memcpy(&lpLayout->mPhysicsBits, &lu64Bits, sizeof(lu64Bits));
 
         std::memcpy(lpLayout->maPhysicsInfo, lpaPhysicsInfo, KU_PHYSICS_INFO_TOTAL);
@@ -276,17 +222,27 @@ namespace BrnReplays
     // the matrix store the caller performs.
     void TrafficEntitySerialiser::ReadAsQuatPos(void* lpTransform)
     {
-        u8 lauPacked[12];
+        alignas(16) u8 lauPacked[16];
         BaseSerialiser::Read(lauPacked, 12);
-
         float lafUnpacked[8];
         QuantisedQuatPos::UnPack(lafUnpacked, lauPacked);
-
-        // The X360 builds a rotation matrix from the unpacked quaternion in VMX regs and
-        // stores it (plus the position lane) into lpTransform. The exact matrix math is
-        // produced by the (not-yet reconstructed) QuantisedQuatPos expansion; copy the
-        // unpacked working set into the transform record as the grounded surface.
-        std::memcpy(lpTransform, lafUnpacked, sizeof(lafUnpacked));
+        // ARTIST 82658E34..82658EA8: the rwmath scaled-quaternion builder,
+        // identical to the inline in RigidBody::DynamicUpdate. Keep fused neg_qq
+        // and the three original permutation leftovers in basis W lanes.
+        const float lfSX = 1.4142135381698608f * lafUnpacked[0];
+        const float lfSY = 1.4142135381698608f * lafUnpacked[1];
+        const float lfSZ = 1.4142135381698608f * lafUnpacked[2];
+        const float lfSW = 1.4142135381698608f * lafUnpacked[3];
+        const float lfDX = std::fmaf(-lfSX, lfSX, 0.5f);
+        const float lfDY = std::fmaf(-lfSY, lfSY, 0.5f);
+        const float lfDZ = std::fmaf(-lfSZ, lfSZ, 0.5f);
+        const float lfXY = lfSX * lfSY, lfYZ = lfSY * lfSZ, lfZX = lfSZ * lfSX;
+        const float lfWZ = lfSW * lfSZ, lfWX = lfSW * lfSX, lfWY = lfSW * lfSY;
+        auto& lrTransform = *static_cast<Matrix44Affine*>(lpTransform);
+        lrTransform.xAxis = {lfDY + lfDZ, lfXY + lfWZ, lfZX - lfWY, lfDX + lfDY};
+        lrTransform.yAxis = {lfXY - lfWZ, lfDZ + lfDX, lfYZ + lfWX, lfXY - lfWZ};
+        lrTransform.zAxis = {lfZX + lfWY, lfYZ - lfWX, lfDX + lfDY, lfXY + lfWZ};
+        lrTransform.wAxis = {lafUnpacked[4], lafUnpacked[5], lafUnpacked[6], 0.0f};
     }
 
     // @0x82658B50
@@ -294,13 +250,18 @@ namespace BrnReplays
     // quantised record and write it to the stream.
     void TrafficEntitySerialiser::WriteAsQuatPos(const void* lpTransform)
     {
-        // The X360 reads the transform's basis vectors in VMX regs, derives a quaternion
-        // (with the w-sign-selection `fsel`) plus the position, then Pack()s an 8-float
-        // scratch. Reconstructed as the scratch-build + Pack + Write surface.
-        float lafScratch[8];
-        std::memcpy(lafScratch, lpTransform, sizeof(lafScratch));
-
-        u8 lauPacked[12];
+        const auto& lrTransform = *static_cast<const Matrix44Affine*>(lpTransform);
+        rw::math::vpu::Matrix33 lBasis;
+        lBasis.xAxis = lrTransform.xAxis;
+        lBasis.yAxis = lrTransform.yAxis;
+        lBasis.zAxis = lrTransform.zAxis;
+        const rw::math::vpu::Quaternion lQuat = rw::math::vpu::QuaternionFromMatrix33(lBasis, 0.0f);
+        float lafScratch[8] = {lQuat.x, lQuat.y, lQuat.z, lQuat.w,
+                              lrTransform.Pos().x, 0.0f, lrTransform.Pos().z, 0.0f};
+        // ARTIST 82658D58..82658D6C, flt_8206CEB4=-900. Unordered selects the floor.
+        const float lfY = lrTransform.Pos().y;
+        lafScratch[5] = (lfY - -900.0f >= 0.0f) ? lfY : -900.0f;
+        alignas(16) u8 lauPacked[16];
         QuantisedQuatPos::Pack(lauPacked, lafScratch);
         BaseSerialiser::Write(lauPacked, 12);
     }
@@ -315,17 +276,17 @@ namespace BrnReplays
         CGS_ASSERT(lpFrame != nullptr, "lpFrame");
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265DD9C-0x8265DE18), each citing a distinct member.
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maTrafficLightState) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maTrafficLightManager) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0");
 
-        BaseSerialiser::Read(lpFrame->maHeader, 148);
-        BaseSerialiser::Read(lpFrame->maTrafficLightState, 2);
+        BaseSerialiser::Read(&lpFrame->mHeader, 148);
+        BaseSerialiser::Read(&lpFrame->muLocalPlayerHull, 2);
         // The bonus-asset count is read with the 1-byte ReadByte primitive (sub_8264FCF0),
         // not the general Read(_,1).
         BaseSerialiser::ReadByte(&lpFrame->muNumBonusAssets);
@@ -358,7 +319,7 @@ namespace BrnReplays
         // at stride KU_SLOT_STRIDE starting at the slot-table base, read one more byte
         // into a local, store its inverted-zero test into muReadSlotsValid, then read the
         // 4-byte muReadSlotsWord.
-        u8* lpSlot = lpFrame->maSlotTable;
+        u8* lpSlot = (lpFrame->maTrafficLightManager + 5);
         for (u32 luSlot = 0; luSlot < KU_NUM_SLOTS; ++luSlot)
         {
             BaseSerialiser::ReadByte(lpSlot);
@@ -368,8 +329,8 @@ namespace BrnReplays
         BaseSerialiser::ReadByte(&luByte);
         // asm 0x8265E7C8-0x8265E7DC: cntlzw(byte); extrwi ,1,26 (== (clz>>5)&1 == (byte==0));
         // xori ,1  -> stored value is (byte != 0) ? 1 : 0.
-        lpFrame->muReadSlotsValid = (luByte != 0) ? 1u : 0u; // ((cntlzw(byte)>>5)&1) ^ 1
-        BaseSerialiser::Read(&lpFrame->muReadSlotsWord, 4);
+        lpFrame->maTrafficLightManager[4800] = (luByte != 0) ? 1u : 0u; // ((cntlzw(byte)>>5)&1) ^ 1
+        BaseSerialiser::Read(&lpFrame->maTrafficLightManager[4804], 4);
     }
 
     // @0x8265D288
@@ -379,17 +340,17 @@ namespace BrnReplays
         CGS_ASSERT(lpFrame != nullptr, "lpFrame");
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265D2EC-0x8265D368), each citing a distinct member.
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maTrafficLightState) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maTrafficLightManager) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0");
 
-        BaseSerialiser::Write(lpFrame->maHeader, 148);
-        BaseSerialiser::Write(lpFrame->maTrafficLightState, 2);
+        BaseSerialiser::Write(&lpFrame->mHeader, 148);
+        BaseSerialiser::Write(&lpFrame->muLocalPlayerHull, 2);
         BaseSerialiser::Write(&lpFrame->muNumBonusAssets, 1);
         BaseSerialiser::Write(lpFrame->maBonusAssets, 2);
         BaseSerialiser::Write(&lpFrame->mVehicleUpdateBits, 80);
@@ -418,14 +379,14 @@ namespace BrnReplays
         // Trailing slot table (loc_8265DCD4-0x8265DD28): write KU_NUM_SLOTS one-byte slots at
         // stride KU_SLOT_STRIDE, then the SAME +148080/+148084 slots-valid scalars the read side
         // uses (asm r29=a2+143280, Write(+0x12C0,1)/Write(+0x12C4,4) -- no read/write asymmetry).
-        const u8* lpSlot = lpFrame->maSlotTable;
+        const u8* lpSlot = (lpFrame->maTrafficLightManager + 5);
         for (u32 luSlot = 0; luSlot < KU_NUM_SLOTS; ++luSlot)
         {
             BaseSerialiser::Write(lpSlot, 1);
             lpSlot += KU_SLOT_STRIDE;
         }
-        BaseSerialiser::Write(&lpFrame->muReadSlotsValid, 1);  // +148080
-        BaseSerialiser::Write(&lpFrame->muReadSlotsWord, 4);   // +148084
+        BaseSerialiser::Write(&lpFrame->maTrafficLightManager[4800], 1);  // +148080
+        BaseSerialiser::Write(&lpFrame->maTrafficLightManager[4804], 4);   // +148084
     }
 
     // @0x8265F2D8
@@ -597,5 +558,220 @@ namespace BrnReplays
         {
             lpRecord->maData[1] |= 0x20u;
         }
+    }
+}
+
+
+namespace BrnReplays
+{
+namespace
+{
+    // FLAG recovered role name. ARTIST static descriptor 82FFA5C0, initializer
+    // 82C5F3F8..82C5F47C: r4/r5/r6/r7=9/9/9/5, v1=(-2,-2,-2,0), v2=(2,2,2,1).
+    const QuantisedVector4Compression sTrafficSkinningCompression(
+        Vector4{-2.0f,-2.0f,-2.0f,0.0f}, Vector4{2.0f,2.0f,2.0f,1.0f}, 9,9,9,5);
+
+    bool SameTrafficTransformXYZ(const Matrix44Affine& a, const Matrix44Affine& b)
+    {
+        const Vector3* ap = &a.xAxis; const Vector3* bp = &b.xAxis;
+        for (u32 row=0;row<4;++row)
+            if (ap[row].x != bp[row].x || ap[row].y != bp[row].y || ap[row].z != bp[row].z)
+                return false;
+        return true;
+    }
+    template<class T> bool TrafficXYZDeltaExceeds(const T& a, const T& b)
+    {
+        // flt_8209D7B0. Strict vcmpgt: NaN is false, unlike an inverted <= test.
+        const float epsilon=0.0000152587890625f;
+        return std::fabs(a.x-b.x)>epsilon || std::fabs(a.y-b.y)>epsilon || std::fabs(a.z-b.z)>epsilon;
+    }
+}
+
+    // ARTIST 8265AE98..8265B70C. A four-bit mask selects detached parts,
+    // skinning, light locators and the wheel/deformation block respectively.
+    void TrafficEntitySerialiser::WritePhysicsInfo(const u8* lpInfo, u8 luIndex)
+    {
+        const auto& info=*reinterpret_cast<const BrnTraffic::TrafficPhysicsInfo*>(lpInfo);
+        CGS_ASSERT(info.mDetachedPartQueue.muNumParts<=20,"lPhysicsInfo.muNumDetachedParts <= 20");
+        auto* layout=GetStaticLayout();
+        const BrnTraffic::TrafficPhysicsInfo* previous=nullptr;
+        if (!IsKeyFrame())
+        {
+            CGS_ASSERT(luIndex<25,"invalid index");
+            if ((layout->mInfoValid & (u64(1)<<luIndex))!=0)
+                previous=reinterpret_cast<const BrnTraffic::TrafficPhysicsInfo*>(layout->maPreviousPhysicsInfo)+luIndex;
+        }
+        u8 flags=15;
+        if (previous)
+        {
+            CGS_ASSERT(!IsKeyFrame(),"!IsKeyFrame()");
+            u32 part=0;
+            if(info.mDetachedPartQueue.muNumParts==previous->mDetachedPartQueue.muNumParts)
+            {
+                for(;part<info.mDetachedPartQueue.muNumParts;++part)
+                    if(info.mDetachedPartQueue.mau8PartIndex[part]!=previous->mDetachedPartQueue.mau8PartIndex[part] ||
+                       !SameTrafficTransformXYZ(info.mDetachedPartQueue.maTransforms[part],previous->mDetachedPartQueue.maTransforms[part])) break;
+                if(part==info.mDetachedPartQueue.muNumParts) flags&=~1u;
+            }
+            if(std::memcmp(info.maSkinningOffsets_Scratch,previous->maSkinningOffsets_Scratch,sizeof(info.maSkinningOffsets_Scratch))==0) flags&=~2u;
+            if(info.miNumLightLocators==previous->miNumLightLocators)
+            {
+                s32 light=0;
+                // These two counterintuitive branches are in the shipped code:
+                // 8265B1EC beq exits on EQUAL tags; 8265B22C bne exits when
+                // every XYZ delta is <= epsilon. Do not replace with equality.
+                for(;light<info.miNumLightLocators;++light)
+                    if(info.maLightTagPointTypes[light]==previous->maLightTagPointTypes[light] ||
+                       !TrafficXYZDeltaExceeds(info.maLightLocatorPositions[light],previous->maLightLocatorPositions[light])) break;
+                if(light==info.miNumLightLocators) flags&=~4u;
+            }
+            bool sameWheels=std::memcmp(info.mabWheelExists,previous->mabWheelExists,sizeof(info.mabWheelExists))==0;
+            bool sameRoad=!TrafficXYZDeltaExceeds(info.mvRoadTestNormal_HeightAboveRoad,previous->mvRoadTestNormal_HeightAboveRoad) &&
+                !(std::fabs(info.mvRoadTestNormal_HeightAboveRoad.w-previous->mvRoadTestNormal_HeightAboveRoad.w)>0.0000152587890625f);
+            if(sameWheels && sameRoad && info.mbIsDeforming==previous->mbIsDeforming &&
+               info.mbIsFatallyCrashing==previous->mbIsFatallyCrashing && info.mu8RenderDamageFlags==previous->mu8RenderDamageFlags)
+            {
+                u32 glass=0;
+                for(;glass<8;++glass)
+                    if(info.mafGlassPaneFractureAmounts[glass]!=previous->mafGlassPaneFractureAmounts[glass]) break;
+                // Original 8265B39C branches away when ALL glass entries match.
+                // The following wheel loop subtracts each loaded row from ITSELF
+                // (8265B3B8/C4/CC/D0), so its strict comparisons never exceed epsilon.
+                if(glass!=8) flags&=~8u;
+            }
+        }
+        BaseSerialiser::WriteByte(&flags);
+        if(flags&1)
+        {
+            BaseSerialiser::Write(&info.mDetachedPartQueue.muNumParts,1);
+            for(u32 part=0;part<info.mDetachedPartQueue.muNumParts;++part)
+            {
+                BaseSerialiser::Write(&info.mDetachedPartQueue.mau8PartIndex[part],1);
+                WriteAsQuatPos(&info.mDetachedPartQueue.maTransforms[part]);
+            }
+        }
+        if(flags&2)
+            for(u32 point=0;point<128;++point)
+            {
+                alignas(16) u8 packed[16]; const auto& v=info.maSkinningOffsets_Scratch[point];
+                QuantisedVector4::Pack(packed,&sTrafficSkinningCompression,Vector4{v.x,v.y,v.z,v.w});
+                BaseSerialiser::Write(packed,4);
+            }
+        if(flags&4)
+        {
+            BaseSerialiser::Write(&info.miNumLightLocators,1);
+            for(s32 light=0;light<info.miNumLightLocators;++light)
+            {
+                BaseSerialiser::WriteFloat(&info.maLightLocatorPositions[light].x);
+                BaseSerialiser::WriteFloat(&info.maLightLocatorPositions[light].y);
+                BaseSerialiser::WriteFloat(&info.maLightLocatorPositions[light].z);
+                BaseSerialiser::Write(&info.maLightTagPointTypes[light],1);
+            }
+        }
+        if(flags&8)
+        {
+            BaseSerialiser::Write(info.mabWheelExists,4);
+            BaseSerialiser::Write(&info.mvRoadTestNormal_HeightAboveRoad,16);
+            for(u32 wheel=0;wheel<4;++wheel)
+            {
+                float packed[12]; const Vector3* rows=&info.maWheelTransforms[wheel].xAxis;
+                for(u32 row=0;row<4;++row) {packed[3*row]=rows[row].x;packed[3*row+1]=rows[row].y;packed[3*row+2]=rows[row].z;}
+                BaseSerialiser::Write(packed,48);
+            }
+            BaseSerialiser::Write(&info.mbIsDeforming,1);
+            BaseSerialiser::Write(&info.mbIsFatallyCrashing,1);
+            BaseSerialiser::Write(&info.mu8RenderDamageFlags,1);
+            BaseSerialiser::Write(info.mafGlassPaneFractureAmounts,32);
+        }
+    }
+
+    // ARTIST 8265B710..8265BDC8; exported callers retained the name but no
+    // function JSON was emitted. Recovered directly from the raw image assembly.
+    void TrafficEntitySerialiser::ReadPhysicsInfo(TrafficPhysicsInfoRecord* lpInfo,u32 luIndex,s32)
+    {
+        auto& info=*reinterpret_cast<BrnTraffic::TrafficPhysicsInfo*>(lpInfo);
+        auto* layout=GetStaticLayout();
+        const BrnTraffic::TrafficPhysicsInfo* previous=nullptr;
+        if(!IsKeyFrame())
+        {
+            CGS_ASSERT(luIndex<25,"invalid index");
+            if(layout->mInfoValid & (u64(1)<<luIndex))
+                previous=reinterpret_cast<const BrnTraffic::TrafficPhysicsInfo*>(layout->maPreviousPhysicsInfo)+luIndex;
+        }
+        u8 flags; BaseSerialiser::ReadByte(&flags);
+        CGS_ASSERT(flags==15 || previous!=nullptr,"previous physics info required for delta");
+        if(flags&1)
+        {
+            BaseSerialiser::ReadByte(&info.mDetachedPartQueue.muNumParts);
+            for(u32 part=0;part<info.mDetachedPartQueue.muNumParts;++part)
+            {
+                BaseSerialiser::ReadByte(&info.mDetachedPartQueue.mau8PartIndex[part]);
+                ReadAsQuatPos(&info.mDetachedPartQueue.maTransforms[part]);
+            }
+        }
+        else
+        {
+            CGS_ASSERT(!IsKeyFrame(),"!IsKeyFrame()");
+            info.mDetachedPartQueue.muNumParts=previous->mDetachedPartQueue.muNumParts;
+            for(u32 part=0;part<info.mDetachedPartQueue.muNumParts;++part)
+            {
+                info.mDetachedPartQueue.mau8PartIndex[part]=previous->mDetachedPartQueue.mau8PartIndex[part];
+                info.mDetachedPartQueue.maTransforms[part]=previous->mDetachedPartQueue.maTransforms[part];
+            }
+        }
+        if(flags&2)
+            for(u32 point=0;point<128;++point)
+            {
+                alignas(16) u8 packed[16];BaseSerialiser::Read(packed,4);
+                QuantisedVector4::UnPack(&info.maSkinningOffsets_Scratch[point],packed,&sTrafficSkinningCompression);
+            }
+        else {CGS_ASSERT(!IsKeyFrame(),"!IsKeyFrame()");std::memcpy(info.maSkinningOffsets_Scratch,previous->maSkinningOffsets_Scratch,sizeof(info.maSkinningOffsets_Scratch));}
+        if(flags&4)
+        {
+            BaseSerialiser::ReadByte(&info.miNumLightLocators);
+            for(s32 light=0;light<info.miNumLightLocators;++light)
+            {
+                BaseSerialiser::ReadFloat(&info.maLightLocatorPositions[light].x);
+                BaseSerialiser::ReadFloat(&info.maLightLocatorPositions[light].y);
+                BaseSerialiser::ReadFloat(&info.maLightLocatorPositions[light].z);
+                info.maLightLocatorPositions[light].w=0.0f;
+                BaseSerialiser::ReadByte(&info.maLightTagPointTypes[light]);
+            }
+        }
+        else
+        {
+            CGS_ASSERT(!IsKeyFrame(),"!IsKeyFrame()");info.miNumLightLocators=previous->miNumLightLocators;
+            for(s32 light=0;light<info.miNumLightLocators;++light)
+            {
+                info.maLightLocatorPositions[light]=previous->maLightLocatorPositions[light];
+                info.maLightTagPointTypes[light]=previous->maLightTagPointTypes[light];
+            }
+        }
+        if(flags&8)
+        {
+            BaseSerialiser::Read(info.mabWheelExists,4);
+            BaseSerialiser::Read(&info.mvRoadTestNormal_HeightAboveRoad,16);
+            for(u32 wheel=0;wheel<4;++wheel)
+            {
+                float packed[12];BaseSerialiser::Read(packed,48);
+                Vector3* rows=&info.maWheelTransforms[wheel].xAxis;
+                for(u32 row=0;row<4;++row) rows[row]={packed[3*row],packed[3*row+1],packed[3*row+2],0.0f};
+            }
+            u8 value;BaseSerialiser::ReadByte(&value);info.mbIsDeforming=value!=0;
+            BaseSerialiser::ReadByte(&value);info.mbIsFatallyCrashing=value!=0;
+            BaseSerialiser::ReadByte(&info.mu8RenderDamageFlags);
+            BaseSerialiser::Read(info.mafGlassPaneFractureAmounts,32);
+        }
+        else
+        {
+            CGS_ASSERT(!IsKeyFrame(),"!IsKeyFrame()");
+            std::memcpy(info.mabWheelExists,previous->mabWheelExists,4);
+            info.mvRoadTestNormal_HeightAboveRoad=previous->mvRoadTestNormal_HeightAboveRoad;
+            std::memcpy(info.maWheelTransforms,previous->maWheelTransforms,sizeof(info.maWheelTransforms));
+            info.mbIsDeforming=previous->mbIsDeforming;info.mbIsFatallyCrashing=previous->mbIsFatallyCrashing;
+            info.mu8RenderDamageFlags=previous->mu8RenderDamageFlags;
+            std::memcpy(info.mafGlassPaneFractureAmounts,previous->mafGlassPaneFractureAmounts,32);
+        }
+        CGS_ASSERT(info.mDetachedPartQueue.muNumParts<=20,"lPhysicsInfo.muNumDetachedParts <= 20");
     }
 }

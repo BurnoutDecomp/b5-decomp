@@ -1,3 +1,4 @@
+#include "GameSource/Replays/BrnReplayRequestInterface.h"
 #pragma once
 
 // BrnTraffic::BrnTrafficIO IO buffers (TrafficEntityModule shared IO), from the DecFIGS DWARF
@@ -512,9 +513,9 @@ namespace BrnTrafficIO
         // DWARF :424 -- Construct proves the shape (VariableEventQueue<32768,16> @ +834828),
         // the same instantiation every other GuiEventInputQueue in the tree is.
         typedef CgsModule::VariableEventQueue<32768, 16> GuiEventInputQueue;
-        // X360-only member at +834828-44: 44 bytes, zeroed by Construct as 11 words, no DecFIGS
-        // counterpart and no recovered type. PARKED: named by offset role rather than invented.
-        struct InterfaceAt834784 { unsigned char maReserved[44]; };
+        // ARTIST +834784: replay request table. Eleven native BaseSerialiser* slots.
+        typedef BrnReplays::ReplayIO::RequestInterface ReplayRequestInterface;
+        typedef ReplayRequestInterface InterfaceAt834784; // compatibility for original offset-named consumers
 
         // @0x82761908 -- run by CreateIOBuffer<OutputBuffer_PostPhysics> @0x827B79D0.
         void Construct();
@@ -574,6 +575,9 @@ namespace BrnTrafficIO
         const GuiEventInputQueue* GetGuiEventQueue() const;                       // 0x827A0E18 (baked 418)
         GuiEventInputQueue*       GetGuiEventQueue();                             // 0x82712030 (baked 419)
 
+        const ReplayRequestInterface* GetReplayRequestInterface() const;
+        ReplayRequestInterface* GetReplayRequestInterface();
+
         static void _AssertLayout();
 
     private:
@@ -588,7 +592,7 @@ namespace BrnTrafficIO
         SceneInputInterface            mSceneInputInterface;               // console +11376  :421
         TrafficTypeResponseQueue       mTrafficTypeResponseQueue;          // console +830144 :422
         ResourceRequestInterface       mResourceRequestInterface;          // console +830672 :423
-        InterfaceAt834784              mInterfaceAt834784;                 // console +834784 (X360-only)
+        ReplayRequestInterface        mReplayRequestInterface;                 // console +834784 (X360-only)
         GuiEventInputQueue             mGuiEventQueue;                     // console +834828 :424
     };
 
