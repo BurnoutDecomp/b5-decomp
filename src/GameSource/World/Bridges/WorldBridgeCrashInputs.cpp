@@ -1,22 +1,21 @@
 // =================================================================================================
 // GameSource/World/Bridges/WorldBridgeCrashInputs.cpp   (crash exit wave, 2026-08-25)
 //
-// The four crash-module INPUT bridges plus the crash->physics output bridge. Together with
+// The input, physics and traffic crash-module bridges. Together with
 // WorldBridgeCrashPostScene.cpp (landed c3655e4a) this closes the crash module's wiring: nothing
 // reached it before, and nothing left it.
 //
 //   WorldModule::BridgeInputToCrashModule                    @0x827ADEE8  (25 insns)
-//   WorldModule::BridgeEntityModulesToCrashModule_PreScene   @0x827A5060  (33 insns)
 //   WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics@0x827AB8B0  (17 insns)
 //   WorldModule::BridgeTrafficToCrashModule_PostPhysics      @0x827AD708  (33 insns)
-//   WorldModule::BridgeCrashModuleToPhysicsModule            @0x827AAC70  (33 insns)
 //
 // ⚠️ WorldModule::BridgeCrashModuleToOutput STAYS GATED and is deliberately not here. It carries
 // CrashIO::OutputBuffer_PostPhysics' mNetworkOutputInterface out to the world output buffer -- the
 // NETWORK half, whose every producer is parked. Landing it would move nothing.
 //
 // DWARF homes are WorldBridgeEntityModulesToCrash.cpp / WorldBridgeCrashToEntityModules.cpp (their
-// assert strings name both). Same file-split precedent as WorldBridgeCrashPostScene.cpp and
+// assert strings name both). The race-car input and crash-to-physics output bridges
+// now live only in those original files. Same file-split precedent as WorldBridgeCrashPostScene.cpp and
 // WorldBridgePropModule.cpp. DELETE-WHEN either home TU becomes mountable whole.
 //
 // ⭐ THE ONE THAT MATTERS MOST IS THE SMALLEST: BridgePhysicsModuleToCrashModule_PostPhysics is
@@ -127,30 +126,6 @@ void BridgeInputToCrashModule(
 }
 
 // =================================================================================================
-// BridgeEntityModulesToCrashModule_PreScene @ 0x827A5060   (33 insns)
-//
-//   two null asserts (WorldBridgeEntityModulesToCrash.cpp:37 / :38), then
-//   RaceCarEntityModuleIO::OutputBuffer_PreScene::GetActiveRaceCarOutputInterface
-//   -> CrashIO::InputBuffer_PreScene::SetActiveRaceCarInterface.
-//
-// ⭐ This is the crash module's ONLY window onto the cars: the player slot, every RaceCarState,
-// and the per-car flags word. TickCrashes, ClearupCrashes and PreSceneUpdate all read through it.
-// =================================================================================================
-void BridgeEntityModulesToCrashModule_PreScene(
-    void* lpWorldModule,
-    BrnWorld::CrashIO::InputBuffer_PreScene* lpCrashInputBuffer_PreScene,
-    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene)
-{
-    (void)lpWorldModule;
-
-    CGS_ASSERT( lpCrashInputBuffer_PreScene != 0, "lpCrashInputBuffer_PreScene" );        // :37
-    CGS_ASSERT( lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene" );  // :38
-
-    lpCrashInputBuffer_PreScene->SetActiveRaceCarInterface(
-        lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface() );
-}
-
-// =================================================================================================
 // BridgePhysicsModuleToCrashModule_PostPhysics @ 0x827AB8B0   (17 insns)
 //
 //   PhysicsModuleIO::OutputBuffer::GetVehicleOutputInterface        -> SetVehicleOutputInterface
@@ -198,41 +173,6 @@ void BridgeTrafficToCrashModule_PostPhysics(
 
     lpCrashInputBuffer_PostPhysics->SetTrafficInputInterface(
         lpTrafficOutputBuffer_PostPhysics->GetCrashTrafficInputInterface() );
-}
-
-// =================================================================================================
-// BridgeCrashModuleToPhysicsModule @ 0x827AAC70   (33 insns)
-//
-//   two null asserts (WorldBridgeCrashToEntityModules.cpp:58 / :59), then
-//   CrashIO::OutputBuffer_PreScene::GetVehicleInputInterface  (the const/read-lock overload)
-//   -> PhysicsModuleIO::InputBuffer::GetVehicleInputInterface -> VehicleInputInterface::Append.
-//
-// UN-PARKED 2026-09-24 (crash parity FOLLOWUPS 18a): G63-D2 (4bc22993) promoted
-// CrashIO::OutputBuffer_PreScene::mVehicleInputInterface from the one-byte placeholder to the real
-// BrnPhysics::Vehicle::VehicleInputInterface (constructed by OutputBuffer_PreScene::Construct at the
-// console's 0x827CEA20), so the console's three calls stand as written, in its order:
-//   0x827AACD8  OutputBuffer_PreScene::GetVehicleInputInterface() const   (0x827A2488, read-lock)
-//   0x827AACE4  PhysicsModuleIO::InputBuffer::GetVehicleInputInterface()  (0x8279ED28, write-lock)
-//   0x827AACEC  VehicleInputInterface::Append(crash side)                 (0x823C87C0)
-// The console's only producer into the crash side is HandleNetworkCrashingTraffic (the write-lock
-// getter 0x827BB678 has that single caller), so offline this merges empty queues.
-// (The DWARF-home copy of this function in WorldBridgeCrashToEntityModules.cpp is unmounted.)
-// =================================================================================================
-void BridgeCrashModuleToPhysicsModule(
-    void* lpWorldModule,
-    BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
-    const BrnWorld::CrashIO::OutputBuffer_PreScene* lpCrashOutput_PreScene)
-{
-    (void)lpWorldModule;
-
-    CGS_ASSERT( lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer" );   // :58
-    CGS_ASSERT( lpCrashOutput_PreScene != 0, "lpCrashOutput_PreScene" );           // :59
-
-    const BrnPhysics::Vehicle::VehicleInputInterface* lpCrashVehicleInput =
-        lpCrashOutput_PreScene->GetVehicleInputInterface();                        // 0x827AACD8
-    lpPhysicsModuleInputBuffer->GetVehicleInputInterface()->Append( *lpCrashVehicleInput );   // 0x827AACE4 / 0x827AACEC
-
-    static bool s_bWitnessed = false;
 }
 
 }   // namespace WorldModule

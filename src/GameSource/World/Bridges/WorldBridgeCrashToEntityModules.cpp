@@ -19,17 +19,12 @@ void BridgeCrashModuleToPhysicsModule(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer");   // :58
-    CGS_ASSERT(lpCrashOutput_PreScene != 0, "lpCrashOutput_PreScene");           // :59
+    CGS_ASSERT( lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer" );   // :58
+    CGS_ASSERT( lpCrashOutput_PreScene != 0, "lpCrashOutput_PreScene" );           // :59
 
-    // FLAG: both buffer slices model this member as opaque storage (their headers'
-    // convention); the real type on BOTH sides is BrnPhysics::Vehicle::
-    // VehicleInputInterface (the crash buffer stages its own copy of the same
-    // interface) -- adopt the typed members when the buffers' own TUs land.
-    typedef BrnPhysics::Vehicle::VehicleInputInterface VehicleInputInterface;
-    VehicleInputInterface* lpVehicle = reinterpret_cast<VehicleInputInterface*>(
-        lpPhysicsModuleInputBuffer->GetVehicleInputInterface());
-    lpVehicle->Append(*reinterpret_cast<const VehicleInputInterface*>(
-        lpCrashOutput_PreScene->GetVehicleInputInterface()));
+    const BrnPhysics::Vehicle::VehicleInputInterface* lpCrashVehicleInput =
+        lpCrashOutput_PreScene->GetVehicleInputInterface();                        // 0x827AACD8
+    lpPhysicsModuleInputBuffer->GetVehicleInputInterface()->Append( *lpCrashVehicleInput );   // 0x827AACE4 / 0x827AACEC
+
 }
 }

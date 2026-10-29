@@ -46,10 +46,7 @@
 // Entry::HashString) with the prime 0x01000193 (16777619); the caller supplies the offset
 // basis (0x811C9DC5 == -2128831035) as the seed. The ResourceRegistrar uses it to hash bundle
 // and resource names into the QueuedResource/RequestedResource lookup keys.
-// FLAG: home-of-convenience. This is a vendor RenderWare routine with no reconstructed rwcore
-// home yet; declared here and bodied in BrnResourceRegistrar.cpp so this TU is self-contained.
-// When a vendor rwcore string-hash home lands, migrate this definition there (it would
-// otherwise multiply-define).
+// Defined once in vendor/renderware/src/rw/RwHash32String.cpp.
 // -----------------------------------------------------------------------------
 namespace rw
 {

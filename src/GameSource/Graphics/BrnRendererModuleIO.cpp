@@ -48,6 +48,6 @@ namespace RendererIO
         mpShaderConstantsFrame      = 0;
         mpBlobbyShadowBuffer        = 0;
         mpCoronaSubmissionInteface  = 0;
-        mpSnapshotBuffer            = 0;
+        mpReusableLoadingScreenAllocator = 0;  // ARTIST 0x824001D0: this+0x1E4
     }
 }

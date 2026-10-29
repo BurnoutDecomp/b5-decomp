@@ -25,7 +25,7 @@ namespace CgsGui
     protected:
         u8 mPad0[167112]; // base members (recovered by their own TUs)
     };
-    ViewModule::ViewModule() { __debugbreak(); }
+    // The shared base constructor is defined in CgsGuiViewModule.cpp.
 }
 
 namespace BrnFlapt
