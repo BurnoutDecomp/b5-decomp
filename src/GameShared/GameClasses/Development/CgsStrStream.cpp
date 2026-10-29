@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "rw/core/stdc/stdc.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (AppendFormat copy guard)
 
 #include <cstdarg>
@@ -18,6 +19,16 @@ namespace CgsDev
         const char* KAC_PADDED_HEX = "0x%08X";
         const char* KAC_FLOAT      = "%f";
         const s32   KI_FORMAT_BUFFER_SIZE = 64;
+
+        // XDK exposes the formatter used by AppendFormat as vsnprintf.
+        int Format(char* lpBuffer, size_t luSize, const char* lpcFormat, ...)
+        {
+            va_list lArgs;
+            va_start(lArgs, lpcFormat);
+            const int liResult = vsnprintf(lpBuffer, luSize, lpcFormat, lArgs);
+            va_end(lArgs);
+            return liResult;
+        }
     }
 
     StrStreamBase::StrStreamBase()
@@ -28,15 +39,15 @@ namespace CgsDev
     StrStreamBase& StrStreamBase::operator<<(s32 liValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        if (leCurrentMode == E_PRINTMODE_DECIMAL)
+        if (mePrintMode == E_PRINTMODE_DECIMAL)
         {
-            std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_INTEGER, liValue);
+            Format(lacBuffer, sizeof(lacBuffer), KAC_INTEGER, liValue);
         }
         else
         {
-            std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)liValue);
-            if (leCurrentMode == E_PRINTMODE_HEXONCE)
-                leCurrentMode = E_PRINTMODE_DECIMAL;
+            Format(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)liValue);
+            if (mePrintMode == E_PRINTMODE_HEXONCE)
+                mePrintMode = E_PRINTMODE_DECIMAL;
         }
         return *this << lacBuffer;
     }
@@ -44,28 +55,28 @@ namespace CgsDev
     StrStreamBase& StrStreamBase::operator<<(u32 luValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        if (leCurrentMode == E_PRINTMODE_DECIMAL)
+        if (mePrintMode == E_PRINTMODE_DECIMAL)
         {
-            std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_UNSIGNED, luValue);
+            Format(lacBuffer, sizeof(lacBuffer), KAC_UNSIGNED, luValue);
         }
         else
         {
-            std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, luValue);
-            if (leCurrentMode == E_PRINTMODE_HEXONCE)
-                leCurrentMode = E_PRINTMODE_DECIMAL;
+            Format(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, luValue);
+            if (mePrintMode == E_PRINTMODE_HEXONCE)
+                mePrintMode = E_PRINTMODE_DECIMAL;
         }
         return *this << lacBuffer;
     }
 
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
     {
-        if (leCurrentMode == E_PRINTMODE_DECIMAL)
+        if (mePrintMode == E_PRINTMODE_DECIMAL)
             Append64IntDecimal(luValue);
-        else
+        else if (static_cast<u32>(mePrintMode) < 3)
         {
             Append64IntHex(luValue);
-            if (leCurrentMode == E_PRINTMODE_HEXONCE)
-                leCurrentMode = E_PRINTMODE_DECIMAL;
+            if (mePrintMode == E_PRINTMODE_HEXONCE)
+                mePrintMode = E_PRINTMODE_DECIMAL;
         }
         return *this;
     }
@@ -73,19 +84,20 @@ namespace CgsDev
     StrStreamBase& StrStreamBase::operator<<(f32 lfValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_FLOAT, lfValue);
+        Format(lacBuffer, sizeof(lacBuffer), KAC_FLOAT, lfValue);
         return *this << lacBuffer;
     }
 
     StrStreamBase& StrStreamBase::operator<<(void* lpValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        std::snprintf(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)(size_t)lpValue);
+        Format(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)(size_t)lpValue);
         return *this << lacBuffer;
     }
 
     StrStreamBase& StrStreamBase::operator<<(PrintMode leMode)
     {
+        mePrintMode = leMode;
         return *this;
     }
 
@@ -105,7 +117,7 @@ namespace CgsDev
 
         va_list lArgs;
         va_start(lArgs, lpcFormat);
-        const int liWritten = std::vsnprintf(lacBuffer, sizeof(lacBuffer), lpcFormat, lArgs);
+        const int liWritten = ::vsnprintf(lacBuffer, sizeof(lacBuffer), lpcFormat, lArgs);
         va_end(lArgs);
 
         CGS_ASSERT(liWritten < static_cast<int>(sizeof(lacBuffer)),
@@ -117,15 +129,14 @@ namespace CgsDev
     void StrStreamBase::Append64IntDecimal(u64 luValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        std::snprintf(lacBuffer, sizeof(lacBuffer), "%llu", (unsigned long long)luValue);
+        rw::core::stdc::ConvertI64ToA(static_cast<s64>(luValue), lacBuffer, 10);
         *this << lacBuffer;
     }
 
     void StrStreamBase::Append64IntHex(u64 luValue)
     {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        std::snprintf(lacBuffer, sizeof(lacBuffer), "0x%016llX", (unsigned long long)luValue);
-        *this << lacBuffer;
+        AppendFormat("0x%08X", static_cast<u32>(luValue >> 32));
+        AppendFormat("%08X", static_cast<u32>(luValue));
     }
 
     // @ 0x821F0158 - construct over a fixed buffer (cleared to the empty string).
