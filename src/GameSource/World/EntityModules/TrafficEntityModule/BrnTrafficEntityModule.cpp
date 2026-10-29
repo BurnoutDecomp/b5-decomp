@@ -11657,7 +11657,7 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  (online reject still partial)
+// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  (birth/proximity branches recovered)
 //
 // Every param that is alive, not a zombie, and has no live vehicle
 // becomes a standard Vehicle. The candidate set is three FastBitArray terms, not a linear
@@ -11670,8 +11670,6 @@ namespace
 void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    (void)lpInput;   // only read by the GATED race-car proximity arm below
-
     CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 13477
 
     if (mbWaitingForStreaming)
@@ -11682,18 +11680,22 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     const bool lbRejectNearPlayers =
         mbDontCreateVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour;
 
+    ::Array<Vector3, E_ACTIVE_RACE_CAR_INDEX_COUNT> lActiveRaceCarPositions;
+    lActiveRaceCarPositions.Construct();
     if (lbRejectNearPlayers)
     {
-        // GATE: the race-car proximity reject @0x8273A3FC. BLOCKERS: the +0x220 state lane sits
-        // behind an IDA-truncated getter, and Param::SetDivorced is undeclared. Online-only.
-        // DELETE-WHEN online traffic lands.
-        static bool sbLogged = false;
-        LogMissingLeg_T2(sbLogged,
-            "UpdateVehicles_CreateNewVehicles race-car proximity rejection "
-            "(mbDontCreateVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) -- ONLINE-ONLY "
-            "and unreachable offline. Blockers: the getter behind the +0x220 race-car state "
-            "lane is IDA-truncated, and Param::SetDivorced is undeclared. Radius recovered: "
-            "unk_8300CF70 lane 0 == 6400.0f == 80m^2");
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface =
+            lpInput->GetActiveRaceCarOutputInterface();
+        CGS_ASSERT(lpActiveRaceCarOutputInterface != nullptr, "lpActiveRaceCarOutputInterface");
+        for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+        {
+            const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
+            if (lpActiveRaceCarOutputInterface->IsRaceCarActive(leIndex))
+            {
+                lActiveRaceCarPositions.Append(
+                    lpActiveRaceCarOutputInterface->GetRaceCarState(leIndex)->mTransform.Pos());
+            }
+        }
     }
 
     // mAliveParams & ~mZombieParams & ~mAliveVehicles, field for field, in the console's order.
@@ -11715,7 +11717,7 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     {
         const u32 luParam = static_cast<u32>(lItParam.GetIndex());
 
-        const Param* lpParam = GetParam(luParam);          // carries header-2350's bound
+        Param* lpParam = GetParam(luParam);          // carries header-2350's bound
         CGS_ASSERT(lpParam->IsAlive(), "lpParam->IsAlive()");        // .cpp 13526
         CGS_ASSERT(!lpParam->IsZombie(), "!lpParam->IsZombie()");    // .cpp 13527
 
@@ -11725,10 +11727,23 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
 
         if (lbRejectNearPlayers)
         {
-            // Second half of the same gate: without the reject the console would still fall
-            // through to the maker, so skipping the whole param is what keeps the two halves
-            // consistent.
-            continue;
+            bool lbTooNearRaceCar = false;
+            for (u32 luRaceCar = 0; luRaceCar < lActiveRaceCarPositions.GetLength(); ++luRaceCar)
+            {
+                const Vector3 lDelta = lParamPos - lActiveRaceCarPositions.GetItem(luRaceCar);
+                // ARTIST startup thunk 82C66E98 writes 6400 into 8300CF70 lane zero.
+                if (rw::math::vpu::SLerpDetail::Dot3(lDelta, lDelta) < 6400.0f)
+                {
+                    lbTooNearRaceCar = true;
+                    break;
+                }
+            }
+            if (lbTooNearRaceCar)
+            {
+                lpParam->SetZombie(luParam, mParamSoaData);
+                lpParam->SetDivorced();
+                continue;
+            }
         }
 
         Vehicle* lpVehicle = GetVehicle(luParam);          // carries header-2459's bound
