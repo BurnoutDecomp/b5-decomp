@@ -1,118 +1,68 @@
 #pragma once
 
-// ===========================================================================
-// XGRAPHICS::Arena -- the linear (bump-pointer) block allocator used by the
-// XGRAPHICS shader-microcode compiler in BURNOUT_X360_ARTIST.XEX. It hands out
-// 4-byte-aligned allocations from a growable backing block; when the block is
-// exhausted it grows a fresh, larger block from a parent heap. This header is
-// the canonical OWNING home for:
-//
-//     XGRAPHICS::Arena::Malloc @ 0x82C21EC0
-//     XGRAPHICS::Arena::Grow   @ 0x82C26AC8
-//     XGRAPHICS::Arena::Free   @ 0x82C21F88
-//
-// There is no reference source and no DWARF for this TU, so the SHAPE below is
-// reconstructed purely from the X360 asm of these three methods. `XGRAPHICS`
-// is an X360 graphics-SDK boundary, so its identifiers are preserved verbatim
-// per the naming convention.
-//
-// LAYOUT grounded in the asm (X360 byte offsets; only the fields these three
-// methods touch are attested). On X360 every field is 4-byte-wide, so pointers
-// occupy one slot each; the PC x64 recon accesses everything by NAME (semantic
-// parity, not byte-matching), so the widened pointers do not need to preserve
-// these literal offsets.
-//   +0x00 mpHeap        -- parent heap the arena grows blocks from (Grow reads
-//                          a block-alloc fn @+0x5A0 and its context @+0x5A4).
-//   +0x04 mpBlock       -- current backing block (an ArenaBlock header + payload).
-//   +0x08 mpCurrent     -- bump pointer: next free byte in the current block.
-//   +0x0C mpHighWater   -- running peak the bump pointer has ever reached
-//                          (never reset by Grow; used only for reuse stats).
-//   +0x10 mpEnd         -- one past the last usable byte of the current block.
-//   +0x14 mpLastAlloc   -- the pointer returned by the most recent Malloc
-//                          (Free rewinds the bump pointer to it, LIFO).
-//   +0x18 muFreeCount   -- stats: number of LIFO Free()s serviced.
-//   +0x1C muReuseCount  -- stats: number of Malloc()s that reused freed space.
-//   +0x20 muFreeBytes   -- stats: total bytes returned by Free().
-//   +0x24 muReuseBytes  -- stats: total bytes re-handed-out below the high water.
-//   +0x28 mbTrackStats  -- when set, Malloc/Free maintain the four counters
-//                          above and Free zero-fills + rewinds (LIFO free).
-// The stats field NAMES/semantics are inferred from how the four counters are
-// updated; the layout and behaviour are asm-exact.
-// ===========================================================================
-
 #include "types.hpp"
 
 namespace XGRAPHICS
 {
+class Compiler;
 
-// Header written at the head of every backing block Grow() allocates. The old
-// block is chained through mpPrevBlock so the whole chain can be walked/freed;
-// the payload the arena hands out begins immediately after this header.
-// On X360 sizeof(ArenaBlock) == 8 (the literal `8` the asm bumps by); the PC
-// x64 recon uses sizeof() so the widened pointer stays correct.
-struct ArenaBlock
+// ARTIST82C26B08..B10: the backing allocation starts with this eight-byte header.
+struct Chunk
 {
-    ArenaBlock* mpPrevBlock; // +0x00 previously-active block (chain link)
-    u32         muBlockSize; // +0x04 total bytes in this block (header + payload)
+    Chunk* previous;
+    u32 size;
 };
 
+// The original XDK CodeView names and signatures agree with all three ARTIST
+// routines. Allocation changes the mutable arena state through a const owner.
 class Arena
 {
 public:
-    // @ 0x82C21EC0 -- carve `aiSize` bytes (rounded up to 4) off the current
-    // block, growing a new block first if it would not fit. Returns the alloc.
-    void* Malloc(int aiSize);
+    void* Malloc(unsigned int size) const; //82C21EC0
+    void Free(void* block) const;          //82C21F88
+    void Grow(unsigned int size) const;    //82C26AC8
 
-    // @ 0x82C21F88 -- LIFO free: if stats tracking is on and `apPtr` was the
-    // most recent Malloc, zero it and rewind the bump pointer. Returns `apPtr`.
-    void* Free(void* apPtr);
-
-    // @ 0x82C26AC8 -- allocate a fresh backing block (>= a 12248-byte payload)
-    // from the parent heap, chaining the old block, and reset the bump pointer.
-    void* Grow(int aiSize);
-
-    ArenaHeap*  mpHeap;       // +0x00 parent heap the arena grows blocks from
-    ArenaBlock* mpBlock;      // +0x04 current backing block
-    u8*         mpCurrent;    // +0x08 bump pointer (next free byte)
-    u8*         mpHighWater;  // +0x0C peak the bump pointer has ever reached
-    u8*         mpEnd;        // +0x10 one past the last usable byte in the block
-    u8*         mpLastAlloc;  // +0x14 pointer the most recent Malloc returned
-    u32         muFreeCount;  // +0x18 stats: LIFO frees serviced
-    u32         muReuseCount; // +0x1C stats: mallocs that reused freed space
-    u32         muFreeBytes;  // +0x20 stats: total bytes freed
-    u32         muReuseBytes; // +0x24 stats: total bytes reused below high water
-    bool        mbTrackStats; // +0x28 maintain the counters + LIFO-free behaviour
+    Compiler* context;
+    mutable Chunk* chunk;
+    mutable char* hwm;
+    mutable char* hwm_max;
+    mutable char* amax;
+    mutable char* old;
+    mutable int reclaimed;
+    mutable int reused;
+    mutable u32 reclaimed_bytes;
+    mutable u32 reused_bytes;
+    bool recycle;
 };
 
-// ---------------------------------------------------------------------------
-// Arena-prefixed object allocation. The XGRAPHICS compiler carves small objects
-// (InternalVector, DefStack, ...) from an Arena while prepending the owning
-// arena pointer to each block, so the object can later be returned to its arena
-// without the caller tracking which one it came from. This idiom is inlined at
-// every VRegInfo allocation site; it is de-inlined into these two helpers.
-// ---------------------------------------------------------------------------
+CGS_STATIC_ASSERT((sizeof(Chunk) == 8), "ARTIST Arena block header");
+CGS_STATIC_ASSERT((offsetof(Arena, context) == 0), "ARTIST Arena Compiler owner");
+CGS_STATIC_ASSERT((offsetof(Arena, chunk) == 4), "ARTIST Arena chunk");
+CGS_STATIC_ASSERT((offsetof(Arena, hwm) == 8), "ARTIST Arena cursor");
+CGS_STATIC_ASSERT((offsetof(Arena, hwm_max) == 0xC), "ARTIST Arena high water");
+CGS_STATIC_ASSERT((offsetof(Arena, amax) == 0x10), "ARTIST Arena end");
+CGS_STATIC_ASSERT((offsetof(Arena, old) == 0x14), "ARTIST Arena last allocation");
+CGS_STATIC_ASSERT((offsetof(Arena, reclaimed) == 0x18), "ARTIST Arena reclaim count");
+CGS_STATIC_ASSERT((offsetof(Arena, reused) == 0x1C), "ARTIST Arena reuse count");
+CGS_STATIC_ASSERT((offsetof(Arena, reclaimed_bytes) == 0x20), "ARTIST Arena reclaimed bytes");
+CGS_STATIC_ASSERT((offsetof(Arena, reused_bytes) == 0x24), "ARTIST Arena reused bytes");
+CGS_STATIC_ASSERT((offsetof(Arena, recycle) == 0x28), "ARTIST Arena recycle flag");
+CGS_STATIC_ASSERT((sizeof(Arena) == 0x2C), "ARTIST Arena size");
 
-// Allocate `auObjectSize` bytes for an object plus a leading Arena* slot; store
-// the owning arena in that slot and return the object pointer (just past it).
-// The X360 Malloc returns a -4 sentinel on OOM, which makes the object pointer
-// come out null -- a failed allocation yields null (the caller skips
-// construction), exactly as the ctor asm branches.
-inline void* ArenaAllocPrefixed(Arena* apArena, usize auObjectSize)
+// Native allocation sites prepend the owning Arena pointer to their objects.
+inline void* ArenaAllocPrefixed(Arena* arena, usize objectSize)
 {
-    void* lpBlock = apArena->Malloc(static_cast<int>(auObjectSize + sizeof(Arena*)));
-    *static_cast<Arena**>(lpBlock) = apArena;
-    if (reinterpret_cast<intptr_t>(lpBlock) == -static_cast<intptr_t>(sizeof(Arena*)))
-        return 0; // X360 OOM sentinel -> null object
-    return static_cast<u8*>(lpBlock) + sizeof(Arena*);
+    void* block = arena->Malloc(static_cast<u32>(objectSize + sizeof(Arena*)));
+    *static_cast<Arena**>(block) = arena;
+    if (reinterpret_cast<intptr_t>(block) == -static_cast<intptr_t>(sizeof(Arena*)))
+        return 0;
+    return static_cast<u8*>(block) + sizeof(Arena*);
 }
 
-// Inverse of ArenaAllocPrefixed: recover the owning arena from the leading slot
-// and LIFO-free the whole block. The caller null-guards `apObject`.
-inline void ArenaFreePrefixed(void* apObject)
+inline void ArenaFreePrefixed(void* object)
 {
-    u8*    lpBlock = static_cast<u8*>(apObject) - sizeof(Arena*);
-    Arena* lpArena = *reinterpret_cast<Arena**>(lpBlock);
-    lpArena->Free(lpBlock);
+    u8* block = static_cast<u8*>(object) - sizeof(Arena*);
+    Arena* arena = *reinterpret_cast<Arena**>(block);
+    arena->Free(block);
 }
-
-} // namespace XGRAPHICS
+}
