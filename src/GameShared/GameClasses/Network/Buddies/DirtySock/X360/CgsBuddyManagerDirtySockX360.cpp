@@ -186,10 +186,10 @@ namespace CgsNetwork
 
         const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
 
-        // The asm takes the high 32 bits of the XUID (>> 32) for XShowGamerCardUI's
-        // second argument; the XDK packs the gamertag id in the high dword.
+        // ARTIST82880070..7C forwards the full64-bit return register to r4.
+        // HLBBudGetXenonXUID loads all64 bits with ld; no shift or narrowing.
         const u64 luXuid = GetBuddyXUID(lpBuddyName);
-        return XShowGamerCardUI(luUserIndex, luXuid >> 32);
+        return XShowGamerCardUI(luUserIndex, luXuid);
     }
 
     // =========================================================================

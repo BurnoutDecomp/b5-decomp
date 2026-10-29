@@ -540,7 +540,8 @@ namespace BrnTraffic
         // zero input yields the same non-finite lanes the console's estimate would.
         Vector3 UnitVector(Vector3 lVector)
         {
-            return lVector * (1.0f / std::sqrt(rw::math::vpu::Dot(lVector, lVector)));
+            namespace Vmx = rw::math::vpu::SLerpDetail;
+            return Vmx::Scale(lVector, Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lVector, lVector), 2));
         }
     }
 
@@ -651,12 +652,23 @@ namespace BrnTraffic
     void DebugComponent::DrawOffsetArrow(Vector3 lFrom, Vector3 lTo, f32 lfOffset, rw::RGBA lColour,
                                          CgsDev::Debug3DImmediateRender* lpDisplay) const
     {
-        const Vector3 lUp        = { 0.0f, 1.0f, 0.0f, 0.0f };
+        namespace Vmx = rw::math::vpu::SLerpDetail;
+        const Vector3 lUp = {0.0f, 1.0f, 0.0f, 0.0f};
         const Vector3 lDirection = UnitVector(lTo - lFrom);
-        const Vector3 lSide      = UnitVector(rw::math::vpu::Cross(lUp, lDirection));
-        const Vector3 lOffset    = lSide * lfOffset;
-
-        DrawArrow(lFrom + lOffset, lTo + lOffset, lColour, lpDisplay);
+        // Original vpermwi 0x63 / vmul / vnmsub / vpermwi cross, including W.
+        const Vector3 lCross = {
+            Vmx::NegativeMultiplySubtract(lUp.z, lDirection.y, lUp.y * lDirection.z),
+            Vmx::NegativeMultiplySubtract(lUp.x, lDirection.z, lUp.z * lDirection.x),
+            Vmx::NegativeMultiplySubtract(lUp.y, lDirection.x, lUp.x * lDirection.y),
+            Vmx::NegativeMultiplySubtract(lUp.w, lDirection.w, lUp.w * lDirection.w)};
+        const Vector3 lSide = UnitVector(lCross);
+        const auto OffsetPoint = [lSide, lfOffset](Vector3 lPoint) {
+            return Vector3{std::fmaf(lSide.x, lfOffset, lPoint.x),
+                           std::fmaf(lSide.y, lfOffset, lPoint.y),
+                           std::fmaf(lSide.z, lfOffset, lPoint.z),
+                           std::fmaf(lSide.w, lfOffset, lPoint.w)};
+        };
+        DrawArrow(OffsetPoint(lFrom), OffsetPoint(lTo), lColour, lpDisplay);
     }
 }
 
@@ -988,8 +1000,10 @@ void DebugComponent::DrawKillZone(const KillZone* lpKillZone, u64 luKillZoneId,
         const Vector3 lRightDirection = lrNext.maPoints[1] - lrStart.maPoints[1];
         // The original has an unconditional reciprocal-square-root refinement,
         // with no zero-length selection. Preserve degenerate-input NaNs.
-        const f32 lfLeftInv = 1.0f / std::sqrt(rw::math::vpu::Dot(lLeftDirection, lLeftDirection));
-        const f32 lfRightInv = 1.0f / std::sqrt(rw::math::vpu::Dot(lRightDirection, lRightDirection));
+        // ARTIST 8275B994..8275B9E4: vmsum3fp128, vrsqrtefp and two Newton refinements.
+        namespace Vmx = rw::math::vpu::SLerpDetail;
+        const f32 lfLeftInv = Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lLeftDirection, lLeftDirection), 2);
+        const f32 lfRightInv = Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lRightDirection, lRightDirection), 2);
         const VecFloat lLeftInv = {lfLeftInv, lfLeftInv, lfLeftInv, lfLeftInv};
         const VecFloat lRightInv = {lfRightInv, lfRightInv, lfRightInv, lfRightInv};
         const Vector3 lLeftBack = lrStart.maPoints[0] - (lLeftDirection * lLeftInv) * lApproachLength;

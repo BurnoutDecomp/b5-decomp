@@ -42,6 +42,7 @@ namespace BrnDirector
         static void GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage);
 
     private:
+        friend class MainDirector; // MainDirector::Prepare clears the X360 +0 request latch.
         // @0x82239C80 (this TU) -- consume muLiveCamRequest: SEND_CAMERA ships the
         // camera's position + at-axis to "Tool.CanEdit" as a "CameraPos" message on
         // the "Camera" channel; FLY_CAMERA points the arbitrator's debug fly-world
@@ -57,4 +58,6 @@ namespace BrnDirector
 
         static DirectorDevTools* mpInstance;
     };
+
+    static_assert(sizeof(DirectorDevTools) == 0x50, "DirectorDevTools host layout widens the X360 pointer fields");
 }

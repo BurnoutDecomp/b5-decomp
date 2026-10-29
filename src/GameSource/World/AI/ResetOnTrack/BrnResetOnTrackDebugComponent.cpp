@@ -321,10 +321,16 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
                 continue;
             }
 
-            const Vector3 lPosition = lpCar->GetPosition();
+            const Vector3 lStartPosition = lpCar->GetPosition();
+            const Vector2 lStart2D = BrnMath::Flatten(lStartPosition);
+
+            // ARTIST keeps this projection call for its validity assertion even though it
+            // discards the projected value before reading the full direction for the endpoint.
+            (void)BrnMath::Flatten(lpCar->GetDirection());
+
             const Vector3 lDirection = lpCar->GetDirection();
+            const Vector3 lPosition = lpCar->GetPosition();
             const Vector3 lEndPosition = Add(lPosition, Scale(lDirection, lfLineLength));
-            const Vector2 lStart2D = BrnMath::Flatten(lPosition);
             const Vector2 lEnd2D = BrnMath::Flatten(lEndPosition);
             const AISection* lpSection =
                 mpResetOnTrackManager->mpAISectionData->GetAISection(
@@ -342,7 +348,8 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
                 luColour = K_CYAN;
             }
 
-            lpDisplay->DrawLine(lPosition, lEndPosition, RenderColour(luColour));
+            const Vector3 lDrawStartPosition = lpCar->GetPosition();
+            lpDisplay->DrawLine(lDrawStartPosition, lEndPosition, RenderColour(luColour));
         }
 
         const s32 liHngEntryCount = mHngTestRingBuffer.GetLength();

@@ -487,6 +487,23 @@ inline void ChallengeListEntry::SetNumPlayers( int32_t liNum )
     muNumPlayers = static_cast<uint8_t>( 17 * liNum );
 }
 
+// DecFIGS :415; ARTIST8235307C/82353130 only replace the CURRENT low nibble.
+// SetNumPlayers above publishes an authored count into both nibbles during resource load.
+inline void ChallengeListEntry::SetNewNumPlayers( int32_t liNum )
+{
+    CGS_ASSERT( liNum >= 1, "liNumPlayers >= 1" );
+    CGS_ASSERT( liNum <= KI_MAX_PLAYERS, "liNumPlayers <= KI_MAX_PLAYERS" );
+
+    muNumPlayers = static_cast<uint8_t>((muNumPlayers & 0xF0u) | (static_cast<uint32_t>(liNum) & 0xFu));
+}
+
+// DecFIGS :418; inlined in ARTIST UnHackAllChallenges82333040. Both range asserts
+// are non-gating; the store preserves the high nibble and copies it into the low nibble.
+inline void ChallengeListEntry::ResetNumPlayers()
+{
+    SetNewNumPlayers(GetOriginalNumPlayers());
+}
+
 // ChallengeListEntryAction::SetCombineAction (DWARF :253) -- X360-inlined into
 // ChallengeList::AddListResource's post-load pass, which is the ONLY writer of the byte in
 // the whole image (`*(80 * actionIndex + entry + 3) = <value>`). +0x03 is

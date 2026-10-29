@@ -30,6 +30,21 @@
 
 namespace BrnAI
 {
+// Construct is inlined into AIModule::Construct @0x82794D64..0x82794D8C. The operation
+// order follows the console stores: race time, route/graph counts, race flags/count,
+// four component fields, then DebugComponent::Register.
+void RaceBalancingManager::Construct(AIModule* lpAIModule)
+{
+    mfRaceTime = 0.0f;
+    maRaceBalancingRoutes.Clear();
+    maRaceBalancingGraphs.Clear();
+    mbInRace = false;
+    mbOnStartLine = false;
+    miCheckpointCount = 0;
+    mRaceBalancingDebugComponent.Construct(lpAIModule, this);
+    mRaceBalancingDebugComponent.Register();
+}
+
 // ===========================================================================================
 // Construct -- inlined in AIModule::Construct @0x82794D64..0x82794D8C. The original
 // sequence clears the route-array count, graph-array count, race clock, race flags and

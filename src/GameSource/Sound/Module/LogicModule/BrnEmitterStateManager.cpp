@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEmitterStateManager.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/Sound/Module/LogicModule/BrnEmitterState.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/World/BrnEmitterEffect.h"   // KB_DEBUG_WORLD_EMITTERS (Query's lbDrawDebug)
@@ -207,17 +208,10 @@ const char* EmitterStateManager::GetTypeName() const
 //   state 3: if (!StateManager::PrepareStates(this, 1, 4, 0)) stay;
 //   state 4: return 1;
 //
-// FLAG (stub -- domain cascade): the real body cascades into
-//   * BrnSound::Logic::World::SoundWorldScene::Prepare (the world emitter scene),
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker,
-//     reached through the now-inherited IResourceRequester sub-object),
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     a declared-only stub in the foundation).
-// None reconstructed in this slice. PrepareStateManagersOnBoot (0x826837F8) only
-// needs Prepare() to return true to advance boot, so this stub returns true WITHOUT
-// the world-scene prep / asset load / state bring-up. NOT an X360-faithful body --
-// the prepare state machine + SoundWorldScene are deferred. X360 addr above.
+// SOURCE RECOVERY NOTE (batch 02): this body retains the state switch, scene setup,
+// resource request and state-preparation calls. This delta restores the original
+// AddMonitor registration and UpdateParams monitor scope. It makes no runtime claim
+// for world-scene or emitter-audio integration.
 // ---------------------------------------------------------------------------
 bool EmitterStateManager::Prepare()
 {
@@ -237,6 +231,9 @@ bool EmitterStateManager::Prepare()
         mSoundScene.Prepare(lpLogicModule, "_Emitter");
         LoadAsset("sound\\world\\emitters.bundle", 0,
                   BrnSound::Logic::ResourceRegistrar::E_DATA);
+        // ARTIST 0x826F5B88-0x826F5BA4: page 14, 1.0f budget, scaled.
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor(
+            "Emitters", CgsDev::E_PMP_14, false, 1.0f, true);
         mePrepareState = E_PREPARE_UPDATING;
         return false;
     }
@@ -299,6 +296,7 @@ BrnSound::Logic::ResourceRegistrar& EmitterStateManager::GetResourceRegistrar()
 // entity no state holds yet (StateManager::GetStateObj) a free state (GetFreeState, vtable +0x14).
 void EmitterStateManager::UpdateParams(f32 lfDeltaTime)
 {
+    CgsDev::PerfMonCpu::StartMonitor(miCpuMonitor);
     mSoundScene.Update();
     BrnSound::Logic::BrnStateManager::UpdateParams(lfDeltaTime);
 
@@ -319,6 +317,7 @@ void EmitterStateManager::UpdateParams(f32 lfDeltaTime)
                 lpState->Attach(&laEntities[liEntity]);
         }
     }
+    CgsDev::PerfMonCpu::StopMonitor(miCpuMonitor);
 }
 
 CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)

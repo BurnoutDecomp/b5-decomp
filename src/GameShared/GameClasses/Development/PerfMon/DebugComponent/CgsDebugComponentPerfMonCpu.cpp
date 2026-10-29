@@ -128,13 +128,9 @@ namespace CgsDev
         LogBufferUpdate();
     }
 
-    // X360 RenderHUD (CgsDebugComponentPerfMonCpu.cpp:246): draw the active page. Bounded to the table
-    // (bar) view; the graph view is the follow-on.
+    // ARTIST 0x8282CDC8: mbDisplayAsGraph is the only branch; both views receive the renderer.
     void DebugComponentPerfMonCpu::RenderHUD( Debug2DImmediateRender* lpDebug2DRender )
     {
-        if (!lpDebug2DRender)
-            return;
-
         if (mbDisplayAsGraph)
             RenderPerformanceGraph( lpDebug2DRender );
         else

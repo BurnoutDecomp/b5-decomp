@@ -2073,7 +2073,7 @@ void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
             // The trail's debrisparams: the player's crash debris for the player's car, the AI trail debris for the
             // others (`cmpw r30(player), r26(car)` -> this + 0x2D388 / this + 0x2D3A8, 0x8229E2E4..0x8229E300), and
             // the car colour GetRaceCarColour returns (r9).
-            const Attrib::Gen::debrisparams& lrTrailDebris =
+            Attrib::Gen::debrisparams& lrTrailDebris =
                 (leIndex == lePlayerIndex) ? mCrashingDebrisParams : mAIRaceCarCrashingTrailDebris;
             HandleCrashingTrail(lrData, lrParams.mDt, lrParams.mTime, lpStateAgain, leIndex,
                                 lpActiveRaceCars->GetRaceCarColour(leIndex), lrTrailDebris);
@@ -4551,7 +4551,7 @@ namespace
 void EffectsModule::HandleCrashingTrail(ActiveRaceCarData& /*lrActiveRaceCar*/, f32 lfCurrentTimeStep, f32 lfCurrentTime,
                                         const RaceCarState* lpRaceCarState, EActiveRaceCarIndex leActiveRaceCarIndex,
                                         const RwRGBAReal& lrCarColour,
-                                        const Attrib::Gen::debrisparams& lrDebrisParameters)
+                                        Attrib::Gen::debrisparams& lrDebrisParameters)
 {
     const u32 luCar = static_cast<u32>(leActiveRaceCarIndex);
     const u8* const lpLayout = DebrisParamsLayout(lrDebrisParameters);

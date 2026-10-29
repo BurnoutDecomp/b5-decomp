@@ -164,7 +164,7 @@ void AIModule::Construct()
         maAICars[leCar].Construct(leCar);
     }
 
-    // [FLAG PC boot gate] The six perf monitors and AIDebugComponent::Construct
+    // [FLAG PC boot gate] The six perf monitors and separate AIDebugComponent::Construct
     // remain parked -- see the banner.
 
     // ⭐ The two player cursors. The console DOES store both here, and both are 0:

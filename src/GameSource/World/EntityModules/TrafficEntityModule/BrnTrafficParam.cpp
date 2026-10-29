@@ -1,5 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/matrix44affine_operation.h" // SLerpDetail::VectorMax
 #include "rw/math/vpu/vector3_operation.h"   // IsZero / IsValid / Normalize / Cross (ParamTransform)
 
 // Param::Construct / Param::Initialise reach these; all four are leaf headers.
@@ -534,15 +535,28 @@ void ParamTransform::UpdateLerpedPosition(VecFloat lfSimTimeStep)
                "RwMath::IsValid( mDirAndAccel.GetVector3() )");
     CGS_ASSERT(mDirAndAccel.GetPlus() == mDirAndAccel.GetPlus(),
                "RwMath::IsValid( mDirAndAccel.GetPlus() )");
-    CGS_ASSERT(lfSimTimeStep.x == lfSimTimeStep.x, "RwMath::IsValid( lfSimTimeStep )");
+    CGS_ASSERT(lfSimTimeStep.x == lfSimTimeStep.x && lfSimTimeStep.y == lfSimTimeStep.y &&
+                   lfSimTimeStep.z == lfSimTimeStep.z && lfSimTimeStep.w == lfSimTimeStep.w,
+               "RwMath::IsValid( lfSimTimeStep )");
 
-    const f32 lfStep     = lfSimTimeStep.x;
-    const f32 lfAccelled = mLerpedPosAndSpeed.GetPlus() + mDirAndAccel.GetPlus() * lfStep;
-    const f32 lfSpeed    = (lfAccelled > 0.0f) ? lfAccelled : 0.0f;   // asm: vmaxfp vs zero
-
-    mLerpedPosAndSpeed.SetVector3(mLerpedPosAndSpeed.GetVector3()
-                                 + mDirAndAccel.GetVector3() * (lfSpeed * lfStep));
-    mLerpedPosAndSpeed.SetPlus(lfSpeed);
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    const f32 lfOldSpeed = mLerpedPosAndSpeed.GetPlus();
+    const f32 lfAcceleration = mDirAndAccel.GetPlus();
+    // ARTIST 82712B70/78: fused acceleration in all four lanes, then VMX max against zero.
+    const VecFloat lSpeed = {
+        Vmx::VectorMax(std::fmaf(lfAcceleration, lfSimTimeStep.x, lfOldSpeed), 0.0f),
+        Vmx::VectorMax(std::fmaf(lfAcceleration, lfSimTimeStep.y, lfOldSpeed), 0.0f),
+        Vmx::VectorMax(std::fmaf(lfAcceleration, lfSimTimeStep.z, lfOldSpeed), 0.0f),
+        Vmx::VectorMax(std::fmaf(lfAcceleration, lfSimTimeStep.w, lfOldSpeed), 0.0f)};
+    const Vector3 lPosition = mLerpedPosAndSpeed.GetVector3();
+    const Vector3 lVelocity = mDirAndAccel.GetVector3() * lSpeed;
+    // 82712B7C/80: direction*speed is rounded before the fused timestep/position operation.
+    mLerpedPosAndSpeed.SetVector3(Vector3{
+        std::fmaf(lVelocity.x, lfSimTimeStep.x, lPosition.x),
+        std::fmaf(lVelocity.y, lfSimTimeStep.y, lPosition.y),
+        std::fmaf(lVelocity.z, lfSimTimeStep.z, lPosition.z), 0.0f});
+    // The two original vrlimi/stvx pairs preserve xyz, then publish the plus/W speed lane.
+    mLerpedPosAndSpeed.SetPlus(lSpeed.w);
 }
 
 // 0x82712E28 -- per-decision-frame restamp. The previous deterministic position becomes the

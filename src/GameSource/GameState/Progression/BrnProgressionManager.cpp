@@ -22,6 +22,8 @@
 #include "BrnProgressionCarData.h"                                    // BrnProgression::CarData (colour/palette/unlock type)
 #include "SharedClasses/Progression/BrnProgressionData.h"             // BrnProgression::ProgressionData (rank count)
 #include "SharedClasses/Progression/BrnRaceEventData.h"               // BrnProgression::EventJunction / RaceEventData (the event-list producer)
+#include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // OnFindAllDriveThrus
+#include "SharedClasses/Progression/BrnTrophyUnlockData.h"             // starting body-shop trophy ids
 // [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] RE-POINTED, exactly as the note that stood
 // here asked. GetRankThresholdForEvent dereferences the per-rank record, so it needs
 // BrnProgression::ProgressionRankData COMPLETE -- BrnProgressionData.h only forward-declares it
@@ -431,42 +433,14 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
 //               profile, zero the three car-type affinities, ClearMedalsOnRankUp, and clear
 //               the 18 per-rank completed counts.
 //
-// ⭐⭐ [progression wave: medals, 2026-09-06] Q1, Q3 AND Q4 ARE PAID. Only Q2 is still parked,
-// and its blocker is a MEASUREMENT, not a missing body -- read its note before touching it.
-// The caller set changed with them: UpdatePlayerMedals @0x8239FE50 is bodied
-// (BrnProgressionManager_Medals.cpp), so this function is once again reached from its console
-// seat and CAN now be called with a NON-ZERO rank, which is what makes the Q3/Q4 arms live code
-// rather than dead code.
-//
-// ⛔ HONEST PARTIAL -- WHAT IS LANDED AND WHAT IS PARKED.
-// LANDED: the :965 assert; the whole rank-0 EVENT-LIST arm (the junction walk, the duplicate
-//   test, AddEvent and AddEventTypeToEventTotals); UnlockDefaultPlayerCars (Q1); the RANK-N
-//   licence-upgrade arm (Q3); and the shared rank tail (Q4).
-// PARKED, with the console body written out for whoever lands it:
-//   Q2  the starting-drive-thru tail: `if (!mBodyShopsDriveThruSet.Contains(0x6C72D)) {
-//         mBodyShopsDriveThruSet.Insert(0x6C72D);
-//         if (GetLength() == 11) { OnTrophyUnlock(20);
-//                                  if (mProfile.AreAllDriveThrusCompleted()) OnTrophyUnlock(21); }
-//         if (mProfile.AreAllDriveThrusCompleted() && !mpAchievementManager->IsAwarded(32))
-//             mpAchievementManager->Award(32);
-//         mbDriveThrusDirty = true; }`
-//       -- OnTrophyUnlock @0x82389740 is declared and parked tree-wide (the same P2 park
-//       OnEventFinishUpdateProfile carries), and the two AchievementManagerBase vtable slots
-//       route into a TU that is deliberately NOT MOUNTED.
-// ✅ Q3 PAID (progression wave: medals). The old text here said OnLicenseUpgrade @0x8235ADC8
-//   "lives in a TU that is not mounted" and that the arm was "UNREACHABLE from this build's only
-//   caller, which passes rank 0". BOTH HALVES WERE STALE: BrnGameStateAchievementManagerBase.cpp
-//   is mounted (build_game_exe.bat, right after the X360 leaf -- the rem block above that echo
-//   still argues for the old state), OnLicenseUpgrade is bodied there, and the caller is now
-//   UpdatePlayerMedals, which passes whatever rank the medal total bought. Body:
-//   UnlockToProgressionRankLicenceUpgrade in BrnProgressionManager_Medals.cpp.
-// ✅ Q4 PAID (progression wave: medals). ClearMedalsOnRankUp @0x823705D8 is bodied, and the two
-//   "un-homed words" are homed: the chosen-car-type slot is meLeastUsedCarType (+133480, DWARF
-//   :167) and the `rank >= 5` store targets Profile::mbHasUnlockedCredits at profile+0x1CD14 ==
-//   +118036 (the old note's "+118404" was a mis-read of `lis 1 / ori 0xCD14`). Body:
-//   UnlockToProgressionRankTail in BrnProgressionManager_Medals.cpp. One store of the tail stays
-//   parked -- the debug component's own display-ready flag; see that body's banner.
-// The lpGameActionQueue parameter is consumed only by Q3.
+// The rank-zero arm populates offline profile events, unlocks the default player cars, then
+// registers the starting body shop in the profile. The inline tail below preserves its
+// duplicate check, category/umbrella trophies, all-drive-thrus achievement and dirty flag.
+// The rank-N licence-upgrade body and shared rank tail live in
+// UnlockToProgressionRankLicenceUpgrade / UnlockToProgressionRankTail in
+// BrnProgressionManager_Medals.cpp; the shared tail also sets
+// mDebugComponent.mbProfileReadyForDisplay. The action queue is used only by the rank-N
+// licence-upgrade telemetry arm.
 // ------------------------------------------------------------------------------------
 void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
                                                  BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue)
@@ -509,64 +483,30 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
             AddEventTypeToEventTotals(lpcJunction);
         }
 
-        // ✅ [progression wave: medals, 2026-09-06] PARK Q1 IS PAID. UnlockDefaultPlayerCars
-        // @0x8237BF98 (`bl` @0x8239DF44) is bodied in BrnProgressionManager_Medals.cpp: it walks
-        // PROGRESSION.DAT's player-car id table, AddCar()s any the profile does not already own
-        // (type 0 == E_UNLOCK_TYPE_UNLOCK) and marks each one's unlock sequence already-seen.
-        // That is the rank-0 STARTING GARAGE -- until now the profile started with no cars at all
-        // from this path.
+        // X360 @0x8239DF44 calls UnlockDefaultPlayerCars, which adds the authored starting
+        // cars the profile does not already own and marks their unlock sequence seen.
         UnlockDefaultPlayerCars();
 
-        // ⭐⭐ PARK Q2 IS NO LONGER BLOCKED ON WHAT THIS SITE SAID IT WAS (2026-08-27,
-        // drive-thru link-closure wave). The old text named "OnTrophyUnlock @0x82389740 + the
-        // unmounted AchievementManagerBase" as the blockers; OnTrophyUnlock is bodied now
-        // (BrnProgressionManager_Unlocks.cpp) and the AchievementManagerBase drive-thru split IS
-        // mounted. Leaving that text in place would send the next reader chasing two things that
-        // are already there -- a diagnostic naming the wrong blocker costs exactly as much as one
-        // naming the wrong object.
-        //
-        // WHAT Q2 ACTUALLY IS, from the asm @0x8239DF48..0x8239DFC4: THE STARTING BODY SHOP
-        // REGISTERS ITSELF. `lis r11,6 / ori r31, r11, 0xC72D` builds the CgsID 0x6C72D, tests it
-        // against mProfile.mBodyShopsDriveThruSet (manager+0xA7B8 == Profile+42568) with
-        // Set<s64,11>::Contains, and on a MISS Inserts it -- then, if the set is now full
-        // (GetLength() == 11), fires OnTrophyUnlock(20 == E_UNLOCKTYPE_FIND_ALL_BODYSHOPS) and,
-        // when every drive-thru category is complete, OnTrophyUnlock(21) on top. It is
-        // OnDriveThru's body-shop leg, inlined at boot for the one drive-thru the player starts
-        // standing in.
-        // ⚠️ DELIBERATELY NOT LANDED. It WRITES INTO THE SAVED PROFILE on the boot path, and it
-        // should not land until a run has driven through the starting body shop behind it: landing
-        // a profile-mutating boot arm that has never once run is how a save ends up with a wrong
-        // set in it.
-        //
-        // ⚠️⚠️ THE REASON THIS NOTE GAVE FOR "could not exercise it" WAS WRONG, and re-measuring it
-        // is what found the real bug (2026-08-28, gas-station wave). The text said "flow_run.ps1's
-        // phase machine does not reach DRIVING on the returning-player path ... so -Drive silently
-        // holds no throttle". Both halves fail on measurement:
-        //   * the phase machine DOES reach DRIVING on that path now (flow_run.ps1's newprof+ingame
-        //     promotion, run gas_r1_probe: phase=DRIVING at 32 s), and the throttle IS held --
-        //   * but the car still did not move, because on the returning-player path the player's
-        //     ENGINE IS NEVER STARTED (no GuiPlayerEngineEvent engineOn=1 in the whole run; the
-        //     drive-thru gate reports gear=0 and never re-opens). The harness was innocent; the
-        //     boot path is missing the engine start. THAT is the remaining blocker for this park
-        //     on the returning path, and it is not a harness bug.
-        // On the FRESH-profile path the car now does drive (the authored-extent fix in
-        // BrnTriggerQueryManager.cpp), so the drive this park is waiting for is available there --
-        // the starting body shop is drive-thru region id 444205 == 0x6C72D at (3345.78, 2.19,
-        // -1712.68), which is the same CgsID the asm builds, confirmed against the live region
-        // dump. Land it with that drive behind it. [[gates-are-stale-not-dead]]
-        if (CgsDev::Log::gpDebugPrint != 0)
+        // X360 @0x8239DF48..0x8239E02C registers the starting body shop (CgsID 0x6C72D).
+        const CgsID lStartingBodyShopId = static_cast<CgsID>(0x6C72D);
+        const BrnTrigger::GenericRegion::Type leBodyShopType =
+            BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP;
+        if (!mProfile.IsDriveThruDiscoverd(lStartingBodyShopId, leBodyShopType))
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank(0): profile "
-                   "event list populated -- "
-                << mProfile.GetEventCount()
-                << " records from " << luJunctionCount
-                << " authored junctions; starting garage now holds "
-                << mProfile.GetCarCount()
-                << " cars. STILL PARKED on this path: ONLY the "
-                   "starting-body-shop drive-thru registration (CgsID 0x6C72D -> "
-                   "mBodyShopsDriveThruSet, @0x8239DF48), which is UNBLOCKED but unverified -- "
-                   "see the note at this call site.\n";
+            mProfile.AddDriveThru(lStartingBodyShopId, leBodyShopType);
+            if (mProfile.GetNumDriveThrusDiscovered(leBodyShopType) == 11)
+            {
+                OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_BODYSHOPS);
+                if (mProfile.AreAllDriveThrusCompleted())
+                {
+                    OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_DRIVE_THRUS);
+                }
+            }
+            if (mProfile.AreAllDriveThrusCompleted())
+            {
+                mpAchievementManager->OnFindAllDriveThrus();
+            }
+            SetDriveThrusDirtyFlag();
         }
     }
     else
