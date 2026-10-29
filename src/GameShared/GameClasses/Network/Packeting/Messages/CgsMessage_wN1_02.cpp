@@ -99,7 +99,7 @@ namespace CgsNetwork
 
         if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
         {
-            Message::GetAnglesFromVector(*lpvField, &lfAngleA, &lfAngleB, &lfMagnitude);
+            Message::GetAnglesFromVector(__lvx(lpvField, 0), &lfAngleA, &lfAngleB, &lfMagnitude);
 
             u32 luPacked = 0;
             FloatQuantiser::Pack(lfAngleA, -KF_PI, KF_PI, liXBits, &luPacked);
@@ -134,7 +134,7 @@ namespace CgsNetwork
             Message::GetVectorFromAngles(lpvField, lfAngleA, lfAngleB, lfMagnitude);
 
             f32 lfTestMagnitude = 0.0f;
-            Message::GetAnglesFromVector(*lpvField, &lfAngleA, &lfAngleB, &lfTestMagnitude);
+            Message::GetAnglesFromVector(__lvx(lpvField, 0), &lfAngleA, &lfAngleB, &lfTestMagnitude);
             CGS_ASSERT(fabsf(lfTestMagnitude - lfMagnitude) < KF_MAX_VECTOR_MAGNITUDE_ERROR,
                        "RwMath::Abs( lfTestMagnitude - lfMagnitude ) < 0.1f");
 

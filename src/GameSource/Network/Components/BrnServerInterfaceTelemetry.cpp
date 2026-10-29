@@ -20,11 +20,8 @@
 // is empty.
 // ===========================================================================
 
-// Platform memset (declared exactly as the other network TUs declare it).
-extern "C"
-{
-    void* XMemSet(void* lpDest, s32 liValue, u32 luCount);
-}
+// Original native XMemSet declaration and ABI.
+#include <xtl.h>
 
 namespace BrnNetwork
 {

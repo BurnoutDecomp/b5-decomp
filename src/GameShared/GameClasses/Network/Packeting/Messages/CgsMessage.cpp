@@ -9,7 +9,9 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (streamed assert)
 #include "rw/math/vpu/vector3_operation.h"                              // Min / Max / Magnitude
 
-#include <cmath>   // sinf, cosf, sin, cos, fmaf
+#include <cmath>   // native CRT sin/cos
+#include <xtl.h>
+#include <xboxmath.h> // original XMVectorASin/ATan and native VMX intrinsics
 
 // CgsNetwork::Message  -- the reconstructed functions of the
 // class:CgsNetwork::Message translation unit.
@@ -44,26 +46,51 @@ namespace CgsNetwork
         // A vector shorter than this has no direction worth encoding.
         const f32 KF_MIN_ANGLES_MAGNITUDE = 1.52587890625e-05f;   // 2^-16
 
-        // The quadrant-correct arctangent the angle decoders build inline: the arctangent of
-        // the ratio, moved half a turn towards the numerator's side when the denominator is
-        // negative, and a quarter turn (with the numerator's sign) when it is zero -- also
-        // when the numerator is zero too.
-        // FLAG (PC-platform, numeric): the console forms the ratio with a reciprocal
-        // estimate refined once and evaluates its minimax arctangent; the exact divide and
-        // atanf are used here.
-        f32 ATan2(f32 lfNumerator, f32 lfDenominator)
+        // Keep the native fmadds boundary out of line: /O2 otherwise reassociates
+        // the rounded addend product into a different fused operation.
+        __declspec(noinline) f32 MultiplyAdd(f32 lfA, f32 lfB, f32 lfAddend)
         {
-            if (lfDenominator == 0.0f)
-            {
-                return copysignf(KF_ANGLE_HALF_PI, lfNumerator);
-            }
+            return lfA * lfB + lfAddend;
+        }
 
-            const f32 lfAngle = atanf(lfNumerator / lfDenominator);
-            if (lfDenominator < 0.0f)
-            {
-                return lfAngle + copysignf(KF_ANGLE_PI, lfNumerator);
-            }
-            return lfAngle;
+        // ARTIST 82881748..828817E4 and 82881B40..82881BB0: one reciprocal
+        // refinement, the original XboxMath arctangent, then VMX quadrant selects.
+        // This differs from XMVectorATan2's extra refinement/special-case policy.
+        XMVECTOR ATan2(XMVECTOR lvNumerator, XMVECTOR lvDenominator)
+        {
+            const XMVECTOR lvZero = __vspltisw(0);
+            const XMVECTOR lvOne = XMVectorReplicate(1.0f);
+            const XMVECTOR lvTrue = __vspltisw(-1);
+            const XMVECTOR lvSignMask = __vslw(lvTrue, lvTrue);
+            XMVECTOR lvReciprocal = __vrefp(lvDenominator);
+            const XMVECTOR lvError = __vnmsubfp(lvReciprocal, lvDenominator, lvOne);
+            lvReciprocal = __vmaddfp(lvReciprocal, lvError, lvReciprocal);
+            const XMVECTOR lvRatio = __vmaddfp(lvNumerator, lvReciprocal, lvZero);
+            const XMVECTOR lvAngle = XMVectorATan(lvRatio);
+            const XMVECTOR lvSign = __vand(lvNumerator, lvSignMask);
+            const XMVECTOR lvPi = __vor(XMVectorReplicate(KF_ANGLE_PI), lvSign);
+            const XMVECTOR lvHalfPi = __vor(XMVectorReplicate(KF_ANGLE_HALF_PI), lvSign);
+            const XMVECTOR lvNegative = __vcmpgtfp(lvZero, lvDenominator);
+            const XMVECTOR lvIsZero = __vcmpeqfp(lvZero, lvDenominator);
+            const XMVECTOR lvQuadrant = __vsel(lvAngle, __vaddfp(lvPi, lvAngle), lvNegative);
+            return __vsel(lvQuadrant, lvHalfPi, lvIsZero);
+        }
+
+        // ARTIST 828819E4..82881A3C / 82881AB4..82881AE8 performs TWO Newton
+        // steps. SDK6534's XMVector3Length/Normalize performs only one.
+        XMVECTOR ReciprocalSqrt(XMVECTOR lvLengthSquared)
+        {
+            const XMVECTOR lvOne = XMVectorReplicate(1.0f);
+            const XMVECTOR lvHalf = XMVectorReplicate(0.5f);
+            XMVECTOR lvEstimate = __vrsqrtefp(lvLengthSquared);
+            XMVECTOR lvSquared = __vmulfp(lvEstimate, lvEstimate);
+            XMVECTOR lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+            XMVECTOR lvError = __vnmsubfp(lvLengthSquared, lvSquared, lvOne);
+            lvEstimate = __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
+            lvSquared = __vmulfp(lvEstimate, lvEstimate);
+            lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+            lvError = __vnmsubfp(lvLengthSquared, lvSquared, lvOne);
+            return __vmaddfp(lvHalfEstimate, lvError, lvEstimate);
         }
 
         // Time between two frames at each rate, and the wrap of the 16-bit frame counter.
@@ -111,27 +138,26 @@ namespace CgsNetwork
     //   ( cos(B)*cos(A), sin(B), cos(B)*sin(A), 0 )
     // on the stack, splats the magnitude across all four lanes, multiplies
     // (vmulfp128) and stores the 16-byte result through the output pointer. The
-    // VMX is lowered to the equivalent scalar f32 stores it computes lane-for-lane
-    // (lane0=x .. lane3=w), preserving the exact lane mapping (var_60/5C/58/54).
+    // final scale uses the original native VMX multiply, preserving all four lanes
+    // (lane0=x .. lane3=w), including the zero fourth lane.
     void Message::GetVectorFromAngles(rw::math::vpu::Vector3* lpvOut,
                                       f32 lfAngleA, f32 lfAngleB, f32 lfMagnitude)
     {
-        const f32 lfSinA = sinf(lfAngleA);
-        const f32 lfCosA = cosf(lfAngleA);
-        const f32 lfSinB = sinf(lfAngleB);
-        const f32 lfCosB = cosf(lfAngleB);
-
-        lpvOut->x = lfMagnitude * (lfCosB * lfCosA);   // var_60, lane 0
-        lpvOut->y = lfMagnitude * lfSinB;              // var_5C, lane 1
-        lpvOut->z = lfMagnitude * (lfCosB * lfSinA);   // var_58, lane 2
-        lpvOut->w = 0.0f;                              // var_54, lane 3 (zeroed)
+        const f32 lfSinB = static_cast<f32>(sin(static_cast<double>(lfAngleB)));
+        const f32 lfSinA = static_cast<f32>(sin(static_cast<double>(lfAngleA)));
+        const f32 lfCosBForZ = static_cast<f32>(cos(static_cast<double>(lfAngleB)));
+        const f32 lfZ = lfCosBForZ * lfSinA;
+        const f32 lfCosA = static_cast<f32>(cos(static_cast<double>(lfAngleA)));
+        const f32 lfCosBForX = static_cast<f32>(cos(static_cast<double>(lfAngleB)));
+        const XMVECTOR lvDirection = { lfCosBForX * lfCosA, lfSinB, lfZ, 0.0f };
+        __stvx(__vmulfp(lvDirection, XMVectorReplicate(lfMagnitude)), lpvOut, 0);
     }
 
     // ---- SetMatrixFromEulerAngles ---------------------------------------------------
     // Rotation rows from the negated roll / pitch / yaw (cos and sin in double, rounded to
     // single). Only the x, y and z lanes of the three rotation rows are written; the
     // translation row and the w lanes keep their values. The console fuses the four
-    // multiply-adds, so they are written with fmaf.
+    // multiply-adds; MultiplyAdd preserves their native scalar fmadds boundary.
     void Message::SetMatrixFromEulerAngles(rw::math::vpu::Matrix44Affine* lpMatrix,
                                            f32 lfRoll, f32 lfPitch, f32 lfYaw)
     {
@@ -145,13 +171,13 @@ namespace CgsNetwork
         const f32 lfCosYawSinPitch = lfCosYaw * lfSinPitch;
         const f32 lfSinYawSinPitch = lfSinYaw * lfSinPitch;
 
-        lpMatrix->xAxis.x = fmaf(lfSinYawSinPitch, lfSinRoll, lfCosYaw * lfCosRoll);
+        lpMatrix->xAxis.x = MultiplyAdd(lfSinYawSinPitch, lfSinRoll, lfCosYaw * lfCosRoll);
         lpMatrix->xAxis.y = lfCosPitch * lfSinRoll;
-        lpMatrix->xAxis.z = fmaf(lfCosYawSinPitch, lfSinRoll, -(lfSinYaw * lfCosRoll));
+        lpMatrix->xAxis.z = MultiplyAdd(lfCosYawSinPitch, lfSinRoll, -(lfSinYaw * lfCosRoll));
 
-        lpMatrix->yAxis.x = fmaf(lfSinYawSinPitch, lfCosRoll, -(lfCosYaw * lfSinRoll));
+        lpMatrix->yAxis.x = MultiplyAdd(lfSinYawSinPitch, lfCosRoll, -(lfCosYaw * lfSinRoll));
         lpMatrix->yAxis.y = lfCosPitch * lfCosRoll;
-        lpMatrix->yAxis.z = fmaf(lfCosYawSinPitch, lfCosRoll, lfSinYaw * lfSinRoll);
+        lpMatrix->yAxis.z = MultiplyAdd(lfCosYawSinPitch, lfCosRoll, lfSinYaw * lfSinRoll);
 
         lpMatrix->zAxis.x = lfSinYaw * lfCosPitch;
         lpMatrix->zAxis.y = -lfSinPitch;
@@ -798,83 +824,70 @@ namespace CgsNetwork
     // arc-sine of the forward row's y; away from straight up / down, yaw comes from the
     // forward row and roll from the side and up rows. At the poles yaw and roll are not
     // separable: roll takes the whole turn and yaw is zero.
-    // FLAG (PC-platform, numeric): the console's arc-sine is its minimax polynomial; asinf
-    // is used here (the clamp keeps the argument in range).
-    void Message::GetEulerAnglesFromMatrix(rw::math::vpu::Matrix44Affine lMatrix,
+    // Native XMVectorASin supplies the console polynomial; ATan2 above restores
+    // the original VMX reciprocal and quadrant operations.
+    void Message::GetEulerAnglesFromMatrix(const rw::math::vpu::Matrix44Affine& lMatrix,
                                            f32* lpfRollOut, f32* lpfPitchOut, f32* lpfYawOut)
     {
-        const rw::math::vpu::Vector3 lvMinusOne = { -1.0f, -1.0f, -1.0f, 0.0f };
-        const rw::math::vpu::Vector3 lvPlusOne  = {  1.0f,  1.0f,  1.0f, 0.0f };
-
+        const XMVECTOR lvMinusOne = { -1.0f, -1.0f, -1.0f, 0.0f };
+        const XMVECTOR lvPlusOne = { 1.0f, 1.0f, 1.0f, 0.0f };
         CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, "lpfRollOut && lpfPitchOut && lpfYawOut");
-
-        const rw::math::vpu::Vector3 lZAxis =
-            rw::math::vpu::Min(rw::math::vpu::Max(lMatrix.zAxis, lvMinusOne), lvPlusOne);
-        const rw::math::vpu::Vector3 lXAxis =
-            rw::math::vpu::Min(rw::math::vpu::Max(lMatrix.xAxis, lvMinusOne), lvPlusOne);
-        const rw::math::vpu::Vector3 lYAxis =
-            rw::math::vpu::Min(rw::math::vpu::Max(lMatrix.yAxis, lvMinusOne), lvPlusOne);
-
-        const f32 lfPitch = asinf(lZAxis.y);
+        const XMVECTOR lvZAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.zAxis, 0), lvMinusOne), lvPlusOne);
+        const XMVECTOR lvXAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.xAxis, 0), lvMinusOne), lvPlusOne);
+        const XMVECTOR lvYAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.yAxis, 0), lvMinusOne), lvPlusOne);
+        const f32 lfPitch = XMVectorASin(__vspltw(lvZAxis, 1)).x;
         *lpfPitchOut = lfPitch;
-
+        const XMVECTOR lvTrue = __vspltisw(-1);
+        const XMVECTOR lvSign = __vslw(lvTrue, lvTrue);
         if (!(lfPitch < KF_ANGLE_HALF_PI))
         {
-            *lpfRollOut = ATan2(lXAxis.z, -lYAxis.z);
-            *lpfYawOut  = 0.0f;
+            *lpfRollOut = ATan2(__vspltw(lvXAxis, 2), __vxor(__vspltw(lvYAxis, 2), lvSign)).x;
+            *lpfYawOut = 0.0f;
         }
         else if (!(lfPitch > -KF_ANGLE_HALF_PI))
         {
-            *lpfRollOut = ATan2(-lXAxis.z, lYAxis.z);
-            *lpfYawOut  = 0.0f;
+            *lpfRollOut = ATan2(__vxor(__vspltw(lvXAxis, 2), lvSign), __vspltw(lvYAxis, 2)).x;
+            *lpfYawOut = 0.0f;
         }
         else
         {
-            *lpfYawOut  = ATan2(-lZAxis.x, lZAxis.z);
-            *lpfRollOut = ATan2(-lXAxis.y, lYAxis.y);
+            *lpfYawOut = ATan2(__vxor(__vspltw(lvZAxis, 0), lvSign), __vspltw(lvZAxis, 2)).x;
+            *lpfRollOut = ATan2(__vxor(__vspltw(lvXAxis, 1), lvSign), __vspltw(lvYAxis, 1)).x;
         }
     }
 
-    // ---- GetAnglesFromVector --------------------------------------------------------
-    // The inverse of GetVectorFromAngles: the magnitude, then (for a vector long enough to
-    // have a direction) angle B as the arc-sine of the unit vector's y and angle A as the
-    // heading of its x / z pair. A vertical vector has no heading: angle A is zero.
-    // FLAG (PC-platform, numeric): the console's magnitude and unit vector use a refined
-    // reciprocal square-root estimate and its arc-sine is a minimax polynomial; the exact
-    // forms are used here.
-    void Message::GetAnglesFromVector(rw::math::vpu::Vector3 lVector,
+    // ARTIST 82881978: vmsum3fp, two-step reciprocal-square-root refinement,
+    // zero-length select, then normalization/clamp and the native ASin/ATan path.
+    void Message::GetAnglesFromVector(__vector4 lVector,
                                       f32* lpfAngleAOut, f32* lpfAngleBOut, f32* lpfMagnitudeOut)
     {
-        const f32 lfMagnitude = rw::math::vpu::Magnitude(lVector);
+        const XMVECTOR lvVector = lVector;
+        const XMVECTOR lvZero = __vspltisw(0);
+        const XMVECTOR lvLengthSquared = __vmsum3fp(lvVector, lvVector);
+        const XMVECTOR lvLength = __vmulfp(lvLengthSquared, ReciprocalSqrt(lvLengthSquared));
+        const XMVECTOR lvZeroLength = __vcmpeqfp(lvZero, lvLengthSquared);
+        const f32 lfMagnitude = __vsel(lvLength, lvZero, lvZeroLength).x;
         *lpfMagnitudeOut = lfMagnitude;
-
         if (!(fabsf(lfMagnitude) > KF_MIN_ANGLES_MAGNITUDE))
         {
             *lpfAngleBOut = 0.0f;
             *lpfAngleAOut = 0.0f;
             return;
         }
-
-        const rw::math::vpu::Vector3 lvPlusOne  = {  1.0f,  1.0f,  1.0f,  0.0f };
-        const rw::math::vpu::Vector3 lvMinusOne = { -1.0f, -1.0f, -1.0f, -0.0f };
-        const f32 lfInverseMagnitude = 1.0f / lfMagnitude;
-        const rw::math::vpu::Vector3 lDirection = { lVector.x * lfInverseMagnitude,
-                                                    lVector.y * lfInverseMagnitude,
-                                                    lVector.z * lfInverseMagnitude,
-                                                    lVector.w * lfInverseMagnitude };
-        const rw::math::vpu::Vector3 lUnit =
-            rw::math::vpu::Min(rw::math::vpu::Max(lDirection, lvMinusOne), lvPlusOne);
-
-        const f32 lfAngleB = asinf(lUnit.y);
+        const XMVECTOR lvPlusOne = { 1.0f, 1.0f, 1.0f, 0.0f };
+        const XMVECTOR lvTrue = __vspltisw(-1);
+        const XMVECTOR lvSign = __vslw(lvTrue, lvTrue);
+        const XMVECTOR lvMinusOne = __vxor(lvPlusOne, lvSign);
+        const XMVECTOR lvDirection = __vmulfp(lvVector, ReciprocalSqrt(lvLengthSquared));
+        const XMVECTOR lvUnit = __vminfp(__vmaxfp(lvDirection, lvMinusOne), lvPlusOne);
+        const f32 lfAngleB = XMVectorASin(__vspltw(lvUnit, 1)).x;
         *lpfAngleBOut = lfAngleB;
-
         if (fabsf(lfAngleB) == KF_ANGLE_HALF_PI)
         {
             *lpfAngleAOut = 0.0f;
             return;
         }
-
-        *lpfAngleAOut = ATan2(lUnit.z, lUnit.x);
+        *lpfAngleAOut = ATan2(__vspltw(lvUnit, 2), __vspltw(lvUnit, 0)).x;
     }
 
     // ---- GetTimeDiffWrapped16 -------------------------------------------------------

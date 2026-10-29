@@ -1072,7 +1072,7 @@ namespace BrnNetwork
         CGS_ASSERT( lpRoadRulesManager->mpNetworkModule != 0, "lpRoadRulesManager->mpNetworkModule" );
         CGS_ASSERT( lpRoadRulesManager->mpNetworkModule->GetNetworkManager() != 0,
                     "lpRoadRulesManager->mpNetworkModule->GetNetworkManager()" );
-        auto* lpBuddyManager = lpRoadRulesManager->mpNetworkModule->GetNetworkManager()->GetBuddyManager();
+        BuddyManagerX360* lpBuddyManager = lpRoadRulesManager->mpNetworkModule->GetNetworkManager()->GetBuddyManager();
         CGS_ASSERT( lpBuddyManager != 0, "lpBuddyManager" );
         lRoadRulesPbEvent.mbWasPBByFriend = lpBuddyManager->IsFullBuddy( &lPlayerName );
 

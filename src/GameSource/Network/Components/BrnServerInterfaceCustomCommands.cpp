@@ -65,38 +65,29 @@ namespace
         "Set ELO"              // [10] E_ACTION_SET_ELO                      (inferred)
     };
 
-    // Helper to pack a big-endian fourcc (the wire byte order the X360 lobby uses).
-    constexpr s32 KFOURCC(char a, char b, char c, char d)
-    {
-        return (static_cast<s32>(static_cast<u8>(a)) << 24) |
-               (static_cast<s32>(static_cast<u8>(b)) << 16) |
-               (static_cast<s32>(static_cast<u8>(c)) << 8)  |
-                static_cast<s32>(static_cast<u8>(d));
-    }
-
     // The per-action lobby message-kind fourcc, indexed by EAction (read from the image).
     const s32 KI_ACTIONS_TO_MESSAGE_CODES[ServerInterfaceCustomCommands::E_ACTION_COUNT] =
     {
-        KFOURCC('r','r','u','p'),  // [0]  SET_ROAD_RULES_SCORES
-        KFOURCC('r','r','g','t'),  // [1]  GET_ROAD_RULES_SCORES
-        KFOURCC('r','r','l','c'),  // [2]  GET_LOCAL_ROAD_RULES_SCORES
-        KFOURCC('f','g','e','t'),  // [3]  GET_FRIENDS
-        KFOURCC('f','u','p','d'),  // [4]  UPLOAD_FRIENDS
-        KFOURCC('f','b','s','t'),  // [5]  UPLOAD_FREEBURN_LOBBY_STATS
-        KFOURCC('o','p','u','p'),  // [6]  UPLOAD_OFFLINE_PROGRESSION
-        KFOURCC('r','v','u','p'),  // [7]  UPLOAD_RIVAL_DATA
-        KFOURCC('e','v','u','p'),  // [8]  UPLOAD_EVENT_SCORE_DATA
-        KFOURCC('g','e','l','o'),  // [9]  GET_ELO
-        KFOURCC('s','e','l','o')   // [10] SET_ELO
+        0x72727570,  // [0]  SET_ROAD_RULES_SCORES
+        0x72726774,  // [1]  GET_ROAD_RULES_SCORES
+        0x72726C63,  // [2]  GET_LOCAL_ROAD_RULES_SCORES
+        0x66676574,  // [3]  GET_FRIENDS
+        0x66757064,  // [4]  UPLOAD_FRIENDS
+        0x66627374,  // [5]  UPLOAD_FREEBURN_LOBBY_STATS
+        0x6F707570,  // [6]  UPLOAD_OFFLINE_PROGRESSION
+        0x72767570,  // [7]  UPLOAD_RIVAL_DATA
+        0x65767570,  // [8]  UPLOAD_EVENT_SCORE_DATA
+        0x67656C6F,  // [9]  GET_ELO
+        0x73656C6F   // [10] SET_ELO
     };
 
     // --- ConvertError special-case codes (read off the X360 cmpw immediates) ----------
-    const s32 KI_CODE_NOT_RECOGNISED = KFOURCC('b','a','d','c');  // 0x62616463 -> 140
-    const s32 KI_CODE_TIMEOUT        = KFOURCC('t','i','m','e');  // 0x74696D65 -> 5
-    const s32 KI_CODE_IN_PROGRESS    = KFOURCC('i','p','e','r');  // 0x69706572 -> 6
+    const s32 KI_CODE_NOT_RECOGNISED = 0x62616463;  // 0x62616463 -> 140
+    const s32 KI_CODE_TIMEOUT        = 0x74696D65;  // 0x74696D65 -> 5
+    const s32 KI_CODE_IN_PROGRESS    = 0x69706572;  // 0x69706572 -> 6
 
     // 'nost' (0x6E6F7374) -- the set-elo "local player has no stats" sub-error code.
-    const s32 KI_CODE_NO_STATS       = KFOURCC('n','o','s','t');
+    const s32 KI_CODE_NO_STATS       = 0x6E6F7374;
 
     // CustomCommandErrorMapping (BrnServerInterfaceCustomCommands.cpp:105) -- the generic
     // {kind, code} -> server-interface error table consulted by ConvertError when the code
@@ -114,20 +105,20 @@ namespace
     const CustomCommandErrorMapping
         KA_CUSTOM_COMMAND_ERROR_MAPPING[KI_NUMBER_OF_ERROR_MAPPINGS] =
     {
-        { KFOURCC('r','r','u','p'), KFOURCC('i','n','v','p'), 3 },
-        { KFOURCC('r','r','u','p'), KFOURCC('i','s','k','y'), 3 },
-        { KFOURCC('r','r','u','p'), KFOURCC('t','i','m','e'), 5 },
-        { KFOURCC('r','r','g','t'), KFOURCC('n','o','f','r'), 0 },
-        { KFOURCC('r','r','g','t'), KFOURCC('i','n','v','p'), 3 },
-        { KFOURCC('r','r','g','t'), KFOURCC('t','i','m','e'), 5 },
-        { KFOURCC('r','r','l','c'), KFOURCC('t','i','m','e'), 5 },
-        { KFOURCC('r','r','l','c'), KFOURCC('i','n','v','p'), 3 },
-        { KFOURCC('f','g','e','t'), KFOURCC('m','a','u','t'), 4 },
-        { KFOURCC('f','g','e','t'), KFOURCC('m','i','s','s'), 2 },
-        { KFOURCC('f','g','e','t'), KFOURCC('i','n','v','p'), 3 },
-        { KFOURCC('f','u','p','d'), KFOURCC('m','a','u','t'), 4 },
-        { KFOURCC('f','u','p','d'), KFOURCC('m','i','s','s'), 2 },
-        { KFOURCC('s','e','l','o'), KFOURCC('n','o','s','t'), 0 },
+        { 0x72727570, 0x696E7670, 3 },
+        { 0x72727570, 0x69736B79, 3 },
+        { 0x72727570, 0x74696D65, 5 },
+        { 0x72726774, 0x6E6F6672, 0 },
+        { 0x72726774, 0x696E7670, 3 },
+        { 0x72726774, 0x74696D65, 5 },
+        { 0x72726C63, 0x74696D65, 5 },
+        { 0x72726C63, 0x696E7670, 3 },
+        { 0x66676574, 0x6D617574, 4 },
+        { 0x66676574, 0x6D697373, 2 },
+        { 0x66676574, 0x696E7670, 3 },
+        { 0x66757064, 0x6D617574, 4 },
+        { 0x66757064, 0x6D697373, 2 },
+        { 0x73656C6F, 0x6E6F7374, 0 },
     };
 }
 

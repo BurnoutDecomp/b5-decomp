@@ -35,6 +35,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "BrnCommonTypes.h"                                              // CgsID
 #include "GameSource/BurnoutConstants.h"                                 // ::EActiveRaceCarIndex, BrnGameState::EChallengeStatus
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"              // NetworkEvent<N>, NetworkPlayerID, InviteOrJoinParams, Road::ChallengeIndex

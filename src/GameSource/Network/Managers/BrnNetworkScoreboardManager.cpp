@@ -34,7 +34,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                              // CgsDev::Log::gpDebugPrint
 
 #include <cstdlib>   // atoi, qsort
-#include <cstdio>    // snprintf (the rank-column "%d" formatter)
 #include "types.hpp"   // uintptr_t (this <-> s32 user-data round-trip)
 
 namespace BrnNetwork
@@ -540,7 +539,7 @@ namespace BrnNetwork
                 if (liColumnIndex == liRankColumnIndex)
                 {
                     // The rank column is synthesised from the (1-based) sorted position.
-                    snprintf(lacBuffer, KI_CELL_BUFFER_SIZE, "%d", liViewRow + 1);
+                    CgsCore::SPrintf(lacBuffer, KI_CELL_BUFFER_SIZE, "%d", liViewRow + 1);
                 }
                 else
                 {

@@ -12,17 +12,8 @@
 #include "GameSource/Network/Parameters/BrnNetworkPlayerInfoData.h"               // BrnNetwork::PlayerInfoData
 #include "GameSource/Network/BrnNetworkManager.h"  // BrnNetworkManager accessors
 
-// ---- XDK / Xbox-LIVE entry points -------------------------------------------
-// Real prototypes live in the Xbox 360 XDK (<xapi.h>/<xonline.h>) / the EA DirtySock library;
-// declared here as extern "C" free functions, mirroring the sibling BrnNetworkBuddyManagerX360.cpp
-// glue precedent. Argument shapes are taken from the X360 call sites (register usage), not the
-// PPC Hex-Rays.
-extern "C"
-{
-    // The XUID signed in to a controller index (0 == success). The X360 Update path resolves the
-    // local console XUID before downloading the local player's own gamer picture.
-    u32 XUserGetXUID(u32 luUserIndex, u64* lpXuid);
-}
+// Original XDK declaration (including DWORD/XUID and native C ABI).
+#include <xtl.h>
 
 #include "netconn.h"   // NetConnStatus ('onln': 1 while connected to the network service)
 

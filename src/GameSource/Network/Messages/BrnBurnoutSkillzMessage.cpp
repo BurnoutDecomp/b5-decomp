@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include <float.h> // FLT_MAX: the native 0x7F7FFFFF float bound
 #include "GameSource/Network/Messages/BrnBurnoutSkillzMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (streamed assert)
@@ -20,7 +21,7 @@ namespace BrnNetwork
     {
         // Skill values are non-negative and unbounded above.
         const f32 KF_MIN_SKILL_VALUE = 0.0f;
-        const f32 KF_MAX_SKILL_VALUE = 3.40282347e+38f;
+        const f32 KF_MAX_SKILL_VALUE = FLT_MAX;
     }
 
     // The base reliable fields, a cleared skill table and no initial-data marker.

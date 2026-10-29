@@ -3,6 +3,7 @@
 #include <cstddef>   // offsetof
 
 #include "types.hpp"
+#include <vectorintrinsics.h> // native VMX-register parameter below
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                    // NetworkPlayerID
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
@@ -145,12 +146,13 @@ namespace CgsNetwork
         // every w lane are left as they are), and back. Used by the matrix field primitive.
         static void SetMatrixFromEulerAngles(rw::math::vpu::Matrix44Affine* lpMatrix,
                                              f32 lfRoll, f32 lfPitch, f32 lfYaw);
-        // Declaration only: vector code (an inlined arc-sine and two arc-tangents built on
-        // reciprocal estimates) that is not reconstructed yet.
-        static void GetEulerAnglesFromMatrix(rw::math::vpu::Matrix44Affine lMatrix,
+        // ARTIST 828815B0 receives the matrix address in r3 and outputs in r4-r6.
+        // Keep the indirect native contract while the generic matrix wrapper is recovered.
+        static void GetEulerAnglesFromMatrix(const rw::math::vpu::Matrix44Affine& lMatrix,
                                              f32* lpfRollOut, f32* lpfPitchOut, f32* lpfYawOut);
-        // Declaration only, for the same reason: the two angles and the magnitude of a vector.
-        static void GetAnglesFromVector(rw::math::vpu::Vector3 lVector,
+        // ARTIST 82881978 receives the vector in v1 and output pointers in r3-r5.
+        // A plain four-float aggregate does not use that native register ABI.
+        static void GetAnglesFromVector(__vector4 lVector,
                                         f32* lpfAngleAOut, f32* lpfAngleBOut, f32* lpfMagnitudeOut);
     };
 
