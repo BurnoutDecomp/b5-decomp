@@ -10,15 +10,8 @@
 // BrnReplayDiskReadStream.h DWARF supplies the member/enum names. See the header for the
 // field-order/offset map. Raw-image holes are cited at their recovered bodies.
 
-// --- Win32/X360 critical-section primitives (the lock embedded at object offset 0).
-//     Declared here exactly as the sibling GPUDiskWriteStream.cpp does; the real bodies
-//     come from the platform. RtlEnter/LeaveCriticalSection(this) is the inlined
-//     mMutex Lock/Unlock. ---
-extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
-extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
-
-// Xbox block copy the ARTIST asm calls for the delivered read data (semantically memcpy).
-extern "C" void* XMemCpy(void* lpDest, const void* lpSrc, size_t luSize);
+// SDK declarations come from the stream header. The byte-storage mutex layout
+// remains unresolved; these casts identify its native critical-section prefix.
 
 namespace BrnReplays
 {
@@ -38,7 +31,7 @@ namespace BrnReplays
     // request boundary: the original emits a channel-one warning for repeats.
     void DiskReadStream::Close()
     {
-        RtlEnterCriticalSection(mMutex);
+        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
         if (meStatus != E_STATUS_CLOSED && !mbWaitingToClose)
         {
             mbWaitingToClose = true;
@@ -49,7 +42,7 @@ namespace BrnReplays
             *CgsDev::Log::gpDebugPrint
                 << "WARNING: Attempt to close a stream that is already closed or closing - ignoring request\n";
         }
-        RtlLeaveCriticalSection(mMutex);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
     }
 
     // ARTIST 82653968..826539B4 (raw image). Closing uses the urgent file
@@ -67,7 +60,7 @@ namespace BrnReplays
     void DiskReadStream::OnRead(s32 liResult, CgsFileSystem::Handle /*lHandle*/,
                                 u64 luSize, void* lpContext)
     {
-        RtlEnterCriticalSection(mMutex);
+        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
         CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
         CGS_ASSERT(miPendingOperationCount > 0,
                    "Received file event with 0 pending operations\n");
@@ -117,7 +110,7 @@ namespace BrnReplays
         --miPendingOperationCount;
         --miInputRequestCount;
         Service();
-        RtlLeaveCriticalSection(mMutex);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
     }
 
     // ARTIST 82650D70. Failure still closes the stream; cancellation returns
@@ -125,7 +118,7 @@ namespace BrnReplays
     void DiskReadStream::OnClose(s32 liResult, CgsFileSystem::Handle /*lHandle*/,
                                  u64 /*luSize*/, void* /*lpContext*/)
     {
-        RtlEnterCriticalSection(mMutex);
+        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
         CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
         CGS_ASSERT(miPendingOperationCount > 0,
                    "Received stream event with 0 pending operations\n");
@@ -154,7 +147,7 @@ namespace BrnReplays
             break;
         }
         --miPendingOperationCount;
-        RtlLeaveCriticalSection(mMutex);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
     }
 
     // =====================================================================================
@@ -219,7 +212,7 @@ namespace BrnReplays
     // =====================================================================================
     void DiskReadStream::SetRange(s32 liStartFilePos, s32 liEndFilePos)
     {
-        RtlEnterCriticalSection(mMutex);
+        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
 
         CGS_ASSERT(meStatus == E_STATUS_OPEN, "Invalid state to do set range\n");
         CGS_ASSERT(!mbLockedForRead, "Can not set range while locked for read\n");
@@ -231,7 +224,7 @@ namespace BrnReplays
         miReadPosition      = miLoopStart;
 
         Service();
-        RtlLeaveCriticalSection(mMutex);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
     }
 
     // =====================================================================================
@@ -281,7 +274,7 @@ namespace BrnReplays
     // =====================================================================================
     bool DiskReadStream::ReadBlock(s32 liFilePosition, void* lpData, s32 liDataSize)
     {
-        RtlEnterCriticalSection(mMutex);
+        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
 
         CGS_ASSERT((liFilePosition % miBlockSize) == 0,
                    "Must specify file pos that is multiple of stream block size\n");
@@ -345,7 +338,7 @@ namespace BrnReplays
                         }
                     }
 
-                    RtlLeaveCriticalSection(mMutex);
+                    RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
                     return true;
                 }
             }
@@ -356,7 +349,7 @@ namespace BrnReplays
         // Not ready -- pump the service loop and report that the data must be streamed in.
         (void)lbNeedsService;
         Service();
-        RtlLeaveCriticalSection(mMutex);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
         return false;
     }
 
@@ -406,7 +399,7 @@ namespace BrnReplays
     // =====================================================================================
     s32 DiskReadStream::GetAmountOfDataInBuffer()
     {
-        RtlEnterCriticalSection(mMutex);
+        RtlEnterCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
 
         s32 liAmount = 0;
         if (miBlocksUsed > 0)
@@ -423,7 +416,7 @@ namespace BrnReplays
             while (li < miBlocksUsed);
         }
 
-        RtlLeaveCriticalSection(mMutex);
+        RtlLeaveCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex));
         return liAmount;
     }
 
