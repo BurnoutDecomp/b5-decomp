@@ -577,6 +577,8 @@ namespace CgsMemory
         // ARTIST8286AF0C..8286AF58: copy the five 12-byte root resource sets.
         for (u32 ls = 0; ls < MemoryBank::KI_NUM_TYPES; ++ls)
             maRootSets[ls] = lpInitOptions->maResourceSets[ls];
+        // ARTIST8286AF58, after the complete root-set copy.
+        mbIsNewModule = true;
     }
 
     // @ 0x8286B3B8 - sub-allocate a new bank's block ranges out of its parent. Two passes over the 5
