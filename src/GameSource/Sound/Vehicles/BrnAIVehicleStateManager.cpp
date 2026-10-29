@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/BrnAIVehicleStateManager.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
@@ -113,7 +114,7 @@ static f32 DistanceSquared3( const rw::math::vpu::Vector3& arA, const rw::math::
 // loader stage in PrepareAIEngineLoading spells with CgsCore::SPrintf.
 static void AIEngineBundleName( char* apcBuffer, u32 auSize, const char* apcEngineName )
 {
-    std::snprintf( apcBuffer, auSize, "Engines\\%08x.bundle",
+    CgsCore::SPrintf( apcBuffer, auSize, "Engines\\%08x.bundle",
                    static_cast<u32>( CgsResource::ID::HashString(
                        reinterpret_cast<const u8*>( apcEngineName ) ) ) );
 }
@@ -133,7 +134,7 @@ u64 AIVehicleStateManager::GetAIEngineAttribKey( s32 liAIEngineIndex )
     CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
                 "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
     char lacDecimal[32];
-    std::snprintf( lacDecimal, sizeof( lacDecimal ), "%d", KAI_AI_ENGINE_ATTRIB_IDS[liAIEngineIndex] );
+    CgsCore::SPrintf( lacDecimal, sizeof( lacDecimal ), "%d", KAI_AI_ENGINE_ATTRIB_IDS[liAIEngineIndex] );
     return static_cast<u64>( Attrib::StringToKey( lacDecimal ) );
 }
 
@@ -276,7 +277,7 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
             CGS_ASSERT( std::strlen( lpcName ) < 64, "String too long" );
             AIEngineBundleName( lacBundle, sizeof( lacBundle ), lpcName );
             LoadAsset( lacBundle, lpcName, BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS );
-            std::snprintf( lacRegistry, sizeof( lacRegistry ), "%sRegistry", lpcName );
+            CgsCore::SPrintf( lacRegistry, sizeof( lacRegistry ), "%sRegistry", lpcName );
             LoadAsset( lacBundle, lacRegistry, BrnSound::Logic::ResourceRegistrar::E_DATA );
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG

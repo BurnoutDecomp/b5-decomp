@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleState.h"
@@ -91,11 +92,11 @@ void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFileP
 
     char lacRegistry[64];
     char lacBundle[64];
-    std::snprintf(lacRegistry, sizeof(lacRegistry), "%sRegistry", lpcEngineName);
+    CgsCore::SPrintf(lacRegistry, sizeof(lacRegistry), "%sRegistry", lpcEngineName);
     const char* lpcBundle = 0;
     if (lbUseFilePath)
     {
-        std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle",
+        CgsCore::SPrintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle",
                       static_cast<u32>(luName));
         lpcBundle = lacBundle;
     }
@@ -107,7 +108,7 @@ void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFileP
         // ARTIST's resource-only request is resolved against the already-loaded
         // engine bundle.  The native host registrar keeps the bundle hash in its
         // lookup key, so repeat the same lookup with that materialized path.
-        std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle",
+        CgsCore::SPrintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle",
                       static_cast<u32>(luName));
         lpHandle = GetResourceRegistrar().GetResource(lacBundle, lacRegistry);
     }
@@ -289,7 +290,7 @@ void VehicleStateManager::OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsP
             BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
                 << "] AUDIO LOAD: OnAssetLoaded  Car idx:" << static_cast<s32>(luUserId)
                 << " " << static_cast<u64>(lbIsPlayer) << "\n";
-            const auto* lpVehicles = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
                 ->GetBrnInputStructure()->GetVehicleInterface();
             BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
                 << "] AUDIO LOAD: Player Car index is :"
@@ -313,7 +314,7 @@ void VehicleStateManager::OnAssetUnloaded(CgsID lAssetId, u32 luUserId)
     {
         BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime()
             << "] AUDIO LOAD: OnAssetUnloaded Car idx" << static_cast<s32>(luUserId) << "\n";
-        const auto* lpVehicles = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
             ->GetBrnInputStructure()->GetVehicleInterface();
         BrnSound::Debug::DebugComponent::mLogCombined << "***[" << GetCurTime();
         if (lpVehicles->IsPlayerCarActive())

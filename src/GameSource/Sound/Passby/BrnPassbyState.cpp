@@ -70,19 +70,15 @@ PassbyState::PassbyState()
 // observable return — a stable &sTypeInfo whose typeName is the recovered class
 // name — matches, without fabricating the descriptor's id/base wiring.
 //
-// NOTE: BrnState.h's minimal CgsSound::Logic::ClassTypeInfo<T> has no constructor
-// (aggregate members ObjectID / mpcTypeName / mpBaseTypeInfo / mpfnCreateObject),
-// so the descriptor is aggregate-initialised here.
+// ClassTypeInfo uses its recovered constructor.
 // ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo =
-    {
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
         0x40000,       // ObjectID        (PS3 0x85FA1C: PassbyState id = 0x40000)
         "PassbyState", // mpcTypeName
         0,       // mpBaseTypeInfo  (DEFERRED -- BrnState descriptor chain)
-        &PassbyState::CreateObject,  // mpfnCreateObject @ 0x826D4978
-    };
+        &PassbyState::CreateObject);  // mpfnCreateObject @ 0x826D4978
     return &sTypeInfo;
 }
 

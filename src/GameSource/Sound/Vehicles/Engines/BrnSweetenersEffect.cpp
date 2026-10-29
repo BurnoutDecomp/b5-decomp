@@ -615,14 +615,25 @@ void SweetenersEffect::ProcessUpdate()
     const f32 lfReverbGain = GetRWACMixerOutputValue(9, 0);
     const f32 lfPitch = GetRWACMixerOutputValue(6, 1);
 
-    const auto lUpdateVoice = [&](CgsSound::Logic::VoiceWrapper& arVoice,
-                                  f32 afGain)
+    struct VoiceUpdate
     {
-        if (!arVoice.IsAlive())
-            return;
-        arVoice.SetParameter(0, lfPitch, &luPitchName);
-        arVoice.SetGain(1, lfReverbGain, &luReverbName);
-        arVoice.SetGain(0, afGain, &luSendName);
+        const f32& mfPitch;
+        const f32& mfReverbGain;
+        const u32& muPitchName;
+        const u32& muSendName;
+        const u32& muReverbName;
+
+        void operator()(CgsSound::Logic::VoiceWrapper& arVoice, f32 afGain) const
+        {
+            if (!arVoice.IsAlive())
+                return;
+            arVoice.SetParameter(0, mfPitch, &muPitchName);
+            arVoice.SetGain(1, mfReverbGain, &muReverbName);
+            arVoice.SetGain(0, afGain, &muSendName);
+        }
+    };
+    const VoiceUpdate lUpdateVoice = {
+        lfPitch, lfReverbGain, luPitchName, luSendName, luReverbName
     };
 
     lUpdateVoice(mExhaustPopsVoice,

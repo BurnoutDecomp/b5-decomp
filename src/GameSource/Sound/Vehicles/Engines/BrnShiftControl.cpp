@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -116,7 +117,7 @@ void ShiftControl::SetupLoadData()
     const u32 luHash = static_cast<u32>(CgsResource::ID::HashString(
         reinterpret_cast<const u8*>(lpcComponent)));
     char lacBundle[64];
-    std::snprintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle", luHash);
+    CgsCore::SPrintf(lacBundle, sizeof(lacBundle), "Engines\\%08x.bundle", luHash);
     LoadAsset(lacBundle, lpcComponent, BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
 }
 
