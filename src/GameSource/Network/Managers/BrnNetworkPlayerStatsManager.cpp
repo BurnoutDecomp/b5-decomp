@@ -877,7 +877,50 @@ namespace BrnNetwork
         *CgsDev::Log::gpDebugPrint << "An Error occurred in the server interface: "
                                    << mpServerInterface->GetLastError(leComponent) << "\n";
         mpServerInterface->ClearLastError(leComponent);
+        const EStatsStatus leFailedStatus = meCurrentStatus;
         meCurrentStatus = E_STATS_STATUS_IDLE;
+
+        // [PC PLATFORM DIVERGENCE -- not in the X360 binary] The console downloads every player's stats from
+        // the lobby service, which is where the local record (and each remote record that the per-player
+        // update messages later patch) comes from. The PC lobby layer has no such service (see
+        // dirtysdk/src/pc/lobbymiscpc.cpp: the statbook requests fail at once), so the download can never
+        // insert a record and every consumer of the cache -- CheckForLocalPlayerTakedowns
+        // (lpLocalPlayersStats) and UpdatePlayersStats (RECIEVED STATS UPDATE FOR PLAYER WE HAVE NO STATS FOR)
+        // -- finds nothing. Seed the cache with the record a brand-new account would download (all
+        // counters 0) so the peer-to-peer counter exchange works; an existing record is only refreshed.
+        if (leComponent == CgsNetwork::E_COMPONENTS_PLAYER_INFO
+            && (leFailedStatus == E_STATS_STATUS_DOWNLOADING_VIEWS
+                || leFailedStatus == E_STATS_STATUS_SELECTING_VIEW
+                || leFailedStatus == E_STATS_STATUS_DOWNLOADING_STATS))
+        {
+            NetworkPlayerStats* lpExisting = mPlayerStatsCache.GetPlayerStats(mCurrentEventBeingProcessed.GetName());
+            if (lpExisting != nullptr)
+            {
+                lpExisting->SetTimeStamp(mpNetworkManager->GetTime());
+            }
+            else
+            {
+                NetworkPlayerStats lStats;
+                lStats.Construct();
+                const bool lbIsLocalPlayer = mpNetworkManager->IsLocalPlayer(mCurrentEventBeingProcessed.GetPlayerID())
+                                             || IsThisLocalPlayer(mCurrentEventBeingProcessed.GetName());
+                lStats.Prepare(mCurrentEventBeingProcessed.GetName(), mpNetworkManager->GetTime(), lbIsLocalPlayer,
+                               mCurrentEventBeingProcessed.GetPlayerID());
+                lStats.SetStatus(NetworkPlayerStats::E_STATS_AGE_CURRENT);
+                for (NetworkPlayerStats::EStatsValue leValue = NetworkPlayerStats::E_STATS_VALUE_START;
+                     leValue < NetworkPlayerStats::E_STATS_VALUE_COUNT;
+                     leValue++)
+                {
+                    lStats.SetStat(leValue, "0",
+                                   leValue == NetworkPlayerStats::E_STATS_VALUE_WIN_PERCENT
+                                       ? NetworkPlayerStats::E_STAT_TYPE_PERCENT
+                                       : NetworkPlayerStats::E_STAT_TYPE_NUMBER);
+                }
+                lStats.SetTimeStamp(mpNetworkManager->GetTime());
+                lStats.SetCalculated(false);
+                mPlayerStatsCache.InsertPlayerStats(lStats);
+            }
+        }
         return true;
     }
 

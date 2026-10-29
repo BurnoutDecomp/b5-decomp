@@ -48,7 +48,7 @@ const char* const FriendsListEntry::KAC_STATUS_ICON_NAMES[FriendsListEntry::E_FR
     "sent",             // E_FRIENDLISTICONSTATE_SENT          (reconstructed)
     "sentJoinable",     // E_FRIENDLISTICONSTATE_SENT_JOINABLE (reconstructed)
     "joinable",         // E_FRIENDLISTICONSTATE_JOINABLE      (reconstructed)
-    "fbcComplete",      // E_FRIENDLISTICONSTATE_FBC_COMPLETE  (reconstructed)
+    "complete",         // E_FRIENDLISTICONSTATE_FBC_COMPLETE  (label verified in FLAPTHUD.BUNDLE clip hash table)
 };
 
 #define ICON(e) FriendsListEntry::E_FRIENDLISTICONSTATE_##e
