@@ -34,6 +34,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"               // Array<T,N>
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingGraph.h"  // BrnAI::RaceBalancingGraph, GraphType
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingRoute.h"  // BrnAI::RaceBalancingRoute
+#include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingDebugComponent.h"
 
 namespace BrnAI
 {
@@ -143,13 +144,7 @@ namespace BrnAI
         bool mbInRace;                                        // +0x4878 (18552)
         bool mbOnStartLine;                                   // +0x4879 (18553)
 
-        // PLACEHOLDER -- BrnAI::RaceBalancingDebugComponent (DWARF :131). It derives from
-        // CgsDev::DebugComponent (vtable + base members) and adds mpAIModule /
-        // mpRaceBalancingManager / miCurrentRival / mbShowData. Its exact sizeof is not
-        // recoverable from this TU's asm (the 5 bodied funcs never touch it), so it is an
-        // opaque byte placeholder here; total sizeof(RaceBalancingManager) is therefore NOT
-        // pinned. Every member the bodied funcs DO touch is pinned below. See open_questions.
-        u8 mRaceBalancingDebugComponent_placeholder[0x40];   // +0x487C (size unverified)
+        RaceBalancingDebugComponent mRaceBalancingDebugComponent; // +0x487C (ARTIST constructor)
     };
     // The touched private offsets are pinned inside _AssertLayout() (BrnRaceBalancingManager.cpp)
     // where offsetof has the member context it needs; the compile gate enforces them.

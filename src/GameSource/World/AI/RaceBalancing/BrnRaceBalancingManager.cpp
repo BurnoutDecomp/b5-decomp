@@ -437,6 +437,9 @@ void RaceBalancingManager::_AssertLayout()
                   "mbInRace @ +0x4878");
     CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, mbOnStartLine)         == 0x4879),
                   "mbOnStartLine @ +0x4879");
+    CGS_STATIC_ASSERT((offsetof(RaceBalancingManager, mRaceBalancingDebugComponent) == 0x487C),
+                  "mRaceBalancingDebugComponent @ +0x487C");
+    CGS_STATIC_ASSERT((sizeof(RaceBalancingManager) == 0x4898), "RaceBalancingManager size");
 }
 
 // ---- the extern tuning constants BrnRaceBalancingManager.h:56.. declares (DWARF :102..:108); defined here

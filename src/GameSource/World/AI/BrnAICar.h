@@ -40,8 +40,7 @@
 //   mLastRoutePosition     @+0x1480 (5248)  :664  -- UpdateRoute snapshot; IsExtrapolatedRouteGettingOld
 //   mPlaceOnTrackPosition  @+0x1490 (5264)  :666
 //   mPlaceOnTrackDirection @+0x14A0 (5280)  :667
-//   (guest mpDriver        @+0x14B0 (5296)  :670  -- 4-byte console slot kept as pad; the HOST
-//                                                    pointer lives in the tail, see mpDriverHost)
+//   mpDriver               @+0x14B0 (5296)  :670
 //   mePersonalityType      @+0x14CC (5324)  :678
 //   meResetSpeedType       @+0x14D0 (5328)  :679
 //   mCarAssetAttribKey     @+0x14D8 (5336)  :682  -- SetDriver `ld r4,0x14D8`
@@ -58,7 +57,6 @@
 //   mbIsDrifting           @+0x1544 (5444)  :724
 //   mbIsTouchingRaceCar    @+0x1545 (5445)  :725
 //   mbIsInResetPairSection @+0x1551 (5457)  :737
-//   mpDriverHost           @+0x1558 (host only; sizeof stays 0x1560 -- see the stride note)
 // DWARF NAMES OF THE ALREADY-NAMED MEMBERS (kept as committed, other TUs read them by these
 // names; the asm attests the ROLE, the DWARF the NAME):
 //   mRight == mUnitRight :659 . mfSpeedInRange == mfActualInRangeSpeed :685 . mfSpeedOutOfRange
@@ -335,7 +333,7 @@ namespace BrnAI
         void UpdateOutOfRangeData(Vector3 lPosition, Vector3 lAtVector, u16 luSectionIndex,
                                   u8 luSectionSpeed);                                       // @0x8276F398 (DWARF :240)
         void SetDriver(AIDriver* lpDriver);                                                 // @0x8276EF20 (DWARF :125)
-        AIDriver* GetDriver() const { return mpDriverHost; }                                // DWARF :131 (inlined-away getter)
+        AIDriver* GetDriver() const { return mpDriver; }                                // DWARF :131 (inlined-away getter)
         void SetDirection(Vector3 lDirection);                                              // @0x8276B2C0 (DWARF :532)
         f32  GetCurrentNodeY(AISectionsData* lpAISectionsData);                             // @0x8276EFD8 (DWARF :379)
         void OnModeStart(EAISpeedSelectionMethod leSpeedSelectionMethod, s32 liOpponentIndex,
@@ -356,7 +354,6 @@ namespace BrnAI
 
         Aggressiveness mAggressiveness;                 // +0x140C (5132)
 
-        u8 mPad1424[12];                                // [0x1424 .. 0x142F] the console Aggressiveness tail (0x24 on X360 vs 0x18 host)
         Vector3 mPosition;                              // +0x1430 (5168) DWARF :657 -- GetPosition @0x8276B1F0 / Update / UpdateInRangeData (row 3 of the transform)
         Vector3 mDirection;                             // +0x1440 (5184) DWARF :658 -- GetDirection @0x8276B488 / SetDirection @0x8276B2C0
         Vector3 mRight;                                 // +0x1450 (5200) car world-space right vector (SetRight @0x8276B7D0 stores here; DWARF mUnitRight :659)
@@ -365,7 +362,7 @@ namespace BrnAI
         Vector3 mLastRoutePosition;                     // +0x1480 (5248) DWARF :664 -- UpdateRoute snapshots mPosition here; route-age tests measure from it
         Vector3 mPlaceOnTrackPosition;                  // +0x1490 (5264) DWARF :666
         Vector3 mPlaceOnTrackDirection;                 // +0x14A0 (5280) DWARF :667
-        u8 mPad14B0[4];                                 // +0x14B0 (5296) guest mpDriver :670 (4-byte console slot) -- the host pointer is mpDriverHost @+0x1558
+        AIDriver* mpDriver;                              // +0x14B0: ARTIST SetDriver stores here
         EAIBehaviour meBehaviour;                       // +0x14B4 (5300) (==1 ROLLING_START -> INACTIVE-mode skip in CalcDesiredSpeed)
         EAIBehaviour mePreviousBehaviour;               // +0x14B8 (5304) prior behaviour (SetBehaviour shifts meBehaviour into here)
         s32 meSpeedSelectionMethod;                     // +0x14BC (5308) EAISpeedSelectionMethod -- CalcDesiredSpeed switch
@@ -426,14 +423,6 @@ namespace BrnAI
         bool mbIsInJunkYard;                            // +0x154F (5455) SetIsInJunkyard @0x82764EC0 stores here
         u8 mbUseChosenDistanceFunction;                 // +0x1550 (5456) DWARF mbIsOnline :736 -- Update stores its lbIsOnline argument here
         bool mbIsInResetPairSection;                    // +0x1551 (5457) DWARF :737 (the console's last member; object tail-padded to 0x1560)
-        u8 mPad1552[6];                                 // [0x1552 .. 0x1557] console tail padding, now the host pointer's alignment gap
-        // HOST-ONLY pointer slot: the console's 4-byte mpDriver @+0x14B0 cannot hold an 8-byte
-        // host pointer without growing the object past the baked 5472 stride (see the stride note
-        // below), so -- exactly like AIDriver::mpCarHost -- the real pointer lives in the console's
-        // tail padding. SetDriver @0x8276EF20 stores it, GetDriver reads it; UpdateInRangeData
-        // dereferences it (AIDriver::ResetPIDTuningState). Nothing on the console reads the
-        // padding bytes, so this is invisible to every console-derived stride.
-        AIDriver* mpDriverHost;                         // +0x1558 (host only) == guest mpDriver @+0x14B0 :670
 
     private:
         // offsetof-on-private would need a member-function context, but every touched member is
@@ -513,23 +502,6 @@ namespace BrnAI
     CGS_STATIC_ASSERT((offsetof(AICar, mbIsTouchingRaceCar)  == 0x1545), "AICar::mbIsTouchingRaceCar @ +0x1545");
     CGS_STATIC_ASSERT((offsetof(AICar, mbIsInResetPairSection) == 0x1551), "AICar::mbIsInResetPairSection @ +0x1551");
 
-    // ⭐⭐ THE WHOLE-OBJECT STRIDE, MEASURED 2026-08-26 (aimodule wave) AND NOW PINNED.
-    // Every offset above pins a member; NONE of them pins the SIZE, and the size is what the
-    // console indexes this class by. BrnAI::AIModule::GetAICar @0x82765AD0 returns
-    //     module + 560 + 5472 * index
-    // and BrnAI::ResetOnTrackManager::GetAICar @0x82765878 does the same off its own array
-    // pointer -- both with the literal 5472 baked in. That arithmetic is only correct on this
-    // host if sizeof(AICar) really is 5472, and it IS: measured 5472 == 0x1560 exactly (the
-    // last member ends at 0x1551 and Vector3's 16-byte alignment rounds the object to 0x1560).
-    // ⛔ IT IS TRUE BY ACCIDENT OF TODAY'S PAD MODEL, NOT BY CONSTRUCTION. This class is an
-    // explicitly-padded reproduction of a 32-bit layout; the moment a grow carves a POINTER out
-    // of one of the pads, the host object grows past 0x1560 and every one of those baked strides
-    // silently starts walking the array at the wrong pitch -- silently, because every address it
-    // produces is still inside the allocation. [[serialized slots stay 32-bit]] in reverse.
-    // This assert is the tripwire: if it ever fires, the fix is to replace the console constants
-    // with `&mpaAICars[index]` on the host type, NOT to adjust the padding to hide it.
-    // 2026-09-03 (AICar::Update wave): the ONE pointer the class needs on the host (mpDriver) was
-    // placed in the console's 14-byte tail padding (mpDriverHost @+0x1558) precisely so this
-    // assert keeps holding without touching a single console offset.
+    CGS_STATIC_ASSERT((offsetof(AICar, mpDriver) == 0x14B0), "AICar::mpDriver @ +0x14B0");
     CGS_STATIC_ASSERT((sizeof(AICar) == 0x1560), "AICar stride: the console bakes 5472 into GetAICar");
 }
