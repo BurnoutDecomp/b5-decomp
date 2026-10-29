@@ -16,6 +16,21 @@ namespace renderengine
         // Field meanings follow the consumers in 827E8950 and the native XDK.
         struct Parameters
         {
+            // ARTIST Renderer constructor827E008C..827E0284 inlines these
+            // defaults before constructing its Job arrays. Natural padding at
+            //45..47 is deliberately untouched.
+            Parameters()
+                : muAddressU(0), muAddressV(0), muAddressW(0),
+                  muMagFilter(0), muMinFilter(0), muMipFilter(2),
+                  muMagFilterZ(0), muMinFilterZ(0), muMinMipLevel(13),
+                  muMaxMipLevel(0), muMaxAnisotropy(1), mfMipLodBias(0.0f),
+                  mfAnisotropyBias(0.0f), miHGradientExpBias(0),
+                  miVGradientExpBias(0), muTrilinearThreshold(0),
+                  mbWhiteBorder(0), mbSeparateZFilterEnable(0), mbWhiteBorderW(0),
+                  mbPointBorderEnable(1), mbUnidentified44(1), mpTexture(0)
+            {
+            }
+
             u32 muAddressU;
             u32 muAddressV;
             u32 muAddressW;
