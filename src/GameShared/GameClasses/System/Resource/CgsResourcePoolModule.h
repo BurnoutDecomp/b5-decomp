@@ -52,7 +52,7 @@ namespace CgsResource
 
     public:
         static const s32 KI_MAX_POOLS = 128;
-        static const s32 KI_MAX_TYPES = 128;
+        static const s32 KI_MAX_TYPES = 512; // DecFIGS KI_MAX_RESOURCE_TYPES; ARTIST stages+6700.
         // Defrag-path capacities (DWARF CgsPoolModule.h:61-64) -- the IntelliFrag/EmergencyFrag passes
         // size their scratch arrays from these.
         static const s32 KI_MAX_ALLOCATION_REQUESTS   = 4096;    // :61
@@ -117,7 +117,8 @@ namespace CgsResource
         PoolModule() {}
 
         // ---- lifecycle ---------------------------------------------------------------
-        void Construct(const void* lpInitOptions, void* lpAllocator);
+        virtual void Construct(const InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator);
         bool Prepare();
         bool Release();
         void Destruct();
@@ -218,6 +219,20 @@ namespace CgsResource
                                   bool* lpNeeds, void* lpResources, bool lbLiveUpdateReplace, bool lbAllowFailiure);
 
     private:
+        static void AssertNativeTypeLayout()
+        {
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mePoolPrepareStage) == 6700, "ARTIST type-table extent");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, maPools) == 6712, "ARTIST pool table");
+            CGS_STATIC_ASSERT(sizeof(Pool) == 464, "ARTIST pool stride");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mReceiverQueue) == 0x15844, "ARTIST pool receiver");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mScratchPool) == 0x19880, "ARTIST scratch owner");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mAllocListSet) == 0x19b00, "ARTIST allocation list");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mProcessState) == 0x19b30, "ARTIST pool update state");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mRelocator) == 0x19d00, "ARTIST relocator owner");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mRelocationParams) == 0x1a100, "ARTIST relocation parameters");
+            CGS_STATIC_ASSERT(offsetof(PoolModule, mPendingAllocationRequests) == 0x1a110, "ARTIST pending allocations");
+            CGS_STATIC_ASSERT(sizeof(PoolModule) == 0x1a200, "ARTIST pool module span");
+        }
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         s32               mNumTypes;                 // +0x228 (a1[138]) registered type count
         ResourceTypeEntry maTypes[KI_MAX_TYPES];     // +0x22C type registry (12B X360 entries)

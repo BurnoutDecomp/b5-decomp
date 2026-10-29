@@ -17,27 +17,28 @@
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
 #define WIN32_LEAN_AND_MEAN
 #include <xtl.h>   // CreateFileA / ReadFile / SetFilePointerEx / FindFirstFileA / CloseHandle
 
-// CgsDev debug-trace facade (Init prints a one-line trace when the message filter allows). Matches
-// the RemapDevice sibling's local declaration; bodies live in Development/Log/CgsLog.cpp.
-namespace CgsDev
-{
-    namespace Message { extern u64 gxMessageFilterFlags; }
-    namespace Log { void DebugPrint(const char* pcText, int liArg); }
-}
-
 namespace CgsFileSystem
 {
+    // Inlined by ARTIST829033C0.16 records and16 index bytes belong to the device.
+    void DevicePhysicalX360::Construct(s32 liDriveIndex)
+    {
+        miDriveIndex = liDriveIndex;
+        mHandlePool.Construct(maHandles, maiFreeIndices, static_cast<s8>(KI_MAX_OPEN_FILES));
+        CGS_STATIC_ASSERT(sizeof(DevicePhysicalX360) == 4400, "ARTIST physical device stride");
+    }
+
     // Init @0x828DE998, mapped to the worker-start Connect() hook: when the message filter's bit 0
     // is set, print a one-line init trace; always return 0.
     int DevicePhysicalX360::Connect()
     {
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            CgsDev::Log::DebugPrint("Physical X360 device initialized\n", 0);
+            *CgsDev::Log::gpDebugPrint << "Physical X360 device initialized\n";
         return 0;
     }
 
@@ -164,6 +165,20 @@ namespace CgsFileSystem
         if (!CallErrorCallback(0))
             Sleep(static_cast<DWORD>(-1));
         return -2;
+    }
+
+    // ARTIST828DEAA0..828DEB90, raw original instructions. Write failures
+    // return-2 directly; the read-side disk-error callback is not used here.
+    int DevicePhysicalX360::Write(Handle::DeviceHandle lpHandle, const void* lpBuffer,
+                                  u32 luSize, u32* lpuOutResult)
+    {
+        FileHandleRecord& lrRecord = *static_cast<FileHandleRecord*>(lpHandle);
+        CGS_ASSERT((lrRecord.miFlags & 2) != 0, "File is read only\n");
+        DWORD luWritten;
+        if (!WriteFile(lrRecord.mpHandle, lpBuffer, luSize, &luWritten, 0)) return -2;
+        lrRecord.mu64Position += luWritten;
+        *lpuOutResult = luWritten;
+        return 0;
     }
 
     // Seek @0x828DEB98. If the request equals the record's current position, report it without a

@@ -68,6 +68,13 @@ namespace CgsResource
         void* GetDestAddress(ID lId) { return mImportHashTable.GetDestAddress(lId); }
 
     private:
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(offsetof(ScratchPool, mGatherStream) == 0x100, "ARTIST scratch gather stream");
+            CGS_STATIC_ASSERT(offsetof(ScratchPool, mScatterStream) == 0x180, "ARTIST scratch scatter stream");
+            CGS_STATIC_ASSERT(sizeof(ScratchPool) == 0x280, "ARTIST scratch pool span");
+            CGS_STATIC_ASSERT(__alignof(ScratchPool) == 128, "ARTIST scratch pool alignment");
+        }
         void BuildGatherDistributionList();
         void BuildScatterDistributionList();
 

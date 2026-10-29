@@ -6,10 +6,10 @@
 
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "rw/rwcore_structs.h"
 
-#include <cstdlib>   // malloc / free
 #include <cstring>   // strcmp / strncpy / strlen
-#include <cstdio>    // snprintf
 
 // Forked-vendor EAThread X360-ABI sleep (pointer-arg; the worker polls 15ms when the queue is
 // empty). Declared locally rather than via the vendor eathread.h (whose ThreadSleep takes a
@@ -30,11 +30,20 @@ namespace CgsFileSystem
         return DeviceManager::mpDeviceManager;
     }
 
-    // Allocation. The X360 allocated the (161712-byte) DeviceManager through the GameData
-    // allocator via a custom operator new; on PC this is a marked malloc leaf (single ~160KB
-    // allocation). mpAllocator is captured by InitializeDeviceManager for parity / future use.
-    void* DeviceManager::operator new(size_t luSize) { return malloc(luSize); }      // PC IO leaf
-    void  DeviceManager::operator delete(void* lpBlock) { free(lpBlock); }
+    // Native allocation uses the resource allocator installed before new is called.
+    void* DeviceManager::operator new(size_t luSize)
+    {
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        return static_cast<rw::IResourceAllocator*>(mpAllocator)->DoAllocate(lDescriptor, 0).m_baseResources[0];
+    }
+    void DeviceManager::operator delete(void* lpBlock)
+    {
+        rw::Resource lResource;
+        lResource.m_baseResources[0] = lpBlock;
+        static_cast<rw::IResourceAllocator*>(mpAllocator)->DoFree(lResource);
+    }
 
     // ctor @ 0x828F0C90.
     // The X360 ctor, per physical slot, RtlInitializeCriticalSection'd the OperationPool lock,
@@ -127,17 +136,67 @@ namespace CgsFileSystem
         // Install the device + its error callback (X360: *(dev+8)=callback, *(dev+4)=0). The
         // slot's OperationPool was already brought up by the DeviceManager ctor.
         lrSlot.mpDevice = lpDevice;
+        lpDevice->SetParent(0);
         lpDevice->SetErrorCallback(lpfErrorCallback);
 
         mDeviceListFutex.Unlock();
 
         // Spawn the per-device worker, named "CgsFileSystem:<prefix>" (X360 SPrintf + Thread::Begin).
         char lacThreadName[64];
-        snprintf(lacThreadName, sizeof(lacThreadName), "CgsFileSystem:%s", lpcPrefix);
+        CgsCore::SPrintf(lacThreadName, sizeof(lacThreadName), "CgsFileSystem:%s", lpcPrefix);
         EA::Thread::ThreadParameters lParams;
         lParams.mpName = lacThreadName;
-        lrSlot.mWorkerThread.Begin(PhysicalDeviceThread, &lrSlot, &lParams);
+        lParams.mnPriority = 350;
+        lParams.mnProcessor = 0;
+        lParams.mbSuspended = false;
+        lrSlot.mWorkerThread.Begin(PhysicalDeviceThread, &lrSlot, &lParams,
+            EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
         return true;
+    }
+
+    // ARTIST828F0CF8..828F11B4 (raw assembly; export hole).
+    void DeviceManager::AddVirtualDevice(Device* lpDevice, const char* lpcPrefix,
+                                         const char* lpcParent, ErrorCallback lpfErrorCallback)
+    {
+        mDeviceListFutex.Lock();
+        CGS_ASSERT(FindDevice(lpcPrefix) == 0, "Device name already in use\n");
+        Device* lpParent = FindDevice(lpcParent);
+        CGS_ASSERT(lpParent != 0, "Parent device not found\n");
+        s32 liSlot = 0;
+        while (liSlot < KI_MAX_VIRTUAL_DEVICES && maVirtualDevices[liSlot].mpDevice) ++liSlot;
+        CGS_ASSERT(liSlot < KI_MAX_VIRTUAL_DEVICES, "No free virtual devices\n");
+        CgsCore::StrCpy(maVirtualDevices[liSlot].macPrefix,
+                       sizeof(maVirtualDevices[liSlot].macPrefix), lpcPrefix);
+        maVirtualDevices[liSlot].mpDevice = lpDevice;
+        lpDevice->SetParent(lpParent);
+        lpDevice->SetErrorCallback(lpfErrorCallback);
+        Device* lpPhysical = lpDevice->GetPhysicalParent();
+        s32 liPhysical = 0;
+        while (liPhysical < KI_MAX_PHYSICAL_DEVICES &&
+               maPhysicalDevices[liPhysical].mpDevice != lpPhysical) ++liPhysical;
+        CGS_ASSERT(liPhysical < KI_MAX_PHYSICAL_DEVICES, "Physical device not found\n");
+        Operation lOperation = Operation();
+        lOperation.miType = E_OP_DISCONNECT;
+        lOperation.mHandle = Handle::Make(lpDevice, 0);
+        lOperation.miPriority = 0x7fffffff;
+        maPhysicalDevices[liPhysical].mOperations.AddOperation(&lOperation);
+        mDeviceListFutex.Unlock();
+    }
+
+    // ARTIST828F2260: shutdown is asynchronous; the worker retires after op9.
+    void DeviceManager::Shutdown()
+    {
+        mDeviceListFutex.Lock();
+        for (s32 li = 0; li < KI_MAX_PHYSICAL_DEVICES; ++li)
+        {
+            if (!maPhysicalDevices[li].mpDevice) continue;
+            Operation lOperation = Operation();
+            lOperation.miType = E_OP_SHUTDOWN;
+            lOperation.mHandle = Handle::Make(maPhysicalDevices[li].mpDevice, 0);
+            lOperation.miPriority = 0x7fffffff;
+            maPhysicalDevices[li].mOperations.AddOperation(&lOperation);
+        }
+        mDeviceListFutex.Unlock();
     }
 
     void DeviceManager::SetDefaultPath(const char* lpcPath)
@@ -426,177 +485,6 @@ namespace CgsFileSystem
                 break;
             }
         }
-    }
-
-    // ---- ReadFileSync — PC synchronous convenience over the async device engine ----------
-    namespace
-    {
-        // A per-op completion record: the worker fires SyncOpCallback, which records the result
-        // + handle and posts the count-0 semaphore the waiting caller blocks on.
-        struct SyncCompletion
-        {
-            EA::Thread::Semaphore* mpDone;
-            s32                    miResult;
-            Handle                 mHandle;
-            u64                    muSize;
-        };
-
-        void SyncOpCallback(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
-        {
-            SyncCompletion* lpComp = static_cast<SyncCompletion*>(lpContext);
-            lpComp->miResult = liResult;
-            lpComp->mHandle  = lHandle;
-            lpComp->muSize   = luSize;
-            lpComp->mpDone->Post(1);
-        }
-
-        // Fill in the op's completion callback/context, enqueue it on the device's pool, and block
-        // until the worker thread posts completion; returns the op result.
-        int EnqueueAndWait(OperationPool* lpPool, Operation* lpOp, SyncCompletion* lpComp)
-        {
-            lpOp->mpfCallback = SyncOpCallback;
-            lpOp->mpContext   = lpComp;
-            lpPool->AddOperation(lpOp);
-            return lpComp->miResult;
-        }
-    }
-
-    s32 DeviceManager::ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize)
-    {
-        // Route through the first registered physical device.
-        PhysicalDeviceSlot* lpSlot = 0;
-        for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
-            if (maPhysicalDevices[liIndex].mpDevice) { lpSlot = &maPhysicalDevices[liIndex]; break; }
-        if (!lpSlot)
-            return -1;
-
-        Device*        lpDevice = lpSlot->mpDevice;
-        OperationPool* lpPool   = &lpSlot->mOperations;
-
-        EA::Thread::Semaphore lDone;   // count 0 (default ctor)
-        SyncCompletion lComp;
-        lComp.mpDone   = &lDone;
-        lComp.miResult = 0;
-        lComp.mHandle.Clear();
-        lComp.muSize   = 0;
-
-        // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
-        Operation lOp;
-        memset(&lOp, 0, sizeof(lOp));
-        lOp.miType   = E_OP_OPEN;
-        lOp.mHandle = Handle::Make(lpDevice, 0);
-        strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
-        lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
-        lOp.muFlags     = 1;
-        lOp.mpfCallback = SyncOpCallback;
-        lOp.mpContext   = &lComp;
-        lpPool->AddOperation(&lOp);
-        const Handle lHandle = lComp.mHandle;
-        if (lComp.miResult != 0 || lHandle.IsNull())
-            return -1;
-
-        // READ the first luMaxSize bytes.
-        memset(&lOp, 0, sizeof(lOp));
-        lOp.miType     = E_OP_READ;
-        lOp.mHandle    = lHandle;
-        lOp.mu64Offset = 0;
-        lOp.muSize     = luMaxSize;
-        lOp.mpReadBuffer = lpBuffer;
-        lOp.mpfCallback = SyncOpCallback;
-        lOp.mpContext   = &lComp;
-        lpPool->AddOperation(&lOp);
-        const int liBytes = lComp.miResult == 0 ? static_cast<int>(lComp.muSize) : -1;
-
-        // CLOSE.
-        memset(&lOp, 0, sizeof(lOp));
-        lOp.miType      = E_OP_CLOSE;
-        lOp.mHandle     = lHandle;
-        lOp.mpfCallback = SyncOpCallback;
-        lOp.mpContext   = &lComp;
-        lpPool->AddOperation(&lOp);
-
-        return liBytes;
-    }
-
-    void* DeviceManager::ReadWholeFile(const char* lpcPath, u32* lpuOutSize)
-    {
-        if (lpuOutSize) *lpuOutSize = 0;
-
-        // Route through the first registered physical device.
-        PhysicalDeviceSlot* lpSlot = 0;
-        for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
-            if (maPhysicalDevices[liIndex].mpDevice) { lpSlot = &maPhysicalDevices[liIndex]; break; }
-        if (!lpSlot)
-            return 0;
-
-        Device*        lpDevice = lpSlot->mpDevice;
-        OperationPool* lpPool   = &lpSlot->mOperations;
-
-        EA::Thread::Semaphore lDone;
-        SyncCompletion lComp;
-        lComp.mpDone   = &lDone;
-        lComp.miResult = 0;
-        lComp.mHandle.Clear();
-        lComp.muSize   = 0;
-
-        Operation lOp;
-
-        // OPEN (read mode == 1). The worker delivers the file handle in the callback's result.
-        memset(&lOp, 0, sizeof(lOp));
-        lOp.miType   = E_OP_OPEN;
-        lOp.mHandle = Handle::Make(lpDevice, 0);
-        strncpy(lOp.macPath, lpcPath, sizeof(lOp.macPath) - 1);
-        lOp.macPath[sizeof(lOp.macPath) - 1] = 0;
-        lOp.muFlags = 1;
-        const int liOpenResult = EnqueueAndWait(lpPool, &lOp, &lComp);
-        const Handle lHandle = lComp.mHandle;
-        if (liOpenResult != 0 || lHandle.IsNull())
-            return 0;
-
-        // GETFILESIZE (the worker passes the size as the callback result).
-        memset(&lOp, 0, sizeof(lOp));
-        lOp.miType   = E_OP_GETFILESIZE;
-        lOp.mHandle = lHandle;
-        const int liSizeResult = EnqueueAndWait(lpPool, &lOp, &lComp);
-        const int liSize = liSizeResult == 0 ? static_cast<int>(lComp.muSize) : -1;
-
-        void* lpBuffer = 0;
-        u32   luBytes  = 0;
-        if (liSize > 0)
-        {
-            lpBuffer = malloc(static_cast<size_t>(liSize));   // PC IO leaf; caller free()s
-            if (lpBuffer)
-            {
-                // READ the whole file.
-                memset(&lOp, 0, sizeof(lOp));
-                lOp.miType     = E_OP_READ;
-        lOp.mHandle    = lHandle;
-                lOp.mu64Offset = 0;
-                lOp.muSize     = static_cast<u32>(liSize);
-        lOp.mpReadBuffer = lpBuffer;
-                const int liReadResult = EnqueueAndWait(lpPool, &lOp, &lComp);
-                const int liRead = liReadResult == 0 ? static_cast<int>(lComp.muSize) : -1;
-                if (liRead == liSize)
-                {
-                    luBytes = static_cast<u32>(liSize);
-                }
-                else
-                {
-                    free(lpBuffer);   // short / failed read -> the whole-file read failed
-                    lpBuffer = 0;
-                }
-            }
-        }
-
-        // CLOSE.
-        memset(&lOp, 0, sizeof(lOp));
-        lOp.miType   = E_OP_CLOSE;
-        lOp.mHandle = lHandle;
-        EnqueueAndWait(lpPool, &lOp, &lComp);
-
-        if (lpBuffer && lpuOutSize)
-            *lpuOutSize = luBytes;
-        return lpBuffer;
     }
 
 } // namespace CgsFileSystem

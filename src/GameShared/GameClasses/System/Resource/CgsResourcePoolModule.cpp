@@ -208,9 +208,9 @@ namespace CgsResource
 
     // ARTIST 828FC0B8: construct the pool bank, type registry, scratch staging,
     // allocation/relocation storage and the five request-processing states.
-    void PoolModule::Construct(const void* lpInitOptions, void* lpAllocator)
+    void PoolModule::Construct(const InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator*)
     {
-        mbIsNewModule = true;   // X360 *(this+4)=1 (set at the end of Construct; base Prepare skips old IO)
         CgsModule::ModuleSingleBuffered::Construct();          // X360: ModuleSingleBuffered::Construct(a1)
         mePoolPrepareStage = E_POOLPREPARE_START;              // X360 *(a1+6700)=0
         mePoolReleaseStage = E_POOLRELEASE_DONE;               // X360 *(a1+6704)=3
@@ -324,7 +324,7 @@ namespace CgsResource
         mLiveUpdateState.Construct(this);
         mEmergencyFragState.Construct(this);
         mPendingAllocationRequests.Construct();
-
+        mbIsNewModule = true; // ARTIST828FC0B8 stores this after all subobjects.
     }
     // The existing host update transport now drives the original typed request and
     // receiver processors, then the same state machines and owned maPools sweep.

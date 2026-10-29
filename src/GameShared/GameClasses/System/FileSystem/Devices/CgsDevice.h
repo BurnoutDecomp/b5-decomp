@@ -29,13 +29,13 @@ namespace CgsFileSystem
 {
     // A device-level error callback: receives the device error code, returns the (possibly
     // remapped) result the failing op should report.
-    typedef int (*ErrorCallback)(int liError);
+    typedef bool (*ErrorCallback)(int liError);
 
     class Device
     {
     public:
         Device() : mpParent(0), mpfErrorCallback(0) {}
-        virtual ~Device() {}
+        // ARTIST820CEEE0/820CEF0C:11 op slots, no virtual destructor.
 
         // ---- the worker-dispatched async op interface (X360 vtable order) -------------
         // Base defaults are "Not implemented" (assert + -2); concrete devices override.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 
 // CgsMemory::DistributionStream - the shared base of the resource defragmenter's two
 // budgeted data movers, GatherStream and ScatterStream.
@@ -20,6 +21,7 @@
 // (9 dwords on X360); the two address fields widen to pointers for x64 (compiler layout).
 namespace CgsMemory
 {
+    static const u32 KU_DISTRIBUTION_STREAM_ALIGNMENT = 128;
     // A 16-byte (X360) distribution-list entry. All three fields are 16-byte aligned
     // (the gather builder asserts this). mpScatteredAddress is the resource's real
     // address; muPackedOffset is its slot inside the packed staging buffer.
@@ -31,7 +33,7 @@ namespace CgsMemory
         u32 muReserved;          // [0x0C]
     };
 
-    class DistributionStream
+    class __declspec(align(128)) DistributionStream
     {
     public:
         DistributionStream* Construct();
@@ -53,5 +55,12 @@ namespace CgsMemory
         u32                            muEntryOffset;     // [0x18] cursor: offset in entry
         u32                            muStreamPosition;  // [0x1C] running progress
         u32                            mu32Flags;         // [0x20] bit0 = active
+    private:
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(sizeof(DistributionStream) == 128, "ARTIST distribution stream stride");
+            CGS_STATIC_ASSERT(__alignof(DistributionStream) == 128, "ARTIST distribution stream alignment");
+            CGS_STATIC_ASSERT(offsetof(DistributionStream, mu32Flags) == 0x20, "ARTIST distribution stream flags");
+        }
     };
 }

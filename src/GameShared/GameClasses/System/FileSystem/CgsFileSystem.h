@@ -4,6 +4,10 @@
 #include "SDKs/EATech/eathread/eathread_atomic.h"
 // Real instance layout: the 16 file handles, the 8 read-stream engines, the embedded log + lock.
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"
+#include "GameShared/GameClasses/System/FileSystem/CgsPatchManager.h"
+#include "GameShared/GameClasses/System/FileSystem/CgsDiskCache.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsRemapDevice.h"
 // Complete CgsFileSystem::File definition — maFiles[16] is embedded by value below.
 #include "GameShared/GameClasses/System/FileSystem/CgsFileRW.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFileLog.h"
@@ -12,27 +16,11 @@
 // Committed vendor Futex: CRITICAL_SECTION-backed fast mutex (the file-system-wide lock).
 #include "eathread/eathread_futex.h"
 
-// CgsFileSystem::FileSystem - the resource file-I/O subsystem embedded by value inside
-// CgsResource::ResourceModule. It owns the device manager (DeviceManager singleton) and, on the
-// real X360, the rw::core::filesys layer, per-stream critical sections, a FileLog, and the
-// async open/read/close stream machinery the BundleLoaderModule reads .BUNDLE files through.
-//
-// SOURCES (X360 ARTIST): ctor 0x827DF320, Construct 0x829033C0, Prepare 0x828F04E8,
-// Release 0x82903880, Destruct 0x828E8A88.
-//
-// STATUS: the async device engine (DeviceManager + OperationPool + per-device worker thread +
-// EnsureDeviceManagerUp() does the idempotent bring-up — FileSystem::Prepare calls it, and the
-// bundle loader calls it lazily so EVERY load (incl. the early movie/debug-font bootstrapping,
-// which runs before Prepare) goes through the engine (no CRT fallback). The rw::core::filesys
-// Manager + the 16-slot BaseFile/OpenReadStream wrapper above DeviceManager remain follow-on.
+// Native resource filesystem:16 buffered files,8 read-stream engines, the
+// allocator-owned RW manager and memory driver, patch map and DVD/HDD devices.
+// ARTIST governs lifecycle/ABI; AssertNativeLayout checks the original offsets.
 namespace CgsFileSystem
 {
-    // Idempotent: initialise the DeviceManager + register the PC physical device (spawning its
-    // worker thread) if not already up. Callable from FileSystem::Prepare or lazily from the
-    // first file read. (X360: FileSystem::Prepare did this once, early in its boot; on PC the
-    // resource module prepares late, so the loader also calls it to cover early bootstrapping.)
-    void EnsureDeviceManagerUp();
-
     // Pointer-only members of the layout below; reconstructed in their own follow-on TUs.
     class DiskLayout;
     class DeviceMemFileSystem;
@@ -54,17 +42,14 @@ namespace CgsFileSystem
     // the file log, a system scratch buffer and a subsystem-wide lock. Embedded by value inside
     // CgsResource::ResourceModule.
     //
-    // LAYOUT POLICY: faithful DWARF member ORDER with natural PC widths (the project convention —
-    // not exact X360 byte offsets). The X360 ARTIST asm of the methods below is the authority for
-    // BEHAVIOUR (bounds checks, the read-stream effective-status collapse); members are reached BY
-    // NAME, never by raw offset. The PS3-only device members (mPS3*Drive / the RemapDevices) are
-    // gated OUT — they are not part of the X360 build that the asm/ledger attest.
     class FileSystem
     {
     public:
-        // ---- PC-native bring-up shim (separate X360 funcs, reconstructed as no-ops) ----
-        void Construct();   // 0x829033C0
-        bool Prepare();     // 0x828F04E8 — brings up the async device engine
+        // Native allocator/device lifecycle.
+        void Construct(rw::IResourceAllocator* lpAllocator,
+                       rw::IResourceAllocator* lpDebugAllocator,
+                       const char* lpcSearchPath, DiskLayout* lpDiskLayout); // ARTIST829033C0
+        bool Prepare();     // ARTIST828F04E8
         bool Release();     // 0x82903880
         void Destruct();    // 0x828E8A88
 
@@ -97,6 +82,8 @@ namespace CgsFileSystem
 
     private:
         static EA::Thread::AtomicInt32 mDiskErrorOccured;
+        static EA::Thread::AtomicInt32 mReleasing;
+        static void AssertNativeLayout();
         static bool RWDiskErrorHandler(s32 liIndex);
 
         // Shared effective-status read used by Is{Open,Closed}: the raw stream status, except that
@@ -134,5 +121,11 @@ namespace CgsFileSystem
         DiskLayout*           mpDiskLayout;                                       // :258
         EA::Thread::Futex     mFileSystemFutex;                                   // :259
         DeviceMemFileSystem*  mpMemFileSystem;                                    // :260
+        DiskCache mDiskCache; // ARTIST82903864..74 and DecFIGS debug option names.
+        PatchManager mPatchManager; // ARTIST829034BC: Construct atfilesystem+39240.
+        DevicePhysicalX360 mX360DVDDrive;
+        DevicePhysicalX360 mX360HardDrive;
+        RemapDevice mX360RemapDVDDrive;
+        RemapDevice mX360RemapHardDrive;
     };
 }

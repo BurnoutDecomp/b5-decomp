@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 #include "SDKs/EATech/eajobs/job.h"   // EA::Jobs::Job (mJob, embedded by value)
 
 // CgsMemory::Relocator - the block-copy engine the resource pool's emergency defragmenter
@@ -40,7 +41,7 @@ namespace CgsMemory
 
     // The job's data block. The first four words are the params snapshot; mbTestHijacks
     // selects the job's alternate (data-stream hijack) body and Execute always clears it.
-    struct RelocatorJobData
+    struct __declspec(align(128)) RelocatorJobData
     {
         RelocateOp* mpOps;               // +0x00
         s32         miNumOps;            // +0x04
@@ -78,5 +79,14 @@ namespace CgsMemory
                                             //        ever sets it.
         EA::Jobs::Job mJob;                 // +0x010 the one copy job
         RelocatorJobData mJobData;          // +0x380 the block attached to that job
+    private:
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(sizeof(RelocatorJobData) == 128, "ARTIST relocation job data");
+            CGS_STATIC_ASSERT(__alignof(RelocatorJobData) == 128, "ARTIST relocation job-data alignment");
+            CGS_STATIC_ASSERT(offsetof(Relocator, mJob) == 0x10, "ARTIST relocation job");
+            CGS_STATIC_ASSERT(offsetof(Relocator, mJobData) == 0x380, "ARTIST relocation job-data offset");
+            CGS_STATIC_ASSERT(sizeof(Relocator) == 1024, "ARTIST relocator span");
+        }
     };
 }

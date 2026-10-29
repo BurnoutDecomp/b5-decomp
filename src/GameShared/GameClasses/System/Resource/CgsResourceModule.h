@@ -22,15 +22,11 @@
 // shuttles. The ctor embeds (by value, in order): BundleLoaderModule @a1+160, PoolModule
 // @a1+45280, MemoryModule @a1+72032, CgsFileSystem::FileSystem @a1+72204, DebugComponent @a1+84806.
 //
-// DEFER STATUS: this pass reconstructs the lifecycle ORCHESTRATION spine - Prepare (0x828F4140)
-// and Release (0x82906570), the resumable stage machines that bring the four sub-modules up (base
-// -> Memory -> FileSystem -> Bundle -> Pool + register debug) and tear them down in reverse. They
-// are rw-INDEPENDENT (they only chain the embedded modules' own Prepare/Release). Construct
-// (allocates everything through the rw allocator), Update and the request shuttles are DEFERRED
-// (rw allocator middleware) as inert marked stubs.
+namespace rw { namespace core { struct GeneralResourceAllocator; } }
+
 namespace CgsResource
 {
-    struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
+    using CgsFileSystem::DiskLayout;
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
     namespace ResourceIO { struct InputBuffer; struct OutputBuffer; }                    // the module's request input
     // The write-stream request event types (deprecated adders take these by pointer only).
@@ -95,7 +91,7 @@ namespace CgsResource
                 static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
         }
 
-        void Construct(const InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+        virtual void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
                        rw::IResourceAllocator* lpDebugAllocator);  // ARTIST829055B0
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
@@ -151,6 +147,10 @@ namespace CgsResource
         void ProcessPendingFileSystemResponses();                                           // @0x828F42B8
 
     private:
+        template<class Response> Response* FileSystemAlloc();
+        template<class Response> void FileSystemFree(Response* lpResponse);
+        static void AssertNativeInitOptions();
+
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage             mePrepareStage;       // +0x228 (a1[138])
         EReleaseStage             meReleaseStage;       // +0x22C (a1[139])
@@ -159,10 +159,11 @@ namespace CgsResource
         CgsMemory::MemoryModule   mMemoryModule;        // +0x46580 (a1+72032)
         CgsFileSystem::FileSystem mFileSystem;          // +0x4684C (a1+72204)
         DebugComponent            mDebugComponent;      // +0x52D18 (a1+84806)
-        PendingFileResponse       maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
-        s8                        maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        rw::core::GeneralResourceAllocator* mpFileSystemAllocator; // ARTIST+360492
         CgsContainers::IndexedPool<PendingFileResponse,
                                    KI_MAX_PENDING_FILE_SYSTEM_RESPONSES, s8>
                                   mPendingFileResponses;
+        PendingFileResponse maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        s8 maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
     };
 }

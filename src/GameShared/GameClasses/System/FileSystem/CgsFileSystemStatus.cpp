@@ -4,6 +4,7 @@ namespace CgsFileSystem
 {
     // ARTIST830EA574; static AtomicInt32 storage is zero-initialized before startup.
     EA::Thread::AtomicInt32 FileSystem::mDiskErrorOccured;
+    EA::Thread::AtomicInt32 FileSystem::mReleasing;
 
     // Inlined in ResourceModule::Update82907948; CgsFileSystem.h:246.
     bool FileSystem::HasDiskErrorOccured() const

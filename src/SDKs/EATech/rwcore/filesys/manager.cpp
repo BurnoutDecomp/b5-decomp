@@ -107,7 +107,7 @@ namespace rw
                 , muMaxSearchPaths(lpConfig->muMaxSearchPaths) // a1[14] = a2[0]
                 , mpSearchPathTable(0)   // a1[15] = 0
                 , mbSortByPosition(0)          // a1[16] = 0
-                , muReserved44(0)              // a1[17] = 0
+                , mpErrorHandler(0)              // a1[17] = 0
             {
                 mDeviceList.mpHead  = 0;   // *a1 = 0
                 mDeviceList.mpTail  = 0;   // a1[1] = 0
