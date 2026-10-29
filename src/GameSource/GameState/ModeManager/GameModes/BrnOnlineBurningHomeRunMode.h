@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // GameStateModuleIO::GameActionQueue (PickNewBurningHomeRunRunner)
 
 namespace BrnGameState
@@ -36,6 +37,9 @@ public:
                                     GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
 private:
+    // Start and PickRandomRunnerAndSetTeams use the generator at +0xC0 (seed +0xE0).
+    CgsNumeric::Random mRandom;
+
     // The runner counters (console +0xF0..+0xFC). The three words are the debug info's, in its
     // order; PreWorldUpdate compares the runner's crash count minus the first against the other
     // two. The float has no debug-info name: PreWorldUpdate adds the frame time to it and
