@@ -5,6 +5,16 @@
 
 namespace BrnGameState
 {
+// DecFIGS declaration shape; ARTIST PreWorldUpdate fixes the player index at +0xD4.
+enum EAddingRivalsState
+{
+    E_ADDING_RIVALS_STATE_WAITING_TO_ADD = 0,
+    E_ADDING_RIVALS_STATE_PRESENTATION_DELAY = 1,
+    E_ADDING_RIVALS_STATE_PRESENTATION_ACTIVE = 2,
+    E_ADDING_RIVALS_STATE_NO_MORE_RIVALS = 3,
+    E_ADDING_RIVALS_STATE_COUNT = 4
+};
+
 // Original offline Burning Route setup and player tracking.
 class BurningRouteMode : public OfflineGameMode
 {
@@ -28,7 +38,15 @@ private:
     // DWARF: BrnBurningRoute.cpp:27. The mode's fixed outro timeout; the X360 GetOutroTimeout body
     // returns 0.0, so this constant is 0.0f for this build (same shape as RaceMode).
     static const f32 KF_OUTRO_TIME_SECONDS;
-    ::EActiveRaceCarIndex mePlayerActiveIndex; // DecFIGS :97; ARTIST PreWorldUpdate stores +0xD4.
+    EAddingRivalsState meAddingRivalsState;
+    s32 miNumRivalsInRace;
+    s32 miNumRivalAdditionCamerasThisRace;
+    f32 mfCarAdditionStateTime;
+    f32 mfTimeToNextAddition;
+    ::EGlobalRaceCarIndex meMainRivalGlobalIndex;
+    ::EActiveRaceCarIndex mePlayerActiveIndex; // ARTIST PreWorldUpdate stores +0xD4.
+    ::EActiveRaceCarIndex meMainRivalActiveIndex;
+    bool mbPlayerBeatMainRival;
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
