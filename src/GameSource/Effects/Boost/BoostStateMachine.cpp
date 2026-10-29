@@ -166,7 +166,9 @@ void BoostStateMachine::OnConstruct()
 {
     mTime              = 0.0f;          // +0x08  (base mTime / state timer)
     muNumBoostTags     = 0;             // +0x0C
+#if !defined(_XBOX)
     mbBoostLocatorLocalValid = false;   // host-side bring-up field; see the header
+#endif
     mState             = EffectsStateAllOff;  // +0x04 (base mState = 0)
     for (u32 lu = 0; lu < KU_MAX_BOOST_EFFECTS; ++lu)
     {
@@ -287,7 +289,9 @@ void BoostStateMachine::Reset(ParticleEffectHelper& lParticleEffectHelper)
     }
 
     muNumBoostTags     = 0;       // +0x0C
+#if !defined(_XBOX)
     mbBoostLocatorLocalValid = false;   // host-side bring-up field; see the header
+#endif
     mState             = EffectsStateAllOff;  // +0x04
     mfExhaustSmokeBlend = 0.0f;   // +0x20  (rodata flt_82001CC0 == 0.0)
 }
@@ -621,6 +625,7 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
 
     if (!lbDoLocatorUpdate)
     {
+#if !defined(_XBOX)
         if (lpCar != NULL && muNumBoostTags != 0)
         {
             for (u32 luBoost = 0; luBoost < muNumBoostTags && luBoost < KU_NUM_BOOST_LOCATORS;
@@ -661,6 +666,7 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
+#endif
         return;
     }
 

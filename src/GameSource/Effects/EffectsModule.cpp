@@ -698,6 +698,7 @@ namespace
 //   Every member constructs itself here.
 // =============================================================================
 EffectsModule::EffectsModule()
+#if !defined(_XBOX)
     : mEffectInstanceHandle(0xFFFFFFFFu)
     , mQAEffectHandle(0xFFFFFFFFu)
     , liEffectInstanceIndex(0)
@@ -718,6 +719,9 @@ EffectsModule::EffectsModule()
         maShowtimeBounceEffectHandles[lu] = 0xFFFFFFFFu;
     for (u32 lu = 0; lu < KU_MAX_JUNKYARD_VFX; ++lu)
         maJunkyardEffectHandles[lu] = 0xFFFFFFFFu;
+#else
+{
+#endif
 }
 
 // =============================================================================

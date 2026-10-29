@@ -283,6 +283,7 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
             lrParticleModule.StopLionEffect(&lrSlot);
         }
 
+#if !defined(_XBOX)
         // ⚠ HOST-SIDE BRING-UP CAPTURE, not console behaviour. The console's tag loop really
         // does throw the locator away (see the note above this function) because the DEFORMED
         // per-frame table positions the effects. That table is empty on this build, so the
@@ -294,6 +295,8 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
                 lLocator.mLocatorMatrix;
             mBoostMachine.mbBoostLocatorLocalValid = true;
         }
+
+#endif
 
         lruHandle = BrnParticle::LionEffect::KU_HANDLE_INVALID;
         ++mBoostMachine.muNumBoostTags;
