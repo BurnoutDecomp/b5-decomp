@@ -6,7 +6,7 @@
 // ===========================================================================
 
 #include "SDKs/Realmc/RealmcMemcardInterfaceImpl.h" // RealmcIface::MemcardInterfaceImpl (the concrete impl)
-#include "SDKs/Realmc/RealmcCore.h"                 // RealmcCore::GetMemAllocator / AllocateMem / IRealmcAllocatorBackend
+#include "SDKs/Realmc/RealmcCore.h"                 // RealmcCore::GetMemAllocator / AllocateMem / EA::Allocator::ICoreAllocator
 #include "SDKs/Realmc/RealmcObjectManager.h"        // RealmcCore::ObjectManager::Initialize
 #include "SDKs/Realmc/RealmcLocale.h"               // RealmcCore::Locale::SetLocaleGetStrCallback
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"   // EA::Thread::ThreadParameters
@@ -31,7 +31,7 @@ namespace RealmcIface
 // the earlier calls' return values are discarded.
 // ---------------------------------------------------------------------------
 MemcardInterface* MemcardInterface::CreateInstance(const CreateParams* pParams,
-                                                   int liParam2, int liParam3)
+                                                   IGameInterface* pGameInterface, const GameInfo& rGameInfo)
 {
     // Install the caller's allocator backend and locale template getter.
     RealmcCore::GetMemAllocator(pParams->mpAllocator);
@@ -73,7 +73,7 @@ MemcardInterface* MemcardInterface::CreateInstance(const CreateParams* pParams,
         // allocated with a null tag, then the impl is constructed in place.
         void* pMem = RealmcCore::AllocateMem(0, 1320);
         s_pInstance = pMem
-                          ? new (pMem) MemcardInterfaceImpl(pThreadParams, liParam2, liParam3)
+                          ? new (pMem) MemcardInterfaceImpl(pThreadParams, pGameInterface, rGameInfo)
                           : 0;
     }
     return s_pInstance;

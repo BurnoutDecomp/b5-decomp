@@ -466,7 +466,7 @@ void ProfileManager::Construct(GuiCache& lrGuiCache, CgsGui::SystemUserProfile& 
     // The save/load system: this manager IS its MessageDisplay (X360 passes the +4
     // sub-object). The 4th argument carries the X360 content title id through the
     // committed recon's string-typed slot (stored, never dereferenced in scope).
-    mSaveLoadSystem.Construct(this, reinterpret_cast<::LanguageManager*>(lpLanguageManager),
+    mSaveLoadSystem.Construct(this, lpLanguageManager,
                               "Burnout Paradise",
                               reinterpret_cast<const char*>(static_cast<usize>(KU_CONTENT_TITLE_ID)),
                               "Memcard\\SaveImage.png", 5, 20,
@@ -496,10 +496,8 @@ bool ProfileManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, CgsMemory::Lin
 
     mpSystemUserProfile->AttachListener(*this);   // the +12 Listener sub-object on X360
 
-    // The committed SaveLoadSystem::Prepare types its watcher param with the global-ns
-    // SystemUserProfile forward; it is the same CgsGui::SystemUserProfile object.
     mSaveLoadSystem.Prepare(lpHeapMalloc, lpLinearMalloc,
-                            reinterpret_cast<::SystemUserProfile*>(mpSystemUserProfile));
+                            mpSystemUserProfile);
 
     mpaMugshotCircularBuffer = static_cast<MugshotSaveBuffer*>(mpHeapMalloc->Malloc(
         KI_MUGSHOTS_IN_CIRCULAR_BUFFER * static_cast<s32>(sizeof(MugshotSaveBuffer)), 4));

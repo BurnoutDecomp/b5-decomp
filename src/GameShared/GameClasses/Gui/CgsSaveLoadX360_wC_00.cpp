@@ -34,16 +34,6 @@
 
 namespace
 {
-    // Pending message-display option DISPATCH THUNK. The X360 stores the handler as a member-
-    // function pointer ({ func @+0x198, delta @+0x19C }) written by BootupCheckDone's
-    // `std r9,0x194(r11)`, and HandleOption dispatches it as (adjustedThis, option); this
-    // reconstruction stores a plain function pointer, so the thunk forwards to the real
-    // CgsGui::SaveLoadSystem member of the same name (CgsSaveLoadPS3.cpp precedent).
-    void SaveLoadSystem_BootupHandleRetryBootup(void* lpSystem, u32 luOption)
-    {
-        static_cast<CgsGui::SaveLoadSystem*>(lpSystem)->BootupHandleRetryBootup(luOption);
-    }
-
     // Localisation string-table entries (X360 rodata pointers).
     const char* const KSTR_RETRY_BOOT             = "SAVELOAD_RETRY_BOOT";              // off_82F331A0
     const char* const KSTR_RETRY                  = "SAVELOAD_RETRY";                   // off_82F331AC
@@ -68,11 +58,8 @@ namespace CgsGui
             {
                 // The retry prompt's pending option handler = &BootupHandleRetryBootup. The X360
                 // builds the member-fn pointer { func @+0x198, delta = 0 @+0x19C } on the stack and
-                // stores it with the 8-byte `std r9,0x194(r11)`. muFunc is full-width on x64 (see
-                // the header note) -- no truncation.
-                mMessageDisplayOptionFunc.muFunc =
-                    reinterpret_cast<uintptr_t>(&SaveLoadSystem_BootupHandleRetryBootup);
-                mMessageDisplayOptionFunc.muDelta = 0;
+                // stores the native 8-byte member pointer with `std r9,0x194(r11)`.
+                mMessageDisplayOptionFunc = &SaveLoadSystem::BootupHandleRetryBootup;
 
                 // The X360 reuses the same stack slot for the pair and then the options array.
                 const char* lapcOptions[2];
@@ -88,7 +75,7 @@ namespace CgsGui
 
             // No signed-in user: nothing to retry with -- report cancelled through the bound
             // result handler (r3 = raw 0x12C == mpActiveMessageDisplay +0x130, r4 = 2).
-            reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+            mpResultHandler
                 ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_CANCELLED);
             return;
         }
@@ -96,7 +83,7 @@ namespace CgsGui
         mbField183 = true;      // stb r10,0x17F(r11) -- +0x183 first
         mbField180 = true;      // stb r10,0x17C(r11) -- +0x180
         EnableAutosave(-1);     // r3 = the real this (r11 - 4), r4 = -1
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+        mpResultHandler
             ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_SUCCESS);
     }
 
@@ -114,7 +101,7 @@ namespace CgsGui
 
         mbField183 = true;      // stb r10,0x183(r3)
         mbField180 = false;     // stb r9,0x180(r3)
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+        mpResultHandler
             ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_FAILURE);
     }
 
@@ -130,7 +117,7 @@ namespace CgsGui
         }
 
         mbField180 = false;     // stb r10,0x180(r3)
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+        mpResultHandler
             ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_FAILURE);
     }
 }

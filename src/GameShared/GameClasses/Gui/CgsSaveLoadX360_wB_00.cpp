@@ -24,13 +24,13 @@ namespace CgsGui
     }
 
     // X360 0x8284CB80. Realmc find-entry callback -- never expected on X360.
-    void SaveLoadSystem::FoundEntry()
+    void SaveLoadSystem::FoundEntry(const void*)
     {
         CGS_ASSERT(false, "FoundEntry called");
     }
 
     // X360 0x8284CBC0. Realmc find-entries-done callback -- never expected on X360.
-    void SaveLoadSystem::FindEntriesDone()
+    void SaveLoadSystem::FindEntriesDone(u32, u32)
     {
         CGS_ASSERT(false, "FindEntriesDone called");
     }

@@ -10,7 +10,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include <cstring>   // std::memcpy
 
-extern "C" u32 XShowSigninUI(u32 luPanes, u32 luFlags);
+
 
 // CgsGui::XenonFileInputStream member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU (class:CgsGui::XenonFileInputStream) bodies the two
@@ -146,7 +146,7 @@ namespace CgsGui
     {
         CGS_ASSERT(mpSystemUserProfile != 0, "SaveLoadSystem: uninitialised");   // :382
 
-        if (!reinterpret_cast<CgsGui::SystemUserProfile*>(mpSystemUserProfile)->mbSignedIn)
+        if (!mpSystemUserProfile->mbSignedIn)
         {
             (this->*lpfnUIClosedFunc)();
             return;
@@ -176,7 +176,7 @@ namespace CgsGui
         }
 
         // 0x130 is the RESULT HANDLER (committed idiom): report failure (1).
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+        mpResultHandler
             ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(1));
     }
 
@@ -185,9 +185,9 @@ namespace CgsGui
     // friendship, mirroring `stb r11,0x1C(profile)`; then wait for the UI to close.
     void SaveLoadSystem::SignIn()
     {
-        auto* lpProfile = mpSystemUserProfile;          // r30 = lwz 0x194(this)
+        SystemUserProfile* lpProfile = mpSystemUserProfile;          // r30 = lwz 0x194(this)
         if (XShowSigninUI(1, 0) == 0)
-            reinterpret_cast<CgsGui::SystemUserProfile*>(lpProfile)->mbSignedIn = true;
+            lpProfile->mbSignedIn = true;
         WaitForUIClosed(&SaveLoadSystem::SignInUIClosed);
     }
 
@@ -201,7 +201,7 @@ namespace CgsGui
             return;
         }
 
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+        mpResultHandler
             ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(1));
     }
 }

@@ -55,11 +55,13 @@
 
 // The two Realmc/EAThread collaborators CreateParams references by pointer only;
 // full definitions live in their own homes (pulled in by the .cpp).
-namespace RealmcCore { class IRealmcAllocatorBackend; }
+namespace EA { namespace Allocator { class ICoreAllocator; } }
 namespace EA { namespace Thread { struct ThreadParameters; } }
 
 namespace RealmcIface
 {
+class IGameInterface;
+class GameInfo;
 
 // ---------------------------------------------------------------------------
 // MemcardInterface -- abstract base of the Realmc memory-card SDK. It is a pure
@@ -73,7 +75,7 @@ public:
     // words). Named members replace the raw a1[0]/a1[1]/a1[2] indexing.
     struct CreateParams
     {
-        RealmcCore::IRealmcAllocatorBackend*     mpAllocator;    // +0x00 -> GetMemAllocator
+        EA::Allocator::ICoreAllocator*     mpAllocator;    // +0x00 -> GetMemAllocator
         RealmcCore::Locale::LocaleGetStrCallback mpfnGetStr;     // +0x04 -> SetLocaleGetStrCallback
         EA::Thread::ThreadParameters*            mpThreadParams; // +0x08 (optional override)
     };
@@ -134,7 +136,7 @@ public:
     // Realmc ObjectManager, then lazily constructs the single MemcardInterfaceImpl
     // and returns it (the same instance on every subsequent call).
     static MemcardInterface* CreateInstance(const CreateParams* pParams,
-                                            int liParam2, int liParam3);
+                                            IGameInterface* pGameInterface, const GameInfo& rGameInfo);
 };
 
 } // namespace RealmcIface

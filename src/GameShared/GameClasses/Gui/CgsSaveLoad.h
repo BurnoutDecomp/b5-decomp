@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 
 #include "GameShared/GameClasses/Gui/CgsOpaqueBuffer.h"   // CgsGui::OpaqueBuffer (SaveLoadMetadata::mStoredData)
 
@@ -106,6 +107,9 @@ namespace CgsGui
         char         macFilename[FILENAMELENGTH_MAX];  // CgsSaveLoad.h:175 (X360 +0x20)
         OpaqueBuffer mStoredData;                      // CgsSaveLoad.h:177 (X360 +0x30: {ptr,size})
     };
+
+    CGS_STATIC_ASSERT(sizeof(SaveLoadMetadata) == 0x38, "ARTIST metadata size");
+    CGS_STATIC_ASSERT(offsetof(SaveLoadMetadata, mStoredData) == 0x30, "ARTIST metadata data pair");
 
     // CgsSaveLoad.h:189/:195-:212 -- the content-information-file provider the save/load
     // system inherits from so the memory-card layer can query/load its CIF blobs.
