@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"
 #include "SDKs/EATech/rwcore/filesys/list.h"   // detail::ListSingle (the op list)
 #include "eathread/eathread.h"                  // EA::Thread::ThreadTime (GetStatus / Device::Wait timeout)
 
@@ -247,14 +248,10 @@ namespace rw
             // Alloc (vtable slot +0x08) is the full EA-allocator signature proven by the
             // Manager/AsyncOp allocation call sites:
             //   (*(*alloc + 4))(alloc, size, "name", flags, align, alignOffset)
-            class Allocator
-            {
-            public:
-                virtual void  Slot0() = 0;          // +0x00
-                virtual void* Alloc(u32 luSize, const char* lpcName, u32 luFlags,
-                                    u32 luAlign, u32 luAlignOffset) = 0;  // +0x08 (2nd entry)
-                virtual void  Free(void* lpBlock, unsigned int luFlags) = 0;  // +0xC (4th entry)
-            };
+            // ARTIST uses the genuine EA core-allocator prefix of IResourceAllocator:
+            // destructor, full Alloc, short Alloc, Free. A separate three-slot
+            // interface dispatches Free through the wrong slot.
+            typedef ::rw::IResourceAllocator Allocator;
 
             // X360 off_8327F07C -- defined by the device-driver TU; null until installed.
             extern Allocator* gpFileSysAllocator;
