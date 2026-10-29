@@ -174,6 +174,7 @@ void WorldDebugComponent::Update(const BrnWorldIO::DebugController* lpDebugContr
 
 void WorldDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
 {
+    CGS_ASSERT(mpWorldModule != NULL, "mpWorldModule != NULL");
     if (mbVehicleGunIsPrimed)
         DrawVehicleGun(lpDisplay);
     if (mbShowTarget)
@@ -208,7 +209,7 @@ void WorldDebugComponent::DrawTarget(CgsDev::Debug3DImmediateRender* lpDisplay) 
 {
     const BrnDirector::Camera::Camera* lpCamera = mpWorldModule->GetLastCameraInput();
     lpDisplay->DrawHollowSphere(lpCamera->GetPosition() + lpCamera->GetDirection(),
-                                0.01f, rw::RGBA(255, 255, 255, 255));
+                                0.01f, rw::RGBA(255, 0, 0, 255));
 }
 
 // @0x827B1AA8.
