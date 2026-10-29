@@ -1,57 +1,74 @@
 #pragma once
 
-// BrnReplays::RaceCarSerialiserFrame -- the per-frame snapshot the race-car-entity
-// replay serialiser records/plays back. Unlike the traffic/prop frames, the X360
-// RaceCarEntitySerialiser does NOT walk this frame field-by-field: Read/Write hand the
-// whole 0xD7E0-byte frame region to the raw BaseSerialiser::Read/Write byte primitives
-// (see BrnReplayRaceCarEntitySerialiser.cpp). No DWARF or Feb-2007 source was recovered
-// for this type, so it is modelled as an opaque fixed-size serialised blob -- the only
-// attested surface is its SIZE and the Clear() method CheckStaticLayoutCleared drives.
+// BrnReplays::RaceCarSerialiserFrame, recovered from ARTIST's X360 consumers.
 //
-// X360 attestation for the frame SIZE:
-//   * The static layout buffer is 0x1B000 (110592) bytes (RaceCarEntitySerialiser::
-//     Construct @0x8264C4C0, `lis 3,1`|`lis 4,1` -> 0x1B000 static + dynamic).
-//   * It holds TWO RaceCarSerialiserFrame copies -- the "previous" frame at static-base
-//     +0 and the "live" frame at static-base +0xD7E0 (55264). Read @0x8264C518 / Write
-//     @0x8264C618 serialise the live frame with size r5 = 0xD7E0; CheckStaticLayoutCleared
-//     @0x82657A48 Clear()s the +0xD7E0 frame then the +0 frame. So each frame is exactly
-//     0xD7E0 bytes and 2*0xD7E0 + 0x40-byte tail == 0x1B000.
+// The console record is a typed snapshot, even though RaceCarEntitySerialiser::Read/Write
+// pass the whole live frame to BaseSerialiser.  ARTIST 0x822F5CF8 and 0x82306120 identify
+// these fields directly: active interface at +0, global interface at +10480, eight
+// ActiveRaceCar::RenderParams at +12896 (stride 5280), then the model and wheel CgsID arrays
+// at +55136 and +55200.  The two output-interface copies and the eight RenderParams copies
+// are member-wise on the host so ResourceHandle and EventQueue pointers keep native width.
+//
+// X360 frame size is 0xD7E0 (55264); the native PC frame is 55328 because the actual active
+// output interface widens from 10480 to 10544 and each CgsID is the native 8-byte type.
+// This preserves native pointer identity and does not claim cross-bitness replay-file
+// compatibility.  The outer owner keeps its two typed frames plus the original 64-byte
+// reserve/alignment tail, so its native allocation is 110720 (0x1B080).
 
 #include "types.hpp"
+#include "BrnCommonTypes.h" // CgsID
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include <cstddef>
 
 namespace BrnReplays
 {
-    // One race-car-serialiser frame. Size 0xD7E0 (X360-attested). Its interior layout is
-    // not recovered; Read/Write treat it as a raw serialised byte blob (external serialised
-    // data), so it is held as opaque storage. GROW this home into named fields (do not
-    // redefine it) when the RaceCarSerialiserFrame TU family is reconstructed.
-    static const u32 KU_RACECAR_FRAME_SIZE = 0xD7E0; // 55264
+    static const u32 KU_RACECAR_FRAME_SIZE_X360 = 0xD7E0u;
+    static const u32 KU_RACECAR_FRAME_SLOT_COUNT = 8u;
+    static const u32 KU_RACECAR_STATIC_LAYOUT_TAIL_SIZE = 64u;
 
     struct RaceCarSerialiserFrame
     {
-        u8 maFrameData[KU_RACECAR_FRAME_SIZE]; // @0x0000 undecoded serialised frame state
+        BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
+            mActiveRaceCarOutputInterface;
+        BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface
+            mGlobalRaceCarOutputInterface;
+        BrnWorld::ActiveRaceCar::RenderParams maRenderParams[KU_RACECAR_FRAME_SLOT_COUNT];
+        CgsID maRaceCarIds[KU_RACECAR_FRAME_SLOT_COUNT];
+        CgsID maWheelIds[KU_RACECAR_FRAME_SLOT_COUNT];
 
-        // Clear @0x826C????  (BrnReplays::RaceCarSerialiserFrame::Clear) -- reset the frame
-        // to its empty state. Declared here for the compile-only gate; the body lives in the
-        // frame's own [todo] TU. Return type modelled as RaceCarSerialiserFrame* to match the
-        // sibling TrafficSerialiserFrame::Clear (which returns the frame) and the X360 call
-        // site, where Clear's return is threaded into r3 as CheckStaticLayoutCleared's result.
+        // X360 0x82657748: clear the two interfaces, reset every render-parameter record,
+        // clear both model-id arrays, and return this frame.
         RaceCarSerialiserFrame* Clear();
+
+        // X360 0x822E7820: member-wise frame copy; each RenderParams copy retains the
+        // destination queue storage while copying the source queue's live events.
+        RaceCarSerialiserFrame& operator=(const RaceCarSerialiserFrame& lrOther);
     };
 
-    // The static-layout buffer GetStaticLayout returns: a "previous" frame followed by the
-    // "live" frame, plus a 64-byte tail. Sized to the 0x1B000 Construct argument.
     struct RaceCarEntitySerialiserStaticLayout
     {
-        RaceCarSerialiserFrame mPreviousFrame; // @0x0000  Clear()ed second by CheckStaticLayoutCleared
-        RaceCarSerialiserFrame mLiveFrame;     // @0xD7E0  serialised by Read/Write; Clear()ed first
-        u8 maTail[0x1B000 - 2 * KU_RACECAR_FRAME_SIZE]; // @0x1AFC0  64-byte undecoded tail
+        RaceCarSerialiserFrame mPreviousFrame;
+        RaceCarSerialiserFrame mLiveFrame;
+        u8 maTail[KU_RACECAR_STATIC_LAYOUT_TAIL_SIZE];
     };
 
-    // Pin the X360-attested sizes so the +0xD7E0 live-frame offset and the 0x1B000 buffer
-    // size are exact.
-    static_assert(sizeof(RaceCarSerialiserFrame) == 0xD7E0,
-                  "RaceCarSerialiserFrame must be 0xD7E0 bytes (X360 Read/Write size arg)");
-    static_assert(sizeof(RaceCarEntitySerialiserStaticLayout) == 0x1B000,
-                  "RaceCarEntitySerialiserStaticLayout must be 0x1B000 bytes (Construct arg)");
+    static_assert(sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface) == 10544,
+                  "Native RaceCar active interface width changed");
+    static_assert(sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface) == 2416,
+                  "RaceCar global interface width changed");
+    static_assert(sizeof(BrnWorld::ActiveRaceCar::RenderParams) == 5280,
+                  "RaceCar RenderParams width changed");
+    static_assert(sizeof(RaceCarSerialiserFrame) == 55328,
+                  "Native RaceCar replay frame must use the typed 64-bit record");
+    static_assert(sizeof(RaceCarEntitySerialiserStaticLayout) == 110720,
+                  "Native RaceCar static owner must preserve two frames and the 64-byte tail");
+    static_assert(offsetof(RaceCarSerialiserFrame, mGlobalRaceCarOutputInterface) == 10544,
+                  "Native active/global replay interface order changed");
+    static_assert(offsetof(RaceCarSerialiserFrame, maRenderParams) == 12960,
+                  "Native replay RenderParams array offset changed");
+    static_assert(offsetof(RaceCarSerialiserFrame, maRaceCarIds) == 55200,
+                  "Native replay car-id array offset changed");
+    static_assert(offsetof(RaceCarSerialiserFrame, maWheelIds) == 55264,
+                  "Native replay wheel-id array offset changed");
 }

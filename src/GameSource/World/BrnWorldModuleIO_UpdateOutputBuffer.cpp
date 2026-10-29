@@ -324,6 +324,12 @@ UpdateOutputBuffer::GetReplayActiveRaceCarOutputInterface() const
 
 // WorldModule::Update @0x827D63E8 -- the debug component's "wants controller focus"
 // byte copy into +217668 (raw stb on X360, the named member store here).
+bool UpdateOutputBuffer::GetWorldWantsDebugControllerFocus() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mbWorldWantsDebugControllerFocus;
+}
+
 void UpdateOutputBuffer::SetWorldWantsDebugControllerFocus(bool lbWantsFocus)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

@@ -343,6 +343,12 @@ void RaceCarEntityModule::Construct()
         maRaceCars[liGlobal].Construct( static_cast<EGlobalRaceCarIndex>( liGlobal ) );
     }
 
+    // X360 0x822FE0B4..0x822FE0B8: seed the replay-mode latch, then Construct the
+    // embedded RaceCar serialiser. BaseSerialiser keeps its static pointer null until
+    // ReplayModule adopts/allocates it; the first PreSceneUpdate clear must tolerate that.
+    mbInReplay = false;
+    (void)mReplaySerialiser.Construct();
+
     // ⭐⭐⭐ 0x822FDB20 `stwx r29, r30, r9` with r9 == 0x18368 and r29 == -1 (`li r29, -1`
     // @0x822FDA58, not touched again before the store) -- the console SEEDS meGameModeType to
     // E_MODE_NONE here. This tree did not, so on a fresh boot the member held the module pool's
@@ -5366,12 +5372,10 @@ bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourInde
 //   5. the per-GLOBAL-slot loop (0..34) -> RaceCar::FillInOutputInterface
 //   6/7. the replay read/write legs against RaceCarEntitySerialiser::GetStaticLayout.
 //
-// REPRODUCED HERE: 2, 3, 4 (minus the deformation-ptr publish -- see below), 5.
+// Recovered here: both 48-byte WorldMap2D copies, player/active/global publication, the
+// playback snapshot/resource-handle bind, and the recording frame producer.
 //
 // [FLAG PC bring-up] NOT reproduced, and dropped rather than paraphrased:
-//   * step 1 -- the module's own CgsWorld::WorldMap2D member is inside this header's
-//     opaque attested-offset tail (it has no name here yet), so there is nothing to
-//     copy FROM. Nothing on the reconstructed path reads the published copy.
 //   * step 4's SetDeformationModelResourcePtr -- ⭐ RETIRED 2026-09-03 (boost-exhaust
 //     wave). Both of its reasons went stale: +0x1CA4 is no longer inside maPad1C90 (it is
 //     the named mDeformationModelHandle, and this module is already a friend), and the
@@ -5381,9 +5385,9 @@ bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourInde
 //   * step 5 -- ⭐ RETIRED (hud H3b tracking slice 2026-08-25): RaceCar::
 //     FillInOutputInterface @0x822BED20 is reconstructed and the per-global-slot loop
 //     below publishes through it; the satnav 199 producer consumes the result.
-//   * steps 6/7 -- replay. The PC has no replay path and RaceCarEntitySerialiser has no
-//     static layout; the console gates both legs on its replay state word anyway.
-// DELETE-WHEN: each named blocker lands.
+//   * step 6/7 -- replay. The typed native frame is copied member-wise so ResourceHandle and
+//     EventQueue members retain their x64 identities; its whole live frame remains the raw
+//     BaseSerialiser record/read unit.
 //
 // ⚠️ The console asserts "This car should be inactive" for muType == E_RACE_CAR_TYPE_INACTIVE
 // on an ATTACHED slot and then still publishes flags == (IsActive?0x10:0) | 1. Reproduced
@@ -5395,15 +5399,16 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
         RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface )
 {
-    (void)lpReplayActiveCarInterface;    // [FLAG] steps 1 + 6/7 only
-    (void)lpReplayGlobalCarInterface;    // [FLAG] steps 6/7 only
-
     CGS_ASSERT( lpGlobalCarInterface != 0, "lpGlobalCarInterface != NULL" );   // X360 :4900
 
     if( lpActiveCarInterface == 0 || lpGlobalCarInterface == 0 )
     {
         return;
     }
+
+    // X360 0x822F5CF8 starts with the two WorldMap2D copies (active and replay-active).
+    lpActiveCarInterface->SetWorldMap2D( &mWorldMap2D );
+    lpReplayActiveCarInterface->SetWorldMap2D( &mWorldMap2D );
 
     // ---- step 3: the player block -------------------------------------------------
     if( mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
@@ -5579,13 +5584,13 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         //
         // The console body, from the asm at the tail of the same loop iteration: a stack-local
         // ResourcePtr is memset to zero, self-ringed (mpNext/mpPrev/mpThis = &local),
-        // CreateFromHandle'd against `_R31 + 7332` (== 0x1CA4 == mDeformationModelHandle),
+        // CreateFromHandle'd against the wrapper's source handle at `_R31 + 7332`,
         // handed to SetDeformationModelResource, then unlinked from its ring on the way out.
         // The ResourcePtr(const ResourceHandle&) ctor is exactly that sequence and
         // ~BaseResourcePtr is the unlink, so the local below IS the console's local.
         {
             const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
-                lDeformationModelPtr( lpActiveRaceCar->mDeformationModelHandle );
+                lDeformationModelPtr( lpActiveRaceCar->mDeformationModelResourcePtr.GetResourceHandle() );
             lpActiveCarInterface->SetDeformationModelResourcePtr( leSlot, lDeformationModelPtr );
         }
 
@@ -5650,6 +5655,293 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
                         "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" );    // BurnoutConstants.h:84
         }
     }
+
+    // Playback snapshot and deformation-resource handle publication. ARTIST copies the
+    // live frame's two output interfaces, then rebinds each active car's deformation handle
+    // from the RaceCarStreamer only while its required resources are loaded.
+    const BrnReplays::BaseSerialiser::EMode leReplayMode = mReplaySerialiser.GetMode();
+    if( leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING ||
+        leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING ||
+        leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED )
+    {
+        BrnReplays::RaceCarEntitySerialiserStaticLayout* lpLayout = mReplaySerialiser.GetStaticLayout();
+        const BrnReplays::RaceCarSerialiserFrame& lrLiveFrame = lpLayout->mLiveFrame;
+        *lpReplayActiveCarInterface = lrLiveFrame.mActiveRaceCarOutputInterface;
+        *lpReplayGlobalCarInterface = lrLiveFrame.mGlobalRaceCarOutputInterface;
+
+        for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
+        {
+            const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>( liSlot );
+            if( lpReplayActiveCarInterface->IsRaceCarActive( leSlot ) &&
+                mRaceCarStreamer.IsRaceCarLoaded( liSlot ) )
+            {
+                CGS_ASSERT( mRaceCarStreamer.IsRaceCarLoaded( liSlot ),
+                            "IsRaceCarLoaded( liActiveRaceCar )" );
+                lpReplayActiveCarInterface->SetDeformationModelResourcePtr(
+                    leSlot, mRaceCarStreamer.GetPhysicsResource( liSlot ) );
+            }
+            else
+            {
+                const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
+                    lNullResourcePtr( CgsResource::NULLResourceHandle );
+                lpReplayActiveCarInterface->SetDeformationModelResourcePtr( leSlot,
+                                                                             lNullResourcePtr );
+            }
+        }
+    }
+
+    // Recording producer. The raw frame is updated only for attached active slots; an
+    // unattached slot keeps the prior frame's identity/render records. The RenderParams
+    // destination is reset before its queue-aware member copy, matching the X360's
+    // memset -> event-queue Construct -> operator= sequence.
+    if( leReplayMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+        leReplayMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING ||
+        leReplayMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_STALLED )
+    {
+        BrnReplays::RaceCarEntitySerialiserStaticLayout* lpLayout = mReplaySerialiser.GetStaticLayout();
+        BrnReplays::RaceCarSerialiserFrame& lrLiveFrame = lpLayout->mLiveFrame;
+        lrLiveFrame.mActiveRaceCarOutputInterface = *lpActiveCarInterface;
+        lrLiveFrame.mGlobalRaceCarOutputInterface = *lpGlobalCarInterface;
+
+        for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
+        {
+            const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>( liSlot );
+            ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leSlot );
+            if( !lpActiveRaceCar->IsAttached() )
+            {
+                CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                            "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+                continue;
+            }
+
+            CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" ); // X360 :1089
+            RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+            const CgsID lModelId = lpRaceCar->GetModelId();
+            lrLiveFrame.maRaceCarIds[liSlot] = lModelId;
+
+            CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" ); // X360 :1089
+            const CgsID lWheelModelId = lpRaceCar->GetWheelModelId();
+            lrLiveFrame.maWheelIds[liSlot] = lWheelModelId;
+
+            ActiveRaceCar::RenderParams& lrRenderParams = lrLiveFrame.maRenderParams[liSlot];
+            std::memset( &lrRenderParams, 0, sizeof( lrRenderParams ) );
+            // ARTIST 0x822F6858: r17=-1; 0x822F6970/74 stores the two masks.
+            lrRenderParams.mBodyPartVisibility.SetBitField( 0u, ~u64(0) );
+            lrRenderParams.mBodyPartVisibility.SetBitField( 1u, ~u64(0) );
+            lrRenderParams.maDetachedParts.Construct();
+            lrRenderParams = *lpActiveRaceCar->GetRenderParams();
+            CGS_ASSERT( lModelId != 0, "Invalid model id\n" );
+            CGS_ASSERT( lWheelModelId != 0, "Invalid model id\n" );
+
+            CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                        "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+        }
+    }
+}
+
+// X360 0x82301BB0. Pump the recorded car list into RaceCarStreamer while the serialiser
+// allows streaming, invalidate the old active-car aliases once per replay-entry latch,
+// then publish whether every recorded active car is loaded.
+void RaceCarEntityModule::UpdateReplayStreaming(
+        RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    const BrnReplays::BaseSerialiser::EMode leMode = mReplaySerialiser.GetMode();
+    const bool lbPlaying =
+        leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING ||
+        leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING ||
+        leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED;
+    CGS_ASSERT(lbPlaying, "Attempt to update the replay data when not playing\n");
+
+    BrnReplays::RaceCarEntitySerialiserStaticLayout* lpLayout = mReplaySerialiser.GetStaticLayout();
+    const BrnReplays::RaceCarSerialiserFrame& lrLiveFrame = lpLayout->mLiveFrame;
+    const RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface& lrRecordedCars =
+        lrLiveFrame.mActiveRaceCarOutputInterface;
+
+    if (mReplaySerialiser.AllowStreaming())
+    {
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+            if (!mbInvalidatedRaceCars)
+            {
+                ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(leSlot);
+                if (lpActiveRaceCar->IsActive())
+                {
+                    lpActiveRaceCar->OnResourcesInvalidated(lpOutput->GetVehicleInputInterface());
+                }
+            }
+
+            if (lrRecordedCars.IsRaceCarActive(leSlot))
+            {
+                const CgsID lModelId = lrLiveFrame.maRaceCarIds[liSlot];
+                const CgsID lWheelModelId = lrLiveFrame.maWheelIds[liSlot];
+                CGS_ASSERT(lModelId != 0, "Invalid model id");
+                CGS_ASSERT(lWheelModelId != 0, "Invalid model id");
+
+                const EActiveRaceCarIndex lePlayerIndex =
+                    lrRecordedCars.mePlayerActiveRaceCarIndex;
+                CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                           "Player car index hasn't been set");
+                mRaceCarStreamer.SetRequiredVehicleData(liSlot, lModelId, lWheelModelId,
+                                                        leSlot == lePlayerIndex);
+            }
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+    }
+
+    // ARTIST 0x82301BB0 inlines these pumps outside AllowStreaming. There is no
+    // RaceCarStreamer::Update timer store in this path.
+    mRaceCarStreamer.mAttributeStreamer.Update();
+    mRaceCarStreamer.mPhysicsStreamer.Update();
+    mRaceCarStreamer.mGraphicsStreamer.Update();
+    mRaceCarStreamer.mWheelGraphicsStreamer.Update();
+    mRaceCarStreamer.mAudioStreamer.Update(lpInput, lpOutput);
+    mRaceCarStreamer.UpdateDesiredCars();
+
+    bool lbAllLoaded = true;
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+        if (lrRecordedCars.IsRaceCarActive(leSlot) && !mRaceCarStreamer.IsRaceCarLoaded(liSlot))
+        {
+            lbAllLoaded = false;
+            break;
+        }
+        CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+    mReplaySerialiser.SetDataReady(lbAllLoaded);
+}
+
+// X360 0x82306120. Restore mode rebuilds the streamed car set and sends one validate event
+// per active car after all required resources load. In playback modes 5/6, move the scene
+// placeholder entities from the frame's body transforms before pumping replay streaming.
+void RaceCarEntityModule::UpdateSerialiser(
+        RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    const BrnReplays::BaseSerialiser::EMode leMode = mReplaySerialiser.GetMode();
+    if (leMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+        leMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING ||
+        leMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_STALLED ||
+        leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING)
+    {
+        return;
+    }
+
+    if (leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING ||
+        leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED)
+    {
+        BrnReplays::RaceCarEntitySerialiserStaticLayout* lpLayout =
+            mReplaySerialiser.GetStaticLayout();
+        const BrnReplays::RaceCarSerialiserFrame& lrLiveFrame = lpLayout->mLiveFrame;
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput =
+            lpOutput->GetSceneInputInterface();
+
+        for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        {
+            const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+            if (lrLiveFrame.mActiveRaceCarOutputInterface.IsRaceCarActive(leSlot))
+            {
+                CGS_ASSERT(liSlot < 0x4000,
+                           "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+                const CgsSceneManager::EntityId lEntityId(
+                    (static_cast<u32>(liSlot) << 10) | 0x21000000u);
+                lpSceneInput->SetEntityPosition(
+                    lEntityId, lrLiveFrame.maRenderParams[liSlot].GetBodyTransform().wAxis);
+            }
+            CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        }
+        UpdateReplayStreaming(lpInput, lpOutput);
+        return;
+    }
+
+    if (leMode != BrnReplays::BaseSerialiser::E_MODE_RESTORING)
+    {
+        return;
+    }
+
+    if (mbReplayRestored)
+    {
+        mReplaySerialiser.SetDataRestored(true);
+        return;
+    }
+
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(leSlot);
+        if (lpActiveRaceCar->IsAttached())
+        {
+            RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+            const CgsID lModelId = lpRaceCar->GetModelId();
+            const CgsID lWheelModelId = lpRaceCar->GetWheelModelId();
+            mRaceCarStreamer.SetRequiredVehicleData(
+                liSlot, lModelId, lWheelModelId,
+                lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER);
+        }
+        else
+        {
+            mRaceCarStreamer.RemoveVehicleData(liSlot);
+        }
+        CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+
+    mRaceCarStreamer.Update(lpInput, lpOutput, 0.0f);
+
+    bool lbAllLoaded = true;
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
+        if (lpActiveRaceCar->IsAttached() && !mRaceCarStreamer.IsRaceCarLoaded(liSlot))
+        {
+            lbAllLoaded = false;
+            break;
+        }
+        CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+    mReplaySerialiser.SetDataRestored(lbAllLoaded);
+    if (!lbAllLoaded)
+    {
+        return;
+    }
+
+    BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput =
+        lpOutput->GetVehicleInputInterface();
+    const BrnPhysics::Vehicle::VehicleInputInterface::ValidateRaceCarEventQueue* lpcEvents =
+        lpVehicleInput->GetValidateRaceCarEvents();
+    BrnPhysics::Vehicle::VehicleInputInterface::ValidateRaceCarEventQueue* lpEvents =
+        const_cast<BrnPhysics::Vehicle::VehicleInputInterface::ValidateRaceCarEventQueue*>(lpcEvents);
+
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
+        if (lpActiveRaceCar->IsActive())
+        {
+            lpActiveRaceCar->mDeformationModelResourcePtr =
+                mRaceCarStreamer.GetPhysicsResource(liSlot).GetResourceHandle();
+            lpActiveRaceCar->mGraphicsModelResourcePtr =
+                mRaceCarStreamer.GetGraphicsResource(liSlot).GetResourceHandle();
+
+            BrnPhysics::Vehicle::ValidateRaceCarEvent lrEvent = {};
+            lrEvent.mbValidate = true;
+            lrEvent.mVolumeInstanceID = lpActiveRaceCar->mHandlingBodyVolumeId;
+            lrEvent.mModelHandle = lpActiveRaceCar->mDeformationModelResourcePtr.GetResourceHandle();
+            lrEvent.mGraphicsHandle = lpActiveRaceCar->mGraphicsModelResourcePtr.GetResourceHandle();
+            lpEvents->AddEvent(lrEvent);
+        }
+        CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+
+    mbReplayRestored = true;
 }
 
 // ============================================================================
@@ -5951,6 +6243,47 @@ void RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene( RaceCarEntityModuleI
 //
 // [FLAG PC bring-up] everything else is dropped, NOT paraphrased.
 // DELETE-WHEN: the interior lands and the full spine is reconstructed.
+// X360 0x822D2C88. Entering replay creates one radius-3 placeholder scene entity for each
+// active-car index, clears the invalidation latch, and resets the replay-restored latch.
+void RaceCarEntityModule::EnterReplay(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput =
+        lpOutput->GetSceneInputInterface();
+
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        CGS_ASSERT(liSlot < 0x4000,
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+        const CgsSceneManager::EntityId lEntityId(
+            (static_cast<u32>(liSlot) << 10) | 0x21000000u);
+        const Vector3 lCentre = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lpSceneInput->AddEntity(lEntityId, 3204u, lCentre, 3.0f);
+        mbInvalidatedRaceCars = false;
+        CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+    mbReplayRestored = false;
+}
+
+// X360 0x822D2DC0. Leaving replay removes the same eight placeholder scene entities with
+// the scene manager's replay-removal flag.
+void RaceCarEntityModule::LeaveReplay(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput =
+        lpOutput->GetSceneInputInterface();
+
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        CGS_ASSERT(liSlot < 0x4000,
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+        const CgsSceneManager::EntityId lEntityId(
+            (static_cast<u32>(liSlot) << 10) | 0x21000000u);
+        lpSceneInput->RemoveEntity(lEntityId, 1u);
+        CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    }
+}
+
 void RaceCarEntityModule::PreSceneUpdate(
         RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
@@ -5971,6 +6304,35 @@ void RaceCarEntityModule::PreSceneUpdate(
     // pre-scene update -- `ld 0x20 ; mulld ; addi 1 ; std 0x20` on module +0x18490, the DWARF's
     // Random::RandomUInt with its result unused (the ring is not touched).
     (void)mNonDeterministicRandom.RandomUInt();
+
+    // X360 0x8230D928 carries replay mode in BrnUpdateSet bit 8. The mode edge owns the
+    // eight placeholder scene entities; then every PreScene pass lazily clears the typed
+    // serialiser frames, reads an unrestored playback frame, and dispatches the car replay
+    // state before this function's ordinary game-action/update legs.
+    const bool lbInReplay = ( lUpdateSet & static_cast<BrnUpdateSet>( 0x100u ) ) != 0;
+    if( lbInReplay != mbInReplay )
+    {
+        if( lbInReplay )
+        {
+            EnterReplay( lpOutput );
+        }
+        else
+        {
+            LeaveReplay( lpOutput );
+        }
+    }
+    mbInReplay = lbInReplay;
+
+    (void)mReplaySerialiser.CheckStaticLayoutCleared();
+    const BrnReplays::BaseSerialiser::EMode leReplayMode = mReplaySerialiser.GetMode();
+    if( ( leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING ||
+          leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING ||
+          leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED ) &&
+        !mReplaySerialiser.SkipModuleSerialise() )
+    {
+        (void)mReplaySerialiser.Read();
+    }
+    UpdateSerialiser( lpInput, lpOutput );
 
     // ---- step 10: latch the sim time step -----------------------------------
     if( ( lUpdateSet & 1 ) != 0 )
@@ -6041,7 +6403,12 @@ void RaceCarEntityModule::PreSceneUpdate(
     }
 
     // ---- step 11: pump the five component streamers -------------------------
-    UpdateStreaming( lpInput, lpOutput );
+    // ARTIST skips the ordinary load path while replay owns its recorded car list; the
+    // playback/restoration branches above drive the same streamer family from frame IDs.
+    if( !mbInReplay )
+    {
+        UpdateStreaming( lpInput, lpOutput );
+    }
 
     // ---- step 12: LATCH THIS FRAME'S PAD STATE ------------------------------
     // ⚠️ Load-bearing: ProcessPlayerVehicleInput reads mPlayerVehicleControls by name at
@@ -8067,9 +8434,15 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     SendStreamerEvents( lpOutput );
 
-    // FLAG PC-platform leaf: the position overlay is submitted by the world render
-    // pass. Its transient queue is consumed per presentation, while this update runs
-    // at the fixed simulation rate (possibly zero or multiple times per presentation).
+    // X360 0x82307948..0x82307960: optional position overlay, before the replay request
+    // interface registers this module's serialiser into the PostPhysics output.
+    if( mbDisplayPlayerCarPosition )
+    {
+        DebugRenderPosition();
+    }
+
+    // X360 0x82307968..0x82307974: register the embedded RaceCar serialiser every frame.
+    lpOutput->GetReplayRequestInterface()->RegisterSerialiser( &mReplaySerialiser );
 
     // The console's own unlock order: read first (0x82307980), then write (0x82307988).
     if( lpInput != 0 )
@@ -8077,6 +8450,27 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         lpInput->UnlockForRead();
     }
     lpOutput->UnlockForWrite();
+
+    // The module owns this serialiser's record leg. Keep the console's recording-mode
+    // gate separate from the BaseSerialiser skip flag, which was set by Construct's sixth
+    // argument. A key frame still refreshes the previous-frame snapshot even when the
+    // generic Write leg is skipped.
+    const BrnReplays::BaseSerialiser::EMode leReplayMode = mReplaySerialiser.GetMode();
+    if( leReplayMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+        leReplayMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING ||
+        leReplayMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_STALLED )
+    {
+        if( !mReplaySerialiser.SkipModuleSerialise() )
+        {
+            (void)mReplaySerialiser.Write();
+        }
+        if( mReplaySerialiser.IsKeyFrame() )
+        {
+            BrnReplays::RaceCarEntitySerialiserStaticLayout* lpLayout =
+                mReplaySerialiser.GetStaticLayout();
+            lpLayout->mPreviousFrame = lpLayout->mLiveFrame;
+        }
+    }
 }
 
 // X360 0x822BDAB0; DecFIGS declares this const. The first four rows are the player's

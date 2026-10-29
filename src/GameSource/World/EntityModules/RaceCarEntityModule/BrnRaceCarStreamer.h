@@ -69,6 +69,8 @@ namespace RaceCarEntityModuleIO
 
 class RaceCarStreamer
 {
+    // ARTIST UpdateReplayStreaming inlines these pumps without the load timer update.
+    friend class RaceCarEntityModule;
     friend struct RaceCarEntityModuleDebugComponent;   // the streaming-state HUD reads the per-slot arrays
 
 public:

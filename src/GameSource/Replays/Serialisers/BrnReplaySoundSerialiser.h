@@ -87,7 +87,7 @@ namespace BrnReplays
         s32 Read(SoundSerialiserStaticLayout* lpStatic);
         s32 Write(SoundSerialiserStaticLayout* lpStatic);
 
-        // @0x826534E0 / @0x82658EC8 -- read / write a 12-byte quantised quat+pos record into /
+        // @0x826534E0 / @0x82658EC8 -- read / write seven aligned quat+pos floats into /
         // out of the 64-byte transform at the head of a key-frame record.
         void ReadAsQuatPos(void* lpTransform);
         void WriteAsQuatPos(const void* lpTransform);

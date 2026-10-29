@@ -16,6 +16,8 @@
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"         // the six scene-query post offices
 #include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"                   // BrnReplays::DirectorSerialiser (mDirectorSerialiser)
 
+namespace CgsModule { class IOBufferStack; }
+
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
 // DirectorModule owns the live and replay directors plus its persistent replay
@@ -96,7 +98,7 @@ public:
     // X360 0x8225C768. Pre-scene-query update: latch the replay flag, Clear the per-frame
     // scene-query post office, then run MainDirector::PreSceneQueryUpdate (live leg) or
     // ReplayDirector::PreSceneQueryUpdate (replay leg). BODIED.
-    s32 PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
+    s32 PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputBufferStack, CgsModule::IOBufferStack* lpOutputBufferStack,
                             const DirectorIO::InputBuffer* lpInputBuffer,
                             DirectorIO::OutputBuffer* lpOutputBuffer,
                             DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
@@ -106,7 +108,7 @@ public:
     // MainDirector::Update (live leg) or ReplayDirector::Update (replay leg), copy
     // the produced graphics camera into the module's own, then the replay-serialiser
     // bookkeeping + serialiser registration. BODIED.
-    s32 Update(s32 liUnusedA, s32 liUnusedB,
+    s32 Update(CgsModule::IOBufferStack* lpInputBufferStack, CgsModule::IOBufferStack* lpOutputBufferStack,
                const DirectorIO::InputBuffer* lpInputBuffer,
                DirectorIO::OutputBuffer* lpOutputBuffer,
                const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
@@ -114,7 +116,7 @@ public:
 
     // X360 0x82250DD0. Post-GUI update: run MainDirector::PostGuiUpdate when not replaying,
     // then latch the input buffer's post-GUI car index. BODIED.
-    s32 PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
+    s32 PostGuiUpdate(CgsModule::IOBufferStack* lpInputBufferStack, CgsModule::IOBufferStack* lpOutputBufferStack,
                       const DirectorIO::InputBuffer* lpInputBuffer,
                       DirectorIO::OutputBuffer* lpOutputBuffer);
 

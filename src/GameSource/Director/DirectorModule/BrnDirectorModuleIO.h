@@ -2,6 +2,8 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"
+#include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityStatusInterface.h"
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base + read/write lock-state queries
@@ -169,7 +171,14 @@ namespace DirectorIO
         // MainDirector::Update's gameplay middle tests it too.
         bool                                               IsSimPaused() const;
         // ARTIST ReplayDirector::FillInSharedInfo loads input+0x6AB4.
-        bool IsAllStreamed() const { return mbAllStreamed; }
+        const BrnGameState::GameStateModuleIO::CarScoreData* GetPlayerScoreData() const;
+        void SetPlayerScoreData(const BrnGameState::GameStateModuleIO::CarScoreData* lpScoreData);
+        bool GetPlayerComboWarningActive() const;
+        void SetPlayerComboWarningActive(bool lbActive);
+        bool IsAllStreamed() const { return mWorldEntityStatusInterface.GetAllStreamed(); }
+        void SetWorldEntityStatusInterface(const BrnWorld::WorldEntityIO::StatusInterface* lpStatus);
+        void SetWorldWantsDebugControllerFocus(bool lbFocus);
+
         // Inlined by ARTIST DoUpdate_Director @0x823E8F2C; DWARF :284.
         void SetSimPaused(bool lbSimPaused) { mbSimPaused = lbSimPaused; }
 
@@ -368,9 +377,7 @@ namespace DirectorIO
         // @0x0990 (2448): per-active-car published vehicle state. Stride 0x4F0 (1264) confirmed.
         BrnDirector::Camera::VehicleInfo mRaceCarInfo[8]; // @0x0990 .. 0x3110
 
-        // @0x3110 .. : mPlayerScoreData (CarScoreData) + mbPlayerComboWarningActive +
-        // mfPlayerBoostPercentage, ending at the vehicle-info pointer array @0x3238. HONEST opaque.
-        u8  mScoreAndBoostBlock[0x3238 - (0x0990 + 8 * 1264)]; // CarScoreData + combo flag + boost f32
+        BrnGameState::GameStateModuleIO::CarScoreData mPlayerScoreData; // ARTIST +0x3110, 296 bytes
 
         // @0x3238 (12856): the per-car TEAMS. The PS3 DWARF's accessor GetVehicleInfoArray (:146)
         // types it as eight VehicleInfo pointers, but on the X360 the eight words are team ids:
@@ -384,7 +391,8 @@ namespace DirectorIO
         //     reads per nearest-car row (`lwzx r10, 4 * car, lpaVehicleTeams` @0x8221DEE4).
         // Stored as eight 4-byte words either way; the name is kept for the DWARF accessor.
         u32 maVehicleInfoArray[8];                       // @0x3238 (32 bytes -> 0x3258)
-        u8  maVehicleInfoArrayPad[0x325C - (0x3238 + 8 * sizeof(u32))]; // 4-byte gap
+        bool mbPlayerComboWarningActive; // ARTIST +0x3258
+        u8 maPad3259[3];
         // @0x325C (12892): the player's boost fill fraction. The producer is
         // BrnGameModule::BridgeWorldToDirector @0x823E3AB0 -- `*(input + 0x325C) =
         // (fabs(boost.mfMaxBoost) > eps) ? boost.mfBoostAmount / boost.mfMaxBoost : 0`.
@@ -439,10 +447,11 @@ namespace DirectorIO
         // pad is 8 bytes; it is the un-modelled remainder of the console's own span, NOT
         // padding we invented for alignment.
         BrnDirector::BrnDirectorVehicleInputInterface mVehicleDriverInputInterface;   // @0x6780
-        u8  maVehicleDriverInputInterfacePad[
-                (0x6AB4 - 0x6780) - sizeof(BrnDirector::BrnDirectorVehicleInputInterface)];
-        bool mbAllStreamed; // console+0x6AB4, BehaviourSharedInfo::mbAllStreamed
+        // ARTIST BridgeWorldToDirector823E3F80..3FA4 copies this exact
+        // five-byte interface. The fifth byte is IsAllStreamed's source.
+        BrnWorld::WorldEntityIO::StatusInterface mWorldEntityStatusInterface; // +0x6AB0
         u8 maPad6AB5[3];
+
 
         // @0x6AB8 (27320): contacts. AppendContacts stores one 32-bit word at member word [0]
         // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage.

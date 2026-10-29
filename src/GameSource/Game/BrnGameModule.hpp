@@ -1208,6 +1208,9 @@ namespace BrnGame
         CgsGui::ViewIO::InputBuffer*           mpGuiViewInputBuffer; // h:494
         CgsGui::ModelIO::OutputBuffer*         mpGuiModelOutputBuffer;// h:495
         CgsGui::CgsGuiModuleIO::OutputBuffer*  mpGuiOutputBuffer;    // h:496
+        // FLAG PC-platform leaf: original DoUpdate's local input survives both
+        // Director phases; one Construct retains bridge data through PostGuiUpdate.
+        BrnDirector::DirectorIO::InputBuffer* mpDirectorInputBufferPC;
         BrnDirector::DirectorIO::OutputBuffer* mpDirectorOutputBuffer;// h:497
         // [FLAG PC placement] this sub-step's world UPDATE OUTPUT buffer. On the console it is
         // a LOCAL of DoUpdate @0x823F0AF8 (created near the top, threaded through every leg,

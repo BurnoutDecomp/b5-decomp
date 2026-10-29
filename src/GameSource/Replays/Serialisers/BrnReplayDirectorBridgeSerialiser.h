@@ -2,6 +2,8 @@
 #define GAMESOURCE_REPLAYS_SERIALISERS_BRNREPLAYDIRECTORBRIDGESERIALISER_H
 
 #include "types.hpp"
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "BrnCommonTypes.h"                             // Matrix44Affine (the CoM transforms)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the lpStatic tripwires)
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h" // BrnReplays::BaseSerialiser
@@ -39,14 +41,14 @@ namespace BrnReplays
         u8 mbPlayerWasTakenDown;             // +0x0002 (serialised, 1)
         u8 mabVehicleActive[8];              // +0x0003 (serialised, 8)
         u8 maPad000B[0x10 - 0x0B];           // +0x000B .. +0x000F
-        u8 maVehicleInfos[8][1264];          // +0x0010 (serialised, 10112; opaque records)
+        BrnDirector::Camera::VehicleInfo maVehicleInfos[8];          // +0x0010 (serialised, 10112; typed records)
         CgsModule::VariableEventQueue<13312, 16> mGameActionQueue;   // +0x2790 (SerialiseGameActionQueue)
-        u8 maBlock5BA0[48];                  // +0x5BA0 (serialised, 48; role not recovered)
+        BrnDirector::Camera::PlayerCrashInfo mPlayerCrashInfo;                  // +0x5BA0 (serialised, 48; original PlayerCrashInfo)
         Matrix44Affine maCentreOfMassTransforms[8];   // +0x5BD0 (serialised, 512)
-        u8 maPlayerData[296];                // +0x5DD0 (serialised, 296; the truncated-symbol block)
-        u8 mBlock5EF8;                       // +0x5EF8 (serialised, 1)
+        BrnGameState::GameStateModuleIO::CarScoreData mPlayerScoreData;                // +0x5DD0 (serialised, 296; original CarScoreData)
+        bool mbPlayerComboWarningActive;                       // +0x5EF8 (serialised, 1)
         u8 maPad5EF9[3];                     // +0x5EF9 .. +0x5EFB
-        u8 maBlock5EFC[4];                   // +0x5EFC (serialised, 4)
+        f32 mfPlayerBoostPercentage;                   // +0x5EFC (serialised, 4)
     };
     static_assert(offsetof(DirectorBridgeSerialiserStaticLayout, mGameActionQueue) == 0x2790, "game action queue seat");
     static_assert(offsetof(DirectorBridgeSerialiserStaticLayout, maCentreOfMassTransforms) == 0x5BD0, "centre-of-mass seat");
@@ -87,11 +89,11 @@ namespace BrnReplays
 
         // @0x823A8770 (h:238) -- one vehicle's 1264-byte info record (opaque; the
         // consumers own the field surface).
-        void* GetVehicleInfo(s32 liVehicleIndex)
+        const BrnDirector::Camera::VehicleInfo* GetVehicleInfo(s32 liVehicleIndex)
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
             CGS_ASSERT(lpStatic != 0, "lpStatic");   // :238 (non-gating)
-            return lpStatic->maVehicleInfos[liVehicleIndex];
+            return &lpStatic->maVehicleInfos[liVehicleIndex];
         }
 
         // @0x823A87E0 (h:287) -- one vehicle's centre-of-mass transform.
@@ -109,7 +111,7 @@ namespace BrnReplays
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
             CGS_ASSERT(lpStatic != 0, "lpStatic");   // :310 (non-gating)
-            return lpStatic->maPlayerData;
+            return &lpStatic->mPlayerScoreData;
         }
 
         // @0x823A88A8 (h:383/:384/:385) -- the takedown record (was-taken-down +
