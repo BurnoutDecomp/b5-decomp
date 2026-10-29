@@ -41,62 +41,11 @@
 namespace RealmcIface
 {
 
-// ---------------------------------------------------------------------------
-// XCONTENT_DATA -- the X360 content-package descriptor the XContent* APIs take
-// (DeviceID + content type + wide display name + ascii file name). This is a
-// platform (Xbox SDK) type reproduced here so XenonUtil::OpenContainer can build
-// one field-by-field and the container helpers can pass it by pointer. FLAGGED:
-// Xbox-SDK type; only the fields the X360 code touches are modelled, laid out at
-// their attested byte offsets (0x08 wide name, 0x108 ascii name).
-// ---------------------------------------------------------------------------
-struct XCONTENT_DATA
-{
-    DWORD DeviceID;             // +0x000  target device id
-    DWORD dwContentType;        // +0x004  content type (3 == saved game, else 1)
-    WCHAR szDisplayName[128];   // +0x008  wide display name (wcsncpy 127)
-    CHAR  szFileName[42];       // +0x108  ascii file name (strncpy 41)
-};
-
-// XCONTENT_DEVICE_DATA -- the output record for XContentGetDeviceData. The
-// X360 worker uses only dwDeviceType (+0x04); the remaining members preserve
-// the SDK's 0x50-byte record stride from the primary XContent ABI evidence.
-struct XCONTENT_DEVICE_DATA
-{
-    DWORD      dwDeviceID;       // +0x00
-    DWORD      dwDeviceType;     // +0x04
-    ULONGLONG  ullDeviceBytes;   // +0x08
-    ULONGLONG  ullFreeBytes;     // +0x10
-    WCHAR      szDisplayName[28];// +0x18
-};
-
+// Content descriptors and overlapped operations use the genuine XDK types.
 CGS_STATIC_ASSERT((sizeof(XCONTENT_DATA) == 0x134), "XCONTENT_DATA size");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, DeviceID) == 0x000), "XCONTENT_DATA device id offset");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, dwContentType) == 0x004), "XCONTENT_DATA content type offset");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, szDisplayName) == 0x008), "XCONTENT_DATA display name offset");
+CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, szDisplayName) == 0x08), "XCONTENT_DATA display name offset");
 CGS_STATIC_ASSERT((offsetof(XCONTENT_DATA, szFileName) == 0x108), "XCONTENT_DATA file name offset");
-CGS_STATIC_ASSERT((sizeof(XCONTENT_DEVICE_DATA) == 0x50), "XCONTENT_DEVICE_DATA size");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, dwDeviceID) == 0x00), "XCONTENT_DEVICE_DATA device id offset");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, dwDeviceType) == 0x04), "XCONTENT_DEVICE_DATA device type offset");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, ullDeviceBytes) == 0x08), "XCONTENT_DEVICE_DATA capacity offset");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, ullFreeBytes) == 0x10), "XCONTENT_DEVICE_DATA free space offset");
-CGS_STATIC_ASSERT((offsetof(XCONTENT_DEVICE_DATA, szDisplayName) == 0x18), "XCONTENT_DEVICE_DATA name offset");
-
-// ---------------------------------------------------------------------------
-// XOVERLAPPED -- the X360 async-op descriptor the device-selector UI / content
-// APIs post their completion into. FLAGGED: Xbox-SDK type; only InternalLow (the
-// status word compared against ERROR_IO_INCOMPLETE == 997) is read by name, the
-// rest is reserved so the object can be handed to the APIs by address.
-// ---------------------------------------------------------------------------
-struct XOVERLAPPED
-{
-    DWORD  InternalLow;         // +0x00  status (997 == still pending)
-    DWORD  InternalHigh;        // +0x04
-    DWORD  InternalContext;     // +0x08
-    HANDLE hEvent;              // +0x0C
-    void*  pCompletionRoutine;  // +0x10
-    DWORD  dwCompletionContext; // +0x14
-    DWORD  dwExtendedError;     // +0x18
-};
+CGS_STATIC_ASSERT((sizeof(XOVERLAPPED) == 0x1c), "XOVERLAPPED size");
 
 // ---------------------------------------------------------------------------
 // ThumbnailData -- the { pointer, byte-count } thumbnail descriptor the save
@@ -105,7 +54,7 @@ struct XOVERLAPPED
 // ---------------------------------------------------------------------------
 struct ThumbnailData
 {
-    const void* mpbData;  // +0x00  thumbnail bytes
+    const BYTE* mpbData;  // +0x00  thumbnail bytes
     DWORD       mcbData;  // +0x04  thumbnail size (0 == none)
 };
 
@@ -146,7 +95,7 @@ public:
 
     // @ 0x82B53A18 -- 0 if the device *lpuDeviceId names is present (XContentGetDeviceState
     //                 succeeds), 2 if the id is 0 or the device is gone.
-    static int CardExists(const u32* lpuDeviceId);
+    static int CardExists(const XCONTENTDEVICEID* lpuDeviceId);
 
     // @ 0x82B53AD8 -- map an internal card RESULT code (the values above) to the
     //                 public card STATUS code the worker tasks report. A 16-entry

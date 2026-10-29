@@ -23,34 +23,6 @@
 #include <cstring>   // memset / strncpy / strcpy / strcat
 #include <cwchar>    // wcsncpy
 
-// ---------------------------------------------------------------------------
-// Xbox 360 content / notification / sign-in platform APIs. Declared locally as
-// extern "C" prototypes (the established idiom for X360 kernel calls in this
-// tree -- see the X360 network managers). The content-data / overlapped /
-// thumbnail arguments are register-level pointers, so they are declared void*
-// here rather than pinning the Xbox-SDK struct layouts. Return values are the
-// Win32/XDK error codes the asm branches on.
-// ---------------------------------------------------------------------------
-extern "C"
-{
-    DWORD XContentGetDeviceState(DWORD dwDeviceID, void* pOverlapped);
-    DWORD XContentGetDeviceData(DWORD dwDeviceID, void* pDeviceData);
-    DWORD XContentClose(const char* szRootName, void* pOverlapped);
-    DWORD XContentFlush(const char* szRootName, void* pOverlapped);
-    DWORD XContentDelete(DWORD dwUserIndex, const void* pContentData, void* pOverlapped);
-    DWORD XContentSetThumbnail(DWORD dwUserIndex, const void* pContentData,
-                               const void* pbThumbnail, DWORD cbThumbnail, void* pOverlapped);
-    DWORD XContentCreate(DWORD dwUserIndex, const char* szRootName, void* pContentData,
-                         DWORD dwContentFlags, DWORD* pdwDisposition, DWORD* pdwLicenseMask,
-                         void* pOverlapped);
-    DWORD XShowDeviceSelectorUI(DWORD dwUserIndex, DWORD dwContentType, DWORD dwContentFlags,
-                                unsigned long long uliBytesRequested, DWORD* pdwDeviceID,
-                                void* pOverlapped);
-    DWORD XGetOverlappedExtendedError(void* pOverlapped);
-    int   XNotifyGetNext(HANDLE hNotification, DWORD dwMsgFilter, DWORD* pdwId, ULONG_PTR* pParam);
-    s32   XUserGetSigninState(u32 dwUserIndex);
-}
-
 // The Crc32 checksum utility used by the file-header/integrity checks (external
 // engine helper; declared for the compile gate -- its body lives in its own TU).
 u32 Crc32(const void* lpData, u32 luLength);
@@ -79,7 +51,7 @@ namespace
 // ---------------------------------------------------------------------------
 // CardExists @ 0x82B53A18 -- 0 if the named device is present, 2 otherwise.
 // ---------------------------------------------------------------------------
-int XenonUtil::CardExists(const u32* lpuDeviceId)
+int XenonUtil::CardExists(const XCONTENTDEVICEID* lpuDeviceId)
 {
     u32 luDeviceId = *lpuDeviceId;
     if (luDeviceId == 0)
@@ -149,7 +121,7 @@ BOOL XenonUtil::CloseState(State* lpState)
     lpState->mbCancel = 1;                       // *a1 = 1 (byte)
     BOOL lResult = CloseHandle(lHandle);
     lpState->mhNotification = INVALID_HANDLE_VALUE;   // -1
-    lpState->mOverlapped = XOVERLAPPED{};        // zero the 28-byte async descriptor
+    std::memset(&lpState->mOverlapped, 0, sizeof(lpState->mOverlapped));        // zero the 28-byte async descriptor
     sDwUserIndex = KU_NO_USER;                    // dword_82F8797C = -1
     lpState->miResult = 0;
     return lResult;
@@ -163,10 +135,10 @@ int XenonUtil::UpdateDeviceInfo(State* lpState)
 {
     int liResult = 0;
     CardData& rCard = lpState->mCardData;
-    u32 luDeviceId = rCard.maCurrent.muState;    // *(a1+8)
+    u32 luDeviceId = rCard.maCurrent.DeviceID;    // *(a1+8)
     if (luDeviceId != 0)
     {
-        DWORD luErr = XContentGetDeviceData(luDeviceId, &rCard);
+        DWORD luErr = XContentGetDeviceData(luDeviceId, &rCard.maCurrent);
         if (luErr == 0)
             return 0;
         liResult = (luErr == 1167) ? 14 : 1;
@@ -217,15 +189,17 @@ int XenonUtil::DeviceSelectorShow(State* lpState, u64 luBytesRequested, int liMo
 
     DWORD dwContentType = (liMode == 1) ? 3 : 1;
     DWORD luDeviceId = 0;                          // the selected device id (BYREF)
-    lpState->mOverlapped = XOVERLAPPED{};          // zero the async descriptor
+    std::memset(&lpState->mOverlapped, 0, sizeof(lpState->mOverlapped));          // zero the async descriptor
 
     // Kick the selector UI until it starts (returns ERROR_IO_PENDING == 997) or
     // the operation is cancelled.
+    ULARGE_INTEGER lBytesRequested;
+    lBytesRequested.QuadPart = luBytesRequested;
     DWORD luShow;
     do
     {
         luShow = XShowDeviceSelectorUI(sDwUserIndex, dwContentType, lpState->muContentFlags,
-                                       luBytesRequested, &luDeviceId, &lpState->mOverlapped);
+                                       lBytesRequested, &luDeviceId, &lpState->mOverlapped);
     } while (!lpState->mbCancel && luShow != 997);
 
     // Pump it to completion (Update returns != 15) or until cancelled.
@@ -247,7 +221,7 @@ int XenonUtil::DeviceSelectorShow(State* lpState, u64 luBytesRequested, int liMo
     if (liStatus == 0)
     {
         lpState->muContentFlags = lpState->muNextContentFlags;
-        DWORD luErr = XContentGetDeviceData(luDeviceId, &lpState->mCardData);
+        DWORD luErr = XContentGetDeviceData(luDeviceId, &lpState->mCardData.maCurrent);
         if (luErr == 0)
             liStatus = 0;
         else if (luErr == 1167)
@@ -271,7 +245,7 @@ int XenonUtil::OpenContainer(State* lpState, const void* lpName, s16 lsFlags, in
     if (liResult != 0)
         return liResult;
 
-    lpContentData->DeviceID = lpState->mCardData.maCurrent.muState;   // *a5 = *(a1+8)
+    lpContentData->DeviceID = lpState->mCardData.maCurrent.DeviceID;   // *a5 = *(a1+8)
     lpContentData->dwContentType = (liOpenMode == 1) ? 3 : 1;
 
     std::wcsncpy(lpContentData->szDisplayName, static_cast<const wchar_t*>(lpName), 127);

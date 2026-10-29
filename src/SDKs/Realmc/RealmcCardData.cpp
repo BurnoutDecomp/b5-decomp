@@ -33,9 +33,9 @@ namespace RealmcIface
 CardData::CardData()
 {
     std::memset(&maCurrent, 0, sizeof(CardDataBlock));   // memset(this, 0, 80)
-    maCurrent.muState = 0;                               // this[0] = 0
+    maCurrent.DeviceID = 0;                               // this[0] = 0
     std::memset(&maPrevious, 0, sizeof(CardDataBlock));  // memset(this+80, 0, 80)
-    maPrevious.muState = 0;                              // this[80] = 0
+    maPrevious.DeviceID = 0;                              // this[80] = 0
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ CardData::CardData()
 // ---------------------------------------------------------------------------
 CardData& CardData::operator=(const CardData& rOther)
 {
-    if (maCurrent.muState != rOther.maCurrent.muState)
+    if (maCurrent.DeviceID != rOther.maCurrent.DeviceID)
     {
         std::memcpy(&maPrevious, &maCurrent, sizeof(CardDataBlock)); // this+80 <- this
     }
@@ -73,7 +73,7 @@ CardData& CardData::operator=(const CardData& rOther)
 // ---------------------------------------------------------------------------
 bool CardData::operator==(const CardData& rOther) const
 {
-    return rOther.maCurrent.muState == maCurrent.muState;
+    return rOther.maCurrent.DeviceID == maCurrent.DeviceID;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ bool CardData::operator==(const CardData& rOther) const
 // ---------------------------------------------------------------------------
 bool CardData::operator!=(const CardData& rOther) const
 {
-    return rOther.maCurrent.muState != maCurrent.muState;
+    return rOther.maCurrent.DeviceID != maCurrent.DeviceID;
 }
 
 // ---------------------------------------------------------------------------
