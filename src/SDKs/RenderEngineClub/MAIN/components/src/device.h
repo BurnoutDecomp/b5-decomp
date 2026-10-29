@@ -16,6 +16,8 @@ namespace renderengine
     extern PixelBuffer gOriginalDepthStencilBuffer;
     extern u32 guTilingEnabled;
 
+
+    class RenderTargetState;
     enum PrimitiveType;
 
     // ARTIST 822768D0 writes the destination followed by the complete handle.
@@ -57,7 +59,15 @@ namespace renderengine
         static void BeginShaderStates(const ProgramVariableHandle& lrHandle,
                                       FloatShaderStateIterator& lrIterator);
 
+        // ARTIST 82B61B38 and the inlined default-state load at 823F926C.
+        static void SetState(const RenderTargetState* lpState);
+        static const RenderTargetState* GetDefaultRenderTargetState() { return m_renderTargetState; }
+
         // ARTIST 82B61F08: remove every texture binding of this resource.
         static void UnSetResource(D3DResource* lpResource);
+
+    protected:
+        // DecFIGS device.h:1662; ARTIST dword_83271614.
+        static RenderTargetState* m_renderTargetState;
     };
 }
