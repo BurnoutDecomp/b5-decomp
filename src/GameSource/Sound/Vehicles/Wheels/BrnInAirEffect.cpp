@@ -669,10 +669,7 @@ void TrafficInAir::Clear()
 // the car's queued PhysicalTrafficState, and it counts as crashing only while both it
 // and the player car are fatally crashing. No physical state clears the data.
 //
-// FLAG (replay serialiser not in this tree): while the sound serialiser plays back,
-// the console takes the wheel-contact flags and the crash flag from the recorded
-// traffic entity instead. This tree's SoundLogicModule holds no SoundSerialiser, so
-// only the live path runs.
+// ARTIST826B7070..7114 selects recorded wheel/crash state during playback.
 void TrafficInAir::UpdatePhysicsData(f32 afTimeStep)
 {
     bool lbFoundState = false;
@@ -680,6 +677,26 @@ void TrafficInAir::UpdatePhysicsData(f32 afTimeStep)
     {
         BrnSound::Module::SoundLogicModule* lpModule =
             static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+        BrnReplays::SoundSerialiser& lrSerialiser=lpModule->GetSoundSerialiser();
+        if (lrSerialiser.IsPlaying())
+        {
+            const BrnReplays::SoundSerialiserTrafficEntityData* lpData=
+                lrSerialiser.GetTrafficEnt(mpTrafficEntity->mEntityId.muValue);
+            if (lpData)
+            {
+                lbFoundState=true;
+                mPhysicsData.mIsOnGround.Update(false);
+                for (u32 luWheel=0; luWheel<4; ++luWheel)
+                {
+                    mPhysicsData.maWheelOnGround[luWheel].Update(lpData->mabWheelOnGround[luWheel]);
+                    if (mPhysicsData.maWheelOnGround[luWheel].GetCurrent())
+                        mPhysicsData.mIsOnGround.Update(true);
+                }
+                mPhysicsData.mbIsCrashing=lpData->mbIsCrashing;
+            }
+        }
+        else
+        {
         const BrnSound::Module::Io::LogicInputBuffer* lpInputBuffer =
             lpModule->GetBrnInputStructure();
         CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
@@ -713,6 +730,7 @@ void TrafficInAir::UpdatePhysicsData(f32 afTimeStep)
                     ->GetVehicleInterface()->IsPlayerCarFatalyCrashing();
             }
         }
+        }
     }
 
     if (!lbFoundState)
@@ -734,12 +752,25 @@ void TrafficInAir::UpdatePhysicsData(f32 afTimeStep)
     // traffic.
 }
 
-// FLAG (replay serialiser not in this tree): while the sound serialiser records, the
-// console writes the four wheel-contact flags and the crash flag of a physical car
-// into its recorded traffic entity before the base update. This tree's
-// SoundLogicModule holds no SoundSerialiser, so only the base update runs.
+// ARTIST826B7354..73D4: publish four wheel contacts and crash before base update.
 void TrafficInAir::ProcessUpdate()
 {
+    if (mpTrafficEntity->mbIsPhysical)
+    {
+        BrnReplays::SoundSerialiser& lrSerialiser=
+            static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetSoundSerialiser();
+        if (lrSerialiser.IsRecording())
+        {
+            BrnReplays::SoundSerialiserTrafficEntityData* lpData=
+                lrSerialiser.GetTrafficEnt(mpTrafficEntity->mEntityId.muValue);
+            if (lpData)
+            {
+                lpData->mbIsCrashing=mPhysicsData.mbIsCrashing;
+                for (u32 luWheel=0; luWheel<4; ++luWheel)
+                    lpData->mabWheelOnGround[luWheel]=mPhysicsData.maWheelOnGround[luWheel].GetCurrent();
+            }
+        }
+    }
     InAirEffect::ProcessUpdate();
 }
 

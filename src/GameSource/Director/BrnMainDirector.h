@@ -300,6 +300,9 @@ namespace BrnDirector
         Camera::BehaviourManager& GetBehaviourManager()       { return mBehaviourManager; }
         CameraFinaliser&          GetCameraFinaliser()        { return mCameraFinaliser; }
 
+        // ARTIST DirectorModule::Update copies MainDirector+0x32F10.
+        const Camera::Camera& GetLastCamera() const { return mLastCamera; }
+
         // The embedded CgsGraphics::Camera (CONSOLE +0x349D0) -- the camera
         // MainDirector::Update fills (via Camera::Camera::CopyToCgsCamera) and publishes with
         // DirectorIO::OutputBuffer::SetCgsCamera, and which DirectorModule::Update then copies

@@ -109,7 +109,7 @@ namespace DirectorIO
         // ARTIST 0x82207848: typed mutable view of the same member under the write lock.
         BrnDirector::DirectorOutputInterface* GetDirectorOutputInterface();
         u8*       GetDirectorOutputIn();        // legacy byte view for existing callers
-        u8*       GetReplayRequestI();          // -> mReplayRequestInterface   @0x0724
+        BrnReplays::ReplayIO::RequestInterface* GetReplayRequestI();          // -> mReplayRequestInterface   @0x0724
         CgsSystem::TimerRequestInterface* GetTimerRequestInterfac();  // -> mTimerRequestInterface @0x0500
         // X360 0x822069B0 -> &mVaultRequestInterface (this+0x510), WRITE-lock. Same DWARF name
         // as the const twin above; the constness is what separates the two lock bits here.

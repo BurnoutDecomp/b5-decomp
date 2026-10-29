@@ -13,7 +13,7 @@
 #include "GameSource/Director/Camera/Camera.h"                            // BrnDirector::Camera::Camera (mCamera)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"                // BrnDirector::WorldMap (mWorldMap)
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"         // the six scene-query post offices
-#include "GameSource/Replays/BrnReplayBaseSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
+#include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
@@ -350,20 +350,9 @@ private:
 
     u8 mPad_0x38925[0x38930 - 0x38925];                      // +0x38925..+0x3892F (untouched)
 
-    // this+0x38930 (231728). BrnReplays::BaseSerialiser::Construct(this, 4, 0, 1024, 384,
-    // "DirectorModule", 0) -- the director's own replay serialiser record (DWARF calls
-    // the derived type BrnReplays::DirectorSerialiser; that derived type is not homed
-    // yet, so this is declared at its real touched base type). Real committed base type.
-    // Prepare/Update (declaration-only) reach the same field via
-    // BrnReplays::DirectorSerialiser::GetStaticLayout(this+231728) -- same offset,
-    // corroborating this placement.
-    BrnReplays::BaseSerialiser mDirectorSerialiser;
-
-    // this+0x3898C (231820): one zeroed byte immediately after mDirectorSerialiser's
-    // BaseSerialiser-sized (0x5C CONSOLE bytes) tail -- a DirectorSerialiser-added field;
-    // that derived type is not homed, so this is named as an explicit scratch byte rather
-    // than folded into BaseSerialiser itself.
-    u8 mDirectorSerialiserExtra_0x3898C;                     // +0x3898C
+    // ARTIST DirectorModule::Construct/Update own the persistent derived
+    // serialiser at console +0x38930. Its own +0x5C latch belongs to that type.
+    BrnReplays::DirectorSerialiser mDirectorSerialiser;
 
     u8 mPad_0x3898D[0x38990 - 0x3898D];                      // +0x3898D..+0x3898F (untouched)
 

@@ -27,12 +27,25 @@
 // count/control scalars get named members. GROW into named sub-records if DWARF is recovered.
 
 #include "types.hpp"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
 #include <cstddef>   // offsetof (the layout pins at the bottom)
 
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<512,16>
 
 namespace BrnReplays
 {
+    // ARTIST82682488 returns this12-byte auxiliary record;826B7340 stores four
+    // wheel contacts and crashing at+0..4;826E32B0 reads/writes drift at+8.
+    struct SoundSerialiserTrafficEntityData
+    {
+        bool mabWheelOnGround[4];
+        bool mbIsCrashing;
+        u8 maReserved[3];
+        f32 mfDriftFactor;
+    };
+    static_assert(sizeof(SoundSerialiserTrafficEntityData)==12,"original traffic auxiliary stride");
+    static_assert(offsetof(SoundSerialiserTrafficEntityData,mfDriftFactor)==8,"original drift field");
+
     // Reconstructed from BURNOUT_X360_ARTIST.XEX. Sound-module replay static layout block.
     class SoundSerialiserStaticLayout
     {
@@ -76,7 +89,9 @@ namespace BrnReplays
         s32                                    miNumScrapes;                   // +0x810
         CgsModule::VariableEventQueue<512, 16> mEventQueue;                    // +0x814 (0x210 -> +0xA24)
         f32                                    mfA24;                          // +0xA24
-        u8                                     maReserved0xA28[0xC58 - 0xA28]; // +0xA28 (opaque; traffic records live here)
+        u8                                     maReserved0xA28[8];             // +0xA28 -> aligned records
+        BrnTraffic::BrnTrafficIO::TrafficSoundEntity maTrafficEntities[6];      // +0xA30
+        SoundSerialiserTrafficEntityData        maTrafficEntityData[6];       // +0xC10
         s32                                    miNumTrafficEntities;           // +0xC58
         f32                                    mfC5C;                          // +0xC5C
         u8                                     maReserved0xC60[0xE88 - 0xC60]; // +0xC60 (opaque; previous-frame copy)
@@ -94,6 +109,8 @@ namespace BrnReplays
     static_assert(offsetof(SoundSerialiserStaticLayout, miNumScrapes)         == 0x810, "miNumScrapes @ +0x810");
     static_assert(offsetof(SoundSerialiserStaticLayout, mEventQueue)          == 0x814, "mEventQueue @ +0x814");
     static_assert(offsetof(SoundSerialiserStaticLayout, mfA24)                == 0xA24, "mfA24 @ +0xA24");
+    static_assert(offsetof(SoundSerialiserStaticLayout, maTrafficEntities)==0xA30,"original traffic records");
+    static_assert(offsetof(SoundSerialiserStaticLayout, maTrafficEntityData)==0xC10,"original traffic auxiliary records");
     static_assert(offsetof(SoundSerialiserStaticLayout, miNumTrafficEntities) == 0xC58, "miNumTrafficEntities @ +0xC58");
     static_assert(offsetof(SoundSerialiserStaticLayout, mfC5C)                == 0xC5C, "mfC5C @ +0xC5C");
     static_assert(offsetof(SoundSerialiserStaticLayout, muE88)                == 0xE88, "muE88 @ +0xE88");

@@ -18,11 +18,7 @@
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficStateManager -- out-of-line bodies.
 //
-// FLAG (replay serialiser not in this tree): while the sound serialiser records, the
-// console's UpdateParams mirrors the six nearest entities into it, and while it plays
-// back it matches and attaches the recorded entities instead of the live list. This
-// tree's SoundLogicModule holds no SoundSerialiser and nothing drives its mode, so only
-// the live traffic interface is read -- the console's own path whenever no replay runs.
+// ARTIST82702ED8: live/recorded traffic selection and nearest-six capture.
 //
 // Traffic cull success/failure retains the original Sound debug log.
 // =============================================================================
@@ -209,8 +205,23 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
     SortResult laSortedEntities[BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface::KU_MAX_ENTITIES];
     SortEntitiesDistanceFromPosition( lListenerPosition, lrTraffic, laSortedEntities );
 
+    BrnReplays::SoundSerialiser& lrSerialiser=lpModule->GetSoundSerialiser();
+    if (lrSerialiser.IsRecording())
+    {
+        lrSerialiser.GetStaticLayout()->miNumTrafficEntities=0;
+        for (u16 lu16Entry=0; lu16Entry<KU_NUMBER_OF_TRAFFIC_CARS &&
+             lu16Entry<lrTraffic.GetTrafficEntityCount(); ++lu16Entry)
+        {
+            const u16 lu16Index=laSortedEntities[lu16Entry].muIndex;
+            CGS_ASSERT(lu16Index<lrTraffic.mu16EntityCount,"lu16Index < mu16EntityCount");
+            lrSerialiser.AddTrafficEntity(&lrTraffic.maActiveEntityList[lu16Index]);
+        }
+    }
+
     u16 lau16EntityMatched[KU_NUM_SLOTS] = { 0 };
-    const u16 lu16EntityCount = lrTraffic.GetTrafficEntityCount();
+    const u16 lu16EntityCount = lrSerialiser.IsPlaying()
+        ? static_cast<u16>(lrSerialiser.GetStaticLayout()->GetNumTrafficEntities())
+        : lrTraffic.GetTrafficEntityCount();
 
     for ( u16 luActiveIndex = 0; luActiveIndex < KU_NUM_SLOTS; ++luActiveIndex )
     {
@@ -224,10 +235,16 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
         u16 lu16Matches = 0;
         for ( u16 luEntry = 0; luEntry < lu16EntityCount; ++luEntry )
         {
-            // TrafficSoundOutputInterface::GetTrafficEntity, inlined.
-            const u16 lu16Index = laSortedEntities[luEntry].muIndex;
-            CGS_ASSERT( lu16Index < lrTraffic.mu16EntityCount, "lu16Index < mu16EntityCount" );
-            const Slot::TrafficSoundEntity& lrEntity = lrTraffic.maActiveEntityList[lu16Index];
+            const Slot::TrafficSoundEntity* lpEntity;
+            if (lrSerialiser.IsPlaying())
+                lpEntity=&lrSerialiser.GetStaticLayout()->maTrafficEntities[luEntry];
+            else
+            {
+                const u16 lu16Index=laSortedEntities[luEntry].muIndex;
+                CGS_ASSERT(lu16Index<lrTraffic.mu16EntityCount,"lu16Index < mu16EntityCount");
+                lpEntity=&lrTraffic.maActiveEntityList[lu16Index];
+            }
+            const Slot::TrafficSoundEntity& lrEntity=*lpEntity;
 
             if ( lrEntity.mu16EntityIndex == lrActiveSlot.mEntity.mu16EntityIndex )
             {
@@ -246,9 +263,16 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
 
     for ( u16 luEntry = 0; luEntry < lu16EntityCount; ++luEntry )
     {
-        const u16 lu16Index = laSortedEntities[luEntry].muIndex;
-        CGS_ASSERT( lu16Index < lrTraffic.mu16EntityCount, "lu16Index < mu16EntityCount" );
-        const Slot::TrafficSoundEntity& lrEntity = lrTraffic.maActiveEntityList[lu16Index];
+        const Slot::TrafficSoundEntity* lpEntity;
+        if (lrSerialiser.IsPlaying())
+            lpEntity=&lrSerialiser.GetStaticLayout()->maTrafficEntities[luEntry];
+        else
+        {
+            const u16 lu16Index=laSortedEntities[luEntry].muIndex;
+            CGS_ASSERT(lu16Index<lrTraffic.mu16EntityCount,"lu16Index < mu16EntityCount");
+            lpEntity=&lrTraffic.maActiveEntityList[lu16Index];
+        }
+        const Slot::TrafficSoundEntity& lrEntity=*lpEntity;
 
         if ( lau16EntityMatched[luEntry] != 0 )
             continue;
@@ -283,7 +307,7 @@ void TrafficStateManager::UpdateParams( f32 /*lfTimeStep*/ )
         if ( KI_SPEW_TRAFFIC_MANAGEMENT )
             BrnSound::Debug::DebugComponent::mLogCombined << "[Traffic] Successfully Culled. \n";
         if ( lbAttached )
-            break;
+            luEntry=lrTraffic.GetTrafficEntityCount(); // ARTIST8270365C..80, then loop increment
     }
 
     CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );

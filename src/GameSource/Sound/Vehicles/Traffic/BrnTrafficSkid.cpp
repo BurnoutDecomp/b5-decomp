@@ -21,10 +21,7 @@
 // SendIndexes::AEMS_Skids_Traffic (Send01, ReverbSend) -- the same tables AISkidEffect
 // reads.
 //
-// FLAG (replay serialiser not in this tree): while the sound serialiser plays back,
-// the console's ProcessUpdate takes mfDriftFactor from the recorded traffic entity, and
-// while it records it writes mfDriftFactor there. This tree's SoundLogicModule holds
-// no SoundSerialiser, so the live drift factor is always used.
+// ARTIST826E3304..3398: consume/publish drift before the voice update.
 //
 // Not carried: the KB_SKID_PRINT_INFO developer TTY lines in CalculateDriftParameter,
 // gated on a switch that is zero in the image.
@@ -221,6 +218,23 @@ void TrafficSkid::ProcessUpdate()
 {
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTrafficSoundEntity = mpTrafficControl->GetTrafficEntity();
     CGS_ASSERT( lpTrafficSoundEntity != 0, "lpTrafficSoundEntity" );
+
+    BrnReplays::SoundSerialiser& lrSerialiser=
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetSoundSerialiser();
+    if (lrSerialiser.IsPlaying())
+    {
+        BrnReplays::SoundSerialiserTrafficEntityData* lpData=
+            lrSerialiser.GetTrafficEnt(lpTrafficSoundEntity->mEntityId.muValue);
+        if (lpData)
+            mfDriftFactor=lpData->mfDriftFactor;
+    }
+    else if (lrSerialiser.IsRecording())
+    {
+        BrnReplays::SoundSerialiserTrafficEntityData* lpData=
+            lrSerialiser.GetTrafficEnt(lpTrafficSoundEntity->mEntityId.muValue);
+        if (lpData)
+            lpData->mfDriftFactor=mfDriftFactor;
+    }
 
     const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStageBefore = mSkidVoice.GetUpdateStage();
     mSkidVoice.Update();
