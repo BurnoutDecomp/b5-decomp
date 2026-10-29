@@ -1,3 +1,4 @@
+#include <float.h>
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -471,7 +472,7 @@ namespace
     // X360 0x8232A4A8 confirms the same flt_82CDB7D0 store path; the PS3 supplies the literal value.
     // RaceCarPositioningData's own distances are seeded with the same sentinel via its Construct()
     // (kept named, not hard-coded here).
-    const f32 KF_INVALID_RACE_DISTANCE = 3.4028235e38f;   // flt_82CDB7D0 == FLT_MAX (PS3 0x1E364C)
+    const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // flt_82CDB7D0 == FLT_MAX (PS3 0x1E364C)
 }
 
 // X360 0x8232A4A8. Full scoring-state reset. NAMED-MEMBER semantic-parity reconstruction (NOT a
@@ -555,11 +556,7 @@ void ScoringSystem::ClearData(bool lbResetCarData)
     mbNewLeader                       = false;                      // ASM stb r30,0x4EF8
     mbNewLastPlace                    = false;                      // ASM stb r30,0x4EF9
 
-    // ASM stb r30,0x5D21 -- a single byte zeroed in the elimination-state region (between
-    // mbEliminationRequired @ss+0x5D20 and muCarsThatHaventBeenEliminated @ss+0x5D24). Its field
-    // identity is NOT confidently recoverable (the semantic slice models mbEliminationRequired at
-    // that anchor but has no named bool at +0x5D21); rather than risk a confidently-wrong member
-    // name (the OnModeStart-revert lesson), this single store is left UNMODELED and FLAGGED.
+    mbPlayerElimated = false; // ARTIST clears +0x5D21; name follows DecFIGS.
 
     // ASM stw r30,0x5D40 -- the eliminated-race-car index list reset (DWARF SHAPE:
     // CgsContainers::Array<EActiveRaceCarIndex,7u>::Construct), i.e. drive its live count to 0.
