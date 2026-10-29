@@ -25,6 +25,12 @@ namespace BrnResource
     // their backing allocators. Static zero initialization is not backing memory.
     HeapResourceAllocator Allocators::mRuntimeAllocator;
     LinearResourceAllocator Allocators::mEmbeddedTextureAllocator;
+    LinearResourceAllocator Allocators::mGlobalResourceAllocator;
+
+    LinearResourceAllocator* GetGlobalResourceAllocator()
+    {
+        return &Allocators::mGlobalResourceAllocator;
+    }
 
     // ARTIST82666E48/50/68: Runtime backing allocator, name and print level.
     void HeapResourceAllocator::Construct(rw::core::GeneralResourceAllocator* lpAllocator,
