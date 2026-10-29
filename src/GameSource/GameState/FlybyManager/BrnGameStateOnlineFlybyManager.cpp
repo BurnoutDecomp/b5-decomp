@@ -256,19 +256,19 @@ void OnlineFlybyManager::CalculateDisconnectRating(FlybyManager::RivalRating* lp
         lpRating->miRivalWeighting = -1;
 }
 
-// ARTIST 0x823646E8. Opponents on a different round-start team gain 20.
+// ARTIST 0x823646E8 reads each CarData current team at +0x13C; different teams gain 20.
 void OnlineFlybyManager::CalculateTeamRating(FlybyManager::RivalRating* lpRating)
 {
     const BrnNetwork::NetworkPlayerID lLocalPlayerID = GetGameStateModule()->GetLocalPlayerNetworkID();
     const ScoringSystem* lpScoringSystem = GetGameStateModule()->GetModeManager()->GetScoringSystem();
     const CarData* lpCarData = lpScoringSystem->GetCarData(lLocalPlayerID);
     CGS_ASSERT(lpCarData, "lpCarData");
-    const GameStateModuleIO::EPlayerTeam leLocalTeam = lpCarData->GetRoundStartTeam();
+    const GameStateModuleIO::EPlayerTeam leLocalTeam = lpCarData->GetTeam();
 
     lpScoringSystem = GetGameStateModule()->GetModeManager()->GetScoringSystem();
     lpCarData = lpScoringSystem->GetCarData(lpRating->mPlayerID);
     CGS_ASSERT(lpCarData, "lpCarData");
-    if (leLocalTeam != lpCarData->GetRoundStartTeam())
+    if (leLocalTeam != lpCarData->GetTeam())
         lpRating->miRivalWeighting += 20;
 }
 
