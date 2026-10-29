@@ -1,350 +1,272 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
-
-#include <xtl.h>   // QueryPerformanceCounter / QueryPerformanceFrequency (high-res timer)
-#include "rw/rwcore_structs.h"
-#include <cstring>
-#include <atomic>
-#include <mutex>
-
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "rw/rwcore_structs.h"
+#include <xtl.h>
+#include <pix.h>
+#include <ppcintrinsics.h>
+#include <cstddef>
+#include <cstring>
 
-// winspool.h (pulled in by Windows.h) macro-defines AddMonitor -> AddMonitorA, which would rename our
-// registry entry point and break the link against callers that don't include Windows.h. Drop the macro.
 #ifdef AddMonitor
 #undef AddMonitor
 #endif
 
-// CgsDev::PerfMonCpu - the CPU perfmon registry bodies. The frame's update/render spine brackets each
-// region with StartMonitor/StopMonitor; the elapsed time per region is converted to milliseconds via
-// the QPC frequency (the X360 read the PPC timebase - CgsTimeUtils.cpp sets the QPC precedent). The
-// debug perfmon component reads mfCurrentValue / the snapshot per monitor to draw the overlay bars.
-
 namespace CgsDev
 {
-    namespace PerfMonCpu
+    PerfMonCpuInstance* PerfMonCpu::mpMonitorsArray = 0;
+    s32 PerfMonCpu::miMaxMonitorCount = 0;
+    s32 PerfMonCpu::miMonitorCount = 0;
+    PerfMonGameFrequency PerfMonCpu::meGameFrequency = E_PMF_60HZ;
+    bool PerfMonCpu::mbResetAllValues = false;
+    s32 PerfMonCpu::miNumIterations = 0;
+    bool PerfMonCpu::mbIgnoreZeroCallsInAverage = false;
+    s32 PerfMonCpu::miLibPerfMode = 0;
+
+    namespace
     {
-        bool mbIgnoreZeroCallsInAverage = false;
+        // ARTIST83018F14, refreshed by StartProfiling's frequency query.
+        f32 gfCounterScale = 0.0f;
+        const char* const gpcSource = "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/Cpu/CgsPerfMonCpu.cpp";
+        const char* const gpcX360Source = "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/Cpu/X360/CgsPerfMonCpuX360.cpp";
+        const char* const gpcX360Header = "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/Cpu/X360/CgsPerfMonCpuX360.h";
 
-        namespace
+        void MonitorAssert(const char* lpcExpression, const char* lpcFile, s32 liLine)
         {
-            PerfMonCpuInstance* gpMonitorsArray   = 0;
-            s32                 giMaxMonitorCount  = 0;
-            std::atomic<s32>    giMonitorCount{0};
-            std::mutex         gMonitorRegistration;
-            s32                 giNumIterations    = 1;
-            s64                 gi64TimerFrequency = 0;
-            PerfMonGameFrequency geGameFrequency  = E_PMF_60HZ;
-            bool                gbResetAllValues   = true;
+            Assert::BeginAssert();
+            Assert::FireAssert(lpcExpression, lpcFile, liLine);
+            Assert::EndAssert();
+        }
+    }
 
-            u64 GetTimerTicks()
+    // ARTIST82824B10. The supplied allocator owns the registry's five-lane resource.
+    bool PerfMonCpu::Construct(s32 liMaxMonitors, rw::IResourceAllocator* lpAllocator)
+    {
+        CGS_STATIC_ASSERT(sizeof(PerfMonCpuInstance) == 96, "ARTIST monitor stride");
+        CGS_STATIC_ASSERT(offsetof(PerfMonCpuInstance, macName) == 28, "ARTIST monitor name");
+        CGS_STATIC_ASSERT(offsetof(PerfMonCpuInstance, mbActive) == 60, "ARTIST monitor active");
+        CGS_STATIC_ASSERT(offsetof(PerfMonCpuInstance, mePage) == 64, "ARTIST monitor page");
+        CGS_STATIC_ASSERT(offsetof(PerfMonCpuInstance, mfCurrentValue) == 68, "ARTIST monitor value");
+        CGS_STATIC_ASSERT(offsetof(PerfMonCpuInstance, miOrigLibPerfTraceId) == 88, "ARTIST monitor trace");
+        CGS_STATIC_ASSERT(sizeof(PerfMonCpuMonitorData) == 44, "ARTIST monitor snapshot");
+        miMaxMonitorCount = liMaxMonitors;
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(PerfMonCpuInstance) * liMaxMonitors;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        mpMonitorsArray = static_cast<PerfMonCpuInstance*>(lpAllocator->Allocate(lDescriptor, 0).m_baseResources[0]);
+        if (!mpMonitorsArray)
+            MonitorAssert("mpMonitorsArray", gpcSource, 71);
+        miMonitorCount = 0;
+        meGameFrequency = E_PMF_60HZ;
+        mbResetAllValues = true;
+        miNumIterations = 1;
+        mbIgnoreZeroCallsInAverage = false;
+        std::memset(mpMonitorsArray, 0, sizeof(PerfMonCpuInstance) * miMaxMonitorCount);
+        return true;
+    }
+
+    void PerfMonCpu::SetGameFrequency(PerfMonGameFrequency leFrequency) { meGameFrequency = leFrequency; }
+    void PerfMonCpu::SetNumIterationsTaken(s32 liNumIterations) { miNumIterations = liNumIterations; }
+    s32 PerfMonCpu::GetMonitorCount() { return miMonitorCount; }
+    s32 PerfMonCpu::GetMaxMonitorCount() { return miMaxMonitorCount; }
+    void PerfMonCpu::ResetValuesInActiveMonitors() { mbResetAllValues = true; }
+
+    // ARTIST82817238 leaves the last displayed current value and active flag intact.
+    void PerfMonCpu::PrepareActiveMonitorsForUpdate()
+    {
+        for (s32 liIndex = 0; liIndex < miMonitorCount; ++liIndex)
+        {
+            PerfMonCpuInstance& lrInstance = mpMonitorsArray[liIndex];
+            lrInstance.miFrameCounter = 0;
+            lrInstance.mu64StartValue = 0;
+            lrInstance.mu64Value = 0;
+            lrInstance.mfAverageValue = 0.0f;
+            lrInstance.mfMinMaxValue = 0.0f;
+            lrInstance.miNumCalls = 0;
+            lrInstance.mfAverageAccumulator = 0.0f;
+            lrInstance.miMaxCalls = 0;
+        }
+    }
+
+    // ARTIST82824C30. Assertions report errors without replacing the append policy.
+    s32 PerfMonCpu::AddMonitor(const char* lpcString, PerfMonCpuPage lePage,
+                               bool lbRecordMinNotMax, f32 lfCpuBudget, bool lbScaled)
+    {
+        if (!(miMonitorCount < miMaxMonitorCount))
+            MonitorAssert("miMonitorCount < miMaxMonitorCount", gpcSource, 264);
+        if (!lpcString)
+            MonitorAssert("lpcString != NULL", gpcSource, 267);
+        if (!(std::strlen(lpcString) <= KI_PERFMONCPU_MAXSTRINGLENGTH - 1))
+            MonitorAssert("strlen(lpcString) <= (KI_PERFMONCPU_MAXSTRINGLENGTH-1)", gpcSource, 268);
+        for (s32 liCount = 0; liCount < miMonitorCount; ++liCount)
+            if (std::strcmp(mpMonitorsArray[liCount].macName, lpcString) == 0)
+                MonitorAssert("strcmp(mpMonitorsArray[liCount].macName, lpcString) != 0", gpcSource, 274);
+        PerfMonCpuInstance& lrInstance = mpMonitorsArray[miMonitorCount];
+        std::memset(&lrInstance, 0, sizeof(lrInstance));
+        if (std::strlen(lpcString) >= KI_PERFMONCPU_MAXSTRINGLENGTH)
+        {
+            Assert::BeginAssert();
+            StrStream lMessage(Assert::gpcMessageBuffer, Assert::giMessageBufferSize);
+            lMessage << "String too long: " << lpcString;
+            Assert::FireAssert(Assert::gpcMessageBuffer,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+            Assert::EndAssert();
+        }
+        std::strncpy(lrInstance.macName, lpcString, KI_PERFMONCPU_MAXSTRINGLENGTH);
+        lrInstance.mePage = lePage;
+        lrInstance.mbMinimum = lbRecordMinNotMax;
+        lrInstance.mfCpuBudget = lfCpuBudget;
+        lrInstance.mbScaled = lbScaled;
+        lrInstance.miLibPerfTraceId = -1;
+        lrInstance.miOrigLibPerfTraceId = -1;
+        lrInstance.miLibPerfTraceId = lrInstance.miOrigLibPerfTraceId;
+        return miMonitorCount++;
+    }
+
+    // ARTIST821F1198 checks the allocated capacity, rather than the registered count.
+    void PerfMonCpu::StartMonitor(s32 liMonitorID)
+    {
+        if (!(liMonitorID >= 0 && liMonitorID < miMaxMonitorCount))
+            MonitorAssert("liMonitorID >= 0 && liMonitorID < miMaxMonitorCount", gpcX360Header, 61);
+        PerfMonCpuInstance& lrInstance = mpMonitorsArray[liMonitorID];
+        if (lrInstance.mbActive)
+        {
+            Assert::BeginAssert();
+            StrStream lMessage(Assert::gpcMessageBuffer, Assert::giMessageBufferSize);
+            lMessage << "Monitor already started: " << lrInstance.macName << "\n";
+            Assert::FireAssert(Assert::gpcMessageBuffer, gpcX360Header, 64);
+            Assert::EndAssert();
+        }
+        LARGE_INTEGER lNow;
+        QueryPerformanceCounter(&lNow);
+        lrInstance.mbActive = true;
+        lrInstance.mu64StartValue = static_cast<u64>(lNow.QuadPart);
+        ++lrInstance.miNumCalls;
+    }
+
+    // ARTIST821F1308 performs no capacity/count guard on this path.
+    void PerfMonCpu::StopMonitor(s32 liMonitorID)
+    {
+        PerfMonCpuInstance& lrInstance = mpMonitorsArray[liMonitorID];
+        if (!lrInstance.mbActive)
+            MonitorAssert("mpMonitorsArray[liMonitorID].mbActive == true", gpcX360Header, 97);
+        LARGE_INTEGER lNow;
+        QueryPerformanceCounter(&lNow);
+        lrInstance.mbActive = false;
+        lrInstance.mu64Value += static_cast<u64>(lNow.QuadPart) - lrInstance.mu64StartValue;
+    }
+
+    // ARTIST828251D0 queries the timer frequency on every profiling frame.
+    void PerfMonCpu::StartProfiling()
+    {
+        if (mbResetAllValues)
+        {
+            PrepareActiveMonitorsForUpdate();
+            for (s32 liIndex = 0; liIndex < miMonitorCount; ++liIndex)
             {
-                LARGE_INTEGER liNow;
-                QueryPerformanceCounter(&liNow);
-                return static_cast<u64>(liNow.QuadPart);
+                PerfMonCpuInstance& lrInstance = mpMonitorsArray[liIndex];
+                lrInstance.mfMinMaxValue = lrInstance.mbMinimum ? 100.0f : 0.0f;
+                lrInstance.miMaxCalls = 0;
             }
+            mbResetAllValues = false;
+        }
+        for (s32 liIndex = 0; liIndex < miMonitorCount; ++liIndex)
+        {
+            mpMonitorsArray[liIndex].mu64Value = 0;
+            mpMonitorsArray[liIndex].miNumCalls = 0;
+        }
+        LARGE_INTEGER lFrequency;
+        if (!QueryPerformanceFrequency(&lFrequency))
+            MonitorAssert("QueryPerformanceFrequency(&lFrequency)", gpcX360Source, 87);
+        const f32 lfFrequency = static_cast<f32>(static_cast<double>(static_cast<u64>(lFrequency.QuadPart)));
+        gfCounterScale = 100.0f / lfFrequency;
+    }
 
-            f32 GetGameFrequencyHz()
+    // ARTIST82825350: each conversion/multiply/divide rounds to single precision.
+    void PerfMonCpu::StopProfiling()
+    {
+        LARGE_INTEGER lNow;
+        QueryPerformanceCounter(&lNow);
+        f32 lfGameFrequency;
+        switch (meGameFrequency)
+        {
+        case E_PMF_60HZ: lfGameFrequency = 59.94f; break;
+        case E_PMF_50HZ: lfGameFrequency = 50.0f; break;
+        case E_PMF_30HZ: lfGameFrequency = 29.97f; break;
+        case E_PMF_25HZ: lfGameFrequency = 25.0f; break;
+        default:
+            MonitorAssert("invalid game frequency", gpcX360Source, 137);
+            lfGameFrequency = 59.94f;
+            break;
+        }
+        const f32 lfInverseIterations = 1.0f / static_cast<f32>(miNumIterations);
+        for (s32 liIndex = 0; liIndex < miMonitorCount; ++liIndex)
+        {
+            PerfMonCpuInstance& lrInstance = mpMonitorsArray[liIndex];
+            if (lrInstance.miNumCalls > lrInstance.miMaxCalls)
+                lrInstance.miMaxCalls = lrInstance.miNumCalls;
+            const f32 lfTicks = static_cast<f32>(static_cast<double>(lrInstance.mu64Value));
+            const f32 lfTime = lfTicks * gfCounterScale;
+            f32 lfCurrent = lfTime * lfGameFrequency;
+            if (lrInstance.mbScaled)
             {
-                switch (geGameFrequency)
-                {
-                case E_PMF_60HZ: return 59.94f;
-                case E_PMF_50HZ: return 50.0f;
-                case E_PMF_30HZ: return 29.97f;
-                case E_PMF_25HZ: return 25.0f;
-                default:
-                    CGS_ASSERT(false, "invalid game frequency");
-                    return 59.94f;
-                }
+                lrInstance.miNumCalls /= miNumIterations;
+                lfCurrent *= lfInverseIterations;
             }
+            lrInstance.mfCurrentValue = lfCurrent;
+            lrInstance.mfAverageAccumulator += lrInstance.mfCurrentValue;
+            if (!mbIgnoreZeroCallsInAverage || lrInstance.mfCurrentValue > 0.0f)
+                ++lrInstance.miFrameCounter;
+            if (lrInstance.miFrameCounter > 0)
+                lrInstance.mfAverageValue = lrInstance.mfAverageAccumulator / static_cast<f32>(lrInstance.miFrameCounter);
+            const f32 lfDifference = lrInstance.mfMinMaxValue - lrInstance.mfCurrentValue;
+            lrInstance.mfMinMaxValue = static_cast<f32>(lrInstance.mbMinimum
+                ? __fsel(lfDifference, lrInstance.mfCurrentValue, lrInstance.mfMinMaxValue)
+                : __fsel(lfDifference, lrInstance.mfMinMaxValue, lrInstance.mfCurrentValue));
+        }
+    }
 
-            bool IsValidHandle(s32 liHandle)
+    // ARTIST82824FF8. Trace values are zero in this build, independently of tag state.
+    void PerfMonCpu::GetMonitorData(s32 liMonitorID, PerfMonCpuMonitorData* lpResult)
+    {
+        if (!lpResult)
+            MonitorAssert("lpResult", gpcSource, 315);
+        if (!(liMonitorID >= 0 && liMonitorID < miMonitorCount))
+            MonitorAssert("liMonitorID >= 0 && liMonitorID < miMonitorCount", gpcSource, 316);
+        const PerfMonCpuInstance& lrInstance = mpMonitorsArray[liMonitorID];
+        lpResult->mpcName = lrInstance.macName;
+        lpResult->mfCurrentValue = lrInstance.mfCurrentValue;
+        lpResult->mfAverageValue = lrInstance.mfAverageValue;
+        lpResult->mfMinMaxValue = lrInstance.mfMinMaxValue;
+        lpResult->miMaxCalls = lrInstance.miMaxCalls;
+        lpResult->mfCpuBudget = lrInstance.mfCpuBudget;
+        lpResult->miNumCalls = lrInstance.miNumCalls;
+        lpResult->mbTraced = false;
+        lpResult->mfCurrentTraceValue = 0.0f;
+        lpResult->mfAverageTraceValue = 0.0f;
+        lpResult->mfMinMaxTraceValue = 0.0f;
+    }
+
+    // ARTIST82825148 (export hole), raw instructions attest the page-filtered callback.
+    void PerfMonCpu::ReportMonitors(FPerfMonCpuReportCallback* lpDisplayCallback,
+                                    void* lpUserData, PerfMonCpuPage lePage)
+    {
+        for (s32 liIndex = 0; liIndex < miMonitorCount; ++liIndex)
+            if (lePage == E_PMP_MAX || mpMonitorsArray[liIndex].mePage == lePage)
             {
-                return gpMonitorsArray && liHandle >= 0 && liHandle < giMonitorCount;
+                PerfMonCpuMonitorData lCallbackParameters;
+                GetMonitorData(liIndex, &lCallbackParameters);
+                lpDisplayCallback(lCallbackParameters, lpUserData);
             }
-        }
+    }
 
-        bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator)
-        {
-            CGS_STATIC_ASSERT((sizeof(PerfMonCpuInstance) == 96), "ARTIST CPU monitor record stride");
-            LARGE_INTEGER liFreq;
-            QueryPerformanceFrequency(&liFreq);
-            gi64TimerFrequency = liFreq.QuadPart;
+    PerfMonCpuPage PerfMonCpu::GetMonitorPage(s32 liMonitorHandle)
+    { return mpMonitorsArray[liMonitorHandle].mePage; }
 
-            giMaxMonitorCount = liMaxMonitorCount;
-            rw::ResourceDescriptor lDescriptor;
-            for (u32 luLane = 0; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
-            {
-                lDescriptor.m_baseResourceDescriptors[luLane].m_size = 0;
-                lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
-            }
-            const u32 luBytes = static_cast<u32>(liMaxMonitorCount) *
-                                static_cast<u32>(sizeof(PerfMonCpuInstance));
-            lDescriptor.m_baseResourceDescriptors[0].m_size = luBytes;
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-            if (!gpMonitorsArray)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("mpMonitorsArray",
-                    "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/Cpu/CgsPerfMonCpu.cpp", 71);
-                CgsDev::Assert::EndAssert();
-            }
-
-            giMonitorCount    = 0;
-            giNumIterations   = 1;
-            geGameFrequency   = E_PMF_60HZ;
-            gbResetAllValues  = true;
-            mbIgnoreZeroCallsInAverage = false;
-
-            std::memset(gpMonitorsArray, 0, luBytes);
-            return true;
-        }
-
-        void SetGameFrequency(PerfMonGameFrequency leFrequency)
-        {
-            geGameFrequency = leFrequency;
-        }
-
-        // ARTIST 0x82817238. Clear the complete accumulated-value set for every registered
-        // monitor. Minimum monitors are seeded by StartProfiling after this call.
-        void PrepareActiveMonitorsForUpdate()
-        {
-            for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
-            {
-                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
-                lrInstance.mu64StartValue       = 0;
-                lrInstance.mu64Value            = 0;
-                lrInstance.miFrameCounter       = 0;
-                lrInstance.miNumCalls           = 0;
-                lrInstance.miMaxCalls           = 0;
-                lrInstance.mfCurrentValue       = 0.0f;
-                lrInstance.mfMinMaxValue        = 0.0f;
-                lrInstance.mfAverageValue       = 0.0f;
-                lrInstance.mfAverageAccumulator = 0.0f;
-            }
-        }
-
-        // DecFIGS names the inline ARTIST reset latch: the actual clear happens at the start of
-        // the next profiling frame, so no active monitor is torn down mid-region.
-        void ResetValuesInActiveMonitors()
-        {
-            gbResetAllValues = true;
-        }
-
-        // ARTIST 0x828251D0. Begin a CPU profiling frame: service the deferred reset, then clear
-        // only this frame's raw ticks/call counts. Long-running average/min/max values remain.
-        void StartProfiling()
-        {
-            if (gbResetAllValues)
-            {
-                PrepareActiveMonitorsForUpdate();
-                for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
-                {
-                    PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
-                    lrInstance.mfMinMaxValue = lrInstance.mbMinimum ? 100.0f : 0.0f;
-                    lrInstance.miMaxCalls = 0;
-                }
-                gbResetAllValues = false;
-            }
-
-            for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
-            {
-                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
-                lrInstance.mu64Value = 0;
-                lrInstance.miNumCalls = 0;
-            }
-        }
-
-        // ARTIST 0x82825350, with the platform timer conversion expressed in host-native QPC
-        // units. Values are percentage of one game frame, not milliseconds.
-        void StopProfiling()
-        {
-            const f32 lfFrameScale = GetGameFrequencyHz() * 100.0f;
-            const s32 liIterations = (giNumIterations > 0) ? giNumIterations : 1;
-
-            for (s32 liIndex = 0; liIndex < giMonitorCount; ++liIndex)
-            {
-                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
-                if (lrInstance.miNumCalls > lrInstance.miMaxCalls)
-                    lrInstance.miMaxCalls = lrInstance.miNumCalls;
-
-                f32 lfCurrent = 0.0f;
-                if (gi64TimerFrequency > 0)
-                {
-                    lfCurrent = static_cast<f32>(
-                        static_cast<double>(lrInstance.mu64Value) /
-                        static_cast<double>(gi64TimerFrequency)) * lfFrameScale;
-                }
-
-                if (lrInstance.mbScaled)
-                {
-                    lrInstance.miNumCalls /= liIterations;
-                    lfCurrent /= static_cast<f32>(liIterations);
-                }
-
-                lrInstance.mfCurrentValue = lfCurrent;
-                lrInstance.mfAverageAccumulator += lfCurrent;
-                if (!mbIgnoreZeroCallsInAverage || lfCurrent > 0.0f)
-                    ++lrInstance.miFrameCounter;
-
-                if (lrInstance.miFrameCounter > 0)
-                {
-                    lrInstance.mfAverageValue = lrInstance.mfAverageAccumulator /
-                        static_cast<f32>(lrInstance.miFrameCounter);
-                }
-
-                if (lrInstance.mbMinimum)
-                {
-                    if (lfCurrent < lrInstance.mfMinMaxValue)
-                        lrInstance.mfMinMaxValue = lfCurrent;
-                }
-                else if (lfCurrent > lrInstance.mfMinMaxValue)
-                {
-                    lrInstance.mfMinMaxValue = lfCurrent;
-                }
-            }
-        }
-
-        s32 AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbScaled)
-        {
-            if (!gpMonitorsArray || giMonitorCount >= giMaxMonitorCount)
-                return -1;
-
-            const s32 liHandle = giMonitorCount.load(std::memory_order_relaxed);
-            PerfMonCpuInstance& lrInstance = gpMonitorsArray[liHandle];
-
-            s32 liChar = 0;
-            if (lpcName)
-                for (; liChar < KI_PERFMONCPU_MAXSTRINGLENGTH - 1 && lpcName[liChar]; ++liChar)
-                    lrInstance.macName[liChar] = lpcName[liChar];
-            lrInstance.macName[liChar] = '\0';
-
-            lrInstance.mePage          = lePage;
-            lrInstance.mbMinimum       = lbMinimum;
-            lrInstance.mfCpuBudget     = lfCpuBudget;
-            lrInstance.mbScaled        = lbScaled;
-            lrInstance.mbLibPerfTagged = false;
-            lrInstance.mbActive        = false;
-            lrInstance.miOrigLibPerfTraceId = -1;
-            lrInstance.miLibPerfTraceId = -1;
-            giMonitorCount.store(liHandle + 1, std::memory_order_release);
-            return liHandle;
-        }
-
-        void StartMonitor(s32 liMonitorHandle)
-        {
-            if (!IsValidHandle(liMonitorHandle))
-                return;
-
-            PerfMonCpuInstance& lrInstance = gpMonitorsArray[liMonitorHandle];
-            CGS_ASSERT(!lrInstance.mbActive, "Monitor already started");
-            lrInstance.mbActive = true;
-            lrInstance.mu64StartValue = GetTimerTicks();
-            ++lrInstance.miNumCalls;
-        }
-
-        void StopMonitor(s32 liMonitorHandle)
-        {
-            if (!IsValidHandle(liMonitorHandle))
-                return;
-
-            PerfMonCpuInstance& lrInstance = gpMonitorsArray[liMonitorHandle];
-            CGS_ASSERT(lrInstance.mbActive, "mpMonitorsArray[liMonitorID].mbActive == true");
-            const u64 lu64Elapsed = GetTimerTicks() - lrInstance.mu64StartValue;
-            lrInstance.mbActive = false;
-            lrInstance.mu64Value += lu64Elapsed;
-        }
-
-        void SetNumIterationsTaken(s32 liNumIterations)
-        {
-            giNumIterations = liNumIterations;
-        }
-
-        s32 GetMonitorCount()    { return giMonitorCount; }
-        s32 GetMaxMonitorCount() { return giMaxMonitorCount; }
-
-        f32 GetMonitorTime(s32 liMonitorHandle)
-        {
-            return IsValidHandle(liMonitorHandle) ? gpMonitorsArray[liMonitorHandle].mfCurrentValue : 0.0f;
-        }
-
-        void GetMonitorData(s32 liMonitorHandle, PerfMonCpuMonitorData* lpData)
-        {
-            if (!lpData)
-                return;
-
-            if (!IsValidHandle(liMonitorHandle))
-            {
-                lpData->mpcName             = "";
-                lpData->mfCurrentValue      = 0.0f;
-                lpData->mfAverageValue      = 0.0f;
-                lpData->mfMinMaxValue       = 0.0f;
-                lpData->mfCpuBudget         = 0.0f;
-                lpData->miNumCalls          = 0;
-                lpData->miMaxCalls          = 0;
-                lpData->mbTraced            = false;
-                lpData->mfCurrentTraceValue = 0.0f;
-                lpData->mfAverageTraceValue = 0.0f;
-                lpData->mfMinMaxTraceValue  = 0.0f;
-                return;
-            }
-
-            PerfMonCpuInstance& lrInstance = gpMonitorsArray[liMonitorHandle];
-            lpData->mpcName             = lrInstance.macName;
-            lpData->mfCurrentValue      = lrInstance.mfCurrentValue;
-            lpData->mfAverageValue      = lrInstance.mfAverageValue;
-            lpData->mfMinMaxValue       = lrInstance.mfMinMaxValue;
-            lpData->mfCpuBudget         = lrInstance.mfCpuBudget;
-            lpData->miMaxCalls          = lrInstance.miMaxCalls;
-            lpData->mbTraced            = lrInstance.mbLibPerfTagged;
-            lpData->mfCurrentTraceValue = 0.0f;
-            lpData->mfAverageTraceValue = 0.0f;
-            lpData->mfMinMaxTraceValue  = 0.0f;
-        }
-
-        bool IsMonitorOverBudget(s32 liMonitorHandle)
-        {
-            if (!IsValidHandle(liMonitorHandle))
-                return false;
-            PerfMonCpuInstance& lrInstance = gpMonitorsArray[liMonitorHandle];
-            return lrInstance.mfCpuBudget > 0.0f && lrInstance.mfCurrentValue > lrInstance.mfCpuBudget;
-        }
-
-        PerfMonCpuPage GetMonitorPage(s32 liMonitorHandle)
-        {
-            return IsValidHandle(liMonitorHandle) ? gpMonitorsArray[liMonitorHandle].mePage : E_PMP_GENERAL;
-        }
-
-        namespace
-        {
-            // PIX (Performance Investigator for Xbox) named-counter sink. The X360 build linked the
-            // console PIX SDK (PIXAddNamedCounter pushed a labelled scalar into the PIX timeline);
-            // there is no PIX on PC, so this is a no-op shim that preserves the call shape. FLAG:
-            // the X360 passed a printf-style label format whose rodata string was not recovered;
-            // KAC_PIX_COUNTER_FORMAT below is a documented placeholder, not an X360 fact.
-            const char* KAC_PIX_COUNTER_FORMAT = "%s"; // FLAG: placeholder (unrecovered rodata)
-
-            void PIXAddNamedCounter(f32 /*lfValue*/, const char* /*lpcFormat*/, const char* /*lpcName*/)
-            {
-                // No PIX profiler on the PC target: intentionally empty.
-            }
-        }
-
-        // X360 0x828172E8. Walk the live registry and emit one PIX named counter per monitor.
-        void AddPIXCounters()
-        {
-            const s32 liCount = giMonitorCount;
-            if (!gpMonitorsArray || liCount <= 0)
-                return;
-
-            for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
-            {
-                PerfMonCpuInstance& lrInstance = gpMonitorsArray[liIndex];
-                // X360 emits a counter for EVERY monitor up to giMonitorCount. The asm's
-                // `addic. r4,r11,0x1C; beq` only computes &macName (entry+0x1C) and sets the
-                // condition on that address -- never zero for a real slot, so the branch is
-                // never taken (no active/sentinel skip). Emit unconditionally to match.
-                PIXAddNamedCounter(lrInstance.mfCurrentValue, KAC_PIX_COUNTER_FORMAT, lrInstance.macName);
-            }
-        }
+    // ARTIST828172E8 uses the real SDK named-counter API with the monitor name as its format.
+    void PerfMonCpu::AddPIXCounters()
+    {
+        for (s32 liIndex = 0; liIndex < miMonitorCount; ++liIndex)
+            PIXAddNamedCounter(mpMonitorsArray[liIndex].mfCurrentValue, mpMonitorsArray[liIndex].macName);
     }
 }

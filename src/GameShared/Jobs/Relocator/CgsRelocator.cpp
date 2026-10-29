@@ -16,14 +16,9 @@ void RelocatorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs:
 
 namespace CgsMemory
 {
-    // The three CPU monitor handles this engine times itself with. The resource module's
-    // perfmon registration block seeds them ("Relocator Exec" / "Relocator GPU" /
-    // "Relocator Update"); until it does they hold the unregistered sentinel and
-    // Start/StopMonitor ignore them. -1 is the console's initialiser, NOT zero - zero is a
-    // valid monitor handle.
-    static s32 giRelocatorExecMonitor   = -1;
-    static s32 giRelocatorGpuMonitor    = -1;
-    static s32 giRelocatorUpdateMonitor = -1;
+    s32 Relocator::_miExecutePerfMon = -1;
+    s32 Relocator::_miGPUCopyPerfMon = -1;
+    s32 Relocator::_miUpdatePerfMon = -1;
 
     // Reset both running latches.
     Relocator* Relocator::Construct()
@@ -39,8 +34,8 @@ namespace CgsMemory
     {
         CGS_ASSERT(!mbRunningExternally && !mbRunning, "Already running\n");
 
-        CgsDev::PerfMonCpu::StartMonitor(giRelocatorExecMonitor);
-        CgsDev::PerfMonCpu::StartMonitor(giRelocatorGpuMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(_miExecutePerfMon);
+        CgsDev::PerfMonCpu::StartMonitor(_miGPUCopyPerfMon);
 
         // The snapshot: the job reads this block, not the caller's params.
         mJobData.mpOps              = lpParams->mpOps;
@@ -51,7 +46,7 @@ namespace CgsMemory
 
         const s32 liNumOps = lpParams->miNumOps;
 
-        CgsDev::PerfMonCpu::StopMonitor(giRelocatorGpuMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(_miGPUCopyPerfMon);
 
         if (liNumOps > 0)
         {
@@ -69,13 +64,13 @@ namespace CgsMemory
             CgsSystem::JobManager()->AddJobs(&mJob, 1);
         }
 
-        CgsDev::PerfMonCpu::StopMonitor(giRelocatorExecMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(_miExecutePerfMon);
     }
 
     // Poll the copy job and report whether the engine has gone idle.
     bool Relocator::Update(bool lbClearExternalLatch, bool lbBlock)
     {
-        CgsDev::PerfMonCpu::StartMonitor(giRelocatorUpdateMonitor);
+        CgsDev::PerfMonCpu::StartMonitor(_miUpdatePerfMon);
 
         if (lbClearExternalLatch)
         {
@@ -96,7 +91,7 @@ namespace CgsMemory
             // Otherwise the job is still going and the latch stays set.
         }
 
-        CgsDev::PerfMonCpu::StopMonitor(giRelocatorUpdateMonitor);
+        CgsDev::PerfMonCpu::StopMonitor(_miUpdatePerfMon);
 
         return !mbRunningExternally && !mbRunning;
     }

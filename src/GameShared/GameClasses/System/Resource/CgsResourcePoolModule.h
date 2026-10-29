@@ -51,6 +51,12 @@ namespace CgsResource
         friend class DebugPoolTypeList; //ARTIST828E4334..4388 reads the registered type names
 
     public:
+    // Shared ARTIST profiling handles; registered by ResourceModule::Construct.
+    static s32 _miAllocateListTraceId;
+    static s32 _miFixupListTraceId;
+    static s32 _miAllocateStateTraceId;
+    static s32 _miIntellifragStateTraceId;
+
         static const s32 KI_MAX_POOLS = 128;
         static const s32 KI_MAX_TYPES = 512; // DecFIGS KI_MAX_RESOURCE_TYPES; ARTIST stages+6700.
         // Defrag-path capacities (DWARF CgsPoolModule.h:61-64) -- the IntelliFrag/EmergencyFrag passes

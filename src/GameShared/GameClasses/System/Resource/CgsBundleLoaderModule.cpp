@@ -8,6 +8,14 @@
 // ARTIST streaming stages. Native event sizes and pointers replace the console
 // record strides; resource payload bytes retain the converted native bundle ABI.
 namespace CgsResource {
+    s32 BundleLoaderModule::_miUpdatePerfMon = -1;
+    s32 BundleLoaderModule::_miStreamUpdate = -1;
+    s32 BundleLoaderModule::_miStreamEntryCopy = -1;
+    s32 BundleLoaderModule::_miStreamDataCopy = -1;
+    s32 BundleLoaderModule::_miTraceStreamUpdate_StreamHeader = -1;
+    s32 BundleLoaderModule::_miTraceStreamUpdate_StreamEntries = -1;
+    s32 BundleLoaderModule::_miTraceStreamUpdate_StreamData = -1;
+
 
 void BundleLoaderModule::ProcessBundleLoadRequests(
     const BundleLoaderIO::InputBuffer_Update* lpInput, BundleLoaderIO::OutputBuffer*)

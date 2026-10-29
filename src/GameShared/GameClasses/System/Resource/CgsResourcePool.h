@@ -76,6 +76,39 @@ namespace CgsResource
         friend class DebugPoolTypeList; //ARTIST828EEB28..48 reads the named heap capacities
 
     public:
+    // Shared ARTIST profiling handles; registered by ResourceModule::Construct.
+    static s32 _miPoolModuleStatePerfMon;
+    static s32 _miPoolModuleIdle;
+    static s32 _miPoolModuleAllocating;
+    static s32 _miPoolModuleDeallocating;
+    static s32 _miPoolModuleLiveupdate;
+    static s32 _miPoolModuleIntellifrag;
+    static s32 _miPoolModuleEmergencyFrag;
+    static s32 _miPoolUpdatePerfMon;
+    static s32 _miPoolDeleteHashEntryPerfMon;
+    static s32 _miPoolDeleteMemoryPerfMon;
+    static s32 _miPoolDeleteResourcePerfMon;
+    static s32 _miPoolAllocateResourceListPerfMon;
+    static s32 _miPoolFixupPerfMon;
+    static s32 _miPoolFindByIndexPerfMon;
+    static s32 _miPoolFixupResourcePerfMon;
+    static s32 _miPoolFindTypePerfMon;
+    static s32 _miPoolDefragPerfMon;
+    static s32 _miPoolDefragWFInitialDeathsPerfMon;
+    static s32 _miPoolDefragMakeTempPerfMon;
+    static s32 _miPoolDefragMoveToTempPerfMon;
+    static s32 _miPoolDefragResolveTempPerfMon;
+    static s32 _miPoolDefragWFSourceDeathsPerfMon;
+    static s32 _miPoolDefragMakeDestPerfMon;
+    static s32 _miPoolDefragMoveToDestPerfMon;
+    static s32 _miPoolDefragMoveDestRebasePerfMon;
+    static s32 _miPoolDefragResolveDestPerfMon;
+    static s32 _miPoolDefragWFTempDeathsPerfMon;
+    static s32 _miPoolDefragWFDonePerfMon;
+    static s32 _miPoolAddTempTrace;
+    static s32 _miResolveAllTrace;
+    static s32 _miFixupTrace;
+
         // :179
         enum EPrepareStage { E_PREPARESTAGE_START = 0, E_PREPARESTAGE_DONE = 1 };
         // :186

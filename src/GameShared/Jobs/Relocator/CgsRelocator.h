@@ -54,6 +54,11 @@ namespace CgsMemory
     class Relocator
     {
     public:
+    // Shared ARTIST profiling handles; registered by ResourceModule::Construct.
+    static s32 _miExecutePerfMon;
+    static s32 _miGPUCopyPerfMon;
+    static s32 _miUpdatePerfMon;
+
         // The implicit constructor forwards null to the contained Job in both
         // ARTIST callers: ReplayModule 827E041C..042C and PoolModule
         // 827E08AC..08BC. Execute supplies "Relocator" when the job is submitted.

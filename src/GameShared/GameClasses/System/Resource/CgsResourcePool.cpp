@@ -32,6 +32,38 @@ namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lp
 
 namespace CgsResource
 {
+    s32 Pool::_miPoolModuleStatePerfMon = -1;
+    s32 Pool::_miPoolModuleIdle = -1;
+    s32 Pool::_miPoolModuleAllocating = -1;
+    s32 Pool::_miPoolModuleDeallocating = -1;
+    s32 Pool::_miPoolModuleLiveupdate = -1;
+    s32 Pool::_miPoolModuleIntellifrag = -1;
+    s32 Pool::_miPoolModuleEmergencyFrag = -1;
+    s32 Pool::_miPoolUpdatePerfMon = -1;
+    s32 Pool::_miPoolDeleteHashEntryPerfMon = -1;
+    s32 Pool::_miPoolDeleteMemoryPerfMon = -1;
+    s32 Pool::_miPoolDeleteResourcePerfMon = -1;
+    s32 Pool::_miPoolAllocateResourceListPerfMon = -1;
+    s32 Pool::_miPoolFixupPerfMon = -1;
+    s32 Pool::_miPoolFindByIndexPerfMon = -1;
+    s32 Pool::_miPoolFixupResourcePerfMon = -1;
+    s32 Pool::_miPoolFindTypePerfMon = -1;
+    s32 Pool::_miPoolDefragPerfMon = -1;
+    s32 Pool::_miPoolDefragWFInitialDeathsPerfMon = -1;
+    s32 Pool::_miPoolDefragMakeTempPerfMon = -1;
+    s32 Pool::_miPoolDefragMoveToTempPerfMon = -1;
+    s32 Pool::_miPoolDefragResolveTempPerfMon = -1;
+    s32 Pool::_miPoolDefragWFSourceDeathsPerfMon = -1;
+    s32 Pool::_miPoolDefragMakeDestPerfMon = -1;
+    s32 Pool::_miPoolDefragMoveToDestPerfMon = -1;
+    s32 Pool::_miPoolDefragMoveDestRebasePerfMon = -1;
+    s32 Pool::_miPoolDefragResolveDestPerfMon = -1;
+    s32 Pool::_miPoolDefragWFTempDeathsPerfMon = -1;
+    s32 Pool::_miPoolDefragWFDonePerfMon = -1;
+    s32 Pool::_miPoolAddTempTrace = -1;
+    s32 Pool::_miResolveAllTrace = -1;
+    s32 Pool::_miFixupTrace = -1;
+
     namespace
     {
         bool sabLoggedPoolFull[64] = { false };
@@ -700,7 +732,7 @@ namespace CgsResource
         miDefragFrame          = -1; // ARTIST 82902204: no relocation in progress
         mpCurrentScratchPool   = 0; // ARTIST 8290220C
         meDefragStage          = DEFRAGSTAGE_IDLE;   // (defrag-state init; the full machinery is deferred.
-                                                     //  ⚠ when it lands: a defrag MOVE relocates a resource
+                                                     //  âš  when it lands: a defrag MOVE relocates a resource
                                                      //  without FreeMemoryForResource, so it must also notify
                                                      //  renderengine::WorldGeometry_OnResourceMemoryFreed for
                                                      //  the OLD range -- see WorldGeometry.h.)
