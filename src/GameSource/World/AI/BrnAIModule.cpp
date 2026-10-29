@@ -216,6 +216,8 @@ void AIModule::Destruct()
     CgsModule::ModuleSingleBuffered::Destruct();
     mResourceReceiverQueue.Clear();
     mRouteMapModule.Destruct();
+    mAIDebugComponent.Destruct();
+    mContactSpyInterface.Construct();
 }
 
 // =================================================================================================
