@@ -2,20 +2,16 @@
 // (EARenderWare rwcore, rw/core/stdc/stdc.cpp). Bodies reconstructed from the
 // Burnout X360 image; see rw/core/stdc/stdc.h for the per-entry-point contracts.
 //
-// SCOPE NOTE: the integer/hex formatters (ConvertIToA / ConvertXToA)
-// are DECLARATION-ONLY in the header. Their console bodies dispatch into private rwcore
-// recursive digit-emit helpers and float/field-padding routines that are not part
-// of this class' function set and have not been reconstructed; reconstructing the
-// bodies here would require fabricating those callees, so they are intentionally
-// left undefined (the per-TU `cl /c` gate is compile-only and does not link).
-// This file homes the fourteen self-contained mem*/string* primitives, each
-// matched against its disassembly, plus Vsprintf / Vsnprintf / Snprintf / StringCopy
-// as the CRT wrappers their own header contracts describe -- see the FLAGs on those
-// bodies.
+// ConvertAToI @0x82BC7650 is recovered below from the ARTIST decimal scan. The integer/hex
+// formatters (ConvertIToA / ConvertXToA) remain declaration-only: their console bodies dispatch
+// into private recursive digit-emit helpers and float/field-padding routines that are not in
+// this function set. This TU also homes the self-contained mem*/string* primitives and the
+// Vsprintf / Vsnprintf / Snprintf / StringCopy CRT wrappers described by their own contracts.
 
 #include "rw/core/stdc/stdc.h"
 
 #include <cstdio>    // ::vsprintf (the Vsprintf wrapper below)
+#include <cstring>   // std::memcpy for the 32-bit return bit pattern
 
 namespace rw
 {
@@ -429,6 +425,38 @@ s32 Snprintf(char* lpcDst, s32 liSize, const char* lpcFormat, ...)
     const s32 liWritten = Vsnprintf(lpcDst, liSize, lpcFormat, lvaArgs);
     va_end(lvaArgs);
     return liWritten;
+}
+
+// ConvertAToI @0x82BC7650. The console skips any leading bytes until the first minus or
+// decimal digit, consumes decimal digits into a wrapping 32-bit accumulator, applies the
+// optional minus sign, then sign-extends that 32-bit result. Preserve that scan (including
+// its permissive non-digit prefix skip) and the 32-bit wrap instead of delegating to host atoi.
+s32 ConvertAToI(const char* lpcString)
+{
+    const u8* lpByte = reinterpret_cast<const u8*>(lpcString);
+    while (*lpByte != 0 && *lpByte != static_cast<u8>('-') &&
+           (*lpByte < static_cast<u8>('0') || *lpByte > static_cast<u8>('9')))
+    {
+        ++lpByte;
+    }
+
+    const bool lbNegative = (*lpByte == static_cast<u8>('-'));
+    if (lbNegative)
+        ++lpByte;
+
+    u32 luValue = 0;
+    while (*lpByte >= static_cast<u8>('0') && *lpByte <= static_cast<u8>('9'))
+    {
+        luValue = luValue * 10u + static_cast<u32>(*lpByte - static_cast<u8>('0'));
+        ++lpByte;
+    }
+
+    if (lbNegative)
+        luValue = 0u - luValue;
+
+    s32 liValue;
+    std::memcpy(&liValue, &luValue, sizeof(liValue));
+    return liValue;
 }
 
 // ----------------------------------------------------------------------------
