@@ -142,9 +142,9 @@ void RootPreUpdateOutputBuffer::SetPreUpdateOutput(const PreUpdateOutput& lPreUp
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
 
     // (1) leading GuiOut queue region: PreUpdateOutput +0x000 .. +0x110.
-    std::memcpy(mPreUpdateOutput.maGuiOutEventQueueStorage,
-                lPreUpdateOutput.maGuiOutEventQueueStorage,
-                sizeof(mPreUpdateOutput.maGuiOutEventQueueStorage));
+    std::memcpy(&mPreUpdateOutput.mGuiOutEventQueue,
+                &lPreUpdateOutput.mGuiOutEventQueue,
+                sizeof(mPreUpdateOutput.mGuiOutEventQueue));
 
     // (2) audio-car-loaded queue: zero the destination count (X360 `stw 0, 8(queue)`),
     //     then merge all live source events.

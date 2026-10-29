@@ -51,6 +51,9 @@ namespace BrnReplays
     class SoundSerialiser : public BaseSerialiser
     {
     public:
+        // ARTIST8264C9F8, called on SoundLogicModule's native13600 member.
+        void Construct();
+
         // The count guards test `> N` (unsigned), i.e. valid range [0, N]. The rodata assert
         // strings name SoundSerialiserStaticLayout::KI_MAX_COLLISIONS/KI_MAX_SCRAPES and
         // SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES; the comparison values are 8 / 4 / 6.

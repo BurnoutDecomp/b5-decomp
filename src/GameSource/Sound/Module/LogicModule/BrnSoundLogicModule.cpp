@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"   // EaTraxHelper::SetGlobalDataKey
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
@@ -126,24 +127,18 @@ namespace
 
 }
 
+// ARTIST827E3DA8: only the real bases and members construct themselves.
+SoundLogicModule::SoundLogicModule()
+{
+}
+
 void SoundLogicModule::ResourcesAreReady()
 {
     const bool lbResolved = mBurnoutGlobalData.ResolveLoadedCollection();
     CGS_ASSERT(lbResolved, "mBurnoutGlobalData.IsValid()");
 
-    // ⭐ PUBLISH THE EA-TRAX GLOBAL-DATA KEY. Every BrnSound::Module::Io::EaTraxHelper
-    // accessor opens with `CGS_ASSERT(mGlobalDataKey != 0)` -- the console's own gate on
-    // the .data word at 0x82FFB820 -- and the X360 writes that word from a sound logic
-    // module body (`std r3, -0x47E0(r11)` @0x826C9788, inside the unnamed function at
-    // 0x826C9330), i.e. from exactly here. Nothing in this tree wrote it, so the EA Trax
-    // menu fired that assert once per song-list read the moment CN_TRAX opened -- 16 in
-    // the first frame the tab drew. The value is the BurnoutGlobalData collection key,
-    // the same one ResolveLoadedCollection just looked the collection up with, and it is
-    // published only when that lookup SUCCEEDED so the gate keeps meaning "the global
-    // data is bound".
-    BrnSound::Module::Io::EaTraxHelper lEaTraxHelper;
-    lEaTraxHelper.SetGlobalDataKey(
-        lbResolved ? Attrib::Gen::burnoutglobaldata::KU_COLLECTION_KEY : 0ull);
+    // Construct establishes the global collection key before resource loading.
+
 }
 
 // X360 0x826AFF88. Search the per-frame trigger-action table for the entry whose
@@ -236,74 +231,35 @@ u32 SoundLogicModule::GetUniqueId()
     return luCandidate;
 }
 
-// Bring-up. The X360 ctor (0x827E3DA8) default-constructs the embedded ResourceRegistrar
-// (a1+21016); its queues/pools are then initialised by the bring-up Construct (0x826B0470).
-// (phase B5): the ENGINE base Construct runs FIRST -- ModuleSingleBuffered + the instance
-// counter + the message queue seeds -- then the Brn half: clear the per-frame trigger
-// table + Construct the embedded registrar so the broker is live. The 3 Voices (X360
-// +20976/+20988/+21000) are still grown on top.
+// Native Construct826C9330: initialize the engine, broker and replay channel,
+// then the actual module words, random stream, queues and global collection key.
 void SoundLogicModule::Construct()
 {
+    // ARTIST826C9330, reached through SoundLogicModule's real vtable slot zero.
     CgsSound::Logic::Module::Construct();
-
-    mRandomGenerator.Construct();
-
-    mpBrnLogicInputBuffer  = 0;
-    mpBrnLogicOutputBuffer = 0;
-
-    // The module's own unique-id cursor (X360 this+0x5214). The console's ctor
-    // @0x827E3DA8 does not write this word -- it relies on the module block being
-    // zero at allocation -- and its generator @0x826838C8 skips 0/1/2, so the first
-    // id it hands out is 3. Seeding 0 here reproduces that exactly; on the host the
-    // storage is not guaranteed zero, so the seed is explicit.
-    muBrnUniqueId = 0;
-
-    // The per-frame trigger-action table starts empty (so GetSoundTriggerAction's
-    // "used before Construct/Clear" assert is satisfied).
-    maTriggerActions.Clear();
-
-    // The freed-stream-buffer id list starts empty too (console `stw 0` into its count word
-    // +0x51EC; the constructor left the -1 sentinel there).
-    mFreedStreamBufferIds.Clear();
-
-    // The dispatch state block (X360 this+0x13570) starts zeroed.
-    std::memset(&mDispatchState, 0, sizeof(mDispatchState));
-
-    // FLAG host seed: no console constructor writes these three; the console relies on the
-    // module block being zero at allocation, as it does for the unique-id cursor above.
-    mbSeenAnyRivals  = false;
-    mfHoldTimer      = 0.0f;
-    mbHoldingVolumes = false;
-
-    // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
-
-    // The pre-update output block's three queues (phase C1; the same trio the
-    // RootPreUpdateOutputBuffer carve constructs).
-    reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-        mPreUpdateOutput.maGuiOutEventQueueStorage)->Construct();
+    mSoundSerialiser.Construct();
+    mpBrnLogicInputBuffer = 0;
+    mpBrnLogicOutputBuffer = 0;
+    meBrnPrepareStage = E_PREPSTAGE_PERFMON;
+    meBrnReleaseStage = E_BRN_RELEASE_START;
+    mpBrnAllocator = 0;
+    maTriggerActions.Clear();
+    muBrnUniqueId = 3;
+    mRandomGenerator.Construct();
+    mRandomGenerator.SetSeed(static_cast<u32>(CgsSystem::GetSystemTimerBaseTime64()));
+    mPreUpdateOutput.mGuiOutEventQueue.Construct();
     mPreUpdateOutput.mAudioCarDataLoadedQueue.Construct();
     mPreUpdateOutput.mAudioEffectsMessageQueue.Construct();
 
-    // The 9 state-manager slots start empty; CreateStateManagers (stage 4) fills them via
-    // StateManager::CreateStateMan (null where no leaf is registered). Nulling here keeps
-    // PrepareStateManagersOnBoot's `*v5 != 0` guard honest even if a stage runs early.
-    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
-        mapStateManagers[liIndex] = 0;
-
-    // [grow-in] X360 ctor also constructs the 3 Voices (Submix/Master/GlobalReverb); their
-    //   Logic::Voice slice reconciliation is deferred (see Prepare stage 2).
-
-    meBrnPrepareStage = E_PREPSTAGE_PERFMON;
-    mbConstructed     = true;
-
-    // [marked deviation -- PC DRIVER LATCH] Seeds the one-shot
-    // PrepareStateManagersOnEnteringGameplay(4) poll Update() runs; see that function's
-    // banner for the console chain it stands in for.
-    mbEnteringGameplayPrepared = false;
-
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-        *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Construct (registrar live)\n";
+    Io::EaTraxHelper lEaTraxHelper;
+    lEaTraxHelper.SetGlobalDataKey(Attrib::StringToKey("292859"));
+    miCommandStreamUsage = 0;
+    mFreedStreamBufferIds.Clear();
+    mbSeenAnyRivals = false;
+    mbHoldingVolumes = false;
+    mfHoldTimer = 0.0f;
+    mbIsNewModule = true;
 }
 
 // X360 0x82703C18 (vtable+0x58). The REAL resumable stage machine (phase B5), console
@@ -425,14 +381,6 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
     // Console: every exit detaches the per-call buffers (vtbl+0x54).
     DetachBuffers();
 
-    if (lbPrepared && !mbPrepared)
-    {
-        mbPrepared = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Prepare: stage machine "
-                                          "complete (engine base + environment live; voices "
-                                          "grow-in) -> prepared\n";
-    }
     return lbPrepared;
 }
 
@@ -609,9 +557,9 @@ void SoundLogicModule::ProcessGuiEvents(
                   // (X360 @0x826EDCCC: `ld` / `ori 2` or `clrrdi`-style clear / `std`).
             CGS_ASSERT(lpEvent != 0, "lpLoadingScreenEvent");
             if (EventU8At(lpEvent, 0))
-                mDispatchState.mu64Flags |= 2u;
+                mFrameInformation.maPaused.SetBit(1);
             else
-                mDispatchState.mu64Flags &= ~static_cast<u64>(2u);
+                mFrameInformation.maPaused.UnSetBit(1);
             // [DIAG] NOT IN THE X360 BINARY -- the loading-screen witness the [music] lines
             // were missing: this bit is half of MusicEffect::UpdateParams' stream-pause gate.
             break;
@@ -840,13 +788,13 @@ void SoundLogicModule::ProcessGameActionQueue(
         }
 
         case 16:  // The action's flag-0x80 arm: publish its +0x1C field into the module's
-                  // dispatch state block (see maDispatchState's banner).
+                  // convoy fields of the frame snapshot.
             if ((EventU8At(lpEvent, 0) & 0x80u) == 0x80u)
             {
                 const s32 liField = EventS32At(lpEvent, 28);   // X360 *(v9 + 7), dwords
                 if (liField != -1)
-                    mDispatchState.mu8FlagAt1 = 1;
-                mDispatchState.mi32At4 = liField;
+                    mFrameInformation.mbInConvoy = 1;
+                mFrameInformation.miCarInFrontIndex = liField;
             }
             break;
 
@@ -953,12 +901,12 @@ void SoundLogicModule::ProcessGameActionQueue(
 
         case 86:
         case 88:
-            mDispatchState.mu64Flags |= 1u;                       // @0x826ECEC8 `ori 1`
+            mFrameInformation.maPaused.SetBit(0);                       // @0x826ECEC8 `ori 1`
             break;
 
         case 87:
         case 89:
-            mDispatchState.mu64Flags &= ~static_cast<u64>(1u);    // @0x826ECEE0 `clrrdi 1`
+            mFrameInformation.maPaused.UnSetBit(0);    // @0x826ECEE0 `clrrdi 1`
             break;
 
         case 97:  // PlayerCarRepaired -> HUD control.
@@ -1282,11 +1230,10 @@ void SoundLogicModule::UpdateFrameInformation(
     mFrameInformation.mIsHardStop.Update(lpVehicles->IsPlayerCarCrashing());
     mFrameInformation.mbInReplay = (aeUpdateSet & 0x0100u) != 0;
 
-    // X360 @0x826B01B4..0x826B01C4: `clrlwi r9, updateSet, 31` -> +0x13578 (the sim-paused
-    // bit, the other half of MusicEffect::UpdateParams' stream-pause gate) and `stb 0` ->
-    // +0x13579 (game action 16's one-shot flag, cleared every tick).
-    mDispatchState.mu8SimPausedBit = static_cast<u8>(aeUpdateSet & 1u);
-    mDispatchState.mu8FlagAt1      = 0;
+    // ARTIST826B01D8 clears the convoy flag; game action16 may set it again.
+    // The replay bit above comes from the high byte of the native update set.
+
+    mFrameInformation.mbInConvoy      = 0;
 
     if (lpVehicles->IsPlayerCarActive())
     {
@@ -1321,8 +1268,7 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     // @+0x5150.  PreUpdate publishes this block before the next Update, so
     // clearing it here gives each event exactly one frame of lifetime.
     maTriggerActions.Clear();
-    reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-        mPreUpdateOutput.maGuiOutEventQueueStorage)->Clear();
+    (&mPreUpdateOutput.mGuiOutEventQueue)->Clear();
     mPreUpdateOutput.mAudioCarDataLoadedQueue.Clear();
     mPreUpdateOutput.mAudioEffectsMessageQueue.Clear();
 
@@ -1375,23 +1321,6 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     AttachBuffers(apInputBuffer, apOutputBuffer);
     mpBrnLogicOutputBuffer->LockForWrite();
     mpBrnLogicInputBuffer->LockForWrite();
-
-    // [marked deviation -- DRIVER ONLY] Poll the console's own
-    // PrepareStateManagersOnEnteringGameplay(4) until it reports ready. Boot's
-    // PrepareStateManagersOnBoot(4) SKIPS slot 2 (AIVehicleStateManager) by design, and the
-    // console's LoadSoundModuleAgain -> RootSoundModule::PrepareOnEnteringGameplay ->
-    // SoundLogicModule::PrepareOnEnteringGameplay chain that prepares it has no body in this
-    // tree yet. 0x82703FA8..0x82704000 wraps that same call in LockForWrite / [on retry]
-    // ResourceBridging / UnlockForWrite -- which is exactly the bracket this drain already
-    // holds, so the poll sits inside it and the registrar Update below services the AI engine
-    // bundle requests the prepare issues. One-shot: once it answers true it is never called
-    // again, matching the console's stage machine parking at DONE.
-    // See PrepareStateManagersOnEnteringGameplay's banner for the full chain and the
-    // measurement. RETIRE THIS when that chain is reconstructed.
-    if (!mbEnteringGameplayPrepared)
-    {
-        mbEnteringGameplayPrepared = PrepareStateManagersOnEnteringGameplay(4);
-    }
 
     ResourceBridging();
     mpBrnLogicOutputBuffer->UnlockForWrite();
