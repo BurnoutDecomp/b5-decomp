@@ -65,7 +65,7 @@ namespace Jobs
         // --- Job API (X360-attested subset the engine drives by name) ---------------
         // job.h:42 -- construct a named, empty job. X360 0x82BCB0C0 (inits the entry
         // defaults + both dependency/event bucket lists, then Clear()s and SetName()s).
-        explicit Job(const char* lpcName);
+        explicit Job(const char* lpcName = 0);
         // job.h:43 -- tear the job down: destroy the event/dependency/dependent bucket
         // chains. X360 0x82BCB1A8.
         ~Job();
