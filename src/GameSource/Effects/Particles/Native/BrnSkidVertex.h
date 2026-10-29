@@ -25,6 +25,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "BrnCommonTypes.h"   // Vector3 / Vector4 (rw::math::vpu)
 // renderengine::VertexDescriptor::Parameters is named (by reference) in the declaration
 // of FillVertexDescriptorParameters below, so the full descriptor type must be visible.

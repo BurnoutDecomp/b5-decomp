@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticlePrograms.h"
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.cpp
 //
@@ -30,14 +31,6 @@
 #include <cstring>   // memcpy (the raw shader-constant row copies)
 #include <cstdio>    // [diag] snprintf (the skid-constant resolve line)
 
-// The two converted PC program images (pc/gcm/renderengine/SkidProgramsPC.cpp -- the PC stand-in
-// for the two guest .data blobs; see that file's recipe).
-namespace renderengine
-{
-    extern const u32 guSkidVertexProgramPCSize;
-    extern const u32 guSkidPixelProgramPCSize;
-}
-
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
 // surface BrnIm3d.cpp / BrnSunCorona.cpp / BrnPostFxBloom.cpp declare (defined in
 // ImmediateMode.cpp). Returns the staged row the caller copies the constant into.
@@ -69,9 +62,11 @@ namespace BrnGraphics
     // =========================================================================================
     void Im3dSkidsRenderer::Construct(rw::IResourceAllocator* lpAllocator)
     {
-        // X360: the two guest .data microcode blobs, 456 / 228 bytes; PC: the converted images.
-        const u32   lauVertexProgramSize[1]   = { renderengine::guSkidVertexProgramPCSize };
-        const u32   lauPixelProgramSize[1]    = { renderengine::guSkidPixelProgramPCSize };
+        // The native ARTIST shader packages and byte lengths.
+        const void* const lapVertexProgramBinary[1] = { BrnParticlePrograms::gaSkidVertex };
+        const void* const lapPixelProgramBinary[1] = { BrnParticlePrograms::gaSkidPixel };
+        const u32   lauVertexProgramSize[1]   = { sizeof(BrnParticlePrograms::gaSkidVertex) };
+        const u32   lauPixelProgramSize[1]    = { sizeof(BrnParticlePrograms::gaSkidPixel) };
         CgsGraphics::ImRenderer<SkidVertex>::Construct(
             lpAllocator,
             lapVertexProgramBinary, lauVertexProgramSize,
@@ -97,7 +92,7 @@ namespace BrnGraphics
             // both in the log and in the picture, which is why it is worth one line.
             // DELETE-WHEN-STABLE.
             char lacMsg[280];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                 "[trailpass] skid constants: wvp{set=%u idx=%u type=%u count=%u} "
                 "start{set=%u idx=%u type=%u count=%u} end{set=%u idx=%u type=%u count=%u} "
                 "vars=%u\n",

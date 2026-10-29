@@ -1,3 +1,5 @@
+#include <xtl.h>
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnSparkRenderer_Render.cpp
 //
@@ -50,16 +52,7 @@
 struct IDirect3DDevice9;
 extern IDirect3DDevice9* gpD3DDevice;
 
-extern "C"
-{
-    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
-                                   const void* lpStreamData, u32 luOffsetInBytes,
-                                   u32 luStride, u32 luFlags);
-    void D3DDevice_DrawVertices(IDirect3DDevice9* lpDevice, u32 luPrimitiveType,
-                                u32 luStartVertex, u32 luVertexCount);
-    void D3DDevice_SetTexture(IDirect3DDevice9* lpDevice, u32 luSampler,
-                              const void* lpTexture, u32 luFlags);
-}
+
 
 // The three shared-library render states Dispatch binds (ImmediateMode.cpp), declared
 // `extern void*` exactly as BrnTrailRender.cpp / BrnSkyDomeManager.cpp declare theirs.
@@ -599,7 +592,7 @@ void SparkArray::RenderBank(NativeParticleVertex::VertexIterator& lrIterator,
                 {
                     sbLoggedGeometry = true;
                     char lacMsg[256];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
+                    _snprintf(lacMsg, sizeof(lacMsg),
                         "[spark] ribbon0 edges=%u halfWidth=%.5f colour=%08X "
                         "A0{%.3f %.3f %.3f} B0{%.3f %.3f %.3f}\n",
                         luEdgeCount, static_cast<double>(lfHalfWidth), luColourWord,
@@ -782,8 +775,8 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     mpRenderer->SetTransform(&lViewProjectionMatrix);
 
     const u32 luVertexStride = NativeParticleVertex::GetStride();   // packed GPU24, CPU record32
-    D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
-    D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luVertexStride, 1);
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, luVertexStride, 1);
 
     const renderengine::Texture* lpCachedTexture = 0;
     for (s32 lnBatch = 0; lnBatch < lrBatches.GetCount(); ++lnBatch)
@@ -808,7 +801,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
             {
                 suLoggedArrays |= luBit;
                 char lacMsg[160];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                     "[spark] draw array %d: texture=%p verts=%u start=%u\n",
                     static_cast<int>(lrBatch.meArrayId),
                     static_cast<const void*>(lpTexture),
@@ -824,7 +817,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
         }
 
         shadow::Device::FlushVertexProgramState();
-        D3DDevice_DrawVertices(gpD3DDevice, KU_SPARK_PRIMITIVE_TYPE,
+        D3DDevice_DrawVertices(gpD3DDevice, static_cast<D3DPRIMITIVETYPE>(KU_SPARK_PRIMITIVE_TYPE),
                                lrBatch.muStartVertex, lrBatch.muVertexCount);
 
         // [DIAG] NOT IN THE X360 BINARY. The DRAW-side witness -- the [spark] line at the
@@ -869,10 +862,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
         // ladder still reads `drew=0/0 line=0`, so the grinding sparks come AFTER it and the
         // strip needs a budget long enough to reach them (400 frames was measured too short).
         static u32 suFilmThreshold = 0u;
-        if (suFilmThreshold == 0u)
-        {
-            suFilmThreshold = (liValue > 0) ? static_cast<u32>(liValue) : 8000u;
-        }
+
     }
 
     // The EndRendering fold at 0x8228BE24.

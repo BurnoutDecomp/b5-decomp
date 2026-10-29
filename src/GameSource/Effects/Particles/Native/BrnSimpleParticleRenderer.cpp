@@ -1,3 +1,5 @@
+#include <xtl.h>
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.cpp
 //
@@ -31,14 +33,7 @@
 // (BrnSparkRenderer_Render.cpp) and the Lion dispatch declare.
 struct IDirect3DDevice9;
 extern IDirect3DDevice9* gpD3DDevice;
-extern "C"
-{
-    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
-                                   const void* lpStreamData, u32 luOffsetInBytes,
-                                   u32 luStride, u32 luFlags);
-    void D3DDevice_DrawVertices(IDirect3DDevice9* lpDevice, u32 luPrimitiveType,
-                                u32 luStartVertex, u32 luVertexCount);
-}
+
 
 // The shared-library rasteriser and depth-stencil states Dispatch binds (ImmediateMode.cpp).
 extern void* gpSkyDomeRasterizerState;      // X360 dword_83010F3C  mpRasterizerState_CullNone
@@ -210,13 +205,6 @@ namespace Native
         // program pair and the vertex declaration. A null one is a crash, not a missing effect.
         if (mpRenderer == 0)
         {
-            static bool sbLogged = false;
-            if (!sbLogged && SimpleFxDiagArmed())      // [diag] default OFF (BRN_SIMPLEFX_DIAG)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog("[simplefx] Dispatch SKIPPED: mpRenderer is null "
-                                        "(BrnSimpleParticleRenderer::Construct did not run)\n");
-            }
             return;
         }
 
@@ -228,16 +216,7 @@ namespace Native
         (void)lfNearPlane;
         (void)lfFarPlane;
         (void)KF_ZFADE_DISTANCE;
-        if (lbZFade)
-        {
-            static bool sbLogged = false;
-            if (!sbLogged && SimpleFxDiagArmed())      // [diag] default OFF (BRN_SIMPLEFX_DIAG)
-            {
-                sbLogged = true;
-                CgsDev::Log::WriteToLog("[simplefx] Dispatch: z-fade requested; this build has no depth "
-                                        "target to sample -- drawing the SansZFade program\n");
-            }
-        }
+
         const bool lbUseZFade = false;
         mpRenderer->BeginRendering(BrnGraphics::Im3dSmokeRenderer::KI8_PROGRAM_SANS_ZFADE);
 
@@ -246,8 +225,8 @@ namespace Native
         // declares (and NativeParticleVertex::VertexIterator::Write fills), so use its packed
         // GPU stride. The separate BasicColouredTexturedVertex CPU record is32 bytes.
         const u32 luVertexStride = NativeParticleVertex::GetStride();
-        D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
-        D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luVertexStride, 1);
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, luVertexStride, 1);
 
         for (u32 luBatch = luFirstBatch; luBatch < luLastBatch; ++luBatch)
         {
@@ -262,26 +241,10 @@ namespace Native
                 BrnSimpleParticleArray::GetTexture(static_cast<ENativeParticleType>(lrBatch.meParticleType));
             shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
 
-            // [DIAG] NOT IN THE X360 BINARY. The texture witness, once per type, BRN_SIMPLEFX_DIAG=1
-            // only (default OFF): a null texture keeps every count perfect and draws nothing.
-            // DELETE-WHEN-STABLE.
-            {
-                static u32 suLoggedTypes = 0;
-                const u32 luBit = 1u << (lrBatch.meParticleType & 31u);
-                if ((suLoggedTypes & luBit) == 0 && SimpleFxDiagArmed())
-                {
-                    suLoggedTypes |= luBit;
-                    char lacMsg[192];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[simplefx] draw type %u: texture=%p blend=%u verts=%u start=%u zfade=%d\n",
-                        lrBatch.meParticleType, static_cast<const void*>(lpTexture), lrBatch.meBlendMode,
-                        lrBatch.muVertexCount, lrBatch.muStartVertex, lbUseZFade ? 1 : 0);
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
+
 
             shadow::Device::FlushVertexProgramState();
-            D3DDevice_DrawVertices(gpD3DDevice, KU_XENOS_QUADLIST,
+            D3DDevice_DrawVertices(gpD3DDevice, static_cast<D3DPRIMITIVETYPE>(KU_XENOS_QUADLIST),
                                    lrBatch.GetStartVertex(), lrBatch.GetVertexCount());
 
             gauSimpleParticleDrawnBatches  += 1u;                        // [diag]

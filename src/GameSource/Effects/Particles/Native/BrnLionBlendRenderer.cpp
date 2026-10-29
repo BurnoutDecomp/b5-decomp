@@ -634,7 +634,7 @@ void LionBlendRenderer::RenderSprites(EffectsVertexBufferIterator& arIterator,
             {
                 sbSpriteOnce = true;
                 char lacMsg[384];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                     "[lionsprite] mat.wa=(%.2f,%.2f,%.2f,%.2f) conv.wAxis=(%.2f,%.2f,%.2f,%.2f)"
                     " part.mPos=(%.2f,%.2f,%.2f) back.wAxis=(%.2f,%.2f,%.2f,%.2f)"
                     " back.xAxis=(%.3f,%.3f,%.3f) corner0=(%.2f,%.2f,%.2f)\n",

@@ -92,6 +92,7 @@ namespace BrnParticle
                                      f32 lfSpawnTime)
     {
         // The ring draw comes first -- before the assert, before any store.
+        const f32 lfRotationAmount = mRandom.RandomFloat(1.0f, 4.0f);
 
         CGS_ASSERT(mu16SpawnBufferCount < KU16_NUM_DEBRIS_IN_SPAWN_BUFFER,
                    "mDebrisSpawnBufferHeader.mu16DebrisCount < KU_NUM_DEBRIS_IN_SPAWN_BUFFER");
@@ -100,10 +101,18 @@ namespace BrnParticle
             static_cast<DebrisBatchSpawnEvent::DebrisSpawnData*>(mpSparkSpawnBuffer)
             + mu16SpawnBufferCount;
 
-        lpRecord->mvPositionPlusSize               = { lvPosition.x, lvPosition.y, lvPosition.z, lfSize };
-        lpRecord->mvVelocityPlusSpawnTime          = { lvVelocity.x, lvVelocity.y, lvVelocity.z, lfSpawnTime };
-        lpRecord->mvRotationAxisPlusRotationAmount = { lvRotationAxis.x, lvRotationAxis.y,
-                                                       lvRotationAxis.z, lfRotationAmount };
+        lpRecord->mvPositionPlusSize.x = lvPosition.x;
+        lpRecord->mvPositionPlusSize.y = lvPosition.y;
+        lpRecord->mvPositionPlusSize.z = lvPosition.z;
+        lpRecord->mvPositionPlusSize.w = lfSize;
+        lpRecord->mvVelocityPlusSpawnTime.x = lvVelocity.x;
+        lpRecord->mvVelocityPlusSpawnTime.y = lvVelocity.y;
+        lpRecord->mvVelocityPlusSpawnTime.z = lvVelocity.z;
+        lpRecord->mvVelocityPlusSpawnTime.w = lfSpawnTime;
+        lpRecord->mvRotationAxisPlusRotationAmount.x = lvRotationAxis.x;
+        lpRecord->mvRotationAxisPlusRotationAmount.y = lvRotationAxis.y;
+        lpRecord->mvRotationAxisPlusRotationAmount.z = lvRotationAxis.z;
+        lpRecord->mvRotationAxisPlusRotationAmount.w = lfRotationAmount;
         lpRecord->meType                           = leDebrisType;
 
         if (leDebrisType != Native::eDebrisArray_Coloured)
@@ -135,6 +144,7 @@ namespace BrnParticle
 
             BrnEffects::Utils::DebrisColourRandomiser lRandomiser;
             lRandomiser.Prepare(lvLow, lvHigh);
+            lRandomiser.Randomise(lpRecord->mvColour, mRandom);
         }
 
         mu16SpawnBufferCount = static_cast<u16>(mu16SpawnBufferCount + 1);

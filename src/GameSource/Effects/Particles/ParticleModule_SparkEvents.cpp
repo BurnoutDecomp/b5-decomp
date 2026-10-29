@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
 // =================================================================================================
 // GameSource/Effects/Particles/ParticleModule_SparkEvents.cpp
 //
@@ -124,8 +125,7 @@ namespace BrnParticle
         // vnmsubfp: -(a*c - b), rounded ONCE, then NEGATED -- zeros too (a QNaN keeps its sign).
         inline f32 ShowerVnmsub(f32 lfA, f32 lfC, f32 lfB)
         {
-            const f32 lfDifference = std::fma(lfA, lfC, -lfB);
-            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+            return BrnParticleMath::VpuNegativeMultiplySubtract(lfA, lfC, lfB);
         }
 
         // vminfp: a NaN operand propagates (AltiVec: "the result is a QNaN"), the first one first.
@@ -142,7 +142,7 @@ namespace BrnParticle
         {
             f32 lfEstimate = static_cast<f32>(1.0 / static_cast<f64>(lfX));
             for (u32 luStep = 0; luStep < 2u; ++luStep)
-                lfEstimate = std::fma(lfEstimate, ShowerVnmsub(lfEstimate, lfX, 1.0f), lfEstimate);
+                lfEstimate = BrnParticleMath::VpuMultiplyAdd(lfEstimate, ShowerVnmsub(lfEstimate, lfX, 1.0f), lfEstimate);
             return lfEstimate;
         }
 
@@ -159,7 +159,7 @@ namespace BrnParticle
             {
                 const f32 lfEstimateSquared = lfEstimate * lfEstimate;
                 const f32 lfHalf            = lfEstimate * 0.5f;
-                lfEstimate = std::fma(lfHalf, ShowerVnmsub(lfSquared, lfEstimateSquared, 1.0f), lfEstimate);
+                lfEstimate = BrnParticleMath::VpuMultiplyAdd(lfHalf, ShowerVnmsub(lfSquared, lfEstimateSquared, 1.0f), lfEstimate);
             }
             return lfSquared * lfEstimate;
         }
@@ -177,12 +177,12 @@ namespace BrnParticle
         // Phase -0.25 gives sin(angle), phase 0 gives cos(angle).
         inline f32 ShowerSinCosLane(f32 lfAngle, f32 lfPhase)
         {
-            const f32 lfX        = std::fma(lfAngle, KF_SHOWER_ONE_OVER_TWO_PI, lfPhase);
+            const f32 lfX        = BrnParticleMath::VpuMultiplyAdd(lfAngle, KF_SHOWER_ONE_OVER_TWO_PI, lfPhase);
             const f32 lfFraction = lfX - std::floor(lfX);
             const f32 lfT        = ShowerVMin(lfFraction, KF_SHOWER_FOLD_PERIOD - lfFraction) + KF_SHOWER_FOLD_BIAS;
             const f32 lfT2       = lfT * lfT;
-            const f32 lfInner    = std::fma(lfT2, KF_SHOWER_POLY_C5, KF_SHOWER_POLY_C3);
-            const f32 lfPoly     = std::fma(lfT2, lfInner, KF_SHOWER_POLY_C1);
+            const f32 lfInner    = BrnParticleMath::VpuMultiplyAdd(lfT2, KF_SHOWER_POLY_C5, KF_SHOWER_POLY_C3);
+            const f32 lfPoly     = BrnParticleMath::VpuMultiplyAdd(lfT2, lfInner, KF_SHOWER_POLY_C1);
             return lfPoly * lfT;
         }
 
@@ -190,10 +190,10 @@ namespace BrnParticle
         inline Vector3 ShowerMulAdd(const Vector3& lrA, f32 lfScale, const Vector3& lrB)
         {
             Vector3 lv;
-            lv.x = std::fma(lrA.x, lfScale, lrB.x);
-            lv.y = std::fma(lrA.y, lfScale, lrB.y);
-            lv.z = std::fma(lrA.z, lfScale, lrB.z);
-            lv.w = std::fma(lrA.w, lfScale, lrB.w);
+            lv.x = BrnParticleMath::VpuMultiplyAdd(lrA.x, lfScale, lrB.x);
+            lv.y = BrnParticleMath::VpuMultiplyAdd(lrA.y, lfScale, lrB.y);
+            lv.z = BrnParticleMath::VpuMultiplyAdd(lrA.z, lfScale, lrB.z);
+            lv.w = BrnParticleMath::VpuMultiplyAdd(lrA.w, lfScale, lrB.w);
             return lv;
         }
 
@@ -218,7 +218,7 @@ namespace BrnParticle
                 return;
             lrbLogged = true;
             char lacMsg[320];
-            std::snprintf(lacMsg, sizeof(lacMsg), "[particle] NOT RECONSTRUCTED: %s\n", lpcWhat);
+            _snprintf(lacMsg, sizeof(lacMsg), "[particle] NOT RECONSTRUCTED: %s\n", lpcWhat);
             CgsDev::Log::WriteToLog(lacMsg);
         }
     }
@@ -463,6 +463,8 @@ namespace BrnParticle
                     // so re-ordering them changes every spark. The console draws the inheritance
                     // first (inline, before the RandomiseXYZ call it then makes), then the spread,
                     // then -- only for non-body-part types -- the position jitter, then the size.
+                    const Vector3 lvInherited = lVelocityInheritance.RandomInterpolate(mRandom);
+                    const Vector3 lvSpread    = lVelocitySpread.RandomiseXYZ(mRandom);
 
                     Vector3 lvVelocity;
                     lvVelocity.x = lvSpread.x + lvInherited.x;
@@ -473,6 +475,7 @@ namespace BrnParticle
                     Vector3 lvSpawnPosition = lvPoint;
                     if (!lbIsBodyPartContact)
                     {
+                        const Vector3 lvJitter = lPositionJitter.RandomiseXYZ(mRandom);
                         lvSpawnPosition.x += lvJitter.x;
                         lvSpawnPosition.y += lvJitter.y;
                         lvSpawnPosition.z += lvJitter.z;
@@ -487,6 +490,8 @@ namespace BrnParticle
                     const s32 liMonitor = lrMonitors.miSpawnSpark;
 
                     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+                    const f32 lfSize = mRandom.RandomFloat(KF_SPARK_SIZE_MIN, KF_SPARK_SIZE_MAX);
 
                     lrArray.SpawnSpark(lvSpawnPosition,
                                        lvVelocity,
@@ -619,8 +624,8 @@ namespace BrnParticle
 
         for (u32 luRemaining = luNumToSpawn; luRemaining != 0u; --luRemaining)
         {
-   // var_80
-      // var_70
+            const Vector4 lvDirectionDraw = lDirectionRandomiser.RandomiseXYZW(mRandom);   // var_80
+            const Vector4 lvOffsetDraw    = lOffsetRandomiser.RandomiseXYZW(mRandom);      // var_70
 
             // (sinL, cosL, sinF, cosF): vmrghw (lat, lat, fwd, fwd) against the phase splat.
             const f32 lfSinLateral = ShowerSinCosLane(lvDirectionDraw.x, KF_SHOWER_SIN_PHASE);
@@ -772,16 +777,16 @@ namespace BrnParticle
             f32 lfX, lfY, lfLengthSquared;
             do
             {
-                lfX = std::fma(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+                lfX = BrnParticleMath::ScalarMultiplyAdd(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
                 const f32 lfXSquared = lfX * lfX;
-                lfY = std::fma(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
-                lfLengthSquared = std::fma(lfY, lfY, lfXSquared);
+                lfY = BrnParticleMath::ScalarMultiplyAdd(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+                lfLengthSquared = BrnParticleMath::ScalarMultiplyAdd(lfY, lfY, lfXSquared);
             } while (!(lfLengthSquared < KF_DEBRIS_BURST_ONE));   // `fcmpu ; bge` loops on a NaN too
             const f32 lfScale = std::sqrt(KF_DEBRIS_BURST_ONE - lfLengthSquared) * KF_DEBRIS_BURST_TWO;
             Vector3 lv;
             lv.x = lfScale * lfX;
             lv.y = lfScale * lfY;
-            lv.z = std::fma(lfLengthSquared, KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
+            lv.z = BrnParticleMath::ScalarMultiplyAdd(lfLengthSquared, KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
             lv.w = 0.0f;
             return lv;
         }
@@ -843,13 +848,13 @@ namespace BrnParticle
             lvWeights.z = KF_DEBRIS_BURST_GREY_WEIGHT; lvWeights.w = 0.0f;
             const f32 lfGrey = BurstDot4(lvWeights, lvBaseColour);
             Vector4 lvLow, lvHigh;
-            lvLow.x  = std::fma(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
-            lvLow.y  = std::fma(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
-            lvLow.z  = std::fma(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.x  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.y  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
+            lvLow.z  = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_LOW, lfGrey);
             lvLow.w  = KF_DEBRIS_BURST_ALPHA_LOW;
-            lvHigh.x = std::fma(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
-            lvHigh.y = std::fma(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
-            lvHigh.z = std::fma(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.x = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.x - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.y = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.y - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
+            lvHigh.z = BrnParticleMath::VpuMultiplyAdd(lvBaseColour.z - lfGrey, KF_DEBRIS_BURST_SATURATION_HIGH, lfGrey);
             lvHigh.w = KF_DEBRIS_BURST_ALPHA_HIGH;
             BrnEffects::Utils::DebrisColourRandomiser lColourRandomiser;
             lColourRandomiser.Prepare(lvLow, lvHigh);
@@ -867,6 +872,9 @@ namespace BrnParticle
             {
                 // The spot in the emitter box: RandomFloat(-h, h) per axis, z drawn first, then y, then x
                 // (the range `h - (-h)`, the negation a `vxor` of the sign bit), added to the spawn position.
+                const f32 lfOffsetZ = mRandom.RandomFloat(-lrHalf.z, lrHalf.z);
+                const f32 lfOffsetY = mRandom.RandomFloat(-lrHalf.y, lrHalf.y);
+                const f32 lfOffsetX = mRandom.RandomFloat(-lrHalf.x, lrHalf.x);
                 Vector3 lvPosition;
                 lvPosition.x = lpEvent->mSpawnPosition.x + lfOffsetX;
                 lvPosition.y = lpEvent->mSpawnPosition.y + lfOffsetY;
@@ -874,9 +882,12 @@ namespace BrnParticle
                 lvPosition.w = lpEvent->mSpawnPosition.w + 0.0f;
 
                 Vector3 lvVelocity;
+                const f32 lfAimDraw = mRandom.RandomFloat();
                 if (!(lfAimDraw < BurstLayoutF32(lpLayout, KU_BURST_CAMERA_PROBABILITY)))   // `fcmpu ; bge` 0x8229AB48
                 {
                     // ---- the cone (0x8229AC14) ----
+                    const f32 lfLateral = mRandom.RandomFloat(-lfConeHalfAngle, lfConeHalfAngle);
+                    const f32 lfAzimuth = mRandom.RandomFloat() * KF_DEBRIS_BURST_TWO_PI;
                     // One TrigBaseFunctions5 evaluation over (az, az, lat, lat) with the (sin, cos, sin, cos)
                     // phases (vmrghw, 0x8229ACCC..0x8229AD2C).
                     const f32 lfSinAzimuth = ShowerSinCosLane(lfAzimuth, KF_SHOWER_SIN_PHASE);
@@ -891,20 +902,23 @@ namespace BrnParticle
                     lvDirection.y = lfCosLateral;
                     lvDirection.z = lfSinAzimuth * lfCosLateral;
                     lvDirection.w = lvDirection.x;
+                    const f32 lfSpeed   = mRandom.RandomFloat(lfSpeedMin, lfSpeedMax);
+                    const f32 lfInherit = BrnParticleMath::ScalarMultiplyAdd(mRandom.RandomFloat(), KF_DEBRIS_BURST_INHERIT_RANGE,
+                                                   KF_DEBRIS_BURST_INHERIT_MIN);
                     // v127 = V * splat(inherit), then vmaddfp128 v127 = dir * splat(speed) + v127.
-                    lvVelocity.x = std::fma(lvDirection.x, lfSpeed, lrInherit.x * lfInherit);
-                    lvVelocity.y = std::fma(lvDirection.y, lfSpeed, lrInherit.y * lfInherit);
-                    lvVelocity.z = std::fma(lvDirection.z, lfSpeed, lrInherit.z * lfInherit);
-                    lvVelocity.w = std::fma(lvDirection.w, lfSpeed, lrInherit.w * lfInherit);
+                    lvVelocity.x = BrnParticleMath::VpuMultiplyAdd(lvDirection.x, lfSpeed, lrInherit.x * lfInherit);
+                    lvVelocity.y = BrnParticleMath::VpuMultiplyAdd(lvDirection.y, lfSpeed, lrInherit.y * lfInherit);
+                    lvVelocity.z = BrnParticleMath::VpuMultiplyAdd(lvDirection.z, lfSpeed, lrInherit.z * lfInherit);
+                    lvVelocity.w = BrnParticleMath::VpuMultiplyAdd(lvDirection.w, lfSpeed, lrInherit.w * lfInherit);
                 }
                 else
                 {
                     // ---- at the camera: 0.5 above it, 7 m/s, lifted by half a gravity drop (0x8229AB50) ----
                     Vector3 lvToTarget;
-                    lvToTarget.x = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[0], KF_DEBRIS_BURST_HALF, lrCamera.x) - lvPosition.x;
-                    lvToTarget.y = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[1], KF_DEBRIS_BURST_HALF, lrCamera.y) - lvPosition.y;
-                    lvToTarget.z = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[2], KF_DEBRIS_BURST_HALF, lrCamera.z) - lvPosition.z;
-                    lvToTarget.w = std::fma(KAF_DEBRIS_BURST_CAMERA_UP[3], KF_DEBRIS_BURST_HALF, lrCamera.w) - lvPosition.w;
+                    lvToTarget.x = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[0], KF_DEBRIS_BURST_HALF, lrCamera.x) - lvPosition.x;
+                    lvToTarget.y = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[1], KF_DEBRIS_BURST_HALF, lrCamera.y) - lvPosition.y;
+                    lvToTarget.z = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[2], KF_DEBRIS_BURST_HALF, lrCamera.z) - lvPosition.z;
+                    lvToTarget.w = BrnParticleMath::VpuMultiplyAdd(KAF_DEBRIS_BURST_CAMERA_UP[3], KF_DEBRIS_BURST_HALF, lrCamera.w) - lvPosition.w;
                     const f32 lfDistance   = ShowerGuardedLength3(lvToTarget);
                     const f32 lfFlightTime = lfDistance * KF_DEBRIS_BURST_SECONDS_PER_M;   // fmuls
                     const f32 lfSpeedScale = KF_DEBRIS_BURST_CAMERA_SPEED / lfDistance;    // fdivs
@@ -916,11 +930,13 @@ namespace BrnParticle
                     ++luDiagAtCamera;                                                       // [DIAG]
                 }
 
-          // f28
-   // `lfsx f30` -- drawn BEFORE the colour's two
+                const f32 lfSize     = mRandom.RandomFloat(lfSizeMin, lfSizeMax);          // f28
+                const Vector3 lvAxis = BurstRandomUnitVector(mRandom);
+                const f32 lfSpin     = mRandom.RandomFloat();   // `lfsx f30` -- drawn BEFORE the colour's two
                 Vector4 lvColour;
+                lColourRandomiser.Randomise(lvColour, mRandom);
                 lrArray.SpawnDebris(lvPosition, lvVelocity, lvAxis, lvColour,
-                                    std::fma(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
+                                    BrnParticleMath::VpuMultiplyAdd(lfSpin, KF_DEBRIS_BURST_SPIN_RANGE, KF_DEBRIS_BURST_SPIN_MIN),
                                     lfSize, lpEvent->mfCurrentTime);
                 if ((lauDiagPieces[0] | lauDiagPieces[1] | lauDiagPieces[2] | lauDiagPieces[3]) == 0u)   // [DIAG]
                 {
