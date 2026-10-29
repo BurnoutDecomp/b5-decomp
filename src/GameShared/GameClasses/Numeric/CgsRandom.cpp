@@ -31,7 +31,8 @@
                                  //   type (the header itself deliberately only forward-declares
                                  //   it, to stay standalone)
 
-#include <cmath>   // std::fmaf -- the two bounded draws' fused range maps (fmadds / vmaddfp)
+#include <xtl.h>
+#include <xboxmath.h>
 
 namespace CgsNumeric
 {
@@ -233,9 +234,11 @@ namespace CgsNumeric
     //     ParticleModule (rotation speed) fsubs @0x82281A90, fmadds f3, f12, f13, f0  @0x82281AD0
     //     ClutchControl                   fsubs @0x826CDFBC, fmadds f12, f10, f11, f12 @0x826CDFC0
     //                                     fsubs @0x826CE078, fmadds f12, f11, f0, f12  @0x826CE07C
-    //   So the range map is std::fmaf, not a multiply followed by an add.
+    //   The native scalar expression below emits that fmadds. The volatile range
+    //   preserves the separately rounded fsubs at the original call sites.
     f32 Random::RandomFloat(f32 lfMin, f32 lfMax)
     {
+        const volatile f32 lfRange = lfMax - lfMin;
         const f32 lfUnitValue = mafFloatBuffer[muOldestBufferIndex] - 1.0f;
 
         mauIntegerBuffer[muOldestBufferIndex] =
@@ -243,7 +246,7 @@ namespace CgsNumeric
         muSeed              = muSeed * KU_RANDOM_MULTIPLIER + 1;
         muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
 
-        return std::fmaf(lfMax - lfMin, lfUnitValue, lfMin);
+        return lfRange * lfUnitValue + lfMin;
     }
 
     // RandomVecFloat -- DWARF CgsRandom.h:94. Pinned by its expansion in
@@ -285,7 +288,7 @@ namespace CgsNumeric
     //   v13 = +0x10 (range) and v12 = +0 (min), and BrnEffectsUtils.cpp already spells them
     //   std::fma. JumpStateMachine::FireWheelDebris does the same on a RandomVecFloat splat
     //   (`vmaddfp v13, v5, v13, v11` @0x82293C20, v5 = max - min @0x82293C08). Hence std::fmaf
-    //   per lane.
+    //   in the native vector instruction below.
     // ⚠️ THE FOURTH LANE OF THE RING SLOT IS NEVER REFILLED -- only slot+0/+1/+2 are written,
     //   so lane w carries whatever the previous vector draw left there. Read, and returned,
     //   exactly as the console does; every consumer uses xyz only.
@@ -305,11 +308,7 @@ namespace CgsNumeric
         const u32 luSlot = (muOldestBufferIndex + 3) & 4;
         muOldestBufferIndex = luSlot;
 
-        rw::math::vpu::Vector3 lUnitValue;
-        lUnitValue.x = mafFloatBuffer[luSlot + 0] - 1.0f;
-        lUnitValue.y = mafFloatBuffer[luSlot + 1] - 1.0f;
-        lUnitValue.z = mafFloatBuffer[luSlot + 2] - 1.0f;
-        lUnitValue.w = mafFloatBuffer[luSlot + 3] - 1.0f;
+        const __vector4 lUnitValue = __vsubfp(__lvx(mafFloatBuffer, luSlot * sizeof(f32)), XMVectorReplicate(1.0f));
 
         muSeed = lu64Seed2;
 
@@ -321,10 +320,9 @@ namespace CgsNumeric
         muOldestBufferIndex = luSlot + 3;
 
         rw::math::vpu::Vector3 lResult;
-        lResult.x = std::fmaf(lMax.x - lMin.x, lUnitValue.x, lMin.x);
-        lResult.y = std::fmaf(lMax.y - lMin.y, lUnitValue.y, lMin.y);
-        lResult.z = std::fmaf(lMax.z - lMin.z, lUnitValue.z, lMin.z);
-        lResult.w = std::fmaf(lMax.w - lMin.w, lUnitValue.w, lMin.w);
+        const __vector4 lMinimum = __lvx(&lMin, 0);
+        const __vector4 lRange = __vsubfp(__lvx(&lMax, 0), lMinimum);
+        __stvx(__vmaddfp(lUnitValue, lRange, lMinimum), &lResult, 0);
         return lResult;
     }
 }
