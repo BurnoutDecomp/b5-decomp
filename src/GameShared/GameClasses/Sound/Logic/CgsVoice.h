@@ -75,6 +75,9 @@ struct Content;
 class Voice
 {
 public:
+    // ARTIST827E3E18..3E38 constructs all three embedded voices this way.
+    Voice() : mVoiceHandle(), mpOwnerModule(0) {}
+
     // The interned name-hash type the logic layer passes around (Connect's send name,
     // Construct's spec name). Playback::Name::MakeHash returns this widened value.
     typedef u32 Ident;
