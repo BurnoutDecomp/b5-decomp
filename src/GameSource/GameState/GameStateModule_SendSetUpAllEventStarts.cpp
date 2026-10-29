@@ -58,23 +58,7 @@
 // (BoxRegion::GetPosition2D() == { x, z }, BrnRegion.h:103). Spelled as an explicit Vector2 here
 // so the lane choice is readable instead of hidden in a permute mask.
 //
-// ⛔ THE ONE DEVIATION, and it is an OWNER swap, not a data swap. The console reads the AI-section
-// resource off mProgressionManager.mpAISectionData (the `this + 181300` adjust above: 47920 +
-// 133380). NOTHING IN THIS TREE BINDS THAT MEMBER -- ProgressionManager::LoadProgressionData binds
-// mpProgressionData and nothing else, so operator-> there would fire the ResourcePtr's own
-// "Can not instance resource pointer" assert and then BuildAISectionPointMap would run on a null.
-// mStreetManager.mpAISectionData IS the same AI-lanes acquire and IS bound (StreetManager::
-// LoadAIData), so it is read from there, through the accessor that names the swap.
-// DELETE-WHEN ProgressionManager::mpAISectionData gets its console binder.
-//
-//
-// ⛔ WHAT THIS DOES **NOT** FIX, stated so nobody quotes this TU as closing the whole storm:
-// the sat-nav's OTHER two asserts on the same frame ("E_WORLDDATACONTROLLERSTATE_READY <= meState"
-// @BrnGuiWorldDataController.cpp:374 and its downstream "lpRaceEventData" @BrnSatNavRenderer.cpp
-// :1307) come from BrnGui::WorldDataController, not from here. Its progression binding lands in
-// this same wave (WorldDataController::Prepare2 @0x82516CB8); its meState gate does not -- that
-// needs the GetFreeburnChallengeList reply, which is deliberately parked (see the banner in
-// BrnGuiWorldDataController.cpp).
+// ARTIST reads the AI sections resource from the embedded ProgressionManager.
 // ============================================================================
 
 #include "GameSource/GameState/BrnGameStateModule.h"
@@ -132,29 +116,16 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
     const BrnTraffic::TrafficData* const lpTrafficData = mTriggerQueryManager.GetTrafficData();
 
     // ---- the AI-section point map (0x82375A14..0x82375A50) ---------------------------------
-    // See the banner's ⛔ for why this reads the StreetManager's copy of the resource.
-    const BrnAI::AISectionsData* const lpAISectionsData = mStreetManager.GetAISectionData();
+    // ARTIST82375A40 reads ProgressionManager +0x20904.
+    const BrnAI::AISectionsData* const lpAISectionsData = mProgressionManager.GetAISectionsData();
 
     u8* const lpArena = new u8[KN_AI_POINT_MAP_ARENA_BYTES];
     CgsMemory::LinearMalloc lArena;
     lArena.Construct();
     lArena.Create(lpArena, KN_AI_POINT_MAP_ARENA_BYTES);
 
-    if (lpAISectionsData != 0)
-    {
-        lpAISectionPointMap = lpAISectionsData->BuildAISectionPointMap(&lArena);
-    }
-    else if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        static bool sbNoAILogged = false;
-        if (!sbNoAILogged)
-        {
-            sbNoAILogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[event-starts] DEGRADED: no AISectionsData bound; every event start records "
-                   "AI section KI_INVALID_SECTION_INDEX.\n";
-        }
-    }
+    BrnAI::AISectionPointMap* const lpAISectionPointMap =
+        lpAISectionsData->BuildAISectionPointMap(&lArena);
 
     // ---- the district map (0x82375A54..0x82375A8C) ------------------------------------------
     // The console builds this unconditionally off the StreetManager's "Districts" handle; the
@@ -291,12 +262,8 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
             }
 
             // The nearest AI section to the trigger (0x82375C74).
-            s16 li16AISectionIndex = static_cast<s16>(0x7FFF);   // BrnWorld::KI_INVALID_SECTION_INDEX
-            if (lpAISectionPointMap != 0)
-            {
-                li16AISectionIndex = static_cast<s16>(
-                    lpAISectionsData->FindNearestAISection(lv3TriggerPosition, lpAISectionPointMap));
-            }
+            const s16 li16AISectionIndex = static_cast<s16>(
+                lpAISectionsData->FindNearestAISection(lv3TriggerPosition, lpAISectionPointMap));
 
             // 0x82375CAC -- the record. See the ⚠️ in the banner: the POSITION is the junction's
             // (+0x110), not the trigger's.

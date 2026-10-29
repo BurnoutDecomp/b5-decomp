@@ -43,8 +43,6 @@ namespace CgsSystem
             u32 muHighDateTime;
         };
 
-        DateAndTime();
-
         // --- recovered (have standalone X360 addresses) ---
         void Update();                                            // 0x828D6A68
         s32  GetYear() const;                                     // 0x828D6AE8

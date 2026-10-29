@@ -34,7 +34,7 @@ namespace BrnGameState    { class AchievementManagerBase; }
 // [stuntrace waveB / agent 10] the event-finish progression writer's two foreign types.
 // Both are POINTER-ONLY here (BrnTrainingManager.h itself includes THIS header, so pulling it
 // in from here would be a cycle); BrnProgressionManager_EventFinish.cpp includes the real homes.
-namespace BrnGameState    { class TrainingManager; }
+namespace BrnGameState    { class TrainingManager; class GameStateModule; }
 // [drive-thru wave 2026-08-27] Construct's other two sibling managers, POINTER-ONLY here for the
 // same reason as TrainingManager: BrnStuntManager.h forward-declares THIS class, and
 // BrnGameStateStreetManager.h is a large closure. Tags match the committed homes -- both are
@@ -106,6 +106,7 @@ enum EUnlockSequenceType : s32
 
 class ProgressionManager
 {
+    friend class BrnGameState::GameStateModule;
 public:
     friend struct ProgressionDebugComponent;   // the progression debug HUD reads the manager directly
     // X360 0x82359AE0 (identity.json-attested; has_pseudocode). DecFIGS DWARF
@@ -945,12 +946,10 @@ private:
     static const s32 KI_DISTRICT_COUNT                    = 18;   // the ctor / SetupRoamingSections loop bound
     static const s32 KI_MAX_ROAMING_SECTIONS_PER_DISTRICT = 8;    // "Too many roaming locations in district"
     typedef Array<u16, KI_MAX_ROAMING_SECTIONS_PER_DISTRICT> RoamingSections;   // DWARF BrnGameStateTypes.h:202
-    RoamingSections maRoamingSections[KI_DISTRICT_COUNT];         // X360 +0x00 .. +0x168 (20-byte stride)
 
     // The player's persisted profile (the X360 reaches it as the by-value sub-object at this+0x170).
     // Every Profile-facing bodied function (IsCarUnlocked / RepairUnlockedVehicle / SetRoadRule* /
     // AreRoadRulesAvailable's medal read) goes through this named member.
-    Profile mProfile;                                  // X360 +0x170
 
     // ⭐ X360 +133128 (0x20808) -- THE TROPHY-CAR UNLOCK QUEUE, named by the console's own assert
     // strings: SendTrophyUnlockUpdate @0x823892B8 fires
@@ -962,8 +961,6 @@ private:
     // closes: 12 * 16 == 192 == 0xC0, and Construct @0x8237A5F8 zeroes exactly +133320 ==
     // 133128 + 192, which is the count word SendTrophyUnlockUpdate's "Array used before
     // Construct/Clear was called" assert reads.
-    Array<BrnGameState::GameStateModuleIO::TrophyUnlockAction, 12>
-        mQueueOfTrophyCarUnLocks;                              // X360 +133128 (count word +133320)
 
     // The player's road-rules-ruled tallies (X360 +133456 / +133460 / +133464).
     // *** FLAG -- COMMITTED-NAME CORRECTION (StreetManager keystone, wave B) ***
@@ -977,14 +974,8 @@ private:
     //   GetNumberOfCompleteRoadsRuledByLocalPlayer @ 0x8233F350 stores the
     //     both-scores tally at +133464.
     // AreRoadRulesAvailable's nonzero-OR reads stay correct under the rename.
-    s32 miNumberOfParCrashRoadRulesRuledByPlayer;              // X360 +133456 (DWARF :152)
-    s32 miNumberOfParTimeRoadRulesRuledByPlayer;               // X360 +133460 (DWARF :155)
-    s32 miNumberOfNumberOfCompleteRoadRulesRuledByPlayer;      // X360 +133464 (DWARF :158; sic -- DWARF spelling)
 
     // Prepare2 back-pointers (X360 +0x20924 / +0x2093C / +0x20938). Typed as the X360 forwards them.
-    void*                                  mpTriggerData;        // X360 +0x20924 (a5)
-    BrnGameState::ModeManager*             mpModeManager;        // X360 +0x2093C (Prepare2's a3)
-    BrnGameState::AchievementManagerBase*  mpAchievementManager; // X360 +0x20938 (a6)
 
     // ---- [drive-thru wave 2026-08-27] the two CONSTRUCT back-pointers ComputeCompletionPercentage
     // reads. NAMED BY THE CONSOLE'S OWN ASSERT STRINGS: ProgressionManager::Construct @0x8237A5F8
@@ -997,8 +988,6 @@ private:
     // GameStateModule::Construct calls it at the console's own position, so both pointers are
     // installed before anything can read them. ComputeCompletionPercentage's own null guards stay
     // (they are the console's contract, not a PC crutch) but they no longer fire.
-    BrnGameState::StreetManager* mpStreetManager;  // X360 +133424 (0x20930)
-    BrnGameState::StuntManager* mpStuntManager;  // X360 +133444 (0x20944)
 
     // ---- [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] the landmark -> AI-section cache ----
     // DWARF BrnProgressionManager.h:809/:810 give the record verbatim:
@@ -1030,11 +1019,9 @@ private:
         u16 muAISectionIndex;    // +0x04 (DWARF :810) the nearest AI section to that landmark
     };
     static const s32 KI_LANDMARK_AI_SECTION_INDEX_COUNT = 512;   // DWARF :826 array bound
-    LandmarkAISectionIndexPair maLandmarkAISectionIndices[KI_LANDMARK_AI_SECTION_INDEX_COUNT];
 
     // X360 +133000 (0x208A8). The manager owns the full ProgressionDebugComponent by value; its
     // constructor and DebugComponent::Register run in Prepare2's original tail order.
-    ProgressionDebugComponent mDebugComponent;
 
     // *** FLAG -- COMMITTED-TYPE CORRECTION (StreetManager keystone, wave B) ***
     // Previously committed as two "IntrusiveListHead mEventListA/mEventListB" whose
@@ -1059,23 +1046,17 @@ private:
         E_LOADSTAGE_ACQUIRE_REQUESTED= 3,   // AcquireResource("ProgressionData") issued
         E_LOADSTAGE_DONE             = 4    // mpProgressionData bound
     };
-    ELoadStage meLoadStage;                             // X360 +133340
 
-    CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData;  // X360 +133348 (0x20 stride)
-    CgsResource::ResourcePtr<BrnAI::AISectionsData>           mpAISectionData;    // X360 +133380
 
     // ---- the player-car / unlock block (X360 +0x208D0 .. +0x20988) ----------------------------
     // X360 +133328 (0x208D0). The CarData record for the car the player is currently in.
     // OnPlayerCarChange writes it (and clears it on the lbUpdateProfile == false path);
     // GetCurrentCarData() hands it back.
     // Initialization follows the native constructor/lifecycle, without host defaults.
-    CarData* mpCurrentCarData;
     // X360 +133332 (0x208D4). The chosen-livery record for that car
     // (Profile::GetChosenLiveryDataForBaseCar's answer, cached by OnPlayerCarChange).
     // The element type (BrnProgression::LiveryData) is owned by BrnProfile.h, included above.
-    LiveryData* mpCurrentLiveryData;
     // X360 +133448 (0x20948). The loaded vehicle list (see SetVehicleList).
-    const BrnResource::VehicleList* mpVehicleList;
     // X360 +133468 (0x2095C). AddCar increments it for every E_UNLOCK_TYPE_SPONSOR car and once
     // more for "CARBEAGT" specifically. FLAG: name inferred from those two increments only.
     // [progression wave 2026-09-06, conductor] RENAMED from miSponsorCarCount: the DWARF names
@@ -1083,15 +1064,11 @@ private:
     // and ApplyVehicleList @0x82359A20 seeds it from the vehicle list's selectable-minus-sponsor
     // pair; AddCar's two increments (sponsor cars, CARBEAGT) grow that maximum. The GUI reads it
     // as `miCarsTotal` (GameBridgeGameStateToX_StuntGuiEvents.cpp).
-    s32 miMaxCarCount;
     // X360 +133484 (0x2096C), read as an UNSIGNED byte by GetProgressionRank (`>= 0x80` == the
     // signed-negative "rank not set yet" case, which answers 0). Distinct from the Profile's own
     // mi8CurrentProgressionRank at Profile+112 -- this is the manager's live cache.
-    s8 mi8ProgressionRank;
     // X360 +133489 (0x20971) / +133512 (0x20988) -- the two one-byte request flags
     // CarSelectManager::UpdateExitState sets to 1 on junkyard exit.
-    bool mbUpdateRivalsRequested;   // DWARF :185 `mbUpdateRivals` (+133489)
-    bool mbDriveThrusDirty;         // DWARF :218 `mbDriveThruDataDirtyFlag` (+133512)
     // ⭐ X360 +133487 (0x2096F). The FORCED-autosave request latch. CheckForSpecialCarUnlocks
     // raises it on the 100%-completion arm (`stbx r22, r31, 0x2096F` @0x82396288) and
     // PreWorldUpdate @0x823A4F68 drains it: `if (*(this + 133487)) { payload = 1;
@@ -1100,19 +1077,16 @@ private:
     // id-356 arm ORs it into mbForceProfileAutosave, which bypasses the 60 s throttle. The
     // drive-thru arm posts the same action 55 with a payload of ZERO (unforced). Same action,
     // different urgency, and the byte is the whole difference.
-    bool mbAutosaveRequested;       // DWARF :179 `mbForceAutoSaveForOneHundredPercent` (+133487)
 
     // X360 +133491 (0x20973). DWARF BrnProgressionManager.h:191 `mbPlayerMedalsUpdateRequired`.
     // PreWorldUpdate @0x823A4F68 polls it (`lbzx r11, r31, 0x20973`) and, when set, runs
     // UpdatePlayerMedals + UnlockRivals -- neither of which is reconstructed, so on PC the poll
     // parks with a one-shot log and the byte stays set (the console clears it in the callee).
     // Construct @0x8237A5F8 seeds 0; false is the host's zero-initialised value.
-    bool mbPlayerMedalsUpdateRequired;              // X360 +133491 (0x20973)
     // [L4 boot order 2026-09-28] X360 +133492 (0x20974). DWARF BrnProgressionManager.h:876
     // `bool mbPlayerJustWonATrophyUpdateRequired` -- the byte after mbPlayerMedalsUpdateRequired (:875).
     // OnLoadProfile @0x823893E0 clears it (`stbx r15(0), r29, 0x20974`). ⚠️ NO READER ON PC yet (the
     // console's PreWorldUpdate trophy leg is not reconstructed); the store is the console's.
-    bool mbPlayerJustWonATrophyUpdateRequired;      // X360 +133492 (0x20974)
 
     // ---- [stuntrace waveB / agent 10] the deferred "all win types for this mode" check -------
     // X360 +133440 (0x20940). The training manager the progression layer queues its
@@ -1124,7 +1098,6 @@ private:
     // BrnProgressionManager.cpp:126 -> `*(a1 + 133440) = a4`), and Construct is now reconstructed
     // and called from GameStateModule::Construct. SetTrainingManager (the PC-only stand-in setter
     // declared above) therefore still has no caller -- and no longer needs one.
-    BrnGameState::TrainingManager* mpTrainingManager;      // X360 +133440 (0x20940)
 
     // X360 +133493 (0x20975) / +133494 (0x20976). The gate pair ProgressionManager::PreWorldUpdate
     // @0x823A4F68 polls (`if (+133493) if (+133494)`) before running a 2 s timer at +133500 and
@@ -1134,8 +1107,6 @@ private:
     // ⚠️ FLAG (NAMES PROVISIONAL): the assert string only names the MODE member below, so which
     // of the two bytes is the "pending" one and which the "armed" one is an inference from the
     // writer/reader pair. Do not rename without a third witness.
-    bool mbCheckAllWinTypesPending;               // X360 +133493 (0x20975) DWARF :197 `mbCheckForAllEventTypeComplete`
-    bool mbCheckAllWinTypesArmed;               // X360 +133494 (0x20976) DWARF :200 `mbNeedCheckForAllWinTypes`
 
     // X360 +133496 (0x20978). PINNED BY THE ASSERT STRING: PreWorldUpdate @0x823A4F68 fires
     // "meModeToCheckForAllWinTypes != RaceEventData::E_MODE_INVALID"
@@ -1143,11 +1114,9 @@ private:
     // CheckForAllModeTypeCompletion. Logical type BrnProgression::RaceEventData::EModeType;
     // stored as the s32 the X360 writes (`stwx` of the event record's +0xEC mode BYTE, so the
     // stored value is a zero-extended byte). Construct seeds -1 (E_MODE_INVALID).
-    s32 meModeToCheckForAllWinTypes;                // X360 +133496 (0x20978)
 
     // X360 +133500 (0x2097C). DWARF :206 `mfTimeTillAllEventTypeCompleteHudMessage` -- the 2 s
     // (flt_82001D9C) hold PreWorldUpdate runs on the sim step before CheckForAllModeTypeCompletion.
-    f32 mfTimeTillAllEventTypeCompleteHudMessage;  // X360 +133500 (0x2097C)
 
     // ---- [takedown P1 wave 2026-09-03] the "all rivals beaten" flag pair --------------------
     // X360 +133504 (0x20980) / +133505 (0x20981), two consecutive bools in the DWARF's order
@@ -1157,12 +1126,9 @@ private:
     // ... if (+133504)`) and clears both -- that reader is not reconstructed yet, so on PC the
     // pair is written and never consumed (no HUD "all rivals beaten" message). Construct seeds
     // are not attested here; false is the zero-initialised host value.
-    bool mbNeedToShowAllRivalsBeatenMessage;      // X360 +133504 (0x20980)
-    bool mbShowShutDownAllIfNeeded;      // X360 +133505 (0x20981)
 
     // X360 +133508 (0x20984). DWARF :215 `mfTimeTillShowAllRivalsBeatenMessage` -- the 2 s hold
     // PreWorldUpdate runs on the sim step before posting AllRivalsShutDownAction (210).
-    f32 mfTimeTillShowAllRivalsBeatenMessage;      // X360 +133508 (0x20984)
 
     // X360 +133516 (0x2098C). DWARF :221 `miPreWorldUpdate` -- the CgsDev::PerfMonCpu handle
     // PreWorldUpdate brackets itself with (`lwz r3, 0(r23)` where r23 == this + 0x2098C).
@@ -1171,7 +1137,6 @@ private:
     // and asserts it >= 0 (BrnProgressionManager.cpp:197). The -1 in-class initialiser stays as
     // the pre-Construct value (the host has no BSS zero to lean on) and is exactly what
     // StartMonitor/StopMonitor reject through IsValidHandle if anything ticks before Construct.
-    s32 miPreWorldUpdate;                            // X360 +133516 (0x2098C)
 
     // ---- [progression wave: medals] ---------------------------------------------------------
     // The two members UnlockToProgressionRank's shared rank tail (@0x8239E094, park Q4) writes and
@@ -1192,17 +1157,69 @@ private:
     // ⚠️ NO READER ON PC. The console consumer is GetGiftCarId @0x8237AC80 (DWARF
     // BrnProgressionManager.cpp:559, `GetGiftCarId(ECarType leLeastUsedCarType)`), which is not
     // reconstructed. The store is real and is reproduced; nothing observes it yet.
-    CgsID mNewlyUnlockedCarID; // X360 +133472 (0x20960), DWARF :164
-    s32 meLeastUsedCarType;                           // X360 +133480 (0x20968), DWARF :167
     // mbHasJustRankedUp -- DWARF :182. `stbx 1 -> +0x20970` @0x8239E1D0, and ONLY when the rank
     // argument is non-zero, so the rank-0 starting unlock does not read as "you just ranked up".
     // Consumed and cleared by ShowModeResults after it records the rank-up.
-    bool mbHasJustRankedUp;                        // X360 +133488 (0x20970), DWARF :182
 
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
     // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.
     static void _AssertLayout()
     {
+#if defined(D_PLATFORM_X360)
+        CGS_STATIC_ASSERT((sizeof(ProgressionManager) == 0x209A0), "ARTIST GameState containment requires209A0");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, maRoamingSections) == 0x0), "ARTIST maRoamingSections offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mProfile) == 0x170), "ARTIST mProfile offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, maPresetRaces) == 0x1D980), "ARTIST maPresetRaces offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, maLandmarkAISectionIndices) == 0x1F788), "ARTIST maLandmarkAISectionIndices offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mDebugComponent) == 0x20788), "ARTIST mDebugComponent offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbSendAchievementAwardedEvent_DEBUG) == 0x20800), "ARTIST mbSendAchievementAwardedEvent_DEBUG offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miAchievementToAward_DEBUG) == 0x20804), "ARTIST miAchievementToAward_DEBUG offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mQueueOfTrophyCarUnLocks) == 0x20808), "ARTIST mQueueOfTrophyCarUnLocks offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpCurrentCarData) == 0x208D0), "ARTIST mpCurrentCarData offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpCurrentLiveryData) == 0x208D4), "ARTIST mpCurrentLiveryData offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, muNumPresetRaces) == 0x208D8), "ARTIST muNumPresetRaces offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, meLoadStage) == 0x208DC), "ARTIST meLoadStage offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, meAILoadStage) == 0x208E0), "ARTIST meAILoadStage offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpProgressionData) == 0x208E4), "ARTIST mpProgressionData offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpAISectionData) == 0x20904), "ARTIST mpAISectionData offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpTriggerData) == 0x20924), "ARTIST mpTriggerData offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miLastUpdatedRival) == 0x20928), "ARTIST miLastUpdatedRival offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miLastReturnedRival) == 0x2092C), "ARTIST miLastReturnedRival offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpStreetManager) == 0x20930), "ARTIST mpStreetManager offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpCarSelectManager) == 0x20934), "ARTIST mpCarSelectManager offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpAchievementManager) == 0x20938), "ARTIST mpAchievementManager offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpModeManager) == 0x2093C), "ARTIST mpModeManager offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpTrainingManager) == 0x20940), "ARTIST mpTrainingManager offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpStuntManager) == 0x20944), "ARTIST mpStuntManager offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mpVehicleList) == 0x20948), "ARTIST mpVehicleList offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, meLastPlayerDistrict) == 0x2094C), "ARTIST meLastPlayerDistrict offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miNumberOfParCrashRoadRulesRuledByPlayer) == 0x20950), "ARTIST miNumberOfParCrashRoadRulesRuledByPlayer offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miNumberOfParTimeRoadRulesRuledByPlayer) == 0x20954), "ARTIST miNumberOfParTimeRoadRulesRuledByPlayer offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miNumberOfNumberOfCompleteRoadRulesRuledByPlayer) == 0x20958), "ARTIST miNumberOfNumberOfCompleteRoadRulesRuledByPlayer offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miMaxCarCount) == 0x2095C), "ARTIST miMaxCarCount offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mNewlyUnlockedCarID) == 0x20960), "ARTIST mNewlyUnlockedCarID offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, meLeastUsedCarType) == 0x20968), "ARTIST meLeastUsedCarType offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mi8ProgressionRank) == 0x2096C), "ARTIST mi8ProgressionRank offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mi8HackEventRankNumber) == 0x2096D), "ARTIST mi8HackEventRankNumber offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbHackEventNumberActive) == 0x2096E), "ARTIST mbHackEventNumberActive offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbAutosaveRequested) == 0x2096F), "ARTIST mbAutosaveRequested offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbHasJustRankedUp) == 0x20970), "ARTIST mbHasJustRankedUp offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbUpdateRivalsRequested) == 0x20971), "ARTIST mbUpdateRivalsRequested offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbReturnRivals) == 0x20972), "ARTIST mbReturnRivals offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbPlayerMedalsUpdateRequired) == 0x20973), "ARTIST mbPlayerMedalsUpdateRequired offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbPlayerJustWonATrophyUpdateRequired) == 0x20974), "ARTIST mbPlayerJustWonATrophyUpdateRequired offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbCheckAllWinTypesPending) == 0x20975), "ARTIST mbCheckAllWinTypesPending offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbCheckAllWinTypesArmed) == 0x20976), "ARTIST mbCheckAllWinTypesArmed offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, meModeToCheckForAllWinTypes) == 0x20978), "ARTIST meModeToCheckForAllWinTypes offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mfTimeTillAllEventTypeCompleteHudMessage) == 0x2097C), "ARTIST mfTimeTillAllEventTypeCompleteHudMessage offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbNeedToShowAllRivalsBeatenMessage) == 0x20980), "ARTIST mbNeedToShowAllRivalsBeatenMessage offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbShowShutDownAllIfNeeded) == 0x20981), "ARTIST mbShowShutDownAllIfNeeded offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mfTimeTillShowAllRivalsBeatenMessage) == 0x20984), "ARTIST mfTimeTillShowAllRivalsBeatenMessage offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, mbDriveThrusDirty) == 0x20988), "ARTIST mbDriveThrusDirty offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miPreWorldUpdate) == 0x2098C), "ARTIST miPreWorldUpdate offset");
+        CGS_STATIC_ASSERT((offsetof(ProgressionManager, miPostWorldUpdate) == 0x20990), "ARTIST miPostWorldUpdate offset");
+#endif
+
         // [progression wave: lifecycle] the head region is pointer-free too, so its console
         // shape survives to the host: 18 districts x Array<s16,8>, 20 bytes each, count word
         // at record +0x10 (SetupRoamingSections @0x8236FE60 -- see the member's banner).
@@ -1233,7 +1250,6 @@ private:
     // cursor reaches ProgressionData::GetRivalCount(). Construct @0x8237A5F8 is not reconstructed;
     // 0 is both the host's zero-initialised value and the "start of a fresh pass" value the
     // console's own reset (`stw r23, 0(r29)` with r23 == 0) writes.
-    s32 miLastUpdatedRival;                           // X360 +133416 (0x20928)
 
 public:
     // X360 0x8236F658. DWARF :661 `CgsID UnlockRivals(InputBuffer::GameActionQueue*)`. Walks the
@@ -1289,7 +1305,6 @@ private:
     // X360 +133428 (0x20934). The junkyard/car-select manager. Construct @0x8237A5F8 asserts it
     // non-null ("lpCarSelectManager != NULL", BrnProgressionManager.cpp:124) and stores it; this
     // build has no reconstructed READER yet, so it is installed and documented, not consumed.
-    BrnGameState::CarSelectManager* mpCarSelectManager;     // X360 +133428 (0x20934)
 
     // X360 +133344 (0x208E0). LoadAIData's stage word -- the exact twin of meLoadStage above,
     // switched on by ProgressionManager::LoadAIData @0x8239A0D0 (`v6 = a1 + 133344`). The five
@@ -1304,21 +1319,17 @@ private:
         E_AI_DATA_ACQUIRE_REQUESTED   = 3,   // GetAILanes ("WorldMapData") issued
         E_AI_DATA_LOAD_COMPLETE       = 4    // mpAISectionData bound
     };
-    AILoadStage meAILoadStage;     // X360 +133344 (0x208E0)
 
     // X360 +121216 (0x1D980) / +133336 (0x208D8). The preset ("HACK_") race table and its live
     // count. ProcessLoadedPresetRaces @0x8236FDF8 fills both (`*(a1 + 133336) = HACK_SetupRaces(...)`
     // then one Array<Race,64>::Append per race, the instantiation committed in Array_Race_64.cpp);
     // GetRacesAtLandmark @0x8236F830 and LandmarkHasAvailableRaces @0x8236F928 are the readers and
     // both take the count from +133336, NOT from the array's own count word.
-    Array<Race, 64> maPresetRaces;                              // X360 +121216 (0x1D980)
-    u32 muNumPresetRaces;                       // X360 +133336 (0x208D8)
 
     // X360 +133520 (0x20990). DWARF :224 `miPostWorldUpdate` -- the second CgsDev::PerfMonCpu
     // handle Construct registers ("Prog: Post-World Up"), asserted >= 0 at
     // BrnProgressionManager.cpp:198. The PostWorldUpdate body that brackets itself with it is not
     // reconstructed; the handle is registered anyway because Construct's assert reads it.
-    s32 miPostWorldUpdate;                                 // X360 +133520 (0x20990)
 
 public:
     // X360 0x8237A5F8. THE MANAGER'S CONSTRUCT. Sole caller: GameStateModule::Construct
@@ -1394,5 +1405,61 @@ private:
     // makes at 0x8239DD94.., kept together in BrnProgressionManager_Lifecycle.cpp so Prepare2
     // itself keeps one line for them and this lane stays file-disjoint from the other four.
     void RunPrepare2Tail();
+private:
+    // ARTIST827DEA50/8237A5F8/82370008: native containment and scalar stores.
+    // Declaration names and order corroborated by DecFIGS BrnProgressionManager.h:822..894.
+    // All positions follow from genuine member types and their natural alignment.
+    RoamingSections maRoamingSections[KI_DISTRICT_COUNT];          //00000
+    Profile mProfile;                                             //00170
+    Array<Race, 64> maPresetRaces;                                 //1D980
+    LandmarkAISectionIndexPair maLandmarkAISectionIndices[KI_LANDMARK_AI_SECTION_INDEX_COUNT]; //1F788
+    ProgressionDebugComponent mDebugComponent;                     //20788
+    bool mbSendAchievementAwardedEvent_DEBUG;                      //20800
+    s32 miAchievementToAward_DEBUG;                               //20804
+    Array<BrnGameState::GameStateModuleIO::TrophyUnlockAction, 12> mQueueOfTrophyCarUnLocks; //20808
+    CarData* mpCurrentCarData;                                    //208D0
+    LiveryData* mpCurrentLiveryData;                              //208D4
+    u32 muNumPresetRaces;                                         //208D8
+    ELoadStage meLoadStage;                                       //208DC
+    AILoadStage meAILoadStage;                                    //208E0
+    CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData; //208E4
+    CgsResource::ResourcePtr<BrnAI::AISectionsData> mpAISectionData; //20904
+    void* mpTriggerData;                                          //20924
+    s32 miLastUpdatedRival;                                       //20928
+    s32 miLastReturnedRival;                                      //2092C
+    BrnGameState::StreetManager* mpStreetManager;                 //20930
+    BrnGameState::CarSelectManager* mpCarSelectManager;           //20934
+    BrnGameState::AchievementManagerBase* mpAchievementManager;  //20938
+    BrnGameState::ModeManager* mpModeManager;                     //2093C
+    BrnGameState::TrainingManager* mpTrainingManager;             //20940
+    BrnGameState::StuntManager* mpStuntManager;                   //20944
+    const BrnResource::VehicleList* mpVehicleList;                 //20948
+    BrnWorld::EDistrict meLastPlayerDistrict;                     //2094C
+    s32 miNumberOfParCrashRoadRulesRuledByPlayer;                  //20950
+    s32 miNumberOfParTimeRoadRulesRuledByPlayer;                   //20954
+    s32 miNumberOfNumberOfCompleteRoadRulesRuledByPlayer;          //20958
+    s32 miMaxCarCount;                                            //2095C
+    CgsID mNewlyUnlockedCarID;                                    //20960
+    s32 meLeastUsedCarType;                                       //20968
+    s8 mi8ProgressionRank;                                        //2096C
+    s8 mi8HackEventRankNumber;                                    //2096D
+    bool mbHackEventNumberActive;                                //2096E
+    bool mbAutosaveRequested;                                    //2096F
+    bool mbHasJustRankedUp;                                       //20970
+    bool mbUpdateRivalsRequested;                                //20971
+    bool mbReturnRivals;                                         //20972
+    bool mbPlayerMedalsUpdateRequired;                           //20973
+    bool mbPlayerJustWonATrophyUpdateRequired;                   //20974
+    bool mbCheckAllWinTypesPending;                              //20975
+    bool mbCheckAllWinTypesArmed;                                //20976
+    s32 meModeToCheckForAllWinTypes;                              //20978
+    f32 mfTimeTillAllEventTypeCompleteHudMessage;                  //2097C
+    bool mbNeedToShowAllRivalsBeatenMessage;                       //20980
+    bool mbShowShutDownAllIfNeeded;                               //20981
+    f32 mfTimeTillShowAllRivalsBeatenMessage;                      //20984
+    bool mbDriveThrusDirty;                                      //20988
+    s32 miPreWorldUpdate;                                         //2098C
+    s32 miPostWorldUpdate;                                        //20990
+
 };
 }

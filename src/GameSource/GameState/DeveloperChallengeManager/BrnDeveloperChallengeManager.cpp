@@ -58,10 +58,11 @@ void DeveloperChallengeManager::Construct(BrnProgression::ProgressionManager* lp
                                           ScoringSystem*                      lpScoringSystem,
                                           GameStateModule*                    lpGameStateModule)
 {
-    CGS_ASSERT(lpProgressionManager != 0, "lpProgressionManager");
-    CGS_ASSERT(lpStreetManager      != 0, "lpStreetManager");
-    CGS_ASSERT(lpScoringSystem      != 0, "lpScoringSystem");
-    CGS_ASSERT(lpGameStateModule    != 0, "lpGameStateModule");
+    const char* const lpcFile = "..\\..\\..\\GameSource\\GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.cpp";
+    if (!lpProgressionManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpProgressionManager", lpcFile, 65); CgsDev::Assert::EndAssert(); }
+    if (!lpStreetManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpStreetManager", lpcFile, 66); CgsDev::Assert::EndAssert(); }
+    if (!lpScoringSystem) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpScoringSystem", lpcFile, 67); CgsDev::Assert::EndAssert(); }
+    if (!lpGameStateModule) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpGameStateModule", lpcFile, 68); CgsDev::Assert::EndAssert(); }
 
     // Cache the owning subsystems (Construct stores them at +0xA4/+0xA8/+0xAC/+0xB0).
     mpProgressionManager = lpProgressionManager;
@@ -307,9 +308,8 @@ void DeveloperChallengeManager::OnCollectStunt(u32 luStuntType, CgsID lBillboard
     for (u32 luIndex = 0; luIndex < maCollectedBillboards.GetLength(); ++luIndex)
     {
         const CollectedBillboard& lrEntry = maCollectedBillboards[luIndex];
-        // FLAG: CollectedBillboard fields are provisional (16-byte stub). The X360 reads the buffered
-        // billboard id from the record's leading qword; compared against lBillboardId.
-        const CgsID lBufferedId = *reinterpret_cast<const CgsID*>(lrEntry.maBlob);   // FLAG: id @+0
+        // ARTIST compares the full64-bit billboard ID in the record's leading qword.
+        const CgsID lBufferedId = lrEntry.mBillboardId;
         if (lBufferedId == lBillboardId)
         {
             lbAlreadyBuffered = true;
@@ -321,8 +321,8 @@ void DeveloperChallengeManager::OnCollectStunt(u32 luStuntType, CgsID lBillboard
     {
         // Append {id, collectTime} and, if the buffer now tops the burst count, trip the challenge.
         CollectedBillboard lNewEntry;
-        *reinterpret_cast<CgsID*>(lNewEntry.maBlob)         = lBillboardId;            // FLAG: id @+0
-        *reinterpret_cast<f32*>(lNewEntry.maBlob + 8)       = mlfCurrentRaceTime;      // FLAG: collect time @+8
+        lNewEntry.mBillboardId = lBillboardId;
+        lNewEntry.mfCollectTime = mlfCurrentRaceTime;
         maCollectedBillboards.Append(lNewEntry);
 
         if (static_cast<s32>(maCollectedBillboards.GetLength()) == KI_DEV_CHALLENGE_BILLBOARD_BURST_COUNT)
@@ -658,7 +658,7 @@ void DeveloperChallengeManager::UpdateBufferedCollectedBillboards()
     {
         const CollectedBillboard& lrEntry = maCollectedBillboards[static_cast<u32>(liIndex)];
         // FLAG: collect time is the f32 @+8 of the provisional 16-byte record (see OnCollectStunt).
-        const f32 lfCollectTime = *reinterpret_cast<const f32*>(lrEntry.maBlob + 8);   // FLAG: time @+8
+        const f32 lfCollectTime = lrEntry.mfCollectTime;
         if (lfCollectTime < lfCutoff)
         {
             maCollectedBillboards.Erase(static_cast<u32>(liIndex));

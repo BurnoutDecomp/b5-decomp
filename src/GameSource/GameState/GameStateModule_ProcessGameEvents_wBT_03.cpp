@@ -83,7 +83,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
                 reinterpret_cast<const GameStateModuleIO::HitOverheadSignEvent*>(lpEvent);
             mModeManager.GetScoringSystem()->GetCrashScorer()->DealWithHitOverheadSign();
 
-            GameStateModuleIO::OverheadSignHitAction lSignAction = {};
+            GameStateModuleIO::OverheadSignHitAction lSignAction = GameStateModuleIO::OverheadSignHitAction();
             lSignAction.miPointsAwarded = KI_SCORE_BONUS_PER_OVERHEAD_SIGN;
             lSignAction.mu8SignFlags    = lpSignEvent->muRaceCarId;
             lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignAction),
@@ -117,7 +117,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
             reinterpret_cast<const GameStateModuleIO::CompletedStuntEvent*>(lpEvent);
         CGS_ASSERT(lpCompletedStuntEvent, "lpCompletedStuntEvent");
 
-        GameStateModuleIO::CompletedStuntAction lStuntAction = {};
+        GameStateModuleIO::CompletedStuntAction lStuntAction = GameStateModuleIO::CompletedStuntAction();
         lStuntAction.muStuntActionComplete         = lpCompletedStuntEvent->muStuntActionComplete;
         lStuntAction.mfCompletedBarrelRollAngle    = lpCompletedStuntEvent->mfCompletedBarrelRollAngle;
         lStuntAction.mfCompletedAirSpinAngle       = lpCompletedStuntEvent->mfCompletedAirSpinAngle;
@@ -188,7 +188,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
         // The console adds the player's leg distance to the record's mfConvoyLegDistance without
         // writing that word first, so its sum starts from whatever the stack slot held. The record is
         // zero-initialised here, so the sum starts from 0.
-        GameStateModuleIO::InProgressStuntAction lStuntAction = {};
+        GameStateModuleIO::InProgressStuntAction lStuntAction = GameStateModuleIO::InProgressStuntAction();
         lStuntAction.muStuntActionInProgress        = lpInProgressStuntEvent->muStuntActionInProgress;
         lStuntAction.mfInProgressBarrelRollAngle    = lpInProgressStuntEvent->mfInProgressBarrelRollAngle;
         lStuntAction.mfInProgressAirSpinAngle       = lpInProgressStuntEvent->mfInProgressAirSpinAngle;
@@ -384,7 +384,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
 
     case GameStateModuleIO::E_EVENT_PLAYER_RESET_ON_TRACK:
     {
-        const GameStateModuleIO::PlayerResetOnTrackAction lResetAction = {};
+        const GameStateModuleIO::PlayerResetOnTrackAction lResetAction = GameStateModuleIO::PlayerResetOnTrackAction();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetAction),
                                 GameStateModuleIO::E_ACTION_PLAYER_RESET_ON_TRACK,
                                 static_cast<s32>(sizeof(lResetAction)));
@@ -431,7 +431,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
         mModeManager.GetScoringSystem()->GetCrashScorer()->DealWithVehicleLeaping(
             reinterpret_cast<const GameStateModuleIO::VehicleLeaptEvent*>(lpEvent));
 
-        const GameStateModuleIO::VehicleLeaptAction lLeaptAction = {};
+        const GameStateModuleIO::VehicleLeaptAction lLeaptAction = GameStateModuleIO::VehicleLeaptAction();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lLeaptAction),
                                 GameStateModuleIO::E_ACTION_VEHICLE_LEAPT,
                                 static_cast<s32>(sizeof(lLeaptAction)));
@@ -520,7 +520,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
 
     case GameStateModuleIO::E_EVENT_PLAYER_CAN_SKIP_CRASH:
     {
-        const GameStateModuleIO::HUDMessagePlayerCanSkipCrashAction lSkipCrashAction = {};
+        const GameStateModuleIO::HUDMessagePlayerCanSkipCrashAction lSkipCrashAction = GameStateModuleIO::HUDMessagePlayerCanSkipCrashAction();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSkipCrashAction),
                                 GameStateModuleIO::E_ACTION_HUD_MESSAGE_PLAYER_CAN_SKIP_CRASH,
                                 static_cast<s32>(sizeof(lSkipCrashAction)));
@@ -529,7 +529,7 @@ void GameStateModule::ProcessGameEvents_Group3(s32                              
 
     case GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING:
     {
-        const GameStateModuleIO::PlayerCrashEndingSoonAction lCrashEndingAction = {};
+        const GameStateModuleIO::PlayerCrashEndingSoonAction lCrashEndingAction = GameStateModuleIO::PlayerCrashEndingSoonAction();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCrashEndingAction),
                                 GameStateModuleIO::E_ACTION_PLAYER_CRASH_ENDING_SOON,
                                 static_cast<s32>(sizeof(lCrashEndingAction)));

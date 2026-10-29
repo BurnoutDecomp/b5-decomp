@@ -43,7 +43,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                            // GameStateModuleIO::EImageType / EGameModeType / IsOnlineFreeBurnLobby
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                            // PreWorldInputBuffer / OutputBuffer / GameActionQueue / TimerStatusInterface
-#include "GameSource/GameState/BrnGameStateModule.h"                              // GameStateModule (GetPlayerActiveRaceCarIndex / IsOnlineGameMode / GetModeManager)
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                      // ModeManager::IsInPostEvent
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // BrnNetwork::ECameraStatus, InGamePlayerStatusInterface
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h" // (TakedownEventQueue element note)
@@ -130,9 +129,7 @@ public:
     // ---- lifecycle ----
     // X360 0x82363A88. Seeds every member to its cleared value and caches the owning module.
     void Construct(GameStateModule* lpGameStateModule);
-    // Prepare/Release/Destruct are X360-inlined no-ops for this manager (the DWARF declares them,
-    // but the X360 build emits no out-of-line body and GameStateModule's Prepare/Release/Destruct
-    // do not call into them). Declared-only; bodies are trivial and land if ever de-inlined.
+    // Prepare/Release are no-ops; Destruct is inlined in GameStateModule at 82375420.
     bool Prepare();
     bool Release();
     void Destruct();

@@ -16,6 +16,8 @@ namespace BrnGameState
     class TakedownManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        TakedownManagerDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
         // DWARF BrnTakedownManagerDebugComponent.cpp:42. No out-of-line X360 symbol: it is inlined
         // into GameStateModule::Construct @0x82380404..0x82380434 (the store cluster right after the
         // owning TakedownManager's two manager pointers). Body in the .cpp. [takedown wave 2026-09-02]

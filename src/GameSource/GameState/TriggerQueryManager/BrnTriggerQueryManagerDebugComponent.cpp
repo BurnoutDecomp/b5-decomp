@@ -61,6 +61,19 @@ namespace BrnGameState
         miGenericRegionType = BrnTrigger::GenericRegion::E_TYPE_COUNT;
     }
 
+    void TriggerQueryManagerDebugComponent::Destruct()
+    {
+        if (!mpTriggerData)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mpTriggerData != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.cpp", 114);
+            CgsDev::Assert::EndAssert();
+        }
+        mpTriggerData = 0;
+        // ARTIST calls the folded empty base body at 8284CB38.
+    }
+
     // =============================================================================================
     // GetName  @ 0x82358788
     // =============================================================================================

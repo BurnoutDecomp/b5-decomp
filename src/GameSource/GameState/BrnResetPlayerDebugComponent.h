@@ -33,6 +33,9 @@ namespace BrnGameState
     class ResetPlayerDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        ResetPlayerDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         // X360 @ 0x82357940. Bind the component to its owning game-state module and reset the menu
         // selection state. Called by BrnGameState::GameStateModule::Construct.
         void Construct(GameStateModule* lpGameStateModule);

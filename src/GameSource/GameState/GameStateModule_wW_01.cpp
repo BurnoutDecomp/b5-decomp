@@ -20,7 +20,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                   // PostWorldInputBuffer
-#include "GameSource/GameState/BrnGameStateTakedownCache.h"              // mpTakedownCache's queues
+#include "GameSource/GameState/BrnGameStateModule.h"              // mpTakedownCache's queues
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"             // ModeManager::PostWorldUpdate
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // the landmark pass
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"     // the boost tips
@@ -59,8 +59,8 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
     mLastAICarOutputInterface   = *lpPostWorldInputBuffer->GetAICarOutputInterface();
 
     // The traffic-type responses TakedownManager::Update reads next pre-world (gsm+278480).
-    mpTakedownCache->mTrafficTypeResponseQueue.Clear();
-    mpTakedownCache->mTrafficTypeResponseQueue.Append(*lpPostWorldInputBuffer->GetTrafficTypeResponseQueue());
+    mLastTrafficTypeResponseQueue.Clear();
+    mLastTrafficTypeResponseQueue.Append(*lpPostWorldInputBuffer->GetTrafficTypeResponseQueue());
 
     // The frame's game events join the carry queue; PreWorldUpdate's ProcessGameEvents drains it.
     mGameEventCarryQueue.Append(*lpPostWorldInputBuffer->GetGameEventQueue());
@@ -69,7 +69,7 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
     {
         CacheTakedownManagerPostWorldInputData(lpPostWorldInputBuffer);
         mModeManager.PostWorldUpdate(lpPostWorldInputBuffer,
-                                     &mpTakedownCache->mTakedownEventQueue,
+                                     &mTakedownEventQueue,
                                      mfSimTimeStep);
     }
 

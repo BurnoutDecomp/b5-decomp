@@ -14,7 +14,10 @@
 
 namespace BrnGameState
 {
-    StuntManagerDebugComponent::StuntManagerDebugComponent() = default;
+    StuntManagerDebugComponent::StuntManagerDebugComponent()
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag())
+    {
+    }
 
     // ------------------------------------------------------------------------
     // [gateui] Construct @ X360 0x82358C80 -- BODIED 2026-08-20.

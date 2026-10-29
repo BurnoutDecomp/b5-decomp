@@ -101,12 +101,12 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
 
     case GameStateModuleIO::E_EVENT_PLAYER_FINISHED_MODE:
         mModeManager.PlayerFinishedMode(reinterpret_cast<const GameStateModuleIO::PlayerFinishedModeEvent*>(lpEvent));
-        mpTakedownManager->ClearRaceCarData();
+        mTakedownManager.ClearRaceCarData();
         break;
 
     case GameStateModuleIO::E_EVENT_PLAYER_EXITED_MODE:
         mModeManager.UserCancelCurrentMode();
-        mpTakedownManager->ClearRaceCarData();
+        mTakedownManager.ClearRaceCarData();
         break;
 
     case GameStateModuleIO::E_EVENT_REQUEST_INVITE:
@@ -130,7 +130,7 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
         }
         else
         {
-            const GameStateModuleIO::PromptDoInviteAction lPromptDoInviteAction = {};
+            const GameStateModuleIO::PromptDoInviteAction lPromptDoInviteAction = GameStateModuleIO::PromptDoInviteAction();
             lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lPromptDoInviteAction),
                                     GameStateModuleIO::E_ACTION_PROMPT_DO_INVITE,
                                     static_cast<s32>(sizeof(lPromptDoInviteAction)));
@@ -148,7 +148,7 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
 
     case GameStateModuleIO::E_EVENT_UPDATE_PREPARE_FOR_INVITE:
     {
-        const GameStateModuleIO::UpdatePrepareForInviteAction lUpdatePrepareForInviteAction = {};
+        const GameStateModuleIO::UpdatePrepareForInviteAction lUpdatePrepareForInviteAction = GameStateModuleIO::UpdatePrepareForInviteAction();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lUpdatePrepareForInviteAction),
                                 GameStateModuleIO::E_ACTION_UPDATE_PREPARE_FOR_INVITE,
                                 static_cast<s32>(sizeof(lUpdatePrepareForInviteAction)));
@@ -285,7 +285,7 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
         break;
 
     case GameStateModuleIO::E_EVENT_PAYBACK_TRIGGERABLE:
-        mpPaybackManager->ProcessPaybackTriggerableEvent();
+        mPaybackManager.ProcessPaybackTriggerableEvent();
         break;
 
     case GameStateModuleIO::E_EVENT_JUST_BOUNCED:
@@ -317,7 +317,7 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
 
     case GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN:
     {
-        const GameStateModuleIO::JustAppliedExtraSpinAction lSpinAction = {};
+        const GameStateModuleIO::JustAppliedExtraSpinAction lSpinAction = GameStateModuleIO::JustAppliedExtraSpinAction();
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSpinAction),
                                 GameStateModuleIO::E_ACTION_JUST_APPLIED_EXTRA_SPIN,
                                 static_cast<s32>(sizeof(lSpinAction)));

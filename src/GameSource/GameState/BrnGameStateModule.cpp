@@ -11,7 +11,7 @@
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"    // original mode-pause input: IsInTakedownCamera
-#include "GameSource/GameState/BrnGameStateTakedownCache.h"             // [FX-GS2 G10-D11] mpTakedownCache->mVehicleOutputInterface (CheckForTailingRivals' r5)
+#include "GameSource/GameState/BrnGameStateModule.h"             // [FX-GS2 G10-D11] mVehicleOutputInterface (CheckForTailingRivals' r5)
 #include "GameSource/GameState/BrnGameEvents.h"                         // [returning-player wave] E_GUI_HAS_STARTED_GAME (the case-78 trigger)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> (the carry-queue walk)
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
@@ -40,10 +40,10 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // [boost-wave2] BrnPhysics::Vehicle::EImpactType (E_IMPACT_COUNT)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"        // [FX-GS] PaybackManager::Destruct (the Destruct leg)
 #include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"
-#include "GameSource/GameState/InviteManager/BrnGameStateInviteManager.h"          // [PGEP] mpGameStateInviteManager (new / Construct / Prepare / Destruct)
-#include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"        // [PGEP] mpImageManager
-#include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"      // [PGEP] mpOnlineFlybyManager
-#include "GameSource/GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.h" // [PGEP] mpRichPresenceManager
+#include "GameSource/GameState/InviteManager/BrnGameStateInviteManager.h"          // [PGEP] (&mGameStateInviteManager) (new / Construct / Prepare / Destruct)
+#include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"        // [PGEP] (&mImageManager)
+#include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"      // [PGEP] (&mOnlineFlybyManager)
+#include "GameSource/GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.h" // [PGEP] (&mRichPresenceManager)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // [PGEP] PerfMonCpu::AddMonitor ("XUserSetContext")
 
 namespace BrnGameState
@@ -98,266 +98,85 @@ enum EGsmGameAction
 // BrnGameModule::BridgeGameStateToDirector @0x823CD170 Appends this buffer's +0x04 queue into
 // the director input buffer's queue every frame, and MainDirector::ProcessInputQueue drains it.
 // ----------------------------------------------------------------------------
+// ARTIST827E44B8. Real members perform their C++ construction in native declaration order.
+GameStateModule::GameStateModule()
+{
+}
+
 void GameStateModule::Construct()
 {
+    mbIsUpdating = true;
     CgsModule::ModuleSingleBuffered::Construct();
-    // The two embedded debug components are Constructed immediately after the module base in
-    // ARTIST 0x82380388, in this order and with the owning module pointer.
+    mePrepareStage = E_PREPARESTAGE_START;
+    mePrepare2Stage = E_PREPARE2STAGE_START;
+    meReleaseStage = E_RELEASESTAGE_DONE;
     mResetPlayerDebugComponent.Construct(this);
     mGameStateDebugComponent.Construct(this);
-
-    if (mpOutputBuffer == 0)
-    {
-        mpOutputBuffer = new GameStateModuleIO::OutputBuffer();
-        mpOutputBuffer->Construct();
-    }
-
-    // ⭐⭐ [D2 gesture-sink] THE PRE-WORLD CONTROLLER SINK. Allocated here for exactly the
-    // reason mpOutputBuffer is, and with the same shape of FLAG -- the console stages this
-    // buffer per frame out of the update IOBufferStack
-    // (BrnGameModule::DoUpdate_GameStatePreWorld @0x823EE0E8:
-    //  `CreateIOBuffer<GameStateModuleIO::PreWorldInputBuffer>(stack, &buf, "GameStatePreWorld")`
-    //  ... `DestroyIOBuffer(stack, &buf)`), and nothing on PC runs that entry point. The full
-    // attestation, the refuted "module + 0x2BE8" premise and the DELETE-WHEN live on
-    // GameStateModule::GetPreWorldInputBuffer() in the header.
-    //
-    // ⚠️ `new T()` -- the parenthesised form is load-bearing, not decoration. PreWorldInputBuffer
-    // has no user-provided constructor, so value-initialisation ZERO-INITIALISES the whole object
-    // before the implicit default ctor runs. Without it ControllerInput::mbRaceModePressed (and
-    // its twenty siblings) would be indeterminate for every read taken before the first
-    // BridgeControllerToGameState of the session -- a "the gesture fired on boot" bug that would
-    // reproduce about half the time.
-    if (mpPreWorldInputBuffer == 0)
-    {
-        mpPreWorldInputBuffer = new GameStateModuleIO::PreWorldInputBuffer();
-        mpPreWorldInputBuffer->Construct();   // raises eStatusConstructed and constructs every embedded queue
-    }
-
-    // ⭐⭐ [gateui] THE STUNT SUB-OBJECT, wired with the console's own six arguments. X360
-    // 0x82380388, the line immediately after OnlineCarSelectManager::Construct:
-    //     BrnGameState::StuntManager::Construct(a1 + 183952,   // &mStuntManager
-    //                                           a1 + 47920,    // &mProgressionManager
-    //                                           a1 + 42320,    // &mTriggerQueryManager
-    //                                           a1 + 4128,     // &mModeManager
-    //                                           a1 + 46640,    // the TrainingManager
-    //                                           a1);           // this
-    // Verbatim, same order. Construct is the manager's ONLY initialiser -- it seeds the "last
-    // latched element" set to its empty state (muLastZoneId/muLastPropId = -1,
-    // mpLastStuntOrSmashElement = NULL, meLastStuntElementType = COUNT), Constructs the district
-    // map's receiver queue and registers the debug component -- so without it OnPropHit would
-    // latch into, and Prepare would stream through, uninitialised state.
-    //
-    // X360 GameStateModule::Construct calls ModeManager::Construct here, after the invite
-    // manager and before ProgressionManager::Construct. Preserve the original owner argument order.
-    // [takedown wave 2026-09-02] X360 Construct @0x82380388 inlines TakedownManager::Construct
-    // (the two manager pointers into gsm+568, its back-pointer at gsm+1256) BEFORE the
-    // TriggerQueryManager / RoadRules / DriveThru constructs; the queue constructs follow at
-    // gsm+249936 / +250272 / +250800. Both halves in GameStateModule_gTD_00.cpp.
-
-    // [PGEP] The invite manager (console gsm+0x7F0), constructed right after PaybackManager::Construct
-    // (its five queue Constructs and three seed stores are inlined there). Held by pointer here; see
-    // the member block in the header.
-    if (mpGameStateInviteManager == 0)
-    {
-        mpGameStateInviteManager = new GameStateInviteManager();
-    }
-    mpGameStateInviteManager->Construct();
-
+    mTakedownManager.Construct(&mModeManager, &mProgressionManager);
+    mMugshotManager.Construct(this);
+    mPaybackManager.Construct(this);
+    mGameStateInviteManager.Construct();
     mModeManager.Construct(this, &mProgressionManager, &mTriggerQueryManager,
-                           &mNetworkRoundManager, &mStreetManager, mpMugshotManager,
-                           &mRoadRulesManager, &mAchievementManager);
-
-    // ⭐⭐ [progression wave: lifecycle, 2026-09-06] THE PROGRESSION MANAGER'S CONSTRUCT, at the
-    // console's own position. X360 0x82380388, the call IMMEDIATELY AFTER ModeManager::Construct
-    // (call 14 of this function's 50) at 0x8238050C:
-    //     BrnProgression::ProgressionManager::Construct(a1 + 47920,    // &mProgressionManager
-    //                                                   a1 + 183712,   // &mCarSelectManager
-    //                                                   a1 + 284520,   // &mStreetManager
-    //                                                   a1 + 46640,    // the TrainingManager
-    //                                                   a1 + 183952);  // &mStuntManager
-    // Verbatim, same argument order (the four are named by Construct's own asserts,
-    // BrnProgressionManager.cpp:124..127). This is the ONLY installer of the progression layer's
-    // mpStreetManager / mpStuntManager / mpTrainingManager / mpCarSelectManager back-pointers, of
-    // every scalar seed the manager owns, of Profile::Construct's first call, and of the two
-    // PerfMonCpu handles PreWorldUpdate brackets itself with.
-    //
-    // ⓘ It is placed here, after ModeManager::Construct and BEFORE mStuntManager.Construct, to
-    // match the console's ordering as closely as this function's existing (documented) order
-    // deviation allows. The three sub-objects whose addresses it takes -- mCarSelectManager,
-    // mStreetManager, mStuntManager -- are only STORED, never dereferenced, so taking the address
-    // of one that has not been Constructed yet is well-defined and the stored value is final. The
-    // TrainingManager is the embedded object; its address is final before Construct runs.
+        &mNetworkRoundManager, &mStreetManager, &mMugshotManager,
+        &mRoadRulesManager, &mAchievementManager);
     mProgressionManager.Construct(&mCarSelectManager, &mStreetManager,
-                                  &mTrainingManager, &mStuntManager);
-
-    // The prepare-reply queue, at the console's seat: immediately after ProgressionManager::Construct
-    // (0x8238050C) the console builds EventReceiverQueue<3072,16>::Construct inline on this+0x38BC0 --
-    // buffer = +0x18, 0xC00, align 0x10 (0x82380514..0x8238052C) -- and calls
-    // BaseEventReceiverQueue::Clear (0x82380530). It used to be a one-shot at the top of Prepare
-    // whose banner blamed the missing ClearData; ClearData never touches it. [FX-TAILS-A 2026-09-24]
+        &mTrainingManager, &mStuntManager);
     mReceiverQueue.Construct();
-
-    // The console's next two calls: TriggerQueryManager::Construct (the progression, takedown and
-    // road-rules managers it keeps) and RoadRulesManager::Construct (the street, mode and training
-    // managers). The training-manager address refers to the embedded owner.
-    mTriggerQueryManager.Construct(&mProgressionManager, mpTakedownManager, &mRoadRulesManager);
+    mTriggerQueryManager.Construct(&mProgressionManager, &mTakedownManager, &mRoadRulesManager);
     mRoadRulesManager.Construct(&mStreetManager, &mModeManager, &mTrainingManager);
-
-    // ⭐ [drive-thru wave 2026-08-27] THE DRIVE-THRU SUB-OBJECT, wired with the console's own five
-    // arguments. X360 0x82380388 line 116, immediately after RoadRulesManager::Construct:
-    //     BrnGameState::DriveThruManager::Construct(a1 + 44240,   // &mDriveThruManager
-    //                                               a1 + 183712,  // &mCarSelectManager
-    //                                               a1 + 46640,   // the TrainingManager
-    //                                               a1 + 4128,    // &mModeManager
-    //                                               a1,           // this
-    //                                               a1 + 47920);  // &mProgressionManager
-    // Verbatim, same argument order. Construct is the manager's ONLY initialiser: it seeds all 46
-    // DriveThruTriggerData timers to the -1.0 "inactive" sentinel, nulls their region pointers,
-    // zeroes the six per-type totals and sets meDriveThruCache / meDiscoveredDriveThruType to the
-    // E_TYPE_COUNT (32) "nothing cached" sentinel. Without it Update's per-frame sweep reads 46
-    // uninitialised timers and its `meDriveThruCache != E_TYPE_COUNT` gate is a coin flip
-    // [[valid-pointer-invalid-object]].
     mDriveThruManager.Construct(&mCarSelectManager, &mTrainingManager, &mModeManager,
-                                this, &mProgressionManager);
-
-    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D5] RumbleManager::Construct @0x82378A70 -- call
-    // #19 of X360 0x82380388 (0x823805C8), IMMEDIATELY after DriveThruManager::Construct (#18,
-    // 0x82380578), which is why it sits here: `addis r3,r31,1 ; addi r3,r3,-0x49A8` == &mRumbleManager.
-    // The manager's ONLY initialiser: rumble enabled, wheel force-feedback on, the six other flags
-    // clear, and the four inline event queues bound (a queue that never ran Construct has a NULL
-    // mpEvents, and the first AddEventSafe on it fires "mpEvents != NULL").
-    // ARTIST 0x82380584..0x823805C4 initializes the embedded training owner here.
+        this, &mProgressionManager);
     mTrainingManager.Construct(&mProgressionManager, this);
     mRumbleManager.Construct();
-
-    // X360 0x82380388 calls CarSelectManager @0x823805DC, OnlineCarSelectManager @0x823805F0,
-    // and StuntManager @0x8238060C in this order after RumbleManager::Construct. The online
-    // manager stores this module and the progression manager before its first update.
     mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
     mOnlineCarSelectManager.Construct(this, &mProgressionManager);
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
-                            &mTrainingManager, this);
-
-    // X360 0x82380628 constructs the embedded OfflineFlybyManager at gsm+0x2D630 through its
-    // FlybyManager base; 0x82380634 clears its two-bit message set. The typed owner body below
-    // reproduces both operations. The following X360 call @0x82380644 constructs the online
-    // manager at gsm+0x2D8E0; this PC source retains that manager behind a stable pointer.
+        &mTrainingManager, this);
     mOfflineFlybyManager.Construct(this, mModeManager.GetScoringSystem());
-    if (mpOnlineFlybyManager == 0)
-    {
-        mpOnlineFlybyManager = new OnlineFlybyManager();
-    }
-    mpOnlineFlybyManager->Construct(this, mModeManager.GetScoringSystem());
-
-    // ⭐ [FX-RUMBLE] ContactSpyInterface::Construct(gsm+250800) -- call #25 of the same function
-    // (0x8238065C), the first of the per-frame input caches' Constructs that precede the
-    // carry-queue Construct below (#30). Clears the handle RumbleManager::Update reads (mpData = 0),
-    // so the first pre-world before any post-world sees an UNBOUND spy and UpdateImpacts returns on
-    // its own `mpData == NULL` test (0x823793D8), exactly as the console's first frame does.
+    mOnlineFlybyManager.Construct(this, mModeManager.GetScoringSystem());
+    mNetworkRoundManager.Construct();
     mContactSpyInterface.Construct();
-
-    // ⭐ [gateui] THE GAME-EVENT CARRY QUEUE (X360 this+248384). The console Constructs it right
-    // here: `CgsModule::VariableEventQueue<1536,16>::Construct(a1 + 248384)` @0x82380388, in the
-    // block of queue Constructs near the end of the body. This is the never-Constructed-queue
-    // trap paid up front -- PostWorldUpdate Appends into it and PreWorldUpdate Clears it, and
-    // Clear() does NOT bind a buffer.
+    mRaceCarCrashEventQueue.Construct();
+    mTakedownEventQueue.Construct();
+    mVehicleOutputInterface.Construct();
     mGameEventCarryQueue.Construct();
-
-    // ⭐ [showtime score wave 2026-08-29] THE SHOWTIME CRASH HAND-OFF STACK (X360 this+284488).
-    // Same never-Constructed-container trap, and this container makes it LOUD rather than latent:
-    // CgsContainers::Stack's uninitialised sentinel is miLength == 0x7FFFFFFF, and every Push /
-    // Peek / Pop / IsFull opens with CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED,
-    // "Stack used before Construct/Clear was called"). ProcessContacts calls IsFull() on the very
-    // first showtime frame, so without this the assert fires immediately -- and on a pool-carved
-    // module the garbage length would then index maData out of range.
-    // ⓘ The console does this in the same Construct @0x82380388 block; UpdateShowtimeMode's own
-    // "Stack used before Construct/Clear was called" FireAssert (BrnGameStateModule.cpp:1611
-    // region, CgsStack.h:177) is the X360 witness that the container is this type.
-    mShowtimePendingTrafficIndexStack.Construct();
-
-    // ✅ [FX-TAILS-A 2026-09-24] The two "construct insurance" Clears that sat here
-    // (mLastActiveRaceCarInterface / mLastGlobalRaceCarInterface) are RETIRED: they stood in for
-    // GameStateModule::ClearData @0x8236B3A8, whose first two calls they are
-    // (RCEntityActiveRaceCarOutputInterface::Clear(+0x397E0) @0x8236B430,
-    // RCEntityGlobalRaceCarOutputInterface::Clear(+0x3C0D0) @0x8236B43C). ClearData now runs at the
-    // console's seat below, right after DeveloperChallengeManager::Construct, and again at Prepare's
-    // START stage -- so the snapshots hold the interfaces' own "no data" state (index -1, every
-    // active-index slot E_ACTIVE_RACE_CAR_INDEX_INVALID) before any reader runs.
-
-    // ⭐ 2026-09-03 (aiwave, lane P1): AchievementManagerBase.cpp is MOUNTED -- the eight externals the
-    // bat named are bodied (BrnScoringSystem_Accessors2.cpp / _Queries.cpp, BrnProgressionManager_Rivals.cpp),
-    // so the console's call goes back on its line (Construct @0x82380388: r4 = mProgressionManager,
-    // r5 = mStreetManager, r6 = mModeManager's ScoringSystem, r7 = this).
-    // [PGEP] The rich-presence manager (console gsm+0x2C4D0), at its seat just before the
-    // achievement manager's Construct: the console leaf's inlined construct half registers the
-    // "XUserSetContext" monitor (page 5, budget 1.0, scaled) and starts the presence thread, then
-    // RichPresenceManagerBase::Construct(this, &mNetworkRoundManager, &mModeManager).
-    if (mpRichPresenceManager == 0)
-    {
-        mpRichPresenceManager = new RichPresenceManagerX360();
-        mpRichPresenceManager->miSetContextPM =
-            CgsDev::PerfMonCpu::AddMonitor("XUserSetContext", CgsDev::E_PMP_5, false, 1.0f, true);
-        mpRichPresenceManager->CreatePresenceThread();
-    }
-    mpRichPresenceManager->Construct(this, &mNetworkRoundManager, &mModeManager);
-
-    // AchievementManagerX360::Construct also reproduces the X360-only inline tail at
-    // 0x82380740..764: user/state/handle stores, CgsXOverlapped::Construct, and both zeroed bits.
+    mLastTrafficTypeResponseQueue.Construct();
+    mOutputGuiEventQueue.Construct();
+    mRichPresenceManager.miSetContextPM =
+        CgsDev::PerfMonCpu::AddMonitor("XUserSetContext", CgsDev::E_PMP_5, false, 1.0f, true);
+    mRichPresenceManager.CreatePresenceThread();
+    mRichPresenceManager.Construct(this, &mNetworkRoundManager, &mModeManager);
     mAchievementManager.Construct(&mProgressionManager, &mStreetManager,
-                                  mModeManager.GetScoringSystem(), this);
-
-    // StreetManager::Construct, the console's call after the achievement manager's (its
-    // road-rules manager argument is the one RoadRulesManager::Construct initialised above).
+        mModeManager.GetScoringSystem(), this);
     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
-
-    // [PGEP] GameStateImageManagerBase::Construct (console gsm+0x2D4B0, r4 = &mProgressionManager),
-    // the call between StreetManager::Construct and DeveloperChallengeManager::Construct.
-    if (mpImageManager == 0)
-    {
-        mpImageManager = new GameStateImageManagerBase();
-    }
-    mpImageManager->Construct(&mProgressionManager);
-
-    // ⭐ 2026-09-03 (aiwave, lanes P1+P3): DeveloperChallengeManager::Construct @0x82380794 sits right after
-    // GameStateImageManagerBase::Construct @0x82380778 and before ClearData @0x823807A8 (r4 = r28
-    // mProgressionManager, r5 = r25 mStreetManager, r6 = r23 the ScoringSystem, r7 = r31 this). The TU is
-    // mounted now (its five externals landed), so the console's call goes back on its line.
+    mImageManager.Construct(&mProgressionManager);
     mDeveloperChallengeManager.Construct(&mProgressionManager, &mStreetManager,
-                                         mModeManager.GetScoringSystem(), this);
-
-    // The console's one store between the two calls: `stbx r24(=1, li @0x823803A0), r31, 0x32DC4`
-    // @0x823807A4 -- mbIsFirstUpdate (DWARF BrnGameStateModule.h:272), this tree's
-    // mbSendSetupPlayerCarPending, the one-shot latch PreWorldUpdate @0x823A5510 tests and clears.
-    // [FX-AIBUZZ 2026-09-24] It used to be armed at the end of Prepare's terminal stage, on the belief
-    // that "an event handler" arms it on the console. An image-wide scan of the ARTIST export finds
-    // exactly TWO functions touching +0x32DC4: this store and PreWorldUpdate's test/clear -- nothing
-    // else (not ClearData, not Prepare, no event handler). Nothing observable moves: the only reader,
-    // PreWorldUpdateSetupPlayerCarBringUp, runs only in E_MGS_IN_GAME (BrnGameModule.cpp), long after
-    // Prepare's terminal stage; Prepare runs once per boot; and a re-Prepare now leaves the consumed
-    // latch down, as the console's single arming does.
+        mModeManager.GetScoringSystem(), this);
     mbSendSetupPlayerCarPending = true;
-
-    // ClearData at the console's seat: `mr r3, r31 ; bl ClearData` @0x823807A8, the call right after
-    // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
     ClearData();
-
-    // ARTIST Construct's four full-vector identity stores at +0x47570.
     mPlayerCarTransform.SetIdentity();
-
-    // ARTIST 823803AC saves this; 82380934 restores it into r11, and
-    // 82380944 stores r24's original true byte at +4 after base Construct cleared it.
+    mfShowtimeIntroTimeLeft = 0.0f;
     mbIsNewModule = true;
-
-    // GameStateDebugComponent::OnActivate's module-owned controls: ARTIST Construct @0x82380388
-    // writes the two snap-race gates true and clears the four signature-takedown debug values.
-    mbDebugLimitSnapRaceStartConditions = true;   // X360 +0x4575F
-    mbAllowSnapRaceMode = true;                   // X360 +0x45762
-    muDebugSigTDRegionIndex = 0;                   // X360 +0x475B0
-    mbDrawCrashDebugText = false;                 // X360 +0x475B4
-    mbDrawSignatureTakedownRegionText = false;    // X360 +0x475B5
-    mbDebugMakeAllTakedownsSignature = false;     // X360 +0x475B6
-
-    // ARTIST's complete monitor block: page5, no minimum, budget1, scaled.
+    mbWasInShowtimeGameMode = false;
+    mfSnapRaceStartHoldSeconds = 0.35f;
+    mbToggleShowtimeBehaviour = false;
+    mfTimeSpentDoingCrashStartAction = 0.01f;
+    mbIsUpdating = false;
+    mfTimeSinceLastCrashMode = 2.0f;
+    muDebugSigTDRegionIndex = 0;
+    mfSimTimeStep = 0.0f;
+    meShowtimeBehaviour = static_cast<EShowtimeBehaviour>(2);
+    mbPropSystemNeedsProgression = false;
+    mbDebugMakeAllTakedownsSignature = false;
+    mbDrawCrashDebugText = false;
+    mbAllowSnapRaceMode = true;
+    mbDebugLimitSnapRaceStartConditions = true;
+    mLocalPlayerNetworkID = -1;
+    miPlayerMaxStatsDPadDownCount = 0;
+    mbDrawSignatureTakedownRegionText = false;
+    mbWaitForStreaming = true;
+    mbFreeburnChallengeSelectorVisible = false;
+    meFreeburnChallengeStyle = static_cast<BrnResource::ChallengeListEntry::EFreeburnChallengeStyle>(0);
     miTriggersPostPM = CgsDev::PerfMonCpu::AddMonitor("Trigger Post update", CgsDev::E_PMP_5, false, 1.0f, true);
     miTriggersPrePM = CgsDev::PerfMonCpu::AddMonitor("Trigger Pre update", CgsDev::E_PMP_5, false, 1.0f, true);
     miShowTimeUpdate = CgsDev::PerfMonCpu::AddMonitor("Show Time Update", CgsDev::E_PMP_5, false, 1.0f, true);
@@ -370,30 +189,97 @@ void GameStateModule::Construct()
     miProcessEventsPM = CgsDev::PerfMonCpu::AddMonitor("Process events", CgsDev::E_PMP_5, false, 1.0f, true);
     miTakedownPM = CgsDev::PerfMonCpu::AddMonitor("Takedown manager", CgsDev::E_PMP_5, false, 1.0f, true);
     miEmmUpdatePM = CgsDev::PerfMonCpu::AddMonitor("EMM update", CgsDev::E_PMP_5, false, 1.0f, true);
-    miModeManagerPrePM = CgsDev::PerfMonCpu::AddMonitor("Mode manager PRE", CgsDev::E_PMP_5, false, 1.0f, true);
-    miModeManagerPostPM = CgsDev::PerfMonCpu::AddMonitor("Mode manager POST", CgsDev::E_PMP_5, false, 1.0f, true);
-    miCopyingAndResettingPM = CgsDev::PerfMonCpu::AddMonitor("Copying and resetting", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPrePM = CgsDev::PerfMonCpu::AddMonitor("Mode manager pre", CgsDev::E_PMP_5, false, 1.0f, true);
+    miModeManagerPostPM = CgsDev::PerfMonCpu::AddMonitor("Mode manager post", CgsDev::E_PMP_5, false, 1.0f, true);
+    miCopyingAndResettingPM = CgsDev::PerfMonCpu::AddMonitor("Copying and Resetting", CgsDev::E_PMP_5, false, 1.0f, true);
     miProcessContactsPM = CgsDev::PerfMonCpu::AddMonitor("Process contacts", CgsDev::E_PMP_5, false, 1.0f, true);
     miStreetManagerPM = CgsDev::PerfMonCpu::AddMonitor("Street manager", CgsDev::E_PMP_5, false, 1.0f, true);
-    CGS_ASSERT(miGameStatePrePM >= 0, "miGameStatePrePM >= 0");
-    CGS_ASSERT(miGameStatePostPM >= 0, "miGameStatePostPM >= 0");
-    CGS_ASSERT(miDetectModeStartsPM >= 0, "miDetectModeStartsPM >= 0");
-    CGS_ASSERT(miRoadRulesPM >= 0, "miRoadRulesPM >= 0");
-    CGS_ASSERT(miDriveThrusPM >= 0, "miDriveThrusPM >= 0");
-    CGS_ASSERT(miProcessEventsPM >= 0, "miProcessEventsPM >= 0");
-    CGS_ASSERT(miTakedownPM >= 0, "miTakedownPM >= 0");
-    CGS_ASSERT(miEmmUpdatePM >= 0, "miEmmUpdatePM >= 0");
-    CGS_ASSERT(miModeManagerPrePM >= 0, "miModeManagerPrePM >= 0");
-    CGS_ASSERT(miModeManagerPostPM >= 0, "miModeManagerPostPM >= 0");
-    CGS_ASSERT(miCopyingAndResettingPM >= 0, "miCopyingAndResettingPM >= 0");
-    CGS_ASSERT(miStreetManagerPM >= 0, "miStreetManagerPM >= 0");
+    muCachedJunctionLightTriggerId = 0xFFFFFFFFu;
+    muCachedJunctionLogicBoxId = 0xFFFFFFFFu;
+    mbJunctionNewlyDiscovered = false;
+    mbCanEnterEventAtJunction = false;
+    mbAtJunctionWithEvent = false;
+    if (miGameStatePrePM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miGameStatePrePM >= 0", KAC_GSM_FILE, 295);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miGameStatePostPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miGameStatePostPM >= 0", KAC_GSM_FILE, 296);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miDetectModeStartsPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miDetectModeStartsPM >= 0", KAC_GSM_FILE, 297);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miRoadRulesPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miRoadRulesPM >= 0", KAC_GSM_FILE, 298);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miDriveThrusPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miDriveThrusPM >= 0", KAC_GSM_FILE, 299);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miProcessEventsPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miProcessEventsPM >= 0", KAC_GSM_FILE, 300);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miTakedownPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miTakedownPM >= 0", KAC_GSM_FILE, 301);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miEmmUpdatePM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miEmmUpdatePM >= 0", KAC_GSM_FILE, 302);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miModeManagerPrePM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miModeManagerPrePM >= 0", KAC_GSM_FILE, 303);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miModeManagerPostPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miModeManagerPostPM >= 0", KAC_GSM_FILE, 304);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miCopyingAndResettingPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miCopyingAndResettingPM >= 0", KAC_GSM_FILE, 305);
+        CgsDev::Assert::EndAssert();
+    }
+    if (miStreetManagerPM < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("miStreetManagerPM >= 0", KAC_GSM_FILE, 306);
+        CgsDev::Assert::EndAssert();
+    }
+    mActivePlayerCarId = 0;
+    mActivePlayerWheelId = 0;
 }
 
 // ARTIST 82311E48..82311E70 and 82343220..82343248 inline this selector.
 FlybyManager* GameStateModule::GetFlybyManager()
 {
     if (IsOnlineGameMode())
-        return mpOnlineFlybyManager;
+        return (&mOnlineFlybyManager);
     return &mOfflineFlybyManager;
 }
 
@@ -441,7 +327,7 @@ void GameStateModule::PreWorldUpdate(
         const EActiveRaceCarIndex lePlayerIndex = GetPlayerActiveRaceCarIndex();
         lpOutput->GetGameStateToGuiInterface()->SetPlayerRaceCarIndex(lePlayerIndex);
         lpOutput->GetGameStateToGuiInterface()->AppendRaceCarCrashes(
-            &mpTakedownCache->mRaceCarCrashEventQueue);
+            &mRaceCarCrashEventQueue);
     }
 
     CgsDev::PerfMonCpu::StartMonitor(miDriveThrusPM);
@@ -451,7 +337,7 @@ void GameStateModule::PreWorldUpdate(
     const bool lbIsFreeburn = mModeManager.GetCurrentGameMode() == 0 ||
         leDriveMode == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
         leDriveMode == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
-    const bool lbInviteInProgress = mpGameStateInviteManager->IsInviteInProgress();
+    const bool lbInviteInProgress = mGameStateInviteManager.IsInviteInProgress();
     const bool lbIsInJunkyard = mCarSelectManager.IsInJunkyard();
     const bool lbIsAnythingPaused = miSimPauseFlags != 0;
     const bool lbIsOnline = mModeManager.IsOnlineGameMode();
@@ -465,14 +351,14 @@ void GameStateModule::PreWorldUpdate(
 
     CgsDev::PerfMonCpu::StartMonitor(miCopyingAndResettingPM);
     CopyInputDataToPaybackManager(lpInput);
-    mpOnlineFlybyManager->mPlayerInputInterface = *lpInput->GetPlayerStatusInterface();
-    mpGameStateInviteManager->AppendFromPreWorldInputData(lpInput);
+    mOnlineFlybyManager.mPlayerInputInterface = *lpInput->GetPlayerStatusInterface();
+    mGameStateInviteManager.AppendFromPreWorldInputData(lpInput);
     CgsDev::PerfMonCpu::StopMonitor(miCopyingAndResettingPM);
-    CheckForTailingRivals(lpOutput, &mpTakedownCache->mVehicleOutputInterface, lfGameTimeStep);
+    CheckForTailingRivals(lpOutput, &mVehicleOutputInterface, lfGameTimeStep);
     const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
     mTrainingManager.Update(lpInput, lpActionQueue, &mLastActiveRaceCarInterface,
                               lfGameTimeStep, lbAllowTimedTips);
-    mRumbleManager.Update(&mLastActiveRaceCarInterface, &mpTakedownCache->mRaceCarCrashEventQueue,
+    mRumbleManager.Update(&mLastActiveRaceCarInterface, &mRaceCarCrashEventQueue,
                           mePlayerActiveRaceCarIndex, &mContactSpyInterface, lfGameTimeStep);
 
     CgsDev::PerfMonCpu::StartMonitor(miCopyingAndResettingPM);
@@ -481,12 +367,12 @@ void GameStateModule::PreWorldUpdate(
     lGameEvents.Construct();
     lGameEvents.Append(mGameEventCarryQueue);
     lGameEvents.Append(*lpInput->GetGameEventQueue());
-    lGameEvents.Append(*mpGameStateInviteManager->GetGameEventQueue());
+    lGameEvents.Append(*mGameStateInviteManager.GetGameEventQueue());
     mGameEventCarryQueue.Clear();
     CgsDev::PerfMonCpu::StopMonitor(miCopyingAndResettingPM);
     CgsDev::PerfMonCpu::StartMonitor(miShowTimeUpdate);
     UpdateShowtimeMode(lpInput, lpOutput, &mContactSpyInterface,
-                       &mpTakedownCache->mTrafficTypeResponseQueue);
+                       &mLastTrafficTypeResponseQueue);
     CgsDev::PerfMonCpu::StopMonitor(miShowTimeUpdate);
     mOutputGuiEventQueue.Clear();
     ProcessGameEvents(&lGameEvents, lpActionQueue, lpInput, lpOutput);
@@ -503,28 +389,28 @@ void GameStateModule::PreWorldUpdate(
         mCarSelectManager.Update(lpActionQueue, lpInput->GetControllerInput(), lfGameTimeStep);
     CgsDev::PerfMonCpu::StopMonitor(miCarSelectManagerUpdate);
     mOnlineCarSelectManager.Update(lpActionQueue, lpInput->GetControllerInput(), lfGameTimeStep);
-    mpImageManager->PreWorldUpdate(mePlayerActiveRaceCarIndex,
-                                  &mpTakedownCache->mTakedownEventQueue, lpOutput);
+    mImageManager.PreWorldUpdate(mePlayerActiveRaceCarIndex,
+                                  &mTakedownEventQueue, lpOutput);
 
     CgsDev::PerfMonCpu::StartMonitor(miTakedownPM);
-    mpTakedownCache->mTakedownEventQueue.Clear();
+    mTakedownEventQueue.Clear();
     if (!lbSimPaused)
     {
         BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingCars;
-        lCrashingCars.SetFromVehicleOutputInterface(&mpTakedownCache->mVehicleOutputInterface);
-        mpTakedownManager->Update(&mLastActiveRaceCarInterface, mfSimTimeStep,
-            &mpTakedownCache->mRaceCarCrashEventQueue, &lCrashingCars, lpInput, lpOutput,
-            &mpTakedownCache->mTrafficTypeResponseQueue);
+        lCrashingCars.SetFromVehicleOutputInterface(&mVehicleOutputInterface);
+        mTakedownManager.Update(&mLastActiveRaceCarInterface, mfSimTimeStep,
+            &mRaceCarCrashEventQueue, &lCrashingCars, lpInput, lpOutput,
+            &mLastTrafficTypeResponseQueue);
         const GameStateModuleIO::TakedownEventOutputQueueType* const lpTakedownEvents =
             lpOutput->GetTakedownEventOutputQueue();
-        mpTakedownCache->mTakedownEventQueue.Clear();
-        mpTakedownCache->mTakedownEventQueue.Append(*lpTakedownEvents);
-        mpMugshotManager->Update(lpInput, lpOutput, &mpTakedownCache->mVehicleOutputInterface,
-            &mpTakedownCache->mTakedownEventQueue, mModeManager.GetCurrentGameModeType(),
+        mTakedownEventQueue.Clear();
+        mTakedownEventQueue.Append(*lpTakedownEvents);
+        mMugshotManager.Update(lpInput, lpOutput, &mVehicleOutputInterface,
+            &mTakedownEventQueue, mModeManager.GetCurrentGameModeType(),
             miSimPauseFlags != 0);
-        mpPaybackManager->Update(lpInput, lpOutput, &mpTakedownCache->mVehicleOutputInterface,
-            &mpTakedownCache->mTakedownEventQueue, mModeManager.GetCurrentGameModeType());
-        ProcessTakedownEvents(lpActionQueue, &mpTakedownCache->mTakedownEventQueue, lpOutput);
+        mPaybackManager.Update(lpInput, lpOutput, &mVehicleOutputInterface,
+            &mTakedownEventQueue, mModeManager.GetCurrentGameModeType());
+        ProcessTakedownEvents(lpActionQueue, &mTakedownEventQueue, lpOutput);
     }
     CgsDev::PerfMonCpu::StopMonitor(miTakedownPM);
     // ARTIST r7 is active-interface+0x2861, its named all-active-cars-ready byte.
@@ -553,15 +439,15 @@ void GameStateModule::PreWorldUpdate(
         SendSetUpAllDriveThrusMessage(lpActionQueue);
     DetectModeStarts(lpInput, lpOutput);
     lGameEvents.Destruct();
-    mpGameStateInviteManager->Update(lpOutput, lpActionQueue);
-    mModeManager.HandleOnlineTeamModes(lpInput, lpOutput, &mpTakedownCache->mTakedownEventQueue);
+    mGameStateInviteManager.Update(lpOutput, lpActionQueue);
+    mModeManager.HandleOnlineTeamModes(lpInput, lpOutput, &mTakedownEventQueue);
     const GameStateModuleIO::EGameModeType leStuntMode = mModeManager.GetCurrentGameModeType();
     const bool lbIsAGameModeActive = mModeManager.GetCurrentGameMode() != 0 &&
         leStuntMode != GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
         leStuntMode != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
     mStuntManager.Update(lpOutput->GetGameActionQueue(), &mLastActiveRaceCarInterface,
                           mfSimTimeStep, lbIsAGameModeActive);
-    mpRichPresenceManager->Update(lpInput, lpOutput);
+    mRichPresenceManager.Update(lpInput, lpOutput);
     mAchievementManager.Update(lpInput, lpOutput);
     mDeveloperChallengeManager.PreWorldUpdate(lpInput, lpOutput);
 
@@ -634,7 +520,7 @@ void GameStateModule::EmmPreWorldUpdate(
         CgsDev::PerfMonCpu::StartMonitor(miModeManagerPrePM);
         // 8238F100..F154 compares takedown timer+640 with -1.0f and stacks
         // that result as the tenth argument. It is not the sim-pause flag.
-        const bool lbTakedownPaused = mpTakedownManager->IsInTakedownCamera();
+        const bool lbTakedownPaused = mTakedownManager.IsInTakedownCamera();
         const EGlobalRaceCarIndex leGlobal =
             static_cast<EGlobalRaceCarIndex>(GetPlayerGlobalRaceCarIndex());
         const EActiveRaceCarIndex leActive = GetPlayerActiveRaceCarIndex();
@@ -731,7 +617,7 @@ void GameStateModule::ClearData()
     mLastAICarOutputInterface.Construct();
 
     mGameEventCarryQueue.Clear();
-    mpTakedownCache->mTakedownEventQueue.Clear();
+    mTakedownEventQueue.Clear();
 
     mbWaitingForStreaming                     = false;
     mbWaitingToPutPlayerInJunkyard            = false;
@@ -756,46 +642,42 @@ void GameStateModule::ClearData()
 
 void GameStateModule::Destruct()
 {
+    mActivePlayerCarId = 0;
+    mActivePlayerWheelId = 0;
+    mbIsUpdating = true;
     mGameStateDebugComponent.Destruct();
-
-    if (mpOutputBuffer != 0)
-    {
-        delete mpOutputBuffer;
-        mpOutputBuffer = 0;
-    }
-
-    // [D2 gesture-sink] the partner of Construct()'s allocation -- the console's partner is
-    // DoUpdate_GameStatePreWorld's DestroyIOBuffer tail.
-    if (mpPreWorldInputBuffer != 0)
-    {
-        mpPreWorldInputBuffer->Destruct();
-        delete mpPreWorldInputBuffer;
-        mpPreWorldInputBuffer = 0;
-    }
-
-    // [PGEP] The console's GameStateModule::Destruct runs GameStateImageManagerBase::Destruct early
-    // (before StreetManager::Destruct) and the invite manager's inlined Destruct right after
-    // ModeManager::Destruct, immediately before PaybackManager::Destruct below. The deletes are the
-    // partners of Construct()'s allocations (the console embeds all three managers by value).
-    if (mpImageManager != 0)
-    {
-        mpImageManager->Destruct();
-        delete mpImageManager;
-        mpImageManager = 0;
-    }
-    if (mpOnlineFlybyManager != 0)
-    {
-        delete mpOnlineFlybyManager;
-        mpOnlineFlybyManager = 0;
-    }
-    if (mpGameStateInviteManager != 0)
-    {
-        mpGameStateInviteManager->Destruct();
-        delete mpGameStateInviteManager;
-        mpGameStateInviteManager = 0;
-    }
-
+    mResetPlayerDebugComponent.Destruct();
+    for (s32 i = 0; i < 7; ++i) mafRivalTailingTimes[i] = 0.0f;
+    meControllerState = E_CONTROLLERSTATE_NOT_IN_GAME;
+    mDeveloperChallengeManager.maCollectedBillboards.Clear();
+    mDeveloperChallengeManager.maRoadRageTakedownTimes.Clear();
+    mDeveloperChallengeManager.mpProgressionManager = 0;
+    mDeveloperChallengeManager.mpStreetManager = 0;
+    mDeveloperChallengeManager.mpScoringSystem = 0;
+    mDeveloperChallengeManager.mpGameStateModule = 0;
+    mImageManager.Destruct();
+    mStreetManager.Destruct();
+    mRichPresenceManager.Destruct();
+    mLastTrafficTypeResponseQueue.Clear();
+    mGameEventCarryQueue.Destruct();
+    mReceiverQueue.Clear();
+    mProgressionManager.mpModeManager = 0;
+    mNetworkRoundManager.Destruct();
+    mOfflineFlybyManager.mStatShownMessages.UnSetAll();
+    mModeManager.Destruct();
+    mGameStateInviteManager.Destruct();
+    mPaybackManager.Destruct();
+    mMugshotManager.Destruct();
+    mTriggerQueryManager.mTriggerQueryManagerDebugComponent.Destruct();
+    mDriveThruManager.Destruct();
+    mAchievementManager.mAchievementsEarnt.UnSetAll();
+    mAchievementManager.mAchievementsToWrite.UnSetAll();
+    mAchievementManager.miUserIndex = -1;
+    mAchievementManager.miState = 0;
+    mAchievementManager.mhEnumerator = 0;
+    mAchievementManager.mOverLapped.Construct();
     CgsModule::ModuleSingleBuffered::Destruct();
+    mbIsUpdating = false;
 }
 
 // ----------------------------------------------------------------------------
@@ -997,7 +879,7 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
     case E_PREPARESTAGE_TAKEDOWNMANAGER:
         mePrepareStage = E_PREPARESTAGE_TAKEDOWNMANAGER;
-        if (!mpTakedownManager->Prepare())
+        if (!mTakedownManager.Prepare())
             break;
         // fall through
     case E_PREPARESTAGE_MUGSHOTMANAGER:
@@ -1005,17 +887,17 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // ARTIST has no provider work in this case.
         // fall through
     case E_PREPARESTAGE_PAYBACKMANAGER:
-        mpPaybackManager->Prepare();
+        mPaybackManager.Prepare();
         mePrepareStage = E_PREPARESTAGE_PAYBACKMANAGER;
         // fall through
     case E_PREPARESTAGE_INVITEMANAGER:
         mePrepareStage = E_PREPARESTAGE_INVITEMANAGER;
-        mpGameStateInviteManager->Prepare();
+        mGameStateInviteManager.Prepare();
         // fall through
     case E_PREPARESTAGE_FLYBYMANAGER:
         mePrepareStage = E_PREPARESTAGE_FLYBYMANAGER;
         mOfflineFlybyManager.Prepare();
-        mpOnlineFlybyManager->Prepare();
+        mOnlineFlybyManager.Prepare();
         // fall through
     case E_PREPARESTAGE_NETWORKROUNDMANAGER:
         mePrepareStage = E_PREPARESTAGE_NETWORKROUNDMANAGER;
@@ -1028,9 +910,9 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
     case E_PREPARESTAGE_RICH_PRESENCE:
         mePrepareStage = E_PREPARESTAGE_RICH_PRESENCE;
-        mpRichPresenceManager->miNumberPlayers = 0;
-        mpRichPresenceManager->miLobbyContextEnabled = -1;
-        if (!mpRichPresenceManager->RichPresenceManagerBase::Prepare())
+        mRichPresenceManager.miNumberPlayers = 0;
+        mRichPresenceManager.miLobbyContextEnabled = -1;
+        if (!mRichPresenceManager.RichPresenceManagerBase::Prepare())
             break;
         // fall through
     case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
@@ -1045,7 +927,7 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
     case E_PREPARESTAGE_IMAGE_MANAGER:
         mePrepareStage = E_PREPARESTAGE_IMAGE_MANAGER;
-        if (!mpImageManager->Prepare(lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
+        if (!mImageManager.Prepare(lpAllocatorList->GetHeapAllocator(KI_MODE_MANAGER_HEAP_BANK)))
             break;
         // fall through
     case E_PREPARESTAGE_RUMBLE_MANAGER:
@@ -1244,7 +1126,6 @@ bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
         // BrnGameModule::ResourceUpdateThread, which starts long before this flow state runs, so
         // it needs this signal to hold off. DELETE-WHEN the module scheduler's real Prepare2 pass
         // orders the two lanes.
-        mbPrepare2Complete = true;
         lbDone = true;
         break;
 

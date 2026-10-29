@@ -16,7 +16,7 @@
 
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
-#include "GameSource/GameState/BrnGameStateTakedownCache.h"
+#include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"
 #include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"     // MugshotManager (Construct / Update)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"     // PaybackManager (Construct / Update)
@@ -68,185 +68,11 @@ void GameStateModule::CacheTakedownManagerPostWorldInputData(
 {
     CGS_ASSERT(lpInput, "lpInput");
 
-    mpTakedownCache->mRaceCarCrashEventQueue.Clear();
+    mRaceCarCrashEventQueue.Clear();
     mContactSpyInterface.Construct();
     mContactSpyInterface = *lpInput->GetContactSpyInterface();
-    mpTakedownCache->mRaceCarCrashEventQueue.Append(*lpInput->GetRaceCarCrashEventQueue());
-    mpTakedownCache->mVehicleOutputInterface = *lpInput->GetVehicleOutputInterface();
-}
-
-// The !IsSimPaused takedown leg of PreWorldUpdate (see the banner). Replaces the direct
-// ProcessTakedownEvents call that stood in PreWorldUpdateStuntBringUp.
-void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lpActionQueue,
-                                          f32 lfGameTimestep,
-                                          const CgsSystem::TimerStatusInterface& lrTimerStatusInterface,
-                                          bool lbSimPaused)
-{
-    // Console PreWorldUpdate clears the module's own GUI event queue (gsm +0x2E580) once per frame,
-    // at the head of the function, immediately before ProcessGameEvents. Reproduced here, the
-    // earliest per-frame point this file owns: nothing between the console's position and this one
-    // writes that queue on this build -- the only writers tree-wide are the two manager ticks below.
-    // Without the clear the queue only ever grows, and AddEvent's overflow arm asserts and then
-    // writes the record ANYWAY, so repeated payback publishes eventually walk off the storage.
-    // DELETE-WHEN the clear can sit in PreWorldUpdate itself, beside the game-event drain.
-    //
-    // FLAG NOT REPRODUCED (blocked outside this file): the console's matching per-frame DRAIN at the
-    // tail of PreWorldUpdate, `OutputBuffer::GetGuiEventQueue()->Append(<this queue>)`, unconditional
-    // just before the race-distance fill. OutputBufferGuiEventQueue is still the opaque byte-array
-    // placeholder in BrnGameStateModuleIO.h rather than the console's VariableEventQueue<18432,16>,
-    // so the destination has neither an Append nor a Construct. Until it is retyped there, the
-    // records the managers publish are cleared unread instead of reaching the GUI.
-    mOutputGuiEventQueue.Clear();
-
-    // The console guards none of this leg: the two manager ticks below sit unconditionally inside
-    // its not-paused arm, gated only by the pause byte. So the takedown manager's own pointer is
-    // NOT part of the leg's entry test any more -- it gates only its own tick, and the mugshot and
-    // payback ticks are no longer silently coupled to takedown bring-up succeeding.
-    if (mpTakedownCache == 0)
-    {
-        return;
-    }
-
-    CgsModule::EventQueue<TakedownEvent, 8>* lpOutputTakedownQueue =
-        reinterpret_cast<CgsModule::EventQueue<TakedownEvent, 8>*>(
-            mpOutputBuffer->GetTakedownEventOutputQueue());
-
-    // Console PreWorldUpdate line 276: `*(gsm+249944) = 0` -- the module copy is cleared BEFORE the
-    // IsSimPaused branch, so a paused frame never re-drains last frame's events (verify V3).
-    mpTakedownCache->mTakedownEventQueue.Clear();
-    if (lbSimPaused)
-    {
-        return;
-    }
-
-    // : the crashing-race-car scratch, built from the cached
-    // VehicleOutputInterface (r24 == gsm+250816) exactly as the console builds it -- for every slot
-    // the cache's mUsedRaceCars marks in use, that car's RaceCarState::mbCrashing. The cache is
-    // filled at the post-world point by CacheTakedownManagerPostWorldInputData above.
-    mpTakedownCache->mCrashingRaceCarInterface.SetFromVehicleOutputInterface(
-        &mpTakedownCache->mVehicleOutputInterface);
-
-    // [PC HARNESS, NOT X360] BRN_FORCE_TAKEDOWN=<seconds>: once the current mode has been IN_PROGRESS
-    // for that long, fire the console's own "Force takedown" debug action (aggressor = car 0, victim
-    // = car 1, STANDARD), so ProcessQueuedTakedowns -> ProcessTakedownEvent -> OnPlayerDoesATakedown
-    // run deterministically on a scripted drive. Off unless the variable is set. DELETE-WHEN a
-    // scripted ram can be relied on.
-    {
-        static bool sbForced = false;
-    }
-
-    // [PC HARNESS, NOT X360] BRN_FORCE_PLAYER_TAKEN_DOWN=<seconds> (FX-BRIDGES CC-8 witness): the SAME
-    // debug action with the roles reversed -- once the current mode has been IN_PROGRESS that long, the
-    // first active, non-crashing rival slot is armed as the aggressor of a STANDARD takedown of the
-    // player (TakedownManager::HarnessForceTakenDown), so ProcessQueuedTakedowns -> ProcessTakedownEvent ->
-    // the output takedown queue -> BridgeGameStateToDirector's taken-down leg run deterministically.
-    // Re-armed every 10 s, at most three times, in case the confirmation sweep drops one (the aggressor
-    // crashed or slowed below KF_MIN_TAKEDOWN_SPEED). Off unless the variable is set.
-    // DELETE-WHEN a scripted rival ram on the player can be relied on.
-    {
-        static s32         siTakenDownShots  = 0;
-    }
-
-    // [PC HARNESS, not console code] BRN_FORCE_RIVAL_TAKEDOWN=<seconds>: the free-roam rival hunt.
-    // The two knobs above need an IN_PROGRESS mode and a fixed victim; this one runs only while NO mode is
-    // running (free burn) and picks its victim from the frame's active race cars: the first active,
-    // loaded, non-crashing rival slot (IsRaceCarRival). Once such a slot has been seen for that many
-    // seconds of game time, the player's slot is armed as the aggressor of a STANDARD takedown of the
-    // rival: the "Force takedown" debug action's arming (HarnessForceTakenDown: Clear, then the
-    // pending event) plus the two car model ids DetectStandardTakedown writes into the pending event.
-    // Everything after the arming is the console's code: ProcessQueuedTakedowns confirms it,
-    // ProcessTakedownEvent's free-burn arm posts the ShutdownAction and calls
-    // ProgressionManager::OnPursuitWon with the victim slot's rival id.
-    // ProcessQueuedTakedowns drops an arm whose aggressor is under KF_MIN_TAKEDOWN_SPEED, so the arm
-    // is repeated every second of rival time (at most forty times) until the tick is seen posting the
-    // rival state change (197); the drive script must get the player above that speed while the
-    // rival is in range. Off unless the variable is set. DELETE-WHEN a scripted ram on a roaming
-    // rival can be relied on.
-    static f32         sfRivalSeenTime    = 0.0f;
-    static s32         siRivalHuntShots   = 0;
-    static s32         siRivalHuntWitness = 0;
-
-    mpPreWorldInputBuffer->LockForRead();
-    mpTakedownManager->Update(&mLastActiveRaceCarInterface,
-                              lfGameTimestep,
-                              &mpTakedownCache->mRaceCarCrashEventQueue,
-                              &mpTakedownCache->mCrashingRaceCarInterface,
-                              mpPreWorldInputBuffer,
-                              mpOutputBuffer,
-                              &mpTakedownCache->mTrafficTypeResponseQueue);
-
-    // [PC HARNESS, not console code] the rival hunt's witness: for a few frames after an arm, every
-    // game action the takedown tick itself posted (the queue entries past the length it had before the
-    // tick) -- the takedown camera (6), ON_PLAYER_TAKEDOWN (14), SHUTDOWN (120), and from
-    // OnPursuitWon the rival state change (197) and the forced autosave (55). Nothing on PC logs the
-    // arrival of 197, so this is where its post is observable. Only after a BRN_FORCE_RIVAL_TAKEDOWN arm.
-    if (siRivalHuntWitness > 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-        --siRivalHuntWitness;
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize   = 0;
-        s32 liIndex  = 0;
-        s32 liAction = lpActionQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (lpEvent != 0)
-        {
-            if (liIndex >= liActionsBeforeTick)
-            {
-                if (liAction == GameStateModuleIO::E_ACTION_RIVAL_STATE_CHANGED)
-                {
-                    siRivalHuntShots = 40;   // the pursuit is won: stop re-arming
-                }
-            }
-            ++liIndex;
-            const CgsModule::Event* lpNext = 0;
-            liAction = lpActionQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent  = lpNext;
-        }
-    }
-
-    // 0x823A59F8..0x823A5A10: `*(gsm+249944) = 0; TakedownEvent_::Append(gsm+249936, out's queue)`.
-    mpTakedownCache->mTakedownEventQueue.Append(*lpOutputTakedownQueue);   // (the copy was cleared above)
-
-    // The two managers the console ticks between the takedown-queue drain and ProcessTakedownEvents,
-    // in that order and with the console's argument lists:
-    //     MugshotManager::Update(gsm +0x500, preIn, out, cachedVehicleOutput, the module's takedown
-    //                            queue copy, meCurrentGameModeType, <the pause bool>)
-    //     PaybackManager::Update(gsm +0x570, preIn, out, cachedVehicleOutput, the same queue copy,
-    //                            meCurrentGameModeType)
-    // THE SEVENTH ARGUMENT IS RESOLVED. In the console leg r9 is `*(r14) != 0`, where r14 is a
-    // stack slot holding a pointer the module computed far earlier in the same function -- the
-    // module's own pause-reason bitfield, gsm +0x38B60 == miSimPauseFlags. Two independent reads
-    // pin it: the same stack-held pointer feeds DriveThruManager::Update's pause argument earlier
-    // in the tick, and it is dereferenced again right after this leg as RumbleManager::
-    // UpdatePauseState's `lbPaused`. So the argument is `miSimPauseFlags != 0`, i.e. "is anything
-    // paused" -- not the leg's own lbSimPaused (which is the stricter IsSimPaused answer the leg
-    // already early-returned on).
-    if (mpMugshotManager != 0)
-    {
-        mpMugshotManager->Update(mpPreWorldInputBuffer,
-                                 mpOutputBuffer,
-                                 &mpTakedownCache->mVehicleOutputInterface,
-                                 &mpTakedownCache->mTakedownEventQueue,
-                                 GetCurrentGameModeType(),
-                                 miSimPauseFlags != 0);
-    }
-
-    if (mpPaybackManager != 0)
-    {
-        mpPaybackManager->Update(mpPreWorldInputBuffer,
-                                 mpOutputBuffer,
-                                 &mpTakedownCache->mVehicleOutputInterface,
-                                 &mpTakedownCache->mTakedownEventQueue,
-                                 GetCurrentGameModeType());
-    }
-    mpPreWorldInputBuffer->UnlockForRead();
-
-    if (mpTakedownCache->mTakedownEventQueue.GetLength() > 0 && CgsDev::Log::gpDebugPrint != 0)
-    {
-    }
-
-    // The legacy adapter stages its existing caller's timer for the original signature.
-    mTimerStatusInterface = lrTimerStatusInterface;
-    ProcessTakedownEvents(lpActionQueue, &mpTakedownCache->mTakedownEventQueue, mpOutputBuffer);
+    mRaceCarCrashEventQueue.Append(*lpInput->GetRaceCarCrashEventQueue());
+    mVehicleOutputInterface = *lpInput->GetVehicleOutputInterface();
 }
 
 // ProcessGameEvents @0x823A0A18 case 27 (POST_EVENT_LEAVE) ends with `TakedownManager::
@@ -262,12 +88,12 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
 // invented arms that could only ever pass.
 bool GameStateModule::IsInTakedownCamera() const
 {
-    return mpTakedownManager->IsInTakedownCamera();
+    return mTakedownManager.IsInTakedownCamera();
 }
 
 void GameStateModule::ClearTakedownRaceCarData()
 {
-    mpTakedownManager->ClearRaceCarData();
+    mTakedownManager.ClearRaceCarData();
 }
 
 // ==============================================================================================
@@ -299,7 +125,7 @@ void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuff
     // r4 = the action queue re-fetched @0x82390F24) -- no test. A pointer on this build (see
     // ConstructTakedownBringUp), always set by Construct; the `!= 0` guard it used to carry is gone
     // [FX-TAILS-A 2026-09-24, REVIEW-E on a5619c29].
-    mpTakedownManager->ClearAllTakedowns(lpActionQueue);
+    mTakedownManager.ClearAllTakedowns(lpActionQueue);
 
     mDriveThruManager.DriveThroughsCanNowOpenAgain();
 }
@@ -328,11 +154,11 @@ void GameStateModule::OnModeEnd(bool lbResetState)
     // 0x823767FC); held by pointer on this build and never null here, so no test here either
     // [FX-FLOW 2026-09-24, review D]: ConstructTakedownBringUp -- called from GameStateModule::
     // Construct -- assigns both from `new` and dereferences them on the spot (->Construct(this)),
-    // nothing else ever writes mpMugshotManager, and mpPaybackManager is cleared only by
+    // nothing else ever writes (&mMugshotManager), and (&mPaybackManager) is cleared only by
     // GameStateModule::Destruct, which has no ModeManager leg left to end a mode. OnModeEnd's one
     // caller is ModeManager::SendModeStopMessages, i.e. a running game.
-    mpMugshotManager->OnRoundEnd(lbResetState);
-    mpPaybackManager->OnRoundEnd(lbResetState);
+    mMugshotManager.OnRoundEnd(lbResetState);
+    mPaybackManager.OnRoundEnd(lbResetState);
 
     // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY: the round-end hand-off.
 
@@ -371,8 +197,8 @@ void GameStateModule::CopyInputDataToPaybackManager(
     // never null here (see OnModeEnd above: set from `new` in GameStateModule::Construct's
     // ConstructTakedownBringUp, cleared only by Destruct) -- the one caller is the pre-world tick.
 
-    mpPaybackManager->SetTimerInterface(lpPreWorldInputBuffer->GetTimerStatusInterface());
-    mpPaybackManager->SetDirtyTrickButtonState(
+    mPaybackManager.SetTimerInterface(lpPreWorldInputBuffer->GetTimerStatusInterface());
+    mPaybackManager.SetDirtyTrickButtonState(
         lpPreWorldInputBuffer->GetControllerInput()->mbDirtyTrickPressed);
 
     // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY. One line, the first time a running game

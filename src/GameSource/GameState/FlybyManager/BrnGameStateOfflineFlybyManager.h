@@ -17,6 +17,7 @@ public:
     s32 CalculateNumberOfCarsInFlyby() ;
 
 private:
+    friend class GameStateModule;
     CgsContainers::BitArray<2> mStatShownMessages;
 };
 }

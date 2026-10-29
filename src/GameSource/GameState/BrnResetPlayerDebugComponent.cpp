@@ -82,7 +82,8 @@ namespace BrnGameState
 
     void ResetPlayerDebugComponent::Destruct()
     {
-        DebugComponent::Destruct();
+        mpGameStateModule = 0;
+        // ARTIST calls the folded empty base body at 8284CB38.
     }
 
     // ------------------------------------------------------------------------------------------------

@@ -27,6 +27,7 @@
 
 #include <cstddef> // offsetof (compile-time checks of the producer's byte records)
 #include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"
+#include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameActions.h"                 // typed payback mugshot action records
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint ([mugshot] witness)
@@ -167,11 +168,16 @@ void MugshotManager::Construct(GameStateModule* lpGameStateModule)
 }
 
 // ---------------------------------------------------------------------------
-// Prepare / Release / Destruct -- console-inlined no-ops for this manager.
+// Prepare and Release are no-ops; ARTIST82375420 inlines Destruct.
 // ---------------------------------------------------------------------------
 bool MugshotManager::Prepare()  { return true; }
 bool MugshotManager::Release()  { return true; }
-void MugshotManager::Destruct() { }
+void MugshotManager::Destruct()
+{
+    ResetState();
+    mRoadRuleMugshotBeatenRoadID = 0;
+    mpGameStateModule = 0;
+}
 
 // ---------------------------------------------------------------------------
 // ResetState. Shared body used by OnRoundStart /

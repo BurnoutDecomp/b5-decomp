@@ -125,7 +125,7 @@ public:
         maDriveThroughClosed.UnSetAll();
     }
     bool Release();                                             // own TU; declared-only
-    void Destruct();                                           // own TU; declared-only
+    void Destruct() { maDriveThroughClosed.UnSetAll(); } // ARTIST82375420
 
     s32  GetTotalDriveThrusOfType(BrnTrigger::GenericRegion::Type leTriggerType);  // X360 0x82356468
 
