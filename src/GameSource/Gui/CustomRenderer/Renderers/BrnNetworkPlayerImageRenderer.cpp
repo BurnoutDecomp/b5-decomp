@@ -8,9 +8,7 @@
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h" // CgsNetwork::NetworkImageConverter
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
 #include <cstring>   // memset
-#include <cstdio>    // [diag] snprintf ([netimg] slot-ring probe)
-#include <cstdlib>   // [diag] getenv   (BRN_NETIMG gates it)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // [diag] CgsDev::Log::WriteToLog
+#include "rw/rwcore_structs.h"
 
 // ============================================================================
 // BrnGui::NetworkPlayerImageRenderer -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -56,49 +54,12 @@ namespace BrnGui
         };
         const u32 muNumResourcesToLoad = 1u;
 
-        // ================= [netimg] THE SLOT-RING PROBE =================================
-        // DELETE-WHEN-STABLE. Inert unless BRN_NETIMG names a non-zero value.
-        //
-        // WHAT IT HAS TO SEPARATE, and why nothing already in the tree could. The defect this
-        // was written for is not "the picture is wrong", it is "the picture is written to a
-        // buffer nothing ever reads". A probe that only counted arriving events, or only
-        // counted GetRenderOutput calls, would look IDENTICAL before and after the fix: the
-        // events arrive either way and the reads happen either way. The separating quantity is
-        // the pair of RING CURSORS -- miCurrentCopyToTexture (where RecvEvent writes) and
-        // miCurrentRenderTexture (where GetRenderOutput reads) -- and specifically the SET OF
-        // DISTINCT VALUES each takes over a run. SwapBuffers is their only writer in the whole
-        // image, so without it each set has exactly ONE element and the two elements differ;
-        // with it each has three and they meet. Hence bitmasks + distinct-value counts below,
-        // not maxima. [[diagnostics-that-lie]]
-
-        u32 guNetImgRenderSlotMask = 0;   // bit n set == miCurrentRenderTexture was n at a READ
-        u32 guNetImgCopySlotMask   = 0;   // bit n set == miCurrentCopyToTexture was n at a WRITE
-        u32 guNetImgSwaps          = 0;
-        u32 guNetImgRecv258        = 0;   // type-258 events seen
-        u32 guNetImgCopies         = 0;   // of those, ones carrying a real texture (-> CopyTexture)
-        u32 guNetImgReads          = 0;   // GetRenderOutput calls
-        u32 guNetImgReadsDefault   = 0;   //   ... answered with the baked default texture
-        u32 guNetImgReadsLive      = 0;   //   ... answered with a live buffer  (THE ONE THAT MATTERS)
-        u32 guNetImgReadsNull      = 0;   //   ... answered NULL
-        u32 guNetImgUpdates        = 0;   // per-frame Update() calls -- the census cadence
-
-        void NetImgDumpCensus(const char* lpcWhere)
+        renderengine::Texture2D* AllocateTexture(rw::IResourceAllocator* allocator,
+            const renderengine::Texture2D::ResourceDescriptor& descriptor,
+            const renderengine::Texture2D::Parameters& parameters)
         {
-            char lacMsg[320];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[netimg] census@%s upd=%u swaps=%u recv258=%u copies=%u reads=%u "
-                "live=%u default=%u null=%u renderSlots=0x%X(%u) copySlots=0x%X(%u)\n",
-                lpcWhere, guNetImgUpdates, guNetImgSwaps, guNetImgRecv258, guNetImgCopies,
-                guNetImgReads, guNetImgReadsLive, guNetImgReadsDefault, guNetImgReadsNull,
-                guNetImgRenderSlotMask,
-                static_cast<unsigned>(((guNetImgRenderSlotMask >> 0) & 1u) +
-                                      ((guNetImgRenderSlotMask >> 1) & 1u) +
-                                      ((guNetImgRenderSlotMask >> 2) & 1u)),
-                guNetImgCopySlotMask,
-                static_cast<unsigned>(((guNetImgCopySlotMask >> 0) & 1u) +
-                                      ((guNetImgCopySlotMask >> 1) & 1u) +
-                                      ((guNetImgCopySlotMask >> 2) & 1u)));
-            CgsDev::Log::WriteToLog(lacMsg);
+            const rw::Resource resource = allocator->DoAllocate(descriptor, 0);
+            return renderengine::Texture2D::Initialize(resource, parameters);
         }
 
         // The id the default texture is fetched from the GuiCache under (X360 GetLoadedResource
@@ -179,25 +140,22 @@ namespace BrnGui
             renderengine::Texture2D::Parameters lNormalParams;
             lNormalParams.muWidth     = KU_TEXTURE_WIDTH;
             lNormalParams.muHeight    = KU_TEXTURE_HEIGHT;
-            lNormalParams.muDepth     = 1u;
             lNormalParams.muNumLevels = 1u;
-            lNormalParams.muFormat    = renderengine::PIXELFORMAT_A1R5G5B5;
-            lNormalParams.muUsage     = 0u;
-            lNormalParams.mauReserved[0] = 0u;
-            lNormalParams.mauReserved[1] = 0u;
+            lNormalParams.meFormat    = renderengine::PIXELFORMAT_A1R5G5B5;
+            lNormalParams.muFlags     = 0u;
 
             renderengine::Texture2D::Parameters lYUY2Params = lNormalParams;
-            lYUY2Params.muFormat = renderengine::PIXELFORMAT_G8B8;
+            lYUY2Params.meFormat = renderengine::PIXELFORMAT_G8B8;
 
             renderengine::Texture2D::Parameters lCompressedParams = lNormalParams;
-            lCompressedParams.muFormat = renderengine::PIXELFORMAT_DXT1;
+            lCompressedParams.meFormat = renderengine::PIXELFORMAT_DXT1;
 
             renderengine::Texture2D::ResourceDescriptor lNormalDesc;
             renderengine::Texture2D::ResourceDescriptor lYUY2Desc;
             renderengine::Texture2D::ResourceDescriptor lCompressedDesc;
-            renderengine::Texture2D::GetResourceDescriptor(&lNormalDesc, &lNormalParams);
-            renderengine::Texture2D::GetResourceDescriptor(&lYUY2Desc, &lYUY2Params);
-            renderengine::Texture2D::GetResourceDescriptor(&lCompressedDesc, &lCompressedParams);
+            lNormalDesc = renderengine::Texture2D::GetResourceDescriptor(lNormalParams);
+            lYUY2Desc = renderengine::Texture2D::GetResourceDescriptor(lYUY2Params);
+            lCompressedDesc = renderengine::Texture2D::GetResourceDescriptor(lCompressedParams);
 
             // Allocate + lock + clear every buffered texture from the texture allocator.
             for (s32 liDisplay = 0; liDisplay < KI_MAX_NUM_TEXTURES_TO_DISPLAY; ++liDisplay)
@@ -205,25 +163,23 @@ namespace BrnGui
                 for (s32 liBuffer = 0; liBuffer < KI_NUM_TEXTURES_TO_BUFFER; ++liBuffer)
                 {
                     // Normal (A1R5G5B5) texture into the resource memory the allocator hands out.
-                    renderengine::Texture2D* lpNormal = renderengine::Texture2D::Initialize(
-                        &lNormalDesc, &lNormalParams);
+                    renderengine::Texture2D* lpNormal = AllocateTexture(
+                        mpTextureAllocator, lNormalDesc, lNormalParams);
                     maapTextureBuffer[liDisplay][liBuffer] = lpNormal;
                     CGS_ASSERT(maapTextureBuffer[liDisplay][liBuffer],
                                "maapTextureBuffer[ liTextureIndex ][ liIndex ]");
-                    renderengine::Texture::Lock(maapTextureBuffer[liDisplay][liBuffer], 0, 0, 0,
-                                                &maaLockedTextures[liDisplay][liBuffer]);
+                    maapTextureBuffer[liDisplay][liBuffer]->Lock(0, 0, 0, maaLockedTextures[liDisplay][liBuffer]);
                     memset(maaLockedTextures[liDisplay][liBuffer].mpPixelData, 0,
                            maaLockedTextures[liDisplay][liBuffer].muStride *
                                maaLockedTextures[liDisplay][liBuffer].muHeight);
 
                     // YUY2 (G8B8) texture.
-                    renderengine::Texture2D* lpYUY2 = renderengine::Texture2D::Initialize(
-                        &lYUY2Desc, &lYUY2Params);
+                    renderengine::Texture2D* lpYUY2 = AllocateTexture(
+                        mpTextureAllocator, lYUY2Desc, lYUY2Params);
                     maapYUY2TextureBuffer[liDisplay][liBuffer] = lpYUY2;
                     CGS_ASSERT(maapYUY2TextureBuffer[liDisplay][liBuffer],
                                "maapYUY2TextureBuffer[ liTextureIndex ][ liIndex ]");
-                    renderengine::Texture::Lock(maapYUY2TextureBuffer[liDisplay][liBuffer], 0, 0, 0,
-                                                &maaLockedYUY2Textures[liDisplay][liBuffer]);
+                    maapYUY2TextureBuffer[liDisplay][liBuffer]->Lock(0, 0, 0, maaLockedYUY2Textures[liDisplay][liBuffer]);
                     memset(maaLockedYUY2Textures[liDisplay][liBuffer].mpPixelData, 0,
                            maaLockedYUY2Textures[liDisplay][liBuffer].muStride *
                                maaLockedYUY2Textures[liDisplay][liBuffer].muHeight);
@@ -234,13 +190,12 @@ namespace BrnGui
                 }
 
                 // Compressed (DXT1) texture -- single-buffered per display index.
-                renderengine::Texture2D* lpCompressed = renderengine::Texture2D::Initialize(
-                    &lCompressedDesc, &lCompressedParams);
+                renderengine::Texture2D* lpCompressed = AllocateTexture(
+                    mpTextureAllocator, lCompressedDesc, lCompressedParams);
                 mapCompressedTextureBuffer[liDisplay] = lpCompressed;
                 CGS_ASSERT(mapCompressedTextureBuffer[liDisplay],
                            "mapCompressedTextureBuffer[ liTextureIndex ]");
-                renderengine::Texture::Lock(mapCompressedTextureBuffer[liDisplay], 0, 0, 0,
-                                            &maLockedCompressedTextures[liDisplay]);
+                mapCompressedTextureBuffer[liDisplay]->Lock(0, 0, 0, maLockedCompressedTextures[liDisplay]);
                 // DXT1: clear (height rounded up to 4-row blocks) * stride bytes.
                 memset(maLockedCompressedTextures[liDisplay].mpPixelData, 0,
                        ((maLockedCompressedTextures[liDisplay].muHeight + 3) / 4) *
@@ -379,13 +334,6 @@ namespace BrnGui
             // Render is on while either a texture is supplied or the index is a real slot.
             mbRenderTexture = (lpImageEvent->mpTexture != 0) || (lpImageEvent->miTextureIndex != -1);
 
-            // [netimg] DELETE-WHEN-STABLE. One line per arriving picture, carrying BOTH
-            // cursors, so the write slot and the read slot are on the same line.
-            ++guNetImgRecv258;
-            if (lpImageEvent->mpTexture != 0) ++guNetImgCopies;
-            if (miCurrentCopyToTexture >= 0 && miCurrentCopyToTexture < KI_NUM_TEXTURES_TO_BUFFER)
-                guNetImgCopySlotMask |= (1u << miCurrentCopyToTexture);
-
             if (mbRenderTexture)
             {
                 CGS_ASSERT((lpImageEvent->miTextureIndex >= 0) &&
@@ -429,15 +377,6 @@ namespace BrnGui
     // Count the arm-to-clear timer down; clear the surfaces when it underflows.
     void NetworkPlayerImageRenderer::Update()
     {
-        // [netimg] DELETE-WHEN-STABLE. THE CENSUS CADENCE IS HERE, not on the read path, and
-        // that is deliberate: the first version of this probe printed every 600th
-        // GetRenderOutput call and printed NOTHING AT ALL over a 150 s run, because the
-        // default-texture short-circuit means the component is barely read. A probe whose
-        // sampling clock is the very quantity under test reports silence as "no data" and
-        // silence as "no defect" identically. Update() is the per-frame drive, so this ticks
-        // whatever the renderer is doing. [[diagnostics-that-lie]]
-        ++guNetImgUpdates;
-
         if (miClearTexturesFrameCount >= 0)
         {
             --miClearTexturesFrameCount;
@@ -459,16 +398,8 @@ namespace BrnGui
     renderengine::Texture* NetworkPlayerImageRenderer::GetRenderOutput(
         s32 liTextureIndex, s32* lpiShaderProgram, CgsGui::ImRendererSet* /*lpRendererSet*/)
     {
-        // [netimg] DELETE-WHEN-STABLE. Census only -- one line per read would be one line per
-        // component per frame. The census is dumped from SwapBuffers (and, when the ring is
-        // frozen, every 600th read, so a run in which SwapBuffers never fires still reports).
-        ++guNetImgReads;
-        if (miCurrentRenderTexture >= 0 && miCurrentRenderTexture < KI_NUM_TEXTURES_TO_BUFFER)
-            guNetImgRenderSlotMask |= (1u << miCurrentRenderTexture);
-
         if (mbUseDefaultTexture)
         {
-            ++guNetImgReadsDefault;
             CGS_ASSERT(mpDefaultTexture != 0, "NULL != mpDefaultTexture");
             *lpiShaderProgram = 0;
             return mpDefaultTexture;
@@ -485,22 +416,18 @@ namespace BrnGui
             const s32 liRender = miCurrentRenderTexture;
             if (maabRenderTexture[liTextureIndex][liRender])
             {
-                ++guNetImgReadsLive;   // [netimg]
                 return maapTextureBuffer[liTextureIndex][liRender];
             }
             if (maabRenderCompressedTexture[liTextureIndex][liRender])
             {
-                ++guNetImgReadsLive;   // [netimg]
                 return mapCompressedTextureBuffer[liTextureIndex];
             }
             if (maabRenderYUY2Texture[liTextureIndex][liRender])
             {
-                ++guNetImgReadsLive;   // [netimg]
                 *lpiShaderProgram = 1;
                 return maapYUY2TextureBuffer[liTextureIndex][miCurrentRenderTexture];
             }
         }
-        ++guNetImgReadsNull;   // [netimg]
         return 0;
     }
 
@@ -516,12 +443,6 @@ namespace BrnGui
         renderengine::Texture* lpOutput = GetRenderOutput(0, &liShaderProgram, 0);
         BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
                                                KAC_SPECIAL_TEXTURE_NAME);
-
-        // [netimg] DELETE-WHEN-STABLE. Not one line per swap (that is one per frame); the
-        // first 5 swaps prove the ring moves at all, then a census every 600.
-        ++guNetImgSwaps;
-        if (miCurrentCopyToTexture >= 0 && miCurrentCopyToTexture < KI_NUM_TEXTURES_TO_BUFFER)
-            guNetImgCopySlotMask |= (1u << miCurrentCopyToTexture);   // the CURSOR, not just writes
 
         CGS_ASSERT(mpFlaptRenderer, "mpFlaptRenderer");
         mpFlaptRenderer->SetSpecialTextureShaderProgram(liShaderProgram);
