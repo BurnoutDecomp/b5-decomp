@@ -113,7 +113,6 @@ namespace CgsResource
 
         // @ 0x82907268 - route the module's inbound resource requests to the sub-module inputs. Pool-create
         // slice: CreatePool (id 0) -> pool input. Caller holds resIn read-locked + poolIn write-locked.
-        void ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn, PoolIO::InputBuffer* lpPoolIn);
         void ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
             CgsMemory::MemoryIO::InputBuffer* lpMemIn,
             BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn);

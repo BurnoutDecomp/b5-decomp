@@ -66,7 +66,8 @@ namespace CgsResource
         maTypeStringList[1].mpcName = KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_ARTIST];
         maTypeStringList[2].miValue = E_POOLTYPELISTMODE_RAW;
         maTypeStringList[2].mpcName = KAPC_POOLTYPELISTMODENAMES[E_POOLTYPELISTMODE_RAW];
-        maTypeStringList[E_POOLTYPELISTMODE_COUNT] = {0, 0};
+        maTypeStringList[E_POOLTYPELISTMODE_COUNT].miValue = 0;
+        maTypeStringList[E_POOLTYPELISTMODE_COUNT].mpcName = 0;
 
         miSortMode = E_DEBUGSORTMODE_NONE;
         for (s32 liMode = 0; liMode < E_DEBUGSORTMODE_COUNT; ++liMode)
@@ -101,16 +102,22 @@ namespace CgsResource
     // ARTIST828D9778: walk all128 original pool slots in index order.
     void DebugComponent::GenerateStringList()
     {
-        maStringList[0] = {-1, "<none>"};
+        maStringList[0].miValue = -1;
+        maStringList[0].mpcName = "<none>";
         s32 liNext = 1;
         PoolModule& lrPools = mpResourceModule->GetPoolModule();
         for (s32 liPool = 0; liPool < PoolModule::KI_MAX_POOLS; ++liPool)
         {
             const Pool& lrPool = lrPools.GetPoolByIndex(liPool);
             if (lrPool.GetId() != -1)
-                maStringList[liNext++] = {lrPool.GetId(), lrPool.GetName()};
+            {
+                maStringList[liNext].miValue = lrPool.GetId();
+                maStringList[liNext].mpcName = lrPool.GetName();
+                ++liNext;
+            }
         }
-        maStringList[liNext] = {-1, 0};
+        maStringList[liNext].miValue = -1;
+        maStringList[liNext].mpcName = 0;
     }
 
     // ARTIST828EE200. These are the original18 registration sites.
@@ -253,7 +260,7 @@ namespace CgsResource
                           200.0f, 60.0f, 14.0f, 0xFFFFFFFFu, false);
             for (s32 liHeap = 0; liHeap < 3; ++liHeap)
             {
-                const f32 lfY = std::fma(static_cast<f32>(liHeap), 16.0f, 76.0f);
+                const f32 lfY = static_cast<f32>(liHeap) * 16.0f + 76.0f;
                 lpDisplay->DrawValue(maiPoolShareTestResults[liHeap],
                                      220.0f, lfY, 14.0f, 0xFFFFFFFFu);
             }

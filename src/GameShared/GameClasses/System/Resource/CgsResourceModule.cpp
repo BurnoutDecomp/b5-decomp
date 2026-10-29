@@ -133,6 +133,7 @@ namespace CgsResource
     // ARTIST828EC6B0, with retirement of native pending-response allocations.
     void ResourceModule::Destruct()
     {
+        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         const s32 liCount = mPendingFileResponses.Get(lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
         for (s32 li = 0; li < liCount; ++li)
         {
@@ -147,51 +148,14 @@ namespace CgsResource
         CgsModule::ModuleSingleBuffered::Destruct();
     }
 
-    // @ 0x82907268 - route inbound resource requests to the sub-module inputs. Pool-create slice: a
-    // CreatePool request (id 0) is forwarded to the pool input queue. [The bundle/file/memory request
-    // routes (ids 2/3/9..0xD) are deferred -- pool bring-up only sends CreatePool. X360 forwards size 172;
-    // we use the recorded event size so the native canonical CreatePoolRequest copies whole.]
-    void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn, PoolIO::InputBuffer* lpPoolIn)
-    {
-        const ResourceIO::ResourceRequestQueue<16384>* lpQ =
-            static_cast<const ResourceIO::InputBuffer&>(*lpResIn).GetResourceQueue();
-        PoolIO::InputBuffer::PoolInputQueue* lpPoolQ = lpPoolIn->GetPoolInputQueue();
-
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
-        while (liId != -1 && lpEvent != 0)
-        {
-            if (liId == 0)        // CreatePool -> pool input
-                lpPoolQ->AddEvent(lpEvent, 0, liSize);
-            else if (liId == 2)   // LoadBundle -> bundle loader's load-request intake
-                mBundleLoaderModule.EnqueueLoadRequest(*reinterpret_cast<const Events::LoadBundleRequest*>(lpEvent));
-            else if (liId == 3)   // UnloadBundle -> bundle loader's unload-request intake
-                mBundleLoaderModule.EnqueueUnloadRequest(*reinterpret_cast<const Events::UnloadBundleRequest*>(lpEvent));
-            else if (liId == 4)   // AcquireResource -> pool input (X360 routes id 4 -> pool tag 4)
-                lpPoolQ->AddEvent(lpEvent, 4, liSize);
-            else if (liId == 5)   // AcquireResourceList -> pool input (X360 routes id 5 -> pool tag 5)
-                lpPoolQ->AddEvent(lpEvent, 5, liSize);
-            else if (liId == 16)  // OpenReadStream -> asynchronous FileSystem + pending response
-                AddOpenReadStreamRequest(
-                    reinterpret_cast<const Events::OpenReadStreamRequest*>(lpEvent));
-            else if (liId == 18)  // CloseReadStream -> asynchronous FileSystem + pending response
-                AddCloseReadStreamRequest(
-                    reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent));
-            const CgsModule::Event* lpNext = 0;
-            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent = lpNext;
-        }
-    }
-
     // ARTIST82907268: native event sizes are carried by the queue. Pool and
     // memory tags below are the original switch values, not resource tags.
     void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
         CgsMemory::MemoryIO::InputBuffer* lpMemIn,
         BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
     {
-        const auto* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
-        auto* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
+        const ResourceIO::ResourceRequestQueue<16384>* lpQueue = static_cast<const ResourceIO::InputBuffer*>(lpResIn)->GetResourceQueue();
+        PoolIO::InputBuffer::PoolInputQueue* lpPoolQueue = lpPoolIn->GetPoolInputQueue();
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
@@ -226,7 +190,7 @@ namespace CgsResource
     // ARTIST82907580..82907630 (export hole).
     void ResourceModule::ProcessBundleLoaderStreamRequests(const BundleLoaderIO::OutputBuffer* lpLoaderOut)
     {
-        const auto* lpQueue = lpLoaderOut->GetStreamRequestQueue();
+        const BundleLoaderIO::OutputBuffer::StreamRequestQueue* lpQueue = lpLoaderOut->GetStreamRequestQueue();
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
@@ -248,17 +212,17 @@ namespace CgsResource
     void ResourceModule::ProcessResourceResponses(const BundleLoaderIO::OutputBuffer* lpLoaderOut,
                                                   PoolIO::OutputBuffer* lpPoolOut)
     {
-        const auto* lpLoads = lpLoaderOut->GetLoadBundleResponseQueue();
+        const BundleLoaderIO::OutputBuffer::LoadBundleResponseQueue* lpLoads = lpLoaderOut->GetLoadBundleResponseQueue();
         for (s32 li = 0; li < lpLoads->GetLength(); ++li)
         {
-            const auto& lrResponse = lpLoads->GetEvent(li);
+            const Events::LoadBundleResponse& lrResponse = lpLoads->GetEvent(li);
             if (lrResponse.mpUser)
                 lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 2, sizeof(lrResponse));
         }
-        const auto* lpUnloads = lpLoaderOut->GetUnloadBundleResponseQueue();
+        const BundleLoaderIO::OutputBuffer::UnloadBundleResponseQueue* lpUnloads = lpLoaderOut->GetUnloadBundleResponseQueue();
         for (s32 li = 0; li < lpUnloads->GetLength(); ++li)
         {
-            const auto& lrResponse = lpUnloads->GetEvent(li);
+            const Events::UnloadBundleResponse& lrResponse = lpUnloads->GetEvent(li);
             if (lrResponse.mpUser)
                 lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
         }
@@ -429,9 +393,10 @@ namespace CgsResource
     // responses are retained until the next update, as in the original pipeline.
     bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
     {
-        auto* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
+        ResourceIO::InputBuffer* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
         if (!lpResIn) return false;
 
+        static PoolIO::InputBuffer s_poolIn;
         static PoolIO::OutputBuffer s_poolOut;
         static CgsMemory::MemoryIO::InputBuffer s_memIn;
         static CgsMemory::MemoryIO::OutputBuffer s_memOut;

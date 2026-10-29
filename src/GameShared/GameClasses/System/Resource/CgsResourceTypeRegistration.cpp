@@ -177,7 +177,7 @@ namespace CgsResource
         // acquire access-violates.
         static IdListResourceType          sIdList;            // 0x25 (37) IdList (zone-collision lists)
         TypeRegistry::Register(&sIdList, "IdList");
-     // 0x31 (49) PFXHookBundle (screen-filter hooks)
+        static PFXHookBundleResourceType sPfxHookBundle; // 0x31 (49)
         TypeRegistry::Register(&sPfxHookBundle, "PFXHookBundle");
         // The four world-prop/sound types. The console registers all four, PropPhysics
         // immediately before PropGraphicsList; id-keyed lookup is order-independent.

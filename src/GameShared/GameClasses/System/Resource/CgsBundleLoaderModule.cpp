@@ -13,9 +13,9 @@ void BundleLoaderModule::ProcessBundleLoadRequests(
 {
     // ARTIST828E2A10..828E2BAC; the export is missing, so constants and
     // case-sensitive string tests are read from the instructions and image.
-    const auto* lpLoads = lpInput->GetLoadBundleRequestQueue();
+    const BundleLoaderIO::InputBuffer_Update::LoadBundleRequestQueue* lpLoads = lpInput->GetLoadBundleRequestQueue();
     for (s32 li = 0; li < lpLoads->GetLength(); ++li) {
-        const auto& lrRequest = lpLoads->GetEvent(li);
+        const Events::LoadBundleRequest& lrRequest = lpLoads->GetEvent(li);
         s32 liPriority = 0;
         if (std::strstr(lrRequest.macFileName, "TRK_"))
             liPriority = std::strstr(lrRequest.macFileName, "Prop") ? 1000 : 2000;
@@ -25,7 +25,7 @@ void BundleLoaderModule::ProcessBundleLoadRequests(
             && (CgsDev::Message::gxMessageFilterFlags & 1))
             *CgsDev::Log::gpDebugPrint << "Unable to add entry. Queue is full.\n";
     }
-    const auto* lpUnloads = lpInput->GetUnloadBundleRequestQueue();
+    const BundleLoaderIO::InputBuffer_Update::UnloadBundleRequestQueue* lpUnloads = lpInput->GetUnloadBundleRequestQueue();
     for (s32 li = 0; li < lpUnloads->GetLength(); ++li)
         if (!mUnloadRequestQueue.Push(&lpUnloads->GetEvent(li), 0)
             && (CgsDev::Message::gxMessageFilterFlags & 1))
@@ -38,7 +38,7 @@ void BundleLoaderModule::PostLoadFinishedEvent(BundleLoaderIO::OutputBuffer* lpO
     // ARTIST828EC3C8-450: preserve destination/event/name/pool; clear the
     // request-only live-update flag, and publish the supplied result.
     CGS_ASSERT(lpOutput, "lpOutput");
-    Events::LoadBundleResponse lResponse = {};
+    Events::LoadBundleResponse lResponse = Events::LoadBundleResponse();
     lResponse.mpUser = lpRequest->mpUser;
     lResponse.miEventId = lpRequest->miEventId;
     lResponse.SetFileName(lpRequest->macFileName);
@@ -66,7 +66,7 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
                     | 0x8000000000000000ull);
         s32 liLoaded = 0;
         while (liLoaded < miMaxLoadedBundles) {
-            const auto& lrLoaded = mpLoadedBundles[liLoaded];
+            const LoadedBundleData& lrLoaded = mpLoadedBundles[liLoaded];
             if (lrLoaded.miPoolId == lRequest.miPoolId && lrLoaded.mResourceId == lId)
                 break;
             ++liLoaded;
@@ -87,7 +87,7 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
     // Avoid opening the active bundle twice while it is still being loaded.
     if (meStreamStage != STREAMSTAGE_IDLE && _stricmp(lRequest.macFileName, mLoadRequest.macFileName) == 0)
         return false;
-    Events::OpenReadStreamRequest lOpen = {};
+    Events::OpenReadStreamRequest lOpen = Events::OpenReadStreamRequest();
     lOpen.Construct(&mReceiverQueue, liNextStream);
     char lacName[256];
     std::strncpy(lacName, lRequest.macFileName, sizeof(lacName));
@@ -131,7 +131,7 @@ bool BundleLoaderModule::CheckForUnloads(BundleLoaderIO::OutputBuffer* lpOutput)
                     | 0x8000000000000000ull);
         s32 liSlot = 0;
         while (liSlot < miMaxLoadedBundles) {
-            const auto& lrLoaded = mpLoadedBundles[liSlot];
+            const LoadedBundleData& lrLoaded = mpLoadedBundles[liSlot];
             if (lrLoaded.miPoolId == lRequest.miPoolId && lrLoaded.mResourceId == lId)
                 break;
             ++liSlot;
@@ -140,9 +140,9 @@ bool BundleLoaderModule::CheckForUnloads(BundleLoaderIO::OutputBuffer* lpOutput)
             CGS_ASSERT(false, "Could not find bundle in pool to unload\n");
             continue;
         }
-        auto& lrLoaded = mpLoadedBundles[liSlot];
+        LoadedBundleData& lrLoaded = mpLoadedBundles[liSlot];
         if (lrLoaded.miRefCount == 1) {
-            Events::UnloadResourceListRequest lUnload = {};
+            Events::UnloadResourceListRequest lUnload = Events::UnloadResourceListRequest();
             lUnload.miEventId = liSlot;
             lUnload.miPoolId = lRequest.miPoolId;
             lUnload.mListId = lId;
@@ -152,7 +152,7 @@ bool BundleLoaderModule::CheckForUnloads(BundleLoaderIO::OutputBuffer* lpOutput)
             lrLoaded.miPoolId = -1;
         }
         --lrLoaded.miRefCount;
-        Events::UnloadBundleResponse lResponse = {};
+        Events::UnloadBundleResponse lResponse = Events::UnloadBundleResponse();
         lResponse.mpUser = lRequest.mpUser;
         lResponse.miEventId = lRequest.miEventId;
         lResponse.SetFileName(lRequest.macFileName);
@@ -269,7 +269,7 @@ void BundleLoaderModule::ProcessBundleEntryList(void* lpOutputBuffer) // 828FAF5
     std::strncpy(lacName, mLoadRequest.macFileName, sizeof(lacName));
     for (char* lp = lacName; *lp; ++lp)
         if (*lp >= 'a' && *lp <= 'z') *lp -= 'a' - 'A';
-    mAllocationRequest = {};
+    mAllocationRequest = Events::AllocateResourceListRequest();
     mAllocationRequest.miEventId = mLoadRequest.miEventId;
     mAllocationRequest.miPoolId = mLoadRequest.miPoolId;
     mAllocationRequest.mpEntries = reinterpret_cast<const BundleV2::ResourceEntry*>(mpcHeaderBuffer);
@@ -287,7 +287,7 @@ void BundleLoaderModule::ProcessBundleEntryList(void* lpOutputBuffer) // 828FAF5
     mCurrentLoad.mResourceId = mAllocationRequest.mListId;
     mCurrentLoad.miRefCount = 1;
     mCurrentLoad.mbIsLiveUpdate = mAllocationRequest.mbLiveUpdateReplace;
-    auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+    BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
     lpOutput->GetPoolSendQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&mAllocationRequest), 16, sizeof(mAllocationRequest));
     mbStreamJobStarted = false;
@@ -310,7 +310,7 @@ bool BundleLoaderModule::StreamDataFunc() // 82904648
             continue;
         }
         const u32 luRemaining = lrEntry.GetDiskSize(miCurrentMemoryType) - miCurrentResourcePosition;
-        auto* lpDestination = static_cast<u8*>(
+        u8* lpDestination = static_cast<u8*>(
             mAllocationResponse.mpResources[miCurrentResource].m_baseResources[miCurrentMemoryType])
             + miCurrentResourcePosition;
         const u32 luRead = lrStream.Read(luRemaining, lpDestination);
@@ -329,13 +329,10 @@ void BundleLoaderModule::ProcessReceiverQueue() // 828E2888
     s32 liTag = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent) {
         if (liTag == 16) {
-            const auto* lpResponse = reinterpret_cast<const Events::OpenReadStreamResponse*>(lpEvent);
+            const Events::OpenReadStreamResponse* lpResponse = reinterpret_cast<const Events::OpenReadStreamResponse*>(lpEvent);
             maStreams[lpResponse->GetEventId()] = lpResponse->GetStream();
-            mabStreamOpenFailed[lpResponse->GetEventId()] = !lpResponse->GetStream().IsValid();
-            if (mabStreamOpenFailed[lpResponse->GetEventId()])
-                mabStreamBuffersUsed[lpResponse->GetEventId()] = false;
         } else if (liTag == 18) {
-            const auto* lpResponse = reinterpret_cast<const Events::CloseReadStreamResponse*>(lpEvent);
+            const Events::CloseReadStreamResponse* lpResponse = reinterpret_cast<const Events::CloseReadStreamResponse*>(lpEvent);
             mabStreamBuffersUsed[lpResponse->GetEventId()] = false;
         } else {
             CGS_ASSERT(false, "Unexpected event received\n");
@@ -357,7 +354,7 @@ void BundleLoaderModule::SendPartialFixupRequest(void* lpOutputBuffer) // 828FBF
     if (liCount <= 0)
         return;
     CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
-    Events::FixUpAndResolveResourceListRequest lRequest = {};
+    Events::FixUpAndResolveResourceListRequest lRequest = Events::FixUpAndResolveResourceListRequest();
     lRequest.miPoolId = mAllocationResponse.miPoolId;
     lRequest.mListId = mAllocationResponse.mListId;
     lRequest.miFirstIndex = miNextFixUpRequestIndex;
@@ -376,7 +373,7 @@ bool BundleLoaderModule::StreamDoneFunc(void* lpOutputBuffer) // 828FB178
         return false;
     }
     CGS_ASSERT(lpOutputBuffer, "lpOutput");
-    Events::FixUpAndResolveResourceListRequest lRequest = {};
+    Events::FixUpAndResolveResourceListRequest lRequest = Events::FixUpAndResolveResourceListRequest();
     lRequest.miPoolId = mAllocationResponse.miPoolId;
     lRequest.mListId = mAllocationResponse.mListId;
     lRequest.miFirstIndex = miNextFixUpRequestIndex;
@@ -426,7 +423,7 @@ void BundleLoaderModule::ProcessPoolResponses()
         } else if (liTag == 19 && meStreamStage != STREAMSTAGE_STREAMDATA) {
             meStreamStage = STREAMSTAGE_LOADDONE;
             if (!mCurrentLoad.mbIsLiveUpdate) {
-                const auto* lpResponse = reinterpret_cast<const Events::FixUpAndResolveResourceListResponse*>(lpEvent);
+                const Events::FixUpAndResolveResourceListResponse* lpResponse = reinterpret_cast<const Events::FixUpAndResolveResourceListResponse*>(lpEvent);
                 mCurrentLoad.mHandle = lpResponse->mListHandle;
                 s32 liSlot = 0;
                 while (liSlot < miMaxLoadedBundles && mpLoadedBundles[liSlot].miPoolId >= 0)
@@ -449,9 +446,9 @@ void BundleLoaderModule::ProcessPoolResponses()
 // append its native events to the loader's cache for the following update.
 void BundleLoaderModule::RecordPostUpdateEvents(const BundleLoaderIO::InputBuffer_Record* lpInput)
 {
-    auto* lpLock = const_cast<BundleLoaderIO::InputBuffer_Record*>(lpInput);
+    BundleLoaderIO::InputBuffer_Record* lpLock = const_cast<BundleLoaderIO::InputBuffer_Record*>(lpInput);
     lpLock->LockForRead();
-    const auto* lpQueue = lpInput->GetPoolReceiveQueue();
+    const BundleLoaderIO::InputBuffer_Record::PoolReceiveQueue* lpQueue = lpInput->GetPoolReceiveQueue();
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
     s32 liTag = lpQueue->GetFirstEvent(&lpEvent, &liSize);
@@ -467,8 +464,8 @@ bool BundleLoaderModule::StreamCompressedDataAsJobFunc(void* lpOutputBuffer)
 {
     // ARTIST82900FA0..829013F4. Copy at most one 512-KiB batch into the
     // secondary buffer, whose lifetime extends until its inflate job completes.
-    auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
-    auto& lrStream = maStreams[miCurrentStream];
+    BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+    CgsFileSystem::ReadStream& lrStream = maStreams[miCurrentStream];
     if ((lrStream.IsBufferComplete() || (mbStreamJobStarted && mbOnLastStreamJob))
         && mQueuedLoads.GetLength() == 0)
         CheckForLoads(lpOutput);
@@ -494,7 +491,7 @@ bool BundleLoaderModule::StreamCompressedDataAsJobFunc(void* lpOutputBuffer)
         u32 luAvailable = muDecompressionStreamSize;
         while (luAvailable != 0 && luCopied < KU_SECONDARY_STREAM_BUFFER_SIZE)
         {
-            const auto& lrEntry = mAllocationResponse.mpEntries[miCurrentResource];
+            const BundleV2::ResourceEntry& lrEntry = mAllocationResponse.mpEntries[miCurrentResource];
             const u64 luDesired = static_cast<u64>(lrEntry.mauDiskOffset[miCurrentMemoryType])
                                 + mCurrentBundle.mauResourceDataOffset[miCurrentMemoryType];
             if (luDesired > luPosition)
@@ -524,7 +521,7 @@ bool BundleLoaderModule::StreamCompressedDataAsJobFunc(void* lpOutputBuffer)
                     // copied bytes remain in the ring until the stream closes.
                     break;
                 }
-                const auto& lrNext = mAllocationResponse.mpEntries[miCurrentResource];
+                const BundleV2::ResourceEntry& lrNext = mAllocationResponse.mpEntries[miCurrentResource];
                 mDecompressionJobInterface.CreateEntry(
                     mAllocationResponse.mpResources[miCurrentResource].m_baseResources[miCurrentMemoryType],
                     lrNext.GetUncompressedSize(miCurrentMemoryType));
@@ -546,7 +543,7 @@ bool BundleLoaderModule::StreamCompressedDataAsJobFunc(void* lpOutputBuffer)
 bool BundleLoaderModule::StreamIdleFunc(void* lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
-    auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+    BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
     mLoadRequestQueue.Tick(1);
     mUnloadRequestQueue.Tick(1);
     if (CheckForUnloads(lpOutput))
@@ -559,7 +556,7 @@ bool BundleLoaderModule::StreamIdleFunc(void* lpOutputBuffer)
 }
 void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
 {
-    auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+    BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
     switch (meStreamStage) {
     case STREAMSTAGE_IDLE: {
         meStreamStage = STREAMSTAGE_IDLE;
@@ -575,13 +572,6 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
         // fall through: ready stages advance within the same update.
     case STREAMSTAGE_STREAMHEADER:
         meStreamStage = STREAMSTAGE_STREAMHEADER;
-        if (mabStreamOpenFailed[miCurrentStream])
-        {
-            mabStreamOpenFailed[miCurrentStream] = false;
-            PostLoadFinishedEvent(lpOutput, &mLoadRequest, Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY);
-            meStreamStage = STREAMSTAGE_IDLE;
-            break;
-        }
         if (!StreamHeaderFunc()) break;
         // fall through
     case STREAMSTAGE_STREAMDEBUGDATA:

@@ -41,7 +41,7 @@ namespace CgsResource
         muMaxEntries = 0;
         miCurrentMemType = 0;
         mpDistributionEntries = 0;
-        mImportHashTable = ImportHashTable{};
+        mImportHashTable = ImportHashTable();
     }
 
     // Inlined in ARTIST PoolModule::Construct before ScratchPool::InitPool.

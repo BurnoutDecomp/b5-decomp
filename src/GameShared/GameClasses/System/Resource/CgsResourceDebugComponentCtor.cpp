@@ -28,7 +28,7 @@ namespace CgsResource
 {
 
 DebugComponent::DebugComponent()
-    : CgsDev::DebugComponent(CgsDev::DebugComponent::ResourceConstructorTag{})
+    : CgsDev::DebugComponent(CgsDev::DebugComponent::ResourceConstructorTag())
 {
     // Original by-value window and descriptor construction runs before this body.
 }

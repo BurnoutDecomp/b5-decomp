@@ -52,6 +52,8 @@ namespace CgsResource
         rw::Resource lOffset;
         for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
             lOffset.m_baseResources[lu] = 0;
+        const u32 luDelta = reinterpret_cast<u32>(lrDest.m_baseResources[liMemType])
+                          - reinterpret_cast<u32>(lrSource.m_baseResources[liMemType]);
         lOffset.m_baseResources[liMemType] = reinterpret_cast<void*>(luDelta);
         FixUp(lpResource, lOffset);
     }

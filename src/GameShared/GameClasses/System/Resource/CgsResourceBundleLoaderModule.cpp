@@ -9,6 +9,25 @@
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
 namespace CgsResource
 {
+    namespace
+    {
+        class BundleAllocation
+        {
+        public:
+            explicit BundleAllocation(rw::IResourceAllocator* lpAllocator)
+                : mpAllocator(lpAllocator) {}
+            void* operator()(size_t luSize, u32 luAlignment) const
+            {
+                rw::ResourceDescriptor lDescriptor;
+                lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+                lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+                return mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
+            }
+        private:
+            rw::IResourceAllocator* mpAllocator;
+        };
+    }
+
     // @ 0x828E2678 - resumable prepare stage machine: free every stream slot, clear the
     // receiver + load/unload queues, then bring up the base module.
     bool BundleLoaderModule::Prepare()
@@ -19,7 +38,6 @@ namespace CgsResource
         case E_STAGE_START:
             maStreams[0] = 0;
             maStreams[1] = 0;
-            mabStreamOpenFailed[0] = mabStreamOpenFailed[1] = false;
             meStreamStage = STREAMSTAGE_IDLE;
             miNumLoadedBundles = 0;
             for (s32 li = 0; li < miMaxLoadedBundles; ++li)
@@ -83,8 +101,6 @@ namespace CgsResource
     {
         CgsModule::ModuleSingleBuffered::Construct();
         mbIsNewModule = true;
-        mLoadRequests.Construct();
-        mUnloadRequests.Construct();
         mReceiverQueue.Construct();
         mLoadRequestQueue.Construct(128);
         mUnloadRequestQueue.Construct(128);
@@ -95,7 +111,6 @@ namespace CgsResource
         miCurrentStream = 0;
         mabStreamBuffersUsed[0] = false;
         mabStreamBuffersUsed[1] = false;
-        mabStreamOpenFailed[0] = mabStreamOpenFailed[1] = false;
         // The allocator-backed overload supplies the loaded-bundle table.
         mpLoadedBundles = 0;
         miMaxLoadedBundles = 0;
@@ -118,13 +133,7 @@ namespace CgsResource
         mbForceUpperCaseFileNames = lpOptions->mbForceUpperCaseFileNames;
         miNumLoadedBundles = 0;
 
-        const auto lAllocate = [lpAllocator](size_t luSize, u32 luAlignment) -> void*
-        {
-            rw::ResourceDescriptor lDescriptor;
-            lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-            return lpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
-        };
+        const BundleAllocation lAllocate(lpAllocator);
         mpDecompressionEntries = static_cast<CompressedData*>(lAllocate(
             sizeof(CompressedData) * miMaxResourcesPerBundle, 128));
         mapcStreamBuffers[0] = static_cast<char*>(lAllocate(miStreamBufferSize, 128));
@@ -164,8 +173,8 @@ namespace CgsResource
     {
         // ARTIST82907638; the legacy native adapter has a bool return, unused
         // by the resource dispatcher. Input and output lifetime matches ARTIST.
-        auto* lpInput = static_cast<BundleLoaderIO::InputBuffer_Update*>(lpInputBuffer);
-        auto* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+        BundleLoaderIO::InputBuffer_Update* lpInput = static_cast<BundleLoaderIO::InputBuffer_Update*>(lpInputBuffer);
+        BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
         lpOutput->LockForWrite();
         lpInput->LockForRead();
         ProcessReceiverQueue();
@@ -177,113 +186,4 @@ namespace CgsResource
         return false;
     }
 
-    // Queue a LoadBundleRequest routed here by the ResourceModule shuttle (resource request id 2).
-    void BundleLoaderModule::EnqueueLoadRequest(const Events::LoadBundleRequest& lrRequest)
-    {
-        mLoadRequests.AddEvent(lrRequest);
-    }
-
-    // Drain the queued LoadBundleRequests: for each, resolve the target pool by id and load its bundle
-    // into that pool via the PC synchronous BundleLoader (the load leaf: read file -> per-resource
-    // Pool::CreateEntry -> FixUp/ResolveImports/PostFixUp), then reply with a LoadBundleResponse to the
-    // request's reply target. [The async StreamHeader/EntryList/Data FSM + FileSystem + EA Jobs are the
-    // deferred remainder; the request/response machinery + the per-resource pool create/fixup are faithful.]
-    void BundleLoaderModule::ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType)
-    {
-        for (s32 li = 0; li < liCount; ++li)
-        {
-            const Events::LoadBundleRequest& lrRequest = mLoadRequests.GetEvent(li);
-
-            Pool* lpPool = (lpPoolModule != 0) ? lpPoolModule->GetPool(lrRequest.miPoolId) : 0;
-            Events::LoadBundleResponse lResponse;
-            static_cast<Events::BundleLoaderEvent&>(lResponse) = static_cast<const Events::BundleLoaderEvent&>(lrRequest);
-            lResponse.meResult = Events::LoadBundleResponse::E_RESULT_SUCCESS;
-
-            if (lpPool == 0)
-            {
-                CGS_ASSERT(false, "LoadBundle: target pool id not found");
-                lResponse.meResult = Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY;
-            }
-            else
-            {
-                BundleLoader lLoader;
-                // Ids are stored RAW/untagged (the X360 form -- CreateResourceList
-                // 0x828FF480 registers the on-disc u64 verbatim; acquires are untagged
-                // zero-extended hashes and select the pool via miPoolId; see LoadBundle).
-                const s32 liLoaded = lLoader.LoadBundle(lrRequest.macFileName, lpPool, lpfnResolveType);
-                *CgsDev::Log::gpDebugPrint << "[stream] LoadBundle '" << lrRequest.macFileName
-                                          << "' -> pool " << (s32)lrRequest.miPoolId
-                                          << ": " << (s32)liLoaded << " resources\n";
-                if (liLoaded == BundleLoader::KI_LOAD_FILE_MISSING)
-                {
-                    if (!sbSaidIt && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbSaidIt = true;
-                    }
-                    lResponse.meResult = Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY;
-                }
-                else if (liLoaded < 0)
-                {
-                    // The request's OWN failure policy, finally consumed. Every producer in
-                    // the tree fills mbAllowFailiure (from the GameData request's fail flag,
-                    // or a literal at the fixed-asset sites) and until now NOTHING read it:
-                    // an asset the caller declared mandatory disappeared as quietly as an
-                    // optional one, which is precisely the silent-drop shape this codebase
-                    // keeps getting bitten by. The console consumes the flag inside the async
-                    // stream FSM (deferred here) for exactly this: a disallowed failure is
-                    // loud. The RESULT is unchanged either way -- the requester still gets
-                    // the failure reply and its own error path -- so this adds a diagnostic,
-                    // not a behaviour.
-                    CGS_ASSERT(lrRequest.mbAllowFailiure,
-                               "LoadBundle failed for a request that did not allow failure");
-                    lResponse.meResult = Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY;
-                }
-            }
-
-            // Reply to the request's originating receiver queue (the X360 ProcessPoolResponses path; here a
-            // direct post). Event id 2 == the LoadBundle event family.
-            if (lrRequest.mpUser != 0)
-                lrRequest.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 2,
-                                           static_cast<s32>(sizeof(lResponse)));
-        }
-        // Only the serviced head is retired; the tail stays queued for the next Update
-        // (see the pacing note above).
-        for (s32 li = 0; li < liCount; ++li)
-        {
-            mLoadRequests.PopFront();
-        }
-    }
-
-    void BundleLoaderModule::EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest)
-    {
-        mUnloadRequests.AddEvent(lrRequest);
-    }
-
-    // Drain the queued UnloadBundleRequests: resolve each request's pool and unload its bundle's resources
-    // (BundleLoader::UnloadBundle -> ref-count-release each), then reply with an UnloadBundleResponse.
-    void BundleLoaderModule::ProcessUnloadRequests(PoolModule* lpPoolModule)
-    {
-        const s32 liCount = mUnloadRequests.GetLength();
-        for (s32 li = 0; li < liCount; ++li)
-        {
-            const Events::UnloadBundleRequest& lrRequest = mUnloadRequests.GetEvent(li);
-
-            Pool* lpPool = (lpPoolModule != 0) ? lpPoolModule->GetPool(lrRequest.miPoolId) : 0;
-            if (lpPool != 0)
-            {
-                BundleLoader lLoader;
-                const s32 liUnloaded = lLoader.UnloadBundle(lrRequest.macFileName, lpPool);
-                *CgsDev::Log::gpDebugPrint << "[stream] UnloadBundle '" << lrRequest.macFileName
-                                          << "' <- pool " << (s32)lrRequest.miPoolId
-                                          << ": " << (s32)liUnloaded << " resources\n";
-            }
-
-            Events::UnloadBundleResponse lResponse;
-            static_cast<Events::BundleLoaderEvent&>(lResponse) = static_cast<const Events::BundleLoaderEvent&>(lrRequest);
-            if (lrRequest.mpUser != 0)
-                lrRequest.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 3,
-                                           static_cast<s32>(sizeof(lResponse)));
-        }
-        mUnloadRequests.Clear();
-    }
 }
