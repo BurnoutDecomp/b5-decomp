@@ -186,6 +186,54 @@ void Param::Initialise(u32 luHullIndex,
     }
 }
 
+// ARTIST 0x82756530; DWARF BrnTrafficParam.h:338. Repair a live param's lane
+// location while preserving its previous location and all unrelated vehicle state.
+void Param::ReinsertInLanes(u32 luHullIndex, u32 luSectionIndex, f32 lfParamAlong,
+                           const Hull* lpHull)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lpHull != 0, "lpHull");
+    const Section* const lpSection = lpHull->GetSection(luSectionIndex);
+    CGS_ASSERT(lpSection != 0, "lpSection");
+
+    const u16 luPreviousHull = muHullIndex;
+    const u8 luPreviousSection = muSectionIndex;
+    muSectionIndex = static_cast<u8>(luSectionIndex);
+    muStartHullIndex = luPreviousHull;
+    muStartSectionIndex = luPreviousSection;
+    muHullIndex = static_cast<u16>(luHullIndex);
+    SetChangedSection();
+    SetParamAlong(lfParamAlong);
+
+    mfSpeed = lpSection->mfSpeed;
+    mfAcceleration = 0.0f;
+    mSympCrashTarget.muValue = 0xFFFFFFFFu;
+    miBehaviour = KI_BEHAVIOUR_NORMAL;
+    mfLastSpeed = lpSection->mfSpeed;
+    // The original clears this byte after the earlier SetChangedSection call.
+    mxEffectAndHistoryState = 0;
+    muCurrentSectionDirection = E_DIR_STRAIGHT_ON;
+    mfMaxAcceleration = KF_PARAM_MAX_ACCEL_FORCE;
+    muNextStopLineIndex = static_cast<u8>(KU_UNKNOWN_STOPLINE);
+    muNextHistoryToWrite = 0;
+    const u16 luSegmentId = static_cast<u16>(muCurrentSegment + lpSection->muRungOffset);
+    for (u32 luHistoryIndex = 0; luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER; ++luHistoryIndex)
+    {
+        mauHistoryHulls[luHistoryIndex] = static_cast<u16>(luHullIndex);
+        mauHistorySegments[luHistoryIndex] = luSegmentId;
+    }
+    mfStopDist = FLT_MAX;
+    for (u32 luPlan = 0; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+    {
+        maPlans[luPlan].muType = ParamPlan::E_TYPE_NONE;
+    }
+    for (u32 luSide = E_LEFT; luSide < E_SIDE_COUNT; ++luSide)
+    {
+        mauNeighbourData[luSide] = static_cast<u16>(KU_UNKNOWN_NEIGHBOUR);
+        mauNeighbourEndRung[luSide] = KU_PARAM_INVALID_NEIGHBOUR_END_RUNG;
+    }
+}
+
 // 0x827069D0 — stamp the position-along and the derived integer segment.
 void Param::SetParamAlong(f32 lfParamAlong)
 {
