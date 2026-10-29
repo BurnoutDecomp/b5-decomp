@@ -70,12 +70,16 @@ namespace CgsSceneManager
         static const u32 KU_VOLUME_VOLUME_QUERY_MEM_SIZE = 299008;
         static const u32 KU_VOLUME_LINE_QUERY_MEM_SIZE   = 67584;
 
-        // NOT X360: host GPInstance / VolRef widths; the console buffer is macVolumeVolumeQueryBuffer[299008] =
+        // Host GPInstance / VolRef widths need extra space; the console buffer is macVolumeVolumeQueryBuffer[299008] =
         // 0x49000 (KU_VOLUME_VOLUME_QUERY_MEM_SIZE). The host VolumeVolumeQuery for 100 volumes / 100 results
         // needs rw::collision::KU_VOLUME_VOLUME_QUERY_HOST_SIZE_R100 (0x495D8), rounded up to 0x100 here -- the
         // same sizing as LooseOctree's buffer (68862272). Construct's "VolumeVolumeQueryMem is too small" assert
         // (0x828B0C4C `ori r29, r11, 0x9000`) keeps the console text and compares against this.
+#if defined(D_PLATFORM_X360) && D_PLATFORM_X360
+        static const u32 KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE = KU_VOLUME_VOLUME_QUERY_MEM_SIZE;
+#else
         static const u32 KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE = 0x49600;
+#endif
 
         // Two-step prepare/release handshakes driven by the SceneManagerModule. The asm
         // post-increments the stage and asserts it stays <= the DONE terminal, so the
@@ -116,7 +120,7 @@ namespace CgsSceneManager
         static void _AssertLayout();
 
         // --- members (offsets pinned above) ---
-        CGS_ALIGN(16) u8 macVolumeVolumeQueryBuffer[KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE];  // +0x00000 (host size, above)
+        CGS_ALIGN(16) u8 macVolumeVolumeQueryBuffer[KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE];  // +0x00000
         CGS_ALIGN(16) u8 macVolumeLineQueryBuffer[KU_VOLUME_LINE_QUERY_MEM_SIZE];         // +0x49000 (host +0x49600)
 
         EFineIntersectionTestPrepareStage mePrepareStage;  // +0x59800
