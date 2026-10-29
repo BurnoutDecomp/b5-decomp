@@ -46,12 +46,7 @@
 // (mPhysicsState is at +224, mRenderParams at +2016; subtract and every one lands.)
 // The [6] on the two physics arrays was wrong too -- RaceCarState carries [4].
 //
-// ---- x64 ------------------------------------------------------------------
-// Parity is by NAMED MEMBER, not byte offset. mpRaceCar is a real pointer, so the
-// members after it sit 4 bytes later than the console; nothing reads this class by
-// offset, so that is fine and the old offsetof static_asserts are retired (the
-// console offsets survive as the comments above/below, which is what a later wave
-// needs). RenderParams itself IS byte-identical on x64 -- see its own banner.
+// Native field layout and 0x1CD0 array stride are pinned by AssertNativeLayout.
 // ============================================================================
 
 #include "types.hpp"
@@ -61,7 +56,7 @@
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"      // CgsContainers::FixedRingBuffer<T,N>
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Graphics/CgsModel.h"             // CgsGraphics::Model::State
-#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"        // native 32-byte ResourcePtr wrappers
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"      // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnDetachedPartRenderEvent.h"
@@ -69,7 +64,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h" // CgsGeometric::AxisAlignedBox (mDeformedBBox, named 2026-08-24)
 
-namespace BrnPhysics { namespace Deformation { struct DeformationState; } }  // UpdateDeformationState's source
+namespace BrnPhysics { namespace Deformation { struct DeformationState; struct StreamedDeformationSpec; } }  // UpdateDeformationState's source
 
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 // RenderParams' LIGHT-LOCATOR block (the corona producer's input) speaks two deformation
@@ -89,6 +84,7 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInter
 // this type -- BrnRaceCarEntityModuleIO.h:380); pointer-only and never dereferenced.
 namespace BrnAI { namespace AIModuleIO { struct RaceCarAIInterface; } }
 
+namespace BrnVehicle { struct GraphicsSpec; }
 namespace CgsNumeric { class Random; }   // ActiveRaceCar::Update's lpRandom (pointer-only; CgsRandom.h)
 // GetPropCollisionBox's return type (pointer-only here; vendor/renderware/collision/CollisionVolume.hpp).
 namespace rw { namespace collision { struct BoxVolume; } }
@@ -181,10 +177,11 @@ public:
     // Called only by RaceCarEntityModule::OnRaceCarResourcesLoaded @0x822FEBF8.
     // Vector arg v1 is the initial velocity (Hex-Rays drops it -- vector register).
     // ------------------------------------------------------------------------
-    void OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
-                            const CgsResource::ResourceHandle& lrGraphicsModelHandle,
-                            const Vector3&                     lrInitialVelocity,
-                            u64                                luCarAssetAttribKey );
+    void OnResourcesLoaded( const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrDeformationModelResourcePtr,
+                            const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>& lrGraphicsModelResourcePtr,
+                            BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                            u64 luCarAssetAttribKey,
+                            Vector3 lInitialVelocity );
 
     // ------------------------------------------------------------------------
     // X360 0x822D3EC8  ActiveRaceCar::AddHandlingModel -- hands the freshly-active car to
@@ -1124,10 +1121,8 @@ private:
     // write at this+0xD0 followed by VolumeInstanceId::SetEntityIDEntityIndex). The X360
     // order is what this header follows, because it is what the asm proves.
     //
-    // Members whose TYPE is not reconstructed in this tree stay as honest `u8 maPadXXXX`
-    // spans sized to the console gap, with the DWARF name/type in the comment. On x64
-    // mpRaceCar is 8 bytes wide so everything after it sits +4 -- parity here is by named
-    // member (see the banner), the console offsets are documentation.
+    // The native declarations below retain the ARTIST offsets. Resource wrappers
+    // use their real fields, not anonymous spans or standalone handle mirrors.
     // ========================================================================
 
     // The declared AddRemoveNetworkCarForCollisionQueue / mAddRemoveNetworkCarForCollisionQueue.
@@ -1285,26 +1280,28 @@ private:
     bool mbRightIndicatorActive;                         // +0x1C8C (7308)
     bool mbLeftIndicatorActive;                          // +0x1C8D (7309)
 
-    // DWARF mDeformationModelResourcePtr (ResourcePtr<BrnPhysics::Deformation::
-    // StreamedDeformationSpec>) and mGraphicsModelResourcePtr (ResourcePtr<
-    // BrnVehicle::GraphicsSpec>) -- 32 bytes each, created by OnResourcesLoaded at
-    // this+0x1C90 / this+0x1CB0, closing the class at the attested 0x1CD0 stride.
-    //
-    // PARTIALLY NAMED 2026-08-01 (drivable wave). The two ResourcePtr WRAPPERS stay opaque
-    // -- homing them would drag both spec types into every consumer of this header AND give
-    // ActiveRaceCar two non-trivial ctors/dtors (BaseResourcePtr links itself into an
-    // intrusive alias list), which the module's 8-slot array has never had. What IS named is
-    // the ResourceHandle each wrapper stores at its own +0x14: AddHandlingModel reads exactly
-    // those two, with two 64-bit loads (`ld r7, 0x1CA4(r31)` / `ld r8, 0x1CC4(r31)` ==
-    // 0x1C90+0x14 and 0x1CB0+0x14), and hands them straight to
-    // VehicleInputInterface::CreateRaceCar. OnResourcesLoaded is what fills them.
-    // [FLAG] the alias-list binding half of BaseResourcePtr::CreateFromHandle (the resource
-    // MEMORY pointer + Propogate) is not reproduced -- see OnResourcesLoaded's banner.
-    u8 maPad1C90a[20];                                   // +0x1C90 (7312) .. +0x1CA4 (7332)
-    CgsResource::ResourceHandle mDeformationModelHandle; // +0x1CA4 (7332)
-    u8 maPad1CAC[24];                                    // +0x1CAC (7340) .. +0x1CC4 (7364)
-    CgsResource::ResourceHandle mGraphicsModelHandle;    // +0x1CC4 (7364)
-    u8 maPad1CCC[12];                                    // +0x1CCC (7372) .. +0x1CD0 (7376)
+    // ARTIST OnResourcesLoaded/Detach call BaseResourcePtr::CreateFromHandle
+    // on +0x1C90 and +0x1CB0. DWARF names the two genuine ResourcePtr members
+    // (their position differs on PS3). Native BaseResourcePtr is 32 bytes with
+    // its handle at +0x14, giving the loads +0x1CA4/+0x1CC4 in AddHandlingModel.
+    CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec> mDeformationModelResourcePtr;
+    CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec> mGraphicsModelResourcePtr;
+
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(RenderParams) == 0x14A0), "ARTIST replay render snapshot stride");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, mPhysicsState) == 0xE0), "ARTIST physics state");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, mpRaceCar) == 0x6F0), "ARTIST owner pointer");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, mRenderParams) == 0x7E0), "ARTIST render params");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, miDefaultColourIndex) == 0x1C80), "ARTIST default colour");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, mfIndicatorTime) == 0x1C88), "ARTIST indicator timer");
+        CGS_STATIC_ASSERT((sizeof(CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>) == 0x20), "native ResourcePtr stride");
+        CGS_STATIC_ASSERT((sizeof(CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>) == 0x20), "native ResourcePtr stride");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, mDeformationModelResourcePtr) == 0x1C90), "ARTIST deformation resource wrapper");
+        CGS_STATIC_ASSERT((offsetof(ActiveRaceCar, mGraphicsModelResourcePtr) == 0x1CB0), "ARTIST graphics resource wrapper");
+        CGS_STATIC_ASSERT((sizeof(ActiveRaceCar) == 0x1CD0), "ARTIST active slot stride");
+        CGS_STATIC_ASSERT((__alignof(ActiveRaceCar) == 16), "native active slot alignment");
+    }
 
               // == RenderParams::mWheelTransforms[6]
     // Damage events carry world poses even while a panel is still attached. Track by

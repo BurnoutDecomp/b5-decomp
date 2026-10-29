@@ -1813,13 +1813,12 @@ RaceCarEntityModule::GetGlobalRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 // accessor asm bakes in (this + 592 / this + 6752).
 inline void RaceCarEntityModule::LockLayout_()
 {
-    // maRaceCars still lands on the console offset (its leading span is exact and RaceCar
-    // has no leading pointer). NOTHING AFTER maActiveRaceCars can be pinned any more: with
-    // the ODR fork retired the element is the REAL ActiveRaceCar, whose mpRaceCar widens
-    // 4->8 on the x64 gate, so the array stride (console 0x1CD0) and every member the array
-    // pushes downstream shift. That is exactly the project's named-member parity rule --
-    // the console offsets survive as the per-member comments, which is what a later wave
-    // needs; no code reads this module by offset.
+    // Native array boundaries and the first scalar tail are directly attested.
+    // Later declaration-order/layout recovery remains separate work.
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, maActiveRaceCars) == 0x1A60), "ARTIST active slots");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mfCurrentTailgateDuration) == 0x182F0), "ARTIST tailgate duration");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, meIndexOfCarPlayerIsTailgating) == 0x182F4), "ARTIST tailgate index");
+    CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, mePlayerActiveRaceCarIndex) == 0x182F8), "ARTIST player index");
     CGS_STATIC_ASSERT((offsetof(RaceCarEntityModule, maRaceCars) == 0x250),
                   "maRaceCars @+0x250 (== 592)");
 }
