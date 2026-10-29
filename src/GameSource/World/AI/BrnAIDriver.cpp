@@ -26,8 +26,8 @@
 //   * AICar (BrnAICar.h) carries every field these bodies read as a named member.
 //   * The embedded sub-objects are named members of AIDriver: mSteeringFan (@0x710),
 //     mPIDController / mPIDControllerDrift (@0x1B34 / @0x1B98) sit at their guest offsets;
-//     the pointer-bearing RacingLine and AIAggression live in the HOST-ONLY tail and are
-//     reached through GetRacingLine() / GetAggression() (see BrnAIDriver.h's HOST-WIDTH RULE).
+//     RacingLine and AIAggression are embedded at their native offsets and reached
+//     through GetRacingLine() / GetAggression().
 //   * The car's Route is the AICar's own base (AICar::GetRoute()); node x/y come from
 //     Route::GetNode(i)->GetX()/GetY().
 //   * StepTo and Find{Signed,Unsigned}AngleBetween2DVectors are declared in BrnAIUtils.h and
