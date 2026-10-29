@@ -128,17 +128,15 @@ namespace Jobs
     // The combined LocalBackend vtable's worker slots are WakeThreads +0x1C /
     // ExecuteReadyJobs +0x50 / GetSleepTimeoutMs +0x54 (see local_backend.h), so +0x10
     // is a distinct earlier slot: the SchedulerBackend AddThread entry. The only
-    // concrete backend is LocalBackend, whose non-virtual AddThread(JobThreadHandle*,
-    // const JobThreadParameters&) @ 0x82BCA6C0 IS the body that slot resolves to --
-    // so the concrete call below is the exact target of the +0x10 dispatch.
+    // concrete backend is LocalBackend, whose AddThread implementation at
+    // 0x82BCA6C0 receives the native hidden return buffer through this dispatch.
     JobThreadHandle JobScheduler::AddThread(const JobThreadParameters& lrParameters)
     {
         JobThreadHandle lHandle;
 
         mLock.Lock();
-        LocalBackend::LocalBackend* lpBackend =
-            static_cast<LocalBackend::LocalBackend*>(mSchedulers[lrParameters.environment]);
-        lpBackend->AddThread(&lHandle, lrParameters);
+        Detail::SchedulerBackend* lpBackend = mSchedulers[lrParameters.environment];
+        lHandle = lpBackend->AddThread(lrParameters);
         mLock.Unlock();
 
         return lHandle;

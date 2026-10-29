@@ -50,6 +50,9 @@ namespace EA
 {
 namespace Thread
 {
+    // ARTIST8324FF04, also declared by the EAThread SDK.
+    RunnableClassUserWrapper sGlobalRunnableClassUserWrapper = 0;
+
     // 0x82B42650
     BarrierParameters::BarrierParameters(int height, bool bIntraProcess, const char* pName)
     {
@@ -156,11 +159,9 @@ namespace Thread
     // 0->1 atomically). If all 24 are taken, heap-allocates a fresh 68-byte
     // record and zero-inits the same fields the static-slot path leaves zeroed.
     //
-    // FLAG: the X360 reservation is a PowerPC lwarx/stwcx. spin claiming the
+    // The X360 reservation is a PowerPC lwarx/stwcx. spin claiming the
     // busy word, plus a second lwarx/stwcx. that zeroes the per-record spinlock
-    // word at +0x20. On the MSVC host we model the reservation with an
-    // interlocked compare-and-swap -- a host mapping of an atomic primitive that
-    // cannot be expressed by name; the store-for-store field writes are exact.
+    // word at +0x20. XDK interlocked intrinsics emit both reservation loops.
     EAThreadDynamicData* AllocateThreadDynamicData()
     {
         for (s32 liIndex = 0; liIndex < KI_THREAD_DYNAMIC_DATA_COUNT; ++liIndex)
@@ -307,9 +308,8 @@ namespace Thread
 
     // The EAThread Microsoft/X360 Futex is a CRITICAL_SECTION wrapper. The X360
     // JobScheduler ctor/AddThread (@ 0x82BC9AA0 / 0x82BCA5F8) drive exactly these
-    // Rtl* critical-section calls on the embedded section. We model the X360
-    // InitializeCriticalSectionAndSpinCount with the host equivalent (the vendor
-    // EATHREAD_FUTEX_SPIN_COUNT is 256); functionally identical to the plain init.
+    // Rtl* critical-section calls on the embedded section. The XDK API receives
+    // the EAThread spin count of 256.
 
     Futex::Futex()
     {
@@ -380,6 +380,26 @@ namespace Thread
         return static_cast<unsigned>(liReturn);
     }
 
+    // ARTIST82B44248: wrapper or IRunnable::Run at virtual slot4.
+    static unsigned __stdcall ThreadClassEntryTrampoline(void* pArg)
+    {
+        EAThreadDynamicData* const pData = static_cast<EAThreadDynamicData*>(pArg);
+        MemoryBarrier();
+        IRunnable* const pRunnable = static_cast<IRunnable*>(pData->mpStartContext[0]);
+        void* const pContext = pData->mpStartContext[1];
+        SetCurrentThreadHandle(pData->mhThreadHandleCopy, false);
+        pData->mnStatus = Thread::kStatusRunning;
+        RunnableClassUserWrapper const pWrapper =
+            reinterpret_cast<RunnableClassUserWrapper>(pData->mpBeginThreadUserWrapper);
+        const intptr_t nReturn = pWrapper ? pWrapper(pRunnable, pContext) : pRunnable->Run(pContext);
+        pData->mnReturnValue = static_cast<s32>(nReturn);
+        SetCurrentThreadHandle(0, false);
+        pData->mnStatus = Thread::kStatusEnded;
+        if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pData->mnRefCount)) == 0)
+            FreeThreadDynamicData(pData);
+        return static_cast<unsigned>(nReturn);
+    }
+
     // 0x82B42DC0 -- single `stw 0,0(this)`: no dynamic-data record attached yet.
     // (Hex-Rays folds this body together with the identically-shaped
     // rw::movie::VideoRenderable::~VideoRenderable; it is the Thread default ctor
@@ -409,6 +429,55 @@ namespace Thread
     // emits exactly the vtable store + conditional operator-delete tail.
     IRunnable::~IRunnable()
     {
+    }
+
+    // ARTIST82B42DD0. An initially absent record waits for publication; an
+    // already-present record with a null handle takes the ended path directly.
+    Thread::Status Thread::WaitForEnd(const u32& timeoutAbsolute, intptr_t* pThreadReturnValue)
+    {
+        EAThreadDynamicData* lpData;
+        EAThreadDynamicData* volatile& rpPublishedData = mThreadData.mpData;
+        for (;;)
+        {
+            // ARTIST82B42E3C: publication can be withdrawn before this fence.
+            MemoryBarrier();
+            lpData = rpPublishedData;
+            if (lpData)
+                break;
+            while (!mThreadData.mpData || !mThreadData.mpData->mhThread)
+            {
+                const u32 nNow = ::GetTickCount() + 0x2710u;
+                if (nNow >= timeoutAbsolute)
+                    break;
+                ::SleepEx(1, TRUE);
+                MemoryBarrier();
+            }
+            if (!mThreadData.mpData)
+                return kStatusNone;
+            pThreadReturnValue = 0;
+        }
+
+        if (lpData->mhThread)
+        {
+            u32 nWait = timeoutAbsolute;
+            if (nWait != 0 && nWait != 0xFFFFFFFFu)
+            {
+                const u32 nNow = ::GetTickCount() + 0x2710u;
+                const u32 nDeadline = timeoutAbsolute;
+                nWait = nDeadline > nNow ? nDeadline - nNow : 0;
+            }
+            if (::WaitForSingleObject(mThreadData.mpData->mhThread, nWait) == WAIT_TIMEOUT)
+                return kStatusRunning;
+            ::CloseHandle(mThreadData.mpData->mhThread);
+            mThreadData.mpData->mhThread = 0;
+            mThreadData.mpData->mnStatus = kStatusEnded;
+        }
+        if (pThreadReturnValue)
+        {
+            MemoryBarrier();
+            *pThreadReturnValue = mThreadData.mpData->mnReturnValue;
+        }
+        return kStatusEnded;
     }
 
     // 0x82B42EF8
@@ -494,114 +563,151 @@ namespace Thread
         return gpGlobalRunnableFunctionUserWrapper;
     }
 
-    // 0x82B43F80
-    ThreadId Thread::Begin(RunnableFunction            pFunction,
-                           void*                        pContext,
-                           const ThreadParameters*      pParameters,
-                           RunnableFunctionUserWrapper  pUserWrapper)
+    // ARTIST82B42DB0.
+    RunnableClassUserWrapper Thread::GetGlobalRunnableClassUserWrapper()
     {
-        // If a prior thread record is still attached, release our reference to it
-        // (lwarx/stwcx. decrement); free if that was the last reference.
-        EAThreadDynamicData* lpOld = mThreadData.mpData;
-        if (lpOld)
+        return sGlobalRunnableClassUserWrapper;
+    }
+
+    // ARTIST82B43F80.
+    ThreadId Thread::Begin(RunnableFunction pFunction, void* pContext,
+        const ThreadParameters* pParameters, RunnableFunctionUserWrapper pUserWrapper)
+    {
+        EAThreadDynamicData* const pOld = mThreadData.mpData;
+        if (pOld && InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pOld->mnRefCount)) == 0)
+            FreeThreadDynamicData(pOld);
+
+        EAThreadDynamicData* const pData = AllocateThreadDynamicData();
+        if (pData)
         {
-            if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&lpOld->mnRefCount)) == 0)
-                FreeThreadDynamicData(lpOld);
+            pData->mhThread = 0;
+            pData->mnThreadId = 0;
+            pData->mnStatus = 0;
+            pData->mnReturnValue = 0;
+            pData->mpBeginThreadUserWrapper = 0;
+            InterlockedExchange(reinterpret_cast<volatile LONG*>(&pData->mnRefCount), 0);
         }
+        mThreadData.mpData = pData;
+        // The native body does not suppress the reference operations on allocation failure.
+        InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pData->mnRefCount));
+        InterlockedIncrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount));
+        mThreadData.mpData->mhThread = 0;
+        mThreadData.mpData->mpStartContext[0] = reinterpret_cast<void*>(pFunction);
+        mThreadData.mpData->mpStartContext[1] = pContext;
+        mThreadData.mpData->mpBeginThreadUserWrapper = reinterpret_cast<void*>(pUserWrapper);
 
-        // Acquire a fresh dynamic-data record. Begin zeroes status/return/start
-        // context/wrapper and the refcount, then publishes its fields.
-        EAThreadDynamicData* lpData = AllocateThreadDynamicData();
-        if (lpData)
-        {
-            lpData->mhThread                 = 0; // +0x00
-            lpData->mnThreadId               = 0; // +0x04 (asm zero block stores +0x00/+0x04/+0x08/+0x0C/+0x1C/+0x20)
-            lpData->mnStatus                 = 0; // +0x08
-            lpData->mnReturnValue            = 0; // +0x0C
-            lpData->mpBeginThreadUserWrapper = 0; // +0x1C
-            lpData->mnRefCount               = 0; // +0x20 (lwarx/stwcx. store 0)
-        }
-
-        mThreadData.mpData = lpData;
-        if (!lpData)
-        {
-            // (Out-of-pool with failed heap alloc: the X360 code still falls
-            // through with a null record; the two refcount loops below operate on
-            // the published null and are no-ops in that degenerate case.)
-        }
-
-        // Two atomic increments of the refcount: one for the Thread object's own
-        // reference, one for the reference handed to the running thread.
-        if (lpData)
-        {
-            InterlockedIncrement(reinterpret_cast<volatile LONG*>(&lpData->mnRefCount));
-            InterlockedIncrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount));
-        }
-
-        // Publish the start parameters (store order from the asm).
-        EAThreadDynamicData* const lpPub = mThreadData.mpData;
-        lpPub->mhThread                 = 0;                          // +0x00 (stw r26,0(r11))
-        lpPub->mpStartContext[0]        = reinterpret_cast<void*>(pFunction); // +0x10
-        lpPub->mpStartContext[1]        = pContext;                   // +0x14
-        lpPub->mpBeginThreadUserWrapper = reinterpret_cast<void*>(pUserWrapper); // +0x1C
-
-        unsigned int luStackSize = pParameters ? static_cast<unsigned int>(pParameters->mnStackSize) : 0u;
-
-        // _beginthreadex(security=0, stack, start=trampoline, arg=lpPub, flags=4
-        // (CREATE_SUSPENDED), thrdaddr = &lpPub->mnThreadId). The X360 passes ThrdAddr =
-        // record+4 (asm 0x82B4409C addi r8,r6,4) so the OS thread id is written INTO the
-        // record's +0x04 field, where SetName later reads it; the HANDLE return goes to mhThread.
-        uintptr_t luHandle = _beginthreadex(0, luStackSize, ThreadEntryTrampoline,
-                                            lpPub, 4 /*CREATE_SUSPENDED*/,
-                                            reinterpret_cast<unsigned*>(&lpPub->mnThreadId));
-        lpPub->mhThread = reinterpret_cast<HANDLE>(luHandle);
-
-        if (lpPub->mhThread)
+        const unsigned nStackSize = pParameters ? static_cast<unsigned>(pParameters->mnStackSize) : 0;
+        const uintptr_t nHandle = _beginthreadex(0, nStackSize, ThreadEntryTrampoline,
+            mThreadData.mpData, CREATE_SUSPENDED,
+            reinterpret_cast<unsigned*>(&mThreadData.mpData->mnThreadId));
+        mThreadData.mpData->mhThread = reinterpret_cast<HANDLE>(nHandle);
+        if (mThreadData.mpData->mhThread)
         {
             if (pParameters)
                 SetName(pParameters->mpName);
+            mThreadData.mpData->mhThreadHandleCopy = mThreadData.mpData->mhThread;
+            if (pParameters && pParameters->mnPriority != 0 && mThreadData.mpData)
+                ::SetThreadPriority(mThreadData.mpData->mhThread, pParameters->mnPriority);
 
-            lpPub->mhThreadHandleCopy = lpPub->mhThread; // +0x18
-
-            if (pParameters && pParameters->mnPriority != 0)
-                ::SetThreadPriority(lpPub->mhThread, pParameters->mnPriority);
-
-            int liProcessor;
+            int nProcessor;
             if (pParameters && pParameters->mnProcessor >= 0)
             {
-                liProcessor = pParameters->mnProcessor;
-                // If the requested processor equals the round-robin cursor,
-                // advance the cursor so the next auto-assignment differs.
-                if (liProcessor == glProcessorRoundRobin)
+                nProcessor = pParameters->mnProcessor;
+                if (nProcessor == glProcessorRoundRobin)
                     InterlockedIncrement(&glProcessorRoundRobin);
             }
             else
             {
-                liProcessor = giDefaultProcessor;
-                if (giDefaultProcessor < 0)
-                    liProcessor = InterlockedIncrement(&glProcessorRoundRobin);
+                nProcessor = giDefaultProcessor;
+                if (nProcessor < 0)
+                    nProcessor = InterlockedIncrement(&glProcessorRoundRobin);
             }
-
-            if (lpPub->mhThread)
+            if (mThreadData.mpData)
             {
-                if (liProcessor < 0)
-                    liProcessor = 0;
-                XSetThreadProcessor(lpPub->mhThread, static_cast<DWORD>(liProcessor % 6));
+                if (nProcessor < 0)
+                    nProcessor = 0;
+                XSetThreadProcessor(mThreadData.mpData->mhThread, static_cast<DWORD>(nProcessor % 6));
             }
-
-            ResumeThread(lpPub->mhThread);
-            return lpPub->mhThread;
+            ResumeThread(mThreadData.mpData->mhThread);
+            return mThreadData.mpData->mhThread;
         }
-
-        // _beginthreadex failed: release both references (decrement twice; free
-        // at zero each time, matching the asm's two lwarx/stwcx. dec loops).
-        if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&lpPub->mnRefCount)) == 0)
-            FreeThreadDynamicData(lpPub);
         if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount)) == 0)
             FreeThreadDynamicData(mThreadData.mpData);
-
+        if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount)) == 0)
+            FreeThreadDynamicData(mThreadData.mpData);
         mThreadData.mpData = 0;
         return 0;
     }
+
+    // ARTIST82B442F8.
+    ThreadId Thread::Begin(IRunnable* pRunnable, void* pContext,
+        const ThreadParameters* pParameters, RunnableClassUserWrapper pUserWrapper)
+    {
+        EAThreadDynamicData* const pOld = mThreadData.mpData;
+        if (pOld && InterlockedDecrement(reinterpret_cast<volatile LONG*>(&pOld->mnRefCount)) == 0)
+            FreeThreadDynamicData(pOld);
+
+        EAThreadDynamicData* const pData = AllocateThreadDynamicData();
+        if (pData)
+        {
+            pData->mhThread = 0;
+            pData->mnThreadId = 0;
+            pData->mnStatus = 0;
+            pData->mnReturnValue = 0;
+            pData->mpBeginThreadUserWrapper = 0;
+            InterlockedExchange(reinterpret_cast<volatile LONG*>(&pData->mnRefCount), 0);
+        }
+        mThreadData.mpData = pData;
+        // The native body does not suppress the reference operations on allocation failure.
+        InterlockedIncrement(reinterpret_cast<volatile LONG*>(&pData->mnRefCount));
+        InterlockedIncrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount));
+        mThreadData.mpData->mhThread = 0;
+        mThreadData.mpData->mpStartContext[0] = pRunnable;
+        mThreadData.mpData->mpStartContext[1] = pContext;
+        mThreadData.mpData->mpBeginThreadUserWrapper = reinterpret_cast<void*>(pUserWrapper);
+
+        const unsigned nStackSize = pParameters ? static_cast<unsigned>(pParameters->mnStackSize) : 0;
+        const uintptr_t nHandle = _beginthreadex(0, nStackSize, ThreadClassEntryTrampoline,
+            mThreadData.mpData, CREATE_SUSPENDED,
+            reinterpret_cast<unsigned*>(&mThreadData.mpData->mnThreadId));
+        mThreadData.mpData->mhThread = reinterpret_cast<HANDLE>(nHandle);
+        if (mThreadData.mpData->mhThread)
+        {
+            if (pParameters)
+                SetName(pParameters->mpName);
+            mThreadData.mpData->mhThreadHandleCopy = mThreadData.mpData->mhThread;
+            if (pParameters && pParameters->mnPriority != 0 && mThreadData.mpData)
+                ::SetThreadPriority(mThreadData.mpData->mhThread, pParameters->mnPriority);
+
+            int nProcessor;
+            if (pParameters && pParameters->mnProcessor >= 0)
+            {
+                nProcessor = pParameters->mnProcessor;
+                if (nProcessor == glProcessorRoundRobin)
+                    InterlockedIncrement(&glProcessorRoundRobin);
+            }
+            else
+            {
+                nProcessor = giDefaultProcessor;
+                if (nProcessor < 0)
+                    nProcessor = InterlockedIncrement(&glProcessorRoundRobin);
+            }
+            if (mThreadData.mpData)
+            {
+                if (nProcessor < 0)
+                    nProcessor = 0;
+                XSetThreadProcessor(mThreadData.mpData->mhThread, static_cast<DWORD>(nProcessor % 6));
+            }
+            ResumeThread(mThreadData.mpData->mhThread);
+            return mThreadData.mpData->mhThread;
+        }
+        if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount)) == 0)
+            FreeThreadDynamicData(mThreadData.mpData);
+        if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&mThreadData.mpData->mnRefCount)) == 0)
+            FreeThreadDynamicData(mThreadData.mpData);
+        mThreadData.mpData = 0;
+        return 0;
+    }
+
 }
 }

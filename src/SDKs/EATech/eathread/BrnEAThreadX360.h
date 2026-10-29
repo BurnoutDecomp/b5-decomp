@@ -155,9 +155,7 @@ namespace Thread
 
     // X360: 24 statically-allocated EAThreadDynamicData slots guarded by a
     // parallel 24-entry busy-flag table (one int per slot, claimed via
-    // lwarx/stwcx.). On the MSVC host the PowerPC reservation sequence is
-    // modeled with an interlocked compare-and-swap; this is a host mapping of an
-    // un-modelable-by-name SIMD/atomic primitive and is FLAGGED as such.
+    // lwarx/stwcx. emitted by the native XDK interlocked intrinsics).
     const s32 KI_THREAD_DYNAMIC_DATA_COUNT = 24;
 
     // 0x82B43CF8
@@ -195,15 +193,12 @@ namespace Thread
     //                                              RtlLeaveCriticalSection(this+8)
     // i.e. the scheduler's mLock Futex lives at +0x08 and occupies the +0x08..+0x28
     // span on the 32-bit X360 image (mEnableProfiling is the next member at +0x28).
-    // The PC x64 wrapper must use the host CRITICAL_SECTION size instead; its larger
-    // storage is a host layout detail and does not change the console member offsets.
     //
     // This is the PROJECT home for EA::Thread::Futex. It must NOT pull the divergent
     // vendor eathread/eathread_futex.h (that header transitively defines a different
     // EA::Thread::MutexParameters than the X360-faithful one above, a C2011 collision).
-    // The CRITICAL_SECTION storage is modeled as a suitably-sized/aligned byte buffer
-    // so this header stays free of <Windows.h>; the lock bodies live out-of-line in
-    // BrnEAThreadX360.cpp (which owns the Win32 critical-section calls).
+    // The native CRITICAL_SECTION occupies the 32-byte EAThread platform span;
+    // lock bodies and XDK calls live out-of-line in BrnEAThreadX360.cpp.
     class Futex
     {
     public:
@@ -229,13 +224,10 @@ namespace Thread
         void Unlock();
 
     private:
-        // Raw, pointer-aligned storage for the host CRITICAL_SECTION. Keep the
-        // 32-byte EAThread platform span on 32-bit builds; Win64's CRITICAL_SECTION
-        // is 40 bytes, so the host x64 wrapper must reserve 40. The out-of-line
-        // calls in the .cpp verify size and alignment against the Windows type.
+        // Pointer-aligned native EAThread critical-section storage.
         union
         {
-            u8     mCRITICAL_SECTION[sizeof(void*) == 8 ? 40 : 32];
+            u8     mCRITICAL_SECTION[32];
             void*  mAlign;
         };
 
@@ -243,6 +235,8 @@ namespace Thread
         Futex(const Futex&);
         Futex& operator=(const Futex&);
     };
+
+    CGS_STATIC_ASSERT((sizeof(Futex) == 32), "ARTIST Futex platform span");
 
     // ---- IRunnable + RunnableFunction (EATech DWARF eathread_thread.h) ------
 
@@ -267,6 +261,7 @@ namespace Thread
     // The two optional global user-wrappers the trampoline can route through.
     typedef intptr_t (*RunnableFunctionUserWrapper)(RunnableFunction pFunction, void* pContext);
     typedef intptr_t (*RunnableClassUserWrapper)(IRunnable* pRunnable, void* pContext);
+    extern RunnableClassUserWrapper sGlobalRunnableClassUserWrapper;
 
     // 0x82B42D58: ThreadParameters POD (EATech DWARF eathread_thread.h:404).
     // Only mnStackSize/mnPriority/mnProcessor/mpName are read by Begin (a4[1],
@@ -337,14 +332,8 @@ namespace Thread
 
         ~Thread();
 
-        // Block until the started thread ends (then optionally returns its value via
-        // pThreadReturnValue) but give up after pTimeoutAbsolute. Reconstructed
-        // OUT-OF-GROUP: the body lives in the (separate, not-yet-homed) EA::Thread
-        // object TU; this is a forward declaration so callers (e.g.
-        // EA::Jobs::LocalBackend::JobThread::WaitForEnd) compile and link against the
-        // canonical symbol. FLAGGED -- declared here, defined in its own TU.
-        Status WaitForEnd(intptr_t* pThreadReturnValue = 0,
-                          const int* pTimeoutAbsolute  = 0);
+        // ARTIST82B42DD0: absolute32-bit deadline first, optional return output second.
+        Status WaitForEnd(const u32& timeoutAbsolute, intptr_t* pThreadReturnValue = 0);
 
         // Start a thread running pFunction(pContext), per pParameters. Returns
         // the new thread's HANDLE (ThreadId) or 0 on failure. (0x82B43F80)
@@ -352,6 +341,11 @@ namespace Thread
                        void*                   pContext     = 0,
                        const ThreadParameters* pParameters  = 0,
                        RunnableFunctionUserWrapper pUserWrapper = 0);
+
+        // ARTIST82B442F8: the distinct IRunnable path uses its class entry trampoline.
+        ThreadId Begin(IRunnable* pRunnable, void* pContext = 0,
+                       const ThreadParameters* pParameters = 0,
+                       RunnableClassUserWrapper pUserWrapper = 0);
 
         // Poll thread status; optionally writes the return value out. (0x82B42EF8)
         Status GetStatus(intptr_t* pThreadReturnValue = 0);
@@ -374,6 +368,9 @@ namespace Thread
         // filesys::Device::Start passes its result explicitly. Declared here (the Thread
         // home); the out-of-line body lives with the other Thread statics.
         static RunnableFunctionUserWrapper GetGlobalRunnableFunctionUserWrapper();
+
+        // ARTIST82B42DB0: separate class-wrapper global at8324FF04.
+        static RunnableClassUserWrapper GetGlobalRunnableClassUserWrapper();
 
     protected:
         EAThreadData mThreadData;

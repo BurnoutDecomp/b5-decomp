@@ -3,7 +3,6 @@
 #include "SDKs/EATech/eajobs/detail.h"     // EA::Jobs::Detail::WaitOnYieldHelper
 
 #include <xtl.h>  // QueryPerformanceCounter, LARGE_INTEGER
-#include <stdint.h>   // uintptr_t
 
 // ============================================================================
 // SDKs/EATech/eajobs/job_instance_handle.cpp
@@ -43,6 +42,16 @@ namespace Jobs
         SchedulerBackend::~SchedulerBackend()
         {
         }
+
+        // ARTIST base slots1C/44/48/4C resolve to the genuine bare blr82AD5078.
+        void SchedulerBackend::WakeThreads() {}
+        void SchedulerBackend::SetProfilingCallback(ProfilerCallback*) {}
+        void SchedulerBackend::SetProfilingContext(void*) {}
+        void SchedulerBackend::FlushProfile() {}
+
+        // ARTIST base slot50 resolves to li r3,0;blr82B0F1B8.
+        bool SchedulerBackend::ExecuteReadyJobs(int) { return false; }
+
     }
 
     // Reassemble the 64-bit value the X360 reads with `ld 8(handle)`: on the

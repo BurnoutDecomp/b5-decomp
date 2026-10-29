@@ -2,8 +2,7 @@
 #define EA_JOBS_LOCAL_BACKEND_JOB_THREAD_H
 
 #include "types.hpp"
-#include <atomic>
-#include "eathread/eathread_thread.h" // Native EAThread implementation linked by the PC build.
+#include "eathread/eathread_thread.h" // Native EAThread implementation.
 #include "SDKs/EATech/eajobs/job_thread_parameters.h" // EA::Jobs::JobThreadParameters
 
 // SDKs/EATech/eajobs/job_thread.h
@@ -43,7 +42,7 @@ namespace LocalBackend
     // the worker's +0x04 slot and dispatches its combined-vtable worker entry points
     // BY NAME -- slot +0x50 (ExecuteReadyJobs, run any ready jobs for an affinity) and
     // slot +0x54 (GetSleepTimeoutMs, the wait before the next wake). LocalBackend has
-    // ONE vptr (off_82182500, the Detail::SchedulerBackend vtable extended with the
+    // ONE vptr (off_82182500, implementing Detail::SchedulerBackend including its
     // worker slots), so the worker calls those virtuals directly on the concrete
     // backend -- there is NO separate worker-interface base/vtable. Forward-declared
     // here; the definition (and the call dispatch in JobThread::Run) lives in
@@ -77,11 +76,18 @@ namespace LocalBackend
 
         LocalBackend*             mpBackend;    // +0x04
         bool                      mbStarted;    // +0x08
-       // +0x09 on console
+        bool                      mbQuit;       // +0x09
         EA::Thread::Thread        mThread;      // +0x0C
         EA::Jobs::JobThreadParameters mParameters; // +0x10
-        void*                     mhEvent;      // native Win32 wake handle
+        void*                     mhEvent;      // native XDK wake handle
     };
+
+    CGS_STATIC_ASSERT((offsetof(JobThread, mbStarted) == 8), "ARTIST worker start flag");
+    CGS_STATIC_ASSERT((offsetof(JobThread, mbQuit) == 9), "ARTIST worker quit flag");
+    CGS_STATIC_ASSERT((offsetof(JobThread, mThread) == 0xC), "ARTIST worker thread");
+    CGS_STATIC_ASSERT((offsetof(JobThread, mParameters) == 0x10), "ARTIST worker parameters");
+    CGS_STATIC_ASSERT((offsetof(JobThread, mhEvent) == 0x28), "ARTIST worker event");
+    CGS_STATIC_ASSERT((sizeof(JobThread) == 0x2C), "ARTIST worker stride");
 }
 }
 }

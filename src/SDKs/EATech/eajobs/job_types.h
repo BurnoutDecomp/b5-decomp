@@ -59,14 +59,17 @@ namespace Jobs
     // job.h, not reconstructed in this group).
     struct Job;
     struct JobInstanceHandle;
+    struct JobThreadHandle;
+    struct JobThreadParameters;
+    struct JobMetrics;
+    typedef void ProfilerCallback(const JobMetrics* pMetrics, int iCount, void* pContext);
     struct EntryPoint;   // entry_point.h -- CreateNotReadyInstance's entry argument
     struct Event;
 
     // job_types.h -- a single 32-bit job argument word. Jobs receive four of them
     // (Job::mParams[4] / the local-job entry signature); SetData packs the data
-    // pointer + size into two of the slots. Native pointers widen the console four-byte union
-    // so it can carry a pointer, an int, or a float interchangeably (the X360 stores
-    // raw words). Tag is `struct` to match the job_scheduler.h forward declaration.
+    // pointer + size into two of the slots. The four-byte union carries a pointer,
+    // an int, or a float as a raw word. Tag is `struct` to match job_scheduler.h.
     struct Param
     {
         union
@@ -101,63 +104,34 @@ namespace Jobs
         typedef WaitOnCallback* WaitOnYieldCallbackArg;
 
         // SchedulerBackend -- the polymorphic owner of submitted job-instance slots.
-        // Only the two virtual entry points JobInstanceHandle dispatches into are
-        // committed here (the X360 asm proves the call sites: vtable slot +0x30 for
-        // the completion query, slot +0x38 for adding a barrier). The full backend
-        // (LocalBackend etc.) is reconstructed elsewhere; this is the minimal
-        // abstract surface the handle calls BY NAME. The polymorphic interface keeps
-        // the named virtual dispatch the binary performs without committing the rest
-        // of the backend's (out-of-group) vtable/layout.
+        // ARTIST base 82182408 and LocalBackend 82182500 have these 22 slots.
         class SchedulerBackend
         {
         public:
-            // Polymorphic base destructor. Defined OUT-OF-LINE in
-            // job_instance_handle.cpp so the interface owns a real .cpp definition
-            // home -- the X360 base scalar-deleting destructor @ 0x82BC9A08 (stores
-            // the SchedulerBackend vtable off_82182408 into *this, then for the
-            // deleting variant conditionally operator-delete's). The body is empty
-            // (no members, no base); the vtable store + delete-tail is what the
-            // compiler emits.
-            virtual ~SchedulerBackend();
-
-            // vtable slot +0x28: create a NOT-READY job instance for the supplied
-            // entry-point + parameters, writing its 16-byte JobInstanceHandle into
-            // pOutHandle. Job::INTERNAL_AddNotReady @ 0x82BCA3D8 selects the backend by
-            // the entry's environment (pBackends[env]) and dispatches this slot with the
-            // out-handle buffer, the entry point and the param block.
-            virtual void CreateNotReadyInstance(JobInstanceHandle* pOutHandle,
-                                                const EntryPoint*  pEntryPoint,
-                                                const Param*       pParams) = 0;
-
-            // vtable slot +0x30: is the instance identified by (uSubmissionId,
-            // uHandleQword==packed backend+index) finished? Nonzero == complete.
-            // (X360 passes the submission id and the packed +0x8 qword as a 64-bit
-            // handle key.)
-            virtual int IsJobComplete(u64 uSubmissionId, u64 uHandleQword) = 0;
-
-            // vtable slot +0x34: register an event/barrier on the instance keyed by
-            // (uSubmissionId, uHandleQword) to fire when the instance reaches phase
-            // iWhen. Job::INTERNAL_SubmitEventsAndDeps dispatches this slot two ways
-            // (X360 0x82BCB39C / 0x82BCB470): with a freshly-built barrier handle as
-            // the payload (a dependency edge), and with one of the job's own Events as
-            // the payload (a start/end event); both hand the backend the submission
-            // key, the payload pointer and the phase word as the last two operands.
-            virtual int SubmitEvent(u64 uSubmissionId, u64 uHandleQword,
-                                    const void* pPayload, int iWhen) = 0;
-
-            // vtable slot +0x38: establish a barrier so the dependent job-instance handle
-            // waits on the instance keyed by (uSubmissionId, uHandleQword). The X360
-            // dispatches this through the *dependency's* backend vtable, handing it the
-            // dependent handle, the backend, and the dependency's submission key.
-            virtual Event AddBarrier(u64 uSubmissionId, u64 uHandleQword) = 0;
-
-            // vtable slot +0x3C: BLOCKING wait on the instance keyed by (uSubmissionId,
-            // uHandleQword) -- the backend's "sleep on instance" entry. Job::SleepOn
-            // @ 0x82BCA1F8 tail-calls this slot (X360 0x82BCA244 lwz r11,0x3C) with the
-            // job's submission id and packed handle qword; the LocalBackend honours it by
-            // waiting on (then re-posting) the slot's completion semaphore.
-            virtual int SleepOn(u64 uSubmissionId, u64 uHandleQword) = 0;
+            virtual ~SchedulerBackend();                                      //00
+            virtual int GetNumJobsInFlight() const = 0;                         //04
+            virtual int GetNumThreads() const = 0;                              //08
+            virtual JobThreadHandle GetThreadHandle(u32 uIndex) const = 0;      //0C
+            virtual JobThreadHandle AddThread(const JobThreadParameters&) = 0;  //10
+            virtual void RequestEnd(u64 uHandle) = 0;                           //14
+            virtual void WaitForEnd(u64 uHandle) = 0;                           //18
+            virtual void WakeThreads();                                        //1C
+            virtual u64 GetThreadId(u64 uHandle) const = 0;                      //20
+            virtual JobThreadParameters GetThreadParameters(u64 uHandle) const = 0; //24
+            virtual JobInstanceHandle CreateNotReadyInstance(const EntryPoint*, const Param*) = 0; //28
+            virtual void GetEnabler(u64,u64,u32*&,u32&) = 0;                     //2C
+            virtual int IsJobComplete(u64,u64) = 0;                             //30
+            virtual int SubmitEvent(u64,u64,const void*,int) = 0;               //34
+            virtual Event AddBarrier(u64,u64) = 0;                              //38
+            virtual int SleepOn(u64,u64) = 0;                                   //3C
+            virtual int GetAllowSleepOn(u64,u64) = 0;                           //40
+            virtual void SetProfilingCallback(ProfilerCallback*);              //44
+            virtual void SetProfilingContext(void*);                            //48
+            virtual void FlushProfile();                                       //4C
+            virtual bool ExecuteReadyJobs(int);                                //50
+            virtual u32 GetSleepTimeoutMs() = 0;                                //54
         };
+
     }
 
     // job_instance_handle.h:21 -- the lightweight handle to a submitted job
@@ -194,8 +168,8 @@ namespace Jobs
         : mSubmissionId(0)
         , mSchedulerBackend(0)
         , mIndex(0)
-        , mPadding(0)
     {
+        // ARTIST82BCC190..198 leaves the final padding word untouched.
     }
 
     inline JobInstanceHandle::JobInstanceHandle(Detail::SchedulerBackend* pBackend,
@@ -203,8 +177,8 @@ namespace Jobs
         : mSubmissionId(uSubmissionId)
         , mSchedulerBackend(pBackend)
         , mIndex(uIndex)
-        , mPadding(0)
     {
+        // ARTIST82BCC1C8..1D0 writes only submission id, backend and index.
     }
 }
 }
