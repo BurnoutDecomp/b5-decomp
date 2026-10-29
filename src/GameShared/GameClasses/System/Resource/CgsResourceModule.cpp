@@ -173,6 +173,11 @@ namespace CgsResource
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mMemoryModule) == 288128, "ARTIST memory module owner");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mFileSystem) == 288816, "ARTIST filesystem owner");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mDebugComponent) == 339224, "ARTIST resource debug owner");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mpFileSystemAllocator) == 0x5802c, "ARTIST filesystem allocator owner");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mPendingFileResponses) == 0x58030, "ARTIST pending-response pool");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, maPendingFileResponses) == 0x5803c, "ARTIST pending-response records");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, maiPendingFileResponseFreeIndices) == 0x580fc, "ARTIST pending-response free indices");
+        CGS_STATIC_ASSERT(sizeof(ResourceModule) == 0x58180, "ARTIST resource module span");
     }
 
     // ARTIST82907268: native event sizes are carried by the queue. Pool and
