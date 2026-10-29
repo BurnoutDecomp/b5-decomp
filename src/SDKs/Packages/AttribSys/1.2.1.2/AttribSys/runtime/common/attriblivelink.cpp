@@ -19,15 +19,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"        // Attrib::Instance / Attrib::Collection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribute.h"             // Attrib::Attribute / Attrib::Node
 
-#define EASTLAlloc(allocator, n) \
-    CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Malloc((n), 0);
-#define EASTLAllocAligned(allocator, n, alignment, offset) \
-    CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Malloc((n), 0)
-#define EASTLFree(allocator, p, size) \
-    CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Free((void*)(p), static_cast<s32>(size), NULL)
-#define EASTL_MAP_DEFAULT_ALLOCATOR allocator_type()
-#include <EASTL/algorithm.h>   // eastl::lower_bound
-#include <EASTL/map.h>         // eastl::map (Attrib::EditTable)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelinkmap.h"
 
 namespace Attrib
 {
@@ -162,15 +154,23 @@ namespace Attrib
     // -----------------------------------------------------------------------------------------
     // EditTable -- every live edit, keyed by its EditSpecifier.
     // -----------------------------------------------------------------------------------------
-    struct EditTable : public eastl::map<EditSpecifier, EditRecord, eastl::less<EditSpecifier>,
-                                         CgsAttribSys::AttribSysPackageAllocator>
+    struct EditTable : public LiveLinkMap<EditSpecifier, EditRecord>
     {
     public:
         void* operator new(size_t lnBytes);
     };
 
-    CGS_STATIC_ASSERT((__alignof(EditTable::node_type) <= EASTL_ALLOCATOR_MIN_ALIGNMENT),
-                  "EditTable nodes must never take the over-aligned allocation branch");
+    CGS_STATIC_ASSERT(sizeof(EditSpecifier) == 0x20, "ARTIST edit key size");
+    CGS_STATIC_ASSERT(sizeof(EditRecord) == 0x28, "ARTIST edit record size");
+    CGS_STATIC_ASSERT(sizeof(EditTable) == 0x30, "ARTIST edit table size");
+    CGS_STATIC_ASSERT(offsetof(EditTable, mAnchor) == 4, "ARTIST edit table anchor");
+    CGS_STATIC_ASSERT(offsetof(EditTable, mnSize) == 0x14, "ARTIST edit table count");
+    CGS_STATIC_ASSERT(offsetof(EditTable, mAllocator) == 0x18, "ARTIST edit table allocator");
+    CGS_STATIC_ASSERT(sizeof(EditTable::node_type) == 0x58, "ARTIST edit node allocation");
+    CGS_STATIC_ASSERT(offsetof(EditTable::node_type, mValue) == 0x10, "ARTIST edit node value");
+    CGS_STATIC_ASSERT(offsetof(EditTable::value_type, second) == 0x20, "ARTIST edit record position");
+    CGS_STATIC_ASSERT((__alignof(EditTable::node_type) <= CgsAttribSys::AttribSysPackageAllocator::KI_DEFAULT_ALIGNMENT),
+                      "Edit nodes use the original unaligned Malloc entry point");
 
     // -----------------------------------------------------------------------------------------
     // TweakableAttribute -- an attribute cursor that hands out the address of an element.
@@ -291,6 +291,29 @@ namespace Attrib
         }
     }
 
+    // ARTIST eastl::lower_bound<Definition> @82808E68: signed 24-byte
+    // distance, unsigned full-key comparison, then halve the remaining range.
+    static const Definition* LowerBoundDefinition(const Definition* lpBegin,
+                                                  const Definition* lpEnd,
+                                                  const Definition& lrSearch)
+    {
+        const Definition* lpDefinition = lpBegin;
+        ptrdiff_t liRemaining = lpEnd - lpBegin;
+        while (liRemaining > 0)
+        {
+            const ptrdiff_t liHalf = liRemaining >> 1;
+            const Definition* lpMiddle = lpDefinition + liHalf;
+            if (*lpMiddle < lrSearch)
+            {
+                lpDefinition = lpMiddle + 1;
+                liRemaining -= liHalf + 1;
+            }
+            else
+                liRemaining = liHalf;
+        }
+        return lpDefinition;
+    }
+
     // Find the bytes of the addressed attribute element: through a live instance of the
     // collection when it holds its own copy of the attribute, else through the class
     // definition (the collection's layout block or the class static data). Reports the
@@ -307,7 +330,7 @@ namespace Attrib
         const Definition* lpEnd = lpBegin + lpPrivate->mNumDefinitions;
         Definition lSearch;
         lSearch.mKey = lrSpec.GetAttribKey();
-        const Definition* lpDefinition = eastl::lower_bound(lpBegin, lpEnd, lSearch);
+        const Definition* lpDefinition = LowerBoundDefinition(lpBegin, lpEnd, lSearch);
         if (!(lpDefinition < lpEnd))
             lpDefinition = NULL;
         lrpDefinition = lpDefinition;
@@ -524,6 +547,12 @@ namespace Attrib
             const unsigned int luLocation = static_cast<unsigned int>(atoi(lacToken));
             CGS_ASSERT(luLocation < mExtraSize + mTypeSize,
                        "Invalid pointer location specified in live link edit message.\n");
+
+            // ARTIST 8280D920-8280D938 selects the data or extra-image base;
+            // stwx at 8280D9F0/8280DA04/8280DA7C writes the native pointer slot.
+            unsigned char** lppSlot = reinterpret_cast<unsigned char**>(
+                luLocation < mTypeSize ? lpData + luLocation
+                                      : mExtraImage + (luLocation - mTypeSize));
 
             if (*lpcFixup == '@')
             {
