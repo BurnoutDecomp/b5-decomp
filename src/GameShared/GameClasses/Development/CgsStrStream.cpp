@@ -36,36 +36,29 @@ namespace CgsDev
     {
     }
 
+    // ARTIST821F0E50 / 821F0EC8: 0 decimal, 1/2 hex, other modes silent.
     StrStreamBase& StrStreamBase::operator<<(s32 liValue)
     {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
         if (mePrintMode == E_PRINTMODE_DECIMAL)
+            AppendFormat("%d", liValue);
+        else if (static_cast<u32>(mePrintMode) < 3)
         {
-            Format(lacBuffer, sizeof(lacBuffer), KAC_INTEGER, liValue);
+            AppendFormat("0x%X", static_cast<u32>(liValue));
+            if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
         }
-        else
-        {
-            Format(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)liValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE)
-                mePrintMode = E_PRINTMODE_DECIMAL;
-        }
-        return *this << lacBuffer;
+        return *this;
     }
 
     StrStreamBase& StrStreamBase::operator<<(u32 luValue)
     {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
         if (mePrintMode == E_PRINTMODE_DECIMAL)
+            AppendFormat("%u", luValue);
+        else if (static_cast<u32>(mePrintMode) < 3)
         {
-            Format(lacBuffer, sizeof(lacBuffer), KAC_UNSIGNED, luValue);
+            AppendFormat("0x%X", luValue);
+            if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
         }
-        else
-        {
-            Format(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, luValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE)
-                mePrintMode = E_PRINTMODE_DECIMAL;
-        }
-        return *this << lacBuffer;
+        return *this;
     }
 
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
@@ -81,11 +74,19 @@ namespace CgsDev
         return *this;
     }
 
+    // ARTIST821F0F40: hexadecimal formats the original float's raw bits.
     StrStreamBase& StrStreamBase::operator<<(f32 lfValue)
     {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        Format(lacBuffer, sizeof(lacBuffer), KAC_FLOAT, lfValue);
-        return *this << lacBuffer;
+        if (mePrintMode == E_PRINTMODE_DECIMAL)
+            AppendFormat("%f", lfValue);
+        else if (static_cast<u32>(mePrintMode) < 3)
+        {
+            u32 luBits;
+            std::memcpy(&luBits, &lfValue, sizeof(luBits));
+            AppendFormat("0x%X", luBits);
+            if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
+        }
+        return *this;
     }
 
     StrStreamBase& StrStreamBase::operator<<(void* lpValue)
