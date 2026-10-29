@@ -16,10 +16,10 @@ public:
         u32 muNumLevels;
         PixelFormat meFormat;
     };
-    typedef ResourceDescriptor5 ResourceDescriptor;
-    static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor*, const Parameters*);
-    static Texture2D* Initialize(const rw::Resource*, const Parameters*);
-    static u32 Xbox2GetPhysicalMemorySize(const Parameters*);
+    typedef rw::ResourceDescriptor ResourceDescriptor;
+    static ResourceDescriptor GetResourceDescriptor(const Parameters&);
+    static Texture2D* Initialize(const rw::Resource&, const Parameters&);
+    static u32 Xbox2GetPhysicalMemorySize(const Parameters&);
 };
 CGS_STATIC_ASSERT((sizeof(Texture2D) == 0x34), "ARTIST 2D texture header");
 CGS_STATIC_ASSERT((sizeof(Texture2D::Parameters) == 20), "ARTIST 2D texture parameters");
