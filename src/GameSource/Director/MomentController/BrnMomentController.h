@@ -37,51 +37,21 @@ namespace BrnDirector
     // with the real field set. Include that header if you need the type.
 
     // MomentController owns the live director moments.
-    // It holds the moment object pool (the declaration AbstractPool<70,20,Vector4>; host-widened, see
-    // the KU_MOMENT_POOL_UNITS banner) and the parameter bank
+    // It holds the native AbstractPool<70,20,Vector4> and the parameter bank
     // by value, and hands moments out through MomentHandle. NewMoment is the
     // factory: release the in/out handle, allocate the requested moment type from the pool,
     // Prepare the handle around the new slot, then SetParameters from the bank.
     class MomentController
     {
     public:
-    // ⛔ HOST BUCKET WIDENING -- an console SIZE CONSTANT THAT DOES NOT SURVIVE THE x64 PORT.
-    //
-    // The the declaration spells the moment pool
-    // `AbstractPool<70u, 20u, rw::math::vpu::Vector4>`: 20 slots, each 70 Vector4 units ==
-    // 1120 bytes, sized on the console to hold the LARGEST director moment. The console's
-    // largest is MomentPlayerJumping (0x3A0 == 928 bytes, its last member meType at +0x39C),
-    // i.e. the console reserved ~20% headroom over the biggest moment.
-    //
-    // ⚠️ MEASURED 2026-08-23 on THIS host build (sizeof probe over all twelve concrete
-    // moments): MomentPlayerJumping is **1296 bytes** -- 176 bytes MORE than the console
-    // bucket. Its four BehaviourCollection<> members are handle-and-pointer dense, and every
-    // one of those widened 4 -> 8 bytes. With the console's literal 70, NewMoment's
-    // `AllocateVoid<MomentPlayerJumping>()` would placement-new a 1296-byte object into a
-    // 1120-byte slot: AbstractPool's own "object is too large" CGS_ASSERT would fire and
-    // then the construction would proceed anyway, scribbling 176 bytes over the NEXT pool
-    // slot -- i.e. silent heap corruption of a neighbouring live moment.
-    //
-    // So the console's UNIT COUNT is platform data, not behaviour. What is faithful is the
-    // RULE ("one slot holds the largest moment, with ~20% headroom"); the host number is
-    // re-derived from the host's own largest moment:
-    //     1120 / 928  ==  1.207  ->  1296 * 1.207  ==  1564  ->  ceil(1564 / 16)  ==  98
-    // The pool grows from 20*1120 == 22,400 to 20*1568 == 31,360 bytes.
-    //
-    // ⭐ THE NUMBER CANNOT SILENTLY ROT: BrnMomentController.cpp -- the one TU that sees all
-    // twelve concrete moment types, because NewMoment lives there -- carries a static_assert per
-    // type against sizeof(AbstractPool<...>::Bucket). Grow a moment past the bucket and that TU
-    // stops compiling instead of the heap stopping working.
-    //
-    // ✅ THE SECOND SIZE LANDMINE IS GONE (2026-09-24, FX-DIRECTOR). MainDirector used to model this
-    //    object as the console's 22,416-byte span (`u8 maMomentController[0x1CA60 - 0x172D0]`) plus
-    //    the pool's free queue / count / occupancy a second time, and reinterpret_cast the span
-    //    for ArbStateSharedInfo::mpMomentController -- which the host object (widened bucket, 8-byte
-    //    vptr) does not fit. It now holds `MomentController mMomentController;` BY VALUE and reaches
-    //    it by name, so NewMoment's AllocateVoid writes into memory the controller owns.
+    // DecFIGS declares 70 Vector4 units per slot. ARTIST MainDirector::Prepare
+    // refills the 20-entry queue at controller+0x5790, and Construct stores the
+    // occupancy at+0x57E8 before constructing the parameter bank at+0x57F0.
+    // The native pool must retain that 1120-byte stride. Concrete moment fit
+    // checks remain in BrnMomentController.cpp.
     public:
         static const u32 KU_MOMENT_POOL_UNITS_CONSOLE = 70u;   // the console's own bucket
-        static const u32 KU_MOMENT_POOL_UNITS      = 98u;   // this host's re-derivation (see above)
+        static const u32 KU_MOMENT_POOL_UNITS      = 70u;
         static const u32 KU_MOMENT_POOL_BUCKETS    = 20u;   // unchanged, 20 live moments
 
         typedef AbstractPool<KU_MOMENT_POOL_UNITS, KU_MOMENT_POOL_BUCKETS,
@@ -157,8 +127,17 @@ namespace BrnDirector
 
     private:
         // Member list, held by value, pool first.
-        MomentPool                                     mMomentPool;       //  (host-widened bucket -- see the banner above)
+        MomentPool                                     mMomentPool;
         MomentParameterBank                            mMomentParameterBank;
+
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT((sizeof(MomentPool::Bucket) == 1120), "ARTIST moment slot stride");
+            CGS_STATIC_ASSERT((sizeof(MomentPool) == 0x57F0), "ARTIST moment pool");
+            CGS_STATIC_ASSERT((offsetof(MomentController, mMomentPool) == 0), "ARTIST moment pool base");
+            CGS_STATIC_ASSERT((offsetof(MomentController, mMomentParameterBank) == 0x57F0), "ARTIST moment parameters");
+            CGS_STATIC_ASSERT((sizeof(MomentController) == 0x5840), "ARTIST moment controller extent");
+        }
     };
 
 } // namespace BrnDirector
