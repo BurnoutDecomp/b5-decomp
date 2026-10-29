@@ -301,7 +301,6 @@ private:
     DLCPackage  maPackages[KU_DLC_PACKAGE_CAPACITY];  // X360 +0x000; capacity inferred
     char        macVersionText[16];                  // X360 +0x4C0
     CgsFileSystem::AsyncOp mVersionFileOp;            // X360 +0x4D0
-    u8          mPad04FC[4];                          // X360 gap to the stage dword
     EPrepareStage mePrepareStage;                    // X360 +0x500
     EReleaseStage meReleaseStage;                    // X360 +0x504
     CgsModule::EventReceiverQueue<256, 16> mMonitorReceiverQueue; // X360 +0x508
@@ -309,9 +308,31 @@ private:
     s32         miCurrentPackage;                     // X360 +0x624
     EA::Thread::Thread mDLCMonitorThread;             // X360 +0x628
     bool        mbDLCMonitorThreadStarted;            // X360 +0x62C
-    u8          mPad062D[3];                          // X360 +0x62D..+0x62F
     EA::Thread::Futex mMonitorLock;                   // X360 +0x630; C++ member lifecycle
     s32         muMonitorPackageCount;                // X360 +0x650
+
+    // ARTIST ctor827E35B8..35CC, Construct826659E8 and package/monitor
+    // consumers. AsyncOp is0x30 bytes; natural alignment supplies the gap
+    // after the monitor-thread flag without adding an invented field.
+#if defined(_XBOX)
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(DLCPackage) == 0x4C), "ARTIST DLC package stride");
+        CGS_STATIC_ASSERT((sizeof(CgsFileSystem::AsyncOp) == 0x30), "ARTIST DLC version operation");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, macVersionText) == 0x4C0), "ARTIST DLC version text");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, mVersionFileOp) == 0x4D0), "ARTIST DLC version operation owner");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, mePrepareStage) == 0x500), "ARTIST DLC prepare stage");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, meReleaseStage) == 0x504), "ARTIST DLC release stage");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, mMonitorReceiverQueue) == 0x508), "ARTIST DLC monitor queue");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, muPackageCount) == 0x620), "ARTIST DLC package count");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, miCurrentPackage) == 0x624), "ARTIST DLC current package");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, mDLCMonitorThread) == 0x628), "ARTIST DLC monitor thread");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, mbDLCMonitorThreadStarted) == 0x62C), "ARTIST DLC thread flag");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, mMonitorLock) == 0x630), "ARTIST DLC monitor lock");
+        CGS_STATIC_ASSERT((offsetof(DLCManager, muMonitorPackageCount) == 0x650), "ARTIST DLC monitor package count");
+        CGS_STATIC_ASSERT((sizeof(DLCManager) == 0x658), "ARTIST DLC contained extent");
+    }
+#endif
 };
 
 } // namespace BrnResource

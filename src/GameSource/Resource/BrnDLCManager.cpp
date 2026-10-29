@@ -211,8 +211,9 @@ namespace BrnResource
     // base call (BaseCollisionGenerator::Destruct == trivial base prep) is a no-op here.
     void DLCDebugComponent::Update()
     {
-        for (PackDetail& lPack : maPackDetails)   // asm: walk +0x70 .. +0xAC, stride 12
+        for (s32 liPack = 0; liPack < E_DLC_DATA_PACK_COUNT; ++liPack)
         {
+            PackDetail& lPack = maPackDetails[liPack]; // +0x70 .. +0xAC, stride12
             bool lbChanged = false;
             if (lPack.mbLastApplied != lPack.mbAvailable)
             {
