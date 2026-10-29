@@ -83,7 +83,8 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            for (u32 luIndex = 0; luIndex < 11; ++luIndex)
+            for (u32 luIndex = 0; luIndex < sizeof(mReplayRequestInterface.mapSerialisers) /
+                sizeof(mReplayRequestInterface.mapSerialisers[0]); ++luIndex)
                 mReplayRequestInterface.mapSerialisers[luIndex] = 0;
         }
 

@@ -224,7 +224,7 @@ void ChallengeListComponent::ShowDescriptionInTicker()
     GuiEventTickerClearMessages clear = {{0, 1}};
     Output(mpStateInterface, clear);
     s32 index;
-    const auto* entry = GetFilteredChallenge(miStartChallengeIndex + miHighlightedIndex, &index);
+    const BrnResource::ChallengeListEntry* entry = GetFilteredChallenge(miStartChallengeIndex + miHighlightedIndex, &index);
     GuiEventTickerCustomMessage message = {};
     message.Construct(true, false, true, false);
     message.AddString("%1", 1);
@@ -274,17 +274,17 @@ void ChallengeListComponent::Update()
             continue;
         }
         s32 index;
-        const auto* entry = GetFilteredChallenge(filteredIndex, &index);
+        const BrnResource::ChallengeListEntry* entry = GetFilteredChallenge(filteredIndex, &index);
         if (entry == 0) continue;
         CGS_ASSERT(static_cast<u32>(index) < 2000, "Challenge index out of range");
-        const auto* completion = mEveryPlayerCompletionStatus.GetLocalPlayerCompletionStatus();
+        const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* completion = mEveryPlayerCompletionStatus.GetLocalPlayerCompletionStatus();
         const bool done = (completion->maxBits[index / 64] & (u64(1) << (index % 64))) != 0;
         AddOutputAptViewState(maacAptState[row], done ? "completed" : "unCompleted", false);
         char textId[64], number[64];
         CgsCore::SnPrintf(textId, sizeof(textId), "$CHALLENGE_COMP_DESC_%d", row);
         CgsCore::SnPrintf(number, sizeof(number), "%d", filteredIndex + 1);
         textId[63] = number[63] = 0;
-        auto* language = mpStateInterface->GetLanguageManager();
+        CgsLanguage::LanguageManager* language = mpStateInterface->GetLanguageManager();
         language->FormatAndAddText(textId + 1, language->GetCurrentLanguage() == 10 ? "%1 : %2" : "%1: %2",
             CgsLanguage::LanguageManager::E_FORMAT_TEXT, 2,
             number, CgsLanguage::LanguageManager::E_FORMAT_INTEGER,

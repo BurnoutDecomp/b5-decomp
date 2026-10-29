@@ -223,8 +223,10 @@ namespace
         mpStateInterface->RegisterForEvents(maiEventToObserve, 10);
 
         MainMapComponent::MainMapParameterBundle lMapParameters;
-        lMapParameters.mv4ViewRect    = { 0.0f, 0.175f, 1.0f, 0.84027779f };
-        lMapParameters.mv4PaddingRect = { 0.4f, 0.18055555f, 0.95f, 0.83333331f };
+        const Vector4 lViewRect = { 0.0f, 0.175f, 1.0f, 0.84027779f };
+        lMapParameters.mv4ViewRect = lViewRect;
+        const Vector4 lPaddingRect = { 0.4f, 0.18055555f, 0.95f, 0.83333331f };
+        lMapParameters.mv4PaddingRect = lPaddingRect;
         lMapParameters.meMapType      = GuiEventRenderMainMap::E_MAPTYPE_MAINMAP;
         mMainMapComponent.Construct(mpStateInterface, &lMapParameters);
         mMainMapComponent.Prepare();
@@ -259,7 +261,8 @@ namespace
         mbWaitingForRoute         = false;
         mbEditingNewCheckpoint    = false;
         mbRouteEdited             = false;
-        mv2WorldCenterPoint       = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector2 lWorldCenter = { 0.0f, 0.0f, 0.0f, 0.0f };
+        mv2WorldCenterPoint = lWorldCenter;
         mRandom.Construct();
         // ARTIST repeats this active latch after Prepare; it is a real store on the map
         // component and remains visible in the recovered source.
@@ -370,8 +373,8 @@ namespace
             // image operands are -/+2^52, 0/1, 0.03f, 0.2f, 2.5f, 0.5f and 5.0f;
             // nearest-integer plus the residual correction is exactly floor here.
             const f32 lfDistance = static_cast<f32>(ldDistance);
-            const f32 lfBiasedSeconds = std::fma(lfDistance, KF_ROUTE_METRES_TO_SECONDS, 2.5f);
-            const f32 lfFiveSecondUnits = std::fma(lfBiasedSeconds, 0.2f, 0.5f);
+            const f32 lfBiasedSeconds = lfDistance * KF_ROUTE_METRES_TO_SECONDS + 2.5f;
+            const f32 lfFiveSecondUnits = lfBiasedSeconds * 0.2f + 0.5f;
             const f32 lfRoundedSeconds = static_cast<f32>(
                 std::floor(static_cast<double>(lfFiveSecondUnits))) * KF_SECONDS_ROUND_VALUE;
             CgsCore::SPrintf(lacFormattedValue, sizeof(lacFormattedValue), "%f",
@@ -1557,22 +1560,6 @@ namespace
 
         u32 lauIconsToIgnore[GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE];
         s32 liNumIconsToIgnore = 0;
-        const auto AppendIgnoredIcon = [&](u32 luIcon)
-        {
-            lauIconsToIgnore[liNumIconsToIgnore++] = luIcon;
-            CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
-                       "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
-        };
-        // Each ARTIST distance is a three-lane dot product followed by length;
-        // height participates, and the boundary is strictly less than 200 metres.
-        const auto IsWithinExclusionRadius = [](const auto& lrA, const auto& lrB)
-        {
-            const f32 lfX = lrA.x - lrB.x;
-            const f32 lfY = lrA.y - lrB.y;
-            const f32 lfZ = lrA.z - lrB.z;
-            return std::sqrt(lfX * lfX + lfY * lfY + lfZ * lfZ) < 200.0f;
-        };
-
         if (mSelectRoutes.GetCurrentlySelectedCheckpointIndex() == 0)
         {
             // Start-point editing hides starts too close to the first checkpoint.
@@ -1588,10 +1575,15 @@ namespace
                 {
                     const SatNavEventDisplayInfo* lpEventStart = mpGuiCache->GetEventStart(luEventStart);
                     CGS_ASSERT(lpEventStart, "lpEventStart");
-                    if (IsWithinExclusionRadius(lpEventStart->mv3Position,
-                                                 lFirstCheckpointInfo.GetPositionLane()))
+                    const f32 lfExclusionX = lpEventStart->mv3Position.x - lFirstCheckpointInfo.GetPositionLane().x;
+                    const f32 lfExclusionY = lpEventStart->mv3Position.y - lFirstCheckpointInfo.GetPositionLane().y;
+                    const f32 lfExclusionZ = lpEventStart->mv3Position.z - lFirstCheckpointInfo.GetPositionLane().z;
+                    if (std::sqrt(lfExclusionX * lfExclusionX + lfExclusionY * lfExclusionY +
+                        lfExclusionZ * lfExclusionZ) < 200.0f)
                     {
-                        AppendIgnoredIcon(lpEventStart->muEventInstanceId);
+                        lauIconsToIgnore[liNumIconsToIgnore++] = lpEventStart->muEventInstanceId;
+                        CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                            "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
                     }
                     if (liNumIconsToIgnore == GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE)
                         break;
@@ -1617,10 +1609,12 @@ namespace
 
             if (mSelectRoutes.GetCurrentlySelectedCheckpointIndex() > liPreviousCheckpointOffset)
             {
-                AppendIgnoredIcon(static_cast<u32>(static_cast<s32>(
+                lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(
                     mSelectRoutes.GetCheckpointLandmark(
                         mSelectRoutes.GetCurrentRound(),
-                        mSelectRoutes.GetCurrentlySelectedCheckpointIndex() - liPreviousCheckpointOffset))));
+                        mSelectRoutes.GetCurrentlySelectedCheckpointIndex() - liPreviousCheckpointOffset)));
+                CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                    "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
             }
 
             bool lbIgnoreNextCheckpoint = true;
@@ -1639,10 +1633,12 @@ namespace
             }
             if (lbIgnoreNextCheckpoint)
             {
-                AppendIgnoredIcon(static_cast<u32>(static_cast<s32>(
+                lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(
                     mSelectRoutes.GetCheckpointLandmark(
                         mSelectRoutes.GetCurrentRound(),
-                        mSelectRoutes.GetCurrentlySelectedCheckpointIndex() + 1))));
+                        mSelectRoutes.GetCurrentlySelectedCheckpointIndex() + 1)));
+                CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                    "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
             }
 
             if (leMenuType == SelectRoutes::E_MENU_ITEM_TYPE_FINISH_POINT)
@@ -1658,9 +1654,15 @@ namespace
                     {
                         GuiEventUpdateSatNav::SatNavIconInfo lFinishInfo;
                         mpGuiCache->GetOnlineFinishPoint(liFinishPoint, &lFinishInfo);
-                        if (IsWithinExclusionRadius(lFinishInfo.GetPositionLane(), lpEventStart->mv3Position))
+                        const f32 lfExclusionX = (lFinishInfo.GetPositionLane()).x - (lpEventStart->mv3Position).x;
+                        const f32 lfExclusionY = (lFinishInfo.GetPositionLane()).y - (lpEventStart->mv3Position).y;
+                        const f32 lfExclusionZ = (lFinishInfo.GetPositionLane()).z - (lpEventStart->mv3Position).z;
+                        if (std::sqrt(lfExclusionX * lfExclusionX + lfExclusionY * lfExclusionY +
+                        lfExclusionZ * lfExclusionZ) < 200.0f)
                         {
-                            AppendIgnoredIcon(static_cast<u32>(static_cast<s32>(lFinishInfo.GetLandmarkIndexHalf())));
+                            lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(lFinishInfo.GetLandmarkIndexHalf()));
+                            CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                                "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
                         }
                         if (liNumIconsToIgnore == GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE)
                             break;
@@ -1682,9 +1684,15 @@ namespace
                     {
                         GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
                         mpGuiCache->GetLandmarkInfoAtPositionInList(liLandmark, &lLandmarkInfo);
-                        if (IsWithinExclusionRadius(lLandmarkInfo.GetPositionLane(), lpEventStart->mv3Position))
+                        const f32 lfExclusionX = (lLandmarkInfo.GetPositionLane()).x - (lpEventStart->mv3Position).x;
+                        const f32 lfExclusionY = (lLandmarkInfo.GetPositionLane()).y - (lpEventStart->mv3Position).y;
+                        const f32 lfExclusionZ = (lLandmarkInfo.GetPositionLane()).z - (lpEventStart->mv3Position).z;
+                        if (std::sqrt(lfExclusionX * lfExclusionX + lfExclusionY * lfExclusionY +
+                        lfExclusionZ * lfExclusionZ) < 200.0f)
                         {
-                            AppendIgnoredIcon(static_cast<u32>(static_cast<s32>(lLandmarkInfo.GetLandmarkIndexHalf())));
+                            lauIconsToIgnore[liNumIconsToIgnore++] = static_cast<u32>(static_cast<s32>(lLandmarkInfo.GetLandmarkIndexHalf()));
+                            CGS_ASSERT(liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE,
+                                "liNumIconsToIgnore <= GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE");
                         }
                         if (liNumIconsToIgnore == GuiEventDrawEventIcons::KI_MAX_ICONS_TO_IGNORE)
                             break;
