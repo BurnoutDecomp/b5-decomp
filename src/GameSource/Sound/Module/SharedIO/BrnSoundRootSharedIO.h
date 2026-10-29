@@ -34,7 +34,7 @@ namespace Io
     struct SoundWorldLoadEvent
     {
         // BrnSoundRootSharedIO.h:53
-        enum eLoadEvent : s32
+        enum eLoadEvent
         {
             E_LOAD_EVENT_INVALID            = 0,
             E_LOAD_EVENT_PASSBY_MAP_LOADED  = 1,

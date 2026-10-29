@@ -108,7 +108,7 @@ bool KB_SHOW_STATIC_ENVIRONMENT = false;
 void EnclosureControl::UpdateParams(f32 afTimeStep)
 {
     using BrnGameState::GameStateModuleIO::SoundTriggerAction;
-    auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    BrnSound::Module::SoundLogicModule* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     mfTimeSinceTrigger += afTimeStep;
     CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
     const EntityId leEntity = mpPhysicsControl->GetRawPhysicsData()->mEntityId;
@@ -167,9 +167,9 @@ void EnclosureControl::ProcessTriggerAction(
             BrnSound::Debug::DebugComponent::mLogCombined << "[Whoosh][FAIL] Car below velocity threshold.\n";
         return;
     }
-    auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    BrnSound::Module::SoundLogicModule* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     mfTimeSinceTrigger = 0.0f;
-    auto* lpPassbys = static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
+    BrnSound::Logic::Passby::PassbyStateManager* lpPassbys = static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
         lpLogicModule->GetEnvironment().GetStateManager(4));
     const BrnSound::Logic::Passby::PassbyStateManager::Passby lPassby(
         arAction.mQueryPos, 0.0f,
@@ -188,7 +188,7 @@ void EnclosureControl::DrawDebug() const
         "Pass Tunnel", "Pass Overpass", "Pass Bridge", "Pass Warehouse", "Pass LargeOverheadobject", "Pass NarrowAlley"
     };
     CgsDev::DebugInterface lDebug;
-    auto& lrRender = lDebug.Get2dRender();
+    CgsDev::DebugRender& lrRender = lDebug.Get2dRender();
     f32 lfY = 50.0f;
     for (s32 liType = 19; liType < 31; ++liType)
         if (maTriggerInfo[E_TRIGGER_POSITION_AT_ENTITY].IsTypeActive(

@@ -70,11 +70,11 @@ void StaticSoundMapResourceType::FixUp(void* lpResource, const rw::Resource& lrR
     CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMin)             == 0x00), "StaticSoundMap::mMin @ +0");
     CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mMax)             == 0x10), "StaticSoundMap::mMax @ +0x10");
     CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mfSubRegionSize)  == 0x20), "StaticSoundMap::mfSubRegionSize @ +0x20");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpSubRegions)     == 0x28), "StaticSoundMap::mpSubRegions @ +0x28");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumSubRegionsX) == 0x30), "StaticSoundMap::miNumSubRegionsX @ +0x30");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpEntities)       == 0x38), "StaticSoundMap::mpEntities @ +0x38");
-    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumEntities)    == 0x40), "StaticSoundMap::miNumEntities @ +0x40");
-    CGS_STATIC_ASSERT((sizeof(StaticSoundMap) == 0x50), "StaticSoundMap header 0x50 (porter contract)");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpSubRegions)     == (sizeof(void*) == 4 ? 0x24 : 0x28)), "StaticSoundMap::mpSubRegions @ +0x28");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumSubRegionsX) == (sizeof(void*) == 4 ? 0x28 : 0x30)), "StaticSoundMap::miNumSubRegionsX @ +0x30");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, mpEntities)       == (sizeof(void*) == 4 ? 0x30 : 0x38)), "StaticSoundMap::mpEntities @ +0x38");
+    CGS_STATIC_ASSERT((offsetof(StaticSoundMap, miNumEntities)    == (sizeof(void*) == 4 ? 0x34 : 0x40)), "StaticSoundMap::miNumEntities @ +0x40");
+    CGS_STATIC_ASSERT((sizeof(StaticSoundMap) == (sizeof(void*) == 4 ? 0x40 : 0x50)), "StaticSoundMap header 0x50 (porter contract)");
 
     StaticSoundMap* lpMap = static_cast<StaticSoundMap*>(lpResource);
 

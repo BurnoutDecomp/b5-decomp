@@ -110,7 +110,7 @@ inline u32 DebugFlagIndex(u64 lxFlags)
     return luIndex; // 63-cntlzd(flags), including -1 for zero
 }
 
-enum ECollisionSpliceTags : int
+enum ECollisionSpliceTags
 {
     E_COLLISION_SPLICE_SMALL_LANDINGS = 0,
     E_COLLISION_SPLICE_SUSPENSION = 1,
