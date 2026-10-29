@@ -237,7 +237,7 @@ namespace CgsGeometric
             const f32      lfRadius2 = LineVmxMul(lrCentre.w, lrCentre.w);
 
             // ROUNDING (ROUNDING_RULE.md rule 3, 2026-09-25 -- REVIEW-J on 335639ce): every `vmaddfp` here rounds
-            // ONCE (std::fma); the vmulfp128 / vsubfp steps round separately (rule 4). All eleven fused sites
+            // ONCE; the native VMX intrinsics retain this while vmulfp128/vsubfp round separately. All eleven fused sites
             // of the :172 copy are below (the :305 copy at 0x828BD3AC.. is the same sequence); until this
             // change each was written a*b + c, rounding the product first.
 

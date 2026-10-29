@@ -65,6 +65,8 @@
 #include <cmath>     // std::sqrt (the vrsqrtefp lowering)
 #include <cstring>   // std::memcpy (mask lane bit patterns)
 #include <cstdlib>
+#include <xtl.h>
+#include <xboxmath.h>
 
 namespace CgsGeometric
 {
@@ -818,10 +820,10 @@ namespace CgsGeometric
 // zero length, collinear triangles, non-zero w lanes): no hit-mask differences; the only value
 // differences are rejected sweeps parallel to the plane to within a float ulp, where the
 // slab times divide by a dot product of ~1e-8 whose sign the rounding decides.
-// PC LOWERING, as for the four-wide kernel: vrefp / vrsqrtefp with their Newton-Raphson
-// steps are a divide / 1/sqrt, the fused multiply-adds a multiply then an add, EXCEPT the
-// cross products, whose fused subtract is std::fma (it decides the normal of a nearly
-// degenerate triangle).
+// Native continuation: the single-triangle/circle family below now uses actual
+// VMX estimates, refinements, fused and separate arithmetic, comparisons and
+// word merges. Whole emitted functions and all output lanes are compared with
+// ARTIST. The older four-wide sections above retain their separate legacy notes.
 // =============================================================================================
 
 namespace CgsGeometric
@@ -832,17 +834,43 @@ namespace CgsGeometric
         // equal operands of opposite sign order -0 below +0.
         inline f32 SweptVmxMin(f32 lfA, f32 lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;
-            return (lfA < lfB) ? lfA : lfB;
+            return __vminfp(XMVectorReplicate(lfA), XMVectorReplicate(lfB)).x;
         }
         inline f32 SweptVmxMax(f32 lfA, f32 lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;
-            return (lfA > lfB) ? lfA : lfB;
+            return __vmaxfp(XMVectorReplicate(lfA), XMVectorReplicate(lfB)).x;
+        }
+
+        __forceinline f32 SweptMul(f32 a, f32 b) { return __vmulfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+        __forceinline f32 SweptAdd(f32 a, f32 b) { return __vaddfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+        __forceinline f32 SweptSub(f32 a, f32 b) { return __vsubfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+        __forceinline f32 SweptMadd(f32 a, f32 b, f32 c) { return __vmaddfp(XMVectorReplicate(a), XMVectorReplicate(b), XMVectorReplicate(c)).x; }
+        __forceinline bool SweptMaskBool(__vector4 mask)
+        {
+            u32 bits;
+            std::memcpy(&bits, &mask, sizeof(bits));
+            return bits != 0;
+        }
+        __forceinline bool SweptGE(f32 a, f32 b) { return SweptMaskBool(__vcmpgefp(XMVectorReplicate(a), XMVectorReplicate(b))); }
+        __forceinline bool SweptGT(f32 a, f32 b) { return SweptMaskBool(__vcmpgtfp(XMVectorReplicate(a), XMVectorReplicate(b))); }
+        __forceinline bool SweptEQ(f32 a, f32 b) { return SweptMaskBool(__vcmpeqfp(XMVectorReplicate(a), XMVectorReplicate(b))); }
+        __forceinline __vector4 SweptReciprocal(__vector4 d)
+        {
+            const __vector4 one = XMVectorReplicate(1.0f);
+            __vector4 x = __vrefp(d);
+            for (int i = 0; i != 2; ++i) x = __vmaddfp(x, __vnmsubfp(x, d, one), x);
+            return x;
+        }
+        __forceinline __vector4 SweptReciprocalSqrt(__vector4 d)
+        {
+            const __vector4 one = XMVectorReplicate(1.0f), half = XMVectorReplicate(0.5f);
+            __vector4 x = __vrsqrtefp(d);
+            for (int i = 0; i != 2; ++i)
+            {
+                const __vector4 square = __vmulfp(x, x), halfX = __vmulfp(x, half);
+                x = __vmaddfp(halfX, __vnmsubfp(d, square, one), x);
+            }
+            return x;
         }
 
         inline rw::math::vpu::MaskScalar SweptMask(bool lbValue)
@@ -871,37 +899,35 @@ namespace CgsGeometric
         // The x+y dot of two 2D vectors (vmulfp128, then splat x + splat y).
         inline f32 SweptDot2(const Vector2& lrA, const Vector2& lrB)
         {
-            return (lrA.x * lrB.x) + (lrA.y * lrB.y);
+            const __vector4 product = __vmulfp(__lvx(&lrA, 0), __lvx(&lrB, 0));
+            return __vaddfp(__vspltw(product, 0), __vspltw(product, 1)).x;
         }
 
         inline f32 SweptDot3(const Vector3& lrA, const Vector3& lrB)
         {
-            return ((lrA.x * lrB.x) + (lrA.y * lrB.y)) + (lrA.z * lrB.z);
+            return __vmsum3fp(__lvx(&lrA, 0), __lvx(&lrB, 0)).x;
         }
 
         // Normalize on all four lanes: vmsum3fp128 + vrsqrtefp + two Newton-Raphson steps.
         inline Vector3 SweptNormalize(const Vector3& lrV)
         {
-            const f32 lfInverseLength = 1.0f / std::sqrt(SweptDot3(lrV, lrV));
+            const __vector4 v = __lvx(&lrV, 0);
+            const __vector4 inverse = SweptReciprocalSqrt(__vmsum3fp(v, v));
             Vector3 lResult;
-            lResult.x = lrV.x * lfInverseLength;
-            lResult.y = lrV.y * lfInverseLength;
-            lResult.z = lrV.z * lfInverseLength;
-            lResult.w = lrV.w * lfInverseLength;
+            __stvx(__vmulfp(v, inverse), &lResult, 0);
             return lResult;
         }
 
         // a x b by the yzx-permute idiom, on all four lanes (the permute keeps w in w): one
         // rounded product (vmulfp128), then the other subtracted FUSED (vnmsubfp), which is
-        // std::fma. The fused form is kept because it decides the normal of a nearly
+        // retained as the native instruction because it decides the normal of a nearly
         // degenerate triangle, where the two products cancel.
         inline Vector3 SweptCross(const Vector3& lrA, const Vector3& lrB)
         {
             Vector3 lResult;
-            lResult.x = std::fma(-lrA.z, lrB.y, lrA.y * lrB.z);
-            lResult.y = std::fma(-lrA.x, lrB.z, lrA.z * lrB.x);
-            lResult.z = std::fma(-lrA.y, lrB.x, lrA.x * lrB.y);
-            lResult.w = std::fma(-lrA.w, lrB.w, lrA.w * lrB.w);
+            const __vector4 a = __lvx(&lrA, 0), b = __lvx(&lrB, 0);
+            const __vector4 first = __vmulfp(a, __vpermwi(b, 0x63));
+            __stvx(__vpermwi(__vnmsubfp(__vpermwi(a, 0x63), b, first), 0x63), &lResult, 0);
             return lResult;
         }
 
@@ -910,10 +936,7 @@ namespace CgsGeometric
                                             const Vector3& lrBasisY, const Vector3& lrPoint)
         {
             Vector3 lOffset;
-            lOffset.x = lrPoint.x - lrBasisOrigin.x;
-            lOffset.y = lrPoint.y - lrBasisOrigin.y;
-            lOffset.z = lrPoint.z - lrBasisOrigin.z;
-            lOffset.w = lrPoint.w - lrBasisOrigin.w;
+            __stvx(__vsubfp(__lvx(&lrPoint, 0), __lvx(&lrBasisOrigin, 0)), &lOffset, 0);
             return SweptPlanePoint(SweptDot3(lOffset, lrBasisX), SweptDot3(lOffset, lrBasisY));
         }
         inline Vector2 SweptTransform3DVectorTo2D(const Vector3& lrBasisX, const Vector3& lrBasisY,
@@ -926,13 +949,10 @@ namespace CgsGeometric
         // guard), magnitude = |v|^2 * rsqrt(|v|^2), selected to 0 when |v|^2 == 0.
         inline f32 SweptNormalizeReturnMagnitude(const Vector2& lrV, Vector2& lrDirection)
         {
-            const f32 lfLengthSq      = SweptDot2(lrV, lrV);
-            const f32 lfInverseLength = 1.0f / std::sqrt(lfLengthSq);
-            lrDirection.x = lrV.x * lfInverseLength;
-            lrDirection.y = lrV.y * lfInverseLength;
-            lrDirection.z = lrV.z * lfInverseLength;
-            lrDirection.w = lrV.w * lfInverseLength;
-            return (lfLengthSq == 0.0f) ? 0.0f : (lfLengthSq * lfInverseLength);
+            const __vector4 lengthSq = XMVectorReplicate(SweptDot2(lrV, lrV));
+            const __vector4 inverse = SweptReciprocalSqrt(lengthSq);
+            __stvx(__vmulfp(__lvx(&lrV, 0), inverse), &lrDirection, 0);
+            return __vsel(__vmulfp(lengthSq, inverse), __vzero(), __vcmpeqfp(lengthSq, __vzero())).x;
         }
 
         // SolveSweptCircleEquation: a t^2 + b t + c = 0 with
@@ -944,25 +964,25 @@ namespace CgsGeometric
                                             f32 lfR1, f32 lfR2, f32 lfR3,
                                             f32& lrfA, f32& lrfDiscriminant)
         {
-            const f32 lfA = SweptDot2(lrV, lrV) + lfR1;
-            const f32 lfB = (2.0f * SweptDot2(lrP, lrV)) + lfR2;
-            const f32 lfC = SweptDot2(lrP, lrP) + lfR3;
+            const f32 lfA = SweptAdd(SweptDot2(lrV, lrV), lfR1);
+            const f32 lfB = SweptMadd(2.0f, SweptDot2(lrP, lrV), lfR2);
+            const f32 lfC = SweptAdd(SweptDot2(lrP, lrP), lfR3);
 
             lrfA            = lfA;
-            lrfDiscriminant = (lfB * lfB) - ((4.0f * lfA) * lfC);
+            lrfDiscriminant = SweptSub(SweptMul(lfB, lfB), SweptMul(SweptMul(4.0f, lfA), lfC));
 
-            const f32 lfInverseTwoA = 1.0f / (2.0f * lfA);
-            const f32 lfRoot = (lrfDiscriminant == 0.0f)
+            const f32 lfInverseTwoA = SweptReciprocal(XMVectorReplicate(SweptMul(2.0f, lfA))).x;
+            const f32 lfRoot = SweptEQ(lrfDiscriminant, 0.0f)
                              ? 0.0f
-                             : (lrfDiscriminant * (1.0f / std::sqrt(lrfDiscriminant)));
-            const f32 lfMinusB = -1.0f * lfB;
-            return SweptVmxMin((lfMinusB + lfRoot) * lfInverseTwoA, (lfMinusB - lfRoot) * lfInverseTwoA);
+                             : SweptMul(lrfDiscriminant, SweptReciprocalSqrt(XMVectorReplicate(lrfDiscriminant)).x);
+            const f32 lfMinusB = SweptMul(-1.0f, lfB);
+            return SweptVmxMin(SweptMul(SweptAdd(lfMinusB, lfRoot), lfInverseTwoA), SweptMul(SweptSub(lfMinusB, lfRoot), lfInverseTwoA));
         }
 
         // IsBetween0And1: (t >= 0) & !(t > 1).
         inline bool SweptIsBetween0And1(f32 lfValue)
         {
-            return (lfValue >= 0.0f) && !(lfValue > 1.0f);
+            return SweptGE(lfValue, 0.0f) && !SweptGT(lfValue, 1.0f);
         }
 
         // Intersect2DSweptCircleWithVertexAndEdge, inlined three times. The vertex sweep solves for P = circle - vertex; the edge sweep for
@@ -978,47 +998,35 @@ namespace CgsGeometric
             const f32 KF_NO_SOLUTION = 2.0f;
 
             Vector2 lOffset;
-            lOffset.x = lrCirclePos.x - lrVertex.x;
-            lOffset.y = lrCirclePos.y - lrVertex.y;
-            lOffset.z = lrCirclePos.z - lrVertex.z;
-            lOffset.w = lrCirclePos.w - lrVertex.w;
+            __stvx(__vsubfp(__lvx(&lrCirclePos, 0), __lvx(&lrVertex, 0)), &lOffset, 0);
 
             f32 lfVertexA = 0.0f, lfVertexDiscriminant = 0.0f;
             const f32 lfVertexT = SweptSolveCircleEquation(lOffset, lrCircleTranslation, lfR1, lfR2, lfR3,
                                                            lfVertexA, lfVertexDiscriminant);
-            const bool lbGotVertexSolution = !(lfVertexA == 0.0f) && (lfVertexDiscriminant >= 0.0f)
+            const bool lbGotVertexSolution = !SweptEQ(lfVertexA, 0.0f) && SweptGE(lfVertexDiscriminant, 0.0f)
                                           && SweptIsBetween0And1(lfVertexT);
 
             const f32 lfOffsetAlong      = SweptDot2(lOffset, lrEdgeDir);
             const f32 lfTranslationAlong = SweptDot2(lrCircleTranslation, lrEdgeDir);
             Vector2 lOffsetPerp, lTranslationPerp;
-            lOffsetPerp.x      = lOffset.x - (lrEdgeDir.x * lfOffsetAlong);
-            lOffsetPerp.y      = lOffset.y - (lrEdgeDir.y * lfOffsetAlong);
-            lOffsetPerp.z      = lOffset.z - (lrEdgeDir.z * lfOffsetAlong);
-            lOffsetPerp.w      = lOffset.w - (lrEdgeDir.w * lfOffsetAlong);
-            lTranslationPerp.x = lrCircleTranslation.x - (lrEdgeDir.x * lfTranslationAlong);
-            lTranslationPerp.y = lrCircleTranslation.y - (lrEdgeDir.y * lfTranslationAlong);
-            lTranslationPerp.z = lrCircleTranslation.z - (lrEdgeDir.z * lfTranslationAlong);
-            lTranslationPerp.w = lrCircleTranslation.w - (lrEdgeDir.w * lfTranslationAlong);
+            __stvx(__vsubfp(__lvx(&lOffset, 0), __vmulfp(__lvx(&lrEdgeDir, 0), XMVectorReplicate(lfOffsetAlong))), &lOffsetPerp, 0);
+            __stvx(__vsubfp(__lvx(&lrCircleTranslation, 0), __vmulfp(__lvx(&lrEdgeDir, 0), XMVectorReplicate(lfTranslationAlong))), &lTranslationPerp, 0);
 
             f32 lfEdgeA = 0.0f, lfEdgeDiscriminant = 0.0f;
             const f32 lfEdgeT = SweptSolveCircleEquation(lOffsetPerp, lTranslationPerp, lfR1, lfR2, lfR3,
                                                          lfEdgeA, lfEdgeDiscriminant);
 
             Vector2 lEdgeSolutionOffset;
-            lEdgeSolutionOffset.x = (lrCircleTranslation.x * lfEdgeT) + lOffset.x;
-            lEdgeSolutionOffset.y = (lrCircleTranslation.y * lfEdgeT) + lOffset.y;
-            lEdgeSolutionOffset.z = (lrCircleTranslation.z * lfEdgeT) + lOffset.z;
-            lEdgeSolutionOffset.w = (lrCircleTranslation.w * lfEdgeT) + lOffset.w;
+            __stvx(__vmaddfp(__lvx(&lrCircleTranslation, 0), XMVectorReplicate(lfEdgeT), __lvx(&lOffset, 0)), &lEdgeSolutionOffset, 0);
             const f32 lfEdgeSolutionParam = SweptDot2(lEdgeSolutionOffset, lrEdgeDir);
 
-            const bool lbEdgeSolutionIR = (lfEdgeSolutionParam >= 0.0f) && !(lfEdgeSolutionParam > lfEdgeMagnitude);
-            const bool lbGotEdgeSolution = !(lfEdgeA == 0.0f) && (lfEdgeDiscriminant >= 0.0f)
+            const bool lbEdgeSolutionIR = SweptGE(lfEdgeSolutionParam, 0.0f) && !SweptGT(lfEdgeSolutionParam, lfEdgeMagnitude);
+            const bool lbGotEdgeSolution = !SweptEQ(lfEdgeA, 0.0f) && SweptGE(lfEdgeDiscriminant, 0.0f)
                                         && SweptIsBetween0And1(lfEdgeT) && lbEdgeSolutionIR;
 
             const f32 lfVertexSolution = lbGotVertexSolution ? lfVertexT : KF_NO_SOLUTION;
             const f32 lfEdgeSolution   = lbGotEdgeSolution   ? lfEdgeT   : KF_NO_SOLUTION;
-            const bool lbPickVertex    = !(lfVertexSolution > lfEdgeSolution);
+            const bool lbPickVertex    = !SweptGT(lfVertexSolution, lfEdgeSolution);
 
             lrfOutT = lbPickVertex ? lfVertexSolution : lfEdgeSolution;
             if (lbPickVertex)
@@ -1027,10 +1035,7 @@ namespace CgsGeometric
             }
             else
             {
-                lrOutPosition.x = (lrEdgeDir.x * lfEdgeSolutionParam) + lrVertex.x;
-                lrOutPosition.y = (lrEdgeDir.y * lfEdgeSolutionParam) + lrVertex.y;
-                lrOutPosition.z = (lrEdgeDir.z * lfEdgeSolutionParam) + lrVertex.z;
-                lrOutPosition.w = (lrEdgeDir.w * lfEdgeSolutionParam) + lrVertex.w;
+                __stvx(__vmaddfp(__lvx(&lrEdgeDir, 0), XMVectorReplicate(lfEdgeSolutionParam), __lvx(&lrVertex, 0)), &lrOutPosition, 0);
             }
             return lbGotVertexSolution || lbGotEdgeSolution;
         }
@@ -1063,15 +1068,12 @@ namespace CgsGeometric
             const Vector2& lrDir    = *lapEdgeDir[liEdge];
 
             // The winding test: the centre lies left of every directed edge.
-            const f32 lfSide = (lrDir.x * (lrVertex.y - lCentre.y)) - (lrDir.y * (lrVertex.x - lCentre.x));
-            lbInside = lbInside && (lfSide >= 0.0f);
+            const f32 lfSide = SweptSub(SweptMul(lrDir.x, SweptSub(lrVertex.y, lCentre.y)), SweptMul(lrDir.y, SweptSub(lrVertex.x, lCentre.x)));
+            lbInside = lbInside && SweptGE(lfSide, 0.0f);
 
-            laOffset[liEdge].x = lCentre.x - lrVertex.x;
-            laOffset[liEdge].y = lCentre.y - lrVertex.y;
-            laOffset[liEdge].z = lCentre.z - lrVertex.z;
-            laOffset[liEdge].w = lCentre.w - lrVertex.w;
+            __stvx(__vsubfp(__lvx(&lCentre, 0), __lvx(&lrVertex, 0)), &laOffset[liEdge], 0);
             lafProjection[liEdge] = SweptDot2(laOffset[liEdge], lrDir);
-            labBehind[liEdge]     = !(lafProjection[liEdge] > 0.0f);
+            labBehind[liEdge]     = !SweptGT(lafProjection[liEdge], 0.0f);
         }
 
         // Candidates in the console's order -- the three vertices, then the three edges -- each
@@ -1084,7 +1086,7 @@ namespace CgsGeometric
         for (s32 liVertex = 0; liVertex < 3; ++liVertex)
         {
             const f32 lfDistanceSq = SweptDot2(laOffset[liVertex], laOffset[liVertex]);
-            if (!(lfDistanceSq > lfBest) && labBehind[liVertex])
+            if (!SweptGT(lfDistanceSq, lfBest) && labBehind[liVertex])
             {
                 lfBest  = lfDistanceSq;
                 lPoint  = *lapVertex[liVertex];
@@ -1099,18 +1101,17 @@ namespace CgsGeometric
             const f32      lfProj   = lafProjection[liEdge];
 
             Vector2 lPerp;
-            lPerp.x = laOffset[liEdge].x - (lrDir.x * lfProj);
-            lPerp.y = laOffset[liEdge].y - (lrDir.y * lfProj);
+            __stvx(__vsubfp(__lvx(&laOffset[liEdge], 0), __vmulfp(__lvx(&lrDir, 0), XMVectorReplicate(lfProj))), &lPerp, 0);
             const f32 lfDistanceSq = SweptDot2(lPerp, lPerp);
 
-            const bool lbOnSegment = !(labBehind[liEdge] || (lfProj >= lafEdgeMagnitude[liEdge]));
-            if (!(lfDistanceSq > lfBest) && lbOnSegment)
+            const bool lbOnSegment = !(labBehind[liEdge] || SweptGE(lfProj, lafEdgeMagnitude[liEdge]));
+            if (!SweptGT(lfDistanceSq, lfBest) && lbOnSegment)
             {
                 lfBest   = lfDistanceSq;
-                lPoint.x = (lrDir.x * lfProj) + lrVertex.x;
-                lPoint.y = (lrDir.y * lfProj) + lrVertex.y;
-                lPoint.z = (lrDir.z * lfProj) + lrVertex.z;
-                lPoint.w = (lrDir.w * lfProj) + lrVertex.w;
+                // ARTIST keeps the product rounded before DC00/DC04's add.
+                // XDK otherwise contracts the explicit intrinsics to vmaddfp.
+                const volatile __vector4 lRoundedProduct = __vmulfp(__lvx(&lrDir, 0), XMVectorReplicate(lfProj));
+                __stvx(__vaddfp(__lvx_volatile(&lRoundedProduct, 0), __lvx(&lrVertex, 0)), &lPoint, 0);
                 lbFound  = true;
             }
         }
@@ -1146,10 +1147,7 @@ namespace CgsGeometric
         const f32         lfSphereRad         = lPositionAndRadius.w;
         const f32         lfSphereLength      = lDirectionAndLength.w;
         Vector3 lSphereTranslation;
-        lSphereTranslation.x = lDirectionAndLength.x * lfSphereLength;
-        lSphereTranslation.y = lDirectionAndLength.y * lfSphereLength;
-        lSphereTranslation.z = lDirectionAndLength.z * lfSphereLength;
-        lSphereTranslation.w = lDirectionAndLength.w * lfSphereLength;
+        __stvx(__vmulfp(__lvx(&lDirectionAndLength, 0), XMVectorReplicate(lfSphereLength)), &lSphereTranslation, 0);
 
         CGS_ASSERT(rw::math::vpu::IsValid(lTriVert0), "IsValid(lTriVert0)");
         CGS_ASSERT(rw::math::vpu::IsValid(lTriVert1), "IsValid(lTriVert1)");
@@ -1161,8 +1159,9 @@ namespace CgsGeometric
         CGS_ASSERT(rw::math::vpu::IsValid(lSphereTranslation), "IsValid(lSphereTranslation)");
 
         // ---- the triangle's plane and the in-plane basis ----------------------------------------
-        const Vector3 lEdge01 = lTriangle.CalcEdge01();
-        const Vector3 lEdge12 = lTriangle.CalcEdge12();
+        Vector3 lEdge01, lEdge12;
+        __stvx(__vsubfp(__lvx(&lTriVert1, 0), __lvx(&lTriVert0, 0)), &lEdge01, 0);
+        __stvx(__vsubfp(__lvx(&lTriVert2, 0), __lvx(&lTriVert1, 0)), &lEdge12, 0);
         CGS_ASSERT(rw::math::vpu::IsValid(lEdge01), "IsValid(lEdge01)");
         CGS_ASSERT(rw::math::vpu::IsValid(lEdge12), "IsValid(lEdge12)");
 
@@ -1178,23 +1177,23 @@ namespace CgsGeometric
 
         // ---- clip the sweep to the slab of half-thickness r about the plane ---------------------
         const f32 lfProjectTranslationOntoPlaneNormal = SweptDot3(lSphereTranslation, lTriangleNormal);
-        const f32 lfPosPlaneOffset = SweptDot3(lSpherePos, lTriangleNormal) - lfPlaneOffset;
+        const f32 lfPosPlaneOffset = SweptSub(SweptDot3(lSpherePos, lTriangleNormal), lfPlaneOffset);
 
         // Both times divide by MINUS the translation's normal component (the `vxor` with the sign
         // splat, then `vrefp` + two Newton-Raphson steps).
-        const f32 lfInverseApproach = 1.0f / (-lfProjectTranslationOntoPlaneNormal);
-        const f32 lfFaceCollisionT0 = lfInverseApproach * (lfPosPlaneOffset - lfSphereRad);
-        const f32 lfFaceCollisionT1 = lfInverseApproach * (lfPosPlaneOffset + lfSphereRad);
+        const f32 lfInverseApproach = SweptReciprocal(__vxor(XMVectorReplicate(lfProjectTranslationOntoPlaneNormal), XMVectorReplicate(-0.0f))).x;
+        const f32 lfFaceCollisionT0 = SweptMul(lfInverseApproach, SweptSub(lfPosPlaneOffset, lfSphereRad));
+        const f32 lfFaceCollisionT1 = SweptMul(lfInverseApproach, SweptAdd(lfPosPlaneOffset, lfSphereRad));
 
-        const bool lbMovingParallel = (lfProjectTranslationOntoPlaneNormal == 0.0f);
+        const bool lbMovingParallel = SweptEQ(lfProjectTranslationOntoPlaneNormal, 0.0f);
         const f32  lfT0 = lbMovingParallel ? 0.0f
                                            : SweptVmxMax(SweptVmxMin(lfFaceCollisionT0, lfFaceCollisionT1), 0.0f);
         const f32  lfT1 = lbMovingParallel ? 1.0f
                                            : SweptVmxMin(SweptVmxMax(lfFaceCollisionT0, lfFaceCollisionT1), 1.0f);
 
-        const f32  lfAbsPosPlaneOffset = std::fabs(lfPosPlaneOffset);
-        const bool lbFailedParallel    = (lfAbsPosPlaneOffset >= lfSphereRad) && lbMovingParallel;
-        const bool lbFailedNoneParallel = ((lfT0 >= 1.0f) || !(lfT1 > 0.0f)) && !lbMovingParallel;
+        const f32  lfAbsPosPlaneOffset = __vandc(XMVectorReplicate(lfPosPlaneOffset), XMVectorReplicate(-0.0f)).x;
+        const bool lbFailedParallel    = SweptGE(lfAbsPosPlaneOffset, lfSphereRad) && lbMovingParallel;
+        const bool lbFailedNoneParallel = (SweptGE(lfT0, 1.0f) || !SweptGT(lfT1, 0.0f)) && !lbMovingParallel;
         const bool lbFailed            = lbFailedParallel || lbFailedNoneParallel;
 
         // ---- everything in the plane's 2D frame, origin at vertex 0 -----------------------------
@@ -1205,12 +1204,9 @@ namespace CgsGeometric
         const Vector2 l2DCircleTranslation = SweptTransform3DVectorTo2D(lBasisX, lBasisY, lSphereTranslation);
 
         Vector2 l2DEdge01, l2DEdge12, l2DEdge20;
-        l2DEdge01.x = l2DTriangleV1.x - l2DTriangleV0.x;  l2DEdge01.y = l2DTriangleV1.y - l2DTriangleV0.y;
-        l2DEdge01.z = l2DTriangleV1.z - l2DTriangleV0.z;  l2DEdge01.w = l2DTriangleV1.w - l2DTriangleV0.w;
-        l2DEdge12.x = l2DTriangleV2.x - l2DTriangleV1.x;  l2DEdge12.y = l2DTriangleV2.y - l2DTriangleV1.y;
-        l2DEdge12.z = l2DTriangleV2.z - l2DTriangleV1.z;  l2DEdge12.w = l2DTriangleV2.w - l2DTriangleV1.w;
-        l2DEdge20.x = l2DTriangleV0.x - l2DTriangleV2.x;  l2DEdge20.y = l2DTriangleV0.y - l2DTriangleV2.y;
-        l2DEdge20.z = l2DTriangleV0.z - l2DTriangleV2.z;  l2DEdge20.w = l2DTriangleV0.w - l2DTriangleV2.w;
+        __stvx(__vsubfp(__lvx(&l2DTriangleV1, 0), __lvx(&l2DTriangleV0, 0)), &l2DEdge01, 0);
+        __stvx(__vsubfp(__lvx(&l2DTriangleV2, 0), __lvx(&l2DTriangleV1, 0)), &l2DEdge12, 0);
+        __stvx(__vsubfp(__lvx(&l2DTriangleV0, 0), __lvx(&l2DTriangleV2, 0)), &l2DEdge20, 0);
 
         Vector2 l2DEdge01Dir, l2DEdge12Dir, l2DEdge20Dir;
         const f32 lfEdge01Magnitude = SweptNormalizeReturnMagnitude(l2DEdge01, l2DEdge01Dir);
@@ -1219,14 +1215,11 @@ namespace CgsGeometric
 
         // ---- the FACE test at the slab entry time --------------------------------------------------
         Vector3 lSpherePosAtT0;
-        lSpherePosAtT0.x = (lSphereTranslation.x * lfT0) + lPositionAndRadius.x;
-        lSpherePosAtT0.y = (lSphereTranslation.y * lfT0) + lPositionAndRadius.y;
-        lSpherePosAtT0.z = (lSphereTranslation.z * lfT0) + lPositionAndRadius.z;
-        lSpherePosAtT0.w = (lSphereTranslation.w * lfT0) + lPositionAndRadius.w;
+        __stvx(__vmaddfp(__lvx(&lSphereTranslation, 0), XMVectorReplicate(lfT0), __lvx(&lPositionAndRadius, 0)), &lSpherePosAtT0, 0);
 
-        const f32 lfHeightAtT0 = SweptDot3(lSpherePosAtT0, lTriangleNormal) - lfPlaneOffset;
+        const f32 lfHeightAtT0 = SweptSub(SweptDot3(lSpherePosAtT0, lTriangleNormal), lfPlaneOffset);
         VecFloat lRadiusSquaredAtT0;
-        lRadiusSquaredAtT0.x = (lfSphereRad * lfSphereRad) - (lfHeightAtT0 * lfHeightAtT0);
+        lRadiusSquaredAtT0.x = SweptSub(SweptMul(lfSphereRad, lfSphereRad), SweptMul(lfHeightAtT0, lfHeightAtT0));
         lRadiusSquaredAtT0.y = lRadiusSquaredAtT0.x;
         lRadiusSquaredAtT0.z = lRadiusSquaredAtT0.x;
         lRadiusSquaredAtT0.w = lRadiusSquaredAtT0.x;
@@ -1249,9 +1242,9 @@ namespace CgsGeometric
         // ---- the three (vertex, edge) sweeps ------------------------------------------------------
         const f32 lfVDotN       = lfProjectTranslationOntoPlaneNormal;
         const f32 lfPDotNMinusK = lfPosPlaneOffset;
-        const f32 lfR1 = lfVDotN * lfVDotN;
-        const f32 lfR2 = (2.0f * lfPDotNMinusK) * lfVDotN;
-        const f32 lfR3 = (lfPDotNMinusK * lfPDotNMinusK) - (lfSphereRad * lfSphereRad);
+        const f32 lfR1 = SweptMul(lfVDotN, lfVDotN);
+        const f32 lfR2 = SweptMul(SweptMul(2.0f, lfPDotNMinusK), lfVDotN);
+        const f32 lfR3 = SweptSub(SweptMul(lfPDotNMinusK, lfPDotNMinusK), SweptMul(lfSphereRad, lfSphereRad));
 
         f32 lfEdge01T, lfEdge12T, lfEdge20T;
         Vector2 lEdge01P, lEdge12P, lEdge20P;
@@ -1270,11 +1263,11 @@ namespace CgsGeometric
         const f32 lfMaskedEdge12T = lbEdge12Mask ? lfEdge12T : KF_NO_SOLUTION;
         const f32 lfMaskedEdge20T = lbEdge20Mask ? lfEdge20T : KF_NO_SOLUTION;
 
-        const bool lPickEdge12 = !(lfMaskedEdge12T > lfMaskedEdge01T);
+        const bool lPickEdge12 = !SweptGT(lfMaskedEdge12T, lfMaskedEdge01T);
         f32     lfEdgeResultT = lPickEdge12 ? lfMaskedEdge12T : lfMaskedEdge01T;
         Vector2 lEdgeResultP  = lPickEdge12 ? lEdge12P : lEdge01P;
 
-        const bool lPickEdge20 = !(lfMaskedEdge20T > lfEdgeResultT);
+        const bool lPickEdge20 = !SweptGT(lfMaskedEdge20T, lfEdgeResultT);
         lfEdgeResultT = lPickEdge20 ? lfMaskedEdge20T : lfEdgeResultT;
         lEdgeResultP  = lPickEdge20 ? lEdge20P : lEdgeResultP;
 
@@ -1291,49 +1284,32 @@ namespace CgsGeometric
         // w lane the caller's TriangleContactPoint already held, and computes both normals from
         // that vector before the w lane is replaced by the contact time.
         Vector3 lTriangleContactPoint;
-        lTriangleContactPoint.x = ((lBasisX.x * lResultP.x) + (lBasisY.x * lResultP.y)) + lBasisOrigin.x;
-        lTriangleContactPoint.y = ((lBasisX.y * lResultP.x) + (lBasisY.y * lResultP.y)) + lBasisOrigin.y;
-        lTriangleContactPoint.z = ((lBasisX.z * lResultP.x) + (lBasisY.z * lResultP.y)) + lBasisOrigin.z;
-        lTriangleContactPoint.w = lOutTriangleContactPoint.w;
+        const __vector4 lAlongY = __vmulfp(__lvx(&lBasisY, 0), XMVectorReplicate(lResultP.y));
+        __vector4 lContact = __vaddfp(__vmaddfp(__lvx(&lBasisX, 0), XMVectorReplicate(lResultP.x), lAlongY), __lvx(&lBasisOrigin, 0));
+        lContact = __vrlimi(lContact, __lvx(&lOutTriangleContactPoint, 0), 1, 0);
+        __stvx(lContact, &lTriangleContactPoint, 0);
 
         Vector3 lToContact;
-        lToContact.x = lTriangleContactPoint.x - lPositionAndRadius.x;
-        lToContact.y = lTriangleContactPoint.y - lPositionAndRadius.y;
-        lToContact.z = lTriangleContactPoint.z - lPositionAndRadius.z;
-        lToContact.w = lTriangleContactPoint.w - lPositionAndRadius.w;
+        __stvx(__vsubfp(__lvx(&lTriangleContactPoint, 0), __lvx(&lPositionAndRadius, 0)), &lToContact, 0);
         const Vector3 lSphereNormalIfPenetration = SweptNormalize(lToContact);
 
         Vector3 lSphereContactPointIfPenetration;
-        lSphereContactPointIfPenetration.x = (lSphereNormalIfPenetration.x * lfSphereRad) + lPositionAndRadius.x;
-        lSphereContactPointIfPenetration.y = (lSphereNormalIfPenetration.y * lfSphereRad) + lPositionAndRadius.y;
-        lSphereContactPointIfPenetration.z = (lSphereNormalIfPenetration.z * lfSphereRad) + lPositionAndRadius.z;
+        __stvx(__vmaddfp(__lvx(&lSphereNormalIfPenetration, 0), XMVectorReplicate(lfSphereRad), __lvx(&lPositionAndRadius, 0)), &lSphereContactPointIfPenetration, 0);
 
         Vector3 lSphereContactPointIfFuture;
-        lSphereContactPointIfFuture.x = lTriangleContactPoint.x - (lSphereTranslation.x * lfResultT);
-        lSphereContactPointIfFuture.y = lTriangleContactPoint.y - (lSphereTranslation.y * lfResultT);
-        lSphereContactPointIfFuture.z = lTriangleContactPoint.z - (lSphereTranslation.z * lfResultT);
-        lSphereContactPointIfFuture.w = lTriangleContactPoint.w - (lSphereTranslation.w * lfResultT);
+        __stvx(__vsubfp(__lvx(&lTriangleContactPoint, 0), __vmulfp(__lvx(&lSphereTranslation, 0), XMVectorReplicate(lfResultT))), &lSphereContactPointIfFuture, 0);
 
         Vector3 lToFuture;
-        lToFuture.x = lSphereContactPointIfFuture.x - lPositionAndRadius.x;
-        lToFuture.y = lSphereContactPointIfFuture.y - lPositionAndRadius.y;
-        lToFuture.z = lSphereContactPointIfFuture.z - lPositionAndRadius.z;
-        lToFuture.w = lSphereContactPointIfFuture.w - lPositionAndRadius.w;
+        __stvx(__vsubfp(__lvx(&lSphereContactPointIfFuture, 0), __lvx(&lPositionAndRadius, 0)), &lToFuture, 0);
         const Vector3 lSphereNormalIfFuture = SweptNormalize(lToFuture);
 
         lOutContactNormal = lbResultValidAtT0 ? lSphereNormalIfPenetration : lSphereNormalIfFuture;
 
         const Vector3& lrSphereContactPoint = lbResultValidAtT0 ? lSphereContactPointIfPenetration
                                                                 : lSphereContactPointIfFuture;
-        lOutSphereContactPoint.x = lrSphereContactPoint.x;
-        lOutSphereContactPoint.y = lrSphereContactPoint.y;
-        lOutSphereContactPoint.z = lrSphereContactPoint.z;
-        lOutSphereContactPoint.w = lfResultT;
+        __stvx(__vrlimi(__lvx(&lrSphereContactPoint, 0), XMVectorReplicate(lfResultT), 1, 0), &lOutSphereContactPoint, 0);
 
-        lOutTriangleContactPoint.x = lTriangleContactPoint.x;
-        lOutTriangleContactPoint.y = lTriangleContactPoint.y;
-        lOutTriangleContactPoint.z = lTriangleContactPoint.z;
-        lOutTriangleContactPoint.w = lfResultT;
+        __stvx(__vrlimi(__lvx(&lTriangleContactPoint, 0), XMVectorReplicate(lfResultT), 1, 0), &lOutTriangleContactPoint, 0);
 
         return SweptMask(lPassed);
     }
