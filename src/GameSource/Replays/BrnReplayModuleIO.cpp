@@ -26,14 +26,32 @@ namespace ReplayIO
     {
         static_assert(offsetof(OutputBuffer_PostSim, mGameEventQueue) == 0x0004,
                       "mGameEventQueue @0x0004");
-        static_assert(sizeof(OutputBuffer_PostSim) == 1560,
-                      "OutputBuffer_PostSim stride == 1560 (ReplayIO this+4 .. this+1564)");
+        static_assert(sizeof(OutputBuffer_PostSim) == 1556,
+                      "OutputBuffer_PostSim matches CreateIOBuffer/DestroyIOBuffer size 0x614");
+    }
+
+    // ARTIST 0x82653010: store the IOBuffer constructed flag, then tail-call
+    // VariableEventQueue<1536,16>::Construct(this+4). That queue Construct establishes its
+    // alignment and clears its event count/write cursor; the wrapper does not add another Clear.
+    void OutputBuffer_PostSim::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGameEventQueue.Construct();
+    }
+
+    // DecFIGS BrnReplayModuleIO.cpp:144; DestroyIOBuffer<OutputBuffer_PostSim> frees sizeof(T)
+    // after this shared IOBuffer-only teardown (ARTIST 0x823AE6A0, size 1556).
+    void OutputBuffer_PostSim::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
     }
 
     void ReplayIO_Buffer::_AssertLayout()
     {
         static_assert(offsetof(ReplayIO_Buffer, mPostSimBuffer) == 0x0004,
                       "mPostSimBuffer @0x0004 (GetOutputBuffer_PostSim -> this+4)");
+        static_assert(offsetof(ReplayIO_Buffer, maPostSimTailPad) == 0x0618,
+                      "outer ReplayIO gap @0x0618 (not part of the standalone PostSim buffer)");
         static_assert(offsetof(ReplayIO_Buffer, mPreSimBuffer) == 0x061C,
                       "mPreSimBuffer @0x061C (GetOutputBuffer_PreSim -> this+1564)");
     }
@@ -104,6 +122,8 @@ namespace ReplayIO
                       "mGameDataRequestInterface @0x061C (GetGameDataRequestInterface -> this+0x61C)");
         static_assert(offsetof(OutputBuffer_PreSim, mGuiEventQueue) == 0x0A2C,
                       "mGuiEventQueue @0x0A2C (GetGuiEventQueue -> this+0xA2C)");
+        static_assert(sizeof(OutputBuffer_PreSim) == 6716,
+                      "OutputBuffer_PreSim matches CreateIOBuffer/DestroyIOBuffer size 0x1A3C");
     }
 
     // X360 0x823BB080: read-lock; returns &mStatusInterface (this+4).
@@ -118,6 +138,16 @@ namespace ReplayIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mStatusInterface;
+    }
+
+    // X360 0x823BB128 (ICF-shared outer ReplayIO getter): read-lock; returns
+    // &mGameDataRequestInterface at this+0x61C. DoUpdate uses this const view to append the
+    // ReplayPreSim requests into GameData while the Replay output buffer is read-locked.
+    const OutputBuffer_PreSim::GameDataRequestInterface*
+    OutputBuffer_PreSim::GetGameDataRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGameDataRequestInterface;
     }
 
     // X360 0x8264E278: write-lock; returns &mGameDataRequestInterface (this+0x61C).

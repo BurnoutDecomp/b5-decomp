@@ -26,6 +26,8 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include <cstring>                                                              // memset / memcmp / strncmp
 #include <cstdlib>                                                              // atoi (prop-instance zone number)
 #include <numeric>                                                              // lcm (native bank block geometry)
@@ -43,6 +45,18 @@ namespace BrnResource
 {
     namespace
     {
+        // ARTIST dword_82FFACFC: only 8266AD00/AD14 read/write this word.
+        renderengine::Texture* spDebugTexture = nullptr;
+
+        // Original static initializer82C6C3E8..494 for flt_830112D0.
+        // Im2dRenderBuffer::SetTransform performs the existing native lowering.
+        const CgsGraphics::Im2dTransform K_UNIT_TO_SCREEN = {
+            {-1.0f, 1.0f, 0.0f, 0.0f},
+            {2.0f, 0.0f, 0.0f, -2.0f},
+            {0.0f, 0.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 1.0f, 1.0f}
+        };
+
         // FLAG PC-platform leaf: this is the existing root allocation granule,
         // shared by its allocation owner and the typed bank-capacity projection.
         const u32 KU_GAMEDATA_ROOT_BLOCK_SIZE = 0x00010000u;
@@ -1633,6 +1647,9 @@ namespace BrnResource
                 lpAllocator->DoAllocate(lScratchDescriptor, "ResourceDefragScratch").m_baseResources[0];
         }
         s_InitOptions.mDebugParams.mpDebugAllocator           = lpAllocator;
+        // ARTIST8266D5CC/5E8: bind both callback and its actual module owner.
+        s_InitOptions.mDebugParams.mpTextureRenderCallback = &GameDataModule::TextureRenderCallback;
+        s_InitOptions.mDebugParams.mpTextureRenderUserData = this;
         *CgsDev::Log::gpDebugPrint << "[5b] GameDataModule::Construct: registered "
                                   << (s32)lNumGameTypes << " resource types into the pool registry\n";
 
@@ -1651,6 +1668,52 @@ namespace BrnResource
         mDLCDebugComponent.Construct();
     }
     bool GameDataModule::Release() { return true; }
+    // ARTIST82664598: called from DoDispatch immediately before DebugManagerRender.
+    void GameDataModule::RenderDebug(const GameDataIO::InputBuffer* lpInputBuffer)
+    {
+        lpInputBuffer->LockForRead();
+        mpDebug2dRenderBuffer = lpInputBuffer->GetIm2dDebugRenderBuffer();
+        lpInputBuffer->UnlockForRead();
+    }
+
+    // ARTIST8266ACC8. RenderDebug supplies the renderer-owned stream; the
+    // Debug2DImmediateRender Begin/End pair brackets this window's callback.
+    void GameDataModule::TextureRenderCallback(renderengine::Texture* lpTexture,
+        Vector2 lv2Position, Vector2 lv2Size, void* lpUserData,
+        bool lbSetStates, bool /*lbFlag1*/)
+    {
+        GameDataModule* const lpModule = static_cast<GameDataModule*>(lpUserData);
+        CgsGraphics::Im2dRenderBuffer* const lpBuffer = lpModule->mpDebug2dRenderBuffer;
+        if (lpBuffer == nullptr)
+            return;
+
+        if (spDebugTexture != lpTexture && lpTexture != nullptr)
+            spDebugTexture = lpTexture;
+
+        if (lbSetStates)
+        {
+            lpBuffer->SetTransform(K_UNIT_TO_SCREEN);
+            lpBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+            lpBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
+            lpBuffer->SetState(CgsGui::gpBillboardDepthStencilState);
+        }
+
+        if (lpTexture != nullptr)
+        {
+            const f32 lfRight = lv2Position.x + lv2Size.x;
+            const f32 lfBottom = lv2Position.y + lv2Size.y;
+            const CgsGraphics::RGBA8 lWhite = {255, 255, 255, 255};
+            const CgsGraphics::Basic2dColouredTexturedVertex laVertices[4] = {
+                {{lv2Position.x, lv2Position.y}, lWhite, {0.0f, 0.0f}},
+                {{lv2Position.x, lfBottom}, lWhite, {0.0f, 1.0f}},
+                {{lfRight, lv2Position.y}, lWhite, {1.0f, 0.0f}},
+                {{lfRight, lfBottom}, lWhite, {1.0f, 1.0f}}
+            };
+            lpBuffer->SetTexture(lpTexture);
+            lpBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
+        }
+    }
+
     void GameDataModule::Destruct() {}
 
     // ====================================================================================
@@ -1869,11 +1932,12 @@ namespace BrnResource
             lpInput->UnlockForRead();
 
             // X360: re-lock the input for write and clear the drained request state (the
-            // 32768-byte request queue, the AttribSys request queue @a4+8197 and the debug
-            // Im2d pointer @a4[16393]). The Im2d member is deferred with its subsystem.
+            // 32768-byte request queue, the AttribSys request queue and the debug
+            // Im2d pointer @a4[16393] (ARTIST826749A8).
             lpInput->LockForWrite();
             lpInput->GetRequestInterface()->mRequestQueue.Clear();
             lpInput->GetAttribSysRequestInterface()->mRequestQueue.Clear();
+            lpInput->SetIm2dDebugRenderBuffer(nullptr);
             lpInput->UnlockForWrite();
         }
 

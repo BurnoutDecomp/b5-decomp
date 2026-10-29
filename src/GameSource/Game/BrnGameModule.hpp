@@ -236,8 +236,9 @@ namespace BrnGame
         //   StopMonitor(miUT_SoundUpdate); StopMonitor(miUT_Sound);
         // The stack argument is the update-OUTPUT stack (only forwarded into PreUpdate,
         // which carves its "SoundLogicPreUpdateOutput" scratch from it).
-        BrnSound::Module::Io::RootPreUpdateOutputBuffer* BeginInGameSoundFramePC();
-        void FinishInGameSoundFramePC();
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer* GetSoundPreUpdateOutputBufferPC()
+        { return mpInGameSoundPreUpdateOutputPC; }
+        void FinishInGameSoundFramePC(BrnUpdateSet lUpdateSet);
 
         void DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
                                BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
@@ -404,6 +405,11 @@ namespace BrnGame
         // module's own spines.
         BrnWorldIO::UpdateOutputBuffer* GetWorldUpdateOutputBuffer() { return mpWorldUpdateOutputBuffer; }
         BrnEffects::EffectsIO::OutputBuffer* GetEffectsOutputBuffer() { return mpEffectsOutputBuffer; }
+        // FLAG PC-platform leaf: the flow-state World caller reads the same
+        // per-step Replay output and late update set as ARTIST DoUpdate's locals.
+        BrnReplays::ReplayIO::OutputBuffer_PreSim* GetReplayPreSimOutputBuffer()
+        { return mpReplayPreSimOutputBuffer; }
+        BrnUpdateSet GetFrameUpdateSetPC() const { return mFrameUpdateSetPC; }
         // This sub-step's network OUTPUT buffer, or null when the sub-step does not run the full
         // module cascade (see CreateStaticIOBuffers). The live world drive reads it for
         // BridgeNetworkToWorld.
@@ -1209,6 +1215,11 @@ namespace BrnGame
         // other per-sub-step static IO buffers instead. Same lifetime either way.
         // See GetWorldUpdateOutputBuffer() above.
         BrnWorldIO::UpdateOutputBuffer*        mpWorldUpdateOutputBuffer;
+        // FLAG PC-platform leaf: ARTIST DoUpdate's two standalone phase outputs
+        // live with this host's per-step buffers, through all frame consumers.
+        BrnReplays::ReplayIO::OutputBuffer_PreSim* mpReplayPreSimOutputBuffer;
+        BrnReplays::ReplayIO::OutputBuffer_PostSim* mpReplayPostSimOutputBuffer;
+        BrnUpdateSet mFrameUpdateSetPC = static_cast<BrnUpdateSet>(0);
         // ⭐ THIS SUB-STEP'S EFFECTS OUTPUT BUFFER. The console's DoUpdate @0x823F0AF8
         // creates ONE EffectsIO::OutputBuffer near the top (pseudocode :387) and destroys it
         // at the very bottom (:1159), threading it through DoUpdate_Effects and (as a

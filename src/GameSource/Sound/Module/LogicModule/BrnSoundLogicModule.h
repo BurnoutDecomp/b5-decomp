@@ -19,6 +19,7 @@
 #include "GameSource/AttribSys/Generated/classes/burnoutglobaldata.h"
 #include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
+#include "GameSource/Replays/Serialisers/BrnReplaySoundSerialiser.h"
 #include "SharedClasses/BrnSharedConstants.h"                    // BrnUpdateSet
 
 // =============================================================================
@@ -372,6 +373,10 @@ private:
     // the release once it runs out.
     f32  mfHoldTimer;
     bool mbHoldingVolumes;
+
+    // ARTIST826C9350 and82702B44 attest the X360-only channel at this+0x13600.
+    // Member name is descriptive; the DecFIGS ancestor predates this member.
+    BrnReplays::SoundSerialiser mSoundSerialiser;
 
     // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
     // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)

@@ -20,8 +20,9 @@
 //
 // OutputBuffer_PostSim itself derives from CgsModule::IOBuffer and embeds a single
 // game-event queue: VariableEventQueue<1536,16> at +4 (AppendGameEventQueue @0x8265A798
-// write-locks, then Append<1536,16>'s a source <1536,16> queue into this+4). The
-// post-sim sub-buffer occupies +4..+1564 of ReplayIO (1560 bytes).
+// write-locks, then Append<1536,16>'s a source <1536,16> queue into this+4). Its standalone
+// IOBufferStack allocation is 1556 bytes (ARTIST CreateIOBuffer @0x823AE5D0); the enclosing
+// ReplayIO view has a separate 4-byte gap before the pre-sim member at +0x61C.
 // ARTIST 0x823BB478 is ICF-shared: ReplayIO_Buffer::GetOutputBuffer_PostSim and
 // OutputBuffer_PostSim::GetGameEventQueue() const both read-lock and return this+4.
 
@@ -44,12 +45,16 @@ namespace ReplayIO
     // Derives from IOBuffer (its own status byte at +0). The game-event queue lives at
     // +4 (AppendGameEventQueue appends into this+4). VariableEventQueue<1536,16> has
     // miBufferWritePos at queue-offset +1540 (X360 *(a1+1540)) -> sizeof 1552; with the
-    // 4-byte IOBuffer header that puts the buffer at 1556 bytes. The ReplayIO getter
-    // spacing (this+4 .. this+1564) gives the embedded sub-buffer a 1560-byte slot, so
-    // a 4-byte trailing reserve rounds it to the X360-observed stride.
+    // 4-byte IOBuffer header this is 1556 bytes, matching the standalone CreateIOBuffer and
+    // DestroyIOBuffer instantiations (0x823AE5D0 / 0x823AE6A0).
     struct OutputBuffer_PostSim : public CgsModule::IOBuffer
     {
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+
+        // ARTIST 0x82653010: status byte = 1, then tail-call the queue Construct at this+4.
+        void Construct();
+        // DecFIGS declares the method; its body is the shared IOBuffer-only destructor.
+        void Destruct();
 
         // X360 0x823BB478, callsite 0x823E93D0 (ICF-shared +4 read accessor):
         // asserts the buffer is locked for reading, then returns &mGameEventQueue.
@@ -66,7 +71,6 @@ namespace ReplayIO
     private:
         u8             maStatusPad[3];     // +0x001..+0x003 (force the queue to +4)
         GameEventQueue mGameEventQueue;    // +0x004 (queue.miBufferWritePos @ +1540)
-        u8             maTailReserve[4];   // round the sub-buffer to the +1560 stride
     };
 
     // ---- pre-sim output buffer ----------------------------------------------------
@@ -78,8 +82,8 @@ namespace ReplayIO
     //   +0x004  StatusInterface                       mStatusInterface        (sizeof 0x618)
     //   +0x61C  BrnResource::GameDataIO::RequestInterface<1024> mGameDataRequestInterface (sizeof 0x410 = 1024+16)
     //   +0xA2C  GuiEventQueue (GuiEventQueueSmall)    mGuiEventQueue          (VariableEventQueue<4096,16>)
-    // The four owned accessors (this TU): GetStatusInterface const/non-const (this+4),
-    // GetGameDataRequestInterface non-const (this+0x61C), GetGuiEventQueue const (this+0xA2C).
+    // The owned accessors (this TU): GetStatusInterface const/non-const (this+4),
+    // GetGameDataRequestInterface const/non-const (this+0x61C), and GetGuiEventQueue const (this+0xA2C).
     // GROWN from a prior opaque-storage placeholder once this type's accessor TU landed.
     struct OutputBuffer_PreSim : public CgsModule::IOBuffer
     {
@@ -98,6 +102,10 @@ namespace ReplayIO
         // X360 0x8264E1D0: write-lock (bit 3, "Not locked for writing", :104); returns
         // &mStatusInterface (this+4).
         StatusInterface* GetStatusInterface();
+        // X360 0x823BB128: read-lock (bit 4, "Not locked for reading", :107); returns
+        // &mGameDataRequestInterface (this+0x61C). ICF-shared with the outer ReplayIO getter
+        // of its pre-sim member, under that receiver's separate object view.
+        const GameDataRequestInterface* GetGameDataRequestInterface() const;
         // X360 0x8264E278: write-lock (bit 3, "Not locked for writing", :108); returns
         // &mGameDataRequestInterface (this+0x61C).
         GameDataRequestInterface* GetGameDataRequestInterface();
@@ -205,8 +213,8 @@ namespace ReplayIO
         // ("Not locked for reading", BrnReplayModuleIO.h:175); returns &mPostSimBuffer
         // (this+4).
         OutputBuffer_PostSim* GetOutputBuffer_PostSim();
-        // X360 0x823BB128: read-lock (bit 4); asserts locked for reading
-        // ("Not locked for reading", BrnReplayModuleIO.h:107); returns &mPreSimBuffer
+        // X360 0x823BB128 (ICF-shared with OutputBuffer_PreSim::GetGameDataRequestInterface() const):
+        // read-locks and returns &mPreSimBuffer
         // (this+1564).
         OutputBuffer_PreSim* GetOutputBuffer_PreSim();
 
@@ -215,6 +223,7 @@ namespace ReplayIO
     private:
         u8                   maStatusPad[3];   // +0x001..+0x003 (force +4 placement)
         OutputBuffer_PostSim mPostSimBuffer;   // +0x004
+        u8                   maPostSimTailPad[4]; // +0x618..+0x61B (outer view only; not in standalone type)
         OutputBuffer_PreSim  mPreSimBuffer;    // +0x61C (this+1564)
     };
 }

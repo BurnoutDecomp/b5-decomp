@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"  // GameStateModuleIO::OutputBuffer (its lock bracket)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"  // CgsGuiModuleIO::Input/OutputBuffer (the C4 sound-leg GUI endpoints)
+#include "GameSource/Replays/BrnReplayModuleIO.h"       // ReplayIO::OutputBuffer_PreSim::GetStatusInterface
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"   // CgsModule::LockBuffersForIO (the partial spine's network -> GUI bracket)
 #include "GameSource/Network/BrnNetworkModule.h"              // BrnNetwork::BrnNetworkModule::ProcessBeforeSimulation (the partial spine)
@@ -662,6 +663,39 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
         }
     }
 
+    // X360 DoUpdate_World @0x823E8CC0..CCC: the GUI output's collision-world requests
+    // and game actions are the fourth input bridge, immediately before the replay status.
+    // GameMain runs GuiPreWorld before this state Update and keeps this output alive through
+    // the World leg.
+    {
+        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
+        lpGuiOutput->LockForRead();
+        lpWorldInput->LockForWrite();
+        lpGameModule->BridgeGuiToWorld(lpWorldInput, lpGuiOutput);
+        lpWorldInput->UnlockForWrite();
+        lpGuiOutput->UnlockForRead();
+    }
+
+    // X360 DoUpdate_World @0x823E8BD0 stages ReplayIO::OutputBuffer_PreSim's status
+    // interface after BridgeGuiToWorld and before BridgeSoundToWorld:
+    //   OutputBuffer_PreSim::GetStatusInterface(a8) @0x823E8CD0..D8
+    //   UpdateInputBuffer::SetReplayStatusInterface(worldIn, status) @0x823E8CDC..E0.
+    // The host full-cascade owner keeps this frame's typed PreSim output alive through the
+    // state Update that drives this world leg. The loading-only spine can run without that
+    // full-cascade output, so it contributes no replay status when the owner has none.
+    BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayPreSimOutput =
+        lpGameModule->GetReplayPreSimOutputBuffer();
+    if (lpReplayPreSimOutput != 0)
+    {
+        lpReplayPreSimOutput->LockForRead();
+        lpWorldInput->LockForWrite();
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayPreSimOutputRead =
+            lpReplayPreSimOutput;
+        lpWorldInput->SetReplayStatusInterface(lpReplayPreSimOutputRead->GetStatusInterface());
+        lpWorldInput->UnlockForWrite();
+        lpReplayPreSimOutput->UnlockForRead();
+    }
+
     // ⭐⭐ THE SOUND -> WORLD BRIDGE (X360 BridgeSoundToWorld @0x823CDC98, staged from the
     // loading spine @0x823F2818 and from DoUpdate_World's five-source staging on the full
     // spine -- LAST of the input bridges, immediately before the FreeAll + world dispatch).
@@ -1190,9 +1224,9 @@ void LoadingScriptedState::Update()
         // world/sound owner boundary: Sound remains alive until Main's post-GUI
         // FinishInGameSoundFramePC, so it consumes this frame's actual GUI output.
         BrnSound::Module::Io::RootPreUpdateOutputBuffer* const lpSoundPreOutput =
-            lpGameModule->BeginInGameSoundFramePC();
+            lpGameModule->GetSoundPreUpdateOutputBufferPC();
         DriveWorldUpdateFrame(&s_GameDataInput,
-            lpGameModule->ConstructUpdateSetFromFsm(), lpSoundPreOutput);
+            lpGameModule->GetFrameUpdateSetPC(), lpSoundPreOutput);
     }
 }
 
@@ -1963,17 +1997,10 @@ void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpS
     if (lpGameModule == 0)
         return;
 
-    // Console: BrnGameModule::DoUpdate @0x823F0AF8 (pseudocode line 302) and
-    // ConstructUpdateSet @0x823DCB40 both derive the world's update set from the flow state
-    // machine per frame; ConstructUpdateSetFromFsm @0x823BD420 is one call away from each.
-    // This used to pass the frozen KU_INGAME_UPDATE_SET (0x88) -- see the deleted constant's
-    // obituary in the header for why that made the sim-pause bit unreachable in game.
-    //
-    // ORDERING (checked, no extra plumbing needed): MainGameFlowInGameState.cpp:82-89 runs
-    // DoUpdate() -- which runs the game-state pre-world leg and therefore CheckGameActions,
-    // the writer of mbSimPaused -- BEFORE DriveInGameWorldUpdate() in the same frame. So the
-    // set built here is already this frame's value.
-    const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
+    // The full-cascade owner captures the selected update set at the original DoUpdate
+    // stage and retains it through this state Update. Forward that same frame value instead
+    // of re-deriving it from an FSM which may have changed during earlier module legs.
+    const BrnUpdateSet lUpdateSet = lpGameModule->GetFrameUpdateSetPC();
 
     // Change-only dev trace, mirroring UpdateWorldModule's at :327-338. Unpaused reads 0x88;
     // the pause adds bit 0x1 and it reads 0x89.

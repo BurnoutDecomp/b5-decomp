@@ -82,9 +82,9 @@ void MainGameFlowStateInGame::Update()
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     lpGameModule->DoUpdate();
 
-    // Sound pre-update precedes the world; its post-update runs after the
-    // director/GUI/effects legs in GameMain, as in ARTIST DoUpdate.
-    auto* lpSoundPreUpdateOutput = lpGameModule->BeginInGameSoundFramePC();
+    // GameMain built this frame's sound pre-update output before the world leg;
+    // its post-update runs after the director/GUI/effects legs, as in ARTIST DoUpdate.
+    auto* lpSoundPreUpdateOutput = lpGameModule->GetSoundPreUpdateOutputBufferPC();
 
     // Drive the world module per frame while in-game. DoUpdate above is a PC-platform leaf
     // (the host loop owns the module walk) and its world leg, DoUpdate_World @0x823E8BD0, is

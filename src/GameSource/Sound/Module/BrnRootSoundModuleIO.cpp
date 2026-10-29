@@ -283,7 +283,7 @@ RootInputBuffer::GameActionQueue& RootInputBuffer::GetGameActionQueue()
 void RootInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    std::memcpy(&mReplayStatusInterface, lpInterface, sizeof(ReplayStatusInterface));
+    mReplayStatusInterface = *lpInterface;
 }
 
 // X360 0x823C9140 @ +0x2F20.

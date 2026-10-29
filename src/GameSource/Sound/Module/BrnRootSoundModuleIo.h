@@ -11,6 +11,7 @@
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h" // AudioEffectsMessageQueue (adopted real type)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"
+#include "GameSource/Replays/BrnReplayStatusInterface.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera (mDirectorCamera)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
@@ -229,7 +230,7 @@ namespace Io
         // DWARF-named member-interface types (nested so accessor bodies name them
         // RootInputBuffer::X). Sizes are the X360-attested copy widths where available,
         // else nominal (absorbed by pads).
-        struct ReplayStatusInterface         { u8 mData[4]; };
+        typedef BrnReplays::ReplayIO::StatusInterface ReplayStatusInterface;
         typedef BrnDirector::Camera::Camera DirectorCamera;
         typedef BrnPhysics::ContactSpy::ContactSpyInterface
             InputContactSpyQueueInterface;
@@ -521,7 +522,13 @@ namespace Io
         mWorldLoadInterface.Construct();            // EventQueue<SoundWorldLoadEvent,25>
         mpGuiEventQueue = 0;
         std::memset(&mGameModeInterface, 0xFF, sizeof(mGameModeInterface));   // -1 x4 words
-        std::memset(&mReplayStatusInterface, 0, sizeof(mReplayStatusInterface));
+        // ARTIST826C8230..70: flags and six used bytes, then reel indices/time.
+        mReplayStatusInterface.mxStatusFlags = 0;
+        for (auto& lrReel : mReplayStatusInterface.maReels)
+            lrReel.mbUsed = false;
+        mReplayStatusInterface.miCurrentRecordReel = -1;
+        mReplayStatusInterface.miCurrentPlaybackReel = -1;
+        mReplayStatusInterface.mfPlaybackTimeRemaining = 0.0f;
         mTrafficOutputInterface.mu16EntityCount = 0;                          // sth 0 @+0x6AB0
         mUpdateInfo.mData[0] = 0;                                             // stb 0 @+0xEBBC
         mAudioCarDataLoadedQueue.Construct();
