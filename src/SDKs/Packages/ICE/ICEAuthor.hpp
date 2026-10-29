@@ -38,8 +38,8 @@
 //   @0x010  ICETakeData*          mpEditTakeData       (a1[4]; EditorOn source take)
 //   @0x014  ICETakeData*          mpAssemblyTakeData   (a1[5]; EditAssembly source)
 //   @0x018  ICETakeData*          mpSubTakeData        (sub-take data; SetState/Load*)
-//   @0x01C  f32                   mfInsertTangent      (*(v4+28); InsertTakeSegment)
-//   @0x020  s32                   miSubTakeGuid        (v2[7]=guid in SetAssemSrcTake)
+//   @0x01C  s32                   miSubTakeGuid        (SetAssemblySourceTake / InsertTakeSegment)
+//   @0x020  u8                    mbAssemblyMode       (LoadCurrentTake / LoadCurrentAssembly)
 //   @0x028  ICETake               mEditTake            (the live edit take; 0x738)
 //   @0x760  ICETake               mScratchTake         (assembly-edit-source / undo
 //                                 scratch take; built+edit-buffered in Construct; 0x738)
@@ -151,8 +151,8 @@ struct ICEAuthor
     ICETakeData*            mpEditTakeData;        // @0x010  a1[4]  current edit-source take
     ICETakeData*            mpAssemblyTakeData;    // @0x014  a1[5]  assembly source take
     ICETakeData*            mpSubTakeData;         // @0x018  sub-take data
-    f32                     mfInsertTangent;       // @0x01C  insert-segment tangent value
-    s32                     miSubTakeGuid;         // @0x020  guid written before the take-lookup functor call
+    s32                     miSubTakeGuid;         // @0x01C  assembly source take GUID
+    u8                      mbAssemblyMode;        // @0x020  assembly-mode byte
     u32                     muPad0x24;             // @0x024  alignment to the embedded take @0x28
 
     // ---- the two embedded ICETakes ----

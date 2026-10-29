@@ -71,7 +71,7 @@ static inline f32 SegmentAbs(f32 lfValue)
 // segment length and insert a second key, finding its nearest interval the same way;
 // collapse any soft-key run that opened up between the two inserted boundaries; jump the
 // cursor to the previous key; then stamp the segment's TAKE_START (the tangent arg),
-// TAKE_NUMBER (the saved insert tangent field mfInsertTangent @0x1C) and
+// TAKE_NUMBER (the saved sub-take GUID at +0x1C) and
 // CONTAINS_SUBTAKE (1) metadata onto the assembly element at the first inserted
 // interval; finally force the parameter back to the segment start.
 //
@@ -87,7 +87,7 @@ static inline f32 SegmentAbs(f32 lfValue)
 // into TAKE_START; lfSegmentLength (the second FP input) sets the segment end and gates
 // the non-positive-length reject. The caller (ICEController::JoyHandler) passes them
 // explicitly: InsertTakeSegment(param, subAssemRatio * (rangeEnd - param)). TAKE_NUMBER
-// is the separate member mfInsertTangent (this+0x1C), not either argument.
+// is the separate member miSubTakeGuid (this+0x1C), not either argument.
 // ===========================================================================
 bool ICEAuthor::InsertTakeSegment(f32 lfTangent, f32 lfSegmentLength)
 {
@@ -156,9 +156,9 @@ bool ICEAuthor::InsertTakeSegment(f32 lfTangent, f32 lfSegmentLength)
     // ICETake::SetValue forwards to ICEElementDescription::SetValue with the channel's
     // element data and asserts the index is in range (the inlined line-870 bounds
     // check). TAKE_START carries the tangent arg; TAKE_NUMBER the saved insert
-    // tangent member mfInsertTangent (@0x1C); CONTAINS_SUBTAKE the flag value 1.
+    // sub-take GUID miSubTakeGuid (@0x1C); CONTAINS_SUBTAKE the flag value 1.
     mEditTake.SetValue(KI_ICE_ELEMENT_TAKE_START,       lu16FirstKey, ICEValue(lfTangent));
-    mEditTake.SetValue(KI_ICE_ELEMENT_TAKE_NUMBER,      lu16FirstKey, ICEValue(mfInsertTangent));
+    mEditTake.SetValue(KI_ICE_ELEMENT_TAKE_NUMBER,      lu16FirstKey, ICEValue(miSubTakeGuid));
     mEditTake.SetValue(KI_ICE_ELEMENT_CONTAINS_SUBTAKE, lu16FirstKey, ICEValue((s32)1));
 
     // Force the parameter back onto the segment start.
