@@ -10,7 +10,6 @@
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 #include <cstdio>   // [diag] snprintf (the first-draw witness)
 #include <cstdlib>  // [diag] getenv (the per-array draw witness, BRN_DEBRIS_DIAG)
-#include <chrono>   // [diag] steady_clock (the per-array draw witness's us=)
 
 // The two shared render states the debris pass binds (ImmediateMode.cpp), declared
 // `extern void*` exactly as BrnSparkRenderer_Render.cpp / BrnTrailRender.cpp declare theirs.
@@ -89,9 +88,9 @@ namespace Native
     {
         // The bounce-damping base every preset scales. Per-axis: the debris keeps 70% of its
         // horizontal speed and 60% of its vertical speed across a bounce.
-        constexpr rw::math::vpu::Vector3 KV_DEBRIS_BOUNCINESS = { 0.7f, 0.6f, 0.7f, 0.0f };
+        const rw::math::vpu::Vector3 KV_DEBRIS_BOUNCINESS = { 0.7f, 0.6f, 0.7f, 0.0f };
 
-        constexpr rw::math::vpu::Vector3 ScaledBounciness(f32 lfScale)
+        rw::math::vpu::Vector3 ScaledBounciness(f32 lfScale)
         {
             { const rw::math::vpu::Vector3 lResult = { KV_DEBRIS_BOUNCINESS.x * lfScale,
                                            KV_DEBRIS_BOUNCINESS.y * lfScale,
@@ -99,7 +98,7 @@ namespace Native
                                            KV_DEBRIS_BOUNCINESS.w * lfScale }; return lResult; }
         }
 
-        constexpr rw::math::vpu::Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };
+        const rw::math::vpu::Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };
     }
 
     extern const BrnDebrisArrayParams _gaDebrisArrayParams[eDebrisArray_Max] =

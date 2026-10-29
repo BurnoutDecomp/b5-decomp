@@ -1,3 +1,5 @@
+#include <xtl.h>
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // ============================================================================
 // GameSource/Unity/../Effects/Particles/LionParticleRender.cpp
 //
@@ -29,8 +31,7 @@
 // D3DDevice_SetTexture(off_83271608, 0, texture, 0x80000000) -- (device, sampler, texture,
 // flags); the 0x80000000 flag requests the "set immediately / no GPU stall" path. Declared
 // here as a free function so the texture-bind side effect is preserved (PC backend body / stub).
-extern "C" void D3DDevice_SetTexture(void* apDevice, unsigned int auSampler,
-                                     void* apTexture, unsigned int auFlags);
+extern IDirect3DDevice9* gpD3DDevice;
 
 namespace renderengine
 {
@@ -41,7 +42,7 @@ namespace renderengine
 
 // The global D3D device the particle renderer binds textures on (off_83271608). Modelled as a
 // file-scope pointer the platform layer fills; on PC it resolves to the active device.
-namespace { void* spD3DDevice = 0; }
+
 
 // -------------------------------------------------------------------------------------------
 // dword_83010F20 -- the process-wide DEFAULT blend-state template. Its console .data home is
@@ -512,7 +513,7 @@ U32 LionParticleRender::CreateInternalMaterial(const cParticleMaterial* apMateri
         };
         const u32 luMode = apMaterial->mBlendMode;
         char lacMsg[288];
-        std::snprintf(lacMsg, sizeof(lacMsg),
+        _snprintf(lacMsg, sizeof(lacMsg),
             "[lionmat] #%d hash=%08X mode=%u(%s) rb_blendcontrol=%08X"
             " colour src=%u dst=%u op=%u  alpha src=%u dst=%u op=%u"
             "  alphatest=%u func=%u ref=%u ztest=%u\n",
@@ -678,7 +679,7 @@ namespace
         }
 
         const void* lpD3D = (apTexture != 0)
-                          ? static_cast<const void*>(apTexture->mpD3DTexture) : 0;
+                          ? static_cast<const void*>(apTexture) : 0;
 
         // ...and, once, the acquired-texture table beside the map it is indexed by.
         static bool sbTableDumped = false;
@@ -687,20 +688,20 @@ namespace
             sbTableDumped = true;
             const BrnParticle::TextureNameMap::Entry* lpEntries = apMap->GetEntries();
             char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                           "[liontab] acquired=%d mapEntries=%u\n", siTextureCount, luCount);
             CgsDev::Log::WriteToLog(lacMsg);
             const u32 luDump = (luCount < 8u) ? luCount : 8u;
             for (u32 luIndex = 0; luIndex < luDump; ++luIndex)
             {
                 renderengine::Texture* lpSlot = saTextures[luIndex];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                               "[liontab]   %2u hash=%08X tex=%p d3d=%p %ux%u\n",
                               luIndex, lpEntries[luIndex].muHashedLionTextureName,
                               static_cast<void*>(lpSlot),
-                              (lpSlot != 0) ? static_cast<void*>(lpSlot->mpD3DTexture) : 0,
-                              (lpSlot != 0) ? (unsigned)lpSlot->muWidth : 0u,
-                              (lpSlot != 0) ? (unsigned)lpSlot->muHeight : 0u);
+                              (lpSlot != 0) ? static_cast<void*>(lpSlot) : 0,
+                              (lpSlot != 0) ? (unsigned)lpSlot->GetWidth() : 0u,
+                              (lpSlot != 0) ? (unsigned)lpSlot->GetHeight() : 0u);
                 CgsDev::Log::WriteToLog(lacMsg);
             }
         }
@@ -730,7 +731,7 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
     if (shadow::Device::GetSamplerTextureShadow(0u) != static_cast<void*>(lpTexture))
     {
         LionBindWitness("B", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
-        D3DDevice_SetTexture(spD3DDevice, 0, lpTexture, 0x80000000u);
+        D3DDevice_SetTexture(gpD3DDevice, 0, lpTexture, 0x80000000u);
         LionBindWitness("A", apMaterial->mTextureHandle, lpTexture, mTextureNameMap.operator->());
         shadow::Device::SetSamplerTextureShadow(0u, static_cast<void*>(lpTexture));
     }
@@ -807,7 +808,7 @@ void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* ap
         if (suRegistered == 1 || (suRegistered % 32) == 0)
         {
             char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                           "[texreg] #%u material=%p texture=\"%s\" texHandle=%08X matHandle=%08X\n",
                           suRegistered, static_cast<const void*>(apMaterial),
                           apcTextureName ? apcTextureName : "<null>",
@@ -1115,7 +1116,7 @@ void LionParticleRender::Render(EffectsVertexBufferIterator& arIterator,
         {
             sbVecOnce = true;
             char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                 "[lionvec] count=%u v0=(%.2f,%.2f,%.2f,%.2f) partPos=(%.2f,%.2f,%.2f)\n",
                 (unsigned)auCount, apVectors[0].x, apVectors[0].y, apVectors[0].z, apVectors[0].w,
                 apParticle[0].mPos.x, apParticle[0].mPos.y, apParticle[0].mPos.z);

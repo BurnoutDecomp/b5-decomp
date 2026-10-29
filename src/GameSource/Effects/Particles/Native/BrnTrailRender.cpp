@@ -116,7 +116,7 @@ namespace Native
         const s32 KI_PRIMITIVE_TRIANGLE_STRIP = 6;
 
         // .rdata unk_82181510 == {0, 1, 0, 0}: the uv.y step to the second edge vertex.
-        const Vector4 K_UV_SECOND_EDGE = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const ::Vector4 K_UV_SECOND_EDGE = { 0.0f, 1.0f, 0.0f, 0.0f };
 
         // ============================================================================================
         // [DIAG] BRN_SKID_LOUD -- THE DISCRIMINATOR. NOT IN THE X360 BINARY, inert unless the
@@ -154,7 +154,7 @@ namespace Native
                 if (siMask != 0)
                 {
                     char lacMsg[160];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
+                    _snprintf(lacMsg, sizeof(lacMsg),
                         "[trailpass] BRN_SKID_LOUD=%d ARMED: depth%s blend%s colour%s\n", siMask,
                         (siMask & 1) ? "=OFF" : "=normal",
                         (siMask & 2) ? "=OFF" : "=normal",
@@ -165,20 +165,20 @@ namespace Native
             return static_cast<u32>(siMask);
         }
 
-        inline Vector4 MakeUvTimeAlpha(f32 lfU, f32 lfV, f32 lfAge, f32 lfStrength)
+        inline ::Vector4 MakeUvTimeAlpha(f32 lfU, f32 lfV, f32 lfAge, f32 lfStrength)
         {
-            const Vector4 lResult = { lfU, lfV, lfAge, lfStrength };
+            const ::Vector4 lResult = { lfU, lfV, lfAge, lfStrength };
             return lResult;
         }
-        inline Vector4 Add(Vector4 lLhs, Vector4 lRhs)
+        inline ::Vector4 Add(::Vector4 lLhs, ::Vector4 lRhs)
         {
-            const Vector4 lResult = { lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w };
+            const ::Vector4 lResult = { lLhs.x + lRhs.x, lLhs.y + lRhs.y, lLhs.z + lRhs.z, lLhs.w + lRhs.w };
             return lResult;
         }
-        inline Vector4 ScaleRgb(const RwRGBAReal& lColour, f32 lfWhiteLevel)
+        inline ::Vector4 ScaleRgb(const RwRGBAReal& lColour, f32 lfWhiteLevel)
         {
             // v55 = {wl, wl, wl, 1.0}; colour * v55 (vmulfp128 @0x822959E4 / @0x82295A14).
-            const Vector4 lResult = { lColour.red * lfWhiteLevel, lColour.green * lfWhiteLevel,
+            const ::Vector4 lResult = { lColour.red * lfWhiteLevel, lColour.green * lfWhiteLevel,
                                       lColour.blue * lfWhiteLevel, lColour.alpha * 1.0f };
             return lResult;
         }
@@ -210,7 +210,7 @@ namespace Native
                 if (sfLift > 0.0f)
                 {
                     char lacMsg[128];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
+                    _snprintf(lacMsg, sizeof(lacMsg),
                                   "[trailpass] BRN_SKID_LIFT=%.4f m ARMED (diagnostic only)\n",
                                   static_cast<double>(sfLift));
                     CgsDev::Log::WriteToLog(lacMsg);
@@ -280,7 +280,7 @@ namespace Native
         // the road's own near-black. Same two setters, same two registers -- only the value differs.
         if ((SkidLoudMask() & 4u) != 0u)
         {
-            const Vector4 lMagenta = { 1.0f, 0.0f, 1.0f, 1.0f };
+            const ::Vector4 lMagenta = { 1.0f, 0.0f, 1.0f, 1.0f };
             mpRenderer->SetBlendStartColour(lMagenta);
             mpRenderer->SetBlendEndColour(lMagenta);
         }
@@ -336,20 +336,20 @@ namespace Native
 
             // ---- segment 0: its +half edge vertex is written twice (the strip join) ----------
             {
-                Vector3       lPosition  = lpSegments->ReadSegmentPosition(0);
+                ::Vector3       lPosition  = lpSegments->ReadSegmentPosition(0);
                 lPosition.y += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
-                const Vector3 lTangent   = lpSegments->ReadSegmentTangent(0);
+                const ::Vector3 lTangent   = lpSegments->ReadSegmentTangent(0);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(0);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(0)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
                 if (lfAge > 1.0f)
                 {
                     lfAge = 1.0f;                                                  // vminfp128 with 1.0
                 }
-                const Vector4 lUvA = MakeUvTimeAlpha(0.0f, 0.0f, lfAge, lfStrength);   // u == segment index 0
-                const Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
+                const ::Vector4 lUvA = MakeUvTimeAlpha(0.0f, 0.0f, lfAge, lfStrength);   // u == segment index 0
+                const ::Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
                 // uv.y == 0 is the MINUS edge (v122 == unk_82FAB940 == -0.125) -- see the banner.
-                const Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition; // vmaddcfp128 v10 = v11 * v122 + v12
-                const Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;       // vmaddfp128  v12 = v11 * v121 + v12
+                const ::Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition; // vmaddcfp128 v10 = v11 * v122 + v12
+                const ::Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;       // vmaddfp128  v12 = v11 * v121 + v12
 
                 laVertices[lnVertexCount].mv3Pos         = lEdgeA;
                 laVertices[lnVertexCount].mv4UvTimeAlpha = lUvA;
@@ -363,20 +363,20 @@ namespace Native
             f32 lfSegmentU = 1.0f;                                                        // v13, +1.0 per segment
             for (s32 lnSegment = 1; lnSegment < lnNumSegments; ++lnSegment, lfSegmentU += 1.0f)
             {
-                Vector3       lPosition  = lpSegments->ReadSegmentPosition(lnSegment);
+                ::Vector3       lPosition  = lpSegments->ReadSegmentPosition(lnSegment);
                 lPosition.y += lfDiagLift;   // [diag] BRN_SKID_LIFT, 0.0 unless armed
-                const Vector3 lTangent   = lpSegments->ReadSegmentTangent(lnSegment);
+                const ::Vector3 lTangent   = lpSegments->ReadSegmentTangent(lnSegment);
                 const f32     lfStrength = lpSegments->ReadSegmentStrength(lnSegment);
                 f32           lfAge      = (lfNow - lpSegments->ReadSegmentTime(lnSegment)) * KF_ONE_OVER_TRAIL_BASE_LIFE;
                 if (lfAge > 1.0f)
                 {
                     lfAge = 1.0f;
                 }
-                const Vector4 lUvA = MakeUvTimeAlpha(lfSegmentU, 0.0f, lfAge, lfStrength);
-                const Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
+                const ::Vector4 lUvA = MakeUvTimeAlpha(lfSegmentU, 0.0f, lfAge, lfStrength);
+                const ::Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
                 // uv.y == 0 is the MINUS edge (0x82295BC8/0x82295BD8) -- see the banner.
-                const Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition;
-                const Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;
+                const ::Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition;
+                const ::Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;
 
                 laVertices[lnVertexCount].mv3Pos             = lEdgeA;
                 laVertices[lnVertexCount].mv4UvTimeAlpha     = lUvA;
@@ -385,33 +385,7 @@ namespace Native
                 lnVertexCount += 2;
 
                 // [DIAG] see the banner at lbQuadDiag. DELETE-WHEN-STABLE.
-                if (lbQuadDiag && !lbQuadDiagSpent)
-                {
-                    char lacQ[448];
-                    std::snprintf(lacQ, sizeof(lacQ),
-                        "[trailquad] e=%d/%d s=%d/%d seg=%.4f,%.4f,%.4f tan=%.4f,%.4f,%.4f "
-                        "vA=%.4f,%.4f,%.4f vB=%.4f,%.4f,%.4f tilt=%.4f age=%.3f str=%.3f "
-                        "type=%d emitter=%p laid=%.6f now=%.6f\n",
-                        lnEmitter, lnEmitterCount, lnSegment, lnNumSegments,
-                        static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
-                        static_cast<double>(lPosition.z),
-                        static_cast<double>(lTangent.x), static_cast<double>(lTangent.y),
-                        static_cast<double>(lTangent.z),
-                        static_cast<double>(lEdgeA.x), static_cast<double>(lEdgeA.y),
-                        static_cast<double>(lEdgeA.z),
-                        static_cast<double>(lEdgeB.x), static_cast<double>(lEdgeB.y),
-                        static_cast<double>(lEdgeB.z),
-                        static_cast<double>(lEdgeA.y - lEdgeB.y),
-                        static_cast<double>(lfAge), static_cast<double>(lfStrength),
-                        static_cast<s32>(lu8TrailTypeID), static_cast<const void*>(lpEmitter),
-                        static_cast<double>(lpSegments->ReadSegmentTime(lnSegment)),
-                        static_cast<double>(lfNow));
-                    CgsDev::Log::WriteToLog(lacQ);
-                    if (lnSegment == lnNumSegments - 1)
-                    {
-                        lbQuadDiagSpent = true;
-                    }
-                }
+
             }
 
             // ---- the last vertex repeated: closes this emitter's strip with a degenerate ----
@@ -438,7 +412,7 @@ namespace Native
             // Read the matrix as its 16 floats -- it is being handed to the shader as raw
             // bytes by SetTransform, so this reads it exactly as the program does.
             const f32* const lpM = reinterpret_cast<const f32*>(&mViewProjectionMatrix);
-            const Vector3& lrP = laVertices[0].mv3Pos;
+            const ::Vector3& lrP = laVertices[0].mv3Pos;
             const f32 lfX = lrP.x * lpM[0] + lrP.y * lpM[4] + lrP.z * lpM[8]  + lpM[12];
             const f32 lfY = lrP.x * lpM[1] + lrP.y * lpM[5] + lrP.z * lpM[9]  + lpM[13];
             const f32 lfZ = lrP.x * lpM[2] + lrP.y * lpM[6] + lrP.z * lpM[10] + lpM[14];
@@ -454,18 +428,14 @@ namespace Native
             // therefore faded to nothing -- pointing a marker at it and finding bare tarmac
             // proves only that old marks fade. The freshest segment is the one whose alpha is
             // at its highest, so it is the honest place to aim.
-            {
-                const f32 lfSClipX = lfSX * lpM[0] + lfSY * lpM[4] + lfSZ * lpM[8]  + lpM[12];
-                const f32 lfSClipY = lfSX * lpM[1] + lfSY * lpM[5] + lfSZ * lpM[9]  + lpM[13];
-                const f32 lfSClipW = lfSX * lpM[3] + lfSY * lpM[7] + lfSZ * lpM[11] + lpM[15];
-            }
+
             (void)lfZ;
 
             if (guProbeFirstVertex != 0u)
             {
                 --guProbeFirstVertex;
                 char lacMsg[400];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                     "[trailpass] xform: v0=(%.2f,%.2f,%.2f) clip=(%.3f,%.3f,%.3f,%.3f) "
                     "ndc=(%.3f,%.3f,%.3f) m0=[%.4f %.4f %.4f %.4f] m3=[%.3f %.3f %.3f %.3f] "
                     "start=(%.3f,%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f,%.3f) uvta0=(%.2f,%.2f,%.3f,%.3f)\n",

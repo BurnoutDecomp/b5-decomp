@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 // CgsGraphics::ImRenderer<BrnGraphics::SkidVertex> -- the X360 immediate-mode skid-trail renderer
 // instantiation. This is the renderer behind the skid/tyre-mark decal path: BrnParticle::Native::
 // TrailRenderer::BeginRender / Render drive BeginRendering / Render, and BrnGraphics::Im3dSkidsRenderer
@@ -117,9 +118,6 @@ namespace shadow
 // The D3D immediate-vertex ring API ImRenderer<V>::Render drives (X360 D3DDevice_* calls); minimal
 // external surfaces matching the asm calling convention. Their bodies live in the platform D3D TU.
 struct D3DDevice;
-extern "C" u32   D3DDevice_InsertFence(D3DDevice* lpDevice);
-extern "C" void* D3DDevice_BeginVertices(D3DDevice* lpDevice, u32 luPrimitiveType, u32 luVertexCount, u32 luStride);
-extern "C" void  D3DDevice_EndVertices(D3DDevice* lpDevice);
 
 namespace CgsGraphics
 {
@@ -241,7 +239,7 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    rw::Resource lDescriptorResource = {};
+    rw::Resource lDescriptorResource;
     lpAllocatorIf->Create(&lDescriptorResource, lpAllocatorIf, lauDescriptor, 0);
     mpVertexDescriptor =
         reinterpret_cast<renderengine::VertexDescriptor*>(
@@ -359,7 +357,7 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
 
     shadow::Device::FlushVertexProgramState();
 
-    D3DDevice* lpDevice = reinterpret_cast<D3DDevice*>(mgpDevice);
+    D3DDevice* lpDevice = ::gpD3DDevice;
 
     CGS_ASSERT(lpVertices != 0, "lpVertices");
 
@@ -368,7 +366,7 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
         D3DDevice_InsertFence(lpDevice);
     }
 
-    void* lpRing = D3DDevice_BeginVertices(lpDevice, luPrimitiveType, luCount, KU_SKID_VERTEX_STRIDE);
+    void* lpRing = D3DDevice_BeginVertices(lpDevice, static_cast<D3DPRIMITIVETYPE>(luPrimitiveType), luCount, KU_SKID_VERTEX_STRIDE);
 
     u32* lpDst = reinterpret_cast<u32*>(lpRing);
     if (lpDst != 0)

@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticlePrograms.h"
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.cpp
 //
@@ -28,14 +29,6 @@
 // immediate-mode TUs (BrnIm3dTexPlusLighting.cpp spells it identically).
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
-namespace renderengine
-{
-    extern const u32 guSmokeZFadeVertexProgramPCSize;
-    extern const u32 guSmokeZFadePixelProgramPCSize;
-    extern const u32 guSmokeSansZFadeVertexProgramPCSize;
-    extern const u32 guSmokeSansZFadePixelProgramPCSize;
-}
-
 namespace BrnGraphics
 {
     namespace
@@ -65,10 +58,12 @@ namespace BrnGraphics
 
     void Im3dSmokeRenderer::Construct(rw::IResourceAllocator* lpAllocator)
     {
-        const u32   lauVertexProgramSize[2]   = { renderengine::guSmokeZFadeVertexProgramPCSize,
-                                                  renderengine::guSmokeSansZFadeVertexProgramPCSize };
-        const u32   lauPixelProgramSize[2]    = { renderengine::guSmokeZFadePixelProgramPCSize,
-                                                  renderengine::guSmokeSansZFadePixelProgramPCSize };
+        const void* const lapVertexProgramBinary[2] = { BrnParticlePrograms::gaSmokeZFadeVertex, BrnParticlePrograms::gaSmokeSansZFadeVertex };
+        const void* const lapPixelProgramBinary[2] = { BrnParticlePrograms::gaSmokeZFadePixel, BrnParticlePrograms::gaSmokeSansZFadePixel };
+        const u32   lauVertexProgramSize[2]   = { sizeof(BrnParticlePrograms::gaSmokeZFadeVertex),
+                                                  sizeof(BrnParticlePrograms::gaSmokeSansZFadeVertex) };
+        const u32   lauPixelProgramSize[2]    = { sizeof(BrnParticlePrograms::gaSmokeZFadePixel),
+                                                  sizeof(BrnParticlePrograms::gaSmokeSansZFadePixel) };
         CgsGraphics::ImRenderer<CgsGraphics::BasicColouredTexturedVertex>::Construct(
             lpAllocator,
             lapVertexProgramBinary, lauVertexProgramSize,
@@ -117,20 +112,7 @@ namespace BrnGraphics
         // A zero register count is GetVariableHandleByName's "not found", and an unresolved handle
         // routes its row to the discard bin -- invisible until something draws. BRN_SIMPLEFX_DIAG=1
         // only (default OFF). DELETE-WHEN-STABLE.
-        if (BrnParticle::Native::SimpleFxDiagArmed())
-        {
-            char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                "[simplefx] smoke renderer: programs vs0=%d ps0=%d vs1=%d ps1=%d constants "
-                "offset{idx=%u cnt=%u} scale{idx=%u cnt=%u} depthconv{idx=%u cnt=%u} fade{idx=%u cnt=%u}\n",
-                mapVertexProgramBuffer[0] != 0, mapPixelProgramBuffer[0] != 0,
-                mapVertexProgramBuffer[1] != 0, mapPixelProgramBuffer[1] != 0,
-                mOffsetHandle.mu8RegisterSet, mOffsetHandle.mu8RegisterCount,
-                mScaleHandle.mu8RegisterSet, mScaleHandle.mu8RegisterCount,
-                mDepthConversionHandle.mu8RegisterSet, mDepthConversionHandle.mu8RegisterCount,
-                mDepthFadeConstantsHandle.mu8RegisterSet, mDepthFadeConstantsHandle.mu8RegisterCount);
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
+
     }
 
     // =============================================================================================

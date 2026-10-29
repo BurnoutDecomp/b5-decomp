@@ -67,7 +67,7 @@ namespace Native
         // i.e. exactly {0, 0.03, 0, 0} -- a 3 cm lift along WORLD +Y (not along the contact
         // normal), read out of the X360 image. The committed value was right.
         const f32     KR_TRAIL_HEIGHT_ADJUSTMENT = 0.03f;
-        const Vector3 K_TRAIL_HEIGHT_ADJUSTMENT  = { 0.0f, KR_TRAIL_HEIGHT_ADJUSTMENT, 0.0f, 0.0f };
+        const ::Vector3 K_TRAIL_HEIGHT_ADJUSTMENT  = { 0.0f, KR_TRAIL_HEIGHT_ADJUSTMENT, 0.0f, 0.0f };
 
         // krTrailsMinSegmentLength / krTrailsMinSegmentLengthSquared (:35/36). Only the square is
         // read by the binary (flt_82CDB3E0 == 0.09f); the length is its root.
@@ -87,7 +87,7 @@ namespace Native
 
         // rw::math::vpu::detail::gIVector (.rdata 0x82181500 == {1,0,0,0}): the tangent a strip's
         // very first segment is laid with, before any direction exists.
-        const Vector3 K_I_VECTOR = { 1.0f, 0.0f, 0.0f, 0.0f };
+        const ::Vector3 K_I_VECTOR = { 1.0f, 0.0f, 0.0f, 0.0f };
 
         // [diag] the [trailpass] render probe's gate -- the same BRN_SKID_PROBE the
         // HandleWheels gate probe reads, so one run carries both halves of the claim.
@@ -191,21 +191,21 @@ namespace Native
     // TrailEmitter::AddTrailSegment  @0x8227A9E0
     //   r3 = this, f1 = lfCurrentTime, v1 = lContactPoint, v2 = lContactNormal, f2 = lfSkidStrength
     // =========================================================================================
-    bool TrailEmitter::AddTrailSegment(f32 lfCurrentTime, Vector3 lContactPoint,
-                                       Vector3 lContactNormal, f32 lfSkidStrength)
+    bool TrailEmitter::AddTrailSegment(f32 lfCurrentTime, ::Vector3 lContactPoint,
+                                       ::Vector3 lContactNormal, f32 lfSkidStrength)
     {
         using namespace rw::math::vpu;
 
         // v126: the segment position -- the contact point lifted off the road.
-        const Vector3 lPosition = lContactPoint + K_TRAIL_HEIGHT_ADJUSTMENT;
-        Vector3       lTangent;                                              // v127
+        const ::Vector3 lPosition = lContactPoint + K_TRAIL_HEIGHT_ADJUSTMENT;
+        ::Vector3       lTangent;                                              // v127
         const s32     lnNumSegments = mn8NumSegments;
 
         if (lnNumSegments != 0)
         {
             const s32     lnPrevIndex   = lnNumSegments - 1;
-            const Vector3 lPrevPos      = mpCurrentSegments->ReadSegmentPosition(lnPrevIndex);
-            const Vector3 lDirectionVec = lPosition - lPrevPos;
+            const ::Vector3 lPrevPos      = mpCurrentSegments->ReadSegmentPosition(lnPrevIndex);
+            const ::Vector3 lDirectionVec = lPosition - lPrevPos;
 
             // Too close to the previous segment: nothing laid (vcmpgefp 0.09 >= |d|^2, all lanes).
             if (KR_TRAILS_MIN_SEGMENT_LENGTH_SQUARED >= MagnitudeSquared(lDirectionVec))
@@ -220,7 +220,7 @@ namespace Native
 
             // The half-width axis is direction x normal (vrsqrtefp + two Newton steps, then the
             // two-multiply cross @0x8227AAE0-0x8227AAEC).
-            const Vector3 lUnitDirection = Normalize(lDirectionVec);
+            const ::Vector3 lUnitDirection = Normalize(lDirectionVec);
             lTangent = Cross(lUnitDirection, lContactNormal);
 
             if (lnNumSegments != 1 || (mx8Flags & KX_TRAIL_EMITTER_CONTINUANCE) != 0)
@@ -230,8 +230,8 @@ namespace Native
                 // slwi r5, r6, 5; lvx128 v0, r5, r8` @0x8227AB1C): the console reads the 32 bytes
                 // BEFORE this collection, i.e. the preceding collection's segment 15. Reproduced
                 // as-is -- it is the binary's behaviour, not a reconstruction guess.
-                const Vector3 lPrevPrevPos      = mpCurrentSegments->ReadSegmentPosition(lnNumSegments - 2);
-                const Vector3 lPrevDirectionVec = Normalize(lPrevPos - lPrevPrevPos);
+                const ::Vector3 lPrevPrevPos      = mpCurrentSegments->ReadSegmentPosition(lnNumSegments - 2);
+                const ::Vector3 lPrevDirectionVec = Normalize(lPrevPos - lPrevPrevPos);
 
                 if (Dot(lUnitDirection, lPrevDirectionVec) > KF_TRAIL_DIRECTION_MERGE_COS)
                 {
@@ -364,8 +364,8 @@ namespace Native
     //   r3 = this, r4 = lpTrailEmitterData, r5 = lu8TrailTypeID, v1 = lContactPoint,
     //   v2 = lContactNormal, f1 = lfSkidStrength, f2 = lrCurrentTime.
     // =========================================================================================
-    void TrailSystem::AddTrailSegment(TrailEmitterData* lpTrailEmitterData, Vector3 lContactPoint,
-                                      Vector3 lContactNormal, s8 lu8TrailTypeID, f32 lfSkidStrength,
+    void TrailSystem::AddTrailSegment(TrailEmitterData* lpTrailEmitterData, ::Vector3 lContactPoint,
+                                      ::Vector3 lContactNormal, s8 lu8TrailTypeID, f32 lfSkidStrength,
                                       f32 lrCurrentTime)
     {
         CGS_ASSERT(lpTrailEmitterData != 0, "lpTrailEmitterData != NULL");
@@ -502,8 +502,8 @@ namespace Native
     //   SkidMarkStartColour / SkidMarkEndColour: EffectsModule::Update @0x8229EC28 case 2 and
     //   PostWorldPreparePrepare @0x822902F0 walk the surface list doing exactly this).
     // =========================================================================================
-    void TrailSystem::UpdateTrailType(s16 liSkidMarkTypeID, Vector4 lSkidMarkStartColour,
-                                      Vector4 lSkidMarkEndColour)
+    void TrailSystem::UpdateTrailType(s16 liSkidMarkTypeID, ::Vector4 lSkidMarkStartColour,
+                                      ::Vector4 lSkidMarkEndColour)
     {
         CGS_ASSERT(liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES, "liSkidMarkTypeID < KI_MAX_NUM_TRAIL_TYPES");
 

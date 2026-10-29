@@ -41,6 +41,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "rw/math/vpu/types.h" // rw::math::vpu::Vector4
 // VertexIteratorBaseClass (cursor/base/top/stride bookkeeping) -- committed home is the
 // NativeParticle sibling header.

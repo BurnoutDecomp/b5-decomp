@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticlePrograms.h"
 // CgsGraphics::ImRenderer<BrnGraphics::LionBlendVertex> -- the X360 immediate-mode Lion-blend particle
 // renderer instantiation. This is the renderer behind BrnGraphics::Im3dBlend (Im3dBase<LionBlendVertex>
 // : ImRenderer<LionBlendVertex>), which BrnGraphics::LionBlendRenderer wraps and BrnParticle::
@@ -40,13 +41,6 @@
 // stand-in for the four guest Xenos microcode blobs Im3dBlend::Construct hands to
 // ImRenderer<LionBlendVertex>::Construct; see that file's recipe). Declared the same way
 // BrnIm3dSkidsRenderer.cpp declares the skid pair.
-namespace renderengine
-{
-    extern const u32 guLionBlendVertexProgramPCSize;
-    extern const u32 guLionBlendPixelProgramPCSize;
-    extern const u32 guLionBlendZFadeVertexProgramPCSize;
-    extern const u32 guLionBlendZFadePixelProgramPCSize;
-}
 
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr) -- the same minimal extern
 // surface BrnIm3dSkidsRenderer.cpp / BrnIm3d.cpp / BrnPostFxBloom.cpp declare (defined in
@@ -277,7 +271,7 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
         {
             sbDiagOnce = true;
             char lacMsg[224];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                 "[lionprog] BeginRendering(slot=%d) vp=%p pp=%p vertexDescriptor=%p"
                 " (a NULL descriptor makes FlushVertexProgramState bind nothing)\n",
                 (int)li8Program, static_cast<const void*>(lpVertexProgram),
@@ -356,7 +350,7 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    rw::Resource lDescriptorResource = {};
+    rw::Resource lDescriptorResource;
     lpAllocatorIf->Create(&lDescriptorResource, lpAllocatorIf, lauDescriptor, 0);
     mpVertexDescriptor =
         reinterpret_cast<renderengine::VertexDescriptor*>(
@@ -567,15 +561,17 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
     memcpy(mauTransform, KAF_IDENTITY, sizeof(mauTransform));
 
     // asm words 13..44 -- the two program pairs, in slot order.
+    const void* const lapVertexProgramBinary[2] = { BrnParticlePrograms::gaLionBlendVertex, BrnParticlePrograms::gaLionBlendZFadeVertex };
+    const void* const lapPixelProgramBinary[2] = { BrnParticlePrograms::gaLionBlendPixel, BrnParticlePrograms::gaLionBlendZFadePixel };
     const u32 lauVertexProgramSize[2] =
     {
-        renderengine::guLionBlendVertexProgramPCSize,       // console 0x1A4
-        renderengine::guLionBlendZFadeVertexProgramPCSize,  // console 0x220
+        sizeof(BrnParticlePrograms::gaLionBlendVertex),       // console 0x1A4
+        sizeof(BrnParticlePrograms::gaLionBlendZFadeVertex),  // console 0x220
     };
     const u32 lauPixelProgramSize[2] =
     {
-        renderengine::guLionBlendPixelProgramPCSize,        // console 0x10C
-        renderengine::guLionBlendZFadePixelProgramPCSize,   // console 0x1F8
+        sizeof(BrnParticlePrograms::gaLionBlendPixel),        // console 0x10C
+        sizeof(BrnParticlePrograms::gaLionBlendZFadePixel),   // console 0x1F8
     };
 
     CgsGraphics::ImRenderer<LionBlendVertex>::Construct(
@@ -642,7 +638,7 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
     // reason, as the skid renderer's (BrnIm3dSkidsRenderer.cpp). DELETE-WHEN-STABLE.
     {
         char lacMsg[320];
-        std::snprintf(lacMsg, sizeof(lacMsg),
+        _snprintf(lacMsg, sizeof(lacMsg),
             "[lionblend] Im3dBlend::Construct: p0{wvp=%u cs=%u} "
             "p1{wvp=%u cs=%u off=%u scl=%u dconv=%u dfade=%u} (register counts; 0 == UNRESOLVED)\n",
             mViewProjectionMatrixStateHandle_Normal.mu8RegisterCount,

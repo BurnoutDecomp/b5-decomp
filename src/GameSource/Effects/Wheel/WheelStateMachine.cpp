@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
 // =============================================================================
 // GameSource/Effects/Wheel/WheelStateMachine.cpp  (X360 ARTIST)
 //
@@ -144,8 +145,7 @@ namespace
     // `vnmsubfp`: -(a * c - b), fused, a NaN keeping its sign.
     f32 Vnmsub(f32 lfA, f32 lfC, f32 lfB)
     {
-        const f32 lfDifference = std::fma(lfA, lfC, -lfB);
-        return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        return BrnParticleMath::VpuNegativeMultiplySubtract(lfA, lfC, lfB);
     }
 
     // `vrsqrtefp` and two Newton-Raphson refinements: est * est, est * 0.5, `vnmsubfp` 1 - x est^2 (fused),
@@ -159,7 +159,7 @@ namespace
             const f32 lfSquared  = lfEstimate * lfEstimate;
             const f32 lfHalf     = lfEstimate * 0.5f;
             const f32 lfResidual = Vnmsub(lfX, lfSquared, 1.0f);
-            lfEstimate = std::fma(lfHalf, lfResidual, lfEstimate);
+            lfEstimate = BrnParticleMath::VpuMultiplyAdd(lfHalf, lfResidual, lfEstimate);
         }
         return lfEstimate;
     }
@@ -197,7 +197,7 @@ namespace
         const u32* const lpuS = lrTally.mauSpawned;
         const u32* const lpuG = lrTally.mauGated;
         char lacLine[256];
-        std::snprintf(lacLine, sizeof(lacLine),
+        _snprintf(lacLine, sizeof(lacLine),
                       "[wheel-smoke] tally t=%.1f spawned %u %u %u %u %u %u %u %u gated %u %u %u %u %u %u %u %u\n",
                       lfTime, lpuS[0], lpuS[1], lpuS[2], lpuS[3], lpuS[4], lpuS[5], lpuS[6], lpuS[7],
                       lpuG[0], lpuG[1], lpuG[2], lpuG[3], lpuG[4], lpuG[5], lpuG[6], lpuG[7]);
@@ -249,7 +249,7 @@ void WheelStateMachine::HandleSmokeLayer(u32 luLayer, CarState& lCarState,
     // particles owed = (skidFactor * distanceTravelled) * particlesPerMetre + owed: `fmuls` then ONE
     // `fmadds f0, f0, f28, f13` (0x82288EB8 / 0x82288ED8).
     f32& lrfAccumulator = mfSkidSmokeAccumulators[luLayer];
-    lrfAccumulator = std::fma(lfSkidFactor * lfMaxWheelTravel, lfParticlesPerMetre, lrfAccumulator);
+    lrfAccumulator = BrnParticleMath::ScalarMultiplyAdd(lfSkidFactor * lfMaxWheelTravel, lfParticlesPerMetre, lrfAccumulator);
     if (lrfAccumulator < 1.0f)   // `blt` (0x82288EE4): not taken on a NaN -- a NaN goes on into the loop
     {
         return;
@@ -270,7 +270,7 @@ void WheelStateMachine::HandleSmokeLayer(u32 luLayer, CarState& lCarState,
         {
             sbSaid = true;
             char lacLine[384];
-            std::snprintf(lacLine, sizeof(lacLine),
+            _snprintf(lacLine, sizeof(lacLine),
                           "[wheel-smoke] NaN ACCUMULATOR -- NOT IN THE X360 BINARY -- diagnostic only; the console "
                           "loops forever here (0x82289030 / 0x82289034): wheel %u layer %u skid=%.6g travel=%.6g "
                           "perMetre=%.6g; upstream source: the wheel surface speed (radius x rad/s) or dt\n",
@@ -440,7 +440,7 @@ void WheelStateMachine::FireNativeParticle(Vector3 /*lWheelPosition*/, Vector3 l
 {
     CgsNumeric::Random& lRandom = lEffectHelper.GetEffectsModule()->RandomNumberGenerator();
 
-    const f32 lfSize = std::fma(lRandom.RandomFloat(), KF_WHEEL_SMOKE_SIZE_RANGE, KF_WHEEL_SMOKE_SIZE_MIN);
+    const f32 lfSize = BrnParticleMath::ScalarMultiplyAdd(lRandom.RandomFloat(), KF_WHEEL_SMOKE_SIZE_RANGE, KF_WHEEL_SMOKE_SIZE_MIN);
     const bool lbReverseRotation = (mWheelIndex == 2u) || (mWheelIndex == 0u);
 
     Vector3 lvZero, lvOne;
@@ -465,9 +465,9 @@ void WheelStateMachine::FireNativeParticle(Vector3 /*lWheelPosition*/, Vector3 l
     f32 lafVelocity[4];
     for (u32 luLane = 0; luLane < 4u; ++luLane)
     {
-        const f32 lfInherited = std::fma(lafWheelVel[luLane], lafInherit[luLane], lafKick[luLane]);
+        const f32 lfInherited = BrnParticleMath::VpuMultiplyAdd(lafWheelVel[luLane], lafInherit[luLane], lafKick[luLane]);
         const f32 lfCentred   = lafUnit[luLane] - 0.5f;
-        lafVelocity[luLane]   = std::fma(lfCentred, lafSpread[luLane], lfInherited) + lafBias[luLane];
+        lafVelocity[luLane]   = BrnParticleMath::VpuMultiplyAdd(lfCentred, lafSpread[luLane], lfInherited) + lafBias[luLane];
     }
     Vector3 lvVelocity;
     lvVelocity.x = lafVelocity[0];

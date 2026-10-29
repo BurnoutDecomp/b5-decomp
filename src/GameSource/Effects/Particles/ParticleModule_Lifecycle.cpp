@@ -71,7 +71,7 @@ namespace
             return;
         lrbLogged = true;
         char lacMsg[256];
-        std::snprintf(lacMsg, sizeof(lacMsg), "[particles] NOT RECONSTRUCTED: %s\n", lpcWhat);
+        _snprintf(lacMsg, sizeof(lacMsg), "[particles] NOT RECONSTRUCTED: %s\n", lpcWhat);
         CgsDev::Log::WriteToLog(lacMsg);
     }
 
@@ -126,7 +126,7 @@ namespace
             return;
         sbLogged = true;
         char lacMsg[512];
-        std::snprintf(lacMsg, sizeof(lacMsg),
+        _snprintf(lacMsg, sizeof(lacMsg),
                       "[particles] ParticleModule: Couldn't locate lion effect description "
                       "%s (hash %08X) Does the Particles Bundle need rebuilding ?\n",
                       lpcEffectName ? lpcEffectName : "<NULLSTRING>", luNameHash);
@@ -140,7 +140,7 @@ namespace
             return;
         sbLogged = true;
         char lacMsg[512];
-        std::snprintf(lacMsg, sizeof(lacMsg),
+        _snprintf(lacMsg, sizeof(lacMsg),
                       "[particles] ParticleModule: No free effect instances available to play "
                       "effect: %s\n", lpcEffectName ? lpcEffectName : "<NULLSTRING>");
         CgsDev::Log::WriteToLog(lacMsg);
@@ -171,7 +171,7 @@ namespace
             return;
         ++guStartWitnessCount;
         char lacMsg[640];
-        std::snprintf(lacMsg, sizeof(lacMsg),
+        _snprintf(lacMsg, sizeof(lacMsg),
                       "[lionstart] #%u STARTED %s hash=%08X handle=%u def=%p effect=%p "
                       "descriptors=%u durationMax=%.4f expiry=%.4f\n",
                       guStartWitnessCount, lpcEffectName ? lpcEffectName : "<NULLSTRING>",
@@ -523,7 +523,7 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
             {
                 sbLogged = true;
                 char lacMsg[192];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                               "[p0-debris] %u debris arrays constructed; presets: "
                               "coloured=%d shiny=%d dark=%d highdetail=%d glass=%d particles\n",
                               KU_NUM_DEBRIS_ARRAYS,
@@ -860,7 +860,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
                 // if w0/w1 are both 0, particles.bundle really did ship an empty map.
                 const u32* lpuWords = reinterpret_cast<const u32*>(lpMap);
                 char lacMsg[320];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                     "[skid-ready] FX texture stage: map=%p entries=%u wanted hash=0x%08X "
                     "(\"fxskid\") replies>=%d raw=[%08X %08X %08X %08X]\n",
                     static_cast<const void*>(lpMap), luEntryCount, luTrailNameHash, miResourceCount,
@@ -871,7 +871,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
                 for (u32 luDump = 0; luDump < luEntryCount && luDump < 4u; ++luDump)
                 {
                     const TextureNameMap::Entry& lrEntry = lpMap->GetEntries()[luDump];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
+                    _snprintf(lacMsg, sizeof(lacMsg),
                         "[skid-ready]   entry %u: hash=0x%08X name='%s'\n",
                         luDump, lrEntry.muHashedLionTextureName,
                         (lrEntry.mpGDBTextureName != 0) ? lrEntry.GDBTextureName() : "(null)");
@@ -938,7 +938,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
                 mTrailSystem.SetTrailTexture(lTexture);   // module +139668
                 mTrailSystem.SetReady();                  // module +141320 = 1
                 char lacMsg[224];
-                std::snprintf(lacMsg, sizeof(lacMsg),
+                _snprintf(lacMsg, sizeof(lacMsg),
                     "[skid-ready] TrailSystem::mbIsReady RAISED: entry %u/%u hash=0x%08X == "
                     "HashString(\"fxskid\") res=%p\n",
                     luEntryIndex, luEntryCount, luEntryHash, lpReply->mpResourceMemory);
@@ -1007,7 +1007,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         {
             sbLogged = true;
             char lacMsg[160];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                 "[skid-ready] LoadFXBundle DONE -- TrailSystem::IsReady()=%d\n",
                 mTrailSystem.IsReady() ? 1 : 0);
             CgsDev::Log::WriteToLog(lacMsg);

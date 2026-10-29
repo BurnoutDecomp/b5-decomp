@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnDebrisArrayLite.cpp
 //
@@ -61,8 +62,7 @@ namespace Native
         // vnmsubfp128: -(a*b - d), rounded ONCE, then NEGATED -- zeros too (a QNaN keeps its sign).
         inline f32 SimVnmsub(f32 lfA, f32 lfB, f32 lfD)
         {
-            const f32 lfDifference = std::fma(lfA, lfB, -lfD);
-            return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+            return BrnParticleMath::VpuNegativeMultiplySubtract(lfA, lfB, lfD);
         }
 
         // vmsum3fp128: one rounding of the exact three-term dot (FLAG (model): the double sum is
@@ -87,7 +87,7 @@ namespace Native
             {
                 const f32 lfEstimateSquared = lfEstimate * lfEstimate;       // vmulfp128
                 const f32 lfHalf            = lfEstimate * 0.5f;             // vmulfp128 by the 0.5 splat
-                lfEstimate = std::fma(lfHalf, SimVnmsub(lfSquared, lfEstimateSquared, 1.0f), lfEstimate);
+                lfEstimate = BrnParticleMath::VpuMultiplyAdd(lfHalf, SimVnmsub(lfSquared, lfEstimateSquared, 1.0f), lfEstimate);
             }
             return lfSquared * lfEstimate;
         }
@@ -166,10 +166,10 @@ namespace Native
 
                 // new position = damped * dt + old (ONE vmaddcfp128).
                 Vector3 lvNewPosition;
-                lvNewPosition.x = std::fma(lvDamped.x, lfTimeStep, lvPosition.x);
-                lvNewPosition.y = std::fma(lvDamped.y, lfTimeStep, lvPosition.y);
-                lvNewPosition.z = std::fma(lvDamped.z, lfTimeStep, lvPosition.z);
-                lvNewPosition.w = std::fma(lvDamped.w, lfTimeStep, lvPosition.w);
+                lvNewPosition.x = BrnParticleMath::VpuMultiplyAdd(lvDamped.x, lfTimeStep, lvPosition.x);
+                lvNewPosition.y = BrnParticleMath::VpuMultiplyAdd(lvDamped.y, lfTimeStep, lvPosition.y);
+                lvNewPosition.z = BrnParticleMath::VpuMultiplyAdd(lvDamped.z, lfTimeStep, lvPosition.z);
+                lvNewPosition.w = BrnParticleMath::VpuMultiplyAdd(lvDamped.w, lfTimeStep, lvPosition.w);
 
                 lrLine.mLineStartPosition.x = lvPosition.x;   // the whole quadword, w (the spin rate) too
                 lrLine.mLineStartPosition.y = lvPosition.y;
@@ -189,7 +189,7 @@ namespace Native
                 lvStep.w = lvNewPosition.w - lvPosition.w;
                 const f32 lfDistance = SimGuardedLength3(lvStep);
                 lDebrisToUpdate.mAxisPlusAngle.w =
-                    std::fma(lvPosition.w, lfDistance, lDebrisToUpdate.mAxisPlusAngle.w);
+                    BrnParticleMath::VpuMultiplyAdd(lvPosition.w, lfDistance, lDebrisToUpdate.mAxisPlusAngle.w);
 
                 // Position / velocity written back with their w lanes (rotational velocity, scale) kept.
                 lDebrisToUpdate.mPositionPlusRotVel.x = lvNewPosition.x;
@@ -222,11 +222,11 @@ namespace Native
                 // Back to 95% of the way to the contact (ONE vmaddfp), the spin rate kept.
                 const f32 lfFraction = lrHit.w * KF_DEBRIS_CONTACT_FRACTION;
                 lDebrisToUpdate.mPositionPlusRotVel.x =
-                    std::fma(lrLine.mLineEndPos.x - lrLine.mLineStartPosition.x, lfFraction, lrLine.mLineStartPosition.x);
+                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.x - lrLine.mLineStartPosition.x, lfFraction, lrLine.mLineStartPosition.x);
                 lDebrisToUpdate.mPositionPlusRotVel.y =
-                    std::fma(lrLine.mLineEndPos.y - lrLine.mLineStartPosition.y, lfFraction, lrLine.mLineStartPosition.y);
+                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.y - lrLine.mLineStartPosition.y, lfFraction, lrLine.mLineStartPosition.y);
                 lDebrisToUpdate.mPositionPlusRotVel.z =
-                    std::fma(lrLine.mLineEndPos.z - lrLine.mLineStartPosition.z, lfFraction, lrLine.mLineStartPosition.z);
+                    BrnParticleMath::VpuMultiplyAdd(lrLine.mLineEndPos.z - lrLine.mLineStartPosition.z, lfFraction, lrLine.mLineStartPosition.z);
 
                 // Reflect: v - (2n) * (n . v) -- vmsum3fp128, two vmulfp128, vsubfp.
                 rw::math::vpu::Vector3Plus& lrVelocity = lDebrisToUpdate.mVelocityPlusScale;
@@ -236,7 +236,7 @@ namespace Native
                 lrVelocity.z = lrVelocity.z - (lrHit.z * 2.0f) * lfInto;
 
                 // Lose energy: the array's per-axis bounciness, then a random 60%..100% (fmadds).
-                const f32 lfFactor = std::fma(lpRandom->RandomFloat(), KF_DEBRIS_BOUNCE_FACTOR_RANGE,
+                const f32 lfFactor = BrnParticleMath::ScalarMultiplyAdd(lpRandom->RandomFloat(), KF_DEBRIS_BOUNCE_FACTOR_RANGE,
                                               KF_DEBRIS_BOUNCE_FACTOR_MIN);
                 lrVelocity.x = (lrVelocity.x * lrBounciness.x) * lfFactor;
                 lrVelocity.y = (lrVelocity.y * lrBounciness.y) * lfFactor;
@@ -247,9 +247,9 @@ namespace Native
                 const f32 lfDrawZ = lpRandom->RandomFloat();
                 const f32 lfDrawX = lpRandom->RandomFloat();
                 const f32 lfUp    = lrVelocity.y;
-                lrVelocity.x = std::fma(lfDrawX - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.x);
-                lrVelocity.y = std::fma(KF_DEBRIS_KICK_CENTRE - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.y);
-                lrVelocity.z = std::fma(lfDrawZ - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.z);
+                lrVelocity.x = BrnParticleMath::VpuMultiplyAdd(lfDrawX - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.x);
+                lrVelocity.y = BrnParticleMath::VpuMultiplyAdd(KF_DEBRIS_KICK_CENTRE - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.y);
+                lrVelocity.z = BrnParticleMath::VpuMultiplyAdd(lfDrawZ - KF_DEBRIS_KICK_CENTRE, lfUp, lrVelocity.z);
 
                 lDebrisToUpdate.muBounceCount = static_cast<u8>(lDebrisToUpdate.muBounceCount - 1u);
                 ++gauDebrisSimBounces;   // [DIAG] DELETE-WHEN-STABLE

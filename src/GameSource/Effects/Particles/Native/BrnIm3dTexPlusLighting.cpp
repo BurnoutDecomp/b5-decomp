@@ -1,3 +1,4 @@
+#include "GameSource/Effects/Particles/Native/BrnParticlePrograms.h"
 // ============================================================================
 // GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.cpp
 //
@@ -18,25 +19,19 @@
 
 #include <cstdio>    // [diag] snprintf (the constant-resolve line)
 
-// The two converted PC program images (pc/gcm/renderengine/WorldTexturedProgramsPC.cpp --
-// the PC stand-in for the two guest .data blobs; see that file's recipe).
 // renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr): open one shader-constant
 // row for a named program constant and return the write cursor. Shared declaration with the
 // sibling immediate-mode TUs (CgsIm3d.cpp / CgsIm3dSkyDome.cpp spell it identically).
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
-namespace renderengine
-{
-    extern const u32 guWorldTexturedVertexProgramPCSize;
-    extern const u32 guWorldTexturedPixelProgramPCSize;
-}
-
 namespace BrnGraphics
 {
     void Im3dTexPlusLighting::Construct(rw::IResourceAllocator* lpAllocator)
     {
-        const u32   lauVertexProgramSize[1]   = { renderengine::guWorldTexturedVertexProgramPCSize };
-        const u32   lauPixelProgramSize[1]    = { renderengine::guWorldTexturedPixelProgramPCSize };
+        const void* const lapVertexProgramBinary[1] = { BrnParticlePrograms::gaWorldTexturedVertex };
+        const void* const lapPixelProgramBinary[1] = { BrnParticlePrograms::gaWorldTexturedPixel };
+        const u32   lauVertexProgramSize[1]   = { sizeof(BrnParticlePrograms::gaWorldTexturedVertex) };
+        const u32   lauPixelProgramSize[1]    = { sizeof(BrnParticlePrograms::gaWorldTexturedPixel) };
         CgsGraphics::ImRenderer<WorldTexturedVertex>::Construct(
             lpAllocator,
             lapVertexProgramBinary, lauVertexProgramSize,
@@ -83,7 +78,7 @@ namespace BrnGraphics
         // DELETE-WHEN-STABLE.
         {
             char lacMsg[256];
-            std::snprintf(lacMsg, sizeof(lacMsg),
+            _snprintf(lacMsg, sizeof(lacMsg),
                 "[debrispass] worldtex constants: transforms{idx=%u cnt=%u} vp{idx=%u cnt=%u} "
                 "eye{idx=%u cnt=%u} lightdir{idx=%u cnt=%u} lightcol{idx=%u cnt=%u} "
                 "shiny{idx=%u cnt=%u}\n",
