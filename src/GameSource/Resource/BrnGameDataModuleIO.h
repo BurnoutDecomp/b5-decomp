@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT (AppendRequestInterface<N> template body)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
@@ -12,8 +13,6 @@
 // clash with the typedef). InputBuffer::mpDebug2dRenderBuffer is pointer-only.
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer
 
-namespace rw { namespace core { struct GeneralResourceAllocator; } }   // OutputBuffer::GetAllocator return type
-namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator(); }  // allocator-gate leaf
 
 // BrnResource::GameDataIO::InputBuffer / OutputBuffer -- the per-frame IO payload buffers the
 // game-data streaming module (BrnResource::GameDataModule) exchanges with the rest of the game.
@@ -65,9 +64,8 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 // GetAllocatorList() const @ 0x823B18D8 emits `lwz r3,4(r28)` (LOAD a pointer VALUE); SetAllocatorList
 // @ 0x826640E0 emits `stw r27,4(r28)` (STORE a pointer). An embedded member would compile to
 // `addi r3,r28,4` (compute an address). So mpAllocatorList is `const AllocatorList*` @+4, matching the
-// DecFIGS DWARF (h:184). The +8 slot: the X360 symbols are Get/SetLiveUpdateStatus and the asm reads/
-// writes a SINGLE BYTE there; the PS3 DWARF drifted it into FileSystemStatusInterface (h:189) with
-// Get/SetFileSystemStatusInterface -- we follow the X360 asm+symbols (authoritative for the X360 ledger).
+// DecFIGS DWARF (h:184). The +8 slot is the native live-update status byte. ARTIST also carries the separate
+// FileSystemStatusInterface at +9 (Get at823B16E0, Set at82663EE0).
 //
 // FLAG (MINIMAL SLICE / additive header): lifecycle methods (Construct/Prepare/Release/Destruct/Clear) and
 // the Im2d setter-getters beyond what the reconstructed accessors need are DEFERRED. Semantic parity (real
@@ -83,6 +81,8 @@ namespace GameDataIO
     {
         // DWARF h:63/h:69 -- the request-interface queue sizes (both 32768 entries). Declared as the
         // committed in-class constants the template instantiation uses.
+        void Construct(); // ARTIST8266AE68, original queue initialization
+
         static const s32 knRequestInterfaceQueueSize         = 32768;   // DWARF h:63
         static const s32 kiAttribSysRequestInterfaceQueueSize = 32768;  // DWARF h:69
 
@@ -161,7 +161,7 @@ namespace GameDataIO
     // payload. DWARF home BrnGameDataModuleIO.h:142. It carries a POINTER to the AllocatorList (the
     // bank->allocator registry that GameDataModule::CreateAllocators populates) plus a 1-byte live-update
     // status. The loading-screen module loads read the module's RW general allocator through
-    // OutputBuffer::GetAllocator (e.g. LoadSoundModule @0x823E75A8: passes GetAllocatorList() to
+    // OutputBuffer::GetAllocatorList (e.g. LoadSoundModule @0x823E75A8: passes GetAllocatorList() to
     // RootSoundModule::Prepare). Faithful X360 layout (LAYOUT FIX, see header note):
     //   IOBuffer base         (this+0, 4-byte FlagSet8 status)
     //   const AllocatorList*  mpAllocatorList     (this+4, DWARF h:184 -- POINTER, not embedded)
@@ -170,17 +170,7 @@ namespace GameDataIO
     {
         // DWARF h:147 -- clears the pointer/status members (the old embedded-list Construct was the
         // superseded structural approximation).
-        void Construct() { mpAllocatorList = 0; mbLiveUpdateStatus = 0; }
-
-        // Return the module's RW general resource allocator. X360: OutputBuffer::GetAllocator(this)
-        // returns the GameData general allocator the module loads construct from; pinned to the single
-        // standalone GameData general allocator pending the CreateAllocators memory-map population
-        // (which assigns the real bank ids). The faithful path once mpAllocatorList is populated is
-        // `mpAllocatorList->GetRWGeneralResourceAllocator(<bank>)`.
-        rw::core::GeneralResourceAllocator* GetAllocator() const
-        {
-            return BrnResource::GetGameDataGeneralAllocator();
-        }
+        void Construct(); // ARTIST82666908: base, filesystem +9, allocator pointer +4
 
         // @ 0x823B18D8 -- read-locked accessor. DWARF h:167. Returns *(this+4) (asm `lwz r3,4(r28)`).
         const AllocatorList* GetAllocatorList() const;
@@ -198,11 +188,21 @@ namespace GameDataIO
         // (asm `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus; PS3 DWARF drift =
         // SetFileSystemStatusInterface (h:179).
         void SetLiveUpdateStatus(const u8* lpStatus);
+        const CgsResource::ResourceIO::FileSystemStatusInterface* GetFileSystemStatusInterface() const;
+        void SetFileSystemStatusInterface(const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus);
 
     private:
         const AllocatorList* mpAllocatorList;    // DWARF h:184 -- this+4 (POINTER, not embedded)
         u8                   mbLiveUpdateStatus; // DWARF h:189 storage -- this+8 (X360: 1 status byte)
-        // FileSystemStatusInterface follows in the PS3 DWARF; on X360 the +8 slot is a status byte.
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatusInterface; // ARTIST +9
+
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mpAllocatorList) == 4), "ARTIST allocator pointer +4");
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mbLiveUpdateStatus) == 8), "ARTIST live status +8");
+            CGS_STATIC_ASSERT((offsetof(OutputBuffer, mFileSystemStatusInterface) == 9), "ARTIST filesystem +9");
+            CGS_STATIC_ASSERT((sizeof(OutputBuffer) == 12), "ARTIST output allocation is12bytes");
+        }
     };
 }
 }

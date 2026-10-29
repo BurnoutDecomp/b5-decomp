@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"          // base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // mReceiverQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourceModule.h"        // mResourceModule (the streaming engine)
@@ -25,7 +26,7 @@ namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralRe
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
                                            struct AcquireResourceResponse; } } // response params (by pointer)
-namespace CgsModule { struct Event; }                                        // pump param (by pointer)
+namespace CgsModule { struct Event; struct IOBufferStack; }                                        // pump param (by pointer)
 
 // BrnResource::GameDataModule - Burnout's game-data streaming module: the ~480KB module that is
 // the heart of resource loading. It embeds the CgsResource::ResourceModule (memory + pools +
@@ -43,7 +44,7 @@ namespace CgsModule { struct Event; }                                        // 
 //
 namespace BrnResource
 {
-    namespace GameDataIO { struct GameDataAssetEvent; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
+    namespace GameDataIO { struct GameDataAssetEvent; struct InputBuffer; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
 
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
@@ -57,7 +58,7 @@ namespace BrnResource
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,
             E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_ATTRIBSYS = 6,
-            E_PREPARE_DONE = 7,
+            E_PREPARE_DONE = 19,
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
             // PrepareHudMessages 13, PreparePopups 14). The ones that are live here keep the
@@ -78,6 +79,14 @@ namespace BrnResource
             E_PREPARE_POPUPS       = 14
         };
 
+        enum EReleaseStage
+        {
+            E_RELEASE_START = 0, E_RELEASE_DLC = 1, E_RELEASE_GAMETALK = 2,
+            E_RELEASE_ATTRIBSYS = 3, E_RELEASE_DESTROY_ALLOCATORS = 4,
+            E_RELEASE_DESTROY_POOLS = 5, E_RELEASE_DESTROY_BANKS = 6,
+            E_RELEASE_RESOURCE = 7, E_RELEASE_BASE = 8, E_RELEASE_DONE = 9
+        };
+
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
         // `*(a1+439324) = 96` + element array @a1+439328 + free-index array @a1+443936).
         static const s32 KI_NUM_GAMEDATA_EVENT_SLOTS = 96;
@@ -87,7 +96,8 @@ namespace BrnResource
 
         void Construct();   // 0x82671B90 (slot 0; the X360 takes NO arguments -- the old
                             // `const void* lpInitOptions` param here was fabricated)
-        bool Prepare(void* lpInputBuffer, void* lpOutputBuffer);   // 0x82673F38
+        virtual bool Prepare(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                             const GameDataIO::InputBuffer* lpInputBuffer, GameDataIO::OutputBuffer* lpOutputBuffer);   // 0x82673F38
         bool Release();                               // deferred
         void Destruct();                              // deferred
 
@@ -96,13 +106,23 @@ namespace BrnResource
         // GameData-level requests route through ProcessGameDataEvent), then run the
         // ResourceModule. lpInputBuffer/lpOutputBuffer are the module's GameDataIO
         // InputBuffer/OutputBuffer (see the .cpp for the reconstructed slice + deferrals).
-        bool Update(void* lpInputBuffer, void* lpOutputBuffer);
+        enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 };
+        virtual EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                                     const GameDataIO::InputBuffer* lpInputBuffer, GameDataIO::OutputBuffer* lpOutputBuffer);
 
     private:
-        // rw-allocator-gated bring-up steps (deferred stubs report success).
-        bool CreateBanks(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DA28
-        bool CreatePools(void* lpInputBuffer, void* lpOutputBuffer);       // 0x8266DB88
-        bool CreateAllocators(void* lpInputBuffer, void* lpOutputBuffer);  // 0x8266DD00
+        void ConstructResourceModule(); // ARTIST8266D570
+        void RegisterResourceTypes(); // ARTIST82667EA8; native implementation remains unresolved
+        static void TextureRenderCallback(renderengine::Texture* lpTexture, Vector2 lvPosition,
+            Vector2 lvSize, void* lpUserData, bool lbFlag0, bool lbFlag1); // ARTIST8266ACC8
+
+        // Native asynchronous memory-map bring-up.
+        bool CreateBanks(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);       // 0x8266DA28
+        bool CreatePools(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);       // 0x8266DB88
+        bool CreateAllocators(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);  // 0x8266DD00
+
+        CgsResource::ResourceModule::EUpdateResult UpdateResourceModule(CgsModule::IOBufferStack* lpInputStack,
+            CgsModule::IOBufferStack* lpOutputStack, const CgsResource::ResourceIO::InputBuffer* lpInput);
 
         // ---- GameData request dispatch (X360 addresses on each body) --------------------
         // Route one queued GameData-level event by its queue type id (26 load / 39 unload /
@@ -175,7 +195,8 @@ namespace BrnResource
         // input and runs the module's ProcessInputs directly, stage 1 waits for the
         // SchemaRegisteredResponse on mReceiverQueue, stage 2 reports done. Returns TRUE
         // when complete (Prepare advances), false while still registering.
-        bool PrepareAttribSysSchemaResource(CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer);
+        bool PrepareAttribSysSchemaResource(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                                             CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer);
 
         // ---- the data-table prepares (Prepare stages 9 and 12) --------------------------
         // @0x8266C410 / @0x8266D1F8. Each is a six-state resumable machine on its own stage
@@ -183,8 +204,8 @@ namespace BrnResource
         // (pool 5), wait for the reply on mReceiverQueue, push an AcquireResourceRequest for
         // the named resource, wait, then hand the resolved handle to the embedded list
         // manager's AddListResource. Returns true only in the terminal state.
-        bool PrepareVehicleList();   // 0x8266C410  "Vehicles/VehicleList.bundle" / "B5VehicleList"
-        bool PrepareWheelList();     // 0x8266D1F8  "Wheels/WheelList.bundle"     / "B5WheelList"
+        bool PrepareVehicleList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);   // 0x8266C410  "Vehicles/VehicleList.bundle" / "B5VehicleList"
+        bool PrepareWheelList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);     // 0x8266D1F8  "Wheels/WheelList.bundle"     / "B5WheelList"
         // [challenge-list wave 2026-08-27] @0x8266C088 -- Prepare stage 10. The SAME six-state
         // machine over "OnlineChallenges.bndl" / "B5ChallengeList", but on POOL 26 (`li r25,
         // 0x1A` at 0x8266C0F0, stored as BOTH the LoadBundleRequest's miPoolId @+0x8C and the
@@ -195,7 +216,7 @@ namespace BrnResource
         // against the shipped bundle: HashString("B5ChallengeList") == 0x0D82D720 is exactly the
         // single resource id in build/game/ONLINECHALLENGES.BNDL (type 0x1001F).
         // Assert lines: cpp:716 / 769 / 776 / 803.
-        bool PrepareFreeburnChallengeList();  // 0x8266C088
+        bool PrepareFreeburnChallengeList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);  // 0x8266C088
         // @0x8266CEB0 -- Prepare stage 11, the SAME six-state machine over
         // "Cameras.bundle" / "StandardICETakes" (both string literals read straight off the
         // asm's own string comments at off_82F2A6F8 / off_82F2A71C, and both confirmed by
@@ -203,7 +224,7 @@ namespace BrnResource
         // its type-65 ICETakeDictionary resource). Its terminal step feeds the handle to
         // BrnResource::ICEList::AddListResource -- UN-GATED 2026-08-01, once the take
         // runtime and the type-65 handler joined the link.
-        bool PrepareICEList();       // 0x8266CEB0  "Cameras.bundle"              / "StandardICETakes"
+        bool PrepareICEList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);       // 0x8266CEB0  "Cameras.bundle"              / "StandardICETakes"
         // [gateui r3] @0x8266C8E0 -- Prepare stage 13. The SAME six-state machine, but over
         // POOL 11 (not 5) and with mbAllowFailiure = 0, and its terminal step hands the
         // acquire RESPONSE straight to HudMessageController::AddMessages @0x8267D580.
@@ -214,16 +235,17 @@ namespace BrnResource
         // id in build/game/HUDMESSAGES.HM -- so the two pointers really are one string.
         // (Its sibling PreparePopups has the identical shape over "Popups.pup",
         // hash 0x2718168B == POPUPS.PUP's only resource id.)
-        bool PrepareHudMessages();   // 0x8266C8E0  "HudMessages.hm"              / "HudMessages.hm"
+        bool PrepareHudMessages(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);   // 0x8266C8E0  "HudMessages.hm"              / "HudMessages.hm"
         // Prepare stage 14: "Popups.pup" into pool 11 (mbAllowFailiure 0), terminal step hands
         // the acquire response to PopupController::AddPopupResource.
-        bool PreparePopups();
+        bool PreparePopups(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);
 
         // The shared body of the two above (the X360 emits them as two near-identical
         // functions; the only differences are the bundle path, the resource name, the
         // pool id, the mbAllowFailiure flag, the stage word and the list object). PC
         // helper, not an X360 function -- see the .cpp.
-        bool PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
+        bool PrepareDataListResource(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                                     s32& lriStage, const char* lpcBundleFileName,
                                      const char* lpcResourceName, bool lbAllowFailure,
                                      s32 liPoolId,
                                      CgsResource::ResourceHandle* lpOutHandle);
@@ -424,7 +446,7 @@ namespace BrnResource
     private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
-        EPrepareStage                  meReleaseStage;   // +0x22C (a1[139])
+        EReleaseStage                  meReleaseStage;   // +0x22C (a1[139])
         const CgsMemory::MemoryMap*    mpMemoryMap;     // X360 ConstructResourceModule stores a1+0x6599C
         CgsResource::ResourceModule    mResourceModule;  // +0x280 (a1+160) the streaming engine
         // X360 a1+363096: the module's internal receiver queue -- every request the world
@@ -433,6 +455,9 @@ namespace BrnResource
         // buffer with 16-byte alignment (`*(a1+363112)=0x8000; *(a1+363116)=16`), i.e. the
         // EventReceiverQueue<32768,16> instantiation.
         CgsModule::EventReceiverQueue<32768, 16> mReceiverQueue;
+        // ARTIST ConstructResourceModule +396936/+398984; DecFIGS h357/358.
+        CgsResource::PoolModule::InitOptions::GSResourceType maTypes[256];
+        s32 miNumTypes;
         // X360 a1+426400: the bank->allocator registry published to the OutputBuffer each
         // Update (SetAllocatorList). Populated by CreateAllocators; Construct resets it
         // (the inline `map[0..66] = -1` loop == AllocatorList::Construct).
@@ -455,7 +480,9 @@ namespace BrnResource
         // ARTIST82671BF4/1C14 resets these original request-owner counters;
         // DecFIGS h405/407 names the same bank/pool preparation phases.
         s32                                 miNumBankCreationRequests;
+        s32                                 miNumBanksCreated;
         s32                                 miNumPoolCreationRequests;
+        s32                                 miNumPoolsCreated;
         s32                                 miNumAllocatorCreationRequests;
         // DWARF :303 sibling counter; its X360 updater is outside the CreateAllocators
         // pseudocode (FLAG: maintained here as the created-allocator total).
@@ -477,14 +504,8 @@ namespace BrnResource
         // ARTIST swap-out sets this byte; the real validate response clears it.
         bool                           mbCollisionWorldInvalidated;
         // ---- AttribSys service (THIS BATCH) ---------------------------------------------
-        // X360 a1+395888: the attrib reply receiver -- the queue the vault-registration
-        // legs name as the RegisterVault/UnregisterVault reply target; Update drains it
-        // (3 -> ProcessAttribSysRegisterVaultResponse, 5 -> ProcessUnregisterVehicle
-        // AttribsResponse). Buffer span on the X360 = 3112 bytes between the queue head
-        // (+395888) and the module (+399000) == EventReceiverQueue<3072,16> (3072 payload
-        // + the 40-byte queue head). FLAG: capacity inferred from that span (the receiver
-        // is only ever posted 4-byte replies, so the capacity is not behaviour-bearing).
-        CgsModule::EventReceiverQueue<3072, 16> mAttribSysReceiverQueue;
+        // ARTIST82671C74..8C binds this receiver to1024bytes,16-byte alignment.
+        CgsModule::EventReceiverQueue<1024, 16> mAttribSysReceiverQueue;
         // X360 a1+576 (a1[144]) -- the staged-resource-prepare counter the Prepare*Resource
         // helpers (schema/vehicle-list/...) step through (0 push, 1 wait, 2 done). FLAG
         // role name (the DWARF field name for this word is not yet pulled).
@@ -538,6 +559,7 @@ namespace BrnResource
         s32                            miPopupsPrepareStage;
         // ARTIST Construct calls this typed owner at X360 this+475960 before
         // the DLC debug component; native storage follows the actual member types.
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatus; // ARTIST +0x74330
         BrnResource::DLCManager         mDLCManager;
         // (the 9 GeneralAllocators, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)

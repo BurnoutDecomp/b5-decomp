@@ -292,6 +292,8 @@ namespace MemoryIO
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RW_LINEAR_ALLOCATOR); }
+        // DecFIGS :716; ARTIST8266E2F8 loads the response allocator at +0x10.
+        void GetAllocator(rw::LinearResourceAllocator** lppAllocator) const { *lppAllocator = mpLinearAllocator; }
         void SetLinearAllocator(rw::LinearResourceAllocator* lpA)        { mpLinearAllocator = lpA; }
         void SetGeneralAllocator(rw::core::GeneralResourceAllocator* lpA) { mpGeneralAllocator = lpA; }
     private:
@@ -304,6 +306,8 @@ namespace MemoryIO
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         { MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_RW_GENERAL_ALLOCATOR); }
+        // DecFIGS :734; ARTIST8266E32C loads the response allocator at +0x10.
+        void GetAllocator(rw::core::GeneralResourceAllocator** lppAllocator) const { *lppAllocator = mpAllocator; }
         void SetAllocator(rw::core::GeneralResourceAllocator* lpA) { mpAllocator = lpA; }
     private:
         rw::core::GeneralResourceAllocator* mpAllocator;

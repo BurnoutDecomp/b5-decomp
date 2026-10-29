@@ -41,6 +41,40 @@ namespace BrnResource
 {
 namespace GameDataIO
 {
+    // ARTIST8266AE68: each original queue is constructed/cleared, then the payload is reset.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mRequestInterface.mRequestQueue.Construct();
+        mRequestInterface.mRequestQueue.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Construct();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
+        mRequestInterface.mRequestQueue.Clear();
+        mAttribSysRequestInterface.mRequestQueue.Clear();
+        mpDebug2dRenderBuffer = 0;
+    }
+
+    // ARTIST82666908 does not initialize the separate live-update byte at +8.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mFileSystemStatusInterface.Construct();
+        mpAllocatorList = 0;
+    }
+
+    // ARTIST823B16E0 /82663EE0: read/write lock gates, one status byte at +9.
+    const CgsResource::ResourceIO::FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mFileSystemStatusInterface;
+    }
+
+    void OutputBuffer::SetFileSystemStatusInterface(const CgsResource::ResourceIO::FileSystemStatusInterface* lpStatus)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mFileSystemStatusInterface = *lpStatus;
+    }
+
     // @ 0x82663F90 -- read-locked accessor (asserts at DWARF h:211).
     const RequestInterface<InputBuffer::knRequestInterfaceQueueSize>* InputBuffer::GetRequestInterface() const
     {
