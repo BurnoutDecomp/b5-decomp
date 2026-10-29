@@ -124,6 +124,8 @@ HeapResourceAllocator* GetDebugAllocator();
 HeapResourceAllocator* GetRuntimeAllocator();
 // Genuine public wrapper; distinct from the retained native allocation helper.
 LinearResourceAllocator* GetGraphicsAllocator();
+// Native GlobalResource wrapper at ARTIST82F2C848, independent of GlobalDebug.
+LinearResourceAllocator* GetGlobalResourceAllocator();
 // DecFIGS h405; ARTIST loading-screen allocation uses 82F2C870.
 LinearResourceAllocator* GetEmbeddedTextureAllocator();
 void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
@@ -175,6 +177,8 @@ private:
     // Original private construction phase, DecFIGS h327.
     static void ConstructGlobalGraphicsMemory();
     friend LinearResourceAllocator* GetGraphicsAllocator();
+    friend LinearResourceAllocator* GetGlobalResourceAllocator();
+    static LinearResourceAllocator mGlobalResourceAllocator;
     friend HeapResourceAllocator* GetRuntimeAllocator();
     friend LinearResourceAllocator* GetEmbeddedTextureAllocator();
     static HeapResourceAllocator mRuntimeAllocator;
