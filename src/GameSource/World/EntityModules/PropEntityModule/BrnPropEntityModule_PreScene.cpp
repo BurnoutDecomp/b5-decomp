@@ -813,7 +813,7 @@ namespace BrnWorld
 
                     if ( !mbResourceSystemStalled && muNumberOfLoadedZones != KU_MAX_LOADED_ZONES )
                     {
-                        CgsResource::ResourcePtr<PropZoneData> lZoneData( lpAssetEvent->mHandle );
+                        CgsResource::ResourcePtr<PropZoneData> lZoneData( static_cast<const BrnResource::GameDataIO::GetPropInstancesResponse*>(lpAssetEvent)->GetPropInstancesObjectHandle() );
 
                         if ( !mbResourceSystemStalled )
                         {
@@ -861,7 +861,7 @@ namespace BrnWorld
                     // zone can have been unloaded again while the fetch was in flight).
                     if ( mabWaitingForGraphics.IsBitSet( luZone ) )
                     {
-                        CgsResource::ResourcePtr<PropGraphicsList> lGraphicsList( lpAssetEvent->mHandle );
+                        CgsResource::ResourcePtr<PropGraphicsList> lGraphicsList( static_cast<const BrnResource::GameDataIO::GetPropGraphicsListResponse*>(lpAssetEvent)->GetPropGraphicsListObjectHandle() );
 
                         // ⭐ P7 LANDED 2026-08-19 (wave Q6 cluster C5) -- the callee is
                         // IDENTIFIED. A targeted headless IDA export of 0x8295F4A0 on a private

@@ -218,8 +218,8 @@ namespace BrnDirector
                 static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>(lpEvent);
             CGS_ASSERT(lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST,
                        "lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST");
-            mpTrafficData = lpResponse->mHandle;
-            sbTrafficResolved = (lpResponse->mHandle.mpResourceMemory != 0);
+            mpTrafficData = reinterpret_cast<const BrnResource::GameDataIO::GetTrafficLaneDataResponse*>(lpResponse)->GetTrafficLaneHandle();
+            sbTrafficResolved = (reinterpret_cast<const BrnResource::GameDataIO::GetTrafficLaneDataResponse*>(lpResponse)->GetTrafficLaneHandle().mpResourceMemory != 0);
 
             mReceiverQueue.Clear();
             meLoadingState = E_AI_DATA_ACQUIRE_NOT_STARTED;
@@ -248,7 +248,7 @@ namespace BrnDirector
                 static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>(lpEvent);
             CGS_ASSERT(lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST,
                        "lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST");
-            mpAISectionData = lpResponse->mHandle;
+            mpAISectionData = reinterpret_cast<const BrnResource::GameDataIO::GetAIDataResponse*>(lpResponse)->GetAIDataHandle();
 
             mReceiverQueue.Clear();
             meLoadingState = E_LOADING_STATE_LOADED;
@@ -260,7 +260,7 @@ namespace BrnDirector
                 *CgsDev::Log::gpDebugPrint
                     << "[WorldMap] LOADED -- traffic=" << (sbTrafficResolved ? 1 : 0)
                     << " trigger=" << (sbTriggerResolved ? 1 : 0)
-                    << " ai=" << (lpResponse->mHandle.mpResourceMemory != 0 ? 1 : 0) << "\n";
+                    << " ai=" << (reinterpret_cast<const BrnResource::GameDataIO::GetAIDataResponse*>(lpResponse)->GetAIDataHandle().mpResourceMemory != 0 ? 1 : 0) << "\n";
             }
         }
         // fall through.

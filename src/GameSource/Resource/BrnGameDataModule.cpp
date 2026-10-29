@@ -35,12 +35,79 @@
 // stages, Construct, Update, Destruct and the ProcessXxxRequest handlers are DEFERRED.
 namespace BrnResource
 {
-    // "New module": mark before any Prepare. NO logging here -- BrnGameModule embeds GameDataModule by
-    // value, so this ctor runs at STATIC INIT (before gpDebugPrint is initialized); logging here would
-    // deref an uninitialized gpDebugPrint and crash before the window opens.
+    // ARTIST827E3230: construction is the native member-constructor chain.
+    // The new-module flag belongs to the later virtual Construct call.
     GameDataModule::GameDataModule()
     {
-        mbIsNewModule = true;
+        AssertNativeLayout();
+    }
+
+    void GameDataModule::AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(CgsResource::ResourceModule) == 0x58280), "ARTIST resource allocation extent");
+        CGS_STATIC_ASSERT((sizeof(GameDataEventSlot) == 0x30), "ARTIST event slot stride");
+        CGS_STATIC_ASSERT((offsetof(GameDataEventSlot, mEvent) == 8), "ARTIST captured request");
+        CGS_STATIC_ASSERT((offsetof(GameDataEventSlot, miResponseEventId) == 0x28), "ARTIST response event tag");
+        CGS_STATIC_ASSERT((offsetof(GameDataEventSlot, miRefCount) == 0x2C), "ARTIST event reference count");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mePrepareStage) == 0x228), "ARTIST prepare stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miChallengeListPrepareStage) == 0x22C), "ARTIST challenge stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miVehicleListPrepareStage) == 0x230), "ARTIST vehicle stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miICEListPrepareStage) == 0x234), "ARTIST ICE stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miWheelListPrepareStage) == 0x238), "ARTIST wheel stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, meReleaseStage) == 0x23C), "ARTIST release stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miResourcePrepareStage) == 0x240), "ARTIST schema stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miHudMessagesPrepareStage) == 0x244), "ARTIST HUD stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mResourceModule) == 0x280), "ARTIST resource module");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mLiveUpdateModule) == 0x58500), "ARTIST live-update module");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mReceiverQueue) == 0x58A58), "ARTIST resource receiver");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mAttribSysReceiverQueue) == 0x60A70), "ARTIST attribute receiver");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, maTypes) == 0x60E88), "ARTIST resource type table");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumTypes) == 0x61688), "ARTIST resource type count");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mAttribSysSchemaResourceID) == 0x61690), "ARTIST schema resource id");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mAttribSysModule) == 0x61698), "ARTIST attribute module");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mGameTalk) == 0x61908), "ARTIST GameTalk owner");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mDebugGameTalkInterface) == 0x65940), "ARTIST debug GameTalk interface");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mHudMessageController) == 0x65950), "ARTIST HUD messages");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mPopupController) == 0x65974), "ARTIST popup messages");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miPopupsPrepareStage) == 0x65998), "ARTIST popup stage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mpMemoryMap) == 0x6599C), "ARTIST memory-map pointer");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, macMapBuffer) == 0x659A0), "ARTIST memory-map storage");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mAllocatorList) == 0x681A0), "ARTIST allocator registry");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, maGeneratedRawResources) == 0x68438), "ARTIST generated raw resources");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, maGeneratedRawResourceDescriptors) == 0x68460), "ARTIST raw descriptors");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, maGeneratedLinearAllocators) == 0x684B0), "ARTIST generated linear allocators");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, maGeneratedHeapAllocators) == 0x68590), "ARTIST generated heaps");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mapGeneratedRWLinearAllocators) == 0x6B3B0), "ARTIST generated RW linear allocators");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mapGeneratedRWGeneralAllocators) == 0x6B3C4), "ARTIST generated RW heaps");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mAudioStreamAllocator) == 0x6B3D8), "ARTIST audio-stream allocator");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, muLoadedSoundBundlesCount) == 0x6B3F4), "ARTIST sound-bundle count");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumBankCreationRequests) == 0x6B3F8), "ARTIST bank requests");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumBanksCreated) == 0x6B3FC), "ARTIST banks created");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumPoolCreationRequests) == 0x6B400), "ARTIST pool requests");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumPoolsCreated) == 0x6B404), "ARTIST pools created");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumAllocatorCreationRequests) == 0x6B408), "ARTIST allocator requests");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miNumAllocatorsCreated) == 0x6B40C), "ARTIST allocators created");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mGameDataEventSlotPool) == 0x6B410), "ARTIST event pool");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, maGameDataEventSlots) == 0x6B420), "ARTIST event-slot array");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, masGameDataEventSlotFreeIndices) == 0x6C620), "ARTIST event free indices");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mDebugComponent) == 0x6C6E0), "ARTIST GameData debug component");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mDLCDebugComponent) == 0x6C704), "ARTIST DLC debug component");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mVehicleList) == 0x6C7B0), "ARTIST vehicle list");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mICEList) == 0x6FBC0), "ARTIST ICE list");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mWheelList) == 0x6FFC8), "ARTIST wheel list");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mChallengeList) == 0x70FD0), "ARTIST challenge list");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mpDebug2dRenderBuffer) == 0x742B8), "ARTIST immediate render buffer");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mpTextureState) == 0x742BC), "ARTIST texture-state pointer");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mTextureStateParams) == 0x742C0), "ARTIST texture-state parameters");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mTextureStateResource) == 0x7430C), "ARTIST texture-state resource");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miCollisionWorldRefCount) == 0x74320), "ARTIST collision-world references");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mbCollisionWorldInvalidated) == 0x74324), "ARTIST collision-world state");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, muFirstCollisionBlockAddress) == 0x74328), "ARTIST collision first block");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, muNumCollisionBlocks) == 0x7432C), "ARTIST collision block count");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mFileSystemStatus) == 0x74330), "ARTIST filesystem status");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, mDLCManager) == 0x74338), "ARTIST DLC manager");
+        CGS_STATIC_ASSERT((sizeof(GameDataModule) == 0x74A00), "ARTIST GameData allocation extent");
+        CGS_STATIC_ASSERT((__alignof(GameDataModule) == 128), "ARTIST contained job alignment");
     }
 
     bool GameDataModule::Prepare(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
@@ -3008,21 +3075,13 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
     void GameDataModule::ProcessGetVehicleListRequest(
             CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
-            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 /*liEventId*/, s32 liSlotIndex)
     {
-        GameDataIO::GameDataAssetEvent lResponse;
-        memset(&lResponse, 0, sizeof(lResponse));
-        lResponse.miEventId       = lpEvent->miEventId;
-        lResponse.mpReceiverQueue = 0;
-        lResponse.miPoolId        = 5;                       // X360 immediate
-        lResponse.mId             = 0xC98B447411F97E38ull;   // CgsID("VL__VEHICIST")
-        lResponse.meType          = static_cast<EAssetSet>(3);
-        lResponse.mbFailFlag      = false;
-        lResponse.mHandle.mpResourceMemory = &mVehicleList;
-        lResponse.mHandle.mpSourceEntry    = 0;
+        GameDataIO::GetVehicleListResponse lResponse;
+        lResponse.Construct(lpEvent->miEventId, &mVehicleList, false);
 
         lpEvent->mpReceiverQueue->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 52,
             static_cast<s32>(sizeof(lResponse)));
 
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
@@ -3037,35 +3096,14 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     // uses, which is what pins the member.)
     void GameDataModule::ProcessGetICEListRequest(
             CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
-            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 /*liEventId*/, s32 liSlotIndex)
     {
-        GameDataIO::GameDataAssetEvent lResponse;
-        memset(&lResponse, 0, sizeof(lResponse));
-        lResponse.miEventId       = lpEvent->miEventId;
-        lResponse.mpReceiverQueue = 0;
-        lResponse.miPoolId        = 5;                       // X360 immediate
-        lResponse.mId             = 0x7DDFC0102EE70838ull;   // CgsID("IL__ICEMLIST")
-        lResponse.meType          = static_cast<EAssetSet>(3);
-        lResponse.mbFailFlag      = false;
-        lResponse.mHandle.mpResourceMemory = &mICEList;
-        lResponse.mHandle.mpSourceEntry    = 0;
+        GameDataIO::GetICEListResponse lResponse;
+        lResponse.Construct(lpEvent->miEventId, &mICEList, false);
 
         lpEvent->mpReceiverQueue->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 64,
             static_cast<s32>(sizeof(lResponse)));
-
-        // [PC diagnostic -- PRODUCER end] one-shot. The consumer end prints the pointer it
-        // stored (DirectorResourceManager::LogShotGroupBank); print what was actually sent so
-        // the two can be compared without guessing which side dropped it.
-        static bool s_bLoggedICEListReply = false;
-        if (!s_bLoggedICEListReply)
-        {
-            s_bLoggedICEListReply = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] ProcessGetICEListRequest: replied id " << liEventId
-                << " with &mICEList=" << static_cast<void*>(&mICEList)
-                << " (" << mICEList.GetICEMovieCount() << " takes)\n";
-        }
 
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
     }
@@ -3087,56 +3125,27 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     // Prepare stage 5 wants the same reply.
     void GameDataModule::ProcessGetFreeburnChallengeListRequest(
             CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
-            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 /*liEventId*/, s32 liSlotIndex)
     {
-        GameDataIO::GameDataAssetEvent lResponse;
-        memset(&lResponse, 0, sizeof(lResponse));
-        lResponse.miEventId       = lpEvent->miEventId;
-        lResponse.mpReceiverQueue = 0;
-        lResponse.miPoolId        = 5;                       // X360 immediate (`li r10, 5`)
-        lResponse.mId             = 0x5AF30CD3F949F838ull;   // CgsID("CL__CHALLIST")
-        lResponse.meType          = static_cast<EAssetSet>(3);
-        lResponse.mbFailFlag      = false;
-        lResponse.mHandle.mpResourceMemory = &mChallengeList;
-        lResponse.mHandle.mpSourceEntry    = 0;
+        GameDataIO::GetFreeburnChallengeListResponse lResponse;
+        lResponse.Construct(lpEvent->miEventId, &mChallengeList, false);
 
         lpEvent->mpReceiverQueue->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 53,
             static_cast<s32>(sizeof(lResponse)));
-
-        // [PC diagnostic -- PRODUCER end] one-shot, the same shape the ICE handler carries.
-        // The consumer that matters is BrnGui::WorldDataController::Prepare stage 9; printing
-        // what was actually sent lets the two ends be compared without guessing.
-        static bool s_bLoggedChallengeListReply = false;
-        if (!s_bLoggedChallengeListReply)
-        {
-            s_bLoggedChallengeListReply = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] ProcessGetFreeburnChallengeListRequest: replied id " << liEventId
-                << " with &mChallengeList=" << static_cast<void*>(&mChallengeList)
-                << " (" << mChallengeList.GetChallengeCount() << " challenges)\n";
-        }
 
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
     }
 
     void GameDataModule::ProcessGetWheelListRequest(
             CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
-            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 /*liEventId*/, s32 liSlotIndex)
     {
-        GameDataIO::GameDataAssetEvent lResponse;
-        memset(&lResponse, 0, sizeof(lResponse));
-        lResponse.miEventId       = lpEvent->miEventId;
-        lResponse.mpReceiverQueue = 0;
-        lResponse.miPoolId        = 5;                       // X360 immediate
-        lResponse.mId             = 0xCF5D625701228838ull;   // CgsID("WL__WHEELIST")
-        lResponse.meType          = static_cast<EAssetSet>(3);
-        lResponse.mbFailFlag      = false;
-        lResponse.mHandle.mpResourceMemory = &mWheelList;
-        lResponse.mHandle.mpSourceEntry    = 0;
+        GameDataIO::GetWheelListResponse lResponse;
+        lResponse.Construct(lpEvent->miEventId, &mWheelList, false);
 
         lpEvent->mpReceiverQueue->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), 59,
             static_cast<s32>(sizeof(lResponse)));
 
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
@@ -3157,31 +3166,87 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         typedef GameDataIO::SwapInCollisionWorldResponse CollisionSwapInResponse;
     }
 
-    // The shared 40-byte completion-post the X360 inlines in every acquire/load case:
-    // a GameDataAssetEvent echoing the slot's captured request (receiver lane zeroed),
-    // plus the resolved handle. luTypeLane reproduces the X360 +0x18 store exactly --
-    // 0 for most replies, 1 for the collision/graphics variants, and the id's high word
-    // for the PVS/prop replies (the X360 copies slot dword +24 there). [x64 note: the
-    // X360 record is 32/40 bytes; the reply is the widened committed GameDataAssetEvent,
-    // sized by sizeof per the x64 semantic-parity convention.]
+    namespace
+    {
+        template <class T>
+        void FillResponse(T& lrResponse, const GameDataEventSlot* lpSlot,
+                          bool lbFail, u32 luType)
+        {
+            lrResponse.miEventId = lpSlot->mEvent.miEventId;
+            lrResponse.mpReceiverQueue = 0;
+            lrResponse.miPoolId = lpSlot->mEvent.miPoolId;
+            lrResponse.mId = lpSlot->mEvent.mId;
+            lrResponse.meType = static_cast<EAssetSet>(luType);
+            lrResponse.mbFailFlag = lbFail;
+        }
+
+        template <class T>
+        void SendPlainResponse(const GameDataEventSlot* lpSlot, s32 liId,
+                               bool lbFail, u32 luType)
+        {
+            T lResponse;
+            FillResponse(lResponse, lpSlot, lbFail, luType);
+            lpSlot->mEvent.mpReceiverQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lResponse), liId, sizeof(lResponse));
+        }
+
+        template <class T>
+        void SendHandleResponse(const GameDataEventSlot* lpSlot, s32 liId,
+                                bool lbFail, u32 luType, const CgsResource::ResourceHandle& lrHandle,
+                                void (T::*lpSetHandle)(const CgsResource::ResourceHandle&))
+        {
+            T lResponse;
+            FillResponse(lResponse, lpSlot, lbFail, luType);
+            (lResponse.*lpSetHandle)(lrHandle);
+            lpSlot->mEvent.mpReceiverQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lResponse), liId, sizeof(lResponse));
+        }
+    }
+
     void GameDataModule::PostGameDataResponse(const GameDataEventSlot* lpSlot, s32 liResponseId,
                                               bool lbFailFlag, u32 luTypeLane,
                                               const void* lpResourceMemory, void* lpSourceEntry)
     {
-        GameDataIO::GameDataAssetEvent lResponse;
-        memset(&lResponse, 0, sizeof(lResponse));
-        lResponse.miEventId       = lpSlot->mEvent.miEventId;
-        lResponse.mpReceiverQueue = 0;   // X360 zeroes the receiver lane in the reply
-        lResponse.miPoolId        = lpSlot->mEvent.miPoolId;
-        lResponse.mId             = lpSlot->mEvent.mId;
-        lResponse.meType          = static_cast<EAssetSet>(luTypeLane);
-        lResponse.mbFailFlag      = lbFailFlag;
-        lResponse.mHandle.mpResourceMemory = const_cast<void*>(lpResourceMemory);
-        lResponse.mHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpSourceEntry);
-
-        lpSlot->mEvent.mpReceiverQueue->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResponse), liResponseId,
-            static_cast<s32>(sizeof(lResponse)));
+        CgsResource::ResourceHandle lHandle;
+        lHandle.mpResourceMemory = const_cast<void*>(lpResourceMemory);
+        lHandle.mpSourceEntry = static_cast<CgsResource::Entry*>(lpSourceEntry);
+#define POST_HANDLE(Type, Setter) SendHandleResponse<GameDataIO::Type>(lpSlot, liResponseId, lbFailFlag, luTypeLane, lHandle, &GameDataIO::Type::Setter)
+        switch (liResponseId)
+        {
+        case 27:
+        case 50:
+            if (liResponseId == 50 && luTypeLane == E_ASSETSET_SOUND)
+                SendPlainResponse<GameDataIO::GameDataAssetEvent>(lpSlot, liResponseId, lbFailFlag, luTypeLane);
+            else if (liResponseId == 50 && luTypeLane == E_ASSETSET_ATTRIBS)
+                SendPlainResponse<GameDataIO::GetVehicleAttribsResponse>(lpSlot, liResponseId, lbFailFlag, luTypeLane);
+            else if ((liResponseId == 27 ? lpSlot->mEvent.meType : static_cast<EAssetSet>(luTypeLane)) == E_ASSETSET_GRAPHICS)
+                POST_HANDLE(GetVehicleGraphicsResponse, SetVehicleGraphicsObjectHandle);
+            else
+                POST_HANDLE(GetVehiclePhysicsResponse, SetVehiclePhysicsObjectHandle);
+            break;
+        case 28: case 51:
+        {
+            GameDataIO::GetTrafficVehicleGraphicsResponse lResponse;
+            lResponse.Construct(lpSlot->mEvent.miEventId, lpSlot->mEvent.miPoolId,
+                                lpSlot->mEvent.mId, lHandle, lbFailFlag);
+            lpSlot->mEvent.mpReceiverQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lResponse), liResponseId, sizeof(lResponse));
+            break;
+        }
+        case 31: case 56: POST_HANDLE(GetWorldUnitGraphicsResponse, SetWorldUnitGraphicsHandle); break;
+        case 36: case 60: POST_HANDLE(GetWheelGraphicsResponse, SetWheelGraphicsObjectHandle); break;
+        case 54: POST_HANDLE(GetAIDataResponse, SetAIDataHandle); break;
+        case 55: POST_HANDLE(GetTrafficLaneDataResponse, SetTrafficLaneHandle); break;
+        case 58: POST_HANDLE(GetPVSResponse, SetPVSHandle); break;
+        case 61: POST_HANDLE(GetPropPhysicsResponse, SetPropPhysicsObjectHandle); break;
+        case 62: POST_HANDLE(GetPropInstancesResponse, SetPropInstancesObjectHandle); break;
+        case 63: POST_HANDLE(GetPropGraphicsListResponse, SetPropGraphicsListObjectHandle); break;
+        case 65: POST_HANDLE(GetICEMovieResponse, SetICEMovieObjectHandle); break;
+        case 32: SendPlainResponse<GameDataIO::LoadWorldCollisionResponse>(lpSlot, liResponseId, lbFailFlag, luTypeLane); break;
+        case 66: SendPlainResponse<GameDataIO::GetSurfaceListResponse>(lpSlot, liResponseId, lbFailFlag, luTypeLane); break;
+        default: CGS_ASSERT(false, "Invalid event type received\n"); break;
+        }
+#undef POST_HANDLE
     }
 
     // @ 0x82672630 -- a LoadBundle completed: dispatch the paired GET (the resource is now
@@ -3488,7 +3553,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         // The unload reply record (X360 32-byte build): NOTE the +8 lane is the slot id's
         // HIGH word (slot dword +24), NOT the captured pool id -- reproduced exactly.
         {
-            GameDataIO::GameDataAssetEvent lReply;
+            GameDataIO::UnloadGameDataResponse lReply;
             memset(&lReply, 0, sizeof(lReply));
             lReply.miEventId       = lpSlot->mEvent.miEventId;
             lReply.mpReceiverQueue = 0;

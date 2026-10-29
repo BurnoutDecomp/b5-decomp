@@ -20,8 +20,13 @@
 #include "GameSource/Resource/BrnResourceDebugComponent.h"                   // embedded GameData debug component
 #include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC manager + debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
+#include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModule.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
+#include "GameShared/GameClasses/Development/DebugSystem/GameTalk/CgsDebugGameTalkInterface.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 namespace CgsMemory { struct MemoryMap; }
+namespace CgsGraphics { struct Im2dRenderBuffer; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
@@ -444,125 +449,67 @@ namespace BrnResource
         CgsResource::ResourceModule& GetResourceModule() { return mResourceModule; }
 
     private:
-        // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
-        EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
-        EReleaseStage                  meReleaseStage;   // +0x22C (a1[139])
-        const CgsMemory::MemoryMap*    mpMemoryMap;     // X360 ConstructResourceModule stores a1+0x6599C
-        CgsResource::ResourceModule    mResourceModule;  // +0x280 (a1+160) the streaming engine
-        // X360 a1+363096: the module's internal receiver queue -- every request the world
-        // handlers post into the ResourceModule names it as mpUser, and Update drains the
-        // ProcessInternal*Response completions from it. The X360 Construct binds a 0x8000-byte
-        // buffer with 16-byte alignment (`*(a1+363112)=0x8000; *(a1+363116)=16`), i.e. the
-        // EventReceiverQueue<32768,16> instantiation.
-        CgsModule::EventReceiverQueue<32768, 16> mReceiverQueue;
-        // ARTIST ConstructResourceModule +396936/+398984; DecFIGS h357/358.
-        CgsResource::PoolModule::InitOptions::GSResourceType maTypes[256];
-        s32 miNumTypes;
-        // X360 a1+426400: the bank->allocator registry published to the OutputBuffer each
-        // Update (SetAllocatorList). Populated by CreateAllocators; Construct resets it
-        // (the inline `map[0..66] = -1` loop == AllocatorList::Construct).
-        GameDataIO::AllocatorList      mAllocatorList;
-        // ---- CreateAllocators storage (DWARF BrnGameDataModule.h:264..303, member names +
-        //      order attested; X360 offsets in dwords off `a1`: raw resources @106766x5,
-        //      descriptors @106776x10, linear allocators @106796 stride 7, heap allocators
-        //      @106852 stride 328, rw pointer mirrors @109804/@109809, audio-stream linear
-        //      @109814, request counter @109826). The AllocatorList's private map arrays
-        //      point into these; CreateAllocators fills both. -------------------------------
-        rw::Resource                        maGeneratedRawResources[2];
-        rw::ResourceDescriptor              maGeneratedRawResourceDescriptors[2];
-        CgsMemory::LinearMalloc             maGeneratedLinearAllocators[7];
-        CgsMemory::HeapMalloc               maGeneratedHeapAllocators[8];
-        rw::LinearResourceAllocator*        mapGeneratedRWLinearAllocators[5];
-        rw::core::GeneralResourceAllocator* mapGeneratedRWGeneralAllocators[5];
-        CgsMemory::LinearMalloc             mAudioStreamAllocator;
-        // X360 a1+439304 (dword 109826): outstanding allocator-create requests published to
-        // the ResourceModule; the drain zeroes it once every response has been stored.
-        // ARTIST82671BF4/1C14 resets these original request-owner counters;
-        // DecFIGS h405/407 names the same bank/pool preparation phases.
-        s32                                 miNumBankCreationRequests;
-        s32                                 miNumBanksCreated;
-        s32                                 miNumPoolCreationRequests;
-        s32                                 miNumPoolsCreated;
-        s32                                 miNumAllocatorCreationRequests;
-        // DWARF :303 sibling counter; its X360 updater is outside the CreateAllocators
-        // pseudocode (FLAG: maintained here as the created-allocator total).
-        s32                                 miNumAllocatorsCreated;
-        // X360 a1+439312: the in-flight request slot pool (IndexedPool<GameDataEventSlot,short>,
-        // capacity 96) + its module-embedded backing arrays (X360 a1+439328 / a1+443936).
-        CgsContainers::IndexedPool<GameDataEventSlot, KI_NUM_GAMEDATA_EVENT_SLOTS> mGameDataEventSlotPool;
-        GameDataEventSlot              maGameDataEventSlots[KI_NUM_GAMEDATA_EVENT_SLOTS];
-        s16                            masGameDataEventSlotFreeIndices[KI_NUM_GAMEDATA_EVENT_SLOTS];
-        // ---- completion-routing state (THIS BATCH) --------------------------------------
-        // X360 a1+439284 -- the in-flight sound-bundle unload countdown; the NAME is
-        // attested by the assert text "muLoadedSoundBundlesCount != 0" @ cpp:3618.
-        u32                            muLoadedSoundBundlesCount;
-        // X360 a1+475936 -- the world-collision bundle ref count (++ on load complete
-        // @0x82672630 case 32, -- on unload response id 45, ==1 gate in the validate
-        // swap-in @0x8266E858). DecFIGS h433 attests the original name.
-        s32                            miCollisionWorldRefCount;
-        // X360 a1+475940 -- cleared by ProcessInternalValidateResponse; FLAG role name
-        // ARTIST swap-out sets this byte; the real validate response clears it.
-        bool                           mbCollisionWorldInvalidated;
-        // ---- AttribSys service (THIS BATCH) ---------------------------------------------
-        // ARTIST82671C74..8C binds this receiver to1024bytes,16-byte alignment.
-        CgsModule::EventReceiverQueue<1024, 16> mAttribSysReceiverQueue;
-        // X360 a1+576 (a1[144]) -- the staged-resource-prepare counter the Prepare*Resource
-        // helpers (schema/vehicle-list/...) step through (0 push, 1 wait, 2 done). FLAG
-        // role name (the DWARF field name for this word is not yet pulled).
-        s32                            miResourcePrepareStage;
-        // X360 a1+399000: the embedded AttribSys module (vault array + schema owner).
-        // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
-        // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
-        CgsAttribSys::AttribSysModule  mAttribSysModule;
-        // X360 a1+444128: the GameData debug page (Construct initializes +0x0C..+0x20;
-        // Prepare registers it after the base module Prepare succeeds).
-        BrnResource::DebugComponent    mDebugComponent;
-        // X360 a1+444164: the DLC debug page, registered immediately after mDebugComponent.
-        BrnResource::DLCDebugComponent mDLCDebugComponent;
-        // X360 a1+444336 / a1+457664 / a1+458696: the three RESIDENT data tables. Construct()s
-        // them, Prepare stages 9/11/12 fill them, and ProcessGet{Vehicle,ICE,Wheel}ListRequest
-        // hands a pointer to them straight back to the requester (the console literally
-        // replies with `this + 444336` / `this + 457664` / `this + 458696`).
-        // ⭐ mICEList's offset is attested TWICE and identically: PrepareICEList @0x8266CEB0
-        // binds `this + 0x70000 - 0x440` and ProcessGetICEListRequest @0x826667C8 replies with
-        // `a1 + 457664` -- 0x70000 - 0x440 == 457664, the same object.
-        BrnResource::VehicleList       mVehicleList;
-        BrnResource::ICEList           mICEList;
-        BrnResource::WheelList         mWheelList;
-        // [challenge-list wave 2026-08-27] X360 a1+462800 -- the resident FREEBURN CHALLENGE
-        // table, the fourth member of the same family. Attested TWICE and identically:
-        // PrepareFreeburnChallengeList @0x8266C088 hands `a1 + 115700` (dwords == 462800 bytes)
-        // to ChallengeList::AddListResource, and ProcessGetFreeburnChallengeListRequest
-        // @0x82666728 replies with `this + 0x70000 + 0xFD0` -- the same object.
-        BrnResource::ChallengeList     mChallengeList;
-        // X360 a1[139] / a1[140] / a1[141] / a1[142] -- the four data-table prepares' own stage
-        // words (each Prepare* helper owns one; a1[139] is PrepareFreeburnChallengeList's, X360
-        // offset 0x22C -- `lwz r11, 0x22C(r30)` at its switch head; a1[141] is PrepareICEList's,
-        // X360 offset 0x234).
-        s32                            miChallengeListPrepareStage;
-        s32                            miVehicleListPrepareStage;
-        s32                            miICEListPrepareStage;
-        s32                            miWheelListPrepareStage;
-        // [gateui r3] X360 a1+416080 (0x65950) -- the resident HUD-message table. Attested
-        // twice and identically: GameDataModule::Construct @0x82671D1C constructs
-        // `this + 0x65950` (through the ICF-folded one-store Construct) and
-        // PrepareHudMessages @0x8266CB10 hands the SAME `this + 0x65950` to
-        // HudMessageController::AddMessages. Its ResourcePtr half is the ctor's
-        // `stw 0, 0(this+0x65954)` / `stw 0, 4(...)` pair @0x827E3304.
-        BrnResource::HudMessageController mHudMessageController;
-        // X360 a1[145] (offset 0x244) -- PrepareHudMessages' own six-state stage word.
-        s32                            miHudMessagesPrepareStage;
-        // Console +0x65974 -- the resident popup table (PreparePopups hands this object to
-        // AddPopupResource; the module constructor builds its ResourcePtr).
-        BrnResource::PopupController   mPopupController;
-        // Console +0x65998 -- PreparePopups' own six-state stage word (Construct zeroes it).
-        s32                            miPopupsPrepareStage;
-        // ARTIST Construct calls this typed owner at X360 this+475960 before
-        // the DLC debug component; native storage follows the actual member types.
-        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatus; // ARTIST +0x74330
-        BrnResource::DLCManager         mDLCManager;
-        // (the 9 GeneralAllocators, per-type IndexedLinkLists, HUD
-        //  message / popup controllers and the game-data tables are added with their own passes.)
+        static void AssertNativeLayout();
+
+        // ARTIST ctor827E3230, Construct82671B90 and CheckClassSizes823BD4E0.
+        // DecFIGS supplies member names; array extents follow the native strides.
+        EPrepareStage mePrepareStage;                  // +0x228
+        s32 miChallengeListPrepareStage;                // +0x22C
+        s32 miVehicleListPrepareStage;                  // +0x230
+        s32 miICEListPrepareStage;                      // +0x234
+        s32 miWheelListPrepareStage;                    // +0x238
+        EReleaseStage meReleaseStage;                  // +0x23C
+        s32 miResourcePrepareStage;                     // +0x240
+        s32 miHudMessagesPrepareStage;                  // +0x244
+        CgsResource::ResourceModule mResourceModule;    // +0x280
+        CgsResource::LiveUpdateModule mLiveUpdateModule;// +0x58500
+        CgsModule::EventReceiverQueue<32768, 16> mReceiverQueue; // +0x58A58
+        CgsModule::EventReceiverQueue<1024, 16> mAttribSysReceiverQueue; // +0x60A70
+        CgsResource::PoolModule::InitOptions::GSResourceType maTypes[256]; // +0x60E88
+        s32 miNumTypes;                                // +0x61688
+        CgsResource::ID mAttribSysSchemaResourceID;     // +0x61690
+        CgsAttribSys::AttribSysModule mAttribSysModule; // +0x61698
+        CgsGameTalk::GameTalk mGameTalk;                // +0x61908
+        CgsDev::DebugGameTalkInterface mDebugGameTalkInterface; // +0x65940
+        BrnResource::HudMessageController mHudMessageController; // +0x65950
+        BrnResource::PopupController mPopupController;  // +0x65974
+        s32 miPopupsPrepareStage;                       // +0x65998
+        const CgsMemory::MemoryMap* mpMemoryMap;        // +0x6599C
+        char macMapBuffer[10240];                       // +0x659A0
+        GameDataIO::AllocatorList mAllocatorList;       // +0x681A0
+        rw::Resource maGeneratedRawResources[2];        // +0x68438
+        rw::ResourceDescriptor maGeneratedRawResourceDescriptors[2]; // +0x68460
+        CgsMemory::LinearMalloc maGeneratedLinearAllocators[8]; // +0x684B0
+        CgsMemory::HeapMalloc maGeneratedHeapAllocators[9]; // +0x68590
+        rw::LinearResourceAllocator* mapGeneratedRWLinearAllocators[5]; // +0x6B3B0
+        rw::core::GeneralResourceAllocator* mapGeneratedRWGeneralAllocators[5]; // +0x6B3C4
+        CgsMemory::LinearMalloc mAudioStreamAllocator;  // +0x6B3D8
+        u32 muLoadedSoundBundlesCount;                 // +0x6B3F4
+        s32 miNumBankCreationRequests;                  // +0x6B3F8
+        s32 miNumBanksCreated;                          // +0x6B3FC
+        s32 miNumPoolCreationRequests;                  // +0x6B400
+        s32 miNumPoolsCreated;                          // +0x6B404
+        s32 miNumAllocatorCreationRequests;             // +0x6B408
+        s32 miNumAllocatorsCreated;                     // +0x6B40C
+        CgsContainers::IndexedPool<GameDataEventSlot, KI_NUM_GAMEDATA_EVENT_SLOTS> mGameDataEventSlotPool; // +0x6B410
+        GameDataEventSlot maGameDataEventSlots[KI_NUM_GAMEDATA_EVENT_SLOTS]; // +0x6B420
+        s16 masGameDataEventSlotFreeIndices[KI_NUM_GAMEDATA_EVENT_SLOTS]; // +0x6C620
+        BrnResource::DebugComponent mDebugComponent;    // +0x6C6E0
+        BrnResource::DLCDebugComponent mDLCDebugComponent; // +0x6C704
+        BrnResource::VehicleList mVehicleList;          // +0x6C7B0
+        BrnResource::ICEList mICEList;                  // +0x6FBC0
+        BrnResource::WheelList mWheelList;              // +0x6FFC8
+        BrnResource::ChallengeList mChallengeList;      // +0x70FD0
+        CgsGraphics::Im2dRenderBuffer* mpDebug2dRenderBuffer; // +0x742B8
+        renderengine::TextureState* mpTextureState;     // +0x742BC
+        renderengine::TextureState::Parameters mTextureStateParams; // +0x742C0
+        rw::Resource mTextureStateResource;            // +0x7430C
+        s32 miCollisionWorldRefCount;                  // +0x74320
+        bool mbCollisionWorldInvalidated;              // +0x74324
+        uintptr_t muFirstCollisionBlockAddress;        // +0x74328
+        uintptr_t muNumCollisionBlocks;                // +0x7432C
+        CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatus; // +0x74330
+        BrnResource::DLCManager mDLCManager;            // +0x74338
     };
 }
 

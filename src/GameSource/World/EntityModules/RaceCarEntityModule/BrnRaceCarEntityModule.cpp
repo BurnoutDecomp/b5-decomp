@@ -552,8 +552,7 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
         if( lpReply != 0 )
         {
             CGS_ASSERT( !lpReply->mbFailFlag, "Invalid event id received\n" );   // X360 :6416
-            mpVehicleList = static_cast<const BrnResource::VehicleList*>(
-                lpReply->mHandle.mpResourceMemory );
+            mpVehicleList = static_cast<const BrnResource::GameDataIO::GetVehicleListResponse*>(lpReply)->GetVehicleListPtr();
         }
     }
     // fall through
@@ -577,8 +576,7 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
         if( lpReply != 0 )
         {
             CGS_ASSERT( !lpReply->mbFailFlag, "Invalid event id received\n" );   // X360 :6457
-            mpWheelList = static_cast<const BrnResource::WheelList*>(
-                lpReply->mHandle.mpResourceMemory );
+            mpWheelList = static_cast<const BrnResource::GameDataIO::GetWheelListResponse*>(lpReply)->GetWheelListPtr();
         }
 
         if( CgsDev::Log::gpDebugPrint != 0 )

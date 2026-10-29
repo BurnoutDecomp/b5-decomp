@@ -635,7 +635,7 @@ void RaceCarWheelGraphicsStreamer::Destruct()
 void RaceCarGraphicsStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
 {
     mpStreamer->OnGraphicsLoaded( liActiveRaceCar,
-                                  RaceCarStreamer::GraphicsResourcePtr( lpEvent->mHandle ) );
+                                  RaceCarStreamer::GraphicsResourcePtr( static_cast<const BrnResource::GameDataIO::GetVehicleGraphicsResponse*>(lpEvent)->GetVehicleGraphicsObjectHandle() ) );
 }
 
 void RaceCarGraphicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
@@ -646,7 +646,7 @@ void RaceCarGraphicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
 void RaceCarPhysicsStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
 {
     mpStreamer->OnPhysicsLoaded( liActiveRaceCar,
-                                 RaceCarStreamer::PhysicsResourcePtr( lpEvent->mHandle ) );
+                                 RaceCarStreamer::PhysicsResourcePtr( static_cast<const BrnResource::GameDataIO::GetVehiclePhysicsResponse*>(lpEvent)->GetVehiclePhysicsObjectHandle() ) );
 }
 
 void RaceCarPhysicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
@@ -668,7 +668,7 @@ void RaceCarAttributeStreamer::OnAssetUnloading( s32 liActiveRaceCar )
 void RaceCarWheelGraphicsStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
 {
     mpStreamer->OnWheelGraphicsLoaded( liActiveRaceCar,
-                                       RaceCarStreamer::WheelGraphicsResourcePtr( lpEvent->mHandle ) );
+                                       RaceCarStreamer::WheelGraphicsResourcePtr( static_cast<const BrnResource::GameDataIO::GetWheelGraphicsResponse*>(lpEvent)->GetWheelGraphicsObjectHandle() ) );
 }
 
 void RaceCarWheelGraphicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )

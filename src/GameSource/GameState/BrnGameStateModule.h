@@ -122,6 +122,7 @@ namespace GameStateModuleIO
 // (CgsModule::ModuleSingleBuffered) is #included, not forked.
 class GameStateModule : public CgsModule::ModuleSingleBuffered
 {
+    void ProcessContacts(const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpyInterface);
 public:
     // X360 @ 0x82311570 (BrnGameStateModule.h:949). Inline accessor for the player's active-race-car
     // slot index. Asserts the module is mid-update (mbIsUpdating) via CGS_ASSERT before handing back

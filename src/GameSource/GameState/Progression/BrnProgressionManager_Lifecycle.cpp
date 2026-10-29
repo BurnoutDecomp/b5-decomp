@@ -392,7 +392,7 @@ bool ProgressionManager::LoadAIData(GsmIO::OutputBuffer* lpOutput,
             FireConsoleAssert("lpAIDataResponse->GetEventId() == 1", 2863);
         }
 
-        mpAISectionData = lpAIDataResponse->mHandle;   // CreateFromHandle(&mpAISectionData, ...)
+        mpAISectionData = reinterpret_cast<const BrnResource::GameDataIO::GetAIDataResponse*>(lpAIDataResponse)->GetAIDataHandle();   // CreateFromHandle(&mpAISectionData, ...)
         meAILoadStage   = E_AI_DATA_LOAD_COMPLETE;
         return true;
     }
