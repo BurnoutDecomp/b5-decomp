@@ -316,15 +316,17 @@ namespace Utils
 // ----------------------------------------------------------------------------
 // TransitionSmoother (ADDITIVE GROW: its class TU) -- a lerp-smoothed scalar
 // with a self-smoothed lerp amount. Class shape / member names / method set
-// verbatim from the DWARF (CameraUtils.h:112/:138-:143). This TU bodies Set;
-// Get/GetRef/SetTarget/Update are their own ledger functions (declared-only).
+// verbatim from the DWARF (CameraUtils.h:112/:138-:143). Set/Update/Get are
+// bodied from ARTIST; Get is the source-level inline scalar member load.
 // ----------------------------------------------------------------------------
 struct TransitionSmoother
 {
-    // DWARF :116/:119/:130/:134 -- declared-only.
-    f32 Get() const;
+    // DWARF :116. Inline field reader (the X360 callers load mfData directly).
+    const f32 Get() const { return mfData; }
+    // DWARF :119 -- no caller is recovered in the X360 source paths currently bodied.
     const f32& GetRef() const;
     void SetTarget(f32 lfTarget);
+    // DWARF :134; the console inlines the body in BehaviourRoadRunner::Update.
     void Update(f32 lfTimeStep);
 
     // @0x821F22A0 (class TU; body in CameraUtils.cpp, DWARF :126) -- seed the

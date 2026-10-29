@@ -16,8 +16,11 @@
 
 // BrnDirector::Camera::Utils -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (1 ledger function, class:BrnDirector::Camera::Utils::TransitionSmoother):
-//   TransitionSmoother::Set @0x821F22A0
+// Bodied here (class:BrnDirector::Camera::Utils::TransitionSmoother):
+//   TransitionSmoother::Set      @0x821F22A0
+//   TransitionSmoother::Update   inlined in BehaviourRoadRunner::Update @0x82248098..0x82248108
+//   TransitionSmoother::SetTarget (one store; the console inlines it)
+// Get() is the header inline mfData reader; GetRef() has no recovered caller here.
 //
 // Bodied here (5 ledger functions, class:BrnDirector::Camera::Utils -- FOV/zoom/pitch
 // scalar math whose stores are cleanly recoverable):
@@ -188,14 +191,25 @@ void TransitionSmoother::Set(f32 lfValue, f32 lfLerpAmount0to1,
 }
 
 // CameraUtils.h:130 -- aim the smoother at a new value WITHOUT snapping to it (Set() above is
-// the snapping form: it assigns mfData as well). One store; the console inlines it everywhere,
-// so there is no standalone symbol and nothing to transcribe. `Update(dt)` is what walks
-// mfData toward mfTarget and is still its own (declared-only) ledger function -- until it
-// lands, a smoother that has only been given a target holds its Set() value, which is the
-// conservative direction (a target with no chase never overshoots).
+// the snapping form: it assigns mfData as well). One store; the console inlines it everywhere.
 void TransitionSmoother::SetTarget(f32 lfTarget)
 {
     mfTarget = lfTarget;
+}
+
+// X360 inlines this six-field update at call sites (e.g. BehaviourRoadRunner::Update
+// @0x82248098..0x82248108). The step argument is not read by that body. fsel selects max(1,
+// abs(data-target)*scale); the response ramps mfLerpAmount toward its ideal, then data follows
+// the target with the updated amount. Preserve the fused fmsubs/fmadds/vmaddfp arithmetic.
+void TransitionSmoother::Update(f32 /*lfTimeStep*/)
+{
+    const f32 lfSimilarity = std::fabs(mfData - mfTarget) * mfSimilarityToleranceScale;
+    const f32 lfDenominator = (1.0f - lfSimilarity >= 0.0f) ? 1.0f : lfSimilarity;
+    const f32 lfResponse = 1.0f - (1.0f / lfDenominator);
+    const f32 lfLerpDelta = std::fma(lfResponse, mfIdealLerpAmount, -mfLerpAmount);
+
+    mfLerpAmount = std::fma(lfLerpDelta, mfLerpAmountLerpAmount, mfLerpAmount);
+    mfData = std::fma(mfTarget - mfData, mfLerpAmount, mfData);
 }
 
 // @ 0x821F2378 -- wrap a value into [lo, hi) after adding a step (unsigned modular cycle).

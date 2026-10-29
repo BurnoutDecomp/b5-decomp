@@ -804,20 +804,10 @@ bool BehaviourRoadRunner::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrI
 {
     SetNotPrepared();                              // *(this+8) = 0 -- Update re-seeds the truck
 
-    // ⚠️ QUIET GATE (one call, not a branch): the console opens with
-    //     Utils::TransitionSmoother::Set(&mHeight, 4.0f, <3 more floats>)
-    //   Only the 4.0f survives the decompile as a named constant; the other three arguments
-    //   (the ideal lerp amount, its own lerp amount and the similarity tolerance scale) are
-    //   register garbage in the pseudocode and are NOT recoverable from this site alone.
-    //   Guessing them would silently set the camera-height smoothing rate. The one store the
-    //   asm DOES pin at that address (`*(this+640) = 4.0` == mHeight.mfTarget) is performed
-    //   through the smoother's own named setter, so the height TARGET is right and only the
-    //   smoothing RATE is left at whatever Construct left it.
-    //   CONSEQUENCE: the fly-by camera's height chases its 4.0 target with an unseeded lerp
-    //   amount. Cosmetic until Update's prepared leg runs.
-    //   DELETE-WHEN: TransitionSmoother::Set's three lerp arguments are read off a second call
-    //   site (the other callers of @0x821F22A0).
-    mHeight.SetTarget(4.0f);                       // *(this+640) = 4.0
+    // X360 0x8220F770..0x8220F7A4 loads the full Set tuple before the call:
+    //   f1=4.0 (flt_82004EF4), f2=0.01 (flt_82002138),
+    //   f3=0.1 (flt_82004014), f4=100.0 (flt_820049E0).
+    mHeight.Set(4.0f, 0.0099999998f, 0.1f, 100.0f);
 
     mfFixationAmount              = 0.0f;          // *(this+608)
     mfFixationBlendTimeReciprocal = 0.125f;        // *(this+612)
@@ -838,6 +828,7 @@ bool BehaviourRoadRunner::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrI
     mfTimeSinceLastCollision        = 0.0f;        // *(this+688)
 
     meMode              = E_MODE_LOW_SLOW;         // *(this+696) = 0
+    mHeight.SetTarget(4.0f);                       // X360 stfs +0x280 after Set
     mbHasFixation       = false;                   // *(this+702)
     mbStartingFixation  = false;                   // *(this+703)
     mbFixationIsValid   = false;                   // *(this+704)
@@ -978,15 +969,9 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     // 0x82248060: mfBankingScale += (mfDesiredBankingScale - mfBankingScale) * mfBankingScaleBlendAmount
     mfBankingScale += (mfDesiredBankingScale - mfBankingScale) * mfBankingScaleBlendAmount;
 
-    // ⚠️ QUIET GATE (asm 0x82248098..0x82248108): the inlined
-    // Utils::TransitionSmoother::Update over mHeight -- a self-smoothed lerp whose live blend
-    // weight chases mfIdealLerpAmount through a `1 - 1/(|cur-tgt|*scale)` term. Its declared
-    // sibling TransitionSmoother::Update is DECLARATION-ONLY in CameraUtils.h, and the class's
-    // private members are not reachable from here. mHeight therefore holds the value
-    // Prepare's TransitionSmoother::Set seeded it with (4.0), which is also the target this
-    // frame sets -- so the height is right, it just does not ease.
-    // DELETE-WHEN: TransitionSmoother::Update is bodied.
-    const f32 lfHeight = 4.0f;
+    // X360 0x82248098..0x82248108 inlines the mHeight response update, then reads mfData.
+    mHeight.Update(lfTimestep);
+    const f32 lfHeight = mHeight.Get();
 
     // 0x8224810C: the truck's speed for this frame. The collided arm needs the gated line-test
     // block above, so the desired arm is the one the console takes here too.
