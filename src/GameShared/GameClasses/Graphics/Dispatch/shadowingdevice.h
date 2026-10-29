@@ -15,6 +15,8 @@ namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommand
 // headers already, so the definitions are complete where the bodies need them.
 namespace renderengine
 {
+    class  VertexProgramState;
+    struct VertexDescriptorData;
     class  DepthStencilState;
     class  RasterizerState;
     struct BlendMaterialState;
