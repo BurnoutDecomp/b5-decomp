@@ -4,7 +4,6 @@
 #include "SDKs/EATech/eajobs/jobs.h"               // EA::Jobs::Allocator / GetAllocator (off_8327F280 Free)
 
 #include <xtl.h>  // _InterlockedCompareExchange / _InterlockedExchange (atomic CAS)
-#include <xtl.h> // QueryPerformanceCounter, LARGE_INTEGER
 #include <cstring>   // std::memcpy (the parameters blob copy)
 #include <cstddef>   // offsetof (the uncalled _AssertLayout layout pins)
 #include <new>       // placement new (conditional semaphore construction)
@@ -31,9 +30,7 @@
 //   // CAS the lock 1 -> 0 (release what we took):
 //   reservation: if (lock == 1) lock = 0
 //
-// The masked-interrupt lwarx/stwcx. reservation is modeled on the MSVC host with an
-// interlocked compare-and-swap -- the same conditional atomic the PowerPC primitive
-// provides.
+// XDK interlocked intrinsics emit the native masked-interrupt reservation loops.
 //
 // Vendor EA code reconstructed in its canonical home.
 // ============================================================================
@@ -126,8 +123,7 @@ namespace LocalBackend
         mStartTimeStamp = static_cast<u64>(lCounter.QuadPart);
 
         // Record the four arguments (r5 points to the source block) and mark live.
-        new (&mExecution) ExecutionData;
-        for (int i=0;i<4;++i) mExecution.mArguments[i]=pArguments[i];
+        std::memcpy(mExecution.mArgumentWords, pArguments, sizeof(mExecution.mArgumentWords));
         mStatus  = 0;                 // stw 0,0(this)
         mGarbageCollectorLock = 1;    // stw 1,0x270(this) -- slot is in use
 
@@ -157,11 +153,13 @@ namespace LocalBackend
         QueryPerformanceCounter(&begin);
         // ARTIST82BCC324..32C permits event-only jobs with no code entry.
         if (mParameters.mpfnLocalJob)
-            mParameters.mpfnLocalJob(mExecution.mArguments[0],mExecution.mArguments[1],
-                                    mExecution.mArguments[2],mExecution.mArguments[3]);
-        const u64 threadId=static_cast<u64>(EA::Thread::GetSysThreadId());
+            mParameters.mpfnLocalJob(Param(mExecution.mArgumentWords[0]), Param(mExecution.mArgumentWords[1]),
+                                    Param(mExecution.mArgumentWords[2]), Param(mExecution.mArgumentWords[3]));
+        const u64 threadId = static_cast<u64>(reinterpret_cast<uintptr_t>(EA::Thread::GetThreadId()));
+        mExecution.mProfile.mBegin = static_cast<u64>(begin.QuadPart);
+        mExecution.mProfile.mThreadId = threadId;
         QueryPerformanceCounter(&end);
-        mExecution.mProfile={threadId,static_cast<u64>(begin.QuadPart),static_cast<u64>(end.QuadPart)};
+        mExecution.mProfile.mEnd = static_cast<u64>(end.QuadPart);
         PlayEventList(Event::EVENT_WHEN_JOB_END);
     }
 
@@ -200,7 +198,7 @@ namespace LocalBackend
             return;
 
         EA::Thread::Semaphore* lpSemaphore = Semaphore();
-        lpSemaphore->Wait(EA::Thread::kTimeoutNone);
+        lpSemaphore->Wait(&EA::Thread::kTimeoutNone);
         lpSemaphore->Post(1);
     }
 
@@ -283,15 +281,14 @@ namespace LocalBackend
     //
     // All bodies reconstructed store-for-store from the X360 .XEX (addresses on each
     // method). The packed-slot-word atomics (lwarx/ldarx + stdcx./stwcx. under a brief
-    // interrupt mask) are modelled on the MSVC host with _InterlockedCompareExchange /
-    // _InterlockedCompareExchange64 -- the same conditional 32/64-bit atomic the PowerPC
-    // reservation primitive provides.
+    // interrupt mask) use the native XDK _InterlockedCompareExchange and
+    // _InterlockedCompareExchange64 intrinsics.
     // ========================================================================
 
     // dword_8327F284 -- the process-wide "should the job manager give up waiting?"
     // watchdog predicate. CreateNotReadyInstance consults it only after the ~12s GC
     // budget elapses (the X360 indirect-calls it through this file static, treating a
-    // null pointer as "no watchdog installed"). Installed by the host; null here.
+    // null pointer as "no watchdog installed"). Defaults to null.
     typedef int (*GlobalAbortPredicate)();
     static GlobalAbortPredicate spGlobalAbortPredicate = 0;
 
@@ -304,38 +301,23 @@ namespace LocalBackend
         return static_cast<u32>(static_cast<u16>(uHandleQword >> 16));
     }
 
-    // Pin the LocalBackend layout. The X360 byte offsets (ctor @ 0x82BCBCB8 / the
-    // accessors) are 32-bit-pointer offsets:
-    //   +0x004 mpJobInstances   +0x008 mpPriorityQueue  +0x00C mNextSlot
-    //   +0x010 mNumSlots        +0x014 mThreads[32]     +0x598 mSubmissionCounter
-    //   +0x5A0 mpProfilingCallback +0x5A4 mpProfilingContext +0x5A8 mGarbageCollectorCursor
-    //   +0x5AC mpEnableProfiling +0x5B0 mJobThreadSleepTimeoutMS
-    // The compile gate is an LLP64 (8-byte-pointer) host, so the absolute byte offsets
-    // cannot be reproduced here -- only the pointer-width-INVARIANT structural facts the
-    // CRITICAL fix turns on. The load-bearing one: there is EXACTLY ONE vptr at +0x0
-    // (a second polymorphic base would push the first data member past one pointer and
-    // shift every subsequent member), so the first data member sits immediately after
-    // the vptr and the member ORDER below is the X360 order. Uncalled.
+    // ARTIST82BCBCB8: exact native fields, including natural alignment before
+    // the submission counter after the32worker array ends at594hex.
     static void LocalBackend_AssertLayout()
     {
-        // Single vptr: first data member directly follows the one vtable pointer.
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpJobInstances) == sizeof(void*)),
-                      "single vptr: mpJobInstances is the first data member (one vtable ptr, no 2nd base)");
-        // Member ORDER matches the X360 store sequence (offsets monotonic, ascending).
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpJobInstances)  < offsetof(LocalBackend, mpPriorityQueue)),  "mpJobInstances < mpPriorityQueue");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpPriorityQueue) < offsetof(LocalBackend, mNextSlot)),        "mpPriorityQueue < mNextSlot");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mNextSlot)       < offsetof(LocalBackend, mNumSlots)),        "mNextSlot < mNumSlots");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mNumSlots)       < offsetof(LocalBackend, mThreads)),         "mNumSlots < mThreads");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mThreads)        < offsetof(LocalBackend, mSubmissionCounter)), "mThreads < mSubmissionCounter");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mSubmissionCounter)     < offsetof(LocalBackend, mpProfilingCallback)),     "mSubmissionCounter < mpProfilingCallback");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpProfilingCallback)    < offsetof(LocalBackend, mpProfilingContext)),      "mpProfilingCallback < mpProfilingContext");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpProfilingContext)     < offsetof(LocalBackend, mGarbageCollectorCursor)), "mpProfilingContext < mGarbageCollectorCursor");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mGarbageCollectorCursor) < offsetof(LocalBackend, mpEnableProfiling)),  "mGarbageCollectorCursor < mpEnableProfiling");
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpEnableProfiling)  < offsetof(LocalBackend, mJobThreadSleepTimeoutMS)),"mpEnableProfiling < mJobThreadSleepTimeoutMS");
-        // The 32 inline workers occupy a real span between mThreads and the next member.
-        CGS_STATIC_ASSERT((offsetof(LocalBackend, mSubmissionCounter) - offsetof(LocalBackend, mThreads)
-                          == LocalBackend::KI_NUM_THREADS * sizeof(JobThread)),
-                      "mThreads is exactly 32 contiguous JobThreads");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpJobInstances) == 4), "ARTIST job instances");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpPriorityQueue) == 8), "ARTIST priority queue");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mNextSlot) == 0xC), "ARTIST allocation cursor");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mNumSlots) == 0x10), "ARTIST job capacity");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mThreads) == 0x14), "ARTIST worker array");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mThreads) + sizeof(((LocalBackend*)0)->mThreads) == 0x594), "ARTIST worker array end");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mSubmissionCounter) == 0x598), "ARTIST submission counter");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpProfilingCallback) == 0x5A0), "ARTIST profiling callback");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpProfilingContext) == 0x5A4), "ARTIST profiling context");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mGarbageCollectorCursor) == 0x5A8), "ARTIST garbage collector cursor");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mpEnableProfiling) == 0x5AC), "ARTIST profiling flag");
+        CGS_STATIC_ASSERT((offsetof(LocalBackend, mJobThreadSleepTimeoutMS) == 0x5B0), "ARTIST worker sleep timeout");
+        CGS_STATIC_ASSERT((sizeof(LocalBackend) == 0x5B8), "ARTIST local scheduler size");
     }
 
     // @ 0x82BCBCB8
@@ -389,7 +371,7 @@ namespace LocalBackend
         u32 luQueueBytes = 8u * uMaxJobs;
         if (uMaxJobs > 0x1FFFFFFFu)
             luQueueBytes = 0xFFFFFFFFu;
-        SlotWord* lpQueue = static_cast<SlotWord*>(lpAllocator->Alloc(
+        u64* lpQueue = static_cast<u64*>(lpAllocator->Alloc(
             luQueueBytes, "EA::Jobs::PriorityQueueEntry", 0, 128, 0));
         if (lpQueue)
         {
@@ -439,9 +421,7 @@ namespace LocalBackend
     }
 
     // @ 0x82BCC010 (vtable +0x28) -- CreateNotReadyInstance / AddNotReady.
-    void LocalBackend::CreateNotReadyInstance(JobInstanceHandle* pOutHandle,
-                                              const EntryPoint*  pEntryPoint,
-                                              const Param*       pParams)
+    JobInstanceHandle LocalBackend::CreateNotReadyInstance(const EntryPoint* pEntryPoint, const Param* pParams)
     {
         // Atomically take the next submission id (X360 increments the +0x598 counter
         // under the masked reservation and keeps the post-increment value).
@@ -474,10 +454,7 @@ namespace LocalBackend
                     && !spGlobalAbortPredicate())
                 {
                     // Give up: write a null handle (submission id 0, backend 0, index 0).
-                    pOutHandle->mSubmissionId     = 0;
-                    pOutHandle->mSchedulerBackend = 0;
-                    pOutHandle->mIndex            = 0;
-                    return;
+                    return JobInstanceHandle();
                 }
                 continue;
             }
@@ -500,14 +477,9 @@ namespace LocalBackend
                     == static_cast<__int64>(-1))
                 {
                     // Won the slot: initialise the JobInstance and publish the handle.
-                    JobInstanceHandle lNewHandle(this, static_cast<u16>(liSlot),
-                                                 luSubmissionId);
                     mpJobInstances[liSlot].Initialize(pEntryPoint, pParams);
                     mNextSlot = liSlot;
-                    pOutHandle->mSubmissionId     = luSubmissionId;
-                    pOutHandle->mSchedulerBackend = this;
-                    pOutHandle->mIndex            = static_cast<u16>(liSlot);
-                    return;
+                    return JobInstanceHandle(this, static_cast<u16>(liSlot), luSubmissionId);
                 }
             }
             ++liSlot;
@@ -608,8 +580,9 @@ namespace LocalBackend
 
     void LocalBackend::GetEnabler(u64,u64 uHandleQword,u32*& pLocation,u32& uValue)
     {
-        SlotWord& slot=mpPriorityQueue[SlotIndexFromHandle(uHandleQword)];
-        pLocation=&slot.mHigh;
+        u64& slot=mpPriorityQueue[SlotIndexFromHandle(uHandleQword)];
+        // Native big-endian queue entries expose their first (high) word.
+        pLocation = reinterpret_cast<u32*>(&slot);
         uValue=static_cast<u32>(static_cast<u64>(slot)>>32)&0x1FFFFFFFu;
     }
 
@@ -669,7 +642,7 @@ namespace LocalBackend
     }
 
     // @ 0x82BCC490 (vtable +0x50) -- ExecuteReadyJobs / RunSingleJob.
-    int LocalBackend::ExecuteReadyJobs(int iAffinity)
+    bool LocalBackend::ExecuteReadyJobs(int iAffinity)
     {
         u8 uAffinityMask = static_cast<u8>(iAffinity);
         s32 liCount = mNumSlots;
@@ -681,7 +654,7 @@ namespace LocalBackend
         u64 luAffinityFill = (~static_cast<u64>(uAffinityMask) & 0x3Full) << 55;
         s32 liBest = -1;
         u64 luBestWord = static_cast<u64>(-1);
-        SlotWord* lpQueue = mpPriorityQueue;
+        u64* lpQueue = mpPriorityQueue;
         for (s32 liSlot = 0; liSlot < liCount; ++liSlot)
         {
             u64 luWord = lpQueue[liSlot] | luAffinityFill;
@@ -767,44 +740,33 @@ namespace LocalBackend
     }
 
     // @ 0x82BCA6C0 -- AddThread.
-    void LocalBackend::AddThread(JobThreadHandle* pOutHandle,
-                                 const JobThreadParameters& rParameters)
+    JobThreadHandle LocalBackend::AddThread(const JobThreadParameters& rParameters)
     {
-        int liSlot = 0;
-        while (mThreads[liSlot].mbStarted)
+        int index = 0;
+        while (mThreads[index].mbStarted)
         {
-            ++liSlot;
-            if (liSlot >= KI_NUM_THREADS)
-            {
-                // All workers in use: no-op handle.
-                GetThreadHandle(pOutHandle, 0, 0);
-                return;
-            }
+            if (++index >= KI_NUM_THREADS)
+                return JobThreadHandle();
         }
-        mThreads[liSlot].Start(&rParameters, this);
-        GetThreadHandle(pOutHandle, this, static_cast<u32>(liSlot));
+        mThreads[index].Start(&rParameters, this);
+        return JobThreadHandle(this, static_cast<u32>(index));
     }
 
-    // @ 0x82BC9D58 -- GetNumThreads.
     int LocalBackend::GetNumThreads() const
     {
-        int liCount = KI_NUM_THREADS;
-        for (int liThread = 0; liThread < KI_NUM_THREADS; ++liThread)
-        {
-            if (!mThreads[liThread].mbStarted)
-                --liCount;
-        }
-        return liCount;
+        int count = 0;
+        for (int index = 0; index < KI_NUM_THREADS; ++index)
+            if (mThreads[index].mbStarted) ++count;
+        return count;
     }
 
-    // @ 0x82BC9CF8 -- GetNumJobsInFlight.
     int LocalBackend::GetNumJobsInFlight() const
     {
         int liResult = 0;
         s32 liCount  = mNumSlots;
         if (liCount > 0)
         {
-            const SlotWord* lpQueue = mpPriorityQueue;
+            const u64* lpQueue = mpPriorityQueue;
             for (s32 liSlot = 0; liSlot < liCount; ++liSlot)
             {
                 u64 luWord = lpQueue[liSlot];
@@ -818,30 +780,37 @@ namespace LocalBackend
         return liResult;
     }
 
-    // @ 0x82BCA738 -- WaitForEnd (join worker iIndex).
-    void LocalBackend::WaitForEnd(int iIndex)
+    // ARTIST82BCBA40: the low word selects a worker; wake it after publishing quit.
+    void LocalBackend::RequestEnd(u64 uHandle)
     {
-        mThreads[iIndex].WaitForEnd();
+        JobThread& worker = mThreads[static_cast<u32>(uHandle)];
+        worker.mbQuit = true;
+        ::SetEvent(worker.mhEvent);
     }
 
-    // @ 0x82BC9E20 -- GetThreadHandle.
-    void LocalBackend::GetThreadHandle(JobThreadHandle* pOutHandle,
-                                       Detail::SchedulerBackend* pBackend,
-                                       u32 uHandle) const
+    // ARTIST82BCA738.
+    void LocalBackend::WaitForEnd(u64 uHandle)
     {
-        *pOutHandle = JobThreadHandle(pBackend, uHandle);
+        mThreads[static_cast<u32>(uHandle)].WaitForEnd();
     }
 
-    // @ 0x82BC9E30 -- GetThreadId. The X360 truncates the id to its low 32 bits
-    // (`clrldi r3,r3,32`) before returning it as a job-thread id.
-    u64 LocalBackend::GetThreadId(int iIndex) const
+    // ARTIST82BC9E20: hidden return buffer precedes this and the handle word.
+    JobThreadHandle LocalBackend::GetThreadHandle(u32 uHandle) const
     {
+        return JobThreadHandle(const_cast<LocalBackend*>(this), uHandle);
     }
 
-    // @ 0x82BCA770 -- GetThreadParameters.
-    void LocalBackend::GetThreadParameters(JobThreadParameters* pOut, int iIndex) const
+    // ARTIST82BC9E30: zero-extend the worker's native thread HANDLE.
+    u64 LocalBackend::GetThreadId(u64 uHandle) const
     {
-        std::memcpy(pOut, &mThreads[iIndex].mParameters, sizeof(JobThreadParameters));
+        return static_cast<u64>(reinterpret_cast<uintptr_t>(
+            mThreads[static_cast<u32>(uHandle)].mThread.GetId()));
+    }
+
+    // ARTIST82BCA770: the24-byte structure is returned in the hidden buffer.
+    JobThreadParameters LocalBackend::GetThreadParameters(u64 uHandle) const
+    {
+        return mThreads[static_cast<u32>(uHandle)].mParameters;
     }
 
     // @ 0x82BC9CB8 -- GetEnabler.
@@ -893,7 +862,7 @@ namespace LocalBackend
 
         // Stage-buffer of up to 23 profiling records (defaults set per the X360 init
         // loop). Only consumed when a profiling callback is installed.
-        JobMetrics laRecords[23]{};
+        JobMetrics laRecords[23];
 
         s32 liStart = mGarbageCollectorCursor;
         if (bForce == 1)

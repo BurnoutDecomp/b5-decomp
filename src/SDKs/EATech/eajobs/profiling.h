@@ -14,7 +14,6 @@ namespace EA { namespace Jobs {
         u64 threadId;
         EntryPoint entryPoint;
     };
-    typedef void ProfilerCallback(const JobMetrics* pMetrics, int iCount, void* pContext);
 } }
 
 #endif

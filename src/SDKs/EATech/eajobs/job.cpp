@@ -1,7 +1,6 @@
 #include "SDKs/EATech/eajobs/job.h" // EA::Jobs::Job (+ Dependency), BucketListNode, Event
 
 #include <cstring> // std::memcpy (Clear's 44-byte EntryPoint default block)
-#include <stdint.h> // uintptr_t
 
 // ============================================================================
 // SDKs/EATech/eajobs/job.cpp
@@ -29,12 +28,7 @@ namespace EA
 {
 namespace Jobs
 {
-    // NOTE on layout: the +0x.. offsets quoted throughout this TU and in job.h are the
-    // X360 object offsets (4-byte pointers). On the 64-bit MSVC host the embedded
-    // pointers/handles widen, so the byte offsets are NOT reproduced verbatim -- the
-    // reconstruction is by-name and shape-faithful (as the committed siblings already
-    // are; e.g. job_instance_handle.cpp packs the handle key from named members rather
-    // than reading a raw +0x48 qword). No offsetof pin is asserted for this reason.
+    // Offsets quoted here and in job.h use the native four-byte pointer layout.
 
     // Reassemble the 64-bit "handle key" the X360 reads with `ld 0x48(handle)`: the
     // qword at JobInstanceHandle+0x8 is { mSchedulerBackend (4B, high), mIndex (2B),
@@ -244,8 +238,7 @@ namespace Jobs
         JobEnvironment leEnvironment = mEntryPoint.GetEnvironment();
         Detail::SchedulerBackend* lpBackend = pBackends[leEnvironment];
 
-        JobInstanceHandle lNewHandle;
-        lpBackend->CreateNotReadyInstance(&lNewHandle, &mEntryPoint, mParams);
+        JobInstanceHandle lNewHandle = lpBackend->CreateNotReadyInstance(&mEntryPoint, mParams);
 
         // Store the 16-byte handle into mJobInstanceHandle (the two `std` stores into
         // this+0x40 / this+0x48).

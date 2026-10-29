@@ -106,9 +106,8 @@ namespace LocalBackend
         // storage with thread/start/end profiling qwords. Native arguments
         // retain full pointers. Initialize starts the argument member lifetime.
         union ExecutionData {
-            Param mArguments[4];
+            u32 mArgumentWords[4];
             struct ProfileData { u64 mThreadId, mBegin, mEnd; } mProfile;
-            ExecutionData() : mArguments{} {}
         } mExecution;
         Detail::BucketListNode<Event, 16> mEventLists[KI_NUM_EVENT_LISTS]; // +0x050 (2 * 0x110)
         u32                              mGarbageCollectorLock;  // +0x270
@@ -119,7 +118,7 @@ namespace LocalBackend
         union
         {
             u8                           mSemaphoreStorage[sizeof(EA::Thread::Semaphore)]; // +0x274 (0x10)
-            u64                          mSemaphoreAlign;
+            u32                          mSemaphoreAlign;
         };
         u32                              mEventListLock;         // +0x284
         bool                             mbBeginPlayed;          // +0x288
@@ -172,6 +171,15 @@ namespace LocalBackend
         JobInstance& operator=(const JobInstance&);
     };
 
+    CGS_STATIC_ASSERT((sizeof(Param) == 4), "ARTIST job argument word");
+    CGS_STATIC_ASSERT((sizeof(JobInstance::ExecutionData) == 0x18), "ARTIST argument/profile overlay");
+    CGS_STATIC_ASSERT((offsetof(JobInstance, mExecution) == 0x38), "ARTIST saved arguments");
+    CGS_STATIC_ASSERT((offsetof(JobInstance, mEventLists) == 0x50), "ARTIST job event lists");
+    CGS_STATIC_ASSERT((offsetof(JobInstance, mGarbageCollectorLock) == 0x270), "ARTIST job reference count");
+    CGS_STATIC_ASSERT((offsetof(JobInstance, mSemaphoreStorage) == 0x274), "ARTIST completion semaphore");
+    CGS_STATIC_ASSERT((offsetof(JobInstance, mEventListLock) == 0x284), "ARTIST event lock");
+    CGS_STATIC_ASSERT((sizeof(JobInstance) == 0x290), "ARTIST job instance stride");
+
     // @ 0x82BCBE70 -- MSVC `vector deleting destructor' thunk for JobInstance,
     // materialised as a free function (the thunk has no portable C++ spelling).
     // cFlags bit1 == array variant (cookie at this-16 holds the element count);
@@ -209,14 +217,12 @@ namespace LocalBackend
     //
     // VTABLE: the X360 stamps a SINGLE combined vtable (off_82182500) at +0x0 -- the
     // Detail::SchedulerBackend vtable (slots +0x28 CreateNotReadyInstance / +0x30
-    // IsJobComplete / +0x34 SubmitEvent / +0x38 AddBarrier / +0x3C SleepOn) EXTENDED
-    // with the worker entry points (+0x50 ExecuteReadyJobs / +0x54 GetSleepTimeoutMs)
-    // and the wake hook (+0x1C WakeThreads). The dtor restores the base vtable
+    // IsJobComplete / +0x34 SubmitEvent / +0x38 AddBarrier / +0x3C SleepOn), including
+    // the worker slots (+0x50 ExecuteReadyJobs / +0x54 GetSleepTimeoutMs)
+    // and wake hook (+0x1C WakeThreads). The dtor restores the base vtable
     // off_82182408 on the way out, proving LocalBackend IS a concrete SchedulerBackend
     // -- so it overrides every pure virtual (no second base, ONE vptr at +0x0). The
-    // worker entry points are declared as further virtuals ON THIS class (the same
-    // combined vtable the workers dispatch BY NAME), NOT inherited from a second
-    // polymorphic base (which would insert a 2nd vptr and shift every member offset).
+    // worker entry points override the same SchedulerBackend interface.
     //
     // Vendor EA code reconstructed in its canonical home.
     class LocalBackend : public Detail::SchedulerBackend
@@ -226,9 +232,8 @@ namespace LocalBackend
 
         // The "free / completed" state tag (top 3 bits of the slot word's HIGH word).
         // X360: `lis r8,0x6000` compared against `clrrwi r9,r9,29` (top-3-bits mask).
-        static constexpr u64 KU_SLOT_STATE_MASK = 0xE000000000000000ull;
-        static constexpr u64 KU_SLOT_STATE_FREE = 0x6000000000000000ull;
-        CGS_STATIC_ASSERT((sizeof(SlotWord)==sizeof(u64)), "packed job slot width");
+        static const u64 KU_SLOT_STATE_MASK = 0xE000000000000000ull;
+        static const u64 KU_SLOT_STATE_FREE = 0x6000000000000000ull;
 
         // @ 0x82BCBCB8 -- bring the backend up: stamp the vtable, default the cursors,
         // construct the 32 idle worker threads, release the submission counter, default
@@ -248,9 +253,7 @@ namespace LocalBackend
         // JobInstanceHandle (submission id / backend / index) into pOutHandle. If no slot
         // frees within the ~12s watchdog budget and the global abort predicate fires,
         // writes a null handle instead. (Backend-internal name: AddNotReady.)
-        virtual void CreateNotReadyInstance(JobInstanceHandle* pOutHandle,
-                                            const EntryPoint*  pEntryPoint,
-                                            const Param*       pParams);
+        virtual JobInstanceHandle CreateNotReadyInstance(const EntryPoint* pEntryPoint, const Param* pParams);
 
         // @ 0x82BC9D88 (vtable +0x30) IsJobComplete: nonzero if the slot keyed by
         // (uSubmissionId, uHandleQword) is free/done, reclaimed (-1), or no longer holds
@@ -284,7 +287,7 @@ namespace LocalBackend
         // JobInstance, then publish completion (post its semaphore / decrement its ref)
         // and wake the workers. Returns 1 if a job ran, 0 if there was nothing to do.
         // (Backend-internal name: RunSingleJob; X360 takes the affinity as an u8 mask.)
-        virtual int ExecuteReadyJobs(int iAffinity);
+        virtual bool ExecuteReadyJobs(int iAffinity);
 
         // @ 0x82BCBE60 (vtable +0x54) GetSleepTimeoutMs: the ms a worker waits on its
         // wake event before the next execute pass.
@@ -299,7 +302,7 @@ namespace LocalBackend
         // @ 0x82BCA6C0 -- start the next idle worker thread with rParameters and write a
         // JobThreadHandle (backend, index) into pOutHandle. No-op handle (0,0) when all
         // 32 slots are in use.
-        void AddThread(JobThreadHandle* pOutHandle, const JobThreadParameters& rParameters);
+        JobThreadHandle AddThread(const JobThreadParameters& rParameters);
 
         // @ 0x82BC9D58 -- number of started worker threads.
         int GetNumThreads() const;
@@ -309,17 +312,17 @@ namespace LocalBackend
         int GetNumJobsInFlight() const;
 
         // @ 0x82BCA738 -- join worker thread iIndex.
-        void WaitForEnd(int iIndex);
+        void RequestEnd(u64 uHandle);
+        void WaitForEnd(u64 uHandle);
 
         // @ 0x82BC9E20 -- pack (pBackend, uHandle) into the JobThreadHandle out-struct.
-        void GetThreadHandle(JobThreadHandle* pOutHandle, Detail::SchedulerBackend* pBackend,
-                             u32 uHandle) const;
+        JobThreadHandle GetThreadHandle(u32 uHandle) const;
 
         // @ 0x82BC9E30 -- the OS thread id of worker iIndex.
-        u64 GetThreadId(int iIndex) const;
+        u64 GetThreadId(u64 uHandle) const;
 
         // @ 0x82BCA770 -- copy worker iIndex's 24-byte JobThreadParameters into pOut.
-        void GetThreadParameters(JobThreadParameters* pOut, int iIndex) const;
+        JobThreadParameters GetThreadParameters(u64 uHandle) const;
 
         // @ 0x82BC9CB8 -- read the slot keyed by uHandleQword: write its packed
         // priority-queue entry pointer to *ppEntry and the masked (low-61-bit) state word
@@ -346,7 +349,7 @@ namespace LocalBackend
 
         // +0x000 inherited Detail::SchedulerBackend vtable
         JobInstance*              mpJobInstances;            // +0x004
-        SlotWord*                 mpPriorityQueue;           // +0x008
+        u64*                 mpPriorityQueue;           // +0x008
         s32                       mNextSlot;                 // +0x00C
         s32                       mNumSlots;                 // +0x010
         JobThread                 mThreads[KI_NUM_THREADS];  // +0x014 (32 * 0x2C)
