@@ -351,7 +351,7 @@ namespace CgsDev
                 return;
             }
 
-            const f32 lfCaptionHeight = std::fma(lrMetrics.mfWindowBorderSize, 2.0f, lrMetrics.mfTextSize);
+            const f32 lfCaptionHeight = lrMetrics.mfTextSize + lrMetrics.mfWindowBorderSize * 2.0f;
             if ((mxFlags & KX_FLAGNOBACKGROUND) == 0)
             {
                 const f32 lfRight = mfWidth + mfX;
