@@ -1,6 +1,17 @@
 #include "GameSource/Graphics/BrnBlobbyShadowManager.h"
 
+// ARTIST Renderer::Construct8240ACD0..ACDC; native two-buffer startup.
+void BrnBlobbyShadowManager::Construct()
+{
+    maBuffers[0].miNumShadows = 0;
+    maBuffers[1].miNumShadows = 0;
+    mu8Internal = 0;
+    mu8External = 1;
+}
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
@@ -258,7 +269,8 @@ void BrnBlobbyShadowManager::Render(Matrix44 lViewProjection,
             lVertex.mv3Pos.y = lCentre.y + lfSide * lScaledRight.y;
             lVertex.mv3Pos.z = lCentre.z + lfSide * lScaledRight.z;
             lVertex.mv3Pos.w = lCentre.w + lfSide * lScaledRight.w;
-            lVertex.mv4Colour = {luWhite, luWhite, luWhite, luAlpha};
+            const CgsGraphics::RGBA8 colour = {luWhite, luWhite, luWhite, luAlpha};
+            lVertex.mv4Colour = colour;
             lVertex.mv2Tex0UV.x = laTexCoords[luVertex][0];
             lVertex.mv2Tex0UV.y = laTexCoords[luVertex][1];
         }
