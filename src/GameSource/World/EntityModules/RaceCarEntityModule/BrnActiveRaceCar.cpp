@@ -29,7 +29,7 @@
 // wheel arrays are [4] (RaceCarState), not [6]. See the header banner.
 //
 // Every member access below is BY NAME through the two sub-objects; the numeric offsets
-// survive only as comments (the offsetof pins are retired -- see the header's x64 note).
+// are also enforced by the native layout gates in the header.
 // Behaviour is authoritative from the asm; declaration shapes from the DecFIGS DWARF.
 // ============================================================================
 
@@ -120,13 +120,6 @@ namespace
         }
         return lIdentity;
     }
-
-    // This TU's spelling of BrnPhysics::Def @0x822C7708 (ResourcePtr<StreamedDeformationSpec>::
-    // operator-> over the car's +0x1C90 wrapper), resolved through the handle the wrapper keeps
-    // at +0x14. Defined with AddToScene's helpers below (see its banner); declared here for
-    // OnResourcesLoaded's Def() read (0x822EB210).
-    const BrnPhysics::Deformation::StreamedDeformationSpec*
-    ResolveDeformationSpec(const CgsResource::ResourceHandle& lrHandle);
 }
 
 // ----------------------------------------------------------------------------
@@ -427,13 +420,8 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
 //        stb 0  0x781  mbAIToBeActivated
 //   0x822EB698 / 0x822EB6A4  BaseResourcePtr::CreateFromHandle(this+0x1C90, &dword_82FAD960)
 //                            and (this+0x1CB0, ...) -- `slot = NULLResourcePtr`
-//                            (dword_82FAD960 IS NULLResourcePtr+0x14, the sentinel's
-//                            {mpThis,muThreadId} pair; see CgsResourcePtr.h:169). Reproduced
-//                            as the HANDLE half only, which is the half this class models
-//                            (maPad1C90a + the two named ResourceHandles).
-//                            [FLAG] the alias-list half of CreateFromHandle is not reproduced
-//                            ANYWHERE in this tree -- OnResourcesLoaded's banner records the
-//                            same gap for the write side.
+//                            (dword_82FAD960 is NULLResourcePtr+0x14, its source handle).
+//                            Assignment copies all resource words and unlinks/relinks aliases.
 //
 // NOT cleared by the console: meActiveRaceCarIndex (+0x748). The slot keeps its own index for
 // life (Construct is its only writer) -- DetachActiveRaceCar reads it BEFORE calling this, and
@@ -470,12 +458,10 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
     miFlashFrequency                = 0;                       // 0x794
     mbAIToBeActivated               = false;                   // 0x781
 
-    // `slot = CgsResource::NULLResourcePtr` x2 (see the banner). The wrappers themselves are
-    // this class's two opaque ResourcePtr spans; what it models -- and what AddHandlingModel
-    // reads back -- is the handle each stores at its own +0x14, so the pair is dropped to the
-    // null handle by name.
-    mDeformationModelHandle = CgsResource::NULLResourceHandle;   // this+0x1C90 (+0x14)
-    mGraphicsModelHandle    = CgsResource::NULLResourceHandle;   // this+0x1CB0 (+0x14)
+    // ARTIST 0x822EB698/6A4 assigns the null sentinel's source handle to
+    // both real ResourcePtrs, updating cached resources and unlinking old aliases.
+    mDeformationModelResourcePtr = CgsResource::NULLResourcePtr.GetResourceHandle();   // this+0x1C90 (+0x14)
+    mGraphicsModelResourcePtr = CgsResource::NULLResourcePtr.GetResourceHandle();   // this+0x1CB0 (+0x14)
 
 }
 
@@ -1157,55 +1143,33 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 //
 // WHAT IS REPRODUCED (asm order):
 //   * the two asserts, the state store,
-//   * both resource HANDLES (the console's two BaseResourcePtr::CreateFromHandle calls
-//     store the handle at wrapper+0x14; AddHandlingModel reads exactly those two words),
+//   * both complete resource-pointer assignments, including cached values and alias links,
 //   * the centre-of-mass transform copy and its IsValid assert (leg 1 below),
 //   * ResetVerletOffsets (leg 4 below),
 //   * the detached-part render queue Construct,
 //   * mbCanDriveAwayFromCrash / mbUncrashedThisFrame clears the module's caller makes
 //     right after (they are OnRaceCarResourcesLoaded's own two trailing stores).
 //
-void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
-                                       const CgsResource::ResourceHandle& lrGraphicsModelHandle,
-                                       const Vector3&                     lrInitialVelocity,
-                                       u64                                luCarAssetAttribKey )
+void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrDeformationModelResourcePtr,
+                            const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>& lrGraphicsModelResourcePtr,
+                            BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                            u64 luCarAssetAttribKey,
+                            Vector3 lInitialVelocity )
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");     // BrnActiveRaceCar.cpp:821
     CGS_ASSERT(!IsActive(), "!IsActive()");       // :822
 
-    (void)lrInitialVelocity;     // consumed by AddHandlingModel, carried for signature parity
+    (void)lpVehicleInterface;
+    (void)lInitialVelocity; // ARTIST receives r6/v1 but does not consume either.
 
     muState = E_STATE_WAITING;                                       // +0x740 = 2
 
-    mDeformationModelHandle = lrDeformationModelHandle;              // +0x1CA4
-    mGraphicsModelHandle    = lrGraphicsModelHandle;                 // +0x1CC4
+    mDeformationModelResourcePtr = lrDeformationModelResourcePtr;              // +0x1CA4
+    mGraphicsModelResourcePtr = lrGraphicsModelResourcePtr;                 // +0x1CC4
 
-    // 0x822EB20C..0x822EB24C (banner leg 1): Def(this + 0x1C90) + 0x610 copied whole into
-    // +0x90. PC-SAFETY GUARD, not console behaviour: a spec that does not resolve fires Def's own
-    // "Can not instance" assert (CgsResourcePtr.h:544) and leaves the matrix as Prepare/Attach
-    // set it, where the console would read through the null resource. (The console's Def,
-    // 0x822C7708, asserts on a null +0 word and then returns it anyway -- 0x822C779C `lwz r3, 0(r28)`
-    // -- so the copy at +0x610 would fault.)
-    // KEPT after review D (2026-09-24), because the tree cannot show the spec always resolves here.
-    // The promote gate only proves LOADEDPHYSICS is set in RaceCarStreamer::maxLoadFlags
-    // (IsRaceCarLoadedForStateMachineBringUp), and that bit and maPhysicsResources are kept by
-    // DIFFERENT writers: OnPhysicsUnloading (0x822B75E8) nulls the pointer while OnResourceUnloading
-    // (0x822A1840) only logs -- nothing clears the bit until AddVehicleData recomputes the byte -- and
-    // AddVehicleData sets the bit for a same-model re-add off the pointer still resident at that
-    // moment. So "bit set => pointer live" rests on the InternalBaseStreamer engine never unloading an
-    // entry that is re-requested in the same AddVehicleData, which this tree does not prove. And even a
-    // live pointer resolves through ResolveDeformationSpec's double dereference of the handle's
-    // resource memory, which can itself be empty. Where the console would fault, this build keeps the
-    // Prepare/Attach matrix and asserts. The wheel-scale loop below keeps the same guard for the same
-    // reason.
-    const BrnPhysics::Deformation::StreamedDeformationSpec* lpDeformationSpec =
-        ResolveDeformationSpec( mDeformationModelHandle );
-    CGS_ASSERT( lpDeformationSpec != 0,
-                "Can not instance resource pointer - it has no main memory resource\n" );
-    if( lpDeformationSpec != 0 )
-    {
-        mCentreOfMassTransform = lpDeformationSpec->mCarModelSpaceToHandlingBodySpaceTransform;
-    }
+    // ARTIST Def() reads the cached main-memory resource in the real wrapper.
+    mCentreOfMassTransform =
+        mDeformationModelResourcePtr->mCarModelSpaceToHandlingBodySpaceTransform;
     CGS_ASSERT( rw::math::vpu::IsValid( mCentreOfMassTransform ),
                 "RwMath::IsValid( mCentreOfMassTransform )" );                         // :831
 
@@ -1217,20 +1181,11 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     // inside mRenderParams and is the one member of the block this header names.
     mRenderParams.GetDetachedPartQueue().Construct();
 
-    // 0x822EB410..0x822EB470 (banner leg 2): the four render wheel scales, once per load. Def is
-    // called again on every pass (bl @0x822EB42C); the loop runs while r30 = 0x60 + 0x30*i is
-    // below 0x120, i.e. four wheels. Same PC-safety guard as leg 1.
+    // Def() is evaluated once per wheel, as in ARTIST 0x822EB428..0x822EB470.
     for( u32 luWheel = 0u; luWheel < 4u; ++luWheel )
     {
-        const BrnPhysics::Deformation::StreamedDeformationSpec* lpWheelDeformationSpec =
-            ResolveDeformationSpec( mDeformationModelHandle );
-        CGS_ASSERT( lpWheelDeformationSpec != 0,
-                    "Can not instance resource pointer - it has no main memory resource\n" );
-        if( lpWheelDeformationSpec != 0 )
-        {
-            mRenderParams.SetWheelScale(
-                luWheel, lpWheelDeformationSpec->GetWheelSpec( static_cast<s32>( luWheel ) )->mScale );
-        }
+        mRenderParams.SetWheelScale(
+            luWheel, mDeformationModelResourcePtr->GetWheelSpec( static_cast<s32>( luWheel ) )->mScale );
     }
 
     // 0x822EB474..0x822EB4F0 -- the authored default colour (banner leg 3).
@@ -1239,10 +1194,6 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
         const_cast<Attrib::Collection*>( lCarAsset.GetGraphicsAssetRefSpec()->GetCollection() ), 0 );
     miDefaultColourIndex   = lGraphicsAsset.PlayerColourIndex();          // stw +0x1C80 @0x822EB4DC
     miDefaultColourPalette = lGraphicsAsset.PlayerColourPaletteIndex();   // stw +0x1C84 @0x822EB4E4
-
-    // [DIAG] BRN_RESLOADED_DIAG -- NOT IN THE X360 BINARY. Capped proof the Def() legs were
-    // DISPATCHED on a resolved spec, with the values they stored.
-    static u32 suResLoadedDiagLines = 0u;
 }
 
 // ============================================================================
@@ -1253,7 +1204,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
 // over (it drops the vector velocity and mis-pairs the 64-bit VolumeInstanceId load):
 //   r3 = lpVehicleInterface   r4 = mHandlingBodyVolumeId (ld 0xD0)
 //   r5 = lrInitialTransform   r6 = luCarAssetAttribKey
-//   r7 = mDeformationModelHandle (ld 0x1CA4)   r8 = mGraphicsModelHandle (ld 0x1CC4)
+//   r7/r8 = the resource wrappers' source handles (ld 0x1CA4 / ld 0x1CC4)
 //   r9 = mpRaceCar->GetType() (lbz 0xA4)       f1 = mfBaseDeformAmount (lfs 0x7CC)
 //   stack: meBaseDeformationType (lwz 0x7C8), the computed bool, lu8CarStrengthStat
 //   v1 = lrInitialVelocity     v2 = vspltisw 0  (angular velocity is ALWAYS zero here)
@@ -1288,8 +1239,8 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
         lrInitialVelocity,
         Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },      // asm `vspltisw128 v127, 0` -> v2
         luCarAssetAttribKey,
-        mDeformationModelHandle,
-        mGraphicsModelHandle,
+        mDeformationModelResourcePtr.GetResourceHandle(),
+        mGraphicsModelResourcePtr.GetResourceHandle(),
         mpRaceCar->GetType(),
         mfBaseDeformAmount,                                            // +0x7CC
         meBaseDeformationType,                                         // +0x7C8
@@ -3040,39 +2991,6 @@ namespace
     const u32 KU_CULLING_GROUP_AI_CAR     = 5u;
     const u32 KU_CULLING_GROUP_OTHER_CAR  = 1u;
 
-    // Resolve the resident deformation spec from a ResourceHandle.
-    //
-    // WHY THIS EXISTS: the console reads the handling-body dimensions through
-    // `BrnPhysics::Def...(this + 0x1C90)` @0x822C7708 -- which is
-    // CgsResource::ResourcePtr<StreamedDeformationSpec>::operator-> (its baked assert is
-    // "Can not instance resource pointer - it has no main memory resource" at
-    // CgsResourcePtr.h:544, matching the tree's own accessor exactly) applied to
-    // ActiveRaceCar::mDeformationModelResourcePtr. That member is still the opaque
-    // `maPad1C90a[20]` span in BrnActiveRaceCar.h because homing the ResourcePtr wrapper
-    // would give ActiveRaceCar a non-trivial ctor/dtor its 8-slot array has never had.
-    //
-    // What IS named is the ResourceHandle the wrapper stores at its own +0x14 --
-    // mDeformationModelHandle -- and it addresses the SAME resource: OnRaceCarResourcesLoaded
-    // fills it from RaceCarStreamer::GetPhysicsResourceHandle, i.e. from the very
-    // ResourcePtr the console dereferences. The double deref below is the tree's established
-    // handle->resource idiom, used verbatim by BrnDeformationManager.cpp:128
-    // (ResolveDeformationSpec) and by CgsResource::SafeResourceHandle::operator->
-    // (CgsResourceHandle.h:401); CgsBaseResourcePtr.cpp:60-90 records the runtime witness
-    // that the +0x14 pair resolves through it and the +0x04 pair does not.
-    //
-    // Returns 0 when the car's physics resource is not resident, which is the case the
-    // console's operator-> asserts on.
-    const BrnPhysics::Deformation::StreamedDeformationSpec*
-    ResolveDeformationSpec(const CgsResource::ResourceHandle& lrHandle)
-    {
-        if (lrHandle.mpResourceMemory == 0)
-        {
-            return 0;
-        }
-        return *reinterpret_cast<const BrnPhysics::Deformation::StreamedDeformationSpec* const*>(
-                   lrHandle.mpResourceMemory);
-    }
-
     // dot3 + sqrt, the console's `vmsum3fp128` followed by `vrsqrtefp` and two
     // Newton-Raphson refinements (0x822EB864..0x822EB8A4). The refined reciprocal square
     // root times the input is the square root; `vsel ... vcmpeqfp128 v9, v127, v0` returns
@@ -3193,7 +3111,7 @@ void ActiveRaceCar::AddToScene(
 
     // ---- 1. the handling-body box half-extents -------------------------------------
     const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
-        ResolveDeformationSpec(mDeformationModelHandle);
+        mDeformationModelResourcePtr.operator->();
     CGS_ASSERT(lpSpec != 0,
                "Can not instance resource pointer - it has no main memory resource\n");
     if (lpSpec == 0)
