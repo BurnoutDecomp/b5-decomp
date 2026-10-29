@@ -62,7 +62,7 @@ namespace CgsSceneManager
             const f32 lfDeltaZ = lCameraPosition.z - lMin.z;
             const f32 lfDistanceSquared =
                 lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
-            if (lfDistanceSquared >= lfMaxDistanceSquared)
+            if (!(lfDistanceSquared < lfMaxDistanceSquared))
                 continue;
 
             const Interval* lpMaxInterval = lpIntervalList->GetObjectInterval(

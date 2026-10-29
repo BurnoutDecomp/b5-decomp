@@ -5959,6 +5959,9 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     lpOutput->LockForWrite();
     lpInput->LockForRead();
 
+    // ARTIST 8274AA74: reset before the divergence banner and all state branches.
+    muNumTrafficInsertionsThisFrame = 0;
+
     if (mbHullSyncDivergence)
     {
         // GATE: the hull-sync 2D banner. Its four text/position/size/colour constants come
@@ -9284,27 +9287,49 @@ void TrafficEntityModule::UpdateParams_UpdateNeighbours(Param* lpParam,
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateParams_TryToReinsertParam  @0x827247F0  (.cpp 10552)  GATED
-//
-// Online divergence repair: re-seats a param onto the nearest lane under the vehicle's actual
-// transform. Reached only through mParamsToReinsert, which nothing in the offline driving path
-// fills, and asserts AllowDivergentBehaviour() on entry.
-//
-// BLOCKERS (all three): TrafficData::FindNearestLaneForPoint has no declaration in
-// SharedClasses/Traffic/BrnTrafficDataResourceType.h; Param::ReinsertInLanes has no declaration
-// in BrnTrafficParam.h; muNumTrafficInsertionsThisFrame's <= 1 budget test at +232478 is the
-// only other read. DELETE-WHEN those two land.
-// ----------------------------------------------------------------------------
+// ARTIST 0x827247F0. Attempt at most two lane repairs per PreSceneUpdate frame.
+// The query consumes actual vehicle position/direction, then the active-hull gate.
 void TrafficEntityModule::UpdateParams_TryToReinsertParam(u32 luParam)
 {
     CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");
-    (void)luParam;
+    if (muNumTrafficInsertionsThisFrame > 1)
+    {
+        return;
+    }
 
-    static bool sbLogged = false;
-    LogMissingLeg_T2(sbLogged,
-                  "UpdateParams_TryToReinsertParam @0x827247F0 -- needs "
-                  "TrafficData::FindNearestLaneForPoint and Param::ReinsertInLanes, neither "
-                  "declared in the tree");
+    Param* const lpParam = GetParam(luParam);
+    const Vector3 lPosition = GetVehicleTransform(luParam).Pos();
+    const Vector3 lDirection = GetVehicleTransform(luParam).At();
+    const VecFloat lfMaxDistance{20.0f, 20.0f, 20.0f, 20.0f};
+    const VecFloat lfMinCosAngle{0.8f, 0.8f, 0.8f, 0.8f};
+    u32 luHull, luSection, luSegment;
+    f32 lfParamAlong;
+    const bool lbFound = mpData->FindNearestLaneForPoint(
+        lPosition, lfMaxDistance, lDirection, lfMinCosAngle,
+        &luHull, &luSection, &lfParamAlong, &luSegment);
+    ++muNumTrafficInsertionsThisFrame;
+    if (!lbFound)
+    {
+        return;
+    }
+    const u16 luActiveHull = static_cast<u16>(luHull);
+    if (mActiveHulls.Contains(luActiveHull))
+    {
+        const Hull* const lpHull = GetHull(luHull);
+        const Section* const lpSection = lpHull->GetSection(luSection);
+        lpParam->ReinsertInLanes(luHull, luSection, lfParamAlong, lpHull);
+        Vector3 lLanePosition, lLaneDirection, lLaneRight;
+        const VecFloat lfAlong{lfParamAlong, lfParamAlong, lfParamAlong, lfParamAlong};
+        // This sampler's third output is RIGHT (the existing lrUp name is misleading).
+        lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lfAlong,
+                                          lpParam->muCurrentSegment,
+                                          lLanePosition, lLaneDirection, lLaneRight);
+        const f32 lfSpeed = lpParam->mfSpeed;
+        GetParamTransform(luParam)->Initialise(
+            lLanePosition, lLaneDirection, lLaneRight,
+            VecFloat{lfSpeed, lfSpeed, lfSpeed, lfSpeed});
+        GetVehicle(luParam)->ResetPhysicalTime(5.0f);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -9324,22 +9349,11 @@ void TrafficEntityModule::UpdatePressure_Reset()
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::Pressure_PickSplitToTake  @0x8272BC68  (.cpp 17230..17233)  PARTIAL
-//
-// Picks which of a section's three forward splits a param should take: lowest score wins, ties
-// keep the earlier direction. The base score is 0 for straight-on and 100 for a left/right
-// split whose turn probability is zero; the console then adds the destination span's occupancy
-// pressure.
-//
-// GATED LEG -- the pressure term. It is
-//   score += (f32)lpHullRuntime->GetSectionSpanVehicleCount(span) *
-//            lpHull->mpaSectionSpans[span].mfMaxVehicleRecip;
-// BLOCKER: BrnTraffic::SectionSpan is forward-declared only in SharedClasses/Traffic/
-// BrnTrafficHull.h. DWARF BrnTrafficSection.h:260 spells it (u16 muMaxVehicles @+0,
-// f32 mfMaxVehicleRecip @+4, record stride 8, plus Hull::GetSectionSpan at BrnTrafficHull.h:94)
-// -- home it there and this leg is a two-line edit. Until then the fallback is the console's
-// own no-hull-runtime value, 1.0f, so every split scores alike and direction 0 wins.
-// DELETE-WHEN SectionSpan is homed.
+// TrafficEntityModule::Pressure_PickSplitToTake @0x8272BC68.
+// Active destinations score occupancy times the span's reciprocal capacity plus
+// the direction penalty (scalar fmadds at8272BF98). An absent hull runtime keeps
+// the original fallback score1. Equal scores preserve the earlier direction;
+// unordered scores do not replace the best score. SectionSpan is already homed.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Pressure_PickSplitToTake(const Section* lpSection,
                                                    u8* lpuOutSection,
@@ -9383,21 +9397,17 @@ void TrafficEntityModule::Pressure_PickSplitToTake(const Section* lpSection,
 
         const Hull* lpTargetHull = GetHull(luHull);   // carries the muNumHulls bound
 
+        const HullRuntime* lpHullRuntime = GetHullRuntimeSafe(luHull);
         f32 lfScore = 1.0f;
-        if (mauHullRuntimeDataIndices[luHull] != KU_INVALID_HULL_RUNTIME)
+        if (lpHullRuntime != 0)
         {
-            CGS_ASSERT(luSection < lpTargetHull->muNumSections, "luIndex < muNumSections");
             const Section* lpTargetSection = lpTargetHull->GetSection(luSection);
-            CGS_ASSERT(lpTargetSection->muSpanIndex < lpTargetHull->muNumSectionSpans,
-                       "luIndex < muNumSectionSpans");
-
-            lfScore = lafScores[luDirection];
-
-            static bool sbLogged = false;
-            LogMissingLeg_T2(sbLogged,
-                          "Pressure_PickSplitToTake @0x8272BC68 span-occupancy term -- "
-                          "BrnTraffic::SectionSpan is forward-declared only in "
-                          "SharedClasses/Traffic/BrnTrafficHull.h (DWARF BrnTrafficSection.h:260)");
+            const u32 luSpanIndex = lpTargetSection->muSpanIndex;
+            const SectionSpan* lpSpan = lpTargetHull->GetSectionSpan(luSpanIndex);
+            const f32 lfVehicleCount =
+                static_cast<f32>(lpHullRuntime->GetSectionSpanVehicleCount(luSpanIndex));
+            lfScore = std::fma(lfVehicleCount, lpSpan->GetMaxVehicleCountReciprocal(),
+                               lafScores[luDirection]);
         }
 
         if (lfScore < lfBestScore)
@@ -16883,17 +16893,63 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
                 GetVehicle(luVehicle)->SetAlarmOn(true);   // @0x8270FC10
             }
 
-            // GATE G-ARTIC: the cab/trailer pairing arms and their
-            // Array<TrafficCrashInfo,160>::Append. BLOCKER: needs Vehicle::GetTrailerIndex, absent
-            // here; and the standard-species arm early-outs on muOtherHalfIndex == KU_INVALID_VEHICLE,
-            // which every generated car has. DELETE-WHEN trailers land.
+            // ARTIST82733100..82733450: the other articulated half is queued
+            // for the existing emergency-crash drain. The two roles validate
+            // their reciprocal links at different points; retain that order.
+            u32 luOtherVehicle;
+            const char* lpcPairSelfCrashMessage;
+            if (lpVehicle->IsOfStandardSpecies())
             {
-                static bool sbLoggedArticGate = false;
-                LogGateOnce(sbLoggedArticGate,
-                            "loop 1 cab/trailer pairing + Array<TrafficCrashInfo,160>::Append "
-                            "parked -- Vehicle::GetTrailerIndex is absent and no generated car "
-                            "carries a trailer this round");
+                lpcPairSelfCrashMessage = "Trailer's been told to crash into itself: ";
+                luOtherVehicle = lpVehicle->GetOtherHalfIndex();
+                if (luOtherVehicle == KU_INVALID_VEHICLE)
+                {
+                    continue;
+                }
+                const Vehicle* lpTrailer = GetVehicle(luOtherVehicle);
+                CGS_ASSERT(lpTrailer->IsOfTrailerSpecies(), "IsOfTrailerSpecies()");
+                CGS_ASSERT(lpTrailer->GetOtherHalfIndex() == luVehicle,
+                           "Mismatched artic parts: cab id=");
+                if (lpTrailer->IsCrashing() || EntityIndexOf(lCrasherId) == luOtherVehicle)
+                {
+                    continue;
+                }
             }
+            else if (lpVehicle->IsOfTrailerSpecies())
+            {
+                lpcPairSelfCrashMessage = "Cab's been told to crash into itself: ";
+                if (lpVehicle->GetOtherHalfIndex() == KU_INVALID_VEHICLE)
+                {
+                    continue;
+                }
+                luOtherVehicle = lpVehicle->GetCabIndex();
+                const Vehicle* lpCab = GetVehicle(luOtherVehicle);
+                if (lpCab->IsCrashing() || EntityIndexOf(lCrasherId) == luOtherVehicle)
+                {
+                    continue;
+                }
+                CGS_ASSERT(lpCab->GetTrailerIndex() == luVehicle,
+                           "Mismatched artic parts: trailer id=");
+            }
+            else
+            {
+                continue;
+            }
+
+            TrafficCrashInfo lPairedCrash;
+            lPairedCrash.mVictimId = MakeTrafficEntityId(luOtherVehicle);
+            lPairedCrash.mCauserId = lCrasherId;
+            if (lPairedCrash.mCauserId.muValue == 0xFFFFFFFFu)
+            {
+                lPairedCrash.mCauserId = MakeTrafficEntityId(luVehicle);
+            }
+            lPairedCrash.muCrashTrafficType =
+                static_cast<u32>(BrnPhysics::Vehicle::eCrashTrafficType_Standard);
+            CGS_ASSERT(lPairedCrash.mVictimId.muValue != lPairedCrash.mCauserId.muValue,
+                       lpcPairSelfCrashMessage);
+            // Original stores only victim, causer and type. The emergency drain
+            // does not consume mbNeedsToBeSentToCrashModule; leave it unwritten.
+            maEmergencyCrashingVehicles.Append(lPairedCrash);
         }
     }
 

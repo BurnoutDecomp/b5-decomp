@@ -256,10 +256,12 @@ namespace BrnNetwork
         // X360 0x8258B6F8 -- stamp the local camera status into the local player's menu data.
         void UpdateCameraStatus();
 
-        // queue the local camera picture for DXT compression for transmission
-        // at compression quality liQualitySetting.
-        // DECLARATION-ONLY (depends on the un-homed XCamGetStatus + stream-engine geometry).
-        s32 GetCompressedLocalCameraPicture(
+        // X360 0x82586890. If XCamGetStatus is ready, queue the prepared local texture into the
+        // shared DXT compressor using the requested quality and completion callback. The local
+        // texture owns its source bytes; NetworkTextureDXTCompress copies them into its own
+        // double-buffer before returning. DecFIGS CameraPS3 declares the role-analogous method
+        // void; both X360 callers also ignore the raw r3 residue from this call.
+        void GetCompressedLocalCameraPicture(
             CgsNetwork::NetworkTexture* lpDstTexture,
             s32 liQualitySetting,
             CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback lCompleteCallback,
@@ -287,6 +289,9 @@ namespace BrnNetwork
                                                             void* lpCamera);
 
     private:
+        // Scratch-fixture access only; this friend does not add storage or affect the class ABI.
+        friend struct CameraX360TestAccess;
+
         // X360 0x82586AF8 / 0x82586C50 -- open/close the VDP UDP socket. DECLARATION-ONLY
         // (Winsock/XDK socket layer is un-homed glue).
         void OpenSocket();

@@ -6,7 +6,7 @@
 // recovered from, and the ship-vs-leak divergence list.
 //
 // Bodies recovered here (X360 ARTIST addresses; * = EXPORT HOLE, see each banner):
-//   Construct()                                   * 0x827539A0
+//   Construct()                                     0x827539A0
 //   Destruct()                                      0x8274F690
 //   SetAssetList( u32, const VehicleAsset* )        0x82753A38
 //   AddVehiclesToTargetList( u32, const u8* )       0x8274F6A0
@@ -45,34 +45,19 @@ namespace BrnTraffic
 
 
 // -----------------------------------------------------------------------------
-// * @0x827539A0 -- EXPORT HOLE. No .ida-exports JSON for this address, so neither
-// pseudocode nor assembly can be read; the body below is the leaked Feb-2007
-// TrafficCarStreamer::Construct with one adaptation.
-//
-// The call is attested from the caller: TrafficEntityModule::Construct @0x82740220 calls
-// `TrafficCarStreamer::Construct( this + 469848 )`, and UpdateStreaming @0x82748848
-// addresses the same member. Every store in the leak's body has a reader in the exported
-// siblings: mauLoadStates starts 0 (OnLoadBegin @0x82757E40 asserts ==0), maxLoadFlags
-// starts 0 (AreAllAssetsLoaded @0x82706288 skips slots with the low two bits clear),
-// mauRenderingHistory starts 0 (Update @0x8274F740 treats non-zero as recently drawn), and
-// every maGraphicsStubs slot starts null (OnLoadBegin asserts it).
-//
-// The adaptation: the leak calls the 3-parameter
-// `BaseClass::Construct( E_POOL_TRAFFIC, E_ASSETSET_GRAPHICS, false )`, but the ship base is
-// 4-parameter, `Construct( liPoolId, lbSlotPoolSystem, leAssetSet, lbAllowFailure )` (pinned
-// by WorldGraphicsStreamer::Construct @0x827CA388). lbSlotPoolSystem is false here because
-// InternalBaseStreamer::PostLoadRequest only adds the entry index to the pool id when it is
-// set, and traffic graphics all land in the single E_POOL_TRAFFIC pool.
-// FLAG: this body is an export hole, so `false` for lbSlotPoolSystem and the E_POOL_TRAFFIC
-// value itself (15, DWARF ps3mem.h) are the two facts ARTIST does not directly attest.
-// Revisit this line if a traffic bundle is ever seen requested from pool 15+slot.
+// ARTIST raw 0x827539A0..0x82753A34: complete constructor body.
+// The direct InternalBaseStreamer call binds four arrays of 64 entries, length 64,
+// pool 15, slot-pool false, graphics asset set 0, and allow-failure true.
+// The final flag is byte 1 stored at caller sp+0x5F (827539C4).
+// The remaining named-member stores match the original 64-slot clear and
+// null-handle assignment loop.
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::Construct()
 {
     BaseClass::Construct( BrnResource::E_POOL_TRAFFIC,
-                          false /*lbSlotPoolSystem -- see the FLAG above*/,
+                          false /*lbSlotPoolSystem*/,
                           BrnResource::E_ASSETSET_GRAPHICS,
-                          false /*lbAllowFailure*/ );
+                          true /*lbAllowFailure: ARTIST827539C4*/ );
 
     muNumAssets = 0;
 

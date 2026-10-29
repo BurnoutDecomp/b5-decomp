@@ -100,9 +100,8 @@ class TrafficCarStreamer : public BrnWorld::BaseStreamer< KU_MAX_VEHICLE_ASSETS 
 public:
     // ---- lifecycle ---------------------------------------------------------
 
-    // @0x827539A0 -- EXPORT HOLE (no .ida-exports JSON for this address). Body
-    // from the leak, with the base call adapted to the ship's 4-parameter
-    // BaseStreamer<N>::Construct. See the .cpp for the full FLAG.
+    // ARTIST raw 0x827539A0..0x82753A34: base pool 15, slot-pool false,
+    // graphics set 0, allow-failure true; clear 64 slots and null their handles.
     void Construct();
 
     // @0x8274F690 -- `*(this + 12280) = 0`, i.e. muNumAssets = 0. Nothing else.

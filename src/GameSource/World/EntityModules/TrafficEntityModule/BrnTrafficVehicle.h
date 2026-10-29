@@ -237,6 +237,8 @@ public:
     f32 GetPhysicalTime() const;
     f32 GetManoeuvreTime() const;
     void AddPhysicalTime(f32 lfDelta);
+    // DWARF :469; UpdateParams_TryToReinsertParam827249E4 inlines this bare store.
+    void ResetPhysicalTime(f32 lfTime) { mfPhysicalTime = lfTime; }
     void AddManoeuvreTime(f32 lfDelta);
     // DWARF BrnTrafficVehicle.h:484. Inlined by UpdateStuckReverseManoeuvre @0x82719430 as the
     // `stfs 0.0, 0x60(vehicle)` at 0x8271984C (Vehicle+0x60 == mfManoeuvreTime).

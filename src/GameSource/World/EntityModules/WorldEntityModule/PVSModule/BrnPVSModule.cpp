@@ -29,10 +29,10 @@
 
 namespace BrnWorld
 {
-f32 mfCentreZoneBaseScore         = 100.0f;
-f32 mfImmediateZoneBaseScore      = 10.0f;
-f32 mfSecondaryZoneBaseScore      = 9.8f;
-f32 mfDirectionalScoreMultiplier = 1.0f;
+f32 PVSModule::mfCentreZoneBaseScore         = 100.0f;
+f32 PVSModule::mfImmediateZoneBaseScore      = 10.0f;
+f32 PVSModule::mfSecondaryZoneBaseScore      = 9.8f;
+f32 PVSModule::mfDirectionalScoreMultiplier = 1.0f;
 
 namespace
 {
