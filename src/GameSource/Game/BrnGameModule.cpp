@@ -197,6 +197,8 @@ namespace BrnGame
         , mpGuiOutputBuffer(0)
         , mpDirectorOutputBuffer(0)
         , mpWorldUpdateOutputBuffer(0)
+        , mpReplayPreSimOutputBuffer(0)
+        , mpReplayPostSimOutputBuffer(0)
         , mpEffectsOutputBuffer(0)
         , mpNetworkOutputBuffer(0)
         , mbDispatchCameraPublished(false)
@@ -1470,47 +1472,42 @@ namespace BrnGame
 
         // sub_823B7620 (bracket A), then the effects read lock (bracket B, interleaved).
         lpSoundInputBuffer->LockForWrite();
-        if (lpDirectorOutputBuffer != 0)     lpDirectorOutputBuffer->LockForRead();
-        if (lpWorldOutputBuffer != 0)        lpWorldOutputBuffer->LockForRead();
-        if (lpGameStateOutputBuffer != 0)    lpGameStateOutputBuffer->LockForRead();
-        if (lpGuiOutputBuffer != 0)          lpGuiOutputBuffer->LockForRead();
-        if (lpReplaysPreSimOutputBuffer != 0) lpReplaysPreSimOutputBuffer->LockForRead();
-        if (lpEffectsOutputBuffer != 0)      lpEffectsOutputBuffer->LockForRead();
+        lpDirectorOutputBuffer->LockForRead();
+        lpWorldOutputBuffer->LockForRead();
+        lpGameStateOutputBuffer->LockForRead();
+        lpGuiOutputBuffer->LockForRead();
+        lpReplaysPreSimOutputBuffer->LockForRead();
+        lpEffectsOutputBuffer->LockForRead();
 
         // @0x823DCF98 -- the world -> sound copy + installs (the update set feeds the
         // bit-0x100 replay-source select).
-        if (lpWorldOutputBuffer != 0)
-            BridgeWorldToSound(lpSoundInputBuffer, lpWorldOutputBuffer, leUpdateSet);
+        BridgeWorldToSound(lpSoundInputBuffer, lpWorldOutputBuffer, leUpdateSet);
 
         // @0x823DCFA0/AC -- the director camera into the root input (+0x2F20 on console).
         // SetCameraInput invokes Camera::operator= on the complete by-value camera,
         // matching the console root-input member at +0x2F20.
-        if (lpDirectorOutputBuffer != 0)
-            lpSoundInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
+        lpSoundInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
 
         // @0x823DCFBC -- the game-state bridge (this leg is its ONLY console caller).
-        if (lpGameStateOutputBuffer != 0)
-            BridgeGameStateToSound(lpSoundInputBuffer, lpGameStateOutputBuffer);
+        BridgeGameStateToSound(lpSoundInputBuffer, lpGameStateOutputBuffer);
 
         // @0x823DCFD4 -- the GUI out-queue install (console reloads the gm+0x9A0BD8
         // member; on PC the caller passes the same static buffer).
-        if (lpGuiOutputBuffer != 0)
-            BridgeGuiToSound(lpSoundInputBuffer, lpGuiOutputBuffer);
+        BridgeGuiToSound(lpSoundInputBuffer, lpGuiOutputBuffer);
 
         // @0x823DCFDC/E8 -- the replay status interface into the root input (+0x4).
-        if (lpReplaysPreSimOutputBuffer != 0)
-            lpSoundInputBuffer->SetReplayStatusInterface(
-                reinterpret_cast<const RootIn::ReplayStatusInterface*>(
-                    lpReplaysPreSimOutputBuffer->GetStatusInterface()));
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* const lpReplayRead =
+            lpReplaysPreSimOutputBuffer;
+        lpSoundInputBuffer->SetReplayStatusInterface(lpReplayRead->GetStatusInterface());
 
         // sub_823B7760 (reverse of bracket A), then the effects unlock (bracket B).
-        if (lpReplaysPreSimOutputBuffer != 0) lpReplaysPreSimOutputBuffer->UnlockForRead();
-        if (lpGuiOutputBuffer != 0)          lpGuiOutputBuffer->UnlockForRead();
-        if (lpGameStateOutputBuffer != 0)    lpGameStateOutputBuffer->UnlockForRead();
-        if (lpWorldOutputBuffer != 0)        lpWorldOutputBuffer->UnlockForRead();
-        if (lpDirectorOutputBuffer != 0)     lpDirectorOutputBuffer->UnlockForRead();
+        lpReplaysPreSimOutputBuffer->UnlockForRead();
+        lpGuiOutputBuffer->UnlockForRead();
+        lpGameStateOutputBuffer->UnlockForRead();
+        lpWorldOutputBuffer->UnlockForRead();
+        lpDirectorOutputBuffer->UnlockForRead();
         lpSoundInputBuffer->UnlockForWrite();
-        if (lpEffectsOutputBuffer != 0)      lpEffectsOutputBuffer->UnlockForRead();
+        lpEffectsOutputBuffer->UnlockForRead();
 
         // @0x823DD054 -- the pump, with the console's exact timer products (identical to
         // the loading spine's @0x823F2AC8; cross-confirmed in the decode).
@@ -1896,11 +1893,8 @@ namespace BrnGame
     //   the helper's DestroyIOBuffer (asserting "mpStack->DestroyIOBuffer( &mpBuffer )",
     //     CgsModuleIOHelper.h:57).
     //
-    // The director pause-request and controller-disconnect producers below are source-recovered.
-    // The Replay append remains null-guarded because the active caller still passes null; its
-    // PostSim dispatch and lifetime are a separate prerequisite. The current PC full-cascade
-    // caller also supplies ConstructUpdateSetFromFsm(), whose body never sets bit 0x4, so the
-    // event-10 transition remains dormant until the existing incomplete late-set path is wired.
+    // The active full-cascade caller retains Replay PostSim through this append
+    // and supplies the late ConstructUpdateSet result for controller-disconnect events.
     // BridgeGuiToGameState takes the GUI module's own out-event queue and the game-state module
     // (its signature is adapted, see its declaration), so its game events reach the module's
     // carry queue directly rather than through this buffer's game-event queue. They land ahead
@@ -1923,13 +1917,12 @@ namespace BrnGame
 
         CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
 
-        // LockBuffersForIO: the buffer write-locked, the five sources read-locked. The replay
-        // post-sim source is the only one this build can pass as null.
+        // LockBuffersForIO: the buffer write-locked, all five required sources read-locked.
         lpPostWorldInput->LockForWrite();
         lpInputOutputBuffer->LockForRead();
         lpWorldUpdateOutputBuffer->LockForRead();
         lpGuiOutputBuffer->LockForRead();
-        if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->LockForRead();
+        lpReplaysPostSimOutputBuffer->LockForRead();
         lpDirectorOutputBuffer->LockForRead();
 
         // [PC HARNESS, not console code] scheduled GUI records (BRN_NET_SCRIPT); inert unless set.
@@ -1955,12 +1948,9 @@ namespace BrnGame
         }
 
         // ARTIST 0x823E93D0..0x823E93E4: append Replay events after event 43 and before
-        // event 10. The active PC caller currently passes null for this output.
-        if (lpReplaysPostSimOutputBuffer != 0)
-        {
-            lpPostWorldInput->GetGameEventQueue()->Append(
-                *lpReplaysPostSimOutputBuffer->GetGameEventQueue());
-        }
+        // event 10. The same frame's PostSim producer has completed.
+        lpPostWorldInput->GetGameEventQueue()->Append(
+            *lpReplaysPostSimOutputBuffer->GetGameEventQueue());
 
         // ARTIST 0x823E93F8..0x823E9450: sample update-set bit 0x4 only when neither
         // loading-screen visibility nor disk error suppresses the controller event.
@@ -1983,7 +1973,7 @@ namespace BrnGame
                 BrnDirector::Camera::CameraState::E_FLAG_IS_PICTURE_PARADISE));
 
         lpDirectorOutputBuffer->UnlockForRead();
-        if (lpReplaysPostSimOutputBuffer != 0) lpReplaysPostSimOutputBuffer->UnlockForRead();
+        lpReplaysPostSimOutputBuffer->UnlockForRead();
         lpGuiOutputBuffer->UnlockForRead();
         lpWorldUpdateOutputBuffer->UnlockForRead();
         lpInputOutputBuffer->UnlockForRead();
@@ -2595,10 +2585,8 @@ namespace BrnGame
     // in argument order, with sub_823B7A10 the exact reverse; both are reproduced inline, the
     // same idiom DoUpdate_Sound already uses in this file.
     //
-    // FLAG PC null-tolerance: the console helper asserts every buffer non-null. On this build
-    // the replay pre-sim output and the sound pre-update output are not driven per frame, and
-    // the game-state / world / director statics can be null on defensive frames -- each leg
-    // skips its absent source rather than faking one. Retire the guards as the modules come live.
+    // Every original source now has a frame-owned producer. Preserve required
+    // participants and the original read/write lock bracket without silent skips.
     // =========================================================================================
     void BrnGameModule::DoUpdate_Effects(CgsModule::IOBufferStack* lpInputBufferStack,
                                          CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -2622,71 +2610,37 @@ namespace BrnGame
         const bool lbCreated = lpInputBufferStack->CreateIOBuffer(&lpEffectsInputBuffer, "Effects");
         CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
         (void)lbCreated;
-        if (lpEffectsInputBuffer == 0)
-        {
-            CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Effects);
-            return;
-        }
 
         // sub_823B78A0(effectsIn, director, input, world, gameState, replays, soundPreUpdate)
         lpEffectsInputBuffer->LockForWrite();
-        if (lpDirectorOutputBuffer != 0)       lpDirectorOutputBuffer->LockForRead();
-        if (lpInputOutputBuffer != 0)          const_cast<CgsInput::InputIO::OutputBuffer*>(lpInputOutputBuffer)->LockForRead();
-        if (lpWorldOutputBuffer != 0)          lpWorldOutputBuffer->LockForRead();
-        if (lpGameStateOutputBuffer != 0)      lpGameStateOutputBuffer->LockForRead();
-        if (lpReplaysPreSimOutputBuffer != 0)  lpReplaysPreSimOutputBuffer->LockForRead();
-        if (lpSoundPreUpdateOutputBuffer != 0) lpSoundPreUpdateOutputBuffer->LockForRead();
+        lpDirectorOutputBuffer->LockForRead();
+        lpInputOutputBuffer->LockForRead();
+        lpWorldOutputBuffer->LockForRead();
+        lpGameStateOutputBuffer->LockForRead();
+        lpReplaysPreSimOutputBuffer->LockForRead();
+        lpSoundPreUpdateOutputBuffer->LockForRead();
 
         // @0x823DD154/60 -- the game module own timer status (gm + 0x9A0B0C).
         lpEffectsInputBuffer->SetTimerStatusInterface(&mTimerStatusInterface);
 
         // @0x823DD164/74 -- the director finalised camera.
-        if (lpDirectorOutputBuffer != 0)
-            lpEffectsInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
+        lpEffectsInputBuffer->SetCameraInput(lpDirectorOutputBuffer->GetCameraOutput());
 
         // @0x823DD178/A0 -- pad 0 button word bit 1 raises the QA "restart effects" latch:
         //   `lwz r11, 0x34(padInfo); extrwi r11, r11, 1,30` == (buttons >> 1) & 1.
-        if (lpInputOutputBuffer != 0)
         {
             // `lwz r11, 0x34(padInfo)` == maActionInfo[3].muStatus (+0x18 + 3*8 + 4), and
             // `extrwi r11,r11,1,30` is its bit 1 == pressed-this-frame.
             const CgsInput::InputIO::PadOutputInformation* lpPad = lpInputOutputBuffer->GetPadInfo(0);
-            if (lpPad != 0 && ((lpPad->maActionInfo[3].muStatus >> 1) & 1u) != 0)
+            if (((lpPad->maActionInfo[3].muStatus >> 1) & 1u) != 0)
                 BrnEffects::EffectsModule::RestartEffects();
-        }
-
-        // ---- THE SOUND -> EFFECTS AUDIO MESSAGE QUEUE ------------------------------------
-        // ⚠ FLAG PC bring-up, and it is a CONSTRUCT, not a value. EffectsIO::InputBuffer::
-        // Construct @0x82293618 deliberately does NOT construct mAudioEffectsMessageQueue --
-        // its own banner says so -- because on the console the sound bridge always writes it
-        // (SetAudioEffectsMessageQueue @0x823BA9E0, a 144-byte copy of BrnSound's own
-        // constructed queue) before EffectsModule::Update reads it. This build has no sound
-        // pre-update output buffer to bridge from (the leg goes in null, three arguments up),
-        // so the member stayed as CreateIOBuffer left it and
-        // VariableEventQueue<128,16>::GetNextEvent asserted "Not Constructed" from
-        // EffectsModule::UpdateActiveRaceCars -- 3,860 firings in one run, which stalled the
-        // boot at BOOT phase (measured, run 13).
-        //
-        // A CONSTRUCTED EMPTY queue is exactly what a silent sound module produces: the
-        // exhaust-pop walk reads "no events" and every lafExhaustPopIntensity stays at its
-        // frame default. That is a real value, not a placeholder zero -- the console's own
-        // behaviour on a frame where no car popped.
-        // DELETE-WHEN the sound pre-update output buffer is bridged in here: then the real
-        // queue arrives by copy and this construct goes with the null argument.
-        if (lpSoundPreUpdateOutputBuffer == 0)
-        {
-            BrnSound::Module::Io::AudioEffectsMessageQueue lEmptyAudioEffects;
-            lEmptyAudioEffects.Construct();
-            lpEffectsInputBuffer->SetAudioEffectsMessageQueue(&lEmptyAudioEffects);
         }
 
         // @0x823DD1A4/B8 -- the world -> effects bridge (it takes the update set, not the
         // buffer own copy).
-        if (lpWorldOutputBuffer != 0)
-            BridgeEntityToEffects(lpWorldOutputBuffer, lpEffectsInputBuffer, leUpdateSet);
+        BridgeEntityToEffects(lpWorldOutputBuffer, lpEffectsInputBuffer, leUpdateSet);
 
         // @0x823DD1BC/D4 -- the game-state action queue, appended (NOT replaced).
-        if (lpGameStateOutputBuffer != 0)
         {
             // ⚠ THE CONST OVERLOAD, DELIBERATELY. MEASURED (runs 4-6, 2026-09-02): the
             // non-const GetGameActionQueue @0x8231D4B8 asserts "Not locked for writing" and
@@ -2702,30 +2656,27 @@ namespace BrnGame
         }
 
         // @0x823DD1D8/E8 -- the replay status interface.
-        if (lpReplaysPreSimOutputBuffer != 0)
-        {
-            lpEffectsInputBuffer->SetReplayStatusInterface(
-                lpReplaysPreSimOutputBuffer->GetStatusInterface());
-        }
+        const BrnReplays::ReplayIO::OutputBuffer_PreSim* const lpReplayRead =
+            lpReplaysPreSimOutputBuffer;
+        lpEffectsInputBuffer->SetReplayStatusInterface(lpReplayRead->GetStatusInterface());
 
         // @0x823DD1EC/200 -- the sound pre-update block audio-effects message queue
         // (`addi r4, r11, 0x2A0`).
-        if (lpSoundPreUpdateOutputBuffer != 0)
-        {
-            lpEffectsInputBuffer->SetAudioEffectsMessageQueue(
-                &lpSoundPreUpdateOutputBuffer->GetPreUpdateOutput().GetAudioEffectsMessageQueue());
-        }
+        const BrnSound::Module::Io::RootPreUpdateOutputBuffer* const lpSoundPreRead =
+            lpSoundPreUpdateOutputBuffer;
+        lpEffectsInputBuffer->SetAudioEffectsMessageQueue(
+            &lpSoundPreRead->GetPreUpdateOutput().GetAudioEffectsMessageQueue());
 
         // @0x823DD228 -- `stbx r10, r31, 0xE494`: the suspend flag.
         lpEffectsInputBuffer->SetSuspendEffects(lbSuspendEffects);
 
         // sub_823B7A10 -- the exact reverse of the lock helper.
-        if (lpSoundPreUpdateOutputBuffer != 0) lpSoundPreUpdateOutputBuffer->UnlockForRead();
-        if (lpReplaysPreSimOutputBuffer != 0)  lpReplaysPreSimOutputBuffer->UnlockForRead();
-        if (lpGameStateOutputBuffer != 0)      lpGameStateOutputBuffer->UnlockForRead();
-        if (lpWorldOutputBuffer != 0)          lpWorldOutputBuffer->UnlockForRead();
-        if (lpInputOutputBuffer != 0)          const_cast<CgsInput::InputIO::OutputBuffer*>(lpInputOutputBuffer)->UnlockForRead();
-        if (lpDirectorOutputBuffer != 0)       lpDirectorOutputBuffer->UnlockForRead();
+        lpSoundPreUpdateOutputBuffer->UnlockForRead();
+        lpReplaysPreSimOutputBuffer->UnlockForRead();
+        lpGameStateOutputBuffer->UnlockForRead();
+        lpWorldOutputBuffer->UnlockForRead();
+        lpInputOutputBuffer->UnlockForRead();
+        lpDirectorOutputBuffer->UnlockForRead();
         lpEffectsInputBuffer->UnlockForWrite();
 
         // @0x823DD234/58 -- the module own step, through vtable +0x44.
@@ -2918,7 +2869,7 @@ namespace BrnGame
 
         // ARTIST DoUpdate_Director823E8E1C..2C skips the pre-GUI camera
         // producer during the boot video. PostGuiUpdate still consumes GUI events.
-        if (!lbPostGui && (ConstructUpdateSetFromFsm() & 0x20) != 0)
+        if (!lbPostGui && (mFrameUpdateSetPC & 0x20) != 0)
             return;
 
         BrnDirector::DirectorIO::InputBuffer* lpDirectorInput = 0;
@@ -3092,13 +3043,11 @@ namespace BrnGame
         // ARTIST @0x823E8EF8..0x823E8F2C, after BridgeGameStateToDirector:
         // replay (update set 0x100) or online -> false; otherwise copy mbSimPaused.
         // The director uses this byte to hold simulation-driven camera behaviours.
-        // FLAG: replay playback is not implemented; ConstructUpdateSetFromFsm does not
-        // yet receive ConstructUpdateSet's replay bit (@0x823DCB40).
         if (!lbPostGui)
         {
             const u32 KU_UPDATE_SET_REPLAY_PLAYBACK = 0x100u;
             const bool lbReplayPlayback =
-                (static_cast<u32>(ConstructUpdateSetFromFsm()) & KU_UPDATE_SET_REPLAY_PLAYBACK) != 0;
+                (static_cast<u32>(mFrameUpdateSetPC) & KU_UPDATE_SET_REPLAY_PLAYBACK) != 0;
 
             lpDirectorInput->LockForWrite();
             lpDirectorInput->SetSimPaused(!lbReplayPlayback && !mbOnline && mbSimPaused);
@@ -3177,7 +3126,7 @@ namespace BrnGame
                 {
                     mWorldModule.ExternalSceneQueriesUpdate(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
                                                             lpExternalQuery, lpExternalResults,
-                                                            ConstructUpdateSetFromFsm());
+                                                            mFrameUpdateSetPC);
 
                     CgsModule::LockBuffersForIO(lpSceneQueryInput, lpExternalResults);
                     lpSceneQueryInput->GetResultsQueue()->Append(
@@ -3270,7 +3219,7 @@ namespace BrnGame
         if (!lbPostGui)
         {
             BrnDiag_CamCollideWitness(mpUpdateInputBufferStack, mpUpdateOutputBufferStack, mWorldModule,
-                                      lpDirectorInput, mpDirectorOutputBuffer, ConstructUpdateSetFromFsm());
+                                      lpDirectorInput, mpDirectorOutputBuffer, mFrameUpdateSetPC);
         }
 
         mpUpdateInputBufferStack->DestroyIOBuffer(&lpDirectorInput);
@@ -3430,6 +3379,10 @@ namespace BrnGame
         mEffectsModule.GenerateDispatchLists(mpUpdateInputBufferStack, lpEffectsInput,
                                              lpDispatchInput);
         lpEffectsInput->UnlockForRead();
+        // ARTIST823DC8C4: publish the current renderer debug owner to the
+        // resource module before its debug UI callbacks can use that buffer.
+        if (lpGameDataInput != nullptr)
+            mGameDataModule.RenderDebug(lpGameDataInput);
         DebugManagerRender(lpRendererOutput);
         lpRendererOutput->UnlockForRead();
         mRenderModule.CompleteCommandFramePC(lpDispatchInput,
@@ -4467,9 +4420,10 @@ namespace BrnGame
                 // CORRECTED 2026-09-25 (FX-DIRECTOR2) -- this ran inside DoUpdate_Director, after
                 // a mid-step UpdateTimers, which put every director request one step late.
                 const bool lbRunFullModuleCascade = (mpNetworkOutputBuffer != 0);
+                BrnUpdateSet lInitialModuleUpdateSet = static_cast<BrnUpdateSet>(0);
                 BrnUpdateSet lFullModuleUpdateSet = static_cast<BrnUpdateSet>(0);
                 if (lbRunFullModuleCascade)
-                    lFullModuleUpdateSet = ConstructUpdateSetFromFsm();
+                    lInitialModuleUpdateSet = ConstructUpdateSetFromFsm();
 
                 if (lbRunFullModuleCascade)
                     BridgeTimers(0);
@@ -4514,11 +4468,31 @@ namespace BrnGame
                 {
                     DoUpdate_NetworkPreSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
                                            &mPcInputOutputBuffer, mpNetworkOutputBuffer,
-                                           lFullModuleUpdateSet);
+                                           lInitialModuleUpdateSet);
                     DoUpdate_GameStatePreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
                                                &mPcInputOutputBuffer, mpNetworkOutputBuffer,
                                                mGameStateModule.GetOutputBuffer(),
-                                               lFullModuleUpdateSet);
+                                               lInitialModuleUpdateSet);
+
+                    // ARTIST823F1180/124C/1300: Replay status and GUI-model
+                    // requests exist before the late set is derived for World.
+                    DoUpdate_ReplaysPreSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                          mGameStateModule.GetOutputBuffer(),
+                                          mpReplayPreSimOutputBuffer, lInitialModuleUpdateSet);
+                    DoUpdate_GuiPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                         mpGuiOutputBuffer, mpGuiModelOutputBuffer,
+                                         BrnGameMainFlowController::GetScriptedLoadGameDataInput());
+                    DoPreUpdate_Sound(mpUpdateOutputBufferStack,
+                                      mpInGameSoundPreUpdateOutputPC, mpGuiInputBuffer);
+
+                    // ARTIST823F13CC retains this result through every remaining
+                    // module leg. It includes the just-produced Replay status.
+                    PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+                    lFullModuleUpdateSet = ConstructUpdateSet(
+                        mGameStateModule.GetOutputBuffer(), mpNetworkOutputBuffer,
+                        &mPcInputOutputBuffer, mpGuiModelOutputBuffer, mpReplayPreSimOutputBuffer);
+                    mFrameUpdateSetPC = lFullModuleUpdateSet;
+                    PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
                 }
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)
@@ -4644,6 +4618,10 @@ namespace BrnGame
 
                     // The network -> GUI bridge, under a read lock on the network output (console
                     // DoUpdate_GUI runs it after the replay bridge, before BridgeGameToGui).
+                    mpReplayPreSimOutputBuffer->LockForRead();
+                    BridgeReplayToGui(mpGuiInputBuffer, mpReplayPreSimOutputBuffer);
+                    mpReplayPreSimOutputBuffer->UnlockForRead();
+
                     if (mpNetworkOutputBuffer != 0)
                     {
                         mpNetworkOutputBuffer->LockForRead();
@@ -4811,7 +4789,7 @@ namespace BrnGame
                 {
                     // The scheduler's second argument to GuiModule::Update on the console: this
                     // frame's update set (bit 8 == in-game).
-                    mGuiModule.SetFrameUpdateSet(ConstructUpdateSetFromFsm());
+                    mGuiModule.SetFrameUpdateSet(lFullModuleUpdateSet);
                     mGuiModule.Update();
                     // FLAG PC-platform leaf: export the batch just produced by this
                     // no-argument GUI port into the frame-owned native output object.
@@ -4842,62 +4820,37 @@ namespace BrnGame
                 // TrailSystem::AddTrailSegment. Nothing called it before this change: the
                 // module was a 1-byte ODR stub in BrnGameModule.hpp.
                 //
-                // FLAG PC arguments: the input/replay/sound-pre-update legs of the console
-                // cascade have no per-frame buffer on this build, so they go in null and
-                // DoUpdate_Effects skips each absent source. The suspend flag is the console's
+                // The same typed input, Replay and Sound PreUpdate outputs produced
+                // before World remain alive through Effects. The suspend flag is the console's
                 // "returning to the front end / loading" gate, which has no producer here yet;
                 // FALSE is the console's value while a race is running, and it is what keeps
                 // the effects system live rather than suspended.
                 if (lbRunFullModuleCascade)
                     DoUpdate_Effects(mpUpdateInputBufferStack,
                                  mpUpdateOutputBufferStack,
-                                 /*input   out*/ 0,
+                                 &mPcInputOutputBuffer,
                                  mGameStateModule.GetOutputBuffer(),
                                  mpWorldUpdateOutputBuffer,
                                  mpDirectorOutputBuffer,
-                                 /*replays out*/ 0,
-                                 /*sound   out*/ 0,
+                                 mpReplayPreSimOutputBuffer,
+                                 mpInGameSoundPreUpdateOutputPC,
                                  mpEffectsOutputBuffer,
                                  /*lbSuspendEffects*/ false,
-                                 ConstructUpdateSetFromFsm());
+                                 lFullModuleUpdateSet);
 
                 // ARTIST DoUpdate's sound leg follows the final camera publication
                 // and effects update. Complete the capture begun before world update.
                 if (lbRunFullModuleCascade)
-                    FinishInGameSoundFramePC();
+                    FinishInGameSoundFramePC(lFullModuleUpdateSet);
 
-                // ---- ADOPT THE SERIALISERS THE EFFECTS LEG JUST REGISTERED ----------------
-                // ReplayModule::StoreSerialisers @0x8264B600 is what hands every registered
-                // BaseSerialiser its stream and STATIC buffers out of the replay module's linear
-                // region. On the console it runs from ReplayModule::Update_PostSim @0x8265F618;
-                // that leg is not reconstructed, so it runs here.
-                //
-                // ⚠ AFTER DoUpdate_Effects, NOT BEFORE -- MEASURED (run 9). The first version ran
-                // it just above and adopted NOTHING across a whole 35-second run: the effects
-                // OUTPUT buffer's replay request interface is rebuilt every frame, so before the
-                // effects leg its eleven slots are all null. EffectsModule::Update @0x8229EC28
-                // registers mEffectsSerialiser at its very first statement, so straight after the
-                // leg is the one point in the frame where the interface is populated. (Run 9 also
-                // proves it is not merely stale-by-a-frame: nothing was ever adopted, on any
-                // frame, which only a per-frame clear explains.)
-                //
-                // ⚠ AND UNDER THE READ LOCK, through the CONST accessor. The first version used
-                // the write-lock accessor @0x8227E280 with no lock at all: 3,895 "Not locked for
-                // writing" assertions in one run. This leg only READS the eleven slots, so the
-                // const overload @0x823BAD40 is the right one -- the same read/write pairing
-                // mistake this file's own DoUpdate_Effects made against the game-action queue,
-                // one commit earlier.
-                //
-                // Idempotent by construction (only slots whose pointer changed are touched), so
-                // running it every frame costs one null compare per slot.
-                // DELETE-WHEN ReplayModule::Update_PostSim lands: the call moves there.
-                if (lbRunFullModuleCascade && mpEffectsOutputBuffer != 0)
-                {
-                    mpEffectsOutputBuffer->LockForRead();
-                    const BrnEffects::EffectsIO::OutputBuffer* lpcEffectsOut = mpEffectsOutputBuffer;
-                    mReplayModule.StoreSerialisers(*lpcEffectsOut->GetReplayRequestInterface());
-                    mpEffectsOutputBuffer->UnlockForRead();
-                }
+                // ARTIST823F1AB4: adopt every producer through the real PostSim
+                // input, including both game-owned serialisers, before PostWorld.
+                if (lbRunFullModuleCascade)
+                    DoUpdate_ReplaysPostSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                           mpWorldUpdateOutputBuffer, mpEffectsOutputBuffer,
+                                           mpInGameSoundRootOutputPC, mpDirectorOutputBuffer,
+                                           mpGuiOutputBuffer, mpReplayPostSimOutputBuffer,
+                                           lFullModuleUpdateSet);
 
                 // ---- THE GAME-STATE POST-WORLD LEG -------------------------------------------
                 // Console DoUpdate order: ... DoUpdate_Effects, DoUpdate_Sound,
@@ -4910,7 +4863,7 @@ namespace BrnGame
                 // scripted-load stage 8. Keep the PostWorld producer paired with the PreWorld
                 // consumer above so stage 8 refreshes the active-car snapshot and drains the GUI
                 // carry queue on the next sub-step, as ARTIST does. The same update-set captured
-                // before NetworkPreSim remains valid even if the flow state advances later here.
+                // after Replay/GUI PreWorld/Sound PreUpdate remains valid through this frame.
                 if (lbRunFullModuleCascade)
                 {
                     DoUpdate_GameStatePostWorld(mpUpdateInputBufferStack,
@@ -4918,7 +4871,7 @@ namespace BrnGame
                                                 &mPcInputOutputBuffer,
                                                 mpWorldUpdateOutputBuffer,
                                                 mpGuiOutputBuffer,
-                                                /*replays post-sim out*/ 0,
+                                                mpReplayPostSimOutputBuffer,
                                                 mpDirectorOutputBuffer,
                                                 lFullModuleUpdateSet);
                 }
@@ -4939,7 +4892,7 @@ namespace BrnGame
                                             mGameStateModule.GetOutputBuffer(),
                                             mpWorldUpdateOutputBuffer,
                                             mpGuiOutputBuffer,
-                                            ConstructUpdateSetFromFsm());
+                                            lFullModuleUpdateSet);
                 }
 
                 // ---- the TIMER tick (X360 BrnGameModule::UpdateTimers @0x823BCFD0) ------------
@@ -4963,6 +4916,26 @@ namespace BrnGame
                 // request slot this drains.
                 if (lbRunFullModuleCascade)
                     UpdateTimers();
+
+                // ARTIST823F1F08..1F54: Sound and Replay resource requests are
+                // forwarded after PostSim/Network/Timers, while both outputs live.
+                if (lbRunFullModuleCascade)
+                {
+                    BrnResource::GameDataIO::InputBuffer* const lpGameDataInput =
+                        BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+                    const BrnSound::Module::Io::RootOutputBuffer* const lpSoundOutput =
+                        mpInGameSoundRootOutputPC;
+                    const BrnReplays::ReplayIO::OutputBuffer_PreSim* const lpReplayOutput =
+                        mpReplayPreSimOutputBuffer;
+                    CgsModule::LockBuffersForIO(lpGameDataInput, lpSoundOutput, lpReplayOutput);
+                    lpGameDataInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
+                        lpSoundOutput->GetAttribSysRequestInterface()->mRequestQueue);
+                    lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
+                        lpSoundOutput->GetResourceRequestInterface()->mRequestQueue);
+                    lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
+                        lpReplayOutput->GetGameDataRequestInterface()->mRequestQueue);
+                    CgsModule::UnlockBuffersForIO(lpGameDataInput, lpSoundOutput, lpReplayOutput);
+                }
 
                 // THE GAME-ACTION RETIRE (FLAG PC lifecycle, see the note above DoUpdate_Director's
                 // GUI block). On the console the game-state output buffer is re-Constructed every
@@ -5084,101 +5057,21 @@ namespace BrnGame
         // console, which does exactly that) -- six asserts and a fault. Guarded, not
         // null-checked one by one, so the pairing with the create side stays obvious.
         if (miNumSimFramesRequired > 0)
-        {
-            if (mpNetworkOutputBuffer != 0)
-                mpUpdateOutputBufferStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&mpNetworkOutputBuffer);
-            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(&mpEffectsOutputBuffer);
-            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
-            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
-            mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);
-            mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);
-            mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer);
-            mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer);
-        }
+            DestroyStaticIOBuffers();
 
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
         return false;
     }
 
-    // FLAG PC-platform scheduling: the in-game state drives the world from
-    // GameMain's sub-step. Preserve ARTIST DoUpdate's pre-world sound capture
-    // (823F1300), but consume the frame after director/GUI/effects (823F19E8).
-    // A freshly constructed director output has an identity camera until then.
-    BrnSound::Module::Io::RootPreUpdateOutputBuffer* BrnGameModule::BeginInGameSoundFramePC()
+    // FLAG PC-platform leaf: the host invokes this Sound leg after Effects;
+    // the frame owner retains its typed output through Replay PostSim and resource forwarding.
+    void BrnGameModule::FinishInGameSoundFramePC(BrnUpdateSet lUpdateSet)
     {
-        BrnGameModule* lpGameModule = this;
-        CgsModule::IOBufferStack* lpOutputStack = lpGameModule->GetUpdateOutputBufferStack();
-        BrnSound::Module::Io::RootOutputBuffer*& lpSoundRootOutput = mpInGameSoundRootOutputPC;
-        BrnSound::Module::Io::RootPreUpdateOutputBuffer*& lpSoundPreUpdateOutput = mpInGameSoundPreUpdateOutputPC;
-        lpOutputStack->CreateIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(
-            &lpSoundRootOutput, "Sound");
-        lpOutputStack->CreateIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
-            &lpSoundPreUpdateOutput, "SoundRootPreUpdateOutput");
-
-        if (lpSoundPreUpdateOutput != 0 && lpGameModule->GetGuiInputBuffer() != 0)
-        {
-            lpGameModule->DoPreUpdate_Sound(lpOutputStack, lpSoundPreUpdateOutput,
-                                            lpGameModule->GetGuiInputBuffer());
-        }
-
-        return lpSoundPreUpdateOutput;
-    }
-
-    void BrnGameModule::FinishInGameSoundFramePC()
-    {
-        BrnGameModule* lpGameModule = this;
-        auto* lpOutputStack = GetUpdateOutputBufferStack();
-        auto*& lpSoundRootOutput = mpInGameSoundRootOutputPC;
-        auto*& lpSoundPreUpdateOutput = mpInGameSoundPreUpdateOutputPC;
-        // The post-world sound leg (console @0x823F19E8): the full DoUpdate_Sound with the PC's
-        // live sources. Replay pre-sim + effects outputs are null until those modules are driven
-        // per-frame (FLAG'd inside the leg); the update set is the same FSM derivation the world
-        // drive uses.
-        if (lpSoundRootOutput != 0)
-        {
-            const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
-            lpGameModule->DoUpdate_Sound(
-                lpGameModule->GetUpdateInputBufferStack(),
-                lpOutputStack,
-                lpGameModule->GetGameStateModule().GetOutputBuffer(),
-                lpGameModule->GetWorldUpdateOutputBuffer(),
-                lpGameModule->GetDirectorOutputBuffer(),
-                0,   // replays pre-sim output: module not driven per-frame on PC yet
-                lpSoundRootOutput,
-                lpGameModule->GetGuiOutputBuffer(),
-                0,   // effects output: module unmounted (lock-only participant on console)
-                lUpdateSet);
-
-            // The caller-side sound->resource forwards (console DoUpdate tail @0x823F1F08-34;
-            // the leg itself does NOT forward): the root output's AttribSys <2048> queue +
-            // <4096> request interface into the GameData input, under the standard
-            // W(gameDataIn)+R(rootOut) bracket -- the same pair the loading spine forwards.
-            BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
-                BrnGameMainFlowController::GetScriptedLoadGameDataInput();
-            if (lpGameDataInput != 0)
-            {
-                lpGameDataInput->LockForWrite();
-                lpSoundRootOutput->LockForRead();
-                {
-                    const BrnSound::Module::Io::RootOutputBuffer* lpSoundRootOutputRead = lpSoundRootOutput;
-                    lpGameDataInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
-                        lpSoundRootOutputRead->GetAttribSysRequestInterface()->mRequestQueue);
-                    lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
-                        lpSoundRootOutputRead->GetResourceRequestInterface()->mRequestQueue);
-                }
-                lpSoundRootOutput->UnlockForRead();
-                lpGameDataInput->UnlockForWrite();
-            }
-        }
-
-        // Teardown in reverse creation order (console @0x823F20E0 preUpdateOut ... @0x823F21B4 rootOut).
-        if (lpSoundPreUpdateOutput != 0)
-            lpOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
-                &lpSoundPreUpdateOutput);
-        if (lpSoundRootOutput != 0)
-            lpOutputStack->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(
-                &lpSoundRootOutput);
-
+        DoUpdate_Sound(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                       mGameStateModule.GetOutputBuffer(), mpWorldUpdateOutputBuffer,
+                       mpDirectorOutputBuffer, mpReplayPreSimOutputBuffer,
+                       mpInGameSoundRootOutputPC, mpGuiOutputBuffer,
+                       mpEffectsOutputBuffer, lUpdateSet);
     }
 
     // @ BrnGameModule.cpp:2497 - allocate this sub-step's static GUI/director IO buffers from
@@ -5227,12 +5120,6 @@ namespace BrnGame
         mpUpdateOutputBufferStack->CreateIOBuffer<BrnWorldIO::UpdateOutputBuffer>(
             &mpWorldUpdateOutputBuffer, "World");
 
-        // THIS SUB-STEP'S EFFECTS OUTPUT BUFFER (see the header note on the member). The
-        // console's DoUpdate @0x823F0AF8 creates it near the top and destroys it at the very
-        // bottom; DoUpdate is a PC leaf here, so it shares the other buffers' lifetime.
-        mpUpdateOutputBufferStack->CreateIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(
-            &mpEffectsOutputBuffer, "Effects");
-
         // THIS SUB-STEP'S NETWORK OUTPUT BUFFER (see the header note on the member). The
         // console's DoUpdate creates it at its top and destroys it at its bottom, and DoUpdate
         // runs from exactly two places: MainGameFlowStateInGame::Update, and
@@ -5240,7 +5127,7 @@ namespace BrnGame
         // runs its partial spine instead, which carves its own network buffers). The initial
         // loading screen never updates the network module; it loads it. So the buffer, and
         // with it every network leg of this sub-step, exists only in those states. Created
-        // last so it is destroyed first.
+        // before the remaining full-cascade participants.
         const BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
         const bool lbLoadingScriptedState = (leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE)
                                          && (leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING);
@@ -5249,7 +5136,21 @@ namespace BrnGame
         {
             mpUpdateOutputBufferStack->CreateIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(
                 &mpNetworkOutputBuffer, "Network");
+            // ARTIST823F0C98..0D10: distinct typed outputs, retained through
+            // Replay PostSim, GameState PostWorld, and resource forwarding.
+            mpUpdateOutputBufferStack->CreateIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(
+                &mpInGameSoundRootOutputPC, "Sound");
+            mpUpdateOutputBufferStack->CreateIOBuffer<BrnReplays::ReplayIO::OutputBuffer_PreSim>(
+                &mpReplayPreSimOutputBuffer, "ReplaysPreSim");
+            mpUpdateOutputBufferStack->CreateIOBuffer<BrnReplays::ReplayIO::OutputBuffer_PostSim>(
+                &mpReplayPostSimOutputBuffer, "ReplaysPostSim");
         }
+
+        mpUpdateOutputBufferStack->CreateIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(
+            &mpEffectsOutputBuffer, "Effects");
+        if (mpNetworkOutputBuffer != 0)
+            mpUpdateOutputBufferStack->CreateIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
+                &mpInGameSoundPreUpdateOutputPC, "SoundRootPreUpdateOutput");
     }
 
     // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse
@@ -5257,8 +5158,20 @@ namespace BrnGame
     void BrnGameModule::DestroyStaticIOBuffers()
     {
         if (mpNetworkOutputBuffer != 0)
-            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&mpNetworkOutputBuffer);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
+                &mpInGameSoundPreUpdateOutputPC);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(&mpEffectsOutputBuffer);
+        if (mpNetworkOutputBuffer != 0)
+        {
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnReplays::ReplayIO::OutputBuffer_PostSim>(
+                &mpReplayPostSimOutputBuffer);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnReplays::ReplayIO::OutputBuffer_PreSim>(
+                &mpReplayPreSimOutputBuffer);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(
+                &mpInGameSoundRootOutputPC);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(
+                &mpNetworkOutputBuffer);
+        }
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);

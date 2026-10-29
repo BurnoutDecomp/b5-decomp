@@ -16,6 +16,14 @@
 
 namespace BrnReplays
 {
+    // ARTIST 8264CA0C..3C: r4=9, r5=0, r6/r7=0xF00, r8="Sound", r9=1.
+    void SoundSerialiser::Construct()
+    {
+        BaseSerialiser::Construct(9, 0, 0xF00, 0xF00, "Sound", 1);
+        mfAccumulatedFrameTime = 0.0f;
+        mbExtraFlag = false;
+    }
+
     // @ 0x82682340 -- return the serialiser's static buffer viewed as the structured
     // SoundSerialiser static layout (asserting the buffer is large enough).
     SoundSerialiserStaticLayout* SoundSerialiser::GetStaticLayout()

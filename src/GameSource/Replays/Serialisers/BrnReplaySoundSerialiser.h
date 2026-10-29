@@ -56,6 +56,9 @@ namespace BrnReplays
         // SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES; the comparison values are 8 / 4 / 6.
         static const u32 KU_MAX_TRAFFIC_ENTITIES = 6;
 
+        // ARTIST 0x8264C9F8: channel 9, normal context, 0xF00 stream/static bytes.
+        void Construct();
+
         // @0x82682340 -- returns the static-layout buffer, asserting it is big enough.
         SoundSerialiserStaticLayout* GetStaticLayout();
 

@@ -22,6 +22,7 @@
 #include "GameSource/Resource/BrnDLCManager.h"                               // embedded DLC manager + debug component
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
+namespace CgsGraphics { struct Im2dRenderBuffer; }
 namespace CgsMemory { struct MemoryMap; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
@@ -59,7 +60,7 @@ namespace CgsModule { struct Event; }                                        // 
 // The many embedded subsystems beyond ResourceModule are added with their own passes.
 namespace BrnResource
 {
-    namespace GameDataIO { struct GameDataAssetEvent; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
+    namespace GameDataIO { struct GameDataAssetEvent; struct InputBuffer; struct OutputBuffer; }   // dispatcher/handler param (by pointer)
 
     class GameDataModule : public CgsModule::ModuleSingleBuffered
     {
@@ -68,6 +69,8 @@ namespace BrnResource
         friend class DebugComponent;
 
     public:
+        // ARTIST82664598: publish the renderer-owned bank before DebugManager::Render.
+        void RenderDebug(const GameDataIO::InputBuffer* lpInputBuffer);
         void DebugReportPools(CgsResource::PoolModule::FPoolReportCallback lpfCallback, void* lpUserData);
         enum EPrepareStage
         {
@@ -441,6 +444,11 @@ namespace BrnResource
         CgsResource::ResourceModule& GetResourceModule() { return mResourceModule; }
 
     private:
+        // ARTIST8266ACC8: V1/V2 vectors, R4 userdata, R5/R6 bools.
+        static void TextureRenderCallback(renderengine::Texture* lpTexture,
+            Vector2 lv2Position, Vector2 lv2Size, void* lpUserData,
+            bool lbSetStates, bool lbFlag1);
+
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
         EPrepareStage                  meReleaseStage;   // +0x22C (a1[139])
@@ -537,6 +545,9 @@ namespace BrnResource
         // to ChallengeList::AddListResource, and ProcessGetFreeburnChallengeListRequest
         // @0x82666728 replies with `this + 0x70000 + 0xFD0` -- the same object.
         BrnResource::ChallengeList     mChallengeList;
+        // ARTIST742B8, DWARF h427. Borrowed from this dispatch's renderer
+        // output; RenderDebug refreshes it before the debug-window render.
+        CgsGraphics::Im2dRenderBuffer* mpDebug2dRenderBuffer = nullptr;
         // X360 a1[139] / a1[140] / a1[141] / a1[142] -- the four data-table prepares' own stage
         // words (each Prepare* helper owns one; a1[139] is PrepareFreeburnChallengeList's, X360
         // offset 0x22C -- `lwz r11, 0x22C(r30)` at its switch head; a1[141] is PrepareICEList's,

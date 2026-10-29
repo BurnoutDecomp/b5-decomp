@@ -132,6 +132,10 @@ namespace GameDataIO
         void SetIm2dDebugRenderBuffer(CgsGraphics::Im2dRenderBuffer* lpBuffer)
         { mpDebug2dRenderBuffer = lpBuffer; }
 
+        // DWARF h119; ARTIST RenderDebug826645D0 reads this member while locked.
+        CgsGraphics::Im2dRenderBuffer* GetIm2dDebugRenderBuffer() const
+        { return mpDebug2dRenderBuffer; }
+
     private:
         // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
         // alignment) -- matching the asm's `return a1 + 4` in both GetRequestInterface overloads.

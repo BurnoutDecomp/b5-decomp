@@ -252,7 +252,8 @@ void BridgePropToOutput_PreScene(
 // :: Construct -- the never-Constructed-queue trap does not apply here), as is the destination
 // (BrnWorldModuleIO_UpdateOutputBuffer.cpp :: Construct, `mGameEventQueue.Construct()`).
 //
-// STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
+// Remaining dispositions for the original legs (the landed and still-deferred transfers are
+// labeled below):
 //   * leg 4 -- the remaining traffic GUI-event transfer. Leg 6 is restored below.
 //     (Leg 3, the resource-request flush, has landed -- see the body. Leg 13's network
 //     transfer has landed too; the sound transfer feeds a live sound-module consumer, so it
@@ -285,7 +286,8 @@ void BridgePropToOutput_PreScene(
 //   (leg 12 is LANDED -- see the block at the end of the body; `E_EVENT_REQUEST_PROP_PROGRESSION
 //    = 112` + `struct RequestPropProgression` live in GameSource/GameState/BrnGameEvents.h
 //    :43 / :138.)
-//   * leg 16's prop arm -- AppendReplayRequestInterface(propOut->GetReplayRequestInterface()).
+//   * leg 16's prop arm -- AppendReplayRequestInterface(propOut->GetReplayRequestInterface()),
+//     landed below. The RaceCar and Traffic arms remain pending with their typed producer IO.
 //   * The console's two CPU monitors (a1+6167720 / +6167724) are not modelled on any leg here;
 //     every sibling bridge in this file takes the same disposition.
 // ----------------------------------------------------------------------------
@@ -738,6 +740,15 @@ void BridgeEntityModulesToOutput_PostPhysics(
     // destroyed, preserving the producer's computed ImmediateStreamed and AllStreamed.
     lpOutputBuffer->SetWorldEntityStatusInterface(
         lpWorldEntityOutput_PostPhysics->GetStatusInterface());
+
+    // X360 leg 16's Prop arm: merge PropEntityModule's registered serialiser pointer slots
+    // into the World output request interface. PropEntityModule::PostPhysicsUpdate registers
+    // mPropEntitySerialiser in its typed OutputBuffer_PostPhysics::ReplayRequestInterface;
+    // WorldModule::Update holds that source for reading and this destination for writing.
+    // RaceCar and Traffic are the other two console arms, but their current output/producer
+    // declarations are not yet the typed ReplayIO::RequestInterface contracts.
+    lpOutputBuffer->AppendReplayRequestInterface(
+        lpPropOutput_PostPhysics->GetReplayRequestInterface());
 }
 
 // ----------------------------------------------------------------------------

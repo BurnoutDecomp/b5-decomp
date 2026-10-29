@@ -289,6 +289,7 @@ void SoundLogicModule::Construct()
 
     // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
+    mSoundSerialiser.Construct();  // ARTIST826C934C..54, immediately after registrar
 
     // The pre-update output block's three queues (phase C1; the same trio the
     // RootPreUpdateOutputBuffer carve constructs).
@@ -1093,11 +1094,7 @@ void SoundLogicModule::ProcessGameActionQueue(
             break;
         }
 
-        case 218:  // SoundTriggerAction -- the per-frame trigger table
-                   // GetSoundTriggerAction searches. (X360 also mirrors it into
-                   // BrnReplays::SoundSerialiser's 512-event queue while the replay
-                   // recorder state is 1/2/3; that serialiser is not in this tree, so
-                   // only the live half runs.)
+        case 218:  // SoundTriggerAction: live trigger table and recording queue.
         {
             BrnGameState::GameStateModuleIO::SoundTriggerAction lAction;
             std::memset(&lAction, 0, sizeof(lAction));
@@ -1106,6 +1103,11 @@ void SoundLogicModule::ProcessGameActionQueue(
                                       ? static_cast<size_t>(liSize) : sizeof(lAction);
             std::memcpy(&lAction, lpEvent, luCopy);
             maTriggerActions.Append(lAction);
+            if (mSoundSerialiser.IsRecording())
+            {
+                mSoundSerialiser.GetStaticLayout()->mEventQueue.AddEvent(
+                    lpEvent, 218, 32);  // ARTIST826ECF30..48, exact original payload size
+            }
             break;
         }
 
@@ -1401,12 +1403,36 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
         }
     }
 
+    // ARTIST82702B40..BD8: restore/reset the previous channel allocation, then
+    // publish readiness independently of whether the replay allocator has supplied it.
+    if (mSoundSerialiser.GetStaticLayout() != 0)
+    {
+        if (mSoundSerialiser.IsPlaying())
+        {
+            if (!mSoundSerialiser.SkipModuleSerialise())
+                mSoundSerialiser.Read(mSoundSerialiser.GetStaticLayout());
+        }
+        else
+        {
+            mSoundSerialiser.GetStaticLayout()->Construct();
+        }
+    }
+    mSoundSerialiser.SetDataRestored(true);
+    mSoundSerialiser.SetDataReady(true);
+
     Io::RootInputBuffer* lpInput = static_cast<Io::RootInputBuffer*>(apInputBuffer);
     lpInput->LockForRead();
     UpdateMicrophones(lpInput);
     const EActiveRaceCarIndex lePlayerCarIndex = lpInput->GetPlayerActiveRaceCarIndex();
     UpdateFrameInformation(af32SimDt, lpInput, aeUpdateSet, lePlayerCarIndex);
     const Io::RootInputBuffer* lpReadInput = lpInput;
+    if (mSoundSerialiser.IsPlaying())
+    {
+        Io::RootInputBuffer::GameActionQueue lReplayActions;
+        lReplayActions.Construct();
+        lReplayActions.Append(mSoundSerialiser.GetStaticLayout()->mEventQueue);
+        ProcessGameActionQueue(lePlayerCarIndex, lReplayActions);
+    }
     ProcessGameActionQueue(lePlayerCarIndex, lpReadInput->GetGameActionQueue());
     ProcessCarDataLoadingQueue(*lpInput->GetAudioCarDataLoadedQueueForRead());
     ProcessGameEventQueue(lePlayerCarIndex, lpReadInput->GetGameEventQueue());
@@ -1416,20 +1442,30 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     ProcessCameraFlags(*lpReadInput->GetDirectorCamera());
     lpInput->UnlockForRead();
 
+    if (mSoundSerialiser.IsRecording())
+        mSoundSerialiser.GetStaticLayout()->mfC5C = af32SimDt;
+
     CgsSound::Logic::Module::Update(af32GameDt, af32SimDt, apInputBuffer, apOutputBuffer);
 
-    // ARTIST 0x82702D8C..0x82702D98: publish playback's freed stream
-    // identifiers into the logic message queue, then consume the list. The
-    // messages are intentionally processed by the base Update on the next tick.
+    // ARTIST82702D40..DB8: reattach after the base tick; registrar, freed
+    // streams, and the channel registration share the R(input)+W(output) bracket.
+    AttachBuffers(apInputBuffer, apOutputBuffer);
+    mpBrnLogicInputBuffer->LockForRead();
+    mpBrnLogicOutputBuffer->LockForWrite();
+    CgsDev::PerfMonCpu::StartMonitor(miResourceRegistrarMonitor);
+    mResourceRegistrar.Update();
+    CgsDev::PerfMonCpu::StopMonitor(miResourceRegistrarMonitor);
     ProcessStreamFreedQueue(mFreedStreamBufferIds);
     mFreedStreamBufferIds.Clear();
+    mpBrnLogicOutputBuffer->GetReplayRequestInterface()->RegisterSerialiser(&mSoundSerialiser);
+    mpBrnLogicInputBuffer->UnlockForRead();
+    mpBrnLogicOutputBuffer->UnlockForWrite();
 
-    // The resource broker must continue to drain after boot; effect and manager
-    // LoadAsset requests are resolved through this pass. X360 0x82702E14..0x82702E58
-    // brackets the final request-queue append with output-then-input write locks and
-    // releases them in the same order. ResourceBridging is the identical append pair
-    // factored by Prepare, with the registrar Update immediately ahead of it.
-    AttachBuffers(apInputBuffer, apOutputBuffer);
+    // ARTIST82702DBC..E10: the frame bit is0x8 and nonzero skip suppresses the write.
+    if ((aeUpdateSet & 8u) != 0 && mSoundSerialiser.IsRecording() &&
+        !mSoundSerialiser.SkipModuleSerialise())
+        mSoundSerialiser.Write(mSoundSerialiser.GetStaticLayout());
+
     mpBrnLogicOutputBuffer->LockForWrite();
     mpBrnLogicInputBuffer->LockForWrite();
 
@@ -1450,7 +1486,11 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
         mbEnteringGameplayPrepared = PrepareStateManagersOnEnteringGameplay(4);
     }
 
-    ResourceBridging();
+    // ARTIST82702E24..48: append the requests already updated above.
+    mpBrnLogicOutputBuffer->GetResourceRequestInterface()->mRequestQueue.Append(
+        mResourceRegistrar.GetResourceRequestInterface().mRequestQueue);
+    mpBrnLogicOutputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+        mResourceRegistrar.GetAttribSysRequestInterface().mRequestQueue);
     mpBrnLogicOutputBuffer->UnlockForWrite();
     mpBrnLogicInputBuffer->UnlockForWrite();
     DetachBuffers();
