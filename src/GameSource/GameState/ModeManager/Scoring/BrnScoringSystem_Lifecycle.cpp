@@ -65,13 +65,10 @@ namespace
 //       maRaceCarPositioningData[8] + maBurnoutSkillzData[8] and the inner arrays) -- automatic via
 //       the array members' element constructors.
 //
-// The SINGLE ScoringSystem-owned scalar the asm explicitly stores is the very last instruction
-// (stw r28(=-1), 0x5D40(r31)): ss+0x5D40 == 23872 == miUpdateRacePositionsPM (proven by the
-// "miUpdateRacePositionsPM >= 0" assert + its `== -1` sentinel test elsewhere in the class). Every
-// other ScoringSystem scalar is left untouched by the ctor -- the post-construction ClearData() pass
-// (run from Construct) seeds them -- so we faithfully leave them unset here as well.
+// The final -1 store at +0x5D40 initializes the eliminated-car Array's count,
+// not miUpdateRacePositionsPM (+0x5D44). Array's default constructor owns that store.
+// The monitor word is left untouched by the original C++ constructor.
 ScoringSystem::ScoringSystem()
-    : miUpdateRacePositionsPM(-1)   // X360 0x827E0B14: stw r28(=-1), 0x5D40(r31)
 {
 }
 

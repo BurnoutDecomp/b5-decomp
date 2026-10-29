@@ -925,17 +925,17 @@ namespace BrnGameState
         f32  mfPlayerTimeStationary;                 // :1257
         f32  mfPlayerTimeWithoutInput;               // :1258
 
-        bool mbMedalMode;                            // :1261
-        f32  mafMedalTimes[4];                       // :1262
-        ECurrentMedalTargetTime meCurrentMedalTarget;   // :1263
-        ECurrentMedalTargetTime meCurrentMedalAchieved; // :1264
+        f32  mafMedalTimes[4];                       // X360 +0x5CF8
+        ECurrentMedalTargetTime meCurrentMedalTarget;   // +0x5D08
+        ECurrentMedalTargetTime meCurrentMedalAchieved; // +0x5D0C
+        bool mbMedalMode;                            // +0x5D10
 
-        bool mbEliminationMode;                      // :1267
-        bool mbPlayerElimated;                       // :1268
-        EActiveRaceCarIndex mLastCarRaceCarIndex;    // :1269
-        f32  mfEliminatorTimeStep;                   // :1270
-        bool mbEliminationRequired;                  // :1271
-        u32  muCarsThatHaventBeenEliminated;         // :1272
+        EActiveRaceCarIndex mLastCarRaceCarIndex;
+        f32  mfEliminatorTimeStep;
+        u32  muCarsThatHaventBeenEliminated;
+        bool mbEliminationMode;                      // +0x5D20
+        bool mbPlayerElimated;                       // +0x5D21
+        bool mbEliminationRequired;                  // +0x5D22
 
         Array<EActiveRaceCarIndex, 7u> maEliminatedActiveRaceCarIndexs; // :1275
 

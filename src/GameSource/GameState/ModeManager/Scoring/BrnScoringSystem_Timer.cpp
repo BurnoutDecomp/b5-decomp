@@ -1,3 +1,4 @@
+#include <float.h>
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -362,7 +363,7 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
     // the assert fires on `dist > 200000.0 && dist != 3.4028235e38`. The X360 0x8231F590 carries
     // the identical flt_82CDB7D0 compare. Asserted here as the negated (good) condition.
     CGS_ASSERT(lpScoreData->GetDistanceToFinish() <= 200000.0f ||
-                   lpScoreData->GetDistanceToFinish() == 3.4028235e38f,
+                   lpScoreData->GetDistanceToFinish() == FLT_MAX,
                "Bad distance in scoring system #2, dist from finish at round end");
 
     if (lbForce)
