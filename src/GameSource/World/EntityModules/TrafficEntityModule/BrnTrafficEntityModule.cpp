@@ -11207,16 +11207,37 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
     UpdateParams_PrecalcBehaviourParams(luParam, lpSection, lpHull, lConeA, lConeB, lConeC);
 }
 
-// @0x82717A70 (.cpp 11335). BLOCKER: unk_8300CAC0, a three-lane distance-squared threshold
-// vector seeded by an unnamed dyn-init thunk.
+// @0x82717A70 (.cpp 11335). Threshold vector 8300CAC0 is seeded to {36,4,4,0}
+// by original initializer 82C66FA0 (CRT table 82CD2450). Request removal when
+// the param ahead overlaps; divergent mode additionally uses actual vehicle positions.
 void TrafficEntityModule::UpdateParam_CheckIfInsideParamInFront(u32 luParam)
 {
-    (void)luParam;
-
-    static bool sbLogged = false;
-    LogMissingLeg_T2(sbLogged,
-                  "UpdateParam_CheckIfInsideParamInFront @0x82717A70 -- unk_8300CAC0 lanes 0/1/2 "
-                  "are an unrecovered dyn-init .data vector");
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+    Param* const lpParam = GetParam(luParam);
+    CGS_ASSERT(lpParam != 0, "lpParam");
+    const Vector3 lParamPos = GetParamTransform(luParam)->GetDeterministicPos();
+    const u32 luParamInFront = maParamNeedToSlowData[luParam].muParamInFront;
+    if (luParamInFront != KU_INVALID_PARAM)
+    {
+        const Vector3 lFrontPos = GetParamTransform(luParamInFront)->GetDeterministicPos();
+        const Vector3 lDelta = lFrontPos - lParamPos;
+        f32 lfDistanceSq = rw::math::vpu::SLerpDetail::Dot3(lDelta, lDelta);
+        if (36.0f > lfDistanceSq)
+        {
+            if (mbAllowDivergentBehaviour)
+            {
+                const Matrix44Affine lThisVehicle = GetVehicleTransform(luParam);
+                const Matrix44Affine lFrontVehicle = GetVehicleTransform(luParamInFront);
+                const Vector3 lVehicleDelta = lFrontVehicle.Pos() - lThisVehicle.Pos();
+                lfDistanceSq = rw::math::vpu::SLerpDetail::Dot3(lVehicleDelta, lVehicleDelta);
+            }
+            // Original threshold Y (divergent) and Z (deterministic) are both 4.
+            if (4.0f > lfDistanceSq)
+            {
+                lpParam->SetShouldBeRemoved();
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
