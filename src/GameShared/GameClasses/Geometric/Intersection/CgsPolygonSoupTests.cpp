@@ -48,7 +48,9 @@
 #include "BrnCommonTypes.h"                                            // Vector3 / Vector4 / VecFloat
 
 #include <cstring>   // std::memcpy (mask bit-pattern construction)
-#include <cmath>     // std::sqrt (the sphere/triangle normal), std::fma / std::isfinite (the line family)
+#include <cmath>     // std::sqrt (the sphere/triangle normal)
+#include <xtl.h>
+#include <xboxmath.h>
 #include <limits>    // std::numeric_limits (the line family's refined reciprocals)
 
 namespace CgsGeometric
@@ -1002,31 +1004,37 @@ namespace CgsGeometric
             return lMask;
         }
 
-        // vrefp / vrsqrtefp followed by two Newton-Raphson steps (see the banner).
-        inline f32 LineSoupRefinedReciprocal(f32 lfValue)
+        // ARTIST 8283983C..8283987C: rounded cross product, native length
+        // estimate and two distinct Newton-Raphson refinement steps.
+        __forceinline __vector4 LineSoupCross(__vector4 a, __vector4 b)
         {
-            const f32 lfResult = 1.0f / lfValue;
-            return (std::isfinite(lfResult) && lfResult != 0.0f) ? lfResult : std::numeric_limits<f32>::quiet_NaN();
+            const __vector4 ayzx = __vpermwi(a, 0x63);
+            const __vector4 byzx = __vpermwi(b, 0x63);
+            const __vector4 first = __vmulfp(a, byzx);
+            return __vpermwi(__vnmsubfp(ayzx, b, first), 0x63);
         }
-        inline f32 LineSoupRefinedReciprocalSqrt(f32 lfValue)
+        __forceinline __vector4 LineSoupNormalize(__vector4 v)
         {
-            const f32 lfResult = 1.0f / std::sqrt(lfValue);
-            return (std::isfinite(lfResult) && lfResult != 0.0f) ? lfResult : std::numeric_limits<f32>::quiet_NaN();
+            const __vector4 d = __vmsum3fp(v, v);
+            const __vector4 one = XMVectorReplicate(1.0f);
+            const __vector4 half = XMVectorReplicate(0.5f);
+            __vector4 x = __vrsqrtefp(d);
+            for (int i = 0; i != 2; ++i)
+            {
+                const __vector4 square = __vmulfp(x, x);
+                const __vector4 halfX = __vmulfp(x, half);
+                const __vector4 error = __vnmsubfp(d, square, one);
+                x = __vmaddfp(halfX, error, x);
+            }
+            return __vmulfp(v, x);
         }
-
-        // a x b by the yzx-permute idiom (one rounded product, the other subtracted fused),
-        // then scaled by its refined reciprocal length (vmsum3fp128 + vrsqrtefp + 2 NR).
-        inline void LineSoupUnitCross(f32 lfAx, f32 lfAy, f32 lfAz,
-                                      f32 lfBx, f32 lfBy, f32 lfBz,
-                                      f32& lrfOutX, f32& lrfOutY, f32& lrfOutZ)
+        __forceinline __vector4 LineSoupReciprocal(__vector4 d)
         {
-            const f32 lfCx = std::fma(-lfAz, lfBy, lfAy * lfBz);
-            const f32 lfCy = std::fma(-lfAx, lfBz, lfAz * lfBx);
-            const f32 lfCz = std::fma(-lfAy, lfBx, lfAx * lfBy);
-            const f32 lfInverseLength = LineSoupRefinedReciprocalSqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);
-            lrfOutX = lfCx * lfInverseLength;
-            lrfOutY = lfCy * lfInverseLength;
-            lrfOutZ = lfCz * lfInverseLength;
+            const __vector4 one = XMVectorReplicate(1.0f);
+            __vector4 x = __vrefp(d);
+            for (int i = 0; i != 2; ++i)
+                x = __vmaddfp(x, __vnmsubfp(x, d, one), x);
+            return x;
         }
     }
 
@@ -1037,49 +1045,30 @@ namespace CgsGeometric
                                                                        const Vector3& lLineEnd,
                                                                        VecFloat&      lrParam)
     {
-        const f32 lfE01x = lVertex1.x - lVertex0.x, lfE01y = lVertex1.y - lVertex0.y, lfE01z = lVertex1.z - lVertex0.z;
-        const f32 lfE12x = lVertex2.x - lVertex1.x, lfE12y = lVertex2.y - lVertex1.y, lfE12z = lVertex2.z - lVertex1.z;
-        const f32 lfE20x = lVertex0.x - lVertex2.x, lfE20y = lVertex0.y - lVertex2.y, lfE20z = lVertex0.z - lVertex2.z;
-
-        f32 lfNx, lfNy, lfNz;
-        LineSoupUnitCross(lfE01x, lfE01y, lfE01z, lfE12x, lfE12y, lfE12z, lfNx, lfNy, lfNz);
-
-        f32 lfO01x, lfO01y, lfO01z;
-        f32 lfO12x, lfO12y, lfO12z;
-        f32 lfO20x, lfO20y, lfO20z;
-        LineSoupUnitCross(lfE01x, lfE01y, lfE01z, lfNx, lfNy, lfNz, lfO01x, lfO01y, lfO01z);
-        LineSoupUnitCross(lfE12x, lfE12y, lfE12z, lfNx, lfNy, lfNz, lfO12x, lfO12y, lfO12z);
-        LineSoupUnitCross(lfE20x, lfE20y, lfE20z, lfNx, lfNy, lfNz, lfO20x, lfO20y, lfO20z);
-
-        const f32 lfDotS  = lLineStart.x * lfNx + lLineStart.y * lfNy + lLineStart.z * lfNz;
-        const f32 lfDotE  = lLineEnd.x * lfNx + lLineEnd.y * lfNy + lLineEnd.z * lfNz;
-        const f32 lfDotV0 = lVertex0.x * lfNx + lVertex0.y * lfNy + lVertex0.z * lfNz;
-        const f32 lfDenom = lfDotE - lfDotS;
-        const f32 lfNum   = lfDotV0 - lfDotS;
-        const f32 lfT     = LineSoupRefinedReciprocal(lfDenom) * lfNum;
-
-        lrParam.x = lfT;
-        lrParam.y = lfT;
-        lrParam.z = lfT;
-        lrParam.w = lfT;
-
-        const f32 lfPx = (lLineEnd.x - lLineStart.x) * lfT + lLineStart.x;
-        const f32 lfPy = (lLineEnd.y - lLineStart.y) * lfT + lLineStart.y;
-        const f32 lfPz = (lLineEnd.z - lLineStart.z) * lfT + lLineStart.z;
-
-        const f32 lfF01 = (lfPx - lVertex0.x) * lfO01x + (lfPy - lVertex0.y) * lfO01y + (lfPz - lVertex0.z) * lfO01z;
-        const f32 lfF12 = (lfPx - lVertex1.x) * lfO12x + (lfPy - lVertex1.y) * lfO12y + (lfPz - lVertex1.z) * lfO12z;
-        const f32 lfF20 = (lfPx - lVertex2.x) * lfO20x + (lfPy - lVertex2.y) * lfO20y + (lfPz - lVertex2.z) * lfO20z;
-
-        const bool lbC01 = (0.0f >= lfF01);
-        const bool lbC12 = (0.0f >= lfF12);
-        const bool lbC20 = (0.0f >= lfF20);
-        const bool lbInside = (lbC01 && lbC12 && lbC20) || (!lbC01 && !lbC12 && !lbC20);
-
-        const bool lbDenomNonZero = !(lfDenom == 0.0f);
-        const bool lbTIn = (lfT >= 0.0f) && !(lfT > 1.0f);
-
-        return LineSoupMask(lbInside && lbDenomNonZero && lbTIn);
+        const __vector4 v0 = __lvx(&lVertex0, 0), v1 = __lvx(&lVertex1, 0), v2 = __lvx(&lVertex2, 0);
+        const __vector4 start = __lvx(&lLineStart, 0), end = __lvx(&lLineEnd, 0);
+        const __vector4 e01 = __vsubfp(v1, v0), e12 = __vsubfp(v2, v1), e20 = __vsubfp(v0, v2);
+        const __vector4 normal = LineSoupNormalize(LineSoupCross(e01, e12));
+        const __vector4 o01 = LineSoupNormalize(LineSoupCross(e01, normal));
+        const __vector4 o12 = LineSoupNormalize(LineSoupCross(e12, normal));
+        const __vector4 o20 = LineSoupNormalize(LineSoupCross(e20, normal));
+        const __vector4 dotStart = __vmsum3fp(start, normal);
+        const __vector4 denom = __vsubfp(__vmsum3fp(end, normal), dotStart);
+        const __vector4 numerator = __vsubfp(__vmsum3fp(v0, normal), dotStart);
+        const __vector4 t = __vmulfp(LineSoupReciprocal(denom), numerator);
+        __stvx(t, &lrParam, 0);
+        const __vector4 point = __vmaddfp(__vsubfp(end, start), t, start);
+        const __vector4 zero = __vzero();
+        const __vector4 c01 = __vcmpgefp(zero, __vmsum3fp(__vsubfp(point, v0), o01));
+        const __vector4 c12 = __vcmpgefp(zero, __vmsum3fp(__vsubfp(point, v1), o12));
+        const __vector4 c20 = __vcmpgefp(zero, __vmsum3fp(__vsubfp(point, v2), o20));
+        const __vector4 all = __vand(__vand(c01, c12), c20);
+        const __vector4 none = __vnor(__vor(__vor(c01, c12), c20), __vor(__vor(c01, c12), c20));
+        const __vector4 onSegment = __vand(__vcmpgefp(t, zero), __vnor(__vcmpgtfp(t, XMVectorReplicate(1.0f)), __vcmpgtfp(t, XMVectorReplicate(1.0f))));
+        const __vector4 nonzero = __vnor(__vcmpeqfp(denom, zero), __vcmpeqfp(denom, zero));
+        rw::math::vpu::MaskScalar result;
+        __stvx(__vand(__vand(__vor(all, none), nonzero), onSegment), &result, 0);
+        return result;
     }
 
     u32 IntersectLinePolySoupTriangleDoubleSided4(const Vector3  laV0[4],
