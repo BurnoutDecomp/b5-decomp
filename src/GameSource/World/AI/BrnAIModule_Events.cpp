@@ -137,6 +137,7 @@ namespace
     // NaN test, NOT a finiteness test (an infinity passes it). Spelled exactly that way.
     inline bool IsNotNaN(f32 lfValue) { return !(lfValue != lfValue); }
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
     inline bool WitnessManagementEvent(s32 liType)
     {
         if (liType < 0 || liType >= AIModuleIO::E_EVENT_COUNT) { return false; }
@@ -182,6 +183,7 @@ namespace
         }
         return false;
     }
+#endif
 
     // The console's streamed assert form (StrStream over CgsDev::Assert::gpcMessageBuffer). Used
     // by the two arms whose message embeds a number: HandleManagementEvents' "AI car in unknown
@@ -289,12 +291,14 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             lpCar->mCarAssetAttribKey = lpAttach->mCarAssetAttribKey;                     // 0x827988B8 ld/std
             mBuzzBy.RequestResetBuzzTimers();                                             // 0x827988C0
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] ATTACH_AI_CONTROL global " << static_cast<s32>(leGlobalRaceCarIndex)
                     << " -> AICar OUT_OF_RANGE (personality " << lpAttach->mePersonalityType << ")\n";
             }
+#endif
             break;
         }
 
@@ -334,6 +338,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
 
             lpDriver->SetAICar(lpCar);                                                    // 0x827989C0
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -342,6 +347,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                     << " (mbIsActive now " << static_cast<s32>(lpDriver->IsActive() ? 1 : 0)
                     << ", car state " << static_cast<s32>(lpCar->meCarState) << ")\n";
             }
+#endif
             break;
         }
 
@@ -418,12 +424,14 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             lpDriver->mbIsRacingLineInitialised = 0;                                      // 0x82798B64
             lpDriver->mbIsActive                = 0;                                      // 0x82798B68
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] DEACTIVATE_RACE_CAR global " << static_cast<s32>(leGlobalRaceCarIndex)
                     << " -> driver released (mbIsActive 0)\n";
             }
+#endif
             break;
         }
 
@@ -450,12 +458,14 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             lpCar->meCarState = E_AI_CAR_STATE_INACTIVE;                                  // 0x82798C4C
             mBuzzBy.RequestResetBuzzTimers();                                             // 0x82798C50
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] DETACH_AI_CONTROL global " << static_cast<s32>(leGlobalRaceCarIndex)
                     << " -> AICar INACTIVE\n";
             }
+#endif
             break;
         }
 
@@ -501,6 +511,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             }
             lpCarDriver->ResetPIDTuningState();                                             // 0x82798CB8
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -508,6 +519,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                     << static_cast<s32>(lpControlChanged->mbPlayerIsInControl ? 1 : 0)
                     << " (player global " << static_cast<s32>(mePlayerGlobalRaceCarIndex) << ")\n";
             }
+#endif
             break;
         }
 
@@ -548,12 +560,14 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                                         lpSetUp->muNumberOfMedalsToUnlock);
             mBuzzBy.RequestResetBuzzTimers();                                               // 0x82798DC4
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] SET_UP_OUT_OF_RANGE global " << static_cast<s32>(leGlobalRaceCarIndex)
                     << " section " << static_cast<s32>(lpSetUp->muSection) << "\n";
             }
+#endif
             break;
         }
 
@@ -603,6 +617,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                 SetBehaviourInline(lpCar, E_AI_BEHAVIOUR_DONUT);
             }
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -613,6 +628,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                     << " dest section " << static_cast<s32>(lpAddCar->muDestinationAISection)
                     << " behaviour " << static_cast<s32>(lpCar->meBehaviour) << "\n";
             }
+#endif
             break;
         }
 
@@ -642,6 +658,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             lpCar->mbWantsAlternativeRoute   = 0;                                           // 0x82798BC0
             lpCar->mAggressiveness.SetAggression(0.0f);                                     // 0x82798BC4/BC8
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessManagementEvent(liType))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -649,6 +666,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                     << static_cast<s32>(lpRemoveCar->meGlobalRaceCarIndex)
                     << " -> CRUISING, route invalidated\n";
             }
+#endif
             break;
         }
 
@@ -755,6 +773,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             lpPlayerCar->meRouteFindingStyle = leRouteFindingStyle;                           // 0x827925E8
             InvalidateRouteInline(lpPlayerCar);                                               // 0x827925EC/F0
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -763,16 +782,19 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                     << " -> player car behaviour " << static_cast<s32>(lpPlayerCar->meBehaviour)
                     << ", style " << static_cast<s32>(leRouteFindingStyle) << "\n";
             }
+#endif
             break;
         }
 
         // ---- 14  E_ACTION_ON_PLAYER_TAKEDOWN  (jump-table case 7, asm 0x82792448) ----------
         case E_ACTION_ON_PLAYER_TAKEDOWN:
             OnPlayerTakedown(reinterpret_cast<const OnPlayerTakedownAction*>(lpAction));
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 14 ON_PLAYER_TAKEDOWN\n";
             }
+#endif
             break;
 
         // ---- 23  E_ACTION_PREPARE_FOR_MODE  (jump-table case 16, asm 0x8279230C) -----------
@@ -783,12 +805,14 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             const PrepareForModeAction* const lpPrepare =
                 reinterpret_cast<const PrepareForModeAction*>(lpAction);
             OnModeStart(lpPrepare->GetGameModeParams());
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] action 23 PREPARE_FOR_MODE -> OnModeStart (inGameMode "
                     << static_cast<s32>(mbIsInGameMode) << ")\n";
             }
+#endif
             break;
         }
 
@@ -807,30 +831,36 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                     OnRollingStart();
                 }
             }
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] action 30 STOP_MODE_INTRO (donut " << static_cast<s32>(mbDonutStart)
                     << ", fullRolling " << static_cast<s32>(mbFullRollingStart) << ")\n";
             }
+#endif
             break;
 
         // ---- 34  E_ACTION_START_PLAYING_MODE  (jump-table case 27, asm 0x8279231C) ---------
         case E_ACTION_START_PLAYING_MODE:
             OnModeStartRacing(false);                                                        // `li r4, 0`
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 34 START_PLAYING_MODE\n";
             }
+#endif
             break;
 
         // ---- 35  E_ACTION_FINISHED_MODE_NOTIFY  (jump-table case 28, asm 0x827922FC) -------
         case E_ACTION_FINISHED_MODE_NOTIFY:
             OnModeFinished(reinterpret_cast<const FinishedModeNotifyAction*>(lpAction));
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 35 FINISHED_MODE_NOTIFY\n";
             }
+#endif
             break;
 
         // ---- 39  E_ACTION_STOP_MODE  (jump-table case 32, asm 0x8279232C) ------------------
@@ -845,12 +875,14 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                                          (lpStopMode->mu8Field11 == 0) &&
                                          (lpStopMode->mu8Field13 == 0);
             OnModeEnd(!lbHoldModeState);
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] action 39 STOP_MODE -> OnModeEnd(" << static_cast<s32>(!lbHoldModeState)
                     << ")\n";
             }
+#endif
             break;
         }
 
@@ -884,6 +916,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
 
             lpRouteInputBuffer->GetRaceRouteRequestQueue()->AddEventSafe(lRequest);         // 0x82792438/0x82792440
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
@@ -892,6 +925,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                     << " sections " << static_cast<s32>(lpRouteInfo->muStartSectionIndex)
                     << " -> " << static_cast<s32>(lpRouteInfo->muEndSectionIndex) << "\n";
             }
+#endif
             break;
         }
 
@@ -910,12 +944,14 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             }
             mBuzzBy.ClearCarsAwaitingCollection();                                          // 0x82792530
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] action 99 DRIVE_THRU_JUNK_YARD in "
                     << static_cast<s32>(lpJunkYard->mbIsInJunkYard ? 1 : 0) << "\n";
             }
+#endif
             break;
         }
 
@@ -935,29 +971,35 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             mBuzzBy.ClearCarsAwaitingCollection();                                          // 0x827924F8
             mBuzzBy.SetInJunkyard(true);                                                    // 0x827924FC
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 106 JUNK_YARD_ON_GAME_START\n";
             }
+#endif
             break;
         }
 
         // ---- 113  E_ACTION_RACE_CAR_REACHED_CHECKPOINT  (case 106, asm 0x827922AC) --------
         case E_ACTION_RACE_CAR_REACHED_CHECKPOINT:
             OnRaceCarReachedCheckpoint(reinterpret_cast<const RaceCarReachedCheckpointAction*>(lpAction));
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 113 RACE_CAR_REACHED_CHECKPOINT\n";
             }
+#endif
             break;
 
         // ---- 114  E_ACTION_RACE_CAR_REACHED_FINISH  (case 107, asm 0x8279229C) ------------
         case E_ACTION_RACE_CAR_REACHED_FINISH:
             OnRaceCarReachedFinish(reinterpret_cast<const RaceCarReachedFinishAction*>(lpAction));
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 114 RACE_CAR_REACHED_FINISH\n";
             }
+#endif
             break;
 
         // ---- 120  E_ACTION_SHUTDOWN  (jump-table case 113, asm 0x82792458) ----------------
@@ -971,10 +1013,12 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             }
             SetBehaviourInline(lpPlayerCar, E_AI_BEHAVIOUR_STOP);                           // 0x82792464..0x82792474
             mBuzzBy.AddCarAwaitingCollection();                                             // 0x82792478..0x82792480
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 120 SHUTDOWN -> player car STOP\n";
             }
+#endif
             break;
         }
 
@@ -987,10 +1031,12 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                 break;   // [GUARD]
             }
             SetBehaviourInline(lpPlayerCar, E_AI_BEHAVIOUR_STOP);                           // 0x82792494..0x827924A0
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 122 AWARD_SEQUENCE_START -> STOP\n";
             }
+#endif
             break;
         }
 
@@ -1003,10 +1049,12 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                 break;   // [GUARD]
             }
             SetBehaviourInline(lpPlayerCar, E_AI_BEHAVIOUR_CRUISING);                       // `stw r14(3), 0x14B4`
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint << "[ai-evt] action 123 AWARD_SEQUENCE_END -> CRUISING\n";
             }
+#endif
             break;
         }
 
@@ -1028,12 +1076,14 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             }
             lpCar->SetRoadRageMadness(lpMadness->mfMadness);                                // 0x8279239C
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (WitnessGameAction(liType))
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[ai-evt] action 131 UPDATE_ROAD_RAGE_MADNESS slot "
                     << static_cast<s32>(lpMadness->meActiveRaceCarIndex) << "\n";
             }
+#endif
             break;
         }
 
@@ -1480,6 +1530,7 @@ void AIModule::OnRaceCarReachedCheckpoint(
             lpAICar, lpRaceCarReachedCheckpointAction->miCheckPointIndex);                       // 0x8278A700
     }
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
     if (siCheckpointWitness < 16 && CgsDev::Log::gpDebugPrint != 0)
     {
         ++siCheckpointWitness;
@@ -1491,6 +1542,7 @@ void AIModule::OnRaceCarReachedCheckpoint(
             << static_cast<s32>(lpRaceCarReachedCheckpointAction->muNextCheckpointAISectionIndex)
             << (lpAICar->IsOpponent() ? " (opponent: rubber band told)\n" : " (not an opponent)\n");
     }
+#endif
 }
 
 }
