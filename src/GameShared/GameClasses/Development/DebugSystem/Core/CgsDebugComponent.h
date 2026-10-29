@@ -8,6 +8,8 @@
 namespace CgsResource { class DebugComponent; }
 namespace BrnAI { class AIDebugComponent; class RaceBalancingDebugComponent; class RouteMapDebugComponent; struct ResetOnTrackDebugComponent; }
 namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleCollisionDebugComponent; }
+namespace CgsGameTalk { class GameTalkDebugComponent; }
+namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -84,6 +86,11 @@ namespace CgsDev
         friend class CgsSceneManager::TriangleCollisionDebugComponent;
         struct SceneConstructorTag {};
         explicit DebugComponent(SceneConstructorTag) {}
+        friend class CgsGameTalk::GameTalkDebugComponent;
+        friend class BrnResource::DebugComponent;
+        friend class BrnResource::DLCDebugComponent;
+        struct GameDataConstructorTag {};
+        explicit DebugComponent(GameDataConstructorTag) {}
 
     public:
         DebugComponent();

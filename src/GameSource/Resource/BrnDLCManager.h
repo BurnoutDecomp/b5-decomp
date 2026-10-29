@@ -175,7 +175,7 @@ private:
 class DLCDebugComponent : public CgsDev::DebugComponent
 {
 public:
-    DLCDebugComponent() {}
+    DLCDebugComponent() : CgsDev::DebugComponent(GameDataConstructorTag()) {}
 
     // X360 0x826627F8. Two-phase construct: the folded base CgsDev::DebugComponent::
     // Construct (the X360 image coalesces the trivial base body onto the
