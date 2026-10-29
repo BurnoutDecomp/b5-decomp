@@ -9,6 +9,7 @@ namespace CgsResource { class DebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
+namespace BrnWorld { class WorldDebugComponent; namespace EnvironmentSettings { class DebugComponent; } }
 
 // CgsDev::DebugComponent - the base every in-game debug component derives from (perfmon
 // overlays, the takedown/mode-manager debug menus, etc.). Subclasses register their member
@@ -59,6 +60,13 @@ namespace CgsDev
         friend struct BrnGui::GuiDebugComponent;
         struct GuiConstructorTag {};
         explicit DebugComponent(GuiConstructorTag) {}
+
+        // ARTIST WorldModule's C++ constructor (827E5A4C/827E5A98)
+        // installs these two component vtables without initializing base data.
+        friend class BrnWorld::WorldDebugComponent;
+        friend class BrnWorld::EnvironmentSettings::DebugComponent;
+        struct WorldConstructorTag {};
+        explicit DebugComponent(WorldConstructorTag) {}
 
     public:
         DebugComponent();

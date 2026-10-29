@@ -22,6 +22,9 @@ namespace BrnWorld
     class WorldDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        WorldDebugComponent()
+            : CgsDev::DebugComponent(CgsDev::DebugComponent::WorldConstructorTag()) {}
+
         void Construct(WorldModule* lpWorldModule);
         void Update(const BrnWorldIO::DebugController* lpDebugController);
 

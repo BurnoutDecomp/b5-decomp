@@ -29,9 +29,9 @@ namespace rw
             }
 
             // GetSize @0x82BBD700:  ld r3, 0x18(r3); blr -- return the 64-bit size at +0x18.
-            u64 GetSize(const AsyncOp* lpOp)
+            u64 GetSize(const Handle* lpHandle)
             {
-                return lpOp->mu64Size;
+                return lpHandle->mu64Size;
             }
 
             // =============================================================================
@@ -39,7 +39,7 @@ namespace rw
             // =============================================================================
 
             // -----------------------------------------------------------------------------
-            // AsyncOp::AsyncOp @0x82BBD3E0 -- zero/-3 init of the whole 0x48-byte object.
+            // AsyncOp::AsyncOp @0x82BBD3E0 -- zero/-3 init of the named fields in the 0x48-byte object.
             //   miResult = -3; mpfnComplete = STUB; everything else 0.
             // -----------------------------------------------------------------------------
             AsyncOp::AsyncOp()
@@ -51,11 +51,9 @@ namespace rw
                 , mpStream(0)             // *(result+16) = 0
                 , mUserData(0)                  // *(result+20) = 0
                 , mpfnComplete(&DefaultCompletion) // *(result+24) = STUB
-                , muReserved1C(0)
                 , mu64Position(0)               // *(result+32) = 0
                 , mu64ByteCount(0)              // *(result+40) = 0
                 , mpBuffer(0)             // *(result+48) = 0
-                , muReserved34(0)
                 , mu64BytesDone(0)              // *(result+56) = 0
                 , mpDevice(0)             // *(result+64) = 0
                 , mpfnDoIo(0)             // *(result+68) = 0

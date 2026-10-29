@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<1024,16>
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                // CgsNumeric::Random
 #include "GameSource/World/EnvironmentManager/BrnGlobalIrradianceManager.h"  // embedded BY VALUE @0x700
+#include "SDKs/EATech/rwcore/filesys/asyncop.h"
 
 namespace BrnWorldIO { struct UpdateOutputBuffer; }
 class BrnEffectsFrame;
@@ -55,6 +56,8 @@ class DebugComponent;
 class EnvironmentManager
 {
 public:
+        EnvironmentManager(); // ARTIST 827DE8A8: ResourcePtr and AsyncOp construction.
+
         // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
         //      virtual-dispatches the fleet lifecycle) ----
         // Declaration-only; the body lands with this module's own TU.
@@ -507,8 +510,8 @@ private:
     Vector3        mCloud0Disp;                 // 0x11B0  accumulated cloud-layer-0 UV displacement
     f32            mfWhiteLevel;                // 0x11C0  debug var "HDR white level" [0.025, 1.0]
     f32            mrTimeStep;                  // 0x11C4
-    u8             maAsyncOp[0x48];             // 0x11C8  CgsFileSys AsyncOp
-    u8             mPad1210_[0x28];             // 0x1210  (incl. mpFileHandle @0x1210)
+    rw::core::filesys::AsyncOp mAsyncOp;         // 0x11C8  DWARF :428
+    rw::core::filesys::Handle* mpFileHandle;     // 0x1210  DWARF :429
     Vector3        mOverrideKeyLightDirection;  // 0x1220
     f32            mfTimeBeforeEnteringJunkyard;// 0x1230
     bool           mbOverrideKeyLightDirection; // 0x1234
@@ -523,6 +526,16 @@ private:
     f32            mfTimeOfDayLowerBound;       // 0x1C64
     f32            mfSunElevTodLBound;          // 0x1C68  sun-elevation time-of-day clamp floor
     f32            mfSunElevTodUBound;          // 0x1C6C  sun-elevation time-of-day clamp cap
+
+    void LockNativeLayout_()
+    {
+        CGS_STATIC_ASSERT((sizeof(EnvironmentManager) == 0x1C70), "ARTIST environment manager extent");
+        CGS_STATIC_ASSERT((offsetof(EnvironmentManager, mAsyncOp) == 0x11C8), "ARTIST environment async operation");
+        CGS_STATIC_ASSERT((offsetof(EnvironmentManager, mpFileHandle) == 0x1210), "ARTIST environment file handle");
+        CGS_STATIC_ASSERT((offsetof(EnvironmentManager, mOverrideKeyLightDirection) == 0x1220), "ARTIST environment key light");
+        CGS_STATIC_ASSERT((offsetof(EnvironmentManager, macJunkyardLightingBuffer) == 0x1240), "ARTIST junkyard lighting data");
+        CGS_STATIC_ASSERT((offsetof(EnvironmentManager, mfSunElevTodUBound) == 0x1C6C), "ARTIST environment tail");
+    }
 };
 }
 }

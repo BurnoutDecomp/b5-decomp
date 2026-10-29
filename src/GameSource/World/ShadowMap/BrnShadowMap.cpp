@@ -10,6 +10,8 @@
 #include <algorithm> // std::sort (ComputeOptimalViewVolume's candidate-plane ordering)
 #include <cmath>     // std::sqrt/sin/cos (the vrsqrtefp + 2x NR chains, de-optimised exact)
 #include <cstring>   // memcpy (the 128-byte frustum copies)
+#include <xtl.h>
+#include <xboxmath.h>
 
 // ============================================================================
 // GameSource/Unity/../World/ShadowMap/BrnShadowMap.cpp
@@ -54,6 +56,32 @@ namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
 namespace BrnWorld
 {
+
+    // C++03 spelling of a four-lane aggregate; this keeps the original values
+    // at scalar call sites without relying on C++11 temporary-list syntax.
+    static __forceinline Vector4 MakeShadowVector4(f32 x, f32 y, f32 z, f32 w)
+    {
+        const Vector4 value = { x, y, z, w };
+        return value;
+    }
+
+    static __forceinline Vector3 MakeShadowVector3(f32 x, f32 y, f32 z, f32 w)
+    {
+        const Vector3 value = { x, y, z, w };
+        return value;
+    }
+
+    static Matrix44 MakeShadowMatrix(const Vector4& x, const Vector4& y,
+                                     const Vector4& z, const Vector4& w)
+    {
+        Matrix44 value;
+        value.xAxis = x;
+        value.yAxis = y;
+        value.zAxis = z;
+        value.wAxis = w;
+        return value;
+    }
+
     // BrnShadowMap.cpp:373-374 (DWARF). Per-shadow-map-slot LOD tuning tables, indexed by
     // muCurrentShadowMap (0..KU_NUM_SHADOW_MAPS-1). Non-const: debug-tunable at runtime.
     // Recovered from the X360 ARTIST .data image.
@@ -245,22 +273,6 @@ namespace BrnWorld
         mfVariableBiasMin             = KF_VARIABLE_BIAS_MIN;         // stw 0x3F028F5C -> 0x1520
         mfBiasFrustumLength           = KF_BIAS_FRUSTUM_LENGTH;       // stfs 0x1524
 
-        const f32 lfDistanceScale = lfDistance / 120.0f;
-        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
-        {
-            maTsmBBInfo[luMap].mfNearClip *= lfDistanceScale;
-            maTsmBBInfo[luMap].mfFarClip *= lfDistanceScale;
-        }
-        mfFadeStartDistance *= lfDistanceScale;
-        if (lfDistance > 120.0f) mfShadowMapFarPlane += lfDistance - 120.0f;
-        char lacShadowQuality[224];
-        CgsCore::SnPrintf(lacShadowQuality, sizeof(lacShadowQuality)-1,
-            "[shadow-quality] distance=%.9g near=%.9g,%.9g,%.9g far=%.9g,%.9g,%.9g fade=%.9g lightFar=%.9g\n",
-            lfDistance,maTsmBBInfo[0].mfNearClip,maTsmBBInfo[1].mfNearClip,maTsmBBInfo[2].mfNearClip,
-            maTsmBBInfo[0].mfFarClip,maTsmBBInfo[1].mfFarClip,maTsmBBInfo[2].mfFarClip,
-            mfFadeStartDistance,mfShadowMapFarPlane);
-        CgsDev::Log::WriteToLog(lacShadowQuality);
-
         // ---- debug-variable registration (0x827B46CC..0x827B4938) -----------
         // The automatic DebugInterface handle = the inlined DebugManager
         // singleton-assert + DebugCriticalSection Enter/Leave pair.
@@ -397,10 +409,10 @@ namespace BrnWorld
     // ========================================================================
     void ShadowMap::SetConstantsForEnvmap()
     {
-        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 15u, Vector4{ 5.0f, 5.0f, 5.0f, 1.0f } );
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 15u, MakeShadowVector4( 5.0f, 5.0f, 5.0f, 1.0f ) );
 
         const f32 lfBias = mfBiasFrustumLength / ( mfShadowMapFarPlane - mfShadowMapNearPlane );
-        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 16u, Vector4{ 5.0f, 1.0f, lfBias, 0.2f } );
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 16u, MakeShadowVector4( 5.0f, 1.0f, lfBias, 0.2f ) );
     }
 
     // ========================================================================
@@ -1014,13 +1026,11 @@ namespace BrnWorld
 
     // Clip -> shadow-UV bias: x' = 0.5x + 0.5, y' = -0.5y + 0.5 (the Y flip is the
     // D3D clip-to-texture convention). Init thunk @0x82C6AFF0.
-    static Matrix44 gShadowPostProjectionMatrix =   // unk_8300F470
-    {
-        {  0.5f,  0.0f, 0.0f, 0.0f },
-        {  0.0f, -0.5f, 0.0f, 0.0f },               // -0.5 == flt_82004C78
-        {  0.0f,  0.0f, 1.0f, 0.0f },
-        {  0.5f,  0.5f, 0.0f, 1.0f },
-    };
+    static Matrix44 gShadowPostProjectionMatrix = MakeShadowMatrix( // unk_8300F470
+        MakeShadowVector4( 0.5f,  0.0f, 0.0f, 0.0f ),
+        MakeShadowVector4( 0.0f, -0.5f, 0.0f, 0.0f ),
+        MakeShadowVector4( 0.0f,  0.0f, 1.0f, 0.0f ),
+        MakeShadowVector4( 0.5f,  0.5f, 0.0f, 1.0f ) );
 
     // The per-cascade atlas map: identity in X/Z, Y scaled to 1/3 of the target
     // and translated to the cascade's own third (0, 1/3, 2/3) -- a 1x3 vertical
@@ -1030,30 +1040,28 @@ namespace BrnWorld
     // flt_820065E0 (0x3EAAAAAB) and flt_8200AECC (0x3F2AAAAB).
     static Matrix44 gaShadowConstantMatrix[KU_NUM_SHADOW_MAPS] =   // unk_8300F9A0
     {
-        { { 1.0f, 0.0f,         0.0f, 0.0f },
-          { 0.0f, 0.333333343f, 0.0f, 0.0f },
-          { 0.0f, 0.0f,         1.0f, 0.0f },
-          { 0.0f, 0.0f,         0.0f, 1.0f } },
-        { { 1.0f, 0.0f,         0.0f, 0.0f },
-          { 0.0f, 0.333333343f, 0.0f, 0.0f },
-          { 0.0f, 0.0f,         1.0f, 0.0f },
-          { 0.0f, 0.333333343f, 0.0f, 1.0f } },
-        { { 1.0f, 0.0f,         0.0f, 0.0f },
-          { 0.0f, 0.333333343f, 0.0f, 0.0f },
-          { 0.0f, 0.0f,         1.0f, 0.0f },
-          { 0.0f, 0.666666687f, 0.0f, 1.0f } },
+        MakeShadowMatrix( MakeShadowVector4( 1.0f, 0.0f, 0.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.333333343f, 0.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.0f, 0.0f, 1.0f ) ),
+        MakeShadowMatrix( MakeShadowVector4( 1.0f, 0.0f, 0.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.333333343f, 0.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.333333343f, 0.0f, 1.0f ) ),
+        MakeShadowMatrix( MakeShadowVector4( 1.0f, 0.0f, 0.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.333333343f, 0.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
+                          MakeShadowVector4( 0.0f, 0.666666687f, 0.0f, 1.0f ) ),
     };
 
     // Substituted for a DISABLED map: identity apart from wAxis.y == 1, which
     // pushes the sampled V to 1.0 (off the top of every cascade strip) so the
     // lookup can never report "in shadow". Init thunk @0x82C6B098.
-    static Matrix44 gShadowDisabledConstantMatrix =   // unk_8300E9F0
-    {
-        { 1.0f, 0.0f, 0.0f, 0.0f },
-        { 0.0f, 1.0f, 0.0f, 0.0f },
-        { 0.0f, 0.0f, 1.0f, 0.0f },
-        { 0.0f, 1.0f, 0.0f, 1.0f },
-    };
+    static Matrix44 gShadowDisabledConstantMatrix = MakeShadowMatrix( // unk_8300E9F0
+        MakeShadowVector4( 1.0f, 0.0f, 0.0f, 0.0f ),
+        MakeShadowVector4( 0.0f, 1.0f, 0.0f, 0.0f ),
+        MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
+        MakeShadowVector4( 0.0f, 1.0f, 0.0f, 1.0f ) );
 
     // The half-texel row-3 add applied to every result. Init thunk @0x82C6AF60
     // (lanes 2/3 written from flt_82001CC0 == 0.0).
@@ -1195,31 +1203,6 @@ namespace BrnWorld
     // whenever the shadow focus point has moved more than a metre, so it keeps
     // talking while the car is driving.
     // ========================================================================
-    namespace
-    {
-
-        // The probe's canary: a value no real sub-frustum corner can hold.
-        const f32 KF_SHADOW_CAM_PROBE_CANARY = -1.2345678e9f;
-
-        inline bool ProbeFinite4(const Vector4& lrV)
-        {
-            return std::isfinite(lrV.x) && std::isfinite(lrV.y)
-                && std::isfinite(lrV.z) && std::isfinite(lrV.w);
-        }
-
-        inline bool ProbeFinite44(const Matrix44& lrM)
-        {
-            return ProbeFinite4(lrM.xAxis) && ProbeFinite4(lrM.yAxis)
-                && ProbeFinite4(lrM.zAxis) && ProbeFinite4(lrM.wAxis);
-        }
-
-        // (The stored-plane de-swizzle helper that pinned the SetFromRwFrustum
-        // slot permutation was retired 2026-08-12: that fault is fixed and
-        // verified, and the ladder's live question is now MAGNITUDE, not which
-        // slot holds which plane. The nonFiniteMask below still reports it --
-        // it should read 0b00000000 forever now.)
-    }
-
     // ========================================================================
     // BrnWorld::ShadowMap::CalculateShadowMapCameras @0x827DA820
     //
@@ -1302,9 +1285,9 @@ namespace BrnWorld
             mShadowMapFocusPoint.z = lvFocus.z;
             mShadowMapFocusPoint.w = lvFocus.w;
 
-            const Vector4 lvEyePoint{ lvFocus.x + lvLightOffset.x, lvFocus.y + lvLightOffset.y,
+            const Vector4 lvEyePoint = { lvFocus.x + lvLightOffset.x, lvFocus.y + lvLightOffset.y,
                                       lvFocus.z + lvLightOffset.z, lvFocus.w + lvLightOffset.w };
-            const Vector4 lvUpReference{ lrAt.x, lrAt.y, lrAt.z, lrAt.w };
+            const Vector4 lvUpReference = { lrAt.x, lrAt.y, lrAt.z, lrAt.w };
 
             // the outlined CameraUtils builder (bl sub_8220C960) -> mTransform rows
             Vector4 laRows[4];
@@ -1539,8 +1522,8 @@ namespace BrnWorld
             {
                 laMatrices[luMap] = gShadowDisabledConstantMatrix;
             }
-            laMatrices[luMap].wAxis.x += gShadowConstantRowOffset.x / lfAtlasScale;
-            laMatrices[luMap].wAxis.y += gShadowConstantRowOffset.y / lfAtlasScale;
+            laMatrices[luMap].wAxis.x += gShadowConstantRowOffset.x;
+            laMatrices[luMap].wAxis.y += gShadowConstantRowOffset.y;
             laMatrices[luMap].wAxis.z += gShadowConstantRowOffset.z;
             laMatrices[luMap].wAxis.w += gShadowConstantRowOffset.w;
         }
@@ -1559,14 +1542,14 @@ namespace BrnWorld
             lfFadeScale = lfFar2 / (lfFar2 - mfFadeStartDistance);
         }
         CgsGraphics::mShaderConstantTable.SetShaderConstantData(
-            15u, Vector4{ maTsmBBInfo[0].mfFarClip, maTsmBBInfo[1].mfFarClip, lfFar2, lfFadeScale });
+            15u, MakeShadowVector4( maTsmBBInfo[0].mfFarClip, maTsmBBInfo[1].mfFarClip, lfFar2, lfFadeScale ));
 
         // ---- 6. c16 ---------------------------------------------------------
         CgsGraphics::mShaderConstantTable.SetShaderConstantData(
-            16u, Vector4{ (maTsmBBInfo[0].mfFarClip + maTsmBBInfo[1].mfFarClip) * 0.5f,
+            16u, MakeShadowVector4( (maTsmBBInfo[0].mfFarClip + maTsmBBInfo[1].mfFarClip) * 0.5f,
                           mfShadowFadeToValue,
                           mfBiasFrustumLength / (mfShadowMapFarPlane - mfShadowMapNearPlane),
-                          (1.0f / lfFar2) * lfFadeScale });
+                          (1.0f / lfFar2) * lfFadeScale ));
     }
 
     // ========================================================================
@@ -1584,8 +1567,8 @@ namespace BrnWorld
         const u32 luSelect = (lfDistance >= lfMid) ? 1u : 0u;
 
         CgsGraphics::mShaderConstantTable.SetShaderConstantData(
-            17u, Vector4{ static_cast<f32>(luSelect), static_cast<f32>(luSelect + 1u),
-                          maTsmBBInfo[luSelect].mfFarClip, 0.0f });
+            17u, MakeShadowVector4( static_cast<f32>(luSelect), static_cast<f32>(luSelect + 1u),
+                          maTsmBBInfo[luSelect].mfFarClip, 0.0f ));
     }
 
     // ========================================================================
@@ -1768,14 +1751,12 @@ namespace BrnWorld
         // each stage fused; TransformPoint above is the older non-fused form.
         Vector4 TransformShadowDebugPointFma(const Vector4& lrPoint, const Matrix44& lrMatrix)
         {
-            const f32* lapRows[3] = { &lrMatrix.xAxis.x, &lrMatrix.yAxis.x, &lrMatrix.zAxis.x };
-            const f32* lapTranslation = &lrMatrix.wAxis.x;
+            XMVECTOR value = __vmaddfp(XMVectorReplicate(lrPoint.x),
+                                      __lvx(&lrMatrix.xAxis, 0), __lvx(&lrMatrix.wAxis, 0));
+            value = __vmaddfp(XMVectorReplicate(lrPoint.y), __lvx(&lrMatrix.yAxis, 0), value);
+            value = __vmaddfp(XMVectorReplicate(lrPoint.z), __lvx(&lrMatrix.zAxis, 0), value);
             Vector4 lvOut;
-            f32* lpfOut = &lvOut.x;
-            for (int liLane = 0; liLane < 4; ++liLane)
-            {
-                lpfOut[liLane] = lfValue;
-            }
+            __stvx(value, &lvOut, 0);
             return lvOut;
         }
 
@@ -1795,9 +1776,9 @@ namespace BrnWorld
             const CgsDev::RGBA lPlaneColour = static_cast<CgsDev::RGBA>(0xFF804080u);
             const Vector4 KAA_AXIS_LINES[3][2] =
             {
-                { Vector4{ -20.0f,   0.0f,   0.0f, 0.0f }, Vector4{  20.0f,   0.0f,   0.0f, 0.0f } },
-                { Vector4{   0.0f, -20.0f,   0.0f, 0.0f }, Vector4{   0.0f,  20.0f,   0.0f, 0.0f } },
-                { Vector4{   0.0f,   0.0f, -20.0f, 0.0f }, Vector4{   0.0f,   0.0f, 20.0f, 0.0f } },
+                { MakeShadowVector4( -20.0f,   0.0f,   0.0f, 0.0f ), MakeShadowVector4(  20.0f,   0.0f,   0.0f, 0.0f ) },
+                { MakeShadowVector4(   0.0f, -20.0f,   0.0f, 0.0f ), MakeShadowVector4(   0.0f,  20.0f,   0.0f, 0.0f ) },
+                { MakeShadowVector4(   0.0f,   0.0f, -20.0f, 0.0f ), MakeShadowVector4(   0.0f,   0.0f, 20.0f, 0.0f ) },
             };
 
             for (u32 luAxis = 0; luAxis < 3; ++luAxis)
@@ -1980,40 +1961,6 @@ namespace BrnWorld
         lTsmBBInfo.mSubFrustum.SetFromRwFrustum(lRwFrustum);
         lTsmBBInfo.mSubFrustum.CalcVertices(lFrustumPoints);
 
-        {
-            Vector4 laProbeScratch[8];
-            for (u32 luI = 0; luI < 8; ++luI)
-            {
-                {
-                    const Vector4 lAggregateValue = { KF_SHADOW_CAM_PROBE_CANARY,
-                                               KF_SHADOW_CAM_PROBE_CANARY,
-                                               KF_SHADOW_CAM_PROBE_CANARY,
-                                               KF_SHADOW_CAM_PROBE_CANARY };
-                    laProbeScratch[luI] = lAggregateValue;
-                }
-            }
-            lTsmBBInfo.mSubFrustum.CalcVertices(laProbeScratch);
-
-            bool lbCanaryIntact = true;
-            for (u32 luI = 0; luI < 8; ++luI)
-            {
-                if (laProbeScratch[luI].x != KF_SHADOW_CAM_PROBE_CANARY
-                 || laProbeScratch[luI].y != KF_SHADOW_CAM_PROBE_CANARY
-                 || laProbeScratch[luI].z != KF_SHADOW_CAM_PROBE_CANARY)
-                {
-                    lbCanaryIntact = false;
-                    break;
-                }
-            }
-            if (lbCanaryIntact)
-            {
-            }
-        }
-
-        if (!ProbeFinite44(lWorldToLight))
-        {
-        }
-
         // ---- 3. into the 2D light plane (0x827D92C0..0x827D940C) ------------
         // The flattened point keeps only (x, y): the perm+vrlimi pair the X360
         // emits writes lane 2 as zero and leaves lane 3 unread by every consumer.
@@ -2058,14 +2005,10 @@ namespace BrnWorld
                 lCentreLineEnd = lAggregateValue;
             }
         }
-        const Vector4 lCentreLineVec = Normalize3(Vector4{                   // :1291
+        const Vector4 lCentreLineVec = Normalize3(MakeShadowVector4(                   // :1291
             lCentreLineEnd.x - lCentreLineStart.x, lCentreLineEnd.y - lCentreLineStart.y,
-            lCentreLineEnd.z - lCentreLineStart.z, lCentreLineEnd.w - lCentreLineStart.w });
-        const Vector4 lOriginalBaseLineVec{ lCentreLineVec.y, -lCentreLineVec.x, 0.0f, 0.0f }; // :1305
-
-        if (!ProbeFinite4(lCentreLineVec))
-        {
-        }
+            lCentreLineEnd.z - lCentreLineStart.z, lCentreLineEnd.w - lCentreLineStart.w ));
+        const Vector4 lOriginalBaseLineVec = { lCentreLineVec.y, -lCentreLineVec.x, 0.0f, 0.0f }; // :1305
 
         // ---- 5. the rotation search (0x827D95C4..0x827DA004) ----------------
         // BOTH DUMPED 2026-08-12 (the previous "values not in this dossier" FLAG
@@ -2097,7 +2040,10 @@ namespace BrnWorld
 
         for (u32 luIteration = 0; luIteration < KU_NUM_BOUNDING_BOX_ITERATIONS; ++luIteration) // :1314
         {
-            const f32 lfSin = std::sin(lRotation);
+            XMVECTOR lSin, lCos;
+            XMVectorSinCos(&lSin, &lCos, XMVectorReplicate(lRotation));
+            const f32 lfSin = lSin.x;
+            const f32 lfCos = lCos.x;
             Matrix44Affine lRotationAroundZMatrix;                             // :1310
             {
                 const Vector3 lAggregateValue = {  lfCos, lfSin, 0.0f, 0.0f };
@@ -2117,7 +2063,7 @@ namespace BrnWorld
             }
 
             const Vector4 lvBase = TransformVector(lOriginalBaseLineVec, lRotationAroundZMatrix);
-            const Vector4 lvSide{ -lvBase.y, lvBase.x, 0.0f, 0.0f };
+            const Vector4 lvSide = { -lvBase.y, lvBase.x, 0.0f, 0.0f };
 
             // support points along the side vector -> the base / top lines
             f32 lfSideMin = Dot3(lvSide, lFrustumPointsLightSpace[0]);
@@ -2141,8 +2087,8 @@ namespace BrnWorld
             // support points along the negated base vector -> the two side lines.
             // (Both side lines take the SAME direction vector -- the X360 keeps
             // two copies of it, matching the two named locals.)
-            const Vector4 lvSideLineVec{ -lvSide.x, -lvSide.y, -lvSide.z, -lvSide.w };
-            const Vector4 lvNegBase{ -lvBase.x, -lvBase.y, -lvBase.z, 0.0f };
+            const Vector4 lvSideLineVec = { -lvSide.x, -lvSide.y, -lvSide.z, -lvSide.w };
+            const Vector4 lvNegBase = { -lvBase.x, -lvBase.y, -lvBase.z, 0.0f };
             f32 lfBaseMax = Dot3(lvNegBase, lFrustumPointsLightSpace[0]);
             f32 lfBaseMin = lfBaseMax;
             u32 luMaxIndex = 0;
@@ -2200,12 +2146,12 @@ namespace BrnWorld
         laBestBoxPoints[3] = _LineIntersection2d(lBestBoxBaseLineStart, lBaseLineVec,
                                                  lBestBoxSideLineLeftStart,  lBestBoxSideLineLeftVec);
 
-        const f32 lHeight = Magnitude4(Vector4{                                // :1436
+        const f32 lHeight = Magnitude4(MakeShadowVector4(                                // :1436
             laBestBoxPoints[0].x - laBestBoxPoints[1].x, laBestBoxPoints[0].y - laBestBoxPoints[1].y,
-            laBestBoxPoints[0].z - laBestBoxPoints[1].z, laBestBoxPoints[0].w - laBestBoxPoints[1].w });
-        const f32 lWidth = Magnitude4(Vector4{                                 // :1437
+            laBestBoxPoints[0].z - laBestBoxPoints[1].z, laBestBoxPoints[0].w - laBestBoxPoints[1].w ));
+        const f32 lWidth = Magnitude4(MakeShadowVector4(                                 // :1437
             laBestBoxPoints[0].x - laBestBoxPoints[3].x, laBestBoxPoints[0].y - laBestBoxPoints[3].y,
-            laBestBoxPoints[0].z - laBestBoxPoints[3].z, laBestBoxPoints[0].w - laBestBoxPoints[3].w });
+            laBestBoxPoints[0].z - laBestBoxPoints[3].z, laBestBoxPoints[0].w - laBestBoxPoints[3].w ));
 
         if (mbPreferShortAndFatProjection && lWidth > lHeight)                 // lbz 0x1503(this)
         {
@@ -2240,9 +2186,9 @@ namespace BrnWorld
         }
         lvCentre.z = 0.0f; lvCentre.w = 0.0f;
 
-        const Vector4 lVecU = Normalize3(Vector4{                              // :1460
+        const Vector4 lVecU = Normalize3(MakeShadowVector4(                              // :1460
             laBestBoxPoints[2].x - laBestBoxPoints[3].x, laBestBoxPoints[2].y - laBestBoxPoints[3].y,
-            laBestBoxPoints[2].z - laBestBoxPoints[3].z, laBestBoxPoints[2].w - laBestBoxPoints[3].w });
+            laBestBoxPoints[2].z - laBestBoxPoints[3].z, laBestBoxPoints[2].w - laBestBoxPoints[3].w ));
 
         Matrix44 lTransformT1;                                                 // :1472
         {
@@ -2323,14 +2269,6 @@ namespace BrnWorld
 
         lTsmBBInfo.mBestFitMatrix = MultMatrix(lTransformT1xR, lTransformS2);
 
-        if (!ProbeFinite4(lvCorner) || lvCorner.x == 0.0f || lvCorner.y == 0.0f)
-        {
-        }
-
-        if (!ProbeFinite44(lTsmBBInfo.mBestFitMatrix))
-        {
-        }
-
         if (lTsmBBInfo.mbInvertCullMode)                                       // lbz 0x240(tsm)
         {
             Matrix44 lMirrorX;
@@ -2359,9 +2297,9 @@ namespace BrnWorld
         // then the translation row = -wAxis through that basis.
         {
             const Matrix44Affine& lrView = lTsmBBInfo.mWorldToLightView;
-            const Vector4 lvX{ lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
-            const Vector4 lvY{ lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
-            const Vector4 lvZ{ lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
+            const Vector4 lvX = { lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
+            const Vector4 lvY = { lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
+            const Vector4 lvZ = { lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
             const Vector4 lvCrossYZ = Cross3(lvY, lvZ);
             const Vector4 lvCrossXY = Cross3(lvX, lvY);
             const Vector4 lvCrossZX = Cross3(lvZ, lvX);
@@ -2418,7 +2356,7 @@ namespace BrnWorld
             Vector4 lvDeterminant;
             const Matrix44 lLightToWorld =                                     // :1538
                 rw::math::vpu::Inverse(lWorldToLight, lvDeterminant);
-            const Vector4 lZOffset{ 0.0f, 0.0f, lFrustumPointsLightSpace3d[0].z, 0.0f }; // :1539
+            const Vector4 lZOffset = { 0.0f, 0.0f, lFrustumPointsLightSpace3d[0].z, 0.0f }; // :1539
             BoundingBoxDebugRenderInfo& lDebugInfo = gBoundingBoxDebugRenderInfo[luMapIndex]; // :1540
 
             std::memcpy(&lDebugInfo.mLightFrustum, &maFrustum[luMapIndex],
@@ -2431,35 +2369,35 @@ namespace BrnWorld
                 const Vector4& lrCorner = laBestBoxPoints[luI];
                 const f32 lfInvW = 1.0f / lrCorner.w;
                 lDebugInfo.maBoxPointsWorld[luI] = TransformPoint(
-                    Vector4{ lrCorner.x * lfInvW, lrCorner.y * lfInvW,
-                             lrCorner.z * lfInvW, lrCorner.w * lfInvW }, lLightToWorld);
+                    MakeShadowVector4( lrCorner.x * lfInvW, lrCorner.y * lfInvW,
+                             lrCorner.z * lfInvW, lrCorner.w * lfInvW ), lLightToWorld);
 
                 const Vector4 lvStage = MultRow(lrCorner, *lpMatrices[siBoxMatrixIndex]);
                 const f32 lfInvStageW = 1.0f / lvStage.w;
                 lDebugInfo.maBoxPointsSquare[luI] = TransformPoint(
-                    Vector4{ lvStage.x * lfInvStageW, lvStage.y * lfInvStageW,
-                             lvStage.z * lfInvStageW, lvStage.w * lfInvStageW }, lLightToWorld);
+                    MakeShadowVector4( lvStage.x * lfInvStageW, lvStage.y * lfInvStageW,
+                             lvStage.z * lfInvStageW, lvStage.w * lfInvStageW ), lLightToWorld);
             }
 
             // The side / base line pairs, each a light-space point offset by the
             // stored line vector, mapped back to world.
             const Vector4 laLinePoints[8] =
             {
-                Vector4{ lBestBoxSideLineLeftStart.x + lBestBoxSideLineLeftVec.x,
+                MakeShadowVector4( lBestBoxSideLineLeftStart.x + lBestBoxSideLineLeftVec.x,
                          lBestBoxSideLineLeftStart.y + lBestBoxSideLineLeftVec.y,
-                         lZOffset.z, 0.0f },
-                Vector4{ lBestBoxSideLineLeftStart.x, lBestBoxSideLineLeftStart.y, lZOffset.z, 0.0f },
-                Vector4{ lBestBoxSideLineRightStart.x + lBestBoxSideLineRightVec.x,
+                         lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineLeftStart.x, lBestBoxSideLineLeftStart.y, lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineRightStart.x + lBestBoxSideLineRightVec.x,
                          lBestBoxSideLineRightStart.y + lBestBoxSideLineRightVec.y,
-                         lZOffset.z, 0.0f },
-                Vector4{ lBestBoxSideLineRightStart.x, lBestBoxSideLineRightStart.y, lZOffset.z, 0.0f },
+                         lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxSideLineRightStart.x, lBestBoxSideLineRightStart.y, lZOffset.z, 0.0f ),
                 // the base-parallel pair: slot 0 is the TOP line, slot 1 the BASE line
-                Vector4{ lBestBoxTopLineStart.x, lBestBoxTopLineStart.y, lZOffset.z, 0.0f },
-                Vector4{ lBestBoxTopLineStart.x + lBaseLineVec.x,
-                         lBestBoxTopLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f },
-                Vector4{ lBestBoxBaseLineStart.x, lBestBoxBaseLineStart.y, lZOffset.z, 0.0f },
-                Vector4{ lBestBoxBaseLineStart.x + lBaseLineVec.x,
-                         lBestBoxBaseLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f },
+                MakeShadowVector4( lBestBoxTopLineStart.x, lBestBoxTopLineStart.y, lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxTopLineStart.x + lBaseLineVec.x,
+                         lBestBoxTopLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxBaseLineStart.x, lBestBoxBaseLineStart.y, lZOffset.z, 0.0f ),
+                MakeShadowVector4( lBestBoxBaseLineStart.x + lBaseLineVec.x,
+                         lBestBoxBaseLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f ),
             };
             lDebugInfo.mSideLineEnd[0]   = TransformPoint(laLinePoints[0], lLightToWorld);
             lDebugInfo.mSideLineStart[0] = TransformPoint(laLinePoints[1], lLightToWorld);
@@ -2548,18 +2486,18 @@ namespace BrnWorld
             Vector3Plus laPlanes[12];                                 // :1627
             for (u32 luI = 0; luI < 12; ++luI)                        // :1628
             {
-                const Vector4 lLineVec{ lLineEndLight[luI].x - lLineStartLight[luI].x,   // :1630
+                const Vector4 lLineVec = { lLineEndLight[luI].x - lLineStartLight[luI].x,   // :1630
                                         lLineEndLight[luI].y - lLineStartLight[luI].y,
                                         lLineEndLight[luI].z - lLineStartLight[luI].z,
                                         lLineEndLight[luI].w - lLineStartLight[luI].w };
                 const Vector4 lLineVecNormalised = Normalize3(lLineVec);                 // :1631
                 // the light points down +Z in light space
-                const Vector4 lPlaneNormalLight = Cross3(Vector4{ 0.0f, 0.0f, 1.0f, 0.0f },
+                const Vector4 lPlaneNormalLight = Cross3(MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
                                                          lLineVecNormalised);            // :1632
                 const Vector4 lPlaneNormalWorld = TransformVector(lPlaneNormalLight,
                                                                   lLightToWorld);        // :1636
-                laPlanes[luI].SetVector3(Vector3{ lPlaneNormalWorld.x, lPlaneNormalWorld.y,
-                                                  lPlaneNormalWorld.z, 0.0f });
+                laPlanes[luI].SetVector3(MakeShadowVector3( lPlaneNormalWorld.x, lPlaneNormalWorld.y,
+                                                  lPlaneNormalWorld.z, 0.0f ));
                 laPlanes[luI].SetPlus(Dot3(lPlaneNormalWorld, lLineStartWorld[luI]));
             }
 
@@ -2568,7 +2506,7 @@ namespace BrnWorld
                 bool lbPointsBehind  = false;                         // :1646
                 bool lbPointsInFront = false;                         // :1647
                 Vector3Plus& lPlane  = laPlanes[luI];                 // :1648
-                const Vector4 lPlaneVec4{ lPlane.x, lPlane.y, lPlane.z, lPlane.w };  // :1649
+                const Vector4 lPlaneVec4 = { lPlane.x, lPlane.y, lPlane.z, lPlane.w };  // :1649
 
                 f32 laDistances[8];                                   // :1652
                 for (u32 luJ = 0; luJ < 8; ++luJ)
@@ -2609,19 +2547,19 @@ namespace BrnWorld
         }
 
         // ---- 2. the light vector + the opposing source planes ---------------
-        const Vector4 lLightVector = TransformVector(Vector4{ 0.0f, 0.0f, 1.0f, 0.0f },
+        const Vector4 lLightVector = TransformVector(MakeShadowVector4( 0.0f, 0.0f, 1.0f, 0.0f ),
                                                      lLightToWorld);           // :1707
         if (sbAddOpposingPlanes)
         {
             for (u32 luI = 0; luI < 6; ++luI)                                  // :1712
             {
                 const rw::collision::Plane lPlane = lCameraFrustum.GetPlaneByIndex(luI); // :1715
-                const f32 lNDotL = Dot3(Vector4{ lPlane.x, lPlane.y, lPlane.z, lPlane.w },
+                const f32 lNDotL = Dot3(MakeShadowVector4( lPlane.x, lPlane.y, lPlane.z, lPlane.w ),
                                         lLightVector);                         // :1716
                 if (0.0f > lNDotL)
                 {
-                    laCandidatePlanes[luNumCandidatePlanes].mPlane =
-                        Vector3Plus{ lPlane.x, lPlane.y, lPlane.z, lPlane.w };
+                    const Vector3Plus lCandidatePlane = { lPlane.x, lPlane.y, lPlane.z, lPlane.w };
+                    laCandidatePlanes[luNumCandidatePlanes].mPlane = lCandidatePlane;
                     const f32 lfScore = 2.0f - lNDotL;    // vspltisw 2 + vcfsx
                     {
                         const VecFloat lAggregateValue = { lfScore, lfScore, lfScore, lfScore };
@@ -2636,10 +2574,10 @@ namespace BrnWorld
         if (sbAddNearClipPlane)
         {
             Vector3Plus& lNearPlane = laCandidatePlanes[luNumCandidatePlanes].mPlane; // :1732
-            const Vector4 lLightPosWorldSpace{ lLightToWorld.wAxis.x, lLightToWorld.wAxis.y,
+            const Vector4 lLightPosWorldSpace = { lLightToWorld.wAxis.x, lLightToWorld.wAxis.y,
                                                lLightToWorld.wAxis.z, lLightToWorld.wAxis.w }; // :1735
             const f32 lNearClip = mfShadowMapNearPlane;                        // :1736
-            lNearPlane.SetVector3(Vector3{ lLightVector.x, lLightVector.y, lLightVector.z, 0.0f });
+            lNearPlane.SetVector3(MakeShadowVector3( lLightVector.x, lLightVector.y, lLightVector.z, 0.0f ));
             lNearPlane.SetPlus(Dot3(lLightPosWorldSpace, lLightVector) + lNearClip);
             {
                 const VecFloat lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -2696,7 +2634,7 @@ namespace BrnWorld
         {
             const Vector3Plus& lrPlane = laCandidatePlanes[luI].mPlane;
             lViewVolumeOut.SetPlaneByIndex(luI, rw::collision::Plane(
-                Vector4{ lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w }));
+                MakeShadowVector4( lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w )));
         }
     }
 
@@ -2807,10 +2745,10 @@ namespace BrnWorld
             const Vector4& lrCorner1 = lrDebugInfo.maBoxPointsWorld[1];
             const Vector4& lrCorner2 = lrDebugInfo.maBoxPointsWorld[2];
             const Vector4& lrCorner3 = lrDebugInfo.maBoxPointsWorld[3];
-            lvTextPosition.x = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.x, lrCorner1.x), lrCorner2.x), lrCorner3.x), 0.25f);
-            lvTextPosition.y = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.y, lrCorner1.y), lrCorner2.y), lrCorner3.y), 0.25f);
-            lvTextPosition.z = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.z, lrCorner1.z), lrCorner2.z), lrCorner3.z), 0.25f);
-            lvTextPosition.w = vmx::Multiply(vmx::Add(vmx::Add(vmx::Add(lrCorner0.w, lrCorner1.w), lrCorner2.w), lrCorner3.w), 0.25f);
+            XMVECTOR cornerSum = __vaddfp(__lvx(&lrCorner0, 0), __lvx(&lrCorner1, 0));
+            cornerSum = __vaddfp(cornerSum, __lvx(&lrCorner2, 0));
+            cornerSum = __vaddfp(cornerSum, __lvx(&lrCorner3, 0));
+            __stvx(__vmulfp(cornerSum, XMVectorReplicate(0.25f)), &lvTextPosition, 0);
             lRender.DrawText(ToShadowDebugVector3(lvTextPosition), lacAspectText, 16.0f,
                              static_cast<CgsDev::RGBA>(0xFFFFFFFFu));
 
