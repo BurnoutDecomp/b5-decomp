@@ -38,6 +38,7 @@ namespace BrnGameState
         void        RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ; // X360 0x8231EC30
 
     private:
+        friend class ModeManager;
         // The "End Current Event" action callback registered with the debug menu; the void*
         // context the menu passes back is this component (registered via RegisterFunction(..., this, ...)).
         static void FinshMode(void* lpContext);        // @ BrnModeManagerDebugComponent.cpp:273

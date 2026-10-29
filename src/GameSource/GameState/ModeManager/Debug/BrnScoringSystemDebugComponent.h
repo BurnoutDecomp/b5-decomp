@@ -56,6 +56,7 @@ namespace BrnGameState
         void        OnActivate() ;       // @ 0x82312490
 
     private:
+        friend class ModeManager;
         // @ 0x82329D60 - fill one table cell. Produces the cell text in lpcOutBuffer (200-byte) and the
         // cell colour in *lpuOutColour for the (liColumn, liRow) cell. liColumn 0 = the row-header
         // column (a fixed label per row); liColumn>=1 = a player column (liColumn-1 indexes the network
