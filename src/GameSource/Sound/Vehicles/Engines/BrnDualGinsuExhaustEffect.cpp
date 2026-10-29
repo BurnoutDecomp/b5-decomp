@@ -183,15 +183,7 @@ void DualGinsuExhaustEffect::ProcessUpdate()
 {
     DualGinsuEffect::ProcessUpdate();
 
-    // [FLAG PC bring-up] the same base-class predicate as the Attach guard above -- with the
-    // AI submix parked there is no mReverseWhineVoice to drive, and driving one aimed at
-    // submix 0 is what fired the ConnectVoice assert cluster. See the banner in Attach.
-    if (!mCarSubmix.GetVoiceObject())
-        return;
-
     CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
-    if (!mpPhysicsControl)
-        return;
 
     static const u32 KU_SEND_NAME = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("Send01"));
@@ -199,7 +191,8 @@ void DualGinsuExhaustEffect::ProcessUpdate()
         CgsSound::Playback::Name::MakeHash(
             "~GenericRwacPlayerVoice::SK_PLAYER_PARAMETER_PITCH~"));
     const f32 lfGain = GetRWACMixerOutputValue(6, Nicotine::DMixIO::DMX_VOL);
-    mReverseWhineVoice.SetGain(0, lfGain, &KU_SEND_NAME);
+    if (mReverseWhineVoice.HasLiveVoice())
+        mReverseWhineVoice.SetGain(0, lfGain, &KU_SEND_NAME);
 
     const f32 lfSpeed = (std::min)(
         (std::max)(mpPhysicsControl->GetPhysicsData().mVelocityMagnitude.GetCurrent(),
@@ -208,7 +201,8 @@ void DualGinsuExhaustEffect::ProcessUpdate()
     const f32 lfPitch = KF_MIN_REVERSE_PITCH +
         (lfSpeed / KF_MAX_REVERSE_SPEED) *
         (KF_MAX_REVERSE_PITCH - KF_MIN_REVERSE_PITCH);
-    mReverseWhineVoice.SetParameter(0, lfPitch, &KU_PITCH_NAME);
+    if (mReverseWhineVoice.HasLiveVoice())
+        mReverseWhineVoice.SetParameter(0, lfPitch, &KU_PITCH_NAME);
     mReverseWhineVoice.Update();
 }
 
