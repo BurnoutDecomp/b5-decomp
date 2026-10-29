@@ -29,6 +29,15 @@ struct LoadedBundleData {
 class BundleLoaderModule : public CgsModule::ModuleSingleBuffered {
     friend class DebugComponent;
 public:
+    // Shared ARTIST profiling handles; registered by ResourceModule::Construct.
+    static s32 _miUpdatePerfMon;
+    static s32 _miStreamUpdate;
+    static s32 _miStreamEntryCopy;
+    static s32 _miStreamDataCopy;
+    static s32 _miTraceStreamUpdate_StreamHeader;
+    static s32 _miTraceStreamUpdate_StreamEntries;
+    static s32 _miTraceStreamUpdate_StreamData;
+
     enum EStage { E_STAGE_START=0, E_STAGE_RUNNING=1, E_STAGE_DONE=2 };
     enum EStreamStage {
         STREAMSTAGE_IDLE=0, STREAMSTAGE_STREAMHEADER, STREAMSTAGE_STREAMDEBUGDATA,

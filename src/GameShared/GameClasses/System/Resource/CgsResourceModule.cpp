@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "rw/rwcore_general_alloc.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/Jobs/Relocator/CgsRelocator.h"
 #include <cstddef>
 #include <cstring>                                    // memset (InitOptions zero-init)
 
@@ -15,6 +17,15 @@
 // Update preserves the loader -> pool -> memory order and delayed pool replies.
 namespace CgsResource
 {
+    s32 ResourceModule::_miResourceUpdatePerfMon = -1;
+    s32 ResourceModule::_miProcessResourceRequestsPerfMon = -1;
+    s32 ResourceModule::_miUpdateBundleLoaderPerfMon = -1;
+    s32 ResourceModule::_miUpdatePoolPerfMon = -1;
+    s32 ResourceModule::_miUpdateMemoryPerfMon = -1;
+    s32 ResourceModule::_miUpdateFileSystemPerfMon = -1;
+    s32 ResourceModule::_miUpdateOutputPerfMon = -1;
+    s32 ResourceModule::_miUpdateTrace = -1;
+
     // ResourceModule::InitOptions ctor - zero-init. The X360 ConstructResourceModule constructs this
     // then memset(0)s the whole 1216B block before filling fields, so a zero-init is the faithful net
     // state. (memset over the already-constructed members matches that ctor-then-memset sequence.)
@@ -133,6 +144,481 @@ namespace CgsResource
                               lpOptions->macFileSearchPath, lpOptions->mpDiskLayout);
         mPendingFileResponses.Construct(maPendingFileResponses,
             maiPendingFileResponseFreeIndices, static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
+        // ARTIST8290571C..82906554: preserve idempotent registration order and
+        // class-static homes shared with the timed native callers.
+        if (ResourceModule::_miResourceUpdatePerfMon == -1)
+        {
+            ResourceModule::_miResourceUpdatePerfMon = CgsDev::PerfMonCpu::AddMonitor("Resource update", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miResourceUpdatePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miResourceUpdatePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 100);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (ResourceModule::_miProcessResourceRequestsPerfMon == -1)
+        {
+            ResourceModule::_miProcessResourceRequestsPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Process requests", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miProcessResourceRequestsPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miProcessResourceRequestsPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 101);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (ResourceModule::_miUpdateBundleLoaderPerfMon == -1)
+        {
+            ResourceModule::_miUpdateBundleLoaderPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Bundle loader", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miUpdateBundleLoaderPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateBundleLoaderPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 102);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (ResourceModule::_miUpdatePoolPerfMon == -1)
+        {
+            ResourceModule::_miUpdatePoolPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miUpdatePoolPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdatePoolPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 103);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (ResourceModule::_miUpdateMemoryPerfMon == -1)
+        {
+            ResourceModule::_miUpdateMemoryPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Memory", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miUpdateMemoryPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateMemoryPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 104);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (ResourceModule::_miUpdateFileSystemPerfMon == -1)
+        {
+            ResourceModule::_miUpdateFileSystemPerfMon = CgsDev::PerfMonCpu::AddMonitor("  File system", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miUpdateFileSystemPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateFileSystemPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 105);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (ResourceModule::_miUpdateOutputPerfMon == -1)
+        {
+            ResourceModule::_miUpdateOutputPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Output", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (ResourceModule::_miUpdateOutputPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateOutputPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 106);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleStatePerfMon == -1)
+        {
+            Pool::_miPoolModuleStatePerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool state update", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleStatePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleStatePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 108);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleIdle == -1)
+        {
+            Pool::_miPoolModuleIdle = CgsDev::PerfMonCpu::AddMonitor("  PS Idle", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleIdle < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleIdle >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 109);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleAllocating == -1)
+        {
+            Pool::_miPoolModuleAllocating = CgsDev::PerfMonCpu::AddMonitor("  PS Alloc", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleAllocating < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleAllocating >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 110);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleDeallocating == -1)
+        {
+            Pool::_miPoolModuleDeallocating = CgsDev::PerfMonCpu::AddMonitor("  PS DeAlloc", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleDeallocating < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleDeallocating >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 111);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleLiveupdate == -1)
+        {
+            Pool::_miPoolModuleLiveupdate = CgsDev::PerfMonCpu::AddMonitor("  PS LiveUpd", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleLiveupdate < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleLiveupdate >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 112);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleIntellifrag == -1)
+        {
+            Pool::_miPoolModuleIntellifrag = CgsDev::PerfMonCpu::AddMonitor("  PS Intellifrag", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleIntellifrag < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleIntellifrag >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 113);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolModuleEmergencyFrag == -1)
+        {
+            Pool::_miPoolModuleEmergencyFrag = CgsDev::PerfMonCpu::AddMonitor("  PS Emergencyfrag", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolModuleEmergencyFrag < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleEmergencyFrag >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 114);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (CgsMemory::Relocator::_miExecutePerfMon == -1)
+        {
+            CgsMemory::Relocator::_miExecutePerfMon = CgsDev::PerfMonCpu::AddMonitor("    Relocator Exec", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (CgsMemory::Relocator::_miExecutePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsMemory::Relocator::_miExecutePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 115);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (CgsMemory::Relocator::_miGPUCopyPerfMon == -1)
+        {
+            CgsMemory::Relocator::_miGPUCopyPerfMon = CgsDev::PerfMonCpu::AddMonitor("      Relocator GPU", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (CgsMemory::Relocator::_miGPUCopyPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsMemory::Relocator::_miGPUCopyPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 116);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (CgsMemory::Relocator::_miUpdatePerfMon == -1)
+        {
+            CgsMemory::Relocator::_miUpdatePerfMon = CgsDev::PerfMonCpu::AddMonitor("    Relocator Update", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (CgsMemory::Relocator::_miUpdatePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsMemory::Relocator::_miUpdatePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 117);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolUpdatePerfMon == -1)
+        {
+            Pool::_miPoolUpdatePerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool update", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolUpdatePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolUpdatePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 119);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDeleteHashEntryPerfMon == -1)
+        {
+            Pool::_miPoolDeleteHashEntryPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Delete hash entry", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDeleteHashEntryPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDeleteHashEntryPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 120);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDeleteMemoryPerfMon == -1)
+        {
+            Pool::_miPoolDeleteMemoryPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Delete memory", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDeleteMemoryPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDeleteMemoryPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 121);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDeleteResourcePerfMon == -1)
+        {
+            Pool::_miPoolDeleteResourcePerfMon = CgsDev::PerfMonCpu::AddMonitor("  Delete resource", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDeleteResourcePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDeleteResourcePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 122);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolAllocateResourceListPerfMon == -1)
+        {
+            Pool::_miPoolAllocateResourceListPerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool alloc list", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolAllocateResourceListPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolAllocateResourceListPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 124);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolFixupPerfMon == -1)
+        {
+            Pool::_miPoolFixupPerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool fixup", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolFixupPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFixupPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 138);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolFindByIndexPerfMon == -1)
+        {
+            Pool::_miPoolFindByIndexPerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool search by index", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolFindByIndexPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFindByIndexPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 139);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolFixupResourcePerfMon == -1)
+        {
+            Pool::_miPoolFixupResourcePerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool fixup resource", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolFixupResourcePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFixupResourcePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 140);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolFindTypePerfMon == -1)
+        {
+            Pool::_miPoolFindTypePerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool find resource type", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolFindTypePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFindTypePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 141);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragPerfMon == -1)
+        {
+            Pool::_miPoolDefragPerfMon = CgsDev::PerfMonCpu::AddMonitor("Pool defrag", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 143);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragWFInitialDeathsPerfMon == -1)
+        {
+            Pool::_miPoolDefragWFInitialDeathsPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool WF Initial Deaths", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragWFInitialDeathsPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFInitialDeathsPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 144);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragMakeTempPerfMon == -1)
+        {
+            Pool::_miPoolDefragMakeTempPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool defrag make temp", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragMakeTempPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMakeTempPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 145);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragMoveToTempPerfMon == -1)
+        {
+            Pool::_miPoolDefragMoveToTempPerfMon = CgsDev::PerfMonCpu::AddMonitor("    Move temp", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragMoveToTempPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMoveToTempPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 146);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragResolveTempPerfMon == -1)
+        {
+            Pool::_miPoolDefragResolveTempPerfMon = CgsDev::PerfMonCpu::AddMonitor("    Temp resolve", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragResolveTempPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragResolveTempPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 147);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragWFSourceDeathsPerfMon == -1)
+        {
+            Pool::_miPoolDefragWFSourceDeathsPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool WF Source Deaths", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragWFSourceDeathsPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFSourceDeathsPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 148);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragMakeDestPerfMon == -1)
+        {
+            Pool::_miPoolDefragMakeDestPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool defrag make dest", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragMakeDestPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMakeDestPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 149);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragMoveToDestPerfMon == -1)
+        {
+            Pool::_miPoolDefragMoveToDestPerfMon = CgsDev::PerfMonCpu::AddMonitor("    Move dest", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragMoveToDestPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMoveToDestPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 150);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragMoveDestRebasePerfMon == -1)
+        {
+            Pool::_miPoolDefragMoveDestRebasePerfMon = CgsDev::PerfMonCpu::AddMonitor("      Dest rebase", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragMoveDestRebasePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMoveDestRebasePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 151);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragResolveDestPerfMon == -1)
+        {
+            Pool::_miPoolDefragResolveDestPerfMon = CgsDev::PerfMonCpu::AddMonitor("    Dest resolve", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragResolveDestPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragResolveDestPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 152);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragWFTempDeathsPerfMon == -1)
+        {
+            Pool::_miPoolDefragWFTempDeathsPerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool WF Temp Deaths", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragWFTempDeathsPerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFTempDeathsPerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 153);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (Pool::_miPoolDefragWFDonePerfMon == -1)
+        {
+            Pool::_miPoolDefragWFDonePerfMon = CgsDev::PerfMonCpu::AddMonitor("  Pool Done", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (Pool::_miPoolDefragWFDonePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFDonePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 154);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (BundleLoaderModule::_miUpdatePerfMon == -1)
+        {
+            BundleLoaderModule::_miUpdatePerfMon = CgsDev::PerfMonCpu::AddMonitor("Loader update", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (BundleLoaderModule::_miUpdatePerfMon < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miUpdatePerfMon >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 156);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (BundleLoaderModule::_miStreamUpdate == -1)
+        {
+            BundleLoaderModule::_miStreamUpdate = CgsDev::PerfMonCpu::AddMonitor("  Stream update", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (BundleLoaderModule::_miStreamUpdate < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miStreamUpdate >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 157);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (BundleLoaderModule::_miStreamEntryCopy == -1)
+        {
+            BundleLoaderModule::_miStreamEntryCopy = CgsDev::PerfMonCpu::AddMonitor("    Entry MemCpy", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (BundleLoaderModule::_miStreamEntryCopy < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miStreamEntryCopy >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 158);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        if (BundleLoaderModule::_miStreamDataCopy == -1)
+        {
+            BundleLoaderModule::_miStreamDataCopy = CgsDev::PerfMonCpu::AddMonitor("    Data MemCpy", CgsDev::E_PMP_1, false, 5.0f, false);
+            if (BundleLoaderModule::_miStreamDataCopy < 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miStreamDataCopy >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 159);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        ResourceModule::_miUpdateTrace = 0;
+        PoolModule::_miAllocateListTraceId = 0;
+        PoolModule::_miFixupListTraceId = 0;
+        PoolModule::_miAllocateStateTraceId = 0;
+        PoolModule::_miIntellifragStateTraceId = 0;
+        Pool::_miPoolAddTempTrace = 0;
+        Pool::_miResolveAllTrace = 0;
+        Pool::_miFixupTrace = 0;
+        BundleLoaderModule::_miTraceStreamUpdate_StreamHeader = 0;
+        BundleLoaderModule::_miTraceStreamUpdate_StreamEntries = 0;
+        BundleLoaderModule::_miTraceStreamUpdate_StreamData = 0;
         mbIsNewModule = true;
     }
 

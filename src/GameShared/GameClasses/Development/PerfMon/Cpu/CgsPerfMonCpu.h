@@ -3,25 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/PerfMon/CgsPerfMon.h"
 
-// CgsDev::PerfMonCpu - the CPU performance-monitor registry. Each timed region of the frame is
-// bracketed by StartMonitor/StopMonitor on an int handle returned by AddMonitor; the registry
-// accumulates the elapsed time per monitor, and the debug perfmon component (DebugComponentPerfMonCpu)
-// renders the per-monitor bars from it. Reconstructed from the DecFIGS DWARF data model
-// (PerfMonCpuInstance / PerfMonCpuMonitorData / PerfMonCpuPage, Development/PerfMon/Cpu/CgsPerfMonCpu.h)
-// + the project's QueryPerformanceCounter timer - the X360 read the PPC timebase, which does not port,
-// and CgsTimeUtils.cpp already sets the QPC precedent.
-//
-// INCREMENTAL: the bar overlay needs each monitor's current per-region time + name + budget, so those
-// are modelled fully; the running average is a simple cumulative mean, and the min/max, page grouping,
-// libperf tracing, and iteration scaling are modelled minimally (the trace/page/libperf surface is the
-// perfmon follow-on). PerfMonCpu is modelled as a namespace over file-static singleton state (matching
-// the existing call sites PerfMonCpu::StartMonitor; the X360 spells it a struct of all-static members,
-// which is semantically identical).
-
-// struct, not class: rw::IResourceAllocator's real home (vendor rwcore_structs.h:168) defines it
-// as a STRUCT; a class-kind forward decl makes MSVC mangle this header's Construct differently in
-// TUs that saw the real header (LNK2019 on the world-module mount when DebugManager began calling
-// PerfMonCpu::Construct).
+// Native ARTIST CPU profiling registry; declaration names and shapes from DecFIGS.
 namespace rw { struct IResourceAllocator; }
 
 namespace CgsDev
@@ -67,7 +49,7 @@ namespace CgsDev
 
     // One registered CPU monitor (X360 CgsPerfMonCpu.h:118). mu64StartValue / mu64Value hold raw timer
     // ticks (the start stamp + the last region's elapsed ticks); mfCurrentValue is that elapsed time in
-    // milliseconds - what the overlay draws as a bar.
+    // percent of one game frame - what the overlay draws as a bar.
     struct PerfMonCpuInstance
     {
         u64            mu64StartValue;
@@ -108,46 +90,41 @@ namespace CgsDev
 
     typedef void FPerfMonCpuReportCallback(const PerfMonCpuMonitorData& lrData, void* lpUserData);
 
-    namespace PerfMonCpu
+    struct DebugComponentPerfMonCpu;
+
+    struct PerfMonCpu
     {
-        void ReportMonitors(FPerfMonCpuReportCallback* lpfReportCallback, void* lpUserData, PerfMonCpuPage lePage);
-        // ARTIST82824B10 allocates maxCount records of 96 bytes through the supplied
-        // resource allocator, 16-byte aligned, then clears the complete array.
-        bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator);
-        void Destruct();
-        void SetGameFrequency(PerfMonGameFrequency leFrequency);
-        void StartProfiling();
-        void StopProfiling();
-        void PrepareActiveMonitorsForUpdate();
-        void ResetValuesInActiveMonitors();
+        static bool Construct(s32 liMaxMonitorCount, rw::IResourceAllocator* lpAllocator);
+        static void Destruct();
+        static void SetGameFrequency(PerfMonGameFrequency leFrequency);
+        static void StartProfiling();
+        static void StopProfiling();
+        static void PrepareActiveMonitorsForUpdate();
+        static void ResetValuesInActiveMonitors();
+        static s32 AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum,
+                              f32 lfCpuBudget, bool lbScaled);
+        static void StartMonitor(s32 liMonitorHandle);
+        static void StopMonitor(s32 liMonitorHandle);
+        static void SetNumIterationsTaken(s32 liNumIterations);
+        static s32 GetMonitorCount();
+        static s32 GetMaxMonitorCount();
+        static f32 GetMonitorTime(s32 liMonitorHandle);
+        static void GetMonitorData(s32 liMonitorHandle, PerfMonCpuMonitorData* lpData);
+        static bool IsMonitorOverBudget(s32 liMonitorHandle);
+        static PerfMonCpuPage GetMonitorPage(s32 liMonitorHandle);
+        static void ReportMonitors(FPerfMonCpuReportCallback* lpfReportCallback,
+                                   void* lpUserData, PerfMonCpuPage lePage);
+        static void AddPIXCounters();
 
-        // Register a monitor and return its handle (a 0-based index into the registry). StartMonitor /
-        // StopMonitor / GetMonitorData take that handle. Returns -1 if the registry is full/unbuilt.
-        s32  AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbScaled);
-
-        void StartMonitor(s32 liMonitorHandle);
-        void StopMonitor(s32 liMonitorHandle);
-
-        void SetNumIterationsTaken(s32 liNumIterations);
-
-        s32            GetMonitorCount();
-        s32            GetMaxMonitorCount();
-        f32            GetMonitorTime(s32 liMonitorHandle);
-        void           GetMonitorData(s32 liMonitorHandle, PerfMonCpuMonitorData* lpData);
-        bool           IsMonitorOverBudget(s32 liMonitorHandle);
-        PerfMonCpuPage GetMonitorPage(s32 liMonitorHandle);
-
-        // X360 0x828172E8. Register every live monitor as a PIX named counter so the X360 PIX
-        // profiler graphs the per-region time alongside the engine's own overlay. The X360 walks
-        // the registry (giMonitorCount entries of stride sizeof(PerfMonCpuInstance)) and, for each
-        // valid monitor, hands PIX the monitor's current millisecond value (mfCurrentValue) and its
-        // name (macName). PIX is an X360-only SDK (the PPC PIXAddNamedCounter), so on PC this routes
-        // through a no-op shim; the per-counter format string the X360 passed lived in rodata that
-        // did not survive (FLAG: format string is a documented placeholder, not a recovered fact).
-        void AddPIXCounters();
-
-        // Original private static, exposed only because this PC namespace model has no class
-        // privacy. DebugComponentPerfMonCpu registers this exact flag in its ARTIST menu.
-        extern bool mbIgnoreZeroCallsInAverage;
-    }
+    private:
+        friend struct DebugComponentPerfMonCpu;
+        static PerfMonCpuInstance* mpMonitorsArray;
+        static s32 miMaxMonitorCount;
+        static s32 miMonitorCount;
+        static PerfMonGameFrequency meGameFrequency;
+        static bool mbResetAllValues;
+        static s32 miNumIterations;
+        static bool mbIgnoreZeroCallsInAverage;
+        static s32 miLibPerfMode;
+    };
 }

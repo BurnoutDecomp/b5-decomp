@@ -42,6 +42,16 @@ namespace CgsResource
     {
         friend class DebugComponent;
     public:
+    // Shared ARTIST profiling handles; registered by ResourceModule::Construct.
+    static s32 _miResourceUpdatePerfMon;
+    static s32 _miProcessResourceRequestsPerfMon;
+    static s32 _miUpdateBundleLoaderPerfMon;
+    static s32 _miUpdatePoolPerfMon;
+    static s32 _miUpdateMemoryPerfMon;
+    static s32 _miUpdateFileSystemPerfMon;
+    static s32 _miUpdateOutputPerfMon;
+    static s32 _miUpdateTrace;
+
         static const s32 KI_MAX_PENDING_FILE_SYSTEM_RESPONSES = 16;
 
         // DecFIGS CgsResourceModule.h:209-213. A pending asynchronous file

@@ -15,6 +15,11 @@
 // dispatch is integrated separately from construction of its working state.
 namespace CgsResource
 {
+    s32 PoolModule::_miAllocateListTraceId = -1;
+    s32 PoolModule::_miFixupListTraceId = -1;
+    s32 PoolModule::_miAllocateStateTraceId = -1;
+    s32 PoolModule::_miIntellifragStateTraceId = -1;
+
     namespace
     {
         const char* const KPC_POOLMODULE_CREATE_SRC =
