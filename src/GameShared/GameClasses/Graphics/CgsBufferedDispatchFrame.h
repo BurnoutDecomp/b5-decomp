@@ -7,9 +7,9 @@
 // CgsBufferedDispatchFrame.h  (GameShared/GameClasses/Graphics)
 //
 // CgsGraphics::BufferedDispatchFrame — an N-deep ring of CgsGraphics::DispatchFrame
-// objects with independent write/read cursors (classic double/triple buffering of
-// the render-dispatch frame). Construct allocates the DispatchFrame* array plus one
-// 16-byte-aligned DispatchFrame per slot; the For-Write / For-Read accessors hand
+// objects with independent write/read cursors. Construct allocates the pointer
+// array plus one DispatchFrame per slot; the original heap request has alignment16
+// even though the type's embedded-bin alignment is128. The accessors hand
 // out the frame (and its embedded bin / lists) under the cursor.
 //
 // Layout is reconstructed from the BURNOUT_X360_ARTIST.XEX disassembly
@@ -34,19 +34,18 @@ namespace CgsGraphics
 class BufferedDispatchFrame
 {
 public:
-    // ---- Virtual lifecycle / accessors (vtable order from the DWARF) --------
-    // Bodied in this TU (X360-attested): Construct, Destruct, Swap, and the four
-    // For-Write / For-Read accessors. Prepare() and Release() are declared here to
-    // preserve the class' own vtable order (CgsBufferedDispatchFrame.cpp:77/:95);
-    // their bodies were not part of this TU's disassembled function set and are
-    // homed by the follow-on pass.
+    // ARTIST827E7968: the actual default ring starts with two frames, write0/read1.
+    BufferedDispatchFrame();
+
+    // Native vtable820D5174 corroborates the DWARF's nine slots. Prepare and
+    // Release share the original return-true ICF body at82C296C8.
 
     // @ 0x827F97F8 — allocate the frame array + per-slot frames. muNumDispatchFrames
     // must already be set (via SetNumDispatchFrames) before this is called.
     virtual void Construct(u32 luFramesPerList, u32 luBinSizeQwords, rw::IResourceAllocator* lpAllocator);
 
-    virtual bool Prepare();   // CgsBufferedDispatchFrame.cpp:77 (declared-only here)
-    virtual bool Release();   // CgsBufferedDispatchFrame.cpp:95 (declared-only here)
+    virtual bool Prepare();
+    virtual bool Release();
 
     // @ 0x827ECE90 — Release + free every per-slot frame, free the array, reset.
     virtual void Destruct();

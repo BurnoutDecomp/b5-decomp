@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 
 #include <new>      // ::operator new[] / ::operator delete[] (the frame-pointer array backing)
-#include <malloc.h> // _aligned_malloc / _aligned_free (the PC RW aligned-memory thunks)
+#include "rw/core/memory/memoryfunctions.h"
 
 // =============================================================================
 // CgsBufferedDispatchFrame.cpp
@@ -27,13 +27,14 @@
 // thunks whose bodies are homed by the RenderWare-memory follow-on.
 // =============================================================================
 
-namespace
-{
-
-}
-
 namespace CgsGraphics
 {
+
+BufferedDispatchFrame::BufferedDispatchFrame()
+    : mapDispatchFrame(0), muNumDispatchFrames(2),
+      muCurrentFrameForWrite(0), muCurrentFrameForRead(1)
+{
+}
 
 // @ 0x827F97F8
 // Allocate the per-slot frame-pointer array (one entry per muNumDispatchFrames),
@@ -47,8 +48,8 @@ void BufferedDispatchFrame::Construct(u32 luFramesPerList, u32 luBinSizeQwords, 
 
     for (u32 luFrame = 0; luFrame < muNumDispatchFrames; ++luFrame)
     {
-        mapDispatchFrame[luFrame] =
-            static_cast<DispatchFrame*>(RwMallocMemAligned(sizeof(DispatchFrame), 16u));
+        void* lpStorage = RwMallocMemAligned(sizeof(DispatchFrame), 16u);
+        mapDispatchFrame[luFrame] = new(lpStorage) DispatchFrame;
         mapDispatchFrame[luFrame]->Construct(luFramesPerList, luBinSizeQwords, lpAllocator);
     }
 
@@ -59,28 +60,18 @@ void BufferedDispatchFrame::Construct(u32 luFramesPerList, u32 luBinSizeQwords, 
     }
 }
 
-// CgsBufferedDispatchFrame.cpp:77 / :95 (DecFIGS DWARF) -- the class' own
-// Prepare/Release lifecycle slots. NOT RECONSTRUCTED: neither carries an entry
-// in the X360 ARTIST export set (the ledger lists Construct/Destruct/Swap and
-// the four cursor accessors only; the two lifecycle slots are either folded by
-// ICF onto another trivial body or never emitted). They are declared to keep the
-// vtable order the DWARF attests, and trap rather than fake a return value --
-// nothing on the PC render path calls them (BrnRendererModule drives the frame
-// through Construct/Swap/GetDispatchFrameFor* and tears down via Destruct).
+// The native vtable, rather than a guessed lifecycle implementation, establishes
+// these two ICF-folded bodies.
 bool BufferedDispatchFrame::Prepare()
 {
-    CGS_ASSERT(false,
-               "BufferedDispatchFrame::Prepare: no X360 body in the ARTIST export set "
-               "(vtable-order slot; unreferenced on the PC render path)");
-    return false;
+    // Native vtable820D5174 slot1 points to ICF body82C296C8.
+    return true;
 }
 
 bool BufferedDispatchFrame::Release()
 {
-    CGS_ASSERT(false,
-               "BufferedDispatchFrame::Release: no X360 body in the ARTIST export set "
-               "(vtable-order slot; unreferenced on the PC render path)");
-    return false;
+    // Native vtable820D5174 slot2 shares the same real return-true body.
+    return true;
 }
 
 // @ 0x827ECE90
@@ -91,6 +82,7 @@ void BufferedDispatchFrame::Destruct()
     for (u32 luFrame = 0; luFrame < muNumDispatchFrames; ++luFrame)
     {
         mapDispatchFrame[luFrame]->Release();
+        mapDispatchFrame[luFrame]->~DispatchFrame();
         RwFreeMemAligned(mapDispatchFrame[luFrame]);
     }
 

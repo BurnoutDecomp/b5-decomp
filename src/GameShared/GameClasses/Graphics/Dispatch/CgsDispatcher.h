@@ -106,7 +106,7 @@ struct DispatchObjectContext;
 //   0x01C mapChainBlockArray[64] -- saved chains from shared-bin blocks
 //   0x11C muChainBlockCount     -- consumed by ReconnectChainBlocks
 // ARTIST827EE868/827E9438 and the CgsDispatcher.h DWARF pin the shared-bin tail.
-class DispatchList
+class CGS_ALIGN(128) DispatchList
 {
 public:
     // One block in the key-block chain. Submit appends the 64-bit sort record at
@@ -217,15 +217,18 @@ private:
     u64*             mpSortedKeys;         // 0x18 (a1[6]) -- flat sorted record array
     KeyBlock*        mapChainBlockArray[KU_MAX_BLOCKS_PER_CHAIN]; // X360 +0x1C
     u32              muChainBlockCount;                        // X360 +0x11C
-    u8               maReservedTail[0x180u - 0x120u - sizeof(KeyBlock*)];
 
-    // Never called; pins the one pointer-invariant offset fact.
+    // Compile-time native member gates; this helper emits no runtime code.
     static void _AssertLayout()
     {
+        CGS_STATIC_ASSERT((offsetof(DispatchList, mpDispatchBin) == 0x4), "ARTIST list bin");
+        CGS_STATIC_ASSERT((offsetof(DispatchList, mpBlockListHead) == 0x10), "ARTIST list head");
+        CGS_STATIC_ASSERT((offsetof(DispatchList, mapChainBlockArray) == 0x1C), "ARTIST list chains");
+        CGS_STATIC_ASSERT((offsetof(DispatchList, muChainBlockCount) == 0x11C), "ARTIST list chain count");
     }
 };
 
-class DispatchBin
+class CGS_ALIGN(128) DispatchBin
 {
 public:
     // CgsDispatcher.h:66 / :71 — block sizing constants (PS3 DWARF).
@@ -245,7 +248,12 @@ public:
 
     // DispatchAllMeshes/DrawRenderable::Interpret headroom check + the walkers'
     // packet decode (m_pBinBase + qword offset) need these reads.
-    DispatchCommand* GetBase()          { return m_pBin; }
+    DispatchCommand* GetBase()
+    {
+        CGS_STATIC_ASSERT((offsetof(DispatchBin, m_pBin) == 0x8), "ARTIST bin base");
+        CGS_STATIC_ASSERT((offsetof(DispatchBin, mpDispatchFrame) == 0x34), "ARTIST bin frame owner");
+        return m_pBin;
+    }
     u32              GetSizeQwords() const { return m_uSize; }
     u32              GetUsedQwords() const
     {
@@ -323,7 +331,14 @@ public:
 
     // The embedded per-frame dispatch bin (m_Bin, @ 0x80). BufferedDispatchFrame::
     // GetDispatchBinForWrite hands this out (X360: frame + 0x80).
-    DispatchBin&  GetBin() { return m_Bin; }
+    DispatchBin& GetBin()
+    {
+        CGS_STATIC_ASSERT((offsetof(DispatchFrame, m_Bin) == 0x80), "ARTIST frame bin");
+        CGS_STATIC_ASSERT((offsetof(DispatchFrame, muNumDispatchLists) == 0x100), "ARTIST frame count");
+        CGS_STATIC_ASSERT((offsetof(DispatchFrame, mpDispatchBinOutputAddress) == 0x104), "ARTIST frame output");
+        CGS_STATIC_ASSERT((offsetof(DispatchFrame, mpDispatchBinMasterAddress) == 0x108), "ARTIST frame master");
+        return m_Bin;
+    }
 
     // ---- Shared-memory output path (bodied in CgsDispatcherCommands.cpp) ------
     // @ 0x827EE7C8 -- build the embedded bin + every output list against shared mem.
@@ -343,14 +358,20 @@ public:
 
 private:
     DispatchList* m_paLists;                            // 0x000
-    // Padding to the original128-byte bin boundary.
-    u8            maReservedPreBin[0x80u - sizeof(DispatchList*)];
     DispatchBin   m_Bin;                                // 0x080 (embedded bin)
-    // The bin's frame back-pointer is modelled above; retain the remaining pad.
-    u8            maReservedPostBin[0x100u - 0x80u - sizeof(DispatchBin)];
     u32           muNumDispatchLists;                   // 0x100
     uintptr_t     mpDispatchBinOutputAddress;           // X360 0x104
     uintptr_t     mpDispatchBinMasterAddress;           // X360 0x108
 };
+
+// Native type alignment supplies the observed gaps and array extents. ARTIST
+// Frame::Construct uses bin+80/count+100 and list stride180; Buffered::Construct
+// allocates180-byte frames, while Renderer embeds one at its next128 boundary.
+CGS_STATIC_ASSERT((sizeof(DispatchBin) == 0x80), "ARTIST dispatch bin extent");
+CGS_STATIC_ASSERT((__alignof(DispatchBin) == 0x80), "ARTIST dispatch bin alignment");
+CGS_STATIC_ASSERT((sizeof(DispatchList) == 0x180), "ARTIST dispatch list stride");
+CGS_STATIC_ASSERT((__alignof(DispatchList) == 0x80), "ARTIST dispatch list alignment");
+CGS_STATIC_ASSERT((sizeof(DispatchFrame) == 0x180), "ARTIST dispatch frame extent");
+CGS_STATIC_ASSERT((__alignof(DispatchFrame) == 0x80), "ARTIST dispatch frame alignment");
 
 } // namespace CgsGraphics

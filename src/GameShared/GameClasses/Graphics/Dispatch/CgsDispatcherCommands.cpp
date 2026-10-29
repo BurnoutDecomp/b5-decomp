@@ -234,7 +234,15 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
         uintptr_t luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
         u32 luSharedMemoryBlockMax)
 {
-    m_Bin = DispatchBin{};
+    // ARTIST827EE7E8..E800 initializes only these native bin fields. Its
+    // callback/context and cache-line padding survive shared-bin construction.
+    m_Bin.m_pBin = 0;
+    m_Bin.m_pNextWord = 0;
+    m_Bin.m_uSize = 0;
+    m_Bin.m_pPacketStart = 0;
+    m_Bin.m_pLastCommandInPacket = 0;
+    m_Bin.m_uSizeUsedLastTime = 0;
+    m_Bin.m_uUsedQwordsSnapshot = 0;
     m_Bin.mpSharedBinStart = reinterpret_cast<DispatchCommand*>(luSharedMemoryStartAddress);
     m_Bin.m_pSharedNextFreeAtomic = lpSharedMemoryBlockNextFreeAtomic;
     m_Bin.m_uSharedMemoryBlockMax = luSharedMemoryBlockMax;
@@ -243,7 +251,7 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
     mpDispatchBinOutputAddress = 0;
     m_paLists = lpaDispatchListArray;
     muNumDispatchLists = luDispatchListCount;
-    for (u32 luList = 0; luList < luDispatchListCount; ++luList)
+    for (u32 luList = 0; luList < muNumDispatchLists; ++luList)
     {
         DispatchList& lrList = m_paLists[luList];
         lrList.muCount = 0;
@@ -510,10 +518,10 @@ bool DrawRenderableMesh::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpB
 {
     // The WVP shim lane is filled by DrawRenderable::Interpret (the only caller
     // on the world path); direct callers pass identity via the overload below.
-    static const rw::math::vpu::Matrix44 sIdentity =
-        { { 1.f, 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f, 0.f }, { 0.f, 0.f, 1.f, 0.f }, { 0.f, 0.f, 0.f, 1.f } };
+    rw::math::vpu::Matrix44 lIdentity;
+    lIdentity.SetIdentity();
     return AddMeshCommandToBin(lpMesh, lpBin, lpContext, lu8TechniqueIndex,
-                               lu8InstanceCount, false, &sIdentity);
+                               lu8InstanceCount, false, &lIdentity);
 }
 
 bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpBin,
@@ -521,10 +529,10 @@ bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin
                                        u8 lu8InstanceCount,
                                        const DrawRenderableDispatchThreadInfo* /*lpThreadInfo*/)
 {
-    static const rw::math::vpu::Matrix44 sIdentity =
-        { { 1.f, 0.f, 0.f, 0.f }, { 0.f, 1.f, 0.f, 0.f }, { 0.f, 0.f, 1.f, 0.f }, { 0.f, 0.f, 0.f, 1.f } };
+    rw::math::vpu::Matrix44 lIdentity;
+    lIdentity.SetIdentity();
     return AddMeshCommandToBin(lpMesh, lpBin, lpContext, lu8TechniqueIndex,
-                               lu8InstanceCount, true, &sIdentity);
+                               lu8InstanceCount, true, &lIdentity);
 }
 
 namespace

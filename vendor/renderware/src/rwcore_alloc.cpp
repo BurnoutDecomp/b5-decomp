@@ -12,6 +12,36 @@ RwMemoryFunctions rwMemoryFunctions = {
     RwMallocMemStub, RwReallocMemStub, RwFreeMemStub
 };
 
+RwMallocAlignedFunc RwMallocMemAligned = RwMallocMemAlignedStub;
+RwReallocAlignedFunc RwReallocMemAligned = RwReallocMemAlignedStub;
+RwFreeAlignedFunc RwFreeMemAligned = RwFreeMemAlignedStub;
+
+// ARTIST82BBC680/6B8/6F0: each entry lazily installs all three genuine
+// native CRT functions, then forwards its original arguments unchanged.
+void* RwMallocMemAlignedStub(std::size_t lnSize, std::size_t lnAlignment)
+{
+    RwMallocMemAligned = _aligned_malloc;
+    RwReallocMemAligned = _aligned_realloc;
+    RwFreeMemAligned = _aligned_free;
+    return RwMallocMemAligned(lnSize, lnAlignment);
+}
+
+void* RwReallocMemAlignedStub(void* lpMemory, std::size_t lnSize, std::size_t lnAlignment)
+{
+    RwMallocMemAligned = _aligned_malloc;
+    RwReallocMemAligned = _aligned_realloc;
+    RwFreeMemAligned = _aligned_free;
+    return RwReallocMemAligned(lpMemory, lnSize, lnAlignment);
+}
+
+void RwFreeMemAlignedStub(void* lpMemory)
+{
+    RwMallocMemAligned = _aligned_malloc;
+    RwReallocMemAligned = _aligned_realloc;
+    RwFreeMemAligned = _aligned_free;
+    RwFreeMemAligned(lpMemory);
+}
+
 // ARTIST 0x82BBC728. Every lazy entry installs the complete three-slot CRT table.
 void* RwMallocMemStub(std::size_t lnSize)
 {

@@ -144,19 +144,15 @@ DispatchList* DispatchFrame::GetList(u32 luListId)
     // bounds condition is preserved here, the message rendered as a plain string.
     CGS_ASSERT(luListId < muNumDispatchLists, "Invalid List ID");
 
-    // X360 strides the literal 384 == the 32-bit sizeof(DispatchList). On the x64
-    // gate the named-member layout is wider, so the stride is the host sizeof
-    // (semantic parity: "the luListId'th list of the array Construct allocated").
-    const u32 KU_DISPATCH_LIST_STRIDE_BYTES =
-        (sizeof(void*) == 4) ? 384u : static_cast<u32>(sizeof(DispatchList));
-    u8* lpBase = reinterpret_cast<u8*>(m_paLists);
-    return reinterpret_cast<DispatchList*>(lpBase + luListId * KU_DISPATCH_LIST_STRIDE_BYTES);
+    // The recovered native list type supplies the original384-byte stride.
+    return &m_paLists[luListId];
 }
 
 // @ 0x827F7310
 // Construct the bin: record the size in quad-words, zero the cursors + packet
-// state + shared-memory bookkeeping, then carve the command block from the rw
-// resource allocator. The X360 descriptor asks lane 0 for align128(size)+128
+// state and used snapshot, then carve the command block from the resource
+// allocator. Context/shared fields and the frame owner survive this call.
+// The X360 descriptor asks lane 0 for align128(size)+128
 // bytes at 128-byte alignment and takes the lane-0 pointer as the block.
 void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator)
 {
@@ -164,16 +160,11 @@ void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator
     m_pBin                 = 0;
     m_pNextWord            = 0;
     mpMemoryCallback       = 0;      // X360 *a1 = 0 (leading callback/context words)
-    mpMemoryContext        = 0;
     m_pPacketStart         = 0;
     m_pLastCommandInPacket = 0;
     m_pActiveAllocateMemoryBlock = 0;
     m_uSizeUsedLastTime    = 0;
     m_uUsedQwordsSnapshot  = 0;
-    mpSharedBinStart       = 0;
-    m_uSharedMemoryBlockMax = 0;
-    m_pSharedNextFreeAtomic = 0;
-    mpDispatchFrame        = 0;
 
     rw::ResourceDescriptor lDescriptor;
     lDescriptor.m_baseResourceDescriptors[0].m_size      = ((luSizeBytes + 127u) & ~127u) + 128u;
@@ -194,21 +185,17 @@ void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator
 void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceAllocator* lpAllocator)
 {
     muNumDispatchLists = luNumLists;
-    mpDispatchBinOutputAddress = 0;
-    mpDispatchBinMasterAddress = 0;
 
-    // X360 allocates 384 * n through the engine allocator (sub_82C08C00, the RW
-    // heap thunk) with an overflow clamp; the x64 gate sizes by the host sizeof
-    // and uses operator new (the same global heap the PC RW thunks resolve to).
-    const u32 KU_STRIDE = (sizeof(void*) == 4) ? 384u : static_cast<u32>(sizeof(DispatchList));
-    m_paLists = reinterpret_cast<DispatchList*>(::operator new(static_cast<size_t>(KU_STRIDE) * luNumLists));
+    // Native new[] emits the original384-byte stride and overflow clamp.
+    m_paLists = new DispatchList[luNumLists];
     CGS_ASSERT(m_paLists != NULL, "m_paLists != NULL");
 
+    m_Bin.mpDispatchFrame = this;
     m_Bin.Construct(luBinSizeBytes, lpAllocator);
 
     for (u32 luListId = 0; luListId < muNumDispatchLists; ++luListId)
     {
-        DispatchList* lpList  = GetList(luListId);
+        DispatchList* lpList  = &m_paLists[luListId];
         lpList->muCount         = 0;
         lpList->mpDispatchBin   = &m_Bin;
         lpList->muChainBlockCount = 0;
@@ -258,10 +245,8 @@ void DispatchFrame::Release()
 {
     CGS_ASSERT(m_paLists != NULL, "m_paLists != NULL");
 
-    // (X360 `operator delete__`; this TU's Construct carves the array with the
-    // raw ::operator new stride helper, so the matching raw form is used here.)
-    ::operator delete(m_paLists);
-    m_paLists = 0;
+    // The original releases the array without clearing its stored pointer.
+    delete[] m_paLists;
 
     CGS_ASSERT(m_Bin.m_pPacketStart == NULL, "m_pPacketStart == NULL");
 
