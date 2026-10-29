@@ -138,12 +138,17 @@ namespace BrnHW
     // ---- BrnHW::System360HW::PrepareMassiveMemory @ 0x823C1290 ----------------------
     // (BrnSystemHWX360Massive.cpp) Carve the Massive heap allocator out of the
     // game-data bank registry (bank id 0x3F) and stash it in spHeapMalloc.
-    // The first argument is ignored (r3 is overwritten by the AllocatorList in r4).
-    int System360HW::PrepareMassiveMemory(int /*liUnused*/,
-                                          BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+    // The real this receiver is unused; the list remains the second native GPR.
+    int System360HW::PrepareMassiveMemory(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
     {
         BrnMassive::gpMassiveHeapMalloc = lpAllocatorList->GetHeapAllocator(KI_MASSIVE_HEAP_BANK_ID);
-        CGS_ASSERT(BrnMassive::gpMassiveHeapMalloc != 0, "spHeapMalloc != NULL");
+        if (!BrnMassive::gpMassiveHeapMalloc)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("spHeapMalloc != NULL",
+                "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 309);
+            CgsDev::Assert::EndAssert();
+        }
         return 1;
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }
 namespace CgsMemory { class HeapMalloc; }
@@ -22,7 +23,7 @@ namespace MassiveAdClient3 { class CMassiveClientCore; }
 //   +0x98  prepare-stage enum (Prepare advances it via operator++)
 //   +0x9C  release-stage enum (Release advances it via operator++)
 //   +0xA0  embedded Massive sub-system (System360HWMassive)
-//   +0xA4  9 unknown bytes, then the command-line buffer at +0xAD
+//   +0xAC  late-load flag; command-line buffer at +0xAD
 // The first 0x98 bytes are the buffer XGetLaunchData fills (dwBufferSize = 0x98).
 
 namespace BrnMassive
@@ -125,19 +126,26 @@ namespace BrnHW
 
         BrnMassive::System360HWMassive mMassive;  // +0xA0
 
-        // Command-line storage. The launch command line is copied to +0xAD (index 9
-        // of the +0xA4 byte region); CgsStringUtils caps the copy at 64 bytes.
-        u8   mPadA4[9];                 // +0xA4..+0xAC
-        char macCommandLine[64];        // +0xAD  launch command line text
+        // ARTIST Construct stores this late-load flag at +0xAC; Prepare copies
+        // its 64-byte command line immediately after it at +0xAD. The original
+        // flag spelling is unavailable; its loading-stage producer names its role.
+        bool mbEngineModulesLoaded;     // +0xAC
+        char macCommandLine[64];        // +0xAD
 
         bool Prepare();
         int  Release();
-        // The first argument is ignored by the X360 body (r3 is overwritten by the
-        // AllocatorList passed in r4); kept in the signature to match the call site.
-        static int PrepareMassiveMemory(int liUnused,
-                                        BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+        // ARTIST823C1290 receives the genuine hardware receiver in r3 and the
+        // allocator list in r4. The receiver is unused by this member body.
+        int PrepareMassiveMemory(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
         bool HasGameBeenRebootedDueToInvite();
     };
+
+    CGS_STATIC_ASSERT(sizeof(BrnMassive::System360HWMassive) == 0xC, "ARTIST Massive state");
+    CGS_STATIC_ASSERT(offsetof(System360HW, mePrepareStage) == 0x98, "ARTIST hardware prepare stage");
+    CGS_STATIC_ASSERT(offsetof(System360HW, mMassive) == 0xA0, "ARTIST Massive member");
+    CGS_STATIC_ASSERT(offsetof(System360HW, mbEngineModulesLoaded) == 0xAC, "ARTIST late-load flag");
+    CGS_STATIC_ASSERT(offsetof(System360HW, macCommandLine) == 0xAD, "ARTIST command line");
+    CGS_STATIC_ASSERT(sizeof(System360HW) == 0xF0, "ARTIST hardware object extent");
 
     // Postfix increment for the prepare/release state machine (BrnSystemHWX360.cpp).
     System360HW::EPrepareStage operator++(System360HW::EPrepareStage& reStage, int);
