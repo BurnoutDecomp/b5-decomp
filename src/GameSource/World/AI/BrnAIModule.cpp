@@ -79,6 +79,13 @@ void AIModule::AssertNativeLayout()
 }
 #endif
 
+s32 AIModule::miUpdatePM = 0;
+s32 AIModule::miUpdateCarsPM = 0;
+s32 AIModule::miUpdateDriversPM = 0;
+s32 AIModule::miUpdateDriverPM = 0;
+s32 AIModule::miUpdateDriversRoundRobinPM = 0;
+s32 AIModule::miResetOnTrackPM = 0;
+
 AIModule::AIModule()
 {
 }
@@ -129,6 +136,18 @@ void AIModule::Construct()
     mRouteMapModule.Construct(this);
 
     mRandom.Construct();
+    // ARTIST 0x82794FEC..0x82795198: six registrations, then five checks.
+    miUpdatePM = CgsDev::PerfMonCpu::AddMonitor("AI Module, Update", CgsDev::E_PMP_7, false, 5.0f, true);
+    miUpdateCarsPM = CgsDev::PerfMonCpu::AddMonitor("AI Module, Update Cars", CgsDev::E_PMP_7, false, 5.0f, true);
+    miUpdateDriversPM = CgsDev::PerfMonCpu::AddMonitor("AI Module, Update Drivers", CgsDev::E_PMP_7, false, 5.0f, true);
+    miUpdateDriverPM = CgsDev::PerfMonCpu::AddMonitor("Driver, Update", CgsDev::E_PMP_7, false, 3.0f, true);
+    miUpdateDriversRoundRobinPM = CgsDev::PerfMonCpu::AddMonitor("AI Module, Round Robin ", CgsDev::E_PMP_7, false, 5.0f, true);
+    miResetOnTrackPM = CgsDev::PerfMonCpu::AddMonitor("AI Module, Reset On Track", CgsDev::E_PMP_7, false, 2.0f, true);
+    CGS_ASSERT(miUpdatePM >= 0, "miUpdatePM >= 0");
+    CGS_ASSERT(miUpdateCarsPM >= 0, "miUpdateCarsPM >= 0");
+    CGS_ASSERT(miUpdateDriversPM >= 0, "miUpdateDriversPM >= 0");
+    CGS_ASSERT(miUpdateDriverPM >= 0, "miUpdateDriverPM >= 0");
+    CGS_ASSERT(miResetOnTrackPM >= 0, "miResetOnTrackPM >= 0");
     mAIDebugComponent.Construct(this);
 
     // THE 35 AI CARS. AICar::Construct @0x82792620 NOW RUNS (2026-09-04, R1 lane): the
