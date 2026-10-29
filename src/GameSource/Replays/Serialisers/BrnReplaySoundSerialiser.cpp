@@ -108,31 +108,26 @@ namespace BrnReplays
     // @ 0x82682488 -- find the per-entity 12-byte record for the traffic entity whose recorded
     // id matches luEntityId. Linear scan over the recorded traffic entities (match key @
     // record+0x40, i.e. base+0xA70+80*i); returns null when the count is <= 0 or no match.
-    void* SoundSerialiser::GetTrafficEnt(u32 luEntityId)
+    SoundSerialiserTrafficEntityData* SoundSerialiser::GetTrafficEnt(u32 luEntityId)
     {
-        s32 liIndex = 0;
-        if (GetStaticLayout()->GetNumTrafficEntities() <= 0)
+        for (s32 liIndex=0; liIndex<GetStaticLayout()->GetNumTrafficEntities(); ++liIndex)
         {
-            return nullptr;
+            if (GetStaticLayout()->maTrafficEntities[liIndex].mEntityId.muValue==luEntityId)
+                return &GetStaticLayout()->maTrafficEntityData[liIndex];
         }
+        return nullptr;
+    }
 
-        s32 liKeyOffset = 0;
-        while (*reinterpret_cast<u32*>(
-                   reinterpret_cast<u8*>(GetStaticLayout())
-                   + SoundSerialiserStaticLayout::KU_TRAFFIC_KEY_BASE + liKeyOffset)
-               != luEntityId)
+    // ARTIST826823E0..480: u16 comparison@record+0x48, stride80, first match.
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity*
+    SoundSerialiser::GetTrafficEntityByTrafficIndex(u16 lu16TrafficIndex)
+    {
+        for (u16 lu16Index=0; lu16Index<GetStaticLayout()->GetNumTrafficEntities(); ++lu16Index)
         {
-            ++liIndex;
-            liKeyOffset += SoundSerialiserStaticLayout::KU_TRAFFIC_RECORD_STRIDE;
-            if (liIndex >= GetStaticLayout()->GetNumTrafficEntities())
-            {
-                return nullptr;
-            }
+            if (GetStaticLayout()->maTrafficEntities[lu16Index].mu16EntityIndex==lu16TrafficIndex)
+                return &GetStaticLayout()->maTrafficEntities[lu16Index];
         }
-
-        return reinterpret_cast<u8*>(GetStaticLayout())
-             + SoundSerialiserStaticLayout::KU_TRAFFIC_ENT_BASE
-             + SoundSerialiserStaticLayout::KU_TRAFFIC_ENT_STRIDE * liIndex;
+        return nullptr;
     }
 
     // @ 0x826534E0 -- read a 12-byte quantised quat+pos record off the stream, unpack it

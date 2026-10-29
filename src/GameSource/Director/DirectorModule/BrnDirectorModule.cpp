@@ -115,13 +115,10 @@ void DirectorModule::Construct(f32 lfTime)
 
     mMainDirector.Construct(&mDirectorResourceManager, lfTime);
 
-    mDirectorSerialiser.Construct(
-        /* liId               */ 4,
-        /* liMode             */ 0,
-        /* liBufferSize       */ 1024,
-        /* liStaticBufferSize */ 384,
-        /* lpcName            */ "DirectorModule",
-        /* liFlag             */ 0);
+    mDirectorSerialiser.Construct();
+    mbReplayStartedThisFrame = 0;  // ARTIST 8225C664
+    mbIsReplaying = false;
+    mbReplayRestoring = false;
 
     // Budget literals are the X360 rodata floats flt_82004014 (Pre SQ / Post Gui) and
     // flt_82001C98 (Main) -- both cross-confirmed elsewhere in this codebase as 0.1f and
@@ -413,33 +410,19 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
     }
     mbIsReplaying = lbIsReplaying;          // this+232192
 
-    // ---- 2. ⚠️ QUIET GATE: the director-serialiser mode bookkeeping ------------------
-    // The X360 then reads the director serialiser's mode word and stamps two of its flags:
-    //     if ( mDirectorSerialiser.GetMode() == E_MODE_RESTORING /*7*/ )
-    //     {
-    //         mbReplayRestoring                  = true;   // this+232193
-    //         mDirectorSerialiser.mbDataRestored = true;   // this+231817 == serialiser +0x59
-    //     }
-    //     else if ( mode == E_MODE_RECORDING_PREPARING /*1*/ || mode == E_MODE_PLAYING_PREPARING /*4*/ )
-    //     {
-    //         mDirectorSerialiser.mbDataReady    = true;   // this+231816 == serialiser +0x58
-    //     }
-    // (The two byte offsets land EXACTLY on BrnReplays::BaseSerialiser's committed
-    //  mbDataReady @+0x58 / mbDataRestored @+0x59 -- that coincidence is the attestation
-    //  that mDirectorSerialiser is at this+0x38930 and that these are its fields.)
-    //
-    // GATED because both fields are `protected` on BrnReplays::BaseSerialiser and there is no
-    // public setter; adding one means editing GameSource/Replays/BrnReplayBaseSerialiser.h,
-    // which is outside this wave's ownership. The exact additive change is written into the
-    // wave log for the conductor. Reaching around the class to poke +0x58/+0x59 by offset is
-    // precisely the raw-offset-into-another-class's-storage pattern this TU was rewritten to
-    // remove, so it is not done here.
-    //
-    // CONSEQUENCE WHILE GATED: only the replay-record/restore handshake is affected, and the
-    // whole replay leg is gated anyway (step 4). The live camera path is untouched.
-    //
-    // DELETE-WHEN: delete this gate once BrnReplays::BaseSerialiser exposes
-    // SetDataReady(bool) / SetDataRestored(bool) (or DirectorSerialiser is homed).
+    // ARTIST 8225C7EC..8225C834: restore acknowledgement takes precedence
+    // over the prepare/readiness handshake.
+    const BrnReplays::BaseSerialiser::EMode leMode = mDirectorSerialiser.GetMode();
+    if (leMode == BrnReplays::BaseSerialiser::E_MODE_RESTORING)
+    {
+        mbReplayRestoring = true;
+        mDirectorSerialiser.SetDataRestored(true);
+    }
+    else if (leMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+             leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING)
+    {
+        mDirectorSerialiser.SetDataReady(true);
+    }
 
     // ---- 3. the per-frame scene-query post office ----------------------------------
     // This pass populates ALL SIX post offices: it is the one that may MINT query ids.
@@ -463,22 +446,14 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
 
     if (mbIsReplaying)
     {
-        // ⚠️ QUIET GATE -- the REPLAY leg. The X360 runs, when the serialiser mode is
-        // E_MODE_PLAYING_PREPARING (4), E_MODE_PLAYING (5) or E_MODE_PLAYING_STALLED (6):
-        //     mDirectorSerialiser.mbDataReady = true;
-        //     BrnReplays::DirectorSerialiser::Read(&mDirectorSerialiser);            // @0x82650340
-        //     ReplayDirector::PreSceneQueryUpdate(                                   // @0x8225BD28
-        //         this + 221008 /* +0x35F50 */,
-        //         BrnReplays::DirectorSerialiser::GetStaticLayout(&mDirectorSerialiser), // @0x821F5C58
-        //         &lIO );
-        // GATED because BrnReplays::DirectorSerialiser is un-homed (only the base
-        // BaseSerialiser is committed -- GetStaticLayout/Read/Write are the derived type's)
-        // and BrnDirector::ReplayDirector::PreSceneQueryUpdate is itself declaration-only
-        // (BrnReplayDirector.h documents why: an unmodelled layout plus a VMX pipeline).
-        // CONSEQUENCE: replay playback drives no camera. Free drive / all live gameplay is
-        // unaffected -- mbIsReplaying is false for every one of those frames.
-        // DELETE-WHEN: BrnReplays::DirectorSerialiser gets a home AND
-        // ReplayDirector::PreSceneQueryUpdate is bodied.
+        if (mDirectorSerialiser.IsPlaying())
+        {
+            mDirectorSerialiser.SetDataReady(true);
+            mDirectorSerialiser.Read();
+            // Original next call: ReplayDirector::PreSceneQueryUpdate
+            // (8225BD28) with GetStaticLayout and lIO. The camera provider is
+            // still declaration-only; see the bounded packet's remaining gaps.
+        }
     }
     else
     {
@@ -578,36 +553,26 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
         // DELETE-WHEN: as the PreSceneQueryUpdate replay gate.
     }
 
-    // ---- 5. ⚠️ QUIET GATE: the replay RECORD leg + serialiser registration ----------
-    // For serialiser modes E_MODE_RECORDING_PREPARING (1) / E_MODE_RECORDING (2) /
-    // E_MODE_RECORDING_STALLED (3) the X360 snapshots the frame into the serialiser's static
-    // layout and writes the record:
-    //     Camera::Camera::Construct( DirectorSerialiser::GetStaticLayout(&mDirectorSerialiser) );
-    //     Camera::Camera::operator=( GetStaticLayout(...), this + 211472 );
-    //     *(u64*)(GetStaticLayout(...) + 352) = *(u64*)(this + 204736);
-    //     *(u32*)(GetStaticLayout(...) + 360) = *(u32*)(this + 208508);   // + 364/368 from
-    //     *(u32*)(GetStaticLayout(...) + 372) = *(f32*)(this + 211408);   //   208512/208516
-    //     DirectorSerialiser::Write( &mDirectorSerialiser );              // @0x82650438
-    // and then, UNCONDITIONALLY:
-    //     ReplayIO::RequestInterface::RegisterSerialiser(                 // @0x821F34A0
-    //         lpOutputBuffer->GetReplayRequestI(), &mDirectorSerialiser );
-    // and finally a dev tripwire:
-    //     CGS_ASSERT( !lpSceneQueryOutputBuffer->GetSceneQueryInterface()->HasData(),
-    //                 "!lpSceneQueryOutput->GetSceneQueryInterface()->HasData()" );  // :387
-    //
-    // GATED for three separate reasons, none of them fixable inside this wave:
-    //   * DirectorSerialiser::GetStaticLayout / ::Write are the UN-HOMED derived serialiser's;
-    //   * every source offset above (this+204736 / +208508.. / +211408 / +211472) lands inside
-    //     the un-modelled +0x36380..+0x38920 tail (CameraDebugInfo / GameState / VehicleTracker),
-    //     so there is no named member to read them through;
-    //   * CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData @0x82204E48 has no
-    //     declaration on the committed SceneManager header (its own header says the body lives
-    //     in CgsSceneManagerModuleIO.cpp), and that header is outside this wave's ownership.
-    // CONSEQUENCE: no replay recording, and the director's serialiser is not registered with
-    // the replay subsystem. Neither affects the live camera. The dropped assert is a dev
-    // tripwire only.
-    // DELETE-WHEN: DirectorSerialiser is homed, the +0x36380 tail members are recovered, and
-    // SceneQueryInterface::HasData is declared on the SceneManager header.
+    // ARTIST 82275448..8227551C: snapshot in every recording mode,
+    // then let Write select whether the stream can advance this frame.
+    if (mDirectorSerialiser.IsRecording())
+    {
+        BrnReplays::DirectorSerialiserStaticLayout* lpFrame = mDirectorSerialiser.GetStaticLayout();
+        lpFrame->mCamera.Construct();
+        lpFrame->mCamera = mMainDirector.GetLastCamera();
+        const Camera::BehaviourManager& lrManager = mMainDirector.GetBehaviourManager();
+        lpFrame->mCarBaseAssetAttribsKey =
+            lrManager.GetBehaviourParameterBank().GetGameplayCameraCarAttribsKey();
+        lpFrame->mTempCameraBoostResponder = lrManager.GetTempCameraBoostResponder();
+        lpFrame->mSpeedResponder = lrManager.GetSpeedResponder();
+        lpFrame->mfLastHandbrakeTime = lrManager.GetLastHandbrakeTime();
+        mDirectorSerialiser.Write();
+    }
+
+    // ARTIST 82275520..8227552C: every mode, including idle and restoring.
+    lpOutputBuffer->GetReplayRequestI()->RegisterSerialiser(&mDirectorSerialiser);
+    CGS_ASSERT(!lpProducerOf(lpSceneQueryOutputBuffer)->HasData(),
+               "!lpSceneQueryOutput->GetSceneQueryInterface()->HasData()");
 
     lpInputBuffer->UnlockForRead();
     lpSceneQueryInputBuffer->UnlockForRead();

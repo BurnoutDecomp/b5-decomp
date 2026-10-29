@@ -72,7 +72,11 @@ namespace BrnReplays
         SoundSerialiserStaticLayout* AddTrafficEntity(const void* lpEntity);
 
         // @0x82682488 -- find the 12-byte per-entity record for a recorded traffic id.
-        void* GetTrafficEnt(u32 luEntityId);
+        SoundSerialiserTrafficEntityData* GetTrafficEnt(u32 luEntityId);
+
+        // ARTIST826823E0: first recorded entity whose16-bit traffic index matches.
+        const BrnTraffic::BrnTrafficIO::TrafficSoundEntity*
+            GetTrafficEntityByTrafficIndex(u16 lu16TrafficIndex);
 
         // The frame-level Read/Write below overload the base's byte-transfer Read(void*,s32) /
         // Write(const void*,s32); re-expose those so the frame bodies can call both by name.

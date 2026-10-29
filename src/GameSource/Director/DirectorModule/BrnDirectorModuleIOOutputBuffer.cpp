@@ -142,10 +142,10 @@ namespace DirectorIO
     }
 
     // X360 0x82206A58: return &mReplayRequestInterface (this+0x724). Tests the WRITE lock (bit 3).
-    u8* OutputBuffer::GetReplayRequestI()
+    BrnReplays::ReplayIO::RequestInterface* OutputBuffer::GetReplayRequestI()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return reinterpret_cast<u8*>(&mReplayRequestInterface);
+        return &mReplayRequestInterface;
     }
 
     // X360 0x822078F0: return &mTimerRequestInterface (this+0x500). Tests the WRITE lock (bit 3).

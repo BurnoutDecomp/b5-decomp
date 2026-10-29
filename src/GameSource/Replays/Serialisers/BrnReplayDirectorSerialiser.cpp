@@ -15,6 +15,12 @@
 namespace BrnReplays
 {
 
+void DirectorSerialiser::Construct()
+{
+    BaseSerialiser::Construct(4, 0, 1024, KI_STATIC_LAYOUT_SIZE, "DirectorModule", 0);
+    mbStaticCameraConstructed = false;
+}
+
 // @ 0x82650340 -- cpp:38. Lock, resolve the static camera, then the mode ladder:
 // the STALLED pair (3/6), the PREPARING pair (1/4) and RESTORING (7) are explicit
 // no-ops; RECORDING (2) appends the whole camera image to the record stream and
@@ -23,7 +29,7 @@ void DirectorSerialiser::Read()
 {
     BaseSerialiser::Lock();
 
-    BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
+    DirectorSerialiserStaticLayout* lpStatic = GetStaticLayout();
     CGS_ASSERT(lpStatic != 0, "lpStatic");   // :38 (non-gating)
 
     const EMode leMode = GetMode();
@@ -46,18 +52,18 @@ void DirectorSerialiser::Read()
 // @ 0x82650438 -- cpp:69. Lock, resolve the static camera, construct it in place
 // exactly once (the +0x5C latch; note the X360 runs the construct block BEFORE
 // its lpStatic NULL guard -- only the serialise dispatch below is guarded, and
-// that order is kept), then RECORDING appends / PLAYING restores the camera
-// image. Always Unlocks.
+// that order is kept), then RECORDING appends / PLAYING restores the director
+// frame. Always Unlocks.
 void DirectorSerialiser::Write()
 {
     BaseSerialiser::Lock();
 
-    BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
+    DirectorSerialiserStaticLayout* lpStatic = GetStaticLayout();
     CGS_ASSERT(lpStatic != 0, "lpStatic");   // :69 (non-gating)
 
     if (!mbStaticCameraConstructed)
     {
-        lpStatic->Construct();
+        lpStatic->mCamera.Construct();
         mbStaticCameraConstructed = true;
     }
 

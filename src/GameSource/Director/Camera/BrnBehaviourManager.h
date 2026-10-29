@@ -363,6 +363,14 @@ namespace Camera
         // the console reaches the same storage by inlined displacement off the DIRECTOR.
         BehaviourParameterBank&       GetBehaviourParameterBank()       { return mBehaviourParameterBank; }
 
+        // ARTIST DirectorModule::Update 822754B4..82275518 snapshots these
+        // existing members: manager+0x1586C, +0x15874, +0x163C0 respectively.
+        const Utils::TempCameraBoostResponder& GetTempCameraBoostResponder() const
+        { return mTempCameraBoostResponder; }
+        const Utils::SpeedResponder& GetSpeedResponder() const { return mSpeedResponder; }
+        f32 GetLastHandbrakeTime() const { return mfLastHandbrakeTime; }
+
+
         void LockBehaviourForInterpolation(BehaviourHelperIndex lFrom, BehaviourHelperIndex lTo);
         void UnlockBehaviourForInterpolation(BehaviourHelperIndex lFrom, BehaviourHelperIndex lTo);
         void SetBehaviourUpdatesDuringPause(BehaviourHelperIndex lHelper, bool lbUpdatesDuringPause);

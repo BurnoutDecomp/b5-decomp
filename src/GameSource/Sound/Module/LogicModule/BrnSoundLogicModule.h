@@ -229,6 +229,8 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     Attrib::Gen::burnoutglobaldata& GetGlobalData() { return mBurnoutGlobalData; }
     const Attrib::Gen::burnoutglobaldata& GetGlobalData() const { return mBurnoutGlobalData; }
     BrnSound::Logic::FrameInformation& GetFrameInformation() { return mFrameInformation; }
+    // Typed access to the X360-only persistent replay channel (inline original member walk).
+    BrnReplays::SoundSerialiser& GetSoundSerialiser() { return mSoundSerialiser; }
     const BrnSound::Logic::FrameInformation& GetFrameInformation() const { return mFrameInformation; }
     // Inlined in ReverbEffect::ProcessUpdate (ARTIST module+0x51FC).
     CgsSound::Logic::Voice& GetGlobalReverbVoice() { return mGlobalReverbVoice; }
