@@ -208,7 +208,7 @@ namespace
     const f32 KF_ROUND_ROBIN_FAN_WORK_A      = 4.0f;     // flt_820C41C0  (DoRoundRobins, stack var_30)
     const f32 KF_ROUND_ROBIN_FAN_WORK_B      = 4.0f;     // flt_820C41C0  (DoRoundRobins, stack var_2C)
     const f32 KF_ROUND_ROBIN_WORK_SCALE      = 0.0625f;  // flt_82046E00  (DoRoundRobins)
-    const f32 KF_FLT_MAX                     = 3.4028235e38f; // flt_8204F664 (UpdateOneProximityIndex)
+    const f32 KF_FLT_MAX                     = 3.4028234663852886e+38f; // flt_8204F664 (UpdateOneProximityIndex)
     const s32 KI_ROUND_ROBIN_HNG_WORK        = 4;        // DoRoundRobins `li r4, 4`
 
     inline bool WitnessOnce(bool& lrbFlag)
@@ -344,14 +344,18 @@ void AIModule::UpdateCars(f32 lfTimeStep,
                 AISectionsData* lpAISectionsData = GetAISectionsData();
                 // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the player's own AICar::Update runs with the
                 // console AI seat's mbIsDrivenByPlayer (0); the byte is back to 1 before the next car.
+#if !defined(_XBOX) || !defined(_M_PPCBE)
                 const bool lbHarnessSeat = HarnessAIPadBeginPlayerSeat(lpAICar);
+#endif
                 lpAICar->Update(&mRaceBalancingManager,
                                 lfTimeStep,
                                 lpPlayerCar,
                                 lpAISectionsData,
                                 &mMasterRoute,
                                 mbIsInOnlineGameMode);
+#if !defined(_XBOX) || !defined(_M_PPCBE)
                 HarnessAIPadEndPlayerSeat(lpAICar, lbHarnessSeat);
+#endif
                 ++liUpdated;
             }
         }
@@ -669,7 +673,9 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
 
     // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit -- target, route, slam window (BrnAIHarnessPad.h).
     // Returns at once unless the pad is armed with the pursuit objective.
+#if !defined(_XBOX) || !defined(_M_PPCBE)
     HarnessAIPadPursuit(lpPlayerCar);
+#endif
 
     DoRoundRobins();
 
@@ -716,24 +722,30 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
         // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit: inside the slam window the player's OWN driver's
         // aggression victim is the target -- the index the fan's Slam contributor hands FindVictimInTraffic
         // (IncludeSmashIntoPlayer @0x82791230). mbRamming is only ever set by HarnessAIPadPursuit.
+#if !defined(_XBOX) || !defined(_M_PPCBE)
         if (gHarnessAIPad.mbRamming && leSlot == mePlayerActiveRaceCarIndex)
         {
             lpDriver->SetAggressionVictimCar(GetAICar(static_cast<u32>(gHarnessAIPad.miTarget)));
             lpDriver->SetAggressionVictim(gHarnessAIPad.miTarget);
         }
 
+#endif
         const bool lbLineUpdateToken = (leSlot == static_cast<EActiveRaceCarIndex>(miLineUpdateTokenCounter));
         // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the player's own AIDriver::Update runs with the console
         // AI seat's mbIsDrivenByPlayer (0); the byte is back to 1 before the next driver.
+#if !defined(_XBOX) || !defined(_M_PPCBE)
         AICar* lpHarnessSeatCar = lpDriver->GetCar();
         const bool lbHarnessSeat = HarnessAIPadBeginPlayerSeat(lpHarnessSeatCar);
+#endif
         lpDriver->Update(lfTimeStep,
                          lbLineUpdateToken,
                          lPlayerCarPosition,
                          lpPlayerCar,
                          mbDoInRangeCatchup,
                          &mRandom);
+#if !defined(_XBOX) || !defined(_M_PPCBE)
         HarnessAIPadEndPlayerSeat(lpHarnessSeatCar, lbHarnessSeat);
+#endif
         if (lpDriver->mbIsActive)
         {
             ++liActiveDrivers;
@@ -1155,6 +1167,7 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
                 // The pad pursuit harness consumes these positions throughout the run.
             }
 
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             if (lbIsPlayer && sbPlayerTrace)
             {
                 static unsigned luSample = 0;
@@ -1167,6 +1180,8 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
                         << " forced=" << (lControls.mbDoSpeedMatch ? 1 : 0) << " match=" << lControls.mfSpeedMatchSpeed
                         << " line=" << (lpDriver->mbIsRacingLineInitialised ? 1 : 0) << "\n";
             }
+
+#endif
 
             ++liActiveRecords;
         }
@@ -1353,6 +1368,7 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
 // =================================================================================================
 
 // OFF / unarmed / no target / no route held -- the whole state of a default run.
+#if !defined(_XBOX) || !defined(_M_PPCBE)
 HarnessAIPad gHarnessAIPad =
 {
     E_HARNESS_AI_PAD_OFF,                   // meMode
@@ -1769,5 +1785,7 @@ void AIModule::HarnessAIPadReleaseRoute(AICar* lpPlayerCar, const char* lpcReaso
                                    << " [PC HARNESS]\n";
     }
 }
+
+#endif
 
 }   // namespace BrnAI
