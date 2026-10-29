@@ -740,6 +740,11 @@ private:
     bool mbEnableDebugRender;       // :157 +0xB5E
     bool mbEnableBoostEffects;      // :158 +0xB5F
     bool mbJumping;                 // :160 +0xB60
+    // X360-only+0xB61, cleared by Construct, set by ReplayDirector8225C134.
+    // Name inferred from that sole setup writer.
+    bool mbReplayCamera;
+public:
+    void SetReplayCamera(bool lbReplay) { mbReplayCamera = lbReplay; }
 
     // The director debug page registers mbEnableDebugRender / mbEnableBoostEffects.
     friend class BrnDirector::DebugComponent;

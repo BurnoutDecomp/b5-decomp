@@ -209,8 +209,12 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
     const f32 lfPitch = GetMixerOutputValue(2, 1);
     const f32 lfAzimuth = GetMixerOutputValue(1, 3);
 
-    // ARTIST 826B5508..5854, live simulation branch. SoundLogicModule's replay
-    // serialiser binding (826B54D0..5504 / 5858..587C) remains unhomed.
+    BrnReplays::SoundSerialiser& lrSerialiser=lpModule->GetSoundSerialiser();
+    f32 lfTarget;
+    if(lrSerialiser.IsPlaying())
+        lfTarget=lrSerialiser.GetStaticLayout()->mfA24;
+    else
+    {
     mbDeforming.Update(lFrame.meFatality.GetCurrent() != BrnSound::Logic::E_FATAL_OFF &&
         lFrame.meImpactTime.GetCurrent() == AttribSys::Enums::eImpactTime::VSlow);
     if (mbDeforming.GetCurrent())
@@ -267,7 +271,7 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
     // Constants: 82F2FD0C=655340, 82F2CD58=1000ms, 82F2CD5C=700.
     // 826B57C4/E0 are separate fmuls; E8/F4 are fsel (NaN selects 32767).
     const f32 lfFaded = mFadeOut.GetValueFloat() * mDeformIntensityLagged.GetCurrent();
-    f32 lfTarget = lfFaded * 655340.0f;
+    lfTarget = lfFaded * 655340.0f;
     lfTarget = (-lfTarget >= 0.0f) ? 0.0f : lfTarget;
     lfTarget = (32767.0f - lfTarget >= 0.0f) ? lfTarget : 32767.0f;
     // 57F8/5800 bge -> 5854, including unordered; smoothing arm 5804.
@@ -279,6 +283,10 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
         mfAemsIntensity -= afTimeStep * 500.0f;
     else
         mfAemsIntensity = lfTarget;
+
+    if(lrSerialiser.IsRecording())
+        lrSerialiser.GetStaticLayout()->mfA24=lfTarget; // ARTIST826B5858..587C
+    }
 
     static const u32 luIntensity = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("AEMS_intensity"));
@@ -295,7 +303,7 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
 
     // ARTIST826B5894..5B88: original live-simulation debug output. Keep its
     // historical label spelling and send the same current/previous samples.
-    if (KI_DEBUG_SPEW_DEFORM_INFO)
+    if (!lrSerialiser.IsPlaying() && KI_DEBUG_SPEW_DEFORM_INFO)
         BrnSound::Debug::DebugComponent::mLogCombined << "[Deform] [" << mfRunningTime
             << "]DeformAmmount: " << mDeformAmount.GetCurrent() << "\tDeformDelta: "
             << (mDeformAmount.GetCurrent() - mDeformAmount.GetPrevious())

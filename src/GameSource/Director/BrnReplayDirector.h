@@ -1,72 +1,64 @@
-#ifndef GAMESOURCE_DIRECTOR_BRN_REPLAY_DIRECTOR_H
-#define GAMESOURCE_DIRECTOR_BRN_REPLAY_DIRECTOR_H
+#pragma once
 
-#include "types.hpp"
+#include "GameSource/Director/Camera/Camera.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
+#include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"
 
-// ============================================================================
-// GameSource/Director/BrnReplayDirector.h
-//
-// BrnDirector::ReplayDirector -- the camera director that drives camera selection and
-// playback while a replay is running. The DirectorModule owns one ReplayDirector sub-object
-// (constructed in place at DirectorModule +0x35F50, see BrnDirectorModule.cpp) and dispatches
-// its PreSceneQueryUpdate / Update to it from the module's own per-frame spine.
-//
-// HOME for the ReplayDirector class. Source-of-truth filename recovered from the asserts the
-// X360 bodies stream ("..\\..\\..\\GameSource\\Director/BrnReplayDirector.cpp").
-//
-// ----------------------------------------------------------------------------
-// LAYOUT STATUS. ReplayDirector is a very large, mostly-opaque object (the constructor reaches
-// fields up to +0x2788 and the Update/PreSceneQueryUpdate bodies index much further -- past
-// +0x35F50-relative members such as the two owned camera behaviours at +0x1424/+0x1680 and
-// +0x1600/+0x4608, the GameState at +0x7248, the VehicleTracker at +0x7760, the AllVehicleData
-// at +0x6928 and many scalar/flag fields out to ~+0x29D0). That full multi-megabyte layout is
-// NOT yet modelled. Only the constructor is reconstructed here, and -- exactly as the sibling
-// BrnDirectorModule.cpp does -- it addresses each touched field by byte offset through a
-// char*/u32* view of `this` rather than as a named member.
-//
-// The other three recovered functions (FillInSharedInfo, PreSceneQueryUpdate, Update) are
-// declaration-only: see the FLAGs in BrnReplayDirector.cpp. They cannot be bodied faithfully
-// yet because they (a) index the not-yet-modelled ReplayDirector layout entirely by raw offset,
-// (b) drive a multi-stage VMX pipeline in FillInSharedInfo (a vector LCG that seeds a shuffle
-// table, plus several lvx128/stvx128 matrix copies the decompiler could not even allocate
-// locals for -- "local variable allocation has failed"), which the project rules forbid
-// paraphrasing to scalar, and (c) dispatch through a cone of not-yet-reconstructed deps
-// (BrnDirector::Camera::Camera, the camera OutputBuffer, Camera::Utils::SineLerp,
-// ICE::CameraSpaceHandler, AllVehicleData::Construct/Update/GetPlayer, and several sub_*
-// externals). Grow the class body (real bases + named members) and body those three functions
-// when that layout and dep cone are reconstructed.
-// ----------------------------------------------------------------------------
-
+namespace BrnReplays { struct DirectorSerialiserStaticLayout; }
 namespace BrnDirector
 {
+struct DirectorInputOutput;
 
+// ARTIST 827E2020/82250558/8225BD28/8225C298. Console displacements
+// below identify original members; native pointer-bearing members widen on PC.
+// The complete console owner spans0x29E0 bytes, from DirectorModule+0x35F50
+// through+0x38930. Its final camera/selection/first-frame members were formerly
+// modelled as separate DirectorModule fields at+0x36380/+0x38920/+0x38924.
 class ReplayDirector
 {
 public:
-    // Constructor @0x827E2020 (the only function executed in the boot-trace goal milestone).
-    // Installs two camera-behaviour sub-object vtables, default-constructs two owned ICE::ICETake
-    // playback objects and one CarScoreData, and presets two index/handle fields to -1. Bodied.
     ReplayDirector();
+    void FillInSharedInfo(Camera::BehaviourSharedInfo* lpBehaviourInfo,
+                          Camera::CollisionPolicySharedInfo* lpPolicyInfo,
+                          BrnReplays::DirectorSerialiserStaticLayout* lpFrame,
+                          const DirectorInputOutput* lpIO);
+    void PreSceneQueryUpdate(BrnReplays::DirectorSerialiserStaticLayout* lpFrame,
+                             const DirectorInputOutput* lpIO);
+    void Update(BrnReplays::DirectorSerialiserStaticLayout* lpFrame,
+                const DirectorInputOutput* lpIO);
 
-    // @0x82250558 -- assembles the per-frame DirectorSharedInfo the camera behaviours consume
-    // (player/used-car indices, vehicle data, game state, vehicle tracker, the camera-space
-    // handler, and the bumper/external behaviour parameters). Declaration-only (FLAG: VMX
-    // pipeline + unmodelled layout + unreconstructed deps).
-    s32 FillInSharedInfo(s32 liSharedInfoOut, s32 liShotInfoOut, s32 liSerialiserFrame, void* lpInput);
+    Camera::Camera& GetFinalCamera() { return mFinalCamera; }
+    const CgsGraphics::Camera& GetCgsCamera() const { return mCgsCamera; }
+    void SetFirstFrame(bool lbFirstFrame) { mbFirstFrame = lbFirstFrame; }
+    void SetCameraSelection(s32 liSelection) { miCameraSelection = liSelection; }
 
-    // @0x8225BD28 -- called by DirectorModule::PreSceneQueryUpdate before the scene query: when
-    // the player car asset changes it rebuilds the two replay cameras from the car's camera-
-    // behaviour attribs, then fills the shared info and runs each camera's pre-query pass.
-    // Declaration-only (FLAG).
-    void* PreSceneQueryUpdate(s32 liSerialiserFrame, void* lpInput);
-
-    // @0x8225C298 -- the per-frame replay update: fills the shared info, ticks the two replay
-    // cameras, blends/selects between the external and bumper cameras per the serialiser frame
-    // flags, and publishes the resulting camera to the director output buffer. Declaration-only
-    // (FLAG).
-    void* Update(s32 liSerialiserFrame, void* lpInput);
+private:
+    Camera::Camera mExternalCamera;                   // +0x000
+    Camera::Camera mBumperCamera;                     // +0x160
+    CgsGraphics::Camera mCgsCamera;                    // +0x2C0
+    Camera::Camera mFinalCamera;                      // +0x430
+    Camera::BehaviourGameplayExternal::Parameters mExternalParameters; // +0x590
+    Camera::BehaviourGameplayBumper::Parameters mBumperParameters;     // +0x640
+    Camera::BehaviourGameplayExternal mExternalBehaviour;              // +0x690
+    Camera::BehaviourGameplayBumper mBumperBehaviour;                  // +0x1200
+    Camera::Utils::Camera2DRotationController mRotationController;      // +0x1A30
+    Camera::Utils::CameraSphericalRotationController mSphericalRotationController; // +0x1A60
+    Matrix44Affine mSceneSpace;                       // +0x1A90
+    Matrix44Affine mTrafficLightSpace;                // +0x1AD0
+    AllVehicleData mAllVehicleData;                   // +0x1B10
+    GameState mGameState;                             // +0x1C50
+    VehicleTracker mVehicleTracker;                   // +0x1E50
+    CgsNumeric::Random mRandom;                       // +0x2100
+    DebugLog mDebugLog;                               // +0x2130
+    DebugPrinter mDebugPrinter;                       // +0x2790
+    ICE::CameraSpaceHandler mCameraSpaceHandler;      // +0x27C0
+    s32 miCameraSelection;                           // +0x29D0
+    bool mbFirstFrame;                               // +0x29D4
 };
-
-} // namespace BrnDirector
-
-#endif // GAMESOURCE_DIRECTOR_BRN_REPLAY_DIRECTOR_H
+}

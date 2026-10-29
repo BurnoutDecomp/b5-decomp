@@ -25,6 +25,10 @@ namespace Gen
         // BUMPER cam's mfBoostFOV) at every use site. Instance is a private base here.
         using Instance::IsValid;
         using Instance::GetLayoutPointer;
+
+        // ARTIST ReplayDirector::PreSceneQueryUpdate: authored f32 slot6.
+        f32 GetBoostFOV() const
+        { return static_cast<const f32*>(GetLayoutPointer())[6]; }
     };
 
     // Chain the Instance ctor, assert the collection's class is
