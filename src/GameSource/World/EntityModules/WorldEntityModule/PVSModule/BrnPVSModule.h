@@ -52,11 +52,6 @@ namespace BrnWorld
 {
     class PVSDebugComponent;
 
-    extern f32 mfCentreZoneBaseScore;
-    extern f32 mfImmediateZoneBaseScore;
-    extern f32 mfSecondaryZoneBaseScore;
-    extern f32 mfDirectionalScoreMultiplier;
-
     class PVSModule
         : public CgsModule::ModuleSingleBufferedTemplate<PVSIO::InputBuffer, PVSIO::OutputBuffer>
     {
@@ -119,6 +114,13 @@ namespace BrnWorld
         BrnResource::GameDataIO::RequestInterface<512>* GetGameDataRequestInt();
 
     private:
+        // DecFIGS records these as PVSModule static data members. The X360 image stores
+        // them at flt_82CDB58C/590/594/598; OnActivate binds them from the debug component.
+        static f32 mfCentreZoneBaseScore;
+        static f32 mfImmediateZoneBaseScore;
+        static f32 mfSecondaryZoneBaseScore;
+        static f32 mfDirectionalScoreMultiplier;
+
         // The receiver-queue event TYPE the game-data module posts when the PVS zone list has
         // been acquired (GameDataModule::ProcessInternalAcquireResponse case 58 ->
         // PostGameDataResponse; Prepare asserts "Invalid event received\n" on anything else).

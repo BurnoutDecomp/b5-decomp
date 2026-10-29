@@ -550,6 +550,8 @@ namespace Vehicle
     void PhysicalTrafficManagerDebugComponent::DrawPhysicalTraffic(
         CgsDev::Debug3DImmediateRender* lpDisplay)
     {
+        CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL"); // :319
+
         for (s32 liTraffic = mpTrafficManager->mUsedTrafficVehicles.GetFirstNonZeroBit();
              liTraffic >= 0;
              liTraffic = mpTrafficManager->mUsedTrafficVehicles.GetNextNonZeroBit(liTraffic))
@@ -557,19 +559,17 @@ namespace Vehicle
             const PhysicalTrafficVehicle* const lpTrafficVehicle =
                 mpTrafficManager->GetTrafficVehicle(liTraffic);
             const SimpleVehiclePhysics* const lpTrafficPhysics = lpTrafficVehicle->mpVehicleBody;
-            CgsGeometric::Box lTrafficBox;
-            lpTrafficPhysics->GetSimpleVehicleBox(lTrafficBox);
-            const Vector3 lvHalfExtents = lTrafficBox.GetDimensions();
+            const Matrix44Affine lGraphicsTransform = lpTrafficPhysics->GetGraphicsVehicleTransform();
+            const Vector3 lvHalfExtents = lpTrafficPhysics->GetHalfExtent();
             const Vector3 lvBoxInf{ -lvHalfExtents.x, -lvHalfExtents.y,
                                     -lvHalfExtents.z, 0.0f };
             const Vector3 lvBoxSup{ lvHalfExtents.x, lvHalfExtents.y,
                                     lvHalfExtents.z, 0.0f };
             const rw::RGBA lCarColour = lpTrafficPhysics->IsFrozen()
                 ? rw::RGBA(0, 0, 255, 255) : rw::RGBA(255, 255, 255, 255);
-            lpDisplay->DrawBox(lvBoxInf, lvBoxSup, lTrafficBox.GetTransform(), lCarColour);
+            lpDisplay->DrawBox(lvBoxInf, lvBoxSup, lGraphicsTransform, lCarColour);
 
-            const Matrix44Affine lGraphicsTransform = lpTrafficPhysics->GetGraphicsVehicleTransform();
-            const f32 lfHalfLength = lpTrafficPhysics->GetHalfExtent().z;
+            const f32 lfHalfLength = lvHalfExtents.z;
             const Vector3 lvArrowStart = ControlsScaleAdd(lGraphicsTransform.zAxis, lfHalfLength, lGraphicsTransform.wAxis);
             const Vector3 lvArrowEnd = ControlsScaleAdd(lGraphicsTransform.zAxis, lfHalfLength + 1.5f, lGraphicsTransform.wAxis);
             lpDisplay->DrawArrow(lvArrowStart, lvArrowEnd, rw::RGBA(255, 0, 0, 255));

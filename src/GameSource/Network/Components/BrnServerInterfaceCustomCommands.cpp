@@ -61,8 +61,8 @@ namespace
         "Upld Offline Prog",   // [6]  E_ACTION_UPLOAD_OFFLINE_PROGRESSION   (inferred)
         "Upld Rivals Data",    // [7]  E_ACTION_UPLOAD_RIVAL_DATA            (off_82F29F4C, exact)
         "Upld Event Score",    // [8]  E_ACTION_UPLOAD_EVENT_SCORE_DATA      (inferred)
-        "Get ELO",             // [9]  E_ACTION_GET_ELO                      (inferred)
-        "Set ELO"              // [10] E_ACTION_SET_ELO                      (inferred)
+        "Get Debug ELO",       // [9]  E_ACTION_GET_ELO (ARTIST 82F29F54)
+        "Set Debug ELO"        // [10] E_ACTION_SET_ELO (ARTIST 82F29F58)
     };
 
     // Helper to pack a big-endian fourcc (the wire byte order the X360 lobby uses).
@@ -269,11 +269,11 @@ void ServerInterfaceCustomCommands::SetEloOfLocalPlayer(s32 liRaceElo, s32 liRoa
 
     bool lbOk;
     lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "RACE", liRaceElo) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber RACE");
+    CGS_ASSERT(lbOk, "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), mpServerInterface->GetMessageBufferLength(), \"RACE\", liRaceElo)");
     lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "ROADRAGE", liRoadRageElo) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber ROADRAGE");
+    CGS_ASSERT(lbOk, "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), mpServerInterface->GetMessageBufferLength(), \"ROADRAGE\", liRoadRageElo)");
     lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "BURNINGHOMERUN", liBurningHomeRunElo) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber BURNINGHOMERUN");
+    CGS_ASSERT(lbOk, "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), mpServerInterface->GetMessageBufferLength(), \"BURNINGHOMERUN\", liBurningHomeRunElo)");
 
     SendCustomCommand(E_ACTION_SET_ELO, mpServerInterface->GetMessageBuffer());
 }
@@ -977,8 +977,8 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
         }
         else if (liCode == KI_CODE_NO_STATS)
         {
-            // The server reports the local player has no stats yet -- log it, fail quietly.
-            // (X360 streams the note into the global net log; modelled as a no-op success=false.)
+            // ARTIST 8258A2FC..A310: retain the exact original diagnostic (including its typo).
+            *CgsDev::Log::gpDebugPrint << "Note: Setting of stats failed as the local player nas not stats!";
             lbSuccess = false;
         }
     }
