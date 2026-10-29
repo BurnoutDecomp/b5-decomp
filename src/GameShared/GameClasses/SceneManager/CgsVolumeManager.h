@@ -81,6 +81,16 @@ namespace CgsSceneManager
         bool                        mbStaticVolume;      // h:66  console +0x18
     };
 
+} // namespace CgsSceneManager
+
+namespace CgsContainers
+{
+    // ARTIST SceneManagerModule constructor 0x827E1E30 does not clear this pool.
+    template <> inline ObjectPool<CgsSceneManager::VolumeManagerVolume, 5048, s32>::ObjectPool() {}
+}
+
+namespace CgsSceneManager
+{
     class VolumeManager
     {
     public:
