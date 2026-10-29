@@ -9,8 +9,8 @@ namespace CgsAttribSys
 // These are the manager's file-scope statics from the DWARF home. Only the two
 // the getter touches are load-bearing for this TU (sbHasLinearAllocator gates the
 // access; sAttribSysAllocator is the returned instance == X360 &dword_83011B94);
-// the others are defined here so the home links once Prepare()/the other accessors
-// are bodied in their own TUs.
+// Construct clears the same pointer/flag that Prepare adopts; ARTIST stores the
+// linear pointer at 0x83011BAC and the flag at 0x83011BB0.
 CgsMemory::LinearMalloc*  AttribSysMemoryManager::spLinearAllocator   = NULL;
 bool                      AttribSysMemoryManager::sbHasLinearAllocator = false;
 AttribSysPackageAllocator AttribSysMemoryManager::sAttribSysAllocator;

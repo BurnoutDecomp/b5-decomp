@@ -62,12 +62,8 @@ public:
     // Out-of-line so MSVC emits the ??_G scalar deleting destructor @ X360 0x827DD340.
     ~AttribSysGarbageCollector() ;
 
-    // @ 0x827DD330 (16-byte body, dumped from the ARTIST .i64 via the GC vtable
-    // @0x820CEA34): lwz miTotalFreedSoFar / add r6 / stw / blr -- the debug
-    // counter accumulates the r6 argument, which at every ReleaseAsset call
-    // site holds the block DATA POINTER (not the size; an X360-shipped quirk of
-    // the diagnostic counter, reproduced as the truncated add). The asset id is
-    // the 64-bit vault AssetID (attribloadandgo.h).
+    // X360 0x827DD330 accumulates r7, the released block size. The native ABI
+    // passes the 64-bit AssetID in r5, the data pointer in r6 and the size in r7.
     void ReleaseData(u8 luType, Attrib::Vault::AssetID lAssetId,
                      void* lpData, unsigned int luSize) ;
 
@@ -102,7 +98,7 @@ public:
 
     // Resumable bring-up: base module, then the AttribSys memory managers, vault array and
     // a freshly-allocated schema vault. liMaxNumVaults > 0. X360 0x82807620.
-    bool Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
+    virtual bool Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
                  CgsMemory::HeapMalloc* lpAttribSysHeap,
                  CgsMemory::HeapMalloc* lpGameTalkHeap,
                  CgsMemory::HeapMalloc* lpEastlHeap,
@@ -110,20 +106,15 @@ public:
 
     bool Release() ;                     // X360 0x82802520
     void Destruct() ;                    // X360 0x82804380
-    void Update(const AttribSysIO::InputBuffer* lpInputBuffer);   // X360 0x8280FC60
+    virtual void Update(const AttribSysIO::InputBuffer* lpInputBuffer);   // X360 0x8280FC60
 
     // Drain every queued vault/schema request from the read-locked input buffer. X360 0x8280FB60.
     void ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffer);
 
-    bool IsSchemaLoaded() const { return sbSchemaLoaded; }
-    // The same flag without needing a module instance. The console's callers all have one
-    // (they reach the module through the scheduler); the PC's gated-interior call sites --
-    // e.g. WorldEntityModule::PrepareSurfaceList -- do not, and the flag is a file-scope
-    // static on both targets. Added 2026-08-16 with boot audit F-P7-20.
-    static bool IsSchemaLoadedStatic() { return sbSchemaLoaded; }
+    bool IsSchemaLoaded() { return sbSchemaLoaded; }
 
     // X360 0x828025E8 -- the live vault array (returned via the module's static pointer).
-    const VaultArray* GetVaultArray() const;
+    const VaultArray* GetVaultArray();
 
     // X360 0x8280FF50 -- the GameTalk message handler registered on the "AttribSys.xenon"
     // channel by CgsGameTalk::Prepare. A plain (context-free) MessageHandler, hence static:
@@ -138,8 +129,22 @@ private:
     void RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegisterSchemaRequest);   // X360 0x8280E4A0
     void UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest);
 
+    static void _AssertLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(CgsModule::ModuleSingleBuffered) == 0x228), "native single-buffered module base");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, mMemoryManager) == 0x228), "native memory manager");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, mDebugComponent) == 0x22C), "native debug component");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, mGarbageCollector) == 0x238), "native garbage collector");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, mpSchemaVault) == 0x240), "native schema vault pointer");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, mVaultArray) == 0x248), "native vault array");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, mePrepareStage) == 0x268), "native prepare stage");
+        CGS_STATIC_ASSERT((offsetof(AttribSysModule, meReleaseStage) == 0x26C), "native release stage");
+        CGS_STATIC_ASSERT((sizeof(Attrib::Vault) == 0x58), "native schema vault allocation");
+        CGS_STATIC_ASSERT((sizeof(AttribSysModule) == 0x270), "native AttribSys module");
+    }
+
     // --- members (DWARF order; X360 offsets 0x228.. ) ---
-    AttribSysMemoryManager    mMemoryManager;     // X360 +0x228 (all-static front-end; see .h)
+    AttribSysMemoryManager    mMemoryManager;     // X360 +0x228 (native lifecycle receiver)
     AttribSysDebugComponent   mDebugComponent;    // X360 +0x22C
     AttribSysGarbageCollector mGarbageCollector;  // X360 +0x238
     Attrib::Vault*            mpSchemaVault;       // X360 +0x240 (the one loaded schema vault)

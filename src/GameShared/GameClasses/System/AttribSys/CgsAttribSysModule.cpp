@@ -1,12 +1,12 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"
 
+#include <cstddef>                                                 // native layout assertions
 #include <new>                                                     // placement new (RegisterSchema)
 #include <string.h>                                                // strcmp (channel match)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::InputBuffer + requests + Inp
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"          // LinearMalloc::Malloc (schema vault)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h" // the debug log window
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // gpDebugPrint / gxMessageFilterFlags (the PC vault-gate one-shot logs)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"   // Attrib::Database
 #include "SDKs/EA/GameTalk/GameTalk.h"                              // EA::GameTalk::GameTalkMessage accessors
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelink.h" // Attrib::DecodeLiveLinkMessage
@@ -23,10 +23,6 @@ CgsDev::DebugUI::LogWindow sLogWindow;
 
 namespace
 {
-    // The module's debug log window (X360 off_82F31050) and its running line counter
-    // (X360 dword_83011BAC), constructed in AttribSysModule::Construct. Pure debug plumbing.
-    s32                        siLogLineCount = 0;
-
     // X360 schema vault allocation size (CgsAttribSysModule.cpp:151 -> LinearMalloc::Malloc(.., 88)).
     const s32 KI_SCHEMA_VAULT_BYTES = 88;
 }
@@ -55,15 +51,12 @@ AttribSysGarbageCollector::~AttribSysGarbageCollector()
 {
 }
 
-// @ 0x827DD330 -- the GC callback (real body; the trap is retired). The X360's
-// four instructions accumulate the third GPR argument -- the released block's
-// DATA POINTER at every DataBlock::ReleaseAsset site -- into the debug counter
-// (a shipped quirk of the diagnostic; kept faithfully as the truncated add).
-// The engine statically owns every vault image, so no memory is freed here.
+// @ 0x827DD330 -- account the released byte count. AssetID occupies one native
+// 64-bit GPR (r5); data is r6 and size is r7, which the ARTIST add consumes.
 void AttribSysGarbageCollector::ReleaseData(u8 /*luType*/, Attrib::Vault::AssetID /*lAssetId*/,
-                                            void* lpData, unsigned int /*luSize*/)
+                                            void* /*lpData*/, unsigned int luSize)
 {
-    miTotalFreedSoFar += static_cast<s32>(reinterpret_cast<uintptr_t>(lpData));
+    miTotalFreedSoFar = static_cast<s32>(static_cast<u32>(miTotalFreedSoFar) + luSize);
 }
 
 // @ 0x8280AD50 -- one-time construction. Builds the base module, the GC, vault array and debug
@@ -71,11 +64,10 @@ void AttribSysGarbageCollector::ReleaseData(u8 /*luType*/, Attrib::Vault::AssetI
 // array into the static accessor, and marks this as a "new" (lock-free) module.
 void AttribSysModule::Construct()
 {
+    _AssertLayout();
     ModuleSingleBuffered::Construct();
 
-    // Reset the per-frame memory-manager flag (sbHasLinearAllocator) and the debug line count.
-    AttribSysMemoryManager::Construct();
-    siLogLineCount = 0;
+    mMemoryManager.Construct();
 
     mGarbageCollector.Construct();
     mpSchemaVault  = 0;
@@ -97,7 +89,7 @@ void AttribSysModule::Construct()
 }
 
 // @ 0x828025E8 -- hand back the live vault array (the static published by Construct).
-const VaultArray* AttribSysModule::GetVaultArray() const
+const VaultArray* AttribSysModule::GetVaultArray()
 {
     return spVaultArray;
 }
@@ -152,7 +144,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
             CGS_ASSERT(lpEastlHeap     != 0, "lpEastlHeap != NULL");
             CGS_ASSERT(liMaxNumVaults > 0,         "liMaxNumVaults > 0");
 
-            AttribSysMemoryManager::Prepare(lpLinearAlloc, lpAttribSysHeap,
+            mMemoryManager.Prepare(lpLinearAlloc, lpAttribSysHeap,
                                             lpGameTalkHeap, lpEastlHeap);
             mVaultArray.Prepare(liMaxNumVaults, lpLinearAlloc);
 
@@ -198,7 +190,7 @@ bool AttribSysModule::Release()
     }
 }
 
-// @ 0x82804380 -- tear down the base module then the garbage collector.
+// @ 0x82804380 -- tear down the base module and debug component.
 void AttribSysModule::Destruct()
 {
     ModuleSingleBuffered::Destruct();
@@ -216,7 +208,6 @@ void AttribSysModule::Update(const AttribSysIO::InputBuffer* lpInputBuffer)
 
     if (sbSchemaLoaded)
     {
-        CGS_ASSERT(Attrib::Database::IsInitialized(), "Attribute database not initialized.");
         Attrib::Database::Get().CollectGarbage();
     }
 }
@@ -270,11 +261,13 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
 // it; the world passes 1 and only tests queue length).
 void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegisterVaultRequest)
 {
+    CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");
+    mVaultArray.RegisterVault(lpRegisterVaultRequest);
 
-    // Reply: AddEvent(request->mpUserReceiverQueue, &request->miEventId, type 3, size 4).
+    const s32 liEventId = lpRegisterVaultRequest->miEventId;
     lpRegisterVaultRequest->mpUserReceiverQueue->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lpRegisterVaultRequest->miEventId),
-        3, static_cast<s32>(sizeof(s32)));
+        reinterpret_cast<const CgsModule::Event*>(&liEventId),
+        3, static_cast<s32>(sizeof(liEventId)));
 }
 
 // @ 0x8280F9D0 -- unregister a data vault: assert the schema is live, drop the array's
@@ -283,10 +276,14 @@ void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegiste
 // @0x8266EAA0 uses it as the GameData event-slot index).
 void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest)
 {
+    CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");
+    CGS_ASSERT(lpUnregisterVaultRequest != 0, "lpUnregisterVaultRequest != NULL");
+    mVaultArray.UnregisterVault(lpUnregisterVaultRequest);
 
+    const s32 liEventId = lpUnregisterVaultRequest->miEventId;
     lpUnregisterVaultRequest->mpUserReceiverQueue->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lpUnregisterVaultRequest->miEventId),
-        5, static_cast<s32>(sizeof(s32)));
+        reinterpret_cast<const CgsModule::Event*>(&liEventId),
+        5, static_cast<s32>(sizeof(liEventId)));
 }
 
 // @ 0x8280E4A0 -- load the (single) schema: construct the schema vault over the request's
