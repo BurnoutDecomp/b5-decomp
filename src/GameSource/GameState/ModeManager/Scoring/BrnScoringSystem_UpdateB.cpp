@@ -728,7 +728,7 @@ namespace BrnGameState
             mOnlineStuntModeScoring.PreWorldUpdate(lpOutputActionQueue);
             mOnlineStuntModeScoring.SetOnlineChainableMultiplierDisplay(
                 &laChainableMultipliers,
-                StuntModeScoring::KI_ONLINE_CHAINABLE_DISPLAY_BYTES);
+                StuntModeScoringOnline::KI_ONLINE_CHAINABLE_DISPLAY_BYTES);
         }
     }
 }

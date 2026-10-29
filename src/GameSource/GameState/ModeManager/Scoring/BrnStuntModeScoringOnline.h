@@ -31,14 +31,6 @@
 //   +0x2515  bool       mbStuntModeEndedCached           -- cached HasStuntModeEnded result (online)
 //   +0x2516  bool       mbCarsAroundPlayerCaptured       -- the at-takeoff car snapshot has been taken
 //
-// NOTE / FLAG (committed-base overlap): the *base* StuntModeScoring home (BrnStuntModeScoring.h) already
-// modelled the +0x23F0 132-byte region as `maOnlineChainableMultiplierDisplay[132]` and +0x2515 as
-// `mbOnlineChainableUpdateSuppressed`, calling them "StuntModeScoring online internals". The X360 asm
-// proves those slots are owned by THIS derived class, and that +0x23F0 is a typed
-// Array<ChainableMultiplierInfo,8> (data+count == exactly 132 bytes), not raw bytes. This TU declares
-// its own typed members for them; reconciling the duplicate base-home approximation is the base home's
-// concern (flagged for the conductor). We do NOT grow/retype the base home here.
-
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                    // Vector3
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
@@ -192,6 +184,17 @@ namespace BrnGameState
 
     public:
         // Named access for the cached online "mode ended" flag (Prepare/Relase/ClearData reset it).
+        // 0x8234CE48 reads the cached-ended flag at +0x2515 and copies the
+        // 132-byte chainable table to +0x23F0 in this derived object.
+        bool IsOnlineChainableUpdateSuppressed() const { return mbStuntModeEndedCached; }
+        static const s32 KI_ONLINE_CHAINABLE_DISPLAY_BYTES = 132;
+        void SetOnlineChainableMultiplierDisplay(const void* lpData, s32 liSizeInBytes)
+        {
+            CGS_ASSERT(lpData != NULL, "lpData");
+            CGS_ASSERT(liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES, "liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES");
+            memcpy(&maChainableMultiplierInfo, lpData, static_cast<size_t>(liSizeInBytes));
+        }
+
         bool GetStuntModeEndedCached() const { return mbStuntModeEndedCached; }
         void SetStuntModeEndedCached(bool lbEnded) { mbStuntModeEndedCached = lbEnded; }
     };

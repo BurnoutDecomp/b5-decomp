@@ -724,7 +724,6 @@ namespace BrnGameState
                                   EActiveRaceCarIndex leRaceCarIndex,
                                   GameStateModuleIO::EGameModeType leGameMode);                         // :1025 / 0x8232BC78
         void ClearNetworkRoundData();                                                         // :1029
-        NetworkRoundData* GetNetworkRoundData()       { return &mNetworkRoundData; }          // :1033 (inline)
 
         f32  GetPlayerWrongWayTime() const            { return mfPlayerTimeHeadingTheWrongWay; } // :1037
         f32  GetPlayerStationaryTime() const          { return mfPlayerTimeStationary; }      // :1041
@@ -885,9 +884,7 @@ namespace BrnGameState
 
         BaseOnlineModeScoring* mpCurrentOnlineModeScoring;            // :1224  X360 ss+0x4DC8
 
-        NetworkRoundData mNetworkRoundData;          // :1227
-
-        // X360 ScoringSystem +19920 (0x4DC0). The per-event online results aggregate the keystone
+        // X360 ScoringSystem +0x4DD0. The per-event online results aggregate the keystone
         // layout previously omitted -- restored as a by-value member so SaveNetworkRoundData /
         // ClearData / WriteDataToOutput can reach it by name (the full type is in BrnGameActions.h,
         // its own DWARF home; semantic-parity placement, not byte-exact -- accessed by name only).
