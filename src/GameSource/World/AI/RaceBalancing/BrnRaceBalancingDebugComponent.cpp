@@ -91,6 +91,23 @@ int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText
 namespace BrnAI
 {
 
+// Construct is inlined into AIModule::Construct @0x82794D7C..0x82794D88.
+// Preserve the exact four component-relative stores before Register.
+void RaceBalancingDebugComponent::Construct(AIModule* lpAIModule,
+                                              RaceBalancingManager* lpRaceBalancingManager)
+{
+    mpAIModule = lpAIModule;
+    mpRaceBalancingManager = lpRaceBalancingManager;
+    miCurrentRival = 0;
+    mbShowData = true;
+}
+
+// The Race Balancing vtable uses ARTIST's shared AI path getter @0x82767678.
+const char* RaceBalancingDebugComponent::GetPath() const
+{
+    return "AI";
+}
+
 // ====================================================================================================
 // GetName  @0x82767668
 // ====================================================================================================
