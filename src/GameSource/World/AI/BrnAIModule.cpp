@@ -25,7 +25,7 @@
 // stage 2 below.
 //
 // ⚠️ What is still parked is flagged individually at its site (see the Construct banner): the
-// AIDebugComponent, the RouteMapDebugComponent, the six perf monitors and the ContactSpyInterface.
+// AIDebugComponent, the six perf monitors and the ContactSpyInterface.
 // =================================================================================================
 
 namespace BrnAI
@@ -88,7 +88,7 @@ AIModule::AIModule()
 //   ...         stw 0,  0x47F6C(this)   mePrepareStage     = E_PREPARESTAGE_START
 //   ...         stw 0,  0x47F74(this)   meLoadMapDataStage = 0
 //   ...         stw 3,  0x47F70(this)   meReleaseStage     = E_RELEASESTAGE_DONE
-//   ...         (the +270908..+270948 AIDebugComponent seed block + its Register)
+//   ...         (the +270908..+270948 RaceBalancingManager / embedded debug component init+Register)
 //   ...         bl  BrnAI::RouteRequestManager::Construct(this + 270952)
 //   ...         stw 1024, 0x47FC0 / stw 16, 0x47FC4 / stw this+0x47FC8, 0x47FB0
 //                                      == EventReceiverQueue<1024,16>::Construct
@@ -112,7 +112,7 @@ AIModule::AIModule()
 //
 // ⚠️ [FLAG PC boot gate] PARKED, each for the same reason -- the owning TU is not mounted and the
 // member has no named home in this class's pad spine:
-//     * the AIDebugComponent seed block (+270908..+270948), its Construct(+271532) and Register
+//     * the separate AIDebugComponent seed/Construct (+271532) and Prepare-stage Register (+271532)
 //     * the six "AI Module, ..." perf monitors  (Update's StartMonitor/StopMonitor legs are parked
 //       with them)
 //     * +322040/+322044 and ContactSpyInterface::Construct(+322408)
@@ -125,7 +125,9 @@ void AIModule::Construct()
     meLoadMapDataStage = E_LOADMAPDATA_REQUEST_BUNDLE;
     meReleaseStage     = E_RELEASESTAGE_DONE;
 
-    // [FLAG PC boot gate] the AIDebugComponent seed block + Register -- see the banner.
+    // ARTIST 0x82794D64..0x82794D8C initializes the embedded race-balancing manager
+    // and registers its debug component.
+    mRaceBalancingManager.Construct(this);
 
     mResourceReceiverQueue.Construct();
 
@@ -163,7 +165,7 @@ void AIModule::Construct()
         maAICars[leCar].Construct(leCar);
     }
 
-    // [FLAG PC boot gate] The six perf monitors and AIDebugComponent::Construct
+    // [FLAG PC boot gate] The six perf monitors and separate AIDebugComponent::Construct
     // remain parked -- see the banner.
 
     // ⭐ The two player cursors. The console DOES store both here, and both are 0:

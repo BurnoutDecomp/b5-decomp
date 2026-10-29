@@ -9,6 +9,7 @@ namespace CgsResource { class DebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
+namespace BrnAI { class RaceBalancingDebugComponent; }
 
 // CgsDev::DebugComponent - the base every in-game debug component derives from (perfmon
 // overlays, the takedown/mode-manager debug menus, etc.). Subclasses register their member
@@ -59,6 +60,13 @@ namespace CgsDev
         friend struct BrnGui::GuiDebugComponent;
         struct GuiConstructorTag {};
         explicit DebugComponent(GuiConstructorTag) {}
+
+        // AIModule::AIModule @0x827E37FC installs this embedded component vtable
+        // without writing the base active/list fields. Preserve those bytes until
+        // the original two-phase Construct path runs.
+        friend class BrnAI::RaceBalancingDebugComponent;
+        struct RaceBalancingConstructorTag {};
+        explicit DebugComponent(RaceBalancingConstructorTag) {}
 
     public:
         DebugComponent();

@@ -48,8 +48,15 @@ namespace BrnAI
 class RaceBalancingDebugComponent : public CgsDev::DebugComponent
 {
 public:
-    // Two-phase init: wire up the AI module + race-balancing manager pointers and seed the state.
-    // (No standalone X360 symbol in this TU; declared for the call surface, bodied elsewhere.)
+    // ARTIST AIModule::AIModule writes the embedded component vtable but no DebugComponent
+    // active/list data. Select a base construction path that preserves those fields.
+    RaceBalancingDebugComponent()
+        : CgsDev::DebugComponent(CgsDev::DebugComponent::RaceBalancingConstructorTag{})
+    {
+    }
+
+    // Two-phase init: wire up the two owners and seed the controls; the four stores are
+    // inlined into AIModule::Construct on X360.
     void Construct(AIModule* lpAIModule, RaceBalancingManager* lpRaceBalancingManager);
 
     // Base teardown (bodied in its own TU; declared for the DWARF surface).
