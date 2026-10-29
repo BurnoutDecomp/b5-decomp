@@ -176,6 +176,17 @@ namespace BrnPhysics
             CgsModule::EventQueue<SetModelCollisionEvent, 28>         mSetModelCollisionEventQueue;        // X360 +4128
             CgsModule::EventQueue<SetModelCullingGroupEvent, 28>      mSetModelCullingGroupEventQueue;     // X360 +4592
             bool mbResetPlayerScratches;                                                                   // X360 +5056
+
+            void LockNativeLayout_()
+            {
+                CGS_STATIC_ASSERT((sizeof(DeformationInputInterface) == 0x13D0), "ARTIST deformation input extent");
+                CGS_STATIC_ASSERT((offsetof(DeformationInputInterface, mRemoveDeformationModelQueue) == 0xC90), "ARTIST remove deformation queue");
+                CGS_STATIC_ASSERT((offsetof(DeformationInputInterface, mDeactivateDeformationModelQueue) == 0xD40), "ARTIST deactivate deformation queue");
+                CGS_STATIC_ASSERT((offsetof(DeformationInputInterface, mValidateDeformationModelEventQueue) == 0xF10), "ARTIST validate deformation queue");
+                CGS_STATIC_ASSERT((offsetof(DeformationInputInterface, mSetModelCollisionEventQueue) == 0x1020), "ARTIST deformation collision queue");
+                CGS_STATIC_ASSERT((offsetof(DeformationInputInterface, mSetModelCullingGroupEventQueue) == 0x11F0), "ARTIST deformation culling queue");
+                CGS_STATIC_ASSERT((offsetof(DeformationInputInterface, mbResetPlayerScratches) == 0x13C0), "ARTIST scratch-reset flag");
+            }
         };
     }
 }
