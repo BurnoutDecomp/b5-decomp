@@ -540,7 +540,8 @@ namespace BrnTraffic
         // zero input yields the same non-finite lanes the console's estimate would.
         Vector3 UnitVector(Vector3 lVector)
         {
-            return lVector * (1.0f / std::sqrt(rw::math::vpu::Dot(lVector, lVector)));
+            namespace Vmx = rw::math::vpu::SLerpDetail;
+            return Vmx::Scale(lVector, Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lVector, lVector), 2));
         }
     }
 
@@ -651,12 +652,23 @@ namespace BrnTraffic
     void DebugComponent::DrawOffsetArrow(Vector3 lFrom, Vector3 lTo, f32 lfOffset, rw::RGBA lColour,
                                          CgsDev::Debug3DImmediateRender* lpDisplay) const
     {
-        const Vector3 lUp        = { 0.0f, 1.0f, 0.0f, 0.0f };
+        namespace Vmx = rw::math::vpu::SLerpDetail;
+        const Vector3 lUp = {0.0f, 1.0f, 0.0f, 0.0f};
         const Vector3 lDirection = UnitVector(lTo - lFrom);
-        const Vector3 lSide      = UnitVector(rw::math::vpu::Cross(lUp, lDirection));
-        const Vector3 lOffset    = lSide * lfOffset;
-
-        DrawArrow(lFrom + lOffset, lTo + lOffset, lColour, lpDisplay);
+        // Original vpermwi 0x63 / vmul / vnmsub / vpermwi cross, including W.
+        const Vector3 lCross = {
+            Vmx::NegativeMultiplySubtract(lUp.z, lDirection.y, lUp.y * lDirection.z),
+            Vmx::NegativeMultiplySubtract(lUp.x, lDirection.z, lUp.z * lDirection.x),
+            Vmx::NegativeMultiplySubtract(lUp.y, lDirection.x, lUp.x * lDirection.y),
+            Vmx::NegativeMultiplySubtract(lUp.w, lDirection.w, lUp.w * lDirection.w)};
+        const Vector3 lSide = UnitVector(lCross);
+        const auto OffsetPoint = [lSide, lfOffset](Vector3 lPoint) {
+            return Vector3{std::fmaf(lSide.x, lfOffset, lPoint.x),
+                           std::fmaf(lSide.y, lfOffset, lPoint.y),
+                           std::fmaf(lSide.z, lfOffset, lPoint.z),
+                           std::fmaf(lSide.w, lfOffset, lPoint.w)};
+        };
+        DrawArrow(OffsetPoint(lFrom), OffsetPoint(lTo), lColour, lpDisplay);
     }
 }
 
