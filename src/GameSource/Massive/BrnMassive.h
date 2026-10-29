@@ -105,24 +105,50 @@ namespace BrnMassive
         bool                    IsSafeToDownload();
         void                    SetIsPaused(bool lbPaused);
 
-        // Read and written directly by the world entity module's impression pass.
-        bool                    mbSafeToDownload;                                  // +0x92D
-        bool                    mbImpressionFrameStarted;                          // +0x92E
-        bool                    mbIsPaused;                                        // +0x92F
-
         s32                     GetNumActiveSubscribers() const { return mnNumActiveSubscribers; }
 
     private:
+        static void _AssertLayout()
+        {
+            CGS_STATIC_ASSERT((sizeof(BrnMassiveSubscriber) == 0x98), "native subscriber pool stride");
+            CGS_STATIC_ASSERT((__alignof(BrnMassiveSubscriber) == 4), "native subscriber pool alignment");
+            CGS_STATIC_ASSERT((offsetof(BrnMassiveSubscriber, mImpression) == 0x58), "native impression block");
+            CGS_STATIC_ASSERT((offsetof(BrnMassiveSubscriber, mpTextureData) == 0x8C), "native texture pointer");
+            CGS_STATIC_ASSERT((offsetof(BrnMassiveSubscriber, mbImpressionReported) == 0x94), "native impression latch");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, maSubscriberPool) == 0), "native pool at object base");
+            CGS_STATIC_ASSERT((sizeof(((BrnMassive*)0)->maSubscriberPool) == 0x8E8), "native pool cleared byte count");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mapSubscribers) == 0x8E8), "native subscriber pointers");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mnNumActiveSubscribers) == 0x924), "native active count");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mpLookupTable) == 0x928), "native table pointer");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mbField92C) == 0x92C), "native unused flag");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mbSafeToDownload) == 0x92D), "native download flag");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mbImpressionFrameStarted) == 0x92E), "native frame flag");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mbIsPaused) == 0x92F), "native pause flag");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, mDebugComponent) == 0x930), "native debug component");
+            CGS_STATIC_ASSERT((offsetof(BrnMassive, maiSubscriberDebugState) == 0x96C), "native debug states");
+            CGS_STATIC_ASSERT((sizeof(BrnMassive) == 0x990), "native Massive bridge size");
+        }
+
         BrnMassiveSubscriber* GetPoolSlot(s32 liSlot)
         {
             return reinterpret_cast<BrnMassiveSubscriber*>(maSubscriberPool) + liSlot;
         }
 
- // +0x000
+        // Construct @823AB5C0 clears exactly 0x8E8 bytes. CreateSubscriber
+        // @823C1528 placement-constructs at this + index*0x98. This is raw
+        // subscriber storage: its constructors run only when a slot is used.
+        CGS_ALIGN(4) u8 maSubscriberPool[KI_MAX_SUBSCRIBERS * sizeof(BrnMassiveSubscriber)]; // +0x000
         BrnMassiveSubscriber*    mapSubscribers[KI_MAX_SUBSCRIBERS];               // +0x8E8
         s32                      mnNumActiveSubscribers;                           // +0x924
         MassiveLookupTable*      mpLookupTable;                                    // +0x928
         bool                     mbField92C;                                       // +0x92C
+    public:
+        // Read and written directly by the world entity module's impression pass.
+        bool                    mbSafeToDownload;                                  // +0x92D
+        bool                    mbImpressionFrameStarted;                          // +0x92E
+        bool                    mbIsPaused;                                        // +0x92F
+
+    private:
         BrnMassiveDebugComponent mDebugComponent;                                  // +0x930
         s32                      maiSubscriberDebugState[KI_NUM_IMPRESSION_EVENTS]; // +0x96C
     };

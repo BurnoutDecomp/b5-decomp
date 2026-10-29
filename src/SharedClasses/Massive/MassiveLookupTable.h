@@ -1,7 +1,7 @@
 #ifndef SHAREDCLASSES_MASSIVE_MASSIVELOOKUPTABLE_H
 #define SHAREDCLASSES_MASSIVE_MASSIVELOOKUPTABLE_H
 
-#include <cstddef>   // offsetof (the wire-contract pins)
+#include <cstddef>   // offsetof (the native resource layout)
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, CgsID
@@ -12,10 +12,11 @@
 // world renderables drawing it. BrnMassive::GetSubscriberDataAtIndex matches the renderable
 // index and caches the live subscriber pointer in the item.
 //
-// Member set from the debug-info declaration (SharedClasses/Massive/MassiveLookupTable.h). Loaded in
-// place, so the host layout is a wire contract with tools/assets/bundles/nonapt_transcode.py
-// (_massive_table): header {s32 count, pad, u64 item offset}, 64-byte items with the subscriber
-// pointer widened to 8 bytes. _AssertLayout pins it.
+// Native ARTIST resource layout, corroborated by the DecFIGS declaration. FixUp/FixDown
+// @8267F0D8/8267F138 relocate mpItems at +4 and visit 64-byte records. The consumer
+// GetSubscriberDataAtIndex @822A3F08 loads mpSubscriber at +0x28, miIEIndex at +0x2C,
+// and muRenderableIndex at +0x30. Vector3's 16-byte alignment supplies the tail
+// alignment; the resource contains the original 32-bit pointers.
 
 namespace BrnMassive
 {
@@ -27,8 +28,8 @@ namespace BrnMassive
         Vector3               mBoundingBoxMax;     // +0x10
         CgsID                 mSceneID;            // +0x20
         BrnMassiveSubscriber* mpSubscriber;        // +0x28 (null in the data; cached at runtime)
-        s32                   miIEIndex;           // +0x30
-        u8                    muRenderableIndex;   // +0x34
+        s32                   miIEIndex;           // +0x2C
+        u8                    muRenderableIndex;   // +0x30
     };
 
     struct MassiveLookupTable
@@ -46,18 +47,22 @@ namespace BrnMassive
 
     private:
         s32                     miNumberItems;   // +0x00
-        MassiveLookupTableItem* mpItems;         // +0x08 (serialised as an offset from the base)
+        MassiveLookupTableItem* mpItems;         // +0x04 (serialised as an offset from the base)
     };
 
     inline void MassiveLookupTable::_AssertLayout()
     {
+        CGS_STATIC_ASSERT((sizeof(void*) == 4), "MassiveLookupTable stores native 32-bit pointers");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTable, miNumberItems) == 0), "miNumberItems at +0");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, mBoundingBoxMin) == 0), "mBoundingBoxMin at +0");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, mBoundingBoxMax) == 0x10), "mBoundingBoxMax at +0x10");
         CGS_STATIC_ASSERT((sizeof(MassiveLookupTableItem) == 0x40), "MassiveLookupTableItem is a 64-byte record");
         CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, mSceneID) == 0x20), "mSceneID at +0x20");
         CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, mpSubscriber) == 0x28), "mpSubscriber at +0x28");
-        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, miIEIndex) == 0x30), "miIEIndex at +0x30");
-        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, muRenderableIndex) == 0x34), "muRenderableIndex at +0x34");
-        CGS_STATIC_ASSERT((offsetof(MassiveLookupTable, mpItems) == 0x08), "mpItems at +0x08");
-        CGS_STATIC_ASSERT((sizeof(MassiveLookupTable) == 0x10), "the table header is 16 bytes");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, miIEIndex) == 0x2C), "miIEIndex at +0x2C");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTableItem, muRenderableIndex) == 0x30), "muRenderableIndex at +0x30");
+        CGS_STATIC_ASSERT((offsetof(MassiveLookupTable, mpItems) == 0x04), "mpItems at +0x04");
+        CGS_STATIC_ASSERT((sizeof(MassiveLookupTable) == 0x08), "the native table header is 8 bytes");
     }
 }
 
