@@ -515,7 +515,7 @@ namespace CgsMemory
     MemoryModule::InitOptions::InitOptions()
         : muMaxBanks(0), muHighestId(0), muMaxBlocks(0)
     {
-        for (s32 li = 0; li < 6; ++li)
+        for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
         {
             maResourceSets[li].mpDataStart = 0;
             maResourceSets[li].muDataSize  = 0;
@@ -574,8 +574,8 @@ namespace CgsMemory
         muMaxBlocks = luMaxBlocks;
         muHighestId = luHighestId;
 
-        // Copy the caller's root memory regions (X360 copies KI_NUM_TYPES of them; the table holds 6).
-        for (u32 ls = 0; ls < 6; ++ls)
+        // ARTIST8286AF0C..8286AF58: copy the five 12-byte root resource sets.
+        for (u32 ls = 0; ls < MemoryBank::KI_NUM_TYPES; ++ls)
             maRootSets[ls] = lpInitOptions->maResourceSets[ls];
     }
 

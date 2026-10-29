@@ -65,7 +65,7 @@ namespace CgsMemory
             u32             muMaxBanks;
             u32             muHighestId;
             u32             muMaxBlocks;
-            RootResourceSet maResourceSets[6];
+            RootResourceSet maResourceSets[MemoryBank::KI_NUM_TYPES];
 
             InitOptions();
         };
@@ -154,7 +154,7 @@ namespace CgsMemory
         u32                    muFirstFreeBlock;
         u32                    muNumFreeBlocks;
         CgsMemory::LinearMalloc mScratchSpace;     // bump allocator over the backing region
-        RootResourceSet        maRootSets[6];
+        RootResourceSet        maRootSets[MemoryBank::KI_NUM_TYPES];
         DebugComponentMemory   mDebugComponentMemory;
     };
 }
