@@ -63,9 +63,9 @@ ClutchControl::ClutchControl()
 
 ClutchControl::~ClutchControl() {}
 
-CgsSound::Logic::EffectControl* ClutchControl::CreateObject(u32 /*luType*/)
+CgsSound::Logic::EffectControl* ClutchControl::CreateObject(u32 luType)
 {
-    return new ClutchControl();
+    return new ("ClutchControl", luType != 0) ClutchControl();
 }
 
 s32 ClutchControl::GetController(s32 aiSlot)
@@ -425,9 +425,9 @@ void ClutchControl::Notify(const CgsSound::Io::MessageHeader* apkMessage)
 AIClutchControl::AIClutchControl() : ClutchControl() {}
 AIClutchControl::~AIClutchControl() {}
 
-CgsSound::Logic::EffectControl* AIClutchControl::CreateObject(u32 /*luType*/)
+CgsSound::Logic::EffectControl* AIClutchControl::CreateObject(u32 luType)
 {
-    return new AIClutchControl();
+    return new ("AIClutchControl", luType != 0) AIClutchControl();
 }
 
 } // namespace Engines

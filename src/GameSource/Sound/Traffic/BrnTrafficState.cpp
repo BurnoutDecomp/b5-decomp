@@ -21,9 +21,9 @@ TrafficState::~TrafficState()
 }
 
 // MemBase::operator new(0x58, "TrafficState", flavour) with the constructor inlined.
-CgsSound::Logic::State* TrafficState::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::State* TrafficState::CreateObject(u32 luType)
 {
-    return new TrafficState();
+    return new ("TrafficState", luType != 0) TrafficState();
 }
 
 // Descriptor {0x30000, "TrafficState", BrnState::sTypeInfo, &CreateObject}.

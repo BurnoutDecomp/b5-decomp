@@ -90,9 +90,9 @@ TrafficSkid::~TrafficSkid()
 
 // MemBase::operator new(0xB0, "TrafficSkid", flavour) + the constructor; returns the
 // EffectObject view (+0x04).
-CgsSound::Logic::EffectObject* TrafficSkid::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* TrafficSkid::CreateObject(u32 luType)
 {
-    return new TrafficSkid();
+    return new ("TrafficSkid", luType != 0) TrafficSkid();
 }
 
 // Descriptor {0x30020, "TrafficSkid", BrnEffectObject::sTypeInfo, &CreateObject}.

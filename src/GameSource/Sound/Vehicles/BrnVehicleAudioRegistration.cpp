@@ -36,38 +36,41 @@
 // initializer and avoids creating PC-only stand-in effect classes.
 namespace
 {
-template <class T>
-CgsSound::Logic::EffectControl* CreateVehicleControl(u32)
+// Each specialization retains the same descriptor and its original interned tag.
+// Registration initializes it before publishing the native factory callback.
+template <class T, class Base>
+struct VehicleRegistration
 {
-    return new T();
-}
+    static CgsSound::Logic::ClassTypeInfo<Base>& Get(s32 aiObjectId = 0,
+                                                    const char* apTypeName = 0)
+    {
+        static CgsSound::Logic::ClassTypeInfo<Base> sTypeInfo(
+            aiObjectId, apTypeName, Base::GetStaticTypeInfo(), &Create);
+        return sTypeInfo;
+    }
 
-template <class T>
-CgsSound::Logic::EffectObject* CreateVehicleEffect(u32)
-{
-    return new T();
-}
+    static Base* Create(u32 luType)
+    {
+        return new (Get().typeName, luType != 0) T();
+    }
+};
 
 template <class T>
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* RegisterControl(
     s32 aiObjectId, const char* apTypeName)
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl> sTypeInfo(
-        aiObjectId, apTypeName,
-        CgsSound::Logic::EffectControl::GetStaticTypeInfo(),
-        &CreateVehicleControl<T>);
-    return CgsSound::Logic::EffectControl::AddToClassTypeInfoArray(&sTypeInfo);
+    typedef CgsSound::Logic::EffectControl Base;
+    return Base::AddToClassTypeInfoArray(
+        &VehicleRegistration<T, Base>::Get(aiObjectId, apTypeName));
 }
 
 template <class T>
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* RegisterEffect(
     s32 aiObjectId, const char* apTypeName)
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo(
-        aiObjectId, apTypeName,
-        CgsSound::Logic::EffectObject::GetStaticTypeInfo(),
-        &CreateVehicleEffect<T>);
-    return CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(&sTypeInfo);
+    typedef CgsSound::Logic::EffectObject Base;
+    return Base::AddToClassTypeInfoArray(
+        &VehicleRegistration<T, Base>::Get(aiObjectId, apTypeName));
 }
 
 using namespace BrnSound::Vehicles;

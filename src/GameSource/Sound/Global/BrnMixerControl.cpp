@@ -30,9 +30,9 @@ namespace BrnSound
 namespace Logic
 {
 
-CgsSound::Logic::EffectControl* MixerControl::CreateObject(u32)
+CgsSound::Logic::EffectControl* MixerControl::CreateObject(u32 luType)
 {
-    return new MixerControl();
+    return new ("MixerControl", luType != 0) MixerControl();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* MixerControl::GetStaticTypeInfo()

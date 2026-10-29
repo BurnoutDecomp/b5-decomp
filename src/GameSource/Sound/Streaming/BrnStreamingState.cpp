@@ -123,9 +123,9 @@ StreamingStateManager* StreamingState::GetStreamingStateManager() const
     return static_cast<StreamingStateManager*>(mpStateManager);
 }
 
-CgsSound::Logic::State* StreamingState::CreateObject(u32 /*auType*/)
+CgsSound::Logic::State* StreamingState::CreateObject(u32 luType)
 {
-    return new StreamingState();
+    return new ("StreamingState", luType != 0) StreamingState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* StreamingState::GetStaticTypeInfo()

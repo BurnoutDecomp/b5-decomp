@@ -124,12 +124,11 @@ Passby3DControl::~Passby3DControl()
 // ---------------------------------------------------------------------------
 // Passby3DControl::CreateObject(u32)  @ 0x826E8E18
 //   MemBase::operator new(0xD0, "Passby3DControl", a1 != 0) ; Brn3DEffectControl() ;
-//   vptr = off_820B451C. The host `new` stands in for the sound allocator (the
-//   Collision3DControl::CreateObject treatment).
+//   vptr = off_820B451C. Tagged new uses the shared sound allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* Passby3DControl::CreateObject(u32 /*auAllocator*/)
+CgsSound::Logic::EffectControl* Passby3DControl::CreateObject(u32 luType)
 {
-    return new Passby3DControl();
+    return new ("Passby3DControl", luType != 0) Passby3DControl();
 }
 
 // sTypeInfo @0x82F2F97C: {0x40000, "Passby3DControl", &Brn3DEffectControl::sTypeInfo, CreateObject}.
@@ -202,9 +201,9 @@ PassbyEffect::~PassbyEffect()
 //   MemBase::operator new(0x90, "PassbyEffect", a1 != 0) ; PassbyEffect() ; return this + 4
 //   (the EffectBase sub-object -- the host pointer conversion does the same adjustment).
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectObject* PassbyEffect::CreateObject(u32 /*auAllocator*/)
+CgsSound::Logic::EffectObject* PassbyEffect::CreateObject(u32 luType)
 {
-    return new PassbyEffect();
+    return new ("PassbyEffect", luType != 0) PassbyEffect();
 }
 
 // sTypeInfo @0x82F2F98C: {0x40000, "PassbyEffect", &BrnEffectObject::sTypeInfo, CreateObject}.

@@ -75,12 +75,11 @@ AmbienceEffect::~AmbienceEffect()
 
 // ---------------------------------------------------------------------------
 // AmbienceEffect::CreateObj(u32)   (the effect-object factory hook)
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; the returned pointer is the IResourceRequester view.
+// Allocation uses the shared sound allocator with its original tag and flavour.
 // ---------------------------------------------------------------------------
-BrnSound::Logic::IResourceRequester* AmbienceEffect::CreateObj( u32 /*luFlavour*/ )
+BrnSound::Logic::IResourceRequester* AmbienceEffect::CreateObj(u32 flavour)
 {
-    return static_cast<BrnSound::Logic::IResourceRequester*>( new AmbienceEffect() );
+    return static_cast<BrnSound::Logic::IResourceRequester*>( new ("AmbienceEffect", flavour != 0) AmbienceEffect() );
 }
 
 // Controller slot 0 is the ambience control.

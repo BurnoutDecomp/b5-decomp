@@ -93,19 +93,11 @@ PlayerVehicleStateManager::~PlayerVehicleStateManager()
 // size+ctor; the `a1` argument only selects the operator-new flavour (0/1). The
 // factory CreateStateMan @ 0x826A5B60 calls this as createObject(0).
 //
-// FLAG (allocator gate): CgsSound::MemBase (CgsMemBase.h) does NOT model operator
-// new(size, tag, flavour) -- the sound allocator (off_82FFB954) is not homed in this
-// group -- so a faithful placement-new through that allocator is not yet expressible.
-// This reconstruction uses the host `new` (global operator new, NOT the sound
-// allocator); the observable result -- a constructed PlayerVehicleStateManager* (or
-// null) handed to the factory -- matches. Replace with the sound-allocator placement-
-// new once MemBase::operator new is homed. The 1152-byte size is the X360 0x480; on
-// the 64-bit host the real object differs in size, so the literal is documentation
-// only and is NOT passed to the host new.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject(u32 luType)
 {
-    return new PlayerVehicleStateManager();
+    return new ("PlayerVehicleStateManager", luType != 0) PlayerVehicleStateManager();
 }
 
 // ---------------------------------------------------------------------------

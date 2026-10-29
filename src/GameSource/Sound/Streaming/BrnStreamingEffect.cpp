@@ -126,9 +126,9 @@ StreamingEffect::~StreamingEffect()
 {
 }
 
-CgsSound::Logic::EffectObject* StreamingEffect::CreateObject(u32 /*auType*/)
+CgsSound::Logic::EffectObject* StreamingEffect::CreateObject(u32 luType)
 {
-    return new StreamingEffect();
+    return new ("StreamingEffect", luType != 0) StreamingEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* StreamingEffect::GetStaticTypeInfo()

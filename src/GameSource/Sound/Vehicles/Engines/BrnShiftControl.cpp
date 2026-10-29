@@ -60,9 +60,9 @@ ShiftControl::ShiftControl()
 
 ShiftControl::~ShiftControl() {}
 
-CgsSound::Logic::EffectControl* ShiftControl::CreateObject(u32 /*luType*/)
+CgsSound::Logic::EffectControl* ShiftControl::CreateObject(u32 luType)
 {
-    return new ShiftControl();
+    return new ("ShiftControl", luType != 0) ShiftControl();
 }
 
 s32 ShiftControl::GetController(s32 aiSlot)

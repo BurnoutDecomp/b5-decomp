@@ -115,9 +115,9 @@ ScrapeEffect::~ScrapeEffect()
 {
 }
 
-CgsSound::Logic::EffectObject* ScrapeEffect::CreateObject(u32 /*auAllocator*/)
+CgsSound::Logic::EffectObject* ScrapeEffect::CreateObject(u32 luType)
 {
-    return new ScrapeEffect();
+    return new ("ScrapeEffect", luType != 0) ScrapeEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*

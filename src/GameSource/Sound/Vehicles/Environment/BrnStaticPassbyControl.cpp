@@ -38,12 +38,11 @@ static const f32 KF_POSITION_TOLERANCE = 0.0000152587890625f;
 // flavour) tagged "StaticPassbyControl" and inline-constructs a StaticPassbyControl,
 // upcast to CgsSound::Logic::EffectControl* (+4). `luType` only selects the operator-new
 // flavour (0/1).
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; observable result matches. The 0xD60 size is documentation only.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* StaticPassbyControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* StaticPassbyControl::CreateObject(u32 luType)
 {
-    return new StaticPassbyControl();
+    return new ("StaticPassbyControl", luType != 0) StaticPassbyControl();
 }
 
 // ---------------------------------------------------------------------------

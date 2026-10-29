@@ -32,14 +32,11 @@ f32 KF_SPEED_STREAM_CROSSFADE_WIDTH = 40.0f;
 // flavour) tagged "SpeedStreamEffect", placement-constructs a SpeedStreamEffect, and
 // returns the IResourceRequester sub-object pointer (`this + 4`). `aiFlavour` only
 // selects the operator-new flavour (0/1).
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; the +4 adjust is the static_cast to the IResourceRequester base. The
-// 0x70 size is documentation only.
+// Allocation uses the shared sound allocator with its original tag and flavour.
 // ---------------------------------------------------------------------------
-BrnSound::Logic::IResourceRequester* SpeedStreamEffect::Create( int aiFlavour )
+BrnSound::Logic::IResourceRequester* SpeedStreamEffect::Create(int flavour)
 {
-    (void)aiFlavour; // only selected the operator-new flavour on the X360.
-    SpeedStreamEffect* lpEffect = new SpeedStreamEffect();
+    SpeedStreamEffect* lpEffect = new ("SpeedStreamEffect", flavour != 0) SpeedStreamEffect();
     if ( lpEffect == 0 )
     {
         return 0;

@@ -72,10 +72,9 @@ SweetenersEffect::~SweetenersEffect()
 {
 }
 
-BrnSound::Logic::IResourceRequester* SweetenersEffect::CreateObjec(u32 auFlavour)
+BrnSound::Logic::IResourceRequester* SweetenersEffect::CreateObjec(u32 flavour)
 {
-    (void)auFlavour;
-    return static_cast<BrnSound::Logic::IResourceRequester*>(new SweetenersEffect());
+    return static_cast<BrnSound::Logic::IResourceRequester*>(new ("SweetenersEffect", flavour != 0) SweetenersEffect());
 }
 
 s32 SweetenersEffect::GetController(s32 aiSlot)

@@ -53,17 +53,11 @@ CollisionControl::CollisionControl()
 // upcast to CgsSound::Logic::EffectControl* (the compiler synthesises the base-ptr
 // adjustment for `new CollisionControl()`).
 //
-// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
-// flavour) (off_82FFB954 sound allocator not homed in this group), so a faithful
-// placement-new is not yet expressible. This uses the host global `new`; the
-// observable result -- a constructed CollisionControl* (or null) handed back as the
-// base EffectControl* -- matches. Replace with the sound-allocator placement-new once
-// MemBase::operator new is homed. The 0xB0 size is documentation of the X360 inline
-// ctor; the zero-init is done by CollisionControl's (deferred) default constructor.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* CollisionControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* CollisionControl::CreateObject(u32 luType)
 {
-    return new CollisionControl();
+    return new ("CollisionControl", luType != 0) CollisionControl();
 }
 
 // ---------------------------------------------------------------------------

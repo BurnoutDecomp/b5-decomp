@@ -48,12 +48,11 @@ static const Vector2 KV_AMBIENCE_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 
 
 // ---------------------------------------------------------------------------
 // AmbienceControl::CreateObject(u32)   (the factory hook)
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; observable result matches. Mirrors CollisionControl::CreateObject.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* AmbienceControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* AmbienceControl::CreateObject(u32 luType)
 {
-    return new AmbienceControl();
+    return new ("AmbienceControl", luType != 0) AmbienceControl();
 }
 
 // Controller slot 0 is the enclosure control.

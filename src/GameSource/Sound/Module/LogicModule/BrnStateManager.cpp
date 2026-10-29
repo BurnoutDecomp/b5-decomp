@@ -45,12 +45,12 @@ const char* BrnStateManager::GetTypeName() const
 // selector, NOT `this` -- the function never reads an instance), runs the
 // StateManager ctor, then patches the BrnStateManager vptrs. The C++ `new`
 // expression performs exactly that sequence (allocate + ctor + vptr setup), so
-// the faithful PC equivalent is `new BrnStateManager`. STATIC class function so
+// tagged new uses the shared sound allocator. STATIC class function so
 // its address is storable as the descriptor's free-function createObject pointer.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::StateManager* BrnStateManager::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::StateManager* BrnStateManager::CreateObject(u32 luType)
 {
-    return new BrnStateManager();
+    return new ("BrnStateManager", luType != 0) BrnStateManager();
 }
 
 // ---------------------------------------------------------------------------

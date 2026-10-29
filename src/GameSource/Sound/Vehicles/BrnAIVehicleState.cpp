@@ -47,9 +47,9 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* AIVehicleState::GetStati
 
 // @ 0x826E2E90: MemBase::operator new(0x530, "AIVehicleState", flavour) ;
 // VehicleState::VehicleState ; vtable 0x820B3A3C.
-CgsSound::Logic::State* AIVehicleState::CreateObject( u32 /*auType*/ )
+CgsSound::Logic::State* AIVehicleState::CreateObject(u32 luType)
 {
-    return new AIVehicleState();
+    return new ("AIVehicleState", luType != 0) AIVehicleState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* AIVehicleState::GetTypeInfo() const

@@ -78,9 +78,9 @@ bool CollisionState::Detach()
 // its allocator selector does not alter the constructed object. DecFIGS static-init
 // @ 0x864250 pins the descriptor to ObjectID 0x50000, name "CollisionState", and
 // registers it in State::ClassTypeInfoArray.
-CgsSound::Logic::State* CollisionState::CreateObject(u32 /*auAllocator*/)
+CgsSound::Logic::State* CollisionState::CreateObject(u32 luType)
 {
-    return new CollisionState();
+    return new ("CollisionState", luType != 0) CollisionState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*

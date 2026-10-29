@@ -68,9 +68,9 @@ TrafficStateManager::~TrafficStateManager()
 
 // MemBase::operator new(0xCD0, "TrafficStateManager", flavour) + the constructor; the
 // argument only picks the operator-new flavour.
-CgsSound::Logic::StateManager* TrafficStateManager::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::StateManager* TrafficStateManager::CreateObject(u32 luType)
 {
-    return new TrafficStateManager();
+    return new ("TrafficStateManager", luType != 0) TrafficStateManager();
 }
 
 // Descriptor {3, "TrafficStateManager", StateManager::sTypeInfo, &CreateObject}.

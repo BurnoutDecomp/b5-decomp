@@ -21,9 +21,9 @@ const char* Emitter3dControl::GetTypeName() const
     return "Emitter3dControl";
 }
 
-CgsSound::Logic::EffectControl* Emitter3dControl::CreateObject(u32)
+CgsSound::Logic::EffectControl* Emitter3dControl::CreateObject(u32 luType)
 {
-    return new Emitter3dControl();
+    return new ("Emitter3dControl", luType != 0) Emitter3dControl();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*

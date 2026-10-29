@@ -28,9 +28,9 @@ namespace BrnSound
 namespace Logic
 {
 
-CgsSound::Logic::EffectObject* FxEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* FxEffect::CreateObject(u32 luType)
 {
-    return new FxEffect();
+    return new ("FxEffect", luType != 0) FxEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* FxEffect::GetStaticTypeInfo()

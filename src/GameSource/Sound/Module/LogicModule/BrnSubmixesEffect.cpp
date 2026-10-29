@@ -44,14 +44,14 @@ namespace BrnSound
 namespace Logic
 {
 
-CgsSound::Logic::EffectObject* SubmixesEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* SubmixesEffect::CreateObject(u32 luType)
 {
     // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). How many instances of effect
     // type 0x40 the sound data asks for -- one per boot, measured. This line is what
     // established that the Attach/ProcessUpdate lane below is LIVE rather than dead code,
     // back when neither was declared on this leaf and the base's do-nothing versions ran.
     // Kept as the lane's liveness witness.
-    return new SubmixesEffect();
+    return new ("SubmixesEffect", luType != 0) SubmixesEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SubmixesEffect::GetStaticTypeInfo()

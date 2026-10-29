@@ -81,14 +81,11 @@ f32 SmoothTowards(f32 lfCurrent, f32 lfTarget, f32 lfStep)
 // `abFlavour` selects only the operator-new flavour (0/1); both arms allocate the same
 // size and run the same ctor.
 //
-// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
-// flavour) here, so this uses the host `new`; the +4 adjust is the static_cast to the
-// IResourceRequester base. The 0x130 size is documentation only.
+// Allocation uses the shared sound allocator with its original tag and flavour.
 // ---------------------------------------------------------------------------
-BrnSound::Logic::IResourceRequester* HybridExhaustControl::Create( bool abFlavour )
+BrnSound::Logic::IResourceRequester* HybridExhaustControl::Create(bool flavour)
 {
-    (void)abFlavour; // selects only the MemBase operator-new flavour (0/1)
-    return static_cast<BrnSound::Logic::IResourceRequester*>( new HybridExhaustControl() );
+    return static_cast<BrnSound::Logic::IResourceRequester*>( new ("HybridExhaustControl", flavour != 0) HybridExhaustControl() );
 }
 
 // ---------------------------------------------------------------------------

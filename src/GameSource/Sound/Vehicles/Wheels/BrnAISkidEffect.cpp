@@ -92,9 +92,9 @@ AISkidEffect::~AISkidEffect()
 }
 
 // @ 0x826D0840: MemBase::operator new(200, "AISkidEffect", flavour) + ctor.
-CgsSound::Logic::EffectObject* AISkidEffect::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* AISkidEffect::CreateObject(u32 luType)
 {
-    return new AISkidEffect();
+    return new ("AISkidEffect", luType != 0) AISkidEffect();
 }
 
 // Descriptor 0x82F2F774: {0x20040, "AISkidEffect", base BrnEffectObject (0x82F2E7FC),

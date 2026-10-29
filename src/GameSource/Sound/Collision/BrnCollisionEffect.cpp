@@ -100,9 +100,9 @@ CollisionEffect::~CollisionEffect()
 {
 }
 
-CgsSound::Logic::EffectObject* CollisionEffect::CreateObject(u32 /*auAllocator*/)
+CgsSound::Logic::EffectObject* CollisionEffect::CreateObject(u32 luType)
 {
-    return new CollisionEffect();
+    return new ("CollisionEffect", luType != 0) CollisionEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*
@@ -639,15 +639,11 @@ Collision3DControl::Collision3DControl()
 // only selects the operator-new flavour (0/1). DWARF (BrnCollisionEffect.h:199)
 // attests `EffectControl* CreateObject(uint32_t)` (non-virtual, non-const).
 //
-// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
-// flavour) (off_82FFB954 not homed in this group), so a faithful placement-new is not
-// yet expressible. This uses the host `new`; the observable result matches. Mirrors
-// the committed CollisionStateManager::CreateObject @ 0x82701FA8. The 0x120 size is
-// documentation only and is NOT passed to the host new.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* Collision3DControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* Collision3DControl::CreateObject(u32 luType)
 {
-    return new Collision3DControl();
+    return new ("Collision3DControl", luType != 0) Collision3DControl();
 }
 
 // ---------------------------------------------------------------------------

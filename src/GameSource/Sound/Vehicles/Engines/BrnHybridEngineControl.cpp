@@ -50,13 +50,11 @@ void HybridEngineControl::UpdateGinsuRPM()
 // HybridEngineControl, returning it upcast to CgsSound::Logic::EffectControl*. `a1`
 // only selects the operator-new flavour (0/1); both arms use the same size + ctor.
 //
-// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
-// flavour) here, so this uses the host `new`; the observable result matches. Mirrors
-// the committed CollisionControl::CreateObject. The 0x140 size is documentation only.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* HybridEngineControl::CreateObject(u32 luType)
 {
-    return new HybridEngineControl();
+    return new ("HybridEngineControl", luType != 0) HybridEngineControl();
 }
 
 // ---------------------------------------------------------------------------

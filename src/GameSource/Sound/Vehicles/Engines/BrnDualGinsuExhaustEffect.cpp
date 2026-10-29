@@ -34,13 +34,11 @@ f32 KF_MAX_REVERSE_PITCH = 1.2f;   // ARTIST flt_82F2CD0C
 // DualGinsuExhaustEffect, handing it back as the +4 IResourceRequester sub-object view.
 // `a1` only selects the operator-new flavour (0/1); both arms use the same size + ctor.
 //
-// FLAG (allocator gate): CgsSound::MemBase does NOT model operator new(size, tag,
-// flavour) here, so this uses the host `new`; the +4 adjust is the static_cast to the
-// IResourceRequester base. The 0x340 size is documentation only.
+// Allocation uses the shared sound allocator with its original tag and flavour.
 // ---------------------------------------------------------------------------
-BrnSound::Logic::IResourceRequester* DualGinsuExhaustEffect::Creat( s32 /*aiFlavour*/ )
+BrnSound::Logic::IResourceRequester* DualGinsuExhaustEffect::Creat(s32 flavour)
 {
-    DualGinsuExhaustEffect* lpEffect = new DualGinsuExhaustEffect();
+    DualGinsuExhaustEffect* lpEffect = new ("DualGinsuExhaustEffect", flavour != 0) DualGinsuExhaustEffect();
     if ( lpEffect == 0 )
     {
         return 0;

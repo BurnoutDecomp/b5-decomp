@@ -123,9 +123,9 @@ AIPhysicsControl::~AIPhysicsControl()
 }
 
 // @ 0x826E4558: MemBase::operator new(1264, "AIPhysicsControl", flavour) + ctor.
-CgsSound::Logic::EffectControl* AIPhysicsControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* AIPhysicsControl::CreateObject(u32 luType)
 {
-    return new AIPhysicsControl();
+    return new ("AIPhysicsControl", luType != 0) AIPhysicsControl();
 }
 
 // Descriptor 0x82F2F638: {0x20000, "AIPhysicsControl", base PhysicsControl

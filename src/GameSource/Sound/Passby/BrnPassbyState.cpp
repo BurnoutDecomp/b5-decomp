@@ -93,13 +93,13 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTy
 // "PassbyState" (the pool tag named in BrnPassbyState.h:35) and placement-
 // constructs into it; the `u32` argument is the operator-new flavour selector,
 // not `this`. Same treatment as every committed sibling (StreamingState,
-// CollisionState, EmitterState): the host `new` stands in for the sound
+// CollisionState, EmitterState): tagged new uses the sound
 // allocator, and the observable result -- a constructed PassbyState* handed back
 // to StateManager::CreateState -- matches.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::State* PassbyState::CreateObject(u32 /*auType*/)
+CgsSound::Logic::State* PassbyState::CreateObject(u32 luType)
 {
-    return new PassbyState();
+    return new ("PassbyState", luType != 0) PassbyState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetTypeInfo() const

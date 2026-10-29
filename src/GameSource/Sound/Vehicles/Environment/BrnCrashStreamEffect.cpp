@@ -277,12 +277,11 @@ void CrashStreamEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice
 // returns the EffectObject base pointer (+4). The incoming u32 only selects the
 // operator-new flavour (0/1). DWARF (BrnCrashStreamEffect.h:62): EffectObject*
 // CreateObject(uint32_t).
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; observable result matches. The 0x84 size is documentation only.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectObject* CrashStreamEffect::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* CrashStreamEffect::CreateObject(u32 luType)
 {
-    return new CrashStreamEffect();
+    return new ("CrashStreamEffect", luType != 0) CrashStreamEffect();
 }
 
 // ---------------------------------------------------------------------------

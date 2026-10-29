@@ -77,9 +77,9 @@ Traffic3DControl::~Traffic3DControl()
 }
 
 // MemBase::operator new(0xD0, "Traffic3DControl", flavour), Brn3DEffectControl(), leaf vtable.
-CgsSound::Logic::EffectControl* Traffic3DControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* Traffic3DControl::CreateObject(u32 luType)
 {
-    return new Traffic3DControl();
+    return new ("Traffic3DControl", luType != 0) Traffic3DControl();
 }
 
 // Descriptor {0x30010, "Traffic3DControl", Brn3DEffectControl::sTypeInfo, &CreateObject}.
@@ -128,9 +128,9 @@ TrafficEngine::~TrafficEngine()
 
 // MemBase::operator new(0x94, "TrafficEngine", flavour) + the constructor; returns the
 // EffectObject view (+0x04).
-CgsSound::Logic::EffectObject* TrafficEngine::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* TrafficEngine::CreateObject(u32 luType)
 {
-    return new TrafficEngine();
+    return new ("TrafficEngine", luType != 0) TrafficEngine();
 }
 
 // Descriptor {0x30000, "TrafficEngine", BrnEffectObject::sTypeInfo, &CreateObject}.
