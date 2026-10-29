@@ -3,8 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (End's users-connected assert)
 
-#include <atomic>   // std::atomic_thread_fence (End's closing lwsync)
-#include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
+#include <xtl.h>  // native lwsync
 
 namespace CgsMemory
 {
@@ -37,11 +36,6 @@ namespace CgsMemory
 
         mbStreaming = false;                    // *(this+32) = 0
 
-        // De-atomized: the X360 ldarx/stdcx + mfmsr loop stores 0 into the packed
-        // status word. The committed EA::Thread::AtomicInt has both operator=(ValueType)
-        // and SetValue; the explicit named SetValue makes the de-atomic store
-        // unambiguous (the DWARF hint shows the original Construct using operator=,
-        // which is equivalent). (FLAG: de-atomic, semantic parity.)
         mEncodedStatus.SetValue(0);
 
         miNextResult      = 0;                  // this[9]
@@ -70,18 +64,15 @@ namespace CgsMemory
     // count, marks streaming, and lock-free clears the packed status word.
     void DataStreamResultReader::Begin()
     {
+        __lwsync();
         CGS_ASSERT(!mbStreaming, "Already streaming\n");
 
         miNextResult      = 0;   // this[9]
         miNumResultsAtEnd = 0;   // this[10]
         mbStreaming       = true; // *(this+32) = 1
 
-        // De-atomized: the X360 body is a GetValue + SetValueConditional retry
-        // loop (the mfmsr / ldarx-stdcx machinery) whose net effect is to reset
-        // the status word to 0. Mirrors the two attested calls; with the current
-        // value as the condition the CAS always succeeds, so this equals
-        // mEncodedStatus = 0. (FLAG: de-atomic, semantic parity.)
-        mEncodedStatus.SetValueConditional(0, mEncodedStatus.GetValue());
+        // Retry when a producer changes the status between the load and CAS.
+        while (!mEncodedStatus.SetValueConditional(0, mEncodedStatus.GetValue())) {}
     }
 
     // X360 0x82868418.
@@ -101,9 +92,7 @@ namespace CgsMemory
         const s32 liResultSize = miResultSize;      // *(this+16)
         if (liResultSize > 0)
         {
-            // XMemCpy(lpBuffer, mpcResultBuffer + resultSize*cursor, resultSize),
-            // modelled as std::memcpy per the committed convention.
-            std::memcpy(lpBuffer,
+            ::XMemCpy(lpBuffer,
                         mpcResultBuffer + (liResultSize * liCursor),
                         static_cast<usize>(liResultSize));
         }
@@ -135,6 +124,6 @@ namespace CgsMemory
 
         miNumResultsAtEnd = static_cast<s32>(luNumResults);   // *(this+40)
         mbStreaming       = false;                            // *(this+32) = 0
-        std::atomic_thread_fence(std::memory_order_acq_rel);  // lwsync
+        __lwsync();
     }
 }

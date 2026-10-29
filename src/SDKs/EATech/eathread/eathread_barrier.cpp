@@ -15,14 +15,6 @@ namespace EA
 namespace Thread
 {
 
-namespace
-{
-    // The X360 phase-semaphore Wait in Barrier::Wait blocks forever (no deadline set
-    // up in r4 at the call site). The homed Semaphore::Wait dereferences a u32*; the
-    // block-forever sentinel is 0xFFFFFFFF (INFINITE), so we hand it &KU_TIMEOUT_NONE.
-    const u32 KU_TIMEOUT_NONE = 0xFFFFFFFFu;
-}
-
 // ---------------------------------------------------------------------------
 // Barrier::Barrier @ 0x82B43AD8
 //
@@ -72,7 +64,7 @@ bool Barrier::Init(const BarrierParameters* pBarrierParameters)
 
     mBarrierData.mnHeight  = pBarrierParameters->mnHeight;  // stw r10, 4(this)
     // mnCurrent = mnHeight via the X360 masked-interrupt lwarx/stwcx. (atomic store).
-    mBarrierData.mnCurrent = pBarrierParameters->mnHeight;
+    mBarrierData.mnCurrent.SetValue(pBarrierParameters->mnHeight);
 
     SemaphoreParameters lParams(0, pBarrierParameters->mbIntraProcess, 0);  // count 0, name ""
     mBarrierData.mSemaphore0.Init(&lParams);  // this+0xC
@@ -85,7 +77,7 @@ bool Barrier::Init(const BarrierParameters* pBarrierParameters)
 //
 //   phase = mnIndex;                                    ; v2 = *(this+8)
 //   if (--mnCurrent != 0) {                              ; atomic dec this+0; not last
-//       r = (phase ? mSemaphore1 : mSemaphore0).Wait(kTimeoutNone);
+//       r = (phase ? mSemaphore1 : mSemaphore0).Wait(&timeoutAbsolute);
 //       if (r == kResultError)        return kResultError; // -2
 //   } else {                                             ; last arrival
 //       mnCurrent = mnHeight;                            ; atomic reset this+0
@@ -101,7 +93,7 @@ bool Barrier::Init(const BarrierParameters* pBarrierParameters)
 //   }
 //   return (cntlzw(phase - cur) & 0x20) == 0;             ; 0 if cur==phase, else 1
 // ---------------------------------------------------------------------------
-int Barrier::Wait()
+int Barrier::Wait(const ThreadTime& timeoutAbsolute)
 {
     volatile long* const lpCurrent =
         reinterpret_cast<volatile long*>(&mBarrierData.mnCurrent);  // this+0
@@ -117,7 +109,7 @@ int Barrier::Wait()
     {
         // Not the last arrival: block on the active phase semaphore.
         Semaphore& rActive = iPhase ? mBarrierData.mSemaphore1 : mBarrierData.mSemaphore0;
-        iResult = rActive.Wait(&KU_TIMEOUT_NONE);
+        iResult = rActive.Wait(&timeoutAbsolute);
         if (iResult == kResultError)  // -2
             return kResultError;
     }
@@ -136,14 +128,13 @@ int Barrier::Wait()
             Semaphore& rActive = iPhase ? mBarrierData.mSemaphore1 : mBarrierData.mSemaphore0;
             iResult = rActive.Post(iHeight - 1);
         }
-        if (iResult < 0)
-            return -1;
     }
 
-    // Flip the phase index from iPhase to (1 - iPhase). The X360 lwarx/stwcx. loop
-    // CAS-es mnIndex from iPhase to 1-iPhase, abandoning the store (and retrying the
-    // reservation) if another thread already moved the index. InterlockedCompareExchange
-    // performs exactly that atomic conditional swap and returns the prior value.
+    if (iResult < 0)
+        return -1;
+
+    // The XDK CAS emits the original reservation sequence, including a store
+    // of the observed value on comparison failure before restoring interrupts.
     const s32 iObserved = static_cast<s32>(
         _InterlockedCompareExchange(lpIndex, 1 - iPhase, iPhase));
 
