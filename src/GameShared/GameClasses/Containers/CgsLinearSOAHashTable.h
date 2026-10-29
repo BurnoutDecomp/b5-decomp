@@ -35,7 +35,17 @@ namespace CgsContainers
 
         // X360 0x828EA3C8 (CgsLinearSOAHashTable.h:167) for the <ImportHashTableValue> (KeyType=u64)
         // instantiation. Definition lives in CgsResourceImportHashTable.cpp (2-param form).
-        void Initialize(KeyType* lpKeys, ValueType* lpValues, KeyType luLength);
+        void Initialize(KeyType* lpKeys, ValueType* lpValues, KeyType luLength)
+        {
+            CGS_ASSERT(luLength != 0 && ((luLength - 1) & luLength) == 0,
+                       "Length of hash table must be more than 0 and a power of 2");
+            miLength = luLength;
+            mpKeys = lpKeys;
+            mpValues = lpValues;
+            miInvalidKey = KU_EMPTY_KEY;
+            for (KeyType luSlot = 0; luSlot < miLength; ++luSlot)
+                mpKeys[luSlot] = miInvalidKey;
+        }
 
         // :242 -- insert luKey at the first empty slot from its hash position (wrapping); optionally
         // store *lpValue into the parallel value array. Returns &mpValues[pos], or null if full.

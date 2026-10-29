@@ -147,7 +147,7 @@ namespace rw
                 u32                           muMaxSearchPaths;    // X360 +0x38
                 SearchPathEntry*              mpSearchPathTable;   // X360 +0x3C
                 s32                           mbSortByPosition;    // X360 +0x40
-                u32                           muReserved44;        // X360 +0x44
+                bool                        (*mpErrorHandler)(s32);        // X360 +0x44
 
                 // ----- rw::core::filesys::Manager methods (homed in manager.cpp) ----------
 

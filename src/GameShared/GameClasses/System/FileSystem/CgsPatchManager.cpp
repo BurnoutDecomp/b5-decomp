@@ -35,22 +35,21 @@ namespace CgsFileSystem
     // @0x828F0980 (boot trace).
     void PatchManager::Construct(rw::IResourceAllocator* lpAllocator)
     {
+        CGS_STATIC_ASSERT(sizeof(mPatchFileMap) == 16, "ARTIST patch SOA table");
+        CGS_STATIC_ASSERT(offsetof(PatchManager, mPatchFileMap) == 0x888, "ARTIST patch table");
+        CGS_STATIC_ASSERT(offsetof(PatchManager, mbPatching) == 0x898, "ARTIST patching flag");
+        CGS_STATIC_ASSERT(offsetof(PatchManager, mDirSearchThread) == 0x8a0, "ARTIST patch-search thread");
         mpAllocator         = lpAllocator;
         muCurrentPatchIndex = 0;
 
-        // The X360 carves the map's entry array from the allocator (a 16384-byte, 16-aligned
-        // descriptor[0] request) and binds the LinearHashTable<s32,s32> to it with length 0x1000.
-        // The length 0x1000 is the grounded immediate (Construct r6 = 0x1000); the entry storage is
-        // sized for KU_PATCH_FILE_MAP_SIZE slots.
+        // ARTIST828F0980 allocates two independent0x4000-byte arrays.
+        // Its int-key Add/Find instances use divwu, so path hashes stay unsigned.
         rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size =
-            KU_PATCH_FILE_MAP_SIZE * sizeof(CgsContainers::LinearHashEntry<s32, s32>);
+        lDescriptor.m_baseResourceDescriptors[0].m_size = KU_PATCH_FILE_MAP_SIZE * sizeof(u32);
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        rw::Resource lResource = mpAllocator->DoAllocate(lDescriptor, 0);
-
-        CgsContainers::LinearHashEntry<s32, s32>* lpEntries =
-            static_cast<CgsContainers::LinearHashEntry<s32, s32>*>(lResource.m_baseResources[0]);
-        mPatchFileMap.Initialize(lpEntries, KU_PATCH_FILE_MAP_SIZE);
+        u32* lpKeys = static_cast<u32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
+        s32* lpValues = static_cast<s32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
+        mPatchFileMap.Initialize(lpKeys, lpValues, KU_PATCH_FILE_MAP_SIZE);
 
         mbPatching     = false;
         gpPatchManager = this;
@@ -74,7 +73,10 @@ namespace CgsFileSystem
         EA::Thread::ThreadParameters lParams;
         lParams.mpName     = "PatchManDirSearchThread";
         lParams.mnPriority = 100;
-        mDirSearchThread.Begin(DirSearchThreadProc, this, &lParams);
+        lParams.mnProcessor = 0;
+        lParams.mbSuspended = false;
+        mDirSearchThread.Begin(DirSearchThreadProc, this, &lParams,
+            EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
         return true;
     }
 
@@ -150,7 +152,7 @@ namespace CgsFileSystem
 
         const u32 luHash = HashPath(lpcFile);
 
-        s32* lpExisting = mPatchFileMap.FindEntry(static_cast<s32>(luHash));
+        s32* lpExisting = mPatchFileMap.FindEntry(luHash);
         if (lpExisting)
         {
             // The path is already claimed. The patch with the LARGER priority key wins the clash
@@ -162,7 +164,7 @@ namespace CgsFileSystem
         }
         else
         {
-            mPatchFileMap.AddEntry(static_cast<s32>(luHash), &muCurrentPatchIndex);
+            mPatchFileMap.AddEntry(luHash, &muCurrentPatchIndex);
         }
     }
 
@@ -171,7 +173,7 @@ namespace CgsFileSystem
     {
         const u32 luHash = HashPath(lpcSource);
 
-        s32* lpEntry = mPatchFileMap.FindEntry(static_cast<s32>(luHash));
+        s32* lpEntry = mPatchFileMap.FindEntry(luHash);
         if (lpEntry)
         {
             // Claimed by a patch: rewrite to "<patchFolder>/<sourcePath>".

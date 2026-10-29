@@ -65,9 +65,10 @@ namespace CgsFileSystem
     class DevicePhysicalX360 : public Device
     {
     public:
-        // Capacity of the embedded handle pool (runtime field msCapacity in the pool; the literal
-        // extent is a placeholder, the bodies are capacity-driven through the pool).
-        static const s32 KI_MAX_OPEN_FILES = 256;
+        // ARTIST829033C0 constructs two native16-record handle pools.
+        static const s32 KI_MAX_OPEN_FILES = 16;
+
+        void Construct(s32 liDriveIndex);
 
         // ---- worker-dispatched ops (Device base vtable order) ----
         int Connect() ;                                                                  // Init @0x828DE998 (debug trace)
@@ -75,6 +76,8 @@ namespace CgsFileSystem
         int Close(Handle::DeviceHandle lpHandle) ;                                      // @0x828F9D90
         int Read(Handle::DeviceHandle lpHandle, void* lpBuffer, u32 luSize,
                  u32* lpuOutResult) ;                                                    // @0x828DE9F0
+        int Write(Handle::DeviceHandle lpHandle, const void* lpBuffer, u32 luSize,
+                  u32* lpuOutResult); // ARTIST828DEAA0 (export hole).
         int Seek(Handle::DeviceHandle lpHandle, u64 lu64Offset,
                  u64* lpu64OutPosition) ;                                                // @0x828DEB98
 
@@ -88,7 +91,10 @@ namespace CgsFileSystem
     private:
         // Embedded handle pool (this+16; byte-indexed, element stride 0x110). The opaque handle
         // is a live FileHandleRecord*; Close/CloseDirectory recover its index when returning it.
+        s32 miDriveIndex; // ARTIST82903510/58: DVD0, HDD1.
         CgsContainers::IndexedPool<FileHandleRecord, KI_MAX_OPEN_FILES, s8> mHandlePool;  // X360 this+0x10
+        FileHandleRecord maHandles[KI_MAX_OPEN_FILES];
+        s8 maiFreeIndices[KI_MAX_OPEN_FILES];
     };
 
     // Pointer-invariant layout facts only (the X360 32-bit-pointer offsets +8/+0xC/+0x10 and the

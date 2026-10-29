@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // ResolveResourceType (bundle FixUp resolver)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
+#include "rw/rwcore_general_alloc.h"
+#include <cstddef>
 #include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule: native module lifetime and staged request shuttles.
@@ -26,11 +28,6 @@ namespace CgsResource
     // is not yet ready.
     bool ResourceModule::Prepare()
     {
-        // [reliable] The X360 sets *(this+4)=1 (mbIsNewModule) in Construct; that Construct chain isn't
-        // wired for the embedded static yet, and the header ctor doesn't take effect on it, so set it
-        // here (before the base Prepare) so ModuleSingleBuffered skips the old DataStructure IO path
-        // (and its virtual CreateInputDataStructure). Move to Construct once the bring-up chain lands.
-        mbIsNewModule = true;
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
@@ -113,41 +110,69 @@ namespace CgsResource
         }
     }
 
-    // ARTIST829055B0: construct the modules over the supplied resource allocator.
-    // FileSystem uses its existing native device-manager adapter.
-    void ResourceModule::Construct(const InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+    // ARTIST829055B0: preserve submodule order and construct the dedicated
+    // 0x160000-byte general allocator used by filesystem and response storage.
+    void ResourceModule::Construct(InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
                                    rw::IResourceAllocator* lpDebugAllocator)
     {
-        if (lpInitOptions == 0 || lpAllocator == 0)
-            return;
-        const InitOptions* lpOptions = static_cast<const InitOptions*>(lpInitOptions);
-        rw::IResourceAllocator* lpRwAllocator = static_cast<rw::IResourceAllocator*>(lpAllocator);
-
-        mMemoryModule.Construct(
-            const_cast<CgsMemory::MemoryModule::InitOptions*>(&lpOptions->mMemoryInitOptions),
-            lpRwAllocator);
-        mFileSystem.Construct();
-        mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
-        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpRwAllocator,
-                                      lpDebugAllocator);
+        CgsModule::ModuleSingleBuffered::Construct();
+        mePrepareStage = E_PREPARE_START;
+        meReleaseStage = E_RELEASE_DONE;
+        mMemoryModule.Construct(&lpOptions->mMemoryInitOptions, lpAllocator);
+        mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpAllocator, lpDebugAllocator);
+        mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator, lpDebugAllocator);
         mDebugComponent.Construct(this, &lpOptions->mDebugParams);
+        rw::ResourceDescriptor lCapacity;
+        lCapacity.m_baseResourceDescriptors[0].m_size = 0x160000;
+        lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
+        rw::ResourceDescriptor lRequired;
+        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lRequired, &lCapacity);
+        rw::Resource lResource = lpAllocator->Allocate(lRequired, 0);
+        mpFileSystemAllocator = rw::core::GeneralResourceAllocator::Initialize(lResource, lCapacity);
+        mFileSystem.Construct(mpFileSystemAllocator, lpDebugAllocator,
+                              lpOptions->macFileSearchPath, lpOptions->mpDiskLayout);
+        mPendingFileResponses.Construct(maPendingFileResponses,
+            maiPendingFileResponseFreeIndices, static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
+        mbIsNewModule = true;
     }
-    // ARTIST828EC6B0, with retirement of native pending-response allocations.
+
+    // ARTIST828F2900/2998 and828EA560/A5C0: lane-zero allocations are16-aligned,
+    // and responses return to the same allocator through the native DoFree slot.
+    template<class Response> Response* ResourceModule::FileSystemAlloc()
+    {
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(Response);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        return static_cast<Response*>(mpFileSystemAllocator->Allocate(lDescriptor, 0).m_baseResources[0]);
+    }
+    template<class Response> void ResourceModule::FileSystemFree(Response* lpResponse)
+    {
+        rw::Resource lResource;
+        lResource.m_baseResources[0] = lpResponse;
+        mpFileSystemAllocator->DoFree(lResource);
+    }
+
+    // ARTIST828EC6B0 owns no pending-response drain.
     void ResourceModule::Destruct()
     {
-        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
-        const s32 liCount = mPendingFileResponses.Get(lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
-        for (s32 li = 0; li < liCount; ++li)
-        {
-            if (lapPending[li]->meEvent == 16)
-                delete static_cast<Events::OpenReadStreamResponse*>(lapPending[li]->mpResponse);
-            else if (lapPending[li]->meEvent == 18)
-                delete static_cast<Events::CloseReadStreamResponse*>(lapPending[li]->mpResponse);
-            mPendingFileResponses.Push(mPendingFileResponses.GetObjectIndex(lapPending[li]));
-        }
-        // ARTIST828EC6B0.
         mFileSystem.Destruct();
         CgsModule::ModuleSingleBuffered::Destruct();
+    }
+
+    void ResourceModule::AssertNativeInitOptions()
+    {
+        CGS_STATIC_ASSERT(sizeof(CgsMemory::MemoryModule::InitOptions) == 72, "ARTIST memory options");
+        CGS_STATIC_ASSERT(offsetof(InitOptions, mLoaderInitOptions) == 72, "ARTIST loader options");
+        CGS_STATIC_ASSERT(offsetof(InitOptions, mPoolInitOptions) == 96, "ARTIST pool options");
+        CGS_STATIC_ASSERT(offsetof(InitOptions, mpDiskLayout) == 172, "ARTIST disk layout option");
+        CGS_STATIC_ASSERT(offsetof(InitOptions, mDebugParams) == 176, "ARTIST debug options");
+        CGS_STATIC_ASSERT(offsetof(InitOptions, macFileSearchPath) == 188, "ARTIST file search option");
+        CGS_STATIC_ASSERT(sizeof(InitOptions) == 1216, "ARTIST resource options");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mBundleLoaderModule) == 640, "ARTIST bundle module owner");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mPoolModule) == 181120, "ARTIST pool module owner");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mMemoryModule) == 288128, "ARTIST memory module owner");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mFileSystem) == 288816, "ARTIST filesystem owner");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mDebugComponent) == 339224, "ARTIST resource debug owner");
     }
 
     // ARTIST82907268: native event sizes are carried by the queue. Pool and
@@ -244,7 +269,7 @@ namespace CgsResource
             lpRequest->GetUseHDCache());
 
         Events::OpenReadStreamResponse* lpResponse =
-            new Events::OpenReadStreamResponse;
+            FileSystemAlloc<Events::OpenReadStreamResponse>();
         CGS_ASSERT(lpResponse != 0,
                    "Failed to allocate temporary memory for file system request\n");
         if (!lpResponse)
@@ -256,7 +281,7 @@ namespace CgsResource
                    "Failed to allocate record for file system request\n");
         if (!lpPending)
         {
-            delete lpResponse;
+            FileSystemFree(lpResponse);
             return false;
         }
         lpPending->mpResponse = lpResponse;
@@ -273,7 +298,7 @@ namespace CgsResource
     {
         const CgsFileSystem::ReadStream lStream = lpRequest->GetStream();
         Events::CloseReadStreamResponse* lpResponse =
-            new Events::CloseReadStreamResponse;
+            FileSystemAlloc<Events::CloseReadStreamResponse>();
         CGS_ASSERT(lpResponse != 0,
                    "Failed to allocate temporary memory for file system request\n");
         if (!lpResponse)
@@ -285,7 +310,7 @@ namespace CgsResource
                    "Failed to allocate record for file system request\n");
         if (!lpPending)
         {
-            delete lpResponse;
+            FileSystemFree(lpResponse);
             return false;
         }
         lpPending->mpResponse = lpResponse;
@@ -345,11 +370,11 @@ namespace CgsResource
                     lpPending->meEvent, liResponseSize);
 
             if (lpPending->meEvent == 16)
-                delete static_cast<Events::OpenReadStreamResponse*>(
-                    lpPending->mpResponse);
+                FileSystemFree(static_cast<Events::OpenReadStreamResponse*>(
+                    lpPending->mpResponse));
             else
-                delete static_cast<Events::CloseReadStreamResponse*>(
-                    lpPending->mpResponse);
+                FileSystemFree(static_cast<Events::CloseReadStreamResponse*>(
+                    lpPending->mpResponse));
 
             const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
             mPendingFileResponses.Push(liIndex);

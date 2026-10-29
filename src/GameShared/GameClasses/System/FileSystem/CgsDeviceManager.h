@@ -47,7 +47,7 @@ namespace CgsFileSystem
             char               macPrefix[KI_MAX_PREFIX_LENGTH + 1];  // X360 slot+0  (free when mpDevice == 0)
             Device*            mpDevice;                             // X360 slot+12
             OperationPool      mOperations;                         // X360 slot+16
-            EA::Thread::Thread mWorkerThread;                       // X360 slot+0x4E78
+            EA::Thread::Thread mWorkerThread;                       // X360 slot+0x4E88
         };
 
         // A virtual device: a name alias mapping onto a physical device.
@@ -73,21 +73,12 @@ namespace CgsFileSystem
         // Register a physical device under lpcPrefix and spawn its worker thread (step 2).
         bool AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
 
+        void AddVirtualDevice(Device* lpDevice, const char* lpcPrefix,
+                              const char* lpcParent, ErrorCallback lpfErrorCallback);
+        void Shutdown(); // ARTIST828F2260: enqueue one shutdown per physical worker.
+
         // FileSystem::Prepare installs the search path used by unqualified opens.
         void SetDefaultPath(const char* lpcPath);
-
-        // Synchronously read a whole file through the async engine (open -> read -> close,
-        // blocking on each op's completion). The X360 had no single sync path — callers chained
-        // async ops waiting on per-op completion callbacks; this reproduces that wait with a
-        // count-0 EAThread Semaphore the completion callback posts (marked PC convenience). Routes
-        // through the first registered physical device; returns bytes read, or -1 on failure.
-        s32 ReadFileSync(const char* lpcPath, void* lpBuffer, u32 luMaxSize);
-
-        // Open a file, read it WHOLE into a freshly malloc'd buffer (the caller frees it with
-        // free()), and close — all through the async engine (open -> getfilesize -> read ->
-        // close, blocking on each). Returns the buffer (and its size via *lpuOutSize), or null
-        // on failure. This is the bundle loader's replacement for the synchronous CRT leaf.
-        void* ReadWholeFile(const char* lpcPath, u32* lpuOutSize);
 
         // ---- async file operations (the AsyncOp producer API) ----
         // Queue an async open/read/write/close onto the target device's OperationPool; the device's
@@ -105,8 +96,7 @@ namespace CgsFileSystem
         static intptr_t PhysicalDeviceThread(void* lpSlotContext); // 0x828F1EA8
 
         // ---- allocation ----
-        // X360 used the GameData allocator via a custom operator new(161712); on PC this is a
-        // marked malloc leaf (the DeviceManager is a single ~160KB allocation).
+        // ARTIST828F91E0: allocate through the caller-supplied resource allocator.
         static void* operator new(size_t luSize);
         static void  operator delete(void* lpBlock);
 
@@ -120,6 +110,15 @@ namespace CgsFileSystem
         char               macDefaultPath[KI_MAX_DEFAULT_PATH_LENGTH + 1];
 
     private:
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(sizeof(PhysicalDeviceSlot) == 0x4e90, "ARTIST physical slot stride");
+            CGS_STATIC_ASSERT(offsetof(PhysicalDeviceSlot, mOperations) == 16, "ARTIST operation pool");
+            CGS_STATIC_ASSERT(offsetof(PhysicalDeviceSlot, mWorkerThread) == 0x4e88, "ARTIST physical worker");
+            CGS_STATIC_ASSERT(offsetof(DeviceManager, maVirtualDevices) == 160904, "ARTIST virtual device slots");
+            CGS_STATIC_ASSERT(offsetof(DeviceManager, mDeviceListFutex) == 161416, "ARTIST device-list lock");
+            CGS_STATIC_ASSERT(sizeof(DeviceManager) == 161712, "ARTIST device manager allocation");
+        }
         // ---- statics (CgsDeviceManager.cpp) ----
         static DeviceManager* mpDeviceManager;   // X360 dword_830EA400 (singleton)
         static void*          mpAllocator;       // X360 off_830EA404

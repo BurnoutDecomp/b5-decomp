@@ -1,24 +1,14 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
+#include <new>
+#include <cstddef>
 
-// CgsFileSystem::FileSystem - see the header. The async device engine bring-up lives in
-// EnsureDeviceManagerUp(); the rw filesys layer + BaseFile stream machinery are follow-on.
+// Native filesystem lifetime and stream dispatch; ARTIST assembly is authoritative.
 namespace CgsFileSystem
 {
-
-    // The single PC physical device. A process-static (rather than a FileSystem member) so its
-    // lifetime spans the whole run and the worker thread that references it never dangles, and so
-    // a lazy bring-up from the bundle loader (before the FileSystem object prepares) has a device
-    // to register.
-
-    void EnsureDeviceManagerUp()
-    {
-
-        DeviceManager* lpManager = GetDeviceManager();
-        if (lpManager && !lpManager->FindDevice("p_dvd"))
-            lpManager->AddPhysicalDevice(&gPhysicalDevice, "p_dvd", 0);
-    }
 
     // @0x827DF320 (boot trace). The X360 ctor walks the 16 file handles and 8 read-stream engines
     // calling RtlInitializeCriticalSection on each embedded lock, constructs the FileLog, inits the
@@ -32,7 +22,6 @@ namespace CgsFileSystem
         , mpDebugAllocator(0)
         , mpDiskLayout(0)
         , mpMemFileSystem(0)
-        , mbReleasing(false)
     {
     }
 
@@ -179,33 +168,112 @@ namespace CgsFileSystem
         return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
     }
 
-    void FileSystem::Construct()
+    // ARTIST829033C0: native per-instance DVD/HDD devices and their logical remaps.
+    void FileSystem::Construct(rw::IResourceAllocator* lpAllocator,
+                               rw::IResourceAllocator* lpDebugAllocator,
+                               const char* lpcSearchPath, DiskLayout* lpDiskLayout)
     {
-        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
-            maReadStreams[luIndex].Construct(this, &mLog);
-        muNumUsedReadStreams = 0;
-        mbReleasing = false;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
+            maFiles[lu].Construct(this, &mLog, static_cast<s32>(lu));
+        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
+            maReadStreams[lu].Construct(this, &mLog);
+        mpFileSystemAllocator = lpAllocator;
+        mpDebugAllocator = lpDebugAllocator;
+        mPatchManager.Construct(lpAllocator);
+        DeviceManager::InitializeDeviceManager(lpAllocator);
+        mX360DVDDrive.Construct(0);
+        mX360HardDrive.Construct(1);
+        GetDeviceManager()->AddPhysicalDevice(&mX360DVDDrive, "p_dvd", RWDiskErrorHandler);
+        GetDeviceManager()->AddPhysicalDevice(&mX360HardDrive, "p_hdd", 0);
+        mX360RemapDVDDrive.Construct("/d");
+        mX360RemapHardDrive.Construct("/e");
+        GetDeviceManager()->AddVirtualDevice(&mX360RemapDVDDrive, "d", "p_dvd", 0);
+        GetDeviceManager()->AddVirtualDevice(&mX360RemapHardDrive, "e", "p_hdd", 0);
+        mbPrepared = false;
+        mpDiskLayout = lpDiskLayout;
+        CgsCore::StrCpy(maFilePrefix, sizeof(maFilePrefix), lpcSearchPath);
+        mDiskCache.Construct();
     }
 
+    // ARTIST828F04E8: allocator-backed RenderWare manager, native memory driver,
+    // and the original search path. Construction does not report prepared early.
     bool FileSystem::Prepare()
     {
-        EnsureDeviceManagerUp();
-        // The X360 installs maFilePrefix here. The PC physical device maps this
-        // qualified root to the game's working directory.
-        GetDeviceManager()->SetDefaultPath("p_dvd:");
+        if (mbPrepared) return true;
+        if (!mpFileSystemAllocator) return false;
+        rw::core::filesys::FileSystemConfig lOptions;
+        lOptions.muMaxSearchPaths = 2;
+        lOptions.muScratchSize = 1024;
+        lOptions.mpAllocator = mpFileSystemAllocator;
+        rw::core::filesys::Manager::CreateInstance(&lOptions);
+        rw::core::filesys::Manager* lpManager =
+            static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        EA::Thread::ThreadParameters lParameters = lpManager->mThreadParameters;
+        lParameters.mnPriority = 350;
+        lParameters.mpName = "RwFileSystem";
+        lpManager->mThreadParameters = lParameters;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Prepare();
+        lpManager->SetSearchPath(maFilePrefix);
+        GetDeviceManager()->SetDefaultPath(maFilePrefix);
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(DeviceMemFileSystem);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        void* lpMemory = mpFileSystemAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
+        mpMemFileSystem = lpMemory ? ::new (lpMemory) DeviceMemFileSystem("MEM:") : 0;
+        mpMemFileSystem->Construct();
+        lpManager->RegisterDevice(mpMemFileSystem, 0);
+        lpManager->mpErrorHandler = RWDiskErrorHandler;
         mbPrepared = true;
-        mbReleasing = false;
+        muNumUsedReadStreams = 0;
+        mReleasing.SetValue(0);
         return true;
     }
 
+    // ARTIST82903880: start closes, retry while anything remains pending, then
+    // release files before retiring the RW manager and device workers.
     bool FileSystem::Release()
     {
-        for (const auto& lrStream : maReadStreams)
-            if (GetEffectiveStreamStatus(&lrStream) != StreamDeviceDiskRead::E_STATUS_CLOSED)
-                return false;
-        muNumUsedReadStreams = 0;
+        mReleasing.SetValue(1);
+        if (!mbPrepared) return true;
+        bool lbClosed = true;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
+        {
+            if (maFiles[lu].GetStatus() == E_FILESTATE_CLOSED) continue;
+            if (maFiles[lu].GetStatus() == E_FILESTATE_OPEN) maFiles[lu].Close();
+            lbClosed = false;
+        }
+        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
+        {
+            if (GetEffectiveStreamStatus(&maReadStreams[lu]) == StreamDeviceDiskRead::E_STATUS_CLOSED) continue;
+            maReadStreams[lu].Close();
+            lbClosed = false;
+        }
+        if (!lbClosed) return false;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Release();
+        rw::core::filesys::Manager::DestroyInstance();
+        GetDeviceManager()->Shutdown();
         mbPrepared = false;
         return true;
     }
-    void FileSystem::Destruct() {}
+
+    // ARTIST828E8A88: only the sixteen file records are destructed here.
+    void FileSystem::Destruct()
+    {
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Destruct();
+    }
+
+    void FileSystem::AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT(offsetof(FileSystem, maFiles) == 1024, "ARTIST file table");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mbPrepared) == 27648, "ARTIST prepared flag");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, maReadStreams) == 27656, "ARTIST read-stream table");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mpFileSystemAllocator) == 39180, "ARTIST filesystem allocator");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mpMemFileSystem) == 39232, "ARTIST memory driver");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mPatchManager) == 39240, "ARTIST patch manager");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mX360DVDDrive) == 41456, "ARTIST DVD device");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mX360HardDrive) == 45856, "ARTIST HDD device");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mX360RemapDVDDrive) == 50256, "ARTIST DVD remap");
+        CGS_STATIC_ASSERT(offsetof(FileSystem, mX360RemapHardDrive) == 50332, "ARTIST HDD remap");
+        CGS_STATIC_ASSERT(sizeof(FileSystem) == 50408, "ARTIST filesystem size");
+    }
 }

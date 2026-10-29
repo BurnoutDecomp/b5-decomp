@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsLinearHashTable.h"   // CgsContainers::LinearHashTable
+#include "GameShared/GameClasses/Containers/CgsLinearSOAHashTable.h"   // CgsContainers::LinearHashTable
 #include "eathread/eathread_thread.h"                               // EA::Thread::Thread
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator (entry storage)
 
@@ -94,7 +94,7 @@ namespace CgsFileSystem
         rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    entry storage
         PatchEntry                           maPatches[KU_MAX_PATCHES];     // +4    (4)    32 * 68
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
-        CgsContainers::LinearHashTable<s32, s32> mPatchFileMap;             // +0x888 (2184)
+        CgsContainers::LinearSOAHashTable<s32, u32> mPatchFileMap;             // +0x888 (2184)
         bool                                 mbPatching;                    // +0x898 (2200)
         s32                                  miSearchHandleCount;           // +0x89C (2204) scan result
         EA::Thread::Thread                   mDirSearchThread;              // +0x8A0 (2208)
