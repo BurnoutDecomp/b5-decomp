@@ -56,6 +56,7 @@ struct GameDataEventSlot
     EEventStage                       meStage;            // +0x00 (X360)
     GameDataIO::GameDataAssetEvent    mEvent;             // +0x08 (X360) captured request event
     s32                               miResponseEventId;  // +0x28 (X360) response id (69 = fresh sentinel)
+    s32                               miRefCount;         // +0x2C (X360)
 };
 
 } // namespace BrnResource

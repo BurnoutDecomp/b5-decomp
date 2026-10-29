@@ -158,7 +158,7 @@ namespace
                                 reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>( lpEventData );
 
                             // ld r11,0x20(event) -> the acquired ZoneList's ResourceHandle.
-                            const CgsResource::ResourceHandle lHandle = lpAssetEvent->mHandle;
+                            const CgsResource::ResourceHandle lHandle = static_cast<const BrnResource::GameDataIO::GetPVSResponse*>(lpAssetEvent)->GetPVSHandle();
                             mZoneList = lHandle;
                         }
                         else

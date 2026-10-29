@@ -470,7 +470,7 @@ namespace BrnWorld
             // handle is mHandle -- the X360's `event + 0x20`.
             const BrnResource::GameDataIO::LoadGameDataEvent* lpLoaded =
                 static_cast<const BrnResource::GameDataIO::LoadGameDataEvent*>(lpEvent);
-            mpPropPhysicsDataHeader = lpLoaded->mHandle;
+            mpPropPhysicsDataHeader = reinterpret_cast<const BrnResource::GameDataIO::GetPropPhysicsResponse*>(lpLoaded)->GetPropPhysicsObjectHandle();
             // fall through
         }
 
@@ -898,7 +898,6 @@ namespace BrnWorld
         case 3:
             miReplayState = 4;
             // FALL THROUGH -- measured, see the banner above.
-            [[fallthrough]];
 
         case 4:
             // INFERENCE (name only): raw word 2 == E_RESET_UNLOADING, as in PrepareForReplay.

@@ -246,7 +246,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
         }
 
         // X360 `addi r4, r29, 0x20` -- the GameData reply's ResourceHandle. By member.
-        mpTrafficData = lpAcquire->mHandle;
+        mpTrafficData = reinterpret_cast<const BrnResource::GameDataIO::GetTrafficLaneDataResponse*>(lpAcquire)->GetTrafficLaneHandle();
 
         lpReceiverQueue->Clear();
         meTriggerLoadStage = E_TRIGGER_LOAD_DONE;

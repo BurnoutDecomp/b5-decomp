@@ -995,7 +995,7 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
         mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
         const BrnResource::GameDataIO::LoadGameDataEvent* const lpLoaded =
             static_cast<const BrnResource::GameDataIO::LoadGameDataEvent*>(lpEvent);
-        mPropCollisions.SetPropDataResource(lpLoaded->mHandle);
+        mPropCollisions.SetPropDataResource(reinterpret_cast<const BrnResource::GameDataIO::GetPropPhysicsResponse*>(lpLoaded)->GetPropPhysicsObjectHandle());
         mPropCollisions.Initialise();
         mReceiverQueue.Clear();
         // fall through

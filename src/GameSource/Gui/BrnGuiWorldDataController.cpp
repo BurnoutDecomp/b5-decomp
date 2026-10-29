@@ -216,7 +216,7 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
         // X360 `if (*payload != 1)` -- the echoed miEventId, which GetVehicleList set to 1.
         CGS_ASSERT(lpReply != 0 && lpReply->miEventId == 1, "Invalid event id received\n");  // cpp:152
         if (lpReply != 0)
-            mpVehicleList = static_cast<const BrnResource::VehicleList*>(lpReply->mHandle.mpResourceMemory);
+            mpVehicleList = static_cast<const BrnResource::GameDataIO::GetVehicleListResponse*>(lpReply)->GetVehicleListPtr();
         mReceiverQueue.Clear();
     }
         // fall through
@@ -275,7 +275,7 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
             reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
         CGS_ASSERT(lpReply != 0 && lpReply->miEventId == 1, "Invalid event id received\n");  // cpp:226
         if (lpReply != 0)
-            mpChallengeList = static_cast<const BrnResource::ChallengeList*>(lpReply->mHandle.mpResourceMemory);
+            mpChallengeList = static_cast<const BrnResource::GameDataIO::GetFreeburnChallengeListResponse*>(lpReply)->GetFreeburnChallengeListPtr();
         mReceiverQueue.Clear();
     }
         // fall through

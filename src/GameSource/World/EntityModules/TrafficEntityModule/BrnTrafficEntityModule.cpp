@@ -1444,7 +1444,7 @@ bool TrafficEntityModule::LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutput
 
         // The seat. The console reads the handle at payload +0x20; the host handle is 16 bytes
         // where the console's is 8, so it is read by member.
-        lrData = lpAcquire->mHandle;
+        lrData = reinterpret_cast<const BrnResource::GameDataIO::GetTrafficLaneDataResponse*>(lpAcquire)->GetTrafficLaneHandle();
 
         // ARGUMENT ORDER, measured at 0x82746C1C..0x82746C2C: r4 comes from
         // `lbz r4,0x18(TrafficData)` (the u8 COUNT) and r5 from `lwz r31,0x34(TrafficData)`
@@ -1495,8 +1495,7 @@ bool TrafficEntityModule::LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutput
         CGS_ASSERT( lpListReply->miEventId == KI_VEHICLE_LIST_REQUEST,
                     "Invalid event id received" );                       // baked line 1108
 
-        mpVehicleList = static_cast<const BrnResource::VehicleList*>(
-            lpListReply->mHandle.mpResourceMemory );
+        mpVehicleList = static_cast<const BrnResource::GameDataIO::GetVehicleListResponse*>(lpListReply)->GetVehicleListPtr();
     }
     // fall through -- LABEL_20. NOTE the console jumps to case 8, NOT case 4.
 

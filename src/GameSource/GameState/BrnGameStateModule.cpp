@@ -873,26 +873,12 @@ static const s32 KI_MODE_MANAGER_HEAP_BANK = 0x1B;
 // @0x82399458, so KPC_DISTRICT_MAP_BUNDLE_NAME / _RESOURCE_NAME / KI_DISTRICT_MAP_EVENT_ID /
 // KI_DISTRICT_MAP_POOL_ID live in BrnStuntManager.cpp alongside it.
 
-// ARTIST 0x8239E578..0x8239ED10. The original 28-case preparation ladder.
-// BrnGameModule::GamePrepare calls this body; ResourceUpdateThread services the GameData requests
-// and posts replies to the module-owned receiver queue between passes.
-bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
-                              CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
-                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+static const BrnResource::GameDataIO::GameDataAssetEvent* GetListReply(
+    CgsModule::BaseEventReceiverQueue& lrQueue, s32 liExpectedType, s32 liTypeLine, s32 liEventLine)
 {
-    (void)lpUpdateOutputBufferStack; // ARTIST never reads r5.
-    bool lbDone = false;
-    mbIsUpdating = true;
-    lpOutputBuffer->LockForWrite();
-
-    // The three resident-list replies have identical validation and payload shape.
-    // Keep assertion continuation: the original does not return on an invalid reply id.
-    const auto GetListReply = [this](s32 liExpectedType, s32 liTypeLine, s32 liEventLine)
-        -> const BrnResource::GameDataIO::GameDataAssetEvent*
-    {
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
-        const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        const s32 liType = lrQueue.GetFirstEvent(&lpEvent, &liSize);
         if (liType != liExpectedType)
         {
             CgsDev::Assert::BeginAssert();
@@ -908,7 +894,20 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
             CgsDev::Assert::EndAssert();
         }
         return lpReply;
-    };
+}
+
+
+// ARTIST 0x8239E578..0x8239ED10. The original 28-case preparation ladder.
+// BrnGameModule::GamePrepare calls this body; ResourceUpdateThread services the GameData requests
+// and posts replies to the module-owned receiver queue between passes.
+bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                              CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    (void)lpUpdateOutputBufferStack; // ARTIST never reads r5.
+    bool lbDone = false;
+    mbIsUpdating = true;
+    lpOutputBuffer->LockForWrite();
 
     switch (mePrepareStage)
     {
@@ -943,8 +942,7 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mePrepareStage = E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST;
         if (mReceiverQueue.GetLength() < 1)
             break;
-        mpFreeburnChallengeList = static_cast<const BrnResource::ChallengeList*>(
-            GetListReply(KI_REPLY_FREEBURN_CHALLENGE_LIST, 516, 521)->mHandle.mpResourceMemory);
+        mpFreeburnChallengeList = static_cast<const BrnResource::GameDataIO::GetFreeburnChallengeListResponse*>(GetListReply(mReceiverQueue, KI_REPLY_FREEBURN_CHALLENGE_LIST, 516, 521))->GetFreeburnChallengeListPtr();
         // fall through
     case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
         mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
@@ -955,8 +953,7 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
         if (mReceiverQueue.GetLength() < 1)
             break;
-        mpVehicleList = static_cast<BrnResource::VehicleList*>(
-            GetListReply(KI_REPLY_VEHICLE_LIST, 556, 561)->mHandle.mpResourceMemory);
+        mpVehicleList = const_cast<BrnResource::VehicleList*>(static_cast<const BrnResource::GameDataIO::GetVehicleListResponse*>(GetListReply(mReceiverQueue, KI_REPLY_VEHICLE_LIST, 556, 561))->GetVehicleListPtr());
         mProgressionManager.ApplyVehicleList(mpVehicleList);
         mModeManager.ApplyVehicleList(mpVehicleList);
         // fall through
@@ -969,8 +966,7 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
         if (mReceiverQueue.GetLength() < 1)
             break;
-        mpWheelList = static_cast<BrnResource::WheelList*>(
-            GetListReply(KI_REPLY_WHEEL_LIST, 599, 604)->mHandle.mpResourceMemory);
+        mpWheelList = const_cast<BrnResource::WheelList*>(static_cast<const BrnResource::GameDataIO::GetWheelListResponse*>(GetListReply(mReceiverQueue, KI_REPLY_WHEEL_LIST, 599, 604))->GetWheelListPtr());
         // fall through
     case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
         mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
@@ -2687,34 +2683,35 @@ namespace
     {
         CgsID maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_COUNT];
         CgsID maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_COUNT];
+
+        VehicleImpactMessageTables()
+        {
+            for (s32 liImpact = 0; liImpact < BrnPhysics::Vehicle::E_IMPACT_COUNT; ++liImpact)
+            {
+                maAggressorMessages[liImpact] = 0;
+                maVictimMessages[liImpact]    = 0;
+            }
+            // sub_82C4D590 -- the table SendVehicleImpactMessages picks when the aggressor is
+            // the local player (and posts alongside action 53).
+            maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT] =
+                CgsIDCompress("GameTPaint");                      // std -> 0x82FAE230
+            maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_SLAM] =
+                CgsIDCompress("GameGdSlam");                      // std -> 0x82FAE240
+            maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_SHUNT] =
+                CgsIDCompress("GameGdShunt");                     // std -> 0x82FAE248
+            // sub_82C4D620 -- the table for every other aggressor (posted alongside action 54).
+            maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT] =
+                CgsIDCompress("GameTPaint");                      // std -> 0x82FAE1E8
+            maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_SLAM] =
+                CgsIDCompress("GameBdSlam");                      // std -> 0x82FAE1F8
+            maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_SHUNT] =
+                CgsIDCompress("GameBdShunt");                     // std -> 0x82FAE200
+        }
     };
 
     const VehicleImpactMessageTables& GetVehicleImpactMessageTables()
     {
-        static VehicleImpactMessageTables lTables = []() {
-            VehicleImpactMessageTables lBuilt;
-            for (s32 liImpact = 0; liImpact < BrnPhysics::Vehicle::E_IMPACT_COUNT; ++liImpact)
-            {
-                lBuilt.maAggressorMessages[liImpact] = 0;
-                lBuilt.maVictimMessages[liImpact]    = 0;
-            }
-            // sub_82C4D590 -- the table SendVehicleImpactMessages picks when the aggressor is
-            // the local player (and posts alongside action 53).
-            lBuilt.maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT] =
-                CgsIDCompress("GameTPaint");                      // std -> 0x82FAE230
-            lBuilt.maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_SLAM] =
-                CgsIDCompress("GameGdSlam");                      // std -> 0x82FAE240
-            lBuilt.maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_SHUNT] =
-                CgsIDCompress("GameGdShunt");                     // std -> 0x82FAE248
-            // sub_82C4D620 -- the table for every other aggressor (posted alongside action 54).
-            lBuilt.maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT] =
-                CgsIDCompress("GameTPaint");                      // std -> 0x82FAE1E8
-            lBuilt.maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_SLAM] =
-                CgsIDCompress("GameBdSlam");                      // std -> 0x82FAE1F8
-            lBuilt.maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_SHUNT] =
-                CgsIDCompress("GameBdShunt");                     // std -> 0x82FAE200
-            return lBuilt;
-        }();
+        static VehicleImpactMessageTables lTables;
         return lTables;
     }
 }

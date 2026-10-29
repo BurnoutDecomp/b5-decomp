@@ -128,7 +128,7 @@ WorldGraphicsStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDataAs
 {
     CGS_ASSERT( mpWorldEntityModule, "mpWorldEntityModule" );
 
-    maInstanceLists[ liListIndex ] = lpEvent->mHandle;
+    maInstanceLists[ liListIndex ] = static_cast<const BrnResource::GameDataIO::GetWorldUnitGraphicsResponse*>(lpEvent)->GetWorldUnitGraphicsHandle();
 
     mpWorldEntityModule->OnWorldGraphicsLoadComplete( lpEvent, liListIndex );
 }

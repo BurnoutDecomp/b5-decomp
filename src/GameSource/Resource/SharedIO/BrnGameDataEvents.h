@@ -48,6 +48,10 @@ namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer
 
 namespace BrnResource
 {
+    class VehicleList;
+    class ICEList;
+    class WheelList;
+    class ChallengeList;
     // ========================================================================
     // EGeneratedPoolIds -- the generated resource-pool id table.
     //
@@ -130,10 +134,6 @@ namespace GameDataIO
         CgsID     mId;         // +0x10 (u64, 8-aligned)
         EAssetSet meType;      // +0x18 (4-byte enum)
         bool      mbFailFlag;  // +0x1C
-        // The loaded asset's resource handle (WorldGraphicsStreamer::OnLoadComplete
-        // @0x827BE5C8 binds the instance-list slot from event+0x20).
-        CgsResource::ResourceHandle mHandle;   // +0x20
-
         // ADDITIVE GROW: the asset-id accessor the GameData event consumers read. The
         // X360 load-complete handlers read mId straight from +0x10 (e.g.
         // RaceCarBaseComponentStreamer::OnLoadComplete @0x822C0450 `ld r11,0x10(event)`),
@@ -219,55 +219,166 @@ namespace GameDataIO
         }
     };
 
-    // ========================================================================
-    // The two "here is your loaded asset" responses the traffic module consumes.
-    //
-    // ⚠ DO NOT ADD A HANDLE MEMBER TO EITHER OF THEM. The DWARF gives each its own
-    // private ResourceHandle (:232 / :443) and gives GameDataAssetEvent none, but
-    // the committed GameDataAssetEvent above carries `mHandle` at +0x20 -- exactly
-    // where the derived handle would sit, since the base ends at 0x20. Declaring it
-    // again here creates a SECOND handle at +0x28 and every reader takes the wrong
-    // one. So both are empty derivatives whose DWARF-named accessors return the
-    // inherited mHandle: layout and source vocabulary both stay right, and sizeof is
-    // 0x28 either way. X360: TrafficCarStreamer::OnLoadComplete @0x82758270 binds the
-    // stub ResourcePtr from event+0x20.
-    //
-    // ⛔ PARKED: the long-term fix is to push mHandle back down out of
-    // GameDataAssetEvent into the response family. That is a cross-TU reorder
-    // touching BrnBaseStreamer.cpp, BrnRaceCarComponentStreamers.cpp and
-    // BrnWorldGraphicsStreamer.cpp, so it needs a coordinated pass.
-    // ========================================================================
-
-    // DWARF: BrnGameDataEvents.h:220. The reply to a traffic-vehicle GRAPHICS
-    // load (asset set E_ASSETSET_GRAPHICS, pool E_POOL_TRAFFIC); the handle names
-    // the loaded BrnTraffic::GraphicsStub (resource type 65557 / 0x10015).
+    // Response payloads follow the distinct DecFIGS declarations.
     struct GetTrafficVehicleGraphicsResponse : public GameDataAssetEvent
     {
-        // DWARF :229 -- `const ResourceHandle& GetTrafficVehicleGraphicsObjectHandle() const`.
-        const CgsResource::ResourceHandle& GetTrafficVehicleGraphicsObjectHandle() const
+        const CgsResource::ResourceHandle& GetTrafficVehicleGraphicsObjectHandle() const { return mVehicleGraphicsObjectHandle; }
+        void Construct(s32 liEventId, s32 liPoolId, CgsID lId,
+                       const CgsResource::ResourceHandle& lrHandle, bool lbFailFlag)
         {
-            return mHandle;
+            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = liPoolId;
+            mId = lId; meType = static_cast<EAssetSet>(0); mbFailFlag = lbFailFlag;
+            mVehicleGraphicsObjectHandle = lrHandle;
         }
+    private:
+        CgsResource::ResourceHandle mVehicleGraphicsObjectHandle;
     };
 
-    // DWARF: BrnGameDataEvents.h:425. The reply to a vehicle PHYSICS load (asset
-    // set E_ASSETSET_PHYSICS); the handle names the loaded BrnPhysics::Deformation
-    // model data the VehicleTypeRuntime is Prepare'd from. TrafficEntityModule::
-    // LoadData @0x82746A88 stage E_RESOURCE_LOAD_PHYSICS binds
-    // maTrafficVehiclePhysicsSpecs[type] from the record's +0x20 handle, then calls
-    // VehicleTypeRuntime::Prepare @0x82761B10.
+    struct GetVehicleGraphicsResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetVehicleGraphicsObjectHandle() const { return mVehicleGraphicsObjectHandle; }
+        void SetVehicleGraphicsObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mVehicleGraphicsObjectHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mVehicleGraphicsObjectHandle;
+    };
+
     struct GetVehiclePhysicsResponse : public GameDataAssetEvent
     {
-        // DWARF :437 / :440.
-        const CgsResource::ResourceHandle& GetVehiclePhysicsObjectHandle() const
-        {
-            return mHandle;
-        }
-        void SetVehiclePhysicsObjectHandle( const CgsResource::ResourceHandle& lrHandle )
-        {
-            mHandle = lrHandle;
-        }
+        const CgsResource::ResourceHandle& GetVehiclePhysicsObjectHandle() const { return mVehiclePhysicsObjectHandle; }
+        void SetVehiclePhysicsObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mVehiclePhysicsObjectHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mVehiclePhysicsObjectHandle;
     };
+
+    struct GetWheelGraphicsResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetWheelGraphicsObjectHandle() const { return mWheelGraphicsObjectHandle; }
+        void SetWheelGraphicsObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mWheelGraphicsObjectHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mWheelGraphicsObjectHandle;
+    };
+
+    struct GetPropPhysicsResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetPropPhysicsObjectHandle() const { return mPropPhysicsHandle; }
+        void SetPropPhysicsObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mPropPhysicsHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mPropPhysicsHandle;
+    };
+
+    struct GetPropInstancesResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetPropInstancesObjectHandle() const { return mPropInstancesHandle; }
+        void SetPropInstancesObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mPropInstancesHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mPropInstancesHandle;
+    };
+
+    struct GetPropGraphicsListResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetPropGraphicsListObjectHandle() const { return mPropGraphicsListHandle; }
+        void SetPropGraphicsListObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mPropGraphicsListHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mPropGraphicsListHandle;
+    };
+
+    struct GetPVSResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetPVSHandle() const { return mPVSHandle; }
+        void SetPVSHandle(const CgsResource::ResourceHandle& lrHandle) { mPVSHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mPVSHandle;
+    };
+
+    struct GetTrafficLaneDataResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetTrafficLaneHandle() const { return mTrafficLaneHandle; }
+        void SetTrafficLaneHandle(const CgsResource::ResourceHandle& lrHandle) { mTrafficLaneHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mTrafficLaneHandle;
+    };
+
+    struct GetAIDataResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetAIDataHandle() const { return mAIDataHandle; }
+        void SetAIDataHandle(const CgsResource::ResourceHandle& lrHandle) { mAIDataHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mAIDataHandle;
+    };
+
+    struct GetWorldUnitGraphicsResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetWorldUnitGraphicsHandle() const { return mWorldUnitGraphicsHandle; }
+        void SetWorldUnitGraphicsHandle(const CgsResource::ResourceHandle& lrHandle) { mWorldUnitGraphicsHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mWorldUnitGraphicsHandle;
+    };
+
+    struct GetICEMovieResponse : public GameDataAssetEvent
+    {
+        const CgsResource::ResourceHandle& GetICEMovieObjectHandle() const { return mICEMovieObjectHandle; }
+        void SetICEMovieObjectHandle(const CgsResource::ResourceHandle& lrHandle) { mICEMovieObjectHandle = lrHandle; }
+    private:
+        CgsResource::ResourceHandle mICEMovieObjectHandle;
+    };
+
+    struct GetVehicleListResponse : public GameDataAssetEvent
+    {
+        const VehicleList* GetVehicleListPtr() const { return mpVehicleList; }
+        void Construct(s32 liEventId, const VehicleList* lpList, bool lbFailFlag)
+        {
+            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
+            mId = 0xC98B447411F97E38ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            mpVehicleList = lpList;
+        }
+    private:
+        const VehicleList* mpVehicleList;
+    };
+
+    struct GetICEListResponse : public GameDataAssetEvent
+    {
+        const ICEList* GetICEListPtr() const { return mpICEList; }
+        void Construct(s32 liEventId, const ICEList* lpList, bool lbFailFlag)
+        {
+            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
+            mId = 0x7DDFC0102EE70838ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            mpICEList = lpList;
+        }
+    private:
+        const ICEList* mpICEList;
+    };
+
+    struct GetWheelListResponse : public GameDataAssetEvent
+    {
+        const WheelList* GetWheelListPtr() const { return mpWheelList; }
+        void Construct(s32 liEventId, const WheelList* lpList, bool lbFailFlag)
+        {
+            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
+            mId = 0xCF5D625701228838ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            mpWheelList = lpList;
+        }
+    private:
+        const WheelList* mpWheelList;
+    };
+
+    struct GetFreeburnChallengeListResponse : public GameDataAssetEvent
+    {
+        const ChallengeList* GetFreeburnChallengeListPtr() const { return mpChallengeList; }
+        void Construct(s32 liEventId, const ChallengeList* lpList, bool lbFailFlag)
+        {
+            miEventId = liEventId; mpReceiverQueue = 0; miPoolId = 5;
+            mId = 0x5AF30CD3F949F838ull; meType = static_cast<EAssetSet>(3); mbFailFlag = lbFailFlag;
+            mpChallengeList = lpList;
+        }
+    private:
+        const ChallengeList* mpChallengeList;
+    };
+
+    struct LoadICEMovieResponse : public GameDataAssetEvent {};
+    struct GetVehicleAttribsResponse : public GameDataAssetEvent {};
+    struct GetSurfaceListResponse : public GameDataAssetEvent {};
+    struct LoadWorldCollisionResponse : public GameDataAssetEvent {};
+
 }
 }
 

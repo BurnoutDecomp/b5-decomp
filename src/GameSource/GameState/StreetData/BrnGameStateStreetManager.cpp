@@ -376,7 +376,7 @@ bool StreetManager::LoadAIData( GameStateModuleIO::OutputBuffer* lpOutput,
             // marking the load complete (same native-width handle as Progression).
             const BrnResource::GameDataIO::GameDataAssetEvent* asset =
                 reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
-            mpAISectionData = asset->mHandle;
+            mpAISectionData = static_cast<const BrnResource::GameDataIO::GetAIDataResponse*>(asset)->GetAIDataHandle();
 
             meAILoadStage = E_AI_DATA_LOAD_COMPLETE;
             return true;

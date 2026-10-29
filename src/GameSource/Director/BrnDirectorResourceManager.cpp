@@ -514,8 +514,7 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
                            "Invalid event id received\n");                              // cpp:121
                 // asm: lwz r11,0x20(payload) -- the reply's mHandle.mpResourceMemory, which
                 // ProcessGetVehicleListRequest sets to &GameDataModule::mVehicleList.
-                mpVehicleList = reinterpret_cast<const BrnResource::VehicleList*>(
-                    lpReply->mHandle.mpResourceMemory);
+                mpVehicleList = static_cast<const BrnResource::GameDataIO::GetVehicleListResponse*>(lpReply)->GetVehicleListPtr();
                 break;
             }
 
@@ -525,8 +524,7 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
                     reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEventData);
                 CGS_ASSERT(lpReply->miEventId == KI_EVENTID_ICE_LIST,
                            "Invalid event id received\n");                              // cpp:110
-                mpICEDictionaryList = reinterpret_cast<const BrnResource::ICEList*>(
-                    lpReply->mHandle.mpResourceMemory);
+                mpICEDictionaryList = static_cast<const BrnResource::GameDataIO::GetICEListResponse*>(lpReply)->GetICEListPtr();
                 break;
             }
 
