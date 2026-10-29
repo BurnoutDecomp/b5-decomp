@@ -27,10 +27,12 @@
 //     transposes. The only real kernel in the family is TestSphereTriangle4SOA
 //     (144), and that turns out to be a PUBLISHED algorithm (see its banner).
 //
-// PC LOWERING, stated once for the whole file: the tree's rw::math::vpu vectors
+// Legacy scalar sections: the tree's rw::math::vpu vectors
 // are plain 16-byte, 16-aligned {x,y,z,w} structs with no SIMD operations, and
 // the established precedent for this family (CgsTriangle4.cpp) is portable
-// scalar float math. Everything below follows it. ⭐ That is also the safest
+// scalar float math. The extraction/sphere sections retain those older lowerings;
+// the double-sided line family below uses actual native VMX operations.
+// That scalar representation also gave the original reconstruction a
 // possible answer to the "which lane?" hazard: once the console's SoA registers
 // are written as `f32 v[4]`, a lane is an ARRAY INDEX and there is no swizzle
 // left to get wrong. The lane assignments themselves were settled from the
@@ -982,14 +984,10 @@ namespace CgsGeometric
     // normal or edge vector makes 0 * (1/sqrt(0)) a NaN, and every compare against a
     // NaN is false.
     //
-    // PC LOWERING: vrefp + 2 NR is a divide and vrsqrtefp + 2 NR is 1/sqrt, except where the
-    // estimate is infinite or zero (a zero, infinite or underflowing input): there the first
-    // Newton-Raphson step multiplies 0 by infinity and the console's answer is a NaN, which
-    // LineSoupRefined* reproduce. The cross products keep their fused subtract (std::fma):
-    // it decides the normal of a nearly degenerate triangle, where the two products cancel.
-    // The compares are in the console's orientation. The single-triangle kernel was compared
-    // with an interpreter of its instruction stream on 1,000 random triangle/segment pairs (a
-    // third of them collinear): identical masks and parameters.
+    // Native implementation: the actual estimates and both refinement steps,
+    // cross-product multiply/subtract boundaries, dot instructions and compares
+    // execute as VMX. Whole emitted single/four-call functions are compared with
+    // ARTIST, including complete parameter outputs and IEEE edge cases.
     // ============================================================================
     namespace
     {
