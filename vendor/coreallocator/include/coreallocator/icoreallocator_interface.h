@@ -60,12 +60,14 @@ namespace Allocator
         // compiler emits.
         virtual ~ICoreAllocator();
 
+        // MSVC lays out a same-name virtual overload group in reverse declaration
+        // order. ARTIST: aligned Alloc at +4, plain Alloc at +8, Free at +0xC.
+        /// Allocate `nSize` bytes. `pName` is an optional debug tag, `nFlags` an AllocFlags value.
+        virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) = 0;
+
         /// Allocate `nSize` bytes with explicit alignment / alignment offset.
         virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags,
                             unsigned int nAlignment, unsigned int nAlignmentOffset = 0) = 0;
-
-        /// Allocate `nSize` bytes. `pName` is an optional debug tag, `nFlags` an AllocFlags value.
-        virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) = 0;
 
         /// Free a block previously returned by Alloc. `nSize` is the (optional) original size.
         virtual void  Free(void* pBlock, size_t nSize = 0) = 0;
