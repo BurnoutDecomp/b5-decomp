@@ -571,8 +571,9 @@ void PassbyEffect::ProcessUpdate()
             const f32 lfSpeed = (lrPassby.mfRelativeVelocityMagnitude - KF_COLLISION_SPEED_MAX >= 0.0f)
                                     ? KF_COLLISION_SPEED_MAX
                                     : lrPassby.mfRelativeVelocityMagnitude;
-            lfPitch = std::fmaf(lfSpeed * KF_COLLISION_SPEED_SCALE, KF_COLLISION_PITCH_RANGE,
-                                KF_COLLISION_PITCH_MIN) * lfPitch;
+            const f32 lfScaledSpeed = lfSpeed * KF_COLLISION_SPEED_SCALE;
+            const f32 lfCollisionPitch = lfScaledSpeed * KF_COLLISION_PITCH_RANGE + KF_COLLISION_PITCH_MIN;
+            lfPitch = lfCollisionPitch * lfPitch;
         }
 
         const u32 luSend01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
