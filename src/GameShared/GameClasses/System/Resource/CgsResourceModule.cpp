@@ -115,7 +115,8 @@ namespace CgsResource
 
     // ARTIST829055B0: construct the modules over the supplied resource allocator.
     // FileSystem uses its existing native device-manager adapter.
-    void ResourceModule::Construct(const void* lpInitOptions, void* lpAllocator)
+    void ResourceModule::Construct(const InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+                                   rw::IResourceAllocator* lpDebugAllocator)
     {
         if (lpInitOptions == 0 || lpAllocator == 0)
             return;
@@ -128,7 +129,7 @@ namespace CgsResource
         mFileSystem.Construct();
         mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
         mBundleLoaderModule.Construct(&lpOptions->mLoaderInitOptions, lpRwAllocator,
-                                      lpOptions->mDebugParams.mpDebugAllocator);
+                                      lpDebugAllocator);
         mDebugComponent.Construct(this, &lpOptions->mDebugParams);
     }
     // ARTIST828EC6B0, with retirement of native pending-response allocations.
@@ -315,6 +316,7 @@ namespace CgsResource
                 Events::OpenReadStreamResponse* lpResponse =
                     static_cast<Events::OpenReadStreamResponse*>(
                         lpPending->mpResponse);
+                lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
                 lpUser = lpResponse->GetUser();
                 liResponseSize = sizeof(*lpResponse);
             }
