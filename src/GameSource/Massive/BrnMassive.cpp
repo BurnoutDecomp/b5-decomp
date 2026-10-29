@@ -48,13 +48,14 @@ enum EDebugState
 // ---------------------------------------------------------------------------
 int BrnMassive::Construct()
 {
+    _AssertLayout();
     mnNumActiveSubscribers   = 0;
     mbField92C               = false;
     mbSafeToDownload         = true;
     mbImpressionFrameStarted = false;
-    std::memset(maSubscriberPool, 0, sizeof(maSubscriberPool));
+    void* lpResult = std::memset(maSubscriberPool, 0, sizeof(maSubscriberPool));
     mbIsPaused               = false;
-    return 0;
+    return reinterpret_cast<int>(lpResult);
 }
 
 // ---------------------------------------------------------------------------
