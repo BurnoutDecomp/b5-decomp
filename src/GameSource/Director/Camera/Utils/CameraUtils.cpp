@@ -5,6 +5,7 @@
 #include "rw/math/vpu/vector3_operation.h"           // Subtract / Normalize / IsZero
 #include "rw/math/vpu/matrix44affine_operation.h"    // Mult / TransformPoint /
                                                      //   InverseOfMatrixWithOrthonormal3x3
+#include "SDKs/XboxMath/XMVectorTan.h"                // XboxMath::XMVectorTan @0x821F0788
 
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"   // LineTestNearestPostBox (ResolveLineTestNearest...)
 #include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (ApplyPitchAboutPointRads)
@@ -56,38 +57,15 @@
 //   TendToLimits(f32 x5)      NO X360 SYMBOL / PS3 @0x1B53C (CameraUtils.cpp:660) -- the
 //                             X360 inlines it into every caller; see its own banner
 //   SineLerp                  @0x8220CCB0 / PS3 @0x20AE4   (CameraUtils.cpp:808)
+
+// Bodied here (1 ledger function, class:BrnDirector::Camera::Utils -- the near-plane
+// frustum-corner builder consumed by BehaviourRoadRunner):
+//   CalcNearClipCorners @0x821F25B8 (full PPC assembly plus DecFIGS declaration shape)
 //
-// DECLARATION-ONLY + FLAGGED (declared in CameraUtils.h, bodies not reconstructed --
-// each is an inline VMX minimax / corner lattice / permute over UNATTESTED raw rodata
-// coefficient constants; bodying them store-for-store would fabricate those
-// tables, so they are left unbodied per the no-fabrication rule):
-//   ApplyPitchAboutPointRads          @0x822183E0  -- BODIED 2026-09-28 (owner's list, lane L2), with
-//       ResolveLineTestNearestUsingNormalStrict @0x8220CD58, at the end of this file. The entry below is kept as
-//       the record of why it waited:
-//   (was) ApplyPitchAboutPointRads    @0x822183E0  (Sin/Cos minimax, rodata 82000BD0..82000C60)
-//       ⛔ ITS REASON IS THE ONE THAT JUST EXPIRED FOR ITS NEIGHBOUR -- DO NOT RE-QUOTE IT.
-//       RotateMatrix44AffineByEulerAnglesZXY sat on this same list, citing this same rodata
-//       range, and the coefficients turned out to be an implementation detail of sin and cos
-//       that this file de-optimises to libm as a matter of course (see its definition below).
-//       0x82000C60 is DUMPED as { pi, 2pi, 1/pi, 1/(2pi) } -- the range-reduction row, not a
-//       coefficient table. What actually has to be recovered here is the pivot/compose order,
-//       and nobody has tried. It stays on this list only because it has not been done, NOT
-//       because it is blocked.
-//   CalcNearClipCorners               @0x821F25B8  (XMVectorTan + VMX corner lattice)
-//   FindNonParallelNormalisedVectorTo @0x822171B0  (the SECOND of its two returned constants
-//                                                   is still unattested; unk_82181510 is now
-//                                                   pinned -- see KV_AXIS_Y below)
-//
-// ⛔ CORRECTED 2026-08-01 -- CreateAdjustedLookAt and GetFOVDegsToFitObjectToScreenSize used
-//   to sit in the list above, described as unbodiable "vrefp128 + vperm128 mask" and "two
-//   vrefp128 Newton-refine reciprocals" blocks. THAT WAS A MISREADING OF WHAT THE VMX IS
-//   DOING: neither reads a coefficient table. `vrefp128` + Newton-Raphson is a RECIPROCAL
-//   (i.e. a divide, which the PC writes as `/`), and the `vperm` against unk_82CDA350 is the
-//   tree's already-documented `Vector3(x, y, z)` construction mask, not data. There was
-//   nothing to fabricate in either, and both are now bodied below.
-//   THE LESSON GENERALISES: "unattested rodata" and "an addressing mode I have not decoded"
-//   are different findings, and only the first one blocks a reconstruction. Anything still
-//   on the list above should be re-read with that distinction in mind before it is trusted.
+// The former declaration-only flags for ApplyPitchAboutPointRads and
+// FindNonParallelNormalisedVectorTo are retired by their bodies below. The old CalcNearClipCorners
+// flag is retired by the body added in this delta; RoadRunner's caller/result chain remains a
+// separate source gate because its post-box consumer is still incomplete.
 
 namespace BrnDirector
 {
@@ -1372,6 +1350,44 @@ Matrix44Affine CreateAdjustedLookAt(Matrix44Affine lLookAt,
     const Vector3 lOrigin = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     return rw::math::vpu::Mult(CreateLookAt(lOrigin, lOffsetTarget), lLookAt);
+}
+
+// X360 0x821F25B8. Build the four corners of the near plane, preserving the console's
+// PPC argument and output order. In the caller, v1 is near distance, v2 is FOV degrees,
+// v3 is reciprocal aspect, and r4..r7 are the four output pointers. The X360 body
+// computes tan(FOV*pi/360) through XMVectorTan, then forms:
+//   centre = wAxis + zAxis*nearDistance
+//   halfX  = xAxis * (tanHalfFov*nearDistance)
+//   halfY  = yAxis * ((tanHalfFov*reciprocalAspect)*nearDistance)
+// Its four stvx stores are {centre+halfX+halfY, centre-halfX+halfY,
+//                           centre+halfX-halfY, centre-halfX-halfY}.
+// No clamping, validity checks, or output-pointer guards are in the console body.
+void CalcNearClipCorners(Matrix44Affine lrCameraTransform,
+                         VecFloat lvNearClipDistance,
+                         VecFloat lvHorizontalFOVDegs,
+                         VecFloat lvReciprocalAspect,
+                         Vector3* lpCorner0,
+                         Vector3* lpCorner1,
+                         Vector3* lpCorner2,
+                         Vector3* lpCorner3)
+{
+    const f32 lfNearClipDistance = static_cast<f32>(lvNearClipDistance);
+    const f32 lfFOVRadians = static_cast<f32>(lvHorizontalFOVDegs) * 0.017453292f;
+    const f32 lfTanHalfFOV = XboxMath::XMVectorTan(lfFOVRadians * 0.5f);
+
+    const Vector3 lNearCentre = rw::math::vpu::Add(
+        lrCameraTransform.wAxis,
+        rw::math::vpu::Mult(lrCameraTransform.zAxis, lfNearClipDistance));
+    const Vector3 lHalfX = rw::math::vpu::Mult(
+        lrCameraTransform.xAxis, lfTanHalfFOV * lfNearClipDistance);
+    const f32 lfYScale =
+        (lfTanHalfFOV * static_cast<f32>(lvReciprocalAspect)) * lfNearClipDistance;
+    const Vector3 lHalfY = rw::math::vpu::Mult(lrCameraTransform.yAxis, lfYScale);
+
+    *lpCorner0 = rw::math::vpu::Add(rw::math::vpu::Add(lNearCentre, lHalfX), lHalfY);
+    *lpCorner1 = rw::math::vpu::Add(rw::math::vpu::Subtract(lNearCentre, lHalfX), lHalfY);
+    *lpCorner2 = rw::math::vpu::Subtract(rw::math::vpu::Add(lNearCentre, lHalfX), lHalfY);
+    *lpCorner3 = rw::math::vpu::Subtract(rw::math::vpu::Subtract(lNearCentre, lHalfX), lHalfY);
 }
 
 // ARTIST 822171B0 / 82217270. Near-opposite vectors use the console's
