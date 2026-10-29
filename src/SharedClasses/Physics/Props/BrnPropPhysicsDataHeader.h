@@ -21,11 +21,9 @@
 // (An earlier revision sized mapPropPartTypes at 500 from a placeholder constant, which put
 // mapVolumeTypes 800 bytes past where the data has it.)
 //
-// LOADED IN PLACE: the resource blob IS this object, and FixUp only adds the resource load
-// base to each serialised offset slot -- so the host layout is a WIRE CONTRACT with
-// tools/assets/bundles/world_type_transcode.py::transcode_propphysics. _AssertLayout() pins it.
-// Console -> host: header 0x2C94 -> 0x5818, mapPropPartTypes 0x7E0 -> 0xFB0,
-// mapVolumeTypes 0xC90 -> 0x1810, muTimeStamp 0x2C90 -> 0x5810.
+// LOADED IN PLACE: the native resource blob is this object. FixUp only adds
+// the resource load base to each serialised offset slot. _AssertLayout pins
+// the ARTIST table offsets and native 0x2C94-byte header.
 //
 // GetType @ 0x82277C50 is emitted OUT OF LINE by the shipped X360 build and its body overrides
 // the leak's inline version: TWO bounds asserts -- liTypeId < KU_MAX_PROP_TYPES (0x1F4 == 500)
@@ -78,11 +76,11 @@ private:
 
     PropTypeData* mapPropTypes[KU_MAX_PROP_TYPES];                    // +0x10
 
-    PropPartTypeData* mapPropPartTypes[KU_MAX_PROP_PART_TYPES];       // console +0x7E0 -> host +0xFB0
+    PropPartTypeData* mapPropPartTypes[KU_MAX_PROP_PART_TYPES];       // native +0x7E0
 
-    rw::collision::Volume* mapVolumeTypes[KU_MAX_PROP_PHYSICS_VOLUMES];  // console +0xC90 -> host +0x1810
+    rw::collision::Volume* mapVolumeTypes[KU_MAX_PROP_PHYSICS_VOLUMES];  // native +0xC90
 
-    uint32_t muTimeStamp;                // console +0x2C90 -> host +0x5810
+    uint32_t muTimeStamp;                // native +0x2C90
 };
 
 // 0x82277C50 - reconstructed store-for-store from the X360 asm (OVERRIDES the leak inline).
@@ -129,27 +127,24 @@ PropPhysicsDataHeader::GetSizeInBytes() const
     return muSizeInBytes;
 }
 
-// ---- x64 layout pins ---------------------------------------------------------------
-// PROPS/PROPPHYSICS.BUNDLE is consumed in place, so these offsets are a WIRE CONTRACT with
-// tools/assets/bundles/world_type_transcode.py::transcode_propphysics (constants
-// PPH_X64_TYPES_AT / PPH_X64_PARTS_AT / PPH_X64_VOLS_AT / PPH_X64_STAMP_AT /
-// PPH_X64_HEADER). Anything that shifts a member here must shift the converter's emitted
-// image in the same step -- the two silently disagreeing is the STREETDATA failure mode.
+// Native table bases are used directly by ARTIST FixUp/FixDown @0x8267F570/658.
 inline void PropPhysicsDataHeader::_AssertLayout()
 {
     PropTypeData::_AssertLayout();
     PropPartTypeData::_AssertLayout();
-    CGS_STATIC_ASSERT((KU_MAX_PROP_TYPES == 500),           "mapPropTypes[500] (FixUp bases)");
-    CGS_STATIC_ASSERT((KU_MAX_PROP_PART_TYPES == 300),      "mapPropPartTypes[300] (FixUp bases)");
+    CGS_STATIC_ASSERT((KU_MAX_PROP_TYPES == 500), "mapPropTypes[500]");
+    CGS_STATIC_ASSERT((KU_MAX_PROP_PART_TYPES == 300), "mapPropPartTypes[300]");
     CGS_STATIC_ASSERT((KU_MAX_PROP_PHYSICS_VOLUMES == 2048), "mapVolumeTypes[2048]");
-    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muSizeInBytes)    == 0x0C),   "muSizeInBytes @0x0C");
-    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapPropTypes)     == 0x10),   "mapPropTypes @0x10");
-    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapPropPartTypes) == 0xFB0),
-                  "mapPropPartTypes @0xFB0 (console +0x7E0)");
-    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapVolumeTypes)   == 0x1910),
-                  "mapVolumeTypes @0x1910 (console +0xC90)");
-    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muTimeStamp)      == 0x5910),
-                  "muTimeStamp @0x5910 (console +0x2C90)");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muNumberOfPropTypes) == 0x0), "PropPhysicsDataHeader::muNumberOfPropTypes @0x0");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muNumberOfVolumeTypes) == 0x4), "PropPhysicsDataHeader::muNumberOfVolumeTypes @0x4");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muNumberOfPartTypes) == 0x8), "PropPhysicsDataHeader::muNumberOfPartTypes @0x8");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muSizeInBytes) == 0xC), "PropPhysicsDataHeader::muSizeInBytes @0xC");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapPropTypes) == 0x10), "PropPhysicsDataHeader::mapPropTypes @0x10");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapPropPartTypes) == 0x7E0), "PropPhysicsDataHeader::mapPropPartTypes @0x7E0");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, mapVolumeTypes) == 0xC90), "PropPhysicsDataHeader::mapVolumeTypes @0xC90");
+    CGS_STATIC_ASSERT((offsetof(PropPhysicsDataHeader, muTimeStamp) == 0x2C90), "PropPhysicsDataHeader::muTimeStamp @0x2C90");
+    CGS_STATIC_ASSERT((sizeof(PropPhysicsDataHeader) == 0x2C94), "native prop physics header size");
+    CGS_STATIC_ASSERT((__alignof(PropPhysicsDataHeader) == 4), "native prop physics header alignment");
 }
 
 }

@@ -4,19 +4,18 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "types.hpp"
 
-#include <cstddef>   // offsetof (porter-contract asserts)
+#include <cstddef>   // offsetof (native layout asserts)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnPhysics::Props::PropInstanceDataResourceType::GetSerialisedResourceDescriptor @ 0x8267B0C8
 //   BrnPhysics::Props::PropInstanceDataResourceType::FixUp     @ 0x8267F7C8
 //   BrnPhysics::Props::PropInstanceDataResourceType::GetTypeID @ 0x82675638
 //
-// The serialised payload is a BrnPhysics::Props::PropZoneData whose HOST layout is the
-// platform-4 on-disk form (see BrnPhysicsPropZoneData.h + the porter contract asserts in
-// FixUp below). FixUp relocates the two table pointers (maInstances then maCells, the X360
-// order, null-preserving) and the descriptor sizes the resource from muSizeInBytes plus the
+// The serialised payload is a native BrnPhysics::Props::PropZoneData (see the
+// layout asserts in FixUp below). FixUp relocates its two table pointers
+// (maInstances then maCells, null-preserving) and the descriptor sizes the resource from muSizeInBytes plus the
 // header -- both by NAMED member access (this handler is a friend of PropZoneData), replacing
-// the earlier raw-offset pokes that mixed X360 byte offsets with 8-byte reads.
+// the earlier raw-offset pokes.
 
 namespace BrnPhysics
 {
@@ -32,8 +31,6 @@ namespace Props
     // GetSerialisedResourceDescriptor @ 0x8267B0C8 (store-for-store). The X360 reads
     // PropZoneData::muSizeInBytes (the byte size of everything after the header) and adds the
     // header size:  r9 = *(a3 + 0xC); r11 = r9 + 0x1C  -> entry0 size = muSizeInBytes + 0x1C.
-    // On x64 the same fields sit at their host offsets (muSizeInBytes @0x18, header 0x28 ==
-    // sizeof(PropZoneData) -- the porter emits muSizeInBytes relative to that header).
     // entry0 align = 16; entry1..4 = {0,1}.
     CgsResource::ResourceDescriptor
     PropInstanceDataResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
@@ -54,17 +51,20 @@ namespace Props
 
     // FixUp @ 0x8267F7C8. Relocate the serialised table offsets by the resource's load base,
     // null-preserving, in the X360 store order (maInstances -- the X360 +8 slot -- first, then
-    // maCells at +0). The 64-bit base replaces the console's 32-bit delta arithmetic.
+    // maCells at +0). Pointer-sized arithmetic retains the native 32-bit delta.
     void PropInstanceDataResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        // Porter-contract pins (world_type_transcode.py transcode_propinstancedata): the host
-        // layout is the serialised form these relocations walk.
-        CGS_STATIC_ASSERT((offsetof(PropZoneData, maCells)          == 0x00), "PropZoneData::maCells @ +0");
-        CGS_STATIC_ASSERT((offsetof(PropZoneData, muNumCells)       == 0x08), "PropZoneData::muNumCells @ +8");
-        CGS_STATIC_ASSERT((offsetof(PropZoneData, maInstances)      == 0x10), "PropZoneData::maInstances @ +0x10");
-        CGS_STATIC_ASSERT((offsetof(PropZoneData, muSizeInBytes)    == 0x18), "PropZoneData::muSizeInBytes @ +0x18");
-        CGS_STATIC_ASSERT((offsetof(PropZoneData, muZoneId)         == 0x24), "PropZoneData::muZoneId @ +0x24");
-        CGS_STATIC_ASSERT((sizeof(PropZoneData) == 0x28), "PropZoneData header 0x28 (porter contract)");
+        // ARTIST FixUp @0x8267F7C8 and descriptor @0x8267B0C8 use the
+        // native pointer slots and 0x1C-byte header.
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, maCells) == 0x0), "PropZoneData::maCells @0x0");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muNumCells) == 0x4), "PropZoneData::muNumCells @0x4");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, maInstances) == 0x8), "PropZoneData::maInstances @0x8");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muSizeInBytes) == 0xC), "PropZoneData::muSizeInBytes @0xC");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muNumberOfInstances) == 0x10), "PropZoneData::muNumberOfInstances @0x10");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muNumberOfProps) == 0x14), "PropZoneData::muNumberOfProps @0x14");
+        CGS_STATIC_ASSERT((offsetof(PropZoneData, muZoneId) == 0x18), "PropZoneData::muZoneId @0x18");
+        CGS_STATIC_ASSERT((sizeof(PropZoneData) == 0x1C), "native prop zone header size");
+        CGS_STATIC_ASSERT((__alignof(PropZoneData) == 4), "native prop zone header alignment");
 
         PropZoneData*   lpZone  = static_cast<PropZoneData*>(lpResource);
         const uintptr_t luDelta = CgsResource::GetLoadBase64(lrResource);

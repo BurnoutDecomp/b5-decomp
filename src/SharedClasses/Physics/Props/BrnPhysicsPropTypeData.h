@@ -14,7 +14,7 @@
 // PropPhysicsDataHeader::mapPropTypes[] / mapPropPartTypes[] hold offsets INTO the
 // serialised PROPS/PROPPHYSICS.BUNDLE blob, which FixUp turns into pointers by adding the
 // resource load base -- the records live inside the resource, so their field offsets are a
-// WIRE CONTRACT with the bundle converter and the _AssertLayout() blocks below pin them.
+// native resource contract, pinned by the _AssertLayout() blocks below.
 // (An earlier revision of this header claimed the opposite -- "stored BY POINTER ... host
 // layout imposes no downstream constraint" -- and reordered mpaPartVolumeGroups behind
 // mfLeanCosAngle on that basis. That was wrong: pointer STORAGE says nothing about where
@@ -35,19 +35,10 @@
 //      the prop debug renderers (0x822DCBF8 / 0x822DDAE8) read +0x38 mass, +0x3C volumes,
 //      +0x44 radius, +0x48 cos, +0x5D parts, +0x5F joint type, +0x60 extra info.
 //  * MEASURED against the shipped resource (0xD75C5932, 219 prop types / 131 part types /
-//    389 volumes): with alignas(16) Vector3 and a u64 CgsResource::ID every DWARF member
+//    389 volumes): with 16-aligned Vector3 and a u64 CgsResource::ID every DWARF member
 //    lands exactly on its asm-attested console offset, and the three object kinds tile the
 //    blob's arena at strides 112 / 48 / 96 with no bytes left over.
 //
-// CONSOLE -> HOST.
-//    PropTypeData     112 -> 112  (unchanged: widening mfMass's tail pad and the two
-//                                  pointers exactly consumes the console record's 15-byte
-//                                  trailing pad; maCollisionVolumes/maParts move
-//                                  +0x3C/+0x40 -> +0x40/+0x48)
-//    PropPartTypeData  48 ->  64  (maCollisionVolumes +0x24 -> +0x28)
-//    rw::collision::Volume  96 -> 96 (opaque serialised record, no widening)
-// tools/assets/bundles/world_type_transcode.py::transcode_propphysics emits exactly this.
-
 namespace rw { class Resource; }
 
 namespace BrnPhysics
@@ -98,9 +89,9 @@ namespace Props
         Vector3                  mOffset;              // console +0x00
         Vector3                  mInertia;             // console +0x10
         f32                      mfMass;               // console +0x20
-        ::rw::collision::Volume* maCollisionVolumes;   // console +0x24 -> host +0x28 (FixUp slot)
-        f32                      mfSphereRadius;       // console +0x28 -> host +0x30
-        u8                       muNumberOfVolumes;    // console +0x2C -> host +0x34
+        ::rw::collision::Volume* maCollisionVolumes;   // native +0x24
+        f32                      mfSphereRadius;       // native +0x28
+        u8                       muNumberOfVolumes;    // native +0x2C
     };
 
     // The name the first recon pass gave PropPartTypeData, reached only via
@@ -251,57 +242,60 @@ namespace Props
         Vector3                  mInertia;             // console +0x20
         CgsResource::ID          mResourceId;          // console +0x30 (u64)
         f32                      mfMass;               // console +0x38
-        ::rw::collision::Volume* maCollisionVolumes;   // console +0x3C -> host +0x40 (FixUp slot 0)
-        PropPartTypeData*        maParts;              // console +0x40 -> host +0x48 (FixUp slot 1)
-        f32                      mfSphereRadius;       // console +0x44 -> host +0x50
-        f32                      mfMaxJointAngleCos;   // console +0x48 -> host +0x54
-        f32                      mfLeanThreshold;      // console +0x4C -> host +0x58
-        f32                      mfMoveThreshold;      // console +0x50 -> host +0x5C
-        f32                      mfSmashThreshold;     // console +0x54 -> host +0x60
-        u32                      muSceneUriId;         // console +0x58 -> host +0x64
-        u8                       muMaxState;           // console +0x5C -> host +0x68
-        u8                       muNumberOfParts;      // console +0x5D -> host +0x69
-        u8                       muNumberOfVolumes;    // console +0x5E -> host +0x6A
-        u8                       mu8JointType;         // console +0x5F -> host +0x6B
-        u8                       mu8ExtraTypeInfo;     // console +0x60 -> host +0x6C
+        ::rw::collision::Volume* maCollisionVolumes;   // native +0x3C
+        PropPartTypeData*        maParts;              // native +0x40
+        f32                      mfSphereRadius;       // native +0x44
+        f32                      mfMaxJointAngleCos;   // native +0x48
+        f32                      mfLeanThreshold;      // native +0x4C
+        f32                      mfMoveThreshold;      // native +0x50
+        f32                      mfSmashThreshold;     // native +0x54
+        u32                      muSceneUriId;         // native +0x58
+        u8                       muMaxState;           // native +0x5C
+        u8                       muNumberOfParts;      // native +0x5D
+        u8                       muNumberOfVolumes;    // native +0x5E
+        u8                       mu8JointType;         // native +0x5F
+        u8                       mu8ExtraTypeInfo;     // native +0x60
     };
 
-    // ---- x64 layout pins ---------------------------------------------------------
-    // PROPS/PROPPHYSICS.BUNDLE is consumed in place, so these offsets are a WIRE CONTRACT
-    // with tools/assets/bundles/world_type_transcode.py::transcode_propphysics (constants
-    // PT_OUT_VOLS / PT_OUT_PARTS / PT_OUT_TAIL / PROP_TYPE_STRIDE / PROP_PART_OUT /
-    // PP_OUT_VOLS). Anything that shifts a member here must shift the converter's emitted
-    // image in the same step -- the two silently disagreeing is the STREETDATA failure mode.
+    // Native ARTIST resource layout. FixUp/FixDown use the pointer slots at
+    // PropTypeData +0x3C/+0x40 and PropPartTypeData +0x24; UpdateInstance uses
+    // the 48-byte part stride. Vector3 alignment supplies the native tail alignment.
     inline void PropPartTypeData::_AssertLayout()
     {
-        CGS_STATIC_ASSERT(( sizeof( Vector3 ) == 16), "Vector3 is a 16-byte SIMD lane quad" );
-        CGS_STATIC_ASSERT(( sizeof( ::rw::collision::Volume ) == 96),
-                       "rwcollision Volume is a 96-byte serialised record on both targets" );
-        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, mfMass )             == 0x20), "mfMass @0x20" );
-        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, maCollisionVolumes ) == 0x28),
-                       "PropPartTypeData::maCollisionVolumes @0x28 (console +0x24)" );
-        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, mfSphereRadius )     == 0x30), "mfSphereRadius @0x30" );
-        CGS_STATIC_ASSERT(( offsetof( PropPartTypeData, muNumberOfVolumes )  == 0x34), "muNumberOfVolumes @0x34" );
+        CGS_STATIC_ASSERT((offsetof(PropPartTypeData, mOffset) == 0x0), "PropPartTypeData::mOffset @0x0");
+        CGS_STATIC_ASSERT((offsetof(PropPartTypeData, mInertia) == 0x10), "PropPartTypeData::mInertia @0x10");
+        CGS_STATIC_ASSERT((offsetof(PropPartTypeData, mfMass) == 0x20), "PropPartTypeData::mfMass @0x20");
+        CGS_STATIC_ASSERT((offsetof(PropPartTypeData, maCollisionVolumes) == 0x24), "PropPartTypeData::maCollisionVolumes @0x24");
+        CGS_STATIC_ASSERT((offsetof(PropPartTypeData, mfSphereRadius) == 0x28), "PropPartTypeData::mfSphereRadius @0x28");
+        CGS_STATIC_ASSERT((offsetof(PropPartTypeData, muNumberOfVolumes) == 0x2C), "PropPartTypeData::muNumberOfVolumes @0x2C");
+        CGS_STATIC_ASSERT((sizeof(Vector3) == 16), "native Vector3 size");
+        CGS_STATIC_ASSERT((sizeof(::rw::collision::Volume) == 96), "native collision Volume size");
+        CGS_STATIC_ASSERT((sizeof(PropPartTypeData) == 48), "native part stride");
+        CGS_STATIC_ASSERT((__alignof(PropPartTypeData) == 16), "native part alignment");
     }
 
     inline void PropTypeData::_AssertLayout()
     {
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mCOMOffset )        == 0x10), "mCOMOffset @0x10" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mInertia )          == 0x20), "mInertia @0x20" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mResourceId )       == 0x30), "mResourceId @0x30" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfMass )            == 0x38), "mfMass @0x38" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, maCollisionVolumes) == 0x40),
-                       "PropTypeData::maCollisionVolumes @0x40 (console +0x3C)" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, maParts )           == 0x48),
-                       "PropTypeData::maParts @0x48 (console +0x40)" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfSphereRadius )    == 0x50), "mfSphereRadius @0x50" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfMaxJointAngleCos )== 0x54), "mfMaxJointAngleCos @0x54" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mfSmashThreshold )  == 0x60), "mfSmashThreshold @0x60" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, muNumberOfParts )   == 0x69), "muNumberOfParts @0x69" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, muNumberOfVolumes ) == 0x6A), "muNumberOfVolumes @0x6A" );
-        CGS_STATIC_ASSERT(( offsetof( PropTypeData, mu8ExtraTypeInfo )  == 0x6C), "mu8ExtraTypeInfo @0x6C" );
-        CGS_STATIC_ASSERT(( sizeof( PropTypeData ) == 112),
-                       "PropTypeData stride is 112 on both targets" );
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mJointLocator) == 0x0), "PropTypeData::mJointLocator @0x0");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mCOMOffset) == 0x10), "PropTypeData::mCOMOffset @0x10");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mInertia) == 0x20), "PropTypeData::mInertia @0x20");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mResourceId) == 0x30), "PropTypeData::mResourceId @0x30");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mfMass) == 0x38), "PropTypeData::mfMass @0x38");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, maCollisionVolumes) == 0x3C), "PropTypeData::maCollisionVolumes @0x3C");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, maParts) == 0x40), "PropTypeData::maParts @0x40");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mfSphereRadius) == 0x44), "PropTypeData::mfSphereRadius @0x44");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mfMaxJointAngleCos) == 0x48), "PropTypeData::mfMaxJointAngleCos @0x48");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mfLeanThreshold) == 0x4C), "PropTypeData::mfLeanThreshold @0x4C");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mfMoveThreshold) == 0x50), "PropTypeData::mfMoveThreshold @0x50");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mfSmashThreshold) == 0x54), "PropTypeData::mfSmashThreshold @0x54");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, muSceneUriId) == 0x58), "PropTypeData::muSceneUriId @0x58");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, muMaxState) == 0x5C), "PropTypeData::muMaxState @0x5C");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, muNumberOfParts) == 0x5D), "PropTypeData::muNumberOfParts @0x5D");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, muNumberOfVolumes) == 0x5E), "PropTypeData::muNumberOfVolumes @0x5E");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mu8JointType) == 0x5F), "PropTypeData::mu8JointType @0x5F");
+        CGS_STATIC_ASSERT((offsetof(PropTypeData, mu8ExtraTypeInfo) == 0x60), "PropTypeData::mu8ExtraTypeInfo @0x60");
+        CGS_STATIC_ASSERT((sizeof(PropTypeData) == 112), "native prop stride");
+        CGS_STATIC_ASSERT((__alignof(PropTypeData) == 16), "native prop alignment");
     }
 }
 }
