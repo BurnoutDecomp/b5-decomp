@@ -580,7 +580,11 @@ Vector3 Vehicle::CalcFrontAxlePos(Matrix44Affine lTransform,
 
     const f32 lfReach = lpVehicleTypeRuntime->GetForwardAxleOffset()
                         - lpVehicleTypeRuntime->GetTrailerPivotDistance();
-    return lArticulationPoint + lTransform.At() * lfReach;
+    const Vector3 lAt = lTransform.At();
+    return Vector3{std::fmaf(lAt.x, lfReach, lArticulationPoint.x),
+                   std::fmaf(lAt.y, lfReach, lArticulationPoint.y),
+                   std::fmaf(lAt.z, lfReach, lArticulationPoint.z),
+                   std::fmaf(lAt.w, lfReach, lArticulationPoint.w)};
 }
 
 // Vehicle::UpdateEffects (X360 @0x82756D48, DWARF BrnTrafficVehicle.h:302) -- one blink step
