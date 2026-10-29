@@ -198,8 +198,7 @@ protected:
     // still parked at START and clear the pause flag (byte_82FAE28E) so the load runs.
     void ResumeLoadingWorld();
 
-    ELoadingStateStage meLoadingStateStage;
-    bool               mbLoadingPaused;
+    // ARTIST stores the shared stage/pause in file-static state, not each instance.
 };
 
 // --- leaves -----------------------------------------------------------------------------
