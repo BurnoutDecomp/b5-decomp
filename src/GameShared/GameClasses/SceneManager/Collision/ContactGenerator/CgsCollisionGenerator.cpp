@@ -27,7 +27,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                    // CgsGeometric::Sphere (TestSphereAgainstPolySoupList)
 #include "rw/math/vpu/vector4_operation.h"                                            // vpu::operator+ / operator- (the sphere's box)
 #include <cstring>   // std::memcpy (the 14-qword result copy)
-#include <cmath>     // std::signbit (the line box's vmaxfp128 / vminfp128 zero ordering)
+#include <vectorintrinsics.h> // native line-box vminfp / vmaxfp
 
 // The contact-generator job entry every CollisionBatch is wired to
 // (GameShared/Jobs/ContactGenerator/ContactGenerator.cpp; X360 0x82920F10). GLOBAL scope, exactly
@@ -483,17 +483,15 @@ namespace CgsCollision
         // answer the end for a NaN start lane.)
         inline f32 VmxMaxFp(f32 lfA, f32 lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
-            return (lfA > lfB) ? lfA : lfB;
+            const __vector4 lvA = { lfA, lfA, lfA, lfA };
+            const __vector4 lvB = { lfB, lfB, lfB, lfB };
+            return __vmaxfp(lvA, lvB).x;
         }
         inline f32 VmxMinFp(f32 lfA, f32 lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
-            return (lfA < lfB) ? lfA : lfB;
+            const __vector4 lvA = { lfA, lfA, lfA, lfA };
+            const __vector4 lvB = { lfB, lfB, lfB, lfB };
+            return __vminfp(lvA, lvB).x;
         }
 
         // The six-lane box overlap the loop does inline (leaf.max >= box.min && box.max >= leaf.min,

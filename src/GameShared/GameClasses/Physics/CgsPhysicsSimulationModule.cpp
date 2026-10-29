@@ -1298,7 +1298,7 @@ namespace CgsPhysics
             // instead would look tidier and would reorder the two writes.
             const s32 liBodyIndex = mBodyData.AddBody(
                 0,
-                RigidBodyId{ lrEvent.mID },
+                RigidBodyId(lrEvent.mID),
                 lInertia);
             CGS_ASSERT(liBodyIndex != -1, "liBodyIndex != -1");   // .cpp:1065
 
@@ -1394,8 +1394,8 @@ namespace CgsPhysics
             const PhysicsSimulationIO::InAddDrive& lrEvent = lpQueue->GetEvent(li);
 
             // `ld 8(event)` and `ld 0x10(event)`, in that order.
-            const s32 liParentIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ParentBodyId });
-            const s32 liChildIndex  = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ChildBodyId });
+            const s32 liParentIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mu64ParentBodyId));
+            const s32 liChildIndex  = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mu64ChildBodyId));
 
             // 0x828A4D44/0x828A4D4C -- either handle unresolved and the event is dropped
             // without a word. Both tests are separate branches to the same target.
@@ -1419,11 +1419,12 @@ namespace CgsPhysics
             // before the solver drive exists, exactly as ProcessAddRigidBodyQueue does.
             // The timestep argument is read from the simulation and then ignored by the
             // callee; see DriveData::AddDrive.
+            const DriveId lGameId = { lrEvent.mu64Id };
             const s32 liDriveIndex = mDriveData.AddDrive(
                 0,
                 lFrames,
                 lDynamics,
-                DriveId{ lrEvent.mu64Id },
+                lGameId,
                 mpSimulation->GetTimeStep());                               // `lfs f1, 0xA0(r9)`
             CGS_ASSERT(liDriveIndex != -1, "liDriveIndex != -1");           // .cpp:1868 tripwire
 
@@ -1470,7 +1471,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InRemoveDrive& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            const DriveId lGameId = { lrEvent.mu64Id };
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
             if (liDriveIndex == -1)
                 continue;
 
@@ -1508,7 +1510,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateDriveFrames& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            const DriveId lGameId = { lrEvent.mu64Id };
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
             if (liDriveIndex == -1)
                 continue;
 
@@ -1536,7 +1539,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateDriveDynamics& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            const DriveId lGameId = { lrEvent.mu64Id };
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
             if (liDriveIndex == -1)
                 continue;
 
@@ -1566,7 +1570,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InSetDriveSpy& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId{ lrEvent.mu64Id });
+            const DriveId lGameId = { lrEvent.mu64Id };
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
             if (liDriveIndex == -1)
                 continue;
 
@@ -1647,8 +1652,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InAddJoint& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liParentBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ParentBodyId });
-            const s32 liChildBodyIndex  = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mu64ChildBodyId });
+            const s32 liParentBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mu64ParentBodyId));
+            const s32 liChildBodyIndex  = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mu64ChildBodyId));
             CGS_ASSERT(liParentBodyIndex != -1, "liParentBodyIndex != -1");   // .cpp:1506
             CGS_ASSERT(liChildBodyIndex  != -1, "liChildBodyIndex != -1");    // .cpp:1507
 
@@ -1663,8 +1668,9 @@ namespace CgsPhysics
             const JointFrames lFrames = lrEvent.mJointFrames;
             const JointLimits lLimits = lrEvent.mJointLimits;
 
+            const JointId lGameId = { lrEvent.mu64Id };
             const s32 liJointIndex = mJointData.AddJoint(0, lFrames, lLimits,
-                                                         JointId{ lrEvent.mu64Id });
+                                                         lGameId);
             CGS_ASSERT(liJointIndex != -1, "liJointIndex != -1");            // .cpp:1521
 
             // ⚠️ mpJointedPairs (+0x47D0), not mpDrivenPairs (+0x47D4). The console reads
@@ -1721,7 +1727,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InRemoveJoint& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            const JointId lGameId = { lrEvent.mu64Id };
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(lGameId);
             if (liJointIndex == -1)
             {
                 // The flag-gated log line comes FIRST, then the assert, and the two use
@@ -1773,7 +1780,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateJointFrames& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            const JointId lGameId = { lrEvent.mu64Id };
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(lGameId);
             if (liJointIndex == -1)
             {
                 CGS_ASSERT(liJointIndex != -1, "Joint not found: ");   // .cpp:1577
@@ -1805,7 +1813,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateJointLimits& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            const JointId lGameId = { lrEvent.mu64Id };
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(lGameId);
             if (liJointIndex == -1)
             {
                 CGS_ASSERT(liJointIndex != -1, "Joint not found: ");   // .cpp:1611
@@ -1837,7 +1846,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InSetJointSpy& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
+            const JointId lGameId = { lrEvent.mu64Id };
+            const s32 liJointIndex = mJointData.GetIndexFromGameID(lGameId);
             if (liJointIndex == -1)
             {
                 CGS_ASSERT(liJointIndex != -1, "Joint not found: ");   // .cpp:1645
@@ -1915,7 +1925,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InRemoveRigidBody& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
             if (liBodyIndex == -1 && !lrEvent.mbFailIfRigidBodyNotFound)
             {
                 continue;   // the tolerant remove -- silent, 0x828A2E54
@@ -2056,7 +2066,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateExternalBody& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
             if (liBodyIndex == -1)
             {
                 // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_PROP_DIAG), first-N witness of the
@@ -2117,7 +2127,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateRigidBody& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
 
             // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (b5-decomp#2). Opt-in
             // (BRN_PROP_DIAG), first-N, PROP-OWNER events only (owner byte 3 ==
@@ -2187,7 +2197,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InApplyForce& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
             if (liBodyIndex == -1)
             {
                 continue;   // SILENT -- 0x828A6BEC
@@ -2228,7 +2238,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InSetRigidBodySpy& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
             if (liBodyIndex == -1)
             {
                 continue;   // SILENT -- 0x828A4A0C
@@ -2266,7 +2276,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InChangeRigidBodyInertia& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mID });
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
             if (liBodyIndex == -1)
             {
                 continue;   // SILENT -- 0x828A4B08
@@ -2409,8 +2419,8 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InAddPotentialContact& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liIndexA = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mIDA });   // `ld 0x30(event)`
-            const s32 liIndexB = mBodyData.GetIndexFromGameID(RigidBodyId{ lrEvent.mIDB });   // `ld 0x38(event)`
+            const s32 liIndexA = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mIDA));   // `ld 0x30(event)`
+            const s32 liIndexB = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mIDB));   // `ld 0x38(event)`
             if (liIndexA == -1 || liIndexB == -1)
             {
                 continue;   // SILENT -- 0x828A3580 / 0x828A3588, no assert on this path
@@ -2629,7 +2639,7 @@ namespace CgsPhysics
             const PhysicsSimulationIO::InAddPotentialContact& lrEvent = lpQueue->GetEvent(liTag);   // `bl sub_8259D258`
             const f32 lfTimeStep = mpSimulation->GetTimeStep();                                      // `lfs 0xA0`
 
-            PhysicsSimulationIO::OutContactSpy lEvent = {};   // zero the pad lanes the per-component stores below leave
+            PhysicsSimulationIO::OutContactSpy lEvent;
             lEvent.mFrictionStress.x = lpSpy->mForceT.x * lfTimeStep;   // spy +0x50 row * splat(ts)
             lEvent.mFrictionStress.y = lpSpy->mForceT.y * lfTimeStep;
             lEvent.mFrictionStress.z = lpSpy->mForceT.z * lfTimeStep;
@@ -2696,7 +2706,7 @@ namespace CgsPhysics
                 CGS_ASSERT(lbSlotUsed, " Joint ptr: ");                 // .cpp:2226 -- fire-and-continue
             }
 
-            PhysicsSimulationIO::OutJointSpy lEvent = {};      // zero the pad lanes
+            PhysicsSimulationIO::OutJointSpy lEvent;
             lEvent.mID = mJointData.GetGameID(liJointIndex).muId;       // h:612/h:613
             lEvent.mLinearStress.x  = lpSpy->mForce.x  * lfScale;       // spy +0x00 row
             lEvent.mLinearStress.y  = lpSpy->mForce.y  * lfScale;
@@ -2727,7 +2737,7 @@ namespace CgsPhysics
 
             const s32 liDriveIndex = static_cast<s32>(lpSpy->mpDrive->GetTag());   // `lwz 0x18(drive)`
 
-            PhysicsSimulationIO::OutDriveSpy lEvent = {};      // zero the pad lanes
+            PhysicsSimulationIO::OutDriveSpy lEvent;
             lEvent.mID = mDriveData.GetGameID(liDriveIndex).muId;       // h:648/h:649
             lEvent.mLinearStress.x  = lpSpy->mForce.x;                  // spy +0x00 row (whole-lane stvx)
             lEvent.mLinearStress.y  = lpSpy->mForce.y;
@@ -2776,7 +2786,7 @@ namespace CgsPhysics
 
             if (lpBody->GetState() & rw_physics::ACTIVE_BODY)           // `lwz 0x8C` & 4
             {
-                PhysicsSimulationIO::OutUpdateRigidBody lEvent = {};   // zero mIDPad; operator= fills the body
+                PhysicsSimulationIO::OutUpdateRigidBody lEvent;
                 lEvent.mRigidBody = *lpBody;                            // `bl RigidBody::operator=` (frame+0x10)
                 lEvent.mID        = mBodyData.GetGameID(liSlot);        // `ld` maGameIDs[slot] -> frame+0x00
                 lpQueue->AddEvent(lEvent);                              // `bl 0x828A66F8`
@@ -3047,7 +3057,7 @@ namespace CgsPhysics
                 mpSimulation->FreezeRigidBody(lpBody);                  // `lwz 0x4864(this)` as this
             }
 
-            PhysicsSimulationIO::OutUpdateRigidBody lEvent = {};   // zero mIDPad; operator= fills the body
+            PhysicsSimulationIO::OutUpdateRigidBody lEvent;
             lEvent.mRigidBody = *lpBody;                                // `bl RigidBody::operator=` first...
             lEvent.mID        = mBodyData.GetGameID(liIndex);           // ...then the raw id re-read
                                                                         // (GetGameID's h:585/h:586 are
