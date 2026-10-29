@@ -71,6 +71,9 @@ public:
     void Update();
 
 private:
+    // Scratch-fixture access only; this friend adds no storage and does not change the class ABI.
+    friend struct NetworkTextureDXTCompressTestAccess;
+
     // Console offsets pinned in a 32-bit build (inert on the host).
     static void _AssertLayout();
 

@@ -443,20 +443,39 @@ namespace BrnNetwork
     void CameraX360::ReleaseFeed(s32 /*liPlayerID*/) { /* BLOCKED: un-homed local-player-info */ }
     void CameraX360::UnregisterPlayer(s32 /*liPlayerID*/) { /* BLOCKED: stream-engine vtable */ }
 
-    s32 CameraX360::GetCompressedLocalCameraPicture(
+    void CameraX360::GetCompressedLocalCameraPicture(
         CgsNetwork::NetworkTexture* lpDstTexture,
-        s32 /*liQualitySetting*/,
-        CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback /*lCompleteCallback*/,
-        void* /*lpCompleteData*/)
+        s32 liQualitySetting,
+        CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback lCompleteCallback,
+        void* lpCompleteData)
     {
-        // Faithful spine: assert lpDstTexture is non-null + already DXT1; when XCamGetStatus()==2,
-        // pull the latest local-camera frame geometry off the stream engine and queue it for DXT
-        // compression. BLOCKED on the un-homed XCamGetStatus + stream-engine frame geometry; the
-        // grounded asserts are reproduced so callers fail loudly rather than silently no-op.
         CGS_ASSERT(lpDstTexture, "lpDstTexture");
-        CGS_ASSERT(lpDstTexture && static_cast<s32>(lpDstTexture->GetFormat()) == KI_PIXELFORMAT_LIN_DXT1,
+        CGS_ASSERT(static_cast<s32>(lpDstTexture->GetFormat()) == KI_PIXELFORMAT_LIN_DXT1,
                    "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == lpDstTexture->GetFormat()");
-        return 0; /* BLOCKED: XCAM status + stream-engine frame geometry */
+
+        if (static_cast<s32>(XCamGetStatus()) != KI_XCAM_STATUS_READY)
+        {
+            return;
+        }
+
+        CGS_ASSERT(mpTextureCompressor, "mpTextureCompressor");
+
+        // ARTIST reads the already-prepared +0x43B50 NetworkTexture, not the opaque XCAM stream
+        // engine: +0x14 source pixels, +0x08 width, +0x0C height, +0x04 bits-per-pixel, and
+        // +0x10 source format. SetNewTextureToCompress copies those source bytes into its own
+        // pending double-buffer before it records the callback/user data.
+        mpTextureCompressor->SetNewTextureToCompress(
+            mLocalCameraTexture.GetTexture(),
+            mLocalCameraTexture.GetTextureSize(),
+            mLocalCameraTexture.GetWidth(),
+            mLocalCameraTexture.GetHeight(),
+            mLocalCameraTexture.GetStride(),
+            lpDstTexture->GetStride(),
+            liQualitySetting,
+            static_cast<s32>(mLocalCameraTexture.GetFormat()),
+            0,
+            lCompleteCallback,
+            lpCompleteData);
     }
 
     // The static reliable-message trampolines are DECLARATION-ONLY: the arrived paths walk the
