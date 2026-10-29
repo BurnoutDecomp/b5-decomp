@@ -16,7 +16,7 @@
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"         // the six scene-query post offices
 #include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"                   // BrnReplays::DirectorSerialiser (mDirectorSerialiser)
 
-namespace CgsModule { class IOBufferStack; }
+namespace CgsModule { struct IOBufferStack; }
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 

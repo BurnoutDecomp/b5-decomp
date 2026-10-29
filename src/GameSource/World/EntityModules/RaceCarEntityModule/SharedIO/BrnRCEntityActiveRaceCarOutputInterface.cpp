@@ -944,5 +944,14 @@ EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetActiveRaceCarIndex(
                "lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT");
     return maeActiveRaceCarIndex[lePlayerScoringIndex];
 }
+// ARTIST UpdateOutputInterfaces @0x822F5D30..0x822F5D88 inlines two
+// WorldMap2D assignments, one into each live/replay active-car output at +0x28B0.
+// Keep the native pointer member and the map geometry together; the console copies
+// the complete 48-byte record. The existing declaration previously had no provider.
+void RCEntityActiveRaceCarOutputInterface::SetWorldMap2D(
+        const CgsWorld::WorldMap2D* lpWorldMap2D)
+{
+    mWorldMap2D = *lpWorldMap2D;
+}
 }
 }
