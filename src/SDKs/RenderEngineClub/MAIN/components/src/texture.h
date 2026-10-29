@@ -3,9 +3,8 @@
 #include "types.hpp"
 #include <xtl.h>
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
-#include "SDKs/RenderEngineClub/MAIN/components/src/states/resourcedescriptor.h"
 
-namespace rw { struct Resource; }
+namespace rw { struct Resource; struct ResourceDescriptor; }
 
 namespace renderengine
 {
@@ -44,20 +43,20 @@ public:
         u32 muLockFlags;
     };
 
-    static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5*, const Parameters*);
-    static Texture* Initialize(const rw::Resource*, const Parameters*);
-    static void GetParameters(const Texture*, Parameters*);
-    static Type GetType(const Texture*);
-    static u32 GetWidth(const Texture*);
-    static u32 GetHeight(const Texture*);
-    static u32 GetDepth(const Texture*);
-    static PixelFormat GetFormat(const Texture*);
+    static rw::ResourceDescriptor GetResourceDescriptor(const Parameters&);
+    static Texture* Initialize(const rw::Resource&, const Parameters&);
+    void GetParameters(Parameters&) const;
+    Type GetType() const;
+    u32 GetWidth() const;
+    u32 GetHeight() const;
+    u32 GetDepth() const;
+    PixelFormat GetFormat() const;
     static u32 GetPixelDataSize(Type, u32 width, u32 height, u32 depth, u32 levels, PixelFormat);
-    static bool Lock(Texture*, u32 flags, u32 mipLevel, u32 index, Locked*);
-    static void Unlock(Texture*, const Locked*);
+    bool Lock(u32 flags, u32 mipLevel, u32 index, Locked&);
+    void Unlock(const Locked&);
     static void Destruct(Texture*);
-    static void Release(Texture*);
-    static void Xbox2CheckPhysicalMemoryFlags(Texture*);
+    void Release();
+    void Xbox2CheckPhysicalMemoryFlags();
 };
 
 CGS_STATIC_ASSERT((sizeof(Texture) == 0x34), "ARTIST native texture header");
