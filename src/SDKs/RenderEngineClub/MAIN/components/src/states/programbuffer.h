@@ -5,6 +5,7 @@
 #include <xtl.h>
 #include <xgraphics.h>
 #include "rw/rwcore_structs.h"  // rw::BaseResourceDescriptors<5>
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/programvariablehandle.h"
 
 // renderengine::ProgramBuffer -- the render-engine vendor wrapper around a single compiled Xenos
 // shader (vertex or pixel) plus the named-variable (constant) table extracted from its microcode.
@@ -34,14 +35,6 @@ namespace renderengine
 
     // The 4-byte shader-constant handle GetVariableHandleByName fills (post-fx effects store one
     // per named constant they look up).
-    struct ProgramVariableHandle
-    {
-        u8 mu8RegisterSet;    // +0x00 <- descriptor +0x04
-        u8 mu8RegisterIndex;  // +0x01 <- descriptor +0x05
-        u8 mu8ShaderType;     // +0x02 <- ProgramBufferData +0x00
-        u8 mu8RegisterCount;  // +0x03 <- descriptor +0x06 (0 when not found)
-    };
-
     struct ProgramBufferData
     {
         u32 muShaderType;     // +0x00 != 0 -> pixel, == 0 -> vertex
