@@ -583,7 +583,7 @@ namespace
     // .rdata scalar constants (values attested by the Hex-Rays literals for
     // the labelled loads in the prologue/epilogue):
     const f32 KF_INITIAL_ROOT     = 0.0f;                    // flt_82001CC0
-    const f32 KF_HUGE_RESIDUAL    = 3.4028235e38f;           // flt_821802D8 (FLT_MAX)
+    const f32 KF_HUGE_RESIDUAL    = FLT_MAX;           // flt_821802D8 (FLT_MAX)
     const f64 KD_ENTRY_GUARD      = 3.402823466385289e38;    // dbl_82180398
     const f32 KF_RESIDUAL_EPSILON = 1.0e-6f;                 // flt_820AD47C
     const f32 KF_ACCEPT_EPSILON   = 0.001f;                  // flt_82013F90
@@ -748,7 +748,7 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
     const f32  lfCrossSq = linemath::Dot3(lvCross, lvCross);
 
     // disc = |delta|^2 * r^2 - crossSq (fmsubs f11, f12, f0, f11: ONE rounding).
-    const f32 lfDisc = std::fma(lfDeltaLenSq, lfRadiusSq, -lfCrossSq);
+    const f32 lfDisc = linemath::Madd(lfDeltaLenSq, lfRadiusSq, -lfCrossSq);
     // `fcmpu f11, f13(0.0) ; bge 0x82BA8294` (0x82BA8284 / 0x82BA8288): bge is TAKEN on an unordered compare,
     // so only an ORDERED disc < 0 returns 0 -- a NaN disc carries on to the root (owner's list 2026-09-27, L2).
     if (lfDisc < 0.0f)
@@ -784,11 +784,11 @@ s32 rwcSphereLineSegIntersect(Fraction* lpDist,           // r3
 //   0x82BA8868  den < num * 2^-128 (fmuls) -> -1
 //   0x82BA8870  num < den -> 1 (`bltlr`), else 0
 // ===========================================================================
-static const f32 KF_PLANE_LINE_EPSILON = 0x1p-128f;   // flt_821801B0 == 0x00200000 (subnormal, exact)
+static const f32 KF_PLANE_LINE_EPSILON = (FLT_MIN * 0.25f);   // flt_821801B0 == 0x00200000 (subnormal, exact)
 
 s32 rwcPlaneLineSegIntersect(Fraction* lpDist, f32 afOrig, f32 afSeg, f32 afSign, f32 afDisp)
 {
-    const f32 lfNum = std::fma(afOrig, afSign, -afDisp);     // fmsubs f0, f1, f3, f4
+    const f32 lfNum = linemath::ScalarMadd(afOrig, afSign, -afDisp);     // fmsubs f0, f1, f3, f4
     if (!(lfNum > 0.0f))                                      // fcmpu f0, 0.0 ; bgt @0x82BA8828
     {
         lpDist->num = 0.0f;                                   // stfs f13 (flt_82001CC0)
@@ -888,8 +888,8 @@ s32 rwcCylinderLineSegIntersect(Fraction* lpDist,        // r3
     // f13 ; fmadds f13, f10, f0, f13):
     //   disc = crossDeltaSq*|axis|^2*r^2 + (proj^2 - crossDeltaSq*crossBaseSq)
     f32 lfDisc = lfCrossDeltaSq * lfCrossBaseSq;                  // fmuls  f13, f10, f13
-    lfDisc = std::fma(lfProj, lfProj, -lfDisc);                   // fmsubs f13, f11, f11, f13
-    lfDisc = std::fma(lfCrossDeltaSq, lfRadialLimit, lfDisc);     // fmadds f13, f10, f0, f13
+    lfDisc = linemath::ScalarMadd(lfProj, lfProj, -lfDisc);                   // fmsubs f13, f11, f11, f13
+    lfDisc = linemath::ScalarMadd(lfCrossDeltaSq, lfRadialLimit, lfDisc);     // fmadds f13, f10, f0, f13
     // `fcmpu f13, f12(0.0) ; bge 0x82BAF968` (0x82BAF958 / 0x82BAF95C): bge is TAKEN on an unordered compare,
     // so only an ORDERED disc < 0 returns 0 -- a NaN disc carries on (owner's list 2026-09-27, L2).
     if (lfDisc < 0.0f)
@@ -1581,7 +1581,7 @@ RwBool BoxVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, const V
                 const f32 lfCapSign = (Lane(lvDelta, luEdge) > 0.0f) ? 1.0f : -1.0f;   // fcmpu ; ble @0x82BA9990
                 Fraction lEvent;
                 lEvent.den = Lane(lvDelta, luEdge) * lfCapSign;                  // fmuls   @0x82BA99C0
-                lEvent.num = Nmsub(Lane(lvPoint, luEdge), lfCapSign, lafHalf[luEdge]);   // fnmsubs @0x82BA99DC
+                lEvent.num = linemath::ScalarNmsub(Lane(lvPoint, luEdge), lfCapSign, lafHalf[luEdge]);   // fnmsubs @0x82BA99DC
                 if (lEvent.den < KF_LINE_FLT_MIN)                               // bge @0x82BA99E8 (NaN: den kept)
                 {
                     lEvent.den = 1.0f;
@@ -1768,7 +1768,7 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
             {
                 liEvent    = 1;
                 lEvent.den = -lfToward;                            // fneg @0x82BAFFB8
-                lEvent.num = Nmsub(-arResult.position.z, lfCap, -lfHalfHeight);   // fnmsubs @0x82BAFFBC
+                lEvent.num = linemath::ScalarNmsub(-arResult.position.z, lfCap, -lfHalfHeight);   // fnmsubs @0x82BAFFBC
                 if (lEvent.num > lEvent.den)                       // ble @0x82BAFFC4 (NaN: valid)
                 {
                     liEvent = 0;
@@ -1811,7 +1811,7 @@ RwBool CapsuleVolume::LineSegIntersect(const Vec4& arPt1, const Vec4& arPt2, con
             const f32 lfAlong = Dot3(arResult.position, lvBarrelAxis);   // vmsum3fp128 @0x82BB0040
             lfCap      = (lfDeltaZ >= 0.0f) ? 1.0f : -1.0f;              // fsel @0x82BB0048
             lEvent.den = lfDeltaZ * lfCap;                               // fmuls @0x82BB004C
-            lEvent.num = std::fma(-lfAlong, lfCap, lfHalfHeight);        // fneg ; fmadds @0x82BB005C
+            lEvent.num = linemath::ScalarMadd(-lfAlong, lfCap, lfHalfHeight);        // fneg ; fmadds @0x82BB005C
             if (lEvent.num > lEvent.den                                  // bgt @0x82BB0068
                 || !(lDist.den * lEvent.num < lDist.num * lEvent.den))   // bge @0x82BB0078 (NaN: hit)
             {
@@ -1943,7 +1943,7 @@ RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2
         const f32 lfApproach      = Dot3(lvCapNormal, lvDelta);    // vmsum3fp128 v0 @0x82BAE118
         const f32 lfT = RefinedRecip(lfApproach) * (lfHalfHeight - lfStartDistance);   // fsubs @0x82BAE124; vmulfp128 @0x82BAE154
         const Vec4 lvCapPoint = MaddSplat(lvDelta, lfT, lvStart);  // vmaddfp @0x82BAE180
-        const f32 lfCapRadialSq = std::fma(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAE190
+        const f32 lfCapRadialSq = linemath::ScalarMadd(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAE190
         if (lfCapRadialSq < lfRadiusSq)                            // fcmpu ; bge @0x82BAE1A0 (NaN: the barrel)
         {
             arResult.lineParam = lfT;                              // stfs f0, 0x40(r28) @0x82BAE1A8
@@ -2093,7 +2093,7 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
     const f64 ldCapDiscLimit = static_cast<f64>(lfRadiusSq) * KD_CAP_DISC_SLACK;   // fmul f12, f13, f0 (double)
     const f32 lfCapT = RefinedRecip(lfApproach) * (lfCapHeight - lfStartDistance);   // fsubs @0x82BAEF24 ; vmulfp128 @0x82BAEF50
     const Vec4 lvCapPoint = MaddSplat(lvDelta, lfCapT, lvStart);   // vmaddfp @0x82BAEF7C
-    const f32 lfCapRadialSq = std::fma(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAEF94
+    const f32 lfCapRadialSq = linemath::ScalarMadd(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAEF94
     if (static_cast<f64>(lfCapRadialSq) < ldCapDiscLimit)          // fcmpu ; bge @0x82BAEFA4 (NaN: on)
     {
         arResult.lineParam = lfCapT;                               // stfs f0, 0x40(r29) @0x82BAEFA8
@@ -2186,7 +2186,7 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
                 if (rwcTorusLineSegIntersect(lfRoot, lvClipStart, lvClipDirection, mfRadius, lfFat) == 1   // @0x82BAF3D8
                     && (lfRoot < arResult.lineParam || lbHit == 0))   // fcmpu ; blt @0x82BAF3F0 ; cmplwi r27 @0x82BAF3F4
                 {
-                    const f32 lfT = std::fma(lfSpan, lfRoot, lfEnter);                   // fmadds @0x82BAF408
+                    const f32 lfT = linemath::ScalarMadd(lfSpan, lfRoot, lfEnter);                   // fmadds @0x82BAF408
                     arResult.lineParam = lfT;                      // stfs f0, 0x40(r29) @0x82BAF418
                     const Vec4 lvPoint = MaddSplat(lvDelta, lfT, lvStart);              // vmaddfp @0x82BAF46C
                     arResult.position = lvPoint;                   // stvx128 v11, r29, r25 @0x82BAF474

@@ -2,8 +2,8 @@
 
 // =====================================================================================
 // rw::physics::Contact -- one narrow-phase contact record in the simulation's contact
-// scratch array (Simulation::m_CJ_Stack); 256 bytes on the console, 272 on the host (the
-// pointer tail below). Filled by CgsPhysics::PhysicsSimulationModule::ProcessAddContactQueue
+// scratch array (Simulation::m_CJ_Stack); 256 native bytes. Filled by
+// CgsPhysics::PhysicsSimulationModule::ProcessAddContactQueue
 // (which inlines GenerateFromCollision) and consumed IN PLACE by Simulation::
 // ContactBatchBuild @0x82BC14C0, which rewrites the rows into the ContactJacobian overlay
 // (bottom of this file) that Anubis/Horus iterate and SpyContactJacobians reads.
@@ -12,33 +12,11 @@
 // (struct :74, members :216..:239, methods :85..:207). The X360 asm is authoritative for
 // behaviour and offsets (drain @0x828A3458; batch @0x82BC14C0).
 //
-// ⭐⭐ LAYOUT: the 16 DWARF rows byte-for-byte (256), PLUS a 16-byte POINTER TAIL = 272 ON
-// THE HOST. ⚠️⚠️ CORRECTION 2026-08-06 (the pipelines wave) TO THE "256 BYTES ON THE HOST
-// TOO" BANNER THAT STOOD HERE: the claim "this record contains NO pointer" was true of the
-// 16 DWARF rows but FALSE of the record's full life cycle. SpyContactJacobians @0x82BC4138
-// loads +0x7C/+0xAC (`lwz r7,0x7C / lwz r8,0xAC` @0x82BC422C/0x82BC4224) and DEREFERENCES
-// them (`lvx128 v5,r8,0x10` = RigidBody::mCom) to reconstruct the world contact points as
-// mCom + rA / mCom + rB -- those lanes are 4-byte RigidBody POINTERS on the console, ridden
-// in from the EVENT's mPointOnA.w/mPointOnB.w lanes by the drain's full-row `stvx` and
-// RELOCATED (not minted) by ContactBatchBuild's vsel into the +0x70/+0xA0 rows' w lanes.
-// An 8-byte host pointer cannot live in a 4-byte lane, so the host record grows a tail --
-// EXACTLY the Xbox One move: its drain-time record carries RigidBody* at +0x10/+0x28, its
-// batch parks them at +0x90/+0xA8, its record is 272 bytes, and its spy chases [ptr+0x10]
-// identically (sub_1409B7390). The host 272 == XB1's 272 is convergence, not import: every
-// row offset below is still X360's, and the 16 rows still reproduce the console
-// byte-for-byte. All walks use sizeof(Contact); the SimulationWorkspace sizer's console
-// `liMaxContacts << 8` term is sizeof(Contact) on the host (fixed in the same commit).
-//
-// ⭐⭐ THE mBodyA/mBodyB CONTRACT, READ FROM THE CONSUMER. At drain time the console's
-// full-row `stvx` of the event's mPointOnA/mPointOnB parks the event's w lanes in
-// +0x0C/+0x1C -- dead for the SOLVER (see above for the spy). The SOLVER values are minted
-// by ContactBatchBuild @0x82BC14C0, which stores {rA.xyz, comA.w} / {rB.xyz, comB.w} over
-// the mPosA/mPosB rows with vsel mask [0x82181650+0x10] = {FFFF,FFFF,FFFF,0000} -- i.e.
-// mBodyA/mBodyB := the snapshot mComA/mComB w lanes := RigidBody::mCom.w := RigidBody::mId,
-// the reaction-force block index (rigidbody.h:269). On the PC the snapshot carries that
-// index as the named mIdA/mIdB members below, GenerateFromCollision writes mBodyA/mBodyB= 0
-// (dead until the batch), and ContactBatchBuild (BODIED 2026-08-06, Simulation.cpp) assigns
-// mBodyA = mIdA / mBodyB = mIdB when it rewrites the record as a ContactJacobian (below).
+// Native ARTIST contact records occupy 256 bytes. The drain carries the body
+// pointers in the position rows at +0x0C/+0x1C. ContactBatchBuild snapshots
+// those pointers, replaces the position w lanes with pool indices, and moves
+// the pointers to the Jacobian normal/up w lanes at +0x7C/+0xAC.
+// Named unions retain both phase-specific meanings without a host pointer tail.
 //
 // ⭐ THE SNAPSHOT REGION (+0x60..+0xF0) is the DWARF's `Vector4U_32 mPad[10]` (:239), spelled
 // here with the lane names its only writer and only reader witness:
@@ -85,10 +63,9 @@ struct CGS_ALIGN(16) Contact
 
     // ---- the six jacobian-input rows, DWARF names/order (:216..:238) ---------------------
     Vector3U_32 mPosA;      // +0x00  :216  contact point on body A (world)
-    s32         mBodyA;     // +0x0C  :218  body A's reaction-force block index -- DEAD at
-                            //              drain time; minted by ContactBatchBuild from mIdA
+    union { s32 mBodyA; RigidBody* mpBodyA; }; // +0x0C pointer; index after batch
     Vector3U_32 mPosB;      // +0x10  :220  contact point on body B (world)
-    s32         mBodyB;     // +0x1C  :222  body B's index -- same contract as mBodyA
+    union { s32 mBodyB; RigidBody* mpBodyB; }; // +0x1C drain pointer / batch index
     Vector3U_32 mRi;        // +0x20  :224  the contact normal (frame row 0)
     f32         mRes;       // +0x2C  :226  restitution
     Vector3U_32 mUp;        // +0x30  :228  cross(T, n) * rsqrt  (frame row 1)
@@ -123,17 +100,6 @@ struct CGS_ALIGN(16) Contact
     Vector3U_32 mTorqueB;   // +0xF0  bodyB mTorque.xyz
     u32         mCoolB;     // +0xFC  bodyB mCool
 
-    // ---- the HOST POINTER TAIL (+0x100, past the console's 256) --------------------------
-    // On the console these are the EVENT's mPointOnA.w/mPointOnB.w lanes (4-byte RigidBody*,
-    // parked at +0x0C/+0x1C by the drain, relocated to +0x7C/+0xAC by the batch, chased by
-    // SpyContactJacobians at [ptr+0x10] = mCom). On XB1 they are the drain's resolved
-    // lpBodyA/lpBodyB in widened slots (+0x10/+0x28 -> batch +0x90/+0xA8), which is the
-    // proof they equal the bodies the snapshot rows were read from -- so the host fills
-    // them in GenerateFromCollision from its own arguments. Spy-only; the solver never
-    // reads them.
-    RigidBody*  mpBodyA;    // +0x100  host tail (console: event w-lane ride)
-    RigidBody*  mpBodyB;    // +0x108
-
     // -------------------------------------------------------------------------------------
     // GenerateFromCollision, the 9-argument form (DWARF contact.h:207) -- inlined by the
     // console into ProcessAddContactQueue @0x828A3458 (0x828A3708..0x828A39B4), transcribed
@@ -144,7 +110,7 @@ struct CGS_ALIGN(16) Contact
     // saves the four live w lanes (+0x2C/+0x3C/+0x4C/+0x5C), zeroes all 256 bytes with two
     // dcbz128, restores the four -- and then overwrites all four with the event's friction/
     // restitution and the caller's tag. Net effect: zero + full fill. Spelled here as the
-    // named-member assignments only; mBodyA/mBodyB get 0 (see the banner's contract note).
+    // named-member assignments; the final pointer writes fill the position w lanes.
     //
     // ⚠️ THE NORMALISATION IS A SINGLE `vrsqrtefp` ESTIMATE -- unlike the jacobian builders
     // (vrsqrtefp + two Newton-Raphson refines, JacobianMath.hpp Sqrt note), the console does
@@ -217,44 +183,42 @@ struct CGS_ALIGN(16) Contact
                              Add(Xyz(lpBodyA->mVel), Cross(Xyz(lpBodyA->mOmega), lvRA)));
 
         // ---- the fill -------------------------------------------------------------------
-        mPosA  = Vector3U_32{ lvPosA.x, lvPosA.y, lvPosA.z };   // full event row, 0x828A37B8
+        mPosA.x = lvPosA.x; mPosA.y = lvPosA.y; mPosA.z = lvPosA.z;   // full event row, 0x828A37B8
         mBodyA = 0;                                             // dead until the batch mint
-        mPosB  = Vector3U_32{ lvPosB.x, lvPosB.y, lvPosB.z };   // 0x828A37BC
+        mPosB.x = lvPosB.x; mPosB.y = lvPosB.y; mPosB.z = lvPosB.z;   // 0x828A37BC
         mBodyB = 0;
-        mRi    = Vector3U_32{ lvN.x, lvN.y, lvN.z };            // 0x828A38E4
+        mRi.x = lvN.x; mRi.y = lvN.y; mRi.z = lvN.z;            // 0x828A38E4
         mRes   = lfRestitution;                                 // event +0x48, 0x828A39B4
-        mUp    = Vector3U_32{ lvUp.x, lvUp.y, lvUp.z };         // 0x828A3900
+        mUp.x = lvUp.x; mUp.y = lvUp.y; mUp.z = lvUp.z;         // 0x828A3900
         mMus   = lfStaticFriction;                              // event +0x40, 0x828A39A4
-        mAt    = Vector3U_32{ lvAt.x, lvAt.y, lvAt.z };         // 0x828A390C
+        mAt.x = lvAt.x; mAt.y = lvAt.y; mAt.z = lvAt.z;         // 0x828A390C
         mMud   = lfDynamicFriction;                             // event +0x44, 0x828A39A8
-        mVel   = Vector3U_32{ lvVel.x, lvVel.y, lvVel.z };      // 0x828A3928
+        mVel.x = lvVel.x; mVel.y = lvVel.y; mVel.z = lvVel.z;      // 0x828A3928
         mTag   = luTag;                                         // the CALLER's loop index
 
         // ---- the snapshot (ten full row copies, 0x828A3930..0x828A3990) -----------------
-        mComA    = Vector3U_32{ lpBodyA->mCom.x,    lpBodyA->mCom.y,    lpBodyA->mCom.z    };
+        mComA.x = lpBodyA->mCom.x; mComA.y = lpBodyA->mCom.y; mComA.z = lpBodyA->mCom.z;
         mIdA     = lpBodyA->mId;
-        mComB    = Vector3U_32{ lpBodyB->mCom.x,    lpBodyB->mCom.y,    lpBodyB->mCom.z    };
+        mComB.x = lpBodyB->mCom.x; mComB.y = lpBodyB->mCom.y; mComB.z = lpBodyB->mCom.z;
         mIdB     = lpBodyB->mId;
-        mIfullA  = Vector3U_32{ lpBodyA->mIfull.x,  lpBodyA->mIfull.y,  lpBodyA->mIfull.z  };
+        mIfullA.x = lpBodyA->mIfull.x; mIfullA.y = lpBodyA->mIfull.y; mIfullA.z = lpBodyA->mIfull.z;
         mInvmA   = lpBodyA->mInvm;
-        mIfullB  = Vector3U_32{ lpBodyB->mIfull.x,  lpBodyB->mIfull.y,  lpBodyB->mIfull.z  };
+        mIfullB.x = lpBodyB->mIfull.x; mIfullB.y = lpBodyB->mIfull.y; mIfullB.z = lpBodyB->mIfull.z;
         mInvmB   = lpBodyB->mInvm;
-        mIspltA  = Vector3U_32{ lpBodyA->mIsplt.x,  lpBodyA->mIsplt.y,  lpBodyA->mIsplt.z  };
+        mIspltA.x = lpBodyA->mIsplt.x; mIspltA.y = lpBodyA->mIsplt.y; mIspltA.z = lpBodyA->mIsplt.z;
         mStateA  = static_cast<u32>(lpBodyA->mState);
-        mIspltB  = Vector3U_32{ lpBodyB->mIsplt.x,  lpBodyB->mIsplt.y,  lpBodyB->mIsplt.z  };
+        mIspltB.x = lpBodyB->mIsplt.x; mIspltB.y = lpBodyB->mIsplt.y; mIspltB.z = lpBodyB->mIsplt.z;
         mStateB  = static_cast<u32>(lpBodyB->mState);
-        mForceA  = Vector3U_32{ lpBodyA->mForce.x,  lpBodyA->mForce.y,  lpBodyA->mForce.z  };
+        mForceA.x = lpBodyA->mForce.x; mForceA.y = lpBodyA->mForce.y; mForceA.z = lpBodyA->mForce.z;
         mKineA   = lpBodyA->mKine;
-        mForceB  = Vector3U_32{ lpBodyB->mForce.x,  lpBodyB->mForce.y,  lpBodyB->mForce.z  };
+        mForceB.x = lpBodyB->mForce.x; mForceB.y = lpBodyB->mForce.y; mForceB.z = lpBodyB->mForce.z;
         mKineB   = lpBodyB->mKine;
-        mTorqueA = Vector3U_32{ lpBodyA->mTorque.x, lpBodyA->mTorque.y, lpBodyA->mTorque.z };
+        mTorqueA.x = lpBodyA->mTorque.x; mTorqueA.y = lpBodyA->mTorque.y; mTorqueA.z = lpBodyA->mTorque.z;
         mCoolA   = lpBodyA->mCool;
-        mTorqueB = Vector3U_32{ lpBodyB->mTorque.x, lpBodyB->mTorque.y, lpBodyB->mTorque.z };
+        mTorqueB.x = lpBodyB->mTorque.x; mTorqueB.y = lpBodyB->mTorque.y; mTorqueB.z = lpBodyB->mTorque.z;
         mCoolB   = lpBodyB->mCool;
 
-        // ---- the spy pointers (host tail; console: the event w lanes ride through the
-        // rows above). XB1's drain stores exactly these two resolved pointers; see the
-        // tail-member banner.
+        // Carry the body pointers in the event position w lanes.
         mpBodyA = lpBodyA;
         mpBodyB = lpBodyB;
     }
@@ -293,10 +257,12 @@ CGS_STATIC_ASSERT((offsetof(Contact, mTorqueA) == 0xE0), "snapshot torqueA @+0xE
 CGS_STATIC_ASSERT((offsetof(Contact, mCoolA)   == 0xEC), "snapshot coolA @+0xEC  (console mTorque.w)");
 CGS_STATIC_ASSERT((offsetof(Contact, mTorqueB) == 0xF0), "snapshot torqueB @+0xF0");
 CGS_STATIC_ASSERT((offsetof(Contact, mCoolB)   == 0xFC), "snapshot coolB @+0xFC");
-CGS_STATIC_ASSERT((offsetof(Contact, mpBodyB)  == 0x108), "spy pointer tail B");
+CGS_STATIC_ASSERT((offsetof(Contact, mpBodyA) == 0x0C && offsetof(Contact, mpBodyB) == 0x1C),
+                  "ARTIST drain pointer lanes");
+CGS_STATIC_ASSERT((sizeof(Contact) == 0x100), "ARTIST contact stride");
 
 // =====================================================================================
-// rw::physics::ContactJacobian -- THE SAME 272 BYTES AFTER ContactBatchBuild @0x82BC14C0
+// rw::physics::ContactJacobian -- THE SAME 256 BYTES AFTER ContactBatchBuild @0x82BC14C0
 // HAS REWRITTEN THEM IN PLACE. The console reuses the storage with entirely different row
 // meanings; this overlay names the post-batch lanes so Anubis/Horus and SpyContactJacobians
 // can access them BY NAME. ContactBatchBuild reads every drain field it needs into locals,
@@ -313,16 +279,15 @@ CGS_STATIC_ASSERT((offsetof(Contact, mpBodyB)  == 0x108), "spy pointer tail B");
 //   +0x50 {mLambda.xyz, mLambdaPos}  impulse accumulators, ZEROED by the batch; lanes =
 //                                    {normal, tangent1, tangent2, positional-normal}
 //   +0x60 {mBias.xyz, mBiasPos}      pre-divided bias impulses; w = penetration/dn
-//   +0x70 {n.xyz,   dead (console: RigidBody* A)}            the contact frame rows
+//   +0x70 {n.xyz,   RigidBody* A}                         the contact frame rows
 //   +0x80 {TnA.xyz, mInvmA (0 unless A ACTIVE)}              T** = I^-1.(r x frame-row),
 //   +0x90 {TnB.xyz, mInvmB}                                  zero rows for non-ACTIVE
-//   +0xA0 {up.xyz,  dead (console: RigidBody* B)}            bodies (the console's
+//   +0xA0 {up.xyz,  RigidBody* B}                         bodies (the console's
 //   +0xB0 {TupA.xyz, dead}                                   branchless vsel masking; XB1
 //   +0xC0 {TupB.xyz, dead}                                   branches and SWAPS instead --
 //   +0xD0 {at.xyz,  mTag (drain +0x5C, preserved)}           same fixed point)
 //   +0xE0 {TatA.xyz, dead}
 //   +0xF0 {TatB.xyz, dead}
-//   +0x100 mpBodyA / +0x108 mpBodyB  (host tail, carried through from the drain record)
 // =====================================================================================
 struct CGS_ALIGN(16) ContactJacobian
 {
@@ -343,13 +308,13 @@ struct CGS_ALIGN(16) ContactJacobian
     Vector3U_32 mBias;      // +0x60  pre-divided bias impulses (restitution folded into .x)
     f32         mBiasPos;   // +0x6C  penetration / dn
     Vector3U_32 mRi;        // +0x70  the contact normal
-    f32         mDeadA;     // +0x7C  console: RigidBody* A -- host: dead, 0
+    union { f32 mDeadA; RigidBody* mpBodyA; }; // +0x7C relocated body A
     Vector3U_32 mTnA;       // +0x80  I_A^-1 . (rA x n)
     f32         mInvmA;     // +0x8C  bodyA inverse mass (0 unless ACTIVE)
     Vector3U_32 mTnB;       // +0x90
     f32         mInvmB;     // +0x9C
     Vector3U_32 mUp;        // +0xA0  frame row 1
-    f32         mDeadB;     // +0xAC  console: RigidBody* B -- host: dead, 0
+    union { f32 mDeadB; RigidBody* mpBodyB; }; // +0xAC relocated body B
     Vector3U_32 mTupA;      // +0xB0  I_A^-1 . (rA x up)
     f32         mDead0;     // +0xBC
     Vector3U_32 mTupB;      // +0xC0
@@ -360,10 +325,10 @@ struct CGS_ALIGN(16) ContactJacobian
     f32         mDead2;     // +0xEC
     Vector3U_32 mTatB;      // +0xF0
     f32         mDead3;     // +0xFC
-    RigidBody*  mpBodyA;    // +0x100  same slots as Contact's tail -- carried through
-    RigidBody*  mpBodyB;    // +0x108
 };
 
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mpBodyA) == 0x7C &&
+                   offsetof(ContactJacobian, mpBodyB) == 0xAC), "ARTIST Jacobian pointer lanes");
 CGS_STATIC_ASSERT((sizeof(ContactJacobian) == sizeof(Contact)),
               "the batch rewrites the record IN PLACE -- the overlay must cover it exactly");
 CGS_STATIC_ASSERT((offsetof(ContactJacobian, mBodyA)   == 0x0C), "post-batch idA @+0x0C");
@@ -377,8 +342,8 @@ CGS_STATIC_ASSERT((offsetof(ContactJacobian, mInvmA)   == 0x8C), "invmA @+0x8C (
 CGS_STATIC_ASSERT((offsetof(ContactJacobian, mInvmB)   == 0x9C), "invmB @+0x9C");
 CGS_STATIC_ASSERT((offsetof(ContactJacobian, mAt)      == 0xD0), "at @+0xD0 (spy row 2)");
 CGS_STATIC_ASSERT((offsetof(ContactJacobian, mTag)     == 0xDC), "tag @+0xDC (spy emit +0x68)");
-CGS_STATIC_ASSERT((offsetof(ContactJacobian, mpBodyA)  == offsetof(Contact, mpBodyA)),
-              "the tail must not move between the two phases");
+CGS_STATIC_ASSERT((offsetof(ContactJacobian, mpBodyA) == offsetof(Contact, mpBodyA) + 0x70),
+                  "ARTIST batch relocates body A from position to normal w lane");
 
 // -------------------------------------------------------------------------------------------
 // Simulation::GetFreeContact (DWARF simulation.h:475) -- bump-allocate the next contact record
@@ -386,8 +351,8 @@ CGS_STATIC_ASSERT((offsetof(ContactJacobian, mpBodyA)  == offsetof(Contact, mpBo
 // simulation.h; defined here because it needs Contact complete. Transcribed from the inline
 // in ProcessAddContactQueue @0x828A36B0..0x828A36EC:
 //     if (m_CT_Count == m_CT_Max) return NULL;            // `cmplw 0x64 vs 0x7C`
-//     lpContact = m_CJ_Stack + (m_CT_Count << 8);         // console 256; host sizeof(Contact)
-//     ++m_CT_Count;                                       // `stw r8, 0x64`      == 272
+//     lpContact = m_CJ_Stack + (m_CT_Count << 8);         // native sizeof(Contact) == 256
+//     ++m_CT_Count;                                       // `stw r8, 0x64`
 // -------------------------------------------------------------------------------------------
 inline Contact* Simulation::GetFreeContact()
 {

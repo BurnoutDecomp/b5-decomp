@@ -1,6 +1,8 @@
 #pragma once
 
-#include <cmath>     // std::fma, std::sqrt
+#include <cmath>     // std::sqrt
+#include <cfloat>
+#include <vectorintrinsics.h>
 
 #include "types.hpp"
 #include "vendor/renderware/collision/FeatureEdge.hpp"   // Vec4
@@ -25,7 +27,7 @@
 //   rw::collision::CylinderVolume::FatLineSegIntersect   @ 0x82BAEB10
 //
 // The rounding is chosen per instruction (scratch/CRASHPARITY_0922/ROUNDING_RULE.md):
-//   rule 3  vmaddfp / vnmsubfp / vmaddfp128 / fmadds / fmsubs / fnmsubs round ONCE. std::fma is used with the
+//   rule 3  vmaddfp / vnmsubfp / vmaddfp128 / fmadds / fmsubs / fnmsubs round ONCE. Native VMX/FPU is used with the
 //           operands in the console's order: the classic `vmaddfp D,A,B,C` is D = A*C + B,
 //           `vnmsubfp D,A,B,C` is D = B - A*C, and `vmaddfp128 D,A,B` is D = A*B + D.
 //   rule 4  vmulfp / vaddfp / vsubfp / fmuls / fadds / fsubs / fdivs each round separately, as written.
@@ -45,11 +47,32 @@ namespace linemath
     // The kernels' .rdata words (tools/re/x360rd.py) and loop counts.
     const f32 KF_LINE_ZERO        = 0.0f;                // flt_82001CC0 == 0x00000000
     const f32 KF_LINE_ONE         = 1.0f;                // flt_82001C98 == 0x3F800000
-    const f32 KF_LINE_FLT_MIN     = 0x1p-126f;           // 0x00800000: unk_821800C0 (the sphere kernel's |n| floor)
+    const f32 KF_LINE_FLT_MIN     = FLT_MIN;           // 0x00800000: unk_821800C0 (the sphere kernel's |n| floor)
                                                          //   and flt_8218017C (the box's edge-cap denominator floor)
-    const f32 KF_LINE_NEG_FLT_MAX = -0x1.fffffep+127f;   // flt_82035570 == 0xFF7FFFFF (the box's separation seed)
+    const f32 KF_LINE_NEG_FLT_MAX = -FLT_MAX;   // flt_82035570 == 0xFF7FFFFF (the box's separation seed)
     const u32 KU_BOX_LINE_STEPS     = 6u;                // li r19, 6 @0x82BA94E0 ; addic. -1 @0x82BA9C70
     const u32 KU_CAPSULE_LINE_STEPS = 3u;                // li r24, 3 @0x82BAFD78 ; addic. -1 @0x82BB0088
+
+    // Native scalar FPU multiply-add; the XDK contracts this expression to fmadds.
+    inline f32 ScalarMadd(f32 afA, f32 afB, f32 afC)
+    {
+        return afA * afB + afC;
+    }
+
+    // Scalar FPU sites use fnmsubs rather than the VMX negative multiply-subtract.
+    inline f32 ScalarNmsub(f32 afA, f32 afC, f32 afB)
+    {
+        return -(afA * afC - afB);
+    }
+
+    // Native fused VMX operation: one rounding, as the ARTIST vmaddfp.
+    inline f32 Madd(f32 afA, f32 afB, f32 afC)
+    {
+        const __vector4 lvA = { afA, afA, afA, afA };
+        const __vector4 lvB = { afB, afB, afB, afB };
+        const __vector4 lvC = { afC, afC, afC, afC };
+        return __vmaddfp(lvA, lvB, lvC).x;
+    }
 
     // vmsum3fp128 -- FLAG (model): one rounding of the exact f64 sum of the three f32 products.
     inline f32 Dot3(const Vec4& arA, const Vec4& arB)
@@ -58,12 +81,13 @@ namespace linemath
                                 + static_cast<f64>(arA.z) * arB.z);
     }
 
-    // vnmsubfp / fnmsubs: -(a*c - b), rounded ONCE and then negated. An exact cancellation is -0, where
-    // std::fma(-a, c, b) gives +0; a QNaN keeps its sign (PowerPC: the fmsub result, negated, NaNs unchanged).
+    // Native vnmsubfp computes -(a*c - b), including its signed-zero/NaN result.
     inline f32 Nmsub(f32 afA, f32 afC, f32 afB)
     {
-        const f32 lfDifference = std::fma(afA, afC, -afB);
-        return (lfDifference != lfDifference) ? lfDifference : -lfDifference;
+        const __vector4 lvA = { afA, afA, afA, afA };
+        const __vector4 lvC = { afC, afC, afC, afC };
+        const __vector4 lvB = { afB, afB, afB, afB };
+        return __vnmsubfp(lvA, lvC, lvB).x;
     }
 
     // vrefp + two steps of `vnmsubfp r = 1 - est*x` / `vmaddfp est = est*r + est`.
@@ -73,7 +97,7 @@ namespace linemath
         for (u32 luStep = 0; luStep < 2u; ++luStep)
         {
             const f32 lfResidual = Nmsub(lfEstimate, afX, 1.0f);
-            lfEstimate = std::fma(lfEstimate, lfResidual, lfEstimate);
+            lfEstimate = Madd(lfEstimate, lfResidual, lfEstimate);
         }
         return lfEstimate;
     }
@@ -88,7 +112,7 @@ namespace linemath
             const f32 lfSquared  = lfEstimate * lfEstimate;
             const f32 lfHalf     = lfEstimate * 0.5f;
             const f32 lfResidual = Nmsub(afX, lfSquared, 1.0f);
-            lfEstimate = std::fma(lfHalf, lfResidual, lfEstimate);
+            lfEstimate = Madd(lfHalf, lfResidual, lfEstimate);
         }
         return lfEstimate;
     }
@@ -132,8 +156,8 @@ namespace linemath
     // vmaddfp against a splat: per-lane a*s + b, ONE rounding.
     inline Vec4 MaddSplat(const Vec4& arA, f32 afS, const Vec4& arB)
     {
-        return MakeVec4(std::fma(arA.x, afS, arB.x), std::fma(arA.y, afS, arB.y),
-                        std::fma(arA.z, afS, arB.z), std::fma(arA.w, afS, arB.w));
+        return MakeVec4(Madd(arA.x, afS, arB.x), Madd(arA.y, afS, arB.y),
+                        Madd(arA.z, afS, arB.z), Madd(arA.w, afS, arB.w));
     }
 
     // The volume's frame composed with the caller's transform -- the four scheduled chains that open the box and
@@ -205,19 +229,15 @@ namespace linemath
     // 0x82BAF310.)
     inline f32 VmxMin(f32 afA, f32 afB)
     {
-        if (afA != afA) return afA;
-        if (afB != afB) return afB;
-        if (afA < afB) return afA;
-        if (afB < afA) return afB;
-        return std::signbit(afA) ? afA : afB;
+        const __vector4 lvA = { afA, afA, afA, afA };
+        const __vector4 lvB = { afB, afB, afB, afB };
+        return __vminfp(lvA, lvB).x;
     }
     inline f32 VmxMax(f32 afA, f32 afB)
     {
-        if (afA != afA) return afA;
-        if (afB != afB) return afB;
-        if (afA > afB) return afA;
-        if (afB > afA) return afB;
-        return std::signbit(afA) ? afB : afA;
+        const __vector4 lvA = { afA, afA, afA, afA };
+        const __vector4 lvB = { afB, afB, afB, afB };
+        return __vmaxfp(lvA, lvB).x;
     }
     // fsel fD, fA, fC, fB (IDA prints that order): fA >= 0 (a -0 included) ? fC : fB -- a NaN fA takes fB.
     inline f32 Fsel(f32 afA, f32 afC, f32 afB)

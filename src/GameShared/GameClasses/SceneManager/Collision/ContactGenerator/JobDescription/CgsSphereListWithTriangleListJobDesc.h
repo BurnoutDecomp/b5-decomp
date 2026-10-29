@@ -58,7 +58,8 @@ namespace CgsCollision
     // =============================================================================================
     struct SphereListWithTriangleListStreamJobDesc : public CollisionJobDescription
     {
-        struct StreamCommand
+        // ARTIST stream factories pass a 32-byte, 16-aligned command.
+        struct CGS_ALIGN(16) StreamCommand
         {
             SphereList           mSphereList;   // DWARF h:111 (console 8B pair; host 16)
             TriangleList         mTriList;      // DWARF h:112 (console 8B pair; host 16)

@@ -105,7 +105,8 @@ namespace CgsCollision
         // ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream @0x82926650 (whose
         // four field reads -- cmd+0x00 / +0x0C / +0x14 / +0x18 -- independently confirm this
         // member order from the consumer side).
-        struct StreamCommand
+        // ARTIST stream factories pass a 32-byte, 16-aligned command.
+        struct CGS_ALIGN(16) StreamCommand
         {
             PrimitivePairList    mPairList;                // console +0x00 (12B), host +0x00 (16B)
             TriangleList         mTriangleList;            // console +0x0C  (8B), host +0x10 (16B)
