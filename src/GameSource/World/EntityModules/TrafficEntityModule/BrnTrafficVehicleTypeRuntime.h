@@ -34,19 +34,20 @@ namespace BrnTraffic
         static const u32 KU_NUM_PAINT_COLOURS_PER_VEHICLE = 20;
 
         // ---- lifecycle -----------------------------------------------------------
-        // DWARF :60. X360 @0x827521E8 is an EXPORT HOLE: no per-function JSON exists for that
-        // address, though TrafficEntityModule::Construct @0x82740220 calls it by name. The
-        // body below is the Feb-2007 original verbatim.
-        //
-        // FLAG (unverifiable, low risk): the ship added mMass_WheelRadius_Z_W, mAttribKey,
-        // maiPaintColours and miNumPaintColours, and the export hole hides whether
-        // ship-Construct seeds them. Prepare @0x82761B10 writes all four before any consumer
-        // reads them, so leaving them untouched cannot produce a stale read.
+        // DWARF :60; complete ARTIST raw body 0x827521E8..0x82752294.
+        // Zero both boxes; seed pivots, mass/radius, all 20 paint indices and count one.
+        // The original leaves mAttribKey untouched; Prepare supplies it later.
         void Construct()
         {
             mBBoxOffset.SetZero();
             mBBoxHalfSize.SetZero();
             mCabPivot_TrailerPivot_BackAxle_FwdAxle = Vector4{ -1.5f, 1.5f, -1.1f, 1.1f };
+            mMass_WheelRadius_Z_W = Vector4{ 2000.0f, 0.65f, 0.0f, 0.0f };
+            for (u32 luPaint = 0; luPaint < KU_NUM_PAINT_COLOURS_PER_VEHICLE; ++luPaint)
+            {
+                maiPaintColours[luPaint] = 0;
+            }
+            miNumPaintColours = 1;
         }
 
         // DWARF :66 `void Prepare(const StreamedDeformationSpec *, Attribute::Key)`,
