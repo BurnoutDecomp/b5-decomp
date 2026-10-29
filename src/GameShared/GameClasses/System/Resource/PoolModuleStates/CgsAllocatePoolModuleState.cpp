@@ -76,7 +76,7 @@ namespace CgsResource
                 meState = E_STATE_IDLE;
                 return mbAllowFailiure ? E_RESULT_FAILED_SAFELY : E_RESULT_ERROR;
             }
-            [[fallthrough]];
+            // fall through
         case E_STATE_ALLOCATE:
         {
             meState = E_STATE_ALLOCATE;
@@ -104,7 +104,7 @@ namespace CgsResource
                 meState = E_STATE_DEFRAG_WAITING;
                 return E_RESULT_DEFRAGMENT;
             }
-            [[fallthrough]];
+            // fall through
         }
         case E_STATE_MERGE_ALLOCATIONS:
         case E_STATE_DEFRAG_WAITING:

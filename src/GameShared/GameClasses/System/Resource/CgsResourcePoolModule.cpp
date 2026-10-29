@@ -20,6 +20,16 @@ namespace CgsResource
         const char* const KPC_POOLMODULE_CREATE_SRC =
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp";
 
+        // ARTIST828FC0B8 uses the caller's five-lane allocator for each work array.
+        void* AllocateWorkingMemory(rw::IResourceAllocator* lpAllocator,
+                                    size_t luSize, u32 luAlignment)
+        {
+            rw::ResourceDescriptor lDescriptor;
+            lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+            return lpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
+        }
+
         void FirePoolCreateAssert(const char* lpcMessage, int liLine)
         {
             CgsDev::Assert::BeginAssert();
@@ -30,9 +40,9 @@ namespace CgsResource
         void FireInvalidPoolIdAssert(s32 liPoolId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Pool id " << liPoolId << " is invalid\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                        KPC_POOLMODULE_CREATE_SRC, 916);
             CgsDev::Assert::EndAssert();
         }
@@ -40,9 +50,9 @@ namespace CgsResource
         void FireDuplicatePoolIdAssert(s32 liPoolId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Pool id " << liPoolId << "is already in use\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                        KPC_POOLMODULE_CREATE_SRC, 922);
             CgsDev::Assert::EndAssert();
         }
@@ -50,9 +60,9 @@ namespace CgsResource
         void FireMissingDependencyAssert(s32 liDependencyId)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Failed to find dependency pool with id " << liDependencyId << "\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                        KPC_POOLMODULE_CREATE_SRC, 1281);
             CgsDev::Assert::EndAssert();
         }
@@ -261,7 +271,7 @@ namespace CgsResource
         // type. Native records contain 64-bit pointers, so retain the count and
         // use their host sizeof/alignment when carving the parent allocator.
         CGS_ASSERT(lpOptions != 0, "lpInitOptions");
-        ScratchPool::InitOptions lScratchOptions = {};
+        ScratchPool::InitOptions lScratchOptions = ScratchPool::InitOptions();
         lScratchOptions.muMaxEntries = static_cast<u32>(lpOptions->miMaxResourceToDefrag);
         lScratchOptions.miBankId = 999;
         lScratchOptions.mDescriptor = lpOptions->mDefragBufferDescriptor;
@@ -276,7 +286,7 @@ namespace CgsResource
         mScratchPool.InitPool(&lScratchOptions);
         for (s32 t = 0; t < 3; ++t)
         {
-            rw::ResourceDescriptor lDescriptor = {};
+            rw::ResourceDescriptor lDescriptor = rw::ResourceDescriptor();
             lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(AllocRequest) * KI_MAX_ALLOCATION_REQUESTS;
             lDescriptor.m_baseResourceDescriptors[0].m_alignment = __alignof(AllocRequest);
             mAllocListSet.mapAllocRequests[t] = static_cast<AllocRequest*>(
@@ -290,18 +300,18 @@ namespace CgsResource
         }
         mAllocListSet.ClearCountsAndResults();
 
-        mpAddressedAllocRequests = static_cast<AllocRequestAddressed*>(lAllocateWorkingMemory(
+        mpAddressedAllocRequests = static_cast<AllocRequestAddressed*>(AllocateWorkingMemory(lpResourceAllocator,
             sizeof(AllocRequestAddressed) * KI_MAX_ALLOCATION_REQUESTS, __alignof(AllocRequestAddressed)));
-        mpRelocateRequests = static_cast<RelocateRequest*>(lAllocateWorkingMemory(
+        mpRelocateRequests = static_cast<RelocateRequest*>(AllocateWorkingMemory(lpResourceAllocator,
             sizeof(RelocateRequest) * KU_MAX_POOL_ENTRIES, 128));
-        mpLinearHeapNodes = static_cast<LinearHeapNode*>(lAllocateWorkingMemory(
+        mpLinearHeapNodes = static_cast<LinearHeapNode*>(AllocateWorkingMemory(lpResourceAllocator,
             sizeof(LinearHeapNode) * (KU_MAX_LINEAR_HEAP_LENGTH + 8u), 128));
         const size_t luSharedStride = sizeof(DistributionEntry) > sizeof(RelocationEntry)
             ? sizeof(DistributionEntry) : sizeof(RelocationEntry);
-        mpDistributionEntries = static_cast<DistributionEntry*>(lAllocateWorkingMemory(
+        mpDistributionEntries = static_cast<DistributionEntry*>(AllocateWorkingMemory(lpResourceAllocator,
             luSharedStride * KU_MAX_POOL_ENTRIES, 128));
         mpRelocationEntries = reinterpret_cast<RelocationEntry*>(mpDistributionEntries);
-        mpRelocateSources = static_cast<RelocateSource*>(lAllocateWorkingMemory(
+        mpRelocateSources = static_cast<RelocateSource*>(AllocateWorkingMemory(lpResourceAllocator,
             sizeof(RelocateSource) * KU_MAX_POOL_ENTRIES, 128));
         mRelocationParams.mpOps = mpRelocationEntries;
         mRelocationParams.miNumOps = 0;
@@ -567,15 +577,8 @@ namespace CgsResource
 
         rw::ResourceDescriptor lDescriptor;
         GetRequiredResourceDescriptor(lpRequest, &lDescriptor);
-        ConvertPoolRequestOptions(lpRequest, &lHostOptions);
-        lDescriptor.m_baseResourceDescriptors[0].m_size =
-            lHostOptions.maHeapInfo[0].muHeapMemorySize + Pool::GetOverheadMemoryRequired(&lHostOptions);
-        const u32 luManagementAlignment = Pool::GetOverheadMemoryAlignment(&lHostOptions);
-        if (lDescriptor.m_baseResourceDescriptors[0].m_alignment < luManagementAlignment)
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luManagementAlignment;
-
         // Value initialization preserves the original strncpy32 zero-padded bank-name tail.
-        CgsMemory::MemoryIO::CreateResourceRequest lRequest = {};
+        CgsMemory::MemoryIO::CreateResourceRequest lRequest = CgsMemory::MemoryIO::CreateResourceRequest();
         lRequest.Construct(&mReceiverQueue, lpRequest->miPoolId);
         lRequest.SetBankName(lpRequest->mpcName);
         lRequest.SetBankId(lpRequest->miBankId);
@@ -591,10 +594,10 @@ namespace CgsResource
     void PoolModule::DoCreatePoolRequest(const CgsMemory::MemoryIO::CreateResourceResponse* lpResponse,
                                          PoolIO::OutputBuffer* lpPoolOutput)
     {
-        SmallResource lResource = {};
+        SmallResource lResource = SmallResource();
         lResource.CreateFromRWResource(lpResponse->GetResource());
 
-        SmallResourceDescriptor lDescriptor = {};
+        SmallResourceDescriptor lDescriptor = SmallResourceDescriptor();
         for (s32 li = 0; li < 3; ++li)
         {
             lDescriptor.m_baseResourceDescriptors[li].m_size = 0;

@@ -49,6 +49,7 @@ namespace PoolIO
     private:
         u8             maStatusPad[3];     // +1..+3 (force +4 placement)
         PoolInputQueue mPoolInputQueue;    // +4
+        static void _AssertLayoutInput();
     };
 
     struct OutputBuffer : public CgsModule::IOBuffer

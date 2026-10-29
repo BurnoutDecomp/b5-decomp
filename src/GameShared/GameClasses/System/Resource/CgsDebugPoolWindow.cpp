@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
-#include <cmath>
+#include <ppcintrinsics.h>
 #include <cstring>
 
 namespace CgsResource
@@ -34,11 +34,10 @@ namespace CgsResource
         // low byte. Preserve wrapping rather than clamping colour components.
         u32 ColourByte(f32 value)
         {
-            const f32 rounded = std::fma(value, 255.0f, 0.5f);
-            if (!std::isfinite(rounded) || rounded < -9223372036854775808.0 ||
-                rounded >= 9223372036854775808.0)
-                return 0; //PPC fctidz indefinite integer has a zero low byte
-            return static_cast<u32>(static_cast<u64>(static_cast<s64>(rounded)) & 0xFFu);
+            const f32 rounded = value * 255.0f + 0.5f;
+            u32 luWord;
+            __stfiwx(__fctidz(rounded), 0, &luWord);
+            return luWord & 0xFFu;
         }
 
         // The scroll path uses fctidz then stfiwx: keep the low32 bits of
@@ -46,10 +45,9 @@ namespace CgsResource
         u32 ScrollSegments(f32 width)
         {
             const f32 segments = width * 0.125f;
-            if (!std::isfinite(segments) || segments < -9223372036854775808.0 ||
-                segments >= 9223372036854775808.0)
-                return 0; //out-of-range instruction/status details remain a hardware model boundary
-            return static_cast<u32>(static_cast<u64>(static_cast<s64>(segments)));
+            u32 luWord;
+            __stfiwx(__fctidz(segments), 0, &luWord);
+            return luWord;
         }
     }
 
@@ -220,20 +218,15 @@ namespace CgsResource
     {
         Heap* lpHeap = lpInfo->mpHeap;
         lpRender->DrawText(lpInfo->macShortName, lfX,
-                           std::fma(lfHeight, 0.5f, lfY) - 4.0f, 14.0f, 0xFF000000u);
+                           (lfHeight * 0.5f + lfY) - 4.0f, 14.0f, 0xFF000000u);
         const u32 luBytesPerSegment = lpInfo->muBytesPerSegment;
         // The original unsigned divides have zero-divisor traps. No extra
         // range, validity, or empty-list guards are placed ahead of them.
         const u32 luTotalSegments = lpHeap->GetTotalSizeBytes() / luBytesPerSegment;
         const f32 lfPixelWidth = lfWidth - 29.0f;
-        u32 luPixelWord = 0;
+        u32 luPixelWord;
         // ARTIST828EE5D4..E5E0: fctidz, low32 word, then logical shift by1.
-        // The PPC indefinite result for non-finite/out-of-s64 values has low32=0.
-        if (std::isfinite(lfPixelWidth) && lfPixelWidth >= -9223372036854775808.0 &&
-            lfPixelWidth < 9223372036854775808.0)
-        {
-            luPixelWord = static_cast<u32>(static_cast<u64>(static_cast<s64>(lfPixelWidth)));
-        }
+        __stfiwx(__fctidz(lfPixelWidth), 0, &luPixelWord);
         const u32 luColumns = luPixelWord >> 1;
         const f32 lfBarX = lfX + 27.0f;
         if (luTotalSegments != 0)

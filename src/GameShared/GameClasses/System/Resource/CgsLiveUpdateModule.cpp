@@ -73,10 +73,10 @@ namespace CgsResource
     // Static EA::GameTalk::MessageHandler. The X360 Hex-Rays mis-resolves the two
     // message reads as CgsNetwork::ServerInterfaceComponent::GetLastError / sub_82837E08;
     // the call sites pass the GameTalkMessage `this` (r3), so they are message accessors:
-    // GetState() (compared == 1) and GetKeyContent("ReplaceResourcesFromFile").
+    // GetNumKeys() (compared == 1) and GetKeyContent("ReplaceResourcesFromFile").
     void LiveUpdateModule::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        if (lpMessage->GetState() != 1)
+        if (lpMessage->GetNumKeys() != 1)
             return;
 
         const char* lpcFileName = lpMessage->GetKeyContent("ReplaceResourcesFromFile");
@@ -112,7 +112,7 @@ namespace CgsResource
             // Just armed -- start the settle countdown.
             mcUpdateCounter = 0;
             // fall through into the settle/advance path
-            [[fallthrough]];
+            // fall through
         case 2:
         {
             mcUpdateCounter = (s8)(mcUpdateCounter + 1);
@@ -141,7 +141,7 @@ namespace CgsResource
 
             miUpdateState = 3;
             // fall through into the await-response check
-            [[fallthrough]];
+            // fall through
         }
         case 3:
         {

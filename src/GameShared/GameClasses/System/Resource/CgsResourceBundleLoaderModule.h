@@ -5,7 +5,6 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
 #include "GameShared/GameClasses/Containers/CgsPriorityQueue.h"
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"
 #include "GameShared/GameClasses/System/Resource/CgsBundleLoaderModuleIO.h"
 #include "GameShared/Jobs/DecompressionJob/DecompressionJobInterface.h"
 
@@ -44,7 +43,8 @@ public:
         bool mbForcePS3HardDriveUpperCaseGame;
     };
 
-    BundleLoaderModule() = default;
+    // ARTIST827DD270: embedded jobs construct normally; the cache starts unconstructed.
+    BundleLoaderModule() { mPoolReceiveQueueCache.MarkUnconstructed(); }
     static const u32 KU_SECONDARY_STREAM_BUFFER_SIZE = 0x80000;
     void Construct();
     void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
@@ -63,12 +63,6 @@ public:
                               Events::LoadBundleResponse::EResult leResult);
     bool CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput);
     bool CheckForUnloads(BundleLoaderIO::OutputBuffer* lpOutput);
-
-    // Legacy synchronous adapter; the runtime uses the staged input protocol.
-    void EnqueueLoadRequest(const Events::LoadBundleRequest& lrRequest);
-    void ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType);
-    void EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest);
-    void ProcessUnloadRequests(PoolModule* lpPoolModule);
 
     bool MoveToFirstResource();
     bool MoveToNextResource();
@@ -135,7 +129,5 @@ private:
     u64 muLoadStartTime;
     u64 muTimerTrace;
 
-    CgsModule::EventQueue<Events::LoadBundleRequest,256> mLoadRequests;
-    CgsModule::EventQueue<Events::UnloadBundleRequest,256> mUnloadRequests;
 };
 }

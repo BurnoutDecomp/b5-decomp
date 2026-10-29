@@ -84,9 +84,9 @@ namespace CgsResource
             if (!IsBufferLockedForWriting())
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+                CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                 lStream << "Not locked for writing\n";
-                CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 82);
                 CgsDev::Assert::EndAssert();
             }

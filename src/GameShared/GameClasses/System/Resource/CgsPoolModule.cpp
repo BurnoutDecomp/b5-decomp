@@ -200,7 +200,7 @@ namespace CgsResource
         lrPool.FixUpAndResolveResourceList(lpList->mIds, lpList->muNumEntries,
             lpRequest->miFirstIndex, lpRequest->miCount, lpRequest->mbFinalFixup, lpRequest->mbFixUpDependencies);
 
-        Events::FixUpAndResolveResourceListResponse lResponse = {};
+        Events::FixUpAndResolveResourceListResponse lResponse = Events::FixUpAndResolveResourceListResponse();
         lResponse.miEventId = lpRequest->miEventId;
         lResponse.miPoolId = lpRequest->miPoolId;
         lResponse.mListHandle.mpResourceMemory = &lpEntry->mResource.m_baseResources[0];
@@ -223,7 +223,7 @@ namespace CgsResource
         mDeAllocateState.Begin(&maPools[liPoolIndex], lpRequest->mListId);
         mProcessState = E_UPDATESTATE_DEALLOCATING_LIST;
 
-        Events::UnloadResourceListResponse lResponse = {};
+        Events::UnloadResourceListResponse lResponse = Events::UnloadResourceListResponse();
         lResponse.miEventId = lpRequest->miEventId;
         lResponse.miPoolId = lpRequest->miPoolId;
         lResponse.mListId = lpRequest->mListId;
@@ -334,7 +334,7 @@ namespace CgsResource
             //   [+0x00] = 0                          (stw r29, r29=0)
             //   [+0x04] = miAllocateRequestEventId   (lwzx *(this+0x19B34))
             //   [+0x2C] = (result==SUCCESS) ? 0 : 1  (mbFailed; asm cntlzw/result/extrwi/xori)
-            Events::AllocateResourceListResponse lEvent = {};
+            Events::AllocateResourceListResponse lEvent = Events::AllocateResourceListResponse();
             mAllocateState.GenerateResponse(&lEvent);
             lEvent.miEventId = miAllocateRequestEventId;
             lEvent.mbFailed = luResult != AllocatePoolModuleState::E_RESULT_SUCCESS;
