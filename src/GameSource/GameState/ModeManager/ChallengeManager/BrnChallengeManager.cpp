@@ -1175,7 +1175,7 @@ bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChall
 // UnHackAllChallenges -- X360 0x82333040. Undoes HackAllChallenges: for every challenge in the
 // list, restore the active num-players (byte +0xD3 low nibble) from the backup HackAllChallenges
 // stashed in the high nibble. The range asserts ("liNumPlayers >= 1" / "<= KI_MAX_PLAYERS",
-// ChallengeListEntry.h:888/890) live inside the entry's GetOriginalNumPlayers accessor.
+// ChallengeListEntry.h:888/890) are retained by ResetNumPlayers.
 // ----------------------------------------------------------------------------
 void ChallengeManager::UnHackAllChallenges()
 {
@@ -1183,8 +1183,8 @@ void ChallengeManager::UnHackAllChallenges()
     {
         BrnResource::ChallengeListEntry* lpChallenge =
             const_cast<BrnResource::ChallengeListEntry*>(mpFreeburnChallengeList->GetChallengeData(liChallenge));
-        // X360: newByte = (byte0xD3 & 0xF0) | (byte0xD3 >> 4) -> SetNumPlayers(GetOriginalNumPlayers()).
-        lpChallenge->SetNumPlayers(lpChallenge->GetOriginalNumPlayers());
+        // Restore the current nibble from the preserved authored count (ARTIST 0x823330D0..E0).
+        lpChallenge->ResetNumPlayers();
     }
 }
 
@@ -3002,7 +3002,7 @@ void ChallengeManager::UpdateRunning(
             {
                 BrnResource::ChallengeListEntry* lpChallenge =
                     const_cast<BrnResource::ChallengeListEntry*>(mpFreeburnChallengeList->GetChallengeData(liChallenge));
-                lpChallenge->SetNumPlayers(1);
+                lpChallenge->SetNewNumPlayers(1);
             }
         }
         else
@@ -3025,7 +3025,7 @@ void ChallengeManager::UpdateRunning(
             {
                 BrnResource::ChallengeListEntry* lpChallenge =
                     const_cast<BrnResource::ChallengeListEntry*>(mpFreeburnChallengeList->GetChallengeData(liChallenge));
-                lpChallenge->SetNumPlayers(2);
+                lpChallenge->SetNewNumPlayers(2);
             }
         }
         else

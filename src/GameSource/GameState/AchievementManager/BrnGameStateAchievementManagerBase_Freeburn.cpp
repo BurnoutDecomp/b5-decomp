@@ -38,33 +38,23 @@ namespace
     // FLAG: X360-SKU numbering; intentionally NOT the PS3 EAchievement names/values.
     const EAchievement E_X360_ACHIEVEMENT_FREEBURN_BLOCK_COMPLETE = static_cast<EAchievement>(47); // OnFreeburnChallengeBlockComplete (0x2F)
 
-    // ------------------------------------------------------------------------
-    // FLOOR / FLAG: OnFreeburnChallengeComplete table. (Moved verbatim with its body.)
-    //
-    // The X360 (0x8235B2D8) iterates a const data table at &unk_82CDBDC4 whose entry
-    // count is the dword at dword_82CDBDDC. Each entry is stride 8 = { EAchievement
-    // achievement; u32 threshold }. For each entry it fires entry.achievement once
-    // (!IsAchievementEarnt && completedCount >= entry.threshold).
-    //
-    // The table CONTENTS and the count are UNRECOVERABLE rodata: they are NOT in the
-    // dossier, dwarfdump, or the IDA data exports (verified). The loop LOGIC is
-    // reconstructed faithfully below, but the rows are modelled here as an HONEST
-    // placeholder: an EMPTY array with count 0, so the loop no-ops. Populate the real
-    // rows + count (from X360 unk_82CDBDC4 / dword_82CDBDDC) when those bytes surface.
-    // Do NOT fabricate rows.
-    // ------------------------------------------------------------------------
+    // ARTIST initialized table82CDBDC4: three {X360 achievement id, u32 threshold}
+    // rows. OnFreeburnChallengeComplete8235B2D8 reads count82CDBDDC and compares
+    // the completed count unsigned. These are X360 SKU ids, not PS3 enum names.
     struct FreeburnChallengeAchievementEntry
     {
-        EAchievement meAchievement;   // unk_82CDBDC4 + 0
-        u32          muThreshold;     // unk_82CDBDC4 + 4
+        EAchievement meAchievement;
+        u32          muThreshold;
     };
 
-    // FLAG: placeholder -- real rows/count are unrecoverable X360 game data. The table
-    // base (X360 unk_82CDBDC4) is modelled as a null pointer with a zero count
-    // (X360 dword_82CDBDDC), so the loop no-ops. When the bytes surface, point this at a
-    // static const FreeburnChallengeAchievementEntry[] and set the count accordingly.
-    const FreeburnChallengeAchievementEntry* const KAPFREEBURN_CHALLENGE_ACHIEVEMENTS = nullptr;
-    const u32 KU_FREEBURN_CHALLENGE_ACHIEVEMENT_COUNT = 0u; // X360 dword_82CDBDDC (unrecoverable; placeholder 0)
+    const FreeburnChallengeAchievementEntry KAPFREEBURN_CHALLENGE_ACHIEVEMENTS[] =
+    {
+        { static_cast<EAchievement>(44), 1u },
+        { static_cast<EAchievement>(45), 25u },
+        { static_cast<EAchievement>(46), 250u },
+    };
+    const u32 KU_FREEBURN_CHALLENGE_ACHIEVEMENT_COUNT = 3u;
+
 }
 
 // ----------------------------------------------------------------------------
@@ -81,12 +71,8 @@ void AchievementManagerBase::OnFreeburnChallengeBlockComplete()
 }
 
 // ----------------------------------------------------------------------------
-// OnFreeburnChallengeComplete  (X360 0x8235B2D8)  -- THE FLOOR (table-driven)
-//   For each row in the (unrecoverable) achievement table, fire row.meAchievement
-//   the first time the player's completed-challenge count reaches row.muThreshold.
-//   The threshold compare is UNSIGNED on the X360 (cmplw). The table is an honest
-//   EMPTY placeholder (count 0), so this loop currently no-ops -- see the FLOOR/FLAG
-//   note above the table definition.
+// OnFreeburnChallengeComplete  (X360 0x8235B2D8).
+// Fire each X360 table achievement once its unsigned completed-count threshold is met.
 // ----------------------------------------------------------------------------
 void AchievementManagerBase::OnFreeburnChallengeComplete(u32 luCompletedChallengeCount)
 {
