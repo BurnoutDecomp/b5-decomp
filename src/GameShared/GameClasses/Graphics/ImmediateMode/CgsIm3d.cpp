@@ -1,32 +1,6 @@
-// CgsGraphics::ImRenderer<BasicColouredTexturedVertex> -- the X360 immediate-mode textured 3D
-// renderer instantiation. This is the renderer behind CgsGraphics::Im3d (the smoke / spark /
-// blobby-shadow / above-car / debug-3D textured paths: Im3dSmokeRenderer::Construct and
-// CgsGraphics::Im3d::Construct build it; the particle / shadow / GUI dispatchers drive
-// BeginRendering / SetTransform / EndRendering).
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (the ImRenderer<BasicColouredTexturedVertex> member
-// bodies):
-//   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::Construct     @ 0x8228D718
-//   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::AddProgram    @ 0x82286A10
-//   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::SetProgram    @ 0x827DBC98
-//   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::EndRendering  @ 0x8227B830
-//   CgsGraphics::ImRenderer<BasicColouredTexturedVertex>::SetTransform  @ 0x8227B8A0
-//   default BeginRendering @0x8227B730; Render @0x824041B8
-//   two-matrix transform @0x827DC478
-//
-// This mirrors CgsIm3dZOnly.cpp (ImRenderer<PositionOnlyVertex>): the per-vertex-type member
-// bodies are defined out-of-class then the template is instantiated PER MEMBER (NOT a whole-struct
-// `template struct ImRenderer<...>`). RenderStart/RenderEnd belong to the
-// command buffer, while this renderer packs source32-byte vertices into GPU24.
-// The separate signed-program BeginRendering overload remains out of this slice.
-// The ImRenderBuffer<V> command-buffer members
-// (Dispatch / Prepare / RenderEnd / SetBufferFullRewindT / SetState / Swap / Hand -- the ones whose
-// asserts cite CgsImRenderBuffer.h / CgsIm3dRenderBuffer.h) belong to a DIFFERENT template
-// instantiation and are not this ledger key's to home.
-//
-// The asm is authoritative for every constant: the three vertex-descriptor element words
-// (0x2A23B9 / 0x14C86 / 0x2C23A5) and the "is pixel program" flag (1) come straight from the
-// immediates -- none are fabricated.
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include <vectorintrinsics.h>
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImNativePrograms.h"
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
@@ -40,52 +14,11 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the constant-resolve witness
 #include <cstdio>
 
-extern "C" void* D3DDevice_BeginVertices(void*, u32, u32, u32);
-extern "C" void D3DDevice_EndVertices(void*);
-extern "C" u32 D3DDevice_InsertFence(void*);
-
-// The converted PC program images for Im3d PROGRAM 0 (pc/gcm/renderengine/Im3dProgramsPC.cpp --
-// the PC stand-in for the two guest .data blobs unk_820D4090 / unk_820D41F0; see that file for
-// the recipe and tools/assets/shaders/brn_im3d.fx for the Xenos listing they came from).
-namespace renderengine
-{
-    extern const u32 guIm3dVertexProgramPCSize;
-    extern const u32 guIm3dPixelProgramPCSize;
-}
-
 namespace CgsGraphics
 {
 namespace
 {
-    // The rw resource allocator's Create slot the X360 immediate-mode builder dispatches through
-    // (vtable +0x10): given the sized descriptor it carves the program/descriptor resource handles
-    // the matching renderengine *::Initialize then turns into the live object. Modelled by name,
-    // mirroring CgsImRenderer.cpp / CgsIm3dZOnly.cpp -- the immediate-mode layer only ever reaches
-    // the allocator through this one virtual. The X360 call is (*(*a2 + 16))(handlesOut, a2, desc, 0).
-    class ResourceAllocator
-    {
-    public:
-        // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
-        // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
-        // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
-        // downgraded to the inert base for the rest of the run. Call the interface by
-        // NAME instead; see CgsResourceAllocatorCreate.h.
-        void* Create(
-            void* lpResourceHandlesOut,
-            ResourceAllocator* /*lpAllocator*/,
-            const void* lpDescriptor,
-            int /*liFlags*/)
-        {
-            return CgsGraphics::ResourceAllocatorCreate(this, lpResourceHandlesOut, lpDescriptor);
-        }
-    };
 
-    // The three vertex-descriptor element words the X360 Construct stores into the textured stream's
-    // descriptor elements (the inlined BasicColouredTexturedVertex::FillVertexDescriptorParameters).
-    // They are the raw asm immediates written at each element's +4 dword:
-    //   element 0 (position, FLOAT3) -> 0x2A23B9  (lis 0x2A / ori 0x23B9)
-    //   element 1 (colour,   UBYTE4N) -> 0x14C86  (lis 1   / ori 0x4C86)
-    //   element 2 (texcoord, FLOAT2)  -> 0x2C23A5 (lis 0x2C / ori 0x23A5)
     const u32 KU_POSITION_ELEMENT_WORD = 0x2A23B9u;
     const u32 KU_COLOUR_ELEMENT_WORD   = 0x14C86u;
     const u32 KU_TEXCOORD_ELEMENT_WORD = 0x2C23A5u;
@@ -93,17 +26,6 @@ namespace
 
 } // namespace CgsGraphics
 
-// The renderengine shader-state entry point SetTransform writes the world matrix into. Out-of-scope
-// (blocked class:renderengine::Device); declared here (external linkage, defined in its own
-// renderengine TU) as the minimal surface so the body links. X360: r3 =
-// renderengine::Device::BeginShaderStates(shaderStateBlock, &outPtr). Shared declaration with the
-// CgsIm3dZOnly.cpp position-only renderer.
-void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
-
-// The shadow-device program binders SetProgram drives. Out-of-scope (the X360 shadow::Device home
-// is only declaration-modelled in shadowingdevice.h: SetVertexProgramInternal takes no args there
-// and the arg-passing form is unhomed). Declared here as the minimal external surface the body
-// calls -- the X360 asm passes the bound program pointer to each.
 namespace shadow
 {
     void DeviceSetVertexProgramInternal(void* lpVertexProgram);
@@ -113,14 +35,6 @@ namespace shadow
 namespace CgsGraphics
 {
 
-// ---------------------------------------------------------------------------------------------------
-// ImRenderer<BasicColouredTexturedVertex>::AddProgram  @ 0x82286A10
-// Find the first empty vertex-program slot, upload the supplied vertex + pixel program binaries into
-// it (sizing each via ProgramBuffer::GetResourceDescriptor -> allocator Create -> Initialize), and
-// return the slot index. Asserts the chosen slot's pixel entry is empty and that we did not run past
-// the program table. (Identical body to the position-only renderer's AddProgram -- the per-program
-// upload is vertex-type-agnostic.)
-// ---------------------------------------------------------------------------------------------------
 template <typename V>
 s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpVertexProgramBinary, u32 luVertexProgramSize,
@@ -145,12 +59,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
 
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-
-    // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
-    // The X360 zeroes exactly muShaderType / muMicrocodePart1 / muMicrocodePart3 / muConstantTableSize
-    // / muNumVariables (param words [1],[4],[6],[8],[9]); the inline-microcode words [3],[5],[7] are
-    // only consumed on the muFunction==0 path (not taken here) and are left untouched by the asm.
     renderengine::ProgramBufferParameters lVertexParams;
     lVertexParams.muShaderType        = 0;
     lVertexParams.muMicrocodePart1    = 0;
@@ -164,14 +72,11 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
 
     renderengine::ProgramResourceLayout lVertexLayout = {};
-    lpAllocatorIf->Create(&lVertexLayout, lpAllocatorIf, &lVertexDescriptor, 0);
+    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lVertexLayout, &lVertexDescriptor);
     mapVertexProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
             renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
 
-    // ---- pixel program (muShaderType = 1 -> pixel) ----------------------------------------------
-    // Same zeroed param words as the vertex case ([1],[4],[6],[8],[9]); muShaderType is set to 1
-    // (the X360 stores li 1 into the param block after the GetResourceDescriptor stores).
     renderengine::ProgramBufferParameters lPixelParams;
     lPixelParams.muMicrocodePart1    = 0;
     lPixelParams.muMicrocodePart3    = 0;
@@ -185,7 +90,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
 
     renderengine::ProgramResourceLayout lPixelLayout = {};
-    lpAllocatorIf->Create(&lPixelLayout, lpAllocatorIf, &lPixelDescriptor, 0);
+    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lPixelLayout, &lPixelDescriptor);
     mapPixelProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
             renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));
@@ -193,15 +98,6 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     return li8ProgramIndex;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// ImRenderer<BasicColouredTexturedVertex>::Construct  @ 0x8228D718
-// One-time-construct the shared render-state library (ImRendererBase::ConstructOnceOnly, guarded by a
-// module flag), build this renderer's position+colour+UV vertex descriptor, clear the program tables,
-// then upload each of li8NumberPrograms vertex/pixel program pairs via AddProgram.
-//
-// The X360 passes the program binaries / sizes as four parallel arrays addressed off one base (a4);
-// here they are the four explicit pointer arrays.
-// ---------------------------------------------------------------------------------------------------
 template <typename V>
 void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const void* const* lapVertexProgramBinary,
@@ -210,16 +106,12 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const u32* lauPixelProgramSize,
                               s8 li8NumberPrograms)
 {
-    // Build the shared render-state library once using the shared ARTIST guard byte_83010F95.
     if (!mgbStateLibraryConstructed)
     {
         ConstructOnceOnly(lpAllocator);
         mgbStateLibraryConstructed = true;
     }
 
-    // Build the textured vertex descriptor (the X360 inlines BasicColouredTexturedVertex::
-    // FillVertexDescriptorParameters: three elements -- FLOAT3 position, UBYTE4N colour, FLOAT2 UV --
-    // whose +4 words are the three KU_*_ELEMENT_WORD asm immediates).
     renderengine::VertexDescriptor::Parameters lParameters;
 
     lParameters.maElements[0].mu16Stream    = 0;
@@ -249,16 +141,14 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     u8 lauDescriptor[144] = {};
     renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
 
-    ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    rw::Resource lDescriptorResource = {};
-    lpAllocatorIf->Create(&lDescriptorResource, lpAllocatorIf, lauDescriptor, 0);
+    rw::Resource lDescriptorResource;
+    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lDescriptorResource, lauDescriptor);
     mpVertexDescriptor =
         reinterpret_cast<renderengine::VertexDescriptor*>(
             renderengine::VertexDescriptor::Initialize(&lDescriptorResource, &lParameters));
 
     CGS_ASSERT(li8NumberPrograms <= KI8_MAX_PROGRAMS, "li8NumberPrograms<=KI8_MAX_PROGRAMS");
 
-    // Clear both program tables (the X360 walks the two parallel 8-entry tables in one strided loop).
     mi8CurrentProgram = 0;
     for (s32 liSlot = 0; liSlot < KI8_MAX_PROGRAMS; ++liSlot)
     {
@@ -266,7 +156,6 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
         mapPixelProgramBuffer[liSlot]  = 0;
     }
 
-    // Upload each supplied program pair.
     for (s32 liProgram = 0; liProgram < li8NumberPrograms; ++liProgram)
     {
         CGS_ASSERT(lapVertexProgramBinary[liProgram] != 0,
@@ -287,13 +176,6 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     }
 }
 
-// ---------------------------------------------------------------------------------------------------
-// ImRenderer<BasicColouredTexturedVertex>::SetProgram  @ 0x827DBC98
-// Bind program slot li8Program's vertex + pixel programs on the device. The vertex program is
-// shadow-cached (module-static dword_8301095C): if it is unchanged the bind is skipped and false is
-// returned; otherwise the vertex program is set, the cache updated, the current slot recorded and the
-// pixel program set, returning true.
-// ---------------------------------------------------------------------------------------------------
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
@@ -301,46 +183,17 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
                "mapVertexProgramBuffer[ li8Program ] != NULL");
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
                "mapPixelProgramBuffer[ li8Program ] != NULL");
-
-    // ⭐⭐ ONE CACHE, NOT ONE PER INSTANTIATION. The X360 shadow-caches the live vertex
-    // program in dword_8301095C -- ONE word for the whole module -- and shadow::Device
-    // already models it by name as mpVertexProgramShadow (shadowingdevice.h:269; the
-    // ImmediateMode.cpp banner at DeviceSetVertexDescriptor makes the same point for
-    // its two neighbours, and CgsImRenderer.h records four more host words that had to be
-    // deleted for the same reason). A function-local `static ProgramBuffer* spgLastVertexProgram`
-    // inside a TEMPLATE body is one object PER INSTANTIATION, so every vertex type got its own
-    // private cache and they lied to each other: whichever renderer bound last owned the
-    // device, and the next renderer skipped its own bind because ITS cache still said "mine is
-    // current".
-    //
-    // MEASURED, run16: the spark pass (ImRenderer<BasicColouredTexturedVertex>) issued 6069
-    // draws of 4.6 million vertices at hr=S_OK, with the right stride, the right declaration
-    // and the right blend -- and the draw-site witness read back
-    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=1 ps=1 ...   (the first draw)
-    //     [lionfx] DrawVertices: ... verts=216 stride=24 vs=0 ps=1 ...   (every draw after)
-    // NO VERTEX SHADER BOUND from the second draw on. The pixels were never going to appear.
-    //
-    // shadow::Device::SetVertexProgram IS the console compare-and-store on that one word, so
-    // calling it unconditionally is what the console does -- its own outer compare was a
-    // redundant fast path over the same word.
-    renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    const bool lbChanged = shadow::Device::SetVertexProgram(
-        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
-
-    if (lbChanged)
+    if (shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program])))
     {
         mi8CurrentProgram = li8Program;
+        shadow::Device::SetPixelProgram(
+            reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[li8Program]));
         return true;
     }
     return false;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// ImRenderer<BasicColouredTexturedVertex>::EndRendering  @ 0x8227B830
-// Assert this renderer is the active one, then clear the active-renderer module static. (The X360
-// compares mgpActiveRenderer against `this + 4` -- the ImRendererBase subobject pointer past this
-// renderer's vptr; `this` when null stays null.)
-// ---------------------------------------------------------------------------------------------------
 template <typename V>
 void ImRenderer<V>::EndRendering()
 {
@@ -348,70 +201,36 @@ void ImRenderer<V>::EndRendering()
     mgpActiveRenderer = 0;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// ImRenderer<BasicColouredTexturedVertex>::SetTransform  @ 0x8227B8A0
-// Copy the supplied 4x4 (4x 16-byte rows) world matrix into this renderer's transform store, then
-// fetch the current program slot's device shader-state block (renderengine::Device::BeginShaderStates)
-// and write the same matrix into it. Returns the shader-state result pointer (X360 r3).
-//
-// The X360 stores the matrix to `this + 0x80` (the transform store) and indexes the shader-state
-// block at `this + 4*(mi8CurrentProgram + 22)`; here both are reached by name via the transform store
-// grown onto the renderer and the per-slot shader-state accessor (the wave-35 fix).
-// ---------------------------------------------------------------------------------------------------
-template <typename V>
-void* ImRenderer<V>::SetTransform(const void* lpTransform)
-{
-    // Copy the 4x4 world matrix into this renderer's PERSISTENT transform store (X360 stvx128 into
-    // `this + 0x80` -- the object member, NOT a stack local), so the side-effect is preserved.
-    const u8* lpSrc = reinterpret_cast<const u8*>(lpTransform);
-    for (s32 liByte = 0; liByte < 64; ++liByte)
-    {
-        this->mauTransform[liByte] = lpSrc[liByte];
-    }
-
-    // X360 passes `this + 4*(mi8CurrentProgram + 22)` == &maShaderStateBlocks[slot] (the current
-    // program's device shader-state block), not plain `this`.
-    void* lpShaderState = 0;
-    void* lpResult =
-        RenderEngineDeviceBeginShaderStates(&this->maShaderStateBlocks[this->mi8CurrentProgram], &lpShaderState);
-
-    // Write the matrix into the fetched shader-state block.
-    u8* lpDst = reinterpret_cast<u8*>(lpShaderState);
-    if (lpDst != 0)
-    {
-        for (s32 liByte = 0; liByte < 64; ++liByte)
-        {
-            lpDst[liByte] = this->mauTransform[liByte];
-        }
-    }
-
-    return lpResult;
-}
-
-// ARTIST sub_8227B730 is the default-program BeginRendering overload.
 template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
     CGS_ASSERT(mapVertexProgramBuffer[0] != 0, "mapVertexProgramBuffer[ 0 ] != NULL");
     CGS_ASSERT(mapPixelProgramBuffer[0] != 0, "mapPixelProgramBuffer[ 0 ] != NULL");
     CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
-    mgpActiveRenderer = static_cast<ImRendererBase*>(this);
+    mgpActiveRenderer = this;
     shadow::Device::ResetShadowing();
+    const renderengine::ProgramBufferData* const lpVertex =
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[0]);
+    const renderengine::ProgramBufferData* const lpPixel =
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[0]);
     mi8CurrentProgram = 0;
+    shadow::Device::SetVertexProgram(lpVertex);
+    shadow::Device::SetPixelProgram(lpPixel);
     shadow::Device::SetVertexDescriptor(
         reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
 }
 
-// ARTIST824041B8 reads32-byte CPU records and writes24-byte GPU records:
-// source position.xyz, colour@16, uv@20/24; the Vector3 pad is not submitted.
 template <typename V>
 void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount)
 {
     CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
+    mDirectDrawParameters.SetPrimitiveType(lePrimitiveType);
     shadow::Device::FlushVertexProgramState();
+    const D3DPRIMITIVETYPE leType = static_cast<D3DPRIMITIVETYPE>(mDirectDrawParameters.GetPrimitiveType());
+    D3DDevice* const lpDevice = gpD3DDevice;
     CGS_ASSERT(lpVertices != 0, "lpVertices");
     if (24u * luCount > 0x80000u)
-        D3DDevice_InsertFence(mgpDevice);
+        D3DDevice_InsertFence(lpDevice);
     struct PackedVertex
     {
         Vector3F mPosition;
@@ -420,18 +239,18 @@ void ImRenderer<V>::Render(renderengine::PrimitiveType lePrimitiveType, const V*
     };
     CGS_STATIC_ASSERT((sizeof(PackedVertex) == 24), "ARTIST GPU vertex stride");
     PackedVertex* lpOutput = static_cast<PackedVertex*>(D3DDevice_BeginVertices(
-        mgpDevice, static_cast<u32>(lePrimitiveType), luCount, sizeof(PackedVertex)));
-    if (lpOutput != 0)
+        lpDevice, leType, luCount, sizeof(PackedVertex)));
         for (u32 luVertex = 0; luVertex < luCount; ++luVertex)
-            lpOutput[luVertex] = {{lpVertices[luVertex].mv3Pos.x, lpVertices[luVertex].mv3Pos.y,
-                                   lpVertices[luVertex].mv3Pos.z}, lpVertices[luVertex].mv4Colour,
-                                  lpVertices[luVertex].mv2Tex0UV};
-    D3DDevice_EndVertices(mgpDevice);
+            {
+                lpOutput[luVertex].mPosition.x = lpVertices[luVertex].mv3Pos.x;
+                lpOutput[luVertex].mPosition.y = lpVertices[luVertex].mv3Pos.y;
+                lpOutput[luVertex].mPosition.z = lpVertices[luVertex].mv3Pos.z;
+                lpOutput[luVertex].mColour = lpVertices[luVertex].mv4Colour;
+                lpOutput[luVertex].mUv = lpVertices[luVertex].mv2Tex0UV;
+            }
+    D3DDevice_EndVertices(lpDevice);
 }
 
-// Emit the X360-attested ImRenderer<BasicColouredTexturedVertex> member bodies. We instantiate
-// the members INDIVIDUALLY rather than `template struct ImRenderer<BasicColouredTexturedVertex>`
-// to keep the unrelated command-buffer and signed-program overloads separate.
 template void ImRenderer<BasicColouredTexturedVertex>::Construct(
     rw::IResourceAllocator*, const void* const*, const u32*, const void* const*, const u32*, s8);
 template s8 ImRenderer<BasicColouredTexturedVertex>::AddProgram(
@@ -441,201 +260,167 @@ template void ImRenderer<BasicColouredTexturedVertex>::EndRendering();
 template void ImRenderer<BasicColouredTexturedVertex>::BeginRendering();
 template void ImRenderer<BasicColouredTexturedVertex>::Render(
     renderengine::PrimitiveType, const BasicColouredTexturedVertex*, u32);
-template void* ImRenderer<BasicColouredTexturedVertex>::SetTransform(const void*);
 
 template <typename V>
 void Im3dBase<V>::SetTransform(Matrix44 lTransform)
 {
     mCurrentTransform = lTransform;
-    ImRenderer<V>::SetTransform(&mCurrentTransform);
+    renderengine::FloatShaderStateIterator lIterator;
+    renderengine::Device::BeginShaderStates(maWorldViewProjStateHandle[this->mi8CurrentProgram], lIterator);
+    *lIterator.m_dest++ = lTransform.xAxis;
+    *lIterator.m_dest++ = lTransform.yAxis;
+    *lIterator.m_dest++ = lTransform.zAxis;
+    *lIterator.m_dest = lTransform.wAxis;
 }
 
-// ARTIST827DC478: full4x4 model-to-world times view-projection, including
-// every row's W lane (the affine-only RenderWare overload is not this body).
 template <typename V>
 void Im3dBase<V>::SetTransform(Matrix44 lModelToWorld, Matrix44 lViewProjection)
 {
-    auto lRow = [&lViewProjection](const Vector4& a) -> Vector4 {
-        return {
-            ((a.x*lViewProjection.xAxis.x + a.y*lViewProjection.yAxis.x) + a.z*lViewProjection.zAxis.x) + a.w*lViewProjection.wAxis.x,
-            ((a.x*lViewProjection.xAxis.y + a.y*lViewProjection.yAxis.y) + a.z*lViewProjection.zAxis.y) + a.w*lViewProjection.wAxis.y,
-            ((a.x*lViewProjection.xAxis.z + a.y*lViewProjection.yAxis.z) + a.z*lViewProjection.zAxis.z) + a.w*lViewProjection.wAxis.z,
-            ((a.x*lViewProjection.xAxis.w + a.y*lViewProjection.yAxis.w) + a.z*lViewProjection.zAxis.w) + a.w*lViewProjection.wAxis.w};
-    };
-    Matrix44 lWvp;
-    lWvp.xAxis = lRow(lModelToWorld.xAxis);
-    lWvp.yAxis = lRow(lModelToWorld.yAxis);
-    lWvp.zAxis = lRow(lModelToWorld.zAxis);
-    lWvp.wAxis = lRow(lModelToWorld.wAxis);
-    SetTransform(lWvp);
+    Matrix44 lTransform;
+    for (u32 luRow = 0; luRow < 4; ++luRow)
+    {
+        const __vector4 lRow = __lvx(&lModelToWorld, luRow * 16);
+        __vector4 lResult = __vmulfp(__lvx(&lViewProjection, 0), __vspltw(lRow, 0));
+        lResult = __vmaddfp(__lvx(&lViewProjection, 16), __vspltw(lRow, 1), lResult);
+        lResult = __vmaddfp(__lvx(&lViewProjection, 32), __vspltw(lRow, 2), lResult);
+        lResult = __vmaddfp(__lvx(&lViewProjection, 48), __vspltw(lRow, 3), lResult);
+        __stvx(lResult, &lTransform, luRow * 16);
+    }
+    SetTransform(lTransform);
 }
 template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44);
 template void Im3dBase<BasicColouredTexturedVertex>::SetTransform(Matrix44, Matrix44);
 
-// ARTIST 827DC6D8 / 827DE4C0: the untextured renderer consumes the same
-// complete one-matrix or model-to-world/view-projection transform contract.
 template void Im3dBase<BasicColouredVertex>::SetTransform(Matrix44);
 template void Im3dBase<BasicColouredVertex>::SetTransform(Matrix44, Matrix44);
 
-// ---------------------------------------------------------------------------------------------------
-// Im3d::Construct  @ 0x827FC748  (289 instructions)
-//
-// The X360 body, in order:
-//   0x827FC75C-0x827FC804  stamp the IDENTITY into the base transform store (mauTransform): the engine-wide identity
-//     row w__math__vpu__detail__gIVector into this+0x80 and the three constant rows
-//     unk_82181510 / unk_82181520 / unk_82181530 into +0x90 / +0xA0 / +0xB0.
-//   0x827FC784-0x827FC808  four stack pairs -> ImRenderer<BasicColouredTexturedVertex>::Construct
-//     (IDA names the callee BasicColouredTexturedVertex___Construct) with li8NumberPrograms = 2:
-//         vertex binaries {unk_820D4090, unk_820D44B8}   sizes {0x160=352, 0x180=384}
-//         pixel  binaries {unk_820D41F0, unk_820D4638}   sizes {0x0E4=228, 0x458=1112}
-//   0x827FC82C-0x827FC878  for i in 0..1: assert mapVertexProgramBuffer[i] != NULL, then
-//     GetVariableHandleByName(mapVertexProgramBuffer[i], "worldViewProj", this+0x58 + 4*i).
-//     THIS+0x58 IS THE BASE ImRenderer maShaderStateBlocks[] -- the same 4-byte handle slot
-//     ImRenderer<V>::SetTransform @0x8227B8A0 pushes the matrix through
-//     (its `this + 4*(mi8CurrentProgram + 22)`). That is why SetTransform carries no handle of
-//     its own, and it is the whole reason this loop exists.
-//   0x827FC87C-0x827FC93C  program 1 only: GetVariableHandleByName("gvMaskUseFlags") against its
-//     VERTEX buffer (this+0x18) and, when that misses, its PIXEL buffer (this+0x38), into
-//     this+0x160.
-//
-// ONE FLAGGED DEVIATION, AND IT IS AN ASSET GAP, NOT AN ANALYSIS ONE: only PROGRAM 0 is built.
-// Program 1 is the STENCIL-MASK variant, and its 1112-byte Xenos pixel half is a separate
-// re-authoring job; nothing on this build calls Im3d::PushMask, which is the only consumer of
-// slot 1 and of mMaskUseFlagsHandle. Passing a null binary would trip AddProgram own assert and
-// then hand renderengine a null image, so the count is 1 and the gap is SAID OUT LOUD instead.
-// DELETE-WHEN pc/gcm/renderengine/Im3dProgramsPC.cpp carries the mask pair as well.
-// ---------------------------------------------------------------------------------------------------
 void Im3d::Construct(rw::IResourceAllocator* lpAllocator)
 {
-    // The identity world transform (X360: gIVector plus the three constant rows).
-    static const f32 KAF_IDENTITY[16] =
+    mCurrentTransform.SetIdentity();
+    const void* const lapVertexProgramBinary[2] = { gaIm3dDefaultVertexProgram, gaIm3dMaskVertexProgram };
+    const u32 lauVertexProgramSize[2] = { sizeof(gaIm3dDefaultVertexProgram), sizeof(gaIm3dMaskVertexProgram) };
+    const void* const lapPixelProgramBinary[2] = { gaIm3dDefaultPixelProgram, gaIm3dMaskPixelProgram };
+    const u32 lauPixelProgramSize[2] = { sizeof(gaIm3dDefaultPixelProgram), sizeof(gaIm3dMaskPixelProgram) };
+    ImRenderer<BasicColouredTexturedVertex>::Construct(lpAllocator,
+        lapVertexProgramBinary, lauVertexProgramSize, lapPixelProgramBinary, lauPixelProgramSize, 2);
+    for (s8 li8Program = 0; li8Program < 2; ++li8Program)
     {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f,
-    };
-    for (u32 luByte = 0; luByte < sizeof(mauTransform); ++luByte)
-    {
-        mauTransform[luByte] = reinterpret_cast<const u8*>(KAF_IDENTITY)[luByte];
-    }
-
-    const u32   lauVertexProgramSize[1]   = { renderengine::guIm3dVertexProgramPCSize };
-    const u32   lauPixelProgramSize[1]    = { renderengine::guIm3dPixelProgramPCSize };
-    const s8    KI8_PROGRAMS_BUILT        = 1;   // the console builds 2 -- see the FLAG above
-    ImRenderer<BasicColouredTexturedVertex>::Construct(
-        lpAllocator,
-        lapVertexProgramBinary, lauVertexProgramSize,
-        lapPixelProgramBinary,  lauPixelProgramSize,
-        KI8_PROGRAMS_BUILT);
-
-    mMaskUseFlagsHandle.mu8RegisterSet   = 0;
-    mMaskUseFlagsHandle.mu8RegisterIndex = 0;
-    mMaskUseFlagsHandle.mu8ShaderType    = 0;
-    mMaskUseFlagsHandle.mu8RegisterCount = 0;
-    mu32NumMasks = 0;
-
-    for (s8 li8Program = 0; li8Program < KI8_PROGRAMS_BUILT; ++li8Program)
-    {
-        renderengine::ProgramBufferData* const lpVertexProgram =
-            reinterpret_cast<renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program]);
-        CGS_ASSERT(lpVertexProgram != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
-        if (lpVertexProgram == 0)
-        {
-            continue;
-        }
+        CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
         renderengine::ProgramBuffer::GetVariableHandleByName(
-            lpVertexProgram, reinterpret_cast<const u8*>("worldViewProj"),
-            reinterpret_cast<renderengine::ProgramVariableHandle*>(&maShaderStateBlocks[li8Program]));
-
-        // [DIAG] DID worldViewProj RESOLVE? mu8RegisterCount == 0 is GetVariableHandleByName
-        // unresolved handle means SetTransform writes the view-projection into a bin and every
-        // spark ribbon transforms by whatever c0..c3 happen to hold. Invisible in the log AND in
-        // the picture, which is why it is worth one line -- the same witness the skid path took.
-        // DELETE-WHEN-STABLE.
-        const renderengine::ProgramVariableHandle& lrHandle =
-            *reinterpret_cast<const renderengine::ProgramVariableHandle*>(
-                &maShaderStateBlocks[li8Program]);
-        char lacMsg[192];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-            "[im3d] program %d worldViewProj{set=%u idx=%u type=%u count=%u} vars=%u\n",
-            static_cast<int>(li8Program),
-            lrHandle.mu8RegisterSet, lrHandle.mu8RegisterIndex,
-            lrHandle.mu8ShaderType, lrHandle.mu8RegisterCount,
-            static_cast<unsigned>(lpVertexProgram->mu16NumVariables));
-        CgsDev::Log::WriteToLog(lacMsg);
+            reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program]),
+            reinterpret_cast<const u8*>("worldViewProj"), &maWorldViewProjStateHandle[li8Program]);
     }
-}
-
-// ---------------------------------------------------------------------------------------------------
-// Im3d::SaveMaskShaderConstants / Im3d::SetMaskPixelShaderState -- ANNOUNCED, NOT RECONSTRUCTED.
-//
-// These two are PushMask own collaborators and separate (still unhomed) ledger keys: no X360 body
-// is attested for THIS key, and their parameter types are width-only (4-byte, no DecFIGS DWARF for
-// this TU), which is why CgsIm3d.h models them as opaque handles rather than inventing a shape.
-// They became LINK-VISIBLE the moment this TU was mounted for CgsGraphics::Im3d::Construct.
-//
-// They are bodied as ANNOUNCEMENTS, not as silent no-ops, because a stub that compiles, links,
-// runs and copies nothing is this project single most expensive defect class. Nothing on this
-// build reaches them -- PushMask own only caller would be the Apt/GUI stencil-mask path, which
-// needs Im3d PROGRAM 1, and Im3d::Construct above builds program 0 only and says so -- so the
-// first line either of them ever prints is itself the news.
-// DELETE-WHEN their own TU lands.
-// ---------------------------------------------------------------------------------------------------
-void Im3d::SaveMaskShaderConstants(const void* lpParam0, const void* lpParam1, const void* lpParam2)
-{
-    (void)lpParam0; (void)lpParam1; (void)lpParam2;
-    static bool sbLogged = false;
-    if (!sbLogged)
+    CGS_ASSERT(mapVertexProgramBuffer[1] != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
+    if (!renderengine::ProgramBuffer::GetVariableHandleByName(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[1]),
+        reinterpret_cast<const u8*>("gvMaskUseFlags"), &maMask[0].mPixelMaskUseHandle))
     {
-        sbLogged = true;
-        CgsDev::Log::WriteToLog(
-            "[im3d] NOT RECONSTRUCTED: CgsGraphics::Im3d::SaveMaskShaderConstants -- no X360 body "
-            "is attested for this ledger key and its parameter types are width-only; the "
-            "stencil-mask path also needs Im3d PROGRAM 1, which Im3dProgramsPC.cpp does not carry.\n");
+        CGS_ASSERT(mapPixelProgramBuffer[1] != 0, "mapPixelProgramBuffer[ li8Program ] != NULL");
+        const bool lbFound = renderengine::ProgramBuffer::GetVariableHandleByName(
+            reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[1]),
+            reinterpret_cast<const u8*>("gvMaskUseFlags"), &maMask[0].mPixelMaskUseHandle) != 0;
+        CGS_ASSERT(lbFound, "GetPixelProgram( leMaskShader )->GetVariableHandleByName(\"gvMaskUseFlags\", maMask[ liShader ].mPixelMaskUseHandle)");
     }
-}
-
-void* Im3d::SetMaskPixelShaderState()
-{
-    static bool sbLogged = false;
-    if (!sbLogged)
+    maMask[0].mvPixelMask.SetZero();
+    const char* const lapFormats[3] = { "gvMask%cPositionMinMax", "gvMask%cUVStartEnd", "gvMask%cUVDifference" };
+    const char* const lapFailures[3] = {
+        "GetPixelProgram( leMaskShader )->GetVariableHandleByName(lacVarName, maMask[ liShader ].maPixelMaskHandles[ i ].mPixelMaskPositionMinMax)",
+        "GetPixelProgram( leMaskShader )->GetVariableHandleByName(lacVarName, maMask[ liShader ].maPixelMaskHandles[ i ].mPixelMaskUVStartEnd)",
+        "GetPixelProgram( leMaskShader )->GetVariableHandleByName(lacVarName, maMask[ liShader ].maPixelMaskHandles[ i ].mPixelMaskUVDifference)" };
+    for (u32 luLayer = 0; luLayer < 2; ++luLayer)
     {
-        sbLogged = true;
-        CgsDev::Log::WriteToLog(
-            "[im3d] NOT RECONSTRUCTED: CgsGraphics::Im3d::SetMaskPixelShaderState -- the same "
-            "ledger-key gap as SaveMaskShaderConstants above; returns null.\n");
+        Im3dMask::Im3dMaskLayer& lrLayer = maMask[0].maPixelMaskHandles[luLayer];
+        renderengine::ProgramVariableHandle* const lapHandles[3] = {
+            &lrLayer.mPixelMaskPositionMinMax, &lrLayer.mPixelMaskUVStartEnd, &lrLayer.mPixelMaskUVDifference };
+        for (u32 luVariable = 0; luVariable < 3; ++luVariable)
+        {
+            char lacName[256];
+            CgsCore::SPrintf(lacName, 256, lapFormats[luVariable], 'A' + luLayer);
+            CGS_ASSERT(mapVertexProgramBuffer[1] != 0, "mapVertexProgramBuffer[ li8Program ] != NULL");
+            if (!renderengine::ProgramBuffer::GetVariableHandleByName(
+                reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[1]),
+                reinterpret_cast<const u8*>(lacName), lapHandles[luVariable]))
+            {
+                CGS_ASSERT(mapPixelProgramBuffer[1] != 0, "mapPixelProgramBuffer[ li8Program ] != NULL");
+                const bool lbFound = renderengine::ProgramBuffer::GetVariableHandleByName(
+                    reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[1]),
+                    reinterpret_cast<const u8*>(lacName), lapHandles[luVariable]) != 0;
+                CGS_ASSERT(lbFound, lapFailures[luVariable]);
+            }
+        }
+        lrLayer.mvPixelMaskPositionMinMax.SetZero();
+        lrLayer.mvPixelMaskUVStartEnd.SetZero();
+        lrLayer.mvPixelMaskUVDifference.SetZero();
     }
-    return 0;
+    mu32NumMasks = 0;
 }
 
-// ---------------------------------------------------------------------------------------------------
-// Im3d::PushMask  @ 0x827DCF78
-// Open one stencil-mask region on the textured immediate-mode 3D renderer. On the FIRST mask of the
-// stack only (mu32NumMasks == 0), rebind the next program slot (mi8CurrentProgram + 1) and, if that
-// bind actually changed device state, reinstall the current world transform (the base renderer's
-// mauTransform store at this+0x80). Then save this mask's shader constants, bump the live mask count,
-// and push the mask pixel-shader state -- returning that call's result (X360 r3 tail-passthrough).
-//
-// The X360 forwards the three mask params to SaveMaskShaderConstants in the order (a4, a2, a3); that
-// reorder is preserved. SaveMaskShaderConstants / SetMaskPixelShaderState are separate unhomed ledger
-// keys (declared on Im3d, bodied by their own TUs) -- reached here BY NAME.
-// ---------------------------------------------------------------------------------------------------
-void* Im3d::PushMask(const void* lpMaskParam0, const void* lpMaskParam1, const void* lpMaskParam2)
+void Im3d::SaveMaskShaderConstants(const BasicColouredTexturedVertex* lpVertices,
+    renderengine::TextureState* lpTextureState, renderengine::Texture* lpTexture)
+{
+    Im3dMask& lrMask = maMask[0];
+    Im3dMask::Im3dMaskLayer& lrLayer = lrMask.maPixelMaskHandles[mu32NumMasks];
+    const Vector4 lPosition = { lpVertices[0].mv3Pos.x, lpVertices[0].mv3Pos.y,
+                               lpVertices[1].mv3Pos.x, lpVertices[1].mv3Pos.y };
+    lrLayer.mvPixelMaskPositionMinMax = lPosition;
+    const Vector4 lUV = { lpVertices[0].mv2Tex0UV.x, lpVertices[0].mv2Tex0UV.y,
+                         lpVertices[1].mv2Tex0UV.x, lpVertices[1].mv2Tex0UV.y };
+    lrLayer.mvPixelMaskUVStartEnd = lUV;
+    const Vector4 lDifference = { 1.0f / (lpVertices[1].mv3Pos.x - lpVertices[0].mv3Pos.x),
+                                 1.0f / (lpVertices[1].mv3Pos.y - lpVertices[0].mv3Pos.y), 0.0f, 0.0f };
+    lrLayer.mvPixelMaskUVDifference = lDifference;
+    lrLayer.mpMaskTextureState = lpTextureState;
+    lrLayer.mpMaskTexture = lpTexture;
+    for (u32 luLane = 0; luLane < mu32NumMasks + 1; ++luLane)
+        reinterpret_cast<f32*>(&lrMask.mvPixelMask)[luLane] = 1.0f;
+}
+
+void Im3d::SetMaskPixelShaderState()
+{
+    CGS_ASSERT(mu32NumMasks > 0, "mu32NumMasks > 0");
+    Im3dMask& lrMask = maMask[(mi8CurrentProgram - 1) / 2];
+    Im3dMask::Im3dMaskLayer& lrLayer = lrMask.maPixelMaskHandles[mu32NumMasks - 1];
+    renderengine::FloatShaderStateIterator lIterator;
+    renderengine::Device::BeginShaderStates(lrLayer.mPixelMaskPositionMinMax, lIterator);
+    *lIterator.m_dest++ = lrLayer.mvPixelMaskPositionMinMax;
+    renderengine::Device::BeginShaderStates(lrLayer.mPixelMaskUVStartEnd, lIterator);
+    *lIterator.m_dest++ = lrLayer.mvPixelMaskUVStartEnd;
+    renderengine::Device::BeginShaderStates(lrLayer.mPixelMaskUVDifference, lIterator);
+    *lIterator.m_dest++ = lrLayer.mvPixelMaskUVDifference;
+    renderengine::Device::BeginShaderStates(lrMask.mPixelMaskUseHandle, lIterator);
+    *lIterator.m_dest = lrMask.mvPixelMask;
+    if (lrLayer.mpMaskTextureState)
+        ImRendererBase::SetState(lrLayer.mpMaskTextureState, mu32NumMasks);
+    else if (lrLayer.mpMaskTexture)
+        ImRendererBase::SetTexture(lrLayer.mpMaskTexture, mu32NumMasks);
+}
+
+void Im3d::PushMask(renderengine::TextureState* lpTextureState, renderengine::Texture* lpTexture,
+                     const BasicColouredTexturedVertex* lpVertices)
 {
     CGS_ASSERT(mu32NumMasks < KU_MAX_MASK_COUNT, "mu32NumMasks < V_IM3D_MAX_MASK_COUNT");
-
-    // First mask only: (re)bind the next program slot and, when that bind changed the device state,
-    // install the world transform once. (X360: `&this->mauTransform` == this+0x80, copied onto
-    // itself and written into the slot's shader-state block by SetTransform.)
-    if (mu32NumMasks == 0 && SetProgram(static_cast<s8>(mi8CurrentProgram + 1)))
-    {
-        SetTransform(mauTransform);
-    }
-
-    SaveMaskShaderConstants(lpMaskParam2, lpMaskParam0, lpMaskParam1);
+    if (mu32NumMasks == 0 && ImRenderer<BasicColouredTexturedVertex>::SetProgram(static_cast<s8>(mi8CurrentProgram + 1)))
+        SetTransform(mCurrentTransform);
+    SaveMaskShaderConstants(lpVertices, lpTextureState, lpTexture);
     ++mu32NumMasks;
-    return SetMaskPixelShaderState();
+    SetMaskPixelShaderState();
 }
 
 } // namespace CgsGraphics
+
+namespace CgsGraphics
+{
+    bool Im3d::SetProgram(s8 li8Program)
+    {
+        s8 li8Slot = static_cast<s8>(2 * li8Program);
+        const bool lbMasked = li8Program < 1 && mu32NumMasks != 0;
+        if (lbMasked) li8Slot = static_cast<s8>(li8Slot + 1);
+        const bool lbChanged = ImRenderer<BasicColouredTexturedVertex>::SetProgram(li8Slot);
+        if (lbChanged)
+        {
+            SetTransform(mCurrentTransform);
+            if (lbMasked) SetMaskPixelShaderState();
+        }
+        return lbChanged;
+    }
+}

@@ -18,7 +18,6 @@
 
 // renderengine::Device::BeginShaderStates (pc/gcm/renderengine/ImmediateMode.cpp): open the
 // constant row a program-variable handle names and return the write cursor.
-void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
 namespace CgsGraphics
 {
@@ -37,9 +36,9 @@ namespace
     // Open the constant row lrHandle names and store one 16-byte vector into it.
     void UploadVectorConstant(renderengine::ProgramVariableHandle& lrHandle, const void* lpValue)
     {
-        void* lpConstant = 0;
-        RenderEngineDeviceBeginShaderStates(&lrHandle, &lpConstant);
-        std::memcpy(lpConstant, lpValue, 16);
+        renderengine::FloatShaderStateIterator lIterator;
+        renderengine::Device::BeginShaderStates(lrHandle, lIterator);
+        std::memcpy(lIterator.m_dest, lpValue, 16);
     }
 }
 
@@ -144,7 +143,7 @@ void Im2d::PushMask(renderengine::TextureState* lpMaskTextureState,
     if (mu32NumMasks == 0
         && ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(static_cast<s8>(mi8CurrentProgram + 1)))
     {
-        ImRenderer<Basic2dColouredTexturedVertex>::SetTransform(&mCurrentTransform);
+        Im2dBase<Basic2dColouredTexturedVertex>::SetTransform(mCurrentTransform);
     }
 
     SaveMaskShaderConstants(lpaMaskVertices, lpMaskTextureState, lpMaskTexture);
@@ -173,7 +172,7 @@ void Im2d::PopMask()
     if (mu32NumMasks == 0
         && ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(static_cast<s8>(mi8CurrentProgram - 1)))
     {
-        ImRenderer<Basic2dColouredTexturedVertex>::SetTransform(&mCurrentTransform);
+        Im2dBase<Basic2dColouredTexturedVertex>::SetTransform(mCurrentTransform);
     }
 }
 
@@ -191,3 +190,20 @@ void Im2d::PushBoostBarColours(Vector3 lvOuterColour, Vector3 lvInnerColour)
 }
 
 } // namespace CgsGraphics
+
+namespace CgsGraphics
+{
+    bool Im2d::SetProgram(s8 li8Program)
+    {
+        s8 li8Slot = static_cast<s8>(2 * li8Program);
+        const bool lbMasked = li8Program < 4 && mu32NumMasks != 0;
+        if (lbMasked) li8Slot = static_cast<s8>(li8Slot + 1);
+        const bool lbChanged = ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(li8Slot);
+        if (lbChanged)
+        {
+            SetTransform(mCurrentTransform);
+            if (lbMasked) SetMaskPixelShaderState();
+        }
+        return lbChanged;
+    }
+}

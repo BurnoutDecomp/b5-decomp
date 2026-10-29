@@ -2,18 +2,9 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 #include "types.hpp"
-// renderengine::RasterizerState::CullMode / DepthStencilState::Function / Texture / ResourceDescriptor5
-// are named in the ImRendererBase state-library builder's declarations, so the full render-state home
-// is pulled in (it is already the immediate-mode layer's render-state dependency: CgsIm2d.cpp and the
-// render-buffer template include it too).
-// CgsGraphics::ImRenderer - the immediate-mode render layer. ImRendererBase carries
-// the (static) render-state library and the SetState/SetTexture API; ImRenderer<V> is
-// the per-vertex-type batch renderer (Begin/EndRendering + Render). Recovered from the
-// DecFIGS DWARF (CgsImRenderer.h). The render-state types and the platform device
-// types are heavy out-of-scope objects, so they are forward-declared here and the
-// in-scope renderers reach them only through these calls.
 namespace renderengine
 {
     class Texture;
@@ -41,7 +32,6 @@ namespace CgsGraphics
 
     struct ImRendererBase
     {
-        // ARTIST loading/Lion draws consume this same shared state library.
         friend struct BrnGame::LoadingScreenRenderer;
         friend class ::cParticleRender;
 
@@ -55,16 +45,12 @@ namespace CgsGraphics
         void SetState(const TextureState* lpState);
         void SetState(const TextureState* lpState, u32 luStage);
         void SetState(const ProgramBuffer* lpVertexProgram, const ProgramBuffer* lpPixelProgram);
-        // Bind a renderengine texture state (the bitmap font's atlas) for the text path's submission.
         void SetState(const renderengine::TextureState* lpTextureState);
         void SetState(const renderengine::TextureState* lpTextureState, u32 luStage);
 
         void SetTexture(renderengine::Texture* lpTexture);
         void SetTexture(renderengine::Texture* lpTexture, u32 luStage);
 
-        // ---- the (static) render-state library + its builders (X360 CgsImRenderer.cpp) -----------
-        // The library of shared render states the immediate-mode layer hands out (built once by
-        // ConstructOnceOnly). Members recovered from the DecFIGS DWARF (CgsImRenderer.h:56).
         struct StateLibrary
         {
             const BlendState*        mpBlendState_Standard;
@@ -90,23 +76,14 @@ namespace CgsGraphics
         };
 
     protected:
-        // X360 shared data (DWARF CgsImRenderer.h:173/176). The typed ImRenderer<V>::Construct
-        // callers test/set mgbStateLibraryConstructed around ConstructOnceOnly; the helper body
-        // itself always rebuilds the library and does not touch the guard.
         static StateLibrary mgStateLibrary;
         static bool mgbStateLibraryConstructed;
 
-        // @0x827F1C20. Static: ARTIST callers pass the allocator in r3 and own the one-time guard.
         static void ConstructOnceOnly(rw::IResourceAllocator* lpAllocator);
 
     private:
-        // The state-library builders (each sizes / allocates / initialises one render state). Only
-        // the ones the X360 ARTIST attests for this TU are reconstructed; the rest stay declared.
         static const BlendState* ConstructNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
         static const BlendState* ConstructNoBlendNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator);
-        // X360 @ 0x827ED118. Build a parameterised blend state using 'this' as the ResourceAllocator.
-        // luMode = 5-bit source-blend enum (v8[0] bits 0..4); liBlendA / liBlendB feed the
-        // blend-op and destination-factor via the per-channel param word.
         const BlendState*        ConstructBlendState(u8 luMode, int liBlendA, int liBlendB);
         static const RasterizerState* ConstructRasteriserState(
             rw::IResourceAllocator* lpAllocator, renderengine::RasterizerState::CullMode leCullMode);
@@ -120,65 +97,24 @@ namespace CgsGraphics
         static const TextureState* ConstructDefaultTextureState(
             rw::IResourceAllocator* lpAllocator, renderengine::Texture* lpTexture);
 
-        // The shared low-level shadow-state setters (the single X360 bodies the typed SetState /
-        // SetTexture overloads drive). Return the renderer (X360 r3 passthrough) for the chained
-        // submission path; the high-level overloads ignore the result.
         void* SetStateLowLevel(const void* lpState);
 
     public:
-        // ---- module statics (X360 .data home of this TU) ----------------------------------------
         static ImRendererBase*        mgpActiveRenderer;          // dword_83010F9C
-        // (mgpLastState / mgpLastTexture / mgbTextureStateDirty / mgbStateShadowingDisabled DELETED.)
-        //
-        // All four were SECOND host homes for words the shadow device already owns, and the X360
-        // reaches all four off the SAME file-scope block base off_83010950 that shadow::Device models:
-        //   mgpLastState             dword_83010964 -> shadow::Device::mpBlendState
-        //                                              (StateBlockShadow::m_pBlendState, DWARF
-        //                                              shadowingdevice.h:665)
-        //   mgpLastTexture           dword_830109E8 -> shadow::Device::mapSamplerTexture[0]
-        //                                              (m_apTextures[0], DWARF :668)
-        //   mgbTextureStateDirty     dword_83010968 -> shadow::Device::mapTextureState[0]
-        //                                              (m_apTextureStates[0], DWARF :666 -- a
-        //                                              TextureState POINTER per unit, not a flag;
-        //                                              retyped 2026-08-14 with SetState @0x8227D158)
-        //   mgbStateShadowingDisabled byte_83010907  -> shadow::Device::mbBlendStateLocked
-        //                                              (DWARF :776; DWARF's CgsImRenderer.h has no
-        //                                              such member at all)
-        // Two host words for one console word means a blit's bind is invisible to the frame bracket's
-        // compare and vice versa, so the bracket skips a bind the device actually needs. SetState /
-        // SetTexture below now delegate to shadow::Device, which leaves exactly one cache.
-        static void*                  mgpDevice;                  // off_83271608 (the D3D device)
     };
 
-    // The maximum number of vertex/pixel program pairs an immediate-mode renderer can carry
-    // (X360 CgsImRenderer.h:241 -- KI8_MAX_PROGRAMS). Sizes the two per-renderer program tables.
     const s8 KI8_MAX_PROGRAMS = 8;
 
     template <typename V>
     struct ImRenderer : public ImRendererBase
     {
-        // OcclusionCullManager::Construct records this existing position-only descriptor for its
-        // query-box vertex upload; the relationship adds no renderer storage or cache state.
         friend struct OcclusionCullManager;
 
         void BeginRendering();
-        // X360 signed-char overload for the per-program renderer specializations (the LionBlend path
-        // @ X360 0x8227C3A8 supplies the LionBlendVertex instantiation). It is bodied only for vertex
-        // types with a matching ARTIST function. The DecFIGS Basic2dColouredTexturedVertex specialization
-        // declares only the no-argument overload, which is the loading/debug/blit path used by CgsIm2d.cpp.
         void BeginRendering(s8 li8Program);
         void EndRendering();
         void Render(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luCount);
 
-        // ---- the X360 program-table API (CgsImRenderer.h DWARF; bodied per vertex type) ---------
-        // The X360 immediate-mode renderer owns a vertex descriptor for its vertex format and a pair
-        // of program tables (one vertex + one pixel program per "program slot"). Construct sizes the
-        // descriptor + uploads the supplied program binaries; SetProgram binds a slot's pair on the
-        // device; SetTransform writes the world transform into the slot's shader-state block. These
-        // are the X360 bodies (Im3dZOnly path); the PC 2D fold above does not drive them.
-        //
-        // lapVertexProgramBinary / lapPixelProgramBinary are parallel arrays of li8NumberPrograms
-        // program-binary pointers; lauVertexProgramSize / lauPixelProgramSize their byte sizes.
         void Construct(rw::IResourceAllocator* lpAllocator,
                        const void* const* lapVertexProgramBinary,
                        const u32* lauVertexProgramSize,
@@ -186,47 +122,18 @@ namespace CgsGraphics
                        const u32* lauPixelProgramSize,
                        s8 li8NumberPrograms);
 
-        // Add one vertex/pixel program pair to the next free slot; returns the slot index.
         s8 AddProgram(rw::IResourceAllocator* lpAllocator,
                       const void* lpVertexProgramBinary, u32 luVertexProgramSize,
                       const void* lpPixelProgramBinary, u32 luPixelProgramSize);
 
-        // Bind program slot li8Program's vertex+pixel programs on the device (shadow-cached on the
-        // vertex program). Returns true when the bind actually changed the device state.
-        bool SetProgram(s8 li8Program);
-
-        // Write the world transform (a 4x4 matrix at lpTransform) into the current program slot's
-        // device shader-state block. Returns the renderengine shader-state result (X360 r3).
-        void* SetTransform(const void* lpTransform);
+        virtual bool SetProgram(s8 li8Program);
 
     protected:
-        // ---- X360 program-table state (DWARF CgsImRenderer.h:302-308) ---------------------------
-        // The PC 2D fold (CgsIm2d.cpp) never touches these; they exist so the X360 Im3dZOnly bodies
-        // can reach the descriptor / program tables / current-slot BY NAME. The X360 build also
-        // carries two heavy renderengine::Device::DirectDraw state blocks (mDirectDrawParameters /
-        // mDirectDrawBatchIterator) ahead of the descriptor; those are out-of-scope (blocked
-        // class:renderengine::Device) and the PC reconstruction reaches every field by name, so the
-        // absolute X360 byte offsets (descriptor @ +0x10, vertex table @ +0x14, pixel table @ +0x34,
-        // current slot @ +0x54) are NOT modelled with padding here (they are not LLP64-invariant).
+        renderengine::Device::DirectDraw::Parameters mDirectDrawParameters;
+        renderengine::Device::DirectDraw::BatchIterator mDirectDrawBatchIterator;
         renderengine::VertexDescriptor*  mpVertexDescriptor;
         renderengine::ProgramBuffer*     mapVertexProgramBuffer[KI8_MAX_PROGRAMS];
         renderengine::ProgramBuffer*     mapPixelProgramBuffer[KI8_MAX_PROGRAMS];
         s8                               mi8CurrentProgram;
-        // X360-only Im3d state, reached BY NAME by the Im3dZOnly bodies (the PC 2D fold never touches
-        // these). The per-program device shader-state blocks SetTransform indexes (X360
-        // `this + 4*(mi8CurrentProgram+22)` == &maShaderStateBlocks[slot]) and the persistent world-
-        // transform store SetTransform writes (X360 stvx128 into this+0x80). Absolute offsets are not
-        // LLP64-invariant so they are reached by name, not pinned with padding.
-        u32                              maShaderStateBlocks[KI8_MAX_PROGRAMS];
-        u8                               mauTransform[64];
-
-    public:
-
-        // The double-buffer "reserve / submit" API the X360 text path drives (folded onto the PC
-        // immediate renderer): RenderStart reserves luVertexCount vertices and returns the write
-        // pointer; the caller fills it; RenderEnd submits the run as one primitive. Bodies in
-        // CgsIm2d.cpp (PC: a scratch vertex run drawn via DrawPrimitiveUP).
-        V*   RenderStart(u32 luVertexCount);
-        void RenderEnd(renderengine::PrimitiveType lePrimitiveType, const V* lpVertices, u32 luVertexCount);
     };
 }

@@ -57,6 +57,12 @@ namespace vpu
     {
         typedef const Matrix44& InParam;
         Vector4 xAxis, yAxis, zAxis, wAxis;
+        // DecFIGS matrix44.h:28/31; the nontrivial copy is also required by
+        // ARTIST's pointer ABI for Matrix44 values (for example 8227B8A0).
+        Matrix44() {}
+        Matrix44(const Matrix44& lrMatrix)
+            : xAxis(lrMatrix.xAxis), yAxis(lrMatrix.yAxis),
+              zAxis(lrMatrix.zAxis), wAxis(lrMatrix.wAxis) {}
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
         {
