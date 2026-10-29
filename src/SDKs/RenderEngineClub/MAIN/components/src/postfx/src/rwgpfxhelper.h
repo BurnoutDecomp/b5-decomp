@@ -23,6 +23,10 @@ namespace renderengine
     // does not pull the whole state surface into every post-fx includer -- the same treatment
     // pc/gcm/renderengine/renderstates.h gives it.
     struct BlendMaterialState;
+    class MeshHelper;
+    class VertexBuffer;
+    struct VertexDescriptorData;
+    class DepthStencilState;
 }
 
 namespace rw
@@ -177,9 +181,9 @@ namespace postfx
         // --- SHAPE (DWARF rwgpfxhelper.h:116-150; every offset below is CONFIRMED by the X360
         // constructor's store map and by PfxHelper::Release's nine release sites) ------------------
         rw::IResourceAllocator*             m_allocator;               // +0x00  :116
-        renderengine::MeshHelper::MeshData* m_quadMeshState;           // +0x04  :122
+        renderengine::MeshHelper*           m_quadMeshState;           // +0x04  :122
         renderengine::VertexDescriptorData* m_quadVertexDescriptor;    // +0x08  :125
-        renderengine::VertexBufferHeader*   m_quadVertexBuffer;        // +0x0C  :126
+        renderengine::VertexBuffer*         m_quadVertexBuffer;        // +0x0C  :126
         // :127 DrawParameters* -- NEVER written by the constructor and NEVER released. No tree type
         // models the renderengine draw-parameter block, so it is carried as an opaque pointer (a
         // reference-only member; the forward-declaration exception applies, and there is nothing to
