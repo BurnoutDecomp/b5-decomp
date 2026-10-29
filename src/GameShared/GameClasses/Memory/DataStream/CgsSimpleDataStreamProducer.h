@@ -14,9 +14,10 @@
 // X360 home (reconstructed in this pass):
 //   Construct @ 0x8286A3B0
 //
-// This is semantic-parity C++ (not byte-matching): members are reconstructed
-// from the DWARF declaration and accessed by name. The X360 store offsets prove
-// which value lands in which logical field; field NAMES follow the DWARF.
+// DecFIGS byte_size 384 and ARTIST 8286A3B0 agree on the native
+// layout: shared geometry at 0, private geometry at 0x20, the command poster
+// at 0x80, streaming at 0x100 and the added count at 0x104. The poster
+// supplies the original 128-byte alignment.
 namespace CgsMemory
 {
     // CgsSimpleDataStreamProducer.h:47 — read cursor over a producer's results.
@@ -99,5 +100,18 @@ namespace CgsMemory
         DataStreamCommandPoster        mCommandPoster;     // h:161
         bool                           mbIsStreaming;      // h:162
         s32                            miNumAddedCommands; // h:163
+
+        static void AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, mShared) == 0, "ARTIST producer shared geometry");
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, miMaxCommands) == 0x20, "ARTIST producer command capacity");
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, miMaxResults) == 0x28, "ARTIST producer result capacity");
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, mResultIterator) == 0x38, "ARTIST producer iterator");
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, mCommandPoster) == 0x80, "ARTIST producer poster");
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, mbIsStreaming) == 0x100, "ARTIST producer streaming flag");
+            CGS_STATIC_ASSERT(offsetof(SimpleDataStreamProducer, miNumAddedCommands) == 0x104, "ARTIST producer added count");
+            CGS_STATIC_ASSERT(sizeof(SimpleDataStreamProducer) == 0x180, "ARTIST producer size");
+            CGS_STATIC_ASSERT(__alignof(SimpleDataStreamProducer) == 128, "ARTIST producer alignment");
+        }
     };
 }

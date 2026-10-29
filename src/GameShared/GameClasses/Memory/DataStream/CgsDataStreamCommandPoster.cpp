@@ -4,7 +4,7 @@
 
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include "types.hpp"  // uintptr_t (Construct's two 128-byte buffer-alignment tripwires)
-#include <atomic>   // std::atomic_thread_fence (End's console lwsync)
+#include <ppcintrinsics.h> // native __lwsync
 
 namespace CgsMemory
 {
@@ -80,9 +80,8 @@ namespace CgsMemory
     // left it so the result walk can still size itself.
     void DataStreamCommandPoster::End()
     {
-        // 0x82867BF8 `lwsync` -- the acquire half of the stream handshake. Mapped to the
-        // host fence the tree already uses for a console lwsync (SDKs/XAudio precedent).
-        std::atomic_thread_fence(std::memory_order_acquire);  // lwsync
+        // ARTIST 82867BF8 emits the native lightweight barrier.
+        __lwsync();
 
         CGS_ASSERT(mbStreaming, "Not streaming\n");                 // :130
 
@@ -146,19 +145,20 @@ namespace CgsMemory
         return ++miNumCommands;
     }
 
-    // X360 0x82867AE8 (⚠ .ida-exports HOLE -- reconstructed from the PS3 DecFIGS out-of-line
-    // body @0xBD1930, whose baked asserts pin the file/lines).
-    // Start a stream: assert not already streaming (:94), raise mbStreaming, then reset the
-    // packed status word to 0. The console resets it through an ldarx/stdcx CAS loop (the
-    // inlined GetEncodedStatus + SetValueConditional pair -- GetEncodedStatus's own
-    // "Encoded status is only valid during stream" tripwire is satisfied by the mbStreaming
-    // store above it); the PC build is single-threaded, so the atomic's own SetValue is the
-    // same observable store.
+    // ARTIST 82867AE8..82867BE0. Publish the streaming flag, clear the
+    // encoded status with the original compare/exchange retry, then release
+    // the stream through the native lwsync at 82867BD8.
     void DataStreamCommandPoster::Begin()
     {
-        CGS_ASSERT(!mbStreaming, "Already streaming\n");   // CgsDataStreamCommandPoster.cpp:94
+        CGS_ASSERT(!mbStreaming, "Already streaming\n");
         mbStreaming = true;
-        mEncodedStatus.SetValue(0);
+        for (;;)
+        {
+            const u64 luStatus = GetEncodedStatus();
+            if (mEncodedStatus.SetValueConditional(0, luStatus))
+                break;
+        }
+        __lwsync();
     }
 
     // X360 0x82867790.
