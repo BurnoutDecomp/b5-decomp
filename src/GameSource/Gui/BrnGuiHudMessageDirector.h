@@ -61,6 +61,7 @@ namespace BrnGui
 
     struct HudMessageDirector
     {
+        friend class GuiModule; // ARTIST82527A58 inlines the payback stop transition.
         // DWARF BrnGuiHudMessageDirector.h:114 -- which payback cinematic is being shown.
         enum EPayback
         {

@@ -38,6 +38,7 @@
 // CLASSICAL chyron -- a different overlay, DWARF GuiClassicalChyronEvent, carrying two
 // 48-char text ids and writing cache+0x12BC0 == the profile's picture-paradise index).
 // ===================================================================================
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::RegisterForEvents
@@ -374,6 +375,7 @@ namespace BrnGui
 
         mEATraxInGameComponent.Update();       // 0x8252A2A4  (this + 0x10020)
         mAchievementPopupComponent.Update();   // 0x8252A2B0  (this + 0x10060)
+        mOnlineNotificationMessageComponent.Update(); // ARTIST8252A2C8
 
         // 0x8252A2BC  (this + 0x10124 == mSaveIconComponent). DELIBERATELY NOT CALLED: the
         // console's target 0x8284CB38 is a bare `blr` that ICF folded with

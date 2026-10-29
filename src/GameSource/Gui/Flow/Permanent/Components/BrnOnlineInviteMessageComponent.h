@@ -27,6 +27,8 @@ namespace BrnGui
     class OnlineInviteMessageComponent : public BrnFlaptComponent
     {
     public:
+        // ARTIST8252A2C8 calls the original per-frame message tick.
+        void Update();
         // The component's showing-state machine. The transition-complete callback asserts
         // the state is TRANSITIONING_OUT and then resets it to HIDDEN. Only the two values
         // the asm names (0 reset target, 2 the asserted value) are attested; the

@@ -133,6 +133,7 @@ namespace CgsGraphics
         rw::movie::IVideoRenderableOperations* mpRwVideoRenderableOperations; // +0x8B0
 
     };
+    CGS_STATIC_ASSERT((sizeof(MoviePlayer) == 0x8B8), "ARTIST native MoviePlayer extent");
 }
 
 #endif

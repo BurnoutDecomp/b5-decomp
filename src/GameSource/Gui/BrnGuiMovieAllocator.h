@@ -24,4 +24,5 @@ namespace BrnGui
         CgsMemory::LinearMalloc mGraphicsAllocator;
         s32 miMainAlignment;
     };
+    CGS_STATIC_ASSERT((sizeof(MovieAllocator) == 0x544), "ARTIST native MovieAllocator extent");
 }

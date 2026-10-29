@@ -8,6 +8,7 @@
 
 namespace renderengine { class TextureState; }
 namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
+namespace CgsGui { namespace CgsGuiModuleIO { struct OutputBuffer; } }
 
 // BrnGui::ColourCalibrationScreen - the full-screen colour/brightness calibration test
 // card: a small state machine that acquires the calibration texture resource, builds a
@@ -46,6 +47,12 @@ namespace BrnGui
         // @0x824471D0 (this TU, DWARF h:82) -- show/hide requests routed from
         // GuiModule::HandleEventsPostBaseModuleUpdate.
         void RecvEvent(const CgsModule::Event* lpEvent, s32 liId);
+
+        // ARTIST825133E0; argument registers corroborated by82529AE0..B04.
+        void Update(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
+            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput,
+            rw::IResourceAllocator* lpTextureAllocator);
 
     private:
         // DWARF h:101-108 (members BY NAME; the console offsets ride in the .cpp notes).

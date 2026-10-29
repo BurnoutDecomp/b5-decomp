@@ -192,15 +192,7 @@ namespace BrnGui
         // The audio cue record: { 100, 457, 12, <the 100-byte payload> }, 112 bytes on
         // channel 40 -- the record the inlined OutputGuiEvent<GuiAudioTriggerEvent>
         // builds. Identical view to BrnOnlineGameOptions_wI_02.cpp's.
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
 
         // Record-size pins. Every payload here is pointer-free, so the X360's AddEvent
         // size immediates (16 / 20 / 112) must survive unchanged on the x64 host; if a
@@ -221,13 +213,10 @@ namespace BrnGui
         // GuiAudioTriggerWire above.
         void PostMenuToggleSound(CgsGui::StateInterface* lpStateInterface)
         {
-            GuiAudioTriggerWire lAudio;
-            lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KAC_EMPTY,
+            GuiAudioTriggerEvent lAudioPayload;
+            lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, KAC_EMPTY,
                              KAC_SOUND_LABEL_MENU_TOGGLE, KAC_EMPTY);
-            lAudio.muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                                  sizeof(CgsGui::GuiEvent<201>));
-            lAudio.muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            lAudio.muHeader2   = 12u;
+            GuiAudioTriggerWire lAudio(lAudioPayload);
 
             lpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,

@@ -134,15 +134,7 @@ namespace BrnGui
         // trigger. Same view as BrnOnlineGameRoomPlayerInfo_wH_08.cpp's.)
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
 
         // Id 463 == BrnGui::GuiEventAudioSettings: { 8, 463, 12, the two volume words },
         // channel 40, 20 bytes. Field order is the X360 store order -- GetMusicVolume
@@ -295,8 +287,9 @@ namespace BrnGui
                 const s32 liMusicVolume = mpGuiCache->GetOptionsDataProfile()->GetMusicVolume();
                 const s32 liSFXVolume   = mpGuiCache->GetOptionsDataProfile()->GetSFXVolume();
 
-                GuiAudioTriggerWire lAudio;
-                lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
+                GuiAudioTriggerEvent lAudioPayload;
+                lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
+                GuiAudioTriggerWire lAudio(lAudioPayload);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lAudio)));

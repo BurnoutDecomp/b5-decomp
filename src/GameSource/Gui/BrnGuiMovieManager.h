@@ -2,6 +2,7 @@
 #define BRN_GUI_MOVIE_MANAGER_H
 
 #include "types.hpp"
+#include "rw/math/vpu/types.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"      // CgsGraphics::MoviePlayer, Im2dRenderBuffer
 #include "GameShared/GameClasses/Graphics/Resources/CgsVideoDataResource.h"  // CgsResource::VideoDataResource
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"           // CgsResource::ResourcePtr
@@ -19,15 +20,7 @@
 // the GUI HUD-flow states (BrnGui::BootVideos/BootLegal/BootAttract), and the data comes from
 // VIDEOS\VIDEOLIST.BUNDLE.
 //
-// [PC IO LAYER] The X360 loads the bundle + acquires resources ASYNCHRONOUSLY (GameDataModule +
-// EVENT_ACQUIRERESOURCE). The PC port already has a SYNCHRONOUS bundle path -- CgsResource::BundleLoader +
-// Pool -- so Prepare loads VIDEOS\VIDEOLIST.BUNDLE in one shot into mMoviePool, and the per-video
-// "acquire" is a synchronous Pool::FindResource(id). This is faithful to the bundle FORMAT +
-// per-resource fixup/import; only the IO is PC-shaped (marked).
-//
-// Collision-world/car-pool reclaim and asynchronous bundle acquisition remain
-// separate reconstruction debt. The real movie allocator/arena lifetime is restored;
-// its host backing is explicit and does not simulate reclaimed car-pool memory.
+// Native IO remains asynchronous through the scheduler-supplied GameData buffers.
 namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
 namespace BrnResource { namespace GameDataIO { struct SwapOutCollisionWorldResponse; } }
 
@@ -51,7 +44,7 @@ namespace BrnGui
             // miCrossfadeInFrames was the sound name, miCrossfadeOutFrames was the first
             // crossfade, and "muField20" was the second. Harmless while nothing wrote a
             // sound name; not harmless since the producers started (F-P8b-5).
-            f32  mafRectangle[4];                 // +0x00 mv4Rectangle (left/top/right/bottom)
+            rw::math::vpu::Vector4 mv4Rectangle;   // +0x00 (left/top/right/bottom)
             u64  mVideoResourceId;                // +0x10 VideoDataResource id, 64-bit (0 = none)
             u32  mSoundStreamName;                // +0x18 CgsSound::Playback::Name::MakeHash of the video name
             s32  miCrossfadeInFrames;             // +0x1C
@@ -112,8 +105,7 @@ namespace BrnGui
         MovieManager();
 
         void Construct();
-        bool Prepare(s32 leLanguage);                                     // requests VIDEOS\VIDEOLIST.BUNDLE
-        // Original asynchronous overload; selected PC preparation still uses Prepare(s32).
+        // ARTIST82514780; receiver queue owns the asynchronous completion.
         bool Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
             const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput,
             CgsLanguage::ELanguage leLanguage);
@@ -229,8 +221,6 @@ namespace BrnGui
 
     private:
         bool QueueNextMovie();                          // VideoDataResource -> GetVideoFile(lang) -> player name
-        bool LoadVideoListBundle();                     // [PC IO] sync BundleLoader of VIDEOS\VIDEOLIST.BUNDLE
-        bool AcquireVideoDataResource(u64 luResId);     // [PC IO] sync Pool::FindResource -> mpVideoDataResource
         void HandlePlayVideoEvent(const GuiEventPlayVideo* lpPlayVideoEvent);
         void HandleStopVideoEvent(const GuiEventStopVideo* lpStopVideoEvent);
 
@@ -256,7 +246,6 @@ namespace BrnGui
         CgsModule::EventReceiverQueue<1024, 16> mReceiverQueue;
         VideoDefinition          mPlayingMovie;
         VideoDefinition          mQueuedMovie;
-        bool                     mbUsesXMPMusic;             // X360 +0xD56 [stub: XMP background music]
         CgsResource::ResourcePtr<CgsResource::VideoDataResource> mpVideoDataResource;
         // DecFIGS mCarPoolResource / mCarPoolResourceDescriptor -- the re-validated car-pool memory the GUI
         // hands back via SetCarPoolValid (the 3-pool SmallResource + its 3-pool size/alignment descriptor).
@@ -267,12 +256,9 @@ namespace BrnGui
         MovieAllocator           mAllocator;
         bool                     mbStopVideoStraightAway;
 
-        // [PC IO] VIDEOS\VIDEOLIST.BUNDLE lives here (loaded synchronously, like the debug font's pool); the
-        // VideoDataResources are looked up out of it by id. mapPoolBacking holds the three malloc'd heaps.
-        CgsResource::Pool        mMoviePool;
-        void*                    mapPoolBacking[3];
-        bool                     mbBundleLoaded;
     };
+
+    CGS_STATIC_ASSERT((sizeof(MovieManager) == 0x1420), "ARTIST native MovieManager extent");
 
     // The movie manager currently owning the screen (the GUI HUD flow sets it). Movies present
     // through GuiModule::UpdateAndRenderMovieManager (inside the GUI render pass, the console

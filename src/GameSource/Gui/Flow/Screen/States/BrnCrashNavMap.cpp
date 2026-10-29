@@ -188,15 +188,7 @@ namespace BrnGui
         // and the id 201 while the X360 wire words are 100 and 457.
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
 
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
 
@@ -328,8 +320,9 @@ namespace BrnGui
         // latched, close the sound out on the way through the door (`lbz r11, 0x6140`).
         if (mSoundData.mbPrevIsScrolling)
         {
-            GuiAudioTriggerWire lScrollEnd;
-            lScrollEnd.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
+            GuiAudioTriggerEvent lScrollEndPayload;
+            lScrollEndPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
+            GuiAudioTriggerWire lScrollEnd(lScrollEndPayload);
             lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScrollEnd),
                                  KI_CHANNEL_GUI_OUT,
                                  static_cast<s32>(sizeof(lScrollEnd)));
@@ -1480,14 +1473,16 @@ namespace BrnGui
         {
             if (!mSoundData.mbPrevIsScrolling)
             {
-                GuiAudioTriggerWire lMoveStart;
-                lMoveStart.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_MOVE_START, "");
+                GuiAudioTriggerEvent lMoveStartPayload;
+                lMoveStartPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_MOVE_START, "");
+                GuiAudioTriggerWire lMoveStart(lMoveStartPayload);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lMoveStart), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lMoveStart)));
 
-                GuiAudioTriggerWire lScrollStart;
-                lScrollStart.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_START, "");
+                GuiAudioTriggerEvent lScrollStartPayload;
+                lScrollStartPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_START, "");
+                GuiAudioTriggerWire lScrollStart(lScrollStartPayload);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lScrollStart), KI_CHANNEL_GUI_OUT,
                     static_cast<s32>(sizeof(lScrollStart)));
@@ -1495,8 +1490,9 @@ namespace BrnGui
         }
         else if (mSoundData.mbPrevIsScrolling)
         {
-            GuiAudioTriggerWire lScrollEnd;
-            lScrollEnd.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
+            GuiAudioTriggerEvent lScrollEndPayload;
+            lScrollEndPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
+            GuiAudioTriggerWire lScrollEnd(lScrollEndPayload);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lScrollEnd), KI_CHANNEL_GUI_OUT,
                 static_cast<s32>(sizeof(lScrollEnd)));
@@ -2538,9 +2534,10 @@ namespace BrnGui
                     mfInspectingEventTime = 0.0f;
                     muInspectingEventID   = 0;
 
-                    GuiAudioTriggerWire lAudio;
-                    lAudio.Construct(KI_AUDIO_ACTION_VIEW_EVENT_STOP, "",
+                    GuiAudioTriggerEvent lAudioPayload;
+                    lAudioPayload.Construct(KI_AUDIO_ACTION_VIEW_EVENT_STOP, "",
                                      KPC_SOUND_MAP_VIEW_EVENT, "");
+                    GuiAudioTriggerWire lAudio(lAudioPayload);
                     mpStateInterface->GetOutputEventQueue()->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lAudio),
                         KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));
@@ -2568,9 +2565,10 @@ namespace BrnGui
 
                         mfInspectingEventTime = mpGuiCache->GetTime();
 
-                        GuiAudioTriggerWire lAudio;
-                        lAudio.Construct(KI_AUDIO_ACTION_VIEW_EVENT_START, "",
+                        GuiAudioTriggerEvent lAudioPayload;
+                        lAudioPayload.Construct(KI_AUDIO_ACTION_VIEW_EVENT_START, "",
                                          KPC_SOUND_MAP_VIEW_EVENT, "");
+                        GuiAudioTriggerWire lAudio(lAudioPayload);
                         mpStateInterface->GetOutputEventQueue()->AddEvent(
                             reinterpret_cast<const CgsModule::Event*>(&lAudio),
                             KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));

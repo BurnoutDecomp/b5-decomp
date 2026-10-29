@@ -90,6 +90,57 @@ void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
 
 // @ 0x823A6A20 — zero-extended byte; guards leCounty >= 0 (vacuous for an unsigned
 // byte but the X360 still emits it) and leCounty < BrnWorld::E_COUNTY_COUNT.
+// ARTIST824FB9A8: action tokens are the original uppercase FLApt names.
+void GuiAudioTriggerEvent::Construct(const char* lpComponentName,
+    const char* lpActionName, const char* lpLabel, const char* lpMovieName)
+{
+    CGS_ASSERT(lpActionName != NULL, "lpActionName");
+    static const char* const KAPC_ACTION_NAMES[14] = {
+        "ON_ENTER", "ON_LEAVE", "ON_FOCUS", "ON_LOSE_FOCUS",
+        "ON_ACCEPT", "ON_CANCEL", "ON_TICK", "ON_CHANGE", "ON_UP",
+        "ON_DOWN", "ON_LEFT", "ON_LEFTSWEEP", "ON_RIGHT", "ON_RIGHTSWEEP"
+    };
+    s32 liAction = 14;
+    for (s32 liIndex = 0; liIndex < 14; ++liIndex)
+    {
+        if (std::strcmp(lpActionName, KAPC_ACTION_NAMES[liIndex]) == 0)
+        {
+            liAction = liIndex;
+            break;
+        }
+    }
+    Construct(liAction, lpComponentName, lpLabel, lpMovieName);
+    if (liAction >= 14 && ::gbLogGuiAudioTriggers &&
+        (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "\nGUI AUDIO TRIGGERS: "
+            << "Received invalid sound action. Component: "
+            << (lpComponentName ? lpComponentName : "<NULLSTRING>")
+            << " Action: " << (lpActionName ? lpActionName : "<NULLSTRING>")
+            << " Label: " << (lpLabel ? lpLabel : "<NULLSTRING>")
+            << " Movie: " << (lpMovieName ? lpMovieName : "<NULLSTRING>") << "\n";
+    }
+}
+
+// ARTIST824F64B0: a state-change event name and the current level-zero movie.
+void GuiAudioTriggerEvent::Construct(const char* lpEventName, const char* lpMovieName)
+{
+    CgsCore::SPrintf(macComponent, 31, "NULL");
+    macComponent[31] = 0;
+    CgsCore::SPrintf(macLabel, 31, lpEventName);
+    macLabel[31] = 0;
+    meAction = 7;
+    CgsCore::SPrintf(macMovie, 32, lpMovieName);
+    if (::gbLogGuiAudioTriggers && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "\nGUI AUDIO TRIGGERS: "
+            << "Received sound action from state change in code. Sending GuiAudioEvent to Audio guys: "
+            << " Event: " << lpEventName << " Movie: " << lpMovieName
+            << " Mapping" << lpEventName << " Action "
+            << KAPC_GUI_AUDIO_ACTION_NAMES[meAction] << "\n";
+    }
+}
+
 BrnWorld::ECounty GuiEventUpdateSatNav::SatNavIconInfo::GetCounty() const
 {
     const u8 luCounty = mu8County;

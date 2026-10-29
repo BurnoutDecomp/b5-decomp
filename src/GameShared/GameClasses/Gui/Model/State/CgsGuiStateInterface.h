@@ -8,6 +8,7 @@
 
 namespace rw { struct IResourceAllocator; }
 namespace CgsLanguage { class LanguageManager; }
+namespace BrnGui { struct GuiAudioTriggerEvent; }
 
 // CgsGui::StateInterface - the channel a GUI state uses to reach the rest of the
 // game: it owns the large output event queue the state writes to, plus the access
@@ -75,7 +76,7 @@ namespace CgsGui
     // { muHeader0 = 8, muEventType = 23, muHeader2 = 12 } + { the sound-name hash,
     // two flag bytes }, channel 40, 20 bytes. (BrnGui::Credits posts it with
     // CgsSound::Playback::Name::MakeHash("Credits") and both flags clear.)
-    struct GuiEventPlayMusicOnMenuStream : public GuiEvent<23>
+    struct GuiEventPlayMusicOnMenuStream : public CgsModule::Event
     {
         u32  muStreamNameHash;   // +0x0C  (CgsSound::Playback::Name::MakeHash result)
         bool mbFlagA;            // +0x10  (roles not recovered; Credits passes false/false)
@@ -83,9 +84,10 @@ namespace CgsGui
 
         explicit GuiEventPlayMusicOnMenuStream(u32 luStreamNameHash,
                                                bool lbFlagA = false, bool lbFlagB = false)
-            : GuiEvent<23>(8, 12)
-            , muStreamNameHash(luStreamNameHash), mbFlagA(lbFlagA), mbFlagB(lbFlagB) {}
+            : muStreamNameHash(luStreamNameHash), mbFlagA(lbFlagA), mbFlagB(lbFlagB) {}
+        s32 GetEventType() const { return 23; }
     };
+    CGS_STATIC_ASSERT((sizeof(GuiEventPlayMusicOnMenuStream) == 8), "ARTIST8250C038 menu stream is eight bytes");
 
     // The "suspend / resume network processing" GUI event. X360-attested by the
     // OutputGuiEvent<CgsGui::GuiEventNetworkSuspension> instantiation @0x82493A88: the
@@ -275,6 +277,11 @@ namespace CgsGui
         CgsLanguage::LanguageManager* GetLanguageManager();
         bool                          IsUsingMetricUnits();
     };
+
+    // Actual native raw payload specializations, defined in the original
+    // instantiation TU. These two publish the genuine channel40 wrapper.
+    template <> void StateInterface::OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(BrnGui::GuiAudioTriggerEvent& lrEvent);
+    template <> void StateInterface::OutputGuiEvent<GuiEventPlayMusicOnMenuStream>(GuiEventPlayMusicOnMenuStream& lrEvent);
 
     // ARTIST OutputGuiEvent<GuiEventNetworkSuspension> 0x82493A88 sends
     // {4,45,12,type} on channel 40. This legacy event type already contains that

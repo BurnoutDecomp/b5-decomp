@@ -2,6 +2,7 @@
 #define BRN_INTERPOLATOR_H
 
 #include "types.hpp"
+#include <float.h>
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 
 // BrnGui::Interpolator<T> / BrnGui::DeltaInterpolator - the small GUI easing helpers the custom
@@ -106,7 +107,7 @@ public:
 };
 
 template <typename T>
-const f32 Interpolator<T>::KF_UnsetSentinel = -3.4028235e38f;
+const f32 Interpolator<T>::KF_UnsetSentinel = -FLT_MAX;
 
 // DWARF BrnBoostBarRenderer.h:117. A rate-driven value: SetDelta keys a per-second rate at a
 // time, GetCurrentValue advances the value by rate * elapsed and clamps it into [min, max].
@@ -120,8 +121,8 @@ public:
         : mfCurrentValue(0.0f)
         , mfCurrentTime(0.0f)
         , mfDeltaPerSec(0.0f)
-        , mfMinValue(-3.4028235e38f)
-        , mfMaxValue(3.4028235e38f)
+        , mfMinValue(-FLT_MAX)
+        , mfMaxValue(FLT_MAX)
     {
     }
 
