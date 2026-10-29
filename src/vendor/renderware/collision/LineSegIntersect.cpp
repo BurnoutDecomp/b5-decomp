@@ -1943,7 +1943,7 @@ RwBool CylinderVolume::ThinLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2
         const f32 lfApproach      = Dot3(lvCapNormal, lvDelta);    // vmsum3fp128 v0 @0x82BAE118
         const f32 lfT = RefinedRecip(lfApproach) * (lfHalfHeight - lfStartDistance);   // fsubs @0x82BAE124; vmulfp128 @0x82BAE154
         const Vec4 lvCapPoint = MaddSplat(lvDelta, lfT, lvStart);  // vmaddfp @0x82BAE180
-        const f32 lfCapRadialSq = linemath::ScalarMadd(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAE190
+        const f32 lfCapRadialSq = linemath::CapRadialSquared(lvCapPoint);   // @0x82BAE190
         if (lfCapRadialSq < lfRadiusSq)                            // fcmpu ; bge @0x82BAE1A0 (NaN: the barrel)
         {
             arResult.lineParam = lfT;                              // stfs f0, 0x40(r28) @0x82BAE1A8
@@ -2093,7 +2093,7 @@ RwBool CylinderVolume::FatLineSegIntersect(const Vec4& arPt1, const Vec4& arPt2,
     const f64 ldCapDiscLimit = static_cast<f64>(lfRadiusSq) * KD_CAP_DISC_SLACK;   // fmul f12, f13, f0 (double)
     const f32 lfCapT = RefinedRecip(lfApproach) * (lfCapHeight - lfStartDistance);   // fsubs @0x82BAEF24 ; vmulfp128 @0x82BAEF50
     const Vec4 lvCapPoint = MaddSplat(lvDelta, lfCapT, lvStart);   // vmaddfp @0x82BAEF7C
-    const f32 lfCapRadialSq = linemath::ScalarMadd(lvCapPoint.x, lvCapPoint.x, lvCapPoint.y * lvCapPoint.y);   // @0x82BAEF94
+    const f32 lfCapRadialSq = linemath::CapRadialSquared(lvCapPoint);   // @0x82BAEF94
     if (static_cast<f64>(lfCapRadialSq) < ldCapDiscLimit)          // fcmpu ; bge @0x82BAEFA4 (NaN: on)
     {
         arResult.lineParam = lfCapT;                               // stfs f0, 0x40(r29) @0x82BAEFA8

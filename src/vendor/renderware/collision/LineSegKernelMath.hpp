@@ -74,6 +74,18 @@ namespace linemath
         return __vmaddfp(lvA, lvB, lvC).x;
     }
 
+    // ARTIST cylinder cap tests 82BAE184..190 / 82BAEF80..94: splat y,
+    // round y*y with vmulfp, then fuse x*x + that rounded product with vmaddfp.
+    // Keep the operations in VMX so their denormal handling is not replaced by FPU.
+    inline f32 CapRadialSquared(const Vec4& arPoint)
+    {
+        const __vector4 lvPoint = { arPoint.x, arPoint.y, arPoint.z, arPoint.w };
+        const __vector4 lvY = __vspltw(lvPoint, 1);
+        const __vector4 lvX = __vspltw(lvPoint, 0);
+        const __vector4 lvYSquared = __vmulfp(lvY, lvY);
+        return __vmaddfp(lvX, lvX, lvYSquared).x;
+    }
+
     // vmsum3fp128 -- FLAG (model): one rounding of the exact f64 sum of the three f32 products.
     inline f32 Dot3(const Vec4& arA, const Vec4& arB)
     {
