@@ -80,6 +80,9 @@ namespace CgsFileSystem
                                   bool lbUseHDCache);
         void CloseReadStream(ReadStream lStream);
 
+        // ARTIST828FD668 and828EC8D4 inline this owned patch service.
+        PatchManager* GetPatchManager() { return &mPatchManager; }
+
     private:
         static EA::Thread::AtomicInt32 mDiskErrorOccured;
         static EA::Thread::AtomicInt32 mReleasing;

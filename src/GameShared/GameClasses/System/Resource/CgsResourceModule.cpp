@@ -10,6 +10,7 @@
 #include "rw/rwcore_general_alloc.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstddef>
 #include <cstring>                                    // memset (InitOptions zero-init)
 
@@ -25,6 +26,9 @@ namespace CgsResource
     s32 ResourceModule::_miUpdateFileSystemPerfMon = -1;
     s32 ResourceModule::_miUpdateOutputPerfMon = -1;
     s32 ResourceModule::_miUpdateTrace = -1;
+
+    // ARTIST827E1F68: compiler construction only, with no pending-pool or latch stores.
+    ResourceModule::ResourceModule() {}
 
     // ResourceModule::InitOptions ctor - zero-init. The X360 ConstructResourceModule constructs this
     // then memset(0)s the whole 1216B block before filling fields, so a zero-init is the faithful net
@@ -620,6 +624,7 @@ namespace CgsResource
         BundleLoaderModule::_miTraceStreamUpdate_StreamEntries = 0;
         BundleLoaderModule::_miTraceStreamUpdate_StreamData = 0;
         mbIsNewModule = true;
+        mbPatchRequestPending = false;
     }
 
     // ARTIST828F2900/2998 and828EA560/A5C0: lane-zero allocations are16-aligned,
@@ -663,7 +668,12 @@ namespace CgsResource
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mPendingFileResponses) == 0x58030, "ARTIST pending-response pool");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, maPendingFileResponses) == 0x5803c, "ARTIST pending-response records");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, maiPendingFileResponseFreeIndices) == 0x580fc, "ARTIST pending-response free indices");
-        CGS_STATIC_ASSERT(sizeof(ResourceModule) == 0x58180, "ARTIST resource module span");
+        CGS_STATIC_ASSERT(sizeof(Events::AddPatchRequest) == 268, "ARTIST patch request copy");
+        CGS_STATIC_ASSERT(offsetof(Events::AddPatchRequest, macFileName) == 8, "ARTIST patch path");
+        CGS_STATIC_ASSERT(offsetof(Events::AddPatchRequest, miPriority) == 264, "ARTIST patch priority");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mbPatchRequestPending) == 0x5810c, "ARTIST patch response latch");
+        CGS_STATIC_ASSERT(offsetof(ResourceModule, mAddPatchRequest) == 0x58110, "ARTIST saved patch request");
+        CGS_STATIC_ASSERT(sizeof(ResourceModule) == 0x58280, "ARTIST CheckClassSizes823BEBF0 resource module span");
     }
 
     // ARTIST82907268: native event sizes are carried by the queue. Pool and
@@ -697,6 +707,7 @@ namespace CgsResource
             case 17: AddOpenWriteStreamRequest(reinterpret_cast<const Events::OpenWriteStreamRequest*>(lpEvent)); break;
             case 18: AddCloseReadStreamRequest(reinterpret_cast<const Events::CloseReadStreamRequest*>(lpEvent)); break;
             case 19: AddCloseWriteStreamRequest(reinterpret_cast<const Events::CloseWriteStreamRequest*>(lpEvent)); break;
+            case 25: AddAddPatchRequest(reinterpret_cast<const Events::AddPatchRequest*>(lpEvent)); break;
             default: CGS_ASSERT(false, "Invalid event id\n"); break;
             }
             const CgsModule::Event* lpNext = 0;
@@ -745,6 +756,32 @@ namespace CgsResource
                 lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
         }
         ProcessPoolOutputResponses(lpPoolOut);
+        if (mbPatchRequestPending && !mFileSystem.GetPatchManager()->IsPatching())
+        {
+            const s32 liEventId = mAddPatchRequest.miEventId;
+            mAddPatchRequest.mpUser->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&liEventId), 25, sizeof(liEventId));
+            mbPatchRequestPending = false;
+        }
+    }
+
+    // ARTIST828FD5C8 retains the complete request until its background scan finishes.
+    bool ResourceModule::AddAddPatchRequest(const Events::AddPatchRequest* lpRequest)
+    {
+        if (mbPatchRequestPending)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                      CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Can only add 1 patch at a time\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.h", 1028);
+            CgsDev::Assert::EndAssert();
+        }
+        mFileSystem.GetPatchManager()->AddPatch(lpRequest->macFileName, lpRequest->miPriority);
+        mAddPatchRequest = *lpRequest;
+        mbPatchRequestPending = true;
+        return true;
     }
 
     // ARTIST @0x829070B0. Start the asynchronous read-stream open, build the

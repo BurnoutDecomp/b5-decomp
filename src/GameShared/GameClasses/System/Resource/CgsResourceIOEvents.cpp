@@ -60,10 +60,10 @@ BundleLoaderEvent& BundleLoaderEvent::SetFileName(const char* pcFileName)
 // Note the X360 copy is UNCONDITIONAL on a non-null source (the path is always provided by the
 // GameDataModule::Prepare call site): the helper measures the length for the assert, then byte-
 // copies the source including its NUL terminator into macFileName.
-AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const char* lpcFileName, s32 liField264)
+AddPatchRequest* AddPatchRequest::Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, const char* lpcFileName, s32 liPriority)
 {
-    miField0 = liField0;
-    miField4 = liField4;
+    mpUser = lpUser;
+    miEventId = liEventId;
 
     // Inlined CgsStringUtils.h:65 bounded copy -- measure source length for the bounds assert.
     const char* pcScan = lpcFileName;
@@ -85,7 +85,7 @@ AddPatchRequest* AddPatchRequest::Construct(s32 liField0, s32 liField4, const ch
     }
     while (lcChar != '\0');
 
-    miField264 = liField264;
+    miPriority = liPriority;
 
     return this;
 }
