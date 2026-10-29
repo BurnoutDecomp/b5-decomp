@@ -26,6 +26,8 @@ namespace BrnResource
         : public CgsDev::DebugComponent
     {
     public:
+        DebugComponent() : CgsDev::DebugComponent(GameDataConstructorTag()) {}
+
         struct MemTypeInfo
         {
             s32 miSize;

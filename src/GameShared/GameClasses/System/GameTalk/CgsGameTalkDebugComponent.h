@@ -11,14 +11,15 @@
 // OnActivate @ 0x82836C20 chains the (empty) base activation, then sizes the shared "Core/GameTalk"
 // log window (off_82F32FD4 == sLogWindow, brought up by GameTalk::Construct) to 250x60.
 //
-// In the X360 build GameTalk::mDebugComponent is a GameTalkDebugComponent; the committed
-// CgsGameTalk.h types that member as the CgsDev::DebugComponent base (same 12-byte layout --
-// this subclass adds only vtable overrides, no data members).
+// GameTalk embeds this concrete type; it adds vtable overrides but no data members.
 
 namespace CgsGameTalk
 {
     class GameTalkDebugComponent : public CgsDev::DebugComponent
     {
+    public:
+        GameTalkDebugComponent() : CgsDev::DebugComponent(GameDataConstructorTag()) {}
+
     protected:
         void OnActivate() ;
         const char* GetName() const ;

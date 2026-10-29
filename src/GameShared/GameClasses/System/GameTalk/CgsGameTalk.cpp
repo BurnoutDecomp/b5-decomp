@@ -62,17 +62,13 @@ namespace CgsGameTalk
     }
 
     // X360 @0x82837648.
-    void GameTalk::Construct()
+    void GameTalk::Construct(bool lbInitialiseNetwork)
     {
         mbPrepared        = false;          // stb 0, 0x4034
         mpGameTalkManager = 0;        // stw 0, 0x4030
 
         // Bring up the transport on the GameTalk listen port (asm passes 0x2694 in r5).
-        mProtocol.Construct(true, KI_DEFAULT_GAMETALK_PORT);
-
-        // Reset the debug component to its clean state (the asm's `...Destruct` symbol on
-        // the +0x4024 subobject is the dedup-shared DebugComponent constructor body).
-        mDebugComponent.Construct();
+        mProtocol.Construct(lbInitialiseNetwork, KI_DEFAULT_GAMETALK_PORT);
 
         // Bring up the "Core/GameTalk" log window.
         sLogWindow.Construct(KI_LOG_WINDOW_LINES);

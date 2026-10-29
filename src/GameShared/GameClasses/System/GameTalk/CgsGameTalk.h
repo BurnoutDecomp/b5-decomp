@@ -4,7 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/GameTalk/X360/CgsGameTalkProtocolX360.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalkDebugComponent.h"
 #include "SDKs/EA/GameTalk/GameTalk.h"
 
 // ============================================================================
@@ -29,7 +29,7 @@
 //   +0x0000  mProtocol          GameTalkProtocol embedded at offset 0 -- GameTalk::Construct
 //                               passes its own `this` straight to GameTalkProtocol::Construct
 //                               (the protocol subobject occupies [0, 0x4024))
-//   +0x4024  mDebugComponent    CgsDev::DebugComponent (Construct in GameTalk::Construct,
+//   +0x4024  mDebugComponent    GameTalkDebugComponent (Construct in GameTalk::Construct,
 //                               Register in GameTalk::Prepare; 12 bytes -> ends at 0x4030)
 //   +0x4030  mpGameTalkManager  the EA GameTalk singleton (Prepare stores the global)
 //   +0x4034  mbPrepared         set 1 by Prepare, asserted by Register/Send/Update
@@ -44,7 +44,7 @@ namespace CgsGameTalk
         // Clears mbPrepared/mpGameTalkManager, constructs the transport on the
         // GameTalk listen port (the asm passes 0x2694 == 9876 in r5), prepares the
         // debug component, and brings up the "Core/GameTalk" log window.
-        void Construct();
+        void Construct(bool lbInitialiseNetwork);
 
         // X360 @0x828394B8. Bring up the GameTalk singleton, point mpGameTalkManager
         // at it, prepare the transport with the inactivity timeout / update step,
@@ -66,7 +66,7 @@ namespace CgsGameTalk
 
     private:
         GameTalkProtocol            mProtocol;          // +0x0000
-        CgsDev::DebugComponent      mDebugComponent;    // +0x4024
+        GameTalkDebugComponent      mDebugComponent;    // +0x4024
         EA::GameTalk::GameTalkManager* mpGameTalkManager; // +0x4030
         bool                        mbPrepared;         // +0x4034
     };
