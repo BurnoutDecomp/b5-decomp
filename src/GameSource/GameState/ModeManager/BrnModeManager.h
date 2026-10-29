@@ -1042,23 +1042,5 @@ private:
     // statics -- the DWARF's own `extern` lines say so -- registered by Construct through
     // CgsDev::PerfMonCpu::AddMonitor.
 
-    // ===============================================================================================
-    // [!] STAND-IN BLOCK -- these are NOT ModeManager members on the console. They are kept only so the
-    // already-committed bodies keep compiling BY NAME, and they sit at the very END so they cannot
-    // perturb the offsetof ordering chain _AssertLayout() pins over the real run above. Retire each
-    // one as its real owner grows the accessor.
-    // ===============================================================================================
-    // FillInRaceDistanceInterface reads these two at X360 +0x5C98 and +0x6A94 -- BOTH INSIDE the
-    // ScoringSystem span (3504..27392), i.e. they are ScoringSystem members reached through the embed
-    // (the same class of mistake the mode-clock identity proof fixed). Re-point that body at
-    // ScoringSystem accessors when they land.
-    s32 miNumActiveRaceCars;                // claimed X360 +0x5C98 -- actually ScoringSystem-internal
-    f32 mfTotalRaceDistance;                // claimed X360 +0x6A94 -- actually ScoringSystem-internal
-    // SetNetworkStuntScore's cache. [!] SUSPECT: +0x6CD0 / D4 / D8 == 27856 / 27860 / 27864 lies INSIDE
-    // the HUDMessageLogic span (27392..27992), so if that offset claim is right these are
-    // HUDMessageLogic sub-members and must move there. Re-verify against 0x82363540's asm.
-    s32 miNetworkStuntActiveCarIndex;       // claimed X360 +0x6CD0
-    s32 miNetworkStuntScore;                // claimed X360 +0x6CD4
-    s32 miNetworkStuntPreviousScore;        // claimed X360 +0x6CD8
 };
 }
