@@ -138,10 +138,12 @@ namespace CgsGui
     };
 
     // A request for the GUI to report the current language back. DWARF :287.
-    struct GuiEventGetLanguage : public GuiEvent<31>
+    struct GuiEventGetLanguage : public CgsModule::Event
     {
         CgsLanguage::ELanguage mLanguage;  // DWARF :289 (filled in by the responder)
+        s32 GetEventType() const { return 31; }
     };
+    CGS_STATIC_ASSERT((sizeof(GuiEventGetLanguage) == 4), "ARTIST8250C098 language reply is four bytes");
 
     // A bare request-for-language event (no payload beyond the header). DWARF :294/:652.
     struct GuiEventRequestLanguage : public GuiEvent<30>

@@ -77,6 +77,10 @@ namespace BrnGui
         // (then the colour cubes are requested), 229..234 the cubes.
         void ResourceUpdate(CgsGui::ModelIO::InputBuffer* lpGuiModelInputBuffer,
                             const CgsGui::ModelIO::OutputBuffer* lpGuiModelOutputBuffer);
+        // ARTIST825125C0; DecFIGS h:75, scheduler update set is16 bits.
+        void EventUpdate(BrnUpdateSet luUpdateSet,
+            const CgsGui::CgsGuiModuleIO::InputBuffer* lpInput,
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
         // :81 @0x82503060 -- fill the renderer's two FX-events effects frames.
         void GenerateEffectFrameEvents(RendererIO::OutputBuffer* lpRenderOutput);
 

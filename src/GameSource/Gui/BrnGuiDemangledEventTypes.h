@@ -1226,7 +1226,15 @@ namespace BrnGui
                   "GUI replay registration carries one full native pointer");
     struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4
     struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
-    struct GuiResponseTimeDateString : public CgsGui::GuiEvent<594> { u8 maPayload[24]; };  // id 594 size 36
+    // ARTIST825293D8..82529584: preserve the request word and write the
+    // formatted local date/time into32 bytes; there is no in-payload header.
+    struct GuiResponseTimeDateString
+    {
+        u32 muRequestId;
+        char macTimeDate[32];
+        s32 GetEventType() const { return 594; }
+    };
+    CGS_STATIC_ASSERT((sizeof(GuiResponseTimeDateString) == 36), "ARTIST GUI594 raw reply");
     struct GuiSaveLoadImageExportRequested { u8 maData[17]; s32 GetEventType() const { return 361; } };  // id 361 size 17
     // X360 instantiation @0x824940E8: record { 20, 323, 12, type, params[16] }, ch40,
     // 32 bytes (GameBridgeGUIToX case 323 memcpy's 20 -- the old maPayload[8] was short).

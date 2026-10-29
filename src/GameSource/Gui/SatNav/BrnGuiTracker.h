@@ -206,6 +206,8 @@ namespace BrnGui
         // X360 body, so it must be called by name rather than stood in with a no-op shim
         // (BrnInGame.cpp carries such a shim, TrackerClearTracker -- that debt should shrink).
         void ClearTracker();
+        // ARTIST82511BD0; DecFIGS BrnGuiTracker.h:142.
+        void Update(CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput);
 
         // @ 0x82501D28 (DWARF BrnGuiTracker.h:75,
         // `void RecEvent(const CgsModule::Event*, int32_t, int32_t)`). The tracker's event

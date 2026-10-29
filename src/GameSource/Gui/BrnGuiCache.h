@@ -1422,6 +1422,7 @@ namespace BrnGui
         // surface -- is the honest exposure. (HudMessageAnalyzer wave-C keystone.)
         friend class MapIconManager; // ARTIST map icon reads of landmark lists.
         friend struct HudMessageAnalyzer;
+        friend class GuiModule; // ARTIST82527A58 reads/writes the original cache members inline.
         friend struct GuiCacheDebugComponent; // owns typed helper snapshot access
 
         // Same exposure rule for the online game-room screen (wave-H keystone): the
@@ -1697,7 +1698,8 @@ namespace BrnGui
         // SetDoDisconnectPopup(0)). Raw s32 per
         // this boundary header's enum convention (see GetCurrentGameModeType).
         s32  meLastDisconnectedError;                     // +0x4B40 (19264) 0 == none
-        u8   mPad_4B44[5];                                // +0x4B44..+0x4B48
+        u8   mPad_4B44[4];                                // +0x4B44..+0x4B47
+        bool mbIsGamePaused;                             // +0x4B48; DecFIGS h:1659, ARTIST825295E0.
         // ADDITIVE CARVE (pause wave, 2026-08-28) from the TAIL of the former
         // mPad_4B44[6] -- the cache's HIGH-DEFINITION byte. Five consumers read it, all
         // with the far-member `lbz +0x4B49` idiom, and all of them pick between an HD and

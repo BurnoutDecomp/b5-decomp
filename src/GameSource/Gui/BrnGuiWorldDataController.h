@@ -116,6 +116,9 @@ namespace BrnGui
         // (PrepareWorldData2) for the sequencing that guarantees exclusive use.
         bool Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
 
+        // ARTIST824F9310..9320: stage11 stores zero to this primary state.
+        void Release() { meState = E_WORLDDATACONTROLLERSTATE_DESTRUCTED; }
+
         // The live state (the readiness gate the accessors assert on). Exposed so the driver can
         // stop pumping without re-entering the machine.
         EWorldDataControllerState GetState() const { return meState; }

@@ -8,7 +8,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash
 
-CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20),
+CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>) == 20),
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
 // BrnGui::Credits -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -124,10 +124,11 @@ void Credits::OnLeave()
         static_cast<u32>(CgsSound::Playback::Name::MakeHash(KPC_NO_MUSIC_STREAM_NAME));
 
     CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(KU_NO_MUSIC_STREAM_HASH);
+    CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40> lMusicWrapper(lMusicEvent);
     // This object is already the complete {8,23,12}+8 channel-40 record.
     mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lMusicEvent), 40,
-        static_cast<s32>(sizeof(lMusicEvent)));
+        reinterpret_cast<const CgsModule::Event*>(&lMusicWrapper), 40,
+        static_cast<s32>(sizeof(lMusicWrapper)));
 
     mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
@@ -193,10 +194,11 @@ bool Credits::UpdateLoadResources()
 
     CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(
         static_cast<u32>(CgsSound::Playback::Name::MakeHash(KPC_CREDITS_MOVIE_NAME)));
+    CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40> lMusicWrapper(lMusicEvent);
     // This object is already the complete {8,23,12}+8 channel-40 record.
     mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lMusicEvent), 40,
-        static_cast<s32>(sizeof(lMusicEvent)));
+        reinterpret_cast<const CgsModule::Event*>(&lMusicWrapper), 40,
+        static_cast<s32>(sizeof(lMusicWrapper)));
 
     return true;
 }

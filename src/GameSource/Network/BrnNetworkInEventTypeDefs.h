@@ -1,4 +1,5 @@
 #pragma once
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 
 // ===================================================================================
 // BrnNetwork::BrnNetworkModuleIO network IN-event leaves -- owning header

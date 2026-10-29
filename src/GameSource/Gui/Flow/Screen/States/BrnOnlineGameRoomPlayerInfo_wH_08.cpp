@@ -110,15 +110,7 @@ namespace BrnGui
         // this record and BrnGuiDemangledEventTypes.h attest for the audio trigger.)
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        struct GuiAudioTriggerWire : public GuiAudioTriggerEvent
-        {
-            GuiAudioTriggerWire()
-            {
-                muHeader0 = static_cast<u32>(sizeof(GuiAudioTriggerEvent) -
-                                             sizeof(CgsGui::GuiEvent<201>));
-                muEventType = KU_WIRE_ID_AUDIO_TRIGGER;
-            }
-        };
+        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
 
         // Id 463 == BrnGui::GuiEventAudioSettings. The record
         // OutputGuiEvent<GuiEventAudioSettings> @0x82493728 builds: { 8, 463, 12, the two
@@ -235,8 +227,9 @@ namespace BrnGui
         // the event is constructed with the null label on the unrecognised path.
         CGS_ASSERT(lpcLabel, "lpcLabel");
 
-        GuiAudioTriggerWire lAudio;
-        lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
+        GuiAudioTriggerEvent lAudioPayload;
+        lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
+        GuiAudioTriggerWire lAudio(lAudioPayload);
 
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
@@ -356,8 +349,9 @@ namespace BrnGui
                     const s32 liMusicVolume = mpGuiCache->GetOptionsDataProfile()->GetMusicVolume();
                     const s32 liSFXVolume   = mpGuiCache->GetOptionsDataProfile()->GetSFXVolume();
 
-                    GuiAudioTriggerWire lAudio;
-                    lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
+                    GuiAudioTriggerEvent lAudioPayload;
+                    lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
+                    GuiAudioTriggerWire lAudio(lAudioPayload);
                     mpStateInterface->GetOutputEventQueue()->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
                         static_cast<s32>(sizeof(lAudio)));

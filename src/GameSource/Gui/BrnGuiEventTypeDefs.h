@@ -109,26 +109,25 @@ enum GuiFlow
 // { component[32], action, label[32], movie[32] } (100 bytes). The committed PC
 // GuiEvent<N> carries its 12-byte queue header explicitly, making this queued
 // record 112 bytes in total.
-struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
+struct GuiAudioTriggerEvent : public CgsModule::Event
 {
     char macComponent[32];
     s32  meAction;
     char macLabel[32];
     char macMovie[32];
 
-    GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12), meAction(0)
-    {
-        macComponent[0] = 0;
-        macLabel[0] = 0;
-        macMovie[0] = 0;
-    }
-
+    s32 GetEventType() const { return 457; }
+    void Construct(const char* lpComponentName, const char* lpActionName,
+                   const char* lpLabel, const char* lpMovieName);
     void Construct(s32 leAction, const char* lpComponentName,
                    const char* lpLabel, const char* lpMovieName = "");
+    void Construct(const char* lpEventName, const char* lpMovieName);
 };
 
-CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerEvent) == 112),
-              "GuiAudioTriggerEvent is a 100-byte payload plus the 12-byte PC GuiEvent header");
+CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerEvent) == 100 &&
+                  offsetof(GuiAudioTriggerEvent, meAction) == 32 &&
+                  offsetof(GuiAudioTriggerEvent, macMovie) == 68),
+              "ARTIST GUI457 is the raw 100-byte audio payload");
 
 // ARTIST wire id 457 carries the same 100-byte payload without the PC
 // GuiEvent<201> header. OutputGuiEvent wraps this record with its own 12-byte
@@ -165,14 +164,6 @@ struct GuiEventRunFsm : public CgsModule::Event
     CgsID    mInitialStateId; // +0x08 -- initial scripted state id
     EHUDFSMs meFsmToRun;      // +0x10
     GuiFlow  meFlowToUse;     // +0x14 -- RunFsm validates this against [0, E_GUIFLOW_COUNT)
-
-    GuiEventRunFsm()
-        : mFsmId(CgsIDCompress(" "))
-        , mInitialStateId(CgsIDCompress(" "))
-        , meFsmToRun(E_GUI_HUD_NUMSFSMS)
-        , meFlowToUse(E_GUIFLOW_COUNT)
-    {
-    }
 
     // 144 is the LIVE wire id on this build: the mounted consumer is BrnGuiModule.cpp's
     // case 144 -> GuiFsmController::RunFsm, and both producers post 144. The DecFIGS text

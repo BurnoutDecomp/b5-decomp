@@ -3,27 +3,17 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // original typed Prepare producer
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // LoadBundleRequest
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original state diagnostic
-#include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoader.h"      // BundleLoader (PC sync loader)
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h"  // RegisterAllResourceTypes
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (VideoDefinition::Copy)
 #include "GameSource/Sound/Global/BrnMusicEffect.h"                                // MusicEffect::IsCustomSoundtrackActive (Update @0x82507A98)
 
-#include <cstdlib>   // malloc / free
-#include <cstdio>    // snprintf (boot-video diagnostics)
 #include <cstring>   // strlen / memset (X360 QueueNextMovie path construction)
-extern "C" void* XPhysicalAlloc(unsigned long, unsigned long, unsigned long, unsigned long);
-extern "C" void XPhysicalFree(void*);
-#include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"   // ResolveResourceType
+#include <xtl.h>
+#include <xmp.h>
 
-// BrnGui::MovieManager -- faithful reconstruction from the X360 ARTIST build (Construct 0x824F9598,
-// Prepare 0x82514780, Update 0x82507A98, RecvEvent 0x824F9688, QueueNextMovie 0x824FF898). The real
-// Update is entangled with subsystems not yet reconstructed; those calls are kept as [STUB]s (marked
-// per-call) so the state machine is faithful + compiles. The chain cannot actually PLAY until the
-// GameDataModule (which loads VIDEOLIST.BUNDLE + fulfils the resource acquire) and the collision/car-pool/
-// MovieAllocator/audio subsystems land. The state machine is reconstructed single-step-per-Update (the
-// X360 chains a few transitions within one call for efficiency; functionally equivalent over frames).
+// Native ARTIST MovieManager: asynchronous bundle/resource replies, original
+// same-call state transitions, and dashboard-music ownership.
 
 namespace BrnGui
 {
@@ -63,36 +53,6 @@ namespace BrnGui
             } while (lpcDest[-1] != 0);
         }
 
-        // Derive the movie's audio stream path "SOUND\STREAMS\<base>.SNS" from the video file name
-        // (e.g. "CRITERION.VP6" -> "SOUND\STREAMS\CRITERION.SNS"). The X360 looks the sound stream up via
-        // the GenericRwacWaveContent (SNR) header keyed by a hashed name; the PC path loads the named
-        // .SNS directly (staged like VIDEOS\*.VP6). See the movie-audio dossier.
-        void BuildSoundStreamPath(char* lpacBuffer, u32 luBufferSize, const char* lpcVideoName)
-        {
-            const char* lpcDir = "SOUND\\STREAMS\\";
-            u32 lu = 0;
-            for (; lpcDir[lu] != 0 && lu < luBufferSize - 1u; ++lu) lpacBuffer[lu] = lpcDir[lu];
-            // copy the base name, stopping at the extension dot
-            u32 liDot = 0;
-            for (u32 li = 0; lpcVideoName[li] != 0; ++li) if (lpcVideoName[li] == '.') liDot = li;
-            const u32 luNameLen = liDot ? liDot : 0xFFFFFFFFu;
-            for (u32 li = 0; lpcVideoName[li] != 0 && li < luNameLen && lu < luBufferSize - 5u; ++li, ++lu)
-                lpacBuffer[lu] = lpcVideoName[li];
-            const char* lpcExt = ".SNS";
-            for (u32 li = 0; lpcExt[li] != 0 && lu < luBufferSize - 1u; ++li, ++lu) lpacBuffer[lu] = lpcExt[li];
-            lpacBuffer[lu] = 0;
-        }
-
-        // The PC movie/stream audio player (single movie at a time -> file-static, no header churn).
-
-        // decoded SOUND\STREAMS\<video>.SNS in the GUI and played it on its own XAudio2
-        // instance. The console plays a movie's sound as the sound module's MENU stream
-        // instead -- GuiModule::Update @0x82527A58 posts the VideoDefinition's sound-stream
-        // name (GuiEventPlayMusicOnMenuStream) when this manager reaches REQUESTING_AUDIO,
-        // MusicEffect queues it on slot 12 and answers GuiOut 504 -- and that path is now
-        // live (see Update's PREPARING arm). With the stand-in on, both would play.
-        char                    g_acSoundStreamPath[260] = { 0 };
-
         // The DEFAULT VIDEO SOUND NAME that VideoDefinition::Prepare seeds +0x18 from.
         // It is mutable data on the console, and its image initialiser is 0. Its ONE
         // writer is the static-initialiser thunk, whose whole body is
@@ -119,8 +79,8 @@ namespace BrnGui
     // name; and the two crossfades are +0x1C/+0x20. See the header for the full store list.
     void MovieManager::VideoDefinition::Prepare()
     {
-        mafRectangle[0] = 0.0f; mafRectangle[1] = 0.0f;
-        mafRectangle[2] = 1.0f; mafRectangle[3] = 1.0f;
+        mv4Rectangle.x = 0.0f; mv4Rectangle.y = 0.0f;
+        mv4Rectangle.z = 1.0f; mv4Rectangle.w = 1.0f;
         // zero-extended, matching the console's `clrldi r3,r11,32` tail (see BrnBootVideos).
         mVideoResourceId = static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
             reinterpret_cast<const u8*>(""))));   // the "" literal @0x820046A7
@@ -140,11 +100,10 @@ namespace BrnGui
     void MovieManager::VideoDefinition::Copy(const VideoDefinition* lpOther)
     {
         CGS_ASSERT(lpOther != 0, "null src defined");
-        if (lpOther == 0) return;
-        mafRectangle[0] = lpOther->mafRectangle[0];
-        mafRectangle[1] = lpOther->mafRectangle[1];
-        mafRectangle[2] = lpOther->mafRectangle[2];
-        mafRectangle[3] = lpOther->mafRectangle[3];
+        mv4Rectangle.x = lpOther->mv4Rectangle.x;
+        mv4Rectangle.y = lpOther->mv4Rectangle.y;
+        mv4Rectangle.z = lpOther->mv4Rectangle.z;
+        mv4Rectangle.w = lpOther->mv4Rectangle.w;
         mVideoResourceId = lpOther->mVideoResourceId;
         mSoundStreamName = lpOther->mSoundStreamName;
         miCrossfadeInFrames = lpOther->miCrossfadeInFrames;
@@ -164,166 +123,28 @@ namespace BrnGui
     // they are intentionally not fabricated here -- only the deterministic car-pool seeding is reproduced.
     MovieManager::MovieManager()
     {
-        miMoveMemoryReleaseDelay  = 0;
-        muFirstCollisionBlockAddress = 0;
-        muNumCollisionBlocks      = 0;
-        mbUsesXMPMusic            = false;
-        mbStopVideoStraightAway   = false;
-        macMovieNameBuffer[0]     = 0;
-        mpcLanguageCode           = 0;
-        mapPoolBacking[0]         = 0;
-        mapPoolBacking[1]         = 0;
-        mapPoolBacking[2]         = 0;
-        mbBundleLoaded            = false;
-
-        // Car-pool memory descriptor: asm seeds all three pools to {base=0, size=0, alignment=1}
-        // (+0xDB0..+0xDD0). SmallResource/ResourceDescriptor have no zero-init, so do it explicitly.
-        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-        {
-            mCarPoolResource.m_baseResources[lt] = 0;
-            mCarPoolResourceDescriptor.m_baseResourceDescriptors[lt].m_size      = 0;
-            mCarPoolResourceDescriptor.m_baseResourceDescriptors[lt].m_alignment = 1;
-        }
+        // ARTIST827DEFF0 initializes only the resource/descriptor owners here;
+        // the state machine is initialized by Construct, then Prepare.
+        for (u32 li = 0; li < CgsResource::E_MEMTYPE_NUMTYPES; ++li)
+            mCarPoolResource.m_baseResources[li] = 0;
     }
 
     // ---- lifecycle (ARTIST Construct 0x824F9598 / Prepare 0x82514780) --------------------------------
     void MovieManager::Construct()
     {
-        miMoveMemoryReleaseDelay = 0;
-        // PC synchronous VIDEOLIST.BUNDLE storage is manager-owned, not GameDataModule pool 11.
-        mMoviePool.Construct();
+        // ARTIST824F9598, in original order. Do not seed host-only movie/audio state.
+        mResourceAllocatorResource.m_baseResources[0] = 0;
         mMoviePlayer.Construct();
-        mResourceAllocatorResource = rw::Resource();
-        mAllocator.Construct();
-        if (MovieAudioPcLeafEnabled())
-            g_movieAudio.Construct();               g_acSoundStreamPath[0] = 0;
         mPlayingMovie.Prepare();
         mQueuedMovie.Prepare();
         mReceiverQueue.Construct();
+        mAllocator.Construct();
         meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
         meCarPoolState = E_CARPOOLSTATE_VALID;
-        meLanguage = 0;                     // English
-        mbUsesXMPMusic = false;
-        mbStopVideoStraightAway = false;
-        macMovieNameBuffer[0] = 0;
-        mpcLanguageCode = 0;
-        muFirstCollisionBlockAddress = 0;
-        muNumCollisionBlocks = 0;
-        mapPoolBacking[0] = 0;
-        mapPoolBacking[1] = 0;
-        mapPoolBacking[2] = 0;
-        mbBundleLoaded = false;
         meState = E_MOVIEMANAGERSTATE_CONSTRUCTED;
     }
 
-    // [PC IO] Load VIDEOS\VIDEOLIST.BUNDLE synchronously into mMoviePool via CgsResource::BundleLoader
-    // + Pool (the X360 streams it asynchronously via the GameDataModule). Pool sizing over-reserves
-    // (safe; the VideoData metadata is small).
-    bool MovieManager::LoadVideoListBundle()
-    {
-        if (mbBundleLoaded)
-            return true;
-
-        CgsResource::RegisterAllResourceTypes();
-
-        const u32 KU_POOL_BYTES = 1u * 1024u * 1024u;
-        mapPoolBacking[0] = malloc(KU_POOL_BYTES);
-        mapPoolBacking[1] = malloc(KU_POOL_BYTES);
-        mapPoolBacking[2] = malloc(KU_POOL_BYTES);
-        if (mapPoolBacking[0] == 0 || mapPoolBacking[1] == 0 || mapPoolBacking[2] == 0)
-        {
-            for (u32 li = 0; li < 3; ++li) { free(mapPoolBacking[li]); mapPoolBacking[li] = 0; }
-            return false;
-        }
-
-        CgsResource::Pool::InitOptions lOptions;
-        lOptions.miId = 1;
-        lOptions.mpcName = "MovieData";
-        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-        {
-            lOptions.maHeapInfo[lt].muMaxNodes       = 64u;
-            lOptions.maHeapInfo[lt].muHeapMemorySize = KU_POOL_BYTES - 64u * 1024u;
-            lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
-            lOptions.mResource.m_baseResources[lt]   = mapPoolBacking[lt];
-            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_POOL_BYTES;
-            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
-        }
-        lOptions.muMaxResources         = 64u;
-        lOptions.muMaxImports           = 64u;
-        lOptions.miRefCountThreshold    = 0;
-        lOptions.miNumDependencies      = 0;
-        lOptions.miBankId               = 0;
-        lOptions.mbAllowDefragmentation = false;
-        mMoviePool.InitPool(&lOptions);
-
-        CgsResource::BundleLoader lLoader;
-        const s32 liLoaded = lLoader.LoadBundle("VIDEOS/VIDEOLIST.BUNDLE", &mMoviePool,
-                                                CgsResource::ResolveResourceType);
-        CgsDev::Log::WriteToLog(liLoaded >= 0
-            ? "[MovieManager] VIDEOS/VIDEOLIST.BUNDLE load completed.\n"
-            : "[MovieManager] VIDEOS/VIDEOLIST.BUNDLE missing/unreadable -> no videos available.\n");
-        mbBundleLoaded = (liLoaded >= 0);
-        return mbBundleLoaded;
-    }
-
-    // [PC IO] Resolve the VideoDataResource for luResId out of the loaded bundle (the X360 waits for the
-    // async EVENT_ACQUIRERESOURCE; the PC port looks it up in the pool synchronously).
-    //
-    // ⭐ THE TYPE-SCAN FALLBACK IS GONE, 2026-08-16 (boot audit F-P8b-3). This used to fall
-    // back to `FindFirstResourceOfType(E_RESOURCETYPE_VIDEODATA)` when the id lookup missed.
-    // There is no console analogue -- the acquire is strictly BY HANDLE: the queued 64-bit
-    // hash comes back from PendingVideoDataResourceRequest @0x824F7808 (which asserts
-    // IsMovieQueued) and goes straight into CreateFromHandle @0x82507DD4; no type scan
-    // exists anywhere in the image. The fallback did not make a miss survivable, it made it
-    // INVISIBLE: an id-scheme mismatch silently bound and played the WRONG video, which is
-    // exactly the class of bug the boot-video work kept chasing. A miss now fails, loudly.
-    bool MovieManager::AcquireVideoDataResource(u64 luResId)
-    {
-        if (!mbBundleLoaded)
-            return false;
-
-        s32 liIndex = -1;
-        CgsResource::ID lId;
-        lId.SetHash(luResId);
-        CgsResource::Entry* lpEntry = mMoviePool.FindResource(lId, false, static_cast<u16>(0xFFFF), &liIndex);
-        {
-            char lac[96];
-            std::snprintf(lac, sizeof(lac), "[MovieManager] acquire id=0x%016llX entry=%s idx=%d\n",
-                          static_cast<unsigned long long>(luResId),
-                          (lpEntry ? "found" : "NOT FOUND"), liIndex);
-            CgsDev::Log::WriteToLog(lac);
-        }
-        if (lpEntry == 0)
-            return false;
-
-        void* lpResource = lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
-        if (lpResource == 0)
-        {
-            CgsDev::Log::WriteToLog("[MovieManager] acquire: entry has no main-memory resource\n");
-            return false;
-        }
-        void* lpVoid = lpResource;
-        mpVideoDataResource.SetResource(&lpVoid);
-        return true;
-    }
-
-    bool MovieManager::Prepare(s32 leLanguage)
-    {
-        meLanguage = leLanguage;
-        if (meState == E_MOVIEMANAGERSTATE_CONSTRUCTED || meState == E_MOVIEMANAGERSTATE_RELEASED)
-        {
-            // [PC IO] X360 issues an async LoadBundleRequest for VIDEOS\VIDEOLIST.BUNDLE and waits for the
-            // GameDataModule's LoadBundleResponse; the PC port loads it synchronously here (same path as the
-            // debug font). The manager goes IDLE either way -- if the bundle is missing, no videos resolve.
-            LoadVideoListBundle();
-            mPlayingMovie.Prepare();
-            mQueuedMovie.Prepare();
-            meState = E_MOVIEMANAGERSTATE_IDLE;
-        }
-        return meState == E_MOVIEMANAGERSTATE_IDLE;
-    }
-
-    // ARTIST82514780. The original I/O overload remains unselected by the PC host Prepare.
+    // ARTIST82514780: publish one load request, then wait for its receiver reply.
     bool MovieManager::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput,
         const BrnResource::GameDataIO::OutputBuffer*, CgsLanguage::ELanguage leLanguage)
     {
@@ -342,7 +163,7 @@ namespace BrnGui
             lRequest.miPoolId = 11;
             lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(&lRequest, 2);
         }
-            [[fallthrough]];
+            // Fall through: the same call may consume an already-delivered reply.
         case E_MOVIEMANAGERSTATE_PREPARING_LOADING_BUNDLE:
             meState = E_MOVIEMANAGERSTATE_PREPARING_LOADING_BUNDLE;
             if (mReceiverQueue.GetLength() < 1)
@@ -358,10 +179,10 @@ namespace BrnGui
         default:
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Unhandled state [" << static_cast<s32>(meState)
                     << "] in MovieManager::Prepare";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 155);
             CgsDev::Assert::EndAssert();
             return false;
@@ -371,54 +192,16 @@ namespace BrnGui
 
     bool MovieManager::Release()
     {
-        if (!mMoviePlayer.Release())
-            return false;
-        if (mResourceAllocatorResource.m_baseResources[0] != 0)
-        {
-            mAllocator.Release();
-            DestroyMemoryResourceAndDescriptor();
-        }
-        if (MovieAudioPcLeafEnabled())
-            g_movieAudio.Release();                mPlayingMovie.Release();
-        mQueuedMovie.Release();
-        mReceiverQueue.Clear(); // Retain the selected host Release queue drain with its real receiver.
-        mpVideoDataResource.SetResource(0);
-        if (mapPoolBacking[0] != 0)
-        {
-            if (mbBundleLoaded)
-            {
-                CgsResource::BundleLoader lLoader;
-                if (lLoader.UnloadBundle("VIDEOS/VIDEOLIST.BUNDLE", &mMoviePool) < 0)
-                    return false;
-                mbBundleLoaded = false;
-            }
-
-            CgsResource::SmallResource lPoolResource = {};
-            CgsResource::Entry::ResourceDescriptor lPoolDescriptor = {};
-            if (!mMoviePool.Invalidate(&lPoolResource, &lPoolDescriptor))
-                return false;
-
-            mMoviePool.ResetPool();
-            mMoviePool.Construct();
-            for (u32 li = 0; li < 3; ++li)
-            {
-                if (mapPoolBacking[li] != 0) { free(mapPoolBacking[li]); mapPoolBacking[li] = 0; }
-            }
-        }
-        mbBundleLoaded = false;
-        meState = E_MOVIEMANAGERSTATE_RELEASED;
+        // Original inline lifecycle: ARTIST GuiModule::Release stage9
+        // (824F93xx) advances without a movie call or movie-member store.
+        // The movie state machine owns asynchronous player/memory release.
         return true;
     }
 
     void MovieManager::Destruct()
     {
-        mMoviePlayer.Destruct();
-        if (mResourceAllocatorResource.m_baseResources[0] != 0)
-        {
-            mAllocator.Destruct();
-            DestroyMemoryResourceAndDescriptor();
-        }
-        meState = E_MOVIEMANAGERSTATE_DESTRUCTED;
+        // Original inline lifecycle; ARTIST82507690 performs no MovieManager
+        // teardown. Its embedded C++ owners retain their normal destructors.
     }
 
     // ---- events (ARTIST RecvEvent 0x824F9688: 504 audio / 508 play / 509 stop) -----------------------
@@ -445,10 +228,10 @@ namespace BrnGui
     void MovieManager::HandlePlayVideoEvent(const GuiEventPlayVideo* lpEv)
     {
         if (lpEv == 0) return;
-        mQueuedMovie.mafRectangle[0] = lpEv->mafRectangle[0];
-        mQueuedMovie.mafRectangle[1] = lpEv->mafRectangle[1];
-        mQueuedMovie.mafRectangle[2] = lpEv->mafRectangle[2];
-        mQueuedMovie.mafRectangle[3] = lpEv->mafRectangle[3];
+        mQueuedMovie.mv4Rectangle.x = lpEv->mafRectangle[0];
+        mQueuedMovie.mv4Rectangle.y = lpEv->mafRectangle[1];
+        mQueuedMovie.mv4Rectangle.z = lpEv->mafRectangle[2];
+        mQueuedMovie.mv4Rectangle.w = lpEv->mafRectangle[3];
         mQueuedMovie.mVideoResourceId = lpEv->muVideoResourceId;
         // ⭐ the sound name rides across with the id (boot audit F-P8b-5/F-P8b-6): the
         // producer fills it, so the queued definition has to carry it or the whole point of
@@ -491,10 +274,10 @@ namespace BrnGui
         default:
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lStream(lMessage.GetBuffer(), lMessage.GetSize());
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid state " << static_cast<s32>(meState)
                     << " when requesting video stop";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 740);
             CgsDev::Assert::EndAssert();
             break;
@@ -505,8 +288,7 @@ namespace BrnGui
     // ---- collision-world / car-pool state requests (ARTIST-faithful) ---------------------------------
     // These four only flip the state to the transitional value (INVALIDATE/VALIDATE); the X360 subsystem
     // (collision-world swap-out / car-pool free) then advances it to INVALID/VALID asynchronously. The PC
-    // build has no live collision/car-pool subsystem yet, so Update() completes those transitions itself
-    // (marked [stub-complete]) -- but the request functions themselves are reconstructed exactly per the asm.
+    // replies advance the state only after the corresponding resource operation completes.
 
     // ARTIST @0x824EADF8: asserts the collision world is currently VALID(0), then requests INVALIDATE(1).
     void MovieManager::RequestInvalidationOfCollisionWorld()
@@ -581,17 +363,23 @@ namespace BrnGui
 
     bool MovieManager::PrepareMovieAllocator()
     {
+        // ARTIST82507E38..8C: use the returned car-pool storage. The physical
+        // region starts at lane1; the main heap follows its first16MiB.
         if (mResourceAllocatorResource.m_baseResources[0] == 0)
         {
-            mDescriptor = rw::ResourceDescriptor();
-            // ARTIST 82507E48/7C: the main heap is sixteen MiB, aligned to 128.
+            mResourceAllocatorResource.m_baseResources[0] = mCarPoolResource.m_baseResources[0];
+            mResourceAllocatorResource.m_baseResources[1] = 0;
+            mResourceAllocatorResource.m_baseResources[2] = mCarPoolResource.m_baseResources[1];
+            mResourceAllocatorResource.m_baseResources[3] = 0;
+            mResourceAllocatorResource.m_baseResources[4] = 0;
             mDescriptor.m_baseResourceDescriptors[0].m_size = 0x1000000;
             mDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
-            if (mResourceAllocatorResource.m_baseResources[0] == 0)
-                return false;
+            mDescriptor.m_baseResourceDescriptors[2].m_size =
+                mCarPoolResourceDescriptor.m_baseResourceDescriptors[1].m_size;
+            mDescriptor.m_baseResourceDescriptors[2].m_alignment = 128;
+            mResourceAllocatorResource.m_baseResources[0] =
+                static_cast<u8*>(mCarPoolResource.m_baseResources[1]) + 0x1000000;
         }
-        // Reconstructing the real retained arena is the other native GPU
-        // disposal boundary. Decoder release leaves these four owners intact.
         return mAllocator.Prepare(mResourceAllocatorResource, mDescriptor);
     }
 
@@ -656,8 +444,8 @@ namespace BrnGui
         mQueuedMovie.Prepare();
         std::memset(macMovieNameBuffer, 0, sizeof(macMovieNameBuffer));
 
-        mMoviePlayer.SetRectangle(mPlayingMovie.mafRectangle[0], mPlayingMovie.mafRectangle[1],
-                                  mPlayingMovie.mafRectangle[2], mPlayingMovie.mafRectangle[3]);
+        mMoviePlayer.SetRectangle(mPlayingMovie.mv4Rectangle.x, mPlayingMovie.mv4Rectangle.y,
+                                  mPlayingMovie.mv4Rectangle.z, mPlayingMovie.mv4Rectangle.w);
         mMoviePlayer.SetCrossfade(mPlayingMovie.miCrossfadeInFrames, mPlayingMovie.miCrossfadeOutFrames);
 
         // The original .data pointers resolve to these exact code strings. The language table below
@@ -728,193 +516,128 @@ namespace BrnGui
     // ---- the state machine (ARTIST Update 0x82507A98), single-step per call --------------------------
     void MovieManager::Update()
     {
-        // [stub-complete] On the X360 the collision-world swap-out / car-pool free subsystem advances the
-        // transitional INVALIDATE(1)->INVALID(3) and VALIDATE(4)->VALID(0) states asynchronously. The PC
-        // build has no live collision/car-pool subsystem yet, so the request is treated as completing
-        // immediately here -- the Request* helpers themselves are reconstructed exactly per the ARTIST asm
-        // (they set only the transitional state); this block stands in for the missing subsystem's reply.
-        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALIDATE)
-            meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALID;
-        else if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALIDATE)
-            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
-        if (meCarPoolState == E_CARPOOLSTATE_INVALIDATE)
-            meCarPoolState = E_CARPOOLSTATE_INVALID;
-        else if (meCarPoolState == E_CARPOOLSTATE_VALIDATE)
-            meCarPoolState = E_CARPOOLSTATE_VALID;
-
+        // ARTIST82507A98. Requests are completed only by their native receiver;
+        // several transitions deliberately continue in this same update.
         switch (meState)
         {
         case E_MOVIEMANAGERSTATE_CONSTRUCTED:
-        case E_MOVIEMANAGERSTATE_PREPARED:
-        case E_MOVIEMANAGERSTATE_REQUESTING_AUDIO:   // [stub: audio request issued externally]
-        case E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO:  // advanced by the 504 event
-        case E_MOVIEMANAGERSTATE_REPORTING_FINISHED: // terminal; the GUI flow resets us to IDLE
-            break;
-
+        case E_MOVIEMANAGERSTATE_REQUESTING_AUDIO:
+        case E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO:
+            return;
         case E_MOVIEMANAGERSTATE_STOP_MOVIE:
             mMoviePlayer.Stop();
-            if (MovieAudioPcLeafEnabled())
-                g_movieAudio.Stop();                   meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
-            break;
-
+            meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
+            // Fall through.
         case E_MOVIEMANAGERSTATE_PLAYING_MOVIE:
-            mMoviePlayer.Update();
-            if (mMoviePlayer.IsFinished())
-            {
-                // [stub: XMPRestoreBackgroundMusic]
-                meState = E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER;
-            }
-            break;
-
+            if (meState == E_MOVIEMANAGERSTATE_PLAYING_MOVIE)
+                mMoviePlayer.Update();
+            if (!mMoviePlayer.IsFinished())
+                return;
+            if (mPlayingMovie.mbDisableCustomSoundtracks)
+                CGS_ASSERT(XMPRestoreBackgroundMusic() == ERROR_SUCCESS,
+                           "XMPRestoreBackgroundMusic() == ERROR_SUCCESS");
+            meState = E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER;
+            // Fall through.
         case E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER:
             if (!mMoviePlayer.Release())
-                break;
-            if (MovieAudioPcLeafEnabled())
-                g_movieAudio.Stop();                   mAllocator.Release(); // ARTIST 82507BB4..BBC4, not arena destruction.
-            if (mPlayingMovie.mbKeepMemoryWhenFinished) // original +0xD30 +0x25 == +0xD55.
-            {
+                return;
+            mAllocator.Release();
+            if (mPlayingMovie.mbKeepMemoryWhenFinished)
                 meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
-            }
             else
             {
                 miMoveMemoryReleaseDelay = 10;
                 meState = E_MOVIEMANAGERSTATE_DELAYING_RETURN_OF_MEMORY;
             }
-            break;
-
+            return;
         case E_MOVIEMANAGERSTATE_DELAYING_RETURN_OF_MEMORY:
             if (--miMoveMemoryReleaseDelay > 0)
-                break;
+                return;
             DestroyMemoryResourceAndDescriptor();
             miMoveMemoryReleaseDelay = 10;
             meState = E_MOVIEMANAGERSTATE_DELAYING_VALIDATE;
-            break;
-
+            // Fall through: the first validation delay tick occurs now.
         case E_MOVIEMANAGERSTATE_DELAYING_VALIDATE:
             if (--miMoveMemoryReleaseDelay > 0)
-                break;
-            RequestValidationOfCollisionWorldState();   // [stub] restore collision world
-            RequestValidationOfCarPool();               // [stub] restore car pool
-            meState = E_MOVIEMANAGERSTATE_RETURNING_MEMORY;
-            break;
-
+                return;
+            RequestValidationOfCollisionWorldState();
+            RequestValidationOfCarPool();
+            // Fall through.
         case E_MOVIEMANAGERSTATE_RETURNING_MEMORY:
-            if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALID && meCarPoolState == E_CARPOOLSTATE_VALID)
-                meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
-            break;
-
+            meState = E_MOVIEMANAGERSTATE_RETURNING_MEMORY;
+            if (meCollisionWorldState != E_COLLISIONWORLDSTATE_VALID ||
+                meCarPoolState != E_CARPOOLSTATE_VALID)
+                return;
+            // Fall through.
+        case E_MOVIEMANAGERSTATE_REPORTING_FINISHED:
+            meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
+            return;
         case E_MOVIEMANAGERSTATE_IDLE:
-            if (IsMovieQueued())
+            meState = E_MOVIEMANAGERSTATE_IDLE;
+            if (!IsMovieQueued())
+                return;
+            if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALID ||
+                meCarPoolState != E_CARPOOLSTATE_INVALID)
             {
-                if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALID ||
-                    meCarPoolState != E_CARPOOLSTATE_INVALID)
-                {
-                    RequestInvalidationOfCollisionWorld();   // [stub] free collision world for the movie
-                    RequestInvalidationOfCarPool();          // [stub] free car pool
-                }
-                meState = E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE;
+                RequestInvalidationOfCollisionWorld();
+                RequestInvalidationOfCarPool();
             }
-            break;
-
+            // Fall through. GuiModule::PreWorldUpdate owns publication of the request.
         case E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE:
-            // On the X360 the GuiModule's PreWorldUpdate polls PendingVideoDataResourceRequest() to obtain
-            // the resource ID + advance to WAITING_FOR_MOVIEDATARESOURCE, then issues the acquire. The PC
-            // build drives that poll here (the GuiModule bridge isn't wired yet); the call advances state.
-            PendingVideoDataResourceRequest();
-            break;
-
+            meState = E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE;
+            return;
         case E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE:
-            // [PC IO] X360 waits for the async EVENT_ACQUIRERESOURCE (KI_VIDEO_DATA_RESOURCE_EVENT_ID
-            // 0x1AFFEED) then mpVideoDataResource.CreateFromHandle(handle). The PC port resolves it
-            // synchronously out of the loaded VIDEOLIST.BUNDLE pool (the debug-font pattern).
-            if (AcquireVideoDataResource(mQueuedMovie.mVideoResourceId))
-                meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY;
-            else
-                meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;   // not in the bundle -> skip this video
-            break;
-
-        case E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY:
-            if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALID &&
-                meCarPoolState == E_CARPOOLSTATE_INVALID)
-            {
-                const bool lbPrepared = PrepareMovieAllocator();
-                CGS_ASSERT(lbPrepared, "mAllocator.Prepare(mResourceAllocatorResource, mDescriptor)");
-                if (!lbPrepared)
-                    break;
-                QueueNextMovie();
-                // QueueNextMovie body but at its selected PC caller. BuildMoviePath writes the
-                // exact "VIDEOS\\" prefix and copies the selected VideoFile::GetName verbatim,
-                // so this offset recovers that same selected name without a localized-audio
-                // filename rule. Decode/load before the later MoviePlayer::Prepare/Play step,
-                // preserving the old audio-before-video-clock ordering.
-                const char* const lpcSelectedVideoFileName =
-                    macMovieNameBuffer + (sizeof("VIDEOS\\") - 1u);
-                BuildSoundStreamPath(g_acSoundStreamPath, sizeof(g_acSoundStreamPath),
-                                     lpcSelectedVideoFileName);
-                if (MovieAudioPcLeafEnabled())
-                    g_movieAudio.Load(g_acSoundStreamPath);
-                {
-                    char lac[300];
-                    std::snprintf(lac, sizeof(lac), "[MovieManager] QueueNextMovie: file '%s' (audio '%s')\n",
-                                  macMovieNameBuffer, g_acSoundStreamPath);
-                    CgsDev::Log::WriteToLog(lac);
-                }
-                meState = E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER;
-            }
-            break;
-
-        case E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER:
         {
-            const bool lbPrepared = mMoviePlayer.Prepare(&mAllocator, macMovieNameBuffer, mpcLanguageCode);
-            char lac[64];
-            std::snprintf(lac, sizeof(lac), "[MovieManager] MoviePlayer.Prepare = %d\n", lbPrepared ? 1 : 0);
-            CgsDev::Log::WriteToLog(lac);
-            if (lbPrepared)
-            {
-                if (mbStopVideoStraightAway)
-                {
-                    meState = E_MOVIEMANAGERSTATE_STOP_MOVIE;
-                }
-                else
-                {
-                    mMoviePlayer.Play();
-                    // X360 @0x82507A98 LABEL_48: Play(), then REQUESTING_AUDIO(5). The GuiModule's
-                    // Update (@0x82527A58, its 5 -> 6 arm) posts this video's sound-stream name to
-                    // the sound module as the MENU stream (GuiEventPlayMusicOnMenuStream) and moves
-                    // the manager to WAITING_FOR_AUDIO(6); MusicEffect queues it on slot 12 and
-                    // answers GuiOut 504 as soon as that voice's stage is settled (UpdateParams
-                    // case 12), which RecvEvent turns into PLAYING(7). Then
-                    //     if (mbUsesXMPMusic) XMPOverrideBackgroundMusic();       // X360 dashboard music
-                    //     else if (MusicEffect::IsCustomSoundtrackActive()) state = PLAYING(7);
-                    meState = E_MOVIEMANAGERSTATE_REQUESTING_AUDIO;
-                    if (MovieAudioPcLeafEnabled())
-                    {
-                        if (g_movieAudio.IsLoaded())
-                            g_movieAudio.Start();
-                        meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
-                    }
-                    else if (!mbUsesXMPMusic && BrnSound::Logic::MusicEffect::IsCustomSoundtrackActive())
-                    {
-                        meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
-                    }
-                }
-            }
+            meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE;
+            CGS_ASSERT(IsMovieQueued(), "IsMovieQueued()");
+            if (mReceiverQueue.GetLength() == 0)
+                return;
+            CGS_ASSERT(mReceiverQueue.GetLength() == 1, "mReceiverQueue.GetLength() == 1");
+            const CgsModule::Event* lpEvent = 0;
+            s32 liEventSize;
+            const s32 liEventId = mReceiverQueue.GetFirstEvent(&lpEvent, &liEventSize);
+            CGS_ASSERT(lpEvent != 0, "lpEvent");
+            CGS_ASSERT(liEventId == 4, "liEventId == CgsResource::ResourceIO::EVENT_ACQUIRERESOURCE");
+            const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpAcquire->miEventId == KI_VIDEO_DATA_RESOURCE_EVENT_ID,
+                       "KI_VIDEO_DATA_RESOURCE_EVENT_ID == lpAcquire->GetEventId()");
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lHandle.mpSourceEntry = lpAcquire->mpSourceEntry;
+            mpVideoDataResource = lHandle;
+            mReceiverQueue.Clear();
+        }
+            // Fall through.
+        case E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY:
+            CGS_ASSERT(IsMovieQueued(), "IsMovieQueued()");
+            meState = E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY;
+            if (meCollisionWorldState != E_COLLISIONWORLDSTATE_INVALID ||
+                meCarPoolState != E_CARPOOLSTATE_INVALID)
+                return;
+            CGS_ASSERT(PrepareMovieAllocator(), "mAllocator.Prepare(mResourceAllocatorResource, mDescriptor)");
+            QueueNextMovie();
+            meState = E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER;
+            // Fall through.
+        case E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER:
+            if (!mMoviePlayer.Prepare(&mAllocator, macMovieNameBuffer, mpcLanguageCode))
+                return;
+            if (mbStopVideoStraightAway)
+                meState = E_MOVIEMANAGERSTATE_STOP_MOVIE;
             else
             {
-                // [diag] the (synchronous) player open failed -> skip rather than spin/retry every frame.
-                // stream before MoviePlayer::Prepare; release it on the skip exactly as the finished
-                // path does, or the never-started stream pins the voice (g_finished stays false)
-                // and the menu-music stream can never reclaim the output afterwards -- the
-                // "menu music stops for good after the first missing-attract skip" fault.
-                if (MovieAudioPcLeafEnabled())
-                    g_movieAudio.Stop();
-                meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
+                mMoviePlayer.Play();
+                meState = E_MOVIEMANAGERSTATE_REQUESTING_AUDIO;
             }
-            break;
-        }
-
+            if (mPlayingMovie.mbDisableCustomSoundtracks)
+                CGS_ASSERT(XMPOverrideBackgroundMusic() == ERROR_SUCCESS,
+                           "XMPOverrideBackgroundMusic() == ERROR_SUCCESS");
+            else if (BrnSound::Logic::MusicEffect::IsCustomSoundtrackActive())
+                meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
+            return;
         default:
-            break;
+            CGS_ASSERT(false, "Unhandled state");
+            return;
         }
     }
 

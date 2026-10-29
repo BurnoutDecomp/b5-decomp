@@ -17,9 +17,10 @@ namespace BrnGui
         mMainAllocator.Construct(lResource.m_baseResources[0],
             static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_size));
         miMainAlignment = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_alignment);
-        if (lDescriptor.m_baseResourceDescriptors[2].m_size != 0)
-        {
-        }
+        // ARTIST824F97C8..97DC always creates the graphics arena, including
+        // a zero-length region, before setting its requested alignment.
+        mGraphicsAllocator.Create(lResource.m_baseResources[2],
+            lDescriptor.m_baseResourceDescriptors[2].m_size);
         mGraphicsAllocator.SetAlignment(lDescriptor.m_baseResourceDescriptors[2].m_alignment);
         return true;
     }
@@ -55,7 +56,7 @@ namespace BrnGui
     void MovieAllocator::DoFree(const rw::Resource& lrResource)
     {
         CGS_ASSERT(lrResource.m_baseResources[2] == 0,
-                   "lResource.GetPhysicalMemoryResource() == NULL");
+                   "lResource.GetPhysicalMemoryResource() == 0");
         CGS_ASSERT(lrResource.m_baseResources[0] != 0, "lResource.GetMemoryResource()");
         mMainAllocator.Free(lrResource.m_baseResources[0]);
     }
