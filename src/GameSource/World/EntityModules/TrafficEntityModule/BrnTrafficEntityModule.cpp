@@ -15137,8 +15137,9 @@ void TrafficEntityModule::PrecalculateAvoidanceFeelerData()
 //                           : lfCrossResultSq * recip(lfLineLengthSq)   (vcmpeqfp / vsel)
 //   0x82708E40..0x82708E6C  vrsqrtefp + two Newton steps ; sqrt as lfResult * rsqrt, and 0 for a
 //                           zero lfResult (vcmpeqfp / vsel)
-// Unsigned: the squared cross product loses the side. FLAG (VMX->portable): the console's sqrt is
-// x * rsqrt(x), a NaN for x == +inf where std::sqrt gives +inf.
+// Unsigned: the squared cross product loses the side. Keep the original one reciprocal and
+// two reciprocal-root refinements plus x*rsqrt(x); both zero selections are original vsel operations.
+// The existing arithmetic helpers model the estimate seed; hardware/exception flags remain unproved.
 // --------------------------------------------------------------------------------------------
 VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 lStart, Vector2 lVel)
 {
@@ -15147,10 +15148,12 @@ VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 
     const f32 lfCrossResultSq = lfCross * lfCross;
     const f32 lfStartLengthSq = lStart.x * lStart.x + lStart.y * lStart.y;
 
-    const f32 lfResult = (lfLineLengthSq == 0.0f) ? lfStartLengthSq
-                                                  : lfCrossResultSq * (1.0f / lfLineLengthSq);
-
-    return SplatDrive((lfResult == 0.0f) ? 0.0f : std::sqrt(lfResult));
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    const f32 lfReciprocal = Vmx::RefinedReciprocal(lfLineLengthSq, 1);
+    const f32 lfProjectedResult = lfCrossResultSq * lfReciprocal;
+    const f32 lfResult = lfLineLengthSq == 0.0f ? lfStartLengthSq : lfProjectedResult;
+    const f32 lfRoot = lfResult * Vmx::RefinedReciprocalSqrt(lfResult, 2);
+    return SplatDrive(lfResult == 0.0f ? 0.0f : lfRoot);
 }
 
 // --------------------------------------------------------------------------------------------
