@@ -28,8 +28,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"      // DeviceManager, Handle
 
-// Platform critical-section init (declared exactly as the sibling stream TUs do).
-extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
+#include <xtl.h> // original native critical-section declarations
 
 namespace BrnReplays
 {
@@ -72,7 +71,7 @@ namespace BrnReplays
 
         // The owning ReplayModule's constructor inlines this: initialise the stream's critical
         // section (RtlInitializeCriticalSection on the mutex at object offset 0).
-        DiskReadStream() { RtlInitializeCriticalSection(mMutex); }
+        DiskReadStream() { RtlInitializeCriticalSection(reinterpret_cast<PRTL_CRITICAL_SECTION>(mMutex)); }
 
         // ---- lifecycle (reconstructed in their own TUs) ----
         void         Construct();
@@ -141,7 +140,7 @@ namespace BrnReplays
         // mutex's first member). Modelled as an opaque blob reached by name -- same
         // pattern as the sibling GPUDiskWriteStream's lock; the real threading type lands
         // with the mutex layer.
-        CGS_ALIGN(void*) u8 mMutex[40];                        // +0x000
+        CGS_ALIGN(4) u8 mMutex[40];                        // +0x000
         char            macFileName[256];                    // X360 +0x024 stream file name
         char*           mpBuffer;                            // X360 +0x124 ring backing store
         s32             miBufferSize;                        // X360 +0x128
