@@ -112,6 +112,16 @@ namespace CgsSceneManager
         u8 macBuffer[KI_VOLUME_SLOT_SIZE];   // CgsVolumeStore.h:64 (+0x00)
     };
 
+} // namespace CgsSceneManager
+
+namespace CgsContainers
+{
+    // ARTIST SceneManagerModule constructor 0x827E1E30 does not clear this pool.
+    template <> inline ObjectPool<CgsSceneManager::VolumeSlot, 4608, s32>::ObjectPool() {}
+}
+
+namespace CgsSceneManager
+{
     // VolumeStore<N> -- owns the pool of N collision-volume slots. Method bodies live in
     // CgsVolumeStore.cpp with an explicit instantiation for N == 4608 (the only one the
     // X360 build emits).
