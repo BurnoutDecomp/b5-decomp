@@ -31,9 +31,9 @@ namespace rw
 // GetRawResource 0x8252ADF8, GetRawResourceDescriptor 0x8252AFD0, GetRWLinearResourceAllocator
 // 0x822775B8, GetRWGeneralResourceAllocator 0x823F3F98. Each resolves
 // `mapXxx[ maiAllocatorMap[bankId] ]` after asserting `maeAllocatorType[bankId] == <type>`. The
-// array sizes (2/2/7/8/5/5) match the GameDataModule's maGenerated*Allocators members.
-// [x64: pointers are 8 bytes, so byte offsets differ from the X360's 32-bit layout -- members are
-// accessed by name, not by offset.]
+// Native accessor bases are +0x218/+0x220/+0x228/+0x248/+0x26C/+0x280.
+// They prove pointer-array extents 2/2/8/9/5/5; the audio pointer is +0x294.
+// The DecFIGS build has one fewer generated linear and heap allocator.
 namespace BrnResource
 {
     class GameDataModule;   // CreateAllocators/DestroyAllocators populate the registry
@@ -87,8 +87,8 @@ namespace BrnResource
             CgsMemory::MemoryMap::EAllocatorType maeAllocatorType[KI_NUM_BANKS];  // bank id -> allocator type
             rw::Resource*                        mapRawResources[2];
             rw::ResourceDescriptor*              mapRawResourceDescriptors[2];
-            CgsMemory::LinearMalloc*             mapLinearAllocators[7];
-            CgsMemory::HeapMalloc*               mapHeapAllocators[8];
+            CgsMemory::LinearMalloc*             mapLinearAllocators[8];
+            CgsMemory::HeapMalloc*               mapHeapAllocators[9];
             rw::LinearResourceAllocator*         mapRWLinearAllocators[5];
             rw::core::GeneralResourceAllocator*  mapRWGeneralAllocators[5];
             CgsMemory::LinearMalloc*             mpAudioStreamAllocator;

@@ -14,30 +14,23 @@ namespace BrnResource
 {
     namespace GameDataIO
     {
-        // [inferred] The X360 AllocatorList::Construct is inlined into GameDataModule::CreateAllocators
-        // (no standalone body in the export). Its job is to start every bank "unassigned" (map = -1, so
-        // the Get* asserts fire if a bank is used before CreateAllocators registers it) and null every
-        // allocator/resource pointer. CreateAllocators then fills the slots as it builds each allocator.
+        // ARTIST82671D30..82671D58: the inlined owner initialization clears
+        // only the 67 bank-map words and the audio-stream pointer. Allocator
+        // types and pointer tables retain their incoming state until creation.
         void AllocatorList::Construct()
         {
+            CGS_STATIC_ASSERT((sizeof(AllocatorList) == 0x298), "ARTIST allocator registry extent");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, maeAllocatorType) == 0x10C), "ARTIST allocator types");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mapRawResources) == 0x218), "ARTIST raw allocator slots");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mapRawResourceDescriptors) == 0x220), "ARTIST raw descriptors");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mapLinearAllocators) == 0x228), "ARTIST linear allocator slots");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mapHeapAllocators) == 0x248), "ARTIST heap allocator slots");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mapRWLinearAllocators) == 0x26C), "ARTIST RW linear slots");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mapRWGeneralAllocators) == 0x280), "ARTIST RW general slots");
+            CGS_STATIC_ASSERT((offsetof(AllocatorList, mpAudioStreamAllocator) == 0x294), "ARTIST audio allocator slot");
             for (s32 li = 0; li < KI_NUM_BANKS; ++li)
             {
                 maiAllocatorMap[li]  = -1;
-                maeAllocatorType[li] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
-            }
-            for (s32 li = 0; li < 2; ++li)
-            {
-                mapRawResources[li]           = 0;
-                mapRawResourceDescriptors[li] = 0;
-            }
-            for (s32 li = 0; li < 7; ++li)
-                mapLinearAllocators[li] = 0;
-            for (s32 li = 0; li < 8; ++li)
-                mapHeapAllocators[li] = 0;
-            for (s32 li = 0; li < 5; ++li)
-            {
-                mapRWLinearAllocators[li]  = 0;
-                mapRWGeneralAllocators[li] = 0;
             }
             mpAudioStreamAllocator = 0;
         }
