@@ -70,13 +70,7 @@ namespace postfx
             Parameters();
         };
 
-        // The post-fx vertex (Position + UV) the full-screen quad uses; on the console the ctor
-        // uploads three of them into the locked vertex buffer (DWARF
-        // rw::graphics::postfx::Vertex[4], the clip-space unit quad written by the CRT initialiser
-        // at X360 0x82C4F910). On this backend RenderQuad pushes FOUR of them straight into the
-        // immediate-vertex ring instead -- the table is KA_QUAD_STRIP in rwgpfxhelper.cpp and the
-        // deviation is argued at the quad gate there. 20 bytes either way, which the .cpp
-        // static_asserts.
+        // ARTIST uploads three FLOAT3 position / FLOAT2 UV vertices for RECTLIST.
         struct Vertex
         {
             f32 maPosition[3];  // +0x00
@@ -155,14 +149,7 @@ namespace postfx
         // Vector4, which is what `const f32*` reading four lanes spells; the asm agrees (`lvx128 v0,
         // r0, r28` / `stvx128 v0, r0, r11` @0x823FE5FC-600 copies a whole 16-byte row).
         //
-        // The quad is drawn as Xenos D3DPT_RECTLIST with THREE vertices
-        // (`D3DDevice_DrawVertices(dev, 8, 0, 3)` @0x823FE62C-3C) -- three corners of a rectangle,
-        // the GPU infers the fourth -- from the vertex buffer the constructor uploads. D3D9 has no
-        // RECTLIST, so on this backend the SAME rectangle is drawn as the equivalent 4-vertex
-        // TRIANGLESTRIP through D3DDevice_BeginVertices/_EndVertices (the fourth corner is the one
-        // the Xenos hardware infers). That is the one deviation, argued in full at the quad gate in
-        // rwgpfxhelper.cpp; the state binds, the uvOffset constant row and their order are the
-        // console's.
+        // ARTIST dispatches the mesh and draws three D3DPT_RECTLIST vertices.
         void RenderQuad(const f32* lpafUvOffset);
 
         // rwgpfxhelper.h:176 -- the teardown helper Release calls nine times. TWO instantiations
@@ -175,7 +162,7 @@ namespace postfx
         // DepthStencilState is a plain marshalled state block with a trivial (inlined-away) Release,
         // while the seven inlined instantiations (VertexDescriptor / VertexBuffer / MeshHelper /
         // ProgramBuffer) DO emit their vendor Release first. See the ReleaseObject() overload set in
-        // rwgpfxhelper.cpp for how that per-T step is spelled against this tree's PC type vocabulary.
+        // rwgpfxhelper.cpp for the native per-type release calls.
         template< class T > void SafeRelease(T*& lprObject);
 
         // --- SHAPE (DWARF rwgpfxhelper.h:116-150; every offset below is CONFIRMED by the X360
