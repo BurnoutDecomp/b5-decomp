@@ -379,11 +379,8 @@ f32 RaceBalancingManager::ComputeTargetSpeed(GraphType leGraphType, const AICar*
             // multiplier is the max (crash parity FX-AINAN2; the old if/if kept the NaN).
             // 0x827917AC `fmadds f0, f12, f0, f13` = (raceTime - parTime) * 0.1 + 1.0, ONE rounding (ROUNDING_RULE 3;
             // the fsubs at 0x82791790 is rule 4; 0.1 @0x820C424C, 1.0 @0x82001C98).
-#if defined(_XBOX) && defined(_M_PPCBE)
             f32 lfMultiplier = (mfRaceTime - lfTargetTime) * KF_SPEED_DIFFERENCE_MULTIPLIER + 1.0f;
-#else
-            f32 lfMultiplier = std::fmaf(mfRaceTime - lfTargetTime, KF_SPEED_DIFFERENCE_MULTIPLIER, 1.0f);
-#endif
+
             lfMultiplier = ((lfMinMultiplier - lfMultiplier) >= 0.0f) ? lfMinMultiplier : lfMultiplier;
             lfMultiplier = ((lfMaxMultiplier - lfMultiplier) >= 0.0f) ? lfMultiplier : lfMaxMultiplier;
 

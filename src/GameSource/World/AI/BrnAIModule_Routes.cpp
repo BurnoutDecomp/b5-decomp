@@ -88,21 +88,7 @@ namespace
     // not carry 117 yet; DELETE-WHEN it does and use the enumerator.
     const s32 KI_EVENT_PLAYER_ROUTE_UPDATED = 117;
 
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-    const s32 KI_ROUTE_DELIVERY_TOTAL   = 64;
 
-    bool RouteDeliveryWitnessBudget(s32* lpaiPerCar, s32& lriTotal, u16 luEventId)
-    {
-        const u32 luBucket = (luEventId < 35u) ? static_cast<u32>(luEventId) : 35u;
-        if (lriTotal >= KI_ROUTE_DELIVERY_TOTAL || lpaiPerCar[luBucket] >= KI_ROUTE_DELIVERY_PER_CAR)
-        {
-            return false;
-        }
-        ++lriTotal;
-        ++lpaiPerCar[luBucket];
-        return true;
-    }
-#endif
 }
 
 // =================================================================================================
@@ -192,44 +178,19 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
         AICar* lpAICar = GetAICar(lpRouteResponse->GetEventId());
         if (lpAICar == 0)   // [GUARD] GetAICar's PC-only out-of-range bail (see BrnAIModule_ResetPump.cpp)
         {
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-            if (siBadIndexWitness < 4 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siBadIndexWitness;
-            }
-#endif
+
             continue;
         }
 
         if (!lpAICar->IsActive())
         {
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-            if (siInactiveWitness < 8 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siInactiveWitness;
-            }
-#endif
+
             continue;
         }
 
         lpAICar->UpdateRoute(lpRouteResponse->GetRoute(), GetAISectionsData());           // 0x827956FC/0x8279570C
 
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-        {
-            static s32 saiDeliveryWitness[36] = { 0 };
-            static s32 siDeliveryWitnessTotal = 0;
-            if (AIModuleRoutes::RouteDeliveryWitnessBudget(saiDeliveryWitness, siDeliveryWitnessTotal,
-                                                           lpRouteResponse->GetEventId())
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[route] AICar " << static_cast<s32>(lpRouteResponse->GetEventId())
-                    << " received route: nodes " << lpRouteResponse->GetRoute()->GetNodeCount()
-                    << " status " << static_cast<s32>(lpRouteResponse->GetRoute()->GetStatus())
-                    << " nextNode " << lpAICar->GetNextRouteNodeIndex() << "\n";
-            }
-        }
-#endif
+
 
         if (lpAICar->GetOpponentIndex() != -1 && !lpAICar->IsPlayerCar() && lpAICar->mbIsInGameMode)   // 0x82795710..0x82795744
         {

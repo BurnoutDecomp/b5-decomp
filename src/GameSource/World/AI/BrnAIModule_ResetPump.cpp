@@ -204,9 +204,7 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
             lpCar->mPosition = lrResult.GetResetPosition();
             lpCar->SetDirection(lrResult.GetResetDirection());
             // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a reset target (BrnAIHarnessPad.h).
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-            HarnessAIPadNoteReset(static_cast<s32>(lrResult.GetGlobalRaceCarIndex()));
-#endif
+
         }
     }
     const AIModuleIO::AIModuleResultInterface::PlaceOnTrackRequestQueue* lpPlacements = lpResults->GetPlaceOnTrackRequestQueue();
@@ -217,9 +215,7 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
         lpCar->mPosition = lrPlacement.GetResetPosition();
         lpCar->SetDirection(lrPlacement.GetResetDirection());
         // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a re-seated target (BrnAIHarnessPad.h).
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-        HarnessAIPadNoteReset(static_cast<s32>(lrPlacement.GetGlobalRaceCarIndex()));
-#endif
+
     }
 }
 

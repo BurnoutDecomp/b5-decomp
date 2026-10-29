@@ -9,9 +9,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#if defined(_XBOX) && defined(_M_PPCBE)
 #include <vectorintrinsics.h>
-#endif
 #include <cmath>   // std::sqrt (de-SIMD'd 2D normalise), std::isfinite (RwMath::IsValid)
 
 // BrnAI::AIDriver -- the STEERING + CAR-CONTROL link. This TU (BrnAIDriver.cpp + the partfile
@@ -39,7 +37,6 @@
 
 namespace BrnAI
 {
-#if defined(_XBOX) && defined(_M_PPCBE)
     static inline f32 NativeVmxMadd(f32 a, f32 b, f32 c)
     {
         const __vector4 va = { a, a, a, a };
@@ -53,10 +50,7 @@ namespace BrnAI
         const __vector4 vb = { b, b, b, b };
         return __vsubfp(va, vb).x;
     }
-#else
-    static inline f32 NativeVmxMadd(f32 a, f32 b, f32 c) { return std::fmaf(a, b, c); }
-    static inline f32 NativeVmxSub(f32 a, f32 b) { return a - b; }
-#endif
+
     // ====================================================================================
     // TU-LOCAL helpers.
     // ====================================================================================
@@ -831,37 +825,7 @@ namespace BrnAI
 #endif
         }
 
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-        static u32 sauRoadSamples[E_GLOBAL_RACE_CAR_INDEX_COUNT] = {};
-        const s32 liCar = static_cast<s32>(lpCar->GetRaceCarIndex());
-        if (sbRoadTrace && !lpCar->IsPlayerCar() && liCar >= 0 &&
-            liCar < E_GLOBAL_RACE_CAR_INDEX_COUNT &&
-            (++sauRoadSamples[liCar] % 60) == 0 && CgsDev::Log::gpDebugPrint)
-        {
-            s32 liRay = 0;
-            for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
-                if (mSteeringFan.mTarget[liStep].x == lResult.x &&
-                    mSteeringFan.mTarget[liStep].y == lResult.y) liRay = liStep;
-            const Vector3 lPosition = lpCar->GetPosition();
-            const Vector3 lDirection = lpCar->GetDirection();
-            *CgsDev::Log::gpDebugPrint << "[ai-road] car=" << liCar
-                << " pos=" << lPosition.x << "," << lPosition.y << "," << lPosition.z
-                << " dir=" << lDirection.x << "," << lDirection.z
-                << " speed=" << lpCar->GetSpeed() << " behaviour=" << static_cast<s32>(lpCar->meBehaviour)
-                << " target=" << lResult.x << "," << lResult.y
-                << " centreKnown=" << static_cast<s32>(mSteeringFan.mbCentreHereKnown)
-                << " centre=" << mSteeringFan.mCentreHere.x << "," << mSteeringFan.mCentreHere.y
-                << " ahead=" << mSteeringFan.mCentreAhead.x << "," << mSteeringFan.mCentreAhead.y
-                << " section=" << GetRacingLine().miLastKnownSectionID
-                << " ray=" << liRay << " bias=" << static_cast<s32>(mSteeringFan.meBiasMode)
-                << " hng=" << mSteeringFan.mfWeighting[eFan_AvoidHNG][liRay]
-                << "," << mSteeringFan.mfWeighting[eFan_ExitHNG][liRay]
-                << " edge=" << mSteeringFan.mfWeighting[eFan_AvoidEdges][liRay]
-                << " parallel=" << mSteeringFan.mfWeighting[eFan_DriveParallel][liRay]
-                << " stuck=" << mfStuckTime << "\n";
-        }
 
-#endif
 
         return lResult;
     }
@@ -1062,19 +1026,7 @@ namespace BrnAI
         const bool lbForceStandard  = lpCar->ForceStandardRoute();    // lbz 0x1548(car)
         const s32  liBehaviour      = static_cast<s32>(lpCar->meBehaviour);   // lwz 0x14B4(car)
 
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit (BrnAIHarnessPad.h): while the target is inside
-        // the console's slam window, the player's own driver takes the bias this function gives a rival in
-        // ATTACK_SLAM (0x827704EC..0x8277052C: Slam, 2) -- AIAggression::Update never runs for the player's
-        // car (0x82799AC0..0x82799AC8) and IsPlayerProtected refuses every AI victim (0x827660F8..0x82766104),
-        // so the harness makes that one decision; UpdateDrivers stored the target as the victim.
-        if (lbPlayer && gHarnessAIPad.mbArmed && gHarnessAIPad.mbRamming)
-        {
-            mSteeringFan.SetBiasMode(eBiasMode_Slam);
-            return;
-        }
 
-#endif
 
         if (lbPlayer && !lbDrivenByPlayer && (lbForceStandard || liBehaviour == 2))
         {

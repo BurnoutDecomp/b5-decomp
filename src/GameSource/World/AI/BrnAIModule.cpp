@@ -45,7 +45,6 @@ AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int)
     return leOldValue;
 }
 
-#if defined(_XBOX) && defined(_M_PPCBE)
 void AIModule::AssertNativeLayout()
 {
     CGS_STATIC_ASSERT((offsetof(AIModule, maAICars) == 0x230), "maAICars native offset");
@@ -77,7 +76,7 @@ void AIModule::AssertNativeLayout()
     CGS_STATIC_ASSERT((offsetof(AIModule, mpClosestCar) == 0x4ED10), "mpClosestCar native offset");
     CGS_STATIC_ASSERT((sizeof(AIModule) == 0x4ED20), "AIModule native size");
 }
-#endif
+
 
 s32 AIModule::miUpdatePM = 0;
 s32 AIModule::miUpdateCarsPM = 0;
