@@ -37,6 +37,9 @@ namespace BrnResource
 class HeapResourceAllocator : public rw::IResourceAllocator
 {
 public:
+    // DecFIGS h1010; ARTIST construction sites store these three native fields.
+    void Construct(rw::core::GeneralResourceAllocator* lpAllocator,
+                   const char* lpcName, s32 liPrintLevel);
     // Allocate a resource matching lDescriptor (lpcName is a debug tag). The
     // returned rw::Resource's m_baseResources[0] is the memory-resource pointer.
     rw::Resource Allocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName = 0);
@@ -44,6 +47,11 @@ public:
     // rw::IResourceAllocator interface: the resource modules allocate their backing memory through
     // this (virtual) entry point; it just forwards to Allocate.
     rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) ;
+
+private:
+    rw::core::GeneralResourceAllocator* mpGeneralAllocator;
+    const char* mpcName;
+    s32 miPrintLevel;
 };
 
 // The initial process-wide RenderWare resource allocator. ARTIST Construct @0x82661A60 and
@@ -111,8 +119,13 @@ inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
 // Accessor for the global debug allocator (asserts the backing allocator exists).
 // X360: returns &Allocators::mGlobalDebugAllocator. DECLARATION-ONLY here.
 HeapResourceAllocator* GetDebugAllocator();
+// BrnResourceAllocator.h:381; ARTIST main allocates through mRuntimeAllocator
+// at 82F2C854, independently of the debug allocator at 82F2C7DC.
+HeapResourceAllocator* GetRuntimeAllocator();
 // Genuine public wrapper; distinct from the retained native allocation helper.
 LinearResourceAllocator* GetGraphicsAllocator();
+// DecFIGS h405; ARTIST loading-screen allocation uses 82F2C870.
+LinearResourceAllocator* GetEmbeddedTextureAllocator();
 void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
 
 // The GameData general resource allocator the loading-screen module loads carve from (SoundModule
@@ -146,6 +159,9 @@ public:
 
     // The startup memory-map/initial-default-allocator chain (ARTIST 0x82664728).
     static void InitMemoryMap();
+    // ARTIST 8266AED8: the real global allocator construction chain. Kept as a
+    // declaration until all original allocation phases are recovered.
+    static void Construct();
 
     // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
     // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
@@ -159,6 +175,10 @@ private:
     // Original private construction phase, DecFIGS h327.
     static void ConstructGlobalGraphicsMemory();
     friend LinearResourceAllocator* GetGraphicsAllocator();
+    friend HeapResourceAllocator* GetRuntimeAllocator();
+    friend LinearResourceAllocator* GetEmbeddedTextureAllocator();
+    static HeapResourceAllocator mRuntimeAllocator;
+    static LinearResourceAllocator mEmbeddedTextureAllocator;
     static rw::Resource mGlobalGraphicsMemory;
     static rw::ResourceDescriptor mGlobalGraphicsMemoryDescriptor;
     static rw::LinearResourceAllocator* mpInternalGraphicsAllocator;
