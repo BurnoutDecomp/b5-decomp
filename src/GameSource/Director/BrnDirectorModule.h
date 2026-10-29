@@ -9,74 +9,20 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h"    // BrnDirector::DirectorInputOutput (the per-frame IO bundle)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 #include "GameSource/Director/BrnDirectorResourceManager.h"               // BrnDirector::DirectorResourceManager (mDirectorResourceManager)
+#include "GameSource/Director/BrnReplayDirector.h"
 #include "GameSource/Director/BrnMainDirector.h"                          // BrnDirector::MainDirector (mMainDirector)
-#include "GameSource/Director/Camera/Camera.h"                            // BrnDirector::Camera::Camera (mCamera)
+#include "GameSource/Director/Camera/Camera.h"                            // BrnDirector::Camera::Camera
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"                // BrnDirector::WorldMap (mWorldMap)
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"         // the six scene-query post offices
-#include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
+#include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"                   // BrnReplays::DirectorSerialiser (mDirectorSerialiser)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
-// ============================================================================
-// GameSource/Director/BrnDirectorModule.h
-//
-// BrnDirector::DirectorModule -- the top-level director engine module (a
-// CgsModule::ModuleSingleBuffered derivative, as declared at the BrnGameModule member
-// site). DWARF home: GameSource/Director/DirectorModule/BrnDirectorModule.h. It owns
-// the debug component, the resource manager, the top-level MainDirector, a replay
-// serialiser, the active Camera, plus a very large fleet of gameplay/camera/debug
-// sub-objects (WorldMap, Arbitrator, MomentController, BehaviourManager, GameState,
-// VehicleTracker, ...) that the 3 functions reconstructed in this wave never touch.
-//
-// LAYOUT MODEL -- NAMED MEMBERS AT ASM-PROVEN OFFSETS, PADDING FOR THE REST.
-//
-// This class was previously reconstructed (and reverted after fresh-eyes review) as one
-// opaque `alignas(16) u8 maStorage[233000];` buffer accessed everywhere through raw
-// reinterpret_cast offset pokes -- forbidden by AGENTS.md's "NO RAW OFFSET POINTER
-// HACKS" rule for an in-memory engine object. This version instead follows the
-// established BrnGuiCache.h / BrnWorldModule.h convention: every field the 3 bodied
-// functions (Construct/Destruct/Release) actually touch is a NAMED member (its own real
-// committed type where one exists -- DebugComponent, DirectorResourceManager,
-// MainDirector, Camera::Camera, BaseSerialiser -- else a scalar/scratch buffer at the
-// asm-proven byte offset), and every gap between named members the bodied functions
-// never reach is an explicit `u8 mPad_0xNNNN[SIZE]` buffer. Per BrnWorldModule.h's
-// precedent for the same "huge object, 3-of-many functions reconstructed" situation,
-// this header does NOT attempt to model (or size-pin) the WHOLE ~0x38F00-byte object:
-// only the touched members, in ascending asm-proven offset order, with padding filling
-// the measured gaps between them. The untouched tail past the last function-touched
-// field (miPerfCount_PostGuiUpdate @0x38B0C / meReleaseStage @0x38B14) is intentionally
-// ABSENT from this slice -- the object's true total size is not attested by any function
-// reconstructed so far, so no static_assert(sizeof(DirectorModule)==...) is made here
-// (matching BrnWorldModule.h, which explicitly declines to pin a size it cannot prove).
-//
-// OFFSETS quoted in comments below are X360 CONSOLE (4-byte-pointer) byte offsets --
-// provenance for the reconstructed .cpp bodies, not host layout facts (the real
-// sub-objects such as DirectorResourceManager/MainDirector are wider on this 64-bit
-// host; access is by name, never by offsetof-against-console-numbers).
-//
-// TWO UNREPRODUCED SIDE EFFECTS (flagged rather than raw-offset-poked into another
-// class's private/opaque storage -- see the per-member comments below):
-//   * Construct's inlined DirectorResourceManager::Construct() body (an
-//     EventReceiverQueue<512,16>::Construct() per the DecFIGS DWARF dump for
-//     BrnDirectorResourceManager.cpp) is called via mDirectorResourceManager.Construct(),
-//     but the currently-committed BrnDirectorResourceManager.h version of that method is
-//     `inline void Construct() {}` (a stub) -- the queue-init side effect is not
-//     reproduced. That gap belongs to the resource-manager TU.
-//   * Construct stores &mDebugComponent into a word at this+0xB40 -- MainDirector's own
-//     CONSOLE +0x40 (the module places MainDirector at +0xB00). ⭐ RESOLVED (BehaviourManager
-//     wave): MainDirector is no longer a console-sized opaque buffer -- it is a named-member
-//     class -- and it now exposes `MainDirector::SetDebugComponent(DebugComponent*)`.
-//     Construct should call `mMainDirector.SetDebugComponent(&mDebugComponent);`
-//     (see the wave log's PART 4 step 2.5). The .cpp still has it unreproduced + flagged.
-//
-// NOTE: a SEPARATE, already-landed TU (GameSource/Director/BrnDirectorModule.cpp, the
-// real `DirectorModule::DirectorModule()` constructor) defines its OWN small,
-// TU-private/local `struct DirectorModule` and does not include this header -- the two
-// coexist under this project's per-TU `cl /c` compile gate (no link step), exactly like
-// every other declaration-only external stub in this codebase. Do not conflate that
-// file's ctor with the Construct()/Destruct()/Release() staged-lifecycle methods
-// reconstructed here.
-// ----------------------------------------------------------------------------
+// DirectorModule owns the live and replay directors plus its persistent replay
+// channel. ARTIST pins the member order; native pointer-bearing objects widen.
+// In particular, ReplayDirector occupies the original full+35F50..+38930
+// region. Its final camera, selection and first-frame flag are not additional
+// DirectorModule fields. Padding below describes remaining untouched regions.
 
 namespace BrnDirector
 {
@@ -133,14 +79,8 @@ public:
 
     // ---- staged Prepare / per-frame Update spine (RECONSTRUCTED, director wave) -----
     //
-    // The five entry points below are now BODIED (DirectorModule/BrnDirectorModule.cpp).
-    // The earlier "BrnDirector::WorldMap has no homed type at all" note is SUPERSEDED:
-    // WorldMap has a real home (Utils/BrnDirectorWorldMap.h/.cpp) and its LoadData
-    // @0x8225F5A0 landed with this wave, as did BrnDirector::InertiaController::Update
-    // @0x8221ECD0. What is still gated inside them is the REPLAY leg only
-    // (BrnReplays::DirectorSerialiser and ReplayDirector::Update / ::PreSceneQueryUpdate
-    // remain un-homed). Every gate is QUIET (never a trap on a per-frame path) and carries
-    // its X360 address plus a DELETE-when note in the .cpp.
+    // The module dispatches both live and replay camera passes, with original
+    // serialiser readiness, frame transfer and unconditional registration.
     //
     // ARGUMENT SHAPE. The IO buffers arrive as separate parameters, exactly as the X360
     // module framework passes them; each entry point then bundles four of them (plus the
@@ -155,7 +95,7 @@ public:
 
     // X360 0x8225C768. Pre-scene-query update: latch the replay flag, Clear the per-frame
     // scene-query post office, then run MainDirector::PreSceneQueryUpdate (live leg) or
-    // ReplayDirector::PreSceneQueryUpdate (replay leg -- GATED). BODIED.
+    // ReplayDirector::PreSceneQueryUpdate (replay leg). BODIED.
     s32 PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
                             const DirectorIO::InputBuffer* lpInputBuffer,
                             DirectorIO::OutputBuffer* lpOutputBuffer,
@@ -163,7 +103,7 @@ public:
                             bool lbIsReplaying);
 
     // X360 0x82275300. The per-frame Update spine: drain the scene-query results, run
-    // MainDirector::Update (live leg) or ReplayDirector::Update (replay leg -- GATED), copy
+    // MainDirector::Update (live leg) or ReplayDirector::Update (replay leg), copy
     // the produced graphics camera into the module's own, then the replay-serialiser
     // bookkeeping + serialiser registration. BODIED.
     s32 Update(s32 liUnusedA, s32 liUnusedB,
@@ -305,50 +245,9 @@ private:
     // named, and the console offsets quoted throughout are provenance only.
     MainDirector mMainDirector;
 
-    u8 mPad_0x35F50[0x36380 - 0x35F50];                     // CONSOLE +0x35F50..+0x3637F.
-    // ⚠️ THIS IS THE ReplayDirector REGION. The (separate) DirectorModule C++ ctor
-    // placement-builds BrnDirector::ReplayDirector at exactly +0x35F50, and the replay leg
-    // of Update / PreSceneQueryUpdate calls `ReplayDirector::{Update,PreSceneQueryUpdate}
-    // (this + 221008)` == this+0x35F50, reading its own CgsGraphics::Camera back out at
-    // this+221712 == +0x36190 (ReplayDirector +0x240).
-    //
-    // It is deliberately NOT declared as a named `ReplayDirector mReplayDirector;` member
-    // here, because two attested facts CONFLICT and neither is safe to prefer:
-    //   * Camera::Construct(this + 222080) in DirectorModule::Construct @0x8225C590 pins
-    //     mCamera at +0x36380, i.e. only 0x430 bytes after the ReplayDirector base, yet
-    //   * BrnReplayDirector.h records that the ReplayDirector ctor reaches fields out to
-    //     its own +0x2788.
-    // Declaring the member at 0x35F50 would silently pick one. Left as reserved storage +
-    // documented until the ReplayDirector layout is recovered; the replay leg is gated
-    // anyway (see the .cpp). Nothing in this span is touched by Construct/Destruct/Release.
-
-    // this+0x36380 (222080). BrnDirector::Camera::Camera::Construct() -- the module's
-    // active/current camera. Real committed type (Camera.h/.cpp).
-    Camera::Camera mCamera;
-
-    u8 mPad_0x36380_tail[0x38920 - 0x36380];                // CONSOLE tail after the Camera span
-    // -- CameraDebugInfo / debug-toggle bytes / DebugLog + 3x DebugPrinter / GameState /
-    // VehicleTracker / EffectInterface -- untouched by Construct/Destruct/Release.
-
-    // this+0x38920 (231712). RECOVERED by PostGuiUpdate @0x82250DD0, whose last act is
-    //   `v10 = lpInputBuffer[7854];  if ( v10 > -1 )  *(this + 231712) = v10;`
-    // i.e. latch the input buffer's word at ITS +0x7AB8 whenever it is not the -1 "none"
-    // sentinel.
-    // ⚠ NAME CORRECTION (fly-by wave): the source word is NOT a car index. It is now the named
-    // DirectorIO::InputBuffer::miCameraType -- the slot BridgeGuiToDirector @0x823CBF70 writes
-    // on GUI command 591, whose own assert text is "Unhandled camera type : ". The member name
-    // below is kept (renaming re-keys the lint fingerprint for no behavioural gain) but it
-    // latches a CAMERA TYPE, not a car index. FLAG: name inferred, not DWARF.
-    s32 miPostGuiCarIndexLatch;                              // +0x38920
-
-    // this+0x38924 (231716). Construct zeroes it; PreSceneQueryUpdate @0x8225C768 SETS IT
-    // TO 1 on the frame the replay flag transitions false->true (together with clearing
-    // +0x38B01). So it is the "a replay just started" edge latch that the replay leg
-    // consumes. Zero-store attested by Construct, the =1 store by PreSceneQueryUpdate.
-    // FLAG: name inferred from that role; the trimmed DWARF does not name it.
-    u8 mbReplayStartedThisFrame;                             // +0x38924
-
-    u8 mPad_0x38925[0x38930 - 0x38925];                      // +0x38925..+0x3892F (untouched)
+    // ARTIST ReplayDirector spans+0x35F50..+0x38930. The final camera,
+    // camera selection, and replay-first-frame latch belong to this object.
+    ReplayDirector mReplayDirector;
 
     // ARTIST DirectorModule::Construct/Update own the persistent derived
     // serialiser at console +0x38930. Its own +0x5C latch belongs to that type.

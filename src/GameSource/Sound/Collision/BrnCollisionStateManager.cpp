@@ -1423,11 +1423,7 @@ bool CollisionStateManager::UniqueScrape(const BrnSound::Logic::Collision::Scrap
 //                       mbIsCrashed (+0x4D), mPosition = its position (+0x30), mVelocity = its At
 //                       row (+0x20) scaled by mfSpeed (+0x44, vmulfp128 by the splat)  0x826A0494..0x826A04E0
 //   owner 3+            false                                                     0x826A0424
-// [NOT IN THIS TREE] while the replay serialiser plays back (sound logic module +0x13600, modes
-// 4..6) the console reads traffic from the recording instead (SoundSerialiser::
-// GetTrafficEntityByTrafficIndex @0x826823E0). This tree's SoundLogicModule holds no
-// SoundSerialiser and nothing drives a serialiser's mode (BrnSoundLogicModule.cpp case 218), so
-// only the live traffic interface is read.
+// ARTIST826A0430..490 selects recorded traffic in playback modes4/5/6.
 // ---------------------------------------------------------------------------
 bool CollisionStateManager::FindEntity(const EntityId& lEntityId, GenericEntity& lEntity) const
 {
@@ -1465,8 +1461,13 @@ bool CollisionStateManager::FindEntity(const EntityId& lEntityId, GenericEntity&
     if (luOwner >= KU_ENTITY_OWNER_PROP)
         return false;
 
-    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTraffic =
-        lpInputBuffer->GetTrafficOutputInterface().GetTrafficEntityIndex(
+    BrnReplays::SoundSerialiser& lrSerialiser=
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetSoundSerialiser();
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTraffic;
+    if (lrSerialiser.IsPlaying())
+        lpTraffic=lrSerialiser.GetTrafficEntityByTrafficIndex(static_cast<u16>(GetEntityIndex(lEntityId)));
+    else
+        lpTraffic=lpInputBuffer->GetTrafficOutputInterface().GetTrafficEntityIndex(
             static_cast<u16>(GetEntityIndex(lEntityId)));
     if (!lpTraffic)
         return false;
@@ -1555,16 +1556,16 @@ void CollisionStateManager::UpdateScrapeHistory(const BrnSound::Logic::FrameInfo
 //                  with the SCRAPE lifetime (0x826D42C8..0x826D4340); no free state ends this leg
 //   new         -> recorded over the oldest history slot when FindEntity knows both sides
 //                  (0x826D4380..0x826D44B0; asserts the slot, cpp:2930)
-// [NOT IN THIS TREE] the replay recorder: the console keeps a BrnReplays::SoundSerialiser in the
-// sound logic module (+0x13600) and, while it records (modes 1..3), zeroes the frame's scrape count
-// (0x826D3F90..0x826D3FC8) and mirrors every tracked scrape into it while it holds fewer than 4
-// (AddScrape @0x826959B8, 0x826D4160..0x826D4194). This tree's SoundLogicModule holds no
-// SoundSerialiser and nothing drives a serialiser's mode (BrnSoundLogicModule.cpp case 218).
+// ARTIST826D3F90..3FC8 and4160..4194 reset/capture up to four scrapes.
 // The eaten-collision spew uses the live menu level (>=3) and original DebugPrint.
 // ---------------------------------------------------------------------------
 void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformation& lrFrame)
 {
     UpdateScrapeHistory(lrFrame);
+    BrnReplays::SoundSerialiser& lrSerialiser=
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetSoundSerialiser();
+    if (lrSerialiser.IsRecording())
+        lrSerialiser.GetStaticLayout()->miNumScrapes=0;
 
     const f32 lfTime = mfCurrentTime;
     const InputCollision* lapContinuing[64];
@@ -1627,6 +1628,8 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
         {
             lapNew[lu32New++] = &lrInput;
         }
+        if (lrSerialiser.IsRecording() && lrSerialiser.GetNumScrapes()<4)
+            lrSerialiser.AddScrape(&lrInput.mScrapeInfo,lrInput.mPosition);
     }
 
     if (lu32Continuing != 0u)
@@ -2872,7 +2875,6 @@ void CollisionStateManager::UpdateResolver(
 bool CollisionStateManager::ProcessCollision(
     OutputCollision& lrOutput, const InputCollision& lrInput)
 {
-    lrOutput = OutputCollision();
     lrOutput.mePipeline = lrInput.mePipeline;
     lrOutput.maMaterial[0] = lrInput.maMaterial[0];
     lrOutput.maMaterial[1] = lrInput.maMaterial[1];
@@ -2889,18 +2891,18 @@ bool CollisionStateManager::ProcessCollision(
     lrOutput.meFatality = mFrameInformation.meFatality.GetCurrent();
     lrOutput.meImpactTime = mFrameInformation.meImpactTime.GetCurrent();
 
-    switch (lrInput.mePipeline)
+    if (lrInput.mePipeline==InputCollision::E_PROP)
+        SelectCollisionBin<Attrib::Gen::propscrashbinlist,Attrib::Gen::propscrashbin>(lrOutput,mPropsCrashBinList);
+    else
+        SelectCollisionBin<Attrib::Gen::crashbinlist,Attrib::Gen::crashbin>(lrOutput,mCrashBinList);
+
+    // ARTIST826BEB28..88: the first valid fatal-start sample advances the
+    // module's frame flag and terminates this conversion pass, including this output.
+    if (lrOutput.miSampleID!=-1 && mFrameInformation.meFatality.GetCurrent()==E_FATAL_START)
     {
-    case InputCollision::E_REGULAR:
-        SelectCollisionBin<Attrib::Gen::crashbinlist, Attrib::Gen::crashbin>(
-            lrOutput, mCrashBinList);
-        break;
-    case InputCollision::E_PROP:
-        SelectCollisionBin<Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>(
-            lrOutput, mPropsCrashBinList);
-        break;
-    default:
-        CGS_ASSERT(false, "lrInput.mePipeline < InputCollision::E_MAX_PIPELINES");
+        auto& lrFrame=static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetFrameInformation();
+        CGS_ASSERT(lrFrame.meFatality.GetCurrent()==E_FATAL_START,"meFatality == E_FATAL_START");
+        lrFrame.meFatality.Update(E_FATAL_ON);
         return false;
     }
     return true;
@@ -2908,15 +2910,15 @@ bool CollisionStateManager::ProcessCollision(
 
 void CollisionStateManager::ProcessCollisions()
 {
-    mu32OutputCollisionCount = 0;
-    for (u32 luIndex = 0;
-         luIndex < mu32InputCollisionCount && mu32OutputCollisionCount < 64u;
-         ++luIndex)
+    CGS_ASSERT(mu32InputCollisionCount<=64,"mu32InputCollisionCount <= E_MAX_COLLISION");
+    bool lbContinue=true;
+    u32 lu32Count=0;
+    while (lu32Count<mu32InputCollisionCount && lbContinue)
     {
-        if (ProcessCollision(maOutputCollision[mu32OutputCollisionCount],
-                             maInputCollision[luIndex]))
-            ++mu32OutputCollisionCount;
+        lbContinue=ProcessCollision(maOutputCollision[lu32Count],maInputCollision[lu32Count]);
+        ++lu32Count; // ARTIST826D3F24..44 counts the terminating attempted output.
     }
+    mu32OutputCollisionCount=lu32Count;
 }
 
 bool CollisionStateManager::LessThanPriority(
@@ -2973,18 +2975,41 @@ CgsSound::Logic::State* CollisionStateManager::GetFreeState(void* apvAttachment)
 
 void CollisionStateManager::UpdateParams(f32 afDeltaTime)
 {
+    const s32 liMonitor=miCpuMonitor;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     CGS_ASSERT(lpModule != nullptr, "lpSoundLogicModule");
-    if (lpModule)
     {
         BrnSound::Module::Io::LogicInputBuffer* lpInput =
             lpModule->GetBrnInputStructure();
-        if (lpInput &&
-            lpInput->GetPlayerActiveRaceCarIndex() !=
+        CGS_ASSERT(lpInput!=nullptr,"lpInput");
+        if (lpInput->GetPlayerActiveRaceCarIndex() !=
                 E_ACTIVE_RACE_CAR_INDEX_INVALID)
         {
+            BrnReplays::SoundSerialiser& lrSerialiser=lpModule->GetSoundSerialiser();
+            if (lrSerialiser.IsPlaying())
+            {
+                mu32InputCollisionCount=0;
+                for(s32 liScrape=0;liScrape<lrSerialiser.GetNumScrapes();++liScrape)
+                {
+                    InputCollision& lrInput=maInputCollision[mu32InputCollisionCount];
+                    lrInput.mPosition=lrSerialiser.GetStaticLayout()->maScrapePositions[liScrape];
+                    lrInput.mScrapeInfo=lrSerialiser.GetStaticLayout()->maScrapes[liScrape];
+                    lrInput.mScrapeInfo.mfTimeStamp=mfCurrentTime;
+                    ++mu32InputCollisionCount;
+                }
+                UpdateScrapes(lpModule->GetFrameInformation());
+                for(s32 liCollision=0;liCollision<lrSerialiser.GetNumCollisions();++liCollision)
+                {
+                    if(!PlayCollision(&lrSerialiser.GetStaticLayout()->maCollisions[liCollision]))
+                        break;
+                }
+            }
+            else
+            {
             UpdateResolver(*lpInput, lpModule->GetFrameInformation(), afDeltaTime);
+            CGS_ASSERT(mu32OutputCollisionCount<=64,"GetOutputCollisionCount"); // ARTIST8270451C..90
 
             OutputCollision* lapCollisions[64] = {};
             for (u32 luIndex = 0; luIndex < mu32OutputCollisionCount; ++luIndex)
@@ -2992,6 +3017,8 @@ void CollisionStateManager::UpdateParams(f32 afDeltaTime)
             std::sort(lapCollisions,
                       lapCollisions + mu32OutputCollisionCount,
                       &CollisionStateManager::LessThanPriority);
+            if(lrSerialiser.IsRecording())
+                lrSerialiser.GetStaticLayout()->miNumCollisions=0;
             for (u32 luIndex = 0; luIndex < mu32OutputCollisionCount; ++luIndex)
             {
                 if (!PlayCollision(lapCollisions[luIndex]))
@@ -3056,10 +3083,15 @@ void CollisionStateManager::UpdateParams(f32 afDeltaTime)
                     }
                     break;
                 }
+                if(lrSerialiser.IsRecording() && lrSerialiser.GetNumCollisions()<8 &&
+                    lapCollisions[luIndex]->miSampleID!=-1)
+                    lrSerialiser.AddCollision(lapCollisions[luIndex]);
+            }
             }
         }
     }
     CgsSound::Logic::StateManager::UpdateParams(afDeltaTime);
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }
 
 // ---------------------------------------------------------------------------

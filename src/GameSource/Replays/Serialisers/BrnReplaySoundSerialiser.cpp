@@ -35,7 +35,7 @@ namespace BrnReplays
 
     // @ 0x82695AC8 -- append one collision record (224 bytes) at index GetNumCollisions() into
     // the static layout's collision array (record base +0, stride 224), then bump the count.
-    SoundSerialiserStaticLayout* SoundSerialiser::AddCollision(const void* lpCollision)
+    SoundSerialiserStaticLayout* SoundSerialiser::AddCollision(const BrnSound::Logic::Collision::OutputCollision* lpCollision)
     {
         CGS_ASSERT(GetNumCollisions() >= 0, "GetNumCollisions() >= 0");
         CGS_ASSERT(GetNumCollisions() < SoundSerialiserStaticLayout::KI_MAX_COLLISIONS,
@@ -43,9 +43,7 @@ namespace BrnReplays
 
         const s32 liIndex = GetStaticLayout()->GetNumCollisions();
 
-        u8* lpDest = reinterpret_cast<u8*>(GetStaticLayout())
-                   + SoundSerialiserStaticLayout::KU_COLLISION_STRIDE * liIndex;
-        std::memcpy(lpDest, lpCollision, SoundSerialiserStaticLayout::KU_COLLISION_STRIDE);
+        GetStaticLayout()->maCollisions[liIndex] = *lpCollision;
 
         SoundSerialiserStaticLayout* lpResult = GetStaticLayout();
         ++lpResult->miNumCollisions;
@@ -55,7 +53,7 @@ namespace BrnReplays
     // @ 0x826959B8 -- append one scrape record: 48 bytes of scalar scrape data (from lpScrape)
     // into the scrape-data array (base +0x710, stride 48), plus a 16-byte position vector into
     // the parallel scrape-vector array (base +0x7D0, stride 16), then bump the count.
-    SoundSerialiserStaticLayout* SoundSerialiser::AddScrape(const void* lpScrape, SoundVec128 lvPosition)
+    SoundSerialiserStaticLayout* SoundSerialiser::AddScrape(const BrnSound::Logic::Collision::ScrapeInfo* lpScrape, Vector3 lvPosition)
     {
         CGS_ASSERT(GetNumScrapes() >= 0, "GetNumScrapes() >= 0");
         CGS_ASSERT(GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES,
@@ -63,15 +61,8 @@ namespace BrnReplays
 
         const s32 liIndex = GetStaticLayout()->GetNumScrapes();
 
-        u8* lpData = reinterpret_cast<u8*>(GetStaticLayout())
-                   + SoundSerialiserStaticLayout::KU_SCRAPE_DATA_BASE
-                   + SoundSerialiserStaticLayout::KU_SCRAPE_DATA_STRIDE * liIndex;
-        std::memcpy(lpData, lpScrape, SoundSerialiserStaticLayout::KU_SCRAPE_DATA_STRIDE);
-
-        u8* lpVec = reinterpret_cast<u8*>(GetStaticLayout())
-                  + SoundSerialiserStaticLayout::KU_SCRAPE_VEC_BASE
-                  + SoundSerialiserStaticLayout::KU_SCRAPE_VEC_STRIDE * liIndex;
-        std::memcpy(lpVec, &lvPosition, sizeof(lvPosition));
+        GetStaticLayout()->maScrapes[liIndex] = *lpScrape;
+        GetStaticLayout()->maScrapePositions[liIndex] = lvPosition;
 
         SoundSerialiserStaticLayout* lpResult = GetStaticLayout();
         ++lpResult->miNumScrapes;

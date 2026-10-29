@@ -67,8 +67,8 @@ namespace BrnReplays
         s32 GetNumTrafficEntities() { return GetStaticLayout()->GetNumTrafficEntities(); }
 
         // @0x82695AC8 / @0x826959B8 / @0x82695B88 -- record one event into the static layout.
-        SoundSerialiserStaticLayout* AddCollision(const void* lpCollision);
-        SoundSerialiserStaticLayout* AddScrape(const void* lpScrape, SoundVec128 lvPosition);
+        SoundSerialiserStaticLayout* AddCollision(const BrnSound::Logic::Collision::OutputCollision* lpCollision);
+        SoundSerialiserStaticLayout* AddScrape(const BrnSound::Logic::Collision::ScrapeInfo* lpScrape, Vector3 lvPosition);
         SoundSerialiserStaticLayout* AddTrafficEntity(const void* lpEntity);
 
         // @0x82682488 -- find the 12-byte per-entity record for a recorded traffic id.

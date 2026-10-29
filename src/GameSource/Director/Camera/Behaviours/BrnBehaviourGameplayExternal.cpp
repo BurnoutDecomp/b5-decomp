@@ -267,11 +267,8 @@ void BehaviourGameplayExternal::Construct()
     mbEnableDebugRender     = false;     // +2910
     mbEnableBoostEffects    = true;      // +2911
     mbJumping               = false;     // +2912
-    // FLAG: the console also stores the same zero byte at +2913 (0xB61). The DWARF member list
-    //   (BehaviourGameplayExternal.h:116..:160) ends at mbJumping @+0xB60, so that sixth byte
-    //   has no name and is NOT modelled -- nothing reads it, and inventing a member for it
-    //   would be a guess. DELETE-WHEN: the DWARF gains the trailing member (or it is proven to
-    //   be tail padding the compiler zeroes).
+    mbReplayCamera = false;             // ARTIST+0xB61
+
 }
 
 // ============================================================================

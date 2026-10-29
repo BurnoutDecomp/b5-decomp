@@ -159,6 +159,52 @@ namespace BrnReplays
         return 0;
     }
 
+    // ARTIST82650130. Alignment and byte count include skipped stream padding.
+    // 82650294..AC tests the unsigned capacity difference (miBufferSize, not used).
+    s32 BaseSerialiser::ReadFloat(void* lpDest)
+    {
+        CGS_ASSERT(meMode == E_MODE_PLAYING, "Not playing\n");
+        CGS_ASSERT(mbLocked, "Not locked\n");
+        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        const u32 luAligned = (static_cast<u32>(miBufferRead) + 3u) & ~3u;
+        CGS_ASSERT(static_cast<u32>(miBufferSize) - luAligned >= 4u,
+                   "Not enough data in buffer\n");
+
+        const s32 liPreviousRead = miBufferRead;
+        const u32 luReadAligned = (static_cast<u32>(liPreviousRead) + 3u) & ~3u;
+        miBufferRead = static_cast<s32>(luReadAligned);
+        // The replay stream is an external native-float byte buffer.
+        *static_cast<f32*>(lpDest) = *reinterpret_cast<const f32*>(
+            static_cast<const u8*>(mpBuffer) + luReadAligned);
+        miBufferRead = static_cast<s32>(static_cast<u32>(miBufferRead) + 4u);
+        return static_cast<s32>(static_cast<u32>(miBufferRead) - static_cast<u32>(liPreviousRead));
+    }
+
+    // ARTIST8264FEE8. Preparing/stalled recording validates but leaves all bytes
+    // and cursors untouched; only826500E4's exact mode2 arm commits a float.
+    s32 BaseSerialiser::WriteFloat(const void* lpSrc)
+    {
+        CGS_ASSERT(IsRecording(), "Not recording\n");
+        CGS_ASSERT(mbLocked, "Not locked\n");
+        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        const u32 luAligned = (static_cast<u32>(miBufferUsed) + 3u) & ~3u;
+        CGS_ASSERT(static_cast<u32>(miBufferSize) - luAligned >= 4u,
+                   "Not enough space in buffer\n");
+
+        if (meMode == E_MODE_RECORDING)
+        {
+            const s32 liPreviousUsed = miBufferUsed;
+            const u32 luWriteAligned = (static_cast<u32>(liPreviousUsed) + 3u) & ~3u;
+            miBufferUsed = static_cast<s32>(luWriteAligned);
+            // The replay stream is an external native-float byte buffer.
+            *reinterpret_cast<f32*>(static_cast<u8*>(mpBuffer) + luWriteAligned) =
+                *static_cast<const f32*>(lpSrc);
+            miBufferUsed = static_cast<s32>(static_cast<u32>(miBufferUsed) + 4u);
+            return static_cast<s32>(static_cast<u32>(miBufferUsed) - static_cast<u32>(liPreviousUsed));
+        }
+        return 0;
+    }
+
     // @ 0x8264C470
     // Mode-directed serialise dispatch. The X360 body switches on meMode (read at
     // *this+0): in E_MODE_RECORDING it tail-calls Write(buffer, size); in

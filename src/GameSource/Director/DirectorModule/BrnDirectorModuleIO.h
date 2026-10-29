@@ -168,6 +168,8 @@ namespace DirectorIO
         // MainDirector::UpdateArbitrator passes it to Arbitrator::Update as lbPaused, and
         // MainDirector::Update's gameplay middle tests it too.
         bool                                               IsSimPaused() const;
+        // ARTIST ReplayDirector::FillInSharedInfo loads input+0x6AB4.
+        bool IsAllStreamed() const { return mbAllStreamed; }
         // Inlined by ARTIST DoUpdate_Director @0x823E8F2C; DWARF :284.
         void SetSimPaused(bool lbSimPaused) { mbSimPaused = lbSimPaused; }
 
@@ -438,7 +440,9 @@ namespace DirectorIO
         // padding we invented for alignment.
         BrnDirector::BrnDirectorVehicleInputInterface mVehicleDriverInputInterface;   // @0x6780
         u8  maVehicleDriverInputInterfacePad[
-                (0x6AB8 - 0x6780) - sizeof(BrnDirector::BrnDirectorVehicleInputInterface)];
+                (0x6AB4 - 0x6780) - sizeof(BrnDirector::BrnDirectorVehicleInputInterface)];
+        bool mbAllStreamed; // console+0x6AB4, BehaviourSharedInfo::mbAllStreamed
+        u8 maPad6AB5[3];
 
         // @0x6AB8 (27320): contacts. AppendContacts stores one 32-bit word at member word [0]
         // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage.

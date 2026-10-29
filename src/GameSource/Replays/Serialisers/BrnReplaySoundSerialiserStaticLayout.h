@@ -27,6 +27,7 @@
 // count/control scalars get named members. GROW into named sub-records if DWARF is recovered.
 
 #include "types.hpp"
+#include "GameSource/Sound/Collision/BrnCollisionDataStructures.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
 #include <cstddef>   // offsetof (the layout pins at the bottom)
 
@@ -83,9 +84,11 @@ namespace BrnReplays
     public:
         // Named count / control words at their attested byte offsets; the record arrays
         // between them are opaque and reached by the KU_* offsets above.
-        u8                                     maReserved0x000[0x700];         // +0x000 collision records (opaque)
+        BrnSound::Logic::Collision::OutputCollision maCollisions[8];          // +0x000, stride224
         s32                                    miNumCollisions;                // +0x700
-        u8                                     maReserved0x704[0x810 - 0x704]; // +0x704 (gap; scrape records live here)
+        u8                                     maReserved0x704[12];           // +0x704 ->0x710
+        BrnSound::Logic::Collision::ScrapeInfo   maScrapes[4];                 // +0x710, stride48
+        Vector3                                maScrapePositions[4];         // +0x7D0, stride16
         s32                                    miNumScrapes;                   // +0x810
         CgsModule::VariableEventQueue<512, 16> mEventQueue;                    // +0x814 (0x210 -> +0xA24)
         f32                                    mfA24;                          // +0xA24
@@ -105,6 +108,12 @@ namespace BrnReplays
     // the reserved spans -- so every named anchor is static_asserted to catch any drift.
     static_assert(sizeof(CgsModule::VariableEventQueue<512, 16>) == 0x210,
                   "VariableEventQueue<512,16> must serialise at 0x210 bytes");
+    static_assert(sizeof(BrnSound::Logic::Collision::OutputCollision)==224,"original recorded collision stride");
+    static_assert(offsetof(BrnSound::Logic::Collision::OutputCollision,miSampleID)==216,"original recordable-sample marker");
+    static_assert(sizeof(BrnSound::Logic::Collision::ScrapeInfo)==48,"original recorded scrape stride");
+    static_assert(offsetof(SoundSerialiserStaticLayout,maCollisions)==0,"original recorded collisions");
+    static_assert(offsetof(SoundSerialiserStaticLayout,maScrapes)==0x710,"original recorded scrapes");
+    static_assert(offsetof(SoundSerialiserStaticLayout,maScrapePositions)==0x7D0,"original recorded scrape positions");
     static_assert(offsetof(SoundSerialiserStaticLayout, miNumCollisions)      == 0x700, "miNumCollisions @ +0x700");
     static_assert(offsetof(SoundSerialiserStaticLayout, miNumScrapes)         == 0x810, "miNumScrapes @ +0x810");
     static_assert(offsetof(SoundSerialiserStaticLayout, mEventQueue)          == 0x814, "mEventQueue @ +0x814");

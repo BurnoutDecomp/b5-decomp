@@ -1,28 +1,9 @@
-// ============================================================================
-// GameSource/Director/DirectorModule/BrnDirectorModule.cpp
-//
-// BrnDirector::DirectorModule -- the top-level director engine module. Of the 7
-// functions this build's ARTIST export recovers for this TU, 3 are reconstructed here:
-//   - Construct  @ 0x8225C590  [EXECUTED in goal trace]
-//   - Destruct   @ 0x82250D98  [recovered; not executed in goal trace]
-//   - Release    @ 0x82239198  [recovered; not executed in goal trace]
-//
-// Prepare (0x822712D8), Update (0x82275300), PreSceneQueryUpdate (0x8225C768) and the
-// nested BrnDirector::CameraFinaliser::Update (0x82250440) remain declaration-only --
-// every one of them reaches at least one un-landed callee (MainDirector::Prepare/
-// Update/PreSceneQueryUpdate are themselves declaration-only in BrnMainDirector.h;
-// BrnDirector::WorldMap has no homed type at all; BrnReplays::DirectorSerialiser /
-// BrnDirector::ReplayDirector / BrnDirector::InertiaController /
-// BrnDirector::KeyAnimShakeController are all [todo]) -- per AGENTS.md the
-// reconstruction rules forbid bodying a function whose callee graph isn't resolved.
-// See BrnDirectorModule.h for their per-function BLOCKED notes.
-//
-// LAYOUT: DirectorModule is modelled with NAMED members at asm-proven offsets (real
-// committed sub-object types where they exist) + explicit padding for untouched spans
-// -- see the header for the full rationale (this TU was previously reconstructed, and
-// reverted after fresh-eyes review, as one opaque byte buffer accessed via raw
-// reinterpret_cast offset pokes throughout; that pattern is not used here).
-// ============================================================================
+// DirectorModule staged lifecycle and per-frame update spine.
+// ARTIST Construct8225C590, Prepare822712D8, Release82239198,
+// Destruct82250D98, PreSceneQueryUpdate8225C768, Update82275300,
+// PostGuiUpdate82250DD0 and ProcessSceneQueryResults82239278.
+// ReplayDirector and DirectorSerialiser are owned typed engine objects.
+// Console displacements in historical evidence comments are provenance only.
 
 #include "GameSource/Director/BrnDirectorModule.h"
 
@@ -111,12 +92,12 @@ void DirectorModule::Construct(f32 lfTime)
     mVolumeTestFinePostOffice.Construct();
     mVolumeTestDeepestPostOffice.Construct();
 
-    mCamera.Construct();
+    mReplayDirector.SetFirstFrame(false);  // ARTIST 8225C664
+    mReplayDirector.GetFinalCamera().Construct();
 
     mMainDirector.Construct(&mDirectorResourceManager, lfTime);
 
     mDirectorSerialiser.Construct();
-    mbReplayStartedThisFrame = 0;  // ARTIST 8225C664
     mbIsReplaying = false;
     mbReplayRestoring = false;
 
@@ -406,7 +387,7 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
     if (lbIsReplaying != mbIsReplaying && lbIsReplaying)
     {
         mbReplayRestoring        = false;   // this+232193
-        mbReplayStartedThisFrame = 1;       // this+231716
+        mReplayDirector.SetFirstFrame(true);       // this+231716
     }
     mbIsReplaying = lbIsReplaying;          // this+232192
 
@@ -450,9 +431,7 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
         {
             mDirectorSerialiser.SetDataReady(true);
             mDirectorSerialiser.Read();
-            // Original next call: ReplayDirector::PreSceneQueryUpdate
-            // (8225BD28) with GetStaticLayout and lIO. The camera provider is
-            // still declaration-only; see the bounded packet's remaining gaps.
+            mReplayDirector.PreSceneQueryUpdate(mDirectorSerialiser.GetStaticLayout(), &lIO);
         }
     }
     else
@@ -485,12 +464,12 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
 //   2. build the per-frame post office with slot 0 (the producer) ONLY -- this pass does
 //      NOT mint queries, so the six post-office slots are deliberately NULLED (the X360
 //      memsets them) and Clear() therefore does nothing;
-//   3. run MainDirector::Update (live) or ReplayDirector::Update (replay -- GATED). BOTH
+//   3. run MainDirector::Update (live) or ReplayDirector::Update (replay). BOTH
 //      legs publish their camera into the output buffer themselves (SetCameraOutput +
 //      SetCgsCamera are called from exactly those two functions and nowhere else);
 //   4. copy whichever director ran into the module's own published graphics camera
 //      (mCgsCamera = <that director's CgsGraphics::Camera>);
-//   5. the replay RECORD leg + serialiser registration (GATED).
+//   5. the replay RECORD leg + unconditional serialiser registration.
 // ----------------------------------------------------------------------------
 s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
                            const DirectorIO::InputBuffer* lpInputBuffer,
@@ -541,16 +520,11 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
     }
     else
     {
-        // ⚠️ QUIET GATE -- the REPLAY leg. The X360 runs, for serialiser modes 4/5/6:
-        //     ReplayDirector::Update( this + 221008,                                  // @0x8225C298
-        //                             DirectorSerialiser::GetStaticLayout(&mDirectorSerialiser),
-        //                             &lIO );
-        //     mCgsCamera = *(CgsGraphics::Camera*)(this + 221712);   // ReplayDirector +0x240
-        // Same blockers as the PreSceneQueryUpdate replay gate (un-homed DirectorSerialiser;
-        // ReplayDirector::Update declaration-only). Note the module's graphics camera is left
-        // UNCHANGED here rather than being fed a fabricated one -- so a replay frame simply
-        // re-presents the previous camera instead of a wrong one.
-        // DELETE-WHEN: as the PreSceneQueryUpdate replay gate.
+        if (mDirectorSerialiser.IsPlaying())
+        {
+            mReplayDirector.Update(mDirectorSerialiser.GetStaticLayout(), &lIO);
+            mCgsCamera = mReplayDirector.GetCgsCamera();
+        }
     }
 
     // ARTIST 82275448..8227551C: snapshot in every recording mode,
@@ -638,7 +612,7 @@ s32 DirectorModule::PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
     {
         const s32 liCameraType = lpInputBuffer->GetCameraType();
         if (liCameraType > -1)
-            miPostGuiCarIndexLatch = liCameraType;
+            mReplayDirector.SetCameraSelection(liCameraType);
     }
 
     lpOutputBuffer->UnlockForWrite();
