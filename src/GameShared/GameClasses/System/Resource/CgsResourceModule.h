@@ -95,7 +95,8 @@ namespace CgsResource
                 static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
         }
 
-        void Construct(const void* lpInitOptions, void* lpAllocator);  // deferred
+        void Construct(const InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
+                       rw::IResourceAllocator* lpDebugAllocator);  // ARTIST829055B0
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
