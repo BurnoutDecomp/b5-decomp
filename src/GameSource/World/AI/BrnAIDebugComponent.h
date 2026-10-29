@@ -74,6 +74,8 @@ protected:
     virtual void OnActivate();
 
 private:
+    static void AssertNativeLayout();
+
     // ---- helpers bodied in this TU ----
 
     // @0x82767360  Draw one AI state-table cell as 2D text, fading every other row, then advance the

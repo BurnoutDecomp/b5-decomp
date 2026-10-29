@@ -331,6 +331,11 @@ namespace BrnAI
     CGS_STATIC_ASSERT((offsetof(AIDriver, mBrakingRoadDir)            == 0x1CB0), "AIDriver::mBrakingRoadDir @ +0x1CB0");
     CGS_STATIC_ASSERT((offsetof(AIDriver, m2DCarPos)                  == 0x1CD0), "AIDriver::m2DCarPos @ +0x1CD0");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mpCar)             == 0x1CE0), "AIDriver::mpCar (guest mpCar) @ +0x1CE0");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, mpSectionsData) == 0x1CE4), "AIDriver::mpSectionsData native offset");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, mpAggressionVictimCar) == 0x1CE8), "AIDriver::mpAggressionVictimCar native offset");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, meDriftState) == 0x1CEC), "AIDriver::meDriftState native offset");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, meAggressionVictim) == 0x1CF0), "AIDriver::meAggressionVictim native offset");
+    CGS_STATIC_ASSERT((offsetof(AIDriver, meRelatedActiveCarIndex) == 0x1CF4), "AIDriver::meRelatedActiveCarIndex native offset");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mQuickTurnSteeringLock)    == 0x1CF8), "AIDriver::mQuickTurnSteeringLock @ +0x1CF8");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mfAngleToBrakingTarget)    == 0x1CFC), "AIDriver::mfAngleToBrakingTarget @ +0x1CFC");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mfCarSpeed)               == 0x1D00), "AIDriver::mfCarSpeed @ +0x1D00");
