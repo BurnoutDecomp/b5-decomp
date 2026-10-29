@@ -1,41 +1,10 @@
 #pragma once
 
-// GameSource/World/ShadowMap/BrnShadowMap.h
-//
-// BrnWorld::ShadowMap -- the shadow-map manager: it owns the (up to
-// BrnWorld::KU_NUM_SHADOW_MAPS == 3) shadow-map cameras / cached matrices / per-map
-// trapezoidal-shadow-map (TSM) bounding info, and drives the per-frame view-volume /
-// camera-matrix computation the renderer consumes when rendering into the shadow maps.
-//
-// HOME for the 7-function BrnShadowMap.cpp TU (compilation home path is
-// "GameSource/Unity/../World/ShadowMap/BrnShadowMap.cpp" per the X360 unity build).
-//
-// LAYOUT: recovered from the DecFIGS DWARF (references/DecFIGS/dwarfdump/GameSource/World/
-// ShadowMap/BrnShadowMap.h), which attests the full named member list. Per the project
-// convention (semantic parity by named member, not byte offset -- the x64 gate rule), the
-// members are declared by name/logical type; only the two fields the RECONSTRUCTED bodies
-// in the .cpp actually touch (muCurrentShadowMap, KU_NUM_SHADOW_MAPS-bounded arrays) have
-// asm-attested provenance below. Most member functions are DECLARATION-ONLY (see the .cpp
-// header comment) -- the class is heavily VMX-dominated and this wave only recovers the two
-// tractable scalar/branchless helpers.
-//
-// FLAG (ambiguous member types, forward/opaque per AGENTS.md "forward-declaration is the
-//   exception (c) no reference exists to reconstruct the type"):
-//   * TsmBBInfo::mYExtents -- the DWARF dump resolves this field's type to THREE DIFFERENT
-//     bogus namespaces across its duplicated CU entries (SmoothStep::Vector2,
-//     AISection::Vector2, Basic2dColouredVertex::Vector2), none of which is a real Vector2
-//     home in this codebase -- a DWARF cross-CU merge artifact (see the project's
-//     wiki-name-retrofit lesson re: DWARF variant misses), not a real nested type. Modelled
-//     as the repo-canonical rw::math::vpu Vector2 (BrnCommonTypes.h), which every other
-//     "Vector2" field in the codebase resolves to.
-//   * mTextureStateResource -- DWARF names its type only "Resource" (unqualified). The only
-//     candidate, rw::Resource, is forward-declared project-wide with NO reconstructed
-//     complete-type home yet (no rwcore_structs.h in this tree) -- left as an opaque
-//     byte-sized placeholder (rw::Resource is a fixed-size POD header on X360) rather than
-//     fabricating a layout.
-//
-// None of the DECLARATION-ONLY functions below are called by the two bodied functions
-// (CalcOptimisedLod / CalcLodDistanceModifier), which only touch muCurrentShadowMap.
+// Native shadow-map manager. ARTIST pins the three camera/TSM strides and
+// the scalar tail; DecFIGS supplies the named declaration order. TsmBBInfo's
+// final extents are the scalar FPU Vector2 type, and the texture allocation
+// uses the genuine five-pointer rw::Resource. Absolute native gates below
+// keep the complete 0x1530-byte shape and the World-owned focus store checked.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                             // Vector2/Vector3/Matrix44/Matrix44Affine/VecFloat
@@ -43,7 +12,8 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"     // CgsGeometric::Frustum
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                   // CgsGraphics::Model::State (CalcOptimisedLod param/return)
 #include "GameSource/Director/Camera/Camera.h"                          // BrnDirector::Camera::Camera (maShadowMapCamera / the render-camera params)
-namespace rw { struct Resource; }   // opaque -- see FLAG above; no reconstructed complete-type home yet
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 namespace BrnWorld
 {
@@ -77,7 +47,10 @@ namespace BrnWorld
             f32                      mfTsmSlideBack;         // BrnShadowMap.h:81
             bool                     mbDebugRender;          // BrnShadowMap.h:82
             bool                     mbSceneOptimised;       // BrnShadowMap.h:84
-            Vector2                  mYExtents;              // BrnShadowMap.h:85 -- see FLAG above
+            // DecFIGS's unqualified Vector2 is the two-float FPU type here.
+            // ARTIST 827BFF78 multiplies TsmBBInfo indices by 0x320; the
+            // preceding bools occupy +0x314/+0x315 and this pair fills +0x318.
+            rw::math::fpu::Vector2Template<f32> mYExtents;    // BrnShadowMap.h:85
         };
 
         // ---- lifecycle / per-frame update (all DECLARATION-ONLY, VMX-dominated) --------
@@ -109,9 +82,12 @@ namespace BrnWorld
         // ValidateTransformWithDebugInfo / SetConstants. This is the real overload:
         void CalculateShadowMapCameras(Vector3 lv3LightDirection, const BrnDirector::Camera::Camera* lpRenderCamera);
 
-        // BrnShadowMap.h:102. Update the focus point the shadow maps are centred on.
-        // DECLARATION-ONLY (not attested by a standalone X360 body in this dossier).
-        void UpdateShadowMapFocusPoint(Vector3 lv3Arg);
+        // DWARF :102; inlined at ARTIST 827D85D4..85E4. Copies all four
+        // vector lanes to ShadowMap+0x14E0, WorldModule+0x5E3BC0.
+        void UpdateShadowMapFocusPoint(Vector3 lFocusPoint)
+        {
+            mShadowMapFocusPoint = lFocusPoint;
+        }
 
         // ---- simple accessors (inlined on console -- no standalone X360 bodies; the
         //      ones the WorldModule render feed reads are BODIED in the .cpp, destub
@@ -251,10 +227,9 @@ namespace BrnWorld
         renderengine::TextureState*            mpTextureState;          // :237
         renderengine::TextureState::Parameters mTextureStateParams;     // :238
 
-        // :239 -- opaque placeholder; see the class-header FLAG re: rw::Resource having no
-        // reconstructed complete-type home yet. Sized/aligned generously (rw::Resource is a
-        // small fixed POD descriptor on X360; this is provenance-honest storage, not a cast).
-        struct OpaqueResourcePlaceholder { CGS_ALIGN(8) u8 maBytes[16]; } mTextureStateResource; // :239
+        // Five native resource pointers. ARTIST WorldModule's C++ constructor
+        // 827E5AF8..5B10 clears +0x9A0..+0x9B0, before the first TSM at +0x9C0.
+        rw::Resource mTextureStateResource;                     // :239
 
         TsmBBInfo maTsmBBInfo[KU_NUM_SHADOW_MAPS];                // :242
 
@@ -306,5 +281,17 @@ namespace BrnWorld
 
         f32  mfVariableBiasMin;                                   // :290
         f32  mfBiasFrustumLength;                                 // :291
+
+        void LockNativeLayout_()
+        {
+            CGS_STATIC_ASSERT((sizeof(TsmBBInfo) == 0x320), "ARTIST TSM stride");
+            CGS_STATIC_ASSERT((offsetof(TsmBBInfo, mYExtents) == 0x318), "ARTIST TSM scalar extents");
+            CGS_STATIC_ASSERT((sizeof(ShadowMap) == 0x1530), "ARTIST shadow-map extent");
+            CGS_STATIC_ASSERT((offsetof(ShadowMap, mTextureStateParams) == 0x954), "ARTIST shadow sampler parameters");
+            CGS_STATIC_ASSERT((offsetof(ShadowMap, mTextureStateResource) == 0x9A0), "ARTIST shadow texture resource");
+            CGS_STATIC_ASSERT((offsetof(ShadowMap, maTsmBBInfo) == 0x9C0), "ARTIST shadow TSM table");
+            CGS_STATIC_ASSERT((offsetof(ShadowMap, mShadowMapFocusPoint) == 0x14E0), "ARTIST shadow focus");
+            CGS_STATIC_ASSERT((offsetof(ShadowMap, mfBiasFrustumLength) == 0x1524), "ARTIST shadow tail");
+        }
     };
 }

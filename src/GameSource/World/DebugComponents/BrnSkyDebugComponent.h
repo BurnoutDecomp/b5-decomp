@@ -36,6 +36,9 @@ namespace EnvironmentSettings
     class DebugComponent : public CgsDev::DebugComponent
     {
     public:
+        DebugComponent()
+            : CgsDev::DebugComponent(CgsDev::DebugComponent::WorldConstructorTag()) {}
+
         // BrnSkyDebugComponent.cpp:48 -- @0x827C7668 (see the file banner).
         void Construct( EnvironmentManager* lpEnvironmentManager );
 

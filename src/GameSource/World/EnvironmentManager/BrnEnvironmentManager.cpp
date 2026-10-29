@@ -17,7 +17,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 
 #include <cmath>     // sqrtf / std::cos / std::sin
-#include <cstdio>    // std::snprintf (bring-up diagnostic) / fopen / fscanf / fclose (the console's d:\Season.txt override)
+#include <cstdio>    // fopen / fscanf / fclose (the console's d:\Season.txt override)
 #include <cstring>   // memset / memcpy / strcmp
 #include <cstdlib>   // strtod (ReadJunkyardLightingData)
 
@@ -41,6 +41,9 @@ namespace
     const f32 KF_DEF_WHITE_LEVEL               = 0.5f;           // flt_82001DA0
     const f32 KF_JUNKYARD_TIME_OF_DAY_SECONDS  = 64800.0f;       // flt_82F307F0  (18:00)
     const f32 KF_JUNKYARD_NEAREST_DISTANCE_SENTINEL = 100000.0f; // flt_820080E8
+    // ARTIST CRT initializer 82C6AA08..AA44 writes unk_8300F410.
+    // The Y lane comes from 820CBDB0 (BF7D2F1B); the other lanes are zero.
+    const Vector3 K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION = { 0.0f, -0.9890000224113464f, 0.0f, 0.0f };
 
     // CalcKeyLightDirection's time-of-day -> elevation-angle mapping.
     const f32 KF_SUN_ELEVATION_ZERO_SECONDS    = 23400.0f;       // flt_820CAA7C  (06:30)
@@ -96,12 +99,18 @@ namespace
 // "Tyring" is reproduced verbatim from the ARTIST rodata.
 
 #include <cstdlib>   // [DIAG] getenv (BRN_ENV_DIAG)
-namespace renderengine { extern u32 guPresentCount; }   // [DIAG] the PC presenter's present count (device.cpp)
 
 namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
+
+EnvironmentManager::EnvironmentManager()
+{
+    // ARTIST 827DE8A8 constructs the four ResourcePtr members and mAsyncOp.
+    // Their real C++ constructors perform those stores in declaration order.
+}
+
 
 // @ 0x827B0D08. Normal environment pause transition. This is deliberately a
 // separate state machine from UpdateFromTool below: normal pause owns the DWARF
@@ -880,7 +889,7 @@ void EnvironmentManager::EnableJunkyardLightingSetup()
     mbOverrideKeyLightDirection = true;
     mfTimeOfDayUpperBound       = KF_JUNKYARD_TIME_OF_DAY_SECONDS;
     SetTimeOfDay_Seconds(KF_JUNKYARD_TIME_OF_DAY_SECONDS);
-    mOverrideKeyLightDirection  = GetDefaultJunkyardKeyLightDirection();
+    mOverrideKeyLightDirection  = K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION;
 
     for (u32 luIndex = 0; luIndex < muNumJunkyardLightingSetupsLoaded; ++luIndex)
     {
@@ -1204,49 +1213,6 @@ void EnvironmentManager::Update( f32 lfPlayerSpeed, BrnWorldIO::UpdateOutputBuff
     if ( lbBlendSetUp )
     {
         PerformBlend( mBlendFrame );
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENV_DIAG=1 (issue #30, the 438 s black window):
-    // names the frame (by present count) on which the time of day REFLECTS at a bound, on which
-    // SetupBlend fails, or on which the blend frame is degenerate (null keyframe / weights not
-    // summing to one), so a black present can be laid against the environment's own state.
-    {
-        static int siEnvDiag = -1;
-        if ( siEnvDiag < 0 )
-        {
-        }
-        if ( siEnvDiag == 1 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static f32 sfPrevDelta   = 0.0f;
-            static u32 suPrinted     = 0u;
-            const f32  lfWeightSum   = mBlendFrame.mafWeights[ 0 ] + mBlendFrame.mafWeights[ 1 ]
-                                     + mBlendFrame.mafWeights[ 2 ] + mBlendFrame.mafWeights[ 3 ];
-            const bool lbNullKeyframe = mBlendFrame.mapKeyframes[ 0 ] == 0 || mBlendFrame.mapKeyframes[ 1 ] == 0
-                                     || mBlendFrame.mapKeyframes[ 2 ] == 0 || mBlendFrame.mapKeyframes[ 3 ] == 0;
-            const bool lbBadWeights   = !( lfWeightSum > 0.999f && lfWeightSum < 1.001f );
-            const bool lbReflected    = ( sfPrevDelta != 0.0f ) && ( ( sfPrevDelta > 0.0f ) != ( mfTimeOfDayDelta > 0.0f ) );
-            sfPrevDelta = mfTimeOfDayDelta;
-            if ( ( lbReflected || !lbBlendSetUp || lbNullKeyframe || lbBadWeights ) && suPrinted < 200u )
-            {
-                ++suPrinted;
-                char lacMsg[ 320 ];
-                std::snprintf( lacMsg, sizeof( lacMsg ),
-                               "[env-diag] present=%u %s%s%s%s tod=%.1f delta=%.4f mode=%d seasonStage=%d "
-                               "blend=[%.3f %.3f %.3f %.3f] kf=[%p %p %p %p]\n",
-                               renderengine::guPresentCount,
-                               lbReflected ? "REFLECT " : "",
-                               lbBlendSetUp ? "" : "SETUPBLEND-FALSE ",
-                               lbNullKeyframe ? "NULL-KEYFRAME " : "",
-                               lbBadWeights ? "BAD-WEIGHTS " : "",
-                               static_cast<double>( mfTimeOfDay ), static_cast<double>( mfTimeOfDayDelta ),
-                               static_cast<int>( meBlendMode ), static_cast<int>( meSetupSeasonsBlendStage ),
-                               static_cast<double>( mBlendFrame.mafWeights[ 0 ] ), static_cast<double>( mBlendFrame.mafWeights[ 1 ] ),
-                               static_cast<double>( mBlendFrame.mafWeights[ 2 ] ), static_cast<double>( mBlendFrame.mafWeights[ 3 ] ),
-                               static_cast<const void*>( mBlendFrame.mapKeyframes[ 0 ] ), static_cast<const void*>( mBlendFrame.mapKeyframes[ 1 ] ),
-                               static_cast<const void*>( mBlendFrame.mapKeyframes[ 2 ] ), static_cast<const void*>( mBlendFrame.mapKeyframes[ 3 ] ) );
-                CgsDev::Log::WriteToLog( lacMsg );
-            }
-        }
     }
 
 }

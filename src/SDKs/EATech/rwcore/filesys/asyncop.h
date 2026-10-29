@@ -57,11 +57,9 @@ namespace rw
             //   +0x40 mpDevice      : the Device this op was queued on
             //   +0x44 mpfnDoIo      : the op's transfer entry point (Device calls it)
             //
-            // The +0x18 slot is the completion callback (a 32-bit function pointer in the
-            // asm: `stw r5,0x18`). The free GetSize @0x82BBD700 reads the 64-bit word at
-            // +0x18 of its argument (`ld 0x18`); that accessor is a separate free function
-            // (not an AsyncOp method) and is modelled via the mu64Size union view below so
-            // both the byte layout and both call shapes are reproduced exactly.
+            // The +0x18 slot is a 32-bit completion callback. The separate
+            // GetSize accessor consumes a Handle, as shown by EnvironmentManager
+            // Prepare's mpFileHandle argument at ARTIST 827D49A8.
             struct AsyncOp;
 
             // The object AsyncOp::mpStream points at, as the Device scheduler sees it. The
@@ -150,7 +148,6 @@ namespace rw
                 s32                miResult;        // +0x04  DoIo result / status (ctor: -3)
                 u8                 mbReserved08;    // +0x08
                 u8                 mbIsReadOp;      // +0x09  non-zero for read-class ops
-                u8                 macReserved0A[2]; // +0x0A .. +0x0B
                 s32                miPriority;      // +0x0C  scheduling priority
                 OpStream*          mpStream;        // +0x10  owning Stream/File (or result Handle)
                 uintptr_t          mUserData;       // +0x14  opaque user word for the callback
@@ -158,16 +155,10 @@ namespace rw
                                                     //        stashes its engine pointer here and
                                                     //        recovers it in its op callbacks --
                                                     //        X360 stored a 32-bit word)
-                union                               // +0x18
-                {
-                    CompletionCallback mpfnComplete; // scheduler: `stw 0x18`, then call
-                    u64                mu64Size;     // free GetSize: `ld 0x18`
-                };
-                u32                muReserved1C;     // +0x1C  (tail of the +0x18 64-bit slot)
+                CompletionCallback mpfnComplete;     // +0x18
                 u64                mu64Position;    // +0x20  64-bit file offset
                 u64                mu64ByteCount;   // +0x28  64-bit byte count requested
                 void*              mpBuffer;        // +0x30  transfer buffer
-                u32                muReserved34;     // +0x34
                 u64                mu64BytesDone;   // +0x38  running transferred bytes
                 Device*            mpDevice;        // +0x40  the Device this op runs on
                 DoIoCallback       mpfnDoIo;        // +0x44  transfer entry point
@@ -206,8 +197,14 @@ namespace rw
                 s32 SetPriority(s32 liPriority);
             };
 
-            // GetSize @0x82BBD700:  ld r3, 0x18(r3)  -- return the 64-bit size at +0x18.
-            u64 GetSize(const AsyncOp* lpOp);
+            CGS_STATIC_ASSERT((sizeof(AsyncOp) == 0x48), "ARTIST async operation size");
+            CGS_STATIC_ASSERT((__alignof(AsyncOp) == 8), "ARTIST async operation alignment");
+            CGS_STATIC_ASSERT((offsetof(AsyncOp, mpfnComplete) == 0x18), "ARTIST async callback");
+            CGS_STATIC_ASSERT((offsetof(AsyncOp, mu64Position) == 0x20), "ARTIST async position");
+            CGS_STATIC_ASSERT((offsetof(AsyncOp, mpBuffer) == 0x30), "ARTIST async buffer");
+            CGS_STATIC_ASSERT((offsetof(AsyncOp, mu64BytesDone) == 0x38), "ARTIST async result size");
+            CGS_STATIC_ASSERT((offsetof(AsyncOp, mpDevice) == 0x40), "ARTIST async device");
+            CGS_STATIC_ASSERT((offsetof(AsyncOp, mpfnDoIo) == 0x44), "ARTIST async operation callback");
 
             // The Device's priority-ordered op queue (nodes link through AsyncOp::mpNext).
             typedef detail::ListSingle<AsyncOp> AsyncOpList;
@@ -239,6 +236,12 @@ namespace rw
                                                //         copy it into StreamState::mu64FileSize)
                 u64           mu64Reserved20;  // +0x20
             };
+
+            CGS_STATIC_ASSERT((sizeof(Handle) == 0x28), "ARTIST filesystem handle size");
+            CGS_STATIC_ASSERT((offsetof(Handle, mu64Size) == 0x18), "ARTIST filesystem handle size field");
+
+            // ARTIST 82BBD700: ld r3, 0x18(r3); blr.
+            u64 GetSize(const Handle* lpHandle);
 
             // The process-wide filesys allocator (X360 off_8327F07C). The scalar deleting
             // destructor frees a heap Handle through its vtable slot +0xC -- the 4th pointer

@@ -1,29 +1,10 @@
 #pragma once
 
-// ============================================================================
-// b5-decomp/src/GameSource/World/BrnWorldModule.h
-//
-// Home of BrnWorld::WorldModule -- the World MODULE: a CgsModule::ModuleSingleBuffered
-// subclass that owns + ticks the whole world subsystem (the race-car / traffic / prop /
-// trigger / world entity modules, the physics + scene + AI + crash modules, the
-// environment manager and the environment/shadow maps) through the per-frame
-// scene-update interface.
-//
-// The ledger key's "GameSource/Unity/../World/BrnWorldModule.cpp" collapses to this
-// GameSource/World/ home (the X360 build #included BrnWorldModule.cpp from a Unity TU).
-//
-// SOURCE-OF-TRUTH: member list + order + method signatures are the DecFIGS DWARF
-// (BrnWorldModule.h:124..386 + the cpp-bodied method decls). The X360 ARTIST asm is the
-// behaviour spine.
-//
-// GROWN 2026-07-24 (world-render campaign): the sub-module fleet is now embedded BY
-// VALUE with the real committed types (the earlier minimal-slice rationale -- "fleet
-// layouts un-homed" -- became stale when BrnWorld::WorldEntityModule landed in full and
-// the sibling module homes were confirmed instantiable). Per the x64 gate the embed is
-// semantic-by-NAME: the X360 32-bit intra-object byte offsets (noted per member below,
-// from WorldModule::Construct @0x827CF540 / Destruct @0x827BD0F0) are cross-reference
-// comments, never layout pins.
-// ============================================================================
+// Native World-module ownership and lifecycle. ARTIST WorldModule's C++
+// constructor (827E5998) names the embedded fleet and vtable order; its engine
+// Construct (827CF540) supplies the stage, monitor, and shader-policy defaults.
+// DecFIGS corroborates the named member declarations. The contained modules
+// must recover their own native layouts before the full World extent closes.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // CgsModule::ModuleSingleBuffered base
@@ -110,6 +91,8 @@ namespace BrnWorld
         friend class WorldDebugComponent;
 
     public:
+        WorldModule(); // ARTIST 827E5998: real by-value member constructors.
+
         // ---- prepare / release / resource / district-map stage enums (DWARF :127..185) ----
         enum EWorldPrepareStage : s32
         {
@@ -179,20 +162,10 @@ namespace BrnWorld
         // Constructs it against the environment manager).
         typedef BrnWorld::EnvironmentSettings::DebugComponent SkyDebugComponent;
 
-        // ====================================================================
-        // CgsModule base pure-virtual overrides (make WorldModule instantiable).
-        // The X360 WorldModule's real lifecycle entry points take extra IO arguments
-        // (Construct(const BrnCpuMonitors&) etc., per the DWARF); the no-arg overrides
-        // exist only to satisfy the abstract CgsModule contract.
-        // ====================================================================
-        void Construct()  { CgsModule::ModuleSingleBuffered::Construct(); }
-        bool Prepare()    { return CgsModule::ModuleSingleBuffered::Prepare(); }
-        // Release/Destruct: on the X360 the this-only virtual slots ARE the real
-        // per-stage teardown bodies (@0x827BCE58 / @0x827BD0F0) -- declared below
-        // with the lifecycle group, bodied in the cpp.
-        bool Release()   ;
+        // ARTIST vtable 820D1388 retains ModuleSingleBuffered's first three
+        // slots. Destruct overrides slot 3; the typed world lifecycle adds
+        // slots 16..19 below.
         void Destruct()  ;
-        void Update()     { CgsModule::ModuleSingleBuffered::Update(); }
 
         // DWARF :358 (virtual). @0x827D63E8 -- the real per-frame world UPDATE
         // spine (the X360 vtable+76 slot the game module's DoUpdate_World and the
@@ -204,12 +177,6 @@ namespace BrnWorld
         // allocator (FreeAll'd by the caller each frame); the one Malloc carves
         // the frame's triangle-cache collision generator (336896 = generator
         // object 74752 + 0x40000 result buffer).
-        virtual void Update( BrnUpdateSet lUpdateSet,
-                             CgsModule::IOBufferStack* lpInputBufferStack,
-                             CgsModule::IOBufferStack* lpOutputBufferStack,
-                             const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
-                             BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
-                             CgsMemory::LinearMalloc* lpFrameAllocator );
 
         // DWARF :361. @0x827CFDE0 -- the trimmed update the game module runs
         // while the boot-up video plays (updateSet & 0x20).
@@ -228,7 +195,24 @@ namespace BrnWorld
 
         // DWARF :343 (virtual). @0x827CF540 -- construct the fleet, register the
         // world/physics perf monitors, copy the global CPU-monitor handle block.
-        void Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors );
+        virtual void Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors );
+
+        virtual bool Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
+                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                              BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
+                              BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
+
+        // DecFIGS :940 carries these IO arguments. ARTIST 827BCE58 does not
+        // read them, but the overload is the distinct virtual slot 18.
+        virtual bool Release( CgsModule::IOBufferStack* lpInputBufferStack,
+                              BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer );
+
+        virtual void Update( BrnUpdateSet lUpdateSet,
+                             CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
+                             BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
+                             CgsMemory::LinearMalloc* lpFrameAllocator );
 
         // @0x827BD0F0 -- the virtual Destruct() body (declared with the base
         // overrides above): destruct eight sub-modules (AI, race car, traffic,
@@ -402,10 +386,6 @@ namespace BrnWorld
         // environment manager -> race car -> traffic -> WORLD ENTITY (starts the
         // world streaming) -> prop -> trigger -> AI -> crash -> env-map cameras ->
         // debug -> done. Resumable: one stage (or more) per call; false = call again.
-        bool Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
-                      CgsModule::IOBufferStack* lpOutputBufferStack,
-                      BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
-                      BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
 
         // @0x827C9478 -- one frame of the WORLD COLLISION prepare (the scripted load's
         // stage 7, LoadingScriptedState::LoadWorldCollision @0x823E73E0). Drives
@@ -458,24 +438,6 @@ namespace BrnWorld
         const BrnGame::BrnCpuMonitors& GetGlobalCpuMonitors() const { return mGlobalCpuMonitors; }
 
     private:
-        // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER=1: once the player's slot is attached and its
-        // AI driver is active, hand the car to the game's own AI through the console's debug toggle
-        // (WorldDebugComponent::AIDrivesPlayerChanged @0x827B1FC0). One-shot; inert without the
-        // variable. Defined at the end of BrnWorldModule.cpp; called once per Update.
-        void HarnessArmAIDrivesPlayer();
-
-        // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=cruise|race|pursuit -- the "AI PAD" seat: the game's
-        // own AI computes the player car's controls and they reach physics through the PAD path (the
-        // control word stays 1, so to the rest of the game the car is human-driven). Arm = the standing
-        // policy + GameSource/World/AI/BrnAIHarnessPad.h's gHarnessAIPad; Stash = the AI's player-slot
-        // record copied out of the AI output after AIModule::Update; Apply = next frame, that record's
-        // driving channels written into the race-car pre-scene PlayerVehicleControls. Bodies at the end
-        // of BrnWorldModule.cpp; all three return at once without the variable.
-        void HarnessArmAIPadPlayer();
-        void HarnessStashAIPadControls( BrnAI::AIModuleIO::OutputBuffer* lpAIOutput );
-        void HarnessApplyAIPad( RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarInput_PreScene,
-                                const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer );
-
         // @0x827A52B0 (DWARF BrnWorldModule.h:473 -- `void BridgeRaceCarModuleToWorldModule_
         // PreScene(InputBuffer_PreScene*, const OutputBuffer_PreScene*)`, i.e. a WorldModule
         // METHOD with `this` implicit). Latch the race-car module's pre-scene active-race-car
@@ -690,15 +652,11 @@ namespace BrnWorld
         s32 miRaceCarGenerateDispListClearPM;          // (+6167572)
 
         BrnGame::BrnCpuMonitors    mGlobalCpuMonitors; // (+6167576, 160-byte ctor copy)
-        BrnGraphics::EnvironmentMap mEnvironmentMap;   // (+6168096)
-        ShadowMap                  mShadowMap;         // (+6170336)
-        // The active player car's world position, latched by Update's tail for
-        // the environment-map / dispatch consumers (X360 stvx128 @ +6175680,
-        // right after the shadow map -- WorldModule::Update @0x827D63E8).
-        Vector4                    mPlayerCarPosition; // (+6175680)
         // The last director camera the dispatch pass consumed (X360 +6167744;
         // GenerateDispatchLists copies the frame camera into it each dispatch).
         BrnDirector::Camera::Camera mLastCameraInput;
+        BrnGraphics::EnvironmentMap mEnvironmentMap;   // (+6168096)
+        ShadowMap                  mShadowMap;         // (+6170336)
 
         // DWARF :336 (X360 +6175760): the world shader-LOD policy block --
         // GenerateDispatchLists refreshes it (the broadcast-splat of
@@ -706,5 +664,13 @@ namespace BrnWorld
         ShaderLodInfo mShaderLodInfo;
 
         bool mbIsInJunkyard;                           // :339 (X360 +6175808)
+
+        void LockNativeLayout_()
+        {
+            CGS_STATIC_ASSERT((offsetof(WorldModule, mePrepareStage) == 0x228), "ARTIST world prepare stage");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, meReleaseStage) == 0x22C), "ARTIST world release stage");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, meVaultResourceStage) == 0x230), "ARTIST world vault stage");
+            CGS_STATIC_ASSERT((offsetof(WorldModule, meDistrictMapLoadStage) == 0x234), "ARTIST world district stage");
+        }
     };
 }

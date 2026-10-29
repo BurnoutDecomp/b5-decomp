@@ -1,43 +1,12 @@
-// ============================================================================
-// b5-decomp/src/GameSource/World/BrnWorldModule.cpp
-//
-// BrnWorld::WorldModule -- the World MODULE spine. See BrnWorldModule.h for the
-// full scope/FLAG rationale.
-//
-// The X360 TU "GameSource/Unity/../World/BrnWorldModule.cpp" has 13 functions:
-//   Construct, Destruct, EntityModulePostSceneUpdate, EntityModulePrePhysicsUpdate,
-//   ExternalSceneQueriesUpdate, GenerateDispatchLists, GenerateFrustumQueries,
-//   GenerateShadowMapDispatchLists, HandleGameActions, LoadDistrictMap, Prepare,
-//   Release, UpdatePhysicsNetworkCatchup.
-//
-// BODIED (1):  LoadDistrictMap  -- faithful, through this TU's own named members +
-//              committed deps (RequestInterface<4096>::LoadBundle, VariableEventQueue
-//              <4096,16>::AddEvent, CgsResource::ID::HashString, the receiver-queue
-//              accessors). All branches/stores/early-outs mirror X360 0x827D11D8.
-//
-// DECLARATION-ONLY + FLAG (12):  every other dossier function reaches a genuinely
-//              un-homed dependency -- either it indexes the embedded sub-module fleet by
-//              raw offset (Construct @0x827CF540, Destruct @0x827BD0F0, Release @0x827BCE58,
-//              ExternalSceneQueriesUpdate @0x827B06C8, UpdatePhysicsNetworkCatchup @0x827B06E0,
-//              EntityModulePostSceneUpdate @0x827C3C58, EntityModulePrePhysicsUpdate @0x827BD5B8,
-//              HandleGameActions @0x827C44D8 -- the latter two also call the [todo] Bridge*
-//              helpers that live in their own TUs), or it is a multi-stage VMX/VPU pipeline
-//              (GenerateDispatchLists @0x827D1CE8, GenerateFrustumQueries @0x827DADF8,
-//              GenerateShadowMapDispatchLists @0x827C96D8). Per AGENTS.md these are NOT
-//              paraphrased to scalar and NOT poked by raw offset into committed aggregates;
-//              they are recorded here with their X360 address + the exact reason they are
-//              blocked, to be bodied once their sub-module/IO deps are homed.
-// ============================================================================
-#include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
+// BrnWorld::WorldModule: native lifecycle, update, dispatch, and folded bridges.
+// ARTIST controls the member stores, virtual slots, and native operations.
+// The corresponding header records the contained layout dependencies.
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include <chrono>  // [DIAG shadow-perf wave] steady_clock for the per-phase producer timers
-#include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
-#include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"   // [DIAG] BRN_WORLD_CAMTRAFFIC
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
@@ -83,6 +52,8 @@
 #include "GameSource/Director/Camera/Camera.h"      // BrnDirector::Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE
 #include <cmath>
 #include <cstddef>  // offsetof (the VehicleRenderInfo layout pins)
+#include <xtl.h>
+#include <xboxmath.h>
 
 // includes folded in from the BrnWorldModule_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"    // InEventLineTestFine
@@ -91,10 +62,6 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"                       // BrnWorld::CrashIO::OutputBuffer_PostPhysics
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                   // Array<short,25> (the GUI record's byte image)
-#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"     // [PC HARNESS] the AI record queue (HarnessStashAIPadControls)
-#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"           // [PC HARNESS] BrnAIDriverControls
-#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // [PC HARNESS] BrnWorld::PlayerVehicleControls
-#include <cstring>                                                                        // [PC HARNESS] std::strcmp (BRN_AI_PAD_PLAYER)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
@@ -103,10 +70,23 @@ namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
 namespace renderengine { extern s32 gEnvironmentMap; }
 
-namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 (device.cpp)
 
 namespace BrnWorld
 {
+
+static __forceinline Vector4 MakeWorldVector4(f32 x, f32 y, f32 z, f32 w)
+{
+    const Vector4 value = { x, y, z, w };
+    return value;
+}
+
+
+WorldModule::WorldModule()
+{
+    // ARTIST 827E5998: construction is the declared fleet, debug components,
+    // and ShadowMap's native sampler/resource constructors. Construct below
+    // is the separate engine lifecycle entry, reached through virtual slot 16.
+}
 
 // qword_8300E9B8: X360 static initializer @0x82C6A9D8 hashes this exact text;
 // WorldModule::Prepare loads the resulting 64-bit key at @0x827D5B6C.
@@ -351,11 +331,11 @@ void
 ShaderLodInfo::Construct()
 {
     {
-        const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector4 lAggregateValue = { 20.0f, 20.0f, 20.0f, 20.0f };
         mShaderLod1NearDistance = lAggregateValue;
     }
     {
-        const Vector4 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector4 lAggregateValue = { 1000.0f, 1000.0f, 1000.0f, 1000.0f };
         mMaxBelievableRadius = lAggregateValue;
     }
     mfShaderLod1NearDistance = 20.0f;
@@ -530,7 +510,7 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     mfCarAmbientLightMultiplier = 1.175f;           // X360 +6167336
 
     // The shader-LOD policy defaults (X360 +6175760..+6175804: the inlined
-    // ShaderLodInfo::Construct default block -- two zero splats, near distance
+    // ShaderLodInfo::Construct default block -- near-distance 20 and radius 1000 splats, near distance
     // 20.0, env-map technique 0, override -1, shader LOD off). The span is
     // mShaderLodInfo (DWARF pins it at +6175760); mLastCameraInput (+6167744)
     // is NOT touched by the X360 Construct.
@@ -1244,7 +1224,7 @@ WorldModule::PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack
 }
 
 // ============================================================================
-// Release  @ 0x827BCE58  (the this-only virtual slot)
+// Release  @ 0x827BCE58  (virtual slot 18; the two IO arguments are unused)
 //
 // The 13-stage release chain (reverse of Prepare). Each sub-module releases
 // through its own resumable Release; the environment manager is nudged by
@@ -1252,7 +1232,7 @@ WorldModule::PrepareWorldCollision( CgsModule::IOBufferStack* lpInputBufferStack
 // mePrepareStage for the next prepare cycle.
 // ============================================================================
 bool
-WorldModule::Release()
+WorldModule::Release( CgsModule::IOBufferStack*, BrnWorldIO::UpdateOutputBuffer* )
 {
     switch ( meReleaseStage )
     {
@@ -2435,10 +2415,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
         this, lpTriggerInput_PreScene, lpTriggerInput_PostScene, lpTrafficInput_PreScene,
         lpRaceCarInput_PreScene, lpRaceCarInput_PrePhysics, lpWorldEntityInput_PreScene,
         lpPropInput_PreScene, lpUpdateInputBuffer );
-    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the AI's player-seat decision of the previous frame
-    // replaces the real pad's driving channels in the race-car pre-scene input the bridge above just
-    // filled (still write-locked). Inert without the variable; see HarnessApplyAIPad (end of file).
-    HarnessApplyAIPad( lpRaceCarInput_PreScene, lpUpdateInputBuffer );
     lpPropInput_PreScene->UnlockForWrite();
     lpWorldEntityInput_PreScene->UnlockForWrite();
     lpTriggerInput_PostScene->UnlockForWrite();
@@ -2595,6 +2571,7 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 
     RaceCarEntityModuleIO::OutputBuffer_PostScene*    lpRaceCarOutput_PostScene = 0;
     PropEntityIO::OutputBuffer_PostScene*             lpPropOutput_PostScene    = 0;
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene* lpTrafficOutput_PostScene = 0;
     lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostScene, "TrafficPostScene" );
     lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput_PostScene, "RaceCarPostScene" );
     lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PostScene, "PropPostScene" );
@@ -2653,12 +2630,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
                                    lpRaceCarOutput_PostScene, lpSceneOutput,
                                    lpRaceCarOutput_PreScene );
 
-    // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER -- see HarnessArmAIDrivesPlayer (end of file).
-    // Placed BEFORE the refresh below so the frame that arms it already runs the AI-owned path.
-    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- the AI PAD seat's standing policy for THIS frame's AI
-    // update (gHarnessAIPad); the control word is never touched. See HarnessArmAIPadPlayer (end of file).
-    HarnessArmAIPadPlayer();
-
     // ARTIST 0x827D74FC..0x827D753C refreshes ownership before StoreDrivenCarData.
     // The management event resets the route/PID once; this latch keeps subsequent
     // frames from overwriting the handoff with "human driving" again.
@@ -2676,10 +2647,6 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     mAIModule.Update( lpInputBufferStack, lpOutputBufferStack, lpAIInput, lpAIOutput,
                       lUpdateSet );
     PerfMonCpu::StopMonitor( miAIModuleUpdatePM );
-
-    // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER -- copy the AI's player-slot record out of this frame's
-    // AI output for next frame's pad (HarnessApplyAIPad). Inert without the variable.
-    HarnessStashAIPadControls( lpAIOutput );
 
     lpInputBufferStack->DestroyIOBuffer( &lpAIInput );
 
@@ -3022,12 +2989,11 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
             const BrnPhysics::Vehicle::RaceCarState* lpPlayerState =
                 lpActiveRaceCars->GetRaceCarState( lePlayerIndex );
 
-            // Env-map refresh around the player car; latch its position.
+            // ARTIST 827D85B8/85E4: both consume the player's transform position.
+            // The second store is ShadowMap::mShadowMapFocusPoint (+0x14E0),
+            // inside the embedded shadow map, rather than a second World field.
             mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() );
-            {
-                const Vector4 lAggregateValue = { lPlayerPosition.x, lPlayerPosition.y, lPlayerPosition.z, 0.0f };
-                mPlayerCarPosition = lAggregateValue;
-            }
+            mShadowMap.UpdateShadowMapFocusPoint( lpPlayerState->mTransform.Pos() );
 
             // |linear velocity| -> the player speed member (X360 vmsum3fp + vrsqrte
             // + Newton refinement == rw::math::vpu::Magnitude).
@@ -3215,6 +3181,25 @@ ClassifyVehicleLOD( f32 lfDistance, const f32* lpafLODDistances )
     return CgsGraphics::Model::E_STATE_LOD_4;
 }
 
+// ARTIST 827C387C..38BC: VMX dot and reciprocal-square-root refinement.
+static __forceinline f32 VehicleLodDistance(const Vector3& camera, const Vector3& vehicle)
+{
+    const XMVECTOR delta = __vsubfp(__lvx(&camera, 0), __lvx(&vehicle, 0));
+    const XMVECTOR square = __vmsum3fp(delta, delta);
+    const XMVECTOR zero = XMVectorZero();
+    const XMVECTOR one = XMVectorReplicate(1.0f);
+    const XMVECTOR half = XMVectorReplicate(0.5f);
+    XMVECTOR estimate = __vrsqrtefp(square);
+    for (s32 step = 0; step < 2; ++step)
+    {
+        const XMVECTOR estimateSquare = __vmulfp(estimate, estimate);
+        const XMVECTOR scaledEstimate = __vmulfp(estimate, half);
+        const XMVECTOR residual = __vnmsubfp(square, estimateSquare, one);
+        estimate = __vmaddfp(scaledEstimate, residual, estimate);
+    }
+    return __vsel(__vmulfp(square, estimate), zero, __vcmpeqfp(square, zero)).x;
+}
+
 // ============================================================================
 // CalculateVehicleLODs  @ 0x827C3778
 //
@@ -3288,6 +3273,7 @@ WorldModule::CalculateVehicleLODs(
         const Vector3& lVehiclePosition =
             lpRaceCar->GetRenderParams()->GetBodyTransform().Pos();
 
+        const f32 lfDistance = VehicleLodDistance(lCameraPos, lVehiclePosition);
         lafRaceCarDistances[ liRaceCarIndex ] = lfDistance;
         lfRenderingCostEstimate += 1.0f / lfDistance;
     }
@@ -3318,6 +3304,9 @@ WorldModule::CalculateVehicleLODs(
         const f32 lfQuality    = KA_VEHICLE_QUALITY_LOD_DISTANCE[ luIndex ];
         const f32 lfAggressive = KA_VEHICLE_AGGRESSIVE_LOD_DISTANCE[ luIndex ];
         // VMX subtract/fused lerp, then a distinct scalar fmuls zoom stage.
+        const XMVECTOR quality = XMVectorReplicate(lfQuality);
+        const XMVECTOR difference = __vsubfp(XMVectorReplicate(lfAggressive), quality);
+        const f32 lfBand = __vmaddfp(difference, XMVectorReplicate(lfAlpha), quality).x;
         lafLODDistances[ luIndex ] = lfBand * lfZoomFactor;
     }
 
@@ -4235,7 +4224,7 @@ WorldModule::GenerateShadowMapDispatchLists(
             mRaceCarEntityModule.GenerateDispatchLists(
                 lpRaceCarDispatchInput, lpFilteredEntityData->maRaceCarEntityIds,
                 liCascadeList, liCascadeList, liCascadeList, false,
-                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
+                MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ), MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ),
                 lpCameraInput->GetPosition() );
         }
         PerfMonCpu::StopMonitor( miRaceCarGenerateDispListClearPM );
@@ -4248,7 +4237,7 @@ WorldModule::GenerateShadowMapDispatchLists(
             // shadow pass has no fog blend to publish). Arg 2 is the array inside the buffer.
             mTrafficEntityModule.GenerateDispatchLists(
                 lpTrafficDispatchInput, lpTrafficRenderInfos->maTrafficRenderInfos,
-                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
+                MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ), MakeWorldVector4( 0.0f, 0.0f, 0.0f, 0.0f ),
                 lpCameraInput->GetPosition(), lpCameraInput->GetDirection(),
                 static_cast<s32>( luCascade ) + 2, static_cast<s32>( luCascade ) + 2,
                 static_cast<s32>( luCascade ) + 2, *lpCameraInput );
@@ -4436,8 +4425,8 @@ GenerateShaderConstantsForQuadricIrradiance( const rw::math::vpu::Matrix44& lIrr
         const f32 Czx = 2.0f * lIrradianceMatrix.zAxis.x;   // 2 * m20
 
         Vector4SetElem( lIrradiance_1, luChannel, C1 );
-        Matrix44Row( lIrradiance_x_y_z_xx,    luChannel + 1 ) = Vector4{ Cx,  Cy,  Cz,  Cxx };
-        Matrix44Row( lIrradiance_xy_yz_zx_yy, luChannel     ) = Vector4{ Cxy, Cyz, Czx, Cyy };
+        Matrix44Row( lIrradiance_x_y_z_xx,    luChannel + 1 ) = MakeWorldVector4( Cx,  Cy,  Cz,  Cxx );
+        Matrix44Row( lIrradiance_xy_yz_zx_yy, luChannel     ) = MakeWorldVector4( Cxy, Cyz, Czx, Cyy );
     }
 
     Matrix44 lIrradianceQuadricForShaderA = lIrradiance_x_y_z_xx;
@@ -4593,8 +4582,8 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 {
     // lTime.x = the SIM time, lTime.y = the GAME time, zw zero (the two vrlimi128 inserts
     // @0x827D14E8 mask 8 = lane x from f2, @0x827D1558 mask 4 = lane y from f1).
-    const VecFloat lSimTime  = VecFloat{ lfSimTime,  lfSimTime,  lfSimTime,  lfSimTime  };
-    const VecFloat lGameTime = VecFloat{ lfGameTime, lfGameTime, lfGameTime, lfGameTime };
+    const VecFloat lSimTime  = { lfSimTime,  lfSimTime,  lfSimTime,  lfSimTime  };
+    const VecFloat lGameTime = { lfGameTime, lfGameTime, lfGameTime, lfGameTime };
     Vector4 lTime;
     lTime.SetZero();
     lTime.x = lSimTime.x;
@@ -4713,22 +4702,22 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
     // The two cloud colours go in as Vector4 with w == 1.0f: the console stores a 16-byte
     // vector built at var_3C0 by copying the Vector3 and then `stfs f29, var_3B4` with
     // f29 == flt_82001C98 == 1.0f (@0x827D19C8/0x827D19CC and @0x827D1A10/0x827D1A14).
-    lpOutputShaderConstants->SetCloudDarkColour0( Vector4{ laCloudDarkColours[ 0 ].x,
+    lpOutputShaderConstants->SetCloudDarkColour0( MakeWorldVector4( laCloudDarkColours[ 0 ].x,
                                                           laCloudDarkColours[ 0 ].y,
-                                                          laCloudDarkColours[ 0 ].z, 1.0f } );
-    lpOutputShaderConstants->SetCloudLiteColour0( Vector4{ laCloudLiteColours[ 0 ].x,
+                                                          laCloudDarkColours[ 0 ].z, 1.0f ) );
+    lpOutputShaderConstants->SetCloudLiteColour0( MakeWorldVector4( laCloudLiteColours[ 0 ].x,
                                                           laCloudLiteColours[ 0 ].y,
-                                                          laCloudLiteColours[ 0 ].z, 1.0f } );
+                                                          laCloudLiteColours[ 0 ].z, 1.0f ) );
     lpOutputShaderConstants->SetCloudTextureScaleAndOffsets0( laCloudScaleAndOffsets[ 0 ] );
 
-    lpOutputShaderConstants->SetCloudLayerOpacity( Vector4{ lCloudOpacity.x,
-                                                           lCloudOpacity.y, 0.0f, 0.0f } );
-    lpOutputShaderConstants->SetCloudLayerDensity( Vector4{ 1.0f - lCloudNegativeDensity.x,
+    lpOutputShaderConstants->SetCloudLayerOpacity( MakeWorldVector4( lCloudOpacity.x,
+                                                           lCloudOpacity.y, 0.0f, 0.0f ) );
+    lpOutputShaderConstants->SetCloudLayerDensity( MakeWorldVector4( 1.0f - lCloudNegativeDensity.x,
                                                            1.0f - lCloudNegativeDensity.y,
-                                                           0.0f, 0.0f } );
-    lpOutputShaderConstants->SetCloudLayerInvFeather( Vector4{ 1.0f / lCloudFeathering.x,
+                                                           0.0f, 0.0f ) );
+    lpOutputShaderConstants->SetCloudLayerInvFeather( MakeWorldVector4( 1.0f / lCloudFeathering.x,
                                                               1.0f / lCloudFeathering.y,
-                                                              0.0f, 0.0f } );
+                                                              0.0f, 0.0f ) );
     lpOutputShaderConstants->SetCloudDistanceCurve( mEnvironmentManager.GetCloudDistanceCurve() );
 
     lpOutputShaderConstants->SetGameTime( lfGameTime );
@@ -4777,296 +4766,6 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 //  The other documented delta is IrradianceQuadricB row 3: the bring-up carried (0,0,0,0),
 //  the console writes (0,0,0,1). Nothing consumes that row.)
 
-// =================================================================================================
-// [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER=1 -- hand the player car to the game's OWN AI.
-//
-// The console has this seat. WorldDebugComponent registers the debug variable "AI drives player"
-// and its callback AIDrivesPlayerChanged @0x827B1FC0 stores maeCarControls[player] = 2 and
-// mAIModule.mbAIPlayerInvulnerable = false. From there every link is the console's:
-//   * Update (above) refreshes AIModule::mbAIDrivesPlayer from the control word each frame
-//     (ARTIST 0x827D74FC..0x827D753C);
-//   * AIModule::StoreDrivenCarData derives AICar::mbIsDrivenByPlayer = isPlayer && !mbAIDrivesPlayer
-//     (asm 0x82795CB4..0x82795CD4), so the player's AIDriver drives its car like any rival's;
-//   * WorldBridgeAIModule forwards the AI's BrnAIDriverControls for the player slot to physics ONLY
-//     when the control word is 2 (0x827AAC1C..0x827AAC2C), and WorldBridgeEntityModulesToPhysics
-//     forwards the pad record ONLY when it is 1 (0x827AAFEC..0x827AB008);
-//   * VehicleManager::UpdateAIDriver @0x825C5110 installs the AI record in the per-car slot and
-//     mirrors it into mPlayerAiDriver.
-// The same seat is what ModeManager posts at event finish (SET_PLAYER_CAR_DRIVER selector 2) and
-// what the AI aggression code tests (FindTarget refuses an AI-driven player car as a target).
-//
-// A harness run has no debug menu, so this arm flips the same member through the same callback
-// once the player's slot is attached AND its AI driver slot is active (before that the callback's
-// index assert would fire and there is no driver to take the wheel). It is a STANDING policy, like
-// the console's sibling mbDEBUGPlayerCarAlwaysUnderAIControl: several console flows hand the car
-// back to pad control (SET_PLAYER_CAR_DRIVER selector 1 at a drive-thru exit, the case-34 "reset
-// every car to player control" arm), so whenever the word is found back at 1 while the variable is
-// set, the toggle is applied again -- the first time with the full banner, afterwards one short
-// line, so a log shows exactly when the game reclaimed the car and the harness re-took it.
-// Opt-in; inert without the variable. The pad channels the harness holds (-Drive/-Steer/-*Script)
-// are dropped by the bridge while the word is 2 -- by the console's own gate, not by anything here.
-// DELETE-WHEN the debug menu is drivable from the harness.
-// =================================================================================================
-
-// =================================================================================================
-// [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=cruise|race|pursuit -- the "AI PAD" seat, world half.
-//
-// The console seat above (BRN_AI_DRIVES_PLAYER) hands the car to the AI by flipping the control word
-// to 2, and with it every reader of AICar::mbIsDrivenByPlayer -- including AIAggression::FindTarget
-// @0x82793C60, which then refuses the player as a rival target (0x82793CA0..0x82793CB4). This seat keeps
-// the control word at 1 (E_CAR_CONTROL_ENTITY_MODULE): to the rest of the game the car is PAD-driven,
-// rivals target it, takedowns are player-credited, race logic treats it as the player. Only the SOURCE
-// of the pad changes:
-//   * AI side (GameSource/World/AI/BrnAIHarnessPad.h): the player's own AICar::Update / AIDriver::Update
-//     run with the console seat's mbIsDrivenByPlayer (0) -- with it set, AIDriver::GetTargetPosition
-//     @0x8277CBF8 aims one metre straight ahead (0x8277CC20..0x8277CC28) and the record the AI already
-//     emits for the player's slot every frame (ProcessAIVehicleInputs @0x82795E10) carries no decision.
-//   * Stash (after AIModule::Update): that record -- the one WorldModule::BridgeAIModuleToPhysicsModule
-//     @0x827AAAA8 would forward in the console seat (0x827AAC08..0x827AAC2C) -- is copied out of the AI
-//     output. Here the bridge drops it, as the console does for control word 1.
-//   * Apply (next frame, right after WorldModule::BridgeInputToEntityModules copied the real pad into
-//     the race-car pre-scene input): the record's gas / brake / handbrake / steering / boost overwrite
-//     the pad's mfAcceleration / mfBraking / mfHandBrake / mfSteering / mbBoost, and mbIsWheel is set --
-//     the AI record's +0x41 mbIsSteeringWheel is 1 (0x82796020), and ProcessPlayerVehicleInput
-//     @0x822FFE30 copies mbIsWheel into exactly that byte (0x82300264..0x82300270). From there it is
-//     the console's own chain: PreSceneUpdate's 60-byte latch, ProcessPlayerVehicleInput's PLAYER
-//     record (boost through the boost strategy and the bar, the start-line / wreck / invulnerability
-//     gates), BridgeEntityModulesToPhysicsModule_PrePhysics' `== 1` forward (0x827AAFE8..0x827AB008),
-//     VehicleManager::UpdatePlayerDriver @0x825E9F38. One frame of latency: the pad is latched at
-//     pre-scene, before the AI update.
-//   * The real pad's BRAKE is a manual override (harness glue for the organic runner's logged UNSTICK
-//     fallback): while it is held, the real pad passes through untouched.
-//   * pursuit: inside the console's slam window (BrnAIModule_Drive.cpp) the pad also holds the
-//     throttle and the boost button -- a pad's ram; the AI's own Slam fan steers.
-// Standing policy, the same shape as HarnessArmAIDrivesPlayer: armed whenever the player's slot is
-// attached, its AI driver slot is active and the control word is 1 (the console's own seat keeps the
-// car while it holds it: junkyard exit, drive-thrus, rolling starts); `race` also needs the player's
-// AICar in a game mode. The first arm prints a banner, every later one `[ai-pad] re-armed #n`.
-// Opt-in; a run without the variable never writes gHarnessAIPad and never touches the pad.
-// DELETE-WHEN a real pad can drive the harness. Trace: scratch/CRASHPARITY_0922/fixes/FX-AIPAD.md.
-// =================================================================================================
-namespace
-{
-    // One frame's player-seat decision: copied out of the AI output after AIModule::Update, written
-    // into the pad on the next frame.
-    struct HarnessAIPadStash
-    {
-        bool mbValid;
-        f32  mfGas;
-        f32  mfBrake;
-        f32  mfHandBrake;
-        f32  mfSteering;
-        bool mbBoost;
-        bool mbRamming;
-    };
-    HarnessAIPadStash sHarnessAIPadStash = { false, 0.0f, 0.0f, 0.0f, 0.0f, false, false };
-
-    const s32 KI_HARNESS_AI_PAD_TRACE_LINES  = 1200;
-    s32       siHarnessAIPadApplied          = 0;
-    s32       siHarnessAIPadTraceLines       = 0;
-    bool      sbHarnessAIPadManual           = false;
-
-    const char* HarnessAIPadModeName( BrnAI::EHarnessAIPadMode leMode )
-    {
-        switch ( leMode )
-        {
-            case BrnAI::E_HARNESS_AI_PAD_CRUISE:  return "cruise";
-            case BrnAI::E_HARNESS_AI_PAD_RACE:    return "race";
-            case BrnAI::E_HARNESS_AI_PAD_PURSUIT: return "pursuit";
-            case BrnAI::E_HARNESS_AI_PAD_COMBAT: return "combat";
-            default:                              return "off";
-        }
-    }
-
-    // BRN_AI_PAD_PLAYER's value: cruise | race | pursuit ("1", what -DiagEnv passes for a bare name, is
-    // cruise). Anything else is REFUSED loudly and the seat stays off.
-}
-
-void WorldModule::HarnessArmAIPadPlayer()
-{
-    static s32         siArmCount    = 0;
-    static s32         siNoteLines   = 0;
-    static const char* spcLastReason = 0;
-    if ( seMode == BrnAI::E_HARNESS_AI_PAD_OFF )
-    {
-        return;
-    }
-
-    BrnAI::HarnessAIPad& lrPad = BrnAI::gHarnessAIPad;
-    lrPad.meMode = seMode;
-
-    const char* lpcBlocked = 0;
-    s32         liControl  = -1;
-    if ( meLocalPlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
-    {
-        lpcBlocked = "no local player race car yet";
-    }
-    else
-    {
-        liControl = maeCarControls[ meLocalPlayerActiveRaceCarIndex ];
-        const BrnAI::AIDriver* lpDriver = mAIModule.GetAIDriver( meLocalPlayerActiveRaceCarIndex );
-        if ( liControl != E_CAR_CONTROL_ENTITY_MODULE )
-        {
-            lpcBlocked = "the console's own seat has the car (control word is not 1)";
-        }
-        else if ( lpDriver == 0 || !lpDriver->IsActive() || lpDriver->GetCar() == 0 )
-        {
-            lpcBlocked = "the player's AI driver slot is not active";
-        }
-        else if ( (seMode == BrnAI::E_HARNESS_AI_PAD_RACE || seMode == BrnAI::E_HARNESS_AI_PAD_COMBAT)
-                  && !lpDriver->GetCar()->mbIsInGameMode )
-        {
-            lpcBlocked = "race: no event is running";
-        }
-    }
-
-    const bool lbArm = ( lpcBlocked == 0 );
-    if ( CgsDev::Log::gpDebugPrint != 0 )
-    {
-        if ( lbArm && !lrPad.mbArmed )
-        {
-            ++siArmCount;
-            if ( siArmCount == 1 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[ai-pad] ***** HARNESS-ONLY (BRN_AI_PAD_PLAYER=" << HarnessAIPadModeName( seMode )
-                    << "): armed -- the game's own AI computes the player car's controls and they reach "
-                    << "physics through the PAD path; maeCarControls["
-                    << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "] stays 1, so rivals target "
-                    << "the player and takedowns are player-credited. Standing: re-armed whenever the game "
-                    << "hands the car back. *****\n";
-            }
-            else
-            {
-                *CgsDev::Log::gpDebugPrint << "[ai-pad] re-armed #" << siArmCount << " ("
-                                           << HarnessAIPadModeName( seMode ) << ")\n";
-            }
-            spcLastReason = 0;
-        }
-        else if ( !lbArm && ( lrPad.mbArmed || lpcBlocked != spcLastReason ) && siNoteLines < 200 )
-        {
-            ++siNoteLines;
-            *CgsDev::Log::gpDebugPrint << "[ai-pad] " << ( lrPad.mbArmed ? "stood down" : "waiting" ) << ": "
-                                       << lpcBlocked << " (control word " << liControl << ")\n";
-            spcLastReason = lpcBlocked;
-        }
-    }
-    lrPad.mbArmed = lbArm;
-}
-
-void WorldModule::HarnessStashAIPadControls( BrnAI::AIModuleIO::OutputBuffer* lpAIOutput )
-{
-    HarnessAIPadStash& lrStash = sHarnessAIPadStash;
-    lrStash.mbValid = false;
-    const BrnAI::HarnessAIPad& lrPad = BrnAI::gHarnessAIPad;
-    if ( !lrPad.mbArmed || lpAIOutput == 0 )
-    {
-        return;
-    }
-
-    lpAIOutput->LockForRead();
-    // Through a const view: the non-const GetVehicleDriverInterface is the WRITE seat (0x8276D9C8,
-    // asserts "Not locked for writing"); the read twin is 0x8279CA00, the one the AI bridge uses.
-    const BrnAI::AIModuleIO::OutputBuffer* lpAIOutputRead = lpAIOutput;
-    const BrnPhysics::Vehicle::VehicleDriverInputInterface::UpdateDriverEventQueue* lpQueue =
-        lpAIOutputRead->GetVehicleDriverInterface()->GetUpdateDriverQueue();
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for ( s32 liType = lpQueue->GetFirstEvent( &lpEvent, &liSize );
-          liType >= 0;
-          liType = lpQueue->GetNextEvent( lpEvent, &lpEvent, &liSize ) )
-    {
-        if ( liType != BrnPhysics::Vehicle::E_DRIVER_TYPE_AI )
-        {
-            continue;
-        }
-        const BrnPhysics::Vehicle::BrnAIDriverControls* lpControls =
-            static_cast<const BrnPhysics::Vehicle::BrnAIDriverControls*>( lpEvent );
-        if ( lpControls->miVehicleID != static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) )
-        {
-            continue;
-        }
-        lrStash.mbValid     = true;
-        lrStash.mfGas       = lpControls->mfGas;
-        lrStash.mfBrake     = lpControls->mfBrake;
-        lrStash.mfHandBrake = lpControls->mfHandBrake;
-        lrStash.mfSteering  = lpControls->mfSteering;
-        lrStash.mbBoost     = lpControls->mbBoost;
-        lrStash.mbRamming   = lrPad.mbRamming;
-        if (lrPad.meMode == BrnAI::E_HARNESS_AI_PAD_COMBAT && lrPad.mbCombatControl)
-        {
-            lrStash.mfSteering = lrPad.mfCombatSteering;
-            lrStash.mfGas = 1.0f;
-            lrStash.mfBrake = 0.0f;
-            lrStash.mfHandBrake = 0.0f;
-            lrStash.mbBoost = true;
-        }
-        break;
-    }
-    lpAIOutput->UnlockForRead();
-}
-
-void WorldModule::HarnessApplyAIPad( RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarInput_PreScene,
-                                     const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer )
-{
-    const HarnessAIPadStash& lrStash = sHarnessAIPadStash;
-    if ( !lrStash.mbValid )
-    {
-        return;
-    }
-    const BrnWorldIO::PlayerVehicleControls* lpRealPad = lpUpdateInputBuffer->GetPlayerVehicleControls();
-    if ( lpRealPad == 0 )
-    {
-        return;
-    }
-
-    // FLAG cross-home cast -- the one WorldBridgeInputToEntityModules makes for the same 60-byte copy.
-    BrnWorld::PlayerVehicleControls lPad = *reinterpret_cast<const BrnWorld::PlayerVehicleControls*>( lpRealPad );
-
-    const bool lbManual = ( lPad.mfBraking > 0.0f );
-    if ( lbManual != sbHarnessAIPadManual && CgsDev::Log::gpDebugPrint != 0
-         && siHarnessAIPadTraceLines < KI_HARNESS_AI_PAD_TRACE_LINES )
-    {
-        ++siHarnessAIPadTraceLines;
-        *CgsDev::Log::gpDebugPrint << ( lbManual ? "[ai-pad] manual override: the real pad holds brake -- it drives"
-                                                 : "[ai-pad] manual override released: the AI drives again" )
-                                   << " [PC HARNESS]\n";
-    }
-    sbHarnessAIPadManual = lbManual;
-    if ( lbManual )
-    {
-        return;   // the real pad already sits in the buffer (the bridge just copied it)
-    }
-
-    lPad.mfAcceleration = lrStash.mfGas;
-    lPad.mfBraking      = lrStash.mfBrake;
-    lPad.mfHandBrake    = lrStash.mfHandBrake;
-    lPad.mfSteering     = lrStash.mfSteering;
-    lPad.mbBoost        = lrStash.mbBoost;
-    lPad.mbIsWheel      = true;
-    if ( lrStash.mbRamming )
-    {
-        lPad.mfAcceleration = 1.0f;
-        lPad.mfBraking      = 0.0f;
-        lPad.mbBoost        = true;
-    }
-    lpRaceCarInput_PreScene->SetPlayerVehicleControls( &lPad );
-
-    ++siHarnessAIPadApplied;
-    if ( ( siHarnessAIPadApplied % KI_HARNESS_AI_PAD_TRACE_PERIOD ) == 1 && CgsDev::Log::gpDebugPrint != 0
-         && siHarnessAIPadTraceLines < KI_HARNESS_AI_PAD_TRACE_LINES )
-    {
-        ++siHarnessAIPadTraceLines;
-        const BrnAI::HarnessAIPad& lrPad = BrnAI::gHarnessAIPad;
-        *CgsDev::Log::gpDebugPrint << "[ai-pad] pad #" << siHarnessAIPadApplied << " "
-                                   << HarnessAIPadModeName( lrPad.meMode ) << " gas " << lPad.mfAcceleration
-                                   << " brake " << lPad.mfBraking << " hb " << lPad.mfHandBrake << " steer "
-                                   << lPad.mfSteering << " boost " << ( lPad.mbBoost ? 1 : 0 ) << " ram "
-                                   << ( lrStash.mbRamming ? 1 : 0 ) << " target " << lrPad.miTarget << " sep "
-                                   << lrPad.mfTargetSeparation << " ahead " << lrPad.mfTargetAheadness
-                                   << " routes " << lrPad.miPlans << " rams " << lrPad.miRamEntries << "\n";
-    }
-}
 }
 
 // ============================================================================
