@@ -7,6 +7,7 @@
 
 namespace CgsResource { class DebugComponent; }
 namespace BrnAI { class AIDebugComponent; class RaceBalancingDebugComponent; class RouteMapDebugComponent; struct ResetOnTrackDebugComponent; }
+namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleCollisionDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -78,6 +79,11 @@ namespace CgsDev
         friend class BrnWorld::EnvironmentSettings::DebugComponent;
         struct WorldConstructorTag {};
         explicit DebugComponent(WorldConstructorTag) {}
+        // ARTIST 0x827E1E30 installs these scene debug vtables without base data writes.
+        friend class CgsSceneManager::SceneManagerDebugComponent;
+        friend class CgsSceneManager::TriangleCollisionDebugComponent;
+        struct SceneConstructorTag {};
+        explicit DebugComponent(SceneConstructorTag) {}
 
     public:
         DebugComponent();

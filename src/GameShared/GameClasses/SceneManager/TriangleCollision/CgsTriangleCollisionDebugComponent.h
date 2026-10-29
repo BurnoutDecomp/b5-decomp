@@ -39,6 +39,8 @@ namespace CgsSceneManager
     class TriangleCollisionDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        TriangleCollisionDebugComponent() : CgsDev::DebugComponent(SceneConstructorTag()) {}
+
         static const s32 KI_MAX_NUM_LEVELS = 8;
         static const s32 KI_SPACIAL_BUFFER_SIZE = 2097152;
 

@@ -19,6 +19,8 @@ namespace CgsSceneManager
     class SceneManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        SceneManagerDebugComponent() : CgsDev::DebugComponent(SceneConstructorTag()) {}
+
         // @ X360 0x828B6658. Called by SceneManagerModule::Construct before Register.
         void Construct(const SceneManagerModule* lpSceneManagerModule);
 
