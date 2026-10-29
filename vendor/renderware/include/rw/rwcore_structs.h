@@ -166,6 +166,17 @@ struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
     void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags) ;
     void Free(void* lpBlock, size_t luSizeOrFlags = 0) ;
 
+    // DecFIGS resourceallocator.h:91/139; ARTIST callers dispatch these
+    // directly through DoAllocate (+0x10) / DoFree (+0x14).
+    Resource Allocate(const ResourceDescriptor& lrDescriptor, const char* lpcName)
+    {
+        return DoAllocate(lrDescriptor, lpcName);
+    }
+    void Free(const Resource& lrResource)
+    {
+        DoFree(lrResource);
+    }
+
     // X360 @0x823FF7D0; DecFIGS resourceallocator.h:178. Build the original
     // five-lane descriptor, dispatch DoAllocate, and return the lane-zero pointer
     // that DecFIGS names MemoryResource.
@@ -217,9 +228,6 @@ struct LinearResourceAllocator : IResourceAllocator {  // ARTIST object size 0x9
     // capacity. Both routines reserve 0x94 bytes before applying alignment.
     static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn);
     static LinearResourceAllocator* Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
-    // Native lane convenience entry; delegates to the same DoAllocate transaction.
-    void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
-    void  Free(void* lpBlock);
     const Resource& GetLinearHeapBase() const;
     ResourceDescriptor GetCapacity() const;
     ResourceDescriptor GetCurrentUsage() const;

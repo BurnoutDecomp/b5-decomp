@@ -10,35 +10,27 @@
 // GetPhysicalGeneralAllocator 0x82BC0AA0)
 // wraps TWO EA::Allocator::GeneralAllocators: a main heap over the resource's first region and an
 // optional physical/graphics heap over lane two. ARTIST's vtable stores prove this is-a
-// IResourceAllocator; the host keeps that inheritance and uses the PC GeneralAllocator engine
-// only as the native platform implementation of the two heap members.
+// IResourceAllocator. The embedded heaps use the original EA native implementation.
 namespace rw
 {
 namespace core
 {
     struct GeneralResourceAllocator : ::rw::IResourceAllocator
     {
-        GeneralResourceAllocator();
         // The resource includes the object reserve returned by GetResourceDescriptor.
         // ARTIST 0x82BC0AA8 starts the main heap after that reserve, keeping the
-        // requested capacity intact. The host reserve follows sizeof/alignof this type.
+        // requested capacity intact. The native reserve is 0xA38 bytes, aligned
+        // to the lane-zero capacity alignment without imposing another minimum.
         GeneralResourceAllocator(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
         ~GeneralResourceAllocator() ;
 
         // ARTIST 0x82BC0E28 adds the aligned allocator-object reserve to lane zero.
-        // The original object's 2616 bytes widen with its real native EA heap members;
-        // a console byte count cannot reserve storage for this host object.
         static ::rw::BaseResourceDescriptors<5>* GetResourceDescriptor(::rw::BaseResourceDescriptors<5>* lpOut, const ::rw::BaseResourceDescriptors<5>* lpIn);
 
         // ARTIST 0x82BC0E00: placement-construct at resource lane zero, or return null.
         // Backing must satisfy GetResourceDescriptor(capacity), including object alignment.
         static GeneralResourceAllocator* Initialize(const Resource& lrResource,
                                                      const ResourceDescriptor& lrCapacity);
-
-        // Only lane two belongs to the physical heap. Disposable lanes one/four
-        // use the main heap with the original allocation flag set.
-        void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
-        void  Free(void* lpBlock);
 
         // DoAllocate @0x82BC0C08 -- the virtual carve consumers reach through the +0 interface
         // base (the GUI modules store GeneralResourceAllocator as an IResourceAllocator*
@@ -58,5 +50,9 @@ namespace core
         EA::Allocator::GeneralAllocator m_physicalAllocator;
         bool                            m_hasPhysical;
     };
+    CGS_STATIC_ASSERT(sizeof(GeneralResourceAllocator) == 0xA38, "ARTIST resource allocator size");
+    CGS_STATIC_ASSERT(offsetof(GeneralResourceAllocator, m_mainAllocator) == 0x4, "ARTIST main heap offset");
+    CGS_STATIC_ASSERT(offsetof(GeneralResourceAllocator, m_physicalAllocator) == 0x51C, "ARTIST physical heap offset");
+    CGS_STATIC_ASSERT(offsetof(GeneralResourceAllocator, m_hasPhysical) == 0xA34, "ARTIST physical heap flag");
 }
 }

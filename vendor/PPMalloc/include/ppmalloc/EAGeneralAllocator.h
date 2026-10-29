@@ -8,7 +8,10 @@
 // dlmalloc-style allocator: small/fast bins (mpFastBinArray), regular bins (mpBinArray) keyed
 // by a bitmap (mBinBitmap), a top chunk, and a linked list of OS core blocks (mHeadCoreBlock).
 //
-// Layout (member names/types/order) recovered from Spore PC (EA::Allocator::GeneralAllocator,
+// Native layout is gated on ARTIST and DecFIGS. Spore-only hook callback fields
+// are absent: ARTIST places mpMallocFailureFunction at 0x4AC and the mutex
+// storage at 0x4E8, ending with mNotifyInitState at 0x514 (sizeof 0x518).
+// Layout (member names/types/order) originally recovered from Spore PC (EA::Allocator::GeneralAllocator,
 // sizeof=1316 on x86), dumped to progress/scratch_dossiers/ea_generalallocator_spore.txt, and
 // cross-checked against the X360 DWARF surface (references/DecFIGS/.../PPMalloc/EAGeneralAllocator.h)
 // + the X360 ctor 0x82B4FF58 / Init 0x82B4FA30 store offsets. Spore + Burnout share this EA
@@ -218,7 +221,9 @@ namespace Allocator
         void* AsInterface(int id);
 
         // Adopt [pCore, pCore+nSize) as the heap's backing memory. @ 0x82B4F800.
-        bool  AddCore(void* pCore, size_t nSize, bool bShouldFree = false, bool bShouldFreeOnShutdown = false);
+        bool  AddCore(void* pCore, size_t nSize, bool bShouldFree = false, bool bShouldTrim = false,
+                      unsigned int (*pCoreFreeFunction)(GeneralAllocator*, void*, unsigned int, void*) = 0,
+                      void* pCoreFreeFunctionContext = 0);
         void* Malloc(size_t nSize, int nAllocationFlags = 0);
         void* MallocAligned(size_t nSize, size_t nAlignment, size_t nAlignmentOffset = 0, int nAllocationFlags = 0);  // @ 0x82B515B0
         void* Calloc(size_t nElementCount, size_t nElementSize, int nAllocationFlags = 0);
@@ -293,6 +298,8 @@ namespace Allocator
         void* ReallocInternal(void* pData, size_t nNewSize, int nAllocationFlags);
         void  FreeInternal(void* pData);
         void* MallocAlignedInternal(size_t nSize, size_t nAlignment, size_t nAlignmentOffset, int nAllocationFlags);
+        void* MMapAllocInternal(size_t nSize, size_t* pSizeAllocated);
+        void* MMapMalloc(size_t nSize);
         void** MallocMultipleInternal(size_t nElementCount, size_t nSizeOrSizeCount, const size_t* pSizeArray, void** pResultArray, int nAllocationFlags);
 
         // --- core management (DWARF EAGeneralAllocator.h:1134..1136) ---------------------
@@ -382,7 +389,7 @@ namespace Allocator
         Chunk* GetNextBin(Chunk* pBin);
         bool   SizeIsWithinSmallBinRange(unsigned int nChunkSize);
         int    GetSmallBinIndexFromChunkSize(unsigned int nChunkSize);
-        int    GetLargeBinIndexFromChunkSize(unsigned int nChunkSize);
+        static int GetLargeBinIndexFromChunkSize(unsigned int nChunkSize);
         int    GetBinIndexFromChunkSize(unsigned int nChunkSize);
         int    GetBinBitmapWordFromBinIndex(int nIndex);
         int    GetBinBitmapBitFromBinIndex(int nIndex);
@@ -447,8 +454,6 @@ namespace Allocator
         unsigned int mnMMapThreshold;
         bool         mbMMapTopDown;
         Chunk        mHeadMMapChunk;
-        void         (*mpHookFunction)(HookInfo*, void*);
-        void*        mpHookFunctionContext;
         bool         (*mpMallocFailureFunction)(GeneralAllocator*, unsigned int, unsigned int, void*);
         void*        mpMallocFailureFunctionContext;
         unsigned int mnMaxMallocFailureCount;
@@ -475,5 +480,6 @@ namespace Allocator
         // DWARF EAGeneralAllocator.h:1335 - global head of the init-callback list (static).
         static volatile InitCallbackNode* mpInitCallbackNode;
     };
+    CGS_STATIC_ASSERT(sizeof(GeneralAllocator) == 0x518, "ARTIST general allocator size");
 }
 }
