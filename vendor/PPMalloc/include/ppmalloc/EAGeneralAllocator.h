@@ -84,16 +84,16 @@ namespace Allocator
             kOptionEnableThreadSafety       = 1,
             kOptionEnableHighAllocation     = 2,
             kOptionEnableSystemAlloc        = 3,
-            kOptionEnableMallocFailureAssert = 4,
-            kOptionMaxMallocFailureCount    = 5,
+            kOptionNewCoreSize              = 4,
+            kOptionCoreIncrementSize        = 5,
             kOptionMaxFastBinRequestSize    = 6,
             kOptionTrimThreshold            = 7,
             kOptionTopPad                   = 8,
             kOptionMMapThreshold            = 9,
             kOptionMMapMaxAllowed           = 10,
-            kOptionNewCoreSize              = 11,
-            kOptionCoreIncrementSize        = 12,
-            kOptionMMapTopDown              = 13,
+            kOptionMMapTopDown              = 11,
+            kOptionTraceInternalMemory      = 12,
+            kOptionMaxMallocFailureCount    = 13,
         };
 
         // --- nested types (GeneralAllocator::*) -----------------------------------------
@@ -378,10 +378,9 @@ namespace Allocator
         BinType FindChunkBin(const Chunk* pChunk) const;
 
         // --- bin access (DWARF EAGeneralAllocator.h:1208..1228) --------------------------
-        // bin_at(i): the regular bins overlap successive Chunk fd/bk fields (the classic dlmalloc
-        // trick). On x64 a Chunk's fd (mpPrevChunk) is at +8, so bin i (1-based) aliases the pair
-        // mpBinArray[2*(i-1)] / mpBinArray[2*(i-1)+1]. Recovered behaviourally from the X360 bin
-        // self-link loop (Init 0x82B4FA30) rather than by byte offset (the X86/PPC/x64 layouts differ).
+        // Native bin i aliases mpBinArray[2*i] / mpBinArray[2*i+1]. Its Chunk
+        // sentinel starts eight bytes before that pair: allocator + 0x28 + 8*i.
+        // Bin 1 is the unsorted sentinel at allocator + 0x30 (Init 82B4FA30).
         Chunk* GetBin(int i);
         Chunk* GetUnsortedBin() const;
         Chunk* GetFirstChunkInBin(const Chunk* pBin);
