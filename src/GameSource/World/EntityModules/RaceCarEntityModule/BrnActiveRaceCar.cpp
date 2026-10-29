@@ -49,7 +49,7 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h" // DeformationState / CarState (UpdateDeformationState, 2026-08-24)
 
 #include <cstring>   // memset (the console's own inlined clears)
-#include <cmath>     // std::fabs (UpdateDeformationState's vandc sign-mask ABS), std::fmaf (Update)
+#include <cmath>     // std::fabs (UpdateDeformationState's vandc sign-mask ABS)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (Update's start-line draw)
 
 // includes folded in from the BrnActiveRaceCar_w*.cpp partfiles (2026-09-15)
@@ -804,18 +804,6 @@ void ActiveRaceCar::Update_PreScene( CgsSceneManager::SceneManagerIO::InSceneUpd
     //   0x822EB158  stb 0, 0x78F             mbChangeCullingGroup = false
     // The producers are AddToCollision / RemoveFromCollision (the collision pair) and
     // UpdateCullingGroup (the group); the consumer is VehicleManager::ProcessCollisionEvents.
-    // [DIAG] BRN_COLLISION_POST_DIAG -- NOT IN THE X360 BINARY. Capped proof the two posts were
-    // DISPATCHED, with what they carried.
-    static u32 suCollisionPostDiagLines = 0u;
-    if( lbLogPosts )
-    {
-        ++suCollisionPostDiagLines;
-        *CgsDev::Log::gpDebugPrint
-            << "[collision-post] slot " << static_cast<s32>( meActiveRaceCarIndex )
-            << " entity " << static_cast<u32>( mHandlingBodyVolumeId.muId >> 32 )
-            << " collision " << ( mbChangeCollisionState ? ( mbCollisionStateToChangeTo ? "on" : "off" ) : "-" )
-            << " culling " << ( mbChangeCullingGroup ? mCullingGrouptoChangeTo : -1 ) << "\n";
-    }
 
     if( mbChangeCollisionState )
     {
@@ -852,7 +840,6 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
 
     lrBodyTransform = rw::math::vpu::Mult(mCentreOfMassTransform, mPhysicsState.mTransform);
 }
-
 
 
 
@@ -1220,6 +1207,8 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
                                       bool                  lbResettingPhysicsState,
                                       u8                    lu8CarStrengthStat )
 {
+    const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+
     CGS_ASSERT(IsActive(), "IsActive()");                             // BrnActiveRaceCar.cpp:1153
     CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInterface != NULL"); // :1154
     CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");                   // :1155
@@ -1237,7 +1226,7 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
         mHandlingBodyVolumeId,
         lrInitialTransform,
         lrInitialVelocity,
-        Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },      // asm `vspltisw128 v127, 0` -> v2
+        lZeroVelocity,      // asm `vspltisw128 v127, 0` -> v2
         luCarAssetAttribKey,
         mDeformationModelResourcePtr.GetResourceHandle(),
         mGraphicsModelResourcePtr.GetResourceHandle(),
@@ -1441,47 +1430,6 @@ void ActiveRaceCar::UpdateDeformationState(
     // Summed squared sensor displacement -> the render damage scalar.
     mRenderParams.SetDeformationSquared(lpCarState->GetSummedDisplacementSquared());
 
-    static u32 sauRivalDamageFrames[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {};
-    if (sbTraceRivalDamage && meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
-        meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)
-    {
-        u32& lruFrame = sauRivalDamageFrames[meActiveRaceCarIndex];
-        if (!mbTakenDown) lruFrame = 0;
-        else if (lruFrame++ < 48 && CgsDev::Log::gpDebugPrint)
-        {
-            f32 lfOffsetSum = 0.0f;
-            const Vector3Plus* lpOffsets = mRenderParams.GetVerletOffsets();
-            for (u32 luPoint = 0; luPoint < 128; ++luPoint)
-                lfOffsetSum += std::fabs(lpOffsets[luPoint].x) +
-                    std::fabs(lpOffsets[luPoint].y) + std::fabs(lpOffsets[luPoint].z);
-            *CgsDev::Log::gpDebugPrint << "[rival-damage] slot=" << static_cast<s32>(meActiveRaceCarIndex)
-                << " crashing=" << (mPhysicsState.mbCrashing ? 1 : 0)
-                << " damaged=" << (mRenderParams.IsDamaged() ? 1 : 0)
-                << " displacement=" << lpCarState->GetSummedDisplacementSquared()
-                << " offsets=" << lfOffsetSum
-                << " pos=" << mPhysicsState.mTransform.Pos().x << "," << mPhysicsState.mTransform.Pos().y
-                << "," << mPhysicsState.mTransform.Pos().z
-                << " angular=" << mPhysicsState.mAngularVelocity.x << "," << mPhysicsState.mAngularVelocity.y
-                << "," << mPhysicsState.mAngularVelocity.z << "\n";
-        }
-        static u32 sauTakedownFlightFrames[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {};
-        u32& lruFlight = sauTakedownFlightFrames[meActiveRaceCarIndex];
-        if (!mbTakenDown) lruFlight = 0;
-        else if (lruFlight < 900 && (lruFlight++ % 6) == 0 && CgsDev::Log::gpDebugPrint)
-        {
-            *CgsDev::Log::gpDebugPrint << "[td-flight] slot=" << static_cast<s32>(meActiveRaceCarIndex)
-                << " f=" << (lruFlight - 1)
-                << " crashing=" << (mPhysicsState.mbCrashing ? 1 : 0)
-                << " pos=" << mPhysicsState.mTransform.Pos().x << "," << mPhysicsState.mTransform.Pos().y
-                << "," << mPhysicsState.mTransform.Pos().z
-                << " vel=" << mPhysicsState.mLinearVelocity.x << "," << mPhysicsState.mLinearVelocity.y
-                << "," << mPhysicsState.mLinearVelocity.z
-                << " upy=" << mPhysicsState.mTransform.Up().y
-                << " angular=" << mPhysicsState.mAngularVelocity.x << "," << mPhysicsState.mAngularVelocity.y
-                << "," << mPhysicsState.mAngularVelocity.z
-                << " displacement=" << lpCarState->GetSummedDisplacementSquared() << "\n";
-        }
-    }
 
     // [deform-readback] one-shot measurement: the first NON-ZERO summed displacement seen
     // (the deform-land wave's acceptance metric -- prove the dents are real numbers, not a
@@ -2203,8 +2151,8 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
             else if (IsPlayer() && mbDriveAwayCheckRequired)
             {
                 // The VMX validity checks compare each planar lane with itself (NaN test).
-                if (!std::isnan(lrCurrentRouteNode.x) && !std::isnan(lrCurrentRouteNode.y) &&
-                    !std::isnan(lrNextRouteNode.x) && !std::isnan(lrNextRouteNode.y))
+                if ((lrCurrentRouteNode.x == lrCurrentRouteNode.x) && (lrCurrentRouteNode.y == lrCurrentRouteNode.y) &&
+                    (lrNextRouteNode.x == lrNextRouteNode.x) && (lrNextRouteNode.y == lrNextRouteNode.y))
                 {
                     const Vector2 lvDirection = BrnMath::Flatten(GetDirection());
                     const f32 lfX = lrNextRouteNode.x - lrCurrentRouteNode.x;
@@ -2212,7 +2160,7 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                     const f32 lfInvLength = 1.0f / std::sqrt(lfX * lfX + lfY * lfY);
                     const f32 lfRouteX = lfX * lfInvLength;
                     const f32 lfRouteY = lfY * lfInvLength;
-                    CGS_ASSERT(!std::isnan(lfRouteX) && !std::isnan(lfRouteY),
+                    CGS_ASSERT((lfRouteX == lfRouteX) && (lfRouteY == lfRouteY),
                                "RwMathVPU::IsValid( lCurrentRouteVec )");
                     if (!(lvDirection.x * lfRouteX + lvDirection.y * lfRouteY >= 0.0f))
                     {
@@ -2251,7 +2199,7 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
         if( mfTimeToStartLineBoostChange < 0.0f )
         {
             mbIsDoingStartLineBoost      = !mbIsDoingStartLineBoost;
-            mfTimeToStartLineBoostChange = std::fmaf( lpRandom->RandomFloat(), 0.85f, 0.25f );
+            mfTimeToStartLineBoostChange = ( lpRandom->RandomFloat() * 0.85f + 0.25f );
         }
         mfTimeToStartLineBoostChange -= lfTimeStep;
     }
@@ -2965,7 +2913,7 @@ namespace
     // Its sibling `unk_82FAD5E0` -- the Vector3 AddForCollision hands the scene as the
     // collision PADDING -- is initialised the same way at 0x82C4B030..0x82C4B064 from
     // flt_82001CC0 == 0.0f in x/y/z with a literal 0 in w, i.e. it is the ZERO vector.
-    // Spelled inline at the call site as Vector3{0,0,0,0} with that attestation.
+    // Spelled as a named four-lane zero aggregate at the call site.
     const f32 KF_HANDLING_BODY_Y_PAD = 0.05f;
 
     // The "is this handling body sane" ceiling both AddToScene tripwires compare against
@@ -3184,7 +3132,7 @@ void ActiveRaceCar::AddToScene(
 
     // (Same two lines the tree's other producer uses -- BrnTriggerEntityModule.cpp's three
     // volume branches -- so the two consumers of this SDK entry point stay spelled alike.)
-    rw::Resource lVolumeResource = {};                            // stw 0, 0/4/8/0xC/0x10
+    rw::Resource lVolumeResource;                            // stw 0, 0/4/8/0xC/0x10
     lVolumeResource.m_baseResources[0] = laVolumeStorage;         // stw r11, var_260(r1)
 
     rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
@@ -3337,7 +3285,7 @@ rw::collision::BoxVolume* ActiveRaceCar::GetPropCollisionBox(void* lpVolumeBuffe
     lHalfExtents.y = lHalfExtents.y + lfHalfExtraHeight;         // vaddfp ; vrlimi128 v6, v13, 4, 0
     lPos.y         = lPos.y - lfHalfExtraHeight;                 // vsubfp ; vrlimi128 v7, v0, 4, 0
 
-    rw::Resource lVolumeResource = {};                           // stw 0, 0x70..0x80(r1)
+    rw::Resource lVolumeResource;                           // stw 0, 0x70..0x80(r1)
     lVolumeResource.m_baseResources[0] = lpVolumeBuffer;         // stw r4, 0x70(r1)
 
     const rw::collision::Vec4 lvHalfExtents = { lHalfExtents.x, lHalfExtents.y, lHalfExtents.z,
@@ -3424,6 +3372,8 @@ void ActiveRaceCar::AddToCollision(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
 {
+    const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+
     CGS_ASSERT(IsActive(), "IsActive()");                                // X360 :1387
     CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");       // X360 :1388
     CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInput != NULL");       // X360 :1389
@@ -3453,7 +3403,7 @@ void ActiveRaceCar::AddToCollision(
         static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
             mCurrentCullingGroup),                                       // lwz 0x7D0
         rw::physics::ACTIVE_BODY,                                        // li r6, 4
-        Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },                               // lvx [unk_82FAD5E0]
+        lZeroVelocity,                               // lvx [unk_82FAD5E0]
         CgsSceneManager::SceneManagerIO::E_DO_NOT_ADD_TO_CACHE_MANAGER); // li r7, 2
 
     CGS_ASSERT(IsAttached(), "IsAttached()");                            // BrnActiveRaceCar.h:1089

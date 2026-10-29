@@ -1223,9 +1223,6 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 
             lpRaceCar->RequestResetOnTrack( KF_AI_LOAD_RESET_SPEED, leType, lfDistance );
 
-            WitnessPlaceRaceCarOnLoad( lpRaceCar,
-                                       lbResetBehind ? "A2-resetBehind" : "A2-standard",
-                                       static_cast<s32>( leType ), lfDistance );
             return;
         }
 
@@ -1257,7 +1254,7 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
             lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
                                                   lpRaceCar->GetDirection(),
                                                   0.0f );
-            WitnessPlaceRaceCarOnLoad( lpRaceCar, "A1-placeOwnPose", -1, 0.0f );
+
             return;
         }
 
@@ -1282,9 +1279,6 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
                                         lRequest.GetResetType(),
                                         lRequest.GetResetDistance() );
 
-        WitnessPlaceRaceCarOnLoad( lpRaceCar, "A1-buzzBy",
-                                   static_cast<s32>( lRequest.GetResetType() ),
-                                   lRequest.GetResetDistance() );
         return;
     }
 
@@ -1292,9 +1286,7 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
     if( meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN )   // +0x18368, == 8
     {
         lpRaceCar->RequestResetOnTrack( 0.0f, BrnAI::E_RESET_TYPE_AWAY_FROM_PLAYER, 0.0f );
-        WitnessPlaceRaceCarOnLoad(
-            lpRaceCar, "B-markedMan",
-            static_cast<s32>( BrnAI::E_RESET_TYPE_AWAY_FROM_PLAYER ), 0.0f );
+
         return;
     }
 
@@ -1303,7 +1295,7 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
         lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
                                               lpRaceCar->GetDirection(),
                                               0.0f );
-        WitnessPlaceRaceCarOnLoad( lpRaceCar, "B-placeOnGrid", -1, 0.0f );
+
         return;
     }
 
@@ -1341,9 +1333,6 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
                                     BrnAI::E_RESET_TYPE_BEHIND_PLAYER_RACE_START,   // li r5, 6
                                     lfDistance );
 
-    WitnessPlaceRaceCarOnLoad(
-        lpRaceCar, "B-behindStartGrid",
-        static_cast<s32>( BrnAI::E_RESET_TYPE_BEHIND_PLAYER_RACE_START ), lfDistance );
 }
 
 // ============================================================================
@@ -1626,7 +1615,7 @@ void RaceCarEntityModule::ResetActiveRaceCar(
 
         // 0x822F4B0C `vspltisw v2, 0` -- the ANGULAR velocity argument is a hard zero; only the
         // linear velocity this call was handed travels through.
-        const Vector3 lZeroAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        const Vector3 lZeroAngularVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         lpVehicleInputInterface->ResetRaceCar(
             static_cast<u32>( leActiveRaceCarIndex ),
@@ -2148,7 +2137,10 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
     lpRaceCar->AddToWorld( leType, lrTransform, lRivalId, lModelId, lResolvedWheelId,
                            static_cast<s8>( liGlobal ),   // asm `extsb r9, r29`
                            liOpponentIndex );
-    lpRaceCar->UpdateVelocity( Vector3{ 0.0f, 0.0f, 0.0f, 0.0f } );   // asm `vmr128 v1, v127` (zero)
+    {
+        const Vector3 lZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+        lpRaceCar->UpdateVelocity( lZeroVelocity );
+    }   // asm `vmr128 v1, v127` (zero)
 
     CGS_ASSERT( leGlobal >= E_GLOBAL_RACE_CAR_INDEX_0,
                 "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0" );   // BrnRaceCarAIInterfaces.h:412
@@ -2206,8 +2198,11 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
                     "BrnMath::IsNormal( lpAction->GetDirection() )" );          // X360 :7465
         // asm: v1 = action+0x00 (position), v2 = action+0x10 (direction),
         //      v3 = unk_82181510 (the world UP axis row the identity basis is built from).
-        BrnMath::BuildTransform( lTransform, lpAction->mPosition, lpAction->mDirection,
-                                 Vector3{ 0.0f, 1.0f, 0.0f, 0.0f } );
+        {
+            const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            BrnMath::BuildTransform( lTransform, lpAction->mPosition, lpAction->mDirection,
+                                 lWorldUp );
+        }
     }
     else
     {
@@ -2753,7 +2748,7 @@ void RaceCarEntityModule::HandleGameActions(
         {
             // ARTIST 0x8230CA34..0x8230CCA0. Notify AI before the active-car gate:
             // physics control ownership alone does not update the driver's routing policy.
-            const auto* lpAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::SetPlayerCarDriverAction*>(lpEvent);
+            const BrnGameState::GameStateModuleIO::SetPlayerCarDriverAction* lpAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::SetPlayerCarDriverAction*>(lpEvent);
             BrnAI::AIModuleIO::PlayerControlChangedEvent lChanged;
             lChanged.mbPlayerIsInControl = lpAction->meCarControl == E_CAR_CONTROL_ENTITY_MODULE;
             lpOutput->GetRaceCarAIInterface()->mManagementQueue.AddEvent(
@@ -2813,7 +2808,7 @@ void RaceCarEntityModule::HandleGameActions(
             CGS_ASSERT(lpPlayerAddedAction != 0, "lpPlayerAddedAction");
 
             BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface = lpOutput->GetRaceCarAIInterface();
-            const Vector3 lOrigin    = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lOrigin    = { 0.0f, 0.0f, 0.0f, 0.0f };
             const Vector3 lDirection = GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetDirection();
             const Matrix44Affine lTransform =
                 BrnDirector::Camera::Utils::CreateLookAt(lOrigin, rw::math::vpu::Add(lOrigin, lDirection));
@@ -5327,8 +5322,11 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 // rp + 8*(pane+0x28B)); spelled through the same accessor the smashed arm calls.
                 CGS_ASSERT( liPane >= 0 && liPane < 8,
                             "( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )" );   // :372, baked shape
-                lpRenderParams->SetCrackedGlassScaleFactorsN(
-                    static_cast<u32>( liPane ), Vector2{ lfWidth, lfWidth, 0.0f, 0.0f } );
+                {
+                    const Vector2 lGlassScale = { lfWidth, lfWidth, 0.0f, 0.0f };
+                    lpRenderParams->SetCrackedGlassScaleFactorsN(
+                    static_cast<u32>( liPane ), lGlassScale );
+                }
             }
             else if( lrEvent.meNewState == BrnPhysics::Deformation::E_GLASS_STATE_SMASHED )
             {
@@ -5336,8 +5334,11 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                                                                 2.0f );   // flt_82014984
                 lpRenderParams->SetCrackedGlassEqualisationFactorN( static_cast<u32>( liPane ),
                                                                     lfEqualisation );
-                lpRenderParams->SetCrackedGlassScaleFactorsN(
-                    static_cast<u32>( liPane ), Vector2{ lfWidth, lfWidth, 0.0f, 0.0f } );
+                {
+                    const Vector2 lGlassScale = { lfWidth, lfWidth, 0.0f, 0.0f };
+                    lpRenderParams->SetCrackedGlassScaleFactorsN(
+                    static_cast<u32>( liPane ), lGlassScale );
+                }
             }
             else
             {
@@ -6401,21 +6402,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         // readback must not clear detached-part queues against empty physics output.
         ReadUpdatedActiveRaceCarDataFromPhysics( lpInput );
 
-        for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-        {
-            ActiveRaceCar* lpActiveRaceCar =
-                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
-            if( lpActiveRaceCar->IsActive()
-                && !lrUsedRaceCars.IsBitSet( static_cast<u32>( liCar ) ) )
-            {
-                // Physics does NOT own this slot: both halves of the pose are stand-ins.
-                // (PublishRenderPoseWithoutPhysicsBringUp calls the wheel half at its own
-                // tail -- the pre-split pairing; the 2026-08-12 wheel-only exists-gate that
-                // used to sit in the else-arm below is retired with the real producer.)
-            }
-            // Physics-owned slots retain L3's real wheel transforms and existence
-            // bytes. UpdateWheelPhysicsState has already published them above.
-        }
     }
     else if( !lbSimPaused )
     {
@@ -6719,31 +6705,43 @@ void RaceCarEntityModule::DebugRenderPosition() const
     }
 
     const ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( lePlayerIndex );
-    const auto* lpPhysicsState = lpPlayerCar->GetPhysicsState();
+    const BrnPhysics::Vehicle::RaceCarState* lpPhysicsState = lpPlayerCar->GetPhysicsState();
     const Vector3& lvPlayerPosition = lpPhysicsState->mTransform.wAxis;
 
     CgsCore::SPrintf( lacText, sizeof(lacText), "Pos: %5.1f, %5.1f, %5.1f",
                       lvPlayerPosition.x, lvPlayerPosition.y, lvPlayerPosition.z );
-    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 30.0f, 0.0f, 0.0f},
+    {
+        const Vector2 lTextPosition = {lfTextX, 30.0f, 0.0f, 0.0f};
+        lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+    }
 
     const Vector3& lvPlayerForward = lpPhysicsState->mTransform.zAxis;
     CgsCore::SPrintf( lacText, sizeof(lacText), "At: % .3f, % .3f, % .3f",
                       lvPlayerForward.x, lvPlayerForward.y, lvPlayerForward.z );
-    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 45.0f, 0.0f, 0.0f},
+    {
+        const Vector2 lTextPosition = {lfTextX, 45.0f, 0.0f, 0.0f};
+        lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+    }
 
     const Vector3& lvLinearVelocity = lpPhysicsState->mLinearVelocity;
     CgsCore::SPrintf( lacText, sizeof(lacText), "Lin Vel: % .1f, % .1f, % .1f",
                       lvLinearVelocity.x, lvLinearVelocity.y, lvLinearVelocity.z );
-    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 60.0f, 0.0f, 0.0f},
+    {
+        const Vector2 lTextPosition = {lfTextX, 60.0f, 0.0f, 0.0f};
+        lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+    }
 
     const Vector3& lvAngularVelocity = lpPhysicsState->mAngularVelocity;
     CgsCore::SPrintf( lacText, sizeof(lacText), "Ang Vel: % .1f, % .1f, % .1f",
                       lvAngularVelocity.x, lvAngularVelocity.y, lvAngularVelocity.z );
-    lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 75.0f, 0.0f, 0.0f},
+    {
+        const Vector2 lTextPosition = {lfTextX, 75.0f, 0.0f, 0.0f};
+        lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                   CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+    }
 
     if( mbRivalDebug )
     {
@@ -6767,8 +6765,11 @@ void RaceCarEntityModule::DebugRenderPosition() const
 
         CgsCore::SPrintf( lacText, sizeof(lacText), "AIs in range: %u/%u",
                           static_cast<u32>(luInRangeRivalCount), static_cast<u32>(luAICount) );
-        lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 90.0f, 0.0f, 0.0f},
+        {
+            const Vector2 lTextPosition = {lfTextX, 90.0f, 0.0f, 0.0f};
+            lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                       CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+        }
 
         f32 lfClosestDistanceSquared = std::numeric_limits<f32>::max();
         s32 liClosestGlobalCar = -1;
@@ -6802,8 +6803,11 @@ void RaceCarEntityModule::DebugRenderPosition() const
         {
             CgsCore::SPrintf( lacText, sizeof(lacText), "Closest AI: %5.1f, %5.1f, %5.1f",
                               lvClosestPosition.x, lvClosestPosition.y, lvClosestPosition.z );
-            lrRender.Draw2DTextJustified( lacText, Vector2{lfTextX, 110.0f, 0.0f, 0.0f},
+            {
+                const Vector2 lTextPosition = {lfTextX, 110.0f, 0.0f, 0.0f};
+                lrRender.Draw2DTextJustified( lacText, lTextPosition,
                                           CgsDev::DebugRender::E_JUSTIFY_RIGHT, 12.0f, 0xFFFFFFFFu );
+            }
         }
     }
 }
@@ -7171,29 +7175,6 @@ void RaceCarEntityModule::UpdateBoost(
             mfCurrentTailgateDuration > KF_MIN_TAILGATE_DURATION,
             meIndexOfCarPlayerIsTailgating );
 
-    if (sbTailgateDebugTrace && CgsDev::Log::gpDebugPrint)
-    {
-        static u32 suTraceFrames = 0, suTraceLines = 0;
-        static f32 safPrevious[5] = {};
-        const f32 lafValues[5] = { KF_TAILGATING_CONE_HALF_ANGLE_RADS,
-            KF_TAILGATING_CONE_DEPTH, KF_MIN_TAILGATEE_SPEED,
-            KF_TAILGATING_MAX_RELATIVE_VELOCITY_MAGNITUDE, BrnWorld::KF_MIN_TAILGATE_DURATION };
-        bool lbChanged = (suTraceFrames++ == 0);
-        for (s32 liValue = 0; liValue < 5; ++liValue)
-        {
-            lbChanged = lbChanged || safPrevious[liValue] != lafValues[liValue];
-            safPrevious[liValue] = lafValues[liValue];
-        }
-        if (suTraceLines < 160 && (lbChanged || suTraceFrames % 120 == 0))
-        {
-            ++suTraceLines;
-            CgsDev::Log::gpDebugPrint->AppendFormat(
-                "[tailgate-debug] cone=%g depth=%g minSpeed=%g maxRelative=%g minDuration=%g duration=%g car=%d active=%d\n",
-                lafValues[0], lafValues[1], lafValues[2], lafValues[3], lafValues[4],
-                mfCurrentTailgateDuration, static_cast<s32>(meIndexOfCarPlayerIsTailgating),
-                mBoostManager.GetBoostStrategy()->IsTailgating() ? 1 : 0);
-        }
-    }
 
     const RaceCarEntityModuleIO::TakedownEventQueue* lpTakedownQueue =
             lpInput->GetTakedownEventQueue();
@@ -7216,9 +7197,6 @@ void RaceCarEntityModule::UpdateBoost(
                        "muType < E_RACE_CAR_TYPE_COUNT");
             if( lpVictimCar->IsAIDriven() )
                 lpVictim->GetRenderParams()->SetDamaged(true);
-            if (sbTraceRivalDamage && CgsDev::Log::gpDebugPrint)
-                *CgsDev::Log::gpDebugPrint << "[rival-damage] player-takedown victim="
-                    << static_cast<s32>(lrEvent.meVictimIndex) << "\n";
         }
     }
 
@@ -7606,9 +7584,9 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
                 const f32 lfPositionRange =
                         static_cast<f32>( lpScoring->miNumPlayersInGame - 1 );
 
-                lControls.mfGas = std::fmaf( lfPositionFromFront / lfPositionRange,
-                                             1.0f - KF_ONLINE_MAX_POSITION_GAS_MODIFIER,
-                                             KF_ONLINE_MAX_POSITION_GAS_MODIFIER ) * lfGas;
+                lControls.mfGas = ( ( lfPositionFromFront / lfPositionRange ) *
+                    ( 1.0f - KF_ONLINE_MAX_POSITION_GAS_MODIFIER ) +
+                    KF_ONLINE_MAX_POSITION_GAS_MODIFIER ) * lfGas;
             }
         }
         else if( meGameModeType
@@ -7823,10 +7801,10 @@ void RaceCarEntityModule::HandleSelectionRequestStreamingAction(
 {
     bool labNeedsLoad[8] = {true,true,true,true,true,true,true,true};
     bool labAvailable[8] = {true,true,true,true,true,true,true,true};
-    for (bool& lbWait : mabCarSelectWaitForStreaming) lbWait = false;
+    for (s32 liSlot = 0; liSlot < 8; ++liSlot) mabCarSelectWaitForStreaming[liSlot] = false;
     for (s32 liSlot = 1; liSlot < 8; ++liSlot)
     {
-        const auto* lpActive = GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
+        const ActiveRaceCar* lpActive = GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
         if (lpActive->IsAttached() && lpActive->GetGlobalRaceCar() &&
             lpActive->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK)
         {
@@ -7858,7 +7836,7 @@ void RaceCarEntityModule::HandleSelectionRequestStreamingAction(
         labAvailable[liSlot] = false;
         const CgsID lCarId = lpAction->maCars[liCar];
         const s32 liVehicle = mpVehicleList->GetVehicleIndex(lCarId);
-        const auto* lpVehicle = liVehicle < 0 ? 0 : mpVehicleList->GetVehicleData(liVehicle);
+        const BrnResource::VehicleListEntry* lpVehicle = liVehicle < 0 ? 0 : mpVehicleList->GetVehicleData(liVehicle);
         s32 liWheel = mpWheelList->FindWheelIndexFromName(lpVehicle->GetDefaultWheelName());
         if (liWheel == -1)
         {
@@ -7866,7 +7844,7 @@ void RaceCarEntityModule::HandleSelectionRequestStreamingAction(
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                 *CgsDev::Log::gpDebugPrint << "*** Couldn't find Wheel: " << lpVehicle->GetDefaultWheelName() << " for Vehicle: " << lCarId << "\n";
         }
-        const auto* lpWheel = mpWheelList->GetWheelData(liWheel);
+        const BrnResource::WheelListEntry* lpWheel = mpWheelList->GetWheelData(liWheel);
         mRaceCarStreamer.SetDesiredVehicleData(liSlot, lCarId, lpWheel->mID, lpAction->maiPriorities[liCar]);
         if ((lpAction->mauExtraInfoFlags[liCar] & 4) != 0) mabCarSelectWaitForStreaming[liSlot] = true;
     }
