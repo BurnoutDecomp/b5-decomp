@@ -3,10 +3,22 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT (DecompressionJobEntry range check)
 
 #include <cstring>   // std::memset / std::memcpy (models the Xbox memset/XMemCpy intrinsics)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <xtl.h> // OutputDebugStringA (the X360 calls it directly on an inflate error)
+
+// Native EAThread id is the32-bit XDK thread handle (ARTIST82B42560).
+namespace EA { namespace Thread { void* GetThreadId(); } }
 
 namespace CgsResource
 {
+    namespace
+    {
+        // ARTIST83248280, six contexts at0x180-byte strides.
+        Decompressor gaDecompressors[6];
+        // ARTIST83015F20: original PrintStringed formatting storage,8192 bytes.
+        char gacDecompressionJobAssertText[8192];
+    }
+    CGS_STATIC_ASSERT(sizeof(Decompressor) == 0x180, "native decompressor context stride");
     // 0x82ACC9C0 -- zlib zalloc trampoline. zlib passes the z_stream::opaque (our `this`) and the
     // item count/size; allocate items*size from the job's heap at 4-byte alignment.
     void* Decompressor::CompressorAllocateCallback(void* lpOpaque, uInt luItems, uInt luSize)
@@ -128,14 +140,29 @@ namespace CgsResource
         return lpJobData->mpStatus;
     }
 
-    // ARTIST82ACCCA0: four-parameter EA job ABI; r4 is the data parameter.
-    // Only the platform-specific workspace selection changes on the host.
+    // ARTIST82ACCCA0: r4 is the job descriptor; context selection uses native thread handles.
     void DecompressionJobEntry(EA::Jobs::Param, EA::Jobs::Param lParam1,
                                EA::Jobs::Param, EA::Jobs::Param)
     {
-        // ARTIST82ACCCAC saves r4: data is the SECOND EA::Jobs parameter.
-        auto* lpData = static_cast<DecompressionJobData*>(lParam1.mpValue);
-        if (lpData && lpData->mpNativeWorker)
-            lpData->mpNativeWorker->Execute(lpData);
+        const u64 luThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
+        const u64 luJobThreadIndex = (luThreadId - 0xF8000088ull) >> 2;
+        if (luJobThreadIndex >= 6)
+        {
+            CgsDev::StrStream lMessage(gacDecompressionJobAssertText, sizeof(gacDecompressionJobAssertText));
+            const u64 luReportedThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
+            lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
+            const char* lpcSource =
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\decompressionjob\\DecompressionJob.cpp";
+            CgsDev::Assert::PrintStringed(lpcSource, 0, 56, lMessage.GetBuffer());
+            __asm { mfmsr r12 }
+            __asm { ori r12, r12, 0x400 }
+            __asm { mtmsr r12 }
+            CgsDev::Assert::PrintStringed(lpcSource, 0, 56, lMessage.GetBuffer());
+            __asm { mfmsr r12 }
+            __asm { ori r12, r12, 0x400 }
+            __asm { mtmsr r12 }
+        }
+        gaDecompressors[static_cast<u32>(luJobThreadIndex)].Execute(
+            static_cast<DecompressionJobData*>(lParam1.mpValue));
     }
 }

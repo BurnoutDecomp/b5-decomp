@@ -7,6 +7,9 @@
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 #include "GameShared/GameClasses/System/Resource/CgsBundleLoaderModuleIO.h"
 #include "GameShared/Jobs/DecompressionJob/DecompressionJobInterface.h"
+#include "GameShared/Jobs/StreamDistribute/StreamDistribute.h"
+
+namespace CgsModule { struct IOBufferStack; }
 
 namespace CgsResource {
 class PoolModule;
@@ -44,7 +47,7 @@ public:
     };
 
     // ARTIST827DD270: embedded jobs construct normally; the cache starts unconstructed.
-    BundleLoaderModule() { mPoolReceiveQueueCache.MarkUnconstructed(); }
+    BundleLoaderModule() : mStreamJob(0) { mPoolReceiveQueueCache.MarkUnconstructed(); }
     static const u32 KU_SECONDARY_STREAM_BUFFER_SIZE = 0x80000;
     void Construct();
     void Construct(const InitOptions* lpOptions, rw::IResourceAllocator* lpAllocator,
@@ -52,7 +55,8 @@ public:
     bool Prepare();
     bool Release();
     void Destruct();
-    bool Update(void* lpInputBuffer, void* lpOutputBuffer);
+    void Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                const BundleLoaderIO::InputBuffer_Update* lpInput, BundleLoaderIO::OutputBuffer* lpOutput);
     void ProcessReceiverQueue();
     void ProcessPoolResponses();
     void RecordPostUpdateEvents(const BundleLoaderIO::InputBuffer_Record* lpInput);
@@ -80,6 +84,8 @@ public:
     void UpdateStream(void* lpOutputBuffer);
 
 private:
+    static void AssertNativeLayout();
+
     // Named ARTIST fields with DecFIGS declaration shape; pointers and embedded
     // events use the host ABI. Compression/job members follow their lifecycle.
     EStage mePrepareStage;
@@ -118,11 +124,13 @@ private:
     s32 miNumLoadedBundles;
     s32 miMaxLoadedBundles;
     DecompressionJobInterface mDecompressionJobInterface;
-    CompressedData* mpDecompressionEntries;
     void* mpDecompressionStreamStart;
     u32 muDecompressionStreamSize;
     bool mbStreamJobStarted;
     bool mbOnLastStreamJob;
+    EA::Jobs::Job mStreamJob;
+    StreamDistributeData mStreamJobData;
+    void* mpJobEntryBuffer;
     BundleLoaderIO::InputBuffer_Record::PoolReceiveQueue mPoolReceiveQueueCache;
     s32 miNextFixUpRequestIndex;
     s32 miMaxPartialFixups;

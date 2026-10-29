@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/EATech/eathread/eathread_atomic.h"
 // Real instance layout: the 16 file handles, the 8 read-stream engines, the embedded log + lock.
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"
 // Complete CgsFileSystem::File definition — maFiles[16] is embedded by value below.
@@ -67,6 +68,8 @@ namespace CgsFileSystem
         bool Release();     // 0x82903880
         void Destruct();    // 0x828E8A88
 
+        bool HasDiskErrorOccured() const;
+
         // ---- X360-attested accessors (this TU) ----
         // @0x827DF320 (boot trace). Default-constructs the embedded handles/streams/log; the
         // member subobjects install their own locks (the X360 ctor inlined RtlInitializeCriticalSection
@@ -93,6 +96,9 @@ namespace CgsFileSystem
         void CloseReadStream(ReadStream lStream);
 
     private:
+        static EA::Thread::AtomicInt32 mDiskErrorOccured;
+        static bool RWDiskErrorHandler(s32 liIndex);
+
         // Shared effective-status read used by Is{Open,Closed}: the raw stream status, except that
         // any outstanding operation collapses it to E_STATUS_PENDING (the X360 asm: v=PENDING; if
         // pendingCount<=0 v=meStatus).

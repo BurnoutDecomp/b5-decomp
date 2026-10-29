@@ -60,6 +60,8 @@ namespace CgsResource
             mFileSystemStatusInterface.Construct();
         }
 
+        void OutputBuffer::Destruct() { CgsModule::IOBuffer::Destruct(); }
+
         // -------- InputBuffer::Construct / Destruct --------
         // Construct the IOBuffer base (sets the constructed status bit) + the embedded request queue.
         void InputBuffer::Construct()

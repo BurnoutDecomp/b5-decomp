@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // receiver-queue forward target
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h" // ResolveResourceType (bundle FixUp resolver)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"     // Events::PoolEvent (pool response routing)
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include <cstring>                                    // memset (InitOptions zero-init)
 
 // CgsResource::ResourceModule: native module lifetime and staged request shuttles.
@@ -150,7 +151,7 @@ namespace CgsResource
 
     // ARTIST82907268: native event sizes are carried by the queue. Pool and
     // memory tags below are the original switch values, not resource tags.
-    void ResourceModule::ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
+    void ResourceModule::ProcessResourceRequests(const ResourceIO::InputBuffer* lpResIn,
         CgsMemory::MemoryIO::InputBuffer* lpMemIn,
         BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn)
     {
@@ -391,63 +392,57 @@ namespace CgsResource
 
     // ARTIST82907948: pump loader, pool and memory in order. Allocation/fixup
     // responses are retained until the next update, as in the original pipeline.
-    bool ResourceModule::Update(void* lpInputBuffer, void* /*lpOutputBuffer*/)
+    ResourceModule::EUpdateResult ResourceModule::Update(CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack, const ResourceIO::InputBuffer* lpInput,
+        ResourceIO::OutputBuffer* lpOutput)
     {
-        ResourceIO::InputBuffer* lpResIn = static_cast<ResourceIO::InputBuffer*>(lpInputBuffer);
-        if (!lpResIn) return false;
-
-        static PoolIO::InputBuffer s_poolIn;
-        static PoolIO::OutputBuffer s_poolOut;
-        static CgsMemory::MemoryIO::InputBuffer s_memIn;
-        static CgsMemory::MemoryIO::OutputBuffer s_memOut;
-        static BundleLoaderIO::InputBuffer_Update s_loaderIn;
-        static BundleLoaderIO::OutputBuffer s_loaderOut;
-        static BundleLoaderIO::InputBuffer_Record s_loaderRecord;
-        s_poolIn.Construct(); s_poolOut.Construct();
-        s_memIn.Construct(); s_memOut.Construct();
-        s_loaderIn.Construct(); s_loaderOut.Construct(); s_loaderRecord.Construct();
+        // ARTIST82907948: these buffers belong to this invocation and return to
+        // their original stacks in reverse construction order.
+        CgsModule::IOHelper<CgsMemory::MemoryIO::InputBuffer> lMemIn(lpInputStack, "Memory");
+        CgsModule::IOHelper<BundleLoaderIO::InputBuffer_Update> lLoaderIn(lpInputStack, "BundleLoader");
+        CgsModule::IOHelper<PoolIO::InputBuffer> lPoolIn(lpInputStack, "Pool");
+        CgsModule::IOHelper<CgsMemory::MemoryIO::OutputBuffer> lMemOut(lpOutputStack, "Memory");
+        CgsModule::IOHelper<BundleLoaderIO::OutputBuffer> lLoaderOut(lpOutputStack, "BundleLoader");
+        CgsModule::IOHelper<PoolIO::OutputBuffer> lPoolOut(lpOutputStack, "Pool");
 
         ProcessPendingFileSystemResponses();
-        lpResIn->LockForRead();
-        s_memIn.LockForWrite(); s_loaderIn.LockForWrite(); s_poolIn.LockForWrite();
-        ProcessResourceRequests(lpResIn, &s_memIn, &s_loaderIn, &s_poolIn);
-        s_poolIn.UnlockForWrite(); s_loaderIn.UnlockForWrite(); s_memIn.UnlockForWrite();
-        lpResIn->UnlockForRead();
-        lpResIn->LockForWrite(); lpResIn->GetResourceQueue()->Clear(); lpResIn->UnlockForWrite();
+        lpInput->LockForRead();
+        lMemIn->LockForWrite(); lLoaderIn->LockForWrite(); lPoolIn->LockForWrite();
+        ProcessResourceRequests(lpInput, lMemIn, lLoaderIn, lPoolIn);
+        lPoolIn->UnlockForWrite(); lLoaderIn->UnlockForWrite(); lMemIn->UnlockForWrite();
+        lpInput->UnlockForRead();
 
-        {
-            mBundleLoaderModule.Update(&s_loaderIn, &s_loaderOut);
-            s_loaderOut.LockForRead();
-            ProcessBundleLoaderStreamRequests(&s_loaderOut);
-            s_loaderOut.UnlockForRead();
-        }
-        s_poolIn.LockForWrite(); s_loaderOut.LockForRead();
-        s_poolIn.GetPoolInputQueue()->Append(
-            *static_cast<const BundleLoaderIO::OutputBuffer&>(s_loaderOut).GetPoolSendQueue());
-        s_loaderOut.UnlockForRead(); s_poolIn.UnlockForWrite();
-        bool lbBusy;
-        {
-            lbBusy = mPoolModule.Update(&s_poolIn, &s_poolOut);
-        }
-        // Retain pool replies for the NEXT loader update. Its current source
-        // buffers stay owned by this load until allocation/fixup completion.
-        s_loaderRecord.LockForWrite(); s_poolOut.LockForRead();
-        s_loaderRecord.GetPoolReceiveQueue()->Append(
-            *static_cast<const PoolIO::OutputBuffer&>(s_poolOut).GetPoolOutputQueue());
-        s_poolOut.UnlockForRead(); s_loaderRecord.UnlockForWrite();
-        mBundleLoaderModule.RecordPostUpdateEvents(&s_loaderRecord);
+        mBundleLoaderModule.Update(lpInputStack, lpOutputStack, lLoaderIn, lLoaderOut);
+        lLoaderOut->LockForRead();
+        ProcessBundleLoaderStreamRequests(lLoaderOut);
+        lLoaderOut->UnlockForRead();
 
-        s_memIn.LockForWrite(); s_poolOut.LockForRead();
-        ProcessPoolResourceRequests(&s_memIn, &s_poolOut);
-        s_poolOut.UnlockForRead(); s_memIn.UnlockForWrite();
+        lPoolIn->LockForWrite(); lLoaderOut->LockForRead();
+        lPoolIn->GetPoolInputQueue()->Append(
+            *static_cast<const BundleLoaderIO::OutputBuffer*>(lLoaderOut)->GetPoolSendQueue());
+        lLoaderOut->UnlockForRead(); lPoolIn->UnlockForWrite();
+        const EUpdateResult leResult = mPoolModule.Update(lpInputStack, lpOutputStack, lPoolIn, lPoolOut)
+            == PoolModule::E_RESULT_REQUIRE_STALL ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
         {
-            mMemoryModule.Update(0, 0, &s_memIn, &s_memOut);
+            CgsModule::IOHelper<BundleLoaderIO::InputBuffer_Record> lRecord(lpInputStack, "BundleLoaderRecord");
+            lRecord->LockForWrite(); lPoolOut->LockForRead();
+            lRecord->GetPoolReceiveQueue()->Append(
+                *static_cast<const PoolIO::OutputBuffer*>(lPoolOut)->GetPoolOutputQueue());
+            lPoolOut->UnlockForRead(); lRecord->UnlockForWrite();
+            mBundleLoaderModule.RecordPostUpdateEvents(lRecord);
         }
-        s_memOut.LockForRead(); ProcessMemoryResponses(&s_memOut); s_memOut.UnlockForRead();
-        s_loaderOut.LockForRead(); s_poolOut.LockForRead();
-        ProcessResourceResponses(&s_loaderOut, &s_poolOut);
-        s_poolOut.UnlockForRead(); s_loaderOut.UnlockForRead();
-        return lbBusy;
+        lMemIn->LockForWrite(); lPoolOut->LockForRead();
+        ProcessPoolResourceRequests(lMemIn, lPoolOut);
+        lPoolOut->UnlockForRead(); lMemIn->UnlockForWrite();
+        mMemoryModule.Update(lpInputStack, lpOutputStack, lMemIn, lMemOut);
+        lMemOut->LockForRead(); ProcessMemoryResponses(lMemOut); lMemOut->UnlockForRead();
+        lPoolOut->LockForRead(); lLoaderOut->LockForRead();
+        ProcessResourceResponses(lLoaderOut, lPoolOut);
+        lLoaderOut->UnlockForRead(); lPoolOut->UnlockForRead();
+        lpOutput->LockForWrite();
+        lpOutput->GetFileSystemStatusInterface()->SetDiskErrorOccured(mFileSystem.HasDiskErrorOccured());
+        lpOutput->UnlockForWrite();
+        return leResult;
     }
 
     // @ 0x829019F0 - forward the pool module's emitted resource-memory requests into the MemoryModule

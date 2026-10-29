@@ -18,6 +18,7 @@
 #include "rw/rwcore_structs.h"                                          // rw::Resource / ResourceDescriptor (InitOptions)
 
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
+namespace CgsModule { struct IOBufferStack; }
 namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; struct DestroyBankResponse; } }
 namespace CgsResource { namespace PoolIO { struct InputBuffer; struct OutputBuffer; } }
 namespace CgsResource { namespace Events { struct CreatePoolRequest; struct AcquireResourceRequest; struct AcquireResourceListRequest; } }
@@ -163,7 +164,9 @@ namespace CgsResource
 
         // ---- current two-argument native adapter ---------------------------------------
         // The full ARTIST four-argument Update/Construct activation remains a separate boundary.
-        bool Update(void* lpInputBuffer, void* lpOutputBuffer);
+        enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 };
+        EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                             const PoolIO::InputBuffer* lpInput, PoolIO::OutputBuffer* lpOutput);
 
         // ---- original typed event dispatch ---------------------------------------------
         void ProcessReceiverQueue(PoolIO::OutputBuffer* lpOutputBuffer);

@@ -32,7 +32,7 @@ namespace CgsResource
 {
     struct DiskLayout;   // forward (ResourceModule::InitOptions holds a pointer only)
     namespace PoolIO { struct OutputBuffer; struct InputBuffer; }   // shuttle buffers
-    namespace ResourceIO { struct InputBuffer; }                    // the module's request input
+    namespace ResourceIO { struct InputBuffer; struct OutputBuffer; }                    // the module's request input
     // The write-stream request event types (deprecated adders take these by pointer only).
     namespace Events
     {
@@ -99,7 +99,9 @@ namespace CgsResource
         bool Prepare();    // 0x828F4140
         bool Release();    // 0x82906570
         void Destruct();   // deferred
-        bool Update(void* lpInputBuffer, void* lpOutputBuffer);        // deferred
+        enum EUpdateResult { E_RESULT_OK = 0, E_RESULT_REQUIRE_STALL = 1 };
+        EUpdateResult Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
+                             const ResourceIO::InputBuffer* lpInput, ResourceIO::OutputBuffer* lpOutput);
 
         // ---- request/response shuttle steps (the pool-create slice of ResourceModule::Update) ---------
         // @ 0x829019F0 - forward the pool module's resource-memory requests (its PoolIO::OutputBuffer
@@ -113,7 +115,7 @@ namespace CgsResource
 
         // @ 0x82907268 - route the module's inbound resource requests to the sub-module inputs. Pool-create
         // slice: CreatePool (id 0) -> pool input. Caller holds resIn read-locked + poolIn write-locked.
-        void ProcessResourceRequests(ResourceIO::InputBuffer* lpResIn,
+        void ProcessResourceRequests(const ResourceIO::InputBuffer* lpResIn,
             CgsMemory::MemoryIO::InputBuffer* lpMemIn,
             BundleLoaderIO::InputBuffer_Update* lpLoaderIn, PoolIO::InputBuffer* lpPoolIn);
         void ProcessBundleLoaderStreamRequests(const BundleLoaderIO::OutputBuffer* lpLoaderOut);

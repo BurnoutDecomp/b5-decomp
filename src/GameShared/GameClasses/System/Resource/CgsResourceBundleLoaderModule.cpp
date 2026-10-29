@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [stream] trace
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include <new>
+#include <cstddef>
 
 // Bundle loader lifetime and native adapters. ResourceModule drives the staged
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
@@ -134,7 +135,7 @@ namespace CgsResource
         miNumLoadedBundles = 0;
 
         const BundleAllocation lAllocate(lpAllocator);
-        mpDecompressionEntries = static_cast<CompressedData*>(lAllocate(
+        mpJobEntryBuffer = static_cast<CompressedData*>(lAllocate(
             sizeof(CompressedData) * miMaxResourcesPerBundle, 128));
         mapcStreamBuffers[0] = static_cast<char*>(lAllocate(miStreamBufferSize, 128));
         mapcStreamBuffers[1] = static_cast<char*>(lAllocate(miStreamBufferSize, 128));
@@ -156,7 +157,8 @@ namespace CgsResource
             mpcDebugDataBuffer = static_cast<char*>(
                 lpDebugAllocator->DoAllocate(lDebugDescriptor, 0).m_baseResources[0]);
         }
-        mDecompressionJobInterface.Construct(CgsSystem::JobManager(), mpDecompressionEntries,
+        mStreamJobData.mpTargets = static_cast<StreamDistributeTargetEntry*>(mpJobEntryBuffer);
+        mDecompressionJobInterface.Construct(CgsSystem::JobManager(), static_cast<CompressedData*>(mpJobEntryBuffer),
                                              miMaxResourcesPerBundle);
         CGS_ASSERT(mpcHeaderBuffer && mpNeeds && mpResources && mpLoadedBundles,
                    "Ran out of memory allocating bundle loader\n");
@@ -169,12 +171,10 @@ namespace CgsResource
         QueryPerformanceCounter(&lTicks);
         muTimerTrace = static_cast<u64>(lTicks.QuadPart);
     }
-    bool BundleLoaderModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    void BundleLoaderModule::Update(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
+        const BundleLoaderIO::InputBuffer_Update* lpInput, BundleLoaderIO::OutputBuffer* lpOutput)
     {
-        // ARTIST82907638; the legacy native adapter has a bool return, unused
-        // by the resource dispatcher. Input and output lifetime matches ARTIST.
-        BundleLoaderIO::InputBuffer_Update* lpInput = static_cast<BundleLoaderIO::InputBuffer_Update*>(lpInputBuffer);
-        BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+        // ARTIST82907638: stacks are forwarded in the native module ABI but unused here.
         lpOutput->LockForWrite();
         lpInput->LockForRead();
         ProcessReceiverQueue();
@@ -183,7 +183,21 @@ namespace CgsResource
         lpInput->UnlockForRead();
         UpdateStream(lpOutput);
         lpOutput->UnlockForWrite();
-        return false;
+    }
+
+    void BundleLoaderModule::AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT(sizeof(DecompressionJobData) == 128, "native decompression descriptor slot");
+        CGS_STATIC_ASSERT(sizeof(StreamDistributeData) == 128, "native stream distribution descriptor slot");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mePrepareStage) == 0x228, "loader prepare stage");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mpcHeaderBuffer) == 0x24C, "loader header buffer");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mDecompressionJobInterface) == 0xA200, "loader decompression interface");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mStreamJob) == 0x2AC90, "loader stream job");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mStreamJobData) == 0x2B000, "loader stream job data");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mpJobEntryBuffer) == 0x2B080, "loader job entries");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, mPoolReceiveQueueCache) == 0x2B084, "loader response cache");
+        CGS_STATIC_ASSERT(offsetof(BundleLoaderModule, muTimerTrace) == 0x2C0A8, "loader timer");
+        CGS_STATIC_ASSERT(sizeof(BundleLoaderModule) == 0x2C100, "native loader size");
     }
 
 }
