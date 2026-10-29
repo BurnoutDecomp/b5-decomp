@@ -1,12 +1,9 @@
 // ============================================================================
 // BrnDirector::ICEWrapper::Construct / ::Destruct / ::PlayMovie / ::GetCurrentMovie /
-// ::IsPlayingMovie / ::Update, split out of SDKs/Packages/ICE/ICEWrapper.cpp: what keeps that
-// TU off the link is UpdateAction, which indexes two dev-tools control->action converter
-// tables whose contents are not recovered and which have no definition anywhere in the tree.
+// ::IsPlayingMovie / ::Update remain split from SDKs/Packages/ICE/ICEWrapper.cpp. The
+// UpdateAction body and its two ARTIST-derived converter tables now live in that linked TU.
 // (Update moved here 2026-09-27, OWNERLIST lane L5: it indexes neither table, and the pause
 // camera needs it -- MainDirector::UpdateICE @0x82238FC0 calls it every frame.)
-// DELETE-WHEN: those two tables are homed and ICEWrapper.cpp can mount -- then move
-// these bodies back into it.
 // MainDirector embeds the wrapper by value and Constructs it at boot, before the
 // debug log exists: nothing here may log.
 // ============================================================================

@@ -10,9 +10,8 @@
 //
 // The ctor / EditorOn / EditorOff / ReconstructCameraMover bodies live in the sibling
 // TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home); Construct, Destruct,
-// PlayMovie, GetCurrentMovie and IsPlayingMovie are split into ICEWrapper_wG_11.cpp so
-// they can be on the link while this TU cannot -- the two converter tables UpdateAction
-// indexes are still unhomed (see the FLAG below).
+// PlayMovie, GetCurrentMovie and IsPlayingMovie remain split into ICEWrapper_wG_11.cpp.
+// UpdateAction and its ARTIST-derived converter maps are now linked from this TU.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
@@ -24,17 +23,28 @@ namespace BrnDirector
 {
 
 // ----------------------------------------------------------------------------
-// FLAG (unhomed dev-tools dependency): the two control->action converter tables
-// UpdateAction maps inputs through. The recorded code reads them as two file-scope
-// arrays (NOT this-relative members) indexed by control 0..21: the press table for
-// just-pressed controls, the pad/held table for is-pressed controls. Their element is
-// ICE::EControlToICEAction (a single action id). Their CONTENTS are not recovered, so
-// they are declared extern (the definitions are the not-yet-reconstructed static
-// tables; the per-TU `cl /c` gate does not link). Replace with the real homed tables
-// when the dev-tools ICE-input mapping TU lands.
+// ARTIST data at 0x82F28718 / 0x82F28770: file-scope 22-entry control-to-action maps.
+// The C++ definitions below preserve the word values and the UpdateAction index order.
 // ----------------------------------------------------------------------------
-extern const ICE::EControlToICEAction maPressConverter[];
-extern const ICE::EControlToICEAction maPadConverter[];
+// ARTIST .data converter tables used by BrnDirector::ICEWrapper::UpdateAction. Each word
+// is the action ID for the corresponding DebugController control index (0..21).
+// ARTIST 0x82F28718: 22 signed action IDs indexed by DebugController::EControl.
+extern const ICE::EControlToICEAction maPressConverter[22] =
+{
+    {13}, {11}, {15}, {17}, {5}, {3},
+    {7}, {9}, {23}, {25}, {19}, {21},
+    {32}, {31}, {29}, {30}, {36}, {35},
+    {33}, {34}, {26}, {27}
+};
+
+// ARTIST 0x82F28770: 22 signed action IDs indexed by DebugController::EControl.
+extern const ICE::EControlToICEAction maPadConverter[22] =
+{
+    {12}, {10}, {14}, {16}, {4}, {2},
+    {6}, {8}, {22}, {24}, {18}, {20},
+    {32}, {31}, {29}, {30}, {36}, {35},
+    {33}, {34}, {26}, {27}
+};
 
 namespace
 {
@@ -88,7 +98,7 @@ void ICEWrapper::UpdateAction(const Camera::Utils::DebugController& lrController
         {
             ICE::ActionRef lAction;
             lAction.SetID(maPressConverter[liControl].mAction);
-            lAction.SetData(lrController.GetControlValue(liControl));
+            lAction.SetData(lrController.GetControllerInfo().mafControlValue[liControl]);
             // Bounded by the queue's capacity (the recorded code skips the push when full).
             if (!mActionQueue.IsFull())
                 mActionQueue.Push(lAction);
@@ -98,7 +108,7 @@ void ICEWrapper::UpdateAction(const Camera::Utils::DebugController& lrController
         {
             ICE::ActionRef lAction;
             lAction.SetID(maPadConverter[liControl].mAction);
-            lAction.SetData(lrController.GetControlValue(liControl));
+            lAction.SetData(lrController.GetControllerInfo().mafControlValue[liControl]);
             if (!mActionQueue.IsFull())
                 mActionQueue.Push(lAction);
         }

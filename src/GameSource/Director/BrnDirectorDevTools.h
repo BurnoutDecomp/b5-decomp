@@ -9,7 +9,7 @@ namespace BrnDirector
     class DirectorResourceManager;
     class MainDirector;
 
-    namespace Camera { class Camera; }
+    namespace Camera { struct Camera; }
     namespace DirectorIO { struct InputBuffer; }
 
     // BrnDirector::DirectorDevTools - the authoring-tool bridge for the director:

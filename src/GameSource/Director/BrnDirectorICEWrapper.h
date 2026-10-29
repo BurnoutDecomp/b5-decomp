@@ -81,10 +81,8 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 // mpResourceManager is its KI_WRITEBUFFER_SIZE buffer); the PS3 DWARF's :218..:222 line gap is
 // where it sits, so it is declared there.
 //
-// FLAG: BrnDirector::Camera::Utils::DebugController (UpdateAction's argument) and the
-//   two dev-input converter tables are dev-tools types with no reconstructed home.
-//   They are MINIMAL-SLICED below / in the .cpp, accessed by name; replace with their
-//   real homes when the dev-tools camera-utils TU is reconstructed.
+// DebugController is the typed camera-utils input snapshot. UpdateAction's file-scope
+//   converter maps are defined from ARTIST data in SDKs/Packages/ICE/ICEWrapper.cpp.
 // ============================================================================
 
 // FLAG: forward declarations for pointer-only references in this header.
