@@ -314,7 +314,6 @@ private:
     // ARTIST ctor827E35B8..35CC, Construct826659E8 and package/monitor
     // consumers. AsyncOp is0x30 bytes; natural alignment supplies the gap
     // after the monitor-thread flag without adding an invented field.
-#if defined(_XBOX)
     static void AssertNativeLayout()
     {
         CGS_STATIC_ASSERT((sizeof(DLCPackage) == 0x4C), "ARTIST DLC package stride");
@@ -332,7 +331,6 @@ private:
         CGS_STATIC_ASSERT((offsetof(DLCManager, muMonitorPackageCount) == 0x650), "ARTIST DLC monitor package count");
         CGS_STATIC_ASSERT((sizeof(DLCManager) == 0x658), "ARTIST DLC contained extent");
     }
-#endif
 };
 
 } // namespace BrnResource
