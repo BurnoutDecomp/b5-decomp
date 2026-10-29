@@ -21,15 +21,14 @@ namespace CgsResource
         const Type* GetType(u32 luResourceTypeId);         // null if unregistered
         void        Clear();
 
-        // Enumeration, in registration order. The X360 keeps its handler table INSIDE the
-        // GameDataModule and hands the whole run to the pool's game-specific type list
-        // (RegisterResourceTypes @0x82667EA8 registers 76 of them); the PC keeps the table
-        // here, so GameDataModule::Construct needs to walk it to forward the same set.
+        // Enumerate the shared handler catalog in registration order. The native
+        // GameDataModule owns its handler/name arrays and supplies the game-specific
+        // entries through PoolModule::InitOptions for asynchronous resource requests.
         u32         GetCount();
         const Type* GetByIndex(u32 luIndex);               // null when out of range
         const char* GetNameByIndex(u32 luIndex);           // "" when unnamed/out of range
     }
 
-    // Default FTypeResolver for BundleLoader::LoadBundle.
+    // Shared catalog lookup by resource type id.
     const Type* ResolveResourceType(u32 luResourceTypeId);
 }

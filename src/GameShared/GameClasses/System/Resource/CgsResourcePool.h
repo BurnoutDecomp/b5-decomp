@@ -29,7 +29,6 @@ namespace CgsResource
 {
     class ScratchPool;          // defrag staging pool (pointer member)
     class DebugResourceTracker; // debug-only resource tracker (pointer member)
-    class BundleLoader;         // PC synchronous bundle loader (drives create + fixup)
 
     // CgsResourcePool.h:60 - a snapshot of a pool's occupancy (for the debug report).
     struct PoolStats
@@ -72,7 +71,6 @@ namespace CgsResource
     // CgsResourcePool.h:124
     class Pool : public BasePool
     {
-        friend class BundleLoader;   // PC loader orchestrates the per-entry fixup/import passes
         friend class DebugComponent; // the stats dump reads the main/video heap totals inline
         friend class DebugPoolWindow; //ARTIST828E3A38 passes the first two embedded heaps
         friend class DebugPoolTypeList; //ARTIST828EEB28..48 reads the named heap capacities
