@@ -2590,8 +2590,6 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
 void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    (void)lpInput;   // only read by the GATED race-car proximity arm below
-
     if (mbWaitingForStreaming)
     {
         return;
@@ -2600,24 +2598,23 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
     const bool lbRejectNearPlayers =
         mbDontCreateStaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour;
 
+    ::Array<Vector3, E_ACTIVE_RACE_CAR_INDEX_COUNT> lActiveRaceCarPositions;
+    lActiveRaceCarPositions.Construct();
     if (lbRejectNearPlayers)
     {
-        // GATE (1 of 2 in this function): the race-car proximity rejection. Parked by choice,
-        // not by a blocker. Its guard is offline-dead, since EnterStartingUpState sets
-        // mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode, and its
-        // collection half walks every active race car, i.e. rival slots this build never fills.
-        // Both pieces it needs are already recovered for whoever writes online traffic: the
-        // getter is DWARF :358 (X360 0x82711850) and the radius is unk_8300CF70 lane 1 ==
-        // 900.0f == 30 m squared (lane 0 is 6400 == 80^2).
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "StaticVehicles_CreateNewVehicles race-car proximity rejection (mbDontCreate"
-            "StaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) -- ONLINE-ONLY and "
-            "UNREACHABLE offline, so kept parked by choice, not by blocker: the getter "
-            "(DWARF :358) and the radius (unk_8300CF70 lane 1 == 900.0f == 30m^2) are both "
-            "available now");
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface =
+            lpInput->GetActiveRaceCarOutputInterface();
+        CGS_ASSERT(lpActiveRaceCarOutputInterface != nullptr, "lpActiveRaceCarOutputInterface");
+        for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+        {
+            const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
+            if (lpActiveRaceCarOutputInterface->IsRaceCarActive(leIndex))
+            {
+                lActiveRaceCarPositions.Append(
+                    lpActiveRaceCarOutputInterface->GetRaceCarState(leIndex)->mTransform.Pos());
+            }
+        }
     }
-
 
     for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
     {
@@ -2652,15 +2649,30 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
         // wAxis. The yAxis is a unit up vector, which is why the correction is one metre and why
         // it follows the car's tilt on a banked road rather than being a world-Y constant.
         //
-        // The gated proximity leg below differences THIS transform's position, not the raw
+        // The proximity leg below differences THIS transform's position, not the raw
         // record's (the console reads back var_180 at 0x82722D90), so the drop belongs here.
         Matrix44Affine lTransform = lpRecord->mTransform;
         lTransform.wAxis = lTransform.wAxis - lTransform.yAxis;
 
         if (lbRejectNearPlayers)
         {
-            // Second half of the same gate: the reject itself (SetZombie + SetDivorced).
-            continue;
+            bool lbTooClose = false;
+            for (u32 luRaceCar = 0; luRaceCar < lActiveRaceCarPositions.GetLength(); ++luRaceCar)
+            {
+                const Vector3 lDelta = lTransform.Pos() - lActiveRaceCarPositions.GetItem(luRaceCar);
+                // Original 8300CF70.Y, initialized to 900 (30m squared).
+                if (900.0f > rw::math::vpu::SLerpDetail::Dot3(lDelta, lDelta))
+                {
+                    lbTooClose = true;
+                    break;
+                }
+            }
+            if (lbTooClose)
+            {
+                lrParam.SetZombie();
+                lrParam.SetDivorced();
+                continue;
+            }
         }
 
         const u32 luVehicle = luStatic + KU_STATIC_TRAFFIC_OFFSET;
