@@ -563,7 +563,9 @@ private:
         CGS_STATIC_ASSERT((offsetof(BoostStrategy, mStartPosition)         == 0x110), "Prepare stvx128 @0x822A5C7C");
         CGS_STATIC_ASSERT((offsetof(BoostStrategy, mfTotalDistanceTraveled)== 0x120), "Prepare @0x822A5CF0");
         CGS_STATIC_ASSERT((sizeof(BoostStrategy) == 0x130), "B2's first subclass member lands at +0x130 (B2::Prepare @0x822C10E4)");
-        CGS_STATIC_ASSERT((__alignof(BoostStrategy) == 16), "Vector3 member forces 16-byte alignment (console stvx128)");
+        // XDK 14 treats the type operand as an abstract temporary. The
+        // reference operand queries the class alignment without constructing it.
+        CGS_STATIC_ASSERT((__alignof(BoostStrategy&) == 16), "Vector3 member forces 16-byte alignment (console stvx128)");
     }
 };
 
