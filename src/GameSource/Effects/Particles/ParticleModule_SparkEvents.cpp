@@ -778,7 +778,10 @@ namespace BrnParticle
             do
             {
                 lfX = BrnParticleMath::ScalarMultiplyAdd(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
-                const f32 lfXSquared = lfX * lfX;
+                // ARTIST8229AE9C rounds x*x before8229AED4 fuses y*y+x*x.
+                // Materialize that scalar product: /O2 otherwise reassociates the
+                // inlined multiply-add and rounds y*y instead near the unit circle.
+                const volatile f32 lfXSquared = lfX * lfX;
                 lfY = BrnParticleMath::ScalarMultiplyAdd(lrRandom.RandomFloat(), KF_DEBRIS_BURST_TWO, -KF_DEBRIS_BURST_ONE);
                 lfLengthSquared = BrnParticleMath::ScalarMultiplyAdd(lfY, lfY, lfXSquared);
             } while (!(lfLengthSquared < KF_DEBRIS_BURST_ONE));   // `fcmpu ; bge` loops on a NaN too
