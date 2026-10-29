@@ -528,12 +528,11 @@ namespace BrnGui
         // The X360 record is { 100, 457, 12, <the 100-byte audio record> }: same payload as
         // the committed GuiAudioTriggerEvent, different queued id (see
         // KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL above).
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL;
-        lAudio.muHeader2   = 12u;
+        CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> lAudioRecord(lAudio);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lAudio, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lAudioRecord)));
     }
 
     // ================================================================================

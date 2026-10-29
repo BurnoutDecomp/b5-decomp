@@ -443,12 +443,11 @@ namespace BrnGui
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(leAction, KAC_EMPTY, "CodeLivery", KAC_EMPTY);
 
-        lAudio.muHeader0   = 100u;
-        lAudio.muEventType = KU_AUDIO_TRIGGER_EVENT_ID;
-        lAudio.muHeader2   = 12u;
+        CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> lAudioRecord(lAudio);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(&lAudio, KI_CHANNEL_GUI_OUT,
-                                                          static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), KI_CHANNEL_GUI_OUT,
+            static_cast<s32>(sizeof(lAudioRecord)));
     }
 }
 

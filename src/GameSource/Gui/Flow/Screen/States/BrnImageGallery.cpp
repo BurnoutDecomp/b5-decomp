@@ -203,7 +203,9 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(GuiShowHideHudWire) == 16), "show/hide hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerEvent) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerEvent) == 100), "ARTIST audio trigger payload is100 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40>) == 112),
+                          "ARTIST audio trigger wrapper is112 bytes");
 
         template <class TPayload>
         void PostWrapped(CgsGui::StateInterface* lpStateInterface, TPayload& lrPayload)
@@ -1081,10 +1083,7 @@ namespace BrnGui
         // The wire record is { 100, 457, 12 } + the 100-byte payload.
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KPC_EMPTY, lpcLabel, KPC_EMPTY);
-        lAudio.muHeader0   = static_cast<u32>(sizeof(GuiAudioTriggerEvent) - sizeof(CgsGui::GuiEvent<201>));
-        lAudio.muEventType = static_cast<u32>(KI_GUI_EVENT_AUDIO_TRIGGER);
-        lAudio.muHeader2   = 12u;
-        PostRecord(mpStateInterface, lAudio);
+        PostWrapped(mpStateInterface, lAudio);
     }
 
     // Drop the middle carousel item to the current category's invisible frame.

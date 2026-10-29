@@ -54,7 +54,9 @@
 #include <cstring>   // strcmp / strstr (HandleAptTriggers' component-name matching)
 #include <cstdlib>   // getenv (the BRN_LOSE_DIAG witness)
 
-CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 20),
+CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 8),
+              "ARTIST menu-music payload is eight bytes");
+CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>) == 20),
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -1607,10 +1609,10 @@ namespace BrnGui
         CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(
             static_cast<u32>(CgsSound::Playback::Name::MakeHash(KAC_CREDITS_MUSIC_STREAM)),
             true, false);
-        // This object is already the complete {8,23,12}+8 channel-40 record.
+        CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40> lMusicRecord(lMusicEvent);
         mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lMusicEvent), 40,
-            static_cast<s32>(sizeof(lMusicEvent)));
+            reinterpret_cast<const CgsModule::Event*>(&lMusicRecord), 40,
+            static_cast<s32>(sizeof(lMusicRecord)));
         return true;
     }
 
@@ -1985,10 +1987,10 @@ namespace BrnGui
 
             CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(KU_NO_MUSIC_STREAM_HASH,
                                                               true, false);
-            // This object is already the complete {8,23,12}+8 channel-40 record.
+            CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40> lMusicRecord(lMusicEvent);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lMusicEvent), 40,
-                static_cast<s32>(sizeof(lMusicEvent)));
+                reinterpret_cast<const CgsModule::Event*>(&lMusicRecord), 40,
+                static_cast<s32>(sizeof(lMusicRecord)));
         }
 
         // ---- 5. the post-event teardown, {1, 292, 12} on channel 40 ---------------------
