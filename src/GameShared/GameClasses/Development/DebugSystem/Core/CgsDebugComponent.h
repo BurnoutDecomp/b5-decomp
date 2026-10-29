@@ -12,6 +12,7 @@ namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
 namespace BrnProgression { struct ProgressionDebugComponent; }
 namespace BrnGameState { class CrashScoreDebugComponent; class ModeManagerDebugComponent; class ScoringSystemDebugComponent; class ChallengeManagerDebugComponent; class RoadRulesDebugComponent; class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
+namespace BrnReplays { class DebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -115,6 +116,11 @@ namespace CgsDev
 
         struct ProgressionConstructorTag {};
         explicit DebugComponent(ProgressionConstructorTag) {}
+        // ReplayModule827E047C installs only its contained debug vtable.
+        // This compiler constructor selection preserves the base data bytes.
+        friend class BrnReplays::DebugComponent;
+        struct ReplayConstructorTag {};
+        explicit DebugComponent(ReplayConstructorTag) {}
 
     public:
         DebugComponent();

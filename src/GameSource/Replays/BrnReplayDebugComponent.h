@@ -101,6 +101,11 @@ namespace BrnReplays
     class DebugComponent : public CgsDev::DebugComponent
     {
     public:
+        // Inlined by ARTIST ReplayModule827E047C: install the vtable while
+        // leaving every base and derived data member untouched.
+        DebugComponent()
+            : CgsDev::DebugComponent(CgsDev::DebugComponent::ReplayConstructorTag()) {}
+
         // Construct @0x82652978 -- store the module/allocator, allocate the four
         // serialiser-info ring buffers + the three usage graphs, zero the counters.
         void Construct(ReplayModule* lpReplayModule, rw::IResourceAllocator* lpAllocator);

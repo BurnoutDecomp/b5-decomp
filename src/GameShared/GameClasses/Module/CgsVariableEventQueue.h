@@ -49,6 +49,10 @@ namespace CgsModule
         void MarkUnconstructed() { mbIsConstructed = false; }
 
     protected:
+        // DecFIGS h:51; ARTIST ReplayModule827E0428 and GUI827E54B0
+        // initialize only this marker before constructing later members.
+        BaseVariableEventQueue() : mbIsConstructed(false) {}
+
         bool mbIsConstructed;
     };
 
