@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include <xtl.h>
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // ============================================================================
@@ -225,8 +226,8 @@ namespace Native
         // declares (and NativeParticleVertex::VertexIterator::Write fills), so use its packed
         // GPU stride. The separate BasicColouredTexturedVertex CPU record is32 bytes.
         const u32 luVertexStride = NativeParticleVertex::GetStride();
-        D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);
-        D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, luVertexStride, 1);
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, static_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, static_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, luVertexStride, 1);
 
         for (u32 luBatch = luFirstBatch; luBatch < luLastBatch; ++luBatch)
         {
