@@ -1126,4 +1126,151 @@ void* GeneralAllocator::MallocAligned(size_t nSize, size_t nAlignment,
     return MallocAlignedInternal(nSize, nAlignment, nAlignmentOffset, nAllocationFlags);
 }
 
+void* GeneralAllocator::ReallocInternal(void* pData, size_t nNewSize, int nAllocationFlags) // 82B50DB0
+{
+    if (!pData) return MallocInternal(nNewSize, nAllocationFlags);
+    const unsigned int nChunkSize = GetChunkSizeFromDataSize(nNewSize);
+    Chunk* pChunk = GetChunkPtrFromDataPtr(pData);
+    const unsigned int nOldSize = GetChunkSize(pChunk);
+    if (pChunk->mnSize & 2)
+    {
+        if (nChunkSize + 4 <= nOldSize) return pData;
+        void* pNewData = MallocInternal(nChunkSize - 7, nAllocationFlags);
+        if (pNewData)
+        {
+            memcpy(pNewData, pData, nOldSize - 8);
+            FreeInternal(pData);
+        }
+        return pNewData;
+    }
+    unsigned int nSizeAvailable = nOldSize;
+    if (nChunkSize > nOldSize)
+    {
+        Chunk* pNext = GetChunkAtOffset(pChunk, nOldSize);
+        const unsigned int nNextSize = GetChunkSize(pNext);
+        nSizeAvailable += nNextSize;
+        if (pNext == mpTopChunk && nSizeAvailable >= nChunkSize + 16)
+        {
+            const unsigned int nRemaining = nSizeAvailable - nChunkSize;
+            Chunk* pNewTop = GetChunkAtOffset(pChunk, nChunkSize);
+            pChunk->mnSize = (pChunk->mnSize & 0x80000007) | nChunkSize;
+            mpTopChunk = pNewTop;
+            pNewTop->mpNextChunk = pNewTop;
+            pNewTop->mpPrevChunk = pNewTop;
+            pNewTop->mnSize = nRemaining | 1;
+            GetChunkAtOffset(pNewTop, nRemaining)->mnPriorSize = nRemaining;
+            AdjustHighFence();
+            return pData;
+        }
+        if (pNext != mpTopChunk && !(GetChunkAtOffset(pNext, nNextSize)->mnSize & 1) &&
+            nSizeAvailable >= nChunkSize)
+            UnlinkChunk(pNext);
+        else
+        {
+            void* pNewData = MallocInternal(nChunkSize - 7, nAllocationFlags);
+            if (!pNewData) return 0;
+            Chunk* pNewChunk = GetChunkPtrFromDataPtr(pNewData);
+            if (pNewChunk == pNext)
+                nSizeAvailable = nOldSize + GetChunkSize(pNewChunk);
+            else
+            {
+                const unsigned int nCopySize = nOldSize - 4;
+                if (nCopySize > 32) memcpy(pNewData, pData, nCopySize);
+                else if ((nCopySize >> 2) - 1 <= 7)
+                    for (unsigned int i = 0; i != (nCopySize >> 2); ++i)
+                        static_cast<unsigned int*>(pNewData)[i] = static_cast<unsigned int*>(pData)[i];
+                FreeInternal(pData);
+                return pNewData;
+            }
+        }
+    }
+    const unsigned int nRemaining = nSizeAvailable - nChunkSize;
+    const unsigned int nFlags = pChunk->mnSize & 0x80000007;
+    if (nRemaining < 16)
+    {
+        pChunk->mnSize = nFlags | nSizeAvailable;
+        GetChunkAtOffset(pChunk, nSizeAvailable)->mnSize |= 1;
+    }
+    else
+    {
+        Chunk* pRemainder = GetChunkAtOffset(pChunk, nChunkSize);
+        pChunk->mnSize = nFlags | nChunkSize;
+        pRemainder->mnSize = nRemaining | 1;
+        Chunk* pNext = GetChunkAtOffset(pRemainder, nRemaining);
+        pNext->mnPriorSize = nRemaining;
+        pNext->mnSize |= 1;
+        const HeapValidationLevel nSaved = mAutoHeapValidationLevel;
+        mAutoHeapValidationLevel = kHeapValidationLevelNone;
+        FreeInternal(GetDataPtrFromChunkPtr(pRemainder));
+        mAutoHeapValidationLevel = nSaved;
+    }
+    return pData;
+}
+
+void* GeneralAllocator::CallocInternal(size_t nElementCount, size_t nElementSize, int nAllocationFlags) // 82B510C8
+{
+    void* pData = MallocInternal(nElementCount * nElementSize, nAllocationFlags);
+    if (pData)
+    {
+        const unsigned int nClearSize = GetChunkSize(GetChunkPtrFromDataPtr(pData)) - 4;
+        if (nClearSize > 32) memset(pData, 0, nClearSize);
+        else if ((nClearSize >> 2) - 1 <= 7)
+            for (unsigned int i = 0; i != (nClearSize >> 2); ++i)
+                static_cast<unsigned int*>(pData)[i] = 0;
+    }
+    return pData;
+}
+
+void* GeneralAllocator::Realloc(void* pData, size_t nNewSize, int nAllocationFlags) // 82B51620
+{
+    PPMAutoMutex lock(mpMutex);
+    return ReallocInternal(pData, nNewSize, nAllocationFlags);
+}
+void* GeneralAllocator::Calloc(size_t nElementCount, size_t nElementSize, int nAllocationFlags) // 82B51688
+{
+    PPMAutoMutex lock(mpMutex);
+    return CallocInternal(nElementCount, nElementSize, nAllocationFlags);
+}
+size_t GeneralAllocator::GetUsableSize(const void* pData) const // 82B4EE48
+{
+    PPMAutoMutex lock(mpMutex);
+    if (!pData) return 0;
+    GeneralAllocator* pThis = const_cast<GeneralAllocator*>(this);
+    const Chunk* pChunk = pThis->GetChunkPtrFromDataPtr(pData);
+    const unsigned int nChunkSize = pThis->GetChunkSize(pChunk);
+    if (pChunk->mnSize & 2) return nChunkSize - 8;
+    if (pThis->GetChunkAtOffset(pChunk, nChunkSize)->mnSize & 1) return nChunkSize - 4;
+    return 0;
+}
+size_t GeneralAllocator::GetLargestFreeBlock(bool bClearCache) // 82B4FE28
+{
+    PPMAutoMutex lock(mpMutex);
+    unsigned int nLargest = 0;
+    if (mpTopChunk)
+    {
+        if (bClearCache) ClearFastBins();
+        nLargest = GetChunkSize(mpTopChunk);
+        for (int i = 254; i >= 2; i -= 2)
+        {
+            Chunk* pChunk = mpBinArray[i];
+            if (pChunk->mpNextChunk != pChunk)
+            {
+                if (GetChunkSize(pChunk) > nLargest) nLargest = GetChunkSize(pChunk);
+                break;
+            }
+        }
+        Chunk* pHead = GetUnsortedBin();
+        for (Chunk* pChunk = pHead->mpNextChunk; pChunk != pHead; pChunk = pChunk->mpNextChunk)
+            if (GetChunkSize(pChunk) > nLargest) nLargest = GetChunkSize(pChunk);
+        if (!bClearCache && nLargest < mnMaxFastBinChunkSize)
+            for (int i = 9; i >= 0; --i)
+                if (mpFastBinArray[i])
+                {
+                    if (GetChunkSize(mpFastBinArray[i]) > nLargest) nLargest = GetChunkSize(mpFastBinArray[i]);
+                    break;
+                }
+    }
+    return nLargest;
+}
+
 } }
