@@ -214,6 +214,8 @@ public:
                     const VehicleTraits* lpVehicleTraits,
                     u32 luParam,
                     ParamSoaData& lParamSoaData);
+    // ARTIST 0x82756530; DWARF :338. f1 consumes the r6 argument slot; lpHull is r7.
+    void ReinsertInLanes(u32 luHullIndex, u32 luSectionIndex, f32 lfParamAlong, const Hull* lpHull);
     void ClearDying(u32 luParam, ParamSoaData& lSoaData);
     void GetHistoryEntry(u32 luHistoryIndex, u32* lpOutSegmentIndex, u32* lpOutHullIndex) const;
     bool IsQueueing() const;

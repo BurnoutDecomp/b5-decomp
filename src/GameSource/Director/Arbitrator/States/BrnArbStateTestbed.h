@@ -83,8 +83,9 @@ namespace BrnDirector
         void        Destruct() override;
         const char* GetName() const override;
 
-        // Is a behaviour or take armed or running.
-        bool IsActive() const;
+        // ARTIST GetNormalCamera/CycleNormalCamera read the embedded testbed's
+        // meState at Arbitrator+0x30+0x2BC and select it only while running.
+        bool IsActive() const { return meState == E_STATE_GENERIC_UPDATE; }
 
         // Bind the debug component RegisterParameters / UnregisterParameters mirror the active
         // parameter block into (spDebugComponent).
