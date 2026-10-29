@@ -23,23 +23,7 @@ namespace BrnAI
 {
 namespace
 {
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-    const s32 KI_ROUTE_WITNESS_TOTAL     = 64;
 
-    // Consumes one line from luEventId's quota; returns true when a line may be printed.
-    bool RouteMapWitnessBudget(s32* lpaiPerEvent, s32& lriTotal, u16 luEventId)
-    {
-        const u32 luBucket = (luEventId < 35u) ? static_cast<u32>(luEventId) : 35u;
-        if (lriTotal >= KI_ROUTE_WITNESS_TOTAL ||
-            lpaiPerEvent[luBucket] >= KI_ROUTE_WITNESS_PER_EVENT)
-        {
-            return false;
-        }
-        ++lriTotal;
-        ++lpaiPerEvent[luBucket];
-        return true;
-    }
-#endif
 }
 
 RouteMapModule::RouteMapModule() {}
@@ -259,21 +243,7 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
 
         lpRouteResponseQueue->AddEvent(lRouteResponse);
 
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-        {
-            static s32 siRaceRouteWitnessTotal = 0;
-            if (RouteMapWitnessBudget(saiRaceRouteWitness, siRaceRouteWitnessTotal, muEventId)
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[route] race route done: owner " << static_cast<s32>(muOwnerId)
-                    << " event " << static_cast<s32>(muEventId)
-                    << " status " << static_cast<s32>(lpRoute->GetStatus())
-                    << " nodes " << lpRoute->GetNodeCount()
-                    << " distance " << lpRoute->GetDistance() << "\n";
-            }
-        }
-#endif
+
     }
 }
 
@@ -429,33 +399,6 @@ void RouteMapModule::ProcessExtrapolatedRoute(
     lpRoute->Prepare(liDefaultStartNode);
     lpRouteResponseQueue->AddEvent(lRouteResponse);
 
-#if !defined(_XBOX) || !defined(_M_PPCBE)
-    {
-        static s32 siExtrapolatedWitnessTotal = 0;
-        static s32 saiEmptyRouteWitness[36]   = { 0 };
-        static s32 siEmptyRouteWitnessTotal   = 0;
-        const bool lbEmptyRoute = (liNodeCount <= 0);
-        const bool lbWitnessed =
-            RouteMapWitnessBudget(saiExtrapolatedWitness, siExtrapolatedWitnessTotal,
-                                  lpRouteRequest->GetEventId());
-        const bool lbWitnessedEmpty =
-            lbEmptyRoute && RouteMapWitnessBudget(saiEmptyRouteWitness, siEmptyRouteWitnessTotal,
-                                                  lpRouteRequest->GetEventId());
-        if ((lbWitnessed || lbWitnessedEmpty) && CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[route] extrapolated route done: owner "
-                << static_cast<s32>(lpRouteRequest->GetOwnerId())
-                << " event " << static_cast<s32>(lpRouteRequest->GetEventId())
-                << " section " << static_cast<s32>(lpRouteRequest->GetCurrentSectionIndex())
-                << " type " << static_cast<s32>(lpRouteRequest->GetRouteType())
-                << " nodes " << liNodeCount
-                << " default " << liDefaultStartNode
-                // GetDistance() reads maNodes[0].z, which Route::Prepare only writes when
-                // liNodeCount > 0 -- on an empty route that lane is untouched stack.
-                << " distance " << ((liNodeCount > 0) ? lpRoute->GetDistance() : 0.0f) << "\n";
-        }
-    }
-#endif
+
 }
 }

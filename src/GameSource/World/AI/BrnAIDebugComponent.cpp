@@ -33,7 +33,6 @@ int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText
 namespace BrnAI
 {
 
-#if defined(_XBOX) && defined(_M_PPCBE)
 void AIDebugComponent::AssertNativeLayout()
 {
     CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mPIDCoefficientsGraph) == 0x48), "PID graph offset");
@@ -41,7 +40,7 @@ void AIDebugComponent::AssertNativeLayout()
     CGS_STATIC_ASSERT((offsetof(AIDebugComponent, mPIDDebugData) == 0x38E8), "PID debug data offset");
     CGS_STATIC_ASSERT((sizeof(AIDebugComponent) == 0x38F8), "AI debug size");
 }
-#endif
+
 
 // ARTIST 0x82767090: the portal-target flag at +0x2e is deliberately untouched.
 void AIDebugComponent::Construct(AIModule* lpAIModule)

@@ -48,9 +48,7 @@ namespace BrnAI
 class RaceBalancingDebugComponent : public CgsDev::DebugComponent
 {
 public:
-#if defined(_XBOX) && defined(_M_PPCBE)
     RaceBalancingDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::AIConstructorTag()) {}
-#endif
     // Two-phase init: wire up the AI module + race-balancing manager pointers and seed the state.
     // (No standalone X360 symbol in this TU; declared for the call surface, bodied elsewhere.)
     void Construct(AIModule* lpAIModule, RaceBalancingManager* lpRaceBalancingManager);
