@@ -83,8 +83,8 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            for (auto& lpSerialiser : mReplayRequestInterface.mapSerialisers)
-                lpSerialiser = 0;
+            for (u32 luIndex = 0; luIndex < 11; ++luIndex)
+                mReplayRequestInterface.mapSerialisers[luIndex] = 0;
         }
 
         // BrnSoundLogicModuleIo.h:65 / :73 (DWARF; own TU, declared-only here) --

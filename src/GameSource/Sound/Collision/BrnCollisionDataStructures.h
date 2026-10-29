@@ -205,26 +205,9 @@ struct InputCollision
 struct OutputCollision
 {
     void DebugPrint(const CollisionStateManager& lCollisionManager) const;
-    OutputCollision()
-        : meBankType(0)
-        , mePipeline(InputCollision::E_REGULAR)
-        , maMaterial{0, 0}
-        , maEntityID{{0}, {0}}
-        , meAction(AttribSys::Enums::eAction::Collision)
-        , meOrientation(AttribSys::Enums::eOrientation::Front)
-        , meSize(E_SIZE_LARGE)
-        , meFatality(E_FATAL_OFF)
-        , meImpactTime(AttribSys::Enums::eImpactTime::False)
-        , mBinKey(0)
-        , mfPriority(0.0f)
-        , miBinIndex(-1)
-        , miSampleID(-1)
-    {
-        mPosition.SetZero();
-        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
-            maParameter[luIndex] = VecFloat();
-        mNormalizedImpulse = VecFloat();
-    }
+    // ARTIST 826FFC0C..50: only the bin key and embedded scrape validity
+    // are initialized; vector/entity default constructors perform no stores.
+    OutputCollision() : mBinKey(0) {}
 
     s32 meBankType;
     InputCollision::EPipeline mePipeline;

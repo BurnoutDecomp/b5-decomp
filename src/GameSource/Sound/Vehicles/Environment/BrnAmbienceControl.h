@@ -30,18 +30,11 @@ struct EnclosureControl;
 struct AmbienceControl : public BrnSound::Logic::BrnEffectControl
 {
     // Region value meaning "no ambience region yet".
-    static constexpr u8 KU8_INVALID_REGION = 255;
+    static const u8 KU8_INVALID_REGION = 255;
 
-    // The console factory writes only mRegion (zero); the handle, the enclosure link and
-    // the timer are cleared here for host determinism and set properly by Attach.
-    AmbienceControl()
-        : mMap2d()
-        , mRegion(0)
-        , mpEnclosureControl(0)
-        , mfTimeSinceUpdate(0.0f)
-    {
-        mMap2dResource.Clear();
-    }
+    // ARTIST 826D0B70: the factory initializes only the two region bytes.
+    // Attach binds the map/resource and initializes the update timer.
+    AmbienceControl() : mRegion(0) {}
     virtual ~AmbienceControl();
 
     // RTTI factory hook.

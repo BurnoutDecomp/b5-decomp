@@ -30,7 +30,7 @@ namespace Environment
 f32 KF_STATIC_PASSBY_VELOCITY_THRESHOLD = 50.0f;
 f32 KF_TIME_TO_WAIT_FOR_RETRIGGER = 1.0f;
 // Record's vector comparison reads 820AA0E0, not the speed threshold.
-static const f32 KF_POSITION_TOLERANCE = 0x1p-16f;
+static const f32 KF_POSITION_TOLERANCE = 0.0000152587890625f;
 
 // ---------------------------------------------------------------------------
 // StaticPassbyControl::CreateObject(u32)  @ 0x826D0E38   (the RTTI factory hook)
@@ -181,12 +181,12 @@ bool StaticPassbyControl::Attach()
 // ARTIST826FE1C0; velocity is MPH at physics+0x128, position at physics+0xA0.
 void StaticPassbyControl::UpdateParams(f32 afTimeStep)
 {
-    const auto& lrPhysics = mpPhysicsControl->GetPhysicsData();
+    const BrnSound::Vehicles::Engines::PhysicsControl::PhysicsData& lrPhysics = mpPhysicsControl->GetPhysicsData();
     const Vector3 lPosition = lrPhysics.mPosition3d.GetCurrent();
     const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
-    auto* lpStateBase = GetStateBase();
+    CgsSound::Logic::State* lpStateBase = GetStateBase();
     CGS_ASSERT(lpStateBase != 0, "lpStateBase");
-    auto* lpPlayerStateMan = static_cast<const PlayerVehicleStateManager*>(lpStateBase->GetStateManager());
+    const PlayerVehicleStateManager* lpPlayerStateMan = static_cast<const PlayerVehicleStateManager*>(lpStateBase->GetStateManager());
     CGS_ASSERT(lpPlayerStateMan != 0, "lpPlayerStateMan");
     ProcessPassbys(lPosition, lfSpeed, lpPlayerStateMan);
     UpdateHistory(afTimeStep);
@@ -211,12 +211,12 @@ void StaticPassbyControl::TriggerPassby(const BrnSound::World::StaticSoundEntity
 {
     const s32 liType = arEntity.GetType();
     CGS_ASSERT(liType < 19, "lePassbyType < ePassbyTypes::MaxPassbyTypes");
-    const auto& lrPackedPos = arEntity.GetPosPlus();
+    const Vector3Plus& lrPackedPos = arEntity.GetPosPlus();
     const Vector3 lPosition = {lrPackedPos.x, lrPackedPos.y, lrPackedPos.z, lrPackedPos.w};
     if (mafHistoryTimeouts[liType].Record(lPosition))
     {
-        auto* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
-        auto* lpManager = static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
+        BrnSound::Module::SoundLogicModule* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        BrnSound::Logic::Passby::PassbyStateManager* lpManager = static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
             lpModule->GetEnvironment().GetStateManager(4));
         const BrnSound::Logic::Passby::PassbyStateManager::Passby lPassby(
             lPosition, 0.0f, static_cast<AttribSys::Enums::ePassbyTypes::ePassbyTypes>(liType), false, 1.0f);

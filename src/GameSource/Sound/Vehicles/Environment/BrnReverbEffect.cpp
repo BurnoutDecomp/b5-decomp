@@ -163,7 +163,7 @@ static const u32 K_DefaultSendName = static_cast<u32>(CgsSound::Playback::Name::
 void ReverbEffect::UpdateParams(f32 afTimeStep)
 {
     using namespace CgsSound::Utils;
-    const auto leReverb = GetActiveReverb();
+    const AttribSys::Enums::eReverbTypes::eReverbTypes leReverb = GetActiveReverb();
     mReverbType.Update(leReverb);
     if (mReverbType.HasChanged())
     {
@@ -193,7 +193,7 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
     mInterpolateReverb.Update(afTimeStep);
     if (meReverbState == E_REVERB_STATE_INTERPOLATING && mInterpolateReverb.IsFinished())
     {
-        auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        BrnSound::Module::SoundLogicModule* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
         CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
         const Attrib::Gen::reverbparams lParams(lpLogicModule->GetGlobalData().ReverbSettings(leReverb));
         mfTime = lParams.Time();
@@ -208,7 +208,7 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
 
     if (KB_DEBUG_REVERB_ZONE)
     {
-        auto* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+        BrnSound::Module::SoundLogicModule* lpLogicModule = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
         CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");
         const Attrib::Gen::reverbparams lParams(lpLogicModule->GetGlobalData().ReverbSettings(mReverbType.GetCurrent()));
         mfTime = lParams.Time();
@@ -231,7 +231,7 @@ void ReverbEffect::UpdateParams(f32 afTimeStep)
 // interpolated wet gain to the live global reverb voice (id 2).
 void ReverbEffect::ProcessUpdate()
 {
-    auto& lrVoice = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)->GetGlobalReverbVoice();
+    CgsSound::Logic::Voice& lrVoice = static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)->GetGlobalReverbVoice();
     lrVoice.SetParameter(0, mfTime, &K_ParamReverbTime);
     lrVoice.SetParameter(1, mfSpaceSize, &K_ParamReverbSpaceSize);
     lrVoice.SetParameter(2, mfBrightness, &K_ParamReverbBrightness);
