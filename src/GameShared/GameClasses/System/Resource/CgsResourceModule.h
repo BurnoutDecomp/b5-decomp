@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"            // base
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
@@ -92,14 +93,8 @@ namespace CgsResource
             InitOptions();   // :148 zero-init (X360 ctor + memset 0)
         };
 
-        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
-        ResourceModule()
-        {
-            mbIsNewModule = true;
-            mPendingFileResponses.Construct(
-                maPendingFileResponses, maiPendingFileResponseFreeIndices,
-                static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
-        }
+        // ARTIST827E1F68 constructs embedded owners; virtual Construct sets runtime state.
+        ResourceModule();
 
         virtual void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator,
                        rw::IResourceAllocator* lpDebugAllocator);  // ARTIST829055B0
@@ -139,17 +134,8 @@ namespace CgsResource
         PoolModule&             GetPoolModule()   { return mPoolModule; }
         CgsMemory::MemoryModule& GetMemoryModule() { return mMemoryModule; }
 
-        // ---- file-system request adders (Wave 49) --------------------------------------------
-        // The two deprecated write-stream adders are bodied (bare "Write streams deprecated"
-        // assert + return false; @0x828D8310 / @0x828D83A0). The four real file-system adders
-        // (AddAddPatchRequest @0x828FD5C8 / AddCloseFileRequest @0x828F3EE0 /
-        // AddRegisterMemFileRequest @0x828EC600 / AddUnregisterMemFileRequest @0x828EC660) are
-        // PARTIAL: they need a cross-TU dependency web (FileSystem::{Lock,Unlock,Close,
-        // Register,Unregister}Internal + GetPatchManager, PatchManager::AddPatch, FileSystemAlloc,
-        // CgsContainers::IndexedPool8<PendingFileResponse,16>, and the FileEvent/FileHandleEvent/
-        // CloseFileRequest/RegisterMemFileRequest/UnregisterMemFileRequest event structs) that is
-        // not yet homed, so they are intentionally NOT declared/bodied here (left to a later wave
-        // to grow coherently, same disposition as wave44's blocked BinaryFileResource members).
+        // Native asynchronous stream and patch request entry points.
+        bool AddAddPatchRequest(const Events::AddPatchRequest* lpRequest);
         bool AddOpenWriteStreamRequest(const Events::OpenWriteStreamRequest* lpRequest);   // @0x828D8310
         bool AddCloseWriteStreamRequest(const Events::CloseWriteStreamRequest* lpRequest); // @0x828D83A0
         bool AddOpenReadStreamRequest(const Events::OpenReadStreamRequest* lpRequest);     // @0x829070B0
@@ -175,5 +161,7 @@ namespace CgsResource
                                   mPendingFileResponses;
         PendingFileResponse maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
         s8 maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        bool mbPatchRequestPending;
+        Events::AddPatchRequest mAddPatchRequest;
     };
 }

@@ -75,6 +75,9 @@ namespace CgsFileSystem
         // else "<path>:".
         void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
 
+        // ARTIST828EC8DC reads this flag before posting a saved patch response.
+        bool IsPatching() const { return mbPatching; }
+
     private:
         // @0x828F0B88. The background thread entry: scan the just-added patch folder, mark the scan
         // finished and advance the current-patch index. `lpContext` is the PatchManager.
