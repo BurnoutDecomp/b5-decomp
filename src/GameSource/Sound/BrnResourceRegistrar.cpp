@@ -10,26 +10,7 @@
 // ReleaseAttribSys) feed the reconstructed GameDataIO and AttribSys request interfaces. The owner
 // SoundLogicModule drives Update each bridge tick and appends both outgoing queues to the root pump.
 
-// =============================================================================
-// rw::RwHash32String @ X360 0x82BBC458 -- FNV-1a over the raw bytes (prime 0x01000193); the caller
-// passes the offset basis (0x811C9DC5) as the seed. Faithful to the X360 body:
-//   while (*p) { v = (16777619 * seed) ^ *p; ++p; seed = v; } return seed;
-// (NOT lowercased -- distinct from BrnParticle's case-insensitive Entry::HashString.)
-// FLAG: home-of-convenience (see header) -- migrate to a vendor rwcore string-hash home when one lands.
-// =============================================================================
-namespace rw
-{
-    u32 RwHash32String(const char* lpacString, u32 luSeed)
-    {
-        const u8* lpcCursor = reinterpret_cast<const u8*>(lpacString);
-        while (*lpcCursor)
-        {
-            luSeed = (0x01000193u * luSeed) ^ static_cast<u32>(*lpcCursor);
-            ++lpcCursor;
-        }
-        return luSeed;
-    }
-}
+// rw::RwHash32String is owned by vendor/renderware/src/rw/RwHash32String.cpp.
 
 namespace BrnSound
 {
