@@ -55,21 +55,9 @@ extern int  gnCurrRenderTickConsumed;           // dword_8324E524 (AptGlobals.cp
 // members of the host user-function table (installed by AptAux::ConstructApt).
 extern AptUserFunctions gAptFuncs;                          // dword_8324E818 (CgsAptAux.cpp)
 
-// The three per-node generalised-process callback slots the update pass installs
-// around AptDisplayList::GeneralisedProcess (dword_8324E41C/420/424; defined in
-// AptCIHBehaviour.cpp, read per node by AptCIH::GeneralisedProcess).
-extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);    // dword_8324E41C
-extern unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*);   // dword_8324E420
-extern unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*);   // dword_8324E424
-
 // The animation-unresolve current-target TLS object (unk_8324E814; defined at global
 // scope in AptGlobals.cpp).
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;
-
-// The free-function adapters matching the process-callback slot signature; forward
-// to the node's member pass (same pattern as AptProcessTextInstCb in
-// AptCIHBehaviour.cpp, which homes the text adapter).
-extern unsigned int AptProcessTextInstCb(AptCIH* pNode, AptCIH* pRoot, void* pCtx);
 
 // ---------------------------------------------------------------------------
 // AptUpdateRecordFrame (sub_82AD9048) -- when the input recorder is armed, stamp
@@ -156,12 +144,12 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     {
         // The deferred generalised-process pass: install the three per-node passes,
         // walk the tree once, restore the previous slots.
-        unsigned int (*pPrevCb)(AptCIH*, AptCIH*, void*)  = AptCIH_sCIHProcessCb;
-        unsigned int (*pPrevCb1)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb1;
-        unsigned int (*pPrevCb2)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb2;
-        AptCIH_sCIHProcessCb  = &AptProcessTextInstCb;
-        AptCIH_sCIHProcessCb1 = &AptCIH_ProcessCustomControlsCb;
-        AptCIH_sCIHProcessCb2 = &AptCIH_ProcessMaskMatriciesCb;
+        AptCIHProcessCallback pPrevCb = AptCIH_sCIHProcessCb;
+        AptCIHProcessCallback pPrevCb1 = AptCIH_sCIHProcessCb1;
+        AptCIHProcessCallback pPrevCb2 = AptCIH_sCIHProcessCb2;
+        AptCIH_sCIHProcessCb  = &AptCIH::ProcessTextInst;
+        AptCIH_sCIHProcessCb1 = &AptCIH::ProcessCustomControls;
+        AptCIH_sCIHProcessCb2 = &AptCIH::ProcessMaskMatricies;
         pAnim->mDisplayList.GeneralisedProcess(0, nDepthLayerMask, 1);
         AptCIH_sCIHProcessCb  = pPrevCb;
         AptCIH_sCIHProcessCb1 = pPrevCb1;
@@ -256,7 +244,7 @@ static void AptUpdateReplaySavedInputs(int nFrames, int nDepthLayerMask)
                             if (!gAptInputRecorderEnabled)
                             {
                                 char lacTag[96];
-                                std::snprintf(lacTag, sizeof(lacTag), "%06d", static_cast<int>(gnAptSavedInputFrame));
+                                std::sprintf(lacTag, "%06d", static_cast<int>(gnAptSavedInputFrame));
                                 gAptFuncs.pfnDebugSetScreenGrabPending(lacTag);
                             }
                             break;

@@ -48,6 +48,7 @@
 
 
 #include <cmath>   // sqrtf
+#include <cfloat>  // FLT_MAX (ARTIST 7F7FFFFF)
 
 
 
@@ -199,8 +200,9 @@ int AptCIH::FindAndSetEvents()
     if (pHash == 0)
         return 0;
 
-    for (const AptEventDescriptor& desc : KaAptEventDescriptors)
+    for (unsigned int i = 0; i < sizeof(KaAptEventDescriptors) / sizeof(KaAptEventDescriptors[0]); ++i)
     {
+        const AptEventDescriptor& desc = KaAptEventDescriptors[i];
         if ((desc.nEventMask & pHash->mnEventHandlerMask) == 0 &&
             (desc.nEventMask & KU_AptEventHandlerNames) != 0)
         {
@@ -653,13 +655,13 @@ extern int gAptBoundingRectMode;
 void GetBoundingRectClamped(const AptCIH* pThis, float* afRect)   // float* (not float[4]): MSVC mangles the array param as float*const, breaking the cross-TU extern
 {
     AptRect* pRect = reinterpret_cast<AptRect*>(afRect);
-    pRect->fLeft = 3.4028235e38f;  pRect->fTop    = 3.4028235e38f;
-    pRect->fRight = -3.4028235e38f; pRect->fBottom = -3.4028235e38f;
+    pRect->fLeft = FLT_MAX;  pRect->fTop    = FLT_MAX;
+    pRect->fRight = -FLT_MAX; pRect->fBottom = -FLT_MAX;
 
     const_cast<AptCIH*>(pThis)->GetBoundingRect(gAptBoundingRectMode, &gAptIdentityMatrix, pRect);
 
-    if (pRect->fLeft == 3.4028235e38f && pRect->fTop == 3.4028235e38f &&
-        pRect->fRight == -3.4028235e38f && pRect->fBottom == -3.4028235e38f)
+    if (pRect->fLeft == FLT_MAX && pRect->fTop == FLT_MAX &&
+        pRect->fRight == -FLT_MAX && pRect->fBottom == -FLT_MAX)
     {
         pRect->fLeft = 0.0f; pRect->fTop = 0.0f; pRect->fRight = 0.0f; pRect->fBottom = 0.0f;
     }
@@ -913,7 +915,7 @@ namespace { const float KF_AptMaskMinScaleAlpha = 51.0f; }
 //   item's mFlags @[c:+0x18] (bit30 isMask), mpColorMatrix @[c:+0x0C], mpPositionMatrix
 //   @[c:+0x08]; mpDisplayListParent @[c:0x1C].
 // ---------------------------------------------------------------------------
-bool AptCIH::ProcessMaskMatricies()
+bool AptCIH::ProcessMaskMatricies(AptCIH* /*pRoot*/)
 {
     AptCharacterInst* pCharInst = mpCharacterInst;
     AptRenderItem* pRenderItem = pCharInst->GetRenderItem();
@@ -1012,25 +1014,20 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
         return;
 
     // Stamp the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged on every arm.
-    auto markASChanged = [this, bASChanged]()
-    {
-        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
-    };
-
     float f31 = fValue;
 
     switch (nSelector)
     {
     case 0:   // _x -- store translation X (position matrix tx @0x10)
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
         pPos->tx = f31;
         return;
     }
     case 1:   // _y -- store translation Y (position matrix ty @0x14)
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
         pPos->ty = f31;
         return;
@@ -1038,7 +1035,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     case 2:   // _xscale (percent) -- scale the first column (a,b)
     {
         f31 *= KF_AptProcHundredth;          // percent -> ratio
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         if (f31 == KF_AptProcZero)
             f31 = KF_AptProcScaleFloor;       // never let the column collapse
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
@@ -1058,7 +1055,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     case 3:   // _yscale (percent) -- scale the second column (c,d)
     {
         f31 *= KF_AptProcHundredth;
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         if (f31 == KF_AptProcZero)
             f31 = KF_AptProcScaleFloor;
         AptMatrix* pPos = GetCharacterInst()->GetRenderItemWritable()->GetPositionMatrixWritable();
@@ -1077,7 +1074,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 4:   // _width -- drive _xscale so the world width matches f31
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         if (f31 < KF_AptProcZero)
             return;
         if (f31 == KF_AptProcZero)
@@ -1117,7 +1114,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 5:   // _height -- drive _yscale so the world height matches f31
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         if (f31 < KF_AptProcZero)
             return;
         if (f31 == KF_AptProcZero)
@@ -1155,7 +1152,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 6:   // _rotation (degrees) -- wrap to (-180,180], cache, rebuild the rotation
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         // Wrap into [-180, 180] via fmod 360 then a 360 subtract for the high half.
         // fmod only when outside [-180, 180] (f31 > 180 || f31 < -180).
         if (f31 > KF_AptProc180 || f31 < KF_AptProcNeg180)
@@ -1184,7 +1181,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 7:   // _alpha (percent) -- colour-scale alpha, rounded to 0..255 then clamped
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         if (f31 < KF_AptProcZero)
         {
@@ -1207,7 +1204,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 8:   // colour translate Red -- clamp [-255, 255], store at translate.Red (@0x1C)
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         float fVal = f31;
         if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
@@ -1217,7 +1214,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 9:   // colour translate Green (@0x20)
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         float fVal = f31;
         if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
@@ -1227,7 +1224,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     }
     case 10:  // colour translate Blue (@0x24)
     {
-        markASChanged();
+        mFlagsA = (mFlagsA & ~1u) | (bASChanged ? 1u : 0u);
         AptCXForm* pCx = GetCharacterInst()->GetRenderItemWritable()->GetColorMatrixWritable();
         float fVal = f31;
         if (!(fVal >= KF_AptProcColorMin)) fVal = KF_AptProcColorMin;
@@ -1302,8 +1299,9 @@ void AptCIH::CleanNativeFunctions()
         &gpAptNativeFn_8324E464, &gpAptNativeFn_8324E468, &gpAptNativeFn_8324E438,
     };
 
-    for (AptValue** ppSlot : apSlots)
+    for (unsigned int i = 0; i < sizeof(apSlots) / sizeof(apSlots[0]); ++i)
     {
+        AptValue** ppSlot = apSlots[i];
         if (*ppSlot)
         {
             (*ppSlot)->Release();
@@ -1332,7 +1330,7 @@ extern intptr_t gAptEmptyTextRenderDataZID;
 // TextFormat resolves. Returns true when this is a dynamic-text node (whether or not
 // a rebuild was needed), false otherwise.
 // ---------------------------------------------------------------------------
-bool AptCIH::ProcessTextInst()
+bool AptCIH::ProcessTextInst(AptCIH* /*pRoot*/)
 {
     if (mpCharacterInst->GetTypeTag() != 2u)   // (mTypeFlags & 0xFC000000) != 0x08000000
         return false;
@@ -1358,26 +1356,14 @@ bool AptCIH::ProcessTextInst()
 // dword_8324E41C/420/424 around AptDisplayList::GeneralisedProcess each frame; the
 // registered callbacks are invoked per node by AptCIH::GeneralisedProcess (above).
 //
-// AptProcessTextInstCb is the free-function adapter matching the callback slot
-// signature (AptCIH*, AptCIH*, void*) -> unsigned int; it forwards to the node's
-// ProcessTextInst (which reads only its `this`, like the console's r3-in call).
-// AptRunGeneralisedTextProcess installs it, walks pRoot's subtree via
-// GeneralisedProcess, and restores the slot -- the faithful text-refresh pass a host
-// per-frame driver runs (the console does it inside AptUpdate).
+// The native slots hold member entry points, without host callback adapters.
 // ---------------------------------------------------------------------------
-extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);   // dword_8324E41C
-
-unsigned int AptProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
-{
-    return pNode->ProcessTextInst() ? 1u : 0u;
-}
-
 void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 {
     if (pRoot == 0)
         return;
-    unsigned int (*pPrev)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb;
-    AptCIH_sCIHProcessCb = &AptProcessTextInstCb;
+    AptCIHProcessCallback pPrev = AptCIH_sCIHProcessCb;
+    AptCIH_sCIHProcessCb = &AptCIH::ProcessTextInst;
     pRoot->GeneralisedProcess(pRoot, 0);
     AptCIH_sCIHProcessCb = pPrev;
 }
@@ -1697,9 +1683,9 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 // initialised data (1): nothing in the image ever clears it, so the early-return screen is
 // always armed.
 bool AptCIH_sbGeneralisedProcessEarlyReturn = true;                                    // bEarlyReturn
-unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*)  = 0;              // sCIHProcessCb
-unsigned int (*AptCIH_sCIHProcessCb1)(AptCIH*, AptCIH*, void*) = 0;              // sCIHProcessCb1
-unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = 0;              // sCIHProcessCb2
+AptCIHProcessCallback AptCIH_sCIHProcessCb = 0;              // sCIHProcessCb
+AptCIHProcessCallback AptCIH_sCIHProcessCb1 = 0;              // sCIHProcessCb1
+AptCIHProcessCallback AptCIH_sCIHProcessCb2 = 0;              // sCIHProcessCb2
 int AptCIH_snGeneralisedProcessTreeDepth = 0;                                           // nTreeDepth
 
 unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
@@ -1720,11 +1706,11 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 
     unsigned int nResult = 0;
     if (AptCIH_sCIHProcessCb)
-        nResult = AptCIH_sCIHProcessCb(this, pRoot, pContext);
+        nResult = static_cast<unsigned int>((this->*AptCIH_sCIHProcessCb)(pRoot));
     if (AptCIH_sCIHProcessCb1)
-        nResult = AptCIH_sCIHProcessCb1(this, pRoot, pContext) | nResult;
+        nResult = static_cast<unsigned int>((this->*AptCIH_sCIHProcessCb1)(pRoot)) | nResult;
     if (AptCIH_sCIHProcessCb2)
-        nResult = AptCIH_sCIHProcessCb2(this, pRoot, pContext) | nResult;
+        nResult = static_cast<unsigned int>((this->*AptCIH_sCIHProcessCb2)(pRoot)) | nResult;
 
     const uint32_t nType = mpCharacterInst->GetTypeTag();
     if (nType == 5u || nType == 9u)
@@ -2249,7 +2235,7 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 // ===========================================================================
 extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the VM singleton)
 
-bool AptCIH::ProcessCustomControls()
+bool AptCIH::ProcessCustomControls(AptCIH* /*pRoot*/)
 {
     AptCharacterInst* pInst = mpCharacterInst;
 
