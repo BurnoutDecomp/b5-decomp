@@ -7,7 +7,6 @@ namespace CgsDev
 namespace MapFile
 {
     Reader::Reader()
-        : mpCallstack(0)
     {
     }
 
@@ -15,7 +14,13 @@ namespace MapFile
     // (asserting it is non-null). Derived readers call this, then open + read the map.
     void Reader::Prepare(const char* /*lpcMapFileName*/, StackUnpickBase* lpCallstack)
     {
-        CGS_ASSERT(lpCallstack, "lpCallstack");
+        if (!lpCallstack)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpCallstack",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReader.cpp", 51);
+            CgsDev::Assert::EndAssert();
+        }
         mpCallstack = lpCallstack;
     }
 
