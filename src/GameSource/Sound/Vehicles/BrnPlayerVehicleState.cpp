@@ -104,19 +104,7 @@ void PlayerVehicleState::Attach(void* apvAttachment)
         // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG. Names/keys as copied
         // out of the ported VehicleListEntry, so a uniform or empty port shows up
         // as identical lines for every car.
-        if (EngineAudioDiagLive())
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[engine-attach] vehicleIndex=" << static_cast<s32>(mAttachInfo.muVehicleIndex)
-                << " car=" << (lpVehicle->GetName() ? lpVehicle->GetName() : "?")
-                << " engineName=" << &mcaEngineComponentName[E_ENGINE][0]
-                << " exhaustName=" << &mcaEngineComponentName[E_EXHAUST][0]
-                << " engineKey=" << CgsDev::E_PRINTMODE_HEXONCE << luEngineKey
-                << " exhaustKey=" << CgsDev::E_PRINTMODE_HEXONCE << luExhaustKey
-                << " collectionKey=" << CgsDev::E_PRINTMODE_HEXONCE
-                << lpVehicle->GetAttribCollectionKeyHash()
-                << "\n";
-        }
+
     }
 
     CgsSound::Logic::State::Attach(apvAttachment);

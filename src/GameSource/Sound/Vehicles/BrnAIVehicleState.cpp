@@ -120,17 +120,6 @@ void AIVehicleState::Attach( void* apvAttachment )
     std::memcpy( &mEngineComponentKey[E_EXHAUST], &luKey, sizeof( luKey ) );
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-    if ( AISoundDiagLive() )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[ai-sound-attach] car=" << static_cast<s32>( mAttachInfo.muVehicleIndex )
-            << " assignment=" << static_cast<s32>( VehicleStateManager::GetAIEngineAssignment( mAttachInfo.muVehicleIndex ) )
-            << " engine=" << lpcEngineName
-            << " key=" << CgsDev::E_PRINTMODE_HEXONCE << luKey
-            << " entity=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u64>( mVehiclePhysicsData.mEntityId.muValue )
-            << " state=" << GetInstanceID()
-            << "\n";
-    }
 
     CgsSound::Logic::State::Attach( apvAttachment );
 }
@@ -157,12 +146,7 @@ void AIVehicleState::UpdateParams( f32 af32DeltaTime )
         if ( !lpVehicles->IsRaceCarActive( static_cast<EActiveRaceCarIndex>( mAttachInfo.muVehicleIndex ) ) )
         {
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-            if ( AISoundDiagLive() )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[ai-sound-detach] car=" << static_cast<s32>( mAttachInfo.muVehicleIndex )
-                    << " no longer active\n";
-            }
+
             Detach();
         }
     }

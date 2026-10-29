@@ -243,13 +243,6 @@ bool TrafficSkid::Detach()
     case E_DETACH_STATE_BEGIN:
         meDetachState = E_DETACH_STATE_BEGIN;
 
-        if ( TrafficSoundDiagTake( guSkidReleaseWitnesses, 64 ) )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[trafficsnd] voice released type=skid stage="
-                << static_cast<s32>( mSkidVoice.GetUpdateStage() ) << "\n";
-        }
-
         mSkidVoice.Release();
         // fall through
     case E_DETACH_STATE_UPDATING:

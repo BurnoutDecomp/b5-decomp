@@ -199,9 +199,6 @@ bool SweetenersEffect::Attach()
     // [sweeteners-attach] NOT X360 -- opt-in dispatch witness on the sound family's latch
     // (BRN_HUD_SOUND_DIAG, capped): the seed the two module-RNG draws built and the windows the
     // square wave now holds.
-    if (BrnSound::Logic::HudSoundDiagBudget(guSweetenersDiagAttach))
-    {
-    }
 
     BrnSound::Logic::GlobalStateManager* lpGlobal =
         static_cast<BrnSound::Logic::GlobalStateManager*>(

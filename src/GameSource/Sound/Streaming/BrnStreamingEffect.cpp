@@ -197,15 +197,6 @@ bool StreamingEffect::Attach()
     // order the arithmetic runs: the ContentSpec asked for, whether a Playback::Content
     // object exists for it, the voice object + ident, and the streamsettings gain this
     // effect will multiply the user's volume by.
-    CgsSound::Diag::StreamDiagPrintf(
-        "[sndstream] attach spec=0x%08X voicespec=0x%08X voiceobj=%d ident=%u "
-        "settings=%d n=%u gain=%.4f\n",
-        static_cast<u32>(mCreateParams.mContentSpecName),
-        static_cast<u32>(mCreateParams.mVoiceSpecName),
-        mVoice.HasLiveVoice() ? 1 : 0,
-        static_cast<u32>(mVoiceId),
-        mStreamSettings.GetCollection() ? 1 : 0,
-        mStreamSettings.Num_ContentSpecs(), mfGain);
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The settings TABLE as the
     // binary search sees it: is ContentSpecs ascending (the search's precondition),
@@ -237,10 +228,7 @@ void StreamingEffect::ProcessUpdate()
     if (leStage != meDiagLastStage)
     {
         meDiagLastStage = leStage;
-        CgsSound::Diag::StreamDiagPrintf(
-            "[sndstream] stage spec=0x%08X ident=%u stage=%d t=%.2f\n",
-            static_cast<u32>(mCreateParams.mContentSpecName),
-            static_cast<u32>(mVoiceId), static_cast<int>(leStage), mfElapsedTime);
+
     }
 
     if (leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE &&
@@ -253,10 +241,7 @@ void StreamingEffect::ProcessUpdate()
     StreamingState* lpState = static_cast<StreamingState*>(mpState);
     if (lpState && lpState->Detach())
     {
-        CgsSound::Diag::StreamDiagPrintf(
-            "[sndstream] finished spec=0x%08X ident=%u after %.2f s -> StreamStopped\n",
-            static_cast<u32>(mCreateParams.mContentSpecName),
-            static_cast<u32>(mVoiceId), mfElapsedTime);
+
         lRequest.mpAttachment->StreamStopped();
     }
 }

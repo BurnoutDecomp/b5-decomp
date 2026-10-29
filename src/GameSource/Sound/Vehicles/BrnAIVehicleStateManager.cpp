@@ -280,14 +280,7 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
             LoadAsset( lacBundle, lacRegistry, BrnSound::Logic::ResourceRegistrar::E_DATA );
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-            if ( AISoundDiagLive() )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[ai-sound-load] request engine=" << lpcName
-                    << " bundle=" << lacBundle
-                    << " registry=" << lacRegistry
-                    << "\n";
-            }
+
         }
         // fall through
     case E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB:
@@ -309,13 +302,7 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
             LoadAsset( lacBundle, lpcLoopModel, BrnSound::Logic::ResourceRegistrar::E_DATA );
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-            if ( AISoundDiagLive() )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[ai-sound-load] request loopmodel engine=" << KAPC_AI_ENGINE_NAMES[liEngine]
-                    << " resource=" << ( lpcLoopModel ? lpcLoopModel : "<null>" )
-                    << "\n";
-            }
+
         }
         // fall through
     case E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS:
@@ -355,16 +342,7 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
                 static_cast<u32>( CgsSound::Playback::Name::MakeHash( lAttribs.GinsuFileDecel() ) ) );
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-            if ( AISoundDiagLive() )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[ai-sound-load] specs engine=" << KAPC_AI_ENGINE_NAMES[liEngine]
-                    << " loopmodel=" << ( lpLoopModel ? "resolved" : "MISSING" )
-                    << " loops=" << static_cast<s32>( luNumberOfLoops )
-                    << " accel=" << ( lAttribs.GinsuFileAccel() ? lAttribs.GinsuFileAccel() : "<null>" )
-                    << " decel=" << ( lAttribs.GinsuFileDecel() ? lAttribs.GinsuFileDecel() : "<null>" )
-                    << "\n";
-            }
+
         }
         // fall through
     }
@@ -385,8 +363,7 @@ bool AIVehicleStateManager::PrepareAIEngineLoading()
         meAIEngineLoadingState = E_AI_ENGINE_LOADING_FINISHED;
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-        if ( AISoundDiagLive() )
-            *CgsDev::Log::gpDebugPrint << "[ai-sound-load] all AI engine content specs loaded\n";
+
         return true;
 
     case E_AI_ENGINE_LOADING_FINISHED:
@@ -419,12 +396,7 @@ void AIVehicleStateManager::ResourcesAreReady()
     }
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-    if ( AISoundDiagLive() )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[ai-sound-load] resources ready -> loading state " << static_cast<s32>( meAIEngineLoadingState )
-            << "\n";
-    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -491,32 +463,13 @@ void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG. The live entity id
             // GetStateObj keys on (VehicleState::IsAttachedToThis @0x82683D38), once per
             // car: an id of 0 on every car makes every attached state match every car.
-            if ( AISoundDiagLive() )
-            {
-                static u8 sau8Seen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { 0 };
-                if ( !sau8Seen[liCar] )
-                {
-                    sau8Seen[liCar] = 1;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[ai-sound-attach] car=" << liCar
-                        << " live entity=" << CgsDev::E_PRINTMODE_HEXONCE
-                        << static_cast<u64>( lpRaceCarState->mEntityId.muValue )
-                        << " d2=" << DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener )
-                        << " state=" << ( lpState ? lpState->GetInstanceID() : -1 )
-                        << "\n";
-                }
-            }
+
             if ( lpState )
             {
                 if ( DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener ) > KF_AI_VEHICLE_RANGE_SQUARED )
                 {
                     // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-                    if ( AISoundDiagLive() )
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[ai-sound-detach] car=" << liCar << " out of range (d2="
-                            << DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener ) << ")\n";
-                    }
+
                     lpState->Detach();
                 }
             }

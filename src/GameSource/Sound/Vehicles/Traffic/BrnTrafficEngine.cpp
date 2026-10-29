@@ -235,24 +235,7 @@ void TrafficEngine::ProcessUpdate()
     const f32 lfRoadNoiseVolume  = GetMixerOutputValue( 1, Nicotine::DMixIO::DMX_VOL );
     const f32 lfReverbSend       = GetMixerOutputValue( 5, Nicotine::DMixIO::DMX_VOL ) * KF_Q15_TO_UNIT;
 
-    const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStageBefore = mTrafficEngineVoice.GetUpdateStage();
     mTrafficEngineVoice.Update();
-
-    if ( leStageBefore != leStageAfter && leStageAfter == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING
-         && TrafficSoundDiagTake( guEnginePlayingWitnesses, 16 ) )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[trafficsnd] voice playing type=engine entity="
-            << static_cast<s32>( mpTrafficControl->GetTrafficEntity()->mu16EntityIndex ) << "\n";
-    }
-    if ( leStageBefore == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING
-         && leStageAfter == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED
-         && TrafficSoundDiagTake( guEngineFinishedWitnesses, 16 ) )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[trafficsnd] voice finished type=engine entity="
-            << static_cast<s32>( mpTrafficControl->GetTrafficEntity()->mu16EntityIndex ) << "\n";
-    }
 
     mTrafficEngineVoice.SetParameter( 0, lfAzimuth,         &KAU_TRAFFIC_ENGINE_PARAMETERS[0] );
     mTrafficEngineVoice.SetParameter( 1, lfVelocity,        &KAU_TRAFFIC_ENGINE_PARAMETERS[1] );

@@ -147,11 +147,7 @@ bool TrafficStateManager::Prepare()
         // fall through
     case E_PREPARE_FINISHED:
         mePrepareState = E_PREPARE_FINISHED;
-        if ( TrafficSoundDiagTake( guPrepareWitnesses, 1 ) )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[trafficsnd] manager prepared states=" << GetStateObjCount() << "\n";
-        }
+
         return true;
     default:
         return false;

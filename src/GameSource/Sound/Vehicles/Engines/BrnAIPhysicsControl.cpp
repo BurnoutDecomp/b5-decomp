@@ -113,7 +113,7 @@ AIPhysicsControl::AIPhysicsControl()
     , mbIsCurrentlyOccluded( false )
     , mbEnableOcclusion( false )
     , mbInsideRadius( false )
-    , mfDiagAIWitnessTimer( 0.0f )
+
 {
     mPhysicsEngine.Construct();
 }
@@ -169,7 +169,7 @@ bool AIPhysicsControl::Attach()
     mbIsCurrentlyOccluded = false;
     mbEnableOcclusion     = false;
     mbInsideRadius        = false;
-    mfDiagAIWitnessTimer  = 0.0f;
+
     return true;
 }
 
@@ -298,7 +298,6 @@ void AIPhysicsControl::UpdateParams( f32 afTimeStep )
 
     UpdateAIPassbys( afTimeStep );
 
-    AIEngineWitness( afTimeStep );
 }
 
 // ---------------------------------------------------------------------------
@@ -490,19 +489,7 @@ void AIPhysicsControl::PlayPassBy( f32 afRelativeVelocityMagnitude, bool abNearM
     }
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG (capped at 64 lines).
-    if ( AISoundDiagLive() )
-    {
-        static u32 suCount = 0;
-        if ( suCount++ < 64u )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[ai-sound-passby] car=" << static_cast<s32>( GetAttachInfo().muVehicleIndex )
-                << ( abNearMiss ? " near-miss" : " passby" )
-                << " relSpeed=" << afRelativeVelocityMagnitude
-                << " accepted=" << static_cast<s32>( lbPosted ? 1 : 0 )
-                << "\n";
-        }
-    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -540,13 +527,7 @@ void AIPhysicsControl::Notify( const CgsSound::Io::MessageHeader* apkMessage )
         mPhysicsEngine.Reset( Splat( 0.0f ) );
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
-        if ( AISoundDiagLive() )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[ai-sound-engine] car=" << static_cast<s32>( GetAttachInfo().muVehicleIndex )
-                << " engine prepared from car asset key=" << CgsDev::E_PRINTMODE_HEXONCE << luCarAssetKey
-                << "\n";
-        }
+
     }
     else if ( liEventId == BrnSound::E_SOUNDMESSAGE_ENABLE_OCCLUSION )
     {
@@ -560,33 +541,6 @@ void AIPhysicsControl::Notify( const CgsSound::Io::MessageHeader* apkMessage )
 // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG.
 // One line per second of game time per attached AI car: the simulated engine feed.
 // ---------------------------------------------------------------------------
-void AIPhysicsControl::AIEngineWitness( f32 afTimeStep )
-{
-    if ( !AISoundDiagLive() )
-        return;
-    mfDiagAIWitnessTimer += afTimeStep;
-    if ( mfDiagAIWitnessTimer < 1.0f )
-        return;
-    mfDiagAIWitnessTimer = 0.0f;
-
-    const CgsSound::Logic::MicrophoneSystem::Microphone* lpListener = AIListenerMicrophone( GetLogicModule() );
-    const Vector3& lrListenerPosition = lpListener->GetMicrophoneMatrix().Pos();
-    const Vector3& lrPosition = mProcessedPhysicsData.mTransform.GetCurrent().Pos();
-    const f32 lfDistance = Length3( lrPosition.x - lrListenerPosition.x,
-                                    lrPosition.y - lrListenerPosition.y,
-                                    lrPosition.z - lrListenerPosition.z );
-    *CgsDev::Log::gpDebugPrint
-        << "[ai-sound-engine] car=" << static_cast<s32>( GetAttachInfo().muVehicleIndex )
-        << " rpm=" << mAverageRPM.GetAverage()
-        << " gear=" << static_cast<s32>( mPhysicsEngine.GetCurrentGear() )
-        << " throttle=" << mProcessedPhysicsData.mThrottle.GetCurrent()
-        << " unityRpm=" << mProcessedPhysicsData.mUnityRpm.GetCurrent()
-        << " wheelRadS=" << mAverageWheelVel.GetAverage()
-        << " speedMps=" << mAverageSpeedMps.GetAverage()
-        << " distance=" << lfDistance
-        << " occluded=" << static_cast<s32>( mbIsCurrentlyOccluded ? 1 : 0 )
-        << "\n";
-}
 
 } // namespace Engines
 } // namespace Vehicles

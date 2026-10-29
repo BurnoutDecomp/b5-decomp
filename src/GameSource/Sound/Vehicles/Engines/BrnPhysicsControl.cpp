@@ -307,7 +307,6 @@ PhysicsControl::PhysicsControl()
     , meIntroRevingState(E_NIS_REVING_STATE_OFF)
     , mEngineDataSet()
     , mEngineStartLineRPM()
-    , mfDiagWitnessTimer(0.0f)      // [DIAG] NOT IN THE X360 BINARY
 {
     mAttachInfo.mpVehicleAsset = 0;
     mAttachInfo.muVehicleIndex = 0;
@@ -382,15 +381,7 @@ void PhysicsControl::SetupLoadData()
         LoadAsset(lacBundle, lacRegistry, BrnSound::Logic::ResourceRegistrar::E_DATA);
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG.
-        if (BrnSound::Vehicles::EngineAudioDiagLive())
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[engine-asset] component=" << (liComponent == 0 ? "ENGINE" : "EXHAUST")
-                << " name=" << lpcComponent
-                << " bundle=" << lacBundle
-                << " registry=" << lacRegistry
-                << "\n";
-        }
+
     }
 }
 
@@ -721,7 +712,6 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     UpdateCollisionPassbys(afTimeStep);
     UpdateStartLineReving(afTimeStep);
 
-    EngineParamWitness(afTimeStep);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,58 +721,6 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
 // exactly what the authored AEMS patch graph sees. Reading them back (rather
 // than echoing what we just wrote) is what makes a never-written slot visible.
 // ---------------------------------------------------------------------------
-void PhysicsControl::EngineParamWitness(f32 afTimeStep)
-{
-    if (!BrnSound::Vehicles::EngineAudioDiagLive())
-        return;
-
-    mfDiagWitnessTimer += afTimeStep;
-    if (mfDiagWitnessTimer < 1.0f)
-        return;
-    mfDiagWitnessTimer = 0.0f;
-
-    const BrnSound::Vehicles::VehicleData& lrRaw = *mpVehiclePhysicsData;
-    const PhysicsData& lrData = mProcessedPhysicsData;
-
-    // The game-mode STATE and the intro-reving state are what gate the start-line rev
-    // machine and DMix slot 6, so the witness carries both: "modeState=0 reving=1" is
-    // the car sitting on the grid, "modeState=2 reving=0" is the live engine.
-    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameMode =
-        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
-            ->GetBrnInputStructure()->GetGameModeInterface();
-
-    *CgsDev::Log::gpDebugPrint
-        << "[engine-param] state=" << GetStateId()
-        << " modeType=" << (lpGameMode ? lpGameMode->miCurrentGameModeType : -99)
-        << " modeState=" << (lpGameMode ? lpGameMode->miCurrentGameModeState : -99)
-        << " reving=" << static_cast<s32>(meIntroRevingState)
-        << " yaw=" << lrData.mYaw.GetCurrent()
-        << " accelMag=" << lrData.mAccelerationMagnitude.GetCurrent()
-        << " osc=" << mfOscillator.GetCurrent()
-        << " rpm=" << lrRaw.mfRPM
-        << " unity=" << lrData.mUnityRpm.GetCurrent()
-        << " norm=" << lrData.mNormalizedRpm.GetCurrent()
-        << " throttle=" << lrData.mThrottle.GetCurrent()
-        << " gear=" << lrData.mGear.GetCurrent()
-        << " mph=" << lrData.mSpeedMPH.GetCurrent()
-        << " idleRpm=" << lrData.mfIdleRpm
-        << " maxRpm=" << lrData.mfMaxRpm;
-
-    Nicotine::DMixIO* lpDMix = GetDMixIOPtr();
-    *CgsDev::Log::gpDebugPrint << " dmix=";
-    if (!lpDMix)
-    {
-        *CgsDev::Log::gpDebugPrint << "<null>\n";
-        return;
-    }
-    for (s32 liSlot = 0; liSlot <= 8; ++liSlot)
-    {
-        if (liSlot)
-            *CgsDev::Log::gpDebugPrint << ",";
-        *CgsDev::Log::gpDebugPrint << lpDMix->GetDMixInput(liSlot);
-    }
-    *CgsDev::Log::gpDebugPrint << "\n";
-}
 
 f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
 {
@@ -995,21 +933,7 @@ void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
     // this the post is a claim: the gate is four conditions deep and the consumer
     // (PassbyStateManager::Prepare @0x826F9748) is still a `return true` stub, so
     // nothing downstream can show whether the producer ever fired.
-    if (BrnSound::Vehicles::EngineAudioDiagLive())
-    {
-        static u32 suPassbyCount = 0;
-        if (suPassbyCount++ < 32u)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[engine-passby] post#" << suPassbyCount
-                << " angularSpeed=" << lfAngularSpeed
-                << " timeSinceLanding=" << mpWheelControl->GetTimeSinceLanding()
-                << " osc=" << lfOscillator
-                << " oscPrev=" << lfPrevOscillator
-                << " accepted=" << static_cast<s32>(lbPosted ? 1 : 0)
-                << "\n";
-        }
-    }
+
 }
 
 // ---------------------------------------------------------------------------

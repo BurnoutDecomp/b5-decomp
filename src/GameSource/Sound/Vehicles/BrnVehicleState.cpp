@@ -181,10 +181,7 @@ void VehicleState::UpdateParams(f32 af32DeltaTime)
             BrnSound::Debug::DebugComponent::mLogCombined
                 << "VehicleState::UpdateParams Detach because  mDesiredAssetIDs[mAttachInfo.miVehicleIndex]  != mAttachInfo.mAssetID . Car idx"
                 << static_cast<s32>(mAttachInfo.muVehicleIndex) << "\n";
-        if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
-            *CgsDev::Log::gpDebugPrint << "[car-audio] sound VehicleState DETACH car=" << mAttachInfo.muVehicleIndex
-                                       << " token=" << mAttachInfo.mAttachToken
-                                       << " desiredNow=" << VehicleStateManager::GetLoadedAssetId(mAttachInfo.muVehicleIndex) << "\n";
+
         Detach();
     }
 }

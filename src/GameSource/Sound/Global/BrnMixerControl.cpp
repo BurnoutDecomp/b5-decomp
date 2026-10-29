@@ -127,9 +127,7 @@ void MixerControl::Notify(const CgsSound::Io::MessageHeader* apMessage)
         // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). The message-12 payload AS
         // THIS CONSUMER READS IT (the console reads +16 music, +20 sfx): both words,
         // so a producer that posted fewer than 8 bytes shows as a garbage second word.
-        CgsSound::Diag::DMixDiagPrintf(
-            "[dmix] settings msg12 music=%d sfx=%d (payload +16/+20 of the queued record)\n",
-            mCachedSettings.miMusicVolume, mCachedSettings.miSFXVolume);
+
     }
     else if (apMessage->GetEventId() == 43)
     {

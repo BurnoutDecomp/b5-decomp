@@ -128,15 +128,7 @@ namespace
     // [DIAG] NOT IN THE X360 BINARY. std::printf does NOT reach BrnGame.log on this
     // build; CgsDev::Log::WriteToLog is the sink the harness reads (the same one the
     // committed [lionfx] witness uses).
-    void MusicDiagPrintf(const char* lpcFormat, ...)
-    {
-        char lacMsg[512];
-        va_list lArgs;
-        va_start(lArgs, lpcFormat);
-        std::vsnprintf(lacMsg, sizeof(lacMsg), lpcFormat, lArgs);
-        va_end(lArgs);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
+
 }
 
 // ---------------------------------------------------------------------------------

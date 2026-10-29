@@ -77,9 +77,6 @@ private:
     void PlayPassBy( f32 afRelativeVelocityMagnitude, bool abNearMiss );                 // @ 0x8269A4C0 (DWARF cpp:362)
     void UpdateAIPassbys( f32 afTimeStep );                                              // @ 0x826B4A98 (DWARF cpp:268)
 
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG (see BrnAISoundDiag.h).
-    void AIEngineWitness( f32 afTimeStep );
-
     CgsSound::Utils::Average<9u,  f32>     mAverageRPM;         // DWARF h:88   +0x28C
     CgsSound::Utils::Average<25u, f32>     mAverageWheelVel;    // DWARF h:89   +0x2B8
     CgsSound::Utils::Average<9u,  Vector3> mAverageVelocity;    // DWARF h:90   +0x330
@@ -92,8 +89,6 @@ private:
     bool                                   mbEnableOcclusion;   // DWARF h:101  +0x4EA
     bool                                   mbInsideRadius;      // DWARF h:102  +0x4EB
 
-    // [DIAG] NOT IN THE X360 BINARY -- witness accumulator.
-    f32                                    mfDiagAIWitnessTimer;
 };
 
 } // namespace Engines

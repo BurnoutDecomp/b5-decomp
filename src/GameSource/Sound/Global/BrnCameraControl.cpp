@@ -506,14 +506,7 @@ void CameraControl::UpdateParams(f32 /*af32DeltaTime*/)
         // reports the posts a free voice accepted, so it cannot count a flood; this line can
         // (one per real gameplay-camera entry, never on consecutive updates).
         static u32 suResetOnTrackPostDiag = 0;
-        if (HudSoundDiagBudget(suResetOnTrackPostDiag))
-        {
-            HudSoundDiagPrintf(
-                "[fx-sting-post] reset-on-track #%u update=%u flags cur=0x%08x prev=0x%08x\n",
-                suResetOnTrackPostDiag, suCameraControlUpdatesDiag,
-                static_cast<u32>(lrCameraState.mCurrentFlags.GetBitField(0)),
-                static_cast<u32>(lrCameraState.mPreviousFlags.GetBitField(0)));
-        }
+
     }
 
     // ---- edge-triggered snapshots ---------------------------------------------

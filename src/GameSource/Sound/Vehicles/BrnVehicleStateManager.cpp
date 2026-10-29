@@ -114,16 +114,6 @@ void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFileP
     // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG. A null handle here is an
     // engine/exhaust playback registry that never reached the registrar, i.e. the
     // voices fall back to whatever registry is already loaded.
-    if (EngineAudioDiagLive())
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[engine-registry] name=" << lpcEngineName
-            << " registry=" << lacRegistry
-            << " bundle=" << (lpcBundle ? lpcBundle : "<resource-only>")
-            << " useFilePath=" << static_cast<s32>(lbUseFilePath ? 1 : 0)
-            << " resolved=" << static_cast<s32>(lpHandle ? 1 : 0)
-            << "\n";
-    }
 
     CGS_ASSERT(lpHandle != 0, "lpResourceHandle");
     if (!lpHandle)
@@ -282,12 +272,6 @@ void VehicleStateManager::OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsP
     gaAttachedAssetIds[luUserId] = lAssetId;
     if (lbIsPlayer)
         guAttachedPlayerMask |= luBit;
-    if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
-        *CgsDev::Log::gpDebugPrint << "[car-audio] sound OnAssetLoaded car=" << luUserId << " asset=" << lAssetId
-                                   << " isPlayer=" << (lbIsPlayer ? 1 : 0)
-                                   << " added=" << (((guAddedMask & luBit) != 0) ? 1 : 0)
-                                   << " desired=" << gaDesiredAssetIds[luUserId]
-                                   << " -> reply=" << ((((guAddedMask & luBit) != 0) && gaDesiredAssetIds[luUserId] == lAssetId) ? 1 : 0) << "\n";
 
     if ((guAddedMask & luBit) != 0 && gaDesiredAssetIds[luUserId] == lAssetId)
     {
@@ -350,9 +334,7 @@ void VehicleStateManager::OnAssetUnloaded(CgsID lAssetId, u32 luUserId)
     gaAttachedAssetIds[luUserId] = 0;
     guAttachedMask &= static_cast<u8>(~luBit);
     guAttachedPlayerMask &= static_cast<u8>(~luBit);
-    if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
-        *CgsDev::Log::gpDebugPrint << "[car-audio] sound OnAssetUnloaded car=" << luUserId << " asset=" << lAssetId
-                                   << " -> reply UNLOADED posted\n";
+
     static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
         ->GetPreUpdateOutput().GetCarDataLoadedQueue().AddEvent(lEvent);
 }
