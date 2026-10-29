@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"
 
@@ -8,9 +9,8 @@ namespace CgsGraphics { struct Im2d; }
 
 // BrnGame::LoadingScreenRenderer - draws the boot/loading screen (animated arrow over
 // a background, plus a fading black overlay) on its own render path so it can animate
-// while the main thread streams. Layout/enum/signatures from the DecFIGS DWARF
-// (BrnLoadingScreenRenderer.h/.cpp); the loading screen uses the engine's standard
-// Im2d + renderengine::Texture2D, with the textures baked into the build.
+// while the main thread streams. ARTIST fixes the 0x60-byte native layout;
+// DecFIGS supplies names. Its PS3-only disk-error member is not present on X360.
 namespace BrnGame
 {
     enum ELoadingScreenCommand
@@ -39,7 +39,6 @@ namespace BrnGame
 
         void Construct();
         void AddCommand(ELoadingScreenCommand leCommand);
-        void RenderDiskErrorMessage(CgsGraphics::Im2d* lpIm2dRenderBuffer);
         CgsMemory::LinearMalloc* GetReusableDataAllocator() { return &mReusableDataBuffer; }
         void RenderForeground(CgsGraphics::Im2d* lpIm2dRenderBuffer);
         void RenderBackground(CgsGraphics::Im2d* lpIm2dRenderBuffer);
@@ -63,7 +62,6 @@ namespace BrnGame
         renderengine::Texture2D* mpTextTexture;
         renderengine::Texture2D* mpBoxTexture;
         ELoadingLanguage         meLanguage;
-        renderengine::Texture2D* mpDiskErrorTexture;
         bool                     mbVisible;
         bool                     mbHiding;
         bool                     mbBlackOverlayVisible;
@@ -80,4 +78,5 @@ namespace BrnGame
         f32                      mfTimeStep;
         f32                      mfRotateSpeedInterp;
     };
+    CGS_STATIC_ASSERT((sizeof(LoadingScreenRenderer) == 0x60), "ARTIST loading renderer");
 }

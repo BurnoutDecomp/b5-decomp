@@ -2,27 +2,46 @@
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] bring-up traces
-#include <cstdio>
-#include <cstdlib>
+#include "GameSource/Resource/BrnResourceAllocator.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 #include <cstring>
 #include <cmath>
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX with the DecFIGS DWARF
-// (BrnLoadingScreenRenderer.cpp) as the structural authority. The loading screen draws
-// through the engine's standard Im2d: a full-screen background plus the box, text and a
-// spinning arrow, each as a (rotated) textured quad, with a separate black-overlay fade.
-// The X360/PS3 emit this as hand-VMX immediate-mode batches; this is the equivalent
-// clean logical C++. Layout/animation constants are the real .rdata values recovered
-// from the XEX. Textures are baked into the build and loaded from external .dds files.
-
-namespace CgsSystem
+// ARTIST owns the native loading path and layout. The four embedded tiled
+// DXT5 arrays are linked from the original data; their symbols retain the
+// DecFIGS names. The car staging region becomes the reusable scratch allocator.
+namespace BrnGame
 {
-    u32 GetSystemTimerBaseTime();
-    u32 GetSystemTimerFrequency();
+    extern u8 gpLoadingScreenTextureArrow[0x4000];
+    extern u8 gpLoadingScreenTextureCar[0x200000];
+    extern u8 gpLoadingScreenTextureText[0x40000];
+    extern u8 gpLoadingScreenTextureBox[0x4000];
+    bool gbUseRotatingLoadingArrow = true; // ARTIST byte_82F241FC
 }
 
 namespace
 {
+    CgsGraphics::Vector2 Point(f32 x, f32 y)
+    {
+        CgsGraphics::Vector2 point = { x, y };
+        return point;
+    }
+
+    void SetScreenTransform(CgsGraphics::Im2d* renderer)
+    {
+        CgsGraphics::Im2dTransform transform;
+        const rw::math::vpu::Vector4 origin = { -1.0f, 1.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector4 rightUp = { 0.0015625f, 0.0f, 0.0f, -0.0027777778f };
+        const rw::math::vpu::Vector4 shift = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const rw::math::vpu::Vector4 scale = { 1.0f, 1.0f, 1.0f, 1.0f };
+        transform.mOriginXYZ = origin;
+        transform.mRightUp = rightUp;
+        transform.mColourShift = shift;
+        transform.mColourScale = scale;
+        transform.TransformByAspectRatio();
+        renderer->SetTransform(transform);
+    }
     // Real loading-screen layout constants (.rdata @0x82F240xx, recovered from the XEX).
     const f32 KF_SCREEN_W = 1280.0f;
     const f32 KF_SCREEN_H = 720.0f;
@@ -53,9 +72,10 @@ namespace
     const f32 KF_DEG2RAD = 0.017453292f;
     const f32 KF_TILT_DEG = -8.0f;             // flt_82F240F8/24108 (box/text tilt)
     // UV extent = content / texture-logical-size (the engine's flt_82FAE5xx ratios).
-    // arrow/box are 64-logical in a 128-physical tiled surface, so * 64/128.
-    const f32 KF_ARROW_UV = (53.5f / 64.0f) * (64.0f / 128.0f);    // flt_82F2407C/9C, /physical
-    const f32 KF_BOX_UV   = (51.0f / 64.0f) * (64.0f / 128.0f);    // flt_82F24094/B4, /physical
+    // Native D3D headers retain the 64x64 logical dimensions. Tiling allocation
+    // granularity does not change these UVs (CRT initializers 82C4E320..E418).
+    const f32 KF_ARROW_UV = (53.5f / 64.0f);
+    const f32 KF_BOX_UV   = (51.0f / 64.0f);
     // Background: the car texture is 2048x1024 with the 1280x720 image in the top-left,
     // so UV = content/texture-size (flt_82FAE59C/5AC = flt_82F24080/A0, flt_82F24084/A4).
     const f32 KF_BG_U = 1280.0f / 2048.0f;     // 0.625
@@ -63,16 +83,15 @@ namespace
     // Text is 512-logical (no padding): U = flt_82F24088/A8, strip height = flt_82F2408C/AC.
     const f32 KF_TEXT_U = 427.0f / 512.0f;
     const f32 KF_TEXT_V_H = 57.0f / 512.0f;
-    // Per-language strip V-offset (the runtime flt_82FAE970[] table). Recovered from the
-    // text texture's strip layout: 5 strips at rows 29/128/229/329/429, ordered
-    // EN, DE, IT, ES, FR (top to bottom); Japanese reuses the English strip.
+    // CRT initializer 82C4E420 computes the language rows from original constants:
+    // 28,28,428,128,328,228 divided by the 512-pixel texture height.
     const f32 KA_TEXT_STRIP_V[BrnGame::LoadingScreenRenderer::E_LOADINGLANGUAGE_COUNT] = {
-        29.0f / 512.0f,    // E_LOADINGLANGUAGE_ENGLISH  -> strip 0
-        29.0f / 512.0f,    // E_LOADINGLANGUAGE_JAPANESE -> (no JP strip; uses EN)
-        429.0f / 512.0f,   // E_LOADINGLANGUAGE_FRENCH   -> strip 4
+        28.0f / 512.0f,    // E_LOADINGLANGUAGE_ENGLISH  -> strip 0
+        28.0f / 512.0f,    // E_LOADINGLANGUAGE_JAPANESE -> (no JP strip; uses EN)
+        428.0f / 512.0f,   // E_LOADINGLANGUAGE_FRENCH   -> strip 4
         128.0f / 512.0f,   // E_LOADINGLANGUAGE_GERMAN   -> strip 1 (LAEDT)
-        329.0f / 512.0f,   // E_LOADINGLANGUAGE_SPANISH  -> strip 3
-        229.0f / 512.0f,   // E_LOADINGLANGUAGE_ITALIAN  -> strip 2
+        328.0f / 512.0f,   // E_LOADINGLANGUAGE_SPANISH  -> strip 3
+        228.0f / 512.0f,   // E_LOADINGLANGUAGE_ITALIAN  -> strip 2
     };
 
     // Build a textured quad (4 verts, triangle-strip order TL,TR,BL,BR) from 4 logical
@@ -86,12 +105,13 @@ namespace
                   CgsGraphics::RGBA8 lColour)
     {
         CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
-        const CgsGraphics::Vector2 laPos[4] = { lTL, lTR, lBL, lBR };
-        const f32 laUV[4][2] = { {lfU0,lfV0}, {lfU1,lfV0}, {lfU0,lfV1}, {lfU1,lfV1} };
+        const CgsGraphics::Vector2 laPos[4] = { lTL, lBL, lTR, lBR };
+        const f32 laUV[4][2] = { {lfU0,lfV0}, {lfU0,lfV1}, {lfU1,lfV0}, {lfU1,lfV1} };
         for (s32 i = 0; i < 4; ++i)
         {
-            laVerts[i].mv2Pos = { laPos[i].x, laPos[i].y };
-            laVerts[i].mv2Tex0UV = { laUV[i][0], laUV[i][1] };
+            laVerts[i].mv2Pos = laPos[i];
+            laVerts[i].mv2Tex0UV.x = laUV[i][0];
+            laVerts[i].mv2Tex0UV.y = laUV[i][1];
             laVerts[i].mv4Colour = lColour;
         }
         lpIm2d->Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
@@ -119,117 +139,72 @@ namespace BrnGame
     renderengine::Texture2D* LoadingScreenRenderer::SetupLoadingScreenTexture(
         f32 lfWidth, f32 lfHeight, void* lpcData, s32 liDataSize)
     {
-        renderengine::Texture2D::Parameters lParams = {};
+        renderengine::Texture2D::Parameters lParams;
+        lParams.muFlags = 0;
         lParams.muWidth = static_cast<u32>(lfWidth + 0.5f);
         lParams.muHeight = static_cast<u32>(lfHeight + 0.5f);
-        lParams.muDepth = 1;
         lParams.muNumLevels = 1;
-        lParams.muFormat = 340;
+        lParams.meFormat = renderengine::PIXELFORMAT_DXT5;
 
-        renderengine::Texture2D::ResourceDescriptor lDesc;
-        renderengine::Texture2D::GetResourceDescriptor(&lDesc, &lParams);
-        renderengine::Texture2D* lpTexture = renderengine::Texture2D::Initialize(&lDesc, &lParams);
-
-        renderengine::Texture::LockInfo lLocked;
-        renderengine::Texture::Lock(lpTexture, 0, 0, 0, &lLocked);
-        if (lLocked.mpBits != 0 && lpcData != 0)
-        {
-            std::memcpy(lLocked.mpBits, lpcData, static_cast<size_t>(liDataSize));
-        }
-        renderengine::Texture::Unlock(lpTexture, &lLocked);
+        const rw::ResourceDescriptor lDesc = renderengine::Texture2D::GetResourceDescriptor(lParams);
+        rw::IResourceAllocator* lpAllocator = BrnResource::GetEmbeddedTextureAllocator();
+        const rw::Resource lResource = lpAllocator->DoAllocate(lDesc, 0);
+        renderengine::Texture2D* lpTexture = renderengine::Texture2D::Initialize(lResource, lParams);
+        renderengine::Texture::Locked lLocked;
+        lpTexture->Lock(0, 0, 0, lLocked);
+        XMemCpy(lLocked.mpPixelData, lpcData, static_cast<size_t>(liDataSize));
+        lpTexture->Unlock(lLocked);
         return lpTexture;
     }
 
-    // Load a baked loading-screen texture from an external .dds. The 128-byte DDS header
-    // (4-byte 'DDS ' magic + DDS_HEADER) carries the dimensions and pixel format, so the
-    // size/format come from the file rather than a hand-rolled prefix. Only uncompressed
-    // 32-bit A8R8G8B8 is handled here (the pixel bytes are B,G,R,A, which is exactly the
-    // texture upload format); the header is read as 32 little-endian u32 words:
-    //   [0]='DDS ' [3]=dwHeight [4]=dwWidth [21]=ddspf.dwFourCC [22]=ddspf.dwRGBBitCount
-    static renderengine::Texture2D* LoadFromDDS(LoadingScreenRenderer& lRenderer,
-                                                renderengine::Texture2D* (LoadingScreenRenderer::*lpSetup)(f32, f32, void*, s32),
-                                                const char* lpacPath)
-    {
-        std::FILE* lpFile = std::fopen(lpacPath, "rb");
-        if (lpFile == 0) { return 0; }
-
-        u32 luHeader[32] = {};   // 'DDS ' magic + the 124-byte DDS_HEADER
-        if (std::fread(luHeader, sizeof(u32), 32, lpFile) != 32 || luHeader[0] != 0x20534444u)
-        {
-            std::fclose(lpFile);
-            return 0;
-        }
-
-        const u32 luH = luHeader[3];   // dwHeight
-        const u32 luW = luHeader[4];   // dwWidth
-        const u32 luFourCC = luHeader[21];
-        const u32 luBitCount = luHeader[22];
-        if (luFourCC != 0u || luBitCount != 32u)   // not uncompressed 32-bit RGBA
-        {
-            std::fclose(lpFile);
-            return 0;
-        }
-
-        const s32 liBytes = static_cast<s32>(luW * luH * 4u);
-        void* lpData = std::malloc(static_cast<size_t>(liBytes));
-        if (lpData != 0) { std::fread(lpData, 1u, static_cast<size_t>(liBytes), lpFile); }
-        std::fclose(lpFile);
-        if (lpData == 0) { return 0; }
-
-        renderengine::Texture2D* lpTex = (lRenderer.*lpSetup)(static_cast<f32>(luW), static_cast<f32>(luH), lpData, liBytes);
-        std::free(lpData);
-        return lpTex;
-    }
-
-    // @ 0x823CE208 - create the textures, the re-usable scratch buffer, pick the language.
+    // ARTIST 823CE208. Preserve the exact initialization stores: this object is
+    // statically zeroed before Construct; the function does not reset every field.
     void LoadingScreenRenderer::Construct()
     {
-        mpArrowTexture = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/arrow.dds");
-        mpCarTexture   = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/car.dds");
-        mpTextTexture  = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/text.dds");
-        mpBoxTexture   = LoadFromDDS(*this, &LoadingScreenRenderer::SetupLoadingScreenTexture, "loadingscreen/box.dds");
-        mpDiskErrorTexture = 0;
-
-        static u8 saReusableData[0x200000];   // 2 MB scratch (X360 reused the car staging region)
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Sizes: Arrow=" << 0x4000
+                << ", Car=" << 0x200000 << ", Text=" << 0x40000 << ", Box=" << 0x4000 << "\n";
+        mpArrowTexture = SetupLoadingScreenTexture(64.0f, 64.0f, gpLoadingScreenTextureArrow, 0x4000);
+        mpCarTexture = SetupLoadingScreenTexture(2048.0f, 1024.0f, gpLoadingScreenTextureCar, 0x200000);
+        mpTextTexture = SetupLoadingScreenTexture(512.0f, 512.0f, gpLoadingScreenTextureText, 0x40000);
+        mpBoxTexture = SetupLoadingScreenTexture(64.0f, 64.0f, gpLoadingScreenTextureBox, 0x4000);
         mReusableDataBuffer.Construct();
-        mReusableDataBuffer.Create(saReusableData, sizeof(saReusableData));
-
+        mReusableDataBuffer.Create(gpLoadingScreenTextureCar, 0x200000);
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Created re-usable data buffer of " << 0x200000 << " bytes\n";
         mbVisible = false;
-        mbHiding = false;
-        mbBlackOverlayVisible = false;
-        mbBlackOverlayHiding = false;
+        switch (CgsSystem::HardwareSku::FindLanguage())
+        {
+        case 7: case 8: meLanguage = E_LOADINGLANGUAGE_ENGLISH; break;
+        case 10: meLanguage = E_LOADINGLANGUAGE_FRENCH; break;
+        case 11: meLanguage = E_LOADINGLANGUAGE_GERMAN; break;
+        case 15: meLanguage = E_LOADINGLANGUAGE_ITALIAN; break;
+        case 16: meLanguage = E_LOADINGLANGUAGE_JAPANESE; break;
+        case 22: meLanguage = E_LOADINGLANGUAGE_SPANISH; break;
+        default:
+            CgsDev::Assert::BeginAssert();
+            {
+                CgsDev::StrStream message(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+                message << "Language does not match SKU\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnLoadingScreenRenderer.cpp", 245);
+            }
+            CgsDev::Assert::EndAssert();
+            break;
+        }
         mbRenderInBackground = false;
-        mfArrowRotation = 0.0f;
-        mfArrowTranslation = 0.0f;
-        // FLAG: ARTIST 0x823CE208 stores 1.0 (flt_82001C98) to mfArrowDirection (this+0x28);
-        // mfFade is this+0x2C per the Render disasm at 0x823E7CE4. DecFIGS confirms
-        // *(this+48)=1.0. Direction is the +/-1 sign of the arrow-translation bounce; 0.0f
-        // would freeze the bounce. (Was 0.0f.)
-        mfArrowDirection = 1.0f;
-        mfFade = 0.0f;
+        mbBlackOverlayHiding = false;
+        mbBlackOverlayVisible = false;
+        mbKillBlackOverlayWhenDone = false;
         mfBlackOverlayFade = 0.0f;
-        mfTimeStep = 0.0f;
+        mfArrowTranslation = 0.0f;
         mfRotateSpeedInterp = 0.0f;
-        muLastTime = 0;
-        meLanguage = static_cast<ELoadingLanguage>(CgsSystem::HardwareSku::FindLanguage());
+        mfArrowDirection = 1.0f;
     }
 
     // @ 0x823AAD48 - map a command onto the visibility / black-overlay state.
     void LoadingScreenRenderer::AddCommand(ELoadingScreenCommand leCommand)
     {
-        // PC bring-up trace: command edges only (the boot flow re-posts SHOW every tick
-        // through the one-shot dispatch slot, so log value changes, not every fire).
-        if (leCommand != E_LSC_NONE)
-        {
-            static ELoadingScreenCommand seLastLogged = E_LSC_NONE;
-            if (leCommand != seLastLogged)
-            {
-                seLastLogged = leCommand;
-                char lacMsg[64];
-                std::snprintf(lacMsg, sizeof(lacMsg), "[LoadScreen] AddCommand %d\n", leCommand);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
         switch (leCommand)
         {
         case E_LSC_SHOW:
@@ -244,16 +219,6 @@ namespace BrnGame
             mbKillBlackOverlayWhenDone = true;
             break;
         case E_LSC_BLACKFADEIN:
-            // [PC timing seam] BF_LEGAL posts the hide (20) and this reveal (589)
-            // back-to-back on the PC (the title resources resolve synchronously); the
-            // console's async load gives the 0.5s hide fade time to finish in between.
-            // The overlay suppresses Render -- and with it the fade's advance -- while
-            // visible, so a still-pending hide would freeze mid-fade and pop the whole
-            // loading screen back over the title animation for its fade tail once the
-            // reveal completes. The overlay starts opaque (1.2 -> alpha clamp 1.0), so
-            // completing the pending hide here is invisible and lands the console-
-            // observed outcome (nothing left under the reveal).
-            if (mbHiding) { mbHiding = false; mbVisible = false; mfFade = 0.0f; }
             mfBlackOverlayFade = 1.2f; mbBlackOverlayVisible = true;
             mbBlackOverlayHiding = true; mbKillBlackOverlayWhenDone = false;
             break;
@@ -281,19 +246,24 @@ namespace BrnGame
     {
         using namespace CgsGraphics;
 
-        // ARTIST 0x823E7B28: the renderer returns before beginning an Im2d pass
-        // when the loading screen's visible byte (this+0x14) is clear.
+        // ARTIST 823E871C: the hidden path refreshes the timer and clears the
+        // old foreground fade/rotation before returning without an Im2d pass.
         if (!mbVisible)
         {
+            muLastTime = CgsSystem::GetSystemTimerBaseTime64();
+            mfArrowRotation = 0.0f;
+            mbHiding = false;
+            mfFade = 0.0f;
             return;
         }
 
         lpIm2d->BeginRendering();
 
-        Im2dTransform lScreenXForm;
-        lScreenXForm.TransformByAspectRatio();
-        lpIm2d->SetTransform(lScreenXForm);
-        lpIm2d->SetState(static_cast<const BlendState*>(0));
+        SetScreenTransform(lpIm2d);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpRasterizerState_CullNone);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpBlendState_Standard);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpDepthStencilState_ZBufferOff);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpSamplerState_Linear_MipNearest_ClampUV);
 
         // --- Fade: one mfFade, two staged outputs (exactly as the source) -------------
         // mfFade ramps IN at KF_FADE_IN_SPEED, OUT at KF_FADE_OUT_SPEED, clamped to
@@ -330,13 +300,25 @@ namespace BrnGame
         // Background / car: full-screen quad, sampling only the 1280x720 image region of
         // the 2048x1024 texture; greys up from black during the first fade stage.
         lpIm2d->SetTexture(mpCarTexture);
-        EmitQuad(lpIm2d, {0.0f,0.0f}, {KF_SCREEN_W,0.0f}, {0.0f,KF_SCREEN_H}, {KF_SCREEN_W,KF_SCREEN_H},
+        EmitQuad(lpIm2d, Point(0.0f,0.0f), Point(KF_SCREEN_W,0.0f), Point(0.0f,KF_SCREEN_H), Point(KF_SCREEN_W,KF_SCREEN_H),
                  0.0f, 0.0f, KF_BG_U, KF_BG_V, lBgCol);
 
-        // Spinning arrow - the loading indicator. byte_82F241FC == 1 selects the arrow
-        // over the alternate box indicator, so the box texture is intentionally not drawn.
-        // The spin speed oscillates between KF_ROTATE_MIN/MAX_SPEED (here equal -> constant
-        // 550 deg/s); advance the angle (wrapping at 180) and draw it rotated.
+        // ARTIST submits both letterbox strips even for the original 1280-wide
+        // background, where each strip has zero height.
+        const RGBA8 lBlack = { 0, 0, 0, 255 };
+        EmitQuad(lpIm2d, Point(0.0f,0.0f), Point(KF_SCREEN_W,0.0f), Point(0.0f,0.0f), Point(KF_SCREEN_W,0.0f),
+                 0.0f, 0.0f, 0.0f, 0.0f, lBlack);
+        EmitQuad(lpIm2d, Point(0.0f,KF_SCREEN_H), Point(KF_SCREEN_W,KF_SCREEN_H), Point(0.0f,KF_SCREEN_H), Point(KF_SCREEN_W,KF_SCREEN_H),
+                 0.0f, 0.0f, 0.0f, 0.0f, lBlack);
+        if (mbRenderInBackground)
+        {
+            lpIm2d->EndRendering();
+            return;
+        }
+
+        if (gbUseRotatingLoadingArrow)
+        {
+        // The native toggle selects rotating versus translated-arrow animation.
         mfRotateSpeedInterp += KF_ROTATE_ACCELERATION * mfTimeStep;
         if (mfRotateSpeedInterp > KF_TWO_PI) { mfRotateSpeedInterp -= KF_TWO_PI; }
         const f32 lfSpeed = (KF_ROTATE_MAX_SPEED - KF_ROTATE_MIN_SPEED)
@@ -346,9 +328,41 @@ namespace BrnGame
         lpIm2d->SetTexture(mpArrowTexture);
         RotatedCorners(laC, KF_ARROW_CX, KF_ARROW_CY, KF_HALF_ARROW, KF_HALF_ARROW, mfArrowRotation * KF_DEG2RAD);
         EmitQuad(lpIm2d, laC[0], laC[1], laC[2], laC[3], 0.0f, 0.0f, KF_ARROW_UV, KF_ARROW_UV, lFgCol);
+        }
+        else
+        {
+            lpIm2d->SetTexture(mpBoxTexture);
+            RotatedCorners(laC, KF_BOX_CX, KF_BOX_CY, KF_HALF_BOX, KF_HALF_BOX, KF_TILT_DEG * KF_DEG2RAD);
+            EmitQuad(lpIm2d, laC[0], laC[1], laC[2], laC[3], 0.0f, 0.0f, KF_BOX_UV, KF_BOX_UV, lFgCol);
+
+            lpIm2d->SetTexture(mpArrowTexture);
+            mfArrowTranslation += (mfArrowDirection * mfTimeStep) * 30.0f;
+            if (mfArrowTranslation > 10.0f)
+            {
+                mfArrowDirection = -mfArrowDirection;
+                mfArrowTranslation = 10.0f - (mfArrowTranslation - 10.0f);
+            }
+            if (mfArrowTranslation < 0.0f)
+            {
+                mfArrowTranslation = -mfArrowTranslation;
+                mfArrowDirection = -mfArrowDirection;
+            }
+            const f32 lfAngle = KF_TILT_DEG * KF_DEG2RAD;
+            const f32 lfSin = static_cast<f32>(std::sin(lfAngle));
+            const f32 lfCos = static_cast<f32>(std::cos(lfAngle));
+            const f32 lfOffsetY = 5.0f - mfArrowTranslation;
+            RotatedCorners(laC, KF_BOX_CX, KF_BOX_CY, KF_HALF_ARROW, KF_HALF_ARROW, lfAngle);
+            for (u32 i = 0; i != 4; ++i)
+            {
+                laC[i].x -= lfSin * lfOffsetY;
+                laC[i].y += lfCos * lfOffsetY;
+            }
+            // ARTIST's alternate arrow intentionally uses the box UV extent.
+            EmitQuad(lpIm2d, laC[0], laC[1], laC[2], laC[3], 0.0f, 0.0f, KF_BOX_UV, KF_BOX_UV, lFgCol);
+        }
 
         // Text bar (tilted): sample only the current language's V-strip (flt_82FAE970).
-        const s32 liLang = (meLanguage >= 0 && meLanguage < E_LOADINGLANGUAGE_COUNT) ? meLanguage : 0;
+        const s32 liLang = meLanguage;
         const f32 lfTextV0 = KA_TEXT_STRIP_V[liLang];
         lpIm2d->SetTexture(mpTextTexture);
         RotatedCorners(laC, KF_TEXT_CX, KF_TEXT_CY,
@@ -366,10 +380,10 @@ namespace BrnGame
         if (!mbBlackOverlayVisible) { return; }
 
         lpIm2d->BeginRendering();
-        Im2dTransform lScreenXForm;
-        lScreenXForm.TransformByAspectRatio();
-        lpIm2d->SetTransform(lScreenXForm);
-        lpIm2d->SetState(static_cast<const BlendState*>(0));
+        SetScreenTransform(lpIm2d);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpRasterizerState_CullNone);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpBlendState_Standard);
+        lpIm2d->SetState(ImRendererBase::mgStateLibrary.mpDepthStencilState_ZBufferOff);
 
         bool lbHideAfterDraw = false;
         if (mbBlackOverlayHiding)
@@ -387,7 +401,7 @@ namespace BrnGame
         f32 lfAlpha = mfBlackOverlayFade; if (lfAlpha > 1.0f) { lfAlpha = 1.0f; } if (lfAlpha < 0.0f) { lfAlpha = 0.0f; }
         const RGBA8 lBlack = { 0, 0, 0, static_cast<u8>(lfAlpha * 255.0f + 0.5f) };
         lpIm2d->SetTexture(mpCarTexture);
-        EmitQuad(lpIm2d, {0.0f,0.0f}, {KF_SCREEN_W,0.0f}, {0.0f,KF_SCREEN_H}, {KF_SCREEN_W,KF_SCREEN_H},
+        EmitQuad(lpIm2d, Point(0.0f,0.0f), Point(KF_SCREEN_W,0.0f), Point(0.0f,KF_SCREEN_H), Point(KF_SCREEN_W,KF_SCREEN_H),
                  0.0f, 0.0f, KF_BG_U, KF_BG_V, lBlack);
         lpIm2d->EndRendering();
     }
@@ -396,13 +410,13 @@ namespace BrnGame
     // visuals (if not backgrounded and no overlay), then update the black overlay.
     void LoadingScreenRenderer::RenderForeground(CgsGraphics::Im2d* lpIm2d)
     {
-        const u32 luFirstTime = CgsSystem::GetSystemTimerBaseTime();
-        const u32 luSecondTime = CgsSystem::GetSystemTimerBaseTime();
-        const u32 luDelta = luSecondTime - static_cast<u32>(muLastTime);
+        const u64 luFirstTime = CgsSystem::GetSystemTimerBaseTime64();
+        const u64 luSecondTime = CgsSystem::GetSystemTimerBaseTime64();
+        const u64 luDelta = luSecondTime - muLastTime;
         muLastTime = luFirstTime;
-        const u32 luFreq = CgsSystem::GetSystemTimerFrequency();
-        f32 lfStep = (luFreq != 0u) ? static_cast<f32>(luDelta) / static_cast<f32>(luFreq) : 0.0f;
-        if (lfStep > 0.1f) { lfStep = 0.1f; }
+        const u64 luFrequency = CgsSystem::GetSystemTimerFrequency64();
+        f32 lfStep = static_cast<f32>((luDelta * 10000) / luFrequency) * 0.0001f;
+        if (lfStep > 0.1f) lfStep = 0.1f;
         mfTimeStep = lfStep;
 
         if (!mbRenderInBackground && !mbBlackOverlayVisible)
@@ -421,16 +435,4 @@ namespace BrnGame
         }
     }
 
-    // @ 0x823AAD48 (RenderDiskErrorMessage) - draw the disk-error texture full screen.
-    void LoadingScreenRenderer::RenderDiskErrorMessage(CgsGraphics::Im2d* lpIm2d)
-    {
-        using namespace CgsGraphics;
-        lpIm2d->BeginRendering();
-        lpIm2d->SetState(static_cast<const BlendState*>(0));
-        lpIm2d->SetTexture(mpDiskErrorTexture);
-        const RGBA8 lWhite = { 255, 255, 255, 255 };
-        EmitQuad(lpIm2d, {0.0f,0.0f}, {KF_SCREEN_W,0.0f}, {0.0f,KF_SCREEN_H}, {KF_SCREEN_W,KF_SCREEN_H},
-                 0.0f, 0.0f, 1.0f, 1.0f, lWhite);
-        lpIm2d->EndRendering();
-    }
 }

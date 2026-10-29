@@ -2,6 +2,7 @@
 #define BRN_NETWORK_PLAYER_IMAGE_RENDERER_H
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                                   // CgsID == u64 (GetID return)
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"    // CgsGui::CustomRenderComponentInterface base
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                              // CgsGui::GuiEventQueueSmall (a queue typedef)
@@ -225,6 +226,7 @@ namespace BrnGui
         bool mbRenderTexture;               // +0x2EC
         bool mbUseDefaultTexture;           // +0x2ED
     };
+    CGS_STATIC_ASSERT((sizeof(NetworkPlayerImageRenderer) == 0x2F0), "ARTIST network player image renderer");
 }
 
 #endif // BRN_NETWORK_PLAYER_IMAGE_RENDERER_H
