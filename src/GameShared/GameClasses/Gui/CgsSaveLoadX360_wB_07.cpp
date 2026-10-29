@@ -5,7 +5,7 @@
 //                                          autosave pre-flight, then reports 0/1 to the
 //                                          result handler.
 //   LoadReady            @ 0x828521A0  -- Realmc load-ready callback: hand the title-save
-//                                          data pair { muSaveDataSizeKb, muGameDataSizeKb }
+//                                          data pair { muSaveDataSizeKb, mStoredData.miSize }
 //                                          to the SDK's DataBuffer and return 0.
 //
 // (LoadHandleConfirmLoad @0x82855EC0 was also reconstructed here by wave B -- the faithful
@@ -39,30 +39,29 @@ namespace CgsGui
     // A non-zero result reports failure (1); success re-arms the autosave pre-flight
     // (EnableAutosave(-1)) then reports success (0). Both go through mpActiveMessageDisplay,
     // which acts as the result handler.
-    void SaveLoadSystem::LoadDone(u32 luResult)
+    void SaveLoadSystem::LoadDone(u32 luResult, s32, u32, void*)
     {
         if (luResult)
         {
-            reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+            mpResultHandler
                 ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(1));
             return;
         }
 
         EnableAutosave(-1);
-        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+        mpResultHandler
             ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(0));
     }
 
     // X360 0x828521A0. Realmc load-ready callback. Only the last parameter (the caller's
     // DataBuffer) is read: fill it with the title-save data pair
-    // { muSaveDataSizeKb, muGameDataSizeKb } (misnamed -- moved as one { data, size } pair,
-    // see the header's pitfall note) and return 0. The four leading parameters are unrecovered.
+    // mStoredData { data, size } pair and return 0. The four leading parameters are unrecovered.
     s32 SaveLoadSystem::LoadReady(s32 /*liArg1*/, s32 /*liArg2*/, s32 /*liArg3*/, s32 /*liArg4*/,
                                   RealmcIface::DataBuffer* lpDataBuffer)
     {
         RealmcIface::DataBuffer lPair;
-        lPair.mpData = reinterpret_cast<void*>(static_cast<uintptr_t>(muSaveDataSizeKb));
-        lPair.muSize = muGameDataSizeKb;
+        lPair.mpData = mStoredData.mpData;
+        lPair.muSize = mStoredData.miSize;
         *lpDataBuffer = lPair;
         return 0;
     }

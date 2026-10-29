@@ -38,12 +38,10 @@ String16::String16()
     mpBegin         = gRealmcEmptyString16;
     mpEnd           = gRealmcEmptyString16;
     mpCapEnd        = gRealmcEmptyString16 + 1;
-    mpAllocatorName = 0;
 }
 
 String16::String16(const char16_t* pFirst, const char16_t* pLast)
 {
-    mpAllocatorName = 0;
     RangeInitialize(pFirst, pLast);   // seats begin/end/capEnd (allocates when non-empty)
 }
 
@@ -60,7 +58,6 @@ String16::String16(const char16_t* pString, const allocator& /*rAllocator*/)
     mpBegin         = 0;
     mpEnd           = 0;
     mpCapEnd        = 0;
-    mpAllocatorName = 0;
 
     const char16_t* pEnd = pString;
     while (*pEnd != 0)
@@ -101,7 +98,7 @@ void* String16::AllocateSelf(unsigned int nCapacity)
     }
 
     char16_t* pBuffer =
-        static_cast<char16_t*>(allocator::allocate(2u * nCapacity, 0));  // 2 bytes / char16
+        static_cast<char16_t*>(mAllocator.allocate(2u * nCapacity, 0));  // 2 bytes / char16
     mpBegin  = pBuffer;
     mpEnd    = pBuffer;
     mpCapEnd = pBuffer + nCapacity;                         // buf + 2*nCapacity bytes
@@ -215,7 +212,7 @@ String16& String16::append(const char16_t* pFirst, const char16_t* pLast)
         const std::size_t nLength = ((nGrow < nNewSize) ? nNewSize : nGrow) + 1u;
 
         char16_t* pNew = static_cast<char16_t*>(
-            allocator::allocate(nLength * sizeof(char16_t), 0));
+            mAllocator.allocate(nLength * sizeof(char16_t), 0));
         std::memcpy(pNew, mpBegin, nSize * sizeof(char16_t));
         char16_t* pNewEnd = pNew + nSize;
         std::memcpy(pNewEnd, pFirst, nCount * sizeof(char16_t));
@@ -225,7 +222,7 @@ String16& String16::append(const char16_t* pFirst, const char16_t* pLast)
         const std::ptrdiff_t nOldCapacity = mpCapEnd - mpBegin;
         if (nOldCapacity > 1 && mpBegin)
         {
-            allocator::deallocate(mpBegin,
+            mAllocator.deallocate(mpBegin,
                                   static_cast<std::size_t>(nOldCapacity) * sizeof(char16_t));
         }
 
@@ -290,7 +287,7 @@ void MessageList::DoErase(MessageListNode* pNode)
 // ---------------------------------------------------------------------------
 // MessageList::DoCreateNode
 //
-//   node = backend->Allocate(16, "RealmcCore::allocator", 0)   (vtable slot +8)
+//   node = backend->Alloc(16, "RealmcCore::allocator", 0)   (vtable slot +8)
 //   if (node + 8 != 0)                                          (placement-new guard)
 //     construct MessagePtr at node + 8: install its vtable, AddRef rValue's
 //     message (the interrupt-masked increment), store the message pointer
@@ -302,7 +299,7 @@ void MessageList::DoErase(MessageListNode* pNode)
 MessageListNode* MessageList::DoCreateNode(const MessagePtr& rValue)
 {
     MessageListNode* pNode =
-        static_cast<MessageListNode*>(allocator::allocate(sizeof(MessageListNode), 0));
+        static_cast<MessageListNode*>(mAllocator.allocate(sizeof(MessageListNode), 0));
     if (pNode)
     {
         new (&pNode->maValue) MessagePtr(rValue);   // AddRefs the message
@@ -313,7 +310,7 @@ MessageListNode* MessageList::DoCreateNode(const MessagePtr& rValue)
 // ---------------------------------------------------------------------------
 // ResponseList::DoCreateNode
 //
-//   node = backend->Allocate(24, "RealmcCore::allocator", 0)   (vtable slot +8)
+//   node = backend->Alloc(24, "RealmcCore::allocator", 0)   (vtable slot +8)
 //   if (node + 8 != 0)                                          (placement-new guard)
 //     copy rValue.first into node + 8 (MessagePtr vtable, AddRef, store) and
 //     rValue.second into node + 0x10 (the same, then the ResponsePtr vtable)
@@ -325,7 +322,7 @@ MessageListNode* MessageList::DoCreateNode(const MessagePtr& rValue)
 ResponseListNode* ResponseList::DoCreateNode(const MessageResponsePair& rValue)
 {
     ResponseListNode* pNode =
-        static_cast<ResponseListNode*>(allocator::allocate(sizeof(ResponseListNode), 0));
+        static_cast<ResponseListNode*>(mAllocator.allocate(sizeof(ResponseListNode), 0));
     if (pNode)
     {
         new (&pNode->maValue) MessageResponsePair(rValue);   // AddRefs both objects
@@ -419,7 +416,7 @@ void IntVector::DoInsertValue(int* pPos, const int* pValue)
             nNewCap = 1;
 
         int* pNew = nNewCap
-            ? static_cast<int*>(allocator::allocate(4u * nNewCap, 0))
+            ? static_cast<int*>(mAllocator.allocate(4u * nNewCap, 0))
             : 0;
 
         const std::size_t nPrefix = static_cast<std::size_t>(pPos - mpBegin);
@@ -474,7 +471,7 @@ void IntVector::DoInsertValue(int* pPos, const int* pValue)
 int* IntVector::DoRealloc(unsigned int nCapacity, int* pBegin, int* pEnd)
 {
     int* pNew = nCapacity
-        ? static_cast<int*>(allocator::allocate(4u * nCapacity, 0))
+        ? static_cast<int*>(mAllocator.allocate(4u * nCapacity, 0))
         : 0;
 
     std::memcpy(pNew, pBegin,

@@ -33,7 +33,7 @@ public:
     // 1320-byte block: r4 = the shared ThreadParameters, r5/r6 = CreateInstance's
     // pass-through liParam2/liParam3 (roles owned by the impl TU).
     MemcardInterfaceImpl(EA::Thread::ThreadParameters* pThreadParams,
-                         int liParam2, int liParam3);
+                         IGameInterface* pGameInterface, const GameInfo& rGameInfo);
 
     // Interface overrides (bodies owned by the impl TU). Declared here so the class
     // is concrete and CreateInstance can construct it; each matches the base slot.

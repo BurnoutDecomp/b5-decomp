@@ -20,7 +20,7 @@ namespace RealmcCore
 // The global allocator backend pointer (X360 off_832BE204). Defined here as a
 // null-initialised pointer; the platform Realmc heap layer installs the real
 // backend object at boot. (Owning definition for the `extern` in the header.)
-IRealmcAllocatorBackend* g_pRealmcAllocator = 0;
+EA::Allocator::ICoreAllocator* g_pRealmcAllocator = 0;
 
 // ---------------------------------------------------------------------------
 // allocator::allocate @ 0x82C44BC8
@@ -34,7 +34,7 @@ IRealmcAllocatorBackend* g_pRealmcAllocator = 0;
 // ---------------------------------------------------------------------------
 void* allocator::allocate(std::size_t nSize, int nExtra)
 {
-    return g_pRealmcAllocator->Allocate(nSize, "RealmcCore::allocator", nExtra);
+    return g_pRealmcAllocator->Alloc(nSize, "RealmcCore::allocator", nExtra);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ void allocator::deallocate(void* pBlock, std::size_t nSize)
 // ---------------------------------------------------------------------------
 void* AllocateMem(const char* szTag, std::size_t nSize)
 {
-    return g_pRealmcAllocator->Allocate(nSize, szTag, 0, 0, 0);
+    return g_pRealmcAllocator->Alloc(nSize, szTag, 0, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ void FreeMemSize(void* lpBlock, u32 luSize)
 // A get-or-set accessor over the global backend pointer: a non-null argument
 // installs the backend (and is returned); a null argument queries the current one.
 // ---------------------------------------------------------------------------
-IRealmcAllocatorBackend* GetMemAllocator(IRealmcAllocatorBackend* pAllocator)
+EA::Allocator::ICoreAllocator* GetMemAllocator(EA::Allocator::ICoreAllocator* pAllocator)
 {
     if (pAllocator == 0)
     {
@@ -167,13 +167,13 @@ void Message::Apply(IMessageProcessor* pProcessor)
 // the object. Returns the post-decrement count. The reservation loop is
 // modelled portably with _InterlockedDecrement.
 // ---------------------------------------------------------------------------
-int RefCount::Release(RefCount* pThis)
+int RefCount::Release()
 {
     int iCount = static_cast<int>(
-        _InterlockedDecrement(reinterpret_cast<volatile long*>(&pThis->miRefCount)));
+        _InterlockedDecrement(reinterpret_cast<volatile long*>(&miRefCount)));
     if (iCount == 0)
     {
-        pThis->Unreferenced();  // vtable slot +4
+        Unreferenced();  // vtable slot +4
     }
     return iCount;
 }
@@ -260,7 +260,7 @@ Response::~Response()
 // RealmcString::Assign  (X360 sub_82B562A0 + the reserve helper sub_82B56228)
 //
 //   reserve(end - begin + 1):
-//     if (n > 1) buf = allocator::allocate(n, 0); set {begin=buf, end=buf,
+//     if (n > 1) buf = mAllocator.allocate(n, 0); set {begin=buf, end=buf,
 //                capEnd=buf+n}
 //     else       point all three at the shared 1-byte empty singleton
 //   memcpy(buf, srcBegin, end - begin)
@@ -280,7 +280,7 @@ void RealmcString::Assign(const char* pSrcBegin, const char* pSrcEnd)
 
     if (nReserve > 1)
     {
-        char* pBuf = static_cast<char*>(allocator::allocate(nReserve, 0));
+        char* pBuf = static_cast<char*>(mAllocator.allocate(nReserve, 0));
         mpBegin  = pBuf;
         mpEnd    = pBuf;
         mpCapEnd = pBuf + nReserve;
@@ -308,7 +308,7 @@ void RealmcString::Assign(const char* pSrcBegin, const char* pSrcEnd)
 // The eastl::basic_string<char, RealmcCore::allocator> C-string constructor.
 // ---------------------------------------------------------------------------
 RealmcString::RealmcString(const char* pString, const allocator& /*rAllocator*/)
-    : mpBegin(0), mpEnd(0), mpCapEnd(0), mpAllocatorName(0)
+    : mpBegin(0), mpEnd(0), mpCapEnd(0)
 {
     const char* pEnd = pString;
     while (*pEnd != '\0')
@@ -332,7 +332,7 @@ void RealmcString::Free()
     const std::ptrdiff_t nCapacity = mpCapEnd - mpBegin;
     if (nCapacity > 1 && mpBegin != 0)
     {
-        allocator::deallocate(mpBegin, static_cast<std::size_t>(nCapacity));
+        mAllocator.deallocate(mpBegin, static_cast<std::size_t>(nCapacity));
     }
 }
 
@@ -423,10 +423,8 @@ MessagePtr::MessagePtr(const MessagePtr& rOther)
 // ---------------------------------------------------------------------------
 MessagePtr::~MessagePtr()
 {
-    // RefCount::Release takes the target object explicitly (the console thunk
-    // reads its first argument as the object), so it is invoked through the
-    // message itself.
-    mpMessage->Release(mpMessage);
+    // RefCount::Release uses the native implicit object (r3).
+    mpMessage->Release();
     mpMessage = 0;
 }
 
@@ -440,7 +438,7 @@ MessagePtr& MessagePtr::operator=(const MessagePtr& rOther)
 {
     if (mpMessage != rOther.mpMessage)
     {
-        mpMessage->Release(mpMessage);  // Release takes the target explicitly (see ~MessagePtr)
+        mpMessage->Release();
         mpMessage = rOther.mpMessage;
         mpMessage->AddRef();
     }
@@ -647,7 +645,7 @@ int IRunnableTask::operator()()
         mpMemcardState->GetMessageFilter()->Reset();
         lpNext->OnTaskRun();
         lpNext->OnTaskComplete();
-        lpNext->Release(lpNext);
+        lpNext->Release();
     }
 
     mpMemcardState->StopTask(liTaskType);

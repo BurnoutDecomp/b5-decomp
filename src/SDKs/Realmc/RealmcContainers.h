@@ -111,7 +111,6 @@ public:
     // Copy constructor (eastl::basic_string(const basic_string&)): a fresh buffer
     // through RangeInitialize over rOther's range, never a shared one.
     String16(const String16& rOther)
-        : mpAllocatorName(0)
     {
         RangeInitialize(rOther.mpBegin, rOther.mpEnd);
     }
@@ -151,7 +150,7 @@ private:
     char16_t*   mpBegin;         // +0x00
     char16_t*   mpEnd;           // +0x04
     char16_t*   mpCapEnd;        // +0x08
-    const char* mpAllocatorName; // +0x0C (stateless allocator name word)
+    allocator mAllocator; // +0x0C (empty allocator subobject)
 };
 
 // ---------------------------------------------------------------------------
@@ -176,7 +175,7 @@ class MessageList
 public:
     // The empty list: sentinel next/prev pointing at itself (the eastl::list
     // default constructor, inlined into the MessageQueue ctor).
-    MessageList() : mpAllocatorName(0)
+    MessageList()
     {
         mSentinel.mpNext = &mSentinel;
         mSentinel.mpPrev = &mSentinel;
@@ -218,7 +217,7 @@ public:
 
 private:
     MessageListNodeBase mSentinel;        // +0x00 {next, prev} (self-referential when empty)
-    const char*         mpAllocatorName;  // +0x08 (stateless allocator name word)
+    allocator           mAllocator;  // +0x08 (empty allocator subobject)
 };
 
 // ---------------------------------------------------------------------------
@@ -243,7 +242,7 @@ class ResponseList
 {
 public:
     // The empty list (see MessageList's constructor).
-    ResponseList() : mpAllocatorName(0)
+    ResponseList()
     {
         mSentinel.mpNext = &mSentinel;
         mSentinel.mpPrev = &mSentinel;
@@ -288,7 +287,7 @@ public:
 
 private:
     MessageListNodeBase mSentinel;        // +0x00 {next, prev} (self-referential when empty)
-    const char*         mpAllocatorName;  // +0x08 (stateless allocator name word)
+    allocator           mAllocator;  // +0x08 (empty allocator subobject)
 };
 
 // ---------------------------------------------------------------------------
@@ -329,15 +328,12 @@ public:
     //   0x82C47358  stw r30(=0), 0(r29)   -> mpBegin  = 0
     //   0x82C4735C  stw r30(=0), 4(r29)   -> mpEnd    = 0
     //   0x82C47360  stw r30(=0), 8(r29)   -> mpCapEnd = 0
-    // The +0xC allocator-name word gets NO X360 store (it is the stateless
-    // allocator subobject, never read on this platform); it is nulled here only
-    // for defined behaviour, the same host-hygiene divergence String16's ctors
-    // already carry.
+    // The empty allocator at +0xC performs no stores; natural object alignment
+    // supplies the remaining bytes, as in ARTIST.
     IntVector()
         : mpBegin(0)
         , mpEnd(0)
         , mpCapEnd(0)
-        , mpAllocatorName(0)
     {
     }
 
@@ -405,7 +401,7 @@ private:
     int*        mpBegin;         // +0x00
     int*        mpEnd;           // +0x04
     int*        mpCapEnd;        // +0x08
-    const char* mpAllocatorName; // +0x0C (stateless allocator name word)
+    allocator mAllocator; // +0x0C (empty allocator subobject)
 };
 
 } // namespace RealmcCore

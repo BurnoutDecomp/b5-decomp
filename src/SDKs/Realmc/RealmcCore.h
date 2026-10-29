@@ -49,6 +49,7 @@
 // ===========================================================================
 
 #include <cstddef>
+#include <coreallocator/icoreallocator_interface.h>
 #include "types.hpp"
 
 #include "types.hpp"   // u32 -- matches the FreeMemSize declaration in RealmcIfaceMessages.h
@@ -105,7 +106,7 @@ public:
 
     // Atomically decrement miRefCount; when it reaches 0, fire the virtual
     // Unreferenced() hook (vtable slot +4). Returns the post-decrement count.
-    int Release(RefCount* pThis);
+    int Release();
 
     // Additive accessor (FLAG: not its own console function). Every Realmc smart
     // pointer over a RefCount object bumps the count with the same interrupt-
@@ -129,7 +130,18 @@ protected:
     int32_t miRefCount;  // +4
 };
 
-class allocator;  // RealmcCore::allocator, defined below (RealmcString's allocator)
+class allocator
+{
+public:
+    // @ 0x82C44BC8 -- forwards to g_pRealmcAllocator->Alloc(nSize,
+    //                 "RealmcCore::allocator", nExtra).
+    void* allocate(std::size_t nSize, int nExtra);
+
+    // @ 0x82C44BF0 -- forwards to g_pRealmcAllocator->Free(...).
+    // The block and its byte size pass straight through to the backend's sized
+    // Free; only the allocator object is swapped for the backend.
+    void deallocate(void* pBlock, std::size_t nSize);
+};
 
 // ---------------------------------------------------------------------------
 // RealmcString -- the small Realmc string the console keeps inside MessageString
@@ -151,7 +163,7 @@ class RealmcString
 {
 public:
     RealmcString()
-        : mpBegin(0), mpEnd(0), mpCapEnd(0), mpAllocatorName(0) {}
+        : mpBegin(0), mpEnd(0), mpCapEnd(0) {}
 
     // Construct from a NUL-terminated string: zero the three pointers, copy the
     // allocator (an empty body), then Assign(pString, pString + strlen(pString)).
@@ -160,7 +172,7 @@ public:
     // Copy constructor (basic_string(const basic_string&)): a fresh buffer over
     // rOther's range, never a shared one.
     RealmcString(const RealmcString& rOther)
-        : mpBegin(0), mpEnd(0), mpCapEnd(0), mpAllocatorName(0)
+        : mpBegin(0), mpEnd(0), mpCapEnd(0)
     {
         Assign(rOther.mpBegin, rOther.mpEnd);
     }
@@ -187,11 +199,11 @@ private:
     char*       mpBegin;         // +0
     char*       mpEnd;           // +4
     char*       mpCapEnd;        // +8
-    const char* mpAllocatorName; // +C (stateless allocator word)
+    allocator mAllocator; // +C: empty allocator subobject, natural tail alignment
 };
 
 // ---------------------------------------------------------------------------
-// IRealmcAllocatorBackend -- the abstract allocator object reached through the
+// EA::Allocator::ICoreAllocator -- the abstract allocator object reached through the
 // global g_pRealmcAllocator pointer (X360 off_832BE204).
 //
 // The backend exposes two Allocate entry points plus a sized Free. From the asm
@@ -201,38 +213,19 @@ private:
 //   slot +8  the plain allocate (size, tag, flags) -- allocator::allocate
 //            @0x82C44BC8 and MessagePtr's node-alloc tail-call it.
 //   slot +12 the sized Free (block, size) -- deallocate/FreeMemSize tail-call it.
-// Modelled here as virtual methods in that exact slot order (declaration order
-// == vtable slot order under MSVC).
+// The canonical coreallocator interface owns these overloads; MSVC reverses
+// same-name overload groups when it emits the vtable.
 // ---------------------------------------------------------------------------
-class IRealmcAllocatorBackend
-{
-public:
-    virtual ~IRealmcAllocatorBackend() {}            // vtable slot +0
-    // slot +4 -- the extended allocate AllocateMem forwards to. AllocateMem's
-    // asm passes (r4=size, r5=tag, r6=0, r7=0, r8=0), i.e. the plain allocate's
-    // (size, tag, flags) plus a trailing (align, alignOffset) pair, defaulted to
-    // zero at the AllocateMem call site.
-    virtual void* Allocate(std::size_t nSize,
-                           const char* szTag,
-                           int nFlags,
-                           int nAlign,
-                           int nAlignOffset) = 0;     // vtable slot +4
-    virtual void* Allocate(std::size_t nSize,
-                           const char* szTag,
-                           int nExtra) = 0;           // vtable slot +8
-    virtual void  Free(void* pBlock, std::size_t nSize) = 0; // vtable slot +12
-};
-
 // The global Realmc allocator backend (X360 off_832BE204). Installed by the
 // platform Realmc heap layer (another TU); declared here for compile/link.
-extern IRealmcAllocatorBackend* g_pRealmcAllocator;
+extern EA::Allocator::ICoreAllocator* g_pRealmcAllocator;
 
 // ---------------------------------------------------------------------------
 // Realmc core memory free-functions (X360 thin thunks over g_pRealmcAllocator).
 // These are the RealmcCore-namespace memory entry points the Realmc/RealmcIface
 // tasks use for allocation. Reconstructed from BURNOUT_X360_ARTIST.XEX (no leak
 // source / DWARF).
-//   AllocateMem     @ 0x82C44B70 -- backend->Allocate(size, tag, 0, 0, 0) (slot +4)
+//   AllocateMem     @ 0x82C44B70 -- backend->Alloc(size, tag, 0, 0, 0) (slot +4)
 //   FreeMemSize     @ 0x82C44BA0 -- backend->Free(block, size)            (slot +12)
 //   GetMemAllocator @ 0x82C44B50 -- get-or-set the g_pRealmcAllocator pointer
 // FreeMemSize is also (redundantly) declared in RealmcIfaceMessages.h with the
@@ -249,25 +242,7 @@ void FreeMemSize(void* lpBlock, u32 luSize);
 // @ 0x82C44B50 -- when pAllocator is non-null, install it as the global backend
 //                 and return it; when null, return the current global backend.
 //                 (The X360 uses the null argument as the "just read it" query.)
-IRealmcAllocatorBackend* GetMemAllocator(IRealmcAllocatorBackend* pAllocator);
-
-// ---------------------------------------------------------------------------
-// RealmcCore::allocator -- a thin stateless adaptor over g_pRealmcAllocator.
-// Both methods forward to the global backend; allocate() stamps the allocation
-// with the "RealmcCore::allocator" tag string.
-// ---------------------------------------------------------------------------
-class allocator
-{
-public:
-    // @ 0x82C44BC8 -- forwards to g_pRealmcAllocator->Allocate(nSize,
-    //                 "RealmcCore::allocator", nExtra).
-    static void* allocate(std::size_t nSize, int nExtra);
-
-    // @ 0x82C44BF0 -- forwards to g_pRealmcAllocator->Free(...).
-    // The block and its byte size pass straight through to the backend's sized
-    // Free; only the allocator object is swapped for the backend.
-    static void deallocate(void* pBlock, std::size_t nSize);
-};
+EA::Allocator::ICoreAllocator* GetMemAllocator(EA::Allocator::ICoreAllocator* pAllocator);
 
 // ---------------------------------------------------------------------------
 // The message family. Every Realmc message is a RefCount with one extra virtual,
@@ -336,12 +311,12 @@ public:
 //   +0x44 MessageClear               +0x48 MessageTrc
 //   +0x4C MessageString              +0x50 Response
 //   +0x54 Message
-// The other eight slots (+0x08, +0x14, +0x1C, +0x20, +0x24, +0x28, +0x2C,
-// +0x38) serve message types this build never constructs: the image holds no
-// Apply thunk and no vtable for any of them, so their parameter types are not
-// known and they are not declared here. Nothing on the host dispatches by slot
-// offset (each Apply resolves its handler by overload), so the host vtable
-// order does not need to match the console's.
+// Native recovery debt: eight message types at +0x08, +0x14, +0x1C, +0x20,
+// +0x24, +0x28, +0x2C and +0x38 remain undeclared. This partial interface has
+// 14 entries rather than ARTIST's 22; the comments below identify ARTIST slots,
+// not this declaration's emitted offsets. Recover the genuine message types
+// and MSVC overload ordering before using this processor as a native ABI.
+// Do not fill the gaps with invented reserved virtual methods.
 //
 // The handlers return nothing the callers read: Apply tail-calls them and every
 // Apply caller (MessageFilter::FilterMessage, the interface's update loop)
@@ -674,7 +649,7 @@ int ThrFunction(void* pArg)
 {
     IRunnableTask* pTask = static_cast<TTask*>(pArg);
     (*pTask)();
-    pTask->Release(pTask);
+    pTask->Release();
     return 0;
 }
 

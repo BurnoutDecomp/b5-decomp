@@ -26,14 +26,7 @@ namespace
     const char* const KSTR_DEVICE_REMOVED_OR_CHANGED = "SAVELOAD_DEVICE_REMOVED_OR_CHANGED"; // off_82F33210
     const char* const KSTR_CONTINUE_WITHOUT_SAVING   = "SAVELOAD_CONTINUE_WITHOUT_SAVING";   // off_82F331C0
 
-    // Xbox 360 XDK C-API system message box (precedent: the anon-namespace XShowSigninUI
-    // declaration in CgsSaveLoadX360_wB_06.cpp). NINE parameters: the ninth -- the
-    // XOVERLAPPED* that makes the call asynchronous -- is passed on the stack, so Hex-Rays
-    // drops it from the pseudocode; the asm `stw r30,var_1FC(r1)` with r30 == &maOverlapped[0]
-    // proves it is there.
-    u32 XShowMessageBoxUI(u32 luUserIndex, const u16* lpwTitle, const u16* lpwText,
-                          u32 luNumButtons, const u16** lppwButtons, u32 luFocusButton,
-                          u32 luFlags, u32* lpuResult, void* lpOverlapped);
+
 }
 
 namespace CgsGui
@@ -56,29 +49,29 @@ namespace CgsGui
             reinterpret_cast<const CgsUnicode::CgsUtf8*>("Warning"), laTitleText);
 
         // raw 0x184 -> real 0x188 (mpLanguageManager)
-        const u8* lpMessageText = reinterpret_cast<CgsLanguage::LanguageManager*>(mpLanguageManager)
+        const u8* lpMessageText = mpLanguageManager
                                       ->FindString(KSTR_DEVICE_REMOVED_OR_CHANGED);
         CgsUnicode::ConvertUtf8ToUtf16(lpMessageText, laMessageText);
 
-        const u8* lpButtonText = reinterpret_cast<CgsLanguage::LanguageManager*>(mpLanguageManager)
+        const u8* lpButtonText = mpLanguageManager
                                      ->FindString(KSTR_CONTINUE_WITHOUT_SAVING);
         CgsUnicode::ConvertUtf8ToUtf16(lpButtonText, laButtonText);
 
-        const u16* lapwButtons[1] = { laButtonText };   // var_1F0 (v5)
+        const wchar_t* lapwButtons[1] = { reinterpret_cast<const wchar_t*>(laButtonText) };   // var_1F0 (v5)
 
         // raw 0x224 -> real 0x228: the embedded XOVERLAPPED gets zeroed before the async call.
-        reinterpret_cast<CgsSystem::CgsXOverlapped*>(maOverlapped)->Construct();
+        mOverlapped.Construct();
 
         const u32 luResult = XShowMessageBoxUI(
             static_cast<u32>(miField210),                  // dwUserIndex, raw 0x20C -> real 0x210
-            laTitleText,                                   // wszTitle
-            laMessageText,                                 // wszText
+            reinterpret_cast<const wchar_t*>(laTitleText),                                   // wszTitle
+            reinterpret_cast<const wchar_t*>(laMessageText),                                 // wszText
             1,                                             // cButtons
             lapwButtons,                                   // pwszButtons
             0,                                             // dwFocusButton
             2,                                             // dwFlags
-            reinterpret_cast<u32*>(&maOverlapped[0x1C]),   // pResult, raw 0x240 -> real 0x244
-            maOverlapped);                                 // the stack-passed XOVERLAPPED*
+            &mMessageBoxResult,   // pResult, raw 0x240 -> real 0x244
+            reinterpret_cast<PXOVERLAPPED>(&mOverlapped));                                 // the stack-passed XOVERLAPPED*
 
         CGS_ASSERT(luResult == ERROR_IO_PENDING, "lResult == ERROR_IO_PENDING");
     }
@@ -88,13 +81,12 @@ namespace CgsGui
     void SaveLoadSystem::ClearMessage()
     {
         // The test reads ONLY the func word (`lwz r11,0x194` -> real 0x198).
-        if (mMessageDisplayOptionFunc.muFunc != 0)
+        if (mMessageDisplayOptionFunc != 0)
         {
             // raw 0x130 -> real 0x134 (mpMessageDisplay), vtable slot +0x8 == HideMessage.
             mpMessageDisplay->HideMessage();
 
-            mMessageDisplayOptionFunc.muFunc  = 0;
-            mMessageDisplayOptionFunc.muDelta = 0;
+            mMessageDisplayOptionFunc = 0;
         }
     }
 }

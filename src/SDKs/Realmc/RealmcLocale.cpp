@@ -77,7 +77,7 @@ LocaleGetStrCallback SetLocaleGetStrCallback(LocaleGetStrCallback pfnCallback)
 // 'd'/'s' for packing (4-byte value) exactly as the asm does, and is never
 // expanded (only 'd' and 's' have expansion arms in the asm).
 // ---------------------------------------------------------------------------
-u16* GetString(const char* pszArgSpec, ...)
+u16* GetString(u32 uStringId, const char* pszArgSpec, ...)
 {
     // The packed arg slots. Each holds either a signed int ('c'/'d') or a
     // pointer ('p'/'s'); on the 32-bit X360 both are 4 bytes (asm stores a
@@ -129,9 +129,9 @@ u16* GetString(const char* pszArgSpec, ...)
     va_end(lArgs);
 
     // Step 2 -- fetch the localized template via the callback.
-    if (!g_pfnLocaleGetStr)
-        return 0;
-    const u16* lpTemplate = g_pfnLocaleGetStr();
+    // ARTIST preserves r3 (string id) until the callback. The game callback
+    // returns ASCII key bytes; Realmc processes that same storage as u16 units.
+    const u16* lpTemplate = reinterpret_cast<const u16*>(g_pfnLocaleGetStr(uStringId));
     if (!lpTemplate)
         return 0;
 

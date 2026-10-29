@@ -37,8 +37,8 @@ SaveReq::SaveReq(const void* pHeadSource,
                  uint32_t uField158,
                  uint32_t uField15C,
                  const uint32_t* pField160Source)
+    : mSaveInfo(*static_cast<const SaveInfo*>(pParamsSource))
 {
-    RealmcCopyEntryContentParams(maParams, pParamsSource);  // sub_82B51D10
     muField158 = uField158;                                 // +0x158
     muField15C = uField15C;                                 // +0x15C
     muField160 = *pField160Source;                          // +0x160
@@ -54,8 +54,8 @@ SaveReq::SaveReq(const void* pHeadSource,
 // 32-byte head memcpy, then maHead[0x1F] = 0.
 // ---------------------------------------------------------------------------
 SaveReq::SaveReq(const SaveReq& rOther)
+    : mSaveInfo(rOther.mSaveInfo)
 {
-    RealmcCopyEntryContentParams(maParams, rOther.maParams);
     muField158 = rOther.muField158;
     muField15C = rOther.muField15C;
     muField160 = rOther.muField160;

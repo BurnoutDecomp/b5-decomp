@@ -105,12 +105,12 @@ Allocator64::~Allocator64()
 //   srwi r11, a2, 6 ; addi r30, r11, 1          -> v4 = (a2 >> 6) + 1   (pages)
 //   addi r11, r30, 2 ; ... max(., 8)            -> v6 = max((a2>>6)+3, 8) (slots)
 //   stw  v6, 4(this)                            -> mnPageSlots = v6
-//   backend->Allocate(4*v6, "RealmcCore::allocator", 0) ; stw r3, 0(this)
+//   backend->Alloc(4*v6, "RealmcCore::allocator", 0) ; stw r3, 0(this)
 //                                               -> mppPageArray = array of v6 ptrs
 //   r10 = v6 - v4 ; extlwi -> v10 = (2*(v6-v4)) & ~3   (centring byte offset)
 //   v11 = mppPageArray + v10 ; v12 = v11 + 4*v4 (front..back slot run, bytes)
 //   for (slot = v11; slot < v12; slot += 4)     -> fill each slot with a 256B page
-//        *slot = backend->Allocate(0x100, tag, 0)
+//        *slot = backend->Alloc(0x100, tag, 0)
 //   stw  v11, 0x14(this)                        -> mppFrontSlot = v11
 //   mpFrontBegin (+0xC) = *v11 ; mpFrontEnd (+0x10) = *v11 + 0x100 ;
 //   mpFrontCur (+0x8) = *v11                    -- the X360 store order exactly
@@ -140,7 +140,7 @@ void* Allocator64::DoInit(unsigned int nByteCapacity)
     // `sizeof(char*) * mnPageSlots`. The two widths must move together -- either
     // one alone reverting to the console 4 is a live heap mismatch.
     void* lpLastResult =
-        RealmcCore::allocator::allocate(sizeof(char*) * luSlots, 0);  // X360: 4 * luSlots
+        g_pRealmcAllocator->Alloc(sizeof(char*) * luSlots, "RealmcCore::allocator", 0);  // X360: 4 * luSlots
     mppPageArray = static_cast<char**>(lpLastResult);
 
     // v10 = (2*(slots - pages)) & ~3  -- a byte offset over 4-byte slots; the
@@ -154,7 +154,7 @@ void* Allocator64::DoInit(unsigned int nByteCapacity)
 
     for (char** lppSlot = lppFront; lppSlot < lppEnd; ++lppSlot)
     {
-        lpLastResult = RealmcCore::allocator::allocate(KU_PageBytes, 0);      // 256-byte page
+        lpLastResult = g_pRealmcAllocator->Alloc(KU_PageBytes, "RealmcCore::allocator", 0);      // 256-byte page
         *lppSlot = static_cast<char*>(lpLastResult);
     }
 
@@ -211,7 +211,7 @@ void* Allocator64::DoPopFront()
 //   v3 = *a2                                                    -> the dword to push
 //   if (((mppBackSlot - mppPageArray) >> 2) + 1 >= mnPageSlots) -> slots exhausted?
 //        DoReallocPt(1, 1)                                       -> grow the array
-//   page = backend->Allocate(0x100, tag, 0)
+//   page = backend->Alloc(0x100, tag, 0)
 //   *(mppBackSlot + 4) = page                                   -> stage page in next slot
 //   if (mpBackCur) *mpBackCur = v3                               -> write value at cursor
 //   mppBackSlot += 4 ; v7 = *mppBackSlot                         -> advance onto the page
@@ -228,7 +228,7 @@ void* Allocator64::DoPushBack(const Element* pValue)
     if ((mppBackSlot - mppPageArray) + 1 >= mnPageSlots)
         DoReallocPt(1, 1);
 
-    void* lpPageRaw = RealmcCore::allocator::allocate(KU_PageBytes, 0);
+    void* lpPageRaw = g_pRealmcAllocator->Alloc(KU_PageBytes, "RealmcCore::allocator", 0);
     char* lpPage = static_cast<char*>(lpPageRaw);
 
     mppBackSlot[1] = lpPage;                            // *(mppBackSlot + 4) = page
@@ -291,7 +291,7 @@ void Allocator64::DoReallocPt(unsigned int nAdditionalSlots, int nSide)
             (luSlots < nAdditionalSlots) ? nAdditionalSlots : luSlots;
         const unsigned int luNewSlots = luSlots + luGrowth + 2u;
         char** lppNewArray = static_cast<char**>(
-            RealmcCore::allocator::allocate(sizeof(char*) * luNewSlots, 0));
+            g_pRealmcAllocator->Alloc(sizeof(char*) * luNewSlots, "RealmcCore::allocator", 0));
 
         lppNewFront = lppNewArray + (mppFrontSlot - mppPageArray) + luFrontGrowth;
         if (mppPageArray)

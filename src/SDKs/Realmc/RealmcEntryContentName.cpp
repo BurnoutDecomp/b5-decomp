@@ -1,7 +1,6 @@
 #include "SDKs/Realmc/RealmcEntryContentName.h"
 
 #include <cstring>  // std::memcpy / std::memset / std::strncpy
-#include <new>      // placement new (RealmcCopyEntryContentParams)
 
 // ===========================================================================
 // RealmcIface::EntryContentName -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -33,8 +32,7 @@ EntryContentName* EntryContentName::SetTitle(const void* pTitleSource)
     {
         std::memcpy(macTitle, pTitleSource, 0x100);
         // sth 0, 0xFE(this) -- zero the trailing 16-bit slot of the title.
-        macTitle[0xFE] = 0;
-        macTitle[0xFF] = 0;
+        macTitle[127] = 0;
     }
     else
     {
@@ -111,17 +109,5 @@ EntryContentName::EntryContentName(const EntryContentName& rOther)
     SetFileName(rOther.macFileName);
 }
 
-// ---------------------------------------------------------------------------
-// RealmcCopyEntryContentParams -- copy-construct the 0x138-byte params block at
-// pDst from the one at pSrc: the EntryContentName copy ctor above, then the two
-// trailing words +0x130 and +0x134. Callers: SaveReq's two ctors.
-// ---------------------------------------------------------------------------
-void RealmcCopyEntryContentParams(void* pDst, const void* pSrc)
-{
-    const EntryContentName& lrSrc = *static_cast<const EntryContentName*>(pSrc);
-    EntryContentName* lpDst = new (pDst) EntryContentName(lrSrc);
-    lpDst->muField130 = lrSrc.muField130;
-    lpDst->muField134 = lrSrc.muField134;
-}
 
 } // namespace RealmcIface
