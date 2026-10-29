@@ -896,9 +896,10 @@ void BehaviourRoadRunner::Reverse()
 //      tables at unk_82000BD0..C20 computing sin and cos in separate lanes, then a vperm128 /
 //      vrlimi128 assembly of a roll matrix), and so are the normalise-with-Newton-Raphson
 //      blocks feeding the two line tests. The project rules forbid paraphrasing those scalar-wise.
-//   3. It needs LineTestNearestPostBox / LineTestFinePostBox interiors, Utils::CameraShake,
-//      Utils::CreateLookAt / SineLerp / CalcNearClipCorners, SceneQueryInterface::LineTestNearest
-//      / LineTestFine, and WorldMap::GetInterestingPointNear -- none of which is homed.
+//   3. The near-clip query/result chain and fixation/shake path are still unhomed here. The
+//      standalone CalcNearClipCorners math now has a body, but this RoadRunner path does not yet
+//      issue or consume its two LineTestNearest boxes; the fixation path also needs
+//      WorldMap::GetInterestingPointNear and CameraShake.
 //
 // CONSEQUENCE, stated plainly: the road-runner behaviour allocates, constructs and prepares,
 // the attract state advances to E_STATE_ACTIVE, and the behaviour then FAILS on its first
@@ -1095,8 +1096,9 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     //   * the FIXATION blend + acquisition -- needs Utils::SineLerp and
     //     WorldMap::GetInterestingPointNear over mpTriggerData, which the director never loads
     //     (TriggerQueryManager::Prepare @0x82398218 is a GameState-module TU).
-    //   * the two near-clip LineTestNearest probes -- need Utils::CalcNearClipCorners (itself
-    //     declaration-only) and the post-box interiors.
+    //   * the two near-clip LineTestNearest probes remain gated on the RoadRunner post-box and
+    //     query/result consumer chain. Utils::CalcNearClipCorners now has an ARTIST-derived body,
+    //     but this source path still issues no probes; no RoadRunner behavior is activated here.
     //   * the CameraShake concat -- Utils::CameraShake has no home outside BehaviourRig.h.
     // None of them moves the camera; all three only refine an already-placed one.
 
