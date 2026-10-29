@@ -275,20 +275,24 @@ namespace Utils
         PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>& lPostBox,
         Vector3 lTestPoint, Vector3& lPosition, Vector3 lVector, VecFloat lvMinDistance);
 
-    // @0x821F25B8. The FOUR near-clip-plane corner positions for a camera transform (a2..a5
-    // are the four out-corners, written in asm store order r30/r29/r28/r27). Used by
-    // BehaviourRoadRunner::Update.
-    // FLAG (declaration-only): heavy XMVectorTan + VMX add/sub corner lattice; the corner
-    // packing / lane order is not safely reconstructable store-for-store. Left unbodied.
+    // @0x821F25B8 (DecFIGS CameraUtils.h:1269). The console passes the broadcast lane values
+    // in v1/v2/v3 as near-clip distance, horizontal FOV in degrees, and reciprocal aspect;
+    // r4..r7 are the four Vector3 output pointers in the original stvx order.
+    // The body preserves that order and calls the recovered XboxMath::XMVectorTan helper.
+    // BehaviourRoadRunner has an ARTIST caller, but its call/result consumer chain remains
+    // gated separately in BrnBehaviourRoadRunner.cpp.
     void CalcNearClipCorners(Matrix44Affine lrCameraTransform,
-                             Vector3& lrCorner0,
-                             Vector3& lrCorner1,
-                             Vector3& lrCorner2,
-                             Vector3& lrCorner3);
+                             VecFloat lvNearClipDistance,
+                             VecFloat lvHorizontalFOVDegs,
+                             VecFloat lvReciprocalAspect,
+                             Vector3* lpCorner0,
+                             Vector3* lpCorner1,
+                             Vector3* lpCorner2,
+                             Vector3* lpCorner3);
 
-    // @0x822171B0. A fixed basis vector guaranteed non-parallel to lVector. Used by SafeSLerp.
-    // FLAG (declaration-only): one of the two returned constants is the raw rodata sentinel
-    // unk_82181510 (an unrecovered basis vector) -- not fabricated. Left unbodied.
+    // @0x822171B0. Return a fixed X or Y basis vector that is not parallel to lVector.
+    // The branch tests |y| > |x|; the two vectors are image-pinned as gIVector and
+    // unk_82181510 in CameraUtils.cpp. Body: this TU.
     Vector3 FindNonParallelNormalisedVectorTo(Vector3 lVector);
     Vector3 SafeSLerp(Vector3 lV0, Vector3 lV1, VecFloat lAmount);
     bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
@@ -312,15 +316,17 @@ namespace Utils
 // ----------------------------------------------------------------------------
 // TransitionSmoother (ADDITIVE GROW: its class TU) -- a lerp-smoothed scalar
 // with a self-smoothed lerp amount. Class shape / member names / method set
-// verbatim from the DWARF (CameraUtils.h:112/:138-:143). This TU bodies Set;
-// Get/GetRef/SetTarget/Update are their own ledger functions (declared-only).
+// verbatim from the DWARF (CameraUtils.h:112/:138-:143). Set/Update/Get are
+// bodied from ARTIST; Get is the source-level inline scalar member load.
 // ----------------------------------------------------------------------------
 struct TransitionSmoother
 {
-    // DWARF :116/:119/:130/:134 -- declared-only.
-    f32 Get() const;
+    // DWARF :116. Inline field reader (the X360 callers load mfData directly).
+    const f32 Get() const { return mfData; }
+    // DWARF :119 -- no caller is recovered in the X360 source paths currently bodied.
     const f32& GetRef() const;
     void SetTarget(f32 lfTarget);
+    // DWARF :134; the console inlines the body in BehaviourRoadRunner::Update.
     void Update(f32 lfTimeStep);
 
     // @0x821F22A0 (class TU; body in CameraUtils.cpp, DWARF :126) -- seed the

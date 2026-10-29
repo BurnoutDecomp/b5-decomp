@@ -13,7 +13,7 @@
 //   StateManager::GetStaticTypeInfo()        RTTI descriptor      @ 0x8268D798  (real)
 //   StateManager::Prepare()                  vtable +0x0C         (stub -- see FLAG)
 //   StateManager::GetChildStateManager(s32)  vtable +0x14         (stub -- see FLAG)
-//   StateManager::PrepareStates(...)         shared helper        @ 0x826EAD30  (stub -- see FLAG)
+//   StateManager::PrepareStates(s32, u32, s32) shared helper    @ 0x826EAD30  (real)
 //   StateManager::CreateStateMan(u32, void*) factory              @ 0x826A5B60  (real -- scans the registry)
 //
 // The minimal slice this file used to be (just IsStateAlias against an opaque
@@ -192,37 +192,41 @@ State* StateManager::GetFreeState(void* /*apvAttachment*/)
 }
 
 // ---------------------------------------------------------------------------
-// StateManager::PrepareStates(s32, s32, s32)  @ 0x826EAD30
+// StateManager::PrepareStates(s32, u32, s32)  @ 0x826EAD30
 //
-// The shared helper every leaf Prepare() calls to advance its owned States (the X360
-// signature is PrepareStates(mask, instancesPerState, startState) -> bool). Its body
-// walks the State machine (creating/preparing State instances), which cascades into
-// CgsSound::Logic::State and the per-state effect graph -- none of which is in this
-// view's reconstructed surface.
-//
-// FLAG (stub): declared so leaf Prepare() overrides (in their own TUs) can name it;
-// the real body belongs to the State-machine group (CgsState.*). Returns true as a
-// non-cascading placeholder. NOT reconstructed here.
+// ARTIST's unsigned state comparison returns true without walking the list when
+// meStatePrepareState > PREPARING. State creation is one-shot at CREATE; every
+// created State has its forced controls built after the assert. Preparation then
+// walks the whole list but stops calling State::Prepare after the first failure.
 // ---------------------------------------------------------------------------
 bool StateManager::PrepareStates(s32 liStateMask,
-                                 s32 liInstancesPerState,
-                                 s32 liStartState)
+                                 u32 luNumStates,
+                                 s32 liForcedEffectControls)
 {
+    if (static_cast<u32>(meStatePrepareState) >
+        static_cast<u32>(E_STATE_PREPARE_STATE_PREPARING))
+    {
+        return true;
+    }
+
     bool lbPrepared = true;
     if (meStatePrepareState == E_STATE_PREPARE_STATE_CREATE)
     {
-        for (s32 liInstance = 0; liInstance < liInstancesPerState; ++liInstance)
+        meStatePrepareState = E_STATE_PREPARE_STATE_CREATE;
+        for (u32 liInstance = 0; liInstance < luNumStates; ++liInstance)
         {
             State* lpState = CreateState(0);
             CGS_ASSERT(lpState != 0, "lpState");
-            if (lpState)
-                lpState->ForceCreateEffectControls(liStartState);
+            lpState->ForceCreateEffectControls(liForcedEffectControls);
         }
-        meStatePrepareState = E_STATE_PREPARE_STATE_PREPARING;
     }
 
+    meStatePrepareState = E_STATE_PREPARE_STATE_PREPARING;
     for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
-        lbPrepared = lpState->Prepare(liStateMask, this) && lbPrepared;
+    {
+        if (lbPrepared)
+            lbPrepared = lpState->Prepare(liStateMask, this);
+    }
     return lbPrepared;
 }
 

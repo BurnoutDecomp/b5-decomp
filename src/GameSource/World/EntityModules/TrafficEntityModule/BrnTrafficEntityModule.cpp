@@ -12,6 +12,7 @@
 // flt_82001CC0 is unattested) is declaration-only and FLAGged in the header.
 // ============================================================================
 
+#include "GameShared/GameClasses/Core/CgsStringUtils.h" // Original formatted allocator assertion
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPvsDiag.h"
@@ -2589,8 +2590,6 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
 void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    (void)lpInput;   // only read by the GATED race-car proximity arm below
-
     if (mbWaitingForStreaming)
     {
         return;
@@ -2599,24 +2598,23 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
     const bool lbRejectNearPlayers =
         mbDontCreateStaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour;
 
+    ::Array<Vector3, E_ACTIVE_RACE_CAR_INDEX_COUNT> lActiveRaceCarPositions;
+    lActiveRaceCarPositions.Construct();
     if (lbRejectNearPlayers)
     {
-        // GATE (1 of 2 in this function): the race-car proximity rejection. Parked by choice,
-        // not by a blocker. Its guard is offline-dead, since EnterStartingUpState sets
-        // mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode, and its
-        // collection half walks every active race car, i.e. rival slots this build never fills.
-        // Both pieces it needs are already recovered for whoever writes online traffic: the
-        // getter is DWARF :358 (X360 0x82711850) and the radius is unk_8300CF70 lane 1 ==
-        // 900.0f == 30 m squared (lane 0 is 6400 == 80^2).
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "StaticVehicles_CreateNewVehicles race-car proximity rejection (mbDontCreate"
-            "StaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) -- ONLINE-ONLY and "
-            "UNREACHABLE offline, so kept parked by choice, not by blocker: the getter "
-            "(DWARF :358) and the radius (unk_8300CF70 lane 1 == 900.0f == 30m^2) are both "
-            "available now");
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface =
+            lpInput->GetActiveRaceCarOutputInterface();
+        CGS_ASSERT(lpActiveRaceCarOutputInterface != nullptr, "lpActiveRaceCarOutputInterface");
+        for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+        {
+            const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
+            if (lpActiveRaceCarOutputInterface->IsRaceCarActive(leIndex))
+            {
+                lActiveRaceCarPositions.Append(
+                    lpActiveRaceCarOutputInterface->GetRaceCarState(leIndex)->mTransform.Pos());
+            }
+        }
     }
-
 
     for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
     {
@@ -2651,15 +2649,30 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
         // wAxis. The yAxis is a unit up vector, which is why the correction is one metre and why
         // it follows the car's tilt on a banked road rather than being a world-Y constant.
         //
-        // The gated proximity leg below differences THIS transform's position, not the raw
+        // The proximity leg below differences THIS transform's position, not the raw
         // record's (the console reads back var_180 at 0x82722D90), so the drop belongs here.
         Matrix44Affine lTransform = lpRecord->mTransform;
         lTransform.wAxis = lTransform.wAxis - lTransform.yAxis;
 
         if (lbRejectNearPlayers)
         {
-            // Second half of the same gate: the reject itself (SetZombie + SetDivorced).
-            continue;
+            bool lbTooClose = false;
+            for (u32 luRaceCar = 0; luRaceCar < lActiveRaceCarPositions.GetLength(); ++luRaceCar)
+            {
+                const Vector3 lDelta = lTransform.Pos() - lActiveRaceCarPositions.GetItem(luRaceCar);
+                // Original 8300CF70.Y, initialized to 900 (30m squared).
+                if (900.0f > rw::math::vpu::SLerpDetail::Dot3(lDelta, lDelta))
+                {
+                    lbTooClose = true;
+                    break;
+                }
+            }
+            if (lbTooClose)
+            {
+                lrParam.SetZombie();
+                lrParam.SetDivorced();
+                continue;
+            }
         }
 
         const u32 luVehicle = luStatic + KU_STATIC_TRAFFIC_OFFSET;
@@ -6888,7 +6901,7 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
 // Live legs: KillOutOfAreaTraffic, SpawnNewTraffic, SpawnShowtimeTraffic (_wT1_07.cpp),
 // UpdateJunctions (crash parity FX-TRAFFICLIGHTS, 2026-09-25), UpdateParams, UpdateVehicles,
 // UpdateLerpedParamTransforms, UpdateParams_DoTimeSlicedLogic and KillTrafficOnStartGridWholeSale
-// (_wW_01.cpp). Still gated: UpdateTrailers, NukeTrafficJams; each gate names its own blocker and cost.
+// (_wW_01.cpp), and UpdateTrailers. NukeTrafficJams remains gated by its named blocker.
 // ============================================================================
 
 
@@ -7263,13 +7276,7 @@ void TrafficEntityModule::UpdateDecisionFrame(
     // alive static VEHICLE via Vehicle::InitialiseAsStatic.
     StaticVehicles_UpdateVehicles(lpInput);
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body; the single "
-            "trailer slot follows its cab, which only exists once driving traffic does "
-            "(wave 2)");
-    }
+    UpdateTrailers(lpInput, lpOutput);
 
     // 0x8274E648..0x8274E674, in the console's order: clear the time-slice cursor, then raise
     // the jam-nuker request that UpdateNonDecisionFrame consumes on a later frame.
@@ -7508,11 +7515,7 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
 
     StaticVehicles_UpdateVehicles(lpInput);
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "UpdateNonDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body (wave 2)");
-    }
+    UpdateTrailers(lpInput, lpOutput);
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateParamNonDecision);
 
@@ -8139,6 +8142,156 @@ u32 TrafficEntityModule::TryAllocateParamId()
 
     ++miDEBUGOverBudgetness;            // 0x827234A4, this + 0x727C4
     return KU_INVALID_PARAM;
+}
+
+// ARTIST 0x827234B0. The original free list holds full trailer vehicle IDs (599).
+u32 TrafficEntityModule::TryAllocateTrailerId()
+{
+    // Original IsEmpty inlines this guard; the existing host IsEmpty accessor does not.
+    CGS_ASSERT(mFreeTrailerStack.miLength != CgsContainers::KI_STACK_UNCONSTRUCTED,
+               "Stack used before Construct/Clear was called");
+    if (!mFreeTrailerStack.IsEmpty())
+    {
+        const u32 luTrailer = mFreeTrailerStack.Peek();
+        if (GetVehicleSpecies(luTrailer) != Vehicle::E_SPECIES_TRAILER)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::MessageBufferPC lMessage;
+            CgsCore::SnPrintf(lMessage.GetBuffer(), lMessage.GetSize(),
+                             "Invalid vehicle id in free trailer list: %u", luTrailer);
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        CGS_ASSERT(!GetVehicle(luTrailer)->IsAlive(), "!GetVehicle( luFreeTrailer )->IsAlive()");
+        mFreeTrailerStack.Pop();
+        return luTrailer;
+    }
+    return KU_INVALID_VEHICLE;
+}
+
+// ARTIST 0x82726620. The countdown is a u16 in-place decrement, including zero wrap.
+void TrafficEntityModule::UpdateTrailers_UpdatePurgatory()
+{
+    u32 luIndex = 0;
+    while (luIndex < mTrailerPurgatoryList.GetLength())
+    {
+        PurgatoryInfo& lrInfo = mTrailerPurgatoryList.GetItem(luIndex);
+        --lrInfo.muDecisionFramesLeft;
+        if (lrInfo.muDecisionFramesLeft != 0)
+        {
+            ++luIndex;
+            continue;
+        }
+        CGS_ASSERT(!GetVehicle(lrInfo.muIndex)->IsAlive(), "!GetVehicle( lInfo.muIndex )->IsAlive()");
+        mFreeTrailerStack.Push(lrInfo.muIndex);
+        mTrailerPurgatoryList.Erase(luIndex);
+    }
+}
+
+// ARTIST 0x82726758. Rebuild the nonphysical trailer around its cab's tow bar.
+void TrafficEntityModule::UpdateTrailers_MoveToCab(u32 luTrailer)
+{
+    Vehicle* lpTrailer = GetTrailerVehicle(static_cast<s32>(luTrailer));
+    if (lpTrailer->GetCabIndex() == KU_INVALID_VEHICLE)
+    {
+        return;
+    }
+
+    CGS_ASSERT(luTrailer < KU_MAX_TRAILER_TRAFFIC, "luTrailer < KU_MAX_TRAILER_TRAFFIC");
+    const u32 luTrailerVehicle = KU_TRAILER_TRAFFIC_OFFSET + luTrailer;
+    VehicleAxles* lpAxles = GetVehicleAxles(luTrailerVehicle);
+    Vehicle* lpCab = GetStandardVehicle(lpTrailer->GetCabIndex());
+    CGS_ASSERT(lpCab->GetTrailerIndex() == luTrailerVehicle,
+               "lpCab->GetTrailerIndex() == luTrailerVehicle");
+    Param* lpParam = GetParam(lpTrailer->GetCabIndex());
+    const Matrix44Affine lCabTransform = GetVehicleTransform(lpTrailer->GetCabIndex());
+
+    // These alive checks belong to the original inlined type getters.
+    CGS_ASSERT(lpCab->IsAlive(), "IsAlive()");
+    const u32 luCabType = lpCab->GetVehicleType();
+    CGS_ASSERT(lpTrailer->IsAlive(), "IsAlive()");
+    const u32 luTrailerType = lpTrailer->GetVehicleType();
+    (void)mpData.operator->();
+    (void)mpData.operator->();
+    const VehicleTypeRuntime* lpCabType = GetVehicleTypeRuntime(luCabType);
+    const VehicleTypeRuntime* lpTrailerType = GetVehicleTypeRuntime(luTrailerType);
+
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    const auto RawPlus = [](const Vector3Plus& lValue) {
+        const Vector3 lXYZ = lValue.GetVector3();
+        return Vector3{lXYZ.x, lXYZ.y, lXYZ.z, lValue.GetPlus()};
+    };
+    const auto NormalizeOr = [](Vector3 lValue, Vector3 lFallback) {
+        const f32 lfLengthSquared = Vmx::Dot3(lValue, lValue);
+        const Vector3 lNormalized = Vmx::Scale(lValue, Vmx::RefinedReciprocalSqrt(lfLengthSquared, 2));
+        // Original vcmpeq/not/vsel selects the cab row only for a zero dot3.
+        return lfLengthSquared == 0.0f ? lFallback : lNormalized;
+    };
+    const auto MultiplyAdd = [](Vector3 lA, f32 lfB, Vector3 lC) {
+        return Vector3{std::fmaf(lA.x, lfB, lC.x), std::fmaf(lA.y, lfB, lC.y),
+                       std::fmaf(lA.z, lfB, lC.z), std::fmaf(lA.w, lfB, lC.w)};
+    };
+    const auto Cross = [](Vector3 lA, Vector3 lB) {
+        // vpermwi 0x63, vmul, vnmsub, vpermwi 0x63; preserve the fourth lane too.
+        return Vector3{Vmx::NegativeMultiplySubtract(lA.z, lB.y, lA.y * lB.z),
+                       Vmx::NegativeMultiplySubtract(lA.x, lB.z, lA.z * lB.x),
+                       Vmx::NegativeMultiplySubtract(lA.y, lB.x, lA.x * lB.y),
+                       Vmx::NegativeMultiplySubtract(lA.w, lB.w, lA.w * lB.w)};
+    };
+
+    const Vector3 lTowBar = lpCab->CalcTowBarPos(lCabTransform, lpCabType);
+    const Vector3 lInitialAt = NormalizeOr(lTowBar - RawPlus(lpAxles->mBackAxle.mPosAndWheelRadius),
+                                          lCabTransform.At());
+    const f32 lfNegativePivot = lpTrailerType->GetTrailerPivotDistance() * -1.0f;
+    const Vector3 lInitialPos = MultiplyAdd(lInitialAt, lfNegativePivot, lTowBar);
+    lpAxles->mBackAxle.mPosAndWheelRadius.SetVector3(
+        MultiplyAdd(lInitialAt, lpTrailerType->GetBackAxleOffset(), lInitialPos));
+
+    lpAxles->UpdateRearAxleForRoadCollision(lpParam, mpData->mpapHulls);
+
+    const Vector3 lAt = NormalizeOr(lTowBar - RawPlus(lpAxles->mBackAxle.mPosAndWheelRadius),
+                                   lCabTransform.At());
+    const Vector3 lPos = lTowBar - Vmx::Scale(lAt, lpTrailerType->GetTrailerPivotDistance());
+    const Vector3 lUpBlend = NormalizeOr(lCabTransform.Up() + RawPlus(lpAxles->mBackAxle.mUpAndDebug),
+                                        lCabTransform.Up());
+    const Vector3 lRight = NormalizeOr(Cross(lUpBlend, lAt), lCabTransform.Right());
+    const Vector3 lUp = NormalizeOr(Cross(lAt, lRight), lCabTransform.Up());
+    Matrix44Affine lTransform;
+    lTransform.Right() = lRight;
+    lTransform.Up() = lUp;
+    lTransform.At() = lAt;
+    lTransform.Pos() = lPos;
+    SetVehicleTransform(luTrailerVehicle, lTransform);
+
+    lpAxles->mFrontAxle.mUpAndDebug.SetVector3(lpAxles->mBackAxle.mUpAndDebug.GetVector3());
+    lpAxles->mFrontAxle.mPosAndWheelRadius.SetVector3(
+        MultiplyAdd(lAt, lpTrailerType->GetForwardAxleOffset(), lPos));
+    lpTrailer->SetWheelRot(lpCab->GetWheelRot().x);
+}
+
+// ARTIST 0x8273B168. The purgatory update runs on both decision and nondecision calls.
+void TrafficEntityModule::UpdateTrailers(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    (void)lpInput;
+    (void)lpOutput;
+    UpdateTrailers_UpdatePurgatory();
+    Vehicle* lpTrailer = GetTrailerVehicle(0);
+    if (!lpTrailer->IsAlive() || lpTrailer->IsPhysical())
+    {
+        return;
+    }
+    if (lpTrailer->GetCabIndex() != KU_INVALID_VEHICLE)
+    {
+        const Vehicle* lpCab = GetVehicle(lpTrailer->GetCabIndex());
+        lpTrailer->CopyEffectsFromCab(lpCab);
+        if (lpCab->IsPhysical())
+        {
+            return;
+        }
+    }
+    UpdateTrailers_MoveToCab(0);
 }
 
 // ----------------------------------------------------------------------------
@@ -11066,16 +11219,37 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
     UpdateParams_PrecalcBehaviourParams(luParam, lpSection, lpHull, lConeA, lConeB, lConeC);
 }
 
-// @0x82717A70 (.cpp 11335). BLOCKER: unk_8300CAC0, a three-lane distance-squared threshold
-// vector seeded by an unnamed dyn-init thunk.
+// @0x82717A70 (.cpp 11335). Threshold vector 8300CAC0 is seeded to {36,4,4,0}
+// by original initializer 82C66FA0 (CRT table 82CD2450). Request removal when
+// the param ahead overlaps; divergent mode additionally uses actual vehicle positions.
 void TrafficEntityModule::UpdateParam_CheckIfInsideParamInFront(u32 luParam)
 {
-    (void)luParam;
-
-    static bool sbLogged = false;
-    LogMissingLeg_T2(sbLogged,
-                  "UpdateParam_CheckIfInsideParamInFront @0x82717A70 -- unk_8300CAC0 lanes 0/1/2 "
-                  "are an unrecovered dyn-init .data vector");
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+    Param* const lpParam = GetParam(luParam);
+    CGS_ASSERT(lpParam != 0, "lpParam");
+    const Vector3 lParamPos = GetParamTransform(luParam)->GetDeterministicPos();
+    const u32 luParamInFront = maParamNeedToSlowData[luParam].muParamInFront;
+    if (luParamInFront != KU_INVALID_PARAM)
+    {
+        const Vector3 lFrontPos = GetParamTransform(luParamInFront)->GetDeterministicPos();
+        const Vector3 lDelta = lFrontPos - lParamPos;
+        f32 lfDistanceSq = rw::math::vpu::SLerpDetail::Dot3(lDelta, lDelta);
+        if (36.0f > lfDistanceSq)
+        {
+            if (mbAllowDivergentBehaviour)
+            {
+                const Matrix44Affine lThisVehicle = GetVehicleTransform(luParam);
+                const Matrix44Affine lFrontVehicle = GetVehicleTransform(luParamInFront);
+                const Vector3 lVehicleDelta = lFrontVehicle.Pos() - lThisVehicle.Pos();
+                lfDistanceSq = rw::math::vpu::SLerpDetail::Dot3(lVehicleDelta, lVehicleDelta);
+            }
+            // Original threshold Y (divergent) and Z (deterministic) are both 4.
+            if (4.0f > lfDistanceSq)
+            {
+                lpParam->SetShouldBeRemoved();
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -11516,20 +11690,19 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  PARTIAL  (.cpp 13477)
+// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  (birth/proximity branches recovered)
 //
 // Every param that is alive, not a zombie, and has no live vehicle
 // becomes a standard Vehicle. The candidate set is three FastBitArray terms, not a linear
 // scan (0x8273A468..0x8273A52C): mAliveParams & ~mZombieParams & ~mAliveVehicles.
 //
 // The two RNG draws come off mEffectRand in this order and both must stay: draw 1 is the
-// across-lane offset, draw 2 is mfRandomVal. Swapping them re-phases every car's lights.
+// across-lane offset, draw 2 is mfRandomVal. A valid trailer adds draw 3 for its mfRandomVal.
+// Swapping them re-phases every car's lights.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    (void)lpInput;   // only read by the GATED race-car proximity arm below
-
     CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 13477
 
     if (mbWaitingForStreaming)
@@ -11540,18 +11713,22 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     const bool lbRejectNearPlayers =
         mbDontCreateVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour;
 
+    ::Array<Vector3, E_ACTIVE_RACE_CAR_INDEX_COUNT> lActiveRaceCarPositions;
+    lActiveRaceCarPositions.Construct();
     if (lbRejectNearPlayers)
     {
-        // GATE: the race-car proximity reject @0x8273A3FC. BLOCKERS: the +0x220 state lane sits
-        // behind an IDA-truncated getter, and Param::SetDivorced is undeclared. Online-only.
-        // DELETE-WHEN online traffic lands.
-        static bool sbLogged = false;
-        LogMissingLeg_T2(sbLogged,
-            "UpdateVehicles_CreateNewVehicles race-car proximity rejection "
-            "(mbDontCreateVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) -- ONLINE-ONLY "
-            "and unreachable offline. Blockers: the getter behind the +0x220 race-car state "
-            "lane is IDA-truncated, and Param::SetDivorced is undeclared. Radius recovered: "
-            "unk_8300CF70 lane 0 == 6400.0f == 80m^2");
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface =
+            lpInput->GetActiveRaceCarOutputInterface();
+        CGS_ASSERT(lpActiveRaceCarOutputInterface != nullptr, "lpActiveRaceCarOutputInterface");
+        for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+        {
+            const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
+            if (lpActiveRaceCarOutputInterface->IsRaceCarActive(leIndex))
+            {
+                lActiveRaceCarPositions.Append(
+                    lpActiveRaceCarOutputInterface->GetRaceCarState(leIndex)->mTransform.Pos());
+            }
+        }
     }
 
     // mAliveParams & ~mZombieParams & ~mAliveVehicles, field for field, in the console's order.
@@ -11573,7 +11750,7 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     {
         const u32 luParam = static_cast<u32>(lItParam.GetIndex());
 
-        const Param* lpParam = GetParam(luParam);          // carries header-2350's bound
+        Param* lpParam = GetParam(luParam);          // carries header-2350's bound
         CGS_ASSERT(lpParam->IsAlive(), "lpParam->IsAlive()");        // .cpp 13526
         CGS_ASSERT(!lpParam->IsZombie(), "!lpParam->IsZombie()");    // .cpp 13527
 
@@ -11583,10 +11760,23 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
 
         if (lbRejectNearPlayers)
         {
-            // Second half of the same gate: without the reject the console would still fall
-            // through to the maker, so skipping the whole param is what keeps the two halves
-            // consistent.
-            continue;
+            bool lbTooNearRaceCar = false;
+            for (u32 luRaceCar = 0; luRaceCar < lActiveRaceCarPositions.GetLength(); ++luRaceCar)
+            {
+                const Vector3 lDelta = lParamPos - lActiveRaceCarPositions.GetItem(luRaceCar);
+                // ARTIST startup thunk 82C66E98 writes 6400 into 8300CF70 lane zero.
+                if (rw::math::vpu::SLerpDetail::Dot3(lDelta, lDelta) < 6400.0f)
+                {
+                    lbTooNearRaceCar = true;
+                    break;
+                }
+            }
+            if (lbTooNearRaceCar)
+            {
+                lpParam->SetZombie(luParam, mParamSoaData);
+                lpParam->SetDivorced();
+                continue;
+            }
         }
 
         Vehicle* lpVehicle = GetVehicle(luParam);          // carries header-2459's bound
@@ -11613,16 +11803,7 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
         if (lpVehicleType->mxVehicleFlags != 0
             && lpVehicleType->muTrailerFlowTypeId != 0xFFFFu)
         {
-            // GATE: the trailer half @0x8273ACA4. BLOCKERS: TryAllocateTrailerId is undeclared
-            // and InitialiseAsTrailer reaches the trapped Vehicle::CalcTowBarPos.
-            // DELETE-WHEN articulated traffic lands.
-            static bool sbLogged = false;
-            LogMissingLeg_T2(sbLogged,
-                "UpdateVehicles_CreateNewVehicles trailer half (TryAllocateTrailerId / "
-                "Vehicle::InitialiseAsTrailer / the muOtherHalfIndex cross-link) -- "
-                "TryAllocateTrailerId is undeclared and InitialiseAsTrailer reaches the "
-                "trapped Vehicle::CalcTowBarPos. luTrailerIndex stays KU_INVALID_VEHICLE, "
-                "which is the console's own no-trailer-available path");
+            luTrailerIndex = static_cast<u16>(TryAllocateTrailerId());
         }
 
         const f32 lfRandomVal = mEffectRand.RandomFloat();
@@ -11647,83 +11828,114 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
 
         maRenderPosesPC[luParam].Reset(); // New driving vehicle in a reused slot.
         SetVehicleTransform(luParam, lOutMatrix);
+
+        if (luTrailerIndex != KU_INVALID_VEHICLE)
+        {
+            Vehicle* lpTrailer = GetVehicle(luTrailerIndex);
+            CGS_ASSERT(!lpTrailer->IsAlive(), "!lpVehicle->IsAlive()");
+            VehicleAxles* lpTrailerAxles = GetVehicleAxles(luTrailerIndex);
+            const u8 luTrailerType = PickVehicleToSpawn(lpVehicleType->muTrailerFlowTypeId);
+            const VehicleTypeUpdateData* lpTrailerTypeUpdate =
+                &mpData->mpaVehicleTypesUpdate[luTrailerType];
+            const VehicleTypeRuntime* lpTrailerTypeRuntime = GetVehicleTypeRuntime(luTrailerType);
+            const f32 lfTrailerRandomVal = mEffectRand.RandomFloat();
+            Matrix44Affine lTrailerMatrix;
+            lpTrailer->InitialiseAsTrailer(lpTrailerAxles,
+                                           lTrailerMatrix,
+                                           lpParam,
+                                           lfTrailerRandomVal,
+                                           mpData->mpapHulls,
+                                           luTrailerType,
+                                           lpTrailerTypeRuntime,
+                                           lpTrailerTypeUpdate,
+                                           lpVehicle,
+                                           lOutMatrix,
+                                           lpVehicleTypeUpdate,
+                                           lpVehicleTypeRuntime,
+                                           luTrailerIndex,
+                                           mVehicleSoaData,
+                                           static_cast<u16>(luParam));
+            // FLAG PC-platform leaf: reset the host render interpolation cache for a new slot,
+            // as the existing standard-vehicle birth immediately above already does.
+            maRenderPosesPC[luTrailerIndex].Reset();
+            SetVehicleTransform(luTrailerIndex, lTrailerMatrix);
+        }
     }
 
     mbDontCreateVehiclesNearAnyPlayers = false;
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::CacheRaceCarState  @ 0x827185D0   (EXPORT HOLE)
+// TrafficEntityModule::CacheRaceCarState  @ 0x827185D0   (raw body recovered)
 //
 // One snapshot per UpdateVehicles of the race cars the traffic sim reacts to. Feb-2007 built
 // the four Append lists inline (BrnTrafficEntityModule.cpp:6976..:7025); the ship hoisted
 // them into mRaceCarState and added the two per-index tables.
 //
-// FLAG: the four lists are the leak verbatim. The fill of mabRaceCarActive /
-// maActiveRaceCarPositions is REASONED from their DWARF names, since the function has no
-// per-function export. DELETE-WHEN the export hole is filled.
+// ARTIST raw 0x827185D0..0x82718984 supplies the complete loop, list ordering,
+// per-index stores, XYZ epsilon reduction and both stationary-facing branches.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::CacheRaceCarState(
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCars)
 {
-    CGS_ASSERT(lpRaceCars != 0, "lpActiveRaceCarOutputInterface");
-
+    CGS_ASSERT(lpRaceCars != nullptr, "lpActiveRaceCarOutputInterface");
     mRaceCarState.mRaceCarPositions.Construct();
     mRaceCarState.mRaceCarLinearVelocities.Construct();
     mRaceCarState.mRaceCarSpeeds.Construct();
     mRaceCarState.mRaceCarXZVelocityDirs.Construct();
 
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    // ARTIST 0x820BA270 lane zero. vrlimi mask1/rotate1 duplicates X into W
+    // in the compare copy, so the recorded vcmpgtfp. reduction tests only XYZ.
+    const f32 KF_ZERO_TOLERANCE = 1.1920928955078125e-7f;
+    const auto IsZero = [KF_ZERO_TOLERANCE](Vector3 lValue) {
+        return !(std::fabs(lValue.x) > KF_ZERO_TOLERANCE
+                 || std::fabs(lValue.y) > KF_ZERO_TOLERANCE
+                 || std::fabs(lValue.z) > KF_ZERO_TOLERANCE);
+    };
     for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
     {
         const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
-
         const bool lbActive = lpRaceCars->IsRaceCarActive(leIndex);
         mRaceCarState.mabRaceCarActive[liIndex] = lbActive;
-
         if (!lbActive)
         {
             continue;
         }
-
-        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
-            lpRaceCars->GetRaceCarState(leIndex);
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState = lpRaceCars->GetRaceCarState(leIndex);
         mRaceCarState.maActiveRaceCarPositions[liIndex] = lpRaceCarState->mTransform.Pos();
-
         if (lpRaceCars->IsRaceCarRival(leIndex))
         {
             continue;
         }
-
         mRaceCarState.mRaceCarPositions.Append(lpRaceCarState->mTransform.Pos());
         mRaceCarState.mRaceCarLinearVelocities.Append(lpRaceCarState->mLinearVelocity);
 
         Vector3 lXZVelocity = lpRaceCarState->mLinearVelocity;
         lXZVelocity.y = 0.0f;
-
-        if (!rw::math::vpu::IsZero(lXZVelocity))
+        if (!IsZero(lXZVelocity))
         {
-            Vector3 lVelocityDir;
-            const f32 lfSpeed =
-                rw::math::vpu::NormalizeReturnMagnitude(lXZVelocity, lVelocityDir);
-            mRaceCarState.mRaceCarXZVelocityDirs.Append(lVelocityDir);
+            const f32 lfLengthSquared = Vmx::Dot3(lXZVelocity, lXZVelocity);
+            const f32 lfInverseLength = Vmx::RefinedReciprocalSqrt(lfLengthSquared, 2);
+            mRaceCarState.mRaceCarXZVelocityDirs.Append(Vmx::Scale(lXZVelocity, lfInverseLength));
+            const f32 lfSpeed = lfLengthSquared == 0.0f ? 0.0f : lfLengthSquared * lfInverseLength;
             mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(lfSpeed));
         }
         else
         {
-            // The stalled-car fallback keeps the direction list index-parallel: fall back on
-            // the car's own At axis, and on world Z if that is flat too.
-            Vector3 lFacing = lpRaceCarState->mTransform.At();
-            lFacing.y = 0.0f;
-
-            if (!rw::math::vpu::IsZero(lFacing))
+            const Vector3 lRawFacing = lpRaceCarState->mTransform.At();
+            Vector3 lXZFacing = lRawFacing;
+            lXZFacing.y = 0.0f;
+            if (!IsZero(lXZFacing))
             {
-                mRaceCarState.mRaceCarXZVelocityDirs.Append(lpRaceCarState->mTransform.At());
+                const f32 lfInverseLength = Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lXZFacing, lXZFacing), 2);
+                mRaceCarState.mRaceCarXZVelocityDirs.Append(Vmx::Scale(lXZFacing, lfInverseLength));
             }
             else
             {
-                mRaceCarState.mRaceCarXZVelocityDirs.Append(rw::math::vpu::GetVector3_ZAxis());
+                // Original zero-facing branch keeps r4 pointing at the raw At row.
+                mRaceCarState.mRaceCarXZVelocityDirs.Append(lRawFacing);
             }
-
             mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(0.0f));
         }
     }
@@ -11823,24 +12035,17 @@ void TrafficEntityModule::UpdateVehicles(
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateLerpedParamTransforms  @ 0x82739CD8   (EXPORT HOLE)
-//
-// The between-decision-frames interpolator: one ParamTransform::UpdateLerpedPosition
-// @0x82712968 per live param, stepped by mfSimTimeStepVec.
-//
-// FLAG: the loop SHAPE is reasoned, not attested -- the function has no per-function JSON and
-// no Feb-2007 counterpart, and its only caller (UpdateNonDecisionFrame @0x8274C21C) passes
-// nothing but `this`. mAliveParams is the module's own liveness set and the only one a
-// per-param sweep could use. DELETE-WHEN the export hole is filled.
+// ARTIST 0x82739CD8..0x8273A304. Walk the actual 600-bit SoA iterator; each yielded
+// index still goes through the original 400-slot param/transform bounds and liveness guards.
+// The owner timestep vector is loaded at 82739E38/8273A00C before the real leaf call.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateLerpedParamTransforms()
 {
-    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIt = mParamSoaData.mAliveParams.Begin();
+         lIt != mParamSoaData.mAliveParams.End(); ++lIt)
     {
-        if (!mParamSoaData.mAliveParams.IsBitSet(luParam))
-        {
-            continue;
-        }
+        const u32 luParam = static_cast<u32>(lIt.GetIndex());
+        CGS_ASSERT(GetParam(luParam)->IsAlive(), "GetParam( luParam )->IsAlive()");
         GetParamTransform(luParam)->UpdateLerpedPosition(mfSimTimeStepVec);
     }
 }
@@ -14965,8 +15170,9 @@ void TrafficEntityModule::PrecalculateAvoidanceFeelerData()
 //                           : lfCrossResultSq * recip(lfLineLengthSq)   (vcmpeqfp / vsel)
 //   0x82708E40..0x82708E6C  vrsqrtefp + two Newton steps ; sqrt as lfResult * rsqrt, and 0 for a
 //                           zero lfResult (vcmpeqfp / vsel)
-// Unsigned: the squared cross product loses the side. FLAG (VMX->portable): the console's sqrt is
-// x * rsqrt(x), a NaN for x == +inf where std::sqrt gives +inf.
+// Unsigned: the squared cross product loses the side. Keep the original one reciprocal and
+// two reciprocal-root refinements plus x*rsqrt(x); both zero selections are original vsel operations.
+// The existing arithmetic helpers model the estimate seed; hardware/exception flags remain unproved.
 // --------------------------------------------------------------------------------------------
 VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 lStart, Vector2 lVel)
 {
@@ -14975,10 +15181,12 @@ VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 
     const f32 lfCrossResultSq = lfCross * lfCross;
     const f32 lfStartLengthSq = lStart.x * lStart.x + lStart.y * lStart.y;
 
-    const f32 lfResult = (lfLineLengthSq == 0.0f) ? lfStartLengthSq
-                                                  : lfCrossResultSq * (1.0f / lfLineLengthSq);
-
-    return SplatDrive((lfResult == 0.0f) ? 0.0f : std::sqrt(lfResult));
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    const f32 lfReciprocal = Vmx::RefinedReciprocal(lfLineLengthSq, 1);
+    const f32 lfProjectedResult = lfCrossResultSq * lfReciprocal;
+    const f32 lfResult = lfLineLengthSq == 0.0f ? lfStartLengthSq : lfProjectedResult;
+    const f32 lfRoot = lfResult * Vmx::RefinedReciprocalSqrt(lfResult, 2);
+    return SplatDrive(lfResult == 0.0f ? 0.0f : lfRoot);
 }
 
 // --------------------------------------------------------------------------------------------

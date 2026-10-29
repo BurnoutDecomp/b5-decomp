@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 
+namespace rw { struct RGBA; }
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Construct @ 0x822F9F40, OnActivate @ 0x822A8B80, GetPolyColour @ 0x822D8C48,
 //   GetSurfaceRenderColour @ 0x822C3FB8, GetFlagsRenderColour @ 0x822A8D40,
@@ -54,10 +56,10 @@ namespace BrnWorld
         virtual void OnActivate() override;
 
     private:
-        static u32 GetPolyColour(CollisionTag lCollisionTag, s32 liPolyIndex);
-        static u32 GetTrafficColour(f32 lfValue);
-        static u32 GetSurfaceRenderColour(u8 luSurfaceId);
-        static u32 GetFlagsRenderColour(CollisionTag lCollisionTag);
+        static rw::RGBA GetPolyColour(CollisionTag lCollisionTag, s32 liPolyIndex);
+        static rw::RGBA GetTrafficColour(f32 lfValue);
+        static rw::RGBA GetSurfaceRenderColour(u8 luSurfaceId);
+        static rw::RGBA GetFlagsRenderColour(CollisionTag lCollisionTag);
 
         CgsDev::DebugUI::StringList maDrawModeList[6];
     };

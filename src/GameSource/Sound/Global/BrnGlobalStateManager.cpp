@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
@@ -15,7 +16,7 @@
 //
 // Sources:
 //   GlobalStateManager::CreateObject  @ 0x826FE380  (real)
-//   GlobalStateManager::Prepare       @ 0x826F5BF8  (stub -- Voice/Content cascade)
+//   GlobalStateManager::Prepare       @ 0x826F5BF8  (partial; monitor restored in batch 02)
 //   GlobalStateManager::ctor          @ 0x826FBB50  (real -- self-contained shell)
 //   GlobalStateManager::dtor          @ 0x826FBBE8  (minimal -- Voice/Content cascade)
 // GetTypeInfo / GetTypeName / GetStaticTypeInfo / GetResourceRegistrar /
@@ -208,19 +209,10 @@ const char* GlobalStateManager::GetTypeName() const
 //   state 3: if (!StateManager::PrepareStates(...)) return 0;
 //   state 4: return 1;
 //
-// FLAG (stub -- Voice/Content domain cascade): the real body cascades into
-//   * CgsSound::Logic::Voice::Construct / Voice::Connect / Voice::SetGain /
-//     Voice::IsReady (the global-voice graph -- the deferred Voice sub-objects),
-//   * CgsSound::Logic::Content::IsLoaded (the global content banks),
-//   * CgsSound::Playback::Name::MakeHash (the content/voice-name hasher),
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker),
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     itself a declared-only stub in the foundation).
-// None reconstructed in this slice. PrepareStateManagersOnBoot (0x826837F8) only needs
-// Prepare() to return true to advance boot, so this stub returns true (boot-ready)
-// WITHOUT the global voice/content bring-up. NOT an X360-faithful body -- the prepare
-// state machine + global Voice/Content domain are deferred. X360 addr above.
+// SOURCE RECOVERY NOTE (batch 02): this body retains the X360 state switch and its
+// source-visible resource/voice operations. This delta restores the original monitor
+// registration in state 2 and UpdateParams monitor bracket. This packet does not make a
+// full parity claim for the Voice/Content helpers or native runtime output.
 // ---------------------------------------------------------------------------
 bool GlobalStateManager::Prepare()
 {
@@ -277,7 +269,9 @@ bool GlobalStateManager::Prepare()
             maSubmixVoices[liVoice].SetGain(1, 0.0f, &luReverbSend);
             maSubmixVoices[liVoice].SetGain(0, 1.0f, &luSend01);
         }
-        // The profiling monitor has no gameplay semantics on the PC host.
+        // ARTIST 0x826F5E74-0x826F5E90: page 14, 10.0f budget, scaled.
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor(
+            "Global", CgsDev::E_PMP_14, false, 10.0f, true);
         // fall through
     }
     case E_PREPARE_STATES:
@@ -319,7 +313,9 @@ void GlobalStateManager::ResourcesAreReady()
 
 void GlobalStateManager::UpdateParams(f32 af32DeltaTime)
 {
+    CgsDev::PerfMonCpu::StartMonitor(miCpuMonitor);
     CgsSound::Logic::StateManager::UpdateParams(af32DeltaTime);
+    CgsDev::PerfMonCpu::StopMonitor(miCpuMonitor);
 }
 
 } // namespace Logic

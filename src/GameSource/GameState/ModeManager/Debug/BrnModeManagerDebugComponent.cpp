@@ -133,10 +133,7 @@ namespace BrnGameState
                 {
                     const CarData* lpCarData = mpModeManager->mScoringSystem.GetCarData(
                         static_cast<EActiveRaceCarIndex>(luCar));
-                    if (lpCarData != nullptr)
-                    {
-                        lStream << lpCarData->GetScoreData()->GetOnlineStuntScore() << " ";
-                    }
+                    lStream << lpCarData->GetScoreData()->GetOnlineStuntScore() << " ";
                 }
                 MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 160.0f,
                               KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
@@ -145,7 +142,9 @@ namespace BrnGameState
 
         if (mbInfiniteLives)
         {
-            mpModeManager->mScoringSystem.ResetRoadRageCrashesForPlayer();
+            // X360 RenderHUD @0x8231F0B0 zeros only ModeManager+0x590C, the
+            // ScoringSystem crash counter at +0x4B5C. It leaves mbPlayerTotalled alone.
+            mpModeManager->mScoringSystem.miCurrentPlayerCrashedNumber = 0;
         }
     }
 

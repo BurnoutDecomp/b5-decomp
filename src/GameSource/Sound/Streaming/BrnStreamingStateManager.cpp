@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/Sound/Streaming/BrnStreamingState.h"
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"   // [DIAG] GetCreateParams for the witness
@@ -17,7 +18,7 @@
 //
 // Sources:
 //   StreamingStateManager::CreateObject  @ 0x82700B68  (real)
-//   StreamingStateManager::Prepare       @ 0x826EE680  (stub -- domain cascade)
+//   StreamingStateManager::Prepare       @ 0x826EE680  (partial; monitor restored in batch 02)
 //   StreamingStateManager::ctor          @ 0x826FBFE0  (real -- self-contained shell)
 // GetTypeInfo / GetTypeName / GetStaticTypeInfo / GetResourceRegistrar /
 // ResourcesAreReady were NOT individually exported; reconstructed from the
@@ -231,16 +232,10 @@ const char* StreamingStateManager::GetTypeName() const
 //   state 3: if (!StateManager::PrepareStates(this, 1, 3, 0)) return 0;
 //   state 4: clear the +0x218.. tail (a1[134..137] = 0); return 1;
 //
-// FLAG (stub -- domain cascade): the real body cascades into
-//   * CgsSystem::HardwareSku::FindLanguage (the SKU/language selector),
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker),
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     itself a declared-only stub in the foundation).
-// None reconstructed in this slice. PrepareStateManagersOnBoot (0x826837F8) only needs
-// Prepare() to return true to advance boot, so this stub returns true (boot-ready)
-// WITHOUT loading the language stream-header bundle / state bring-up. NOT an X360-
-// faithful body -- the prepare state machine is deferred. X360 addr above.
+// SOURCE RECOVERY NOTE (batch 02): this body retains language-based bundle selection,
+// request processing and state-preparation calls. This delta restores the original
+// AddMonitor registration, UpdateParams monitor scope and assertion continuation. It
+// makes no runtime stream/PCM claim.
 // ---------------------------------------------------------------------------
 bool StreamingStateManager::Prepare()
 {
@@ -269,6 +264,9 @@ bool StreamingStateManager::Prepare()
             break;
         }
         LoadAsset(lpacBundle, 0, ResourceRegistrar::E_DATA);
+        // ARTIST 0x826EE83C-0x826EE858: page 14, 1.0f budget, scaled.
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor(
+            "Streams", CgsDev::E_PMP_14, false, 1.0f, true);
         mePrepareState = E_PREPARE_UPDATING;
         return false;
     }
@@ -544,12 +542,10 @@ CgsSound::Logic::State* StreamingStateManager::GetFreeState(void* apRequest)
 
 void StreamingStateManager::UpdateParams(f32 af32GameDt)
 {
+    CgsDev::PerfMonCpu::StartMonitor(miCpuMonitor);
     CgsSound::Logic::StateManager::UpdateParams(af32GameDt);
     CGS_ASSERT(mePrepareState == E_PREPARE_FINISHED,
                "mePrepareState == E_PREPARE_FINISHED");
-    if (mePrepareState != E_PREPARE_FINISHED)
-        return;
-
     ProcessStopRequests();
     muNumRePostRequests = 0;
     for (u32 luIndex = 0; luIndex < muPlayRequestCount; ++luIndex)
@@ -591,6 +587,7 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
     const u32 luRepostCount = muNumRePostRequests;
     for (u32 luIndex = 0; luIndex < luRepostCount; ++luIndex)
         PostStreamRequestInternal(maRePostRequests[luIndex]);
+    CgsDev::PerfMonCpu::StopMonitor(miCpuMonitor);
 }
 
 } // namespace Streaming

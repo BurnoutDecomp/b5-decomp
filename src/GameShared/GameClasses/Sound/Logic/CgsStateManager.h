@@ -232,12 +232,10 @@ public:
     void SetCurrentTime(f32 af32Time)            { mfCurrentTime = af32Time; }
     f32 GetCurTime() const                      { return mfCurrentTime; } // DWARF h:229
 
-    // CgsStateManager.h (PrepareStates @ 0x826EAD30). The shared helper every leaf
-    // Prepare() calls to advance its owned States. NOT in this view's reconstructed
-    // function set (it cascades into the State machine); declared so leaves can name
-    // it, body left to the State-machine group.
-    // FLAG (declared-only): no body here -- see CgsState.* / the State group.
-    bool PrepareStates(s32 liStateMask, s32 liInstancesPerState, s32 liStartState);
+    // ARTIST 0x826EAD30 / DecFIGS 0x85EF90. The shared helper every leaf Prepare()
+    // calls to create and prepare owned States. DecFIGS DWARF-backed prototype uses
+    // (s32 effectFlags, u32 numStates, s32 forcedEffectControls).
+    bool PrepareStates(s32 liStateMask, u32 luNumStates, s32 liForcedEffectControls);
 
     // Content registry @ 0x826AC9F8 / 0x826C7740. The key is the playback Name
     // stored at element +0 and the returned Content is the embedded sub-object at

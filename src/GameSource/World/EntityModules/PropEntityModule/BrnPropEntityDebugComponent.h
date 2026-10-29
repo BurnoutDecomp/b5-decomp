@@ -46,8 +46,12 @@
 // helpers the bodies call out-of-line (RenderInertiaBox 0x822C54C0, ToCellGridScreenCoords
 // 0x822DC3D8) and ResetProps (the OnActivate "Reset props" callback @0x822EFE48). Those
 // three are declared here (this class owns them) but their bodies are their own TUs.
-// Members/methods the X360 set does NOT attest (the Feb-2007 mbRenderParts / mbRenderPartStats
-// / mbRenderPhysicalRed / mbRenderFrozenBlue split, RenderParts/RenderPartStats) are dropped.
+// The X360 OnActivate body directly registers the byte at +0x3A as "Render the stats for
+// each part", but none of the exported component bodies reads it; RenderPropStats emits
+// per-part text under the master prop-stat flag without consulting this byte. Preserve the
+// original storage and registration, and do not invent a PC-only reader. The separate
+// Feb-2007 mbRenderParts / mbRenderPhysicalRed / mbRenderFrozenBlue split and the DecFIGS
+// RenderParts / RenderPartStats declarations have no X360 body in this build and are omitted.
 // ============================================================================
 
 #include "types.hpp"

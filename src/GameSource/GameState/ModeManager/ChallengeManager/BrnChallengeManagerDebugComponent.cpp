@@ -99,9 +99,11 @@ namespace BrnGameState
                 // BeginAssert precedes the local stream construction in the X360 call sequence.
                 CgsDev::Assert::BeginAssert();
 
-                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lMessage(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lMessage << "Index " << liIndex << " is out of range (max bits: " << 2000 << ")\n";
+                // FLAG PC-platform leaf: preserve existing deferred-worker storage; synchronous
+                // MessageBufferPC uses the original shared assert buffer and runtime capacity.
+                CgsDev::Assert::MessageBufferPC lMessageBuffer;
+                CgsDev::StrStream lMessage(lMessageBuffer.GetBuffer(), lMessageBuffer.GetSize());
+                lMessage << "Index " << liIndex << " is out of range (max bits: " << 2000 << "\n";
 
                 CgsDev::Assert::FireAssert(
                     lMessage.GetBuffer(),

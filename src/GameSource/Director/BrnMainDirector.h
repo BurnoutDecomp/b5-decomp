@@ -5,6 +5,7 @@
 #include <cstddef>   // offsetof
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"          // CgsGraphics::Camera (mCgsCamera)
 #include "GameSource/Director/BrnDirectorICEWrapper.h"          // BrnDirector::ICEWrapper (mICEWrapper)
+#include "GameSource/Director/BrnDirectorDevTools.h"          // BrnDirector::DirectorDevTools (mDirectorDevTools)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitrator.h" // BrnDirector::Arbitrator (mArbitrator)
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"     // Camera::BehaviourManager (mBehaviourManager)
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h" // BrnDirector::AllVehicleData (mAllVehicleData)
@@ -67,8 +68,8 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 //     raw offsets, and each becomes a one-line swap when its type lands.
 //
 // FLAG: this class is NON-POLYMORPHIC -- the X360 ctor installs the embedded sub-objects'
-//   vtables but stores NO vtable pointer at MainDirector +0x00 (DirectorDevTools occupies
-//   the head; the lifecycle methods are called directly by DirectorModule, not virtually).
+//   vtables but stores NO vtable pointer at MainDirector +0x00. The typed DirectorDevTools
+//   head is called from MainDirector::Construct / Prepare / Update directly, not virtually.
 // ----------------------------------------------------------------------------
 
 namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeAction; } }  // GameSource/GameState/BrnGameActions.h
@@ -345,10 +346,10 @@ namespace BrnDirector
         // lands, and delete the matching accessor's FLAG.
         // ================================================================================
 
-        // +0x00000  BrnDirector::DirectorDevTools -- occupies the head (its Construct takes
-        //           `this`, i.e. the dev-tools object IS at MainDirector +0).
-        //           FLAG: un-homed; named opaque storage (console span 0x00 .. 0x40).
-        alignas(16) u8 maDirectorDevTools[0x40];
+        // +0x00000  BrnDirector::DirectorDevTools. ARTIST passes MainDirector this
+        //           unchanged to its Construct / Update calls (X360 object head +0x00).
+        //           Use the typed host object; its pointer fields widen naturally on PC.
+        DirectorDevTools mDirectorDevTools;
 
         // +0x00040  the DirectorModule's DebugComponent back-pointer.
         DebugComponent* mpDebugComponent;

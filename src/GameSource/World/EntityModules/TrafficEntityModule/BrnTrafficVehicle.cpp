@@ -179,17 +179,22 @@ void Vehicle::SetSpeed(VecFloat lfSpeed)
     mSpeed_DistAcrossLane_SwerveAmount_W.x = lfSpeed.x;
 }
 
-// FLAG PC boot gate: Vehicle::CalcTowBarPos is not reconstructed. No ARTIST per-function
-// export and no Feb-2007 counterpart; only Vehicle::InitialiseAsTrailer reaches it, and the
-// driving-traffic maker keeps its trailer leg gated for that reason.
-// DELETE-WHEN articulated traffic lands.
-Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
+// ARTIST 0x8270F9B8, resolved by InitialiseAsTrailer's bl at 0x8275FF40.
+// Vector3 return uses a hidden output pointer: r3=out, r4=this, r5=matrix copy, r6=runtime.
+Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpVehicleTypeRuntime) const
 {
-    (void)lTransform;
-    (void)lpTypeRuntime;
-    CGS_ASSERT(false,
-               "Vehicle::CalcTowBarPos not reconstructed (trailer path) [FLAG PC boot gate]");
-    return Vector3{ 0.0f, 0.0f, 0.0f };
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
+
+    const f32 lfPivot = lpVehicleTypeRuntime->GetCabPivotDistance();
+    const Vector3 lAt = lTransform.At();
+    const Vector3 lPosition = lTransform.Pos();
+    // 8270FBFC..8270FC04: splat runtime pivot X, then one fused four-lane multiply/add.
+    return Vector3{std::fmaf(lAt.x, lfPivot, lPosition.x),
+                   std::fmaf(lAt.y, lfPivot, lPosition.y),
+                   std::fmaf(lAt.z, lfPivot, lPosition.z),
+                   std::fmaf(lAt.w, lfPivot, lPosition.w)};
 }
 
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)
@@ -575,7 +580,11 @@ Vector3 Vehicle::CalcFrontAxlePos(Matrix44Affine lTransform,
 
     const f32 lfReach = lpVehicleTypeRuntime->GetForwardAxleOffset()
                         - lpVehicleTypeRuntime->GetTrailerPivotDistance();
-    return lArticulationPoint + lTransform.At() * lfReach;
+    const Vector3 lAt = lTransform.At();
+    return Vector3{std::fmaf(lAt.x, lfReach, lArticulationPoint.x),
+                   std::fmaf(lAt.y, lfReach, lArticulationPoint.y),
+                   std::fmaf(lAt.z, lfReach, lArticulationPoint.z),
+                   std::fmaf(lAt.w, lfReach, lArticulationPoint.w)};
 }
 
 // Vehicle::UpdateEffects (X360 @0x82756D48, DWARF BrnTrafficVehicle.h:302) -- one blink step

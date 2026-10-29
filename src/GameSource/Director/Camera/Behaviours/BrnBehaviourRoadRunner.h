@@ -155,14 +155,13 @@ public:
 };
 
 // ----------------------------------------------------------------------------
-// The two scene-query post boxes the road runner uses. FLAG: neither
-// `LineTestNearestPostBox` nor `LineTestFinePostBox` exists as a named type anywhere in the
-// tree -- the generic BrnDirector::PostBox<T> (Utils/BrnPostBox.h) is instantiated for the
-// line-test result events, but the DWARF names these two aliases and the road runner embeds
-// them BY VALUE. Their console sizes are pinned by the gaps between the members either side
-// (nearest: +0xB0 -> +0x100 == 0x50; fine: +0x150 -> +0x158 == 8). Modelled as named, sized
-// sub-objects until the post-box aliases are homed; the .cpp NEVER reaches inside one.
-// DELETE-WHEN: Utils/BrnPostBox.h grows the two aliases.
+// The two scene-query post boxes the road runner uses. Canonical
+// BrnDirector::LineTestNearestPostBox / LineTestFinePostBox aliases exist in
+// Utils/BrnDirectorPostOfficeTypes.h; this class still models its fields as local opaque spans
+// because the RoadRunner Update/PostCollisionUpdate result-consumer chain has not been restored.
+// Their console sizes are pinned by the member gaps (nearest: +0xB0 -> +0x100 == 0x50; fine:
+// +0x150 -> +0x158 == 8), and this TU does not reach inside either span today. The standalone
+// CalcNearClipCorners helper is now bodied, but it does not activate the omitted query chain.
 // ----------------------------------------------------------------------------
 struct LineTestNearestPostBox { u8 maOpaque[0x50]; };   // FLAG: size console-pinned, interior un-homed
 struct LineTestFinePostBox    { u8 maOpaque[0x08]; };   // FLAG: size console-pinned, interior un-homed
