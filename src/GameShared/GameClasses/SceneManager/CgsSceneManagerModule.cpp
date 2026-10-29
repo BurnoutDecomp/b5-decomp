@@ -824,7 +824,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 
     // ---- leg 2: remove-for-collision (X360 0x828D20C4..0x828D20E8) --------------------
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mRemoveForCollisionQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -994,7 +993,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     // ---- leg 10: add-for-collision (X360 0x828D2CB0..0x828D2D38) ----------------------
     // ⭐ THE LEG THE WHOLE WAVE IS ABOUT: this is what turns a registered prop volume into
     // a body the sweep-and-prune broad phase can see.
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mAddForCollisionQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1116,7 +1114,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 
     // ---- leg 16: per-instance culling group (X360 0x828D3258..0x828D32E0) -------------
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mSetVolumeInstanceCullingGroupQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1162,7 +1159,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     // and the FIRST result is provably dead -- r3 is overwritten at 0x828D3574 by the sret
     // pointer before any use. It is a pure const hash lookup with no side effects, so the
     // single call below is behaviour-identical.
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mSetVolumeInstanceTransformQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1187,7 +1183,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 
     // ---- leg 19: explicit padding (X360 0x828D3614..0x828D369C, stride 0x20) ----------
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mSetPaddingQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1198,7 +1193,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 
     // ---- leg 20: clear an entity's padding (X360 0x828D36B8..0x828D3740, stride 4) ----
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mClearEntityPaddingQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1209,7 +1203,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 
     // ---- leg 21: force no padding (X360 0x828D375C..0x828D37E4, stride 8) -------------
-    if (lbHaveGenerationInput)
     {
         const s32 liCount = lpScene->mForceNoPaddingQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1547,60 +1540,33 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 {
     ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);
 
-    // (see ProcessFrustumTestJobRequests on the two omitted stack tripwires)
+    CGS_ASSERT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL");
+    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
     CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
     CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
     (void)lpInputBufferStack;
 
     ScopedPerfMon lCoarse(siProcessCoarseQueriesPerfMon);
 
-    if (lpSceneInputBuffer == NULL || lpSceneOutputBuffer == NULL)
-    {
-        return;
-    }
-
     // The X360 opens with the W+R helper sub_823B6FE0(sceneOut, sceneIn): the scene
     // OUTPUT is write-locked (the results ring is about to be filled) and the scene INPUT
     // read-locked; the tail unlocks both.
-    reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->LockForWrite();
-    reinterpret_cast<CgsModule::IOBuffer*>(lpSceneInputBuffer)->LockForRead();
-
     CgsModule::IOBufferStack* lpOutStack = lpOutputBufferStack;
 
     // The octree writes its frustum-test results into a SpatialPartition output buffer
     // pushed on the output stack; the SceneManagerModule reads the resolved entity ids
     // out and re-emits them into the scene output event queue.
     SpatialPartitionIO::OutputBuffer* lpResultBuffer = 0;
-    if (lpOutStack != 0)
-    {
-        lpOutStack->CreateIOBuffer(&lpResultBuffer, "SpacialPartition");
-    }
-    else
-    {
-        static bool sbStandInConstructed = false;
-        if (!sbStandInConstructed)
-        {
-            sbStandInConstructed = true;
-            sStandInResultBuffer.Construct();
-        }
-        lpResultBuffer = &sStandInResultBuffer;
-    }
-    if (lpResultBuffer == 0)
-    {
-        return;
-    }
+    lpOutStack->CreateIOBuffer(&lpResultBuffer, "SpacialPartition");
+    reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->LockForWrite();
+    reinterpret_cast<CgsModule::IOBuffer*>(lpSceneInputBuffer)->LockForRead();
 
     reinterpret_cast<CgsModule::IOBuffer*>(lpResultBuffer)->LockForWrite();
 
     CoarseQueryResultBuffer<16384>* lpResults = lpResultBuffer->GetCoarseResultBuffer();
-    lpResults->Construct();
-
     LooseOctree* lpOctree =
         static_cast<LooseOctree*>(mSpatialPartitionManager.GetSpatialPartition());
-    if (lpOctree != NULL)
-    {
-        lpOctree->WaitForFrustumTestJobResults(lpResults);
-    }
+    lpOctree->WaitForFrustumTestJobResults(lpResults);
 
     // One scene-output event per coarse-result BATCH, stamped with that query's id (the
     // batches come back in submission order, so batch i belongs to query i):
@@ -1612,33 +1578,19 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
         u32 luOffset      = 0;
         u32 luNumResults  = 0;
         const u32 luNumBatches = lpResults->GetNumBatches();
-        auto* lpLegacyResults = lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite();
-        bool lbLegacySpace = true;
 
         for (u32 luBatch = 0; luBatch < luNumBatches; ++luBatch)
         {
-            const SceneQueryId lQueryId = maFrustumTestJobQueryIds[
-                (luBatch < KU_MAX_FRUSTUM_TEST_JOB_QUERIES) ? luBatch : 0];
+            const SceneQueryId lQueryId = maFrustumTestJobQueryIds[luBatch];
 
             const u16* lpu16Results =
                 lpResults->GetBatchByOffset(luOffset, &luOffset, &luNumResults);
             CGS_ASSERT(lpu16Results != NULL, "lpu16Results != NULL");
-            if (lpu16Results == NULL)
-            {
-                break;
-            }
-
             SceneManagerIO::OutCoarseQueryResult* lpEvent =
                 static_cast<SceneManagerIO::OutCoarseQueryResult*>(
-                    lrNativeResults.AllocateEventSafe(
+                    lpSceneOutputBuffer->GetResultsQueue()->AllocateEvent(
                         SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE,
                         static_cast<s32>(4 * (luNumResults + 3))));
-            if (lpEvent == NULL)
-            {
-                CGS_ASSERT(lpEvent, "Native frustum result capacity exceeded");
-                break;
-            }
-
             lpEvent->mQueryId              = lQueryId;
             lpEvent->miNumResults          = static_cast<s32>(luNumResults);
             lpEvent->miNumResultsAttempted = static_cast<s32>(luNumResults);
@@ -1654,11 +1606,6 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 
                 lpIds[luResult] = lId;
             }
-            // Preserve the original queue for existing readers. Native world
-            // dispatch reads the complete frame, including batches beyond 32 KB.
-            if (lbLegacySpace)
-                lbLegacySpace = lpLegacyResults->AddEventSafe(lpEvent,
-                    SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE, static_cast<s32>(4 * (luNumResults + 3)));
         }
     }
 
@@ -1669,10 +1616,7 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneInputBuffer)->UnlockForRead();
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->UnlockForWrite();
 
-    if (lpOutStack != 0)
-    {
-        lpOutStack->DestroyIOBuffer(&lpResultBuffer);
-    }
+    lpOutStack->DestroyIOBuffer(&lpResultBuffer);
 }
 
 // ===========================================================================
@@ -2079,10 +2023,7 @@ void SceneManagerModule::RemoveAllOwnerVolumeInstances(
 
         RemoveAllEntityVolumeInstances(lu16EntityIndex, lpOverlapGenerationInput); // 0x828CDB10
 
-        if (lpPartition != NULL)
-        {
-            lpPartition->RemoveEntityFromGraph(lu16EntityIndex);                  // 0x828CDB28
-        }
+        mSpatialPartitionManager.GetSpatialPartition()->RemoveEntityFromGraph(lu16EntityIndex); // 0x828CDB28
 
         CGS_ASSERT(lu16EntityIndex < KI_MAX_NUM_ENTITIES,
                    "lu16Index < KI_MAX_NUM_ENTITIES");                            // 0x828CDB30
@@ -4135,11 +4076,8 @@ namespace CgsSceneManager
             lFineQuery.mxVolumeTypeFlags       = lpQuery->mxVolumeTypeFlags;                          // +0xCC
             lFineQuery.mbExcludeParts          = lbExcludeParts;                                      // +0xCD
 
-            // NOT X360: the console's result record (var_190) starts as stack garbage, and ComputeVolumeTestDeepest
-            // writes its depth (+4) only on a hit, so a miss publishes whatever the stack held. The host starts the
-            // record at zero so a miss publishes a determinate 0.0; the only reader, VisibilityCollisionPolicy::
-            // ProcessSceneQueryResults, takes the hit byte alone (`lbz r11, 8(r3)` @0x822246F0).
-            FineIntersectionTestIO::OutEventVolumeTestDeepestResult lFineResult = {};
+            // The native result is populated by ComputeVolumeTestDeepest (0x828D4824).
+            FineIntersectionTestIO::OutEventVolumeTestDeepestResult lFineResult;
             mFineIntersectionTestModule.ComputeVolumeTestDeepest(&lFineQuery, &lFineResult);         // 0x828D4824
             lResult.mQueryId       = lFineResult.mQueryId;
             lResult.mfDepth        = lFineResult.mfDepth;
