@@ -263,6 +263,10 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                     CgsDev::Assert::FireAssert("Invalid plane segment trigger dimensions", KAC_FILE, 282);
                     CgsDev::Assert::EndAssert();
                 }
+                lrTrigger.mDimensions.x = lpPlane->mDimensions.x;
+                lrTrigger.mDimensions.y = lpPlane->mDimensions.y;
+                lrTrigger.mDimensions.z = KF_PLANE_SEGMENT_TRIGGER_DEPTH;
+                lrTrigger.mDimensions.w = 0.0f;
                 // A plane segment is a very thin box. The X360 feeds BoxVolume::Initialize the
                 // FULL X/Y dims and a literal Z half-extent of 0.0099999998 (== KF_PLANE_SEGMENT_
                 // TRIGGER_DEPTH, used directly -- NO x0.5 anywhere in the plane branch).
@@ -294,6 +298,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                     CgsDev::Assert::FireAssert("Invalid sphere trigger radius", KAC_FILE, 327);
                     CgsDev::Assert::EndAssert();
                 }
+                lrTrigger.mfRadius = lfRadius;
                 // Same staged rw::Resource as the two box branches (0x822D96C4..0x822D96EC).
                 rw::Resource lResource = {};
                 lResource.m_baseResources[0] = laVolumeStorage;
@@ -309,6 +314,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
             {
                 // Box: BoxVolume::Initialize gets the HALVED dims (the asm vmulfp128 by 0.5).
                 const auto* lpBox = static_cast<const TriggerEntityModuleIO::InAddBoxTriggerEvent*>(lpEvent);
+                lrTrigger.mDimensions = lpBox->mDimensions;
                 const f32 lfHX = lpBox->mDimensions.x * 0.5f;
                 const f32 lfHY = lpBox->mDimensions.y * 0.5f;
                 const f32 lfHZ = lpBox->mDimensions.z * 0.5f;

@@ -44,11 +44,11 @@
 // ============================================================================================
 // The DecFIGS (PS3) build of this same class has SIX more OnChange* callbacks (one per
 // mfLeanProp* member, PS3 0x6B54AC/0x6B5C80..0x6B5D90) plus RenderWorld and GetPath overrides.
-// The ARTIST image has NONE of them: the whole export set contains seven OnChange* symbols, no
-// PropDebugComponent::RenderWorld and no PropDebugComponent::GetPath, and ARTIST's OnActivate
-// @0x825E3628 registers exactly the seven variables below plus five namespace-scope floats.
-// So the six lean-prop members are storage the ARTIST build never wires up, mbRenderWorldContacts
-// is registered but read by nothing in this image, and no callback/override is invented here.
+// ARTIST has seven OnChange* symbols and registers seven member tuning floats plus five
+// namespace-scope floats. The lean-prop members are not wired into its OnActivate.
+// RenderWorld is retained at 0x825BADE0 in the original IDB and is selected by vtable
+// 0x820CDF60 slot +4; its missing per-function export did not imply a missing method.
+// GetPath uses the folded Physics-path implementation in slot +0x10.
 namespace BrnPhysics
 {
 namespace Props
@@ -69,6 +69,9 @@ namespace Props
 
         // 0x82628EB0 -- `if (mbRenderStats) RenderStats(lpRender);`, verbatim.
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) override;
+
+        // ARTIST 0x825BADE0; vtable 0x820CDF60 slot +4.
+        void RenderWorld(CgsDev::Debug3DImmediateRender* lpRender) override;
 
     protected:
         // 0x825BADD0 -- returns "Prop Manager".
