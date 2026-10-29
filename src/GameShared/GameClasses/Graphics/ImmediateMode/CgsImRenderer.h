@@ -24,6 +24,8 @@ namespace renderengine
 }
 
 namespace rw { struct IResourceAllocator; }
+namespace BrnGame { struct LoadingScreenRenderer; }
+class cParticleRender;
 
 namespace CgsGraphics
 {
@@ -39,6 +41,10 @@ namespace CgsGraphics
 
     struct ImRendererBase
     {
+        // ARTIST loading/Lion draws consume this same shared state library.
+        friend struct BrnGame::LoadingScreenRenderer;
+        friend class ::cParticleRender;
+
         void SetState(const BlendState* lpState);
         void SetState(const DepthStencilState* lpState);
         void SetState(const DepthStencilState* lpState, u32 luStencilRef);

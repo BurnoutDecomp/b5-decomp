@@ -5,7 +5,7 @@
 
 // includes folded in from the CgsDispatchBin_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
-#include <intrin.h>   // _InterlockedIncrement -- the shared block counter
+#include <xtl.h>      // native _InterlockedIncrement declaration
 
 // =============================================================================
 // CgsDispatcher.cpp

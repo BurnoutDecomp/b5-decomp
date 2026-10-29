@@ -134,15 +134,15 @@ namespace CgsGraphics
         u16 maQueryIds[KI_MAX_NUM_QUERIES];     // +0x2B0 (128 bytes -> ends 0x330)
         // ARTIST Construct initializes these state bytes before creating the vertex/index buffers
         // and the caller-sized query list.
-        bool mbRenderingMesh = false;            // +0x330 (Construct @0x827F1E00)
-        bool mbOcclusionEnabled = false;         // +0x331
-        bool mbShowOccludeeBBs = false;           // +0x332
-        bool mbOccludeesDoubleSided = false;      // +0x333
-        bool mbOcclusionCheapShader = true;       // +0x334
-        bool mbDisplayStats = false;              // +0x335
-        bool mbDetectNearClipIntersections = true;// +0x336
-        bool mbImmediateMode = false;             // +0x337
-        bool mbConditionalRendering = true;       // +0x338
+        bool mbRenderingMesh;            // +0x330 (Construct @0x827F1E00)
+        bool mbOcclusionEnabled;         // +0x331
+        bool mbShowOccludeeBBs;           // +0x332
+        bool mbOccludeesDoubleSided;      // +0x333
+        bool mbOcclusionCheapShader;       // +0x334
+        bool mbDisplayStats;              // +0x335
+        bool mbDetectNearClipIntersections;// +0x336
+        bool mbImmediateMode;             // +0x337
+        bool mbConditionalRendering;       // +0x338
         OcclusionQueryList* mpQueryList;           // +0x33C (Construct @0x827F1E00)
     };
 
