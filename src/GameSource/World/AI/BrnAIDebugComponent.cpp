@@ -6,6 +6,7 @@
 #include "GameSource/World/AI/BrnAIAggression.h"
 #include "GameSource/World/AI/BrnAIBuzzBy.h"
 #include "GameSource/BurnoutConstants.h"                                           // EActiveRaceCarIndex operator++
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::SimpleStrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
@@ -31,6 +32,55 @@ int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText
 
 namespace BrnAI
 {
+
+// ARTIST 0x82767090: the portal-target flag at +0x2e is deliberately untouched.
+void AIDebugComponent::Construct(AIModule* lpAIModule)
+{
+    CGS_ASSERT(lpAIModule != 0, "lpAIModule != NULL");
+    mpAIModule = lpAIModule;
+    mpAISectionsData = 0;
+    miCurrentAICar = 0;
+    mbDrawCarUnderSection = false;
+    mbDrawAICarStatesTable = false;
+    mbDrawSpeedCalculationStateOnTable = false;
+    mbDrawrPersonalityOnTable = false;
+    mbDrawBuzzTime = false;
+    mbDrawAICarStatesOnCar = false;
+    mbDrawBehaviourOnCar = false;
+    mbDrawProximityOnCar = false;
+    mbDrawSpeedOnCar = false;
+    mbDrawFanModeOnCar = false;
+    mbDrawSpeedMatchingOnCar = false;
+    mbDrawAggressionStateOnCar = false;
+    mbDrawAggressionLevelOnCar = false;
+    mbDrawPersonalityTypeOnCar = false;
+    mbDrawScheduleOffsetOnCar = false;
+    mbDrawInvulnerabilityOnCar = false;
+    mbDrawPlayerSlowSpeedTimeOnCar = false;
+    mbDrawAICarRoute = false;
+    mbDrawCurrentSection = false;
+    mbDrawResetOnTrackSection = false;
+    mbDrawAllDriverData = false;
+    mbDrawRacingLines = false;
+    mbDrawDirectVector = false;
+    mbDrawDestinationVector = false;
+    mbDrawControlData = false;
+    mbDrawAggressiveTargetPoints = false;
+    mbDrawAggressiveWarning = false;
+    mbDrawNearbyVehicles = false;
+    mbDrawCarIndices = false;
+    mbDrawChevrons = false;
+    mbDrawHNGMap = false;
+    mbDrawFinishDebugData = false;
+    mbDrawDriftingDebug = false;
+    mbAlwaysWantToDrift = false;
+    mbShowDriftTarget = false;
+    mfCruisingSpeed = 80.0f;
+    mPIDDebugData.meCoefficientToBeTuned = E_COEFFICIENT_COUNT;
+    mPIDDebugData.mfPCoefficient = 0.0f;
+    mPIDDebugData.mfICoefficient = 0.0f;
+    mPIDDebugData.mfDCoefficient = 0.0f;
+}
 
 // @0x827671B8  The component's display name in the debug menu.
 const char* AIDebugComponent::GetName() const
@@ -111,7 +161,7 @@ namespace
     const char* const KPC_ROUTE_INVALID_BLOCK   = "Blocked ";
 
     // A car's checkpoint distance holds this until it has a checkpoint to measure to.
-    const f32 KF_NO_CHECKPOINT_DISTANCE = 3.4028235e+38f;
+    const f32 KF_NO_CHECKPOINT_DISTANCE = 3.4028234663852886e+38f;
 
     // The route section after the car's next route node, 0x7FFF when there is none.
     u16 GetNextNextRouteSectionIndex(const AICar* lpCar)
@@ -317,7 +367,7 @@ void AIDebugComponent::DrawAIStatesTable(CgsDev::Debug2DImmediateRender* lpDispl
     CgsDev::SimpleStrStream lStream;
     CgsDev::StrStreamBase&  lrStream = lStream;
 
-    f32                 lfNearestDistance = 3.4028235e+38f;
+    f32                 lfNearestDistance = 3.4028234663852886e+38f;
     EGlobalRaceCarIndex leNearestCar      = E_GLOBAL_RACE_CAR_INDEX_COUNT;
     s32                 liCarColumns      = 0;
 

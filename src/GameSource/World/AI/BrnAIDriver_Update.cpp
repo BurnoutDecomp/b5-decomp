@@ -242,7 +242,7 @@ namespace BrnAI
         }
 
         const f32 lfPlayerSpeed = lpPlayerCar->GetSpeed();
-        const f32 lfDecentSpeed = mpCarHost->GetDecentSpeed();
+        const f32 lfDecentSpeed = mpCar->GetDecentSpeed();
 
         // 0x82770378 `fcmpu playerSpeed, decent ; bge` -> the decay arm WITHOUT asking
         // IsPlayerProtected. bge is bc 4,lt: taken on >= AND on unordered, so only an ordered
@@ -287,14 +287,14 @@ namespace BrnAI
     bool AIDriver::IsPlayerProtected(AICar* lpPlayerCar)
     {
         if (lpPlayerCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(2)   // lwz 0x14C0
-            && mpCarHost->mfRaceTimer < KF_PRE_AGGRESSION_DELAY                          // flt_820C488C == 5.0
+            && mpCar->mfRaceTimer < KF_PRE_AGGRESSION_DELAY                          // flt_820C488C == 5.0
             && !lpPlayerCar->mbIsDrivenByPlayer)                                         // lbz 0x154A
         {
             return false;
         }
 
         if (!lpPlayerCar->mbIsDrivenByPlayer)                       return true;
-        if (mpCarHost->mfRaceTimer < KF_PRE_AGGRESSION_DELAY)       return true;
+        if (mpCar->mfRaceTimer < KF_PRE_AGGRESSION_DELAY)       return true;
         if (mfPlayerTimeSinceCrash < KF_BE_KIND_AFTER_CRASH_DELAY)  return true;   // flt_820C41E0 == 8.0
         if (mfPlayerTimeSinceAIDriven < KF_BE_KIND_AFTER_AI_DRIVEN_DELAY) return true;  // flt_820C4154 == 3.0
         return false;
@@ -312,21 +312,21 @@ namespace BrnAI
         CGS_ASSERT(lpPlayerCar != 0, "lpPlayerCar");                     // :493
 
         // The player is crashing and this car drew an odd opponent index -> pile in (bias 2).
-        if (lpPlayerCar->IsCrashing() && (mpCarHost->miOpponentIndex % 2) != 0)
+        if (lpPlayerCar->IsCrashing() && (mpCar->miOpponentIndex % 2) != 0)
         {
             return 2;
         }
 
         if (IsPlayerProtected(lpPlayerCar))
         {
-            if (mpCarHost->mfBuzzDistanceToPlayer < KF_AGGRESSIVE_FAN_BUZZ_DISTANCE)  // flt_820C4150 == 10
+            if (mpCar->mfBuzzDistanceToPlayer < KF_AGGRESSIVE_FAN_BUZZ_DISTANCE)  // flt_820C4150 == 10
                 return 0;
-            if (mpCarHost->meRelativeLocation == E_RELATIVE_BEHIND_APPROACHING)       // lwz 0x14D4 == 0
+            if (mpCar->meRelativeLocation == E_RELATIVE_BEHIND_APPROACHING)       // lwz 0x14D4 == 0
                 return 0;
         }
 
         // 0x82766200: behind-approaching (0) or in-front-approaching (2) -> consider a spurt.
-        const s32 liRelative = static_cast<s32>(mpCarHost->meRelativeLocation);
+        const s32 liRelative = static_cast<s32>(mpCar->meRelativeLocation);
         if (liRelative == 0 || liRelative == 2)
         {
             bool lbSpurt = false;
@@ -334,40 +334,40 @@ namespace BrnAI
             // NaN slow-speed time is considered (FX-AINAN2; `>=` skipped it).
             if (!(mfPlayerSlowSpeedTime < KF_AGGRESSIVE_FAN_SLOW_PLAYER_TIME))        // flt_820C4250 == 6.0
             {
-                const f32 lfMySpeed = mpCarHost->GetSpeed();
+                const f32 lfMySpeed = mpCar->GetSpeed();
                 if (lfMySpeed > lpPlayerCar->GetSpeed() + KF_AGGRESSIVE_FAN_SPEED_ADVANTAGE)  // flt_8300D934 == 10 mph
                     lbSpurt = true;
             }
             if (!lbSpurt
-                && mpCarHost->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6)
+                && mpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6)
                 && lpPlayerCar->GetSpeed() < KF_AGGRESSIVE_FAN_MARKED_MAN_PLAYER_SPEED)       // flt_8300D774 == 90 mph
             {
                 lbSpurt = true;
             }
             if (lbSpurt)
             {
-                if (mpCarHost->mfBuzzDistanceToPlayer < KF_AGGRESSIVE_FAN_BUZZ_DISTANCE)
+                if (mpCar->mfBuzzDistanceToPlayer < KF_AGGRESSIVE_FAN_BUZZ_DISTANCE)
                     return 7;
                 return 2;
             }
         }
 
         // 0x8276629C: only the in-front-separating case (3) gets the distance-staggered fans.
-        const s32 liRelative2 = static_cast<s32>(mpCarHost->meRelativeLocation);
+        const s32 liRelative2 = static_cast<s32>(mpCar->meRelativeLocation);
         if (liRelative2 == 2 || liRelative2 != 3)
         {
             return 0;
         }
 
-        const f32 lfDistance = mpCarHost->mfBuzzDistanceToPlayer;
+        const f32 lfDistance = mpCar->mfBuzzDistanceToPlayer;
         if (!(lfDistance > KF_AGGRESSIVE_FAN_MIN_DISTANCE))                          // flt_820C488C == 5
             return 0;
-        if (mpCarHost->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6))
+        if (mpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(6))
             return 0;
         if (lfDistance > KF_AGGRESSIVE_FAN_MAX_DISTANCE)                             // flt_820C3FAC == 100
             return 0;
 
-        const s32 liOpponent = static_cast<s32>(mpCarHost->miOpponentIndex);
+        const s32 liOpponent = static_cast<s32>(mpCar->miOpponentIndex);
         if (lfDistance > KF_AGGRESSIVE_FAN_MID_DISTANCE)                             // flt_820C4238 == 15
             return ((liOpponent % 3) == 0) ? 0 : 5;                                  // andi. r3, r11, 5
         return ((liOpponent % 2) == 0) ? 0 : 6;                                      // rlwinm r3, r11, 0,29,30
@@ -392,7 +392,7 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::UpdateStuck(f32 lfTimeStep)
     {
-        AICar* lpCar = mpCarHost;
+        AICar* lpCar = mpCar;
         const f32 lfSpeed = lpCar->GetSpeed();
         const s32 liBehaviour = static_cast<s32>(lpCar->meBehaviour);     // lwz 0x14B4
 
@@ -424,9 +424,9 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::IsStuck()
     {
-        CGS_ASSERT(mpCarHost != 0, "mpCar != NULL");                       // :2519
+        CGS_ASSERT(mpCar != 0, "mpCar != NULL");                       // :2519
 
-        AICar* lpCar = mpCarHost;
+        AICar* lpCar = mpCar;
         f32 lfThreshold = KF_AI_TIME_FOR_BEING_STUCK;                      // 5.0
 
         if (lpCar->GetRouteFindingStyle() != static_cast<ERouteFindingStyle>(0)
@@ -456,7 +456,7 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::CheckForBoosting()
     {
-        const f32 lfSpeed = mpCarHost->GetSpeed();
+        const f32 lfSpeed = mpCar->GetSpeed();
 
         if (mbUseForcedSpeed)                                              // lbz 0x1D66
         {
@@ -488,14 +488,14 @@ namespace BrnAI
     {
         u8 lbUseForced = 0;
 
-        if (mpCarHost->meSpeedSelectionMethod != 0                       // lwz 0x14BC(car)
+        if (mpCar->meSpeedSelectionMethod != 0                       // lwz 0x14BC(car)
             && GetAggression()->IsSpeedMatchingType())                       // lwz 0x1C58 != 0
         {
             // X360 @0x82793058: f1 = mfDesiredSpeed, f2 = dt (the FIRST float slot carries the
             // target speed, the second the time step -- read off the register set-up, not the
             // DWARF parameter names).
             const f32 lfMatched = GetAggression()->CalcSpeedMatchSpeed(mfDesiredSpeed, lfTimeStep);
-            const f32 lfDecent  = mpCarHost->GetDecentSpeed();
+            const f32 lfDecent  = mpCar->GetDecentSpeed();
             const bool lbBelowTop = (mfDesiredSpeed < mfTopSpeed);       // 0x1D10 < 0x1D14
 
             // fsel f0, (decent - matched), decent, matched == max(decent, matched)
@@ -531,7 +531,7 @@ namespace BrnAI
         (void)lPlayerCarPosition;
         (void)lbDoInRangeCatchup;
 
-        mfTopSpeed = mpCarHost->GetDesiredSpeed();            // lfs 0x14E8(car) -> stfs 0x1D14
+        mfTopSpeed = mpCar->GetDesiredSpeed();            // lfs 0x14E8(car) -> stfs 0x1D14
 
         const f32 lfHardShoulder = HardShoulderSpeed(mfTopSpeed);
         const f32 lfProximity    = ProximitySpeed(mfTopSpeed);
@@ -563,7 +563,7 @@ namespace BrnAI
 
 #if BRN_AI_RACINGLINE_STACK_PRESENT
         const f32 lfRoadPercentage =
-            mRacingLineGenerator.GetRoadPositionAsPercentage(&GetRacingLine(), mpCarHost);
+            mRacingLineGenerator.GetRoadPositionAsPercentage(&GetRacingLine(), mpCar);
 #else
 #endif
 
@@ -597,7 +597,7 @@ namespace BrnAI
             case E_DRIFT_STATE_NORMAL_DRIVING:                    // 0x827996B0
                 CheckForSpeedMatch(lfTimeStep);
                 AttemptToDriveAtDesiredSpeed(lfTimeStep);
-                if (mpCarHost->mbIsDrifting)                      // lbz 0x1544
+                if (mpCar->mbIsDrifting)                      // lbz 0x1544
                     SetDriftState(E_DRIFT_STATE_DRIFTING);
                 if (EstimateNeedForDrifting())
                     SetDriftState(E_DRIFT_STATE_START_DRIFT);
@@ -607,7 +607,7 @@ namespace BrnAI
             case E_DRIFT_STATE_START_DRIFT:                       // 0x82799710
                 CheckForSpeedMatch(lfTimeStep);
                 AttemptToDriveAtDesiredSpeed(lfTimeStep);
-                if (mpCarHost->mbIsDrifting)
+                if (mpCar->mbIsDrifting)
                 {
                     SetDriftState(E_DRIFT_STATE_DRIFTING);
                     break;
@@ -625,7 +625,7 @@ namespace BrnAI
                 mbWantToEnterDrift = 1;                           // stb 1, 0x1D65
                 mbWantToExitDrift  = 0;                           // stb 0, 0x1D64
                 AttemptToDriveAtDesiredSpeedInDrift();
-                if (!mpCarHost->mbIsDrifting)
+                if (!mpCar->mbIsDrifting)
                     SetDriftState(E_DRIFT_STATE_NORMAL_DRIVING);
 
                 const f32 lfDriftAngle =
@@ -645,7 +645,7 @@ namespace BrnAI
                 mfAngleForDrift    = 0.0f;   // 0x1D4C
                 mbWantToEnterDrift = 0;      // 0x1D65
                 mbWantToExitDrift  = 1;      // 0x1D64
-                if (!mpCarHost->mbIsDrifting)
+                if (!mpCar->mbIsDrifting)
                     SetDriftState(E_DRIFT_STATE_NORMAL_DRIVING);
                 break;
 
@@ -663,7 +663,7 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::EstimateNeedForDrifting()
     {
-        if (mpCarHost->GetSpeed() < K_MIN_DRIFT_SPEED)              // flt_8300DBE4 == 30 mph
+        if (mpCar->GetSpeed() < K_MIN_DRIFT_SPEED)              // flt_8300DBE4 == 30 mph
             return false;
 
         const f32 lfAngle = DetermineDriftSteeringAngle(E_DRIFT_DIRECTION_SELECTION_CAR_MOVING);
@@ -698,13 +698,13 @@ namespace BrnAI
         Vector2 lFrom;
         if (leSelection == E_DRIFT_DIRECTION_SELECTION_CAR_MOVING)  // cmpwi r4,0
         {
-            lFrom = To2DU(mpCarHost->GetVelocity());                // @0x8276B570
+            lFrom = To2DU(mpCar->GetVelocity());                // @0x8276B570
             if (!(std::fabs(lFrom.x) > KF_STEERING_VECTOR_EPSILON) &&
                 !(std::fabs(lFrom.y) > KF_STEERING_VECTOR_EPSILON))
-                lFrom = To2DU(mpCarHost->GetDirection());           // b 0x827932F8 -> @0x8276B488
+                lFrom = To2DU(mpCar->GetDirection());           // b 0x827932F8 -> @0x8276B488
         }
         else
-            lFrom = To2DU(mpCarHost->GetDirection());               // @0x8276B488
+            lFrom = To2DU(mpCar->GetDirection());               // @0x8276B488
 
         if (!(std::fabs(lFrom.x) > KF_STEERING_VECTOR_EPSILON) &&
             !(std::fabs(lFrom.y) > KF_STEERING_VECTOR_EPSILON))
@@ -726,7 +726,7 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::FindFinalDriftDirection(Vector2& lrOutDirection)
     {
-        f32 lfLookAhead = mpCarHost->GetSpeed() * KF_DRIFT_LOOK_AHEAD_SPEED_SCALE;   // * 1.1
+        f32 lfLookAhead = mpCar->GetSpeed() * KF_DRIFT_LOOK_AHEAD_SPEED_SCALE;   // * 1.1
         if (lfLookAhead < KF_DRIFT_LOOK_AHEAD_MIN)                                   // flt_820C4150 == 10
             lfLookAhead = KF_DRIFT_LOOK_AHEAD_MIN;
 
@@ -756,7 +756,7 @@ namespace BrnAI
         if (!GetRacingLine().mbIsInitialised)                       // lbz 0x1AF0 (this+6896)
             return false;
 
-        const f32 lfSpeed = mpCarHost->GetSpeed();
+        const f32 lfSpeed = mpCar->GetSpeed();
         f32 lfDistance = lfSpeed * lfTime;
         // fpu::Clamp<float> (DWARF), spelt as the two fsels because fsel picks its THIRD operand
         // on an unordered test (f30 = lfMinDistance, f31 = lfMaxDistance):
@@ -837,14 +837,14 @@ namespace BrnAI
         if (!ComputeRouteDirection(lRouteDirection))
             return;
 
-        const Vector2 lFacing = To2DU(mpCarHost->GetDirection());       // GetDirection + Flatten
+        const Vector2 lFacing = To2DU(mpCar->GetDirection());       // GetDirection + Flatten
         const f32 lfDot = Dot2D(lRouteDirection, lFacing);
 
         // vcmpgtfp v13(-KF_TRIGGER_TURN), v0(dot) -> -K > dot
         if (!(-KF_TRIGGER_TURN > lfDot))                                // flt_8300D74C == cos(60 deg)
             return;
 
-        AICar* lpCar = mpCarHost;
+        AICar* lpCar = mpCar;
         s32 liNewBehaviour;
         if (lpCar->GetSpeed() >= KF_QUICKTURN_SLOWNESS_DROPIN)          // flt_8300D960 == 30 mph
         {
@@ -872,12 +872,12 @@ namespace BrnAI
     // ================================================================================
     f32 AIDriver::GetQuickTurnSteering(Vector2 lVectorToTarget)
     {
-        const Vector2 lFacing = Normalize2DU(To2DU(mpCarHost->GetDirection()));
+        const Vector2 lFacing = Normalize2DU(To2DU(mpCar->GetDirection()));
 
         f32 lfSelector;
         if (GetRacingLine().mbCentreLineHereKnown)                      // lbz 0x1AF1 (this+6897)
         {
-            const Vector2 lCarPos2D = To2DU(mpCarHost->GetPosition());
+            const Vector2 lCarPos2D = To2DU(mpCar->GetPosition());
             // lvx128 v12, r31, 6912 == this+0x1B00 == mRacingLine.mCentreHere (RacingLine +0xBE0)
             const Vector2 lCentreHere = GetRacingLine().mCentreHere;
             const f32 lfDeltaX = lCentreHere.x - lCarPos2D.x;
@@ -902,9 +902,9 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::UpdateQuickTurn()
     {
-        const Vector2 lUseful = Normalize2DU(To2DU(mpCarHost->GetUsefulDirection()));
+        const Vector2 lUseful = Normalize2DU(To2DU(mpCar->GetUsefulDirection()));
         const Vector2 lTarget = GetTargetPosition();
-        const Vector2 lCarPos = To2DU(mpCarHost->GetPosition());
+        const Vector2 lCarPos = To2DU(mpCar->GetPosition());
 
         Vector2 lDelta;
         lDelta.x = lTarget.x - lCarPos.x;
@@ -914,13 +914,13 @@ namespace BrnAI
         const f32 lfDot = Dot2D(lUseful, lDelta);
 
         if (lfDot > KF_QUICKTURN_DROP_OUT                                // flt_8300DC00 == cos(30 deg)
-            || mpCarHost->GetSpeed() < KF_QUICKTURN_SLOWNESS_DROPOUT)    // flt_8300D6FC == 10 mph
+            || mpCar->GetSpeed() < KF_QUICKTURN_SLOWNESS_DROPOUT)    // flt_8300D6FC == 10 mph
         {
-            CGS_ASSERT(mpCarHost->mePreviousBehaviour != static_cast<EAIBehaviour>(5),
+            CGS_ASSERT(mpCar->mePreviousBehaviour != static_cast<EAIBehaviour>(5),
                        "Nested quick turns!\n");                          // :1151
-            const s32 liOldBehaviour = static_cast<s32>(mpCarHost->meBehaviour);
-            const s32 liNewBehaviour = static_cast<s32>(mpCarHost->mePreviousBehaviour);
-            mpCarHost->SetBehaviour(mpCarHost->mePreviousBehaviour);      // @0x82764DE0
+            const s32 liOldBehaviour = static_cast<s32>(mpCar->meBehaviour);
+            const s32 liNewBehaviour = static_cast<s32>(mpCar->mePreviousBehaviour);
+            mpCar->SetBehaviour(mpCar->mePreviousBehaviour);      // @0x82764DE0
         }
     }
 
@@ -945,7 +945,7 @@ namespace BrnAI
         if (!ComputeRouteDirection(lRouteDirection))
             return;
 
-        AICar* lpCar = mpCarHost;
+        AICar* lpCar = mpCar;
         const Vector2 lFacing = To2DU(lpCar->GetDirection());          // GetDirection + Flatten
         const f32 lfDot = Dot2D(lRouteDirection, lFacing);
 
@@ -985,7 +985,7 @@ namespace BrnAI
     {
         (void)lfTimeStep;   // the console reads only mpCar->mfBehaviourTimer here
 
-        AICar* lpCar = mpCarHost;
+        AICar* lpCar = mpCar;
 
         Vector2 lRouteDirection;
         if (!ComputeRouteDirection(lRouteDirection))
@@ -1024,7 +1024,7 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::InitialiseRacingLine()
     {
-        AICar* lpCar = mpCarHost;
+        AICar* lpCar = mpCar;
 
         mbIsRacingLineInitialised = 0;                        // stb 0, 0x1D68
         mbCurrentRouteComplete    = 0;                        // stb 0, 0x1D6A
@@ -1068,7 +1068,7 @@ namespace BrnAI
         // r7 = mpSectionsData (0x1CE4).
         mRacingLineGenerator.InitialiseRacingLine(&GetRacingLine(), lpCar,
                                                   lpCar->miNextRouteNodeIndex - 2,
-                                                  mpSectionsDataHost);   // @0x8278FB20
+                                                  mpSectionsData);   // @0x8278FB20
 #else
 #endif
 
@@ -1090,13 +1090,13 @@ namespace BrnAI
     {
         (void)lfTimeStep;   // the console body takes no float
 
-        CGS_ASSERT(mpCarHost != 0, "AI driver trying to make a racing line without a car");   // :993
+        CGS_ASSERT(mpCar != 0, "AI driver trying to make a racing line without a car");   // :993
         CGS_ASSERT(GetRacingLine().mbIsInitialised, "Racing line not initialised properly");  // :994
 
         // stvx128 v0, r31, 6736 == this+0x1A50 == mRacingLine.mCarPos (RacingLine +0xB30)
-        GetRacingLine().mCarPos = mpCarHost->GetPosition();
+        GetRacingLine().mCarPos = mpCar->GetPosition();
 
-        if (mpCarHost->meBehaviour == static_cast<EAIBehaviour>(4) && GetAggression()->IsTargetPosValid())
+        if (mpCar->meBehaviour == static_cast<EAIBehaviour>(4) && GetAggression()->IsTargetPosValid())
         {
             mbCurrentRouteComplete = 1;                                  // stb 1, 0x1D6A
             const Vector3 lTargetPos = GetAggression()->GetTargetPos();  // @0x827656D0
@@ -1133,10 +1133,10 @@ namespace BrnAI
                                   KF_BRAKING_MAX_LOOK_AHEAD_DIST,      // flt_820C41F0 == 75
                                   KF_BRAKING_MIN_LOOK_AHEAD_DIST))     // flt_82004000 == 16
         {
-            CGS_ASSERT(mpCarHost != 0, "No car available");            // :1058
+            CGS_ASSERT(mpCar != 0, "No car available");            // :1058
 
-            const Vector3 lUseful   = mpCarHost->GetUsefulDirection();  // @0x82770028
-            const Vector3 lPosition = mpCarHost->GetPosition();         // @0x8276B1F0
+            const Vector3 lUseful   = mpCar->GetUsefulDirection();  // @0x82770028
+            const Vector3 lPosition = mpCar->GetPosition();         // @0x8276B1F0
 
             mBrakingAnticipationPos.x = lPosition.x + lUseful.x;        // stvx 0x1CA0
             mBrakingAnticipationPos.y = lPosition.y + lUseful.y;
@@ -1160,7 +1160,7 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::CalcDistanceFromPlayer(Vector3 lPlayerCarPosition)
     {
-        const Vector3 lPosition = mpCarHost->GetPosition();
+        const Vector3 lPosition = mpCar->GetPosition();
         mfDistanceToPlayer = rw::math::vpu::Magnitude(lPosition - lPlayerCarPosition);   // stfs 0x1D08
     }
 
@@ -1178,10 +1178,10 @@ namespace BrnAI
     {
         ResetPIDTuningState();                                    // @0x8277DA48
 
-        if (mpCarHost != 0)
+        if (mpCar != 0)
         {
             // ARTIST8278B2D4..8278B344: keyed car -> handling -> steering.
-            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, 0);
+            Attrib::Gen::burnoutcarasset lAsset(mpCar->mCarAssetAttribKey, 0);
             Attrib::Gen::physicsvehiclehandling lHandling(
                 const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
             Attrib::Gen::physicsvehiclesteeringattribs lSteering(
@@ -1209,10 +1209,10 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::ResetPIDTuningState()
     {
-        if (mpCarHost != 0)
+        if (mpCar != 0)
         {
             //8277DA68..8277DAC4: preserve both validation and balanced instance lifetimes.
-            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, 0);
+            Attrib::Gen::burnoutcarasset lAsset(mpCar->mCarAssetAttribKey, 0);
             Attrib::Gen::physicsvehiclehandling lHandling(
                 const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
             Attrib::Gen::physicsvehiclesteeringattribs lSteering(
@@ -1259,9 +1259,9 @@ namespace BrnAI
             // X360: UpdateWeightings(this+1808 == mSteeringFan, mpCar (0x1CE0), this+3872 ==
             // mRacingLine, this+6960 == mRacingLineGenerator, this == &mNearbyVehicles,
             // *(this+7408) == meAggressionVictim (0x1CF0)).
-            mSteeringFan.UpdateWeightings(mpCarHost, &GetRacingLine(), &mRacingLineGenerator,
+            mSteeringFan.UpdateWeightings(mpCar, &GetRacingLine(), &mRacingLineGenerator,
                                           GetNearbyVehicles(),
-                                          static_cast<EGlobalRaceCarIndex>(meAggressionVictimHost));
+                                          static_cast<EGlobalRaceCarIndex>(meAggressionVictim));
 #endif
         }
 
@@ -1296,7 +1296,7 @@ namespace BrnAI
     // ================================================================================
     s32 AIDriver::GetIndexOfFurthestVehicle(Vector2 lNewPosition)
     {
-        const Vector3 lCarPosition   = mpCarHost->GetPosition();
+        const Vector3 lCarPosition   = mpCar->GetPosition();
         const Vector2 lCar2DPosition = To2DU(lCarPosition);
 
         Vector2 lToCandidate;
@@ -1380,14 +1380,14 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::AddNearbyAIToAvoidance(const AICar* lpCar)
     {
-        const Vector3 lMyPosition    = mpCarHost->GetPosition();
+        const Vector3 lMyPosition    = mpCar->GetPosition();
         const Vector3 lOtherPosition = lpCar->GetPosition();
         const Vector3 lSeparation    = lOtherPosition - lMyPosition;
 
         if (rw::math::vpu::Dot(lSeparation, lSeparation) > KF_NEARBY_AI_MAX_DISTANCE_SQ)  // flt_8201C220
             return false;
 
-        const Vector3 lUseful = mpCarHost->GetUsefulDirection();
+        const Vector3 lUseful = mpCar->GetUsefulDirection();
         if (rw::math::vpu::Dot(lSeparation, lUseful) < 0.0f && !lpCar->mbIsPlayer)         // lbz 0x1549
             return false;
 
