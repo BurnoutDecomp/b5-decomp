@@ -2646,7 +2646,7 @@ void CollisionStateManager::UpdateResolver(
 bool CollisionStateManager::ProcessCollision(
     OutputCollision& lrOutput, const InputCollision& lrInput)
 {
-    lrOutput = OutputCollision();
+    // ARTIST826BEA20 writes the input fields directly, retaining unmodified state.
     lrOutput.mePipeline = lrInput.mePipeline;
     lrOutput.maMaterial[0] = lrInput.maMaterial[0];
     lrOutput.maMaterial[1] = lrInput.maMaterial[1];
