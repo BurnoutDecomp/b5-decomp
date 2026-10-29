@@ -23,6 +23,7 @@
 namespace renderengine
 {
     class Texture;
+    class PixelBuffer;
     class RenderTargetState;   // the D3D surface-state object Device::SetState binds
     class TextureState;        // the colour sampler state (held by pointer only)
 }
@@ -103,8 +104,8 @@ namespace postfx
             }
         };
 
-        u32                                       mpReserved0;     // +0x00
-        renderengine::PixelBuffer::SurfaceHeader* mpPixelBuffer;   // +0x04  PixelBuffer::Initialize result
+        rw::IResourceAllocator*                   mpReserved0;     // +0x00
+        renderengine::PixelBuffer*                mpPixelBuffer;   // +0x04  PixelBuffer::Initialize result
         renderengine::Texture*       mpTexture;       // +0x08  AllocateAndInitializeTexture result
         renderengine::TextureState*  mpTextureState;  // +0x0C  TextureState::Initialize result
         renderengine::Texture*       mpHiZTexture;    // +0x10  depth path: hierarchical-Z companion
@@ -124,14 +125,8 @@ namespace postfx
         //   * the X360 image reads it with `lbz r11, 0x14(r3)` in Target::Resolve(u32) @0x823F9170
         //     and branches on `<= 1` -- "one section, or an atlas of several", a count test.
         //
-        // The byte's OFFSET is unchanged: +0x14, immediately after the four widened pointers on
-        // the console's 4-byte-pointer image and after four 8-byte pointers here; every access is
-        // by name, so the console offset is documentation, never arithmetic.
-        // NOTE (not acted on): the DWARF puts `bool m_bIsShared` in the slot this header still
-        // spells `mau8Pad15[3]`. No X360 reader or writer of that byte has been attested, so it
-        // stays padding rather than becoming an unattested member.
-        u8                           mu8NumSections;  // +0x14  the SECTION COUNT (see above)
-        u8                           mau8Pad15[3];    // +0x15  (DWARF: m_bIsShared lives here)
+        u8                           mu8NumSections;  // +0x14
+        bool                         mbIsShared;      // +0x15, ARTIST constructor 0x82408A38
 
         // X360 0x824034D0 -- build a colour surface (PixelBuffer + sampleable texture + sampler state).
         void CreateColor(const Parameters* lpParameters);
@@ -309,30 +304,16 @@ namespace postfx
         u32                              muColourMode;         // +0x10  RenderTargetMode
         u32                              muDepthStencilMode;   // +0x14  RenderTargetMode
         u8                               mu8HasColour;         // +0x18
-        u8                               mau8Pad19[3];         // +0x19
+        u8                               mu8NumSections;        // +0x19
         renderengine::RenderTargetState* mpSection0State;      // +0x1C  CreateStates' section-0 state
-        Target                           maColourTargets[3];   // +0x20  (3 * 0x18)
+        Target                           maColourTargets[4];   // +0x20, four 0x18-byte targets
         Target                           mDepthTarget;         // +0x80
-        renderengine::RenderTargetState* mpProvidedState;      // +0x84  provided state (USE_PROVIDED)
-        u32                              muProvidedTextureId;  // +0x88
-        // ⚠ MISNAMED, and the name is load-bearing enough to be worth this note (2026-08-15).
-        // The X360 word at +0x8C is `mDepthTarget.mpTextureState` -- the DEPTH sampler state --
-        // not a colour one: mDepthTarget starts at +0x80 and a Target record is 0x18 bytes, so
-        // the "provided state / provided texture id / colour texture state / provided colour
-        // state" quartet modelled at +0x84..+0x90 is the SAME storage as that record's
-        // pixel-buffer / texture / texture-state / hi-Z fields. RenderTarget::CreateStates
-        // @0x82403A18-0x82403B44 settles it: the state stored here binds mDepthTarget's hi-Z-else-
-        // depth texture, and it is built ONLY when Parameters::mbUseDepthStencilAsTexture is set.
-        // PostFxRenderTarget.cpp therefore points BOTH host members at the one state object
-        // and new callers should use GetDepthTextureState(). RENAME PENDING: this member and its
-        // one reader (BrnPostFx.cpp:813, the SamplerDepth argument) belong to the post-fx TU.
-        renderengine::TextureState*      mpColourTextureState; // +0x8C  == mDepthTarget.mpTextureState
-        renderengine::RenderTargetState* mpProvidedColourState;// +0x90
-        u8                               mu8UsesProvidedState; // +0x95
-        u8                               mau8Pad96[2];         // +0x96
 
-        renderengine::RenderTargetState* mapSectionState[KU_NUM_SECTION_STATES];
     };
+
+    CGS_STATIC_ASSERT((sizeof(Target) == 0x18), "ARTIST target size");
+    CGS_STATIC_ASSERT((offsetof(RenderTarget, mDepthTarget) == 0x80), "ARTIST depth target");
+    CGS_STATIC_ASSERT((sizeof(RenderTarget) == 0x98), "ARTIST render target size");
 
     // The engine's default render-target state (X360 dword_83271614, installed by
     // renderengine::Device::Start). Used as section 0's state for targets that have none of their own.
