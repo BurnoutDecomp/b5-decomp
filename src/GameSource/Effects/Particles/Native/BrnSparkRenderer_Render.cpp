@@ -773,7 +773,7 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
           // dword_83010F60 on unit 0
 
     mpRenderer->BeginRendering();
-    mpRenderer->SetTransform(&lViewProjectionMatrix);
+    mpRenderer->SetTransform(lViewProjectionMatrix);
 
     const u32 luVertexStride = NativeParticleVertex::GetStride();   // packed GPU24, CPU record32
     D3DDevice_SetStreamSource(gpD3DDevice, 0, static_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);

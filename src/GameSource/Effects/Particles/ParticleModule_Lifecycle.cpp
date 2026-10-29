@@ -1260,8 +1260,8 @@ void ParticleModule::ResetSparkFrameData(f32 lfTimeStamp)
     rw::math::vpu::Matrix44 lProjectionMatrix;
     lProjectionMatrix.SetIdentity();
 
-    mSparkFrameDataSetUpdate.Reset(lViewMatrix, lProjectionMatrix, lfTimeStamp);   // this + 151600
-    mSparkFrameDataSetRender.Reset(lViewMatrix, lProjectionMatrix, lfTimeStamp);   // this + 154928
+    mParticleRenderJobDataSparks.mSparkFrameDataSet.Reset(lViewMatrix, lProjectionMatrix, lfTimeStamp);   // this + 151600
+    mParticleRenderJobDataParticles.mSparkFrameDataSet.Reset(lViewMatrix, lProjectionMatrix, lfTimeStamp);   // this + 154928
 }
 
 }   // namespace BrnParticle

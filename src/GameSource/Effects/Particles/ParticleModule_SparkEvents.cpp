@@ -357,7 +357,7 @@ namespace BrnParticle
     //  4. THE SPARK'S BIRTH TIME IS EXPRESSED IN THE MOTION-BLUR RING'S CLOCK. SpawnSpark computes
     //     `(lfCurrentTime - lfTimeSinceEvent) + lfBirthTimeOffset`, and this call site passes the
     //     EVENT's time as lfCurrentTime, the render data's time as lfTimeSinceEvent and the ring's
-    //     newest timestamp (+0x250B0 == mSparkFrameDataSetUpdate.maFrames[0].mfTimeStamp) as the
+    //     newest timestamp (+0x250B0 == mParticleRenderJobDataSparks.mSparkFrameDataSet.maFrames[0].mfTimeStamp) as the
     //     offset -- i.e. "how long ago the contact happened, measured back from the ring's now".
     //     Getting that wrong is invisible in a counter and fatal on screen: the ribbon would be
     //     evaluated at an age outside the blur window and cull.
@@ -369,7 +369,7 @@ namespace BrnParticle
 
         // f27 / f26, hoisted out of both loops by the console exactly as they are here.
         const f32 lfRenderTime = lrRenderData.mfCurrentTime;                             // r18 + 8
-        const f32 lfRingTime   = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;       // +0x250B0
+        const f32 lfRingTime   = mParticleRenderJobDataSparks.mSparkFrameDataSet.GetFrame(0).mfTimeStamp;       // +0x250B0
 
         // (1) the speed ramp.
         const Vector3& lrEventVelocity = lpEvent->mvVelocity;
@@ -569,7 +569,7 @@ namespace BrnParticle
 
         const Matrix44Affine& lrFrame = lpEvent->mTransform;
         const f32 lfRenderTime = lrRenderData.mfCurrentTime;                            // f27 (r5 + 8)
-        const f32 lfRingTime   = mSparkFrameDataSetUpdate.GetFrame(0).mfTimeStamp;      // f26 (+0x250B0)
+        const f32 lfRingTime   = mParticleRenderJobDataSparks.mSparkFrameDataSet.GetFrame(0).mfTimeStamp;      // f26 (+0x250B0)
         const f32 lfGroundY    = lpEvent->mfGroundPositionY;                           // f25
 
         // v121 -- the reflection axis: x * (2 * amount).

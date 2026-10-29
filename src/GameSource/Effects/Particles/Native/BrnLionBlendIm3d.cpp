@@ -548,9 +548,7 @@ namespace
 
 void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
 {
-    // asm words 3..37 -- mCurrentTransform = identity. (mauTransform is the committed
-    // ImRenderer<V> alias for Im3dBase<V>::mCurrentTransform at the console's +0x80; see the
-    // "ONE CONSOLE WORD, TWO HOST HOMES" flag at the head of BrnLionBlendIm3d.h.)
+    // ARTIST stores the identity into the native Im3dBase transform at+0x80.
     static const f32 KAF_IDENTITY[16] =
     {
         1.0f, 0.0f, 0.0f, 0.0f,   // w::math::vpu::detail::gIVector @0x82181500
@@ -558,7 +556,7 @@ void Im3dBlend::Construct(rw::IResourceAllocator* lpAllocator)
         0.0f, 0.0f, 1.0f, 0.0f,   // 0x82181520
         0.0f, 0.0f, 0.0f, 1.0f,   // 0x82181530
     };
-    memcpy(mauTransform, KAF_IDENTITY, sizeof(mauTransform));
+    memcpy(&mCurrentTransform, KAF_IDENTITY, sizeof(mCurrentTransform));
 
     // asm words 13..44 -- the two program pairs, in slot order.
     const void* const lapVertexProgramBinary[2] = { BrnParticlePrograms::gaLionBlendVertex, BrnParticlePrograms::gaLionBlendZFadeVertex };

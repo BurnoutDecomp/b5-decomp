@@ -2,6 +2,9 @@
 #define GAMESOURCE_EFFECTS_PARTICLES_PARTICLEMODULE_H
 
 #include "types.hpp"
+#include "SDKs/EATech/eajobs/job.h"
+#include "GameSource/Jobs/ParticleRender/ParticleRender.h"
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; vtable + the two RWMutexes the ctor constructs inline via its DataBuffers)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<16384,16> (mReceiverQueue)
@@ -726,8 +729,6 @@ namespace BrnParticle
         // fills more than that, so the pad is clamped to zero rather than made negative; the
         // console offset it used to reproduce is recorded in the comment, which is all it ever
         // was (nothing reads these members by absolute offset).
-        u8 maPadIfaceAToB[(0x91A0 - 0x9010) > sizeof(CgsGraphics::Im3d)
-                          ? (0x91A0 - 0x9010) - sizeof(CgsGraphics::Im3d) : 1]; // -> +0x91A0 on the console
         // +0x91A0 (37280). NOT a ContainedInterface placeholder any more: this IS the
         // BrnGraphics::Im3dTexPlusLighting that BrnDebrisRenderer borrows, and
         // ParticleModule::Prepare builds it with Im3dTexPlusLighting::Construct (the same
@@ -737,8 +738,6 @@ namespace BrnParticle
         // base + six 4-byte shader-variable handles); host pointers widen the base, so the pad
         // below is clamped the same way maPadIfaceAToB is.
         BrnGraphics::Im3dTexPlusLighting mWorldTexRenderer; // +0x91A0 (37280)
-        u8 maPadIfaceBToC[(0x9210 - 0x91A0) > sizeof(BrnGraphics::Im3dTexPlusLighting)
-                          ? (0x9210 - 0x91A0) - sizeof(BrnGraphics::Im3dTexPlusLighting) : 1]; // -> +0x9210
         // +0x9210 (37392): DWARF :61 BrnGraphics::Im3dSkidsRenderer mSkidsRenderer -- the skid /
         // tyre-mark immediate-mode renderer, 100 bytes on the console, constructed by
         // ParticleModule::Prepare @0x8229BEA0 and handed to the trail system's renderer.
@@ -751,8 +750,6 @@ namespace BrnParticle
         // object is 0x68 bytes (four handles at +0x58..+0x64); host pointers widen the base, so the
         // pad is clamped exactly like maPadIfaceAToB / maPadIfaceBToC above.
         BrnGraphics::Im3dSmokeRenderer mSmokeRenderer; // +0x9274 (37492) DWARF :64 (off_820CEBE8)
-        u8 maPadIfaceDToE[(0x92E0 - 0x9274) > sizeof(BrnGraphics::Im3dSmokeRenderer)
-                          ? (0x92E0 - 0x9274) - sizeof(BrnGraphics::Im3dSmokeRenderer) : 1]; // -> +0x92E0
         // +0x92E0 (37600): DWARF :67 BrnGraphics::LionBlendRenderer -- the Lion blend
         // immediate-mode renderer, 0x1E0 bytes on the console. NOT a ContainedInterface
         // placeholder any more: ParticleModule::Prepare @0x8229BEA0 measures this object
@@ -818,78 +815,18 @@ namespace BrnParticle
         EffectsVertexBufferManager mVertexBufferManagerSparks;     // +0x23184 (143732)  Prepare: Construct(rw, 0x80000, 0)
         EffectsVertexBufferManager mVertexBufferManagerParticles;  // +0x231AC (143772)  Prepare: Construct(rw, 163840, 0)
 
-        // ⭐ HOST-ONLY TAIL ALIGNMENT ANCHOR (2026-09-06, four bytes, no console counterpart).
-        // Everything from miLionBatchCount down is pointer-free, so _AssertLayout in the .cpp
-        // reproduces the console's byte offsets EXACTLY, as deltas from that word. Two of
-        // those members are now real Native::SparkFrameDataSets, which embed 16-byte-aligned
-        // Matrix44Affines, and the console places them at +0x25030 and +0x25D30 -- 0x66C and
-        // 0x136C past the +0x249C4 anchor, both == 12 (mod 16). Those deltas are therefore
-        // reproducible only if the anchor word itself lands at a host offset == 4 (mod 16),
-        // and nothing above guarantees that (every record up there carries host-widened
-        // pointers). Without this the compiler inserts four bytes of its own in front of the
-        // first frame set and SIX of the eight tail asserts fail -- which is exactly how this
-        // was found. This member forces the residue; the asserts prove it stayed forced.
-        CGS_ALIGN(16) u32 muTailAlignmentAnchor;
-
-        // +0x231D4 (143812): DWARF :136 LionBatchArray mLionBatchArray .. +0x249C8 (its trailing
-        // count word at +0x249C4 is the -1 the ctor stamps / the 0 BuildLionVertexBuffers
-        // resets). FLAG: PLACEHOLDER (the Lion batch array type is the Lion core's).
-        u8  maLionBatchArrayPlaceholder[0x249C4 - 0x231D4];
-        s32 miLionBatchCount;                          // +0x249C4 == -1 (ctor)
-        u8  maPad249C8To249D0[0x249D0 - (0x249C4 + 4)];// -> +0x249D0
-        // FLAG: PLACEHOLDER. EA::Jobs::Job mParticleRenderJobSparks (DWARF :139, sizeof 0x350 ==
-        // 848). Its EA::Jobs::Job::Job(this, 0) sub-construction is DEFERRED (see the .cpp).
-        u8  maJob0Placeholder[0x350];                  // +0x249D0
-
-        // +0x24FD0 (151504): -1, +0x25008 (151560): -1, then SparkFrameDataSet @+0x25030.
-        u8  maPad249D0EndTo24FD0[0x24FD0 - (0x249D0 + 0x350)]; // -> +0x24FD0
-        s32 miSentinel24FD0;                           // +0x24FD0 == -1
-        u8  maPad24FD4To25008[0x25008 - (0x24FD0 + 4)];// -> +0x25008
-        s32 miSentinel25008;                           // +0x25008 == -1
-        u8  maPad2500CTo25030[0x25030 - (0x25008 + 4)];// -> +0x25030
-        // +0x25030 (151600): BrnParticle::Native::SparkFrameDataSet -- the UPDATE-side
-        // motion-blur ring. NO LONGER A PLACEHOLDER (2026-09-06). ResetSparkFrameData
-        // @0x8227EAC8 and BeginParticleRenderJob @0x8228A7C0 both address it as
-        // `this + 151600`, and BeginParticleRenderJob reads its frame-0 timestamp as
-        // `*(this + 151728)` == +0x250B0 == +0x25030 + 0x80, which is exactly
-        // maFrames[0].mfTimeStamp -- an independent confirmation of both the base and the
-        // 0xD0 frame stride. sizeof is 8 * 0xD0 == 0x680; the 0x50 that follows it is the
-        // console's own gap to the next job.
-        Native::SparkFrameDataSet mSparkFrameDataSetUpdate;      // +0x25030 (0x680)
-        u8  maPad256B0To25700[0x25700 - (0x25030 + 8 * 0xD0)];   // -> +0x25700
-
-        // +0x25700 (153344): an EA::Jobs::Job. FLAG: PLACEHOLDER (sub-ctor DEFERRED).
-        u8  maJob1Placeholder[0x350];                  // +0x25700
-
-        // +0x25CD0 (154832): -1, +0x25D08 (154888): -1, then SparkFrameDataSet @+0x25D30.
-        u8  maPad25700EndTo25CD0[0x25CD0 - (0x25700 + 0x350)]; // -> +0x25CD0
-        s32 miSentinel25CD0;                           // +0x25CD0 == -1
-        u8  maPad25CD4To25D08[0x25D08 - (0x25CD0 + 4)];// -> +0x25D08
-        s32 miSentinel25D08;                           // +0x25D08 == -1
-        u8  maPad25D0CTo25D30[0x25D30 - (0x25D08 + 4)];// -> +0x25D30 (0x24, mirrors set0's pad)
-        // +0x25D30 (154928): the second BrnParticle::Native::SparkFrameDataSet -- the
-        // RENDER-side ring. ResetSparkFrameData resets BOTH sets (`this + 151600` and
-        // `this + 154928`); only the update-side one is advanced per frame.
-        Native::SparkFrameDataSet mSparkFrameDataSetRender;      // +0x25D30 (0x680)
-        u8  maPad263B0To26400[0x26400 - (0x25D30 + 8 * 0xD0)];   // -> +0x26400
-
-        // +0x26400 (156672): an array of 5 EA::Jobs::Job (stride 0x350; the ctor loops
-        // i = 4..0 calling Job::Job(v5, 0), v5 += 0x350). FLAG: PLACEHOLDER (sub-ctors
-        // DEFERRED). sizeof 5 * 0x350.
+        // Native objects follow the DWARF order. JobData's128-byte DMA alignment
+        // supplies the24D20..24D80 and25A50..25A80 gaps; no host-only anchor is needed.
+        LionBatchArray mLionBatchArray;                                  //231C4
+        EA::Jobs::Job mParticleRenderJobSparks;                           //249D0
+        ParticleRenderJobData mParticleRenderJobDataSparks;               //24D80
+        EA::Jobs::Job mParticleRenderJobParticles;                        //25700
+        ParticleRenderJobData mParticleRenderJobDataParticles;            //25A80
         static const s32 KI_NUM_FRAME_JOBS = 5;
-        u8  maFrameJobsPlaceholder[KI_NUM_FRAME_JOBS * 0x350]; // +0x26400
-
-        // DWARF :397 DebrisUpdateJobData maDebrisUpdateJobData[5] -- the five debris jobs' input,
-        // console +0x27500 at a 0x80 stride (Construct zeroes each 0x80 bytes, 0x822946C4..0x822946DC;
-        // BeginSimulateDebris fills `this + 0x27500 + n * 0x80`). The x64 host widens the two
-        // pointers inside it to 0x90 bytes, so the array starts right at the jobs' end (+0x27490, the
-        // console's own 0x70-byte gap) and still ends before +0x27780 -- the tail stays pinned.
-        static const s32 KI_NUM_DEBRIS_UPDATE_JOBS = 5;   // KU_DEBRISUPDATE_NUMJOBS
-        Native::DebrisUpdateJobData maDebrisUpdateJobData[KI_NUM_DEBRIS_UPDATE_JOBS];    // +0x27490 (x64)
-
-        // Gap to the trailing members at +0x27780.
-        u8  maPad26400EndTo27780[0x27780 - (0x26400 + KI_NUM_FRAME_JOBS * 0x350)
-                                 - KI_NUM_DEBRIS_UPDATE_JOBS * sizeof(Native::DebrisUpdateJobData)]; // -> +0x27780
+        EA::Jobs::Job maDebrisUpdateJob[KI_NUM_FRAME_JOBS];                //26400
+        static const s32 KI_NUM_DEBRIS_UPDATE_JOBS = 5;
+        CGS_ALIGN(128) Native::DebrisUpdateJobData
+            maDebrisUpdateJobData[KI_NUM_DEBRIS_UPDATE_JOBS];              //27500
 
         // +0x27780 (161664): DWARF :160 muNumDebrisUpdateJobsToWaitOn (Construct: -1).
         // NOTE: the earlier model called the byte at +0x27784 "a bool the ctor zeroes last";
