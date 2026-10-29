@@ -12,6 +12,7 @@
 
 #include "rw/math/vpu/types.h"   // Vector4, MaskScalar
 
+#include <vectorintrinsics.h>
 #include <cmath>                 // std::sqrt (Magnitude)
 
 namespace rw
@@ -73,17 +74,11 @@ namespace vpu
 
     // -- mask ops ------------------------------------------------------------------------
     // And(a,b) = vand, lane-wise over the 0x00000000 / 0xFFFFFFFF compare masks.
-    inline MaskScalar And(MaskScalar lLhs, MaskScalar lRhs)
+    __forceinline MaskScalar And(MaskScalar lLhs, MaskScalar lRhs)
     {
-        // Lower to the float-domain mask convention used by MaskScalar (see vpu/types.h):
-        // a lane is "true" iff non-zero. The bitwise AND of two broadcast masks is the
-        // logical AND of their per-lane truth.
-        auto lTrue = [](float f) { return f != 0.0f; };
-        { const MaskScalar lResult = {
-            (lTrue(lLhs.x) && lTrue(lRhs.x)) ? 1.0f : 0.0f,
-            (lTrue(lLhs.y) && lTrue(lRhs.y)) ? 1.0f : 0.0f,
-            (lTrue(lLhs.z) && lTrue(lRhs.z)) ? 1.0f : 0.0f,
-            (lTrue(lLhs.w) && lTrue(lRhs.w)) ? 1.0f : 0.0f }; return lResult; }
+        MaskScalar lResult;
+        __stvx(__vand(__lvx(&lLhs, 0), __lvx(&lRhs, 0)), &lResult, 0);
+        return lResult;
     }
 
     // Select(falseVal, trueVal, mask) = vsel: per-lane mask ? trueVal : falseVal.
