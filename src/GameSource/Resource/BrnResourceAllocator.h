@@ -2,31 +2,16 @@
 #define GAMESOURCE_RESOURCE_BRNRESOURCEALLOCATOR_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Memory/CgsMemoryBank.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::ResourceDescriptor
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // KX_FILTER_* (memory-check print)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (LinearResourceAllocator queries)
 
-namespace rw { namespace core { struct GeneralResourceAllocator; } }   // GetGameDataGeneralAllocator return type
+namespace rw { namespace core { struct GeneralResourceAllocator; } }
 
-// ============================================================================
-// GameSource/Resource/BrnResourceAllocator.h
-//
-// MINIMAL SLICE -- models only the debug resource-allocator surface that
-// ICE::ICEMemory::Construct touches: the named heap allocators are RW resource
-// allocators that hand back an rw::Resource (its m_baseResources[0] is the
-// memory pointer). Construct allocates its 1.75 MB "ICE Debug Memory" block from
-// the global debug allocator and builds the ICE edit heap over it.
-//
-// Shape recovered from the DWARF (HeapResourceAllocator : rw::IResourceAllocator
-// with a public Allocate() that forwards to the virtual DoAllocate) and from the
-// X360 asm of ICEMemory::Construct
-// (a DoAllocate vtable call on Allocators::mGlobalDebugAllocator returning a
-// Resource, whose first base pointer is read back). The full allocator hierarchy
-// (rw::IResourceAllocator's C++ helper layer, the LinearResourceAllocator family,
-// Allocators' construction) lands when those TUs are reconstructed -- GROW this
-// header then; do NOT fork the allocator types elsewhere.
-// ============================================================================
+// Native ARTIST root resource allocators. Each wrapper retains its own backing
+// allocator, name and original diagnostics; startup constructs all real heaps.
 
 namespace BrnResource
 {
@@ -44,9 +29,10 @@ public:
     // returned rw::Resource's m_baseResources[0] is the memory-resource pointer.
     rw::Resource Allocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName = 0);
 
-    // rw::IResourceAllocator interface: the resource modules allocate their backing memory through
-    // this (virtual) entry point; it just forwards to Allocate.
-    rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName) ;
+    // Original virtual allocation/free entries dispatch into the backing heap.
+    rw::Resource DoAllocate(const rw::ResourceDescriptor& lDescriptor, const char* lpcName);
+    void DoFree(const rw::Resource& lrResource);
+    void DoFreeDisposable(rw::Resource& lrResource);
 
 private:
     rw::core::GeneralResourceAllocator* mpGeneralAllocator;
@@ -57,12 +43,13 @@ private:
 // The initial process-wide RenderWare resource allocator. ARTIST Construct @0x82661A60 and
 // DoAllocate @0x82664800 traverse exactly five LinearMalloc records at the X360 0x1C stride;
 // DecFIGS declares six, which is the PS3 shape and is not used by the X360 target. The native
-// member array remains typed and widens naturally with the host pointers. DoFree and
-// DoFreeDisposable preserve the original assertion-only behavior.
+// member array retains the five native records. DoFree and DoFreeDisposable
+// preserve the original assertion-only behavior.
 class DefaultLinearAllocator : public rw::IResourceAllocator
 {
 public:
     void Construct(u32 luPreAllocatedSize);
+    void CheckRenderwareBudget();
     ~DefaultLinearAllocator() ;
 
 protected:
@@ -75,9 +62,8 @@ private:
 };
 
 // The named game-side wrapper over an rw::LinearResourceAllocator (the GlobalGraphics,
-// GlobalResource, MemFile and EmbeddedTexture allocators of Allocators). SLICE: the two members
-// and the three inline queries the renderer's memory report reads; Construct, the remaining
-// queries and the DoAllocate / DoFree / DoFreeDisposable overrides grow here with the Allocators TU.
+// GlobalResource, MemFile and EmbeddedTexture allocators of Allocators). The
+// backing pointer and diagnostic name retain ARTIST's native declaration order.
 class LinearResourceAllocator : public rw::IResourceAllocator
 {
 public:
@@ -117,7 +103,7 @@ inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
 }
 
 // Accessor for the global debug allocator (asserts the backing allocator exists).
-// X360: returns &Allocators::mGlobalDebugAllocator. DECLARATION-ONLY here.
+// ARTIST823A7CB8 returns &Allocators::mGlobalDebugAllocator without allocating.
 HeapResourceAllocator* GetDebugAllocator();
 // BrnResourceAllocator.h:381; ARTIST main allocates through mRuntimeAllocator
 // at 82F2C854, independently of the debug allocator at 82F2C7DC.
@@ -130,13 +116,6 @@ LinearResourceAllocator* GetGlobalResourceAllocator();
 LinearResourceAllocator* GetEmbeddedTextureAllocator();
 void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor);
 
-// The GameData general resource allocator the loading-screen module loads carve from (SoundModule
-// CreateAllocators (memory-map-driven) and vends it via GameDataIO::OutputBuffer::GetAllocator;
-// pending that per-bank population, this returns a single real rw::core::GeneralResourceAllocator
-// lazily Initialize'd over a region carved from the debug heap. (The full per-bank CreateAllocators
-// population is the faithful follow-on; see the allocator-gate memory.)
-rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator();
-
 // Logs the message (when given) and the platform memory status to the debug print, one line per
 // figure in MB plus the in-use percentage. Each line is gated on the debug-print message filter.
 void PrintConsoleMemory(const char* lpcMessage);
@@ -144,15 +123,11 @@ void PrintConsoleMemory(const char* lpcMessage);
 // The platform's free physical memory in bytes.
 u32 GetAvailableMemory();
 
-// Owns the engine's named global allocators. Construct asserts the debug
-// allocator's backing general allocator exists before carving the ICE debug
-// block (X360: Allocators::mpInternalDebugAllocator). MINIMAL SLICE -- only the
-// one static the ICE path null-checks is modelled; the concrete
-// rw::core::GeneralResourceAllocator type is opaque (pointer/null-check only).
+// Original process-wide startup allocator homes.
 class Allocators
 {
 public:
-    static void* mpInternalDebugAllocator;   // X360 dword: backing general allocator
+    static rw::core::GeneralResourceAllocator* mpInternalDebugAllocator;
 
     // When set, a failed memory check (the available-memory comparisons in
     // BrnNetworkModule::ProcessAfterSimulation, the game module's DoUpdate and the network
@@ -161,21 +136,29 @@ public:
 
     // The startup memory-map/initial-default-allocator chain (ARTIST 0x82664728).
     static void InitMemoryMap();
-    // ARTIST 8266AED8: the real global allocator construction chain. Kept as a
-    // declaration until all original allocation phases are recovered.
+    // ARTIST8266AED8: original construction order and default-allocator switch.
     static void Construct();
 
-    // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
-    // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
-    // need GPU-visible memory (e.g. BrnRendererMemory's blit texture state) carve through its virtual
-    // DoAllocate. Returned as the abstract rw::IResourceAllocator* (the X360 calls DoAllocate through
-    // the vtable). DECLARATION-ONLY here; the concrete object + ConstructGlobalGraphicsMemory land
-    // with the Allocators TU.
+    // Existing graphics callers receive the genuine GlobalGraphics wrapper.
     static rw::IResourceAllocator* GetGlobalGraphicsAllocator();
 
 private:
-    // Original private construction phase, DecFIGS h327.
+    static void ConstructGlobalSystemMemory();
+    static void ConstructGlobalDebugMemory();
     static void ConstructGlobalGraphicsMemory();
+    static void ConstructGlobalResourceMemory(const CgsMemory::MemoryBank::Params* lpRootBankParams);
+    static void ConstructChildAllocators();
+    friend HeapResourceAllocator* GetDebugAllocator();
+    static rw::Resource mGlobalSystemMemory;
+    static rw::ResourceDescriptor mGlobalSystemMemoryDescriptor;
+    static rw::core::GeneralResourceAllocator* mpInternalGlobalSystemAllocator;
+    static HeapResourceAllocator mGlobalSystemAllocator;
+    static rw::Resource mGlobalDebugMemory;
+    static rw::ResourceDescriptor mGlobalDebugMemoryDescriptor;
+    static HeapResourceAllocator mGlobalDebugAllocator;
+    static rw::Resource mGlobalResourceMemory;
+    static rw::ResourceDescriptor mGlobalResourceMemoryDescriptor;
+    static rw::LinearResourceAllocator* mpInternalResourceAllocator;
     friend LinearResourceAllocator* GetGraphicsAllocator();
     friend LinearResourceAllocator* GetGlobalResourceAllocator();
     static LinearResourceAllocator mGlobalResourceAllocator;
