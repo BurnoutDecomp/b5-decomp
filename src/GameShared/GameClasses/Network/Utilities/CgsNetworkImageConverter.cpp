@@ -402,7 +402,7 @@ namespace CgsNetwork
     // smaller of the source height (in rows, or DXT blocks for a compressed format) and the locked
     // surface's height; the per-row byte count is the smaller of the source and destination strides.
     // If the strides are equal the whole image copies in one block.
-    char* NetworkImageConverter::UnpackFromNetworkTexture(const NetworkTexture* lpcSrcTexture,
+    void NetworkImageConverter::UnpackFromNetworkTexture(const NetworkTexture* lpcSrcTexture,
                                                           renderengine::Texture::Locked* lpDstLocked)
     {
         const s32 liSrcStride  = lpcSrcTexture->GetStride();
@@ -442,25 +442,21 @@ namespace CgsNetwork
             CgsDev::Assert::EndAssert();
         }
 
-        char* lpcResult = lpcDstPointer;
         if (liSrcStride == liDstStride)
         {
             // Same pitch: one contiguous copy of the whole image.
-            lpcResult = static_cast<char*>(
-                std::memcpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liDstStride) * liRowsToCopy));
+            std::memcpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liDstStride) * liRowsToCopy);
         }
         else
         {
             // Differing pitch: copy row by row, advancing each pointer by its own stride.
             for (s32 liRowIndex = 0; liRowIndex < liRowsToCopy; ++liRowIndex)
             {
-                lpcResult = static_cast<char*>(
-                    std::memcpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liBytesToCopy)));
+                std::memcpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liBytesToCopy));
                 lpcSrcPointer += liSrcStride;
                 lpcDstPointer += liDstStride;
             }
         }
 
-        return lpcResult;
     }
 }

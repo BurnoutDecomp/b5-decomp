@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
 
-#include <cmath>   // fmaf, fabsf
+#include <cmath>   // native fabsf
+#include <float.h> // exact native FLT_MAX
 
 // CgsNetwork::OLDTranslateFrame50HzTo60Hz / OLDTranslateFrame60HzTo50Hz: the float
 // versions of the frame-rate translation. TranslateFrame50HzTo60Hz / 60HzTo50Hz run them
@@ -12,21 +13,27 @@
 // current time wins. That time is reduced modulo the other rate's wrap time and turned
 // into a frame at the other rate (rounded half up for 60 Hz, truncated for 50 Hz). The
 // console evaluates every multiply-add as one fused single-precision operation, so
-// they are written with fmaf.
+// they are written with the native fused multiply-add expression.
 
 namespace CgsNetwork
 {
     namespace
     {
+        // The native compiler contracts this expression to scalar fmadds.
+        inline f32 MultiplyAdd(f32 lfA, f32 lfB, f32 lfAddend)
+        {
+            return lfA * lfB + lfAddend;
+        }
+
         const f32 KF_OLD_TIME_STEP_50HZ = 0.02f;
         const f32 KF_OLD_TIME_STEP_60HZ = 1.0f / 60.0f;
         const f32 KF_OLD_WRAP_TIME_50HZ = 1310.7f;     // 65535 frames at 50 Hz
         const f32 KF_OLD_WRAP_TIME_60HZ = 1092.25f;    // 65535 frames at 60 Hz
 
         // The reciprocals the console multiplies by (image values, bit-exact).
-        const f32 KF_OLD_INV_WRAP_TIME_50HZ     = 0x1.900190p-11f;   // 1 / 1310.7
-        const f32 KF_OLD_INV_WRAP_TIME_60HZ     = 0x1.E001E0p-11f;   // 1 / 1092.25
-        const f32 KF_OLD_FRAMES_PER_SECOND_60HZ = 0x1.DFFFFEp+5f;    // 1 / KF_OLD_TIME_STEP_60HZ
+        const f32 KF_OLD_INV_WRAP_TIME_50HZ     = 0.00076295109465718269f;   // 1 / 1310.7
+        const f32 KF_OLD_INV_WRAP_TIME_60HZ     = 0.00091554131358861923f;   // 1 / 1092.25
+        const f32 KF_OLD_FRAMES_PER_SECOND_60HZ = 59.999996185302734f;    // 1 / KF_OLD_TIME_STEP_60HZ
         const f32 KF_OLD_FRAMES_PER_SECOND_50HZ = 50.0f;
 
         const f32 KF_NO_ALTERNATIVE   = -1.0f;
@@ -34,25 +41,25 @@ namespace CgsNetwork
         const s32 KI_LAST_FRAME       = 0xFFFE;
 
         // The time difference marks "no alternative wrap" with the largest float.
-        const f32 KF_NO_ALTERNATIVE_TIME = 3.40282347e+38f;
+        const f32 KF_NO_ALTERNATIVE_TIME = FLT_MAX;
     }
 
     u16 OLDTranslateFrame50HzTo60Hz(u16 lu16Frame50Hz, u16 lu16CurrentFrame50Hz, u16 lu16NumWraps)
     {
         const f32 lfFrameTime   = static_cast<f32>(static_cast<s32>(lu16Frame50Hz)) * KF_OLD_TIME_STEP_50HZ;
         const f32 lfWrapsTime   = static_cast<f32>(static_cast<s32>(lu16NumWraps)) * KF_OLD_WRAP_TIME_50HZ;
-        const f32 lfCurrentTime = fmaf(static_cast<f32>(lu16CurrentFrame50Hz), KF_OLD_TIME_STEP_50HZ, lfWrapsTime);
+        const f32 lfCurrentTime = MultiplyAdd(static_cast<f32>(lu16CurrentFrame50Hz), KF_OLD_TIME_STEP_50HZ, lfWrapsTime);
         const f32 lfTime        = lfFrameTime + lfWrapsTime;
 
         f32 lfAlternativeTime = KF_NO_ALTERNATIVE;
         if (lu16Frame50Hz < KU_NEAR_WRAP_FRAMES)
         {
-            lfAlternativeTime = fmaf(static_cast<f32>(static_cast<s32>(lu16NumWraps) + 1),
+            lfAlternativeTime = MultiplyAdd(static_cast<f32>(static_cast<s32>(lu16NumWraps) + 1),
                                      KF_OLD_WRAP_TIME_50HZ, lfFrameTime);
         }
         if (KI_LAST_FRAME - static_cast<s32>(lu16Frame50Hz) < static_cast<s32>(KU_NEAR_WRAP_FRAMES))
         {
-            lfAlternativeTime = fmaf(static_cast<f32>(static_cast<s32>(lu16NumWraps) - 1),
+            lfAlternativeTime = MultiplyAdd(static_cast<f32>(static_cast<s32>(lu16NumWraps) - 1),
                                      KF_OLD_WRAP_TIME_50HZ, lfFrameTime);
         }
 
@@ -64,26 +71,26 @@ namespace CgsNetwork
         }
 
         const f32 lfWholeWraps = static_cast<f32>(static_cast<s32>(lfChosenTime * KF_OLD_INV_WRAP_TIME_60HZ));
-        const f32 lfTime60Hz   = fmaf(-lfWholeWraps, KF_OLD_WRAP_TIME_60HZ, lfChosenTime);
-        return static_cast<u16>(static_cast<s64>(fmaf(lfTime60Hz, KF_OLD_FRAMES_PER_SECOND_60HZ, 0.5f)));
+        const f32 lfTime60Hz   = MultiplyAdd(-lfWholeWraps, KF_OLD_WRAP_TIME_60HZ, lfChosenTime);
+        return static_cast<u16>(static_cast<s64>(MultiplyAdd(lfTime60Hz, KF_OLD_FRAMES_PER_SECOND_60HZ, 0.5f)));
     }
 
     u16 OLDTranslateFrame60HzTo50Hz(u16 lu16Frame60Hz, u16 lu16CurrentFrame60Hz, u16 lu16NumWraps)
     {
         const f32 lfFrameTime   = static_cast<f32>(static_cast<s32>(lu16Frame60Hz)) * KF_OLD_TIME_STEP_60HZ;
         const f32 lfWrapsTime   = static_cast<f32>(static_cast<s32>(lu16NumWraps)) * KF_OLD_WRAP_TIME_60HZ;
-        const f32 lfCurrentTime = fmaf(static_cast<f32>(lu16CurrentFrame60Hz), KF_OLD_TIME_STEP_60HZ, lfWrapsTime);
+        const f32 lfCurrentTime = MultiplyAdd(static_cast<f32>(lu16CurrentFrame60Hz), KF_OLD_TIME_STEP_60HZ, lfWrapsTime);
         const f32 lfTime        = lfFrameTime + lfWrapsTime;
 
         f32 lfAlternativeTime = KF_NO_ALTERNATIVE;
         if (lu16Frame60Hz < KU_NEAR_WRAP_FRAMES)
         {
-            lfAlternativeTime = fmaf(static_cast<f32>(static_cast<s32>(lu16NumWraps) + 1),
+            lfAlternativeTime = MultiplyAdd(static_cast<f32>(static_cast<s32>(lu16NumWraps) + 1),
                                      KF_OLD_WRAP_TIME_60HZ, lfFrameTime);
         }
         if (KI_LAST_FRAME - static_cast<s32>(lu16Frame60Hz) < static_cast<s32>(KU_NEAR_WRAP_FRAMES))
         {
-            lfAlternativeTime = fmaf(static_cast<f32>(static_cast<s32>(lu16NumWraps) - 1),
+            lfAlternativeTime = MultiplyAdd(static_cast<f32>(static_cast<s32>(lu16NumWraps) - 1),
                                      KF_OLD_WRAP_TIME_60HZ, lfFrameTime);
         }
 
@@ -95,7 +102,7 @@ namespace CgsNetwork
         }
 
         const f32 lfWholeWraps = static_cast<f32>(static_cast<s32>(lfChosenTime * KF_OLD_INV_WRAP_TIME_50HZ));
-        const f32 lfTime50Hz   = fmaf(-lfWholeWraps, KF_OLD_WRAP_TIME_50HZ, lfChosenTime);
+        const f32 lfTime50Hz   = MultiplyAdd(-lfWholeWraps, KF_OLD_WRAP_TIME_50HZ, lfChosenTime);
         return static_cast<u16>(static_cast<s64>(lfTime50Hz * KF_OLD_FRAMES_PER_SECOND_50HZ));
     }
 
@@ -112,23 +119,23 @@ namespace CgsNetwork
         const f32 lfWrapTimeB = lbFramesBAre50Hz ? KF_OLD_WRAP_TIME_50HZ : KF_OLD_WRAP_TIME_60HZ;
         const f32 lfTimeStepB = lbFramesBAre50Hz ? KF_OLD_TIME_STEP_50HZ : KF_OLD_TIME_STEP_60HZ;
 
-        const f32 lfTimeA = fmaf(static_cast<f32>(lu16FramesA), lfTimeStepA,
+        const f32 lfTimeA = MultiplyAdd(static_cast<f32>(lu16FramesA), lfTimeStepA,
                                  static_cast<f32>(liNumWraps) * lfWrapTimeA);
         const f32 lfFrameTimeB = static_cast<f32>(lu16FramesB) * lfTimeStepB;
 
         const s32 liNumWrapsB = static_cast<s32>(lfTimeA / lfWrapTimeB);
-        const f32 lfTimeDiff  = lfTimeA - fmaf(static_cast<f32>(liNumWrapsB), lfWrapTimeB, lfFrameTimeB);
+        const f32 lfTimeDiff  = lfTimeA - MultiplyAdd(static_cast<f32>(liNumWrapsB), lfWrapTimeB, lfFrameTimeB);
 
         f32 lfAlternativeTimeB    = KF_NO_ALTERNATIVE_TIME;
         f32 lfAlternativeTimeDiff = KF_NO_ALTERNATIVE_TIME;
         if (lu16FramesB < KU_NEAR_WRAP_FRAMES)
         {
-            lfAlternativeTimeB    = fmaf(static_cast<f32>(liNumWrapsB + 1), lfWrapTimeB, lfFrameTimeB);
+            lfAlternativeTimeB    = MultiplyAdd(static_cast<f32>(liNumWrapsB + 1), lfWrapTimeB, lfFrameTimeB);
             lfAlternativeTimeDiff = lfTimeA - lfAlternativeTimeB;
         }
         if (KI_LAST_FRAME - static_cast<s32>(lu16FramesB) < static_cast<s32>(KU_NEAR_WRAP_FRAMES))
         {
-            lfAlternativeTimeB    = fmaf(static_cast<f32>(liNumWrapsB - 1), lfWrapTimeB, lfFrameTimeB);
+            lfAlternativeTimeB    = MultiplyAdd(static_cast<f32>(liNumWrapsB - 1), lfWrapTimeB, lfFrameTimeB);
             lfAlternativeTimeDiff = lfTimeA - lfAlternativeTimeB;
         }
 

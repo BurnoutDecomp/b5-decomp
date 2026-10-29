@@ -22,10 +22,16 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"                                 // AllocatorList::GetHeapAllocator
 #include "GameSource/Resource/BrnResourceAllocator.h"                                              // PrintConsoleMemory, GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
 #include <cstddef>       // offsetof
-#include <type_traits>   // std::is_same
 
 namespace BrnNetwork
 {
+    namespace
+    {
+        // Unevaluated pointer-to-member checks preserve the exact field-type gates
+        // with the original compiler (which predates decltype/type_traits).
+        template <class T, class C> char CheckNativeMemberType(T C::*);
+    }
+
     // The console constructor has no stores of its own past the base and the embedded manager:
     // every store it makes is an inlined member constructor.
     //   - the four module-owned VariableEventQueues and the two queues nested in the vehicle
@@ -526,19 +532,15 @@ namespace BrnNetwork
     // and (b) the pointer-free runs, as console deltas from the run's first member.
     void BrnNetworkModule::_AssertLayout()
     {
-        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mNetworkManager), BrnNetworkManager>::value),
+        CGS_STATIC_ASSERT((sizeof(CheckNativeMemberType<BrnNetworkManager>(&BrnNetworkModule::mNetworkManager)) == 1),
                       "mNetworkManager must be the real BrnNetworkManager");
-        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mVehicleDriverInputInterface),
-                                   BrnPhysics::Vehicle::VehicleDriverInputInterface>::value),
+        CGS_STATIC_ASSERT((sizeof(CheckNativeMemberType<BrnPhysics::Vehicle::VehicleDriverInputInterface>(&BrnNetworkModule::mVehicleDriverInputInterface)) == 1),
                       "mVehicleDriverInputInterface must be the real type");
-        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mVehicleInputInterface),
-                                   BrnPhysics::Vehicle::VehicleInputInterface>::value),
+        CGS_STATIC_ASSERT((sizeof(CheckNativeMemberType<BrnPhysics::Vehicle::VehicleInputInterface>(&BrnNetworkModule::mVehicleInputInterface)) == 1),
                       "mVehicleInputInterface must be the real type");
-        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mVehicleOutputInterface),
-                                   BrnPhysics::Vehicle::VehicleOutputInterface>::value),
+        CGS_STATIC_ASSERT((sizeof(CheckNativeMemberType<BrnPhysics::Vehicle::VehicleOutputInterface>(&BrnNetworkModule::mVehicleOutputInterface)) == 1),
                       "mVehicleOutputInterface must be the real type");
-        CGS_STATIC_ASSERT((std::is_same<decltype(BrnNetworkModule::mGameEventQueue),
-                                   BrnGameState::GameStateModuleIO::GameEventQueue>::value),
+        CGS_STATIC_ASSERT((sizeof(CheckNativeMemberType<BrnGameState::GameStateModuleIO::GameEventQueue>(&BrnNetworkModule::mGameEventQueue)) == 1),
                       "mGameEventQueue must be the real GameStateModuleIO::GameEventQueue");
 
         // The stage/flag/cache run after the manager: +614656 .. +614704 on the console.

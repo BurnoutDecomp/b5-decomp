@@ -1,10 +1,12 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // CgsNetwork::NetworkImageConverter - the network mugshot/texture image pipeline: it converts
 // (format), resizes (bilinear/point), and unpacks NetworkTextures so a transmitted image can be
-// blitted into a GPU texture. The methods are stateless (it is spelt as a class of static-like
-// utilities over the file-static perfmon handles); the X360 build attests the seven methods below
+// blitted into a GPU texture. The methods are stateless (it is a class of static
+// utilities over the file-static perfmon handles); ARTIST passes the source in r3, destination in r4
+// (no implicit this). The X360 build attests the seven methods below
 // plus the eight CPU-perfmon handles SetupPerfmons registers.
 //
 // Method shapes are from the DecFIGS DWARF (CgsNetworkImageConverter.h), gated on the X360 ledger:
@@ -20,14 +22,14 @@ namespace CgsNetwork
     {
     public:
         // Convert lpSrcTexture into lpDstTexture, choosing copy / format-convert by their formats.
-        void Convert(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture);
+        static void Convert(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture);
 
         // Resize lpSrcTexture into lpDstTexture across the column range [liStartColumn, liEndColumn).
-        void ConvertAndResize(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture,
+        static void ConvertAndResize(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture,
                               s32 liStartColumn, s32 liEndColumn);
 
         // Blit lpcSrcTexture's pixels into a locked GPU texture surface, row by row.
-        char* UnpackFromNetworkTexture(const NetworkTexture* lpcSrcTexture,
+        static void UnpackFromNetworkTexture(const NetworkTexture* lpcSrcTexture,
                                        renderengine::Texture::Locked* lpDstLocked);
 
         // Register the CPU performance monitors used by the pipeline (once, at module construct).
@@ -35,14 +37,14 @@ namespace CgsNetwork
 
     private:
         // Same-format byte copy of lpSrcTexture into lpDstTexture.
-        void Copy(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture);
+        static void Copy(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture);
 
         // Format convert X8R8G8B8 -> A1R5G5B5 (no resize).
-        void ConvertX8R8G8B8ToA1R5G5B5(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture);
+        static void ConvertX8R8G8B8ToA1R5G5B5(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture);
 
         // Format convert X8R8G8B8 -> A1R5G5B5 with a bilinear (downscale) / point (upscale) resize,
         // limited to the column range [liStartColumn, liEndColumn).
-        void ConvertAndResizeX8R8G8B8ToA1R5G5B5(const NetworkTexture* lpSrcTexture,
+        static void ConvertAndResizeX8R8G8B8ToA1R5G5B5(const NetworkTexture* lpSrcTexture,
                                                 NetworkTexture* lpDstTexture,
                                                 s32 liStartColumn, s32 liEndColumn);
 

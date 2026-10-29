@@ -13,6 +13,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (builder >= 0 guards)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::Event, NetworkEvent<N>, TelemetryData
 #include "GameSource/Network/Shared Server Types/BrnNetworkSharedServerTypes.h" // ServerGeneratedTypes::OfflineProgressionT

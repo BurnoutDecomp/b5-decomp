@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include <float.h> // FLT_MAX: the native 0x7F7FFFFF float bound
 
 #include "GameSource/Network/Messages/BrnFburnChallengeSuccessMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -32,7 +33,7 @@ namespace BrnNetwork
 
     // The X360 builds these float bounds inline (lis 0x7FFF / FLT_MAX, 0.005 resolution).
     static const f32 KF_SUCCESS_SCORE_MIN        = 0.0f;
-    static const f32 KF_SUCCESS_SCORE_MAX        = 3.4028235e38f;   // FLT_MAX
+    static const f32 KF_SUCCESS_SCORE_MAX        = FLT_MAX;   // FLT_MAX
     static const f32 KF_SUCCESS_SCORE_RESOLUTION = 0.0049999999f;
 
     void FburnChallengeSuccessMessage::Construct()
