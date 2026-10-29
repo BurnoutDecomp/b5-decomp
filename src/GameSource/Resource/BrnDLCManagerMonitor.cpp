@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <eathread/eathread_futex.h>                         // AutoFutex for the selected vendor Futex
-#include "SDKs/Realmc/RealmcXenonUtil.h"                     // XCONTENT_DATA / XCONTENT_DEVICE_DATA
+#include <xtl.h>                                            // XDK content and enumeration APIs
 #include <cstring>   // memcpy
 
 // Recovered DLC monitor boundary; deliberately unmounted from the shipping TU list.
@@ -12,19 +12,6 @@
 // The selected DLCManager::Construct remains in BrnDLCManager.cpp and starts no worker.
 // Select this TU together with the original DLC Prepare path only when its backend and
 // worker/owner lifetime are established; this split supplies no successful-empty provider.
-
-extern "C"
-{
-    DWORD XContentCreateEnumerator(DWORD dwUserIndex, DWORD dwDeviceID, DWORD dwContentType,
-                                   DWORD dwContentFlags, DWORD cItems, DWORD* pcbBuffer,
-                                   HANDLE* phEnum);
-    DWORD XContentGetDeviceData(DWORD dwDeviceID, void* pDeviceData);
-    DWORD XContentCreate(DWORD dwUserIndex, const char* szRootName, void* pContentData,
-                         DWORD dwContentFlags, DWORD* pdwDisposition, DWORD* pdwLicenseMask,
-                         void* pOverlapped);
-    u32 XEnumerate(void* lhEnum, void* lpvBuffer, u32 lcbBuffer,
-                   u32* lpcItemsReturned, void* lpOverlapped);
-}
 
 namespace BrnResource
 {
@@ -55,7 +42,8 @@ namespace BrnResource
     intptr_t DLCManager::X360DLCEnumerationThreadProc(void* lpContext)
     {
         DLCManager* const lpManager = static_cast<DLCManager*>(lpContext);
-        CGS_ALIGN(RealmcIface::XCONTENT_DATA) u8 lacTempBuffer[0x2000];
+        CGS_STATIC_ASSERT((__alignof(XCONTENT_DATA) == 4), "XCONTENT_DATA alignment");
+        CGS_ALIGN(4) u8 lacTempBuffer[0x2000];
         u32 luPriorPackageCount;
 
         {
@@ -82,27 +70,27 @@ namespace BrnResource
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
                     *CgsDev::Log::gpDebugPrint << "Enumerating DLC\n";
 
-                u32 luItemsReturned;
+                DWORD luItemsReturned;
                 XEnumerate(lhEnumerator, lacTempBuffer,
                            static_cast<u32>(sizeof(lacTempBuffer)),
                            &luItemsReturned, 0);
                 if (luItemsReturned == 0)
                     break;
 
-                RealmcIface::XCONTENT_DATA* const lpContentRecords =
-                    reinterpret_cast<RealmcIface::XCONTENT_DATA*>(lacTempBuffer);
+                XCONTENT_DATA* const lpContentRecords =
+                    reinterpret_cast<XCONTENT_DATA*>(lacTempBuffer);
                 for (u32 liRecord = 0; liRecord < luItemsReturned; ++liRecord)
                 {
-                    RealmcIface::XCONTENT_DATA& lContent = lpContentRecords[liRecord];
+                    XCONTENT_DATA& lContent = lpContentRecords[liRecord];
                     char lacFileName[43];
                     std::memcpy(lacFileName, lContent.szFileName, sizeof(lContent.szFileName));
                     lacFileName[42] = 0;
 
                     if (lContent.dwContentType == 2)
                     {
-                        RealmcIface::XCONTENT_DEVICE_DATA lDeviceData;
+                        XDEVICE_DATA lDeviceData;
                         XContentGetDeviceData(lContent.DeviceID, &lDeviceData);
-                        if (lDeviceData.dwDeviceType == 1)
+                        if (lDeviceData.DeviceType == 1)
                         {
                             if (CgsDev::Message::gxMessageFilterFlags & 1)
                                 *CgsDev::Log::gpDebugPrint
