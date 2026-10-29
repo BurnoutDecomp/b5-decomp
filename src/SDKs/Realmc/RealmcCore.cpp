@@ -5,8 +5,7 @@
 #include <eathread/eathread.h>                // EA::Thread::GetThreadTime (SendMessage's send time)
 
 #include <cstring>   // std::memcpy -- the string assign body is a sized copy.
-#include <intrin.h>  // _Interlocked* (MSVC) -- portable stand-in for the X360
-                     // lwarx/stwcx. reservation idiom.
+#include <xtl.h>   // native interrupt-masked _Interlocked* intrinsics
 
 // ===========================================================================
 // RealmcCore core primitives -- reconstructed from BURNOUT_X360_ARTIST.XEX.

@@ -26,14 +26,12 @@
 //   +0x18  mbInitialized  -- byte flag: the mutex+condition have been Init'd (and,
 //                            during ShutDown, "the response list still has work")
 //   +0x19  mbShuttingDown -- byte flag: a shutdown/quit has been requested (also
-//                            set when a response wait times out)
+//                            set when a response wait returns an error)
 //   +0x20  mMutex         -- EA::Thread::Mutex guarding both lists + the flags
 //   +0x50  mCondition     -- EA::Thread::Condition the waiters block on
 //   +0xB0  miWaitTimeoutMs-- the per-wait deadline offset (default 6000ms)
 //
-// The mutex and condition are the linked EAThread ones (the same Mutex
-// MemcardState holds); their host sizes differ from the console's, so every
-// field is reached BY NAME (semantic parity, not byte-matching).
+// Native Mutex/Condition layouts are checked by their headers.
 // ===========================================================================
 
 #include "types.hpp"
@@ -85,8 +83,8 @@ public:
     int PostResponse(MessagePtr& rMessage, ResponsePtr& rResponse);
 
     // Post rMessage on the message list (unless the queue is shutting down) and
-    // block until its response arrives, the queue shuts down, or a wait times
-    // out; the last two yield the empty response. Card thread.
+    // block until its response arrives, the queue shuts down, or a wait returns
+    // an error; the last two yield the empty response. Card thread.
     ResponsePtr SendMessage(const MessagePtr& rMessage);
 
 private:
@@ -98,7 +96,7 @@ private:
     // Under the lock, loop until rMessage's response has been extracted or the
     // queue is shutting down: extract when the response list has entries, wake
     // the other waiters while entries remain, and wait on the condition with a
-    // miWaitTimeoutMs deadline (a timed-out wait marks the queue shutting down).
+    // miWaitTimeoutMs deadline (a failed wait marks the queue shutting down).
     // Returns the extracted response, or the empty response.
     ResponsePtr _WaitForResponse(const MessagePtr& rMessage);
 
@@ -110,9 +108,18 @@ private:
     EA::Thread::Condition mCondition;      // +0x50
     int                   miWaitTimeoutMs; // +0xB0  (default 6000)
 
+    void CheckLayout()
+    {
+        CGS_STATIC_ASSERT((offsetof(MessageQueue, mMutex) == 0x20), "ARTIST queue mutex");
+        CGS_STATIC_ASSERT((offsetof(MessageQueue, mCondition) == 0x50), "ARTIST queue condition");
+        CGS_STATIC_ASSERT((offsetof(MessageQueue, miWaitTimeoutMs) == 0xB0), "ARTIST queue timeout");
+    }
+
     // Non-copyable (embedded Mutex/Condition are non-copyable).
     MessageQueue(const MessageQueue&);
     MessageQueue& operator=(const MessageQueue&);
 };
+
+CGS_STATIC_ASSERT((sizeof(MessageQueue) == 0xB8), "ARTIST message queue size");
 
 } // namespace RealmcCore

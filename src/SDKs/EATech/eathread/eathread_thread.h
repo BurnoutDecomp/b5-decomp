@@ -9,8 +9,7 @@
 // there rather than redefining them.
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"
 
-// eathread.h supplies the base scalar layer (ThreadTime, kTimeout*) and the free
-// ThreadSleep(ThreadTime) overload that belongs to this header's surface. The
+// eathread.h supplies the native base scalar layer (ThreadTime, kTimeout*). The
 // mutual include resolves via the guards.
 #include "SDKs/EATech/eathread/eathread.h"
 

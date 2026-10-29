@@ -297,6 +297,12 @@ namespace Thread
         return SwitchToThread();
     }
 
+    // ARTIST82B42628: biased 32-bit millisecond clock used by absolute deadlines.
+    u32 GetThreadTime()
+    {
+        return ::GetTickCount() + 0x2710u;
+    }
+
     // ---- EA::Thread::Futex -------------------------------------------------
 
     // The EAThread Microsoft/X360 Futex is a CRITICAL_SECTION wrapper. The X360
@@ -339,8 +345,7 @@ namespace Thread
     // per-addr export. It dispatches the runnable, records the return value/status,
     // and releases the dynamic-data refcount when the thread exits.
     //
-    // FLAG: _beginthreadex's start routine is unsigned(__stdcall*)(void*); the
-    // X360 routine's intptr_t return is folded into that ABI on the host.
+    // The native XDK CRT entry takes unsigned(__stdcall*)(void*).
     static unsigned __stdcall ThreadEntryTrampoline(void* pArg)
     {
         EAThreadDynamicData* const lpData = static_cast<EAThreadDynamicData*>(pArg);
@@ -558,6 +563,9 @@ namespace Thread
 
             lpPub->mhThreadHandleCopy = lpPub->mhThread; // +0x18
 
+            if (pParameters && pParameters->mnPriority != 0)
+                ::SetThreadPriority(lpPub->mhThread, pParameters->mnPriority);
+
             int liProcessor;
             if (pParameters && pParameters->mnProcessor >= 0)
             {
@@ -578,12 +586,7 @@ namespace Thread
             {
                 if (liProcessor < 0)
                     liProcessor = 0;
-                // X360 calls XSetThreadProcessor(handle, hwThread) to pin the
-                // thread to one of the 6 hardware threads. FLAG: XSetThreadProcessor
-                // is an X360-only XDK primitive with no Win32 equivalent; on the
-                // MSVC host we model it with SetThreadIdealProcessor (the closest
-                // affinity primitive). The "% 6" hardware-thread fold is exact.
-                SetThreadIdealProcessor(lpPub->mhThread, static_cast<DWORD>(liProcessor % 6));
+                XSetThreadProcessor(lpPub->mhThread, static_cast<DWORD>(liProcessor % 6));
             }
 
             ResumeThread(lpPub->mhThread);

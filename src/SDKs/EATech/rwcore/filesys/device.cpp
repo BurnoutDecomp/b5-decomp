@@ -73,7 +73,7 @@ namespace rw
                         mbStopRequested = 1;
                         mWork.Signal(false);            // Condition::Signal(a1+72, 0)
                         while (mbThreadRunning)
-                            EA::Thread::ThreadSleep(1);
+                            { const u32 luSleepMilliseconds = 1; EA::Thread::ThreadSleep(&luSleepMilliseconds); }
                     }
                     mpDriver->Restore();                // (*(driver+8))(driver)
                 }
@@ -131,7 +131,7 @@ namespace rw
                     mThread.Begin(&Device::ThreadEntry, this, lpParams, lpWrapper);
 
                     while (!mbThreadRunning)
-                        EA::Thread::ThreadSleep(1);
+                        { const u32 luSleepMilliseconds = 1; EA::Thread::ThreadSleep(&luSleepMilliseconds); }
                     // result is the last ThreadSleep return in the asm; the function value is
                     // unused by every caller (InsertOp/Handle::Handle ignore it).
                     liResult = 0;
@@ -319,7 +319,7 @@ namespace rw
 
                         lpThis->mLock.Lock(EA::Thread::kTimeoutNone);
                     }
-                    else if (lpThis->mWork.Wait(&lpThis->mLock, EA::Thread::kTimeoutNone) != EA::Thread::Condition::kResultOK)
+                    else if (lpThis->mWork.Wait(&lpThis->mLock, &EA::Thread::kTimeoutNone) != EA::Thread::Condition::kResultOK)
                     {
                         break;
                     }
@@ -513,7 +513,7 @@ namespace rw
                         break;
                     if (!(EA::Thread::GetThreadTime() < lTimeoutAbsolute))
                         break;
-                    mCompletion.Wait(&mCompletionLock, lTimeoutAbsolute);
+                    mCompletion.Wait(&mCompletionLock, &lTimeoutAbsolute);
                 }
                 return mCompletionLock.Unlock();
             }

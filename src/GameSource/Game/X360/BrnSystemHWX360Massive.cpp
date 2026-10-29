@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include "GameSource/Game/X360/BrnSystemHWX360.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"      // CgsMemory::HeapMalloc
@@ -6,10 +7,6 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h" // CMassiveClientCore + SMassiveClientInit
 
 #include "types.hpp"   // std::intptr_t
-
-// XDK sign-in query (real prototype lives in the Xbox 360 XDK). Prepare gates Massive
-// initialisation on at least one profile being signed in to LIVE (state == 2).
-extern "C" int XUserGetSigninState(unsigned int dwUserIndex);
 
 // ---------------------------------------------------------------------------
 // BrnMassive::operator++(System360HWMassive::EPrepareStage&, int) @ 0x823A8958

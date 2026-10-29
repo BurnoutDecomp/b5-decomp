@@ -65,8 +65,9 @@ namespace Detail
 
         if (lSleepMs >= 0)
         {
-            // Native EAThread takes its own ThreadTime value.
-            EA::Thread::ThreadSleep(static_cast<EA::Thread::ThreadTime>(lSleepMs));
+            // Native EAThread receives the address of the 32-bit millisecond count.
+            const u32 luSleepMilliseconds = static_cast<u32>(lSleepMs);
+            EA::Thread::ThreadSleep(&luSleepMilliseconds);
         }
 
         // Done flag already set -> keep waiting (the caller's loop will observe it).

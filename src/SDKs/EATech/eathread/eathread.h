@@ -2,7 +2,6 @@
 #define EA_THREAD_EATHREAD_H
 
 #include "types.hpp"
-#include "types.hpp"
 
 // The X360-faithful EA::Thread facade home (ThreadId / HANDLE, the parameter PODs,
 // GetThreadId, and the EA::Thread::{Thread, Futex, IRunnable, ThreadParameters,
@@ -28,8 +27,7 @@
 // headers is redefined (a redefinition would be a C2011 collision in the many TUs
 // that include BrnEAThreadX360.h AND these canonical headers, e.g.
 // CgsDeviceManager.h). eathread.h only ADDS the base scalar layer
-// (ThreadTime/kTimeout*/kThreadId*/priority+processor constants) and the free
-// ThreadSleep(ThreadTime) overload, none of which BrnEAThreadX360.h defines.
+// (ThreadTime/kTimeout*/kThreadId*/priority+processor constants).
 // ===========================================================================
 
 namespace EA
@@ -46,10 +44,10 @@ namespace Thread
     // ThreadId (BrnEAThreadX360.h: typedef void* ThreadId).
     typedef ThreadId SysThreadId;
 
-    // Time is a double count of milliseconds; the two sentinel deadlines.
-    typedef double ThreadTime;
+    // ARTIST uses a 32-bit millisecond word, passed by address to waits.
+    typedef u32 ThreadTime;
     const ThreadTime kTimeoutImmediate = 0;
-    const ThreadTime kTimeoutNone      = 4294967295.0;   // 0xFFFFFFFF
+    const ThreadTime kTimeoutNone      = 0xFFFFFFFFu;   // 0xFFFFFFFF
 
     // ---- id / priority / processor constants (Feb-2007 eathread.h) ---------
 
@@ -70,12 +68,7 @@ namespace Thread
 
     // ---- free functions ----------------------------------------------------
 
-    // Sleep the calling thread for a relative time (Feb-2007 eathread.h). This is a
-    // distinct overload from BrnEAThreadX360.h's X360 primitive
-    // `u32 ThreadSleep(const u32* lpuMilliseconds)` -- they differ in parameter type
-    // (const ThreadTime& vs const u32*) so both coexist; callers passing a
-    // ThreadTime (e.g. CgsSystem::ThreadLayout::InteruptThreadForAssert) bind here.
-    void ThreadSleep(const ThreadTime& timeRelative = kTimeoutImmediate);
+    // ThreadSleep(const u32*) and GetThreadTime() are owned by BrnEAThreadX360.h.
 
     // NOTE: ThreadId GetThreadId() is already declared in BrnEAThreadX360.h (the X360
     // home @0x82B42560); it is reused via the include above, not redeclared.
