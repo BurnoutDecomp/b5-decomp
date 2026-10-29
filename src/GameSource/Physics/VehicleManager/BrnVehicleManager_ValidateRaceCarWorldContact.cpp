@@ -549,9 +549,11 @@ namespace Vehicle
                 return true;   // below 10 mph EVERY contact is accepted (li r3,1 fast path)
             }
             // 10..25 mph: scale the cull height by (speed-10)/15 (vrefp + 2 Newton reciprocal).
-            lfCullHeight = lfCullHeight
-                * (lfSpeedMph - KVF_GROUND_CLEARANCE_MIN_SPEED_MPH)
-                / (KVF_GROUND_CLEARANCE_MAX_SPEED_MPH - KVF_GROUND_CLEARANCE_MIN_SPEED_MPH);
+            const f32 lfGroundCullSpeedDelta = lfSpeedMph - KVF_GROUND_CLEARANCE_MIN_SPEED_MPH;
+            const f32 lfGroundCullSpeedRange = KVF_GROUND_CLEARANCE_MAX_SPEED_MPH - KVF_GROUND_CLEARANCE_MIN_SPEED_MPH;
+            const f32 lfGroundCullSpeedRangeReciprocal = 1.0f / lfGroundCullSpeedRange; // 0x3D888889: vrefp + two ARTIST Newton steps
+            const f32 lfGroundCullSpeedScale = lfGroundCullSpeedDelta * lfGroundCullSpeedRangeReciprocal;
+            lfCullHeight = lfCullHeight * lfGroundCullSpeedScale;
         }
 
         // ---- the two ground-cull candidates (both suppressed for walls) ------------------------
