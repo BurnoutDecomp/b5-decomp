@@ -60,32 +60,17 @@
 // vtable calls: one vtable slot cannot resolve to two different targets.)
 #include "GameSource/Effects/Particles/LionParticleRender.h"    // BrnParticle::LionParticleRender
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the one-shot EmitterCubeRender announcement
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"   // shadow::Device
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 
 #include <cstddef>   // offsetof (the layout pins at the foot of this file)
-#include <cstdio>
-#include <cstdlib>   // [lionfx] getenv -- the BRN_LIONFX_NOCULL bring-up bypass    // snprintf -- the [lionfx] bring-up witness
 
-// --- Platform D3D device + fast-path draw thunks -----------------------------------------------
-// The engine's single D3D device global (renderengine::gpD3DDevice, defined
-// in the renderengine device TU) and the two D3DDevice_* thunks Dispatch binds through. No
-// project TU homes the thunks; declared here as the minimal extern surface, matching the XDK d3d9
-// fast-set API and the shadow-device precedent (shadowingdevice.cpp).
-struct IDirect3DDevice9;
-extern IDirect3DDevice9* gpD3DDevice;
+// Native XDK APIs carry the real D3D types and the 64-bit PendingMask3 argument.
+#include <d3d9.h>
+extern D3DDevice* gpD3DDevice;
 
-extern "C"
-{
-    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
-                                   const void* lpStreamData, u32 luOffsetInBytes,
-                                   u32 luStride, u32 luFlags);
-    void D3DDevice_DrawVertices(IDirect3DDevice9* lpDevice, u32 luPrimitiveType,
-                                u32 luStartVertex, u32 luVertexCount);
-}
-
-// The particle draw primitive type the console passes to D3DDevice_DrawVertices.
-static const u32 KU_PARTICLE_PRIMITIVE_TYPE = 13;
+static const D3DPRIMITIVETYPE KU_PARTICLE_PRIMITIVE_TYPE = D3DPT_QUADLIST;
 
 // ----------------------------------------------------------------------------
 // cParticleRender::Dispatch
@@ -103,21 +88,6 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
                                float32_t afDepthSamplerOffsetV,
                                renderengine::TextureState* apDepthTextureState)
 {
-    {
-        static u32 suLastBatches = 0xFFFFFFFFu;
-        const u32 luBatches = arBatchArray.GetLength();
-        if (luBatches != suLastBatches)
-        {
-            suLastBatches = luBatches;
-            char lacMsg[160];
-            std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[lionfx] Dispatch: batches=%u vb=%p white=%.3f\n",
-                          luBatches, static_cast<const void*>(apVertexBuffer),
-                          static_cast<double>(afWhiteLevel));
-            CgsDev::Log::WriteToLog(lacMsg);
-        }
-    }
-
     // Nothing to replay if the batch list is empty. GetLength() fires the "Array used before
     // Construct/Clear was called" assert on the -1 sentinel, matching the console length read.
     if (arBatchArray.GetLength() == 0)
@@ -127,8 +97,9 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
 
     // Reset the shadow device and bind the empty stream / particle sampler state for the pass.
     shadow::Device::ResetShadowing();
-    D3DDevice_SetStreamSource(gpD3DDevice, 0, apVertexBuffer, 0, 0, 1);
-    shadow::Device::SetState(gpLionParticleSamplerState, 0);
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(apVertexBuffer), 0, 0, 1);
+    shadow::Device::SetState(const_cast<CgsGraphics::SamplerState*>(
+        CgsGraphics::ImRendererBase::mgStateLibrary.mpSamplerState_Linear_MipNearest_ClampUV), 0);
 
     mpRenderer->BeginRendering(afWhiteLevel, abEnableZFade, afNearPlane, afFarPlane,
                                afDepthFadeDistance, afDepthSamplerOffsetU, afDepthSamplerOffsetV,
@@ -154,79 +125,14 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
         }
 
         const u32 luVertexStride = mpRenderer->GetVertexStride(*lpCurrentMaterial);
-        D3DDevice_SetStreamSource(gpD3DDevice, 0, apVertexBuffer, 0, luVertexStride, 1);
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(apVertexBuffer), 0, luVertexStride, 1);
 
         const u32 luStartVertex = lrBatch.GetStartVertex();
         const u32 luVertexCount = lrBatch.GetVertexCount();
         shadow::Device::FlushVertexProgramState();
         D3DDevice_DrawVertices(gpD3DDevice, KU_PARTICLE_PRIMITIVE_TYPE, luStartVertex, luVertexCount);
 
-        // ---- [liontex] THE DRAW-TIME TEXTURE CENSUS. NOT console behaviour: ours, log-only,
-        // bounded, DELETE-WHEN-STABLE.
-        //
-        // ⭐⭐ WHY IT EXISTS, AND WHAT IT REPLACES. Two witnesses on this path already print
-        // texture names and NEITHER of them answers "which textures did the Lion pass DRAW":
-        //   [texreg]  (LionParticleRender::TextureRegister) prints the 1st, 32nd, 64th ...
-        //             material REGISTERED -- i.e. a fixed-stride sample of every material of
-        //             every .lef in PARTICLES.BUNDLE, whether or not any effect using it runs;
-        //   [lionbind] (SetMaterial) prints the first 24 BINDS and then stops, and a bind is
-        //             issued only when the texture CHANGES, so one early effect can spend the
-        //             whole budget before another effect ever starts.
-        // Reading the first as if it were the second is what produced the standing claim that
-        // this pass draws six textures and never the boost flame. This line counts EVERY batch
-        // the device is given, keyed by the material's own mTextureHandle, and prints the whole
-        // table whenever a new handle appears -- so the answer is a census, not a sample.
-        {
-            static const u32 KU_TEXCENSUS_SLOTS = 24u;
-            static u32 sauCensusHash[KU_TEXCENSUS_SLOTS] = { 0 };
-            static const char* sapcCensusName[KU_TEXCENSUS_SLOTS] = { 0 };
-            static u32 sauCensusBatches[KU_TEXCENSUS_SLOTS] = { 0 };
-            static u32 sauCensusVerts[KU_TEXCENSUS_SLOTS] = { 0 };
-            static u32 suCensusUsed = 0;
-            static u32 suCensusDumps = 0;
-            static u32 suCensusTick = 0;
-            static const u32 KU_TEXCENSUS_DUMPS = 24u;
-            static const u32 KU_TEXCENSUS_PERIOD = 4000u;
 
-            const u32 luHandle = lpCurrentMaterial->mTextureHandle;
-            u32 luSlot = 0;
-            while (luSlot < suCensusUsed && sauCensusHash[luSlot] != luHandle)
-                ++luSlot;
-
-            bool lbNew = false;
-            if (luSlot == suCensusUsed && suCensusUsed < KU_TEXCENSUS_SLOTS)
-            {
-                sauCensusHash[luSlot] = luHandle;
-                sapcCensusName[luSlot] = lpCurrentMaterial->mpTextureName.Get();
-                ++suCensusUsed;
-                lbNew = true;
-            }
-            if (luSlot < suCensusUsed)
-            {
-                ++sauCensusBatches[luSlot];
-                sauCensusVerts[luSlot] += luVertexCount;
-            }
-
-            // Dumped on a NEW handle (so the moment a texture first draws is in the log) and
-            // every KU_TEXCENSUS_PERIOD batches (so the counts on the LAST dump are current
-            // rather than frozen at whenever the last new texture appeared).
-            ++suCensusTick;
-            if ((lbNew || (suCensusTick % KU_TEXCENSUS_PERIOD) == 0u)
-                && suCensusDumps < KU_TEXCENSUS_DUMPS)
-            {
-                ++suCensusDumps;
-                for (u32 luRow = 0; luRow < suCensusUsed; ++luRow)
-                {
-                    char lacMsg[224];
-                    std::snprintf(lacMsg, sizeof(lacMsg),
-                                  "[liontex] dump%u #%u/%u %08X \"%s\" batches=%u verts=%u\n",
-                                  suCensusDumps, luRow, suCensusUsed, sauCensusHash[luRow],
-                                  sapcCensusName[luRow] ? sapcCensusName[luRow] : "<null>",
-                                  sauCensusBatches[luRow], sauCensusVerts[luRow]);
-                    CgsDev::Log::WriteToLog(lacMsg);
-                }
-            }
-        }
     }
 
     mpRenderer->RenderGroupEnd();
@@ -460,25 +366,19 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
 
     const rw::math::vpu::Matrix44& lrFrustum = lpRenderer->GetPackedFrustumLrtb();
 
-    u32 luLive = 0, luCell = 0, luInactive = 0, luCulled = 0, luRendered = 0;   // [lionfx] witness
-    u32 luCullRange = 0, luCullFrustum = 0, luCullNear = 0;                    // [lionfx] by stage
-
     for (cParticleEmitter* lpEmitter = arEmitterManager.GetpUsed();
          lpEmitter != 0;
          lpEmitter = lpEmitter->GetNextEmitter())
     {
-        ++luLive;
 
         if ((lpEmitter->GetDescriptor()->Flags() & cParticleDescriptor::E_FLAG_CELL_RENDER) != 0)
         {
-            ++luCell;
             EmitterCubeRender(arVertexBuffer, arBatchArray, lpEmitter, arTime);
             continue;
         }
 
         if (!lpEmitter->IsActive())
         {
-            ++luInactive;
             continue;
         }
 
@@ -491,8 +391,7 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
         const f32 lfRangeSq = lfDx * lfDx + (lfDy * lfDy + lfDz * lfDz);
         if (lfRangeSq >= KF_EMITTER_CULL_RANGE_SQ)
         {
-            ++luCulled; ++luCullRange;
-            if (!sbNoCull) continue;
+            continue;
         }
 
         // ---- frustum (the four packed LRTB planes, all four lanes) -----------------------------
@@ -513,107 +412,17 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
                                   && (lafDistance[3] > lrFrustum.wAxis.w);
         if (!lbInsideAllFour)
         {
-            ++luCulled; ++luCullFrustum;
-            if (!sbNoCull) continue;
+            continue;
         }
 
         // ---- near ------------------------------------------------------------------------------
         const f32 lfAlongView = mCamDir.x * lfDx + (mCamDir.y * lfDy + mCamDir.z * lfDz);
         if (lfAlongView <= KF_EMITTER_CULL_BEHIND)
         {
-            ++luCulled; ++luCullNear;
-            if (!sbNoCull) continue;
-        }
-
-        {
-            // [lionfx] ONE-SHOT, the first emitter that ever reaches the cull: every number the
-            // three tests consume, so a wrong camera publish is a readable line rather than a
-            // guess. (The camera data reaches here through ParticleModule::BuildLionVertexBuffers
-            // -> LionParticleRender::SetCameraData, and on this build the ParticleRenderData it
-            // reads is written by a PC bring-up stand-in -- so "is the camera real" is exactly the
-            // question that has to be answerable.) DELETE with the bring-up.
-            static bool sbDiagOnce = false;
-            if (!sbDiagOnce)
-            {
-                sbDiagOnce = true;
-                char lacMsg[416];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[lionfx] cull#1 cam=(%.2f,%.2f,%.2f) dir=(%.3f,%.3f,%.3f) emit=(%.2f,%.2f,%.2f)"
-                    " distSq=%.1f along=%.2f planeD=(%.2f,%.2f,%.2f,%.2f) vs (%.2f,%.2f,%.2f,%.2f)\n",
-                    mCamPos.x, mCamPos.y, mCamPos.z, mCamDir.x, mCamDir.y, mCamDir.z,
-                    lMat.wa.x, lMat.wa.y, lMat.wa.z, lfRangeSq, lfAlongView,
-                    lafDistance[0], lafDistance[1], lafDistance[2], lafDistance[3],
-                    lrFrustum.wAxis.x, lrFrustum.wAxis.y, lrFrustum.wAxis.z, lrFrustum.wAxis.w);
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
-        }
-
-        // ---- [lionemit] THE LIVE-EMITTER ROSTER. NOT console behaviour: ours, bounded,
-        // log-only, DELETE-WHEN-STABLE.
-        //
-        // ⭐ WHY. It answers "WHICH emitter is where" -- the descriptor's own name, its
-        // material's texture and the locator matrix the cull just read -- which nothing else on
-        // this path prints. One dump per KU_LIONEMIT_PERIOD renders. Its first roster is what
-        // settled the boost-effect placement question: TEN emitters at exactly TWO positions
-        // 0.99 m apart, the car's two FXBOOSTPOINT nozzles, none stray and none at the origin.
-        //
-        // ⛔ CORRECTION (2026-09-06). This comment used to open "filmed with BRN_LION_QRES_SHOW=1
-        // this pass draws THREE plumes while the car has TWO nozzles ... a hard-edged saturated
-        // bar pinned to the CAR at an offset nothing authored". THE THIRD OBJECT IS NOT A PLUME
-        // AND NOT A LION DRAW. It is the HUD BOOST BAR -- BrnGui::BoostBarRenderer's fire body,
-        // green because this car's EBoostType is E_BOOST_TYPE_STUNT, whose authored inner colour
-        // KV3_BOOSTTYPE_STUNT_INNER_COLOUR is {0.375, 0.95, 0.30} (see BrnBoostBarRenderer.cpp).
-        // ⚠ AND THE COLOUR CLAIM IS THE HUE, NOT A RATIO -- the first cut of this banner quoted
-        // "78/189/61 == 0.41/1.00/0.32 normalised, a match", and that mean was taken over a window
-        // that swept in the debug strip's PURE-GREEN squares and fps text, which pulled it toward
-        // the authored figure. Bar-only (x[80..640], 7,839 px) it is 91/178/71 == 0.51/1.00/0.40,
-        // and it CANNOT equal the inner colour: RenderFire composes the inner colour through the
-        // fire-body texture and mixes the OUTER colour {0.925, 0.575, 0.575} into the core, so the
-        // bar desaturates with brightness (measured 0.55 r/g in the luma 30-70 band rising to 0.76
-        // above 200, the mid-tones bracketing 0.395). What identifies the type is the HUE, and it
-        // is not close: the other two authored inner colours are RED-dominant by 4.5x (DANGER
-        // {1.125,0.25,0.0}) and 16x (AGGRESSION {2.0,0.125,0.15}). Only STUNT is green -- and STUNT
-        // is enum 2, the same value that selects KAC_BOOST_EFFECTS[2] == BoostGreen.lef.
-        // A SHOW frame is NOT the particle buffer alone: the GUI draws AFTER the composite, so
-        // the map panel, the fps text and the boost bar are all still in it. THE PROOF is
-        // scratch/FLAME/BOOST1/evidence/SHOW_bb_002760.bmp, a SHOW frame at EffectsState 2 (no
-        // boost effect live) whose particle buffer is EMPTY -- black edge to edge -- and which
-        // still carries the bar; plus scratch/GREENBAR/LIVE, a 417-frame composited run of this
-        // build in which NO frame ever reaches EffectsState 1 and the bar is nonetheless in 313
-        // of them, its LEFT EDGE PINNED at x = 102..106 while its right edge grows 271 -> 399+
-        // as boost is earned. A gauge fills; a plume does not. See also the correction banner in
-        // XenonD3D9Shims.cpp's Im2dCompositeBlit_ApplyRopState.
-        {
-            static const u32 KU_LIONEMIT_PERIOD = 900u;
-            static const u32 KU_LIONEMIT_DUMPS  = 10u;
-            static u32 suEmitTick  = 0;
-            static u32 suEmitDumps = 0;
-            if (luLive == 1u)
-                ++suEmitTick;                       // count FRAMES, not emitters
-            if ((suEmitTick % KU_LIONEMIT_PERIOD) == 1u && suEmitDumps < KU_LIONEMIT_DUMPS * 32u)
-            {
-                ++suEmitDumps;
-                const cParticleDescriptor* lpDesc = lpEmitter->GetDescriptor();
-                const cParticleMaterial*   lpMat  = (lpDesc != 0) ? lpDesc->Material() : 0;
-                char lacMsg[288];
-                std::snprintf(lacMsg, sizeof(lacMsg),
-                    "[lionemit] tick=%u live#%u \"%s\" tex=\"%s\" world=%u locator=(%.2f,%.2f,%.2f)"
-                    " cam=(%.2f,%.2f,%.2f)\n",
-                    suEmitTick, luLive,
-                    (lpDesc != 0 && lpDesc->mpName.Get()) ? lpDesc->mpName.Get() : "<noname>",
-                    (lpMat != 0 && lpMat->mpTextureName.Get()) ? lpMat->mpTextureName.Get()
-                                                              : "<notex>",
-                    lpEmitter->GetBindings().GetWorldIndex(),
-                    static_cast<double>(lMat.wa.x), static_cast<double>(lMat.wa.y),
-                    static_cast<double>(lMat.wa.z),
-                    static_cast<double>(mCamPos.x), static_cast<double>(mCamPos.y),
-                    static_cast<double>(mCamPos.z));
-                CgsDev::Log::WriteToLog(lacMsg);
-            }
+            continue;
         }
 
         EmitterRender(arVertexBuffer, arBatchArray, lpEmitter, arTime);
-        ++luRendered;
     }
 
 }
@@ -707,7 +516,7 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
                      || lpBucket->GetEmitterNext() == 0)
                     && lTotalNumParticlesSimulated != 0)
                 {
-                    if (lbDrawThisWorld)
+                    if (apEmitter->GetBindings().GetWorldIndex() == 0)
                     {
                         lpRenderer->Render(lVertexIterator, lParticle, lParticleMatrices,
                                            lTotalNumParticlesSimulated, 0, apEmitter, lpFog,
@@ -739,7 +548,7 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
                      || lpBucket->GetEmitterNext() == 0)
                     && lTotalNumParticlesSimulated != 0)
                 {
-                    if (lbDrawThisWorld)
+                    if (apEmitter->GetBindings().GetWorldIndex() == 0)
                     {
                         lpRenderer->Render(lVertexIterator, lParticle, lParticleVectors,
                                            lTotalNumParticlesSimulated, 0, apEmitter, lpFog,
@@ -771,7 +580,7 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
                      || lpBucket->GetEmitterNext() == 0)
                     && lTotalNumParticlesSimulated != 0)
                 {
-                    if (lbDrawThisWorld)
+                    if (apEmitter->GetBindings().GetWorldIndex() == 0)
                     {
                         lpRenderer->Render(lVertexIterator, lParticle, lParticleMatrices,
                                            lTotalNumParticlesSimulated, 0, apEmitter, lpFog,

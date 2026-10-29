@@ -84,7 +84,9 @@ public:
 
     // Pointer sugar so the walkers read the way the original source did.
     T* operator->() const { return Get(); }
-    explicit operator bool() const { return muSlot != 0u; }
+    // C++03 safe-bool keeps contextual tests without an integer conversion.
+    typedef u32 tLionSerialisedPtr::* tBool;
+    operator tBool() const { return muSlot != 0u ? &tLionSerialisedPtr::muSlot : 0; }
 
     tLionSerialisedPtr& operator=(T* apValue) { Set(apValue); return *this; }
 

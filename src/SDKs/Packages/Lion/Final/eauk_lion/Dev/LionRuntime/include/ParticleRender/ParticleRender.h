@@ -24,15 +24,18 @@
 // ============================================================================
 
 #include "types.hpp"
-#include <EABase/eabase.h>       // one bool8_t ABI regardless of include order
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44 (the engine 4x4 matrix)
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector (mCamPos/mCamDir)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h" // LionBatchArray
 
 // EA / Lion scalar spellings used by the Lion runtime declarations.
 typedef float    float32_t;
-// Use EABase's bool8_t. A separate u8 alias has the same size but a different
-// native C++ signature, making virtual declarations depend on include order.
+// Microsoft C++ EABase uses bool for bool8_t (GNU/PS3 uses int8_t). Keep
+// that native signature without importing modern EABase platform detection.
+#ifndef BOOL8_T_DEFINED
+#define BOOL8_T_DEFINED
+typedef bool bool8_t;
+#endif
 typedef u32      U32;
 typedef float    FP32;
 
