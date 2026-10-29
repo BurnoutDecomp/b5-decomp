@@ -1,99 +1,60 @@
 #include "SDKs/XGraphics/XGraphicsArena.h"
+#include "SDKs/XGraphics/XGraphicsCompiler.h"
 
-#include <cstring> // memset
-
-// ===========================================================================
-// XGRAPHICS::Arena -- reconstructed from BURNOUT_X360_ARTIST.XEX. See
-// XGraphicsArena.h for the attested layout. Each store below is store-for-store
-// with the X360 asm; the four stats counters and the LIFO-free path are gated
-// on mbTrackStats (the +0x28 byte flag) exactly as the asm branches on it.
-// ===========================================================================
+#include <cstring>
 
 namespace XGRAPHICS
 {
-
-// Smallest payload a fresh block is grown with (0x2FD8). Grow bumps this by the
-// block header, so a new block is at least KI_MIN_BLOCK_PAYLOAD + sizeof(header).
-static const int KI_MIN_BLOCK_PAYLOAD = 12248;
-
-void* Arena::Grow(int aiSize)
+// ARTIST82C26AC8; the SDK signature is unsigned, but the minimum-size test is signed.
+void Arena::Grow(unsigned int size) const
 {
-    if (aiSize < KI_MIN_BLOCK_PAYLOAD)
-        aiSize = KI_MIN_BLOCK_PAYLOAD;
+    if (static_cast<s32>(size) < 12248)
+        size = 12248;
 
-    // Total block = requested payload + the header the arena writes at its head.
-    // (On X360 the header is the literal `8` the asm adds; sizeof keeps the PC
-    // x64 build correct once the chain pointer widens.)
-    const u32 luBlockSize = static_cast<u32>(aiSize + static_cast<int>(sizeof(ArenaBlock)));
-    ArenaBlock* lpPrevBlock = mpBlock;
-
-    ArenaBlock* lpBlock = static_cast<ArenaBlock*>(
-        mpHeap->mpfnAllocBlock(mpHeap->mpAllocContext, static_cast<int>(luBlockSize)));
-    mpBlock = lpBlock;
-
-    // Write the block header: chain the old block, record the block size.
-    lpBlock->mpPrevBlock = lpPrevBlock;
-    mpBlock->muBlockSize = luBlockSize;
-
-    // Bump pointer starts just past the header; end sits at the block's tail.
-    u8* lpBase = reinterpret_cast<u8*>(mpBlock);
-    mpCurrent   = lpBase + sizeof(ArenaBlock);
-    mpEnd       = lpBase + luBlockSize;
-    mpLastAlloc = lpBase + sizeof(ArenaBlock);
-    return lpBlock;
+    const u32 blockSize = size + sizeof(Chunk);
+    Chunk* previous = chunk;
+    Chunk* block = static_cast<Chunk*>(context->malloc(context->handle, blockSize));
+    chunk = block;
+    chunk->previous = previous;
+    chunk->size = blockSize;
+    char* base = reinterpret_cast<char*>(chunk);
+    hwm = base + sizeof(Chunk);
+    amax = base + blockSize;
+    old = base + sizeof(Chunk);
 }
 
-void* Arena::Malloc(int aiSize)
+// ARTIST82C21EC0.
+void* Arena::Malloc(unsigned int size) const
 {
-    // Round the request up to the next 4-byte boundary.
-    const u32 luSize = static_cast<u32>(aiSize + 3) & 0xFFFFFFFCu;
+    size = (size + 3u) & ~3u;
+    if (hwm + size > amax)
+        Grow(size);
 
-    // Grow a new block if this allocation would run past the current one.
-    if (mpCurrent + luSize > mpEnd)
-        Grow(static_cast<int>(luSize));
-
-    u8* lpAlloc = mpCurrent;
-    mpLastAlloc = lpAlloc;
-
-    // Stats: if this allocation lands below the high-water mark it is reusing
-    // space a prior LIFO Free() gave back.
-    if (mbTrackStats)
+    char* allocation = hwm;
+    old = allocation;
+    if (recycle && allocation < hwm_max)
     {
-        if (lpAlloc < mpHighWater)
-        {
-            ++muReuseCount;
-            const u32 luReused = (lpAlloc + luSize >= mpHighWater)
-                                     ? static_cast<u32>(mpHighWater - lpAlloc)
-                                     : luSize;
-            muReuseBytes += luReused;
-        }
+        ++reused;
+        reused_bytes += allocation + size >= hwm_max
+            ? static_cast<u32>(hwm_max - allocation) : size;
     }
 
-    u8* lpNext = lpAlloc + luSize;
-    mpCurrent = lpNext;
-    if (mpHighWater < lpNext)
-        mpHighWater = lpNext;
-
-    return mpLastAlloc;
+    char* next = allocation + size;
+    hwm = next;
+    hwm_max = hwm_max < next ? next : hwm_max;
+    return old;
 }
 
-void* Arena::Free(void* apPtr)
+// ARTIST82C21F88: statistics and cursor are reloaded after the external memset.
+void Arena::Free(void* block) const
 {
-    // LIFO free: only the most recent Malloc can be rolled back, and only while
-    // stats tracking is on. Anything else is a no-op that returns the pointer.
-    if (mbTrackStats)
+    if (recycle && block == old)
     {
-        if (apPtr == mpLastAlloc)
-        {
-            u8* lpLast = mpLastAlloc;
-            const u32 luFreedSize = static_cast<u32>(mpCurrent - lpLast);
-            memset(apPtr, 0, luFreedSize);
-            mpCurrent = lpLast; // rewind the bump pointer to the freed alloc
-            ++muFreeCount;
-            muFreeBytes += luFreedSize;
-        }
+        std::memset(block, 0, static_cast<u32>(hwm - old));
+        const u32 freed = static_cast<u32>(hwm - old);
+        hwm = old;
+        ++reclaimed;
+        reclaimed_bytes += freed;
     }
-    return apPtr;
 }
-
-} // namespace XGRAPHICS
+}
