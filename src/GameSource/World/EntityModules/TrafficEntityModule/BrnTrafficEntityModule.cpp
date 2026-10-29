@@ -11818,77 +11818,76 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::CacheRaceCarState  @ 0x827185D0   (EXPORT HOLE)
+// TrafficEntityModule::CacheRaceCarState  @ 0x827185D0   (raw body recovered)
 //
 // One snapshot per UpdateVehicles of the race cars the traffic sim reacts to. Feb-2007 built
 // the four Append lists inline (BrnTrafficEntityModule.cpp:6976..:7025); the ship hoisted
 // them into mRaceCarState and added the two per-index tables.
 //
-// FLAG: the four lists are the leak verbatim. The fill of mabRaceCarActive /
-// maActiveRaceCarPositions is REASONED from their DWARF names, since the function has no
-// per-function export. DELETE-WHEN the export hole is filled.
+// ARTIST raw 0x827185D0..0x82718984 supplies the complete loop, list ordering,
+// per-index stores, XYZ epsilon reduction and both stationary-facing branches.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::CacheRaceCarState(
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCars)
 {
-    CGS_ASSERT(lpRaceCars != 0, "lpActiveRaceCarOutputInterface");
-
+    CGS_ASSERT(lpRaceCars != nullptr, "lpActiveRaceCarOutputInterface");
     mRaceCarState.mRaceCarPositions.Construct();
     mRaceCarState.mRaceCarLinearVelocities.Construct();
     mRaceCarState.mRaceCarSpeeds.Construct();
     mRaceCarState.mRaceCarXZVelocityDirs.Construct();
 
+    namespace Vmx = rw::math::vpu::SLerpDetail;
+    // ARTIST 0x820BA270 lane zero. vrlimi mask1/rotate1 duplicates X into W
+    // in the compare copy, so the recorded vcmpgtfp. reduction tests only XYZ.
+    const f32 KF_ZERO_TOLERANCE = 1.1920928955078125e-7f;
+    const auto IsZero = [KF_ZERO_TOLERANCE](Vector3 lValue) {
+        return !(std::fabs(lValue.x) > KF_ZERO_TOLERANCE
+                 || std::fabs(lValue.y) > KF_ZERO_TOLERANCE
+                 || std::fabs(lValue.z) > KF_ZERO_TOLERANCE);
+    };
     for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
     {
         const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
-
         const bool lbActive = lpRaceCars->IsRaceCarActive(leIndex);
         mRaceCarState.mabRaceCarActive[liIndex] = lbActive;
-
         if (!lbActive)
         {
             continue;
         }
-
-        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
-            lpRaceCars->GetRaceCarState(leIndex);
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState = lpRaceCars->GetRaceCarState(leIndex);
         mRaceCarState.maActiveRaceCarPositions[liIndex] = lpRaceCarState->mTransform.Pos();
-
         if (lpRaceCars->IsRaceCarRival(leIndex))
         {
             continue;
         }
-
         mRaceCarState.mRaceCarPositions.Append(lpRaceCarState->mTransform.Pos());
         mRaceCarState.mRaceCarLinearVelocities.Append(lpRaceCarState->mLinearVelocity);
 
         Vector3 lXZVelocity = lpRaceCarState->mLinearVelocity;
         lXZVelocity.y = 0.0f;
-
-        if (!rw::math::vpu::IsZero(lXZVelocity))
+        if (!IsZero(lXZVelocity))
         {
-            Vector3 lVelocityDir;
-            const f32 lfSpeed =
-                rw::math::vpu::NormalizeReturnMagnitude(lXZVelocity, lVelocityDir);
-            mRaceCarState.mRaceCarXZVelocityDirs.Append(lVelocityDir);
+            const f32 lfLengthSquared = Vmx::Dot3(lXZVelocity, lXZVelocity);
+            const f32 lfInverseLength = Vmx::RefinedReciprocalSqrt(lfLengthSquared, 2);
+            mRaceCarState.mRaceCarXZVelocityDirs.Append(Vmx::Scale(lXZVelocity, lfInverseLength));
+            const f32 lfSpeed = lfLengthSquared == 0.0f ? 0.0f : lfLengthSquared * lfInverseLength;
             mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(lfSpeed));
         }
         else
         {
-            // The stalled-car fallback keeps the direction list index-parallel: fall back on
-            // the car's own At axis, and on world Z if that is flat too.
-            Vector3 lFacing = lpRaceCarState->mTransform.At();
-            lFacing.y = 0.0f;
-
-            if (!rw::math::vpu::IsZero(lFacing))
+            const Vector3 lRawFacing = lpRaceCarState->mTransform.At();
+            Vector3 lXZFacing = lRawFacing;
+            lXZFacing.y = 0.0f;
+            if (!IsZero(lXZFacing))
             {
-                mRaceCarState.mRaceCarXZVelocityDirs.Append(lpRaceCarState->mTransform.At());
+                const f32 lfInverseLength = Vmx::RefinedReciprocalSqrt(Vmx::Dot3(lXZFacing, lXZFacing), 2);
+                mRaceCarState.mRaceCarXZVelocityDirs.Append(Vmx::Scale(lXZFacing, lfInverseLength));
             }
             else
             {
-                mRaceCarState.mRaceCarXZVelocityDirs.Append(rw::math::vpu::GetVector3_ZAxis());
+                // Original zero-facing branch keeps r4 pointing at the raw At row.
+                mRaceCarState.mRaceCarXZVelocityDirs.Append(lRawFacing);
             }
-
             mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(0.0f));
         }
     }
