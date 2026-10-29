@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/meshhelper.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 
 struct RenderableMesh;                                   // renderablemesh.h
 namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommands.h
@@ -94,6 +95,16 @@ namespace shadow
                 lpMeshState->Dispatch<renderengine::Device>(0);
                 mpIndexStreamArray = lpMeshState;
                 mpStreamArray = 0;
+            }
+        }
+
+        // ARTIST 823F9284..92A4; StateBlockShadow::m_pRenderTargetState.
+        static void SetState(const renderengine::RenderTargetState* lpState)
+        {
+            if (mpRenderTargetState != lpState)
+            {
+                renderengine::Device::SetState(lpState);
+                mpRenderTargetState = lpState;
             }
         }
 
@@ -268,11 +279,8 @@ namespace shadow
         // frame bracket's triple has to compare against THESE and not a parallel copy.
         static const renderengine::DepthStencilState* mpDepthStencilState;  // dword_83010A28
         static const renderengine::RasterizerState*   mpRasterizerState;    // dword_83010A2C
-        // dword_83010A30 == StateBlockShadow::m_pRenderTargetState (DWARF source
-        // shadowingdevice.h:671) by the same thirteen-member walk. Left as `u32 muMisc30` because
-        // nothing in this pass reads or writes it beyond ResetShadowing's zero (@0x822769D4); rename
-        // it when a reader lands, not on spec.
-        static u32 muMisc30;                      // dword_83010A30
+        // ARTIST Target::Begin is the reader; ResetShadowing clears this home.
+        static const renderengine::RenderTargetState* mpRenderTargetState; // dword_83010A30
         static bool mbForceStencilWrite;          // byte_83010906
         static u32 muStencilValueToWrite;         // dword_83010908
         static bool mbRasteriserStateLocked;      // mbRasteriserStateLocked

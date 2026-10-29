@@ -231,7 +231,7 @@ namespace shadow
 
     const renderengine::DepthStencilState* Device::mpDepthStencilState = 0;  // dword_83010A28
     const renderengine::RasterizerState*   Device::mpRasterizerState   = 0;  // dword_83010A2C
-    u32 Device::muMisc30 = 0;
+    const renderengine::RenderTargetState* Device::mpRenderTargetState = 0;
     bool Device::mbForceStencilWrite = false;
     u32 Device::muStencilValueToWrite = 0;
     bool Device::mbRasteriserStateLocked = false;
@@ -320,7 +320,7 @@ namespace shadow
 
         mpDepthStencilState = 0;
         mpRasterizerState = 0;
-        muMisc30 = 0;
+        mpRenderTargetState = 0;
         mbVertexProgramStateDirty = true;
     }
 

@@ -9,6 +9,13 @@ namespace renderengine
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
 
+    RenderTargetState* Device::m_renderTargetState = 0;
+
+    void Device::SetState(const RenderTargetState* lpState)
+    {
+        D3DDevice_SetSurfaces(gpD3DDevice, reinterpret_cast<const D3DSURFACES*>(lpState), 0);
+    }
+
     void Device::BeginShaderStates(const ProgramVariableHandle& lrHandle,
                                   FloatShaderStateIterator& lrIterator)
     {
