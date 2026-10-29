@@ -5994,6 +5994,9 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     lpOutput->LockForWrite();
     lpInput->LockForRead();
 
+    // ARTIST 8274AA74: reset before the divergence banner and all state branches.
+    muNumTrafficInsertionsThisFrame = 0;
+
     if (mbHullSyncDivergence)
     {
         // GATE: the hull-sync 2D banner. Its four text/position/size/colour constants come
@@ -9375,27 +9378,49 @@ void TrafficEntityModule::UpdateParams_UpdateNeighbours(Param* lpParam,
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateParams_TryToReinsertParam  @0x827247F0  (.cpp 10552)  GATED
-//
-// Online divergence repair: re-seats a param onto the nearest lane under the vehicle's actual
-// transform. Reached only through mParamsToReinsert, which nothing in the offline driving path
-// fills, and asserts AllowDivergentBehaviour() on entry.
-//
-// BLOCKERS (all three): TrafficData::FindNearestLaneForPoint has no declaration in
-// SharedClasses/Traffic/BrnTrafficDataResourceType.h; Param::ReinsertInLanes has no declaration
-// in BrnTrafficParam.h; muNumTrafficInsertionsThisFrame's <= 1 budget test at +232478 is the
-// only other read. DELETE-WHEN those two land.
-// ----------------------------------------------------------------------------
+// ARTIST 0x827247F0. Attempt at most two lane repairs per PreSceneUpdate frame.
+// The query consumes actual vehicle position/direction, then the active-hull gate.
 void TrafficEntityModule::UpdateParams_TryToReinsertParam(u32 luParam)
 {
     CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");
-    (void)luParam;
+    if (muNumTrafficInsertionsThisFrame > 1)
+    {
+        return;
+    }
 
-    static bool sbLogged = false;
-    LogMissingLeg_T2(sbLogged,
-                  "UpdateParams_TryToReinsertParam @0x827247F0 -- needs "
-                  "TrafficData::FindNearestLaneForPoint and Param::ReinsertInLanes, neither "
-                  "declared in the tree");
+    Param* const lpParam = GetParam(luParam);
+    const Vector3 lPosition = GetVehicleTransform(luParam).Pos();
+    const Vector3 lDirection = GetVehicleTransform(luParam).At();
+    const VecFloat lfMaxDistance{20.0f, 20.0f, 20.0f, 20.0f};
+    const VecFloat lfMinCosAngle{0.8f, 0.8f, 0.8f, 0.8f};
+    u32 luHull, luSection, luSegment;
+    f32 lfParamAlong;
+    const bool lbFound = mpData->FindNearestLaneForPoint(
+        lPosition, lfMaxDistance, lDirection, lfMinCosAngle,
+        &luHull, &luSection, &lfParamAlong, &luSegment);
+    ++muNumTrafficInsertionsThisFrame;
+    if (!lbFound)
+    {
+        return;
+    }
+    const u16 luActiveHull = static_cast<u16>(luHull);
+    if (mActiveHulls.Contains(luActiveHull))
+    {
+        const Hull* const lpHull = GetHull(luHull);
+        const Section* const lpSection = lpHull->GetSection(luSection);
+        lpParam->ReinsertInLanes(luHull, luSection, lfParamAlong, lpHull);
+        Vector3 lLanePosition, lLaneDirection, lLaneRight;
+        const VecFloat lfAlong{lfParamAlong, lfParamAlong, lfParamAlong, lfParamAlong};
+        // This sampler's third output is RIGHT (the existing lrUp name is misleading).
+        lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lfAlong,
+                                          lpParam->muCurrentSegment,
+                                          lLanePosition, lLaneDirection, lLaneRight);
+        const f32 lfSpeed = lpParam->mfSpeed;
+        GetParamTransform(luParam)->Initialise(
+            lLanePosition, lLaneDirection, lLaneRight,
+            VecFloat{lfSpeed, lfSpeed, lfSpeed, lfSpeed});
+        GetVehicle(luParam)->ResetPhysicalTime(5.0f);
+    }
 }
 
 // ----------------------------------------------------------------------------
