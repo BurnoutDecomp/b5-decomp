@@ -142,11 +142,6 @@ namespace Io
 
     struct PreUpdateOutput
     {
-        PreUpdateOutput()
-        {
-            mGuiOutEventQueue.MarkUnconstructed();
-            mAudioEffectsMessageQueue.MarkUnconstructed();
-        }
         // GetCarDataLoadedQueue() const (BrnPreUpdateSharedIo.h:193); referenced by
         // SetPreUpdateOutput to merge the source's audio-car-loaded events.
         const AudioCarLoadedDataQueue& GetCarDataLoadedQueue() const { return mAudioCarDataLoadedQueue; }
