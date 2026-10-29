@@ -84,8 +84,6 @@ void MainGameFlowState::Render() {}
 
 // --- LoadingScriptedState ---------------------------------------------------------------
 LoadingScriptedState::LoadingScriptedState()
-    : meLoadingStateStage(E_LOADINGSTATESTAGE_START)
-    , mbLoadingPaused(false)
 {
 }
 void LoadingScriptedState::OnEnter() {}
@@ -1112,9 +1110,6 @@ bool LoadingScriptedState::LoadSoundModule(BrnResource::GameDataIO::InputBuffer*
 
 // --- MainGameFlowStateInitialLoadingScreen (the boot loading screen) --------------------
 MainGameFlowStateInitialLoadingScreen::MainGameFlowStateInitialLoadingScreen()
-    : meLoadingScreenStage(E_LOADINGSTAGE_START)
-    , mpInputModuleAllocator(0)
-    , mbGuiPreloadDone(false)
 {
 }
 
@@ -1134,7 +1129,6 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
     // PC models that slot as RequestGuiFsmStage (BrnGameModule.hpp:483).
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(0);
 
-    meLoadingStateStage  = E_LOADINGSTATESTAGE_START;
     meLoadingScreenStage = E_LOADINGSTAGE_START;
     mbGuiPreloadDone     = false;
     gBrnInitialLoadingComplete = false;
@@ -1552,7 +1546,7 @@ void MainGameFlowStateInitialLoadingScreen::FinishLoading()
 }
 
 // --- MainGameFlowStateStartScreen (the legal/title screen phase) -------------------------
-MainGameFlowStateStartScreen::MainGameFlowStateStartScreen() : meLoadingStage(E_STARTSCREEN_START) {}
+MainGameFlowStateStartScreen::MainGameFlowStateStartScreen() {}
 
 // @ 0x823AAB18 -- park the scripted load (the title holds it at START until the player's
 // pre-accept) and request the BF_LEGAL GUI FSM stage (BrnLegalFsm; the X360 writes the
@@ -1752,7 +1746,7 @@ void MainGameFlowStateMemoryCard::Update()
 void MainGameFlowStateMemoryCard::Render() { LoadingScriptedState::Render(); }
 
 // --- MainGameFlowStateCompleteLoading (the post-title / compound-load phase) -------------
-MainGameFlowStateCompleteLoading::MainGameFlowStateCompleteLoading() : mbIsCollisionWorldPrepared(false) {}
+MainGameFlowStateCompleteLoading::MainGameFlowStateCompleteLoading() {}
 
 // @ 0x823AABD0 -- request the BF_COMPLOAD GUI FSM stage (BrnCmpLdFsm; pending-stage
 // byte = 3) and reset the settle latch (X360 this+4 = 0).
