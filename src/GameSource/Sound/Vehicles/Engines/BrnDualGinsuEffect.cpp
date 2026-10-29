@@ -711,16 +711,8 @@ bool DualGinsuEffect::Attach()
 
 void DualGinsuEffect::UpdateParams(f32 /*afTimeStep*/)
 {
-    CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
-    if (!mpPhysicsControl || meDualGinsuPrepareState != E_GINSU_PREPARE_STATE_FINISHED ||
-        !mCarSubmix.GetVoiceObject())
-        return;
-
     // ARTIST @ 0x826B3770 refreshes the authored EQ and RPM thresholds every
     // frame, then writes the six fixed PlayerCarSubmix panning coefficients.
-    CGS_ASSERT(mpHybridControl != nullptr, "mpHybridControl");
-    if (!mpHybridControl)
-        return;
     const Attrib::Gen::vehicleengine& lrAttribs =
         mpHybridControl->GetVehicleEngineAttributes();
     mfLowShelfFreq = lrAttribs.EQ_LowShelf_Freq();
@@ -749,10 +741,6 @@ void DualGinsuEffect::UpdateParams(f32 /*afTimeStep*/)
 
 void DualGinsuEffect::ProcessUpdate()
 {
-    if (meDualGinsuPrepareState != E_GINSU_PREPARE_STATE_FINISHED ||
-        !mCarSubmix.GetVoiceObject())
-        return;
-
     const f32 lfCutoff = GetRWACMixerOutputValue(4, Nicotine::DMixIO::DMX_FREQ);
     f32 lfPanningAngle =
         GetRWACMixerOutputValue(0, Nicotine::DMixIO::DMX_AZIM);
