@@ -11,42 +11,42 @@ namespace CgsModule
     public:
         const TInputBuffer* SafeLockInputForRead()
         {
-            const auto* lpBuffer = reinterpret_cast<const TInputBuffer*>(LockInputForRead());
+            const TInputBuffer* lpBuffer = reinterpret_cast<const TInputBuffer*>(LockInputForRead());
             CGS_ASSERT(lpBuffer, "lpBuffer != NULL");
             return lpBuffer;
         }
 
         TOutputBuffer* SafeLockOutputForWrite()
         {
-            auto* lpBuffer = reinterpret_cast<TOutputBuffer*>(LockOutputForWrite());
+            TOutputBuffer* lpBuffer = reinterpret_cast<TOutputBuffer*>(LockOutputForWrite());
             CGS_ASSERT(lpBuffer, "lpBuffer != NULL");
             return lpBuffer;
         }
 
         TInputBuffer* SafeGetInputStructure() const
         {
-            auto* lpBuffer = reinterpret_cast<TInputBuffer*>(GetInputStructure());
+            TInputBuffer* lpBuffer = reinterpret_cast<TInputBuffer*>(GetInputStructure());
             CGS_ASSERT(lpBuffer, "lpBuffer != NULL");
             return lpBuffer;
         }
 
         TOutputBuffer* SafeGetOutputStructure() const
         {
-            auto* lpBuffer = reinterpret_cast<TOutputBuffer*>(GetOutputStructure());
+            TOutputBuffer* lpBuffer = reinterpret_cast<TOutputBuffer*>(GetOutputStructure());
             CGS_ASSERT(lpBuffer, "lpBuffer != NULL");
             return lpBuffer;
         }
 
         void ClearInputBuffer()
         {
-            auto* lpBuffer = reinterpret_cast<TInputBuffer*>(GetInputStructure());
+            TInputBuffer* lpBuffer = reinterpret_cast<TInputBuffer*>(GetInputStructure());
             CGS_ASSERT(lpBuffer, "lpBuffer != NULL");
             lpBuffer->Clear();
         }
 
         void ClearOutputBuffer()
         {
-            auto* lpBuffer = reinterpret_cast<TOutputBuffer*>(GetOutputStructure());
+            TOutputBuffer* lpBuffer = reinterpret_cast<TOutputBuffer*>(GetOutputStructure());
             CGS_ASSERT(lpBuffer, "lpBuffer != NULL");
             lpBuffer->Clear();
         }
