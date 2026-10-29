@@ -12,10 +12,7 @@
 //   PropGraphicsList::GetPartGraphics @ 0x826756C0
 //   PropGraphicsList::GetPropGraphics @ 0x82675648
 //
-// Both fix-ups walk the serialised blob, which on the x64 target IS the host
-// layout (the porter contract pinned in BrnPropGraphicsList.h), so the walks
-// index by named members at the host strides -- semantic parity with the X360
-// 12-byte-stride byte arithmetic.
+// Both fix-ups walk the native serialised records at their declared strides.
 // =============================================================================
 
 namespace BrnPhysics
@@ -53,11 +50,8 @@ namespace Props
             while ( luIndex < muNumberOfPropModels );
         }
 
-        // X360: fires when muSizeInBytes >= 0x2800 (execution continues). The x64
-        // serialised form widens the arrays, so the equivalent capacity bound scales
-        // by the worst-case stride growth (24/12 = 2x). [PC DIVERGENCE: constant
-        // scaled for the widened blob; the X360 literal is 0x2800.]
-        CGS_ASSERT(muSizeInBytes < 2u * 0x2800u, "muSizeInBytes < KU_MAX_SERIALISED_SIZE");
+        // ARTIST 0x8267DBA8 compares the native serialised size against 0x2800.
+        CGS_ASSERT(muSizeInBytes < 0x2800u, "muSizeInBytes < KU_MAX_SERIALISED_SIZE");
     }
 
     // FixDown @ 0x8267DCD0 (store-for-store). Serialise-out fix-up: rebase every embedded
