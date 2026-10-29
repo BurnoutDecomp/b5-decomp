@@ -1,7 +1,7 @@
 #include "GameSource/Sound/Module/LogicModule/Brn3DUserSpaceEffectControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
-#include <cmath>
+#include <vectorintrinsics.h>
 
 // =============================================================================
 // BrnSound::Logic::Brn3DUserSpaceEffectControl -- out-of-line bodies.
@@ -91,34 +91,33 @@ void Brn3DUserSpaceEffectControl::AttachEmitterPosition(const Vector3* apPositio
     CGS_ASSERT(rw::math::vpu::IsValid(*mpTransform), "IsValid( *mpTransform )");
     CGS_ASSERT(rw::math::vpu::IsValid(*apPosition), "IsValid( *lpPosition )");
 
-    // 82696BC0 vsubfp and 82696BFC..6C10: transpose the orthonormal
-    // rotation, rotate -translation, then accumulate the world point X/Y/Z.
-    // Campaign rules 3/4/6: preserve each VMX rounding and denormal flush.
-    const auto flush = [](f32 v) {
-        return std::fpclassify(v) == FP_SUBNORMAL ? std::copysign(0.0f, v) : v;
-    };
-    const auto multiplyAdd = [&](f32 a, f32 b, f32 c) {
-        return flush(std::fma(flush(a), flush(b), flush(c)));
-    };
-    const Vector3& translation = mpTransform->wAxis;
-    const auto inverseComponent = [&](const Vector3& axis) {
-        f32 value = flush(flush(0.0f - flush(translation.z)) * flush(axis.z));
-        value = multiplyAdd(0.0f - flush(translation.y), axis.y, value);
-        value = multiplyAdd(0.0f - flush(translation.x), axis.x, value);
-        value = multiplyAdd(axis.x, apPosition->x, value);
-        value = multiplyAdd(axis.y, apPosition->y, value);
-        return multiplyAdd(axis.z, apPosition->z, value);
-    };
-    {
-        const Vector3 lAggregateValue = {
-        inverseComponent(mpTransform->xAxis),
-        inverseComponent(mpTransform->yAxis),
-        inverseComponent(mpTransform->zAxis), 0.0f};
-        mPositionInUserSpace = lAggregateValue;
-    }
-    // 82696BD8 stores the stable generated member's address; it does not
-    // write mGeneratedPosition until the next UpdateParams.
-    CgsSound::Logic::Cgs3dEffectControl::AttachEmitterPosition(&mGeneratedPosition);
+    // ARTIST82696BA0..82696C14: transpose the rotation, rotate the
+    // negated translation, then accumulate the world position. These are the
+    // original VMX operations, including their fused rounding and denormal rules.
+    const __vector4 lvZero = __vspltisw(0);
+    const __vector4 lvPosition = __lvx(apPosition, 0);
+    const __vector4 lvNegativeTranslation = __vsubfp(lvZero, __lvx(&mpTransform->wAxis, 0));
+    const __vector4 lvX = __lvx(&mpTransform->xAxis, 0);
+    const __vector4 lvY = __lvx(&mpTransform->yAxis, 0);
+    const __vector4 lvZ = __lvx(&mpTransform->zAxis, 0);
+    const __vector4 lvXZLow = __vmrglw(lvX, lvZ);
+    const __vector4 lvYZeroLow = __vmrglw(lvY, lvZero);
+    const __vector4 lvXZHigh = __vmrghw(lvX, lvZ);
+    const __vector4 lvYZeroHigh = __vmrghw(lvY, lvZero);
+    const __vector4 lvTransposeX = __vmrghw(lvXZHigh, lvYZeroHigh);
+    const __vector4 lvTransposeY = __vmrglw(lvXZHigh, lvYZeroHigh);
+    const __vector4 lvTransposeZ = __vmrghw(lvXZLow, lvYZeroLow);
+
+    __vector4 lvResult = __vmulfp(__vspltw(lvNegativeTranslation, 2), lvTransposeZ);
+    lvResult = __vmaddfp(__vspltw(lvNegativeTranslation, 1), lvTransposeY, lvResult);
+    lvResult = __vmaddfp(__vspltw(lvNegativeTranslation, 0), lvTransposeX, lvResult);
+    lvResult = __vmaddfp(lvTransposeX, __vspltw(lvPosition, 0), lvResult);
+    lvResult = __vmaddfp(lvTransposeY, __vspltw(lvPosition, 1), lvResult);
+    lvResult = __vmaddfp(lvTransposeZ, __vspltw(lvPosition, 2), lvResult);
+    __stvx(lvResult, &mPositionInUserSpace, 0);
+
+    // 82696BD8 publishes the stable member address; generation occurs later.
+    mpEmitterPosition = &mGeneratedPosition;
 }
 
 // ARTIST @0x82696C20. Direction transformation deliberately excludes translation.
