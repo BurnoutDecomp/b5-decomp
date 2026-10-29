@@ -3483,7 +3483,6 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             const CgsResource::Events::UnloadBundleResponse* lpResponse)
     {
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
-        const s32 liSlotIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
 
         if (lpSlot->miResponseEventId == 67)
         {
@@ -3493,7 +3492,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
             InvalidatePoolRequest lRequest;
             lRequest.mpUser    = &mReceiverQueue;
-            lRequest.miEventId = liSlotIndex;
+            lRequest.miEventId = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
             lRequest.miPoolId  = 2;   // the collision pool (X360 immediate)
             lpResourceInput->GetResourceQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3510,7 +3509,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         if (lpSlot->mEvent.mpReceiverQueue == 0)
         {
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             return;
         }
 
@@ -3521,14 +3520,13 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 return;   // more sound bundles still unloading -- keep the slot alive
         }
 
-        // The unload reply record (X360 32-byte build): NOTE the +8 lane is the slot id's
-        // HIGH word (slot dword +24), NOT the captured pool id -- reproduced exactly.
+        // ARTIST 8266E57C copies the captured pool id from slot+0x10.
         {
             GameDataIO::UnloadGameDataResponse lReply;
             memset(&lReply, 0, sizeof(lReply));
             lReply.miEventId       = lpSlot->mEvent.miEventId;
             lReply.mpReceiverQueue = 0;
-            lReply.miPoolId        = static_cast<s32>(static_cast<u32>(lpSlot->mEvent.mId >> 32));
+            lReply.miPoolId        = lpSlot->mEvent.miPoolId;
             lReply.mId             = lpSlot->mEvent.mId;
             lReply.meType          = lpSlot->mEvent.meType;
             lReply.mbFailFlag      = false;
@@ -3536,7 +3534,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 reinterpret_cast<const CgsModule::Event*>(&lReply), lpSlot->miResponseEventId,
                 static_cast<s32>(sizeof(lReply)));
         }
-        mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+        mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
     }
 
     // @ 0x8266E5D8 -- a pool invalidate completed (the collision swap-out protocol): retry
