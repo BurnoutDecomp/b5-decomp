@@ -110,9 +110,8 @@ void ICEAuthor::LoadCurrentTake()
 
     // Mark the editor as NOT in assembly mode: clear the @0x20 assembly-mode flag
     // (the mirror of LoadCurrentAssembly's set-to-1). SetAssemblySourceTake gates on
-    // this flag. (This write targets @0x20, the flag the header names miSubTakeGuid;
-    // it does NOT touch mpSubTakeData @0x18.)
-    miSubTakeGuid = 0;
+    // this flag. It does not touch mpSubTakeData at +0x18.
+    mbAssemblyMode = 0;
 }
 
 // ---------------------------------------------------------------------------

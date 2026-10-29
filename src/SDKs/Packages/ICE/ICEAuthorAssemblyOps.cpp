@@ -25,22 +25,7 @@
 // take length, and SetAssemblySourceTake swaps the sub-take referenced by the
 // current assembly interval.
 //
-// FLAG (offset 0x1C vs 0x20 -- header member mismatch, NOT edited here):
-//   The frozen header declares mfInsertTangent @0x1C and miSubTakeGuid @0x20. The
-//   assembly bodies use these two slots the OTHER way round:
-//     * @0x1C (word index 7) is where SetAssemblySourceTake stores the looked-up
-//       sub-take guid before the resource-manager lookup (`v2[7] = guid`). i.e.
-//       @0x1C is the sub-take guid scratch, not an insert tangent.
-//     * @0x20 (word index 8) is an ASSEMBLY-MODE flag: LoadCurrentAssembly writes 1
-//       and LoadCurrentTake writes 0 there, and SetAssemblySourceTake gates on it
-//       being non-zero (`if (*(this+0x20))`). i.e. @0x20 is a bool mode flag, not
-//       the sub-take guid.
-//   Because the header is FROZEN (no .hpp edits allowed here), these bodies access
-//   the slots through their EXISTING header names (mfInsertTangent for the @0x1C
-//   guid scratch via a reinterpret, miSubTakeGuid for the @0x20 mode flag). The
-//   header members should be RENAMED/RETYPED to match (a @0x1C s32 sub-take-guid
-//   scratch + a @0x20 s32/bool assembly-mode flag) when the header is next grown;
-//   do NOT keep mfInsertTangent/miSubTakeGuid as-is. Flagged for the header steward.
+// The source GUID is at +0x1C and the assembly-mode byte at +0x20.
 //
 // FLAG (mpResourceManager take-lookup functor in SetAssemblySourceTake):
 //   The body stashes the guid into the @0x1C scratch, then invokes mpResourceManager
@@ -166,11 +151,6 @@ void ICEAuthor::CommitCurrentAssembly()
 // the edit take, seed a single assembly-channel (10) interval, bind the sub-take,
 // and seek to 0. Finally mark the editor as being in ASSEMBLY mode (the @0x20 flag).
 //
-// FLAG (@0x20 mode flag): the trailing `*(this+0x20) = 1` write lands on the slot the
-// frozen header names miSubTakeGuid. It is the assembly-mode flag (LoadCurrentTake
-// writes 0 there), NOT a guid -- see the file-top FLAG. Written through miSubTakeGuid
-// here because the header is frozen.
-//
 // FLAG (parameter-seek helper): the live-take parameter seek used here and in
 // Construct/LoadCurrentTake is a take-parameter setter taking
 // (this, <unused-slot>, bForce, bWrap, fParameter); it maps to
@@ -198,8 +178,8 @@ void ICEAuthor::LoadCurrentAssembly()
 
     mEditTake.SetParameter(0.0f, true, true);
 
-    // Mark assembly mode (the @0x20 flag; written through the frozen header name).
-    miSubTakeGuid = 1;
+    // Mark assembly mode.
+    mbAssemblyMode = 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,8 +269,7 @@ void ICEAuthor::ChangeAssemTakeLength(f32 lfDeltaSeconds)
 //
 // FLAG (@0x20 mode gate + @0x1C guid scratch + nullary mpResourceManager functor):
 // see the two file-top FLAGs. The gate `if (*(this+0x20))` reads the assembly-mode
-// flag (accessed via miSubTakeGuid). The guid stash `v2[7] = guid` writes the @0x1C
-// scratch (accessed via mfInsertTangent reinterpreted). The lookup
+// flag. The guid stash `v2[7] = guid` writes the @0x1C scratch. The lookup
 // `result = (**(this+0x0C))(this+0x0C)` is the nullary stash-then-call resource
 // functor, reconstructed as mpResourceManager->GetTakeData(liGuid).
 // ---------------------------------------------------------------------------
@@ -300,7 +279,7 @@ void ICEAuthor::SetAssemblySourceTake(s32 liGuid)
     {
         return;
     }
-    if (miSubTakeGuid == 0)                 // @0x20 assembly-mode flag (frozen-name access)
+    if (mbAssemblyMode == 0)                 // @0x20 assembly-mode flag
     {
         return;
     }
@@ -315,9 +294,8 @@ void ICEAuthor::SetAssemblySourceTake(s32 liGuid)
         return;
     }
 
-    // Stash the requested guid into the @0x1C scratch (frozen-name access via the
-    // tangent slot), then resolve the take through the resource-manager functor.
-    *reinterpret_cast<s32*>(&mfInsertTangent) = liGuid;   // v2[7] = guid (@0x1C)
+    // Stash the requested guid, then resolve the take through the resource-manager functor.
+    miSubTakeGuid = liGuid;   // v2[7] = guid (@0x1C)
 
     const ICETakeData* lpResolved = (mpResourceManager != NULL)
         ? mpResourceManager->GetTakeData(liGuid)         // (**(this+0x0C))(this+0x0C)
