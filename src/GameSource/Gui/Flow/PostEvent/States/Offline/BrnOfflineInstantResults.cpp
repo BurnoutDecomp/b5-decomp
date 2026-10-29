@@ -2025,7 +2025,7 @@ namespace BrnGui
         // console's, and RunFsm would read a shifted CgsID.
         CGS_STATIC_ASSERT((sizeof(RunFsmRecord) == 40),
                       "GuiEventRunFsm channel-40 wrapper is 40 bytes (16-byte header + 24)");
-        CGS_STATIC_ASSERT((__builtin_offsetof(RunFsmRecord, mOutEvent) == 16),
+        CGS_STATIC_ASSERT((offsetof(RunFsmRecord, mOutEvent) == 16),
                       "the wrapper's payload offset is 16 (GuiEventRunFsm is 8-aligned)");
         lRunFsm.miOutEventSize   = static_cast<s32>(sizeof(GuiEventRunFsm));   // 0x18
         lRunFsm.miOutEventType   = lRunFsm.mOutEvent.GetEventType();           // 0x90 == 144
@@ -2604,62 +2604,62 @@ namespace BrnGui
         CgsCore::SPrintf(lacText, 1024, "OFFLINE RESULTS DEBUGGING");
         MaybeDrawText(lpDisplay, lacText, 80.0f, 100.0f, 15.0f, KU_WHITE, false);
 
-        const auto DrawInteger = [lpDisplay, &lacText](const char* lpcFormat, s32 liValue,
-                                                       f32 lfY, CgsDev::RGBA luColour)
-        {
-            CgsCore::SPrintf(lacText, 1023, lpcFormat, liValue);
-            MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, luColour, false);
-        };
-
         f32 lfY = 118.0f;
-        DrawInteger("Current State = %d", static_cast<s32>(meCurrentState), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Current State = %d", static_cast<s32>(meCurrentState));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("Win State = %d", static_cast<s32>(meWinState), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Win State = %d", static_cast<s32>(meWinState));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("Active SubState = %d", static_cast<s32>(meActiveSubState), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Active SubState = %d", static_cast<s32>(meActiveSubState));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("SubState State = %d", static_cast<s32>(meSubStateState), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "SubState State = %d", static_cast<s32>(meSubStateState));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("Photo Presentation Stage = %d",
-                    static_cast<s32>(mePhotoPresentationStage), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Photo Presentation Stage = %d", static_cast<s32>(mePhotoPresentationStage));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("Rank Up Presentation Stage = %d",
-                    static_cast<s32>(meRankUpPresentationStage), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Rank Up Presentation Stage = %d", static_cast<s32>(meRankUpPresentationStage));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("Car Unlock Presentation Stage = %d",
-                    static_cast<s32>(meCarUnlockPresentationStage), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Car Unlock Presentation Stage = %d", static_cast<s32>(meCarUnlockPresentationStage));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("New Rivals Presentation Stage = %d",
-                    static_cast<s32>(meNewRivalsPresentationStage), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "New Rivals Presentation Stage = %d", static_cast<s32>(meNewRivalsPresentationStage));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
-        DrawInteger("Free Car Presentation Stage = %d",
-                    static_cast<s32>(meFreeCarPresentationStages), lfY, KU_WHITE);
+        CgsCore::SPrintf(lacText, 1023, "Free Car Presentation Stage = %d", static_cast<s32>(meFreeCarPresentationStages));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
         lfY += 18.0f;
 
-        DrawInteger("License Shown = %d", static_cast<s32>(mbLicenseShown), lfY, KU_GREEN);
+        CgsCore::SPrintf(lacText, 1023, "License Shown = %d", static_cast<s32>(mbLicenseShown));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_GREEN, false);
         lfY += 18.0f;
         // The native second print intentionally reads +0x2224 again, not mbWinsIncremented at +0x222C.
-        DrawInteger("Wins Incremented = %d", static_cast<s32>(mbLicenseShown), lfY, KU_GREEN);
+        CgsCore::SPrintf(lacText, 1023, "Wins Incremented = %d", static_cast<s32>(mbLicenseShown));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_GREEN, false);
         lfY += 18.0f;
-        DrawInteger("Started Upgrade Trans Out = %d",
-                    static_cast<s32>(mbStartedUpgradeTransOut), lfY, KU_GREEN);
+        CgsCore::SPrintf(lacText, 1023, "Started Upgrade Trans Out = %d", static_cast<s32>(mbStartedUpgradeTransOut));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_GREEN, false);
         lfY += 18.0f;
 
-        DrawInteger("Results.Finished Game Mode Type = %d",
-                    mResults.meFinishedGameModeType, lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Finished Game Mode Type = %d", mResults.meFinishedGameModeType);
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Beaten Rival = %x",
                          static_cast<u32>(mResults.mBeatenRival));
         MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
-        DrawInteger("Results.Player Finish Position = %d",
-                    static_cast<s32>(mResults.miPlayerFinishPosition), lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Player Finish Position = %d", static_cast<s32>(mResults.miPlayerFinishPosition));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
 
         // CgsArray::GetLength preserves the native assert-then-continue path and its -1 sentinel.
         const s32 liCarsToUnlockCount =
             static_cast<s32>(mResults.maCarsToUnlockFromSpecialEvent.GetLength());
-        DrawInteger("Results.Cars To Unlock Count = %d", liCarsToUnlockCount, lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Cars To Unlock Count = %d", liCarsToUnlockCount);
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
 
         CgsCore::SPrintf(lacText, 1023, "Results.Rank Up (Old -> New) = %d (%d -> %d)",
@@ -2667,14 +2667,16 @@ namespace BrnGui
                          mResults.miPlayerOldRank, mResults.miPlayerNewRank);
         MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
-        DrawInteger("Results.Cars Revealed = %d", mResults.miCarsRevealed, lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Cars Revealed = %d", mResults.miCarsRevealed);
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
-        DrawInteger("Results.Events Unlocked = %d", mResults.miEventsUnlocked, lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Events Unlocked = %d", mResults.miEventsUnlocked);
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
-        DrawInteger("Results.Completed Last Rank = %d",
-                    static_cast<s32>(mResults.mbCompletedLastRank), lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Completed Last Rank = %d", static_cast<s32>(mResults.mbCompletedLastRank));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
         lfY += 18.0f;
-        DrawInteger("Results.Unlocked Free Car = %d",
-                    static_cast<s32>(mResults.mbHasUnlockedFreeCar), lfY, KU_RED);
+        CgsCore::SPrintf(lacText, 1023, "Results.Unlocked Free Car = %d", static_cast<s32>(mResults.mbHasUnlockedFreeCar));
+        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
     }
 }

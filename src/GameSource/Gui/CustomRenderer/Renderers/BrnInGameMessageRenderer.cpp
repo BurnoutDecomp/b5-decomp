@@ -1296,6 +1296,7 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
                 lpcRulerName = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacRulerName);
             }
 
+            char lacScore[16];
             lacScore[0] = 0;
             const f32 lfScore = static_cast<f32>(lpResponse->miOnlineScore);
             switch (lpResponse->meActiveRoadRule)

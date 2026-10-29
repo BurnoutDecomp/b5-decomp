@@ -234,22 +234,6 @@ namespace BrnGui
 
         CarSelectMain::HandleControllerInput(lpEvent, liEventKind);
 
-        if (liEventKind == KI_EVENT_CONTROLLER_RELEASED && IsCarSelTapStepLever())
-        {
-            const ControllerButtonPayload* lpTap = reinterpret_cast<const ControllerButtonPayload*>(lpEvent);
-            if (lpTap->miButtonId == KI_ACTION_CAROUSEL_NEXT && muCarouselControllerRightPressedRefCount == 0u)
-            {
-                HandleControllerInput(lpEvent, KI_EVENT_CONTROLLER_PRESSED);
-                muCarouselControllerRightPressedRefCount = 0u;
-                return;
-            }
-            if (lpTap->miButtonId == KI_ACTION_CAROUSEL_PREV && muCarouselControllerLeftPressedRefCount == 0u)
-            {
-                HandleControllerInput(lpEvent, KI_EVENT_CONTROLLER_PRESSED);
-                muCarouselControllerLeftPressedRefCount = 0u;
-                return;
-            }
-        }
 
         switch (liEventKind)
         {

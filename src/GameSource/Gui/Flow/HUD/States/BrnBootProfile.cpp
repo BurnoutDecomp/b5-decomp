@@ -439,14 +439,6 @@ namespace BrnGui
         }
     }
 
-    // Stage-transition log (the [BootLegal]-style diagnostic every boot state carries).
-    static void LogProfileStage(s32 liFrom, s32 liTo)
-    {
-        char lac[64];
-        std::snprintf(lac, sizeof(lac), "[BootProfile] stage %d -> %d\n", liFrom, liTo);
-        CgsDev::Log::WriteToLog(lac);
-    }
-
     // @ 0x82474468 (cpp:584) -- ProfileTaskResultHandler override: the manager's
     // ReportTaskCompleted lands here when the boot-up (or re-entry disk-space) task
     // resolves. Un-silence the manager and advance to LEAVING.
@@ -456,7 +448,7 @@ namespace BrnGui
         {
             mpProfileManager->SetSilentMode(false);
         }
-        LogProfileStage(meInternalState, E_INTERNALSTATE_LEAVING);
+
         meInternalState = E_INTERNALSTATE_LEAVING;
     }
 
@@ -466,7 +458,6 @@ namespace BrnGui
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
         if (lpInQueue == 0)
             return;
-        const InternalState lePrevState = meInternalState;
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -573,7 +564,6 @@ namespace BrnGui
             break;
         }
 
-        if (meInternalState != lePrevState)
-            LogProfileStage(lePrevState, meInternalState);
+
     }
 }

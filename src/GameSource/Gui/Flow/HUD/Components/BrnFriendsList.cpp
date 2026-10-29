@@ -1526,7 +1526,7 @@ void FriendsListComponent::SortFullList()
         if (record.mbIsOnline)
             for (s32 player = 0; player < 8; ++player)
             {
-                const auto* info = mpGuiCache->GetOnlinePlayerInfo(player);
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* info = mpGuiCache->GetOnlinePlayerInfo(player);
                 if (info->mNetworkPlayerID != -1 && LobbyNameCmp(info->mPlayerName.macName, record.mPlayerName.macName) == 0)
                 { record.mbIsInSameLobby = true; break; }
             }
@@ -1670,16 +1670,16 @@ void FriendsListComponent::UpdateAllChallengesEntryData()
         const s32 excess = first - static_cast<s32>(muNumEntries) + 5;
         if (excess > 0) { first -= excess; mi8SelectedIndex -= static_cast<s8>(excess); }
     }
-    const auto* list = mpGuiCache->GetFreeburnChallengeList();
+    const BrnResource::ChallengeList* list = mpGuiCache->GetFreeburnChallengeList();
     for (s32 i = 0; i < 5; ++i)
     {
         if (i >= static_cast<s32>(muNumEntries)) maEntries[i].Invalidate();
         else
         {
             ++mi8FirstVisibleIndex;
-            const auto* entry = list->GetChallengeData(mau64ChallengeIds[first + i]);
+            const BrnResource::ChallengeListEntry* entry = list->GetChallengeData(mau64ChallengeIds[first + i]);
             const s32 index = list->GetChallengeIndex(entry->GetChallengeID());
-            const auto* completed = mpGuiCache->GetFreeburnChallengeManager()->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
+            const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* completed = mpGuiCache->GetFreeburnChallengeManager()->GetCompletedChallengesData()->GetLocalPlayerCompletionStatus();
             CGS_ASSERT(static_cast<u32>(index) < 2000, "Challenge index out of range");
             const bool done = (completed->maxBits[index / 64] & (u64(1) << (index % 64))) != 0;
             SetEntryData(i, entry->GetTitleStringID(), done ? 20 : 19, true);

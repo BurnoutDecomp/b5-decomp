@@ -455,19 +455,6 @@ namespace BrnGui
         if (lpInQueue == 0)
             return;
 
-        // Bring-up diagnostic: one line per stage-machine transition (cheap, load-bearing
-        // for boot-flow triage -- the attract/press-start regressions were found with it).
-        {
-            static s32 s_iLastLoggedStage = -1;
-            if (s_iLastLoggedStage != static_cast<s32>(meUpdateStage))
-            {
-                char lacStage[80];
-                std::snprintf(lacStage, sizeof(lacStage), "[BootLegal] stage %d -> %d\n",
-                              s_iLastLoggedStage, static_cast<s32>(meUpdateStage));
-                CgsDev::Log::WriteToLog(lacStage);
-                s_iLastLoggedStage = static_cast<s32>(meUpdateStage);
-            }
-        }
 
         bool lbVideoFinished = false;   // v2:  a 510 (video-finished) event arrived this frame
         bool lbBackRequested = false;   // v39: a 45/49 (back/stop) action arrived this frame
