@@ -825,6 +825,9 @@ namespace BrnGameState
         const RaceCarPositioningData* GetRaceCarPositioningData(::EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
     private:
+        // ModeManagerDebugComponent::RenderHUD mirrors the X360's inline single-word
+        // crash-counter write; it deliberately leaves the adjacent totalled flag untouched.
+        friend class ModeManagerDebugComponent;
 
         // ===== data members (DWARF declared order + types) =====
         CgsSystem::Time mStartTime;                  // :1199
