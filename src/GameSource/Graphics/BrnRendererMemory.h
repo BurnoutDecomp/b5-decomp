@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "rw/rwcore_structs.h"  // rw::Resource, rw::IResourceAllocator
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnRendererMemory::Construct       @ 0x823FCA38  (EXECUTED in the boot trace)
@@ -23,7 +24,7 @@
 //     TextureState pointer + the blit-state Resource land exactly where the asm stores them
 //     (0x2C/0x30/0x38/0x3C, the byte pairs, 0x44, 0x48).
 //   - mu32ScreenWidth / mu32ScreenHeight take the front-buffer resolution from the device parameters.
-// The x64 compile widens the pointers; members are reached BY NAME, never by raw offset.
+// ARTIST uses four-byte pointers; the complete native object is0x70 bytes.
 //
 // X360-ATTESTATION GATE: only the methods the X360 ARTIST ledger attests for this class are declared
 // (Construct + the Create* render-target helpers it calls + CreateBackBuffer). The many PS3-only
@@ -66,7 +67,7 @@ struct BrnRendererMemory
     // 0x823FCA38 -- build every render target then compile the blit shader programs + blit texture
     // state. lParameters supplies the front-buffer resolution; lpAllocator is the rw resource
     // allocator the module owns; lbEnableMSAA enables anti-aliasing on the back/anti-alias buffers.
-    void Construct(renderengine::DeviceParameters lParameters,
+    void Construct(renderengine::Device::Parameters lParameters,
                    rw::IResourceAllocator* lpAllocator,
                    bool lbEnableMSAA);
 
@@ -170,10 +171,7 @@ private:
     CgsRenderTarget* mapRenderTarget[E_RENDER_TARGET_COUNT];    // +0x00 (11 dwords zeroed in Construct)
 
     // Depth-blit shader program pair + its working/original temp-register counts.
-    // (Typed ProgramBufferData* -- the object renderengine::ProgramBuffer::Initialize and
-    // ProgramBufferPC_Adopt actually return. renderengine::ProgramBuffer is the STATIC helper
-    // class, never an instance, so the previous spelling forced a reinterpret_cast at every
-    // producer and could not be handed to GetVariableHandleByName at all.)
+    // Shared program-header declarations remain in the owning renderengine header.
     renderengine::ProgramBufferData* mpDepthBlitVertexProgramBuffer;      // +0x2C
     renderengine::ProgramBufferData* mpDepthBlitPixelProgramBuffer;       // +0x30
     u8                           mu8DepthBlitTempRegisterCountCurrent;  // +0x34
@@ -199,5 +197,6 @@ private:
     u32  muZCullAddress;                                       // +0x68
     u32  muTileCompressionAddress;                             // +0x6C
 
-    void* mpSnapshotBufferPixels;                             // +0x70 (DWARF)
 };
+
+CGS_STATIC_ASSERT((sizeof(BrnRendererMemory) == 0x70), "ARTIST renderer memory");
