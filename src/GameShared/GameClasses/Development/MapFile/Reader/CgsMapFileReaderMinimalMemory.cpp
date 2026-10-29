@@ -1,22 +1,18 @@
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.h"
-#include "GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.h"   // StackUnpick (ComputeAdjustedStack)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
-
-#include <cstring>   // strlen / strcpy
+#include "GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include <cstring>
 
 namespace CgsDev
 {
 namespace MapFile
 {
-    // The X360 ctor leaves the reader synchronous (Prepare reads the whole map up front) so a freshly
-    // prepared reader has every resolvable frame named immediately.
+    // ARTIST827E6028/2C inlines exactly the derived vptr and async=true stores.
+    // The remaining fields retain their incoming storage until Prepare.
     MinimalMemoryReader::MinimalMemoryReader()
-        : mbAsycronous(false)
-        , pFileHandle(0)
-        , mbFinished(true)
+        : mbAsycronous(true)
     {
-        mpCallstack = 0;
-        maacStackNames[0][0] = '\0';
     }
 
     void MinimalMemoryReader::SetAsyncronousMode(bool lbAsynchronous)
@@ -24,40 +20,32 @@ namespace MapFile
         mbAsycronous = lbAsynchronous;
     }
 
-    // 0x828271C8 - latch the call-stack, clear the resolved-name cache, open the map, read + version-check
-    // the header, rebase the stack into the map's address space, skip to the record array, then read the
-    // records (the whole map up front unless asynchronous).
+    // ARTIST828271C8: header reads and gap subtraction retain native uint32
+    // arithmetic. A failed open leaves the ten cache heads empty and finished.
     void MinimalMemoryReader::Prepare(const char* lpcMapFileName, StackUnpickBase* lpCallstack)
     {
-        Reader::Prepare(lpcMapFileName, lpCallstack);   // assert + mpCallstack = lpCallstack
-
+        Reader::Prepare(lpcMapFileName, lpCallstack);
         mbFinished = true;
         for (s32 liResult = 0; liResult < KI_MAX_STACK_RESULTS; ++liResult)
-        {
             maacStackNames[liResult][0] = '\0';
-            maauStackOffsets[liResult]  = 0;
-        }
 
         pFileHandle = std::fopen(lpcMapFileName, "rb");
         if (!pFileHandle)
             return;
 
-        // The 16-byte header: muRecordCount, record-array file offset, base address, version.
-        const size_t luHeaderRead = std::fread(maReadBuffer, 1, 16, pFileHandle);
-        const u32*      lpHeader        = reinterpret_cast<const u32*>(maReadBuffer);
-        const u32       luRecordsOffset = lpHeader[1];
-        const TargetPtr lBaseAddress    = lpHeader[2];
-        const u32       luVersion       = lpHeader[3];
-
-        CGS_ASSERT(luVersion == E_VERSION_CURRENT,
-                   "map file is not the correct version. make sure you have the latest tools / code");
-
-        // Rebase the captured stack into the map's address space (ComputeAdjustedStack is the platform
-        // StackUnpick's; the assert passes a StackUnpick, as the X360 passes a StackUnpickX360).
-        static_cast<StackUnpick*>(mpCallstack)->ComputeAdjustedStack(lBaseAddress);
-
-        // Skip any gap between the header and the record array.
-        if (luRecordsOffset != luHeaderRead && luRecordsOffset > luHeaderRead)
+        const u32 luHeaderRead = static_cast<u32>(std::fread(maReadBuffer, 1, 16, pFileHandle));
+        const u32* const lpHeader = reinterpret_cast<const u32*>(maReadBuffer);
+        if (lpHeader[3] != E_VERSION_CURRENT)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "map file is not the correct version. make sure you have the latest tools / code",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/CgsMapFile.h", 144);
+            CgsDev::Assert::EndAssert();
+        }
+        static_cast<StackUnpick*>(mpCallstack)->ComputeAdjustedStack(lpHeader[2]);
+        const u32 luRecordsOffset = lpHeader[1];
+        if (luRecordsOffset != luHeaderRead)
             std::fread(maReadBuffer, 1, luRecordsOffset - luHeaderRead, pFileHandle);
 
         mbFinished = false;
@@ -72,79 +60,79 @@ namespace MapFile
         }
     }
 
-    // 0x8281AEE8 - advance the incremental load by one buffer (no-op once the whole map has been read).
+    // ARTIST8281AEE8: a finished reader performs no further file operation.
     void MinimalMemoryReader::Update()
     {
         if (!mbFinished)
             ReadRecords();
     }
 
-    // 0x8281A5A8 - read one KI_BUFFER_SIZE chunk of fixed-size records; for each record, find the first
-    // not-yet-resolved frame whose (adjusted) address lies in [mAddress, mAddress+muSize) and cache the
-    // record's name for it. A short read marks the whole map read + closes the file.
+    // ARTIST8281A5A8. Close sees the finished flag already raised; its callback
+    // may change reader state before pFileHandle is cleared. Each record resolves
+    // only the first matching unresolved frame, among the original ten slots.
     void MinimalMemoryReader::ReadRecords()
     {
-        const size_t luBytesRead   = std::fread(maReadBuffer, 1, KI_BUFFER_SIZE, pFileHandle);
-        const u32    luNumRecords  = static_cast<u32>(luBytesRead) / static_cast<u32>(sizeof(Record));
-
+        const u32 luBytesRead = static_cast<u32>(std::fread(maReadBuffer, 1, KI_BUFFER_SIZE, pFileHandle));
+        const u32 luNumRecords = luBytesRead / static_cast<u32>(sizeof(Record));
         if (luBytesRead != KI_BUFFER_SIZE)
         {
+            mbFinished = true;
             std::fclose(pFileHandle);
-            mbFinished  = true;
             pFileHandle = 0;
         }
 
-        const u8* lpCursor = maReadBuffer;
         for (u32 luRecord = 0; luRecord < luNumRecords; ++luRecord)
         {
-            const Record* lpRecord = reinterpret_cast<const Record*>(lpCursor);
-
-            const s32 liNumFrames = (mpCallstack->GetNumStackAddresses() < KI_MAX_STACK_RESULTS)
-                                  ? mpCallstack->GetNumStackAddresses()
-                                  : KI_MAX_STACK_RESULTS;
-
-            for (s32 liFrame = 0; liFrame < liNumFrames; ++liFrame)
+            const Record* const lpRecord = reinterpret_cast<const Record*>(maReadBuffer + luRecord * sizeof(Record));
+            const s32 liStackCount = mpCallstack->GetNumStackAddresses();
+            const u32 luNumFrames = static_cast<u32>(liStackCount <= KI_MAX_STACK_RESULTS ? liStackCount : KI_MAX_STACK_RESULTS);
+            for (u32 luFrame = 0; luFrame < luNumFrames; ++luFrame)
             {
-                if (maacStackNames[liFrame][0] != '\0')
-                    continue;   // already resolved
-
-                const TargetPtr lFrameAddress =
-                    (liFrame < mpCallstack->GetNumStackAddresses())
-                        ? static_cast<TargetPtr>(mpCallstack->GetStackAddress(liFrame))
-                        : 0;
-
-                if (lFrameAddress >= lpRecord->mAddress &&
-                    lFrameAddress < lpRecord->mAddress + lpRecord->muSize)
+                if (maacStackNames[luFrame][0])
+                    continue;
+                const TargetPtr lFrameAddress = static_cast<TargetPtr>(mpCallstack->GetStackAddress(static_cast<s32>(luFrame)));
+                if (lFrameAddress >= lpRecord->mAddress && lFrameAddress < lpRecord->mAddress + lpRecord->muSize)
                 {
-                    CGS_ASSERT(std::strlen(lpRecord->macName) < static_cast<size_t>(KI_NAME_LENGTH),
-                               "map record name is too long");
-                    std::strcpy(maacStackNames[liFrame], lpRecord->macName);
-                    maauStackOffsets[liFrame] =
-                        static_cast<u32>(lFrameAddress - lpRecord->mAddress);
-                    break;   // one frame resolved per record
+                    const u32 luLength = static_cast<u32>(std::strlen(lpRecord->macName));
+                    if (luLength >= static_cast<u32>(KI_NAME_LENGTH))
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+                        lStream << "String " << lpRecord->macName << " is too long. Buffer size = "
+                                << static_cast<u32>(KI_NAME_LENGTH) << ", string length = " << luLength << "\n";
+                        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    // The original continues its complete NUL-terminated copy
+                    // after the length assertion; it does not truncate the name.
+                    const char* lpcSource = lpRecord->macName;
+                    char* lpcDestination = maacStackNames[luFrame];
+                    do
+                    {
+                        *lpcDestination++ = *lpcSource;
+                    }
+                    while (*lpcSource++);
+                    break;
                 }
             }
-
-            lpCursor += sizeof(Record);
         }
     }
 
-    // 0x82820C70 - the resolved name of frame liIndex, or null if out of range / not yet resolved.
+    // ARTIST82820C70. The lower-bound assertion continues to the native indexed
+    // read; the upper bound and empty-cache cases return null.
     const char* MinimalMemoryReader::GetStackEntryName(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+        if (liIndex < 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("liIndex >= 0",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp", 135);
+            CgsDev::Assert::EndAssert();
+        }
         if (liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
             return 0;
         return maacStackNames[liIndex];
-    }
-
-    // ADDITIVE (2026-08-16, no console counterpart) - the byte offset of frame liIndex inside the
-    // function GetStackEntryName names, or 0 when that frame never resolved.
-    u32 MinimalMemoryReader::GetStackEntryOffset(s32 liIndex) const
-    {
-        if (liIndex < 0 || liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
-            return 0;
-        return maauStackOffsets[liIndex];
     }
 }
 }

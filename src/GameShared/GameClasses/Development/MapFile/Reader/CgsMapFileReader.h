@@ -16,7 +16,6 @@ namespace MapFile
     struct Reader
     {
         Reader();
-        virtual ~Reader() {}
 
         // vtable[0] (DoAssert: (**reader)(reader, name, stack)) - latch the call-stack to resolve.
         virtual void        Prepare(const char* lpcMapFileName, StackUnpickBase* lpCallstack);
