@@ -792,28 +792,16 @@ u8  MugshotInfo::GetLockedFlag() const { return mbLocked ? 1u : 0u; }           
 // (`GetFirstNonZeroBit` + `andc`, see Profile::Construct).
 // Hex-Rays suffered a local-allocation failure on this function; the asm is the spine.
 // ====================================================================================
-s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
-                        CgsSystem::DateAndTime lDateTaken, s32 leWorldRegion)
+s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
+                        CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lWorldRegion)
 {
     CGS_ASSERT(leMugshotType != 5, "leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:758
 
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
     Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
 
-    // ⛔ [FLAG PC bring-up] the console's AddMugshot takes the WHOLE 24-byte UniquePlayerID
-    // (r5/r6/r7) and a whole 8-byte WorldRegion (r10); the PC signature this TU inherited takes
-    // only the 16-byte name block and the district ordinal, because the ImageManager's
-    // ImageToSaveEvent models the XUID slot at +0x10 as `maPad0x10` and passes
-    // `lrRegion.GetDistrict()`. The district DOES reconstruct the whole region (WorldRegion::
-    // Construct derives the county from it), so only the gamercard XUID is genuinely lost.
-    // DELETE-WHEN BrnGameStateImageManagerBase widens ImageToSaveEvent to the real 24-byte id and
-    // passes the WorldRegion by value: then this signature becomes the DWARF's
-    // (UniquePlayerID, DateAndTime, WorldRegion) and these two lines go away.
-    MugshotInfo::UniquePlayerID lPlayerID;
-    memcpy(&lPlayerID.macName[0], &lUniqueID, sizeof(lPlayerID.macName));
-    lPlayerID.mqXuid = 0;
-    BrnWorld::WorldRegion lRegion;
-    lRegion.Construct(static_cast<BrnWorld::EDistrict>(leWorldRegion));
+    // The console passes the complete 24-byte name+XUID identity and 8-byte WorldRegion.
+    // HandleImageSaveEvent forwards those typed values directly to this profile writer.
 
     MugshotInfo lRecord;
 
@@ -827,7 +815,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
 
         // X360 `mulli r8, r28, 0x3E8 ; add r30, r8, r31` -- the file id is namespaced per gallery.
         const s32 liFileID = 1000 * leMugshotType + liFreeFileIdBit;
-        lRecord.Construct(lPlayerID, lDateTaken, lRegion, static_cast<u16>(liFileID));
+        lRecord.Construct(lUniqueID, lDateTaken, lWorldRegion, static_cast<u16>(liFileID));
         lrGallery.Append(lRecord);
         return liFileID;
     }
@@ -844,7 +832,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
         {
             const s32 liFileID = static_cast<s32>(lrVictim.mu16FileID);   // X360 `lhz 0x30`
             lrGallery.Erase(static_cast<u32>(liIndex));
-            lRecord.Construct(lPlayerID, lDateTaken, lRegion, static_cast<u16>(liFileID));
+            lRecord.Construct(lUniqueID, lDateTaken, lWorldRegion, static_cast<u16>(liFileID));
             lrGallery.Append(lRecord);
             return liFileID;
         }
@@ -2090,24 +2078,28 @@ void RunProfileSelfTest(Profile& lrProfile)
 
     // ---- the mugshot chain (gallery 0) -----------------------------------------------
     const s32 KI_SELFTEST_GALLERY = 0;
+    const u64 KU_SELFTEST_XUID = 0x1122334455667788ull;
 
-    // The 16 bytes AddMugshot copies into MugshotInfo::mUniquePlayerID's PlayerName base. Any
-    // value does; this one is the ASCII of "SELFTEST" packed into a qword, so the record is
-    // recognisable in a memory dump (byte order is the host's, which is not the console's).
-    Profile::MugshotUniqueIdArg lUniqueID;
-    lUniqueID.mu64Lo = 0x53454C4654455354ull;   // 'S','E','L','F','T','E','S','T'
-    lUniqueID.mu64Hi = 0;
+    // Exercise a full identity value so this source witness detects XUID truncation.
+    MugshotInfo::UniquePlayerID lUniqueID;
+    memset(&lUniqueID, 0, sizeof(lUniqueID));
+    memcpy(lUniqueID.macName, "SELFTEST", sizeof("SELFTEST") - 1);
+    lUniqueID.mqXuid = KU_SELFTEST_XUID;
+
+    BrnWorld::WorldRegion lWorldRegion;
+    lWorldRegion.Construct(static_cast<BrnWorld::EDistrict>(0));
 
     CgsSystem::DateAndTime lNow;
     lNow.SetLocal(true);
     lNow.Update();
 
     const s32 liNumBefore = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
-    const s32 liFileID    = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, 0);
+    const s32 liFileID    = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, lWorldRegion);
     const s32 liNumAdded  = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
 
     s32 liLock0 = -1, liLock1 = -1, liLock2 = -1, liDeleted = -1, liNumAfter = -1, liReclaimed = 0;
     bool lbGotRecord = false, lbFileIDMatches = false, lbPastEndIsNull = false;
+    bool lbXuidMatches = false, lbWorldRegionMatches = false;
 
     if (liFileID >= 0 && liNumAdded == liNumBefore + 1)
     {
@@ -2115,6 +2107,10 @@ void RunProfileSelfTest(Profile& lrProfile)
         MugshotInfo* lpInfo = lrProfile.GetMugshotInfo(KI_SELFTEST_GALLERY, liIndex);
         lbGotRecord     = (lpInfo != 0);
         lbFileIDMatches = lbGotRecord && (lpInfo->GetFileID() == liFileID);
+        lbXuidMatches = lbGotRecord && (lpInfo->GetGamerCardXuid() == KU_SELFTEST_XUID);
+        lbWorldRegionMatches = lbGotRecord
+            && lpInfo->mWorldRegion.GetCounty() == lWorldRegion.GetCounty()
+            && lpInfo->mWorldRegion.GetDistrict() == lWorldRegion.GetDistrict();
         lbPastEndIsNull = (lrProfile.GetMugshotInfo(KI_SELFTEST_GALLERY, liNumAdded) == 0);
 
         if (lbGotRecord)
@@ -2129,7 +2125,7 @@ void RunProfileSelfTest(Profile& lrProfile)
             liNumAfter = lrProfile.GetNumMugshots(KI_SELFTEST_GALLERY);
 
             // The freed file id must be available again: re-adding must hand back the SAME id.
-            const s32 liFileIDAgain = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, 0);
+            const s32 liFileIDAgain = lrProfile.AddMugshot(KI_SELFTEST_GALLERY, lUniqueID, lNow, lWorldRegion);
             liReclaimed = (liFileIDAgain == liFileID) ? 1 : 0;
             if (liFileIDAgain >= 0)
             {
@@ -2140,6 +2136,7 @@ void RunProfileSelfTest(Profile& lrProfile)
     }
 
     const bool lbMugshotOk = (liFileID >= 0) && lbGotRecord && lbFileIDMatches && lbPastEndIsNull
+                          && lbXuidMatches && lbWorldRegionMatches
                           && (liLock0 == 0) && (liLock1 == 1) && (liLock2 == 0)
                           && (liDeleted == liFileID) && (liNumAfter == liNumBefore)
                           && (liReclaimed == 1);
@@ -2155,6 +2152,8 @@ void RunProfileSelfTest(Profile& lrProfile)
                                << " rec=" << (lbGotRecord ? 1 : 0)
                                << " idmatch=" << (lbFileIDMatches ? 1 : 0)
                                << " pastend=" << (lbPastEndIsNull ? 1 : 0)
+                               << " xuidmatch=" << (lbXuidMatches ? 1 : 0)
+                               << " regionmatch=" << (lbWorldRegionMatches ? 1 : 0)
                                << " lock0=" << liLock0
                                << " lock1=" << liLock1
                                << " lock2=" << liLock2

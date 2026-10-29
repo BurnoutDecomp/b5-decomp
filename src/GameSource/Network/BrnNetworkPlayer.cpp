@@ -14,6 +14,7 @@
 #include "GameSource/Network/BrnServerInterface.h"                 // BrnServerInterface::GetGameComponent
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h" // PlayerParams (remote console frame rate)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // GetPlayerParametersByPlayerID
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // network log stream
 #include "GameShared/GameClasses/Development/CgsStrStream.h"        // CgsDev::StrStream (streamed asserts)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"        // BrnNetworkDriverControls
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"  // VehicleDriverInputInterface
@@ -1374,9 +1375,8 @@ namespace BrnNetwork
     // velocities, the driver's controls, the frame counters, the lobby / round / elimination /
     // car-select state, the camera and headset status, and whether a transform reset or a
     // slam happened since the last update (latched every frame until one is sent).
-    // The console also prints the update to its debug stream when the module asks for it
-    // (IsSendUpdateMessageToBeShown); that print needs the vector stream operator, which has
-    // no home in the tree (not reproduced).
+    // When enabled, the console writes the peer ID, transform position and frames-since-start
+    // to the shared network log stream before preparing the outgoing message.
     void BrnNetworkPlayer::HandleSendingUpdateMessage()
     {
         if (!mbIsPrepared || mpTimeManager == nullptr || !mpTimeManager->HasStartFrameBeenSetValid()
@@ -1446,6 +1446,16 @@ namespace BrnNetwork
             static_cast<ECameraStatus>(mpNetworkModule->GetNetworkManager()->GetCamera()->GetLocalCameraStatus());
         lUpdateData.meHeadsetStatus            = lpLocalPlayerMenuData->mu8HeadsetStatus;
 
+        if (mpNetworkModule->IsSendUpdateMessageToBeShown())
+        {
+            CgsDev::Log::LogChannelOutput& lrLog =
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput;
+            lrLog << "SEND MESSAGE TO #" << GetPlayerID() << " POS=(";
+            lrLog.AppendFormat("(%f, %f, %f)", lUpdateData.mMatrix.wAxis.x,
+                               lUpdateData.mMatrix.wAxis.y, lUpdateData.mMatrix.wAxis.z);
+            lrLog << ") FRAMES SINCE START=" << lUpdateData.mu16FramesSinceStart << "\n";
+        }
+
         mUpdateMessageSend.PrepareForSend(&lUpdateData);
         mbHasResetCarTransformSinceLastUpdateSent = false;
         mbHasBeenSlammedSinceLastUpdateSent       = false;
@@ -1475,8 +1485,8 @@ namespace BrnNetwork
     // says we crashed it), and the driver's controls (none while on the start line). Then the
     // sender's camera and headset status, the driver event for the vehicle, and its
     // car-select state for the game side (network event 48).
-    // The console also prints the update to its debug stream when the module asks for it
-    // (IsRecvUpdateMessageToBeShown); not reproduced, as for the send side.
+    // When enabled, the console writes the peer ID, received position and frames-since-start
+    // to the shared network log stream before queuing the driver controls.
     void BrnNetworkPlayer::TellNetworkCarAboutRecievedUpdateMessage(u16 lu16CurrentFrame,
                                                                     UpdateMessage* lpUpdateMessage)
     {
@@ -1568,6 +1578,16 @@ namespace BrnNetwork
         CGS_ASSERT(lpVoipManager, "lpVoipManager");
         lpVoipManager->HandleReceivedHeadsetStatus(
             GetPlayerID(), static_cast<CgsNetwork::ENetworkHeadsetPlayerStatus>(lpUpdateData->meHeadsetStatus));
+
+        if (mpNetworkModule->IsRecvUpdateMessageToBeShown())
+        {
+            CgsDev::Log::LogChannelOutput& lrLog =
+                CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput;
+            lrLog << "RECV UPDATE for #" << GetPlayerID() << " POS=(";
+            lrLog.AppendFormat("(%f, %f, %f)", lpUpdateData->mMatrix.wAxis.x,
+                               lpUpdateData->mMatrix.wAxis.y, lpUpdateData->mMatrix.wAxis.z);
+            lrLog << ") FRAMES SINCE START=" << lpUpdateData->mu16FramesSinceStart << "\n";
+        }
 
         lpVehicleDriverInputInterface->GetUpdateDriverQueue()->AddEvent(&lNetworkDriverControls,
                                                                         BrnPhysics::Vehicle::E_DRIVER_TYPE_NETWORK);

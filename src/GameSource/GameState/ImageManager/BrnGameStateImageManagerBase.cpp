@@ -435,13 +435,9 @@ void GameStateImageManagerBase::HandleImageSaveEvent(const ImageToSaveEvent* lpI
 
         BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
 
-        BrnProgression::Profile::MugshotUniqueIdArg lUniqueID;
-        lUniqueID.mu64Lo = lpImageSaveEvent->mu64UniqueIdLo;
-        lUniqueID.mu64Hi = lpImageSaveEvent->mu64UniqueIdHi;
-
         const s32 liNewMugshotIndex = lpProfile->AddMugshot(
-            static_cast<s32>(leImageGalleryType), lUniqueID, lDateTaken,
-            static_cast<s32>(lrRegion.GetDistrict()));
+            static_cast<s32>(leImageGalleryType), lpImageSaveEvent->mUniquePlayerID,
+            lDateTaken, lrRegion);
 
         mpProgression->OnTrophyUnlock(34); // X360 li r4, 0x22
 
