@@ -986,6 +986,71 @@ void AptActionInterpreter::shutdown()
     mpStack         = 0;
 }
 
+// ARTIST unk_8324E71C: shared native-global extension-object lock.
+static volatile LONG gAptGlobalExtensionLock = 0;
+
+// AptValueShutdown @82AF2BE0: destroy GC references before releasing each pinned
+// singleton. The extension object is protected by the original reservation lock.
+void AptValueShutdown()
+{
+    if (gpAptClassRegistry)
+    {
+        gpAptClassRegistry->DestroyGCPointers();
+        if (gpAptClassRegistry)
+        {
+            AptNativeHash* pRegistry = gpAptClassRegistry;
+            pRegistry->~AptNativeHash();
+            gpAptPseudoDataPool->Deallocate(pRegistry, sizeof(AptNativeHash));
+        }
+        gpAptClassRegistry = 0;
+    }
+
+    while (_InterlockedCompareExchange(&gAptGlobalExtensionLock, 1, 0) != 0) {}
+    gpAptGlobalExtensionObject->DestroyGCPointers();
+    gpAptGlobalExtensionObject->Release();
+    gpAptGlobalExtensionObject = 0;
+    gpAptNativeGlobals = 0; // second C++ view of the same ARTIST slot8324E37C
+    _InterlockedExchange(&gAptGlobalExtensionLock, 0);
+
+    gpAptGlobalFallback->DestroyGCPointers();
+    gpAptGlobalFallback->Release();
+    gpAptGlobalFallback = 0;
+    gpAptKeyObject->DestroyGCPointers();
+    gpAptKeyObject->Release();
+    gpAptKeyObject = 0;
+    gpAptStringObject->DestroyGCPointers();
+    gpAptStringObject->Release();
+    gpAptStringObject = 0;
+
+    if (gpAptRenderingContext)
+        static_cast<AptRenderingContext*>(gpAptRenderingContext)->ScalarDeletingDestructor(1);
+
+    gpAptFnSetInterval->DestroyGCPointers();
+    gpAptFnSetInterval->Release();
+    gpAptFnSetInterval = 0;
+    gpAptFnClearInterval->DestroyGCPointers();
+    gpAptFnClearInterval->Release();
+    gpAptFnClearInterval = 0;
+    gpAptFnIsNaN->DestroyGCPointers();
+    gpAptFnIsNaN->Release();
+    gpAptFnIsNaN = 0;
+    gpAptFnUnescape->DestroyGCPointers();
+    gpAptFnUnescape->Release();
+    gpAptFnUnescape = 0;
+    gpAptFnEscape->DestroyGCPointers();
+    gpAptFnEscape->Release();
+    gpAptFnEscape = 0;
+    gpAptFnBoolean->DestroyGCPointers();
+    gpAptFnBoolean->Release();
+    gpAptFnBoolean = 0;
+    gpAptFnASSetPropFlags->DestroyGCPointers();
+    gpAptFnASSetPropFlags->Release();
+    gpAptFnASSetPropFlags = 0;
+    gpObjRegistrationFunc->DestroyGCPointers();
+    gpObjRegistrationFunc->Release();
+    gpObjRegistrationFunc = 0;
+}
+
 // ===========================================================================
 // AptUpdateShutdown @0x82B0C170 -- tear down the Apt sim/update side (counterpart of
 // AptUpdateInitialize): force the in-shutdown guard + drop the update latch, clean each

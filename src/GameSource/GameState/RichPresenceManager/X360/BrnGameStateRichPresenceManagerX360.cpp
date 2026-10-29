@@ -4,15 +4,14 @@
 // Bodies of BrnGameState::RichPresenceManagerX360 (see the header for the context-queue /
 // presence-thread design). The context and property ids are the title's own presence schema;
 // the four value tables were read out of the image. XUserSetContext / XUserSetProperty go
-// through the PC platform layer (CgsXboxLivePC.cpp / CgsXboxLivePC_wBT_01.cpp).
+// through the native XDK declarations in xtl.h.
 
 #include "GameSource/GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu::StartMonitor / StopMonitor
 
-extern "C" void XUserSetContext(u32 luUserIndex, u32 luContextId, u32 luContextValue);
-extern "C" void XUserSetProperty(u32 luUserIndex, u32 luPropertyId, u32 lcbValue, const void* lpvValue);
+#include <xtl.h> // XUserSetContext / XUserSetProperty
 
 namespace BrnGameState
 {

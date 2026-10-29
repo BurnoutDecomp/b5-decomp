@@ -373,12 +373,12 @@ struct AptCIH : public AptValueGC
     // position transform top-down, install it on the writable render item (SetIsMask),
     // and (re)mark the generalized-process dirty state. Returns true when a mask was
     // (re)processed, false when the node carries no mask.
-    bool ProcessMaskMatricies();   // @0x82AEDAE0
+    bool ProcessMaskMatricies(AptCIH* pRoot);   // @0x82AEDAE0
 
     // ProcessCustomControls -- the per-frame custom-control refresh pass AptUpdate
     // installs into the second generalised-process slot alongside ProcessTextInst /
     // ProcessMaskMatricies. Body in AptCIHBehaviour.cpp.
-    bool ProcessCustomControls();
+    bool ProcessCustomControls(AptCIH* pRoot);
 
     // CleanNativeFunctions @0x82AD6FB8 -- shutdown teardown: Release + null each of the
     // process-wide ActionScript native-function singletons (the built-in AS functions
@@ -390,7 +390,7 @@ struct AptCIH : public AptValueGC
     // handle is unresolved (0 / the empty-text sentinel) or its text is dirty (state
     // bit0 clear), it re-resolves the text (EnsureStringAllocated, fed the parent node
     // so inherited TextFormat resolves). Returns true if the node is dynamic text.
-    bool ProcessTextInst();   // @0x82B076F0
+    bool ProcessTextInst(AptCIH* pRoot);   // @0x82B076F0
 
     // EnsureStringAllocated @0x82B06F08 -- the deep dynamic-text build/layout path
     // (AptCharacterTextInst::UpdateText + the host string-layout call that bakes the
@@ -398,3 +398,10 @@ struct AptCIH : public AptValueGC
     // parent (inherited TextFormat source).
     void EnsureStringAllocated(AptCIH* pParent);   // @0x82B06F08
 };
+
+// ARTIST 82B0D728..76C stores the three actual member entry points in word slots.
+typedef bool (AptCIH::*AptCIHProcessCallback)(AptCIH* pRoot);
+CGS_STATIC_ASSERT(sizeof(AptCIHProcessCallback) == 4, "ARTIST CIH callback word");
+extern AptCIHProcessCallback AptCIH_sCIHProcessCb;
+extern AptCIHProcessCallback AptCIH_sCIHProcessCb1;
+extern AptCIHProcessCallback AptCIH_sCIHProcessCb2;
