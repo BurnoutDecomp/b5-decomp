@@ -12,10 +12,10 @@ typedef CgsGraphics::DispatchList::SortJobInfo SortJobInputOutput;
 // list record. Each descriptor occupies a128-byte job-data slot in the renderer.
 struct CGS_ALIGN(128) SortInfo
 {
-    u64 mu64KeyInAddress = 0;
-    u64 mu64KeyOutAddress = 0;
-    u16 mu16Count = 0;
-    SortJobInputOutput mInputOutputInfo = {};
+    u64 mu64KeyInAddress;
+    u64 mu64KeyOutAddress;
+    u16 mu16Count;
+    SortJobInputOutput mInputOutputInfo;
 };
 CGS_STATIC_ASSERT((sizeof(SortInfo) == 128), "native sort descriptor must fit its job-data slot");
 
