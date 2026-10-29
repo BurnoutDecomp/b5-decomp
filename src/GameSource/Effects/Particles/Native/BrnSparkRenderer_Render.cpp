@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include <xtl.h>
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 // ============================================================================
@@ -775,8 +776,8 @@ void SparkRenderer::Dispatch(rw::math::vpu::Matrix44::InParam lViewProjectionMat
     mpRenderer->SetTransform(&lViewProjectionMatrix);
 
     const u32 luVertexStride = NativeParticleVertex::GetStride();   // packed GPU24, CPU record32
-    D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);
-    D3DDevice_SetStreamSource(gpD3DDevice, 0, reinterpret_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, luVertexStride, 1);
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, static_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, 0, 1);
+    D3DDevice_SetStreamSource(gpD3DDevice, 0, static_cast<D3DVertexBuffer*>(lpVertexBuffer), 0, luVertexStride, 1);
 
     const renderengine::Texture* lpCachedTexture = 0;
     for (s32 lnBatch = 0; lnBatch < lrBatches.GetCount(); ++lnBatch)

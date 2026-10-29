@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "GameSource/Effects/Particles/EffectsVertexBufferManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
@@ -40,11 +41,10 @@ void EffectsVertexBufferManager::Construct(rw::IResourceAllocator* lpAllocator,
 
     // Parameters block Initialize/GetResourceDescriptor read: {format=0, length}.
     renderengine::VertexBuffer::Parameters lVbParams;
-    lVbParams.muFormat = 0u;
-    lVbParams.muLength = luVertexBufferSize;
+    lVbParams.type = 0u;
+    lVbParams.bufferSize = luVertexBufferSize;
 
-    CgsResource::ResourceDescriptor lVbResDesc;
-    renderengine::VertexBuffer::GetResourceDescriptor(&lVbResDesc, &lVbParams);
+    rw::ResourceDescriptor lVbResDesc = renderengine::VertexBuffer::GetResourceDescriptor(lVbParams);
 
     for (u32 luCount = 0u; luCount < KU_NUM_BUFFERS; ++luCount)
     {
@@ -52,28 +52,18 @@ void EffectsVertexBufferManager::Construct(rw::IResourceAllocator* lpAllocator,
         rw::Resource lResource = lpAllocator->DoAllocate(
             reinterpret_cast<const rw::ResourceDescriptor&>(lVbResDesc), 0);
 
-        // The allocated rw::Resource doubles as the VertexBuffer wrapper (m_baseResources[0]
-        // = header, m_baseResources[2] = base offset -- same layout as Wrapper).
-        renderengine::VertexBufferHeader* lpHeader = renderengine::VertexBuffer::Initialize(
-            reinterpret_cast<renderengine::VertexBuffer::Wrapper*>(&lResource), &lVbParams, 0, 0);
-        mapVertexBuffer[luCount] = reinterpret_cast<renderengine::VertexBuffer*>(lpHeader);
+        renderengine::VertexBuffer* const lpBuffer =
+            renderengine::VertexBuffer::Initialize(lResource, lVbParams);
+        mapVertexBuffer[luCount] = lpBuffer;
         CGS_ASSERT(mapVertexBuffer[luCount], "mapVertexBuffer[luCount]");
 
-        // BatchIterator::GetLockedBuffer inlined: read the locked size, lock the buffer,
-        // check it, capture the write address, and unlock.
-        const u32 luLockedBufferSize = lpHeader->muSize;
-        renderengine::VertexBuffer_Xbox2UnSet(lpHeader);
-        void* const lpAddress = reinterpret_cast<void*>(static_cast<usize>(
-            static_cast<u32>(renderengine::D3DVertexBuffer_Lock(lpHeader, 0, 0, 0))));
-
-        CGS_ASSERT(luLockedBufferSize == luVertexBufferSize,
+        renderengine::VertexBuffer::BatchIterator lIterator;
+        lpBuffer->Lock(0, lIterator);
+        CGS_ASSERT(lIterator.GetLockedBufferSize() == luVertexBufferSize,
                    "lBatchIterator.GetLockedBufferSize() == luVertexBufferSize");
-
-        mapVertexBufferAddress[luCount] = lpAddress;
+        mapVertexBufferAddress[luCount] = lIterator.GetLockedBuffer();
         CGS_ASSERT(mapVertexBufferAddress[luCount], "mapVertexBufferAddress[luCount]");
-
-        renderengine::D3DVertexBuffer_Unlock(
-            reinterpret_cast<renderengine::VertexBufferHeader*>(mapVertexBuffer[luCount]));
+        lpBuffer->Unlock(lIterator);
     }
 
     muVertexBufferSize = luVertexBufferSize;
