@@ -87,9 +87,9 @@ protected:
     CgsDev::DebugUI::StringList maStringList[130];
     ResourceModule*             mpResourceModule;          // console +0x523C
     s32                         miTypeListMode;            // EPoolTypeListMode
-    // Three visible modes plus the native null-name end row. ARTIST ends the
-    // three-row walk through the adjacent zero sort value at +0x5260.
-    CgsDev::DebugUI::StringList maTypeStringList[E_POOLTYPELISTMODE_COUNT + 1];
+    // ARTIST/DecFIGS has exactly three rows. The following sort-mode fields
+    // supply the native list terminator: miSortMode@525C and first sort value@5260.
+    CgsDev::DebugUI::StringList maTypeStringList[E_POOLTYPELISTMODE_COUNT];
     s32                         miSortMode;                // EDebugSortMode
     CgsDev::DebugUI::StringList maSortModeStringList[8];
     s32                         miRenderMode;              // EDebugTextureRenderMode
@@ -104,6 +104,26 @@ protected:
     s32                         maiPoolShareTestResults[3];
     bool                        mbPoolShareTestVisible;
     bool                        mbShowBundleLoaderQueue;
+private:
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mPoolWindow) == 0x1c, "ARTIST resource pool window");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mPoolHistogram) == 0x3f8, "ARTIST resource histogram");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mPoolTypeList) == 0x480, "ARTIST resource type list");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mPoolTextures) == 0x4d94, "ARTIST resource texture window");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mBundleFilesWindow) == 0x4de8, "ARTIST bundle window");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mpResourceModule) == 0x523c, "ARTIST debug resource owner");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, maTypeStringList) == 0x5244, "ARTIST three type rows");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, miSortMode) == 0x525c, "ARTIST sort selector");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, maSortModeStringList) == 0x5260, "ARTIST sort rows");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, miRenderMode) == 0x52a0, "ARTIST render selector");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, maRenderModeStringList) == 0x52a4, "ARTIST render rows");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mParams) == 0x52e8, "ARTIST debug parameters");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, miStatsDumpCount) == 0x52f8, "ARTIST statistics counter");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mbPoolShareTestVisible) == 0x5310, "ARTIST share-test visibility");
+        CGS_STATIC_ASSERT(offsetof(DebugComponent, mbShowBundleLoaderQueue) == 0x5311, "ARTIST loader queue visibility");
+        CGS_STATIC_ASSERT(sizeof(DebugComponent) == 0x5314, "ARTIST resource debug span");
+    }
 };
 }
 
