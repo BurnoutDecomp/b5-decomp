@@ -28,6 +28,8 @@
 //     m_blendNoise     +0x50  f32      (ctor 0.005)
 //     m_blendAngle     +0x54  f32      (ctor 0.0)
 
+namespace renderengine { class RasterizerState; class DepthStencilState; struct VertexDescriptorData; }
+
 namespace rw
 {
 namespace graphics
