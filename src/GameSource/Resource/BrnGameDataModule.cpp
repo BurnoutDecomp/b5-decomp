@@ -3230,7 +3230,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             const CgsResource::Events::LoadBundleResponse* lpResponse)
     {
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
-        const s32 liSlotIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        const s32 liSlotIndex = lpResponse->miEventId;
         const bool lbFailed =
             (lpResponse->meResult != CgsResource::Events::LoadBundleResponse::E_RESULT_SUCCESS);
 
@@ -3240,7 +3240,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             if (lbFailed)
             {
                 PostGameDataResponse(lpSlot, 27, true, 0, 0, 0);
-                mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+                mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             }
             else
                 ProcessGetVehicleRequest(lpResourceInput, &lpSlot->mEvent, 50, liSlotIndex);
@@ -3250,7 +3250,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             if (lbFailed)
             {
                 PostGameDataResponse(lpSlot, 28, true, 0, 0, 0);
-                mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+                mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             }
             else
                 ProcessGetTrafficVehicleRequest(lpResourceInput, &lpSlot->mEvent, 51, liSlotIndex);
@@ -3270,7 +3270,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             if (lbFailed)
             {
                 PostGameDataResponse(lpSlot, 31, true, 0, 0, 0);
-                mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+                mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             }
             else
                 ProcessGetWorldUnitRequest(lpResourceInput, &lpSlot->mEvent, 56, liSlotIndex);
@@ -3281,7 +3281,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3268
             ++miCollisionWorldRefCount;
             PostGameDataResponse(lpSlot, 32, false, 1 /*X360 +0x18 immediate*/, 0, 0);
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
 
         case 33:   // PVS
@@ -3304,7 +3304,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             if (lbFailed)
             {
                 PostGameDataResponse(lpSlot, 36, true, 0, 0, 0);
-                mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+                mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             }
             else
                 ProcessGetWheelRequest(lpResourceInput, &lpSlot->mEvent, 60, liSlotIndex);
@@ -3315,12 +3315,18 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             ProcessGetSurfaceListRequest(lpResourceInput, &lpSlot->mEvent, 66, liSlotIndex);
             break;
 
-        case 38:   // sound bundle batch (X360: post id 38 + count down slot->+44, free at
-                   // zero). The sound-bundle producer path is DEFERRED on PC (nothing
-                   // stages id 38); gate = log + free so the pool cannot leak.
+        case 38:
+        {
             CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3289
-            DeferredGameDataRequest("sound-bundle batch completion (id 38)", lpSlot);
+            GameDataIO::GameDataAssetEvent lReply;
+            lReply.miEventId = 0;
+            lReply.mpReceiverQueue = 0;
+            lpSlot->mEvent.mpReceiverQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lReply), 38, sizeof(lReply));
+            if (--lpSlot->miRefCount == 0)
+                mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
+        }
 
         case 68:   // collision world swap-in reload completed (the validate retry path)
         {
@@ -3330,7 +3336,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             lpSlot->mEvent.mpReceiverQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lReply), 68,
                 static_cast<s32>(sizeof(lReply)));
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
         }
 
@@ -3354,18 +3360,16 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     {
         CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");   // X360 line 3357
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
-        const s32 liSlotIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        const s32 liSlotIndex = lpResponse->miEventId;
 
         // No reply-to queue captured -> nothing to route; just recycle the slot.
         if (lpSlot->mEvent.mpReceiverQueue == 0)
         {
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             return;
         }
 
-        // The X360 +0x18 lane for the PVS/prop replies is the slot id's HIGH word (the
-        // dword at slot+24 on the big-endian console) -- reproduced exactly.
-        const u32 luIdHighWord = static_cast<u32>(lpSlot->mEvent.mId >> 32);
+        lpAttribModuleInputBuffer->LockForWrite();
 
         switch (lpSlot->miResponseEventId)
         {
@@ -3374,13 +3378,13 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         {
             CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
                        "lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS");   // line 3542
+            if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
+                break;
             CgsResource::ResourceHandle lHandle;
             lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
             lHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpResponse->mpSourceEntry);
-            lpAttribModuleInputBuffer->LockForWrite();
             lpAttribModuleInputBuffer->GetVaultRequestInterface()->UnregisterVault(
                 &mAttribSysReceiverQueue, lHandle, liSlotIndex);
-            lpAttribModuleInputBuffer->UnlockForWrite();
             break;
         }
 
@@ -3388,12 +3392,12 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             if (lpSlot->mEvent.meType == E_ASSETSET_GRAPHICS ||
                 lpSlot->mEvent.meType == E_ASSETSET_PHYSICS)
             {
-                // X360: meType 0 posts the plain reply; meType 1 posts the graphics
-                // variant (the +0x18 lane carries the asset set).
+                // Both replies carry a handle; the asset-set lane selects the
+                // graphics or physics response.
                 PostGameDataResponse(lpSlot, 50, false,
                                      static_cast<u32>(lpSlot->mEvent.meType),
                                      lpResponse->mpResourceMemory, lpResponse->mpSourceEntry);
-                mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+                mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             }
             else if (lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS)
             {
@@ -3414,15 +3418,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                 CgsResource::ResourceHandle lHandle;
                 lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
                 lHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpResponse->mpSourceEntry);
-                lpAttribModuleInputBuffer->LockForWrite();
                 lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterVault(
                     &mAttribSysReceiverQueue, lHandle, liSlotIndex, leVaultType);
-                lpAttribModuleInputBuffer->UnlockForWrite();
-            }
-            else
-            {
-                CGS_ASSERT(false, "Invalid event type received\n");   // line 3559 sibling
-                mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             }
             break;
 
@@ -3435,21 +3432,25 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         case 65:   // ICE movie
             PostGameDataResponse(lpSlot, lpSlot->miResponseEventId, false, 0,
                                  lpResponse->mpResourceMemory, lpResponse->mpSourceEntry);
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
 
-        case 58:   // PVS zone list
+        case 58:   // PVS zone list uses the DATA asset set.
+            PostGameDataResponse(lpSlot, 58, false, E_ASSETSET_DATA,
+                                 lpResponse->mpResourceMemory, lpResponse->mpSourceEntry);
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
+            break;
+
         case 61:   // prop physics
         case 62:   // prop instances
-            PostGameDataResponse(lpSlot, lpSlot->miResponseEventId, false, luIdHighWord,
+            PostGameDataResponse(lpSlot, lpSlot->miResponseEventId, false, E_ASSETSET_PHYSICS,
                                  lpResponse->mpResourceMemory, lpResponse->mpSourceEntry);
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+            mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
 
         case 57:   // world collision GET is not a supported protocol
             CGS_ASSERT(false,
                 "GETWORLDCOLLISION request not supported - use Load world collision and then Acquire zone collision\n");   // line 3517
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             break;
 
         case 66:   // surface list -> AttribSys RegisterVault(surface vault). X360 case 'B':
@@ -3461,19 +3462,17 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             CgsResource::ResourceHandle lHandle;
             lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
             lHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpResponse->mpSourceEntry);
-            lpAttribModuleInputBuffer->LockForWrite();
             lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterVault(
                 &mAttribSysReceiverQueue, lHandle, liSlotIndex,
                 CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
-            lpAttribModuleInputBuffer->UnlockForWrite();
             break;
         }
 
         default:
             CGS_ASSERT(false, "Invalid event type received\n");   // X360 line 3559
-            mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             break;
         }
+        lpAttribModuleInputBuffer->UnlockForWrite();
     }
 
     // @ 0x8266E3F0 -- an UnloadBundle completed: the world-collision unload kicks the pool
