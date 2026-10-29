@@ -255,6 +255,8 @@ public:
     // LIFECYCLE
     // ===============================================================================================
 
+    void Destruct(); // ARTIST 0x823406E0
+
     // X360 0x82340008 -- THE LAYOUT ORACLE. Eight arguments (DWARF BrnModeManager.h:122; IDA's 28-int
     // prototype is "local variable allocation has failed" garbage -- hazards H9). Argument identity is
     // proven from the asserts the body fires: "lpGameStateModule" / "lpProgressionManager" /
