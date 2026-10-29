@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/meshhelper.h"
 
 struct RenderableMesh;                                   // renderablemesh.h
 namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommands.h
@@ -83,6 +84,18 @@ namespace shadow
         // (the 3D tint volume + scene depth), BrnPostFxBloom, BrnSunCorona, Im3dBlend, the corona
         // renderer. No unit-range assert in this one -- the console has none (faithful).
         static void* SetState(const renderengine::TextureState* lpState, u32 luSamplerId);
+
+        // DecFIGS shadowingdevice.h:484; ARTIST 823FE530 inlines this
+        // StateBlockShadow::m_pMeshState transition over the existing two homes.
+        static void SetState(const renderengine::MeshHelper* lpMeshState)
+        {
+            if (mpIndexStreamArray != lpMeshState)
+            {
+                lpMeshState->Dispatch<renderengine::Device>(0);
+                mpIndexStreamArray = lpMeshState;
+                mpStreamArray = 0;
+            }
+        }
 
         // ⭐ THE PER-UNIT TEXTURE SHADOW, REACHED BY NAME (2026-09-05).
         // On the X360 dword_830109E8 / dword_83010968 are FILE-SCOPE GLOBALS, so a body outside
@@ -216,8 +229,8 @@ namespace shadow
         // mpStreamArray / mpIndexStreamArray are the two alternative stream-layout descriptors the
         // flush walks (the first non-null one wins); mpVertexDescriptor is the active vertex
         // descriptor used to map element streams to D3D stream slots.
-        static const void* mpStreamArray;        // off_83010950
-        static const void* mpIndexStreamArray;   // off_83010954
+        static const void* mpStreamArray;        // off_83010950: StateBlockShadow::m_pMesh
+        static const void* mpIndexStreamArray;   // off_83010954: StateBlockShadow::m_pMeshState
         static const renderengine::VertexDescriptorData* mpVertexDescriptor; // off_83010958
 
         // --- Program shadows (X360 dword_8301095C / dword_83010960) -------------------------
