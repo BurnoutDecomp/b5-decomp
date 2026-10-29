@@ -622,9 +622,9 @@ TrafficInAir::GetTypeInfo() const
 
 // MemBase::operator new(0x3F8, "TrafficInAir", flavour) + the constructor; returns
 // the EffectObject view (+0x04).
-CgsSound::Logic::EffectObject* TrafficInAir::CreateObject(u32)
+CgsSound::Logic::EffectObject* TrafficInAir::CreateObject(u32 luType)
 {
-    return new TrafficInAir();
+    return new ("TrafficInAir", luType != 0) TrafficInAir();
 }
 
 TrafficInAir::TrafficInAir()

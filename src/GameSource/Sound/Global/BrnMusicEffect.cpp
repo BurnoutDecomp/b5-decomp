@@ -380,9 +380,9 @@ void MusicEffect::JumpHpf::Update(f32 afDeltaTime)
     }
 }
 
-CgsSound::Logic::EffectObject* MusicEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* MusicEffect::CreateObject(u32 luType)
 {
-    return new MusicEffect();
+    return new ("MusicEffect", luType != 0) MusicEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* MusicEffect::GetStaticTypeInfo()

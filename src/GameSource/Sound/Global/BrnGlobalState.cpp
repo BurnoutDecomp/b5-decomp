@@ -76,9 +76,9 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GlobalState::GetStaticTy
     return &sTypeInfo;
 }
 
-CgsSound::Logic::State* GlobalState::CreateObject(u32 /*auType*/)
+CgsSound::Logic::State* GlobalState::CreateObject(u32 luType)
 {
-    return new GlobalState();
+    return new ("GlobalState", luType != 0) GlobalState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GlobalState::GetTypeInfo() const

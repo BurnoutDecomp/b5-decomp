@@ -162,9 +162,9 @@ AIVehicleStateManager::~AIVehicleStateManager()
 
 // CreateObject @ 0x82702358: MemBase::operator new(880, "AIVehicleStateManager",
 // flavour) + ctor; the int argument only picks the operator-new flavour.
-CgsSound::Logic::StateManager* AIVehicleStateManager::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::StateManager* AIVehicleStateManager::CreateObject(u32 luType)
 {
-    return new AIVehicleStateManager();
+    return new ("AIVehicleStateManager", luType != 0) AIVehicleStateManager();
 }
 
 // Descriptor 0x82F2E88C: {ObjectID 2, "AIVehicleStateManager", base

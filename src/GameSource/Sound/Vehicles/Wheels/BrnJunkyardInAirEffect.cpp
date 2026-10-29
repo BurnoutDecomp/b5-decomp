@@ -45,9 +45,9 @@ static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
     gpJunkyardInAirEffectReg = CgsSound::Logic::EffectObject::AddToClassTypeInfoArray(
         JunkyardInAirEffect::GetStaticTypeInfo());
 
-CgsSound::Logic::EffectObject* JunkyardInAirEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* JunkyardInAirEffect::CreateObject(u32 luType)
 {
-    return new JunkyardInAirEffect();
+    return new ("JunkyardInAirEffect", luType != 0) JunkyardInAirEffect();
 }
 
 JunkyardInAirEffect::JunkyardInAirEffect()

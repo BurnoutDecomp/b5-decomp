@@ -29,12 +29,11 @@ namespace Environment
 // Allocates a 120-byte (0x78) block via CgsSound::MemBase::operator new(size, tag,
 // flavour) tagged "ReverbEffect" and constructs a ReverbEffect, upcast to the primary
 // EffectObject* (+4). `a1` only selects the operator-new flavour (0/1).
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; observable result matches. The 0x78 size is documentation only.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectObject* ReverbEffect::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* ReverbEffect::CreateObject(u32 luType)
 {
-    return new ReverbEffect();
+    return new ("ReverbEffect", luType != 0) ReverbEffect();
 }
 
 // ---------------------------------------------------------------------------

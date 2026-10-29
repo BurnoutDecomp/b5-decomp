@@ -251,20 +251,11 @@ PassbyStateManager::~PassbyStateManager()
 // sibling managers pass, 0/1). The factory CreateStateMan @ 0x826A5B60 calls this
 // as createObject(0).
 //
-// FLAG (allocator gate): CgsSound::MemBase (CgsMemBase.h) does NOT model
-// operator new(size, tag[, flags]) -- the sound allocator (off_82FFB954) is not
-// homed in this group. A faithful placement-new through that allocator is
-// therefore not yet expressible here; this reconstruction uses the host `new`
-// (which routes through the global operator new, NOT the sound allocator). The
-// observable result -- a constructed PassbyStateManager* (or null) handed to the
-// factory -- matches. Replace `new` with the sound-allocator placement-new once
-// MemBase::operator new is homed. The 944-byte size is the X360 0x3B0; on the
-// 64-bit host the real object is larger (8-byte pointers/vptrs), so the literal
-// size is documentation only and is NOT passed to the host new.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::StateManager* PassbyStateManager::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::StateManager* PassbyStateManager::CreateObject(u32 luType)
 {
-    return new PassbyStateManager();
+    return new ("PassbyStateManager", luType != 0) PassbyStateManager();
 }
 
 // ---------------------------------------------------------------------------

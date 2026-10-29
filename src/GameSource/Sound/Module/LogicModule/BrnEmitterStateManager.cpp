@@ -110,18 +110,11 @@ EmitterStateManager::~EmitterStateManager()
 // argument only selects the operator-new flavour (0/1). The factory CreateStateMan
 // @ 0x826A5B60 calls this as createObject(0).
 //
-// FLAG (allocator gate): CgsSound::MemBase (CgsMemBase.h) does NOT model operator
-// new(size, tag, flavour) -- the sound allocator (off_82FFB954) is not homed in this
-// group -- so a faithful placement-new through it is not yet expressible. This uses
-// the host `new` (global operator new, NOT the sound allocator); the observable
-// result -- a constructed EmitterStateManager* (or null) -- matches. Replace with the
-// sound-allocator placement-new once MemBase::operator new is homed. The 1088-byte
-// size is the X360 0x440; the host object differs in size, so the literal is
-// documentation only and is NOT passed to the host new.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::StateManager* EmitterStateManager::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::StateManager* EmitterStateManager::CreateObject(u32 luType)
 {
-    return new EmitterStateManager();
+    return new ("EmitterStateManager", luType != 0) EmitterStateManager();
 }
 
 // ---------------------------------------------------------------------------

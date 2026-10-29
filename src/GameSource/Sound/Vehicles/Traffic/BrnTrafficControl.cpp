@@ -42,9 +42,9 @@ TrafficControl::~TrafficControl()
 
 // MemBase::operator new(0x44, "TrafficControl", flavour) with the BrnEffectControl base
 // construction inlined; returns the EffectControl view (+0x04).
-CgsSound::Logic::EffectControl* TrafficControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* TrafficControl::CreateObject(u32 luType)
 {
-    return new TrafficControl();
+    return new ("TrafficControl", luType != 0) TrafficControl();
 }
 
 // Descriptor {0x30000, "TrafficControl", BrnEffectControl::sTypeInfo, &CreateObject}.

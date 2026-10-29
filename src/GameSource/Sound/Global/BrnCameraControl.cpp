@@ -21,9 +21,9 @@ namespace BrnSound
 namespace Logic
 {
 
-CgsSound::Logic::EffectControl* CameraControl::CreateObject(u32)
+CgsSound::Logic::EffectControl* CameraControl::CreateObject(u32 luType)
 {
-    return new CameraControl();
+    return new ("CameraControl", luType != 0) CameraControl();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* CameraControl::GetStaticTypeInfo()

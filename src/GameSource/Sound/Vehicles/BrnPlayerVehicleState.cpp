@@ -48,9 +48,9 @@ PlayerVehicleState::GetStaticTypeInfo()
     return &sTypeInfo;
 }
 
-CgsSound::Logic::State* PlayerVehicleState::CreateObject(u32 /*auType*/)
+CgsSound::Logic::State* PlayerVehicleState::CreateObject(u32 luType)
 {
-    return new PlayerVehicleState();
+    return new ("PlayerVehicleState", luType != 0) PlayerVehicleState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*

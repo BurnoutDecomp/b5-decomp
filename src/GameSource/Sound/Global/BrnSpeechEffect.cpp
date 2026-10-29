@@ -114,9 +114,9 @@ SpeechEffect::SpeechEffect()
 
 SpeechEffect::~SpeechEffect() {}
 
-CgsSound::Logic::EffectObject* SpeechEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* SpeechEffect::CreateObject(u32 luType)
 {
-    return new SpeechEffect();
+    return new ("SpeechEffect", luType != 0) SpeechEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* SpeechEffect::GetStaticTypeInfo()

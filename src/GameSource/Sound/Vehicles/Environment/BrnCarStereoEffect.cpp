@@ -51,12 +51,11 @@ CarStereoEffect::CarStereoEffect()
 // flavour) tagged "CarStereoEffect" and constructs a CarStereoEffect, handing it back
 // through its EffectObject base sub-object (+4). The arg only selects the operator-new
 // flavour (0/1).
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; observable result matches. The 0x90 size is documentation only.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectObject* CarStereoEffect::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* CarStereoEffect::CreateObject(u32 luType)
 {
-    return new CarStereoEffect();
+    return new ("CarStereoEffect", luType != 0) CarStereoEffect();
 }
 
 // At most this many car stereos play at once.

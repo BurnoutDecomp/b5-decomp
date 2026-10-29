@@ -108,9 +108,9 @@ PresentationEffect::~PresentationEffect()
 {
 }
 
-CgsSound::Logic::EffectObject* PresentationEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* PresentationEffect::CreateObject(u32 luType)
 {
-    return new PresentationEffect();
+    return new ("PresentationEffect", luType != 0) PresentationEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*

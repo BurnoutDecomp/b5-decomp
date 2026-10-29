@@ -51,12 +51,11 @@ int EnclosureControl::ConvertRegionTypeToIndex( int liRegionType ) const
 // flavour) tagged "EnclosureControl" and inline-constructs an EnclosureControl, upcast
 // to the EffectObject* base (+4 adjust). The bool arg only selects the operator-new
 // flavour (0/1); both arms use the same size + ctor.
-// FLAG (allocator gate): CgsSound::MemBase::operator new is not homed here, so this uses
-// the host `new`; observable result matches. The 0x50 size is documentation only.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* EnclosureControl::Create( bool /*lbFlavour*/ )
+CgsSound::Logic::EffectControl* EnclosureControl::Create( bool lbFlavour )
 {
-    return new EnclosureControl();
+    return new ("EnclosureControl", lbFlavour) EnclosureControl();
 }
 
 // ARTIST debug-menu backing cells. These exact globals are registered by the Sound page.

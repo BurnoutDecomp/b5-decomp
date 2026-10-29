@@ -79,9 +79,9 @@ TrafficHorn::~TrafficHorn()
 
 // MemBase::operator new(0xB0, "TrafficHorn", flavour) + the constructor; returns the
 // EffectObject view (+0x04).
-CgsSound::Logic::EffectObject* TrafficHorn::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectObject* TrafficHorn::CreateObject(u32 luType)
 {
-    return new TrafficHorn();
+    return new ("TrafficHorn", luType != 0) TrafficHorn();
 }
 
 // Descriptor {0x30010, "TrafficHorn", BrnEffectObject::sTypeInfo, &CreateObject}.

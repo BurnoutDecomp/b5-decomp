@@ -55,9 +55,9 @@ const char* EmitterEffect::GetTypeName() const
     return "EmitterEffect";
 }
 
-CgsSound::Logic::EffectObject* EmitterEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* EmitterEffect::CreateObject(u32 luType)
 {
-    return new EmitterEffect();
+    return new ("EmitterEffect", luType != 0) EmitterEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>*

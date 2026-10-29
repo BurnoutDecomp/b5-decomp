@@ -36,9 +36,9 @@ namespace Logic
 {
 bool KB_HUD_SPEW_MESSAGES = false; // ARTIST82FFB8D0, DecFIGS BrnHUDEffect.cpp:27
 
-CgsSound::Logic::EffectObject* HUDEffect::CreateObject(u32)
+CgsSound::Logic::EffectObject* HUDEffect::CreateObject(u32 luType)
 {
-    return new HUDEffect();
+    return new ("HUDEffect", luType != 0) HUDEffect();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* HUDEffect::GetStaticTypeInfo()

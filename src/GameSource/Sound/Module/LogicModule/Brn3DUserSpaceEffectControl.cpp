@@ -38,18 +38,11 @@ namespace Logic
 // fall through to `li r3,0; blr`. Mirrors the committed BrnStateManager /
 // EmitterStateManager CreateObject bodies exactly.
 //
-// FLAG (allocator gate): CgsSound::MemBase (CgsMemBase.h) does NOT model operator
-// new(size, tag, flavour) -- the sound allocator (off_82FFB954) is not homed in this
-// group -- so a faithful placement-new is not yet expressible. This uses the host
-// global `new`; the observable result -- a constructed Brn3DUserSpaceEffectControl*
-// (or null) handed back as the base CgsSound::Logic::EffectControl* -- matches.
-// Replace with the sound-allocator placement-new once MemBase::operator new is homed.
-// The 288-byte size is the X360 0x120; the host object differs in size, so the literal
-// is documentation only and is NOT passed to host new.
+// Tagged allocation now dispatches through the shared sound MemBase allocator.
 // ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* Brn3DUserSpaceEffectControl::CreateObject( u32 /*luType*/ )
+CgsSound::Logic::EffectControl* Brn3DUserSpaceEffectControl::CreateObject(u32 luType)
 {
-    return new Brn3DUserSpaceEffectControl();
+    return new ("Brn3DUserSpaceEffectControl", luType != 0) Brn3DUserSpaceEffectControl();
 }
 
 // ---------------------------------------------------------------------------
