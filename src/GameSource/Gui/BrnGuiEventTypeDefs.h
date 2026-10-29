@@ -154,6 +154,18 @@ enum EHUDFSMs
     E_GUI_HUD_NUMSFSMS = 4,
 };
 
+// DecFIGS BrnGuiEventTypeDefs.h:3556; ARTIST BridgeGuiToGame
+//823CBA30..BA6C copies this raw16-byte event362 into SnapShotRequest.
+struct GuiSnapShotRequested : public CgsModule::Event
+{
+    f32 mfStartX;
+    f32 mfStartY;
+    f32 mfWidth;
+    f32 mfHeight;
+    s32 GetEventType() const { return 362; }
+};
+CGS_STATIC_ASSERT((sizeof(GuiSnapShotRequested) == 16), "ARTIST snapshot payload");
+
 // BrnGuiEventTypeDefs.h:936 -- request to run a GUI FSM. X360 BrnGuiFsmController::RunFsm
 // copies this record as three qwords and reads meFlowToUse at +0x14, proving the controller-facing
 // record is 24 bytes with the ids first. The DecFIGS text lists meFsmToRun first, but the ARTIST
