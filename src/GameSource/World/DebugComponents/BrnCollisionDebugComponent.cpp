@@ -89,21 +89,21 @@ void CollisionDebugComponent::OnActivate()
     RegisterVariable(&sbDrawTags, "Draw tags");
 }
 
-u32 CollisionDebugComponent::GetTrafficColour(f32 lfValue)
+rw::RGBA CollisionDebugComponent::GetTrafficColour(f32 lfValue)
 {
     // flt_820176A8 == 4/pi; the eight threshold branches are the ARTIST body at 0x822A8C50.
     const f32 lfScaled = lfValue * 1.2732395f;
-    if (lfScaled < 1.0f) return 0x200000FFu;
-    if (lfScaled < 2.0f) return 0x20000099u;
-    if (lfScaled < 3.0f) return 0x2000FFFFu;
-    if (lfScaled < 4.0f) return 0x2000FF00u;
-    if (lfScaled < 5.0f) return 0x20009900u;
-    if (lfScaled < 6.0f) return 0x20FFFF00u;
-    if (lfScaled < 7.0f) return 0x20FF0000u;
-    return 0x20FF00FFu;
+    if (lfScaled < 1.0f) return RenderColour(0x200000FFu);
+    if (lfScaled < 2.0f) return RenderColour(0x20000099u);
+    if (lfScaled < 3.0f) return RenderColour(0x2000FFFFu);
+    if (lfScaled < 4.0f) return RenderColour(0x2000FF00u);
+    if (lfScaled < 5.0f) return RenderColour(0x20009900u);
+    if (lfScaled < 6.0f) return RenderColour(0x20FFFF00u);
+    if (lfScaled < 7.0f) return RenderColour(0x20FF0000u);
+    return RenderColour(0x20FF00FFu);
 }
 
-u32 CollisionDebugComponent::GetSurfaceRenderColour(u8 luSurfaceId)
+rw::RGBA CollisionDebugComponent::GetSurfaceRenderColour(u8 luSurfaceId)
 {
     Attrib::Gen::surface lSurface;
     spWorldEntityModule->GetSurface(luSurfaceId, &lSurface);
@@ -119,11 +119,11 @@ u32 CollisionDebugComponent::GetSurfaceRenderColour(u8 luSurfaceId)
     const u32 luRed = static_cast<u8>(laColour[0] * 255.0f);
     const u32 luGreen = static_cast<u8>(laColour[1] * 255.0f);
     const u32 luBlue = static_cast<u8>(laColour[2] * 255.0f);
-    return (static_cast<u32>(siSurfaceAlpha) << 24) |
-           (luBlue << 16) | (luGreen << 8) | luRed;
+    return RenderColour((static_cast<u32>(siSurfaceAlpha) << 24) |
+                         (luBlue << 16) | (luGreen << 8) | luRed);
 }
 
-u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
+rw::RGBA CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
 {
     const u16 luMaterialTag = lCollisionTag.GetMaterialTag();
     const bool lbDrivable = (luMaterialTag & KU_COLLISION_FLAG_DRIVEABLE) != 0;
@@ -132,24 +132,24 @@ u32 CollisionDebugComponent::GetFlagsRenderColour(CollisionTag lCollisionTag)
 
     if (lbDrivable && !lbFatal)
     {
-        return 0x80FFFFFFu;
+        return RenderColour(0x80FFFFFFu);
     }
     if (!lbDrivable && !lbFatal)
     {
-        return 0x80000000u;
+        return RenderColour(0x80000000u);
     }
     if (lbSuperFatal)
     {
-        return 0xFF00FFFFu;
+        return RenderColour(0xFF00FFFFu);
     }
     if (!lbDrivable && lbFatal)
     {
-        return 0x800000FFu;
+        return RenderColour(0x800000FFu);
     }
-    return 0;
+    return RenderColour(0);
 }
 
-u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
+rw::RGBA CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
                                             s32 liPolyIndex)
 {
     CGS_ASSERT(siDrawMode >= E_DRAWMODE_SURFACES &&
@@ -161,12 +161,12 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
     case E_DRAWMODE_SURFACES:
     {
         const u8 luSurfaceId = lCollisionTag.GetSurfaceId();
-        return (luSurfaceId != 0) ? GetSurfaceRenderColour(luSurfaceId) : 0;
+        return (luSurfaceId != 0) ? GetSurfaceRenderColour(luSurfaceId) : RenderColour(0);
     }
     case E_DRAWMODE_FLAGS:
         return GetFlagsRenderColour(lCollisionTag);
     case E_DRAWMODE_ZONES:
-        return KAU_ZONE_COLOURS[liPolyIndex % 16];
+        return RenderColour(KAU_ZONE_COLOURS[liPolyIndex % 16]);
     case E_DRAWMODE_TRAFFIC:
     {
         f32 lfTrafficAngle = 0.0f;
@@ -174,11 +174,11 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
             lCollisionTag.GetTrafficInfo(&lfTrafficAngle);
         if (leTraffic == E_TRAFFIC_DIRECTION_UNKNOWN)
         {
-            return 0x20FFFFFFu;
+            return RenderColour(0x20FFFFFFu);
         }
         if (leTraffic == E_TRAFFIC_DIRECTION_NO_LANES)
         {
-            return 0x20000000u;
+            return RenderColour(0x20000000u);
         }
         return GetTrafficColour(lfTrafficAngle);
     }
@@ -187,21 +187,21 @@ u32 CollisionDebugComponent::GetPolyColour(CollisionTag lCollisionTag,
         const u16 luSectionIndex = lCollisionTag.GetAISectionIndex();
         if (luSectionIndex == KI_INVALID_SECTION_INDEX)
         {
-            return 0x200000FFu;
+            return RenderColour(0x200000FFu);
         }
         switch (luSectionIndex % 4)
         {
-        case 0: return 0x20006400u;
-        case 1: return 0x20009600u;
-        case 2: return 0x2000C800u;
-        default: return 0x2000FF00u;
+        case 0: return RenderColour(0x20006400u);
+        case 1: return RenderColour(0x20009600u);
+        case 2: return RenderColour(0x2000C800u);
+        default: return RenderColour(0x2000FF00u);
         }
     }
     case E_DRAWMODE_DRIVABLE:
-        return lCollisionTag.IsDrivable() ? 0x20006400u : 0x20000064u;
+        return RenderColour(lCollisionTag.IsDrivable() ? 0x20006400u : 0x20000064u);
     default:
         CGS_ASSERT(false, "\nInvalid collision draw mode");
-        return 0;
+        return RenderColour(0);
     }
 }
 
@@ -233,7 +233,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
     CollisionTag lCollisionTag;
     lCollisionTag.Construct(static_cast<u16>(luCollisionTag),
                             static_cast<u16>(luCollisionTag >> 16));
-    const u32 luColour = GetPolyColour(lCollisionTag, liPolyIndex);
+    const rw::RGBA lColour = GetPolyColour(lCollisionTag, liPolyIndex);
 
     Vector3 lPolyCentre;
     if (liNumPolyPoints == 4)
@@ -241,7 +241,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         if (siSurfaceAlpha != 0)
         {
             lpDisplay->DrawSolidQuad(laPoints[0], laPoints[1], laPoints[3],
-                                     laPoints[2], RenderColour(luColour));
+                                     laPoints[2], lColour);
         }
         lpDisplay->DrawQuad(laPoints[0], laPoints[1], laPoints[3], laPoints[2],
                             RenderColour(0xFFFFFFFFu));
@@ -253,7 +253,7 @@ void CollisionDebugComponent::DrawCollisionPolyCallback(
         if (siSurfaceAlpha != 0)
         {
             lpDisplay->DrawSolidTriangle(laPoints[0], laPoints[1], laPoints[2],
-                                         RenderColour(luColour));
+                                         lColour);
         }
         lpDisplay->DrawHollowTriangle(laPoints[0], laPoints[1], laPoints[2],
                                       RenderColour(0xFFFFFFFFu));
