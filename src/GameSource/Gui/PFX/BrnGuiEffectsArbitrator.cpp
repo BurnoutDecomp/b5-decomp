@@ -1114,7 +1114,7 @@ namespace BrnGui
         GuiPFXHookEvent lEvent;
         lEvent.muGuid = 0;
         // ARTIST passes the selected name as SPrintf's format argument in r5, with no varargs.
-        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName),
+        CgsCore::SPrintf(lEvent.macName, 32,
                          lpArbitrator->maPfxHookList[lpArbitrator->miPfxHookIndex].mpcName);
         const f32 lfWeight = lpArbitrator->mfBackgroundWeight;
         lEvent.mfMaximumBloomWeight        = lfWeight;
@@ -1132,7 +1132,7 @@ namespace BrnGui
         GuiPFXStartBackgroundHookEvent lEvent;
         lEvent.muGuid = 0;
         // ARTIST passes the selected name as SPrintf's format argument in r5, with no varargs.
-        CgsCore::SPrintf(lEvent.macName, sizeof(lEvent.macName),
+        CgsCore::SPrintf(lEvent.macName, 32,
                          lpArbitrator->maPfxHookList[lpArbitrator->miPfxHookIndex].mpcName);
         lEvent.mfMaximumWeight = lpArbitrator->mfBackgroundWeight;
         lpArbitrator->StartBackgroundHook(&lEvent);
