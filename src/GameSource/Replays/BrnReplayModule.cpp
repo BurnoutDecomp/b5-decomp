@@ -85,13 +85,11 @@ namespace BrnReplays
     }
 
     ReplayModule::ReplayModule()
-        : maJobs4940{EA::Jobs::Job(0), EA::Jobs::Job(0),
-                     EA::Jobs::Job(0), EA::Jobs::Job(0)}
-        , mSerialiseJob(0)
+        : mSerialiseJob(0)
     {
-        // Base and embedded stream constructors own their locks and the nested Relocator job.
-        // ARTIST 827E0448..046C constructs these four module jobs in slot order, then the final job.
-        mGameEventCache.MarkUnconstructed();
+        // The queue base initializes its marker before later members.
+        // ARTIST827E0448..046C constructs four default-named jobs in slot
+        // order, then the final job. Job's default name is the original null.
     }
 
     // ARTIST 0x82656E20. Initialize the named ReplayModule members and invoke
@@ -255,8 +253,7 @@ namespace BrnReplays
         {
             // ARTIST 8264B4CC..DC: null callback/context and sleep=-1, before poster End.
             mSerialiseJob.WaitOn(0, 0, -1);
-            mCommandPoster.End();
-            mbPosterActive = false;
+            mSerialiseStream.End();
         }
         mbSerialiseActive = false;
     }
@@ -327,25 +324,25 @@ namespace BrnReplays
                 if (static_cast<u32>(liReel) >= 6u)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "Reel " << liReel << " out of range\n";
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
                 if (liReel == miCurrentRecordReel)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "Currently recording to reel " << liReel << " so can't play it\n";
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
                 if (!maReels[liReel].mbUsed)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "Reel " << liReel << " is empty so can't play it\n";
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
                 if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
@@ -366,25 +363,25 @@ namespace BrnReplays
                 if (static_cast<u32>(liReel) >= 6u)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "Reel " << liReel << " out of range\n";
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
                 if (liReel == miCurrentRecordReel)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "Currently recording to reel " << liReel << " so can't delete it\n";
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
                 if (!maReels[liReel].mbUsed)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "Reel " << liReel << " is empty so can't delete it\n";
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(), __FILE__, __LINE__);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
                     CgsDev::Assert::EndAssert();
                 }
                 if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
@@ -428,9 +425,9 @@ namespace BrnReplays
                 if (std::strlen(lpName->macName) >= 256u)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::StrStream lMessage(lBuffer.GetBuffer(), lBuffer.GetSize());
+                    CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "String too long: " << lpName->macName;
-                    CgsDev::Assert::FireAssert(lBuffer.GetBuffer(),
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                         "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",55);
                     CgsDev::Assert::EndAssert();
                 }
@@ -749,7 +746,7 @@ namespace BrnReplays
                 return;
             mHeaderFile.Read(mpcHeaderBuffer, 0, 0x20000);
             meStreamStage = E_STREAM_STAGE_HEADER;
-            [[fallthrough]];
+            // Fall through.
 
         case E_STREAM_STAGE_HEADER:
         {
@@ -771,7 +768,7 @@ namespace BrnReplays
             mbPlaybackDataReady = false;
             mbStreamDataReady = false;
             meStreamStage = E_STREAM_STAGE_OPEN;
-            [[fallthrough]];
+            // Fall through.
         }
 
         case E_STREAM_STAGE_OPEN:
@@ -944,8 +941,7 @@ namespace BrnReplays
         if (mbSerialiseActive)
         {
             mSerialiseJob.WaitOn(0, 0, -1);
-            mCommandPoster.End();
-            mbPosterActive = false;
+            mSerialiseStream.End();
         }
         mbSerialiseActive = false;
         LockSerialisers();

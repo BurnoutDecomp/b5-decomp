@@ -31,7 +31,7 @@
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"   // BrnReplays::GPUDiskWriteStream (embedded @ +0x980)
 #include "GameSource/Replays/Stream/BrnReplayReadStream.h"           // BrnReplays::ReadStream
 #include "GameSource/Replays/Stream/BrnReplayWriteStream.h"          // BrnReplays::WriteStream
-#include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h" // CgsMemory::DataStreamCommandPoster (embedded @ +0x5A80)
+#include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h" // native producer @ +0x5A00
 #include "SDKs/EATech/eajobs/job.h"                                // canonical native-width EA::Jobs::Job embeds
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"       // BrnReplays::DiskReadStream (embedded @ +0x3F80)
 #include "GameSource/Replays/BrnReplayDebugComponent.h"              // BrnReplays::DebugComponent (embedded @ +0x6264)
@@ -248,17 +248,10 @@ namespace BrnReplays
         f32                  mfEndTime;                // +0x92C
 
         CgsFileSystem::FileHandle mHeaderFile;
-        // ------------------------------------------------------------------------
-        // From here on the embedded REAL types (GPUDiskWriteStream / EA::Jobs::Job /
-        // DataStreamCommandPoster) host-inflate beyond their X360 byte spans (pointer
-        // widening + a wider CRITICAL_SECTION), so the tail is modelled in X360
-        // DECLARATION ORDER without absolute-offset pads: the members exist BY NAME at
-        // their proven sequence positions (shape-faithful, not byte-exact -- the same
-        // rule the committed module siblings follow once a real heavy embed appears).
-        // Jobs use the existing canonical EA::Jobs::Job type and native pointer widths.
-        // The job at module+0x2B10 and lock at module+0x3B00 already belong to the
-        // embedded GPU stream's Relocator and stream lock; they are not extra module fields.
-        // ------------------------------------------------------------------------
+        // Native contained objects follow. Some dormant native members still
+        // require recovery: the documented offsets are ARTIST evidence, and
+        // are not an assertion that this entire current declaration matches.
+        // No storage is added merely to fill the remaining native spans.
 
         // @0x980 (2432): the embedded GPU disk write stream (Update_Dispatch dispatches it).
         GPUDiskWriteStream   mGpuWriteStream;          // @0x980
@@ -282,9 +275,10 @@ namespace BrnReplays
         EA::Jobs::Job        mSerialiseJob;
 
         bool                 mbSerialiseActive;        // @0x59D0
-        // @0x5A80 (23168): the data-stream command poster (WaitForSerialiseJobs ends it).
-        CgsMemory::DataStreamCommandPoster mCommandPoster; // @0x5A80
-        bool                 mbPosterActive;           // @0x5B00
+        // ARTIST8264B4E0..B4F0 identifies the actual producer at+5A00:
+        // its poster is+80 and its streaming flag+100. Both belong to
+        // SimpleDataStreamProducer; its End preserves that call/store order.
+        CgsMemory::SimpleDataStreamProducer mSerialiseStream; // native +0x5A00
 
         // DecFIGS names the three readiness flags in this order; ARTIST 8264B57C..B598
         // reads them at+5C32/+5C30/+5C31 and writes the playback-ready result at+5C31.
