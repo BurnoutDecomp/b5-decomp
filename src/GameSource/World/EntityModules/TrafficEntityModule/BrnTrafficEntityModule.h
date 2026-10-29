@@ -18,6 +18,7 @@
 // their parameter snapshots and physical-request lists at the DWARF position.
 // =============================================================================
 
+#include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h"
 #include "types.hpp"        // u8/u16/u32/s8/s32/u64/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (UpdateVehicleStuckSideTime inline)
 #include "BrnCommonTypes.h" // EntityId, Vector2/3/4, Vector3Plus, VecFloat, Matrix44Affine
@@ -632,6 +633,11 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // function consumes, not a corona-only side channel.
         // lpiUpdatedNumDamagedVehiclesRendered is the shared per-frame budget
         // GenerateDispatchLists seeds to 0 once for the whole loop (`*a52 < 5`, pseudocode :1254).
+        // ARTIST 82727BB0; DWARF owning header :14366. GPR r6/r7 are writable out vectors.
+        void SubmitCoronasForVehicle(BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                     u32 luVehicle, Vector3 lCameraPosition, Vector3 lCameraDirection,
+                                     Vector4& lFrontLights, Vector4& lRearLights);
+
         void RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                                u32 luEntityIdx,
                                Vector3 lCameraPosition,
@@ -852,7 +858,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                   BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
         void  PutParamInPurgatory(u32 luParam);                      // @ 0x82716510 (FLAG: Array interior)
         void  RebuildGeneratorList();                                // @ 0x82742DD0 (FLAG)
-        void  UpdateSerialiser();                                    // @ 0x8272DA80 (FLAG)
+        void  UpdateSerialiser();                                    // @ 0x8272DA80
         // @ 0x82707F00. Console defines it here (its assert names BrnTrafficEntityModule.h:2637).
         // The fsel else-value flt_82001CC0 is 0.0f: Param::Construct @0x82751B60 loads it as the
         // SetParamAlong argument `0.0`, ParamListNode::Construct @0x82751C38 as `mfParamAlong = 0.0`.
@@ -1840,6 +1846,11 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         f32                   mfShowtimeTimeNextCrashSpike;         // :773
         f32                   mfShowtimeTimeLastCrashSpike;         // :774
         f32                   mfShowtimeMisBounceTimer;             // :775
+
+        // X360-only replay state omitted from the DecFIGS member listing (:776/777).
+        BrnReplays::TrafficEntitySerialiser mTrafficEntitySerialiser; // ARTIST +0x724C0
+        bool mbReplayPlayback; // FLAG inferred name: +0x72520 selects recorded hull/assets.
+        bool mbReplayAssetsReady; // FLAG inferred name: +0x72521 streaming readiness latch.
 
         f32                   mfPlayerIdleTime;                     // :778
 

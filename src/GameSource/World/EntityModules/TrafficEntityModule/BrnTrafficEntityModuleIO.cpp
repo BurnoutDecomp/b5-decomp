@@ -38,8 +38,8 @@ namespace BrnTrafficIO
         static_assert(sizeof(OutputBuffer_PostPhysics::SceneInputInterface) > 800000,
                       "mSceneInputInterface is the real InSceneUpdateInterface (console 818768 B "
                       "at +11376), not the 44-byte span the +834784 accessor returns");
-        static_assert(sizeof(OutputBuffer_PostPhysics::InterfaceAt834784) == 44,
-                      "the X360-only member at console +834784 is 44 bytes (Construct zeroes 11 words)");
+        static_assert(sizeof(OutputBuffer_PostPhysics::ReplayRequestInterface) == 11 * sizeof(BrnReplays::BaseSerialiser*),
+                      "replay requests retain all eleven host-native pointer slots");
     }
 
     // X360 0x82761908, store for store -- run by CreateIOBuffer<OutputBuffer_PostPhysics>
@@ -82,7 +82,7 @@ namespace BrnTrafficIO
         //                                       unrolled-to-a-loop store run. The console runs
         //                                       it HERE, between the mResourceRequestInterface
         //                                       leg and the mTrafficTypeResponseQueue leg.
-        mInterfaceAt834784 = InterfaceAt834784();
+        mReplayRequestInterface = ReplayRequestInterface{};
 
         mTrafficTypeResponseQueue.Construct();          // +0xCAAC0 (830144)
         mGuiEventQueue.Construct();                     // +0xCFD0C (834828)
@@ -186,17 +186,29 @@ namespace BrnTrafficIO
     const OutputBuffer_PostPhysics::InterfaceAt834784* OutputBuffer_PostPhysics::GetReadInterfaceAt834784() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-        return &mInterfaceAt834784;
+        return &mReplayRequestInterface;
     }
 
     // X360 0x82711D90 (baked 407): write-lock; same member (this + 834784).
     OutputBuffer_PostPhysics::InterfaceAt834784* OutputBuffer_PostPhysics::GetWriteInterfaceAt834784()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        return &mInterfaceAt834784;
+        return &mReplayRequestInterface;
     }
 
     // X360 0x827A0C20 (baked 409): read-lock; return &mSceneInputInterface (this + 11376).
+    const OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mReplayRequestInterface;
+    }
+
+    OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mReplayRequestInterface;
+    }
+
     // The leg WorldModule::BridgeEntityModulesToScene_PostPhysics @0x827AB608 calls first
     // (0x827AB6C0). Two witnesses put the aggregate here rather than at the 44-byte +834784 seat:
     // Construct @0x82761908 builds it with InSceneUpdateInterface::Construct(this+0x2C70), and

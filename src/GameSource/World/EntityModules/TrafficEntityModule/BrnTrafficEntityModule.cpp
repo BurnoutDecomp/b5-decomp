@@ -579,16 +579,11 @@ namespace BrnTraffic
     // @ 0x827081D8 -- on entering replay, clear the byte at +0x72521 and, when
     // CgsDev::Message::gxMessageFilterFlags & 1, print.
     //
-    // PARKED: +0x72521 has no name. It is not mbInReplay (:757, pinned at +465714 by Prepare
-    // @0x8274A578 stage 0), and both replay hooks store ZERO there, which no in/out flag would
-    // do. It lands in the :776/:777 gap the DecFIGS dwarfdump skips, so naming it would be
-    // fabrication. Recover those two members from the X360 Construct @0x82740220 field-init
-    // walk, then restore the store. DELETE THIS WHEN the member is named.
     void TrafficEntityModule::EnterReplay()
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             (*CgsDev::Log::gpDebugPrint) << "TRAF: Enter Replay\n";
-        // PARKED STORE: `*(this + 0x72521) = 0` -- member unnamed, see the FLAG above.
+        mbReplayAssetsReady = false; // ARTIST 82708224..8270822C: clear +0x72521.
     }
 
     // @ 0x82708248 -- symmetric to EnterReplay (same parked store).
@@ -596,7 +591,7 @@ namespace BrnTraffic
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             (*CgsDev::Log::gpDebugPrint) << "TRAF: Leave Replay\n";
-        // PARKED STORE: `*(this + 0x72521) = 0` -- member unnamed, see EnterReplay's FLAG.
+        mbReplayAssetsReady = false;
     }
 
     // @ 0x82708F98 --
@@ -4612,29 +4607,17 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         lpInput->GetVehicleManagerOutputInterface()->GetTrafficTypeRequestQueue(),
         lpOutput->GetTrafficTypeResponseQueue());
 
-    // The console's remaining tail (re-read by crash parity FX-TRAFFICLIGHTS, 2026-09-25):
-    //   0x8274EEC8..0x8274EEDC  the output's replay request interface (0x82711D90, the IO header's
-    //                           GetWriteInterfaceAt834784) ->RegisterSerialiser(&the module's TrafficEntitySerialiser
-    //                           at +0x724C0) (0x821F34A0), before the two unlocks;
-    //   0x8274EEF0..0x8274EF3C  after them: serialiser state (lwz 0(+0x724C0)) 1, 2 or 3 and the byte +0x7251B
-    //                           clear -> TrafficEntitySerialiser::Write(0) (0x8265F4E8) -- the replay recording;
-    //   0x8274EF40..0x8274EFD8  PerfMonCpu::StopMonitor x2 and GetMonitorData x5 into the miPerfMon_* stats.
-    // BLOCKED, the replay legs: RegisterSerialiser is bodied (BrnReplayRequestInterface.cpp), but there is no
-    // serialiser to hand it. BrnReplays::TrafficEntitySerialiser (Construct 0x8264C978, Write 0x8265F4E8) is
-    // declared only inside the UNMOUNTED BrnReplayTrafficEntitySerialiser.cpp, the module header has no member at
-    // +0x724C0, and Construct's own serialiser leg is gated (the [T1-traffic-leg] line). That is the traffic
-    // replay subsystem, not a tail call. Its independent debug-perfmon snapshot tail is restored below.
-    {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "PostPhysicsUpdate replay-serialiser registration/write -- RegisterSerialiser "
-            "0x821F34A0 is bodied, but TrafficEntitySerialiser at +0x724C0 is not declared or mounted");
-    }
+    // ARTIST 0x8274EEC8..0x8274EEDC, still inside both IO locks.
+    lpOutput->GetReplayRequestInterface()->RegisterSerialiser(&mTrafficEntitySerialiser);
 
     LatchRenderPosesPC(); // FLAG PC-platform leaf: after every traffic pose producer.
 
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
+
+    // ARTIST 0x8274EEF0..0x8274EF3C: module writes only when replay does not own it.
+    if (mTrafficEntitySerialiser.IsRecording() && !mTrafficEntitySerialiser.SkipModuleSerialise())
+        mTrafficEntitySerialiser.Write();
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate_Post1);
     CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate);
@@ -5507,6 +5490,7 @@ void TrafficEntityModule::Construct()
     mReceiverQueue.Construct();
 
     mStreamer.Construct();
+    mTrafficEntitySerialiser.Construct();
 
     // 0x8274087C..0x8274088C -- FuzzyBehaviourLogic::Construct(this+0x71860, this+0x72710),
     // i.e. mFuzzyBehaviours.Construct(&mTweakValues). Without this call every fuzzy envelope
@@ -5518,7 +5502,7 @@ void TrafficEntityModule::Construct()
     {
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "Construct sub-object legs TrafficEntitySerialiser::Construct, "
+            "Construct sub-object legs "
             "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
             "the 32-slot showtime list seed and DebugRenderStreamReader::"
             "Construct -- none of those callees has a body or a usable declaration in this tree");
@@ -5813,18 +5797,8 @@ void TrafficEntityModule::Construct()
     mbDontCreateStaticVehiclesNearAnyPlayers = false; // 0x725EA
     mbInPictureParadise                      = false; // 0x725EB
 
-    {
-        // GATE: two stores inside the un-emitted DWARF :776/:777 window, i.e. the
-        // BrnReplays::TrafficEntitySerialiser member the console registers at `this + 468160`.
-        // Construct writes zero to +0x72520 and ONE to +0x72521, while EnterReplay @0x827081D8
-        // and LeaveReplay @0x82708248 both write zero to +0x72521. A flag that constructs to 1
-        // and clears on entering AND leaving replay is not mbInReplay, so it stays unnamed.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "Construct stores +0x72520 = 0 and +0x72521 = 1 -- both inside the replay "
-            "serialiser's DWARF un-emitted :776/:777 window; no attested member name "
-            "(the same byte EnterReplay/LeaveReplay clear)");
-    }
+    mbReplayPlayback = false;      // ARTIST +0x72520
+    mbReplayAssetsReady = true;    // ARTIST +0x72521
 
     // 0x82741450..0x82741460. mLocalPlayerDirection @+0x713E0 is NOT written here; the console
     // leaves it to PostPhysicsUpdate's tail.
@@ -5970,26 +5944,17 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             "are gated; same reason the sibling partfile gates PostPhysicsUpdate's bracket");
     }
 
-    // ⛔ THE OLD NOTE HERE IS RETRACTED (2026-08-27). It said: "BrnUpdateSet is a bare
-    // `typedef u16` ... with no named bits, and the ARTIST body is an export hole, so THE MASKS
-    // CANNOT BE READ OFF ANYTHING." **An ARTIST export hole is not an IMAGE hole.** Both masks
-    // were read straight out of the instruction bytes at 0x8274A9A4..0x8274A9B0 (see the decode
-    // above); the export set simply carries no per-function JSON for this address. ⭐ "The export
-    // does not have it" is a fact about the export, never about the binary.
-    //
-    // The SIM-PAUSED half is LIVE now (it gates the block below, and it is what makes a paused
-    // traffic sim actually stop). The REPLAY half stays gated: bit 8 is decoded above in the
-    // console and drives EnterReplay @0x827081D8 / LeaveReplay @0x82708248, neither of which has
-    // a body in this tree, and replay is not this wave's surface.
-    // DELETE WHEN: EnterReplay/LeaveReplay are bodied.
+    // ARTIST 0x8274A9A8..0x8274AA4C. This latch is distinct from mbInReplay.
+    const bool lbInReplay = (lUpdateSet & 0x100u) != 0;
+    if (lbInReplay != mbReplayPlayback)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "PreSceneUpdate REPLAY latch -- update-set BIT 8 (E_HLA_UPDATE_PLAYING_REPLAY) is "
-            "decoded by the console at 0x8274A9A4/0x8274A9AC and drives EnterReplay @0x827081D8 "
-            "/ LeaveReplay @0x82708248 at 0x8274A9C4..0x8274A9D8; neither callee is bodied in "
-            "this tree. The SIM-PAUSED half of the decode (bit 0, 0x8274A9B0) is LIVE");
+        if (lbInReplay) EnterReplay(); else LeaveReplay();
     }
+    mbReplayPlayback = lbInReplay;
+    mTrafficEntitySerialiser.CheckStaticLayoutCleared();
+    if (mTrafficEntitySerialiser.IsPlaying() && !mTrafficEntitySerialiser.SkipModuleSerialise())
+        mTrafficEntitySerialiser.Read();
+    UpdateSerialiser();
 
     lpOutput->LockForWrite();
     lpInput->LockForRead();
@@ -6128,16 +6093,6 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             GenerateCrashedVehicleEvents(lpOutput);
         }
 
-        {
-            static bool sbLogged = false;
-            LogMissingLeg_T1(sbLogged,
-                "PreSceneUpdate E_STATE_RUNNING remaining leg -- UpdateSerialiser @0x8272DA80, "
-                "not bodied (replay surface). ManageTriggers @0x82747518 is live before the switch. "
-                "UpdateCrashSlider @0x82715A18 and GenerateCrashedVehicleEvents @0x82720030 "
-                "WERE in this list and are now live above. The earlier revision's "
-                "KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
-                "therefore not written");
-        }
     }
     break;
 
@@ -6546,38 +6501,18 @@ void TrafficEntityModule::AddVehiclesToTargetList()
     // hull+64, count at hull+6).
     u16 luHull = KU_INVALID_HULL;
 
+    if (mbReplayPlayback)
     {
-        // GATE -- the replay-playback hull source (0x82722588..0x827225A0), i.e.
-        // `if (*(this + 0x72520)) luHull = *(sub_82707090(this + 0x724C0) + 74);`. Module
-        // +0x724C0 is the BrnReplays::TrafficEntitySerialiser and +0x72520 the replay-playback
-        // latch; both sit in the DWARF's un-emitted :776/:777 window with no member in
-        // BrnTrafficEntityModule.h, and the serialiser class has no owning header in this tree.
-        // Construct writes the latch zero, so live gameplay takes the arm below; this gate
-        // changes replay playback only.
-        // DELETE WHEN: the two members are modelled and the serialiser gets a header.
-        static bool sbLogged = false;
-        LogMissingLeg_T1( sbLogged,
-            "AddVehiclesToTargetList replay-playback hull source -- it reads the hull out of "
-            "BrnReplays::TrafficEntitySerialiser (module +0x724C0) under the replay latch at "
-            "module +0x72520, and BOTH sit in the DecFIGS un-emitted :776/:777 window with no "
-            "member in BrnTrafficEntityModule.h; the serialiser class has no owning header in "
-            "this tree at all. Construct writes the latch ZERO, so live gameplay takes the "
-            "per-player hull list below" );
+        luHull = mTrafficEntitySerialiser.GetStaticLayout()->muLocalPlayerHull;
     }
-
-    // maaRaceCarHulls[meLocalPlayerIndex] -- the per-active-race-car active-hull list, X360
-    // this + 350220 + 24*index (Reset @0x8272CDA0 Appends into the same array at the same
-    // base). Entry 0 is the hull the car is in; the rest are neighbours.
-    const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
-        maaRaceCarHulls[meLocalPlayerIndex];
-
-    if ( lrPlayerHulls.GetLength() == 0 )
+    else
     {
-        // 0x827225A8 `bne` -- before the first RecalculateActiveHulls the list is empty.
-        return;
+        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
+            maaRaceCarHulls[meLocalPlayerIndex];
+        if (lrPlayerHulls.GetLength() == 0)
+            return;
+        luHull = lrPlayerHulls.GetItem(0);
     }
-
-    luHull = lrPlayerHulls.GetItem( 0 );
 
     if ( luHull != KU_INVALID_HULL )
     {
@@ -6668,45 +6603,19 @@ void TrafficEntityModule::UpdateStreaming( BrnTrafficIO::OutputBuffer_PostPhysic
         break;
     }
 
-    // The pump (0x827489AC..0x827489F0). During replay playback the console replaces Update's
-    // bonus-asset list with the recorded one:
-    //     if (*(this + 0x72520)) {
-    //         luNumBonus = *(sub_82707090(this + 0x724C0) + 150);   // count byte
-    //         lpauBonus  = sub_82707090(this + 0x724C0) + 151;      // the bytes after it
-    //     }
-    //     mStreamer.Update(lpauBonus, luNumBonus);
+    // ARTIST 0x827489AC..0x82748A1C: replay supplies the captured streamed assets,
+    // then the common streaming pump advances the boundary readiness latch.
+    const u8* lpauBonusAssets = nullptr;
+    u32 luNumBonusAssets = 0;
+    if (mbReplayPlayback)
     {
-        // GATE -- same two un-modelled members as the replay leg above (+0x72520 latch,
-        // +0x724C0 serialiser); sub_82707090 is an unnamed serialiser accessor.
-        //
-        // The (0, 0) below is not a placeholder: it is the console's own value on every
-        // non-replay frame (both locals start zero, only the latched arm changes them,
-        // 0x827489B0). Live gameplay is unchanged; replay playback loses the recorded set.
-        // DELETE WHEN: the two members are modelled and the serialiser gets a header.
-        static bool sbLogged = false;
-        LogMissingLeg_T1( sbLogged,
-            "UpdateStreaming replay-playback bonus-asset override -- reads a count byte + "
-            "list out of BrnReplays::TrafficEntitySerialiser (module +0x724C0) under the "
-            "replay latch (module +0x72520); neither member exists in the keystone header "
-            "(DecFIGS un-emitted :776/:777 window) and the serialiser has no owning header. "
-            "The (0,0) passed to Update IS the console's own non-replay value, not a stand-in" );
+        BrnReplays::TrafficEntitySerialiserStaticLayout* lpFrame = mTrafficEntitySerialiser.GetStaticLayout();
+        luNumBonusAssets = lpFrame->muNumBonusAssets;
+        lpauBonusAssets = lpFrame->maBonusAssets;
     }
-
-    mStreamer.Update( 0, 0 );
-
-    {
-        // GATE -- the "all loaded" latch (0x827489F4..0x82748A1C), console
-        // `if (*(this+0x72520) && !*(this+0x72521)) *(this+0x72521) = AreAllAssetsLoaded();`.
-        // Both bytes are in the same un-modelled :776/:777 window. The second is set to one by
-        // Construct and cleared by EnterReplay @0x827081D8 and LeaveReplay @0x82708248, i.e. a
-        // "replay assets have arrived" latch re-armed at each replay boundary. Dead on every
-        // live-gameplay frame. DELETE WHEN: the two members are modelled.
-        static bool sbLogged = false;
-        LogMissingLeg_T1( sbLogged,
-            "UpdateStreaming replay assets-arrived latch (module +0x72521, set from "
-            "AreAllAssetsLoaded under the +0x72520 replay latch) -- same un-modelled "
-            ":776/:777 window members. Dead on every non-replay frame" );
-    }
+    mStreamer.Update(lpauBonusAssets, luNumBonusAssets);
+    if (mbReplayPlayback && !mbReplayAssetsReady)
+        mbReplayAssetsReady = mStreamer.AreAllAssetsLoaded();
 
     // 0x82748A20..0x82748A30: carry the streamer's requests into this frame's output buffer.
     // This is the only statement that uses lpOutput, which is why the parameter stays.
@@ -22466,3 +22375,67 @@ void TrafficEntityModule::GenerateNearbyParkedTrafficOutput(const BrnTrafficIO::
 }
 
 }   // namespace BrnTraffic
+
+
+namespace BrnTraffic
+{
+    // ARTIST 0x8272DA80..0x8272E368. All offsets are resolved to owning members.
+    void TrafficEntityModule::UpdateSerialiser()
+    {
+        mTrafficEntitySerialiser.Lock();
+        const BrnReplays::BaseSerialiser::EMode leMode = mTrafficEntitySerialiser.GetMode();
+        if (mTrafficEntitySerialiser.IsRecording())
+        {
+            BrnReplays::TrafficEntitySerialiserStaticLayout* lpFrame =
+                mTrafficEntitySerialiser.GetStaticLayout();
+            lpFrame->Clear();
+            if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                maaRaceCarHulls[meLocalPlayerIndex].GetLength() != 0)
+            {
+                lpFrame->muLocalPlayerHull = maaRaceCarHulls[meLocalPlayerIndex].GetItem(0);
+                mTrafficEntitySerialiser.SetActiveHullsForLocalPlayer(&mActiveHullsForLocalPlayer);
+            }
+
+            CgsContainers::FastBitArray<KU_MAX_TOTAL_TRAFFIC> lVehicles;
+            lVehicles.SetAnd(mVehicleSoaData.mVehiclesWithEntities, mVehicleSoaData.mAliveVehicles);
+            lpFrame->mVehicleUpdateBits = lVehicles;
+            mTrafficEntitySerialiser.SetVehicleTransforms(maVehicleTransforms);
+            for (s32 liVehicle = lVehicles.GetFirstBitSet(); liVehicle >= 0;
+                 liVehicle = lVehicles.GetNextBitSet(liVehicle))
+            {
+                const u32 luVehicle = static_cast<u32>(liVehicle);
+                Vehicle* lpVehicle = GetVehicle(luVehicle);
+                if (lpVehicle->IsPhysical())
+                    GetTrafficPhysicsInfoForVehicl(luVehicle); // retains physical-slot validity assertions
+                mTrafficEntitySerialiser.SetVehicleData(luVehicle, lpVehicle);
+            }
+            mTrafficEntitySerialiser.SetPhysicsData(&maTrafficPhysicsInfoListBits,
+                                                    maTrafficPhysicsInfoList);
+            u8 lauBonusAssets[BrnReplays::KU_MAX_BONUS_STREAMED_ASSETS];
+            u32 luNumBonusAssets = 0;
+            mStreamer.GetBonusAssets(lauBonusAssets, &luNumBonusAssets);
+            mTrafficEntitySerialiser.SetBonusAssets(lauBonusAssets, luNumBonusAssets);
+            static_assert(sizeof(TrafficLightManager) == 4812, "traffic-light state excluding console tail padding");
+            // The frame owns the byte-exact serialized manager span, not a second runtime type.
+            std::memcpy(lpFrame->maTrafficLightManager, &mTrafficLightManager,
+                        sizeof(mTrafficLightManager));
+        }
+        else if (leMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+                 leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING)
+        {
+            mTrafficEntitySerialiser.SetDataReady(mbReplayAssetsReady);
+        }
+        else if (leMode == BrnReplays::BaseSerialiser::E_MODE_RESTORING)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                (*CgsDev::Log::gpDebugPrint) << "TRAF: Restoring replay; dataready="
+                                            << static_cast<u32>(mbReplayAssetsReady) << "\n";
+            mTrafficEntitySerialiser.SetDataRestored(mbReplayAssetsReady);
+        }
+        else if (mTrafficEntitySerialiser.IsPlaying())
+        {
+            mTrafficEntitySerialiser.SetDataReady(true);
+        }
+        mTrafficEntitySerialiser.Unlock();
+    }
+}

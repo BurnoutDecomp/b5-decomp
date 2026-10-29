@@ -22,20 +22,19 @@
 // 19 opaque mesh / 20 transparent mesh). So this file mirrors BrnRaceCarEntityModule_Render.cpp:
 // same packet shape, technique-bit scheme, instanced wheel draw and shadow-pass split.
 //
-// NAMED GATES, each with its blocker:
-//   G1 the replay-serialiser pose source (module +468256 selects it);
+// Recovered render paths (the historical G labels below identify their assembly spans):
+//   G1 the replay-serialiser pose source (module +468256 selects it), including physics;
 //   G2 a physical traffic car RENDERS: its wheels come from
 //      TrafficPhysicsInfo::maWheelTransforms; its main-view blobby-shadow producer uses the
 //      road-test normal/height and VehicleTypeRuntime bounds when PhysicsInfo is present;
 //   G3 the glass-fracture reset + the damaged-vehicle budget leg;
 //   G4 the detached-body-part override table;
-//   G5 SubmitCoronasForVehicle @0x82727BB0 (its sibling RenderTrafficLightCoronas @0x8271EC80 landed:
-//      L3 RACEINTRO 2026-09-27);
+//   G5 SubmitCoronasForVehicle @0x82727BB0 and its GenerateDispatchLists caller loop;
 //   G6 BrnBlobbyShadowBuffer::AddShadow -- main-view producer recovered from the ARTIST
 //      VehicleTypeRuntime bounds, vehicle transform and optional physics road-test normal;
 //   G7 RenderTrafficLightCoronas' replay-playback source (the serialiser at module +0x724C0).
 // PreDispatchUpdate is otherwise real, including the FastBitArray duplicate suppression and the
-// species-dispatched liveness predicate; GenerateDispatchLists is complete apart from G5;
+// species-dispatched liveness predicate; GenerateDispatchLists includes G5;
 // RenderTrafficCar's entry gates, asset/spec resolution, paint colour, body transform, shader
 // constants 20/21/22/23/24/26, body-part loop and wheel loop are real.
 //
@@ -72,6 +71,7 @@
 #include "pc/gcm/renderengine/reflections/GlassCapture.h"
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"                           // Pvs::GetHullIndexForPoint / ForIndices (the same)
 
+#include <cstring>  // canonical recorded TrafficLightManager read view
 #include <cmath>    // powf / sqrtf
 #include <cstdlib>  // getenv / atoi ([tdef-upload] witness, opt-in)
 #include <cstdio>
@@ -289,6 +289,38 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
     // array -- TryClearupOffscreenTraffic (which then treats every car as never-rendered),
     // ClearupCrashedTraffic and NukeTrafficJams' kill selection (_wT5_01.cpp / _wT6_01.cpp),
     // and PostPhysicsUpdate's 80-byte copy into the crash-traffic input interface (+0xCA8).
+    // ARTIST 8274DDE0..8274E428: recorded update bits replace the live visible-ID walk.
+    // Replay does not touch the live rendered-last-frame mask or any live param pool.
+    if (mbReplayPlayback)
+    {
+        const auto* lpFrame=mTrafficEntitySerialiser.GetStaticLayout();
+        for(s32 index=lpFrame->mVehicleUpdateBits.GetFirstBitSet();index>=0;
+            index=lpFrame->mVehicleUpdateBits.GetNextBitSet(index))
+        {
+            const u32 vehicle=static_cast<u32>(index);
+            const auto& transform=*reinterpret_cast<const Matrix44Affine*>(mTrafficEntitySerialiser.GetVehicleTransform(vehicle));
+            const Vector3& position=transform.Pos();
+            const float dx=position.x-lCameraPosition.x,dy=position.y-lCameraPosition.y,dz=position.z-lCameraPosition.z;
+            const float distanceSq=dx*dx+dy*dy+dz*dz;
+            if(!(mfRenderCullDistanceSq>distanceSq)) continue;
+            VehicleRenderInfo info={vehicle,distanceSq,CgsGraphics::Model::E_STATE_LOD_0};
+            u32 insert=lrRenderInfos.GetLength();
+            while(insert>0 && lrRenderInfos[insert-1].mfDistanceSq>distanceSq) --insert;
+            if(lrRenderInfos.GetLength()<lrRenderInfos.GetCapacity()) lrRenderInfos.Append(info);
+            else if(insert>=lrRenderInfos.GetLength()) continue;
+            for(u32 shift=lrRenderInfos.GetLength()-1;shift>insert;--shift) lrRenderInfos[shift]=lrRenderInfos[shift-1];
+            lrRenderInfos[insert]=info;
+        }
+        if(lrRenderInfos.GetLength()>muMaxVehiclesToRender)
+        {
+            VehicleRenderInfo kept[64];
+            for(u32 index=0;index<muMaxVehiclesToRender;++index) kept[index]=lrRenderInfos[index];
+            lrRenderInfos.Clear();
+            for(u32 index=0;index<muMaxVehiclesToRender;++index) lrRenderInfos.Append(kept[index]);
+        }
+        return;
+    }
+
     mVehicleSoaData.mVehiclesRenderedLastFrame.UnSetAll();
 
     // The producer (WorldModule::FilterFrustumTestResults) has already kept only the
@@ -527,12 +559,10 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     //       RenderTrafficLightCoronas( lpInput->GetCoronaSubmissionInterface(),
     //                                  lCameraPosition, lCameraDirection );  // bl 0x8271EC80 at 0x8273B4C4
     //   }
-    // NAMED GATE G5, what is left of it: SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) has no
-    // declaration in this tree, so the traffic cars' own light coronas stay unsubmitted and the two light
-    // vectors stay zero; the monitor id at +0x72A38 is a ship-only member with no DWARF name (debug-only).
+    // SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) fills each car's two light vectors.
+    // The monitor id at +0x72A38 is a ship-only member with no DWARF name (debug-only).
     // The order is load-bearing: the corona pass runs before the draw pass and only off the shadow pass,
     // matching the race-car leg's own mbRenderingShadowMap `continue`.
-    // DELETE-WHEN SubmitCoronasForVehicle lands.
     if ( !lpShadowMap->IsRenderingShadowMap() )
     {
         // [FLAG PC bring-up gate] NOT in the console, which asserts the interface non-null on entry (:14060)
@@ -546,6 +576,10 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
             lpInput->GetCoronaSubmissionInterface();
         if ( lpCoronaSubmissionInterface != 0 && lpCoronaSubmissionInterface->IsReady() )
         {
+            // ARTIST 8273B438..8273B4C4: per-car corona out vectors precede traffic lights.
+            for(u32 index=0;index<luLength;++index)
+                SubmitCoronasForVehicle(lpCoronaSubmissionInterface,laTrafficRenderInfos[index].muEntityIndex,
+                                        lCameraPosition,lCameraDirection,laFrontLights[index],laRearLights[index]);
             RenderTrafficLightCoronas( lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection );
         }
     }
@@ -669,14 +703,21 @@ TrafficEntityModule::RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionI
                                                 Vector3 lCameraPosition,
                                                 Vector3 lCameraDirection )
 {
-    // ---- step 1, NAMED GATE G7: the replay-playback source ------------------
-    // Under the replay latch at module +0x72520 the console takes both inputs from
-    // BrnReplays::TrafficEntitySerialiser (module +0x724C0; sub_82707090 twice: the manager at its +0x22FB0, the
-    // active-hull set at its +0). The latch and the serialiser are not modelled on this build (the un-emitted DWARF
-    // :776/:777 window; AddVehiclesToTargetList's replay hull source is the same gate), and Construct writes the
-    // latch ZERO, so live play takes this arm. DELETE-WHEN the replay wave lands.
-    const TrafficLightManager* lpTrafficLightManager = &mTrafficLightManager;
-    const ::Set<u16, KU_MAX_ACTIVE_HULLS>& lrActiveHulls = mActiveHullsForLocalPlayer;
+    // ARTIST 8271ECD8..8271EDB4: select both replay inputs from the recorded frame.
+    // Decode its byte-backed manager span into the canonical native type. Only the
+    // 4812 meaningful bytes are read; the original 4816 span has four unused tail bytes.
+    TrafficLightManager lRecordedTrafficLights;
+    const TrafficLightManager* lpTrafficLightManager=&mTrafficLightManager;
+    const ::Set<u16,KU_MAX_ACTIVE_HULLS>* lpActiveHulls=&mActiveHullsForLocalPlayer;
+    if(mbReplayPlayback)
+    {
+        const auto* frame=mTrafficEntitySerialiser.GetStaticLayout();
+        static_assert(sizeof(TrafficLightManager)==4812,"canonical traffic-light state extent");
+        std::memcpy(&lRecordedTrafficLights,frame->maTrafficLightManager,sizeof(lRecordedTrafficLights));
+        lpTrafficLightManager=&lRecordedTrafficLights;
+        lpActiveHulls=&frame->mHeader;
+    }
+    const ::Set<u16,KU_MAX_ACTIVE_HULLS>& lrActiveHulls=*lpActiveHulls;
     CGS_ASSERT( lpTrafficLightManager != 0, "lpTrafficLightManager" );              // .cpp:3359
 
     const VecFloat lfCullDistSq = { KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ,
@@ -805,58 +846,41 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         return;
     }
 
-    // ---- entry gate 2 (G1): the replay-serialiser pose source -------------
-    // NAMED GATE. When module +468256 is set the console takes the vehicle's type, damage record
-    // and transform from BrnReplays::TrafficEntitySerialiser (module +468160) instead of from the
-    // live pools, and derives the "not physical" latch from the serialised flag bit 5 rather than
-    // from Vehicle::mxFlags. BLOCKER: the serialiser is not reconstructed
-    // (TrafficEntitySerialiser::GetVehicleData / GetPhysicsInfo / GetVehicleTransform are
-    // undeclared here) and the member at +468256 is unnamed. The live arm below runs outside
-    // replay playback. DELETE-WHEN the replay wave lands.
-
-    const Vehicle* lpVehicle = GetVehicle( luEntityIdx );
-    if ( lpVehicle == 0 )
+    // ARTIST 82728BEC..82728D3C and replay arm 82728CFC: recorded state is
+    // selected without querying the live Vehicle or its render interpolation history.
+    const Vehicle* lpVehicle=nullptr;
+    const TrafficPhysicsInfo* lpPhysicsInfo=nullptr;
+    const Matrix44Affine* lpRecordedTransform=nullptr;
+    bool lbIsPhysical;
+    u32 luVehicleType;
+    f32 lfVehicleSpeed;
+    if(mbReplayPlayback)
     {
-        return;
+        const auto* data=mTrafficEntitySerialiser.GetVehicleData(luEntityIdx);
+        const s8 physicsIndex=static_cast<s8>(data->maData[2]);
+        if(physicsIndex>=0)
+        {
+            lpPhysicsInfo=reinterpret_cast<const TrafficPhysicsInfo*>(mTrafficEntitySerialiser.GetPhysicsInfo(physicsIndex));
+            CGS_ASSERT(lpPhysicsInfo!=nullptr,"lpPhysicsInfo");
+        }
+        luVehicleType=data->maData[0];
+        lbIsPhysical=(data->maData[1]&0x20u)==0;
+        lpRecordedTransform=reinterpret_cast<const Matrix44Affine*>(mTrafficEntitySerialiser.GetVehicleTransform(luEntityIdx));
+        lfVehicleSpeed=30.0f; // ARTIST replay arm loads flt_820BA5E8 = 30.0f.
     }
-
-    // `lbz r11, 5(r29)` then two independent bit tests, BOTH of which must pass
-    // (@0x82728C00..0x82728C18). Bit 0 is E_FLAG_ALIVE; the second bit is the same one
-    // Vehicle::IsAlive()'s sibling predicates read, and it gates rendering specifically.
-    if ( !lpVehicle->IsAlive() )
+    else
     {
-        return;
+        lpVehicle=GetVehicle(luEntityIdx);
+        if(lpVehicle==nullptr || !lpVehicle->IsAlive() || (lpVehicle->GetFlags()&0x02u)==0) return;
+        lbIsPhysical=lpVehicle->IsPhysical();
+        if(lbIsPhysical)
+        {
+            lpPhysicsInfo=GetTrafficPhysicsInfoForVehicl(luEntityIdx);
+            CGS_ASSERT(lpPhysicsInfo!=nullptr,"lpPhysicsInfo");
+        }
+        luVehicleType=lpVehicle->GetVehicleType();
+        lfVehicleSpeed=lpVehicle->GetSpeed().x;
     }
-    // FLAG (partial gate read): the console requires flags bit 1 as well as bit 0
-    // (`rlwinm r10, r11, 0,30,30` @0x82728C10, beq -> bail). Vehicle's PC flag enum does not name
-    // bit 1 yet, and GetFlags() is the only raw accessor, so the test goes through it rather than
-    // inventing a predicate. Naming stays with whoever owns BrnTrafficVehicle.h.
-    if ( ( lpVehicle->GetFlags() & 0x02u ) == 0u )
-    {
-        return;
-    }
-
-    // ---- G2: the physical (promoted) arm -----------------------------------
-    // `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(); the console then fetches
-    // GetTrafficPhysicsInfoForVehicl(idx), asserts it non-null (pseudocode :3188-:3197, baked
-    // .cpp line 15106) and clears the "not physical" latch (`LOBYTE(v68) = 0` @0x82733200's
-    // twin at :3200). That latch does three things downstream, and all three are now honoured:
-    //   * the wheel block takes maWheelTransforms instead of composing the locator (see below);
-    //   * the main-view blobby producer uses mvRoadTestNormal_HeightAboveRoad when PhysicsInfo
-    //     is present; the shadow-map pass is excluded by its separate rendering-byte gate;
-    //   * the damaged verlet-offset upload is enabled -- still G3, see that gate.
-    // The accessor landed with the keystone (_wT3_00.cpp) and returns the real
-    // TrafficPhysicsInfo*; the record itself has always been modelled and Constructed
-    // (_wT1_03.cpp). Nothing here is gated any more.
-    const bool lbIsPhysical = lpVehicle->IsPhysical();
-    const TrafficPhysicsInfo* lpPhysicsInfo = 0;
-    if ( lbIsPhysical )
-    {
-        lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl( luEntityIdx );
-        CGS_ASSERT( lpPhysicsInfo != 0, "lpPhysicsInfo" );                       // baked .cpp 15106
-    }
-
-    const u32 luVehicleType = static_cast< u32 >( lpVehicle->GetVehicleType() );
 
     // ---- the asset id, the streamer gates, the two specs -------------------
     // Leak :8524-8543 maps one-for-one onto ship pseudocode :633-656.
@@ -918,10 +942,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         ? CgsSystem::FrameInterpolation::GetAlpha() : 1.0f;
     const RenderPosePC& lrRenderPose = maRenderPosesPC[luEntityIdx];
     const Matrix44Affine lBodyTransform =
-        lrRenderPose.SampleBody(maVehicleTransforms[luEntityIdx], lfRenderAlpha);
+        mbReplayPlayback ? *lpRecordedTransform : lrRenderPose.SampleBody(maVehicleTransforms[luEntityIdx], lfRenderAlpha);
 
     const Vector4 lPitchRollSteerWheel =
-        lrRenderPose.SampleAngles(lpVehicle->GetPitch_Roll_Steering_WheelRot(), lfRenderAlpha);
+        mbReplayPlayback ? Vector4{} : lrRenderPose.SampleAngles(lpVehicle->GetPitch_Roll_Steering_WheelRot(), lfRenderAlpha);
     const f32 lfPitch    = lPitchRollSteerWheel.x;
     const f32 lfRoll     = lPitchRollSteerWheel.y;
     const f32 lfSteering = lPitchRollSteerWheel.z;
@@ -1344,7 +1368,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             // Both scales and the threshold are now RECOVERED (see their definitions at the
             // head of this file); the console arithmetic below is unchanged, only the numbers
             // it operates on stopped being placeholder zeros.
-            const f32 lfSpeed = lpVehicle->GetSpeed().x;
+            const f32 lfSpeed = lfVehicleSpeed;
 
             // lfScaledSpeed IS an angular velocity in rad/s (m/s divided by the 0.3 m wheel
             // radius), which is why it can be compared against the same 30 rad/s threshold
@@ -1450,8 +1474,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                     lPhysicalScale.zAxis.z = lpPhysicalWheelSpec->mScale.z;
 
                     laWheelMatrices[ liInstanceCount ] = rw::math::vpu::Mult(
-                        lPhysicalScale, lrRenderPose.SampleWheel(liWheel,
-                            lpPhysicsInfo->maWheelTransforms[liWheel], lfRenderAlpha));
+                        lPhysicalScale, (mbReplayPlayback ? lpPhysicsInfo->maWheelTransforms[liWheel] :
+                         lrRenderPose.SampleWheel(liWheel, lpPhysicsInfo->maWheelTransforms[liWheel], lfRenderAlpha)));
                     laWheelConstants[ liInstanceCount ] = lv4WheelConstants;
                     lapWheelMatrices[ liInstanceCount ] = &laWheelMatrices[ liInstanceCount ];
                     ++liInstanceCount;
@@ -1597,7 +1621,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // branch is `if (v68) AddShadow; else if (PhysicsInfo) AddShadow`: v68 is initialized true
     // for a nonphysical traffic car and cleared for the live physical arm at 0x82728C68. A
     // physical car therefore contributes its road-normal shadow whenever PhysicsInfo exists.
-    // The replay arm's serialized latch remains behind G1 and is not reconstructed here.
+    // The replay arm selects the same latch and optional physics through the recorded vehicle data.
     // FLAG PC-platform leaf: TrafficCapture::Submit reuses this geometry leg inside
     // VehicleScope and supplies no blobby buffer. Reflection faces submit vehicle
     // geometry only; the main-view dispatch owns ground-shadow publication.
@@ -1668,3 +1692,109 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
 }
 
 }  // namespace BrnTraffic
+
+
+namespace BrnTraffic
+{
+    // ARTIST 82727BB0..827283FC. Declaration shape is DecFIGS; all flags and tag cases are ARTIST.
+    void TrafficEntityModule::SubmitCoronasForVehicle(BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                                                     u32 luVehicle,Vector3 lCameraPosition,Vector3 lCameraDirection,
+                                                     Vector4& lFrontLights,Vector4& lRearLights)
+    {
+        (void)lCameraDirection;
+        if(mbTrafficIsHidden) return;
+        CGS_ASSERT(lpCoronaSubmissionInterface!=nullptr,"lpCoronaSubmissionInterface != NULL");
+        const TrafficPhysicsInfo* physics=nullptr;
+        Matrix44Affine transform;
+        u32 type;f32 warmth,indicatorWarmth;bool brake,left,right,alarm;
+        if(mbReplayPlayback)
+        {
+            const auto* data=mTrafficEntitySerialiser.GetVehicleData(luVehicle);
+            const s8 physicsIndex=static_cast<s8>(data->maData[2]);
+            if(physicsIndex>=0) physics=reinterpret_cast<const TrafficPhysicsInfo*>(mTrafficEntitySerialiser.GetPhysicsInfo(physicsIndex));
+            transform=*reinterpret_cast<const Matrix44Affine*>(mTrafficEntitySerialiser.GetVehicleTransform(luVehicle));
+            type=data->maData[0];warmth=(data->maData[1]&1u)?1.0f:0.0f;indicatorWarmth=1.0f;
+            brake=(data->maData[1]&2u)!=0;left=(data->maData[1]&4u)!=0;
+            right=(data->maData[1]&8u)!=0;alarm=(data->maData[1]&16u)!=0;
+        }
+        else
+        {
+            const Vehicle* vehicle=GetVehicle(luVehicle);
+            if((vehicle->GetFlags()&Vehicle::E_FLAG_HASENTITY)==0) return;
+            if(vehicle->IsPhysical())
+            {
+                physics=GetTrafficPhysicsInfoForVehicl(luVehicle);
+                if(physics->mbIsFatallyCrashing) return;
+            }
+            transform=maVehicleTransforms[luVehicle];type=vehicle->GetVehicleType();
+            warmth=vehicle->GetHeadlightWarmth();indicatorWarmth=vehicle->GetIndicatorBulbWarmth();
+            brake=vehicle->AreBrakelightsOn();left=vehicle->IsLeftIndicatorOn();
+            right=vehicle->IsRightIndicatorOn();alarm=vehicle->IsAlarmOn();
+        }
+        const f32 tailOpacity=1.0f-warmth;
+        const f32 gap=0.800000011920929f-warmth;
+        const f32 lower=(-gap>=0.0f)?0.0f:gap;
+        const f32 spotOpacity=(0.800000011920929f-lower>=0.0f)?lower:0.800000011920929f;
+        const Vector3 delta=transform.Pos()-lCameraPosition;
+        const f32 distance=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
+        const f32 sizeScale=1.0f+((distance-8.0f>0.0f)?distance-8.0f:0.0f)*0.00704225338995456696f;
+        bool running=true,rear=true;
+        if(GetVehicleSpecies(luVehicle)==Vehicle::E_SPECIES_STATIC)
+        {
+            if(alarm) {running=rear=brake=left=right=false;}
+            else {running=left && (luVehicle&4u)==4u;rear=left;brake=left;right=left;}
+        }
+        if(running) lRearLights.y=1.0f;
+        if(brake) lRearLights.x=1.0f;
+        const auto* spec=maTrafficVehiclePhysicsSpecs[type].operator->();
+        const auto& locators=spec->mLightTags;
+        const Matrix44Affine tagToWorld=rw::math::vpu::Mult(
+            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(spec->mCarModelSpaceToHandlingBodySpaceTransform),transform);
+        const Vector3 forward=transform.zAxis;
+        const Vector3 reverse={-forward.x,-forward.y,-forward.z,0.0f};
+        const u32 count=physics?static_cast<u32>(physics->miNumLightLocators):locators.GetNumLocatorPoints();
+        for(u32 tag=0;tag<count;++tag)
+        {
+            u32 locatorType;Vector3 local;
+            if(physics)
+            {
+                CGS_ASSERT(physics->maLightTagPointTypes[tag]<=57,"lpPhysicsInfo->maLightTagPointTypes[luTagPoint] <= BrnPhysics::Deformation::E_TAGPOINT_COUNT");
+                locatorType=physics->maLightTagPointTypes[tag];local=physics->maLightLocatorPositions[tag];
+            }
+            else {locatorType=static_cast<u32>(locators.GetLocatorTy(tag));local=locators.GetLocatorXf(tag)->Pos();}
+            const Vector3 position=rw::math::vpu::TransformPoint(tagToWorld,local);
+            switch(locatorType)
+            {
+            case 1:case 2:
+                if(running)
+                {
+                    lpCoronaSubmissionInterface->AddCorona(position,forward,sizeScale,1.0f,eCoronaTypeTrafficHeadLight);
+                    lpCoronaSubmissionInterface->AddCorona(position,forward,sizeScale,tailOpacity,eCoronaTypeTrafficHeadLight);
+                    lFrontLights.y=1.0f;
+                }
+                break;
+            case 3:case 4:
+                if(rear) lpCoronaSubmissionInterface->AddCorona(position,reverse,sizeScale,1.0f,eCoronaTypeTrafficRearLight);
+                break;
+            case 5:case 6:
+                if(running)
+                {
+                    // ARTIST deliberately re-reads the baked locator even for physical traffic.
+                    const Vector3 spot=rw::math::vpu::TransformPoint(tagToWorld,locators.GetLocatorXf(tag)->Pos());
+                    lpCoronaSubmissionInterface->AddCorona(spot,forward,sizeScale,spotOpacity,eCoronaTypeTrafficSpotlights);
+                }
+                break;
+            case 7:case 9:
+                if(left) lpCoronaSubmissionInterface->AddCorona(position,locatorType==7?forward:reverse,sizeScale,indicatorWarmth,eCoronaTypeTrafficIndicator);
+                break;
+            case 8:case 10:
+                if(right) lpCoronaSubmissionInterface->AddCorona(position,locatorType==8?forward:reverse,sizeScale,indicatorWarmth,eCoronaTypeTrafficIndicator);
+                break;
+            case 11:case 12:case 13:
+                if(brake) lpCoronaSubmissionInterface->AddCorona(position,reverse,sizeScale,1.0f,eCoronaTypeTrafficBrakeLight);
+                break;
+            default:break;
+            }
+        }
+    }
+}
