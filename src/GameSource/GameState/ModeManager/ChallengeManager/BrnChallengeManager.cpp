@@ -225,7 +225,10 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
 // ----------------------------------------------------------------------------
 // UpdateResultsTimer -- X360 0x82323408. Arms the results countdown on first call
 // (5.5s when the local challenge finished with SUCCESS, else 0.0), then counts it down one
-// frame and returns true once it has expired. The X360 uses fsel to clamp at 0.0.
+// frame. Returns TRUE WHILE THE RESULTS ARE STILL SHOWING and FALSE once the countdown has expired
+// (X360 0x82323488..0x82323494: r11 = (running && timer <= 0); r3 = cntlzw(r11) >> 5 == !r11), which
+// is what UpdateResults tests (`if (result == 0)` -> post "results finished" and go back to NONE).
+// The X360 uses fsel to clamp at 0.0.
 // ----------------------------------------------------------------------------
 bool ChallengeManager::UpdateResultsTimer(f32 lfTimeStep)
 {
@@ -245,7 +248,7 @@ bool ChallengeManager::UpdateResultsTimer(f32 lfTimeStep)
     const bool lbWasRunning = mbResultsTimerRunning;
     if (!lbWasRunning)
     {
-        return true;   // X360 LABEL_11 path: v5==0 -> v5==0 returns 1
+        return true;   // X360 loc_82323484 path: r11=0 -> returns 1 (still showing)
     }
 
     if (mfResultsTimer > 0.0f)
@@ -255,12 +258,8 @@ bool ChallengeManager::UpdateResultsTimer(f32 lfTimeStep)
         mfResultsTimer = (lfNew >= 0.0f) ? lfNew : 0.0f;
     }
 
-    // Expired iff the timer is running AND has reached <= 0.0 (X360: v8=0 unless still >0.0).
-    if (mfResultsTimer > 0.0f)
-    {
-        return false;
-    }
-    return true;
+    // Expired iff the timer is running AND has reached <= 0.0 -> X360 returns 0 (not still showing).
+    return mfResultsTimer > 0.0f;
 }
 
 // ----------------------------------------------------------------------------
@@ -2760,7 +2759,7 @@ void ChallengeManager::UpdateActionSuccess(const BrnResource::ChallengeListEntry
                     mpCurrentChallenge->GetAction(liActionIndex);
 
                 // Arm the convoy timer from the current action's convoy time on first success.
-                if (lpCurrentAction->GetConvoyTime() > 0.0f && !mbConvoyTimerRunning)
+                if (lpCurrentAction->HasConvoyTime() && !mbConvoyTimerRunning)   // inline compare: GetConvoyTime() asserts when <= 0
                 {
                     mfConvoyTimer        = lpCurrentAction->GetConvoyTime();
                     mbConvoyTimerRunning = true;
@@ -3736,6 +3735,25 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
 
     mabPlayerStartedChallenge[mpGameStateModule->GetPlayerActiveRaceCarIndex()] = true;
 
+    // [PC DIAG] NOT IN THE X360 BINARY -- who counts as a participant (remote slots need mbFinalised).
+    for (s32 liSlot = 0; liSlot < KI_MAX_REMOTE_PLAYERS; ++liSlot)
+    {
+        const ChallengeCompletionData& lDiagSlot = maChallengeCompletionData[liSlot];
+        if (lDiagSlot.mNetworkPlayerID != -1)
+        {
+            BrnNetHarnessPC::Witness("fburn", "trigger slot=%d net=%d finalised=%d raceCar=%d",
+                                     liSlot, static_cast<s32>(lDiagSlot.mNetworkPlayerID),
+                                     lDiagSlot.mbFinalised ? 1 : 0,
+                                     static_cast<s32>(mpGameStateModule->GetActiveRaceCarIndex(lDiagSlot.mNetworkPlayerID)));
+        }
+    }
+    BrnNetHarnessPC::Witness("fburn", "trigger started=[%d %d %d %d %d %d %d] localCar=%d",
+                             mabPlayerStartedChallenge[0] ? 1 : 0, mabPlayerStartedChallenge[1] ? 1 : 0,
+                             mabPlayerStartedChallenge[2] ? 1 : 0, mabPlayerStartedChallenge[3] ? 1 : 0,
+                             mabPlayerStartedChallenge[4] ? 1 : 0, mabPlayerStartedChallenge[5] ? 1 : 0,
+                             mabPlayerStartedChallenge[6] ? 1 : 0,
+                             static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex()));
+
     // Posted id is the PARAMETER here (`std r26` == the r4 CgsID), not the cached entry's.
     GameStateModuleIO::FreeburnChallengeAction lAction;
     lAction.mChallengeID                  = lChallengeID;
@@ -3784,6 +3802,18 @@ void ChallengeManager::UpdateResults(f32 lfTimeStep, TGameActionQueue* lpActionQ
     if (meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_RESULTS)   // lwz +0xE08; cmpwi 3
     {
         return;
+    }
+
+    // [PC DIAG] NOT IN THE X360 BINARY -- a challenge parked in RESULTS that never clears (seen after an
+    // abort online: manager status stuck at 3, GUI tracker OFF -> per-frame IsStarted() asserts). Bounded log.
+    {
+        static s32 ssStuckFrames = 0;
+        if ((++ssStuckFrames % 300) == 0)
+        {
+            BrnNetHarnessPC::Witness("fburn", "RESULTS still pending frames=%d localStatus=%d timer=%.3f running=%d dt=%.5f",
+                                     ssStuckFrames, static_cast<s32>(meLocalChallengeStatus), mfResultsTimer,
+                                     mbResultsTimerRunning ? 1 : 0, lfTimeStep);
+        }
     }
 
     if (UpdateResultsTimer(lfTimeStep))   // still running -> nothing to do this frame
@@ -5343,6 +5373,14 @@ void ChallengeManager::PostWorldUpdate(
                        (leCrashedActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
                        "( leCrashedActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && "
                        "( leCrashedActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");  // X360 line 752
+
+            // [PC DIAG] NOT IN THE X360 BINARY -- why a "crash into player" challenge may not count here.
+            BrnNetHarnessPC::Witness("fburn", "crash-evt crasher=%d crashed=%d started[crasher]=%d started[crashed]=%d local=%d",
+                                     static_cast<s32>(leCrasherActiveRaceCarIndex),
+                                     static_cast<s32>(leCrashedActiveRaceCarIndex),
+                                     mabPlayerStartedChallenge[leCrasherActiveRaceCarIndex] ? 1 : 0,
+                                     mabPlayerStartedChallenge[leCrashedActiveRaceCarIndex] ? 1 : 0,
+                                     static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex()));
 
             // Both cars must be taking part in the current challenge (X360 tests the CRASHED
             // car's flag first, then the CRASHER's, both off the +0x598 byte array).

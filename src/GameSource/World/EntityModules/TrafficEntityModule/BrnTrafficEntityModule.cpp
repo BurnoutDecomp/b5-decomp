@@ -550,10 +550,11 @@ namespace BrnTraffic
     //     469108/469109 (the byte NeedToTakeActionAgainstJunctionFUP @0x82707FD0 reads). That
     //     places the four-bool run :855/:856/:858/:860 at 469096..469099, with
     //     CalculateAndSetSteeringUsingAvoidance @0x8273D258 reading 0x72869 as its middle.
-    bool TrafficEntityModule::ShouldBeHollywoodAction()
+    bool TrafficEntityModule::ShouldBeHollywoodAction() const
     {
         bool lbShowtimeActionActive = true;
-        if (mfCrashSliderFinalValue <= 0.0099999998f || !mbAllowDivergentBehaviour)
+        // Original ble tests !GT, so unordered final values reject the action.
+        if (!(mfCrashSliderFinalValue > 0.0099999998f) || !mbAllowDivergentBehaviour)
             lbShowtimeActionActive = false;
 
         if (mbDEBUGTestSympCrash)
@@ -564,12 +565,13 @@ namespace BrnTraffic
     // @ 0x82707FD0 -- forced flag @ +0x72875 (mbDEBUGOverrideJunctionFUP, :866); else if
     // mbAllowDivergentBehaviour @ +0x717E7 is set, true when the junction-FUP score
     // @ +0x725E0 (mfJunctionFUP, :785) >= 65.0 (flt_820BA290).
-    bool TrafficEntityModule::NeedToTakeActionAgainstJunctionFUP()
+    bool TrafficEntityModule::NeedToTakeActionAgainstJunctionFUP() const
     {
         if (mbDEBUGOverrideJunctionFUP)
             return true;
         if (mbAllowDivergentBehaviour)
-            return mfJunctionFUP >= 65.0f;
+            // Original bge tests !LT, including unordered scores.
+            return !(mfJunctionFUP < 65.0f);
         return false;
     }
 
@@ -10552,10 +10554,9 @@ void TrafficEntityModule::DEBUG_AddFuzzyLogicData(u32 luParam, VecFloat* lpafFuz
 
     const Vector3 lParamPosition = GetParamTransform(luParam)->GetDeterministicPos();
     const Vector3 lCameraPosition = mFuzzyBehaviours.mDEBUGLastCameraPos;
-    const f32 lfDeltaX = lParamPosition.x - lCameraPosition.x;
-    const f32 lfDeltaY = lParamPosition.y - lCameraPosition.y;
-    const f32 lfDeltaZ = lParamPosition.z - lCameraPosition.z;
-    const f32 lfDistanceSquared = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+    const Vector3 lOffset = lParamPosition - lCameraPosition;
+    // 0x82716124: retain the existing VMX model's accumulation before narrowing.
+    const f32 lfDistanceSquared = rw::math::vpu::SLerpDetail::Dot3(lOffset, lOffset);
     if (!(900.0f > lfDistanceSquared))
         return;
 
@@ -16096,7 +16097,8 @@ void TrafficEntityModule::UpdateExtremeSwerving(
     // or no local player skips the transform fetch entirely.
     bool lbStartSympatheticCrash = false;
 
-    if (mfCrashSliderFinalValue >= KF_EXTREME_SWERVE_CRASH_SLIDER_MIN &&
+    // 0x8273E998 blt skips only an ordered value below the threshold.
+    if (!(mfCrashSliderFinalValue < KF_EXTREME_SWERVE_CRASH_SLIDER_MIN) &&
         meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
     {
         const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
@@ -16108,7 +16110,7 @@ void TrafficEntityModule::UpdateExtremeSwerving(
             mRaceCarState.maActiveRaceCarPositions[static_cast<s32>(meLocalPlayerIndex)]
             - lTransform.Pos();
 
-        const f32 lfDistSq = rw::math::vpu::Dot(lDiff, lDiff);
+        const f32 lfDistSq = rw::math::vpu::SLerpDetail::Dot3(lDiff, lDiff);
 
         // 0x8273E9F4 `vcmpgtfp. v0, dist2, splat(1600)` -> the CR6 "all lanes greater" bit.
         // NEAR the player: crash. FAR: the car's OWN fixed mfRandomVal decides, and only a
@@ -19060,12 +19062,13 @@ void TrafficEntityModule::UpdateJunctionFUP()
     // ============================================================================
     if (NeedToTakeActionAgainstJunctionFUP() ||
         (mbDEBUGOverrideJunctionFUP ||
-         mfJunctionFUP >= KF_JUNCTION_FUP_ONLINE_SCORE_NEEDS_ACTION))
+         !(mfJunctionFUP < KF_JUNCTION_FUP_ONLINE_SCORE_NEEDS_ACTION)))
     {
         // 0x82745B80..0x82745BA4.
         mfJunctionFUP_TimeTillNextPhysicalKill -= mfSimTimeStep;
 
-        if (mfJunctionFUP_TimeTillNextPhysicalKill <= 0.0f &&
+        // 0x82745BA4 bgt skips only positive ordered timers; unordered reaches the kill test.
+        if (!(mfJunctionFUP_TimeTillNextPhysicalKill > 0.0f) &&
             luNextKillVehicle != KU_JUNCTION_FUP_NO_KILL_VEHICLE)
         {
             // 0x82745BB4..0x82745BC0 -- UNGATED: RemoveVehicle is bodied above in this file.

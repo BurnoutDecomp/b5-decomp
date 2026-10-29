@@ -2,13 +2,14 @@
 
 #include "BrnCommonTypes.h"
 #include <cmath>
+#include <limits>
 
 // FLAG PC-platform leaf: scalar lowering of the X360 VMX floating instructions.
 // These operations flush subnormal operands/results without changing the host
 // floating-point mode. Scalar PPC arithmetic must remain outside this interface.
-// The dot uses one f64 accumulation/f32 rounding; reciprocal-square-root seeds
-// use correctly rounded host arithmetic. Exact hardware estimate bits, dot last
-// bits, NaN payloads and floating status remain unverified model boundaries.
+// Dot3 follows the pinned Xenia f64 (X+Z)+Y and finite-overflow-to-QNaN model.
+// Reciprocal-square-root seeds use correctly rounded host arithmetic. Exact
+// hardware estimate/dot bits, NaN payloads and floating status remain unverified.
 namespace CgsPC { namespace VmxFloat
 {
     inline f32 Flush(f32 lfValue)
@@ -58,10 +59,22 @@ namespace CgsPC { namespace VmxFloat
 
     inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
     {
-        return Flush(static_cast<f32>(
-            static_cast<f64>(Flush(lrA.x)) * Flush(lrB.x)
-          + static_cast<f64>(Flush(lrA.y)) * Flush(lrB.y)
-          + static_cast<f64>(Flush(lrA.z)) * Flush(lrB.z)));
+        // Model boundary: Xenia Canary 72c2afa3 DOT_PRODUCT_3_V128 accumulates
+        // exact f32 products in f64, (X+Z)+Y, then narrows once. Its
+        // EmitDotProductResult maps finite narrowing overflow to quiet NaN;
+        // infinity/NaN from input operands remains nonfinite. Hardware status,
+        // payloads and last-bit behavior are not certified by this lowering.
+        const f64 ldX = static_cast<f64>(Flush(lrA.x)) * Flush(lrB.x);
+        const f64 ldY = static_cast<f64>(Flush(lrA.y)) * Flush(lrB.y);
+        const f64 ldZ = static_cast<f64>(Flush(lrA.z)) * Flush(lrB.z);
+        const f64 ldXZ = ldX + ldZ;
+        const f64 ldSum = ldXZ + ldY;
+        const f32 lfSum = static_cast<f32>(ldSum);
+        if (std::isfinite(ldSum) && std::isinf(lfSum))
+        {
+            return std::numeric_limits<f32>::quiet_NaN();
+        }
+        return Flush(lfSum);
     }
 
     inline Vector3 Subtract(const Vector3& lrA, const Vector3& lrB)

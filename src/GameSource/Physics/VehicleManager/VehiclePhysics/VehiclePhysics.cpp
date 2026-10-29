@@ -1,5 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
 #include "pc/input/EngineFeedback.h"
+#include "pc/math/VmxFloat.h" // CgsPC::VmxFloat::Dot3/Add for UpdateFreezing vmsum3fp128/vaddfp
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // the seat bring-up leg reads the RESIDENT spec (WheelSpecs, mMeshOffset)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"  // BrnPlayerDriverControls (C07 boost/speed-match)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT (CheckForEnteringDrift)
@@ -6882,8 +6883,9 @@ namespace Vehicle
         lfMaxWheelSpin = std::max(lfMaxWheelSpin,
                                   std::fabs(maWheels[3].mIntegrationVariables.x));   // +0x400
 
-        const f32 lfSpeedSq = vpu::MagnitudeSquared(mLinearVelocity)
-                            + vpu::MagnitudeSquared(mAngularVelocity);
+        const f32 lfLinearSpeedSq = CgsPC::VmxFloat::Dot3(mLinearVelocity, mLinearVelocity);
+        const f32 lfAngularSpeedSq = CgsPC::VmxFloat::Dot3(mAngularVelocity, mAngularVelocity);
+        const f32 lfSpeedSq = CgsPC::VmxFloat::Add(lfLinearSpeedSq, lfAngularSpeedSq);
 
         Vector4& lrTimers = mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction;
 
@@ -8923,9 +8925,23 @@ namespace Vehicle
         // `beq cr6, loc_826388C0` @0x826388A4 takes the NOT-crashing-normally arm, and x360rd reads
         // 0x82F2A524..30 as 0.992 / 0.9999 / 0.995 / 0.995 exactly as seated here.
         {
-            f32 lfLx = vpu::Dot(mTransform.xAxis, mAngularVelocity);   // R^T * omega, the
-            f32 lfLy = vpu::Dot(mTransform.yAxis, mAngularVelocity);   // vmrghw/vmrglw transpose
-            f32 lfLz = vpu::Dot(mTransform.zAxis, mAngularVelocity);
+            // ARTIST 0x82638CB4..0x82638CC4: transpose the basis, multiply the first
+            // term, then fuse the Y and Z terms into each body-axis result.
+            f32 lfLx = CgsPC::VmxFloat::MultiplyAdd(
+                mTransform.xAxis.z, mAngularVelocity.z,
+                CgsPC::VmxFloat::MultiplyAdd(
+                    mTransform.xAxis.y, mAngularVelocity.y,
+                    CgsPC::VmxFloat::Multiply(mTransform.xAxis.x, mAngularVelocity.x)));
+            f32 lfLy = CgsPC::VmxFloat::MultiplyAdd(
+                mTransform.yAxis.z, mAngularVelocity.z,
+                CgsPC::VmxFloat::MultiplyAdd(
+                    mTransform.yAxis.y, mAngularVelocity.y,
+                    CgsPC::VmxFloat::Multiply(mTransform.yAxis.x, mAngularVelocity.x)));
+            f32 lfLz = CgsPC::VmxFloat::MultiplyAdd(
+                mTransform.zAxis.z, mAngularVelocity.z,
+                CgsPC::VmxFloat::MultiplyAdd(
+                    mTransform.zAxis.y, mAngularVelocity.y,
+                    CgsPC::VmxFloat::Multiply(mTransform.zAxis.x, mAngularVelocity.x)));
             const f32 lfMaxCrashAngVelX = gvMaxCrashAngularVelocity.x;
             const f32 lfMaxCrashAngVelY = gvMaxCrashAngularVelocity.y;
             const f32 lfMaxCrashAngVelZ = gvMaxCrashAngularVelocity.z;
@@ -8935,10 +8951,18 @@ namespace Vehicle
             if (lfLy >  lfMaxCrashAngVelY) lfLy =  lfMaxCrashAngVelY;
             if (lfLz < -lfMaxCrashAngVelZ) lfLz = -lfMaxCrashAngVelZ;
             if (lfLz >  lfMaxCrashAngVelZ) lfLz =  lfMaxCrashAngVelZ;
+            // ARTIST 0x82638CDC..0x82638CE8: vmulfp128, then two vmaddfp
+            // operations in X, Y, Z axis order for the world-space result.
             mAngularVelocity = Vector3{
-                mTransform.xAxis.x * lfLx + mTransform.yAxis.x * lfLy + mTransform.zAxis.x * lfLz,
-                mTransform.xAxis.y * lfLx + mTransform.yAxis.y * lfLy + mTransform.zAxis.y * lfLz,
-                mTransform.xAxis.z * lfLx + mTransform.yAxis.z * lfLy + mTransform.zAxis.z * lfLz,
+                CgsPC::VmxFloat::MultiplyAdd(mTransform.zAxis.x, lfLz,
+                    CgsPC::VmxFloat::MultiplyAdd(mTransform.yAxis.x, lfLy,
+                        CgsPC::VmxFloat::Multiply(mTransform.xAxis.x, lfLx))),
+                CgsPC::VmxFloat::MultiplyAdd(mTransform.zAxis.y, lfLz,
+                    CgsPC::VmxFloat::MultiplyAdd(mTransform.yAxis.y, lfLy,
+                        CgsPC::VmxFloat::Multiply(mTransform.xAxis.y, lfLx))),
+                CgsPC::VmxFloat::MultiplyAdd(mTransform.zAxis.z, lfLz,
+                    CgsPC::VmxFloat::MultiplyAdd(mTransform.yAxis.z, lfLy,
+                        CgsPC::VmxFloat::Multiply(mTransform.xAxis.z, lfLx))),
                 0.0f };
         }
         BRN_ROLLCATCH_SAMPLE();   // 2: after the registered per-axis clamp

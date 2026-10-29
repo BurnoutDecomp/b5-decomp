@@ -300,4 +300,47 @@ Vector3 CameraSpaceHandler::TransformToWorld(Vector3 lvPoint, eICESpace leSpace)
     return lvWorld;
 }
 
+// ---------------------------------------------------------------------------
+// GetWorldOrientationMatrix (DWARF ICECameraSpaceHandler.cpp:87) -- X360 @0x82533E70.
+//
+// The inverse of a reference space's transform-to-world, for a space whose 3x3 is
+// orthonormal (the DWARF names the inlined helper: InverseOfMatrixWithOrthonormal3x3):
+//
+//     out.row[i] = (M.x[i], M.y[i], M.z[i], 0)          the 3x3, transposed
+//     out.row[3] = -(M.w.x * out.row[0] + M.w.y * out.row[1] + M.w.z * out.row[2])
+//
+// Verified against the asm (0x82533E94..0x82533EF8): the four rows are fetched through
+// GetTransformToWorld(space), merged with vmrghw/vmrglw into the three columns, and the
+// negated translation (0 - wAxis, vsubfp) is splatted lane by lane and accumulated with
+// vmulfp/vmaddfp. Every lane-3 input is a zero (vspltisw 0), so all four output w lanes are 0
+// -- NOT 1; callers read only the rotation and the translation lanes, so the console's
+// zeros are kept rather than "fixed" into a homogeneous 1.
+//
+// `lu8Avatar` is in the DWARF signature and unused by the body: r6 is never read.
+// ---------------------------------------------------------------------------
+void CameraSpaceHandler::GetWorldOrientationMatrix(Matrix4* lpOrientMat, u8 lu8Space, u8 lu8Avatar) const
+{
+    (void)lu8Avatar;
+
+    const Matrix44Affine lToWorld = GetTransformToWorld(static_cast<eICESpace>(lu8Space));
+
+    Vector4& lrXColumn = lpOrientMat->maRows[0];
+    Vector4& lrYColumn = lpOrientMat->maRows[1];
+    Vector4& lrZColumn = lpOrientMat->maRows[2];
+    Vector4& lrOffset  = lpOrientMat->maRows[3];
+
+    lrXColumn.x = lToWorld.xAxis.x;  lrXColumn.y = lToWorld.yAxis.x;  lrXColumn.z = lToWorld.zAxis.x;  lrXColumn.w = 0.0f;
+    lrYColumn.x = lToWorld.xAxis.y;  lrYColumn.y = lToWorld.yAxis.y;  lrYColumn.z = lToWorld.zAxis.y;  lrYColumn.w = 0.0f;
+    lrZColumn.x = lToWorld.xAxis.z;  lrZColumn.y = lToWorld.yAxis.z;  lrZColumn.z = lToWorld.zAxis.z;  lrZColumn.w = 0.0f;
+
+    const f32 lfNegX = 0.0f - lToWorld.wAxis.x;
+    const f32 lfNegY = 0.0f - lToWorld.wAxis.y;
+    const f32 lfNegZ = 0.0f - lToWorld.wAxis.z;
+
+    lrOffset.x = lfNegX * lrXColumn.x + (lfNegY * lrYColumn.x + lfNegZ * lrZColumn.x);
+    lrOffset.y = lfNegX * lrXColumn.y + (lfNegY * lrYColumn.y + lfNegZ * lrZColumn.y);
+    lrOffset.z = lfNegX * lrXColumn.z + (lfNegY * lrYColumn.z + lfNegZ * lrZColumn.z);
+    lrOffset.w = 0.0f;
+}
+
 } // namespace ICE
