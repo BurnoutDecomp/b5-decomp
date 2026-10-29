@@ -21,6 +21,7 @@
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // live serialiser snapshot getters
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu) for DrawLine endpoints
 
 #include <cstdio>
@@ -40,6 +41,14 @@ namespace BrnReplays
         lv2Point.z = 0.0f;
         lv2Point.w = 0.0f;
         return lv2Point;
+    }
+
+    static void* AllocateDebugStorage(rw::IResourceAllocator* lpAllocator, u32 luSize)
+    {
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        return lpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
     }
 
     // --- recovered overlay palette + layout metrics (de-optimised lazy globals) ---
@@ -102,20 +111,17 @@ namespace BrnReplays
         miWriteSlotsUsed  = 0;
         miWriteBufferUsed = 0;
 
-        // Four actual five-lane descriptors: console sizes 294 and three 51C,
-        // lane-zero alignment 16, remaining lanes {0,1}, null allocation name.
-        // sizeof widens only the canonical graph's native pointer metadata.
-        const auto Allocate = [lpAllocator](u32 luSize) -> void*
-        {
-            rw::ResourceDescriptor lDescriptor;
-            lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
-            lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-            return lpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
-        };
-        mpSerialisers = static_cast<DebugSerialiserInfo*>(Allocate(sizeof(DebugSerialiserInfo) * KI_NUM_SERIALISERS));
-        mpWriteSlotsUsedGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
-        mpWriteBufferUsedGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
-        mpReadGraph = static_cast<DebugGraph*>(Allocate(sizeof(DebugGraph)));
+        // ARTIST 826529B4..82652B3C allocates lane zero of four real
+        // five-lane descriptors: one 0x294-byte info block and three 0x51C-byte
+        // graphs, all aligned 16, other lanes {0,1}, null allocation name.
+        mpSerialisers = static_cast<DebugSerialiserInfo*>(
+            AllocateDebugStorage(lpAllocator, sizeof(DebugSerialiserInfo) * KI_NUM_SERIALISERS));
+        mpWriteSlotsUsedGraph = static_cast<DebugGraph*>(
+            AllocateDebugStorage(lpAllocator, sizeof(DebugGraph)));
+        mpWriteBufferUsedGraph = static_cast<DebugGraph*>(
+            AllocateDebugStorage(lpAllocator, sizeof(DebugGraph)));
+        mpReadGraph = static_cast<DebugGraph*>(
+            AllocateDebugStorage(lpAllocator, sizeof(DebugGraph)));
         mpWriteSlotsUsedGraph->mBuffer.Construct();
         mpWriteBufferUsedGraph->mBuffer.Construct();
         mpReadGraph->mBuffer.Construct();
@@ -349,7 +355,7 @@ namespace BrnReplays
             const DebugSerialiserInfo& lrInfo = mpSerialisers[liRow];
 
             char lacIdText[256];
-            std::snprintf(lacIdText, sizeof(lacIdText), "%d", lrInfo.meId);
+            CgsCore::SPrintf(lacIdText, sizeof(lacIdText), "%d", lrInfo.meId);
 
             if (lpRender)
             {
@@ -401,8 +407,8 @@ namespace BrnReplays
     {
         if (lpRender)
             // ARTIST 8264F804 passes the second received vector directly as size.
-            lpRender->DrawBox(Vector2{lrv2Min.X(), lrv2Min.Y(), 0, 0},
-                              Vector2{lrv2Max.X(), lrv2Max.Y(), 0, 0}, KU_COL_GRAPH_FILL);
+            lpRender->DrawBox(MakePoint(lrv2Min.X(), lrv2Min.Y()),
+                              MakePoint(lrv2Max.X(), lrv2Max.Y()), KU_COL_GRAPH_FILL);
 
         const s32 liCount = lpGraph->mBuffer.GetLength();    // graph+0x118
         if (lpRender && liCount > 0)
@@ -600,7 +606,7 @@ namespace BrnReplays
                                    f32 lfX, f32 lfY, f32 lfScale, RGBA lColour)
     {
         char lacText[256];
-        std::snprintf(lacText, sizeof(lacText), "%d", liValue);
+        CgsCore::SPrintf(lacText, sizeof(lacText), "%d", liValue);
         if (lpRender)
             lpRender->DrawText(lacText, lfX, lfY, lfScale, lColour);
     }
@@ -618,11 +624,11 @@ namespace BrnReplays
 
         char lacText[256];
         if (liMB > 0)
-            std::snprintf(lacText, sizeof(lacText), "%dMB, %dKB, %dB", liMB, liKB, liB);
+            CgsCore::SPrintf(lacText, sizeof(lacText), "%dMB, %dKB, %dB", liMB, liKB, liB);
         else if (liKB > 0)
-            std::snprintf(lacText, sizeof(lacText), "%dKB, %dB", liKB, liB);
+            CgsCore::SPrintf(lacText, sizeof(lacText), "%dKB, %dB", liKB, liB);
         else
-            std::snprintf(lacText, sizeof(lacText), "%dB", liB);
+            CgsCore::SPrintf(lacText, sizeof(lacText), "%dB", liB);
 
         if (lpRender)
             lpRender->DrawText(lacText, lfX, lfY, lfScale, lColour);
@@ -635,7 +641,7 @@ namespace BrnReplays
                                       f32 lfX, f32 lfY, f32 lfScale, RGBA lColour)
     {
         char lacText[256];
-        std::snprintf(lacText, sizeof(lacText), "%d/%d", liNumerator, liDenominator);
+        CgsCore::SPrintf(lacText, sizeof(lacText), "%d/%d", liNumerator, liDenominator);
         if (lpRender)
             lpRender->DrawText(lacText, lfX, lfY, lfScale, lColour);
     }
