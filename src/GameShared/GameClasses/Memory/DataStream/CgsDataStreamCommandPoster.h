@@ -32,7 +32,7 @@ namespace CgsMemory
     // field while copying out each fixed-stride record (see CgsDataStreamCommandReader).
     struct DataStreamCommandReader;
 
-    struct DataStreamCommandPoster
+    struct CGS_ALIGN(128) DataStreamCommandPoster
     {
         // The reader reads the poster's command buffer and CAS-updates its packed
         // status word; it needs access to the private members below. (Additive:
@@ -94,3 +94,9 @@ namespace CgsMemory
         bool                mbStreaming;         // +40 true between Begin() and End()
     };
 }
+
+// DecFIGS byte_size 128 and member layout, confirmed by ARTIST producer
+// 8286A3F4 (poster+0x80) / 8286A420 (streaming+0x100): each poster owns
+// one cache line. Natural alignment preserves the following owner members.
+CGS_STATIC_ASSERT(sizeof(CgsMemory::DataStreamCommandPoster) == 128, "ARTIST command poster size");
+CGS_STATIC_ASSERT(__alignof(CgsMemory::DataStreamCommandPoster) == 128, "ARTIST command poster alignment");
