@@ -1,6 +1,7 @@
 #include "vendor/renderware/collision/KdTreeLineQuery.hpp"
 
 #include <cmath>
+#include "vendor/renderware/collision/LineSegKernelMath.hpp"
 
 // ===========================================================================
 // rw::collision::KdTreeLineQuery -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -84,16 +85,14 @@ KdTreeLineQuery::KdTreeLineQuery(KdTree* lpKdTree,
     const f32* lpEnd   = &rEnd.x;
     for (s32 li = 0; li < 4; ++li)
     {
-        const f32 lfAbsMax = std::fmax(AbsF(lpStart[li]), AbsF(lpEnd[li]));
+        const f32 lfAbsMax = linemath::VmxMax(AbsF(lpStart[li]), AbsF(lpEnd[li]));
         lpSeed[li] = lfAbsMax * lFatness[li] + KF_SEED_PAD_EPS;
     }
 
     // ---- precompute the per-axis clip parameters ---------------------------
     AALineClipper::Aabb lTreeBox;
-    lTreeBox.mMin = { lpKdTree->maBoxMin[0], lpKdTree->maBoxMin[1],
-                      lpKdTree->maBoxMin[2], lpKdTree->maBoxMin[3] };
-    lTreeBox.mMax = { lpKdTree->maBoxMax[0], lpKdTree->maBoxMax[1],
-                      lpKdTree->maBoxMax[2], lpKdTree->maBoxMax[3] };
+    lTreeBox.mMin.x = lpKdTree->maBoxMin[0]; lTreeBox.mMin.y = lpKdTree->maBoxMin[1]; lTreeBox.mMin.z = lpKdTree->maBoxMin[2]; lTreeBox.mMin.w = lpKdTree->maBoxMin[3];
+    lTreeBox.mMax.x = lpKdTree->maBoxMax[0]; lTreeBox.mMax.y = lpKdTree->maBoxMax[1]; lTreeBox.mMax.z = lpKdTree->maBoxMax[2]; lTreeBox.mMax.w = lpKdTree->maBoxMax[3];
     mClipper.Init(rStart, rEnd, lSeed, &lTreeBox); // this+0x10
 
     muTopNode   = 0; // +0x254
@@ -119,8 +118,8 @@ KdTreeLineQuery::KdTreeLineQuery(KdTree* lpKdTree,
     {
         const f32 lfA = lpRecipSpan[li] * ((lpBoxMin[li] - lpPadExtent[li]) - lpClipMin[li]);
         const f32 lfB = lpRecipSpan[li] * ((lpBoxMax[li] + lpPadExtent[li]) - lpClipMin[li]);
-        lEnter[li] = std::fmin(lfA, lfB);
-        lExit[li]  = std::fmax(lfA, lfB);
+        lEnter[li] = linemath::VmxMin(lfA, lfB);
+        lExit[li]  = linemath::VmxMax(lfA, lfB);
     }
 
     // fsel-form horizontal reduce (matches the asm fsub/fsel chain exactly):

@@ -90,10 +90,10 @@ AALineClipper* AALineClipper::Init(const Vec4& rStart, const Vec4& rEnd,
         lRecipSpan[i] = linemath::RefinedRecip(lSpan[i]);               // +0x20
     }
 
-    mClipMin   = { lClipMin[0],   lClipMin[1],   lClipMin[2],   lClipMin[3]   };
-    mSpan      = { lSpan[0],      lSpan[1],      lSpan[2],      lSpan[3]      };
-    mRecipSpan = { lRecipSpan[0], lRecipSpan[1], lRecipSpan[2], lRecipSpan[3] };
-    mPadExtent = { lPadExtent[0], lPadExtent[1], lPadExtent[2], lPadExtent[3] };
+    mClipMin.x = lClipMin[0]; mClipMin.y = lClipMin[1]; mClipMin.z = lClipMin[2]; mClipMin.w = lClipMin[3];
+    mSpan.x = lSpan[0]; mSpan.y = lSpan[1]; mSpan.z = lSpan[2]; mSpan.w = lSpan[3];
+    mRecipSpan.x = lRecipSpan[0]; mRecipSpan.y = lRecipSpan[1]; mRecipSpan.z = lRecipSpan[2]; mRecipSpan.w = lRecipSpan[3];
+    mPadExtent.x = lPadExtent[0]; mPadExtent.y = lPadExtent[1]; mPadExtent.z = lPadExtent[2]; mPadExtent.w = lPadExtent[3];
 
     return this;
 }

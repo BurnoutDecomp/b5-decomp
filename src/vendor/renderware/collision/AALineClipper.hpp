@@ -66,7 +66,7 @@ public:
     // it post-construction via Init. The X360 leaves the rows uninitialised before
     // Init runs; this matches that (no zeroing). Purely additive -- no member or
     // existing ctor changes.
-    AALineClipper() = default;
+    AALineClipper() {}
 
     // @ 0x828AED60 -- fill the per-axis clip parameters. Returns this. The asm
     // takes r3=this, r4=lpBox and the segment in the VMX argument registers
