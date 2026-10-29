@@ -48,6 +48,7 @@
 
 // CGS_ASSERT (the house assert machinery the X360 Begin/Fire/End triples map to).
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <float.h>
 
 // EActiveRaceCarIndex (the -1 / COUNT sentinels RaceCarPositioningData::Construct seeds).
 #include "GameSource/BurnoutConstants.h"
@@ -64,8 +65,7 @@ namespace BrnGameState
     //   miCumulativePoints     = 0          (stw 0 @0x130)
     //   miRoundDisconnectedIn  = -1         (stw -1 @0x134, "not disconnected")
     //   mfCurrentDriftDistance = 0.0f       (stfs 0.0 @0x138)
-    //   mePlayerStatus         = PLAYING    (stw 0 @0x13C)
-    //   mePlayerTeam           = 0          (stw 0 @0x140)
+    //   mePlayerTeam           = 0          (stw 0 @0x13C; +0x140 is untouched)
     //   meRaceCarIndex         = COUNT      (stw 8 @0x144, the empty-slot sentinel)
     //   mNetworkPlayerID       = -1         (stw -1 @0x148, invalid network id)
     //   mbIsEliminated         = false      (stb 0 @0x154)
@@ -81,7 +81,6 @@ namespace BrnGameState
         miCumulativePoints     = 0;
         miRoundDisconnectedIn  = -1;
         mfCurrentDriftDistance = 0.0f;
-        mePlayerStatus         = E_PLAYER_STATUS_PLAYING;
         mePlayerTeam           = static_cast<GameStateModuleIO::EPlayerTeam>(0);
         meRaceCarIndex         = E_ACTIVE_RACE_CAR_INDEX_COUNT;
         mNetworkPlayerID       = -1;
@@ -256,7 +255,7 @@ namespace BrnGameState
     // win the nearest-car comparisons.
     void RaceCarPositioningData::Construct()
     {
-        const f32 KF_INVALID_RACE_DISTANCE = 3.4028235e38f;   // flt_82CDB7D0 == FLT_MAX
+        const f32 KF_INVALID_RACE_DISTANCE = FLT_MAX;   // flt_82CDB7D0 == FLT_MAX
 
         meActiveRaceCarIndex       = E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x00  (-1)
         mfDistanceToNextCheckpoint = KF_INVALID_RACE_DISTANCE;          // +0x04
