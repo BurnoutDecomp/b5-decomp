@@ -135,21 +135,21 @@ namespace BrnWorld
         RegisterVariable(&mpWorldEntityModule->mPVSModule.mbDebugRestrictZoneLists,
                          "Restrict PVS to 1 zone");
 
-        RegisterVariable(&mfCentreZoneBaseScore, "Centre zone base score");
-        SetRange(&mfCentreZoneBaseScore, 0.0f, 200.0f);
-        SetStep(&mfCentreZoneBaseScore, 0.5f);
+        RegisterVariable(&PVSModule::mfCentreZoneBaseScore, "Centre zone base score");
+        SetRange(&PVSModule::mfCentreZoneBaseScore, 0.0f, 200.0f);
+        SetStep(&PVSModule::mfCentreZoneBaseScore, 0.5f);
 
-        RegisterVariable(&mfImmediateZoneBaseScore, "Immediate zone base score");
-        SetRange(&mfImmediateZoneBaseScore, 0.0f, 200.0f);
-        SetStep(&mfImmediateZoneBaseScore, 0.5f);
+        RegisterVariable(&PVSModule::mfImmediateZoneBaseScore, "Immediate zone base score");
+        SetRange(&PVSModule::mfImmediateZoneBaseScore, 0.0f, 200.0f);
+        SetStep(&PVSModule::mfImmediateZoneBaseScore, 0.5f);
 
-        RegisterVariable(&mfSecondaryZoneBaseScore, "Secondary zone base score");
-        SetRange(&mfSecondaryZoneBaseScore, 0.0f, 200.0f);
-        SetStep(&mfSecondaryZoneBaseScore, 0.5f);
+        RegisterVariable(&PVSModule::mfSecondaryZoneBaseScore, "Secondary zone base score");
+        SetRange(&PVSModule::mfSecondaryZoneBaseScore, 0.0f, 200.0f);
+        SetStep(&PVSModule::mfSecondaryZoneBaseScore, 0.5f);
 
-        RegisterVariable(&mfDirectionalScoreMultiplier, "Score Multiplier");
-        SetRange(&mfDirectionalScoreMultiplier, 0.0f, 10.0f);
-        SetStep(&mfDirectionalScoreMultiplier, 0.1f);
+        RegisterVariable(&PVSModule::mfDirectionalScoreMultiplier, "Score Multiplier");
+        SetRange(&PVSModule::mfDirectionalScoreMultiplier, 0.0f, 10.0f);
+        SetStep(&PVSModule::mfDirectionalScoreMultiplier, 0.1f);
 
         RegisterVariable(&_mbAllowStreamStalling, "Allow Stream Stalling");
         RegisterVariable(&BrnGame::sbShowStreamStallMessage, "Show stall message");
