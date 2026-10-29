@@ -333,6 +333,10 @@ void RaceCarEntityModule::Construct()
     mbSendStreamingComplete  = false;
     mbCarSelectAllowedInGameMode = false;
     // X360 Construct @0x822FDBA4 / @0x822FDBAC seeds +0x1834A to 0 and +0x18349 to 1.
+    // ARTIST 0x822FDB70/78: reset the player and tailgate slots on every
+    // Construct call, after the per-car construction sweeps.
+    mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    meIndexOfCarPlayerIsTailgating = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     mbRivalDebug = false;
     mbDisplayPlayerCarPosition = true;
     // ARTIST 822FDBDC/E4: both inputs to the tilt-steering enable gate start disabled.
@@ -352,6 +356,19 @@ void RaceCarEntityModule::Construct()
     mpVehicleList        = 0;
     mpWheelList          = 0;
     mbCarColoursBound    = false;
+
+    // ARTIST 0x822FE1AC clears the eight car-select wait flags. The debug-car
+    // request state follows at 0x822FE1B0..0x822FE1E4, including all four lanes
+    // of both vectors. These are lifecycle resets, not C++ object defaults.
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+        mabCarSelectWaitForStreaming[liCar] = false;
+    DEBUG_mfDebugRaceCarVelocity = 0.0f;
+    DEBUG_mbSpawnDebugRaceCarThisFrame = false;
+    DEBUG_mbCleanDebugRaceCarThisFrame = false;
+    DEBUG_mbDebugRaceCarIsActive = false;
+    DEBUG_mpDebugRaceCar = 0;
+    DEBUG_mDebugRaceCarPosition.SetZero();
+    DEBUG_mDebugRaceCarDirection.SetZero();
 
     // ARTIST 822FE1B8..822FE2A0 resets these editable values on every
     // Construct call. In-class initializers alone do not reset a reused module.

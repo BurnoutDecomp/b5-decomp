@@ -1067,25 +1067,15 @@ private:
 
     // X360 +0x182F4 (99060). UpdateBoost loads this exact 32-bit enum for
     // BoostStrategy::SetTailgating at 0x82304B50..0x82304B64.
-    EActiveRaceCarIndex meIndexOfCarPlayerIsTailgating = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    EActiveRaceCarIndex meIndexOfCarPlayerIsTailgating;
                                         // +0x182F4 (99060) .. +0x182F8 (99064)
 
     // X360 +0x182F8 (99064). The active-race-car slot the local player is driving, or
     // E_ACTIVE_RACE_CAR_INDEX_INVALID. UpdateTailgateTimer reads it (asm `lwzx` at 0x182F8)
     // to pick the player car. DWARF BrnRaceCarEntityModule.h:360 -> EActiveRaceCarIndex.
-    // ⛔ SEEDED 2026-08-01 (reset-player-car wave), and this was a REAL DEFECT with two live
-    // consequences. RaceCarEntityModule::Construct @0x822FD898 -- which is where the console
-    // stores E_ACTIVE_RACE_CAR_INDEX_INVALID here -- is declaration-only on this build (it is in
-    // the [VMX] FLAG INVENTORY), so this member sat at whatever the zeroed module memory held:
-    // 0 == E_ACTIVE_RACE_CAR_INDEX_0, i.e. "the player is driving slot 0", from frame one.
-    //   * UpdateOutputInterfaces publishes slot 0 as the player's car before any car exists;
-    //   * HandleResetPlayerCarAction takes its "remove the EXISTING player car" branch on the
-    //     very first record it is ever handed -- MEASURED: the first live action fired the
-    //     console's own "Invalid Number of Palettes"/"Invalid car colour" pair, because it read
-    //     RaceCar::Prepare's -1 colour sentinels off a slot that had never been a player car.
-    // The in-class initialiser is the same seam BrnGameModule's mpOutputBuffer uses; DELETE it
-    // when Construct lands.
-    EActiveRaceCarIndex mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    // Native Construct stores INVALID at 0x822FDB70, before any car is attached.
+    // Keep the initialization in Construct so reused modules get the same reset.
+    EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
                                         // +0x182F8 (99064) .. +0x182FC (99068)
 
     u8 maTailPadA1b[0x18358 - 0x182FC]; // +0x182FC (99068) .. +0x18358 (99160)
@@ -1113,7 +1103,7 @@ private:
     // SUPER-FATAL properties are consulted.
     f32 mfResetOnWaterHeight;           // +0x184CC (99532)
 
-    bool mabCarSelectWaitForStreaming[8] = {}; // ARTIST +99168, DecFIGS :216
+    bool mabCarSelectWaitForStreaming[8]; // Construct clears all eight (ARTIST 0x822FE1AC).
     u8 maTailPadB0[0x18374 - 0x18368];  // +0x18368 (99176) .. +0x18374 (99188)
 
     // X360 +0x18374 (99188). Ring of training requests queued this frame, drained by the
@@ -1379,33 +1369,32 @@ private:
     // The bool->float alignment pad (100216 + 1 + 3 == 100220) falls exactly where the
     // console offsets say it must, which is what makes this a fit and not a placement.
     //
-    // Like the paint overrides below they are dev switches with NO writer on this build
-    // (only the debug menu ever set them on the console), so both console branches that
-    // read them are inert at retail -- DEBUG_mbOverrideDamage false means the max() in the
+    // Construct resets these dev switches; the debug menu can edit them later.
+    // DEBUG_mbOverrideDamage false means the max() in the
     // self-illumination vector is a no-op and the scratch override never runs. They are
     // MODELLED rather than dropped so RenderRaceCar's constant-24 block is the console's
     // whole block, not a slice.
     // ========================================================================
-    bool DEBUG_mbOverrideDamage       = false;  // +0x18778 (100216)
-    f32  DEBUG_mfVehicleScratchAmount = 0.0f;   // +0x1877C (100220)
-    f32  DEBUG_mfVehicleDustAmount    = 0.0f;   // +0x18780 (100224)
-    f32  DEBUG_mfVehicleCrumpleAmount = 0.0f;   // +0x18784 (100228)
-    f32  DEBUG_mfSelfIlluminationR    = 0.0f;   // +0x18788 (100232)
-    f32  DEBUG_mfSelfIlluminationG    = 0.0f;   // +0x1878C (100236)
-    f32  DEBUG_mfSelfIlluminationB    = 0.0f;   // +0x18790 (100240)
+    bool DEBUG_mbOverrideDamage;  // +0x18778 (100216)
+    f32  DEBUG_mfVehicleScratchAmount;   // +0x1877C (100220)
+    f32  DEBUG_mfVehicleDustAmount;   // +0x18780 (100224)
+    f32  DEBUG_mfVehicleCrumpleAmount;   // +0x18784 (100228)
+    f32  DEBUG_mfSelfIlluminationR;   // +0x18788 (100232)
+    f32  DEBUG_mfSelfIlluminationG;   // +0x1878C (100236)
+    f32  DEBUG_mfSelfIlluminationB;   // +0x18790 (100240)
 
     // X360 +0x18740..+0x18770. These are the named vehicle-cannon request
     // members initialised by RaceCarEntityModule::Construct/Destruct and written
     // by WorldDebugComponent. ARTIST contains no reader for the request in the
     // final image; they remain represented because the debug component publishes
     // them exactly.
-    bool    DEBUG_mbSpawnDebugRaceCarThisFrame = false; // +0x18740 (100160)
-    bool    DEBUG_mbCleanDebugRaceCarThisFrame = false; // +0x18741 (100161)
-    bool    DEBUG_mbDebugRaceCarIsActive = false;       // +0x18742 (100162)
-    Vector3 DEBUG_mDebugRaceCarPosition = { 0.0f, 0.0f, 0.0f, 0.0f }; // +0x18750
-    Vector3 DEBUG_mDebugRaceCarDirection = { 0.0f, 0.0f, 0.0f, 0.0f }; // +0x18760
-    f32     DEBUG_mfDebugRaceCarVelocity = 0.0f;        // +0x18770 (100208)
-    RaceCar* DEBUG_mpDebugRaceCar = 0;            // DWARF :469
+    bool    DEBUG_mbSpawnDebugRaceCarThisFrame; // +0x18740 (100160)
+    bool    DEBUG_mbCleanDebugRaceCarThisFrame; // +0x18741 (100161)
+    bool    DEBUG_mbDebugRaceCarIsActive;       // +0x18742 (100162)
+    Vector3 DEBUG_mDebugRaceCarPosition; // +0x18750
+    Vector3 DEBUG_mDebugRaceCarDirection; // +0x18760
+    f32     DEBUG_mfDebugRaceCarVelocity;        // +0x18770 (100208)
+    RaceCar* DEBUG_mpDebugRaceCar;            // DWARF :469
 
     // ========================================================================
     // MODELLED members (paint wave 2026-08-02): the two DEBUG COLOUR OVERRIDES
@@ -1432,16 +1421,16 @@ private:
     // whole function: dropping them would have made the body a partial slice for two
     // branches that cost nothing.
     // ========================================================================
-    bool DEBUG_mbOverrideCarColor    = false;   // +0x18794 (100244)
-    f32  DEBUG_mfOverridePaintColorR = 0.0f;    // +0x18798 (100248)
-    f32  DEBUG_mfOverridePaintColorG = 0.0f;    // +0x1879C (100252)
-    f32  DEBUG_mfOverridePaintColorB = 0.0f;    // +0x187A0 (100256)
-    f32  DEBUG_mfOverridePearlColorR = 0.0f;    // +0x187A4 (100260)
-    f32  DEBUG_mfOverridePearlColorG = 0.0f;    // +0x187A8 (100264)
-    f32  DEBUG_mfOverridePearlColorB = 0.0f;    // +0x187AC (100268)
-    bool DEBUG_mbOverrideCarPalette  = false;   // +0x187B0 (100272)
-    s32  DEBUG_miPaletteIndex        = 0;       // +0x187B4 (100276)
-    s32  DEBUG_miColourIndex         = 0;       // +0x187B8 (100280)
+    bool DEBUG_mbOverrideCarColor;   // +0x18794 (100244)
+    f32  DEBUG_mfOverridePaintColorR;    // +0x18798 (100248)
+    f32  DEBUG_mfOverridePaintColorG;    // +0x1879C (100252)
+    f32  DEBUG_mfOverridePaintColorB;    // +0x187A0 (100256)
+    f32  DEBUG_mfOverridePearlColorR;    // +0x187A4 (100260)
+    f32  DEBUG_mfOverridePearlColorG;    // +0x187A8 (100264)
+    f32  DEBUG_mfOverridePearlColorB;    // +0x187AC (100268)
+    bool DEBUG_mbOverrideCarPalette;   // +0x187B0 (100272)
+    s32  DEBUG_miPaletteIndex;       // +0x187B4 (100276)
+    s32  DEBUG_miColourIndex;       // +0x187B8 (100280)
 
     // ========================================================================
     // MODELLED member (physics-return-path wave 2026-08-11). Same additive rule as the
@@ -1623,8 +1612,8 @@ private:
     bool mbIsInOnlineGameMode;          // +0x18345 (99141)
     bool mbOnlineModeJustFinished;      // +0x18346 (99142)
     bool mbCarSelectAllowedInGameMode;  // +0x18347 (99143)
-    bool mbDisplayPlayerCarPosition = true;  // +0x18349 (99145), Construct seeds the registered switch to 1
-    bool mbRivalDebug = false;               // +0x1834A (99146), Construct seed / DebugRenderPosition reader
+    bool mbDisplayPlayerCarPosition;  // +0x18349 (99145), Construct seeds the registered switch to 1
+    bool mbRivalDebug;               // +0x1834A (99146), Construct seed / DebugRenderPosition reader
     bool mbSixaxisSteeringEnabled;      // +0x1834D (99149)
     bool mbPaybackSixaxisSteering;      // +0x1834E (99150)
 
