@@ -152,9 +152,8 @@ bool MomentController::MomentHandle::Release()
 // This is the ONE TU that sees all twelve concrete moment types, so it is the only place the pool's
 // slot size can be checked against them. AbstractPool::AllocateVoid<T>'s own "object is too large"
 // CGS_ASSERT is NON-FATAL (it fires and the placement-new proceeds into a slot too small), so it is
-// caught at COMPILE time instead. With the console's literal 70-unit (1120 B) bucket,
-// MomentPlayerJumping is 1296 B on this x64 host -- see the HOST BUCKET WIDENING banner in
-// BrnMomentController.h.
+// caught at COMPILE time instead. Every native moment must fit the ARTIST 70-unit
+// (1120-byte) bucket; changing the slot stride would also change the pool ABI.
 namespace
 {
     typedef MomentController::MomentPool::Bucket MomentBucket;
