@@ -42,6 +42,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                           // Array<ImageLoadRequest,3>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                        // CgsContainers::BitArray<3>
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"            // CgsNetwork::NetworkTexture
+#include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h" // Name + XUID identity
 #include "GameSource/BurnoutConstants.h"                                          // EActiveRaceCarIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                            // GameStateModuleIO::EImageType / EImageGalleryType
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                            // OutputBuffer / GameActionQueue
@@ -61,17 +62,18 @@ namespace BrnGameState
 // types when those TUs land (offsets must not move).
 // ---------------------------------------------------------------------------
 
-// Read by HandleImageSaveEvent (X360 0x82391AA8). The X360 reads: a 16-byte unique-player-id at
-// +0x00, the road id at *(a2+0)..its slots, the EImageType at +0x18 (a2[6]), and the texture
-// pointer at +0x1C (a2[7]). Built by the mugshot-capture path; modelled as the words this sink reads.
+// Read by HandleImageSaveEvent (X360 0x82391AA8). The network producer supplies the complete
+// 24-byte X360 UniquePlayerID (16-byte name + 64-bit XUID) at +0x00; image type is at +0x18
+// and the texture pointer is console +0x1C / host +0x20. Keep the identity typed end to end.
 struct ImageToSaveEvent
 {
-    u64                           mu64UniqueIdLo;     // +0x00 (UniquePlayerID lo)  -> AddMugshot arg0/1
-    u64                           mu64UniqueIdHi;     // +0x08 (UniquePlayerID hi)
-    u8                            maPad0x10[0x18 - 0x10];
-    GameStateModuleIO::EImageType meImageType;        // +0x18 (a2[6]) -> gallery-type mapping
-    CgsNetwork::NetworkTexture*   mpTexture;           // +0x1C (a2[7]) -> RequestImageSave
+    CgsNetwork::UniquePlayerIDX360 mUniquePlayerID;  // +0x00 (24 bytes: PlayerName + XUID)
+    GameStateModuleIO::EImageType  meImageType;      // +0x18 -> gallery-type mapping
+    CgsNetwork::NetworkTexture*    mpTexture;        // X360 +0x1C; host +0x20 -> RequestImageSave
 };
+static_assert(sizeof(CgsNetwork::UniquePlayerIDX360) == 0x18, "X360 name+XUID is 24 bytes");
+static_assert(offsetof(ImageToSaveEvent, meImageType) == 0x18, "image type follows the full identity");
+static_assert(offsetof(ImageToSaveEvent, mpTexture) == 0x20, "host texture pointer follows image type");
 
 // Read by HandleImageFilesLoadedEvent (X360 0x82384548). One per-slot file-info record (the X360
 // walks 3 of them, each 16 bytes / 4 words): miFileID@+0x00 (>-1 == valid), miSize@+0x04,

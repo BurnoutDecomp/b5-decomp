@@ -290,13 +290,10 @@ public:
     void SetBestStuntStats(s32 liCompletedBarrelRolls, f32 lfCompletedAirSpinAngle,
                            f32 lfCompletedHandbreakTurnAngle, f32 lfCompletedDriftDistance);
 
-    // FLAG: leMugshotType is GameStateModuleIO::EImageGalleryType (E_IMAGE_GALLERY_TYPE_COUNT == 5,
-    // from DWARF); that enum is not yet homed in the committed tree, so the parameter is the s32 the
-    // X360 compares against 5. lUniqueID is MugshotInfo::UniquePlayerID (2 qwords on X360); its real
-    // layout is unrecovered (see MugshotInfo), so it is taken as a 16-byte opaque struct here.
-    struct MugshotUniqueIdArg { u64 mu64Lo; u64 mu64Hi; };
-    s32  AddMugshot(s32 leMugshotType, MugshotUniqueIdArg lUniqueID,
-                    CgsSystem::DateAndTime lDateTaken, s32 leWorldRegion);
+    // X360/DecFIGS shape: gallery enum, full 24-byte UniquePlayerID (name + XUID), DateAndTime,
+    // and 8-byte WorldRegion. ARTIST 0x82391AA8 forwards all identity qwords and r10 region.
+    s32  AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
+                    CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lWorldRegion);
     s32  GetNumMugshots(s32 leMugshotType);
     s32  GetNumAllMugshots();
     // Debug-info accessors, inlined into ProgressionManager::OnMugshotSent (+117992 increment, then read).

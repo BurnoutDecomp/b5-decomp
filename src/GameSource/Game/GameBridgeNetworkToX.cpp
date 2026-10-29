@@ -501,9 +501,8 @@ namespace BrnGame
                 }
                 case NetIO::NetworkOutMugshotToSaveEvent::KI_EVENT_TYPE:                    // 58
                 {
-                    // The console copies the 32-byte record straight across; the game-state record
-                    // (ImageToSaveEvent) holds the same four fields, with the texture pointer
-                    // widened on the host, so it is copied by member.
+                    // Keep the full typed 24-byte name+XUID identity intact as event 156 crosses
+                    // into GameState; the texture pointer widens only after the ID and image type.
                     const NetIO::NetworkOutMugshotToSaveEvent* lpMugshotToSaveEvent =
                         reinterpret_cast<const NetIO::NetworkOutMugshotToSaveEvent*>(lpEvent);
                     CGS_ASSERT(lpMugshotToSaveEvent != 0, "lpMugshotToSaveEvent");
@@ -511,8 +510,7 @@ namespace BrnGame
                     static_assert(offsetof(BrnGameState::ImageToSaveEvent, meImageType) ==
                                   sizeof(lpMugshotToSaveEvent->mUniquePlayerID),
                                   "the unique player id fills the record up to the image type");
-                    std::memcpy(&lImageToSave, &lpMugshotToSaveEvent->mUniquePlayerID,
-                                sizeof(lpMugshotToSaveEvent->mUniquePlayerID));
+                    lImageToSave.mUniquePlayerID = lpMugshotToSaveEvent->mUniquePlayerID;
                     lImageToSave.meImageType = lpMugshotToSaveEvent->meImageGalleryType;
                     lImageToSave.mpTexture   = lpMugshotToSaveEvent->mpTexture;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lImageToSave, 156);
