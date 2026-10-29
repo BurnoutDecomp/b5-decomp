@@ -216,10 +216,10 @@ namespace CgsGraphics
         std::memcpy(lIndexBufferLockInfo.mpBits, mau16CubeIndices, sizeof(mau16CubeIndices));
         renderengine::IndexBuffer::Unlock(lpIndexBufferHeader, &lIndexBufferLockInfo);
 
-        mDrawParameters.mePrimitiveType = 13u;
-        mDrawParameters.muBaseVertexIndex = 0u;
-        mDrawParameters.muMinVertexIndex = 0u;
-        mDrawParameters.muNumVertices = 24u;
+        mDrawParameters.SetPrimitiveType(static_cast<renderengine::PrimitiveType>(13));
+        mDrawParameters.SetBaseVertexIndex(0u);
+        mDrawParameters.SetStartIndex(0u);
+        mDrawParameters.SetIndexCount(24u);
 
         // ARTIST requests a 0x10-byte console record; the two pointer fields are 64-bit in this
         // PC record, so size this passed-allocator request from the actual host type.
@@ -408,10 +408,10 @@ namespace CgsGraphics
             maQueryIds[miOccludeeIndex] = static_cast<u16>(miNextQueryIndex);
             D3DDevice_BeginConditionalSurvey(gpXboxD3DDevice, static_cast<u32>(miNextQueryIndex), 1u);
             D3DDevice_DrawIndexedVertices(gpD3DDevice,
-                                          mDrawParameters.mePrimitiveType,
-                                          mDrawParameters.muBaseVertexIndex,
-                                          mDrawParameters.muMinVertexIndex,
-                                          mDrawParameters.muNumVertices);
+                                          mDrawParameters.GetPrimitiveType(),
+                                          mDrawParameters.GetBaseVertexIndex(),
+                                          mDrawParameters.GetStartIndex(),
+                                          mDrawParameters.GetIndexCount());
             D3DDevice_EndConditionalSurvey(gpXboxD3DDevice, 0u);
 
             ++miNextQueryIndex;

@@ -153,7 +153,7 @@ void BrnSkyDomeManager::CreateGeometry(
     *lppVertexBuffer = reinterpret_cast<renderengine::VertexBuffer*>(lpVbHeader);
     CGS_ASSERT(*lppVertexBuffer, "NULL != (*lppVertexBuffer)");
 
-    lpDrawIndexedParams->muBaseVertexIndex = 0u;
+    lpDrawIndexedParams->SetBaseVertexIndex(0u);
 
     renderengine::VertexBuffer_Xbox2UnSet(lpVbHeader);
     u8* const lpVertexBase = reinterpret_cast<u8*>(static_cast<usize>(static_cast<u32>(
@@ -281,9 +281,9 @@ void BrnSkyDomeManager::CreateGeometry(
     *lppIndexBuffer = reinterpret_cast<renderengine::IndexBuffer*>(lpIbHeader);
     CGS_ASSERT(*lppIndexBuffer, "(*lppIndexBuffer)");
 
-    lpDrawIndexedParams->muMinVertexIndex = 0u;
-    lpDrawIndexedParams->muNumVertices = static_cast<u32>(liIndexCount);
-    lpDrawIndexedParams->mePrimitiveType = 6u;
+    lpDrawIndexedParams->SetStartIndex(0u);
+    lpDrawIndexedParams->SetIndexCount(static_cast<u32>(liIndexCount));
+    lpDrawIndexedParams->SetPrimitiveType(static_cast<renderengine::PrimitiveType>(6));
 
     renderengine::IndexBufferLockInfo lLockInfo;
     const int liLocked = renderengine::IndexBuffer::Lock(
@@ -592,10 +592,10 @@ namespace
     void DrawSkyDome(const DrawIndexedParameters& lrParameters)
     {
         D3DDevice_DrawIndexedVertices(gpD3DDevice,
-                                      lrParameters.mePrimitiveType,
-                                      lrParameters.muBaseVertexIndex,
-                                      lrParameters.muMinVertexIndex,
-                                      lrParameters.muNumVertices);
+                                      lrParameters.GetPrimitiveType(),
+                                      lrParameters.GetBaseVertexIndex(),
+                                      lrParameters.GetStartIndex(),
+                                      lrParameters.GetIndexCount());
     }
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsPackedOobb.h"  // CgsGraphics::PackedOobb (16B)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"  // CgsResource::ResourceDescriptor
 
@@ -20,15 +21,8 @@
 
 namespace CgsGraphics { struct MaterialAssembly; }
 
-// DWARF renderablemesh.h:141 -- the per-mesh indexed-draw descriptor (4x u32). Defined at
-// its point of use until a canonical shared home is established.
-struct DrawIndexedParameters
-{
-    u32 mePrimitiveType;
-    u32 muBaseVertexIndex;
-    u32 muMinVertexIndex;
-    u32 muNumVertices;
-};
+// Existing global spelling names the single genuine native SDK type.
+typedef renderengine::DrawIndexedParameters DrawIndexedParameters;
 
 struct RenderableMesh
 {

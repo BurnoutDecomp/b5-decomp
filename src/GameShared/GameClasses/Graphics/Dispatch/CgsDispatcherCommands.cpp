@@ -577,7 +577,7 @@ void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32
     Vector4** lppConstScratch = reinterpret_cast<Vector4**>(ReadCommandPointer(&lpWords[4]));
 
     if (lpMesh->mu8InstanceCount != 0
-        || lpMesh->mDrawIndexedParameters.muNumVertices < suOcclusionCullIndexCountThreshold)
+        || lpMesh->mDrawIndexedParameters.GetIndexCount() < suOcclusionCullIndexCountThreshold)
     {
         spOcclusionCullManager->TrivialAcceptOccludeeBoundingBox();
         return;
