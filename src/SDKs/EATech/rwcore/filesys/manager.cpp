@@ -23,7 +23,8 @@
 //   Free   = (*(*alloc + 12))(alloc, block, 0)
 // =====================================================================================
 
-#include "SDKs/EATech/rwcore/filesys/device.h"   // Manager / Device / Allocator / FileSystemConfig
+#include "SDKs/EATech/rwcore/filesys/device.h"
+#include "SDKs/EATech/rwcore/filesys/xenonfiledriver.h"   // Manager / Device / Allocator / FileSystemConfig
 
 #include <cstring>   // memset, strchr
 #include "types.hpp"   // intptr_t
@@ -42,20 +43,12 @@ namespace rw
             // The global filesys Manager (null until CreateInstance).
             Manager* gpFileSysManager = 0;
 
-            // -----------------------------------------------------------------------------
-            // Un-recoverable rodata referenced by Init (device descriptors + default search
-            // path). The X360 addresses are known but their CONTENTS are not in any export,
-            // so they are modelled as flagged-null placeholders -- NEVER fabricated. When the
-            // device-table / default-path data is recovered, fill these in.
-            //   &dword_8327F098 : the default-device descriptor handed to RegisterDevice
-            //   off_82F91A3C .. off_82F91A48 : a static table of device descriptors
-            //   &unk_821811B4   : the default search-path string
-            // -----------------------------------------------------------------------------
+            // ARTIST82BBF0B8 registers the genuine null fallback first, then
+            // the three native CRT-owned DVD/cache/network provider instances.
+            // The default search path is the literal "D:" at821811B4.
             namespace
             {
-                DeviceDriver* const KP_DEFAULT_DEVICE_DESC = 0;  // the default driver (UNRECOVERED)
-                DeviceDriver* const KAP_DEVICE_TABLE[1] = { 0 }; // the static driver table (UNRECOVERED)
-                const char* const KPC_DEFAULT_SEARCH_PATH = 0;// &unk_821811B4   (UNRECOVERED)
+                const char KAC_DEFAULT_SEARCH_PATH[] = "D:";
             }
 
             // -----------------------------------------------------------------------------
@@ -200,26 +193,22 @@ namespace rw
             int Manager::Init()
             {
                 mpScratchBuffer   = static_cast<char*>(Allocate(muScratchSize));      // a1[11]
-                mpSearchPathTable = static_cast<SearchPathEntry*>(Allocate(8 * muMaxSearchPaths)); // a1[15]
+                mpSearchPathTable = static_cast<SearchPathEntry*>(Allocate(sizeof(SearchPathEntry) * muMaxSearchPaths)); // a1[15]
 
                 // a1[10] = RegisterDevice(off_8327F078, &dword_8327F098, 0). The X360 call
-                // target is gpFileSysManager (== this); the descriptor is UNRECOVERED rodata.
-                mpDefaultDevice = RegisterDevice(KP_DEFAULT_DEVICE_DESC, 0);
+                // target is gpFileSysManager (== this);8327F098 is the null driver.
+                mpDefaultDevice = RegisterDevice(&gNullFileDriver, 0);
 
-                // Register every entry in the static device table [off_82F91A3C, off_82F91A48).
-                // The table CONTENTS are UNRECOVERED; the placeholder has a single null entry
-                // so the loop shape (do/while v2 < end) is reproduced without fabricating data.
-                DeviceDriver* const* lpEntry = KAP_DEVICE_TABLE;                     // v2
-                DeviceDriver* const* lpEnd   = KAP_DEVICE_TABLE + 1;                 // table end
+                DeviceDriver* const* lpEntry = gaBuiltinDeviceDrivers;
+                DeviceDriver* const* lpEnd = gaBuiltinDeviceDrivers + 3;
                 do
                 {
                     RegisterDevice(*lpEntry, 0);
                     ++lpEntry;
-                }
-                while (lpEntry < lpEnd);
+                } while (lpEntry < lpEnd);
 
-                mpCurrentDir = KPC_DEFAULT_SEARCH_PATH;     // a1[12] = &unk_821811B4
-                return SetSearchPath(KPC_DEFAULT_SEARCH_PATH);
+                mpCurrentDir = KAC_DEFAULT_SEARCH_PATH;     // a1[12] = &unk_821811B4
+                return SetSearchPath(KAC_DEFAULT_SEARCH_PATH);
             }
 
             // -----------------------------------------------------------------------------

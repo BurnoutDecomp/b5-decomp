@@ -149,6 +149,16 @@ namespace rw
                 s32                           mbSortByPosition;    // X360 +0x40
                 bool                        (*mpErrorHandler)(s32);        // X360 +0x44
 
+                static void CheckNativeLayout()
+                {
+                    CGS_STATIC_ASSERT(sizeof(Manager) == 0x48, "ARTIST filesystem manager allocation");
+                    CGS_STATIC_ASSERT(offsetof(Manager, mThreadParameters) == 0x0c, "ARTIST filesystem thread parameters");
+                    CGS_STATIC_ASSERT(offsetof(Manager, mpDefaultDevice) == 0x28, "ARTIST filesystem default device");
+                    CGS_STATIC_ASSERT(offsetof(Manager, mpCurrentDir) == 0x30, "ARTIST filesystem current directory");
+                    CGS_STATIC_ASSERT(offsetof(Manager, mpErrorHandler) == 0x44, "ARTIST filesystem error handler");
+                    CGS_STATIC_ASSERT(sizeof(SearchPathEntry) == 8, "ARTIST search-path entry");
+                }
+
                 // ----- rw::core::filesys::Manager methods (homed in manager.cpp) ----------
 
                 // @0x82BBE418 (ctor) -- zero the lists, default-construct the thread params
