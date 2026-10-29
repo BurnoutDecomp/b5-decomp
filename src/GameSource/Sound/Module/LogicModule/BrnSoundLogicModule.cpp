@@ -486,7 +486,7 @@ void SoundLogicModule::ProcessGuiEvents(
             u8 lu8PlayOverCustomSoundtrack;
             const bool lbFullChannel155Record =
                 lpuPayload == lpuEventBytes &&
-                liSize >= static_cast<s32>(sizeof(CgsGui::GuiEventPlayMusicOnMenuStream)) &&
+                liSize >= static_cast<s32>(sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>)) &&
                 lpEventHeader->muEventType == 155u &&
                 lpEventHeader->muPayloadOffset == sizeof(GuiEventWireHeader);
             if (lbFullChannel155Record)
@@ -521,10 +521,11 @@ void SoundLogicModule::ProcessGuiEvents(
         {
             CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> lMessage;
             lMessage.Construct(6, 0, 0, 0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
-            if (liType == 201 && liSize >= static_cast<s32>(sizeof(lMessage.mData)))
+            if (liType == 201 && liSize >= static_cast<s32>(
+                sizeof(CgsGui::GuiEventWrapper<BrnGui::GuiAudioTriggerEvent, 40>)))
             {
                 lMessage.mData =
-                    *reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
+                    *reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpuPayload);
             }
             else
             {
