@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsDebugPoolTextures.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 
 #include <cstdlib>   // qsort (the per-frame entry sort)
 
@@ -436,8 +437,8 @@ namespace CgsResource
         // shown, and the selected cell within the page gets a highlight box.
         const s32 liCellsPerPage = liGridSize * liGridSize;
         const s32 liSelected     = miTextureIndex;
-        const s32 liPage         = (liCellsPerPage != 0) ? (liSelected / liCellsPerPage) : 0;
-        const s32 liCellInPage   = (liCellsPerPage != 0) ? (liSelected % liCellsPerPage) : 0;
+        const s32 liPage         = liSelected / liCellsPerPage;
+        const s32 liCellInPage   = liSelected % liCellsPerPage;
         const s32 liPageStart    = liPage * liCellsPerPage;
 
         // The outer frame deducts 8 from its extent (82004C88) and adds 4 to its
@@ -458,13 +459,31 @@ namespace CgsResource
         // ARTIST 828E61E4 subtracts the three-unit gap. Keep the separate half-
         // stride/half-cell products and subtraction at 828E6230..6264, rather
         // than replacing the rounded inset calculation with a fixed constant.
-        const f32 lfInvGrid = (liGridSize != 0) ? (1.0f / static_cast<f32>(liGridSize)) : 0.0f;
-        // The original refines vrefp(2) twice. The host seed is correctly rounded;
-        // exact hardware estimate bits/status retain the shared VMX model limits.
-        f32 lfHalfStrideScale = 1.0f / 2.0f;
-        for (s32 liRefinement = 0; liRefinement < 2; ++liRefinement)
+        const f32 lfInvGrid = 1.0f / static_cast<f32>(liGridSize);
+        const Vector2 lv2CellStride =
         {
-        }
+            lv2FrameSize.x * lfInvGrid,
+            lv2FrameSize.y * lfInvGrid,
+            0.0f, 0.0f,
+        };
+        const Vector2 lv2CellSize =
+        {
+            lv2CellStride.x - 3.0f,
+            lv2CellStride.y - 3.0f,
+            0.0f, 0.0f,
+        };
+        // ARTIST828E6230..828E6264 keeps both products before subtracting the inset.
+        const f32 lfHalfStrideScale = 0.5f;
+        volatile f32 lfHalfStrideX = lv2CellStride.x * lfHalfStrideScale;
+        volatile f32 lfHalfStrideY = lv2CellStride.y * lfHalfStrideScale;
+        volatile f32 lfHalfCellX = lv2CellSize.x * 0.5f;
+        volatile f32 lfHalfCellY = lv2CellSize.y * 0.5f;
+        const Vector2 lv2CellInset =
+        {
+            lfHalfStrideX - lfHalfCellX,
+            lfHalfStrideY - lfHalfCellY,
+            0.0f, 0.0f,
+        };
 
         // Background frame for the whole grid (the X360's first RenderTexture call before the loop):
         // position = Position+{4,4}, size = Size-{8,8}, flags (true,false).
