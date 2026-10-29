@@ -17,7 +17,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
 #include <cmath>
-#include <limits>
+#include <vectorintrinsics.h>
 
 namespace BrnSound
 {
@@ -182,28 +182,18 @@ bool DeformationEffect::Attach()
     return true;
 }
 
-// ARTIST 826B55F8. FLAG (model): vmsum = one rounding of the f64 sum
-// (xenia DOT_PRODUCT_3), with VMX denormal flush and finite-overflow QNaN.
+// ARTIST826B55F8: the original VMX three-component dot product.
 static f32 DeformationDisplacementSquared(const Vector3& lDisplacement)
 {
-    const auto flush = [](f32 v) {
-        return std::fpclassify(v) == FP_SUBNORMAL ? std::copysign(0.0f, v) : v;
-    };
-    const double x = flush(lDisplacement.x);
-    const double y = flush(lDisplacement.y);
-    const double z = flush(lDisplacement.z);
-    const double sum = (x * x + y * y) + z * z;
-    const f32 result = static_cast<f32>(sum);
-    if (std::isfinite(sum) && std::isinf(result))
-        return std::numeric_limits<f32>::quiet_NaN();
-    return flush(result);
+    const __vector4 lvDisplacement = __lvx(&lDisplacement, 0);
+    return __vmsum3fp(lvDisplacement, lvDisplacement).x;
 }
 
 void DeformationEffect::UpdateParams(f32 afTimeStep)
 {
-    auto* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-    const auto* lpInput = lpModule->GetBrnInputStructure();
-    const auto& lFrame = lpModule->GetFrameInformation();
+    BrnSound::Module::SoundLogicModule* lpModule = static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    const BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    const BrnSound::Logic::FrameInformation& lFrame = lpModule->GetFrameInformation();
     const f32 lfVolume = GetMixerOutputValue(0, 0);
     const f32 lfPitch = GetMixerOutputValue(2, 1);
     const f32 lfAzimuth = GetMixerOutputValue(1, 3);
@@ -214,10 +204,10 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
         lFrame.meImpactTime.GetCurrent() == AttribSys::Enums::eImpactTime::VSlow);
     if (mbDeforming.GetCurrent())
     {
-        const auto* lpDeformation = lpInput->GetDeformationInterface().mpDeformationState;
+        const BrnPhysics::Deformation::DeformationState* lpDeformation = lpInput->GetDeformationInterface().mpDeformationState;
         if (lpDeformation != 0)
         {
-            const auto* lpCar = lpDeformation->GetCarStateF(
+            const BrnPhysics::Deformation::CarState* lpCar = lpDeformation->GetCarStateF(
                 mpPhysicsControl->GetRawPhysicsData()->mEntityId.muValue);
             if (lpCar != 0)
             {
@@ -231,7 +221,7 @@ void DeformationEffect::UpdateParams(f32 afTimeStep)
                 for (u32 i = 0; i < lpCar->mu8NumSensors; ++i)
                 {
                     // GetSensor's attested accessor is non-const but only reads.
-                    const auto& lSensor = const_cast<BrnPhysics::Deformation::CarState*>(lpCar)
+                    const BrnPhysics::Deformation::CarSensorState& lSensor = const_cast<BrnPhysics::Deformation::CarState*>(lpCar)
                         ->GetSensor(static_cast<u8>(i));
                     const f32 lfSquared = DeformationDisplacementSquared(lSensor.mDisplacement);
                     lfMaximum = (lfMaximum - lfSquared >= 0.0f) ? lfMaximum : lfSquared;

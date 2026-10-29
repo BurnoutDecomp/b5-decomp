@@ -187,10 +187,14 @@ void DebugComponent::InstallConsole(EConsole)
     {
         RegisterVariable(&meOutput, "Console");
         SetRange(&meOutput, 0, 2);
-        maConsoleNames[0] = { E_AUDIO, "Audio Only" }; // table 0x82F2FCF0
-        maConsoleNames[1] = { E_GAME, "Game Only" }; // 0x82F2FCF4
-        maConsoleNames[2] = { E_AUDIO_AND_GAME, "Audio AND Game" }; // 0x82F2FCF8
-        maConsoleNames[3] = { E_MAX_CONSOLES, 0 }; // 0x82F2FCFC
+        maConsoleNames[0].miValue = E_AUDIO; // table 0x82F2FCF0
+        maConsoleNames[0].mpcName = "Audio Only";
+        maConsoleNames[1].miValue = E_GAME; // 0x82F2FCF4
+        maConsoleNames[1].mpcName = "Game Only";
+        maConsoleNames[2].miValue = E_AUDIO_AND_GAME; // 0x82F2FCF8
+        maConsoleNames[2].mpcName = "Audio AND Game";
+        maConsoleNames[3].miValue = E_MAX_CONSOLES; // 0x82F2FCFC
+        maConsoleNames[3].mpcName = 0;
         SetOptions(&meOutput, maConsoleNames);
         SetChangeCallback(&meOutput, &ConsoleChangeCallback, this);
         sbConsoleRegistered = true;
@@ -697,8 +701,14 @@ void DebugComponent::UpdateMaxRpmDisplay()
 void DebugComponent::BuildMaterialNames()
 {
     for (s32 liIndex = 0; liIndex < 25; ++liIndex)
-        maCollisionMaterialNames[liIndex] = { liIndex, KA_COLLISION_MATERIAL_NAMES[liIndex] };
-    maCollisionMaterialNames[25] = { 0, 0 };
+        {
+            maCollisionMaterialNames[liIndex].miValue = liIndex;
+            maCollisionMaterialNames[liIndex].mpcName = KA_COLLISION_MATERIAL_NAMES[liIndex];
+        }
+    {
+        maCollisionMaterialNames[25].miValue = 0;
+        maCollisionMaterialNames[25].mpcName = 0;
+    }
 
     SetOptions(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_MATERIAL, maCollisionMaterialNames);
     SetRange(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_MATERIAL, 0, 25);
@@ -708,9 +718,18 @@ void DebugComponent::BuildMaterialNames()
 void DebugComponent::BuildActionNames()
 {
     for (s32 liIndex = 0; liIndex < 6; ++liIndex)
-        maCollisionActionNames[liIndex] = { liIndex + 1, KA_COLLISION_ACTION_NAMES[liIndex] };
-    maCollisionActionNames[6] = { 0, "Off" };
-    maCollisionActionNames[7] = { 0, 0 };
+        {
+            maCollisionActionNames[liIndex].miValue = liIndex + 1;
+            maCollisionActionNames[liIndex].mpcName = KA_COLLISION_ACTION_NAMES[liIndex];
+        }
+    {
+        maCollisionActionNames[6].miValue = 0;
+        maCollisionActionNames[6].mpcName = "Off";
+    }
+    {
+        maCollisionActionNames[7].miValue = 0;
+        maCollisionActionNames[7].mpcName = 0;
+    }
 
     SetOptions(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_ACTION, maCollisionActionNames);
     SetRange(&BrnSound::Logic::Collision::KI_DEBUG_FILTER_ACTION, 0, 7);
@@ -731,7 +750,10 @@ void DebugComponent::BuildSplicerBankNames()
             ->GetContentSpec().GetName().GetCString();
         ++liIndex;
     }
-    maSpliceBankNames[liIndex] = { 0, 0 };
+    {
+        maSpliceBankNames[liIndex].miValue = 0;
+        maSpliceBankNames[liIndex].mpcName = 0;
+    }
 
     SetOptions(&miSpliceBankIndex, maSpliceBankNames);
     SetRange(&miSpliceBankIndex, 0, liIndex - 1);

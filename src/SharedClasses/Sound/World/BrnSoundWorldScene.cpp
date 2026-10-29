@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "SharedClasses/Sound/World/BrnSoundWorldScene.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -19,13 +20,16 @@ namespace Logic
 namespace World
 {
 
-// DWARF BrnSoundWorldScene.cpp:38 -- the static-map spew switch (.bss 0x82FFB8CA, default false),
-// read at the four "[Static map]" spew sites: HandleWorldZoneLoad 0x8269BF60, Update 0x826E659C,
-// ResourcesAreReady 0x826BA9E0, HandleWorldZoneUnload 0x826BAB28 (each also requires
-// gxMessageFilterFlags bit 0). [DIAG] NOT IN THE X360 BINARY: BRN_EMITTER_DIAG=1 turns it on for a
-// harness run, standing in for the debugger/menu that flips it on a console.
+// DecFIGS BrnSoundWorldScene.cpp:38; ARTIST byte82FFB8CA.
+bool KB_SPEW_STATIC_MAP_INFO = false;
 
- // namespace
+namespace
+{
+bool SpewStaticMapInfo()
+{
+    return KB_SPEW_STATIC_MAP_INFO && (CgsDev::Message::gxMessageFilterFlags & 1u) != 0;
+}
+}
 
 void StaticSoundMapZone::Construct(u16 lu16Zone)
 {
@@ -140,7 +144,7 @@ void SoundWorldScene::HandleWorldZoneUnload(u16 lu16Zone)
         (mbAcquireInProgress && mu16AcquiringZone == lu16Zone))
     {
         char lacResourceName[32];
-        std::snprintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
+        CgsCore::SPrintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
                       static_cast<unsigned>(lrZone.GetZone()), mpcResourceExt);
         GetResourceRegistrar().RemoveRefsToResource(this, lacResourceName);
         if (mbAcquireInProgress && mu16AcquiringZone == lu16Zone)
@@ -186,7 +190,7 @@ void SoundWorldScene::Update()
                 *CgsDev::Log::gpDebugPrint << "[Static map] 2: Aqcuire unit\t"
                                            << static_cast<s32>(mu16AcquiringZone) << "\n";
             char lacResourceName[32];
-            std::snprintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
+            CgsCore::SPrintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
                           static_cast<unsigned>(mu16AcquiringZone), mpcResourceExt);
             // ARTIST constructs a resource-only QueuedResource directly here:
             // resource name in r4, null bundle filename in r5, requester in r6,
@@ -228,7 +232,7 @@ void SoundWorldScene::ResourcesAreReady()
 
     bool lbFound = false;
     char lacResourceName[32];
-    std::snprintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
+    CgsCore::SPrintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
                   static_cast<unsigned>(mu16AcquiringZone), mpcResourceExt);
     CgsResource::ResourceHandle* lpHandle =
         GetResourceRegistrar().GetResource(0, lacResourceName);
