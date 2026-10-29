@@ -57,6 +57,7 @@
 // ===========================================================================
 namespace BrnGui
 {
+    struct GuiMugshotControlEvent;   // BrnGuiDemangledEventTypes.h (id 325); pointer-only here
     class GuiCache;   // stored by pointer only (BrnGuiCache.h)
 
     struct RaceMainHudState : public CgsGui::State
@@ -202,23 +203,21 @@ namespace BrnGui
         void UpdateEventCountdown(const CgsModule::Event* lpEvent); // @ 0x8247A608
         void ConcludeEventCountdown();                            // @ 0x824748F0
         void HandleImpactEvent(const CgsModule::Event* lpEvent);  // (DWARF .cpp:3791)
+        void HandleMugshotEvent(const GuiMugshotControlEvent* lpEvent);  // @0x82475CD0 (DWARF .cpp:3890)
+        void DoMugshot(const GuiMugshotControlEvent* lpEvent);           // @0x82474B20 (DWARF .cpp:3916)
+        void DoRoadRuleShot(const GuiMugshotControlEvent* lpEvent);      // @0x82474D10 (DWARF .cpp:3983)
         void SetupEventInfo();                                    // @ 0x82474A60
         void StartFreeburnChallengeTicker();                      // (DWARF .cpp:4085)
         void StartFreeburnChallengeNotActiveTicker();             // (DWARF .cpp:4185)
         void AddFakeEvents();                                     // (DWARF .cpp:4244)
-        // RESIDUE -- five more DWARF methods are NOT declared here because their parameter
+        // RESIDUE -- three more DWARF methods are NOT declared here because their parameter
         // types have no committed home in the tree yet, and declaring them against a
         // stand-in type would fork the signature the way the struct forked the class:
         //   SendLocaliseEvent(const char*, const char*, f32, CgsGui::LocaliseFormat)  .cpp:3491
         //   RunReplayState(BrnGui::GuiEventChangeReplayState::ReplayState)            .cpp:3850
-        //   HandleMugshotEvent(const GuiMugshotControlEvent*) / DoMugshot(...)        .cpp:3890/3916
-        //   DoRoadRuleShot(const GuiMugshotControlEvent*)                             .cpp:3983
         //   AddCrashCombo(BrnWorld::EComboEntryType, f32)                             .cpp:4058
         // (CgsGui::LocaliseFormat, GuiEventChangeReplayState and BrnWorld::EComboEntryType
-        // are absent; GuiMugshotControlEvent's one home, BrnGuiDemangledEventTypes.h, is an
-        // opaque GuiEvent<325> header plus `u8 maPayload[12]`, while its producer writes a
-        // 24-byte payload from the record's own address: +0x00 road CgsID, +0x08 response,
-        // +0x0C image type, +0x10 opponent race-car index, +0x14 local-aggressor bool.)
+        // are absent.)
 
         // ---- the static .rdata tables (DWARF BrnRaceMainHudState.h:217..221) ----------
         // 76 entries; values read from the XEX image at 0x8205AC08 and landed in the .cpp.
