@@ -13,7 +13,7 @@ namespace CgsAttribSys
 {
 // CgsAttribSys::AttribSysMemoryManager -- the AttribSys memory front-end.
 //
-// A namespace-of-statics manager (an all-static "class" in the DWARF home
+// Native lifecycle receiver with shared allocator state (DWARF home
 // GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h). Prepare()
 // adopts the engine's LinearMalloc and three HeapMallocs and Construct()s/Prepare()s
 // the three AttribSysPackageAllocators (one each for AttribSys, GameTalk, EASTL);
@@ -21,10 +21,9 @@ namespace CgsAttribSys
 // AttribSys vendor library. The sbHasLinearAllocator flag records that Prepare()
 // has run and gates the accessors.
 //
-// Member set + the alignment constants are recovered from the DecFIGS DWARF
-// (CgsAttribSysMemoryManager.h / .cpp). Only GetAttribSysAllocator() is bodied in
-// this TU's .cpp (X360 0x821F02A0); the other members are declared so callers
-// compile and are bodied in their own TUs.
+// Native Prepare @0x828043B8 receives this in r3 and the four allocators in
+// r4-r7. The module calls it on its mMemoryManager member at +0x228; allocator
+// state remains shared in the original file-scope storage.
 class AttribSysMemoryManager
 {
 public:
@@ -34,13 +33,13 @@ public:
     static const s32 KI_GAMETALK_ALLOC_ALIGNMENT  = 4;
     static const s32 KI_EASTL_ALLOC_ALIGNMENT     = 4;
 
-    static void Construct();
-    static bool Prepare(CgsMemory::LinearMalloc* lpLinearAllocator,
+    void Construct();
+    bool Prepare(CgsMemory::LinearMalloc* lpLinearAllocator,
                         CgsMemory::HeapMalloc* lpAttribSysHeap,
                         CgsMemory::HeapMalloc* lpGameTalkHeap,
                         CgsMemory::HeapMalloc* lpEaStlHeap);
-    static bool Release();
-    static void Destruct();
+    bool Release();
+    void Destruct();
 
     // X360 0x821F02A0 -- the AttribSys package allocator. Asserts the manager has
     // been Prepare'd (sbHasLinearAllocator) then returns &sAttribSysAllocator.
