@@ -730,7 +730,7 @@ OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface()
     return &mGlobalRaceCarOutputInterface;
 }
 
-// X360 0x8279E678 (R, :578) -- const replay active-race-car output accessor.
+// X360 0x8279E870 (R, :578) -- const replay active-race-car output accessor at +840704.
 const RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface() const
 {
@@ -738,8 +738,8 @@ OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface() const
     return &mReplayActiveRaceCarOutputInterface;
 }
 
-// X360 0x822B6488 (W, :579) -- mutable replay active-race-car output accessor
-// (pairs with the const overload above at the identical +826992 offset).
+// X360 0x822B6680 (W, :579) -- mutable replay active-race-car output accessor
+// (pairs with the const overload above at the identical +840704 offset).
 RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface()
 {
@@ -747,7 +747,7 @@ OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface()
     return &mReplayActiveRaceCarOutputInterface;
 }
 
-// X360 0x822B6920 (W, :582) -- mutable replay global-race-car output accessor.
+// X360 0x822B6728 (W, :582) -- mutable replay global-race-car output accessor at +851184. The DWARF const twin has no X360 reader body in the export map.
 RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayGlobalRaceCarOutputInterface()
 {
@@ -755,7 +755,23 @@ OutputBuffer_PostPhysics::GetReplayGlobalRaceCarOutputInterface()
     return &mReplayGlobalRaceCarOutputInterface;
 }
 
-// X360 0x8279E9C0 (R, :590) -- const vehicle-input accessor (re-exposed on PostPhysics).
+// X360 0x8279E9C0 (R, :587) / 0x822B6878 (W, :588) -- the typed eleven-slot
+// replay registration interface at +855152. The input interface follows it at +855200.
+const OutputBuffer_PostPhysics::ReplayRequestInterface*
+OutputBuffer_PostPhysics::GetReplayRequestInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mReplayRequestInterface;
+}
+
+OutputBuffer_PostPhysics::ReplayRequestInterface*
+OutputBuffer_PostPhysics::GetReplayRequestInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mReplayRequestInterface;
+}
+
+// DWARF :590 -- const vehicle-input accessor (re-exposed on PostPhysics).
 const OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PostPhysics::GetVehicleInputInterface() const
 {
@@ -763,8 +779,7 @@ OutputBuffer_PostPhysics::GetVehicleInputInterface() const
     return &mVehicleInputInterface;
 }
 
-// X360 0x822B6878 (W, :591) -- mutable vehicle-input accessor (pairs with the const
-// overload above at the identical +855152 offset).
+// X360 0x822B6920 (W, :591) -- mutable vehicle-input accessor at +855200.
 OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PostPhysics::GetVehicleInputInterface()
 {

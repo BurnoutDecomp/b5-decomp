@@ -36,6 +36,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface
 #include <cstring>   // memset (partial-slice Constructs)                                                       // s8/s32/u8/u16/u32/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (per-race-car header-inline setters)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                      // CgsModule::IOBuffer base
@@ -809,7 +810,7 @@ namespace RaceCarEntityModuleIO
     struct OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
         typedef BrnDirector::BrnDirectorVehicleInputInterface DirectorVehicleInputInterface; // :103
-        typedef RaceCarEntityModuleIO::ResourceRequestInterface ReplayRequestInterface;       // :107
+        typedef BrnReplays::ReplayIO::RequestInterface ReplayRequestInterface;                    // :107, X360 11 BaseSerialiser* slots (44 bytes)
 
         // X360 0x822EA8F8 -- IOBuffer status, then VariableEventQueue<8192,16>::Construct +
         // ::Clear on the resource-request ring at +4 (== mResourceRequestInterface.mRequestQueue),
@@ -851,12 +852,13 @@ namespace RaceCarEntityModuleIO
             mReplayActiveRaceCarOutputInterface.Clear();         // X360 +840704
             mReplayGlobalRaceCarOutputInterface.Clear();         // X360 +851184
             mGameEventQueue.Construct();                         // X360 +853600 (VEQ<1536,16>)
-            // [FLAG] the console's 11-word zero fill at +855152 and
-            // VehicleInputInterface::Construct(+855200) are NOT emitted: on the console those two
-            // seats sit between mGameEventQueue and the buffer's end, but the member-offset
-            // attributions recorded on the declarations below disagree with the Construct's own
-            // offsets for the same two seats (see the report's SUSPECT note), so naming them here
-            // would be a guess. Restore both once that attribution is settled.
+            // 0x822EA8F8 zeros eleven pointer slots at +855152 (the X360
+            // ReplayIO::RequestInterface), then constructs the vehicle input interface at +855200.
+            for (u32 luSerialiser = 0; luSerialiser < BrnReplays::ReplayIO::KI_MAX_SERIALISERS; ++luSerialiser)
+            {
+                mReplayRequestInterface.mapSerialisers[luSerialiser] = nullptr;
+            }
+            mVehicleInputInterface.Construct();                  // X360 +855200
         }
         const ResourceRequestInterface* GetResourceRequestInterface() const;              // :563
         ResourceRequestInterface*       GetResourceRequestInterface();                     // :564
@@ -868,27 +870,27 @@ namespace RaceCarEntityModuleIO
         RCEntityActiveRaceCarOutputInterface*       GetActiveRaceCarOutputInterface();              // :573
         const RCEntityGlobalRaceCarOutputInterface* GetGlobalRaceCarOutputInterface() const;        // :575
         RCEntityGlobalRaceCarOutputInterface*       GetGlobalRaceCarOutputInterface();              // :576
-        const RCEntityActiveRaceCarOutputInterface* GetReplayActiveRaceCarOutputInterface() const;  // :578 R (0x8279E678)
-        RCEntityActiveRaceCarOutputInterface*       GetReplayActiveRaceCarOutputInterface();        // :579 W (0x822B6488)
-        const RCEntityGlobalRaceCarOutputInterface* GetReplayGlobalRaceCarOutputInterface() const;  // :581
-        RCEntityGlobalRaceCarOutputInterface*       GetReplayGlobalRaceCarOutputInterface();        // :582 W (0x822B6920)
+        const RCEntityActiveRaceCarOutputInterface* GetReplayActiveRaceCarOutputInterface() const;  // :578 R (0x8279E870, +840704)
+        RCEntityActiveRaceCarOutputInterface*       GetReplayActiveRaceCarOutputInterface();        // :579 W (0x822B6680, +840704)
+        const RCEntityGlobalRaceCarOutputInterface* GetReplayGlobalRaceCarOutputInterface() const;  // :581 (no X360 reader body found)
+        RCEntityGlobalRaceCarOutputInterface*       GetReplayGlobalRaceCarOutputInterface();        // :582 W (0x822B6728, +851184)
         const GameEventQueue* GetGameEventQueue() const;                                   // :584
         GameEventQueue*       GetGameEventQueue();                                         // :585
-        const ReplayRequestInterface* GetReplayRequestInterface() const;                   // :587
-        ReplayRequestInterface*       GetReplayRequestInterface();                         // :588
-        const OutputBuffer_PreScene::VehicleInputInterface* GetVehicleInputInterface() const; // :590 R (0x8279E9C0)
-        OutputBuffer_PreScene::VehicleInputInterface*       GetVehicleInputInterface();       // :591 W (0x822B6878)
+        const ReplayRequestInterface* GetReplayRequestInterface() const;                   // :587 R (0x8279E9C0, +855152)
+        ReplayRequestInterface*       GetReplayRequestInterface();                         // :588 W (0x822B6878, +855152)
+        const OutputBuffer_PreScene::VehicleInputInterface* GetVehicleInputInterface() const; // :590
+        OutputBuffer_PreScene::VehicleInputInterface*       GetVehicleInputInterface();       // :591 W (0x822B6920, +855200)
     private:
         ResourceRequestInterface             mResourceRequestInterface;                    // :595
         OutputBuffer_PreScene::SceneInputInterface mSceneInputInterface;                   // :596  (0x822B5D50 -> +147488)
         DirectorVehicleInputInterface        mDirectorVehicleInputInterface;               // :597
         RCEntityActiveRaceCarOutputInterface mActiveRaceCarOutputInterface;               // :598
         RCEntityGlobalRaceCarOutputInterface mGlobalRaceCarOutputInterface;               // :599
-        RCEntityActiveRaceCarOutputInterface mReplayActiveRaceCarOutputInterface;         // :600  (0x822B6488/0x8279E678 -> +826992)
-        RCEntityGlobalRaceCarOutputInterface mReplayGlobalRaceCarOutputInterface;         // :601  (0x822B6920 -> +855200)
+        RCEntityActiveRaceCarOutputInterface mReplayActiveRaceCarOutputInterface;         // :600  (0x822B6680/0x8279E870 -> +840704)
+        RCEntityGlobalRaceCarOutputInterface mReplayGlobalRaceCarOutputInterface;         // :601  (0x822B6728/0x8279E918 -> +851184)
         GameEventQueue                       mGameEventQueue;                              // :602
-        ReplayRequestInterface               mReplayRequestInterface;                      // :603
-        OutputBuffer_PreScene::VehicleInputInterface mVehicleInputInterface;               // :604  (0x822B6878/0x8279E9C0 -> +855152)
+        ReplayRequestInterface               mReplayRequestInterface;                      // :603  (0x822B6878/0x8279E9C0 -> +855152)
+        OutputBuffer_PreScene::VehicleInputInterface mVehicleInputInterface;               // :604  (0x822B6920 -> +855200)
     };
 
     // ============================================================================

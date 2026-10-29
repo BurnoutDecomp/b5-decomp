@@ -366,7 +366,7 @@ void DirectorModule::ProcessSceneQueryResults(
 // r11,31` -- the decompiler widens it to __int16 and takes HIBYTE; the value is masked to
 // one bit either way, so it is a bool).
 // ----------------------------------------------------------------------------
-s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
+s32 DirectorModule::PreSceneQueryUpdate(CgsModule::IOBufferStack* lpInputBufferStack, CgsModule::IOBufferStack* lpOutputBufferStack,
                                         const DirectorIO::InputBuffer* lpInputBuffer,
                                         DirectorIO::OutputBuffer* lpOutputBuffer,
                                         DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
@@ -374,8 +374,8 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
 {
     // FLAG: the X360 takes these two arguments and never reads them (the module framework
     // passes the same six-argument shape to every module entry point).
-    (void)liUnusedA;
-    (void)liUnusedB;
+    (void)lpInputBufferStack;
+    (void)lpOutputBufferStack;
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfCount_PreSQUpdate);
 
@@ -471,15 +471,15 @@ s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
 //      (mCgsCamera = <that director's CgsGraphics::Camera>);
 //   5. the replay RECORD leg + unconditional serialiser registration.
 // ----------------------------------------------------------------------------
-s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
+s32 DirectorModule::Update(CgsModule::IOBufferStack* lpInputBufferStack, CgsModule::IOBufferStack* lpOutputBufferStack,
                            const DirectorIO::InputBuffer* lpInputBuffer,
                            DirectorIO::OutputBuffer* lpOutputBuffer,
                            const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
                            DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer)
 {
     // FLAG: taken and never read by the X360 body (see PreSceneQueryUpdate).
-    (void)liUnusedA;
-    (void)liUnusedB;
+    (void)lpInputBufferStack;
+    (void)lpOutputBufferStack;
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfCount_MainUpdate);
 
@@ -573,13 +573,13 @@ s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
 // all seven stores). So the whole post office is inert here and Clear() is a no-op; this
 // pass cannot issue or receive queries. Reproduced verbatim.
 // ----------------------------------------------------------------------------
-s32 DirectorModule::PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
+s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputBufferStack, CgsModule::IOBufferStack* lpOutputBufferStack,
                                   const DirectorIO::InputBuffer* lpInputBuffer,
                                   DirectorIO::OutputBuffer* lpOutputBuffer)
 {
     // FLAG: taken and never read by the X360 body (see PreSceneQueryUpdate).
-    (void)liUnusedA;
-    (void)liUnusedB;
+    (void)lpInputBufferStack;
+    (void)lpOutputBufferStack;
 
     CgsDev::PerfMonCpu::StartMonitor(miPerfCount_PostGuiUpdate);
 

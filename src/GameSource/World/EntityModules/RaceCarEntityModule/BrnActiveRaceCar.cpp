@@ -426,11 +426,8 @@ void ActiveRaceCar::Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio)
 //                            and (this+0x1CB0, ...) -- `slot = NULLResourcePtr`
 //                            (dword_82FAD960 IS NULLResourcePtr+0x14, the sentinel's
 //                            {mpThis,muThreadId} pair; see CgsResourcePtr.h:169). Reproduced
-//                            as the HANDLE half only, which is the half this class models
-//                            (maPad1C90a + the two named ResourceHandles).
-//                            [FLAG] the alias-list half of CreateFromHandle is not reproduced
-//                            ANYWHERE in this tree -- OnResourcesLoaded's banner records the
-//                            same gap for the write side.
+//                            by typed ResourcePtr assignment below; both alias and handle
+//                            state follow the console during slot reuse.
 //
 // NOT cleared by the console: meActiveRaceCarIndex (+0x748). The slot keeps its own index for
 // life (Construct is its only writer) -- DetachActiveRaceCar reads it BEFORE calling this, and
@@ -467,12 +464,11 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
     miFlashFrequency                = 0;                       // 0x794
     mbAIToBeActivated               = false;                   // 0x781
 
-    // `slot = CgsResource::NULLResourcePtr` x2 (see the banner). The wrappers themselves are
-    // this class's two opaque ResourcePtr spans; what it models -- and what AddHandlingModel
-    // reads back -- is the handle each stores at its own +0x14, so the pair is dropped to the
-    // null handle by name.
-    mDeformationModelHandle = CgsResource::NULLResourceHandle;   // this+0x1C90 (+0x14)
-    mGraphicsModelHandle    = CgsResource::NULLResourceHandle;   // this+0x1CB0 (+0x14)
+    // `slot = CgsResource::NULLResourcePtr` x2. ResourcePtr's handle assignment is the
+    // console's BaseResourcePtr::CreateFromHandle(this, &NULLResourceHandle) sequence and
+    // unlinks the previous resource alias before installing the null handle.
+    mDeformationModelResourcePtr = CgsResource::NULLResourceHandle; // this+0x1C90
+    mGraphicsModelResourcePtr    = CgsResource::NULLResourceHandle; // this+0x1CB0
 
     // ⚠️ FLAG PC quality-of-life (verify F2, ghostcar): NOT a console store. The render-pose
     // interpolator (mBodyPoseTrack / maWheelPoseTracks, PC-only, reset in Construct) keeps the
@@ -1311,8 +1307,11 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
 
     muState = E_STATE_WAITING;                                       // +0x740 = 2
 
-    mDeformationModelHandle = lrDeformationModelHandle;              // +0x1CA4
-    mGraphicsModelHandle    = lrGraphicsModelHandle;                 // +0x1CC4
+    // ARTIST 0x822EB1FC / 0x822EB20C bind the two wrappers from the incoming handles.
+    // ResourcePtr's handle assignment performs BaseResourcePtr::CreateFromHandle, keeping
+    // both the source handle and the intrusive alias list live for the loaded resources.
+    mDeformationModelResourcePtr = lrDeformationModelHandle; // wrapper +0x14 == +0x1CA4
+    mGraphicsModelResourcePtr    = lrGraphicsModelHandle;    // wrapper +0x14 == +0x1CC4
 
     // 0x822EB20C..0x822EB24C (banner leg 1): Def(this + 0x1C90) + 0x610 copied whole into
     // +0x90. PC-SAFETY GUARD, not console behaviour: a spec that does not resolve fires Def's own
@@ -1333,7 +1332,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     // Prepare/Attach matrix and asserts. The wheel-scale loop below keeps the same guard for the same
     // reason.
     const BrnPhysics::Deformation::StreamedDeformationSpec* lpDeformationSpec =
-        ResolveDeformationSpec( mDeformationModelHandle );
+        ResolveDeformationSpec( mDeformationModelResourcePtr.GetResourceHandle() );
     CGS_ASSERT( lpDeformationSpec != 0,
                 "Can not instance resource pointer - it has no main memory resource\n" );
     if( lpDeformationSpec != 0 )
@@ -1357,7 +1356,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     for( u32 luWheel = 0u; luWheel < 4u; ++luWheel )
     {
         const BrnPhysics::Deformation::StreamedDeformationSpec* lpWheelDeformationSpec =
-            ResolveDeformationSpec( mDeformationModelHandle );
+            ResolveDeformationSpec( mDeformationModelResourcePtr.GetResourceHandle() );
         CGS_ASSERT( lpWheelDeformationSpec != 0,
                     "Can not instance resource pointer - it has no main memory resource\n" );
         if( lpWheelDeformationSpec != 0 )
@@ -1398,6 +1397,30 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
 }
 
 // ============================================================================
+// OnResourcesInvalidated @ 0x822EB500. Invalidate the physics-side race-car resource
+// record, then drop both ResourcePtr aliases to the null handle. The queue payload uses
+// the current wrapper handles before the aliases are cleared.
+// ============================================================================
+void ActiveRaceCar::OnResourcesInvalidated(
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface)
+{
+    BrnPhysics::Vehicle::ValidateRaceCarEvent lrEvent = {};
+    lrEvent.mbValidate = false;
+    lrEvent.mVolumeInstanceID = mHandlingBodyVolumeId;
+    lrEvent.mModelHandle = mDeformationModelResourcePtr.GetResourceHandle();
+    lrEvent.mGraphicsHandle = mGraphicsModelResourcePtr.GetResourceHandle();
+
+    const BrnPhysics::Vehicle::VehicleInputInterface::ValidateRaceCarEventQueue* lpcEvents =
+        lpVehicleInterface->GetValidateRaceCarEvents();
+    BrnPhysics::Vehicle::VehicleInputInterface::ValidateRaceCarEventQueue* lpEvents =
+        const_cast<BrnPhysics::Vehicle::VehicleInputInterface::ValidateRaceCarEventQueue*>(lpcEvents);
+    lpEvents->AddEvent(lrEvent);
+
+    mDeformationModelResourcePtr = CgsResource::NULLResourceHandle;
+    mGraphicsModelResourcePtr = CgsResource::NULLResourceHandle;
+}
+
+// ============================================================================
 // AddHandlingModel @ 0x822D3EC8   (drivable wave 2026-08-01)
 //
 // Hands a just-promoted car to the physics vehicle manager. Every argument below is
@@ -1405,7 +1428,8 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
 // over (it drops the vector velocity and mis-pairs the 64-bit VolumeInstanceId load):
 //   r3 = lpVehicleInterface   r4 = mHandlingBodyVolumeId (ld 0xD0)
 //   r5 = lrInitialTransform   r6 = luCarAssetAttribKey
-//   r7 = mDeformationModelHandle (ld 0x1CA4)   r8 = mGraphicsModelHandle (ld 0x1CC4)
+//   r7 = mDeformationModelResourcePtr's handle (ld 0x1CA4)
+//   r8 = mGraphicsModelResourcePtr's handle (ld 0x1CC4)
 //   r9 = mpRaceCar->GetType() (lbz 0xA4)       f1 = mfBaseDeformAmount (lfs 0x7CC)
 //   stack: meBaseDeformationType (lwz 0x7C8), the computed bool, lu8CarStrengthStat
 //   v1 = lrInitialVelocity     v2 = vspltisw 0  (angular velocity is ALWAYS zero here)
@@ -1440,8 +1464,8 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
         lrInitialVelocity,
         Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },      // asm `vspltisw128 v127, 0` -> v2
         luCarAssetAttribKey,
-        mDeformationModelHandle,
-        mGraphicsModelHandle,
+        mDeformationModelResourcePtr.GetResourceHandle(),
+        mGraphicsModelResourcePtr.GetResourceHandle(),
         mpRaceCar->GetType(),
         mfBaseDeformAmount,                                            // +0x7CC
         meBaseDeformationType,                                         // +0x7C8
@@ -3485,7 +3509,7 @@ void ActiveRaceCar::AddToScene(
 
     // ---- 1. the handling-body box half-extents -------------------------------------
     const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
-        ResolveDeformationSpec(mDeformationModelHandle);
+        ResolveDeformationSpec(mDeformationModelResourcePtr.GetResourceHandle());
     CGS_ASSERT(lpSpec != 0,
                "Can not instance resource pointer - it has no main memory resource\n");
     if (lpSpec == 0)

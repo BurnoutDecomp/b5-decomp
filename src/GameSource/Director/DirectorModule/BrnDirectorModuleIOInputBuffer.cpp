@@ -45,6 +45,8 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mTimerInterface)      == 0x6750, "mTimerInterface @0x6750");
         static_assert(sizeof(CgsSystem::TimerStatusInterface)     == 0x30,   "TimerStatusInterface fills the @0x6750 span exactly");
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
+        static_assert(offsetof(InputBuffer, mWorldEntityStatusInterface) == 0x6AB0, "world entity status @0x6AB0");
+        static_assert(sizeof(BrnWorld::WorldEntityIO::StatusInterface) == 5, "five original world status bytes");
         static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
         static_assert(offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0, "mTrafficOutputInterface @0x6AC0");
         static_assert(sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface) == 0x78E0 - 0x6AC0,
@@ -83,6 +85,44 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbFinished100PercentSequence @0x7AD4");
         static_assert(offsetof(InputBuffer, mbPlayerEliminated)                == 0x7AD5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbPlayerEliminated @0x7AD5");
         static_assert(offsetof(InputBuffer, mbModeTimeExpired)                 == 0x7AD6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbModeTimeExpired @0x7AD6");
+    }
+
+    const BrnGameState::GameStateModuleIO::CarScoreData* InputBuffer::GetPlayerScoreData() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mPlayerScoreData;
+    }
+
+    void InputBuffer::SetPlayerScoreData(const BrnGameState::GameStateModuleIO::CarScoreData* lpScoreData)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mPlayerScoreData = *lpScoreData;
+    }
+
+    bool InputBuffer::GetPlayerComboWarningActive() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbPlayerComboWarningActive;
+    }
+
+    void InputBuffer::SetPlayerComboWarningActive(bool lbActive)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbPlayerComboWarningActive = lbActive;
+    }
+
+    // ARTIST823E3F80..3FA4: five original status bytes, before queue/contact publish.
+    void InputBuffer::SetWorldEntityStatusInterface(const BrnWorld::WorldEntityIO::StatusInterface* lpStatus)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mWorldEntityStatusInterface = *lpStatus;
+    }
+
+    // DWARF BrnDirectorModuleIO.h:237; inlined by823E50A8..50B0.
+    void InputBuffer::SetWorldWantsDebugControllerFocus(bool lbFocus)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbWorldWantsDebugControllerFocus = lbFocus;
     }
 
     // ---- Construct @0x822393D0 --------------------------------------------------------------

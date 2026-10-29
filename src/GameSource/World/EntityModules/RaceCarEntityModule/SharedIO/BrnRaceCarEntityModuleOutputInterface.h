@@ -30,7 +30,7 @@
 namespace BrnResource { struct VehicleListEntry; }
 namespace BrnPhysics { namespace Deformation { struct StreamedDeformationSpec; } }
 namespace BrnGameState { namespace GameStateModuleIO { enum EPlayerScoringIndex : s32; } }
-namespace BrnWorld { struct RaceCar; }
+namespace BrnWorld { struct RaceCar; class RaceCarEntityModule; }
 
 namespace BrnWorld
 {
@@ -141,6 +141,8 @@ namespace RaceCarEntityModuleIO
     // routed to this header's .cpp (X360 0x8227D690).
     struct RCEntityActiveRaceCarOutputInterface
     {
+        friend class BrnWorld::RaceCarEntityModule;
+
         typedef BrnPhysics::Vehicle::RaceCarState RaceCarState;   // :61
 
         // DWARF :415 -- public live race-car list.

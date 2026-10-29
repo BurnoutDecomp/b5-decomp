@@ -1,125 +1,9 @@
-// ============================================================================
-// b5-decomp/src/GameSource/Game/GameBridgeWorldToX.cpp
-//
-// BrnGame::BrnGameModule::BridgeWorldToDirector  @ X360 0x823E3AB0
-//
-// ⭐ THE WORLD -> DIRECTOR SEAM. This is the ONLY caller of
-// DirectorIO::InputBuffer::SetRaceCarInfo @0x823B2B30 anywhere in the image, i.e. the only
-// way a race car's pose ever reaches the director's cameras. Until it existed, the director
-// input's mRaceCarInfo[8] stayed at whatever DoUpdate_Director's zero-fill left, so every
-// VehicleRef the camera behaviours resolve pointed at a zero transform -- an ORIGIN camera.
-//
-// SIGNATURE (recovered from the ASM, not from a stub -- the dropped-argument rule):
-//   IDA's prototype claims sixteen parameters. The prologue @0x823E3AC8..0x823E3AD8 is
-//   `mr r28,r3 / mr r26,r4 / mr r29,r5` and nothing in the body reads r6..r10; a9..a16 are
-//   IDA's names for stack slots the body re-uses as locals ("local variable allocation has
-//   failed" is printed above its own output). The caller DoUpdate_Director @0x823E8DE0
-//   passes (this, a4, a7), and ITS caller DoUpdate @0x823F0AF8 supplies a4 = the
-//   DirectorIO::InputBuffer created for this sub-step and a7 = the BrnWorldIO::
-//   UpdateOutputBuffer -- which DoUpdate creates ONCE per sub-step and threads through
-//   every leg. So: (InputBuffer* lpDirectorInput, const UpdateOutputBuffer* lpWorldOutput).
-//
-// CONSOLE BODY, in order:
-//    1. mDirectorBridgeSerialiser.Lock()
-//    2. mbPlayerCarCrashing = active->IsPlayerCarActive() && active->IsPlayerCarCrashing()
-//    3. if (!active->IsPlayerCarActive())  { input->SetPlayerCarIndex(INVALID); }
-//       else switch on the replay state word:
-//         state 0..3 (recording / not replaying) -> THE LIVE PUBLISH (4..13 below)
-//         state 4..6 (playback)                  -> replay the serialised snapshot instead
-//    4. publish the traffic-director interface (one u16 + a 3588-byte block)
-//    5. publish the world-entity status interface (5 bytes)
-//    6. NewVehicleEvent<50>::Append(input->GetVehicleInputInterface(),
-//                                   world->GetDirectorVehicleInputInterface())
-//    7. input->AppendContacts(world->GetContactSpyInterface())
-//    8. XMemCpy(input + 16, world->GetRaceCarGlobalOutputInterface(), 2416)
-//    9. input->SetPlayerCarIndex(world->GetPlayerActiveRaceCarIndex())
-//   10. FOR EACH of the 8 active slots that is active: build a stack VehicleInfo
-//       (RaceCarState + AABB + hardest-impact + engine flag) and input->SetRaceCarInfo(i, it)
-//       -- the hardest impact is the car's strongest contact-spy contact this frame (squared
-//       |mNormalStress|, its normal and stress), which every gameplay camera shakes by
-//   11. FOR EACH of the 8 slots: input->SetCrashingCentreOfMass(i, IDENTITY)
-//   12. mfPlayerBoostPercentage = boost.mfBoostAmount / boost.mfMaxBoost  (0 if max ~= 0)
-//   13. build the 48-byte PlayerCrashInfo block from the vehicle manager's crash queue
-//   14. input->mbWorldWantsDebugControllerFocus = world-entity-status byte
-//   15. mDirectorBridgeSerialiser.Unlock()
-//
-// REPRODUCED HERE: 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 and 8 on 2026-09-24;
-//                   4 on 2026-09-25.)
-//
-// [FLAG PC bring-up] dropped rather than paraphrased, each for a NAMED reason:
-//   1/15 + the whole state-4..6 replay arm -- BrnGameModule has no mDirectorBridgeSerialiser
-//        member (the console's is at gm+0x9A1070, inside this layout's omitted range) and
-//        DirectorBridgeSerialiser::GetStaticLayout is declaration-only. The PC has no replay
-//        path at all, so the live arm is the only one that can run.
-//   5 -- its DESTINATION (the world StatusInterface span before mContacts) is honest-opaque
-//        in BrnDirectorModuleIO.h. Writing into it by console byte offset is exactly the
-//        offset-poke this project forbids; it lands when that interface home does.
-//   (4 IS NO LONGER DROPPED -- restored 2026-09-25, crash parity FX-DIRECTOR2. Its destination
-//        is typed now: InputBuffer::mTrafficOutputInterface @0x6AC0, the TrafficDirectorOutputInterface
-//        the world output already carries; the x64 sizeof is the console's 0xE20.)
-//   (8 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-DIRECTOR. Its destination is
-//        typed now: InputBuffer::mGlobalRaceCarInterface at +16, exactly as the finding that stood
-//        here said -- 16 + 2416 == 2432 == mUsedRaceCars, and the x64 sizeof is 2416 too.)
-//   (6 IS NO LONGER DROPPED -- restored 2026-08-02, see the step in the body.)
-//   (13 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-BRIDGES CC-6. Both of its
-//        reasons had expired: Camera::PlayerCrashInfo is homed (SharedIO/BrnPlayerInfo.h) and so is
-//        its source, VehicleManagerOutputInterface::GetRaceCarCrashEventQueue (+0x3A0).)
-//   14 -- reads world-entity-status byte +217668, inside an opaque span.
-//   (the per-car HARDEST-IMPACT leg of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
-//        parity FX-BRIDGES CC-5. Its "not homed" reason had expired: BaseContact is homed in
-//        Physics/ContactSpies/BrnContactSpyEvents.h (mNormalStress +0x20 / mNormal +0x30 of the
-//        96-byte record) and RumbleManager::UpdateImpacts already walks the same run by name.)
-//   (the per-car DEFORMED AABB arm of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
-//        parity FX-BRIDGES CC-7. DeformationOutputInterface::mpDeformationState is homed and written
-//        every frame, and DeformationState::GetCarStateF / CarState::mDeformedBBoxMin/Max are named.)
-//
-// ⚠️ CONSOLE ODDITIES REPRODUCED, NOT FIXED:
-//   * step 10 clears mbHasCrashingCenterOfMass in the staged VehicleInfo and step 11 then
-//     sets it TRUE for all eight slots (SetCrashingCentreOfMass @0x823B2CA8 stores 1 at
-//     element+0x4E5). So the flag is always true and the matrix is always identity unless
-//     something else republishes it. That is what the console does.
-//   * the console never writes mbHardestImpactIsAgainstWorld (VehicleInfo +0x4E4): the stack
-//     VehicleInfo's byte at that offset is left at whatever the frame before put there. An
-//     uninitialised read is not reproducible on a different ABI, so it is published as false
-//     and flagged here rather than left indeterminate.
-//   * the console seeds mHardestNormalStressNormal from the .rdata vector at 0x82181510, which
-//     x360rd reads as (0.0, 1.0, 0.0, 0.0) -- world up. (The old note here said the 16 bytes
-//     "cannot be read"; they can, from the image, and the seed is now the console's.)
-//
-// ✅ RaceCarState +4 DRIFT -- SETTLED AND FIXED (2026-08-01, physics wave 1). The extra four
-// bytes were mCarAssetAttribKey: it is EIGHT bytes, not four. Proof and the full corroborating
-// field table live in BrnVehicleEvents.h's RaceCarState banner (the producer,
-// VehicleOutputInterface::UpdateRaceCarState @0x825EC808, stores it with `std` at state+960 and
-// then lands all fourteen following scalars exactly where the committed offsets now say).
-// The committed member offsets below are therefore CONSOLE-EXACT as of that fix, and this
-// function's own `*(state + 968)` entity-id reads are now literally mEntityId @968.
-// The historical measurement that bounded it is kept for provenance:
-//
-// (HISTORICAL) This function's thirteen
-// rw::math::IsValid asserts name the exact fields they check, so their X360 offsets pin the
-// X360-vs-PS3 member drift the pose wave measured:
-//     448 mAboveGroundTestResult.mIntersectionPosition   == committed 448  (no drift)
-//     464 ...mIntersectionNormal                         == committed 464  (no drift)
-//     480 ...mfVerticalDistance                          == committed 480  (no drift)
-//     496 mTransform, 816 mLinearVelocity, 832 mAngularVelocity           (no drift)
-//     988 mfUpShiftRPM   -> committed  984      \
-//     992 mfDownShiftRPM -> committed  988       |
-//     972 mfSpeedMPH     -> committed  968       | uniform +4
-//     980 mfMaxBoostSpeedMPH -> committed 976    |
-//    1020 mfAbsDriftScale -> committed 1016      |
-//    1024 mfTimeDrifting -> committed 1020       |
-//    1028 mfTimeInAir    -> committed 1024       |
-//    1032 mfGas          -> committed 1028       |
-//    1036 mfBrake        -> committed 1032       |
-//    1044 mfSteering     -> committed 1040      /
-// and this function's own `*(state + 968)` entity-id reads (the deformation + contact-spy
-// lookups) are committed mEntityId @964, also +4. mHalfExtent @848 is read at 848 -- exact.
-// ⇒ the extra four X360 bytes sit between mHalfExtent (848) and mEntityId (964), i.e. inside
-// the mComOffset / mSlamEffect / mShuntEffect / mCarAssetAttribKey run. That OVERTURNS the
-// pose wave's recorded bound ("between mfBrake @1032 and mi8Gear @1088"), which was only ever
-// an upper bound. Nothing here depends on it: every access is by NAME.
-// (END HISTORICAL -- the bound was correct and the culprit was the last name in that run.)
-// ============================================================================
+// World bridges. BridgeWorldToDirector is recovered from ARTIST823E3AB0.
+// Its persistent DirectorBridgeSerialiser is locked across the complete pass.
+// Modes0/1/2/3 publish and capture the live world;4/7 only acknowledge real
+// world streaming readiness;5/6 restore the static replay frame. The final
+// debug-controller-focus transfer and Unlock run on every original branch.
+// Other live conversion/diagnostic code below is preserved from the baseline.
 
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeWorldToX.h"
@@ -180,6 +64,8 @@ namespace BrnGame
             return;
         }
 
+        mDirectorBridgeSerialiser.Lock();
+
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
                 ActiveRaceCarInterface;
 
@@ -211,15 +97,14 @@ namespace BrnGame
             }
         }
 
+        const BrnReplays::BaseSerialiser::EMode leMode = mDirectorBridgeSerialiser.GetMode();
         if (!lpActiveRaceCars->IsPlayerCarActive())
         {
-            // X360: assert the write lock, then `li r11,-1; stw r11, 0x7AA8(r26)`.
-            // Publishing INVALID is what makes MainDirector::GetLivePlayerCarIndex return -1
-            // and the director carry its last finalised camera forward.
             lpDirectorInput->SetPlayerCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID);
-            return;
         }
-
+        else if (leMode == BrnReplays::BaseSerialiser::E_MODE_IDLE ||
+                 mDirectorBridgeSerialiser.IsRecording())
+        {
         // ---- step 9 (the console orders it after 4..8, all of which are gated) ------------
         CGS_ASSERT(lpActiveRaceCars->IsPlayerCarActive(), "Player race car index not active"); // :66
         const EActiveRaceCarIndex lePlayerIndex = lpWorldOutput->GetPlayerActiveRaceCarIndex();
@@ -239,6 +124,11 @@ namespace BrnGame
         // bridge's SetTrafficDirectorOutputInterface (186e27bb). The "dropped" note in the banner
         // above had one reason, an opaque destination, and it expired with the typed member.
         lpDirectorInput->SetTrafficOutputInterface(lpWorldOutput->GetTrafficDirectorOutputInterface());
+
+        // ARTIST823E3F80..3FA4: the actual five status bytes, including
+        // WorldEntityIO::StatusInterface::GetAllStreamed at byte4.
+        lpDirectorInput->SetWorldEntityStatusInterface(lpWorldOutput->GetWorldEntityStatusInterface());
+
 
         // ---- step 6: the NEW-VEHICLE queue merge ------------------------------------------
         // ⭐ RESTORED 2026-08-02 (camera parameter-chain wave). The console's own step, in the
@@ -277,6 +167,9 @@ namespace BrnGame
         lpDirectorInput->SetGlobalRaceCarInterface(lpWorldOutput->GetRaceCarGlobalOutputInterface());
 
         lpDirectorInput->SetPlayerCarIndex(lePlayerIndex);
+        if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout())
+            lpFrame->muActivePlayerIndex = static_cast<s8>(lePlayerIndex);
+
 
         // ---- the frame's race-car contacts (DWARF GameBridgeWorldToX.cpp:87 lpCarContacts) --
         // X360 0x823E4010..0x823E4034: the local starts NULL and is filled only when the world's
@@ -303,8 +196,10 @@ namespace BrnGame
         {
             const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
 
-            // The console tests `maxRaceCarFlags[idx] & 1` inline -- IsRaceCarActive().
-            if (!lpActiveRaceCars->IsRaceCarActive(leSlot))
+            const bool lbVehicleActive = lpActiveRaceCars->IsRaceCarActive(leSlot);
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout())
+                lpFrame->mabVehicleActive[liSlot] = lbVehicleActive;
+            if (!lbVehicleActive)
             {
                 CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                            "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
@@ -442,6 +337,9 @@ namespace BrnGame
                                    || lpActiveRaceCars->IsRaceCarEngineStarting(leSlot);
 
             lpDirectorInput->SetRaceCarInfo(static_cast<u32>(liSlot), lVehicleInfo);
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout())
+                lpFrame->maVehicleInfos[liSlot] = lVehicleInfo;
+
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG (the camera-input gate). The
             // impact-shake input as published: the first 40 non-zero publishes, then every 200th --
@@ -551,6 +449,9 @@ namespace BrnGame
             for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
             {
                 lpDirectorInput->SetCrashingCentreOfMass(static_cast<u32>(liSlot), lIdentity);
+                if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout())
+                    lpFrame->maCentreOfMassTransforms[liSlot] = lIdentity;
+
                 CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                            "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
             }
@@ -574,6 +475,9 @@ namespace BrnGame
                 lfBoostPercentage = lpBoost->mfBoostAmount / lpBoost->mfMaxBoost;
             }
             lpDirectorInput->SetPlayerBoostPercentage(lfBoostPercentage);
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout())
+                lpFrame->mfPlayerBoostPercentage = lfBoostPercentage;
+
         }
 
         // ---- step 13: the player's crash record (X360 0x823E4DF0..0x823E4FE4) ----------------
@@ -636,6 +540,9 @@ namespace BrnGame
             }
 
             lpDirectorInput->SetPlayerCrashInfo(&lPlayerCrashInfo);
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout())
+                lpFrame->mPlayerCrashInfo = lPlayerCrashInfo;
+
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_CRASHCAM_DIAG (the crash-camera gate). The
             // record as published, on every CHANGE of its four flags or of a non-zero speed (at
@@ -669,6 +576,55 @@ namespace BrnGame
                 suLastKey = luKey;
             }
         }
+        }
+        else if (leMode == BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING ||
+                 leMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING ||
+                 leMode == BrnReplays::BaseSerialiser::E_MODE_RESTORING)
+        {
+            // ARTIST823E3EC8..3EF8. Preparing/restoring does not publish a live
+            // snapshot or overwrite the retained Director input's world status.
+            mDirectorBridgeSerialiser.SetDataReady(
+                lpWorldOutput->GetWorldEntityStatusInterface()->GetAllStreamed());
+            mDirectorBridgeSerialiser.SetDataRestored(
+                lpWorldOutput->GetWorldEntityStatusInterface()->GetAllStreamed());
+        }
+        else if (mDirectorBridgeSerialiser.IsPlaying())
+        {
+            // ARTIST823E3D2C..3E88: replay data is the sole vehicle/camera input
+            // source here. Stalled playback republishes the same static frame.
+            lpDirectorInput->SetPlayerCarIndex(static_cast<EActiveRaceCarIndex>(
+                mDirectorBridgeSerialiser.GetActivePlayerIndex()));
+            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+            {
+                if (mDirectorBridgeSerialiser.GetVehicleActive(liSlot))
+                    lpDirectorInput->SetRaceCarInfo(static_cast<u32>(liSlot),
+                        *mDirectorBridgeSerialiser.GetVehicleInfo(liSlot));
+            }
+            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+            {
+                lpDirectorInput->SetCrashingCentreOfMass(static_cast<u32>(liSlot),
+                    *mDirectorBridgeSerialiser.GetCentreOfMassTransform(liSlot));
+                CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            }
+            BrnReplays::DirectorBridgeSerialiserStaticLayout* lpFrame = mDirectorBridgeSerialiser.GetStaticLayout();
+            CGS_ASSERT(lpFrame != 0, "lpStatic");
+            lpDirectorInput->SetPlayerBoostPercentage(lpFrame->mfPlayerBoostPercentage);
+            lpFrame = mDirectorBridgeSerialiser.GetStaticLayout();
+            CGS_ASSERT(lpFrame != 0, "lpStatic");
+            lpDirectorInput->SetPlayerCrashInfo(&lpFrame->mPlayerCrashInfo);
+            mDirectorBridgeSerialiser.SetDataReady(
+                lpWorldOutput->GetWorldEntityStatusInterface()->GetAllStreamed());
+            mDirectorBridgeSerialiser.SetDataRestored(
+                lpWorldOutput->GetWorldEntityStatusInterface()->GetAllStreamed());
+        }
+
+        // ARTIST823E5098..50B4: this tail runs even with no active player,
+        // and for idle, preparing, stalled and restoring serialiser states.
+        lpDirectorInput->SetWorldWantsDebugControllerFocus(
+            lpWorldOutput->GetWorldWantsDebugControllerFocus());
+        mDirectorBridgeSerialiser.Unlock();
+
     }
 
     // ========================================================================================

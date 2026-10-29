@@ -39,6 +39,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h" // BrnWorld::RaceCarStreamer (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"         // BrnWorld::RaceCar (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"   // BrnWorld::ActiveRaceCar (by value)
+#include "GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h"       // BrnReplays::RaceCarEntitySerialiser (by value)
 #include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaManager::BrnSubmissionInterface (SubmitCoronasForRaceCar's 1st arg)
 #include "GameSource/World/BrnPlaceOnTrackManager.h"                              // BrnWorld::PlaceOnTrackManager (by value, +0x17850)
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"                           // CgsWorld::WorldMap2D (by value, +0x18300)
@@ -548,6 +549,16 @@ public:
                 RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalCarInterface,
                 RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
                 RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface );
+
+        // Replay mode edge and the two RaceCar-owned playback producers. ARTIST calls these
+        // from PreSceneUpdate in this order: Enter/LeaveReplay, lazy frame clear/read,
+        // UpdateSerialiser. UpdateOutputInterfaces publishes the typed recorded frame.
+        void EnterReplay(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+        void LeaveReplay(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+        void UpdateSerialiser(RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                              RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+        void UpdateReplayStreaming(RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                                   RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
 
         void TransmitCarsInRaceToQueryManager(
                 RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface );
@@ -1207,7 +1218,19 @@ private:
     bool mbPlayerBaseDeformRequestPending;  // +0x184DC (99548) one-shot: force mbResetDeformation
     u8   maTailPadB1c0[0x184E0 - 0x184DD];  // +0x184DD (99549) .. +0x184E0 (99552)
     f32  mfPlayerBaseDeformAmountSaved;     // +0x184E0 (99552) mode-change stash of the amount
-    u8   maTailPadB1c[0x18718 - 0x184E4];
+    // X360 +0x185F4..+0x18600: replay-state flags and the embedded serialiser. The
+    // serialiser widens on the native target; the following reserve shrinks so the
+    // enclosing module's next recovered member keeps its existing host placement.
+    u8   maReplayPaddingBeforeState[99828 - 99556];
+    bool mbInReplay;       // X360 +0x185F4 (99828), written each PreSceneUpdate
+    bool mbReplayRestored; // X360 +0x185F5 (99829), replay restore completion latch
+    u8   maReplayPaddingBeforeSerialiser[99840 - 99830];
+    BrnReplays::RaceCarEntitySerialiser mReplaySerialiser; // X360 +0x18600 (99840)
+    Matrix44Affine mReplayTransform; // DecFIGS member order; X360 position follows the serialiser
+    u8   maReplayPaddingBeforeInvalidated[32]; // unidentified X360 span before +0x186C0
+    bool mbInvalidatedRaceCars; // ARTIST UpdateReplayStreaming reads +100032 (0x186C0)
+    u8   maReplayPaddingAfter[0x18718 - (99840 + sizeof(BrnReplays::RaceCarEntitySerialiser)
+                                       + sizeof(Matrix44Affine) + 32 + 1)];
     bool mbOncomingTimerActive; // DWARF :453; ARTIST +0x18718
     u8   maOncomingPadding[3];
     f32  mfOncomingNoClueTimer; // DWARF :454; ARTIST +0x1871C

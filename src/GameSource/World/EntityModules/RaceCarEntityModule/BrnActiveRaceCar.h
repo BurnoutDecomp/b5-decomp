@@ -62,6 +62,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Graphics/CgsModel.h"             // CgsGraphics::Model::State
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"        // CgsResource::ResourcePtr
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"      // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnDetachedPartRenderEvent.h"
@@ -81,11 +82,14 @@ namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h and
 // .../SharedIO/BrnVehicleLocatorData.h, which the .cpp that bodies SetLightLocators includes.
 namespace BrnPhysics { namespace Deformation { enum ETagPointType : s32; struct VehicleLocatorData; } }
+namespace BrnPhysics { namespace Deformation { struct StreamedDeformationSpec; } }
+namespace BrnVehicle { struct GraphicsSpec; }
 namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to RaceCar::UpdatePositioningData
 // Detach / RemoveFromScene / RemoveFromCollision take it by pointer only (the .cpp includes
 // the owning header). DWARF spells it OutputBuffer_PreScene::SceneInputInterface, which is a
 // typedef for this type (BrnRaceCarEntityModuleIO.h:379).
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
+namespace BrnReplays { struct RaceCarSerialiserFrame; }
 // Update_PreScene's third parameter (OutputBuffer_PreScene::RaceCarAIInterface, a typedef for
 // this type -- BrnRaceCarEntityModuleIO.h:380); pointer-only and never dereferenced.
 namespace BrnAI { namespace AIModuleIO { struct RaceCarAIInterface; } }
@@ -97,6 +101,7 @@ namespace rw { namespace collision { struct BoxVolume; } }
 namespace BrnWorld
 {
 namespace RaceCarEntityModuleIO { struct GameEventQueue; }
+class RaceCarEntityModule;
 class RaceCar;
 
 // =================================================================================================
@@ -186,6 +191,8 @@ public:
                             const CgsResource::ResourceHandle& lrGraphicsModelHandle,
                             const Vector3&                     lrInitialVelocity,
                             u64                                luCarAssetAttribKey );
+    // X360 0x822EB500: publish ValidateRaceCarEvent(false), then clear both resource aliases.
+    void OnResourcesInvalidated(BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface);
 
     // ------------------------------------------------------------------------
     // X360 0x822D3EC8  ActiveRaceCar::AddHandlingModel -- hands the freshly-active car to
@@ -462,6 +469,9 @@ public:
     // ========================================================================
     class RenderParams
     {
+        friend struct BrnReplays::RaceCarSerialiserFrame;
+        friend class BrnWorld::RaceCarEntityModule;
+
     public:
         typedef CgsModule::EventQueue<DetachedPartRenderEvent, 20> DetachedPartRenderQueue;
 
@@ -1374,26 +1384,15 @@ private:
     bool mbRightIndicatorActive;                         // +0x1C8C (7308)
     bool mbLeftIndicatorActive;                          // +0x1C8D (7309)
 
-    // DWARF mDeformationModelResourcePtr (ResourcePtr<BrnPhysics::Deformation::
-    // StreamedDeformationSpec>) and mGraphicsModelResourcePtr (ResourcePtr<
-    // BrnVehicle::GraphicsSpec>) -- 32 bytes each, created by OnResourcesLoaded at
-    // this+0x1C90 / this+0x1CB0, closing the class at the attested 0x1CD0 stride.
-    //
-    // PARTIALLY NAMED 2026-08-01 (drivable wave). The two ResourcePtr WRAPPERS stay opaque
-    // -- homing them would drag both spec types into every consumer of this header AND give
-    // ActiveRaceCar two non-trivial ctors/dtors (BaseResourcePtr links itself into an
-    // intrusive alias list), which the module's 8-slot array has never had. What IS named is
-    // the ResourceHandle each wrapper stores at its own +0x14: AddHandlingModel reads exactly
-    // those two, with two 64-bit loads (`ld r7, 0x1CA4(r31)` / `ld r8, 0x1CC4(r31)` ==
-    // 0x1C90+0x14 and 0x1CB0+0x14), and hands them straight to
-    // VehicleInputInterface::CreateRaceCar. OnResourcesLoaded is what fills them.
-    // [FLAG] the alias-list binding half of BaseResourcePtr::CreateFromHandle (the resource
-    // MEMORY pointer + Propogate) is not reproduced -- see OnResourcesLoaded's banner.
-    u8 maPad1C90a[20];                                   // +0x1C90 (7312) .. +0x1CA4 (7332)
-    CgsResource::ResourceHandle mDeformationModelHandle; // +0x1CA4 (7332)
-    u8 maPad1CAC[24];                                    // +0x1CAC (7340) .. +0x1CC4 (7364)
-    CgsResource::ResourceHandle mGraphicsModelHandle;    // +0x1CC4 (7364)
-    u8 maPad1CCC[12];                                    // +0x1CCC (7372) .. +0x1CD0 (7376)
+    // DWARF BrnActiveRaceCar.h: mDeformationModelResourcePtr and mGraphicsModelResourcePtr.
+    // ARTIST 0x822EB168 / 0x822EB500 binds and invalidates each BaseResourcePtr alias at
+    // +0x1C90/+0x1CB0. The embedded ResourceHandle is the wrapper's +0x14 pair, read by
+    // AddHandlingModel @0x822D3EC8 and copied into ValidateRaceCarEvent by the invalidation
+    // path. Native ResourcePtr width is retained; no console pointer is truncated.
+    CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
+        mDeformationModelResourcePtr; // X360 +0x1C90 (7312), handle +0x1CA4
+    CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>
+        mGraphicsModelResourcePtr; // X360 +0x1CB0 (7344), handle +0x1CC4
 
     // ---- ⚠️ FLAG PC quality-of-life: the render-pose interpolator's storage ------------
     // PAST the console's 0x1CD0 object stride, deliberately: nothing here exists on the

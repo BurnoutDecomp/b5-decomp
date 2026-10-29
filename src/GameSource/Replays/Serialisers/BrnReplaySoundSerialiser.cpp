@@ -9,7 +9,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
-#include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
 #include "vendor/renderware/physics/JointFrames.hpp"   // rw::math::vpu::QuaternionFromMatrix33 (WriteAsQuatPos)
 
 #include <cstring>
@@ -121,7 +120,7 @@ namespace BrnReplays
         return nullptr;
     }
 
-    // @ 0x826534E0 -- read a 12-byte quantised quat+pos record off the stream, unpack it
+    // @ 0x826534E0 -- read seven aligned quat+pos floats off the stream
     // (working set: quat x/y/z/w @[0..3], position @[4..6]) and expand it into the 64-byte
     // destination transform: three rotation rows @+0/+0x10/+0x20 + the position row @+0x30
     // (the asm stores pos.w = 0 explicitly: `stw r10=0, var_34`).
@@ -144,7 +143,12 @@ namespace BrnReplays
     void SoundSerialiser::ReadAsQuatPos(void* lpTransform)
     {
         float lafUnpacked[8];
-        QuantisedQuatPos::Read(this, lafUnpacked);
+        // ARTIST sub82652640: position xyz first, then quaternion xyzw.
+        // Each value uses the aligned float primitive; this stream is not quantised.
+        for (s32 liLane = 4; liLane < 7; ++liLane)
+            BaseSerialiser::ReadFloat(&lafUnpacked[liLane]);
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+            BaseSerialiser::ReadFloat(&lafUnpacked[liLane]);
 
         const f32 lfX = lafUnpacked[0], lfY = lafUnpacked[1];
         const f32 lfZ = lafUnpacked[2], lfW = lafUnpacked[3];
@@ -173,7 +177,7 @@ namespace BrnReplays
     }
 
     // @ 0x82658EC8 -- derive the quaternion from the 64-byte source transform's three basis
-    // rows and pack {quat, position} into the 12-byte quantised record.
+    // rows and stream seven aligned floats: position xyz followed by quaternion xyzw.
     //
     // RECONSTRUCTED 2026-08-25 wave 4 (was "grounded as copy" -- the derivation was absent and
     // the first two ROWS were passed where the quat belongs). The console's matrix->quaternion
@@ -205,7 +209,11 @@ namespace BrnReplays
         lafScratch[5] = lpSrc[13];
         lafScratch[6] = lpSrc[14];
         lafScratch[7] = 0.0f;        // unused tail lane of the working set
-        QuantisedQuatPos::Write(this, lafScratch);
+        // ARTIST sub826525A0: seven aligned floats in position-then-quaternion order.
+        for (s32 liLane = 4; liLane < 7; ++liLane)
+            BaseSerialiser::WriteFloat(&lafScratch[liLane]);
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+            BaseSerialiser::WriteFloat(&lafScratch[liLane]);
     }
 
     // @ 0x82653608 -- playback one 80-byte sound key-frame record: the quat+pos transform, then
@@ -417,6 +425,7 @@ namespace BrnReplays
         if (liNumCollisions > 0)
         {
             u8* lpRec = lpBase + 0x1C;
+            s32 liCollisionIndex = 0;
             do
             {
                 Read(lpRec - 4, 4);
@@ -430,9 +439,11 @@ namespace BrnReplays
                 ReadFloat(lpRec + 180);
                 Read(lpRec + 100, 16);
                 Read(lpRec + 4, 16);
-                *(lpRec + 188) = 0;
+                // ARTIST826592D0: stw clears the full sample marker at record+216.
+                lpStatic->maCollisions[liCollisionIndex].miSampleID = 0;
                 std::memset(lpRec + 132, 0, 48);
                 --liNumCollisions;
+                ++liCollisionIndex;
                 lpRec += 224;
             } while (liNumCollisions != 0);
         }

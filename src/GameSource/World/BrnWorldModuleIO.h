@@ -642,6 +642,7 @@ namespace BrnWorldIO
         // WorldModule::Update @0x827D63E8 copies the debug component's focus byte
         // straight into +217668 under the write lock (a raw stb on X360; expressed
         // as this named setter on the PC).
+        bool GetWorldWantsDebugControllerFocus() const;
         void SetWorldWantsDebugControllerFocus(bool lbWantsFocus);                          // (Update @0x827D63E8 store)
 
         // ---- sound world load ----

@@ -3,10 +3,10 @@
 //
 // The race-car-entity replay serialiser: records / plays back the whole race-car
 // world's per-frame state. Like its sibling serialisers it derives from BaseSerialiser
-// and drives a fixed 0x1B000-byte static-layout buffer that holds two frames -- the
-// "previous" frame at +0 and the "live" frame at +0xD7E0. Unlike the traffic/prop
-// serialisers it does NOT walk the frame field-by-field: Read/Write serialise the whole
-// 0xD7E0-byte live frame through the raw BaseSerialiser::Read/Write byte primitives.
+// and drives a two-frame static owner -- the previous frame followed by the live frame and
+// the original 64-byte reserve. X360 passes 0x1B000 bytes and serialises a 0xD7E0 frame;
+// the typed native owner widens handles/ids and derives the PC capacities from sizeof.
+// Read/Write still pass the entire live frame through BaseSerialiser's raw byte primitives.
 //
 // Source-of-truth ladder: every signature, branch, constant and store below is taken
 // from the X360 ASM (dossier w33_carserial). Highlights:
@@ -19,40 +19,90 @@
 //   * Read @0x8264C518 reaches the frame path only for E_MODE_PLAYING (5); Write @0x8264C618
 //     only for the recording family {1,2,3}. Both raw-serialise the live frame (0xD7E0 bytes).
 //
-// Callee declarations (BaseSerialiser, RaceCarSerialiserFrame) live in their own TUs;
-// included here for the compile-only gate.
+// Typed frame fields are attested by UpdateOutputInterfaces @0x822F5CF8 and
+// UpdateSerialiser @0x82306120; Frame::Clear and operator= are recovered in this TU.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameSource/Replays/BrnReplayBaseSerialiser.h"
-#include "GameSource/Replays/Serialisers/BrnReplayRaceCarSerialiserFrame.h"
+#include "GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h"
+#include <cstring>
 
 namespace BrnReplays
 {
-    // Static buffer size (Construct arg / GetStaticLayout guard): 0x1B000 == 110592.
-    static const s32 KI_STATIC_BUFFER_SIZE = 0x1B000;
+    // Both X360 capacities are 0x1B000. The native typed owner retains the two frames and
+    // the original 64-byte reserve while allowing its ResourceHandle members to stay native.
+    static const s32 KI_STATIC_BUFFER_SIZE =
+        static_cast<s32>(sizeof(RaceCarEntitySerialiserStaticLayout));
 
-    // DWARF home: GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h.
-    class RaceCarEntitySerialiser : public BaseSerialiser
-    {
-    public:
-        // @0x8264C4C0
-        s32 Construct();
-        // @0x822A3400 -- returns the static-layout buffer, asserting it is big enough.
-        RaceCarEntitySerialiserStaticLayout* GetStaticLayout();
-        // @0x82657A48 -- lazily Clear() both frames on the first frame, mark it done.
-        RaceCarSerialiserFrame* CheckStaticLayoutCleared();
-        // @0x8264C518 / @0x8264C618 -- playback / record one frame (top-level dispatch).
-        s32 Read();
-        s32 Write();
-
-    private:
-        // X360: byte at this+0x5C, cleared by Construct, set by CheckStaticLayoutCleared
-        // once both frames have been Clear()ed for this record/playback session.
-        bool mbStaticLayoutCleared; // @0x5C
-    };
 
     // -------------------------------------------------------------------------
+
+    // @0x82657748. Clear the two interface snapshots, then zero and seed each visual
+    // record. This method operates on the replay buffer's raw storage; after the console's
+    // 5280-byte clear the queue is reconstructed so its inline event pointer is valid.
+    RaceCarSerialiserFrame* RaceCarSerialiserFrame::Clear()
+    {
+        mActiveRaceCarOutputInterface.Clear();
+        mGlobalRaceCarOutputInterface.Clear();
+
+        for (u32 luSlot = 0; luSlot < KU_RACECAR_FRAME_SLOT_COUNT; ++luSlot)
+        {
+            BrnWorld::ActiveRaceCar::RenderParams& lrRenderParams = maRenderParams[luSlot];
+            std::memset(&lrRenderParams, 0, sizeof(lrRenderParams));
+
+            lrRenderParams.mBodyTransform.SetIdentity();
+            for (u32 luWheel = 0; luWheel < 6u; ++luWheel)
+            {
+                lrRenderParams.mWheelTransforms[luWheel].SetIdentity();
+                lrRenderParams.mWheelScaleTransforms[luWheel].SetIdentity();
+            }
+
+            lrRenderParams.mPaintColour.x = 1.0f;
+            lrRenderParams.mPaintColour.y = 1.0f;
+            lrRenderParams.mPaintColour.z = 1.0f;
+            lrRenderParams.mPaintColour.w = 1.0f;
+            lrRenderParams.mPearlescentColour.x = 1.0f;
+            lrRenderParams.mPearlescentColour.y = 1.0f;
+            lrRenderParams.mPearlescentColour.z = 1.0f;
+            lrRenderParams.mPearlescentColour.w = 1.0f;
+
+            // ARTIST 0x82657804 seeds r20=-1; std at 0x826579C8/CC fills both words.
+            lrRenderParams.mBodyPartVisibility.SetBitField(0u, ~u64(0));
+            lrRenderParams.mBodyPartVisibility.SetBitField(1u, ~u64(0));
+            lrRenderParams.maDetachedParts.Construct();
+            lrRenderParams.mLOD = CgsGraphics::Model::E_STATE_LOD_4;
+            lrRenderParams.mbBluesAndTwosCanSwitchState = true;
+
+            maRaceCarIds[luSlot] = 0;
+            maWheelIds[luSlot] = 0;
+        }
+
+        return this;
+    }
+
+    // @0x822E7820. Copy the typed interfaces and all eight render records in slot order.
+    // Their member-wise operators preserve native resource handles and queue storage.
+    RaceCarSerialiserFrame& RaceCarSerialiserFrame::operator=(
+            const RaceCarSerialiserFrame& lrOther)
+    {
+        if (this == &lrOther)
+        {
+            return *this;
+        }
+
+        mActiveRaceCarOutputInterface = lrOther.mActiveRaceCarOutputInterface;
+        mGlobalRaceCarOutputInterface = lrOther.mGlobalRaceCarOutputInterface;
+        for (u32 luSlot = 0; luSlot < KU_RACECAR_FRAME_SLOT_COUNT; ++luSlot)
+        {
+            maRenderParams[luSlot] = lrOther.maRenderParams[luSlot];
+        }
+        for (u32 luSlot = 0; luSlot < KU_RACECAR_FRAME_SLOT_COUNT; ++luSlot)
+        {
+            maRaceCarIds[luSlot] = lrOther.maRaceCarIds[luSlot];
+            maWheelIds[luSlot] = lrOther.maWheelIds[luSlot];
+        }
+        return *this;
+    }
 
     // @0x8264C4C0 (already homed in a prior wave; re-based here onto the real
     // BaseSerialiser home). id 0; mode 0; 0x1B000 dynamic + 0x1B000 static;
@@ -70,8 +120,8 @@ namespace BrnReplays
     // assert (size), unlike the traffic sibling which also asserts non-null.
     RaceCarEntitySerialiserStaticLayout* RaceCarEntitySerialiser::GetStaticLayout()
     {
-        // asm: `lwz r11,0x24(this)` (miStaticBufferSize) compared `< 0x1B000`; named-member
-        // access is what matters on the 64-bit host.
+        // asm: `lwz r11,0x24(this)` (miStaticBufferSize) compared `< 0x1B000`; the native
+        // target uses sizeof(the typed owner), which keeps its 64-bit handles intact.
         CGS_ASSERT(GetStaticBufferSize() >= KI_STATIC_BUFFER_SIZE,
                    "Static buffer size is too small\n");
         return reinterpret_cast<RaceCarEntitySerialiserStaticLayout*>(GetStaticBuffer());
