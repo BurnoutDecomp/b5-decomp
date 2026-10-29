@@ -182,6 +182,7 @@ private:
     // RenderWorld @0x82364E10 reads these attested fields/arrays directly on the console. Keep its
     // typed accesses by name instead of adding non-original engine accessors or raw offsets.
     friend class TriggerQueryManagerDebugComponent;
+    friend class GameStateModule;
 
     // ---- leading preamble (offsets 0..911), grown in place 2026-08-01 -----------------------
     // DWARF BrnTriggerQueryManager.h:211. ARTIST Prepare constructs this component after the
@@ -236,8 +237,8 @@ private:
     // and overwrites it after a rebuild. (DWARF h:231 mLastPlayerPosition.)
     Vector3 mLastPlayerPosition;                      // this+1776 (16B)
 
-    // this+1792 .. this+1807: mLastPlayerPosition2D (Vector2) — not touched; reserved.
-    u8 mauReserved_AfterLastPos[1808 - (1776 + 16)];  // this+1792 .. this+1807
+    // DecFIGS h:232; native vpu::Vector2 occupies the full16-byte SIMD slot.
+    Vector2 mLastPlayerPosition2D;                  // this+1792
 
     // this+1808 (byte). "Triggers updated" dirty flag (DWARF h:234). UpdateTriggers gates the
     // active-set rebuild on it (only rebuilds the first frame it is clear) and sets it true at the
@@ -246,8 +247,6 @@ private:
 
     // this+1809 (byte). The flag IsPlayerInTrafficLightRegion() returns.
     bool mbPlayerInTrafficLightRegion;               // this+1809 (DWARF h:236)
-
-    u8   mau8Pad_1810[2];                            // this+1810 .. this+1811 (align to u32)
 
     // this+1812. The traffic-light trigger handle handed back by GetPlayerCurrentTrafficLightId.
     // Construct stores -1 (LightTriggerId::SetInvalid). (DWARF h:237.)
@@ -259,7 +258,7 @@ private:
     TakedownManager*                    mpTakedownManager;      // this+1820
     RoadRulesManager*                   mpRoadRulesManager;     // this+1824
 
-    u8 mauReserved_AfterManagers[1832 - (1824 + 4)]; // this+1828 .. this+1831 (mpModeManager region; reserved)
+    ModeManager* mpModeManager;                      // this+1828, DecFIGS h:243
 
     // this+1832. The landmark/region indexes armed for the active game mode (DWARF h:245). Element
     // store this+1832..this+1863 (16 * 2B), live-count word this+1864. DWARF spells it
@@ -272,6 +271,15 @@ private:
 
     // DWARF h:248; ARTIST PostWorldUpdate writes/replays this32-byte action.
     GameStateModuleIO::SoundTriggerAction mCachedLookAheadSoundAction;
+
+    // The retained round-robin state is the final declaration run in DecFIGS h:251..256.
+    // ARTIST CheckClassSizes823BF454 independently reports the full class extent780.
+    // Construct82364BF0 leaves this state untouched.
+    bool mbActivateRoundRobinTriggerUpdate;
+    bool mbContinueRoundRobinTriggerUpdate;
+    s32 miCurrentRoundRobinChunk;
+    s32 miCurrentTriggerIndex;
+    s32 miCurrentNoOfRoundRobinPasses;
 
     // Compile-time offset guards (private members -> assert from a member-fn context).
     static void _AssertLayout();

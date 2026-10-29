@@ -89,6 +89,15 @@
 #include "SharedClasses/World/BrnWorldRegion.h"                         // WorldRegion (the case-95 arm's answer)
 #include <cstring>                                                      // memcpy (the case-95 arm's position)
 
+#if defined(D_PLATFORM_X360)
+#include <xtl.h>
+namespace vmx
+{
+    inline f32 Dot3(const Vector3& a, const Vector3& b) { return __vmsum3fp(__lvx(&a, 0), __lvx(&b, 0)).x; }
+    inline f32 Flush(f32 x) { return __vmulfp(XMVectorReplicate(x), XMVectorReplicate(1.0f)).x; }
+}
+#endif
+
 namespace BrnGameState
 {
 namespace
@@ -425,10 +434,11 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
             return;   // [GUARD]
         }
 
+        bool lbCanEnterEvent = false;
         if (mModeManager.GetCurrentGameMode() == 0)
         {
-            lbCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(&mTrainingManager) &&
-                              (lpState->mfSpeedMPH <= 30.0f);
+            lbCanEnterEvent = !IsBlockingTrainingTipActive(&mTrainingManager) &&
+                              !(lpState->mfSpeedMPH > 30.0f);
         }
 
         GameStateModuleIO::JunctionInfoAction lAction = GameStateModuleIO::JunctionInfoAction();
@@ -530,9 +540,10 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                 }
             }
 
+            bool lbActionCanEnterEvent = false;
             if (mbCanEnterEventAtJunction && lbEventUnlocked)
             {
-                lbActionCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(&mTrainingManager);
+                lbActionCanEnterEvent = !IsBlockingTrainingTipActive(&mTrainingManager);
             }
             lAction.mbCanEnterEvent = lbActionCanEnterEvent;
         }
@@ -1161,9 +1172,6 @@ void GameStateModule::CheckForAllEventsOfATypeFound(const BrnProgression::Profil
 
         CGS_ASSERT(luEventFoundCountForSearchingType <= luEventCountForSearchingType,
                    "luEventFoundCountForSearchingType <= luEventCountForSearchingType");
-        DiscoveryWitness("all-of-type check (mode found total)", static_cast<s32>(leModeType),
-                         static_cast<s32>(luEventFoundCountForSearchingType),
-                         static_cast<s32>(luEventCountForSearchingType), 0);
         if (luEventFoundCountForSearchingType < luEventCountForSearchingType)
         {
             return;
@@ -1177,11 +1185,6 @@ void GameStateModule::CheckForAllEventsOfATypeFound(const BrnProgression::Profil
     lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liGameModeType),
                       KI_ACTION_ALL_EVENTS_OF_TYPE_DISCOVERED,
                       static_cast<s32>(sizeof(liGameModeType)));
-
-    DiscoveryWitness("all-of-type POSTED action 203 (mode found total payload)",
-                     static_cast<s32>(leModeType),
-                     static_cast<s32>(luEventFoundCountForSearchingType),
-                     static_cast<s32>(luEventCountForSearchingType), liGameModeType);
 }
 
 // ==============================================================================================
@@ -1250,8 +1253,6 @@ void GameStateModule::CheckForAllEventsBeingFound(BrnProgression::Profile* lpPro
     if (luIndex >= lpProfile->GetEventCount())
     {
         mAchievementManager.OnFindAllEvents();
-        DiscoveryWitness("all-events POSTED action 202 (index count)", -1, static_cast<s32>(luIndex),
-                         static_cast<s32>(lpProfile->GetEventCount()), -1);
 
         const u8 lu8Payload = 0;   // FLAG: the console hands AddEvent an uninitialised stack byte
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload),

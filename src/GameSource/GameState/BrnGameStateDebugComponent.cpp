@@ -21,6 +21,35 @@
 #include "SDKs/XboxMath/XMVectorACos.h"
 
 #include <cmath>
+#if defined(D_PLATFORM_X360)
+#include <xtl.h>
+namespace vmx
+{
+    inline f32 Subtract(f32 a, f32 b) { return __vsubfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+    inline f32 Multiply(f32 a, f32 b) { return __vmulfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+    inline f32 Maximum(f32 a, f32 b) { return __vmaxfp(XMVectorReplicate(a), XMVectorReplicate(b)).x; }
+    inline f32 Dot3(const Vector3& a, const Vector3& b) { return __vmsum3fp(__lvx(&a, 0), __lvx(&b, 0)).x; }
+    inline Vector3 Subtract(const Vector3& a, const Vector3& b) { Vector3 r; __stvx(__vsubfp(__lvx(&a, 0), __lvx(&b, 0)), &r, 0); return r; }
+    inline __vector4 Refine(__vector4 length, u32 steps)
+    {
+        __vector4 estimate = __vrsqrtefp(length);
+        const __vector4 half = XMVectorReplicate(0.5f), one = XMVectorReplicate(1.0f);
+        for (u32 i = 0; i < steps; ++i)
+            estimate = __vmaddfp(__vmulfp(estimate, half), __vnmsubfp(length, __vmulfp(estimate, estimate), one), estimate);
+        return estimate;
+    }
+    inline Vector3 Normalize3Unconditional(const Vector3& v, u32 steps)
+    {
+        const __vector4 value = __lvx(&v, 0); Vector3 r;
+        __stvx(__vmulfp(value, Refine(__vmsum3fp(value, value), steps)), &r, 0); return r;
+    }
+    inline f32 Magnitude3(const Vector3& v)
+    {
+        const __vector4 value = __lvx(&v, 0), length = __vmsum3fp(value, value);
+        const f32 result = __vmulfp(length, Refine(length, 2)).x; return length.x == 0.0f ? 0.0f : result;
+    }
+}
+#endif
 
 namespace BrnGameState
 {
@@ -164,7 +193,7 @@ namespace
     void GameStateDebugComponent::Destruct()
     {
         mpGameStateModule = 0;
-        DebugComponent::Destruct();
+        // ARTIST calls the folded empty base body at 8284CB38.
     }
 
     const char* GameStateDebugComponent::GetName() const
@@ -504,7 +533,7 @@ namespace
         const Vector3 lv3Forward = vmx::Normalize3Unconditional(lrPlayerCarTransform.zAxis, 1);
         const Vector3 lv3Direction = vmx::Normalize3Unconditional(lv3Displacement, 1);
         const f32 lfLowerClampedDot = vmx::Maximum(vmx::Dot3(lv3Forward, lv3Direction), -1.0f);
-        const f32 lfForwardDot = std::isnan(lfLowerClampedDot) || lfLowerClampedDot < 1.0f
+        const f32 lfForwardDot = (lfLowerClampedDot != lfLowerClampedDot) || lfLowerClampedDot < 1.0f
             ? lfLowerClampedDot : 1.0f;
         const f32 lfRelativeAngle = XboxMath::XMVectorACos(lfForwardDot);
 

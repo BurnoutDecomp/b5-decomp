@@ -39,6 +39,11 @@ namespace BrnProgression
     struct ProgressionDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        ProgressionDebugComponent()
+            : CgsDev::DebugComponent(CgsDev::DebugComponent::ProgressionConstructorTag())
+        {
+        }
+
         void Construct(ProgressionManager* lpProgressionManager,
                        BrnGameState::ModeManager* lpModeManager);
         void SetProfileReadyForDisplay() { mbProfileReadyForDisplay = true; }

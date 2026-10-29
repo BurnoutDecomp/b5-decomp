@@ -28,7 +28,7 @@ namespace BrnGameState
     class TriggerQueryManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
-        TriggerQueryManagerDebugComponent() {}
+        TriggerQueryManagerDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
 
         // X360 0x8236E908. Two-phase construct: base DebugComponent::Construct (the X360 image folds
         // the trivial base body onto the BaseCollisionGenerator::Destruct address), cache the manager

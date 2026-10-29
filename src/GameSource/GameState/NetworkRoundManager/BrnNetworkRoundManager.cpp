@@ -4,6 +4,19 @@
 namespace BrnGameState
 {
 
+// ARTIST82380388 and82375420 inline these native owning-module lifetime stores.
+void NetworkRoundManager::Construct()
+{
+    miRoundsRemaining = 0;
+    mbStartingGameDueToPlayerJoin = false;
+}
+
+void NetworkRoundManager::Destruct()
+{
+    miRoundsRemaining = 0;
+    mbStartingGameDueToPlayerJoin = false;
+}
+
 // X360 0x82358928. Cache the incoming start-network-game event and latch its round counters.
 // The X360 does memcpy(this, lpEvent, 256) -> a member-wise copy of the whole 256-byte event into
 // the embedded mStartNetworkGameEvent (it sits at offset 0). miNumRounds lives at event offset 8

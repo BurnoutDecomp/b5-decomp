@@ -46,6 +46,9 @@ namespace BrnGameState
     class StreetManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        StreetManagerDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         // Debug-tweakable: how many road rules the "win specific number of ..." actions grant
         // (X360 OnActivate binds &miNumberOfRoadRulesToWin into the debug menu). Public to match
         // the DWARF (BrnStreetManagerDebugComponent.h:77).

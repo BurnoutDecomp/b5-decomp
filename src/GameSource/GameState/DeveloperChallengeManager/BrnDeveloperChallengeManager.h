@@ -54,6 +54,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // CgsID (== u64)
+#include <cstddef>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsArray.h"              // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"          // FifoQueue<T,N>
@@ -119,12 +120,13 @@ extern const f32 KF_DEV_CHALLENGE_STUNT_COMBO_MIN;            // flt_82CDB9A8 (O
 class DeveloperChallengeManager
 {
 public:
-    // Nested element type of maCollectedBillboards (the manager owns it here; the leaf-containers
-    // provisional stub was removed). FLAG: 16-byte X360 stride is proven; the field names are
-    // provisional -- the burst-window check reads a collect time and the buffered billboard id.
+    // ARTIST82373028 stores the full billboard ID at+0 and the collection time at+8.
+    // The u64 member supplies the native8-byte alignment and16-byte element stride.
+    // Member names describe those accesses; this ARTIST-only type has no DWARF name hints.
     struct CollectedBillboard
     {
-        u8 maBlob[16];   // X360 stride 16 (provisional fields)
+        CgsID mBillboardId;
+        f32 mfCollectTime;
     };
 
     // X360 0x82372E90. Cache the four owning subsystems (asserting each non-null) and bring the
@@ -213,5 +215,24 @@ private:
     StreetManager*                        mpStreetManager;           // +0xA8
     ScoringSystem*                        mpScoringSystem;           // +0xAC
     GameStateModule*                      mpGameStateModule;         // +0xB0
+
+    static void _AssertLayout()
+    {
+#if defined(D_PLATFORM_X360)
+        CGS_STATIC_ASSERT((sizeof(CollectedBillboard) == 16), "ARTIST billboard record stride");
+        CGS_STATIC_ASSERT((__alignof(CollectedBillboard) == 8), "ARTIST billboard record alignment");
+        CGS_STATIC_ASSERT((offsetof(CollectedBillboard, mBillboardId) == 0), "ARTIST billboard ID offset");
+        CGS_STATIC_ASSERT((offsetof(CollectedBillboard, mfCollectTime) == 8), "ARTIST billboard time offset");
+        CGS_STATIC_ASSERT((sizeof(DeveloperChallengeManager) == 0xB8), "Native developer challenge member extent");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, maRoadRageTakedownTimes) == 0x58), "ARTIST takedown FIFO offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, maTakenDownRaceCars) == 0x90), "ARTIST victim bitset offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, maCompletedChallenges) == 0x98), "ARTIST completion bitset offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, mlfCurrentRaceTime) == 0xA0), "ARTIST current race time offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, mpProgressionManager) == 0xA4), "ARTIST progression owner offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, mpStreetManager) == 0xA8), "ARTIST street owner offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, mpScoringSystem) == 0xAC), "ARTIST scoring owner offset");
+        CGS_STATIC_ASSERT((offsetof(DeveloperChallengeManager, mpGameStateModule) == 0xB0), "ARTIST game state owner offset");
+#endif
+    }
 };
 }

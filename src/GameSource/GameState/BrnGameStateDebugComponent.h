@@ -23,6 +23,9 @@ namespace BrnGameState
     class GameStateDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        GameStateDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
+
+    public:
         void Construct(GameStateModule* lpGameStateModule);
         void Destruct();
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpRender) ;

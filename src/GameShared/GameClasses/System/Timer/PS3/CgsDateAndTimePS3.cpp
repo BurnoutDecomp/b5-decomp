@@ -26,13 +26,6 @@ namespace
 
 namespace CgsSystem
 {
-    DateAndTime::DateAndTime()
-        : mbIsLocal(false)
-    {
-        mFileTime.muLowDateTime  = 0;
-        mFileTime.muHighDateTime = 0;
-    }
-
     // 0x828D6A68 - GetLocalTime/GetSystemTime depending on mbIsLocal, then store as FILETIME.
     void DateAndTime::Update()
     {

@@ -116,6 +116,7 @@ protected:
     bool IsAchievementEarnt(EAchievement leAchievement) ;
 
 private:
+    friend class GameStateModule;
     CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS> mAchievementsEarnt;   // +0x18
     CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS> mAchievementsToWrite; // +0x20
     s32                                          miUserIndex;          // +0x28 (-1 == none)

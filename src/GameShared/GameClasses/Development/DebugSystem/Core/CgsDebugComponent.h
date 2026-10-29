@@ -10,6 +10,8 @@ namespace BrnAI { class AIDebugComponent; class RaceBalancingDebugComponent; cla
 namespace CgsSceneManager { class SceneManagerDebugComponent; class TriangleCollisionDebugComponent; }
 namespace CgsGameTalk { class GameTalkDebugComponent; }
 namespace BrnResource { class DebugComponent; class DLCDebugComponent; }
+namespace BrnProgression { struct ProgressionDebugComponent; }
+namespace BrnGameState { class StuntManagerDebugComponent; class TakedownManagerDebugComponent; class PaybackDebugComponent; class TriggerQueryManagerDebugComponent; class StreetManagerDebugComponent; class GameStateDebugComponent; class ResetPlayerDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -91,6 +93,22 @@ namespace CgsDev
         friend class BrnResource::DLCDebugComponent;
         struct GameDataConstructorTag {};
         explicit DebugComponent(GameDataConstructorTag) {}
+        // ARTIST827DEA50 installs only the embedded progression debug vtable.
+        // Its native C++ construction leaves these base data members untouched.
+        friend struct BrnProgression::ProgressionDebugComponent;
+        // ARTIST827E44B8 only installs these embedded debug vtables.
+        friend class BrnGameState::StuntManagerDebugComponent;
+        friend class BrnGameState::TakedownManagerDebugComponent;
+        friend class BrnGameState::PaybackDebugComponent;
+        friend class BrnGameState::TriggerQueryManagerDebugComponent;
+        friend class BrnGameState::StreetManagerDebugComponent;
+        friend class BrnGameState::GameStateDebugComponent;
+        friend class BrnGameState::ResetPlayerDebugComponent;
+        struct GameStateConstructorTag {};
+        explicit DebugComponent(GameStateConstructorTag) {}
+
+        struct ProgressionConstructorTag {};
+        explicit DebugComponent(ProgressionConstructorTag) {}
 
     public:
         DebugComponent();

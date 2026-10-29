@@ -19,6 +19,9 @@
 #include "SharedClasses/Trigger/BrnRegion.h"             // BrnTrigger::BoxRegion (GetDimensions/GetPosition2D/ComputeDirection)
 
 #include <cmath>                                             // submitted look-ahead normalization
+#if defined(D_PLATFORM_X360)
+#include <xtl.h>
+#endif
 
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"          // BrnGameState::RoadRulesManager (OnRoadLimit/IsRoadLimitRegionValid)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"           // BrnGameState::DriveThruManager (HandleDriveThru)
@@ -109,15 +112,18 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
                                     TakedownManager*                    lpTakedownManager,
                                     RoadRulesManager*                   lpRoadRulesManager)
 {
-    CGS_ASSERT(lpProgressionManager != NULL, "lpProgressionManager != NULL");
-    CGS_ASSERT(lpTakedownManager    != NULL, "lpTakedownManager != NULL");
-    CGS_ASSERT(lpRoadRulesManager   != NULL, "lpRoadRulesManager != NULL");
+    const char* const lpcFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp";
+    if (!lpProgressionManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpProgressionManager != NULL", lpcFile, 77); CgsDev::Assert::EndAssert(); }
+    if (!lpTakedownManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpTakedownManager != NULL", lpcFile, 78); CgsDev::Assert::EndAssert(); }
+    if (!lpRoadRulesManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpRoadRulesManager != NULL", lpcFile, 79); CgsDev::Assert::EndAssert(); }
 
     // Empty every embedded array (live-count word -> 0). The reserved-preamble arrays
     // (maSoundActions/maLastPlayerTriggers/maLastFrameTriggers) are Construct'd in the full build
     // at +896/+1492/+1560/+1564; the two modelled here are the ones later code touches.
+    meTriggerLoadStage = E_TRIGGER_LOAD_NOT_STARTED;
     maSoundActions.Construct();      // ARTIST82364D14, count at896
-    for (auto& lrPosition : maActiveRaceCarPosLastFrame) lrPosition = Vector3{};
+    const Vector3 lZeroPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
+    for (s32 i = 0; i < 8; ++i) maActiveRaceCarPosLastFrame[i] = lZeroPosition;
     maActiveTriggers.Construct();      // X360: stw 0 @ +1424
     mLandmarkIndexArray.Construct();   // X360: stw 0 @ +1864
     // ⭐ [bugwave 2026-08-23] DEFECT FIX, not an addition. The comment above used to say these
@@ -790,17 +796,22 @@ void TriggerQueryManager::SubmitTriggerQueries(
 {
     CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
     CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
-    auto* lpTriggerInterface = lpOutput->GetTriggerQueryInputInterface();
+    GameStateModuleIO::TriggerQueryInputInterface* lpTriggerInterface = lpOutput->GetTriggerQueryInputInterface();
     CGS_ASSERT(lpTriggerInterface != NULL, "lpTriggerInterface != NULL");
     for (s32 liCar = static_cast<s32>(lpActiveRaceCarInterface->maCarsInTheRace.GetLength()); liCar > 0; )
     {
-        const auto& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
+        const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
         mbCarHasTeleported = true;
+#if defined(D_PLATFORM_X360)
+        const __vector4 lvDelta = __vsubfp(__lvx(&lrCar.mPreviousPosition, 0), __lvx(&lrCar.mPosition, 0));
+        const f32 lfDistanceSquared = __vmsum3fp(lvDelta, lvDelta).x;
+#else
         const Vector3 lDelta = lrCar.mPreviousPosition - lrCar.mPosition;
         // 823927E4 vmsum3fp128: one rounding of the three products' sum.
         const f32 lfDistanceSquared = static_cast<f32>(
             static_cast<f64>(lDelta.x) * lDelta.x + static_cast<f64>(lDelta.y) * lDelta.y
             + static_cast<f64>(lDelta.z) * lDelta.z);
+#endif
         // vcmpgtfp(100, distanceSquared): unordered also skips the entire arm.
         if (!(lfDistanceSquared < 100.0f)) continue;
 
@@ -816,7 +827,25 @@ void TriggerQueryManager::SubmitTriggerQueries(
 
         if (lrCar.mbIsPlayer)
         {
-            Vector3 lLookAheadDist{lrCar.mDirection.x * 0.25f, lrCar.mDirection.y * 0.25f,
+#if defined(D_PLATFORM_X360)
+            const __vector4 lvLook = __vmulfp(__lvx(&lrCar.mDirection, 0), XMVectorReplicate(0.25f));
+            const __vector4 lvLength = __vmsum3fp(lvLook, lvLook);
+            const f32 lfLengthSquared = lvLength.x;
+            __vector4 lvEstimate = __vrsqrtefp(lvLength);
+            const __vector4 lvHalf = XMVectorReplicate(0.5f);
+            const __vector4 lvOne = XMVectorReplicate(1.0f);
+            for (s32 i = 0; i < 2; ++i)
+            {
+                const __vector4 lvSquared = __vmulfp(lvEstimate, lvEstimate);
+                const __vector4 lvHalfEstimate = __vmulfp(lvEstimate, lvHalf);
+                const __vector4 lvResidual = __vnmsubfp(lvLength, lvSquared, lvOne);
+                lvEstimate = __vmaddfp(lvHalfEstimate, lvResidual, lvEstimate);
+            }
+            Vector3 lLookAheadDist, lForward;
+            __stvx(lvLook, &lLookAheadDist, 0);
+            __stvx(__vmulfp(lvLook, lvEstimate), &lForward, 0);
+#else
+            Vector3 lLookAheadDist = {lrCar.mDirection.x * 0.25f, lrCar.mDirection.y * 0.25f,
                                   lrCar.mDirection.z * 0.25f, lrCar.mDirection.w * 0.25f};
             const f32 lfLengthSquared = static_cast<f32>(
                 static_cast<f64>(lLookAheadDist.x) * lLookAheadDist.x
@@ -834,10 +863,11 @@ void TriggerQueryManager::SubmitTriggerQueries(
                 const f32 lfResidual = lfDifference != lfDifference ? lfDifference : -lfDifference;
                 lfReciprocalLength = std::fma(lfHalf, lfResidual, lfReciprocalLength);
             }
-            const Vector3 lForward{lLookAheadDist.x * lfReciprocalLength,
+            const Vector3 lForward = {lLookAheadDist.x * lfReciprocalLength,
                                    lLookAheadDist.y * lfReciprocalLength,
                                    lLookAheadDist.z * lfReciprocalLength,
                                    lLookAheadDist.w * lfReciprocalLength};
+#endif
             if (lfLengthSquared > 225.0f)
                 {
                     const Vector3 lAggregateValue = {lForward.x * 15.0f, lForward.y * 15.0f,
@@ -855,6 +885,10 @@ void TriggerQueryManager::SubmitTriggerQueries(
             {
                 lEvent.mQueryID.SetIndex(999);
                 lEvent.mLineStart = mPlayerLookAheadPos;
+#if defined(D_PLATFORM_X360)
+                __stvx(__vmaddfp(__lvx(&lForward, 0), XMVectorReplicate(4.0f),
+                                   __lvx(&mPlayerLookAheadPos, 0)), &lEvent.mLineEnd, 0);
+#else
                 // 82392990 vmaddfp D,A,B,C = A*C+B.
                 {
                     const Vector3 lAggregateValue = {std::fma(lForward.x, 4.0f, mPlayerLookAheadPos.x),
@@ -863,6 +897,7 @@ void TriggerQueryManager::SubmitTriggerQueries(
                                           std::fma(lForward.w, 4.0f, mPlayerLookAheadPos.w)};
                     lEvent.mLineEnd = lAggregateValue;
                 }
+#endif
                 lpTriggerInterface->AddEvent(&lEvent, 3);
             }
         }
@@ -877,7 +912,7 @@ void TriggerQueryManager::CacheSoundQueryPositions(const RCEntityActiveRaceCarOu
 {
     for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
     {
-        const auto leCar = static_cast<EActiveRaceCarIndex>(liCar);
+        const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
         CGS_ASSERT(leCar >= E_ACTIVE_RACE_CAR_INDEX_0,
                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
         CGS_ASSERT(leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -902,7 +937,7 @@ bool TriggerQueryManager::IsSoundActionPresent(EntityId lEntityId,
 {
     for (u32 luAction = 0; luAction < maSoundActions.GetLength(); ++luAction)
     {
-        const auto& lrAction = maSoundActions[luAction];
+        const GameStateModuleIO::SoundTriggerAction& lrAction = maSoundActions[luAction];
         if (lrAction.mEntityId.muValue == lEntityId.muValue && lrAction.meResultType == leResultType)
             return true;
     }
@@ -915,7 +950,7 @@ void TriggerQueryManager::CheckSoundActions(const RCEntityActiveRaceCarOutputInt
     using GameStateModuleIO::SoundTriggerAction;
     for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
     {
-        const auto leCar = static_cast<EActiveRaceCarIndex>(liCar);
+        const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
         if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
         {
             const EntityId lEntity = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mEntityId;
@@ -956,11 +991,11 @@ void TriggerQueryManager::PostWorldUpdate(
     using BrnWorld::TriggerEntityModuleIO::OutLineTestResultEvent;
     CgsDev::PerfMonCpu::StartMonitor(gsiPostWorldUpdatePM);
     CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
-    const auto* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
+    const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
     CGS_ASSERT(lpTriggerResults != NULL, "lpTriggerResults != NULL");
-    const auto* lpTriggerResultQueue = lpTriggerResults;
+    const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResultQueue = lpTriggerResults;
     CGS_ASSERT(lpTriggerResultQueue != NULL, "lpTriggerResultQueue != NULL");
-    const auto* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
+    const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
     CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
     // 82386CD8..CEC: these are results for this frame, including an empty one.
     lpModeManager->ClearModeStartRegion();
@@ -977,12 +1012,12 @@ void TriggerQueryManager::PostWorldUpdate(
         CGS_ASSERT(liType == 1, "Unexpected trigger result");
         if (liType == 1)
         {
-            const auto* lpResult = static_cast<const OutLineTestResultEvent*>(lpEvent);
+            const OutLineTestResultEvent* lpResult = static_cast<const OutLineTestResultEvent*>(lpEvent);
             if (lpResult->mQueryID.GetOwner() == 56)
             {
                 const u32 luQueryIndex = lpResult->mQueryID.GetIndex();
                 const bool lbLookAhead = luQueryIndex == 999;
-                const auto leCar = lbLookAhead ? lePlayerCar
+                const EActiveRaceCarIndex leCar = lbLookAhead ? lePlayerCar
                     : static_cast<EActiveRaceCarIndex>((luQueryIndex >> 8) & 0xff);
                 const bool lbPlayer = leCar == lePlayerCar;
                 const bool lbActive = lpActiveRaceCarInterface->IsRaceCarActive(leCar);
@@ -998,19 +1033,19 @@ void TriggerQueryManager::PostWorldUpdate(
                         lAction.meResultType = lbLookAhead ? SoundTriggerAction::E_TYPE_AHEAD_OF_ENTITY : SoundTriggerAction::E_TYPE_AT_ENTITY;
                     }
                     lAction.muActiveTriggers = 0;
-                    const auto* lpTriggers = lpResult->GetTriggerIds();
+                    const BrnWorld::TriggerEntityModuleIO::TriggerId* lpTriggers = lpResult->GetTriggerIds();
                     for (s32 liTrigger = 0; liTrigger < lpResult->miNumTriggers; ++liTrigger)
                     {
                         const u32 luTrigger = lpTriggers[liTrigger];
                         if ((luTrigger >> 24) == 56)
                         {
                             const u32 luRegionIndex = luTrigger & 0x00ffffff;
-                            const auto* lpRegion = mpTriggerData->GetRegion(luRegionIndex);
+                            const BrnTrigger::TriggerRegion* lpRegion = mpTriggerData->GetRegion(luRegionIndex);
                             if (!lbLookAhead && lbPlayer)
                                 maLastPlayerTriggers.Append(static_cast<u16>(luRegionIndex));
                             if (lpRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
                             {
-                                const auto* lpGeneric = static_cast<const BrnTrigger::GenericRegion*>(lpRegion);
+                                const BrnTrigger::GenericRegion* lpGeneric = static_cast<const BrnTrigger::GenericRegion*>(lpRegion);
                                 const u32 luBit = static_cast<u32>(lpGeneric->GetType()) - 19;
                                 if (luBit <= 12) lAction.muActiveTriggers |= 1u << luBit;
                                 if (!lbLookAhead && lbPlayer)

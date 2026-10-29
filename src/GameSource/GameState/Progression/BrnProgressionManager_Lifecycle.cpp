@@ -245,7 +245,9 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     maPresetRaces.Clear();                                // +0x1F780 (the Array's count word)
     muNumPresetRaces        = 0;                          // +0x208D8
     mbUpdateRivalsRequested = false;                      // +0x20971 (DWARF mbUpdateRivals)
+    mbReturnRivals          = false;                      // +0x20972
     miLastUpdatedRival      = 0;                          // +0x20928
+    miLastReturnedRival     = 0;                          // +0x2092C
     meLoadStage             = E_LOADSTAGE_NOT_STARTED;    // +0x208DC
     meAILoadStage           = E_AI_DATA_LOAD_NOT_STARTED; // +0x208E0
 
@@ -259,15 +261,21 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     mpVehicleList                = 0;                     // +0x20948
     mi8ProgressionRank           = KI8_PROGRESSION_RANK_NOT_SET;  // +0x2096C, `li -2` as a BYTE
     mbPlayerMedalsUpdateRequired = true;                  // +0x20973, `li r11, 1` -- NOT zero
+    mbPlayerJustWonATrophyUpdateRequired = false;         // +0x20974
     mbDriveThrusDirty            = true;                  // +0x20988, `stbx r11(1)` -- NOT zero
+    meLastPlayerDistrict = static_cast<BrnWorld::EDistrict>(KI_NO_LAST_PLAYER_DISTRICT); // +0x2094C
     miNumberOfParCrashRoadRulesRuledByPlayer         = 0;  // +0x20950
     miNumberOfParTimeRoadRulesRuledByPlayer          = 0;  // +0x20954
     miNumberOfNumberOfCompleteRoadRulesRuledByPlayer = 0;  // +0x20958
+    mbHackEventNumberActive = false;                     // +0x2096E
+    mi8HackEventRankNumber = 0;                          // +0x2096D
     mQueueOfTrophyCarUnLocks.Clear();                     // +0x208C8 (`stwx 0`, the count word)
     mfTimeTillAllEventTypeCompleteHudMessage = KF_HUD_MESSAGE_HOLD_CLEARED;   // +0x2097C
     miMaxCarCount            = 0;                     // +0x2095C (DWARF miMaxCarCount -- see below)
     mbCheckAllWinTypesPending    = false;                 // +0x20975
+    mbHasJustRankedUp = false;                            // +0x20970
     mbCheckAllWinTypesArmed      = false;                 // +0x20976
+    mNewlyUnlockedCarID = 0;                              // +0x20960
     mbNeedToShowAllRivalsBeatenMessage   = false;         // +0x20980
     mbShowShutDownAllIfNeeded            = false;         // +0x20981
     mfTimeTillShowAllRivalsBeatenMessage = KF_HUD_MESSAGE_HOLD_CLEARED;       // +0x20984
@@ -293,8 +301,8 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
         FireConsoleAssert("miPostWorldUpdate >= 0", 198);
     }
 
-    mbHasJustRankedUp = false;
-    mNewlyUnlockedCarID = 0;
+    mbSendAchievementAwardedEvent_DEBUG = false;          // +0x20800
+    miAchievementToAward_DEBUG = 0;                       // +0x20804
 
     // NAME CORRECTION, RECORDED NOT APPLIED. The member stored above as `miMaxCarCount` is
     // spelled `int32_t miMaxCarCount` by the DWARF (BrnProgressionManager.h:859), sitting exactly

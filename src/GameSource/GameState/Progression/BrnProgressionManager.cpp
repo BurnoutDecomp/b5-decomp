@@ -57,79 +57,12 @@ static const char* const KAC_PROGMGR_FILE =
 // TWO significant figures, which is why shipped stunt-race targets are values like 34,000.
 static const f32 KF_STUNT_TARGET_SIGNIFICANT_FIGURES = 2.0f;
 
-// ------------------------------------------------------------------------------------
-// ProgressionManager::ProgressionManager  @ 0x827DEA50  (EXECUTED in the boot trace)
-//
-// X360 ctor. It performs three groups of stores:
-//   (1) marks the 18 per-district roaming-section arrays UNCONSTRUCTED (the ctor loop: 18 stores
-//       of -1 at +0x10, stride 0x14 -- see the corrected banner inside the loop below);
-//   (2) marks the embedded Profile's index->element containers "unconstructed" by poking
-//       the -1 sentinel into their count words (the freeburn-challenge array + the five
-//       mugshot arrays + the late trophy/achievement tail). FLAG: those count words are
-//       PRIVATE Profile state; the X360 reaches them as raw interior offsets while inlining.
-//       This reconstruction does NOT poke Profile internals by raw offset (forbidden) -- the
-//       embedded Profile is default-constructed and its container-sentinel reset is owned by
-//       the Profile TU's own Construct/Clear path. The observable manager-level state the
-//       boot trace depends on (head slots, debug component, event lists) is reproduced below.
-//   (3) installs the progression debug component's vtable and empties the two intrusive
-//       event lists to their self-referential sentinel state.
-// ------------------------------------------------------------------------------------
+// ARTIST827DEA50: all stores are the native C++ construction of the real members.
+// Array default constructors mark their count words unconstructed; Profile recursively
+// constructs its arrays; the debug member installs only its vtable; resource pointers
+// self-link. The two-phase Construct method owns the later clears and scalar seeds.
 ProgressionManager::ProgressionManager()
 {
-    // (1) [progression wave: lifecycle, 2026-09-06] SHAPE CORRECTION -- the store is the SAME
-    // store, but it is now made through the member it actually is. The head region is
-    // `RoamingSections maRoamingSections[18]` (Array<u16,8> each, DWARF BrnProgressionManager.h:822
-    // + BrnGameStateTypes.h:202), and the -1 the ctor writes at record +0x10 is CgsArray's
-    // KI_UNCONSTRUCTED sentinel, not the leading id word of a 20-byte handle record. Its producer,
-    // SetupRoamingSections @0x8236FE60, Clear()s each entry before Appending -- and CgsArray's own
-    // "Array used before Construct/Clear was called" assert is exactly what this sentinel exists
-    // to arm. See the member's banner in the header for the instruction-level evidence.
-    for (s32 liDistrict = 0; liDistrict < KI_DISTRICT_COUNT; ++liDistrict)
-    {
-        maRoamingSections[liDistrict].MarkUnconstructed();
-    }
-
-    // (3a) The by-value ProgressionDebugComponent member's C++ construction installs its
-    // vtable at the manager's +133000 slot, matching ARTIST's off_820CDE4C store.
-
-    // ⚠️⚠️ [drive-thru wave 2026-08-27] THE TROPHY QUEUE MUST BE CLEARED HERE, and this is a
-    // HOST-ONLY initialisation site, not an invented behaviour. The console clears it in
-    // ProgressionManager::Construct @0x8237A5F8 (`*(a1 + 133320) = 0`, the count word) -- but
-    // that Construct is NOT reconstructed, and Array<T,N>'s default constructor leaves miCount at
-    // the -1 sentinel, so without this the first Append fires "Array used before Construct/Clear
-    // was called".
-    // ⭐ MOVE-WHEN ProgressionManager::Construct lands; this Clear belongs there.
-    mQueueOfTrophyCarUnLocks.Clear();
-
-    // road-rules ruled tallies start clear (the ctor leaves the +133456..+133464 region 0).
-    miNumberOfParCrashRoadRulesRuledByPlayer         = 0;
-    miNumberOfParTimeRoadRulesRuledByPlayer          = 0;
-    miNumberOfNumberOfCompleteRoadRulesRuledByPlayer = 0;
-
-    // Prepare2 back-pointers start null.
-    mpTriggerData        = 0;
-    mpModeManager        = 0;
-    mpAchievementManager = 0;
-
-    // [stuntrace waveB MOUNT-CLOSURE round] The landmark -> AI-section cache starts blank.
-    // ⚠️ FLAG (HOST-ONLY INITIALISATION, same precedent as the five zero-initialised pointer
-    // members in the header): the X360 does NOT clear this table in the ctor, because the console
-    // ProgressionManager is BSS-resident and therefore already zero, and because Prepare2's
-    // ComputeLandmarkAISectionIndices overwrites every live entry before anything reads one. On
-    // the host this class is a by-value sub-object of GameStateModule inside BrnGameModule, so the
-    // 4 KB would otherwise start as stack/heap garbage -- and FindLandmarkAISectionIndex COMPARES
-    // against mId, so garbage there is not inert: it could hand a caller a fabricated AI-section
-    // index instead of the console's "not found" answer. Clearing reproduces the console's
-    // starting state exactly; it is an initialisation-site difference, not a behavioural one.
-    for (s32 liEntry = 0; liEntry < KI_LANDMARK_AI_SECTION_INDEX_COUNT; ++liEntry)
-    {
-        maLandmarkAISectionIndices[liEntry].mId              = 0;
-        maLandmarkAISectionIndices[liEntry].muAISectionIndex = 0;
-    }
-
-    // (3b) the two resource pointers (mpProgressionData / mpAISectionData) reach the
-    // X360 ctor's self-referential sentinel state (count-0/self-link/zero pattern)
-    // through their BaseResourcePtr default ctors -- no explicit stores needed here.
 }
 
 // ------------------------------------------------------------------------------------
@@ -332,76 +265,6 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     // The five trailing calls are dispatched by RunPrepare2Tail in the original order.
     RunPrepare2Tail();
 
-    // ⭐⭐ THE PROFILE EVENT-LIST SEAM -- KEPT, and now BOOT-MEASURED (progression wave, lane
-    // medals, 2026-09-06). The lane brief said to retire it "ONLY if UpdatePlayerMedals'
-    // boot-time call produces the same rank-0 unlock the console does". IT DOES NOT, and the
-    // measurement is the interesting part:
-    //
-    //   run scratch\bugtest\runs\progression_medals\20260906_213407 (seam retired, medals arm
-    //   live): `[medals] total=0 rank=1 profileRank=1 winsToNext=7 events=120`.
-    //
-    // The chain works -- but it lands on rank ONE, not zero. CalculateRankFromMedalTotal starts
-    // at GetProgressionRank() == 0 and the AUTHORED THRESHOLD OF RANK 0 IS ZERO (that run's
-    // winsToNext=7 is rank 1's threshold), so a player with no medals at all already clears rank
-    // 0 and the answer is 1. UnlockToProgressionRank is therefore called with 1, which takes the
-    // RANK-N arm -- and the profile EVENT-LIST population is the RANK-ZERO arm. It never runs.
-    // The event list came out of the save image in that run, not out of the console seat; on a
-    // first-ever profile it would have been EMPTY, which is exactly the `lpEvent` null the D1
-    // wave fixed. So: the seam stays, and it stays as a call to UnlockToProgressionRank(0).
-    // ⓘ THE SAME READING APPLIES TO THE CONSOLE. UnlockToProgressionRank has five xrefs in the
-    // XEX -- UpdatePlayerMedals plus four ProgressionDebugComponent entry points -- and
-    // Profile::AddEvent has exactly one, this function. Whatever populates a retail profile's
-    // event list, it is not the UpdatePlayerMedals path with these thresholds. Open question,
-    // recorded rather than guessed at; do not retire this seam on a theory about it.
-    //
-    // It ALSO now stands in for ProgressionManager::Construct @0x8237A5F8's medals-request store,
-    // which is what makes the console's own seat run at all.
-    //
-    // WHAT WAS BROKEN (D1 wave, 2026-08-27): Profile::Construct zeroes miEventCount, and the ONLY
-    // console writer of the ProfileEvent table -- UnlockToProgressionRank, the single xref to
-    // Profile::AddEvent @0x82359EB8 in the whole XEX -- had no caller on this build. So
-    // mProfile.GetEventCount() stayed 0 for the entire run, every id->record lookup answered NULL,
-    // and winning an offline event fired `lpEvent` (BrnProgressionManager.cpp:1669) in
-    // OnEventFinishUpdateProfile and then crashed on the null record. The D1 fix called
-    // UnlockToProgressionRank(0, 0) from here, which is a PC-INVENTED CALL SITE.
-    //
-    // WHAT WAS BROKEN (D1 wave, 2026-08-27): Profile::Construct zeroes miEventCount, and the ONLY
-    // console writer of the ProfileEvent table -- UnlockToProgressionRank, the single xref to
-    // Profile::AddEvent @0x82359EB8 in the whole XEX -- had no caller on this build. So
-    // mProfile.GetEventCount() stayed 0 for the entire run, every id->record lookup answered NULL,
-    // and winning an offline event fired `lpEvent` (BrnProgressionManager.cpp:1669) in
-    // OnEventFinishUpdateProfile and then crashed on the null record.
-    //
-    // WHAT THE CALL DOES NOW THAT IT IS NOT A NO-OP TAIL. Parks Q1 and Q4 are paid, so this same
-    // rank-0 call also fills the starting garage (UnlockDefaultPlayerCars) and runs the shared
-    // rank tail. On the boot path the profile at THIS moment is the freshly Constructed one --
-    // measured, 20260906_213407: this seam logs "restored from the profile as -2" while the save
-    // image is deserialised LATER, before the first in-game frame -- so the tail's
-    // ClearMedalsOnRankUp finds an empty event list and cannot wipe a saved medal.
-    //
-    // DELETE-WHEN something reconstructed populates the profile event list at its console seat.
-    //
-    // The HasMemoryResource() test guards THIS SEAM, not console code: LoadProgressionData also
-    // answers true from its corrupt-stage default arm (which fires its own :2799 assert and
-    // reports DONE), and the rank-0 arm dereferences mpProgressionData unconditionally the way
-    // the console can afford to. It is a [PC GUARD] on a PC-invented call site.
-    if (!mbInitialRankUnlockDone && mpProgressionData.HasMemoryResource())
-    {
-        mbInitialRankUnlockDone = true;
-
-        UnlockToProgressionRank(0, 0);
-
-        // ProgressionManager::Construct @0x8237A5F8's medals-request store (`li r11, 1` /
-        // `stbx r11, r31, 0x20973` @0x8237A798/0x8237A7B0), stood in for here so the CONSOLE SEAT
-        // -- PreWorldUpdate's medals arm -> UpdatePlayerMedals -> the licence rank -- actually
-        // runs. Setting it after the call above is deliberate: the call already left the rank
-        // cache at 0, and UpdatePlayerMedals is what turns that into the player's real licence.
-        // ⓘ Construct DOES run on this build (the lifecycle lane landed it this wave, called from
-        // GameStateModule at Prepare stage 20, before this), so this is normally a re-store of a
-        // byte that is already 1. It is kept because the two seams are deleted independently.
-        // DELETE-WHEN Construct's own store is the only one that matters.
-        RequestMedalUpdate();
-    }
 
     return true;
 }

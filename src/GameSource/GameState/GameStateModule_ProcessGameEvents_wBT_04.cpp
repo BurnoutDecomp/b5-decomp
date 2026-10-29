@@ -270,7 +270,7 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
     case GameStateModuleIO::E_EVENT_GUI_AWARD_SEQUENCE_START:
     {
         // The AI drives the player's car through the award sequence.
-        GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction = {};
+        GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction = GameStateModuleIO::SetPlayerCarDriverAction();
         lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_AI_MODULE;
         lSetPlayerCarDriverAction.mbIsDriveThru = false;
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSetPlayerCarDriverAction),
@@ -287,7 +287,7 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
     case GameStateModuleIO::E_EVENT_GUI_AWARD_SEQUENCE_END:
     {
         // The player gets the car back.
-        GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction = {};
+        GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction = GameStateModuleIO::SetPlayerCarDriverAction();
         lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_ENTITY_MODULE;
         lSetPlayerCarDriverAction.mbIsDriveThru = false;
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSetPlayerCarDriverAction),

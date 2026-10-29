@@ -43,6 +43,24 @@ namespace
 // displayed position to 1, push it through SetCurrentPosition, then register the two CPU perfmon
 // monitors. The four collaborator null-asserts mirror the X360 (the X360 bakes file/line; CGS_ASSERT
 // injects this file's __FILE__/__LINE__).
+// ARTIST82375420 inlines this state reset during GameState teardown.
+void RichPresenceManagerBase::Destruct()
+{
+    meSetLobbyType = static_cast<GameStateModuleIO::EGameModeType>(18);
+    meLobbyType = static_cast<GameStateModuleIO::EGameModeType>(18);
+    meOldRichPresenceStatus = static_cast<ERichPresenceStates>(0);
+    miUserID = -1;
+    miCurrentRound = -1;
+    miTotalRounds = -1;
+    mpGameStateModule = 0;
+    mpNetworkRoundManager = 0;
+    mpModeManager = 0;
+    mpScoringSystem = 0;
+    mbPlayerIsInLobby = false;
+    meIsRanked = E_GAME_COUNT;
+    meOldRankedStatus = E_GAME_COUNT;
+}
+
 void RichPresenceManagerBase::Construct(GameStateModule* lpGameStateModule,
                                         NetworkRoundManager* lpNetworkRoundManager,
                                         ModeManager* lpModeManager)

@@ -193,10 +193,10 @@ void GameStateModule::ProcessGameEvents_Group2(s32                              
                                 GameStateModuleIO::E_ACTION_SET_IN_MODE_START_REGION,
                                 sizeof(lStartRegionAction));
 
-        mpMugshotManager->OnRoundStart();
-        mpPaybackManager->OnRoundStart();
+        mMugshotManager.OnRoundStart();
+        mPaybackManager.OnRoundStart();
         mNetworkRoundManager.OnRoundStart();
-        mpTakedownManager->ClearAllTakedowns(lpActionQueue);
+        mTakedownManager.ClearAllTakedowns(lpActionQueue);
 
         lStartGameModeParams.Construct(lpNetworkGameEvent->meGameMode,
                                        mLastActiveRaceCarInterface.GetPlayerPosition(),

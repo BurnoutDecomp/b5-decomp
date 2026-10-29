@@ -35,7 +35,7 @@
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer (lock + GetGameActionQueue)
 #include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h" // current player-status snapshot
-#include "GameSource/GameState/BrnGameStateTakedownCache.h"             // mpTakedownCache->mTakedownEventQueue (the post-world scoring leg)
+#include "GameSource/GameState/BrnGameStateModule.h"             // mTakedownEventQueue (the post-world scoring leg)
 #include "GameSource/GameState/BrnGameEvents.h"                         // RecordPropHitEvent / E_EVENT_RECORD_PROP_HIT / E_EVENT_CHANGE_WORLD_REGION
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // WorldRegionChangeEvent (the case-115 payload)
 #include "GameSource/GameState/Offences/BrnStuntManager.h"              // StuntManager::OnPropHit / Update
@@ -83,7 +83,7 @@ void GameStateModule::HandleChangePlayerCarEvent(
     GameStateModuleIO::GameActionQueue* lpActions)
 {
     OnPlayerCarChange(lpEvent->mCarModelId, lpEvent->mWheelModelId, lpActions, true);
-    GameStateModuleIO::ResetPlayerCarAction lReset = {};
+    GameStateModuleIO::ResetPlayerCarAction lReset = GameStateModuleIO::ResetPlayerCarAction();
     lReset.mCarModelId = lpEvent->mCarModelId;
     lReset.mWheelModelId = lpEvent->mWheelModelId;
     lReset.mePlayerScoringIndex = GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
@@ -257,11 +257,6 @@ void GameStateModule::CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpO
                 mLastActiveRaceCarInterface.GetRivalId(leIndex), leIndex);
             SetRivalTailingTime(static_cast<s32>(leIndex), 0.0f);
 
-            static s32 siTailingWitnessed = 0;
-            if (sbTailingDiag && siTailingWitnessed < 12 && CgsDev::Log::gpDebugPrint != 0)
-            {
-                ++siTailingWitnessed;
-            }
         }
     }
 }

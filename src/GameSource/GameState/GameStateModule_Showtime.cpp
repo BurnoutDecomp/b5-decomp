@@ -208,21 +208,7 @@ namespace
         const bool lbOnlineModeRunning =
             (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
 
-        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable() &&
-            sbIgnoreProgressionGate && lbCrashModePressed)
-        {
-            // Say so, once, and say what the true state was -- a run under this flag must be
-            // readable as such from its own log, not from the harness's banner alone.
-            static bool sbSaidSo = false;
-            if (!sbSaidSo && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbSaidSo = true;
-                const BrnProgression::Profile* const lpcProfile = mProgressionManager.GetProfile();
-            }
-        }
-
-        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable() &&
-            !sbIgnoreProgressionGate)
+        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable())
         {
             if (lbCrashModePressed)
             {
@@ -492,7 +478,7 @@ namespace
 
                 CrashModeScoring* const lpCrashScorer = mModeManager.GetScoringSystem()->GetCrashScorer();
 
-                GameStateModuleIO::VehicleHitAction lHitAction = {};   // +0x22..+0x23 never written by the console
+                GameStateModuleIO::VehicleHitAction lHitAction = GameStateModuleIO::VehicleHitAction();   // +0x22..+0x23 never written by the console
                 lpCrashScorer->DealWithScoreForVehicleClass(lResponse.muVehicleIndex,
                                                             lResponse.meType,
                                                             lResponse.mTypeId,
