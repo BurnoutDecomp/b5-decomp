@@ -12,6 +12,7 @@
 
 #include "types.hpp"
 
+#include <vectorintrinsics.h>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -390,21 +391,29 @@ inline VmxVector VmxMulFP(const VmxVector& a, const VmxVector& b)
     return v;
 }
 
-// a * b + c with a single rounding.
-inline VmxVector VmxMaddFP(const VmxVector& a, const VmxVector& b, const VmxVector& c)
+// ARTIST FilterBlock2dBil_FirstPass_Xenon 82B5C9B0..82B5C9C4.
+// Bytes is a serialized register image without an alignment contract. Copy to
+// native register storage rather than using lvx on a potentially unaligned view.
+__forceinline VmxVector VmxMaddFP(const VmxVector& a, const VmxVector& b, const VmxVector& c)
 {
+    __vector4 va, vb, vc;
+    memcpy(&va, a.Bytes, sizeof(va));
+    memcpy(&vb, b.Bytes, sizeof(vb));
+    memcpy(&vc, c.Bytes, sizeof(vc));
+    const __vector4 result = __vmaddfp(va, vb, vc);
     VmxVector v;
-    for (int i = 0; i < 4; ++i)
-        VmxSetF32(v, i, std::fmaf(VmxGetF32(a, i), VmxGetF32(b, i), VmxGetF32(c, i)));
+    memcpy(v.Bytes, &result, sizeof(result));
     return v;
 }
 
-// Round each element toward zero to an integral float.
-inline VmxVector VmxRoundToZeroFP(const VmxVector& a)
+// ARTIST 82B5C9C8/82B5C9CC: native round-toward-zero, preserving VMX behavior.
+__forceinline VmxVector VmxRoundToZeroFP(const VmxVector& a)
 {
+    __vector4 va;
+    memcpy(&va, a.Bytes, sizeof(va));
+    const __vector4 result = __vrfiz(va);
     VmxVector v;
-    for (int i = 0; i < 4; ++i)
-        VmxSetF32(v, i, std::truncf(VmxGetF32(a, i)));
+    memcpy(v.Bytes, &result, sizeof(result));
     return v;
 }
 
