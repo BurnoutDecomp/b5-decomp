@@ -72,8 +72,8 @@ namespace CgsMemory
 
         u32  GetOverheadRequired(const InitOptions* lpInitOptions);
 
-        // "New module": skip ModuleSingleBuffered's old DataStructure IO path (X360 *(this+4)=1).
-        MemoryModule() { mbIsNewModule = true; }
+        // ARTIST827E1FD0..2000: runtime latch is set by virtual Construct, not this constructor.
+        MemoryModule() {}
 
         virtual void Construct(InitOptions* lpInitOptions, rw::IResourceAllocator* lpAllocator);
         virtual bool Prepare();
