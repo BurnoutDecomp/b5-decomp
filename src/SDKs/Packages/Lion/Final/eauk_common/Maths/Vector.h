@@ -29,6 +29,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include <vectorintrinsics.h>
 
 struct CGS_ALIGN(16) cVector
 {
@@ -64,11 +65,11 @@ struct CGS_ALIGN(16) cVector
     // epsilon -- so its w lanes decay geometrically), and it is reproduced here
     // deliberately. Writing Mul as a 3-lane operation would silently "fix" the console.
     //
-    // ⚠ PARAMETERS ARE `const cVector&`, NOT BY VALUE AS THE DWARF DECLARES THEM. The console
-    // passes a cVector in a VMX register; MSVC x64 rejects a by-value parameter of a 16-byte
-    // over-aligned type outright (C2719), and this type IS alignas(16) -- see the banner.
-    // No call below aliases its destination with a source, and Mul/Add read each lane before
-    // they write it, so the reference form is behaviourally identical.
+    // The original methods take cVector values (DWARF Vector.h:120..149).
+    // Keep those snapshots when the destination aliases a source. Whole-quad
+    // operations below use the native VMX instructions observed in ARTIST.
+    // The recovered call sites inline these methods; they do not attest a
+    // standalone cVector register-passing contract for this storage type.
     //
     // ⛔ NO CONSTRUCTORS. The DWARF declares cVector(FP32) and cVector(FP32,FP32,FP32,FP32)
     // and the console builds the weight splat with the first of them, but this type is
@@ -96,7 +97,7 @@ struct CGS_ALIGN(16) cVector
     }
 
     // Vector.h:120 -- the THREE-lane add: `fadds` on x/y/z only (0x8290B268..0x8290B294).
-    void Add(const cVector& arA, const cVector& arB)
+    void Add(cVector arA, cVector arB)
     {
         SetX(arA.GetX() + arB.GetX());
         SetY(arA.GetY() + arB.GetY());
@@ -105,52 +106,48 @@ struct CGS_ALIGN(16) cVector
 
     // Vector.h:122 -- the multiply is a WHOLE-QUAD `vmulfp128` even in the 3-lane family
     // (0x8290B258..0x8290B264). That asymmetry is the console's; see the banner above.
-    void Mul(const cVector& arA, const cVector& arB)
+    void Mul(cVector arA, cVector arB)
     {
-        x = arA.x * arB.x;
-        y = arA.y * arB.y;
-        z = arA.z * arB.z;
-        w = arA.w * arB.w;
+        const __vector4 lA = __lvx(&arA, 0);
+        const __vector4 lB = __lvx(&arB, 0);
+        __stvx(__vmulfp(lA, lB), this, 0);
     }
 
     // Vector.h:141 -- *this = arA + (arB - arA) * arT, on x/y/z; w becomes w * arT.w.
     // asm 0x8290B204..0x8290B294 and 28 identical blocks after it.
-    void Lerp(const cVector& arA, const cVector& arB, const cVector& arT)
+    void Lerp(cVector arA, cVector arB, cVector arT)
     {
         SetX(arB.GetX() - arA.GetX());
         SetY(arB.GetY() - arA.GetY());
         SetZ(arB.GetZ() - arA.GetZ());
         Mul(*this, arT);
-        Add(*this, arA);
+        Add(arA, *this);
     }
 
     // Vector.h:144/145/146 -- the four-lane family. `vaddfp` / `vsubfp` / `vmulfp128`.
-    void Add4(const cVector& arA, const cVector& arB)
+    void Add4(cVector arA, cVector arB)
     {
-        x = arA.x + arB.x;
-        y = arA.y + arB.y;
-        z = arA.z + arB.z;
-        w = arA.w + arB.w;
+        const __vector4 lA = __lvx(&arA, 0);
+        const __vector4 lB = __lvx(&arB, 0);
+        __stvx(__vaddfp(lA, lB), this, 0);
     }
 
-    void Sub4(const cVector& arA, const cVector& arB)
+    void Sub4(cVector arA, cVector arB)
     {
-        x = arA.x - arB.x;
-        y = arA.y - arB.y;
-        z = arA.z - arB.z;
-        w = arA.w - arB.w;
+        const __vector4 lA = __lvx(&arA, 0);
+        const __vector4 lB = __lvx(&arB, 0);
+        __stvx(__vsubfp(lA, lB), this, 0);
     }
 
-    void Mul4(const cVector& arA, const cVector& arB)
+    void Mul4(cVector arA, cVector arB)
     {
-        x = arA.x * arB.x;
-        y = arA.y * arB.y;
-        z = arA.z * arB.z;
-        w = arA.w * arB.w;
+        const __vector4 lA = __lvx(&arA, 0);
+        const __vector4 lB = __lvx(&arB, 0);
+        __stvx(__vmulfp(lA, lB), this, 0);
     }
 
     // Vector.h:149 -- all four lanes lerped. asm 0x8290C3C0..0x8290C3E4.
-    void Lerp4(const cVector& arA, const cVector& arB, const cVector& arT)
+    void Lerp4(cVector arA, cVector arB, cVector arT)
     {
         Sub4(arB, arA);
         Mul4(*this, arT);
