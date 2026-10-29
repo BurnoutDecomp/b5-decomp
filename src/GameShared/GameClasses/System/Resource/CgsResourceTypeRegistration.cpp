@@ -77,35 +77,20 @@
 // Only the handlers reconstructed so far are listed; the rest land in their game-order slot as
 // each handler TU arrives.
 //
-// THREE DELIBERATE DEVIATIONS from the console:
-//   1. Location. This lives engine-side (CgsResource), not in the game-layer GameDataModule,
-//      because the early boot path brings resources online BEFORE GameDataModule::Prepare runs
-//      (the debug-font bring-up and the GUI MovieManager both LoadBundle during Construct).
-//      Routing that through a game-layer method would invert the engine->game layering.
-//   2. Storage. The global CgsResource::TypeRegistry, which BundleLoader's ResolveResourceType
-//      walks, instead of the GameDataModule's own handler/name arrays -- those and their
-//      resolution path are a later reconstruction.
-//   3. Mechanism. Static singletons instead of heap-new'd Type objects plus InitCachedValues.
-//      Statics are boot-safe and need no allocator; cached-value init folds into each handler's
-//      own ctor where it matters.
-//
-// EntryList and IdList are the only two the console registers outside the monolith, in their
-// owning module's bring-up. They are folded in here as a bridge until that registration is
-// reconstructed.
+// This helper retains an engine-side catalog and static handler storage. Native
+// game-layer registration belongs to GameDataModule::RegisterResourceTypes, and
+// PoolModule receives its handler/name entries through InitOptions. Asynchronous
+// bundle requests then use the pool's acquisition, import and fix-up pipeline.
+// EntryList and IdList also remain available in this shared catalog; their native
+// owning modules perform the corresponding startup registration.
 // ============================================================================================
 
 namespace CgsResource
 {
     void RegisterAllResourceTypes()
     {
-        // Idempotent: the debug-font bring-up, the GUI module's movie-bundle load, and the
-        // GameDataModule prepare all reach this; register the handler set exactly once.
-        //
-        // Every entry below is load-bearing. BundleLoader::LoadBundle gates all three fix-up
-        // passes on `mpResourceType != 0`, so an unregistered type skips FixUp, import
-        // resolution and PostFixUp, and CgsResource::Pool::CreateEntryInSlot stores a NULL
-        // mpResourceType. Serialised offsets then stay offsets and imports stay null, usually
-        // with no error beyond one "[bundle] UNREGISTERED resource type id N" line.
+        // Populate the shared catalog once. Native resource requests require
+        // their registered type for FixUp, import resolution and PostFixUp.
         static bool sbRegistered = false;
         if (sbRegistered)
             return;
@@ -128,8 +113,8 @@ namespace CgsResource
         static SnrResourceType             sSnr;               // [game #27] 0x19  SNR (streamed audio)
         TypeRegistry::Register(&sSnr, "Snr");
         // Phase-F sound-content family.  All ten handlers are emitted by the
-        // same ARTIST registration monolith; leaving one out makes BundleLoader
-        // skip its FixUp/import/post-fix path even though the content factory is live.
+        // same ARTIST registration monolith; each resource family needs its
+        // handler in the native pool acquisition and fix-up pipeline.
         static RegistryResourceType sSoundRegistry;             // 0xA000
         TypeRegistry::Register(&sSoundRegistry, "Registry");
         static GenericRwacWaveContentResourceType sRwacWave;     // 0xA020
