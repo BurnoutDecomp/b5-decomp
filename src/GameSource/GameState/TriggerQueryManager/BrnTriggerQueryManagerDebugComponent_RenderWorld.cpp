@@ -54,7 +54,8 @@ namespace BrnGameState
         if (mbRenderTriggerRegions)
         {
             const s32 liRegionCount = mpTriggerData->GetRegionCount();
-            CgsDev::SimpleStrStream lTextStream;
+            char lacTextBuffer[512];
+            CgsDev::StrStream lTextStream(lacTextBuffer, sizeof(lacTextBuffer));
 
             for (s32 liRegionIndex = 0; liRegionIndex < liRegionCount; ++liRegionIndex)
             {
@@ -204,20 +205,20 @@ namespace BrnGameState
                                 lDimensions.z * 0.5f,
                                 0.0f
                             };
-                            const rw::math::vpu::Vector3 lMin =
+                            const rw::math::vpu::Vector3 lNegativeHalfDimensions =
                             {
                                 -lHalfDimensions.x,
                                 -lHalfDimensions.y,
                                 -lHalfDimensions.z,
-                                0.0f
+                                -lHalfDimensions.w
                             };
-                            const rw::math::vpu::Vector3 lMax = lHalfDimensions;
 
-                            lpRender->DrawBox(lMin, lMax, lpBox->ComputeTransform(), lColour);
+                            // ARTIST v1 is +half, v2 is the sign-negated half (including its zero W lane).
+                            lpRender->DrawBox(lHalfDimensions, lNegativeHalfDimensions, lpBox->ComputeTransform(), lColour);
 
                             rw::RGBA lSolidColour;
                             lSolidColour.m_rgba = (lColour.m_rgba & 0x00FFFFFFu) | 0x40000000u;
-                            lpRender->DrawSolidBox(lMin, lMax, lpBox->ComputeTransform(), lSolidColour);
+                            lpRender->DrawSolidBox(lHalfDimensions, lNegativeHalfDimensions, lpBox->ComputeTransform(), lSolidColour);
 
                             if (mbRenderAxis)
                                 lpRender->DrawAxis(lpBox->ComputeTransform());
