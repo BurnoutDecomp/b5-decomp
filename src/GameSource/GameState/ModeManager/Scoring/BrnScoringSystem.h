@@ -590,11 +590,9 @@ namespace BrnGameState
         // slot, SetNetworkStuntScore by network player id; both store via CarData::GetScoreData().
         void SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore);                         // 0x8231F0C8
         void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore);                           // 0x8231FC20
-        // SetNetworkStuntMultiplier (0x8231FC50) arms the per-car "chainable stunt multiplier" trio
-        // (CarScoreData +0xC8 miChainableScore / +0xD0 miCurrentChainableMultiplier / +0xD8 mbChainActive)
-        // on GetCarData(lID); reconciled arg order from the X360 register setup (r5->+0xD0, r6->+0xC8).
-        // Body in BrnScoringSystem_UpdateB.cpp (writes via the CarScoreData chainable-trio accessors).
-        void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore); // 0x8231FC50
+        // ARTIST r6 carries the complete 64-bit payload stored at CarScoreData +0xC8/+0xCC;
+        // r5 supplies the frame value at +0xD0, and the chain-active byte is set at +0xD8.
+        void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s64 li64MultiplierData); // 0x8231FC50
 
         // PlayerPerformedBarrelRolls (0x823634D0) adds liCount to the per-car barrel-roll tally at
         // CarScoreData +0xFC (carved as miBarrelRollCount). Body in BrnScoringSystem_UpdateB.cpp.

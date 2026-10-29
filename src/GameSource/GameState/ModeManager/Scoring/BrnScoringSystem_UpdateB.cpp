@@ -613,25 +613,18 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     // SetNetworkStuntMultiplier -- X360 0x8231FC50
     // ------------------------------------------------------------------------
-    // Arm the per-car "chainable stunt multiplier" trio for the car owned by the given
-    // network player. The lookup (GetCarData(NetworkPlayerID), X360 sub_8231DD88) returns
-    // NULL when no such car is registered; only on a hit does the X360 body write:
-    //   miChainableScore (+0xC8) = liChainableScore   (asm std r30,0xC8 -- r30 == a4)
-    //   miCurrentChainableMultiplier (+0xD0) = liMultiplier  (asm stw r31,0xD0 -- r31 == a3)
-    //   mbChainActive (+0xD8) = 1                      (asm stb 1,0xD8)
-    // Arg order reconciled from the register setup: r5(a3) is the multiplier (->+0xD0),
-    // r6(a4) is the chainable score (->+0xC8); the declared signature names them
-    // (lID, liMultiplier, liChainableScore). The +0xC8 store is a 64-bit `std` whose low
-    // word is the chainable score; the high word (miChainableField, +0xCC) is the
-    // store's incidental tail and is not a meaningful value -- only the named s32 score is
-    // reproduced here.
-    void ScoringSystem::SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore)
+    // ARTIST receives the complete 64-bit event payload in r6 and stores it with std at +0xC8.
+    // Preserve its big-endian word order in the two recovered s32 fields: high word at +0xC8,
+    // low word at +0xCC. The display gather copies both words; +0xD0 is the received frame value.
+    void ScoringSystem::SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s64 li64MultiplierData)
     {
         CarData* lpCar = GetCarData(lID);
         if (lpCar)
         {
             GameStateModuleIO::CarScoreData* lpScore = lpCar->GetScoreData();
-            lpScore->SetChainableScore(liChainableScore);
+            const u64 luMultiplierData = static_cast<u64>(li64MultiplierData);
+            lpScore->SetChainableScore(static_cast<s32>(luMultiplierData >> 32));
+            lpScore->SetChainableField(static_cast<s32>(luMultiplierData));
             lpScore->SetCurrentChainableMultiplier(liMultiplier);
             lpScore->SetChainActive(true);
         }

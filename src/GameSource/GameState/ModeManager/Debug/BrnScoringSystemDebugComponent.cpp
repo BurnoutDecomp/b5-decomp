@@ -182,7 +182,8 @@ namespace BrnGameState
         // Both vectors are normalised before the dot product, exactly as the VMX body does.
         const Vector3 lToRaceCar =
             lpRaceCarState->mTransform.Pos() - lpLocalPlayersCarState->mTransform.Pos();
-        if (rw::math::vpu::MagnitudeSquared(lToRaceCar) >= 102400.0f)
+        const f32 lfDistanceSquared = rw::math::vpu::MagnitudeSquared(lToRaceCar);
+        if (!(lfDistanceSquared < 102400.0f))
             return;
 
         const f32 lfMotionDot = rw::math::vpu::Dot(
