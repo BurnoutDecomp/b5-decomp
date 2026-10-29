@@ -2,9 +2,10 @@
 #include <xtl.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
-// Native PPMalloc engine. ARTIST 82B4D730..82B51620 is authoritative;
-// the three export holes (D810, E1E8, 50A28) were read from the image.
+// Native PPMalloc engine. ARTIST 82B4D730..82B51848 is authoritative;
+// export holes D810, E1E8, F2C8 and 50A28 were read from the image.
 // Chunk sizes include the eight-byte boundary tag. Free-list links occupy
 // user storage, and the next chunk's prior-size word is usable while allocated.
 namespace EA { namespace Allocator {
@@ -49,6 +50,10 @@ void GeneralAllocator::_AssertLayout()
     CGS_STATIC_ASSERT(sizeof(GeneralAllocator) == 0x518, "ARTIST allocator size");
     CGS_STATIC_ASSERT(sizeof(Chunk) == 16, "ARTIST chunk size");
     CGS_STATIC_ASSERT(sizeof(CoreBlock) == 32, "ARTIST core record size");
+    CGS_STATIC_ASSERT(sizeof(BlockInfo) == 24, "ARTIST report block size");
+    CGS_STATIC_ASSERT(sizeof(Snapshot) == 60, "ARTIST snapshot header and first block");
+    CGS_STATIC_ASSERT(offsetof(Snapshot, mBlockInfo) == 36, "ARTIST snapshot blocks");
+    CGS_STATIC_ASSERT(offsetof(BlockInfo, mBlockType) == 20, "ARTIST report block type");
     CGS_STATIC_ASSERT(offsetof(GeneralAllocator, mpTopChunk) == 0x440, "ARTIST top chunk");
     CGS_STATIC_ASSERT(offsetof(GeneralAllocator, mHeadCoreBlock) == 0x448, "ARTIST core head");
     CGS_STATIC_ASSERT(offsetof(GeneralAllocator, mpMallocFailureFunction) == 0x4ac, "ARTIST failure callback");
@@ -1271,6 +1276,587 @@ size_t GeneralAllocator::GetLargestFreeBlock(bool bClearCache) // 82B4FE28
                 }
     }
     return nLargest;
+}
+
+int GeneralAllocator::CheckChunk(const Chunk* pChunk) // 82B4E258
+{
+    PPMAutoMutex lock(mpMutex);
+    int nErrors = 0;
+    if (mnCheckChunkReentrancyCount <= 1)
+    {
+        const int nCount = ++mnCheckChunkReentrancyCount;
+        const unsigned int nSize = GetChunkSize(pChunk);
+        const size_t nAddress = reinterpret_cast<size_t>(pChunk);
+        nErrors = nSize >= 0x40000000;
+        const CoreBlock* pCore = FindCoreBlockForAddress(pChunk);
+        if (pChunk->mnSize & 2)
+        {
+            nErrors += pCore != 0;
+            nErrors += ((nAddress - pChunk->mnPriorSize) & (mnPageSize - 1)) != 0;
+            nErrors += ((nAddress + nSize + 16) & (mnPageSize - 1)) != 0;
+            nErrors += (nAddress & 7) != 0;
+        }
+        else
+        {
+            nErrors += pCore == 0;
+            nErrors += nAddress < reinterpret_cast<size_t>(pCore->mpCore);
+            nErrors += nAddress >= reinterpret_cast<size_t>(pCore->mpCore) + pCore->mnSize;
+            nErrors += nAddress + nSize >= reinterpret_cast<size_t>(pCore->mpCore) + pCore->mnSize;
+            if (pChunk == mpTopChunk)
+            {
+                nErrors += !(pChunk->mpPrevChunk == pChunk && pChunk->mpNextChunk == pChunk);
+                nErrors += nSize < 16;
+                nErrors += !(pChunk->mnSize & 1);
+            }
+            else if (mHeadCoreBlock.mpNextCoreBlock == mHeadCoreBlock.mpPrevCoreBlock)
+            {
+                nErrors += nAddress < reinterpret_cast<size_t>(pCore->mpCore);
+                nErrors += nAddress + nSize > reinterpret_cast<size_t>(pCore) + pCore->mnSize - 16;
+            }
+        }
+        mnCheckChunkReentrancyCount = nCount - 1;
+    }
+    return nErrors;
+}
+int GeneralAllocator::CheckFreeChunk(const Chunk* pChunk) // 82B4E498
+{
+    PPMAutoMutex lock(mpMutex);
+    const unsigned int nSize = GetChunkSize(pChunk);
+    Chunk* pNext = GetChunkAtOffset(pChunk, nSize);
+    int nErrors = CheckChunk(pChunk);
+    nErrors += (pChunk->mnSize >> 1) & 1;
+    nErrors += GetChunkAtOffset(pChunk, GetChunkSize(pChunk))->mnSize & 1;
+    if (nSize < 16) nErrors += nSize > 4;
+    else
+    {
+        nErrors += !(pChunk->mnSize & 1);
+        nErrors += nSize != pNext->mnPriorSize;
+        nErrors += (reinterpret_cast<size_t>(pChunk) & 7) != 0;
+        nErrors += (nSize & 7) != 0;
+        nErrors += !(pChunk == mpTopChunk || (GetChunkAtOffset(pNext, GetChunkSize(pNext))->mnSize & 1));
+        nErrors += pChunk->mpPrevChunk->mpNextChunk != pChunk;
+        nErrors += pChunk->mpNextChunk->mpPrevChunk != pChunk;
+        if (pChunk == pChunk->mpNextChunk || pChunk == pChunk->mpPrevChunk)
+        {
+            nErrors += mpTopChunk != pChunk;
+            nErrors += pChunk->mpNextChunk != pChunk->mpPrevChunk;
+        }
+    }
+    return nErrors;
+}
+int GeneralAllocator::CheckUsedChunk(const Chunk* pChunk) // 82B4E630
+{
+    PPMAutoMutex lock(mpMutex);
+    int nErrors = CheckChunk(pChunk);
+    if (!(pChunk->mnSize & 2))
+    {
+        Chunk* pNext = GetChunkAtOffset(pChunk, GetChunkSize(pChunk));
+        nErrors += !(pNext->mnSize & 1);
+        if (!(pChunk->mnSize & 1))
+            nErrors += pChunk->mnPriorSize != GetChunkSize(GetChunkAtOffset(pChunk, -static_cast<int>(pChunk->mnPriorSize)));
+        if (pNext == mpTopChunk)
+        {
+            nErrors += GetChunkSize(pNext) < 16;
+            nErrors += !(pNext->mnSize & 1);
+        }
+    }
+    return nErrors;
+}
+int GeneralAllocator::CheckMMappedChunk(const Chunk* pChunk) // 82B4E720
+{
+    PPMAutoMutex lock(mpMutex);
+    int nErrors = CheckChunk(pChunk);
+    nErrors += (~pChunk->mnSize >> 1) & 1;
+    const Chunk* pList = mHeadMMapChunk.mpNextChunk;
+    while (pList != &mHeadMMapChunk && GetChunkAtOffset(pList, -static_cast<int>(pList->mnPriorSize)) != pChunk)
+        pList = pList->mpNextChunk;
+    nErrors += pList == &mHeadMMapChunk;
+    return nErrors;
+}
+int GeneralAllocator::CheckState(HeapValidationLevel nLevel) // 82B4E7D8
+{
+    PPMAutoMutex lock(mpMutex);
+    int nErrors = 0;
+    if (nLevel >= kHeapValidationLevelBasic)
+    {
+        if (!mpTopChunk || mpTopChunk == GetInitialTopChunk()) return 0;
+        unsigned int nFastTotal = 0;
+        const unsigned int nMaxFast = mnMaxFastBinChunkSize;
+        unsigned int nProblems = nMaxFast >= 0x50;
+        if (nLevel >= kHeapValidationLevelDetail)
+        {
+            for (int i = 0; i != 10; ++i)
+            {
+                const Chunk* pChunk = mpFastBinArray[i];
+                int nCount = 0;
+                while (pChunk)
+                {
+                    if (nCount >= 2000000) break;
+                    const CoreBlock* pCore = FindCoreBlockForAddress(pChunk);
+                    ++nCount;
+                    nProblems += ((~pChunk->mnSize >> 2) & 1) + (static_cast<int>(pChunk->mnSize) >= 0) + (pCore == 0);
+                    pChunk = pChunk->mpNextChunk;
+                    nProblems += nCount >= 2000000;
+                }
+            }
+            for (int i = 0; i < 256; i += 2)
+            {
+                const Chunk* pChunk = mpBinArray[i];
+                if (i < 2) nProblems += pChunk != 0;
+                else
+                {
+                    const Chunk* pHead = reinterpret_cast<const Chunk*>(&mpBinArray[i - 2]);
+                    const Chunk* pNext = pChunk->mpNextChunk;
+                    nProblems += pChunk == 0;
+                    int nHeads = pNext == pHead;
+                    while (pNext != pChunk)
+                    {
+                        if (pNext == pHead) ++nHeads;
+                        else nProblems += FindCoreBlockForAddress(pNext) == 0;
+                        pNext = pNext->mpNextChunk;
+                    }
+                    nProblems += nHeads == 0;
+                }
+            }
+            nProblems += (nMaxFast & ~1u) > 0x58;
+            nProblems += ((mnPageSize - 1) & mnPageSize) != 0;
+            nProblems += mpInitialTopChunk == 0;
+            nProblems += mnTopPad >= 100000;
+            for (int i = 0; i != 10; ++i)
+            {
+                const Chunk* pChunk = mpFastBinArray[i];
+                if (static_cast<unsigned int>(i) > (((nMaxFast & ~1u) >> 3) - 2)) nProblems += pChunk != 0;
+                while (pChunk)
+                {
+                    const unsigned int nSize = pChunk->mnSize;
+                    pChunk = pChunk->mpNextChunk;
+                    nFastTotal += nSize & 0x7ffffff8;
+                    nProblems += static_cast<unsigned int>(i) != (((nSize >> 3) & 0xfffffff) - 2);
+                }
+            }
+            if (nFastTotal) nProblems += !(nMaxFast & 1);
+            for (int i = 1; i < 128; ++i)
+            {
+                Chunk* pBin = GetBin(i);
+                if (i >= 2 && !(mBinBitmap[i >> 5] & (1u << (i & 31)))) nProblems += pBin->mpPrevChunk != pBin;
+                for (const Chunk* pChunk = pBin->mpPrevChunk; pChunk != pBin; pChunk = pChunk->mpPrevChunk)
+                {
+                    nProblems += CheckFreeChunk(pChunk);
+                    const unsigned int nSize = GetChunkSize(pChunk);
+                    if (i >= 2)
+                    {
+                        const int nIndex = nSize >= 0x200 ? GetLargeBinIndexFromChunkSize(nSize) : nSize >> 3;
+                        nProblems += i != nIndex;
+                        if (nSize >= 0x200)
+                            nProblems += pChunk->mpPrevChunk != pBin && GetChunkSize(pChunk->mpPrevChunk) < nSize;
+                    }
+                    for (const Chunk* pNext = GetChunkAtOffset(pChunk, nSize); !GetChunkIsFenceChunk(pNext);
+                         pNext = GetChunkAtOffset(pNext, GetChunkSize(pNext)))
+                    {
+                        const unsigned int nNextSize = GetChunkSize(pNext);
+                        if (!(GetChunkAtOffset(pNext, nNextSize)->mnSize & 1) || nNextSize < 16) break;
+                        nProblems += CheckUsedChunk(pNext);
+                    }
+                }
+            }
+            for (const Chunk* pList = mHeadMMapChunk.mpNextChunk; pList != &mHeadMMapChunk; pList = pList->mpNextChunk)
+            {
+                const Chunk* pChunk = GetChunkAtOffset(pList, -static_cast<int>(pList->mnPriorSize));
+                nProblems += ((~pChunk->mnSize >> 1) & 1) + ((~pList->mnSize >> 1) & 1);
+            }
+        }
+        nErrors = (mnMMapCount > mnMMapMaxAllowed) + (static_cast<unsigned int>(mnMMapCount) >= 0x80000000) +
+                  CheckChunk(mpTopChunk) + nProblems;
+    }
+    if (nLevel >= kHeapValidationLevelFull)
+    {
+        for (const Chunk* pList = mHeadMMapChunk.mpNextChunk; pList != &mHeadMMapChunk; pList = pList->mpNextChunk)
+            nErrors += CheckMMappedChunk(GetChunkAtOffset(pList, -static_cast<int>(pList->mnPriorSize)));
+        for (const CoreBlock* pCore = mHeadCoreBlock.mpNextCoreBlock; pCore != &mHeadCoreBlock; pCore = pCore->mpNextCoreBlock)
+        {
+            const Chunk* pFence = reinterpret_cast<const Chunk*>(reinterpret_cast<const char*>(pCore) + pCore->mnSize - 16);
+            const Chunk* pChunk = reinterpret_cast<const Chunk*>(pCore->mpCore);
+            while (pChunk < pFence)
+            {
+                const bool bInUse = (GetChunkAtOffset(pChunk, GetChunkSize(pChunk))->mnSize & 1) != 0;
+                nErrors += bInUse ? CheckUsedChunk(pChunk) : CheckFreeChunk(pChunk);
+                if (!bInUse && pChunk == pChunk->mpNextChunk)
+                {
+                    nErrors += mpTopChunk != pChunk;
+                    break;
+                }
+                pChunk = GetChunkAtOffset(pChunk, GetChunkSize(pChunk));
+            }
+        }
+    }
+    return nErrors;
+}
+bool GeneralAllocator::ValidateHeap(HeapValidationLevel nLevel) // 82B4EDF0
+{
+    int nErrors = 0;
+    if (!mbHeapValidationActive)
+    {
+        mbHeapValidationActive = true;
+        nErrors = CheckState(nLevel);
+        mbHeapValidationActive = false;
+    }
+    return nErrors == 0;
+}
+
+int GeneralAllocator::ChunkMatchesBlockType(const Chunk* pChunk, int nFlags) // 82B4D9C0, static
+{
+    if (!(nFlags & 16) && (pChunk->mnSize & 4)) return 0;
+    if ((nFlags & 6) == 6) return 1;
+    const unsigned int nSize = pChunk->mnSize & 0x7ffffff8;
+    const Chunk* pNext = reinterpret_cast<const Chunk*>(reinterpret_cast<const char*>(pChunk) + nSize);
+    const bool bInUse = (pNext->mnSize & 1) && !(pChunk->mnSize & 0x80000000);
+    if (nFlags & 2) return bInUse;
+    if (nFlags & 4) return !bInUse;
+    return 0;
+}
+void GeneralAllocator::GetBlockInfoForChunk(const Chunk* pChunk, BlockInfo* pInfo, const void* pCore) const // 82B4F2C8
+{
+    GeneralAllocator* pThis = const_cast<GeneralAllocator*>(this);
+    const unsigned int nSize = pThis->GetChunkSize(pChunk);
+    const bool bMMapped = (pChunk->mnSize & 2) != 0;
+    pInfo->mpCore = pCore;
+    if (pThis->GetChunkAtOffset(pChunk, nSize)->mnSize & 1)
+    {
+        const void* pData = pThis->GetDataPtrFromChunkPtr(pChunk);
+        const size_t nUsable = GetUsableSize(pData);
+        pInfo->mpBlock = pChunk;
+        pInfo->mBlockType = pChunk->mnSize & 4 ? 16 : 2;
+        pInfo->mnBlockSize = bMMapped ? pChunk->mnPriorSize + nSize + 16 : nSize;
+        pInfo->mpData = const_cast<void*>(pData);
+        pInfo->mnDataSize = nUsable;
+        pInfo->mbMemoryMapped = bMMapped;
+    }
+    else
+    {
+        pInfo->mpBlock = pChunk;
+        pInfo->mnBlockSize = nSize;
+        pInfo->mBlockType = 4;
+        pInfo->mpData = const_cast<char*>(reinterpret_cast<const char*>(pChunk)) + 16;
+        pInfo->mbMemoryMapped = false;
+        pInfo->mnDataSize = pThis->GetChunkSize(pChunk) - 16;
+    }
+}
+void* GeneralAllocator::TakeSnapshot(int nFlags, bool bMakeCopy, void* pStorage, size_t nStorageSize) // 82B511B0
+{
+    PPMAutoMutex lock(mpMutex);
+    Snapshot* pSnapshot = 0;
+    if (bMakeCopy)
+    {
+        if (GetFastBinChunksExist()) ClearFastBins();
+        unsigned int nCapacity = 0;
+        for (int nPass = 0; nPass != 2; ++nPass)
+        {
+            unsigned int nCount = 0;
+            if (nPass)
+            {
+                nCapacity += 4;
+                const size_t nBytes = 24 * nCapacity + 60;
+                if (pStorage && nStorageSize < nBytes) pStorage = 0;
+                pSnapshot = static_cast<Snapshot*>(pStorage ? pStorage : MallocInternal(nBytes, 0x80000000));
+                if (pSnapshot)
+                {
+                    if (!pStorage) GetChunkPtrFromDataPtr(pSnapshot)->mnSize |= 4;
+                    memset(pSnapshot, 0, nBytes);
+                    pSnapshot->mnMagicNumber = 0x534e4150;
+                    pSnapshot->mnSizeOfThis = nBytes;
+                    pSnapshot->mnBlockTypeFlags = nFlags;
+                    pSnapshot->mbUserAllocated = pStorage != 0;
+                    pSnapshot->mnBlockInfoCount = nCapacity;
+                }
+                if (nCapacity == 4) return pSnapshot;
+            }
+            for (const CoreBlock* pCore = mHeadCoreBlock.mpNextCoreBlock; pCore != &mHeadCoreBlock; pCore = pCore->mpNextCoreBlock)
+            {
+                if (nFlags & 8)
+                {
+                    if (nPass && nCount < nCapacity)
+                    {
+                        BlockInfo* pInfo = &pSnapshot->mBlockInfo[nCount];
+                        pInfo->mpCore = pCore->mpCore;
+                        pInfo->mBlockType = 8;
+                        pInfo->mpBlock = pCore->mpCore;
+                        pInfo->mbMemoryMapped = false;
+                        pInfo->mnBlockSize = pCore->mnSize;
+                    }
+                    ++nCount;
+                }
+                if (nFlags & 6)
+                {
+                    const Chunk* pFence = reinterpret_cast<const Chunk*>(reinterpret_cast<const char*>(pCore) + pCore->mnSize - 16);
+                    const Chunk* pChunk = reinterpret_cast<const Chunk*>(pCore->mpCore);
+                    while (pChunk < pFence)
+                    {
+                        const bool bInUse = (GetChunkAtOffset(pChunk, GetChunkSize(pChunk))->mnSize & 1) != 0;
+                        const bool bMatches = (nFlags & (bInUse ? 2 : 4)) && ((nFlags & 16) || !(pChunk->mnSize & 4));
+                        if (bMatches)
+                        {
+                            if (nPass && nCount < nCapacity) GetBlockInfoForChunk(pChunk, &pSnapshot->mBlockInfo[nCount], pCore->mpCore);
+                            ++nCount;
+                        }
+                        if (!bInUse && pChunk == pChunk->mpNextChunk) break;
+                        pChunk = GetChunkAtOffset(pChunk, GetChunkSize(pChunk));
+                    }
+                }
+            }
+            if (nFlags & 2)
+                for (const Chunk* pList = mHeadMMapChunk.mpNextChunk; pList != &mHeadMMapChunk; pList = pList->mpNextChunk)
+                    if ((nFlags & 16) || !(pList->mnSize & 4))
+                    {
+                        if (nPass && nCount < nCapacity)
+                        {
+                            const Chunk* pChunk = GetChunkAtOffset(pList, -static_cast<int>(pList->mnPriorSize));
+                            // ARTIST 82B51470 subtracts the list prior-size a second
+                            // time for this report's core field; retain that value.
+                            const void* pCore = GetChunkAtOffset(pChunk, -static_cast<int>(pList->mnPriorSize));
+                            GetBlockInfoForChunk(pChunk, &pSnapshot->mBlockInfo[nCount], pCore);
+                        }
+                        ++nCount;
+                    }
+            nCapacity = nCount;
+            if (nPass) pSnapshot->mnBlockInfoCount = nCount;
+        }
+    }
+    else
+    {
+        if (pStorage && nStorageSize < 60) pStorage = 0;
+        pSnapshot = static_cast<Snapshot*>(pStorage ? pStorage : MallocInternal(60, 0x80000000));
+        if (pSnapshot)
+        {
+            if (!pStorage) GetChunkPtrFromDataPtr(pSnapshot)->mnSize |= 4;
+            memset(pSnapshot, 0, 60);
+            pSnapshot->mnMagicNumber = 0x534e4150;
+            pSnapshot->mnSizeOfThis = 60;
+            pSnapshot->mnBlockTypeFlags = nFlags;
+            pSnapshot->mbUserAllocated = pStorage != 0;
+            pSnapshot->mbDynamic = true;
+            pSnapshot->mpCurrentCoreBlock = mHeadCoreBlock.mpNextCoreBlock;
+            pSnapshot->mpCurrentMChunk = mHeadMMapChunk.mpNextChunk;
+        }
+    }
+    return pSnapshot;
+}
+const GeneralAllocator::BlockInfo* GeneralAllocator::ReportNext(const void* pContext, int nFlags) // 82B4F3A8
+{
+    Snapshot* pSnapshot = static_cast<Snapshot*>(const_cast<void*>(pContext));
+    if (!pSnapshot || pSnapshot->mnMagicNumber != 0x534e4150) return 0;
+    if (pSnapshot->mbDynamic)
+    {
+        nFlags &= pSnapshot->mnBlockTypeFlags;
+        CoreBlock* pCore = pSnapshot->mpCurrentCoreBlock;
+        while (pCore != &mHeadCoreBlock)
+        {
+            Chunk* pFence = 0;
+            if (pCore->mnSize)
+            {
+                pFence = reinterpret_cast<Chunk*>(reinterpret_cast<char*>(pCore) + pCore->mnSize - 16);
+                Chunk* pChunk = pSnapshot->mpCurrentChunk ?
+                    GetChunkAtOffset(pSnapshot->mpCurrentChunk, GetChunkSize(pSnapshot->mpCurrentChunk)) :
+                    reinterpret_cast<Chunk*>(pCore->mpCore);
+                for (;;)
+                {
+                    pSnapshot->mpCurrentChunk = pChunk;
+                    if (pChunk == pFence || ChunkMatchesBlockType(pChunk, nFlags)) break;
+                    pChunk = GetChunkAtOffset(pChunk, GetChunkSize(pChunk));
+                }
+                if (pSnapshot->mpCurrentChunk != pFence) break;
+            }
+            if (!pCore->mnSize || pSnapshot->mpCurrentChunk == pFence)
+            {
+                do
+                {
+                    pCore = pCore->mpNextCoreBlock;
+                    pSnapshot->mpCurrentCoreBlock = pCore;
+                } while (pCore != &mHeadCoreBlock && !pCore->mnSize);
+                pSnapshot->mpCurrentChunk = 0;
+            }
+        }
+        pCore = pSnapshot->mpCurrentCoreBlock;
+        if (pCore != &mHeadCoreBlock)
+        {
+            GetBlockInfoForChunk(pSnapshot->mpCurrentChunk, pSnapshot->mBlockInfo, pCore->mpCore);
+            return pSnapshot->mBlockInfo;
+        }
+        if ((nFlags & 2) && pSnapshot->mpCurrentMChunk != &mHeadMMapChunk)
+        {
+            Chunk* pChunk;
+            for (;;)
+            {
+                Chunk* pList = pSnapshot->mpCurrentMChunk;
+                Chunk* pNext = pList->mpNextChunk;
+                pChunk = GetChunkAtOffset(pList, -static_cast<int>(pList->mnPriorSize));
+                pSnapshot->mpCurrentMChunk = pNext;
+                if ((nFlags & 16) || !(pChunk->mnSize & 4)) break;
+                if (pNext == &mHeadMMapChunk) return 0;
+            }
+            GetBlockInfoForChunk(pChunk, pSnapshot->mBlockInfo, GetChunkAtOffset(pChunk, -static_cast<int>(pChunk->mnPriorSize)));
+            return pSnapshot->mBlockInfo;
+        }
+        return 0;
+    }
+    const unsigned int nCount = pSnapshot->mnBlockInfoCount;
+    if (pSnapshot->mnBlockInfoIndex < nCount)
+        do
+        {
+            const unsigned int nIndex = pSnapshot->mnBlockInfoIndex;
+            if (pSnapshot->mBlockInfo[nIndex].mBlockType & nFlags) break;
+            pSnapshot->mnBlockInfoIndex = nIndex + 1;
+        } while (pSnapshot->mnBlockInfoIndex < pSnapshot->mnBlockInfoCount);
+    const unsigned int nIndex = pSnapshot->mnBlockInfoIndex;
+    if (nIndex >= nCount) return 0;
+    pSnapshot->mnBlockInfoIndex = nIndex + 1;
+    return &pSnapshot->mBlockInfo[nIndex];
+}
+void GeneralAllocator::ReportEnd(const void* pContext) // inlined at 82B518D4 and 82B517DC
+{
+    Snapshot* pSnapshot = static_cast<Snapshot*>(const_cast<void*>(pContext));
+    if (pSnapshot && pSnapshot->mnMagicNumber == 0x534e4150)
+    {
+        if (pSnapshot->mbReport)
+        {
+            if (!pSnapshot->mbUserAllocated) FreeInternal(pSnapshot);
+        }
+        else pSnapshot->mnBlockInfoIndex = 0;
+    }
+}
+bool GeneralAllocator::ReportHeap(bool (*pReportFunction)(const BlockInfo*, void*), void* pContext,
+    int nFlags, bool bMakeCopy, void* pStorage, size_t nStorageSize) // 82B51848
+{
+    bool bResult = false;
+    if (pReportFunction)
+    {
+        Snapshot* pSnapshot = static_cast<Snapshot*>(TakeSnapshot(nFlags, bMakeCopy, pStorage, nStorageSize));
+        if (pSnapshot)
+        {
+            bResult = true;
+            pSnapshot->mbReport = true;
+            const BlockInfo* pInfo = ReportNext(pSnapshot, nFlags);
+            do
+            {
+                if (!pInfo) break;
+                bResult = pReportFunction(pInfo, pContext);
+                pInfo = ReportNext(pSnapshot, nFlags);
+            } while (bResult);
+            ReportEnd(pSnapshot);
+        }
+    }
+    return bResult;
+}
+
+GeneralAllocator::DataType GeneralAllocator::GetDataPreview(const void* pData, size_t nDataSize,
+    char* pBuffer, wchar_t* pBufferW, size_t nBufferLength) const // 82B4DA38
+{
+    if (nBufferLength >= 5)
+    {
+        unsigned int nCount = (nBufferLength - 2) >> 2;
+        if (nCount > nDataSize) nCount = nDataSize;
+        const char* pDigits = "0123456789abcdef";
+        if (pBuffer)
+        {
+            memset(pBuffer, 32, nBufferLength);
+            pBuffer[nBufferLength - 1] = 0;
+        }
+        if (pBufferW)
+        {
+            memset(pBufferW, 32, nBufferLength * 2);
+            pBufferW[nBufferLength - 1] = 0;
+        }
+        if (pBuffer) pBuffer[3 * nCount - 1] = 9;
+        if (pBufferW) pBufferW[3 * nCount - 1] = 9;
+        for (unsigned int i = 0; i != nCount; ++i)
+        {
+            const unsigned char nByte = static_cast<const unsigned char*>(pData)[i];
+            const signed char nChar = static_cast<signed char>(nByte);
+            const char cHigh = pDigits[nByte >> 4];
+            const char cLow = pDigits[nByte & 15];
+            if (pBuffer)
+            {
+                pBuffer[3 * i] = cHigh;
+                pBuffer[3 * i + 1] = cLow;
+                pBuffer[3 * nCount + i] = nChar < 32 || nChar >= 127 || nChar == 34 || nChar == 39 ? '.' : nChar;
+            }
+            if (pBufferW)
+            {
+                pBufferW[3 * i] = cHigh;
+                pBufferW[3 * i + 1] = cLow;
+                pBufferW[3 * nCount + i] = nChar < 32 || nChar == 34 || nChar == 39 ? '.' : nChar;
+            }
+        }
+    }
+    else if (nBufferLength)
+    {
+        if (pBuffer) *pBuffer = 0;
+        if (pBufferW) *pBufferW = 0;
+    }
+    return kDataTypeBinary;
+}
+size_t GeneralAllocator::DescribeChunk(const Chunk* pChunk, char* pBuffer,
+    size_t nBufferLength, bool bAppendLineEnd) const // 82B4DCA0
+{
+    char* pWrite = pBuffer;
+    unsigned int nRemaining = nBufferLength;
+    const void* pData = reinterpret_cast<const char*>(pChunk) + 8;
+    const unsigned int nSize = (pChunk->mnSize & 0x7ffffff8) - 8;
+    if (nRemaining >= 20)
+    {
+        const int nWritten = _snprintf(pWrite, nRemaining, "addr: 0x%08x%c", pData, mcTraceFieldDelimiter);
+        pWrite += nWritten;
+        nRemaining -= nWritten;
+    }
+    if (nRemaining >= 31)
+    {
+        const int nWritten = _snprintf(pWrite, nRemaining, "size: %10u (%8x)%c", nSize, nSize, mcTraceFieldDelimiter);
+        pWrite += nWritten;
+        nRemaining -= nWritten;
+    }
+    if (nRemaining >= 266)
+    {
+        char pPreview[256];
+        memset(pPreview, 0, sizeof(pPreview));
+        GetDataPreview(pData, nSize, pPreview, 0, 256);
+        const int nWritten = _snprintf(pWrite, nRemaining, "data: %s%c", pPreview, mcTraceFieldDelimiter);
+        pWrite += nWritten;
+        nRemaining -= nWritten;
+    }
+    const unsigned int nFlags = pChunk->mnSize;
+    if ((nFlags & 6) && nRemaining >= 25)
+        pWrite += _snprintf(pWrite, nRemaining, "attr: %s %s%c", nFlags & 4 ? "internal" : "",
+            nFlags & 2 ? "mapped" : "", mcTraceFieldDelimiter);
+    if (bAppendLineEnd)
+    {
+        *pWrite++ = mcTraceRecordDelimiter;
+        *pWrite = 0;
+    }
+    return pWrite - pBuffer;
+}
+void GeneralAllocator::TraceAllocatedMemory(void (*pTraceCallback)(const char*, void*),
+    void* pContext, void* pStorage, size_t nStorageSize) // 82B516F0
+{
+    PPMAutoMutex lock(mpMutex);
+    if (GetFastBinChunksExist()) ClearFastBins();
+    if (!pTraceCallback) pTraceCallback = mpTraceFunction;
+    if (!pContext) pContext = mpTraceFunctionContext;
+    if (pTraceCallback)
+    {
+        Snapshot* pSnapshot = static_cast<Snapshot*>(TakeSnapshot(2, false, pStorage, nStorageSize));
+        if (pSnapshot) pSnapshot->mbReport = true;
+        const BlockInfo* pInfo;
+        while ((pInfo = ReportNext(pSnapshot, 31)) != 0)
+        {
+            const Chunk* pChunk = static_cast<const Chunk*>(pInfo->mpBlock);
+            if (mbTraceInternalMemory || !(pChunk->mnSize & 4))
+            {
+                char pRecord[4000];
+                DescribeChunk(pChunk, pRecord, 4000, true);
+                pTraceCallback(pRecord, pContext);
+            }
+        }
+        ReportEnd(pSnapshot);
+    }
 }
 
 } }

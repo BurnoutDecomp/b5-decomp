@@ -8,17 +8,11 @@
 // dlmalloc-style allocator: small/fast bins (mpFastBinArray), regular bins (mpBinArray) keyed
 // by a bitmap (mBinBitmap), a top chunk, and a linked list of OS core blocks (mHeadCoreBlock).
 //
-// Native layout is gated on ARTIST and DecFIGS. Spore-only hook callback fields
-// are absent: ARTIST places mpMallocFailureFunction at 0x4AC and the mutex
-// storage at 0x4E8, ending with mNotifyInitState at 0x514 (sizeof 0x518).
-// Layout (member names/types/order) originally recovered from Spore PC (EA::Allocator::GeneralAllocator,
-// sizeof=1316 on x86), dumped to progress/scratch_dossiers/ea_generalallocator_spore.txt, and
-// cross-checked against the X360 DWARF surface (references/DecFIGS/.../PPMalloc/EAGeneralAllocator.h)
-// + the X360 ctor 0x82B4FF58 / Init 0x82B4FA30 store offsets. Spore + Burnout share this EA
-// middleware. The PDB is x86 (4-byte pointers); this header uses the real pointer types so the
-// PC x64 build lays it out naturally (semantic parity - field set/order match; pointer-sized
-// members widen 4B->8B). Method BODIES (Malloc/MallocAligned/MallocAlignedInternal/Init/SetOption/
-// bin management) are reconstructed from the X360 pseudocode on top of this layout.
+// Native layout is 0x518 with four-byte pointers. ARTIST constructor 82B4FF58,
+// Init 82B4FA30 and the methods' assembly determine every offset and ABI;
+// DecFIGS corroborates declaration names and types. Spore-only hook fields
+// are absent. The implementation recovers the actual native chunk/bin engine
+// and its original native system-core leaves.
 //
 // This is EA vendor code: members/types follow EA's PPMalloc convention (mpX/mnX/mbX fields,
 // kEnumValue enumerators), NOT the Brn/Cgs K..._ convention. Assertions route through the
@@ -189,32 +183,27 @@ namespace Allocator
         };
 
         // ================================================================================
-        // PUBLIC API. The existing leaf-engine bodies (Init()/AddCore/Malloc.../Free/Owns)
-        // are PRESERVED; the full-DWARF surface (the 6-arg ctor/Init core-init overload, the
-        // validation/trace/report/option/callback methods) is declared on top of them.
+        // PUBLIC API. Native construction and initialization always use the six
+        // attested arguments; default arguments select an initially empty heap.
         // ================================================================================
 
         // DWARF EAGeneralAllocator.h:405 - core-adopting ctor:
-        // GeneralAllocator(pInitialCore, nSize, bShouldFreeInitialCore, bShouldTrace, pCoreAddFn, pContext).
-        GeneralAllocator(void* pInitialCore, size_t nInitialCoreSize,
-                         bool bShouldFreeInitialCore = true, bool bShouldTrace = false,
-                         unsigned int (*pCoreAddFunction)(GeneralAllocator*, void*, unsigned int, void*) = 0,
-                         void* pCoreAddFunctionContext = 0);
-        // Default-construct an empty allocator (core adopted later via AddCore). Preserved.
-        GeneralAllocator();
+        // GeneralAllocator(pInitialCore, nSize, bShouldFreeInitialCore, bShouldTrim, pCoreFreeFn, pContext).
+        GeneralAllocator(void* pInitialCore = 0, size_t nInitialCoreSize = 0,
+                         bool bShouldFreeInitialCore = true, bool bShouldTrim = false,
+                         unsigned int (*pCoreFreeFunction)(GeneralAllocator*, void*, unsigned int, void*) = 0,
+                         void* pCoreFreeFunctionContext = 0);
         // NON-virtual: the X360 GeneralAllocator is non-polymorphic (DWARF declares no base/no
         // virtual dtor; ctor @0x82B4FF58 stores mbInitialized as a BYTE at offset 0 with no vptr;
         // the dtor @0x82B511A8 is a plain tail-call to Shutdown invoked via callers' scalar-deleting
         // thunks, not a vtable slot). A virtual dtor would fabricate a vptr and shift every member.
         ~GeneralAllocator();
 
-        // Empty-heap bring-up (preserved 0-arg form used by the resource allocators).
-        bool  Init();
         // DWARF EAGeneralAllocator.h:420 - full core-init overload (same arg set as the ctor).
-        bool  Init(void* pInitialCore, size_t nInitialCoreSize,
-                   bool bShouldFreeInitialCore, bool bShouldTrace,
-                   unsigned int (*pCoreAddFunction)(GeneralAllocator*, void*, unsigned int, void*),
-                   void* pCoreAddFunctionContext);
+        bool  Init(void* pInitialCore = 0, size_t nInitialCoreSize = 0,
+                   bool bShouldFreeInitialCore = true, bool bShouldTrim = false,
+                   unsigned int (*pCoreFreeFunction)(GeneralAllocator*, void*, unsigned int, void*) = 0,
+                   void* pCoreFreeFunctionContext = 0);
         bool  Shutdown();
 
         // DWARF EAGeneralAllocator.h:437 - ICoreAllocator interface query.
@@ -329,7 +318,7 @@ namespace Allocator
         void   SetNewTopChunk(Chunk* pChunk, bool bChunkIsNew);
         void   AdjustTopChunk(Chunk* pChunk, unsigned int nChunkSize);
         bool   ChunkMatchesLowHigh(int nBlockType, const Chunk* pChunk, unsigned int nChunkSize) const;
-        int    ChunkMatchesBlockType(const Chunk* pChunk, int nBlockTypeFlags);
+        static int ChunkMatchesBlockType(const Chunk* pChunk, int nBlockTypeFlags);
         void   SetFencepostAfterChunk(const Chunk* pChunk, unsigned int nPriorSize);
         void   AddDoubleFencepost(Chunk* pChunk, int nPrevInUse);
         Chunk* MakeChunkFromCore(void* pCore, size_t nCoreSize, int nFlags);
@@ -428,7 +417,7 @@ namespace Allocator
         static void _AssertLayout();
 
     protected:
-        // --- members (real order; see the PDB dump + X360 ctor/Init store offsets) ------
+        // --- members (native ARTIST ctor/Init/method store offsets) -------------------
         bool         mbInitialized;
         unsigned int mnMaxFastBinChunkSize;
         Chunk*       mpFastBinArray[10];
