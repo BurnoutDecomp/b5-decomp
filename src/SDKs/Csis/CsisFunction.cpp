@@ -10,31 +10,12 @@
 namespace Csis
 {
 
-namespace
-{
-Result ValidateFunctionHandle(ClassHandle* apHandle)
-{
-    if (!apHandle || apHandle->miIndex < 0)
-        return static_cast<Result>(apHandle ? apHandle->miIndex : -3);
-    if (!apHandle->mpDescriptor)
-        return static_cast<Result>(-6);
-    if (apHandle->miIndex != *reinterpret_cast<s32*>(
-            reinterpret_cast<u8*>(apHandle->mpDescriptor) + 0x10))
-    {
-        apHandle->mpDescriptor = 0;
-        apHandle->miIndex = -3;
-        return static_cast<Result>(-3);
-    }
-    return static_cast<Result>(0);
-}
-}
-
 // ---------------------------------------------------------------------------
 // Function::CallFast @ 0x82B0FB40
 // ---------------------------------------------------------------------------
-Result Function::CallFast(uintptr_t iParam)
+Result Function::CallFast(Parameter* pParameter)
 {
-    Result eValid = ValidateFunctionHandle(this);
+    Result eValid = ValidHandle<ClassHandle, CsisDef::FunctionDesc>(this, 0);
     if (static_cast<int>(eValid) < 0)
         return eValid;
 
@@ -44,7 +25,7 @@ Result Function::CallFast(uintptr_t iParam)
 
     do
     {
-        pNode->mpfnCallback(iParam, pNode->mpContext);
+        pNode->mpfnCallback(pParameter, pNode->mpContext);
         pNode = pNode->mpNext;
     } while (pNode);
 
@@ -56,7 +37,7 @@ Result Function::CallFast(uintptr_t iParam)
 // ---------------------------------------------------------------------------
 Result Function::SubscribeFast(Subscriber* pNode)
 {
-    Result eValid = ValidateFunctionHandle(this);
+    Result eValid = ValidHandle<ClassHandle, CsisDef::FunctionDesc>(this, 0);
     if (static_cast<int>(eValid) < 0)
         return eValid;
 
@@ -77,7 +58,7 @@ Result Function::SubscribeFast(Subscriber* pNode)
 // ---------------------------------------------------------------------------
 Result Function::UnsubscribeFast(Subscriber* pNode)
 {
-    Result eValid = ValidateFunctionHandle(this);
+    Result eValid = ValidHandle<ClassHandle, CsisDef::FunctionDesc>(this, 0);
     if (static_cast<int>(eValid) < 0)
         return eValid;
 

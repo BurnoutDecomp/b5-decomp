@@ -23,60 +23,42 @@ Class::Class()
 {
 }
 
-int Class::CreateInstanceFast(ClassHandle* phHandle, void* pParameters,
+Result Class::CreateInstanceFast(ClassHandle* phHandle, void* pParameters,
                               Class** ppClass)
 {
-    if (ppClass)
-        *ppClass = 0;
-    if (!phHandle || !ppClass || phHandle->miIndex < 0)
-        return phHandle ? phHandle->miIndex : -3;
-    if (!phHandle->mpDescriptor)
-        return -6;
-
-    SystemClient24* lpDescriptor =
-        static_cast<SystemClient24*>(phHandle->mpDescriptor);
-    if (phHandle->miIndex != lpDescriptor->mState.miStatus)
-    {
-        phHandle->mpDescriptor = 0;
-        phHandle->miIndex = -3;
-        return -3;
-    }
-
+    *ppClass = 0;
+    Result leValid = ValidHandle<ClassHandle, CsisDef::FunctionDesc>(phHandle, 0);
+    if (leValid < 0) return leValid;
     void* lpMemory = System::Allocate(sizeof(Class), "CsisAlloc", 1);
-    Class* lpClass = lpMemory ? new (lpMemory) Class : 0;
-    if (!lpClass)
-        return -1;
-    lpClass->mpClassDesc =
-        reinterpret_cast<SystemDesc::ClassDesc*>(lpDescriptor);
-    *ppClass = lpClass;
-
-    ClassClientNode* lpClient =
-        reinterpret_cast<ClassClientNode*>(lpDescriptor->muRuntimeLink);
+    if (!lpMemory) return RESULT_ERR_MEM;
+    Class* lpClass = new (lpMemory) Class;
+    CsisDef::ClassDesc* lpDescriptor = static_cast<CsisDef::ClassDesc*>(phHandle->mpDescriptor);
+    lpClass->mpClassDesc = lpDescriptor;
+    ClassClientNode* lpClient = static_cast<ClassClientNode*>(lpDescriptor->clients);
     while (lpClient)
     {
-        ClassClientNode* lpNext = lpClient->mpNext;
-        lpClient->mpfnConstructor(lpClass, pParameters,
-                                  lpClient->mpClientData);
-        lpClient = lpNext;
+        lpClient->mpfnConstructor(lpClass, pParameters, lpClient->mpClientData);
+        lpClient = lpClient->mpNext;
     }
     lpClass->SetMemberDataFast(pParameters);
-    return 0;
+    *ppClass = lpClass;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::GetRefCount @ 0x82B0F5B8
 // ---------------------------------------------------------------------------
-int Class::GetRefCount(s32* lpiOutRefCount)
+Result Class::GetRefCount(s32* lpiOutRefCount)
 {
     *lpiOutRefCount = miRefCount;
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::ReleaseFast @ 0x82B0F518 -- fire every destructor client, DecRef, and
 // notify the global observer when the count reaches zero.
 // ---------------------------------------------------------------------------
-int Class::ReleaseFast()
+Result Class::ReleaseFast()
 {
     // Fire every registered destructor client (in list order), following the
     // forward link before invoking so a callback may unlink its own node.
@@ -89,16 +71,16 @@ int Class::ReleaseFast()
 
     if (--miRefCount == 0)
         System::Free(this);
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::Release @ 0x82B0FD60 -- lock the global registry mutex, ReleaseFast, unlock.
 // ---------------------------------------------------------------------------
-int Class::Release()
+Result Class::Release()
 {
     System::Lock();
-    int liResult = ReleaseFast();
+    Result liResult = ReleaseFast();
     System::Unlock();
     return liResult;
 }
@@ -107,50 +89,36 @@ int Class::Release()
 // Class::SetMemberDataFast @ 0x82B0F5C8 -- broadcast member-data parameters via
 // ClassData::SendParameters (this aliases its ClassData registry record), return 0.
 // ---------------------------------------------------------------------------
-int Class::SetMemberDataFast(void* pMemberData)
+Result Class::SetMemberDataFast(void* pMemberData)
 {
-    for (ClassClientNode* lpClient = mpMemberDataClients; lpClient != 0;)
-    {
-        ClassClientNode* lpNext = lpClient->mpNext;
+    for (ClassClientNode* lpClient = mpMemberDataClients; lpClient; lpClient = lpClient->mpNext)
         lpClient->mpfnMemberData(pMemberData, lpClient->mpClientData);
-        lpClient = lpNext;
-    }
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::SubscribeConstructorFast @ 0x82B0FDB8 -- validate the handle, then push
 // lpNode onto the head of the resolved Class's constructor-client list.
 // ---------------------------------------------------------------------------
-int Class::SubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lpNode)
+Result Class::SubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lpNode)
 {
-    if (phHandle == 0 || phHandle->miIndex < 0)
-        return phHandle ? phHandle->miIndex : -3;
-    if (phHandle->mpDescriptor == 0)
-        return -6;
-    ClassClientNode** lppHead = reinterpret_cast<ClassClientNode**>(
-        phHandle->mpDescriptor);
-    if (phHandle->miIndex != *reinterpret_cast<s32*>(
-            reinterpret_cast<u8*>(phHandle->mpDescriptor) + 0x10))
-    {
-        phHandle->mpDescriptor = 0;
-        phHandle->miIndex = -3;
-        return -3;
-    }
+    Result leValid = ValidHandle<ClassHandle, CsisDef::FunctionDesc>(phHandle, 0);
+    if (leValid < 0) return leValid;
+    ClassClientNode** lppHead = reinterpret_cast<ClassClientNode**>(phHandle->mpDescriptor);
 
     lpNode->mpPrev = 0;
     lpNode->mpNext = *lppHead;
     if (*lppHead)
         (*lppHead)->mpPrev = lpNode;
     *lppHead = lpNode;
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::SubscribeDestructorFast @ 0x82B0F5F0 -- push onto the destructor-client
 // list (+0xC) and AddRef.
 // ---------------------------------------------------------------------------
-int Class::SubscribeDestructorFast(ClassClientNode* lpNode)
+Result Class::SubscribeDestructorFast(ClassClientNode* lpNode)
 {
     lpNode->mpPrev = 0;
     lpNode->mpNext = mpDestructorClients;
@@ -159,14 +127,14 @@ int Class::SubscribeDestructorFast(ClassClientNode* lpNode)
     mpDestructorClients = lpNode;
 
     ++miRefCount;
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::SubscribeMemberDataFast @ 0x82B0F6C8 -- push onto the member-data-client
 // list (+0x8) and AddRef.
 // ---------------------------------------------------------------------------
-int Class::SubscribeMemberDataFast(ClassClientNode* lpNode)
+Result Class::SubscribeMemberDataFast(ClassClientNode* lpNode)
 {
     lpNode->mpPrev = 0;
     lpNode->mpNext = mpMemberDataClients;
@@ -175,28 +143,18 @@ int Class::SubscribeMemberDataFast(ClassClientNode* lpNode)
     mpMemberDataClients = lpNode;
 
     ++miRefCount;
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::UnsubscribeConstructorFast @ 0x82B0FE28 -- validate the handle, then
 // unlink lpNode from the resolved Class's constructor-client list.
 // ---------------------------------------------------------------------------
-int Class::UnsubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lpNode)
+Result Class::UnsubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lpNode)
 {
-    if (phHandle == 0 || phHandle->miIndex < 0)
-        return phHandle ? phHandle->miIndex : -3;
-    if (phHandle->mpDescriptor == 0)
-        return -6;
-    ClassClientNode** lppHead = reinterpret_cast<ClassClientNode**>(
-        phHandle->mpDescriptor);
-    if (phHandle->miIndex != *reinterpret_cast<s32*>(
-            reinterpret_cast<u8*>(phHandle->mpDescriptor) + 0x10))
-    {
-        phHandle->mpDescriptor = 0;
-        phHandle->miIndex = -3;
-        return -3;
-    }
+    Result leValid = ValidHandle<ClassHandle, CsisDef::FunctionDesc>(phHandle, 0);
+    if (leValid < 0) return leValid;
+    ClassClientNode** lppHead = reinterpret_cast<ClassClientNode**>(phHandle->mpDescriptor);
 
     if (lpNode == *lppHead)
     {
@@ -210,14 +168,14 @@ int Class::UnsubscribeConstructorFast(ClassHandle* phHandle, ClassClientNode* lp
     {
         lpNode->mpNext->mpPrev = lpNode->mpPrev;
     }
-    return 0;
+    return RESULT_OK;
 }
 
 // ---------------------------------------------------------------------------
 // Class::UnsubscribeDestructorFast @ 0x82B0F630 -- unlink lpNode from the
 // destructor-client list (+0xC), DecRef, notify the observer when it hits zero.
 // ---------------------------------------------------------------------------
-int Class::UnsubscribeDestructorFast(ClassClientNode* lpNode)
+Result Class::UnsubscribeDestructorFast(ClassClientNode* lpNode)
 {
     if (lpNode == mpDestructorClients)
     {
@@ -234,10 +192,10 @@ int Class::UnsubscribeDestructorFast(ClassClientNode* lpNode)
 
     if (--miRefCount == 0)
         System::Free(this);
-    return 0;
+    return RESULT_OK;
 }
 
-int Class::UnsubscribeMemberDataFast(ClassClientNode* lpNode)
+Result Class::UnsubscribeMemberDataFast(ClassClientNode* lpNode)
 {
     if (lpNode == mpMemberDataClients)
         mpMemberDataClients = lpNode->mpNext;
@@ -248,7 +206,7 @@ int Class::UnsubscribeMemberDataFast(ClassClientNode* lpNode)
 
     if (--miRefCount == 0)
         System::Free(this);
-    return 0;
+    return RESULT_OK;
 }
 
 } // namespace Csis
