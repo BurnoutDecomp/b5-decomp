@@ -170,4 +170,10 @@ namespace BrnDirector
     };
 }
 
+namespace CgsContainers
+{
+    // ARTIST ReplayDirector ctor 0x827E2020 does not clear this pool.
+    template <> inline ObjectPool<BrnDirector::DebugLog::LogString, 20, int>::ObjectPool() {}
+}
+
 #endif // GAMESOURCE_DIRECTOR_DIRECTORMODULE_BRN_DIRECTOR_MODULE_DEBUG_PRINTER_H

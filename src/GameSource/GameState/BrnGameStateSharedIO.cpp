@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (AddMessage dynamic assert text)
 #include <cstring>  // memcpy, memset, strncpy, strlen
+#include <new>      // placement construction of the Time pairs in maStorage8C
 
 namespace BrnGameState
 {
@@ -383,11 +384,12 @@ bool IsOnlineFreeBurnLobby(EGameModeType leGameMode)
 
 // ===== CarScoreData =====
 
-// X360 0x822A45A8. The X360 ctor zeroes a fixed subset of fields; we zero-init the whole 296-byte
-// record (a safe superset -- callers reset via ClearData before use). (return-result artifact dropped.)
+// X360 0x822A45A8: the Time members default-construct to zero. The six
+// remaining Time pairs are still represented by the byte storage at +0x8C.
 CarScoreData::CarScoreData()
 {
-    memset(this, 0, sizeof(*this));
+    for (u32 i = 0; i < 6; ++i)
+        new (&maStorage8C[i * sizeof(CgsSystem::Time)]) CgsSystem::Time;
 }
 
 // X360 0x821F2B28. Reset to event-start defaults: zero the record, then seed mTotalTime = Time(0),
