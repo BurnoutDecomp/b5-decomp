@@ -91,8 +91,7 @@ void SpeedStreamControl::UpdateParams(f32 afTimeStep)
 
     bool lbSpeedStream = false;
     // ARTIST826BA310..314: fnmsubs(width,0.75,threshold), rounded once.
-    const f32 lfOnset = -std::fma(KF_SPEED_STREAM_CROSSFADE_WIDTH, 0.75f,
-                                 -KF_SPEED_STREAM_THRESHOLD_MPH);
+    const f32 lfOnset = -(KF_SPEED_STREAM_CROSSFADE_WIDTH * 0.75f - KF_SPEED_STREAM_THRESHOLD_MPH);
     if (!(lrPhysics.mSpeedMPH.GetCurrent() > lfOnset) || lbCrashing)
         mfSpeedHighTime = 0.0f;
     else
@@ -104,6 +103,15 @@ void SpeedStreamControl::UpdateParams(f32 afTimeStep)
     mSpeedStreamOn.Update(lbSpeedStream);
     mBoostStreamOn.Update(lbBoostStream);
     UpdateDuckers();
+}
+
+namespace
+{
+f32 ClampMixerInput(f32 lfValue)
+{
+    lfValue = (-lfValue >= 0.0f) ? 0.0f : lfValue;
+    return (1.0f - lfValue >= 0.0f) ? lfValue : 1.0f;
+}
 }
 
 void SpeedStreamControl::UpdateDuckers()
@@ -121,10 +129,7 @@ void SpeedStreamControl::UpdateDuckers()
     const f32 lfHalfWidth = KF_SPEED_STREAM_CROSSFADE_WIDTH * 0.5f;
     const f32 lfUpper = lfHalfWidth + KF_SPEED_STREAM_THRESHOLD_MPH;
     const f32 lfLower = KF_SPEED_STREAM_THRESHOLD_MPH - lfHalfWidth;
-    const auto ClampMixerInput = [](f32 lfValue) {
-        lfValue = (-lfValue >= 0.0f) ? 0.0f : lfValue;
-        return (1.0f - lfValue >= 0.0f) ? lfValue : 1.0f;
-    };
+
 
     f32 lfHighSpeed = 0.0f;
     if (!lbCrashing)

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnDualGinsuEffect.h"
 #include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -562,7 +563,7 @@ bool DualGinsuEffect::Attach()
         {
             const char* lpcComponent = mpPhysicsControl->GetEngineComponentName(
                 VehicleState::E_EXHAUST);
-            std::snprintf(lacBundleName, sizeof(lacBundleName), "Engines\\%08x.bundle",
+            CgsCore::SPrintf(lacBundleName, sizeof(lacBundleName), "Engines\\%08x.bundle",
                          CgsResource::ID::HashString(
                              reinterpret_cast<const u8*>(lpcComponent)));
             lpcBundleName = lacBundleName;

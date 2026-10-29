@@ -103,7 +103,7 @@ s32 SingleGinsuEffect::GetController(s32 aiSlot)
 // ---------------------------------------------------------------------------
 void SingleGinsuEffect::AttachController(CgsSound::Logic::EffectBase* apController)
 {
-    if ((apController->GetObjectId() & KI_CONTROLLER_CLASS_MASK) == KI_HYBRID_EXHAUST_CONTROLLER_TAG)
+    if ((apController->GetId() & KI_CONTROLLER_CLASS_MASK) == KI_HYBRID_EXHAUST_CONTROLLER_TAG)
     {
         mpHybridControl = static_cast<HybridExhaustControl*>(apController);
     }

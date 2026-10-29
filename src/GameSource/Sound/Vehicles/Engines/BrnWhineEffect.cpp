@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnWhineEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -74,7 +75,7 @@ void WhineEffect::SetupLoadData()
     }
 
     char lacBundle[64];
-    std::snprintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcAsset);
+    CgsCore::SPrintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcAsset);
     mbHasLoadedData = true;
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
         lacBundle, 0, BrnSound::Logic::ResourceRegistrar::E_DATA);
@@ -94,7 +95,7 @@ bool WhineEffect::Attach()
     mfWhineVolume = 0.0f;
     const char* lpcAsset = mpPhysicsControl->GetVehicleEngineAttributes().WhineAssetName();
     char lacContent[64];
-    std::snprintf(lacContent, sizeof(lacContent), "%s.abi", lpcAsset);
+    CgsCore::SPrintf(lacContent, sizeof(lacContent), "%s.abi", lpcAsset);
 
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
     lParams.mpLogicModule = GetLogicModule();

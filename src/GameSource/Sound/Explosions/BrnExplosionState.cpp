@@ -77,13 +77,11 @@ ExplosionState::~ExplosionState()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* ExplosionState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo =
-    {
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
         0,                // ObjectID        (FLAG: State-side id unrecovered)
         "ExplosionState", // mpcTypeName     (FLAG: inferred from class, not GetTypeName-proven)
         0,          // mpBaseTypeInfo  (DEFERRED — BrnState descriptor chain)
-        0,          // mpfnCreateObject(DEFERRED)
-    };
+        0);         // mpfnCreateObject(DEFERRED)
     return &sTypeInfo;
 }
 

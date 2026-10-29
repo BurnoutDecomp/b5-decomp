@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnTurboEffect.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -95,7 +96,7 @@ void TurboEffect::SetupLoadData()
     }
 
     char lacBundle[64];
-    std::snprintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcAsset);
+    CgsCore::SPrintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcAsset);
     mbHasLoadedData = true;
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
         lacBundle, 0, BrnSound::Logic::ResourceRegistrar::E_DATA);
@@ -121,7 +122,7 @@ bool TurboEffect::Attach()
 
     const char* lpcAsset = mpHybridControl->GetVehicleEngineAttributes().TurboAssetName();
     char lacContent[64];
-    std::snprintf(lacContent, sizeof(lacContent), "%s.abi", lpcAsset);
+    CgsCore::SPrintf(lacContent, sizeof(lacContent), "%s.abi", lpcAsset);
 
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
     lParams.mpLogicModule = GetLogicModule();

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnBoostEffect.h"
 
@@ -107,7 +108,7 @@ void BoostEffect::SetupLoadData()
         return;
 
     char lacBundle[64];
-    std::snprintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcBank);
+    CgsCore::SPrintf(lacBundle, sizeof(lacBundle), "sound\\aems\\%s.bundle", lpcBank);
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
         lacBundle, 0, BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
@@ -123,7 +124,7 @@ bool BoostEffect::Attach()
 
     const char* lpcBank = mpPhysicsControl->GetVehicleEngineAttributes().BoostBank();
     char lacContent[64];
-    std::snprintf(lacContent, sizeof(lacContent), "%s.abi", lpcBank);
+    CgsCore::SPrintf(lacContent, sizeof(lacContent), "%s.abi", lpcBank);
 
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
     lParams.mpLogicModule = GetLogicModule();
@@ -155,6 +156,16 @@ bool BoostEffect::Attach()
     mTimeOfLastBoostIn.Update(0.0f);
     mTimeInBoost.Update(0.0f);
     return true;
+}
+
+namespace
+{
+f32 ClampTimer(f32 lfElapsed)
+{
+    const f32 lfScaled = lfElapsed * 100.0f;
+    const f32 lfPositive = -lfScaled >= 0.0f ? 0.0f : lfScaled;
+    return 32767.0f - lfPositive >= 0.0f ? lfPositive : 32767.0f;
+}
 }
 
 void BoostEffect::UpdateParams(f32 afTimeStep)
@@ -196,11 +207,7 @@ void BoostEffect::UpdateParams(f32 afTimeStep)
     // 826B43A8..4408: elapsed centiseconds clamped0..32767. The subtract
     // supplies fsel's predicate; it is not the returned timer value. fsel with
     // unordered predicate chooses the negative arm, hence a NaN ends at32767.
-    const auto ClampTimer = [](f32 lfElapsed) {
-        const f32 lfScaled = lfElapsed * 100.0f; // flt820049E0
-        const f32 lfPositive = -lfScaled >= 0.0f ? 0.0f : lfScaled;
-        return 32767.0f - lfPositive >= 0.0f ? lfPositive : 32767.0f; // flt820AD310
-    };
+
     mfParam_AEMS_time_boosting = ClampTimer(mTimeInBoost.GetCurrent());
     mfParam_AEMS_time_since_last_boostin = ClampTimer(lfNow - mTimeOfLastBoostIn.GetPrevious());
     mfParam_AEMS_time_since_last_boostout = ClampTimer(lfNow - mTimeOfLastBoostOut.GetCurrent());
