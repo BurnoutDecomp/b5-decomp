@@ -34,11 +34,6 @@ namespace
     u32 gu32ModuleInstanceCounter = 0;
 }
 
-// X360 off_82FFB954 -- the file-scope mirror of the module's adopted allocator
-// (Prepare's prologue stores it beside mpAllocator; the sound state/effect
-// deleting-destructor thunks free through it).
-rw::IResourceAllocator* gpModuleAllocator = 0;
-
 // ---------------------------------------------------------------------------
 // Module::Module() @0x827E0FD0
 //
@@ -115,7 +110,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
 {
     CGS_ASSERT(apAllocator != 0, "lpAllocator");
     mpAllocator       = apAllocator;
-    gpModuleAllocator = apAllocator;
+    CgsSound::MemBase::SetAllocator(apAllocator);
 
     mMessageQueue.Prepare();
 

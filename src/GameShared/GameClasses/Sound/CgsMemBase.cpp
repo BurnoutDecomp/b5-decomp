@@ -1,34 +1,43 @@
 #include "GameShared/GameClasses/Sound/CgsMemBase.h"
+#include "rw/rwcore_structs.h"
 
-// CgsSound::MemBase out-of-line members.
-//
-// Reconstructed from the X360 `vector deleting destructor` at 0x826AB548:
-//
-//   *this = &off_820AA820;            // install the MemBase vtable (compiler thunk)
-//   if (flags & 1)                    // deleting flavour
-//   {
-//       _DWORD desc[5];               // a 20-byte free descriptor (sp+0x50)
-//       desc[0] = this;               // [0]  = pointer to free
-//       desc[1..4] = 0;               // [4..0x10] zeroed
-//       allocator = off_82FFB954;     // the sound allocator instance
-//       (*(allocator->vtable + 0x14))(allocator, desc);   // Free(desc)
-//   }
-//   return this;
-//
-// The vtable install and the (flags & 1) allocator-routed free are the
-// compiler-generated deleting-destructor thunk, not the source-level destructor
-// body. The source ~MemBase() body is empty (the destructor writes only the
-// vptr; MemBase has no data members it tears down). MSVC re-synthesises its own
-// deleting thunk from this out-of-line virtual destructor, so it is faithful
-// without hand-writing the thunk or the off_82FFB954 allocator vtable call.
 namespace CgsSound
 {
+rw::IResourceAllocator* MemBase::mpAllocator = 0;
 
-MemBase::~MemBase()
+MemBase::~MemBase() {}
+
+void* MemBase::operator new(size_t luSize, const char* lpcName)
 {
-    // No member teardown: the X360 destructor only re-installs the vtable and
-    // (in the deleting flavour) frees storage via the sound allocator -- both are
-    // thunk/operator-delete concerns, not source-level body statements.
+    return operator new(luSize, lpcName, false);
 }
 
+// ARTIST826AB5C8: both allocation flavours use the same five-lane descriptor.
+// The bool is present in the original declaration but unused by this build.
+void* MemBase::operator new(size_t luSize, const char* lpcName, bool /*lbPermanent*/)
+{
+    rw::ResourceDescriptor lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<u32>(luSize);
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+    rw::Resource lResource = mpAllocator->DoAllocate(lDescriptor, lpcName);
+    return lResource.m_baseResources[0];
+}
+
+// The deleting destructor826AB548 passes one client pointer and four null lanes.
+void MemBase::operator delete(void* lpMemory)
+{
+    rw::Resource lResource;
+    lResource.m_baseResources[0] = lpMemory;
+    mpAllocator->DoFree(lResource);
+}
+
+void MemBase::operator delete(void* lpMemory, const char* /*lpcName*/)
+{
+    operator delete(lpMemory);
+}
+
+void MemBase::operator delete(void* lpMemory, const char* /*lpcName*/, bool /*lbPermanent*/)
+{
+    operator delete(lpMemory);
+}
 }
