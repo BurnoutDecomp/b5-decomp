@@ -126,10 +126,8 @@ namespace BrnWorld
     // ADJACENCY of the tail, which is width-independent and is the property a re-order would
     // break, instead of the console absolutes it used to assert.
     //
-    // ⚠️ mCrashCombo / mCrashBreakerParams are NOT in the DWARF's CrashPlayManager member list.
-    // They are kept, unchanged, at the TAIL (past the DWARF's last member) rather than deleted --
-    // nothing reads them on this build and their real home is unproven. Do not re-insert them
-    // into the middle of the run: that is exactly what displaced mbIsCrashPlayActive before.
+    // ARTIST places the following PowerParkingManager at +0x160; the final
+    // named byte is +0x153, with natural 16-byte alignment.
     // ============================================================================
     struct CrashPlayManager
     {
@@ -170,10 +168,6 @@ namespace BrnWorld
         bool mbAboutToLoseBoost;                // +0x151 (98881)
         bool mbBouncePromptNeeded;              // +0x152 (98882)
         bool mbBoostChargePending;              // +0x153 (98883)
-
-        // Not DWARF members of this class -- see the ⚠️ in the banner. Kept at the tail.
-        CrashCombo         mCrashCombo;
-        CrashBreakerParams mCrashBreakerParams;
 
         // ---- the out-of-line surface, all fifteen of it (BrnCrashPlayManager.cpp) ----------
         // Every one of these has an X360 symbol in the ledger for this TU. The DWARF-declared
@@ -306,6 +300,10 @@ namespace BrnWorld
         // property that actually encodes the DWARF member order, and it is width-independent.
         static void _AssertLayout()
         {
+#if defined(_XBOX)
+            CGS_STATIC_ASSERT((sizeof(CrashPlayManager) == 0x160), "ARTIST CrashPlayManager size");
+            CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mbBoostChargePending) == 0x153), "ARTIST CrashPlayManager final byte");
+#endif
             CGS_STATIC_ASSERT((offsetof(CrashPlayManager, mfAftertouchPower)
                           == offsetof(CrashPlayManager, mfBoostPercentage) + 4),
                           "mfAftertouchPower immediately follows mfBoostPercentage (console +0x134/+0x138)");
