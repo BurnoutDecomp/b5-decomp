@@ -397,16 +397,14 @@ void ResetOnTrackDebugComponent::DrawResetOnTrackAISection(
 
         const Vector3 lStartExtent = {3.0f, 3.0f, 3.0f, 0.0f};
         const Vector3 lEndExtent = {0.25f, 0.25f, 0.25f, 0.0f};
-        lpDisplay->DrawSolidBox(Vector3{lStart.x - lStartExtent.x,
-                                     lStart.y - lStartExtent.y,
-                                     lStart.z - lStartExtent.z, 0.0f},
-                             Add(lStart, lStartExtent),
-                             RenderColour(0x800000FFu));
-        lpDisplay->DrawSolidBox(Vector3{lEnd.x - lEndExtent.x,
-                                     lEnd.y - lEndExtent.y,
-                                     lEnd.z - lEndExtent.z, 0.0f},
-                             Add(lEnd, lEndExtent),
-                             RenderColour(0x80FF0000u));
+        const Vector3 lStartMin = {lStart.x - lStartExtent.x,
+                                   lStart.y - lStartExtent.y,
+                                   lStart.z - lStartExtent.z, 0.0f};
+        const Vector3 lEndMin = {lEnd.x - lEndExtent.x,
+                                 lEnd.y - lEndExtent.y,
+                                 lEnd.z - lEndExtent.z, 0.0f};
+        lpDisplay->DrawSolidBox(lStartMin, Add(lStart, lStartExtent), RenderColour(0x800000FFu));
+        lpDisplay->DrawSolidBox(lEndMin, Add(lEnd, lEndExtent), RenderColour(0x80FF0000u));
     }
 }
 

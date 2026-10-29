@@ -19,6 +19,7 @@ namespace CgsDev
 
     namespace DebugUI
     {
+        struct MenuItemVariableLineGraph;
         struct Window;
         struct Palette;
         struct Metrics;
@@ -28,6 +29,11 @@ namespace CgsDev
             // The menu threads MenuItems through mpDebugLinkedListNext via DebugLinkedList<MenuItem>.
             friend struct CgsDev::Internal::DebugLinkedList<MenuItem>;
 
+        private:
+            friend struct MenuItemVariableLineGraph;
+            struct AIConstructorTag {};
+            explicit MenuItem(AIConstructorTag) {}
+        public:
             MenuItem();
 
             void Prepare();

@@ -49,6 +49,9 @@ namespace BrnAI
 class RouteMapDebugComponent : public CgsDev::DebugComponent
 {
 public:
+#if defined(_XBOX) && defined(_M_PPCBE)
+    RouteMapDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::AIConstructorTag()) {}
+#endif
     // @0x82767E28  Two-phase init. Wires up the route-map module + AI module pointers (asserts the
     // route-map module is non-null), zeroes every toggle, and seeds the defaults: map scale 0.1,
     // map offset (580, 450), the 3 colour-mode dropdown labels ("Plain"/"Type"/"Speed").

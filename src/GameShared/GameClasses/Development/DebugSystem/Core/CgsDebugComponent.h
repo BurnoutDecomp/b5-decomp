@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Functions/CgsFunction.h"
 
 namespace CgsResource { class DebugComponent; }
+namespace BrnAI { class AIDebugComponent; class RaceBalancingDebugComponent; class RouteMapDebugComponent; struct ResetOnTrackDebugComponent; }
 namespace BrnGui { struct GuiHudMessagesDebugComponent; }
 namespace BrnGui { struct SatNavDebugComponent; struct GuiCacheDebugComponent; }
 namespace BrnGui { struct GuiDebugComponent; }
@@ -50,6 +51,16 @@ namespace CgsDev
         friend class CgsResource::DebugComponent;
         struct ResourceConstructorTag {};
         explicit DebugComponent(ResourceConstructorTag) {}
+
+        // ARTIST AIModule::AIModule 0x827E37FC, 0x827E3844, 0x827E387C:
+        // these AI debug bases install only their derived vptr; the route-map
+        // counterpart is attested by ARTIST RouteMapModule::RouteMapModule 0x827E2470.
+        friend class BrnAI::AIDebugComponent;
+        friend class BrnAI::RaceBalancingDebugComponent;
+        friend class BrnAI::RouteMapDebugComponent;
+        friend struct BrnAI::ResetOnTrackDebugComponent;
+        struct AIConstructorTag {};
+        explicit DebugComponent(AIConstructorTag) {}
 
         // ARTIST827E5D38/50/5C/68 install the four actual GUI debug
         // vtables without writing base data. These owners stay separate

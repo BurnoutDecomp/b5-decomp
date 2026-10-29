@@ -18,6 +18,8 @@
 // This slice reconstructs AddFloat / Update / RecalculateMinMax; the remaining virtuals
 // (Prepare/Render/ComputeSize) are declared for class shape but bodied by their own reconstructions.
 
+namespace BrnAI { class AIDebugComponent; }
+
 namespace CgsDev
 {
     struct Debug2DImmediateRender;
@@ -26,6 +28,12 @@ namespace CgsDev
     {
         struct MenuItemVariableLineGraph : public MenuItem
         {
+        private:
+            friend class BrnAI::AIDebugComponent;
+            struct AIConstructorTag {};
+            explicit MenuItemVariableLineGraph(AIConstructorTag) : MenuItem(MenuItem::AIConstructorTag()) {}
+        public:
+            MenuItemVariableLineGraph() {}
             static const s32 KI_MAX_FLOATS   = 5;
             static const s32 KI_HISTORY_SIZE = 360;
 
