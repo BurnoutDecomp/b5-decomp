@@ -328,10 +328,9 @@ namespace CgsResource
     }
     // The existing host update transport now drives the original typed request and
     // receiver processors, then the same state machines and owned maPools sweep.
-    bool PoolModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    PoolModule::EUpdateResult PoolModule::Update(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
+        const PoolIO::InputBuffer* lpIn, PoolIO::OutputBuffer* lpOut)
     {
-        PoolIO::InputBuffer*  lpIn  = static_cast<PoolIO::InputBuffer*>(lpInputBuffer);
-        PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
 
         {
             lpOut->LockForWrite();
@@ -364,7 +363,7 @@ namespace CgsResource
                 if (maPools[li].GetId() != -1)
                     maPools[li].Update();
         }
-        return mProcessState == E_UPDATESTATE_EMERGENCYFRAG;
+        return mProcessState == E_UPDATESTATE_EMERGENCYFRAG ? E_RESULT_REQUIRE_STALL : E_RESULT_OK;
     }
 
     // Look up a created pool by id (null if absent).

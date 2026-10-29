@@ -100,7 +100,6 @@ bool DecompressionJobInterface::RunFlushJobs()
     mJobData.mpStatus     = &mJobStatus;
     mJobData.mpEntries    = mpEntries;
     mJobData.mpHeapMalloc = &mHeap;
-    mJobData.mpNativeWorker = &mNativeWorker;
 
     // The X360 drops the last entry from the flush count when its source buffer is still empty
     // (the in-progress entry was created but never given a source): the entry at index
@@ -154,7 +153,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
         if (lLast.mpSourceBuffer != 0 && mJobStatus.miLastInflateResult != Z_OK)
         {
             char lacMessage[256];
-            std::snprintf(lacMessage, sizeof(lacMessage),
+            _snprintf(lacMessage, sizeof(lacMessage),
                 "Entry is in progress but source stream failed with error or ended (result=%d)\n",
                 mJobStatus.miLastInflateResult);
             CgsDev::Assert::BeginAssert();
@@ -171,7 +170,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
         if (mJobStatus.miLastInflateResult != Z_STREAM_END)
         {
             char lacMessage[256];
-            std::snprintf(lacMessage, sizeof(lacMessage),
+            _snprintf(lacMessage, sizeof(lacMessage),
                 "Entry is in progress but source stream failed with error or did not complete (result=%d)\n",
                 mJobStatus.miLastInflateResult);
             CgsDev::Assert::BeginAssert();

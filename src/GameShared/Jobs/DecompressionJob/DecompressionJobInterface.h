@@ -54,7 +54,7 @@ namespace CgsResource
         // Inlined BundleLoaderModule ctor827DD270 constructs this job unnamed.
         // Native instances need the same clear entry latch as the original
         // zero-initialized module storage before the first CreateEntry.
-        DecompressionJobInterface() : mJob(0), mbEntryInProgress(false) {}
+        DecompressionJobInterface() : mJob(0) {}
         // DecompressionJobInterface.h:59 -- the size of the heap buffer the interface owns
         // (HeapMalloc::Construct passes 0x20000 in Construct's asm).
         static const u32 KU_COMPRESSION_BUFFER_SIZE = 131072;

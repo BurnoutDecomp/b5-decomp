@@ -23,8 +23,8 @@ namespace CgsResource
         struct FileSystemStatusInterface
         {
             void Construct();
-            bool GetDiskErrorOccured() const;
-            void SetDiskErrorOccured(bool lbDiskErrorOccured);
+            bool GetDiskErrorOccured() const { return mbDiskErrorOccured; }
+            void SetDiskErrorOccured(bool lbDiskErrorOccured) { mbDiskErrorOccured = lbDiskErrorOccured; }
 
         private:
             bool mbDiskErrorOccured;   // CgsResourceModuleIO.h:56  [+0]

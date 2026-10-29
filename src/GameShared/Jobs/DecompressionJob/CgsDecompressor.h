@@ -53,7 +53,8 @@ namespace CgsResource
 
     // DecompressionJob.h:46 -- the per-job descriptor. Execute restores the saved zlib stream from
     // mpStatus, walks mpEntries[0..muNumEntries), and allocates zlib internal state via mpHeapMalloc.
-    struct DecompressionJobData
+    // ARTIST828DB1E8 clears its128-byte slot at interface+0x80; native job DMA alignment.
+    struct __declspec(align(128)) DecompressionJobData
     {
         DecompressionJobStatus* mpStatus;       // +0  saved 128-byte zlib-stream snapshot src/dst
         CompressedData*         mpEntries;       // +4  compressed entry array
@@ -66,7 +67,7 @@ namespace CgsResource
     // Layout follows the X360 ARTIST object (mStream embedded at +0x80; the entry cursor + heap
     // handle trail it); members are accessed by name (the callbacks recover `this` from
     // z_stream::opaque). Reconstructed at semantic parity, not byte-matched.
-    class Decompressor
+    class __declspec(align(128)) Decompressor
     {
     public:
         // 0x82ACCB48 -- restore the saved stream, inflate every entry, copy the stream back.
