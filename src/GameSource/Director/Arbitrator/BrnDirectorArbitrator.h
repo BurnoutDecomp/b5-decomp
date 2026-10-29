@@ -190,13 +190,6 @@ namespace BrnDirector
 
         ArbStateTestbed          mArbStateTestbed;            // X360 +0x30 (vtable Construct @+0x30)
 
-        // The normal-camera source selector (X360 +0x2EC): CycleNormalCamera /
-        // GetNormalCamera @0x822087F0/@0x821F5BD8 route to the TESTBED state's camera
-        // (mArbStateTestbed.mCamera == arb +0x40) when this reads 2, else to the
-        // container's current state. FLAG: name inferred from that role (the trimmed
-        // DWARF omits the member; only the ==2 compare is attested).
-        s32                      miDebugCameraMode;           // X360 +0x2EC
-
         // FLAG: two Arbitrator scratch flags the trimmed DWARF omits but the asm PROVES exist
         //   (X360 +0x300 / +0x301): Construct seeds +0x300 = 1 and +0x301 = 0, and
         //   UpdateCameraCycleControl reads/writes +0x301 as the normal-camera cycle selector

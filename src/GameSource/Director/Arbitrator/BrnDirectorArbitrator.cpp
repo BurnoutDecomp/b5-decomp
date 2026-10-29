@@ -621,7 +621,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void Arbitrator::CycleNormalCamera()
     {
-        if (miDebugCameraMode == 2)
+        if (mArbStateTestbed.IsActive())
         {
             mArbStateTestbed.RequestCycleCameraThisFrame();
         }
@@ -634,12 +634,12 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     // GetNormalCamera @0x821F5BD8 -- the camera currently driving the "normal" view:
     // the testbed state's camera (arb +0x40 == mArbStateTestbed's +0x10 Camera) when
-    // the debug-camera selector reads 2, else the current state's camera (state +0x10;
+    // the testbed is in E_STATE_GENERIC_UPDATE, else the current state's camera (state +0x10;
     // the inlined GetCurrentState carries the StateContainer.h:140 tripwire).
     // ------------------------------------------------------------------------
     const Camera::Camera& Arbitrator::GetNormalCamera() const
     {
-        if (miDebugCameraMode == 2)
+        if (mArbStateTestbed.IsActive())
         {
             return mArbStateTestbed.GetCamera();
         }
