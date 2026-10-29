@@ -539,5 +539,17 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
 
         s32  miFramesToForceSuperSlowMotion;              // :240  X360 +433204
         bool mbIsOnlineGameMode;                          // :241  X360 +433208 (stbx: one byte)
+
+        void LockNativeLayout_()
+        {
+            CGS_STATIC_ASSERT((sizeof(PhysicsModule) == 0x69C40), "ARTIST physics module extent");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mSimulationModule) == 0x230), "ARTIST physics simulation module");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mVehicleManager) == 0x4AA0), "ARTIST physics vehicle manager");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mDeformationInput) == 0x5F770), "ARTIST physics deformation input");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mDeformationOutput) == 0x60B40), "ARTIST physics deformation output");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mPropManager) == 0x63630), "ARTIST physics prop manager");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mePrepareStage) == 0x69BB0), "ARTIST physics prepare stage");
+            CGS_STATIC_ASSERT((offsetof(PhysicsModule, mbIsOnlineGameMode) == 0x69C38), "ARTIST physics tail");
+        }
     };
 }

@@ -76,10 +76,14 @@ namespace BrnPhysics
         };
 
         // Input event: remove a deformation model from simulation.
-        struct CGS_ALIGN(16) RemoveDeformationModelEvent
+        struct RemoveDeformationModelEvent
         {
             RigidBodyId mHandlingBodyID;
         };
+        // ARTIST 825A95F8..9604: the twenty-entry remove queue spans
+        // 0xC90..0xD40, with a 16-byte header and eight bytes per record.
+        CGS_STATIC_ASSERT((sizeof(RemoveDeformationModelEvent) == 8), "ARTIST remove deformation event stride");
+        CGS_STATIC_ASSERT((__alignof(RemoveDeformationModelEvent) == 8), "ARTIST remove deformation event alignment");
 
         // Input event: toggle a deformation model's collision.
         struct CGS_ALIGN(16) SetModelCollisionEvent
