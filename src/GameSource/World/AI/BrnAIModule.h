@@ -322,6 +322,12 @@ private:
     void HarnessAIPadReleaseRoute( AICar* lpPlayerCar, const char* lpcReason );
 
     static void AssertNativeLayout();
+    static s32 miUpdatePM;
+    static s32 miUpdateCarsPM;
+    static s32 miUpdateDriversPM;
+    static s32 miUpdateDriverPM;
+    static s32 miUpdateDriversRoundRobinPM;
+    static s32 miResetOnTrackPM;
 
     // ARTIST 0x827E3780 and 0x82794D08; member order corroborated by DecFIGS.
     AICar maAICars[35];
