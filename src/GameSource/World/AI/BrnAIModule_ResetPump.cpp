@@ -175,32 +175,13 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
 void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lpResults,
                                          f32 lfTime)
 {
-    CGS_ASSERT(lpResults != 0, "lpResults != NULL");
-    if (lpResults == 0)
-    {
-        return;
-    }
-
     const AICar* lpPlayerAICar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
     if (lpPlayerAICar == 0)
     {
         return;
     }
 
-    if (liPlayer < 0 || liPlayer >= 35)
-    {
-        static bool sbReportedBadPlayerIndex = false;
-        if (!sbReportedBadPlayerIndex && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbReportedBadPlayerIndex = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[resetpump] AICar[" << static_cast<s32>(mePlayerGlobalRaceCarIndex)
-                << "].miRaceCarIndex is " << liPlayer
-                << ", out of [0,35) -- clamping to 0 for ResetOnTrackManager::Update's range"
-                   " asserts. AICar::Construct is an export hole; see AIModule::Construct.\n";
-        }
-        liPlayer = 0;
-    }
+    const s32 liPlayer = lpPlayerAICar->miRaceCarIndex; // 0x8279AC1C
 
     mResetOnTrackManager.Update(
         lpResults,
@@ -211,10 +192,10 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
     // ARTIST 0x8279AC40..0x8279AE90. Keep the AI model in step with the
     // world/physics reset. In-range cars also discard their pre-reset aggression
     // target, even when the reset request failed.
-    const auto* lpResetResults = lpResults->GetResetOnTrackResultQueue();
+    const AIModuleIO::AIModuleResultInterface::ResetOnTrackResultQueue* lpResetResults = lpResults->GetResetOnTrackResultQueue();
     for (s32 liResult = 0; liResult < lpResetResults->GetLength(); ++liResult)
     {
-        const auto& lrResult = lpResetResults->GetEvent(liResult);
+        const AIModuleIO::ResetOnTrackResult& lrResult = lpResetResults->GetEvent(liResult);
         AICar* lpCar = GetAICar(static_cast<u32>(lrResult.GetGlobalRaceCarIndex()));
         if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
             lpCar->GetDriver()->GetAggression()->Prepare(lpCar);
@@ -223,18 +204,22 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
             lpCar->mPosition = lrResult.GetResetPosition();
             lpCar->SetDirection(lrResult.GetResetDirection());
             // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a reset target (BrnAIHarnessPad.h).
+#if !defined(_XBOX) || !defined(_M_PPCBE)
             HarnessAIPadNoteReset(static_cast<s32>(lrResult.GetGlobalRaceCarIndex()));
+#endif
         }
     }
-    const auto* lpPlacements = lpResults->GetPlaceOnTrackRequestQueue();
+    const AIModuleIO::AIModuleResultInterface::PlaceOnTrackRequestQueue* lpPlacements = lpResults->GetPlaceOnTrackRequestQueue();
     for (s32 liPlacement = 0; liPlacement < lpPlacements->GetLength(); ++liPlacement)
     {
-        const auto& lrPlacement = lpPlacements->GetEvent(liPlacement);
+        const AIModuleIO::PlaceOnTrackRequest& lrPlacement = lpPlacements->GetEvent(liPlacement);
         AICar* lpCar = GetAICar(static_cast<u32>(lrPlacement.GetGlobalRaceCarIndex()));
         lpCar->mPosition = lrPlacement.GetResetPosition();
         lpCar->SetDirection(lrPlacement.GetResetDirection());
         // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a re-seated target (BrnAIHarnessPad.h).
+#if !defined(_XBOX) || !defined(_M_PPCBE)
         HarnessAIPadNoteReset(static_cast<s32>(lrPlacement.GetGlobalRaceCarIndex()));
+#endif
     }
 }
 

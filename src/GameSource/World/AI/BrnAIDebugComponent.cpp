@@ -82,6 +82,13 @@ void AIDebugComponent::Construct(AIModule* lpAIModule)
     mPIDDebugData.mfDCoefficient = 0.0f;
 }
 
+// Inlined by AIModule::Destruct at 0x8276E3C0..0x8276E400.
+void AIDebugComponent::Destruct()
+{
+    CGS_ASSERT(mpAIModule != 0, "mpAIModule != NULL");
+    mpAIModule = 0;
+}
+
 // @0x827671B8  The component's display name in the debug menu.
 const char* AIDebugComponent::GetName() const
 {
