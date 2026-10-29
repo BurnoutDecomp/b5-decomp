@@ -6,6 +6,7 @@
 //     GetName                              @ 0x825BADD0   (4 asm)
 //     OnRegister                           @ 0x822A9750   (2 asm)
 //     RenderHUD                            @ 0x82628EB0   (6 asm)
+//     RenderWorld                          @ 0x825BADE0   (67 instructions; retained IDB body)
 //     OnActivate                           @ 0x825E3628   (259 asm)
 //     RenderStats                          @ 0x826131E8   (239 asm)
 //     OnChangeGravityScale                 @ 0x825BAEF0   (14 asm)
@@ -48,6 +49,9 @@
 // =========================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropDebugComponent.h"
+
+#include "rw/math/vpu/vector3_operation.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 
 #include "BrnCommonTypes.h"                                            // ::VecFloat (== Vector4)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -188,6 +192,34 @@ namespace Props
     {
         if (mbRenderStats)
             RenderStats(lpRender);
+    }
+
+    // ARTIST 0x825BADE0..0x825BAEEC, retained in the IDB but absent from the
+    // per-function export set. Vtable 0x820CDF60 slot +4 points here. Draw up to
+    // 32 stored contacts, reloading the owner buffer between renderer calls.
+    void PropDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpRender)
+    {
+        if (!mbRenderWorldContacts || !mpPropManager->mpDebugWorldContacts)
+            return;
+
+        s32 liNumToRender = mpPropManager->miNumDebugWorldContacts;
+        if (liNumToRender > PropManager::KI_MAX_DEBUG_WORLD_CONTACTS)
+            liNumToRender = PropManager::KI_MAX_DEBUG_WORLD_CONTACTS;
+
+        for (s32 liIndex = 0; liIndex < liNumToRender; ++liIndex)
+        {
+            lpRender->DrawPoint(mpPropManager->mpDebugWorldContacts[liIndex].mPoint0,
+                                rw::RGBA(255, 255, 0, 255));
+            lpRender->DrawPoint(mpPropManager->mpDebugWorldContacts[liIndex].mPoint1,
+                                rw::RGBA(255, 0, 255, 255));
+            lpRender->DrawLine(mpPropManager->mpDebugWorldContacts[liIndex].mPoint0,
+                               mpPropManager->mpDebugWorldContacts[liIndex].mPoint1,
+                               rw::RGBA(255, 255, 255, 255));
+            lpRender->DrawArrow(mpPropManager->mpDebugWorldContacts[liIndex].mPoint0,
+                                mpPropManager->mpDebugWorldContacts[liIndex].mPoint0
+                                    + mpPropManager->mpDebugWorldContacts[liIndex].mNormal,
+                                rw::RGBA(255, 0, 0, 255));
+        }
     }
 
     // X360 0x826131E8. Three stat lines down the right of the screen. Everything here is read
