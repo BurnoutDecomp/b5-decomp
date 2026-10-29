@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_COLLISION_COLLISION_STATE_MANAGER_H
 
 #include "types.hpp"
+#include <cstddef>
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h" // BrnSound::Logic::Collision::ScrapeInfo (committed; maScrapeHistory element)
 #include "GameSource/Sound/Collision/BrnBinLookupCache.h"          // BinLookupCache (maBinLoopupCache, DWARF h:787)
@@ -395,19 +396,19 @@ private:
     // velocity and open / closed flags (UpdateHingingBodyParts).
     HingeStateCache mHingeCache;
     PropToMaterialMapping maPropToMaterialMappings[500];
-    InputCollision maInputCollision[64];
-    OutputCollision maOutputCollision[64];
-    CameraInfo mCameraInfo;
-    u32 mu32InputCollisionCount;
-    u32 mu32OutputCollisionCount;
-    BrnSound::Logic::FrameInformation mFrameInformation;
-
     // DWARF (BrnCollisionStateManager.h:639). The 16-entry scrape history (X360 +0x1E40, stride
     // 48 -- the full ScrapeInfo). UpdateScrapes records new scrapes into it and refreshes the ones
     // that continue; UpdateScrapeHistory ages them out; UpdateResolver forgets them all when the
     // impact time changes or the fatality starts; the regular InputCollision reads it for the
     // SloMoCrash cull.
     BrnSound::Logic::Collision::ScrapeInfo maScrapeHistory[E_MAX_SCRAPE_HISTORY];
+
+    InputCollision maInputCollision[64];
+    OutputCollision maOutputCollision[64];
+    CameraInfo mCameraInfo;
+    u32 mu32InputCollisionCount;
+    u32 mu32OutputCollisionCount;
+    BrnSound::Logic::FrameInformation mFrameInformation;
 
     // The three ref-counted content handles built at the tail of the ARTIST
     // constructor.  They are the runtime-visible part of the otherwise deferred
@@ -423,6 +424,17 @@ private:
     CgsResource::ResourceHandle mPropDataResourceHandle;
     u32 mx32CameraBinFlags;
     u32 mx32GameModeBinFlags;
+
+    static void AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(CollisionStateManager, maScrapeHistory) == 0x1E40), "Collision scrape history native offset");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(CollisionStateManager, maInputCollision) == 0x2140), "Collision input native offset");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(CollisionStateManager, maOutputCollision) == 0x4940), "Collision output native offset");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(CollisionStateManager, mCameraInfo) == 0x8140), "Collision camera native offset");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(CollisionStateManager, mu32InputCollisionCount) == 0x8190), "Collision input count native offset");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(CollisionStateManager, mFrameInformation) == 0x81A0), "Collision frame native offset");
+        CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(CollisionStateManager) == 0x8280), "Collision manager native size");
+    }
 };
 
 } // namespace Collision
