@@ -88,5 +88,17 @@ namespace CgsMemory
         bool                mbStreaming;        // +32 true between Begin() and End()
         s32                 miNextResult;       // +36 read cursor (next record index)
         s32                 miNumResultsAtEnd;  // +40 record count latched at stream end
+
+        void CheckLayout()
+        {
+            CGS_STATIC_ASSERT((offsetof(DataStreamResultReader, mpcResultBuffer) == 8), "ARTIST result buffer");
+            CGS_STATIC_ASSERT((offsetof(DataStreamResultReader, miResultSize) == 0x10), "ARTIST result stride");
+            CGS_STATIC_ASSERT((offsetof(DataStreamResultReader, mpcDataBuffer) == 0x18), "ARTIST data buffer");
+            CGS_STATIC_ASSERT((offsetof(DataStreamResultReader, mbStreaming) == 0x20), "ARTIST streaming flag");
+            CGS_STATIC_ASSERT((offsetof(DataStreamResultReader, miNextResult) == 0x24), "ARTIST result cursor");
+            CGS_STATIC_ASSERT((offsetof(DataStreamResultReader, miNumResultsAtEnd) == 0x28), "ARTIST result count");
+        }
     };
 }
+
+CGS_STATIC_ASSERT((sizeof(CgsMemory::DataStreamResultReader) == 0x30), "ARTIST data stream reader size");

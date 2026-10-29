@@ -19,7 +19,6 @@
 #include "eathread/eathread_thread.h"                           // EA::Thread::Thread
 #include "eathread/eathread_barrier.h"                          // EA::Thread::Barrier
 #include "eathread/eathread_atomic.h"                           // EA::Thread::AtomicPointer
-#include <exception>
 
 class Mutex;
 namespace CgsDev { namespace Assert { struct AssertData; } }
@@ -75,5 +74,18 @@ namespace CgsSystem
         volatile s32                  miResourcePercentageOfFrame;
         bool                          mbUpdatingResourceSystem;
         EA::Thread::AtomicPointer     mAssertFromSecondaryThread;
+
+        void CheckLayout()
+        {
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, mUpdateThreadId) == 0x10), "ARTIST update id");
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, mDispatchThread) == 0x14), "ARTIST dispatch thread");
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, mUpdateStartBarrier) == 0x18), "ARTIST start barrier");
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, mUpdateEndBarrier) == 0x44), "ARTIST end barrier");
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, meFrameRate) == 0x70), "ARTIST frame rate");
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, mbUpdatingResourceSystem) == 0x78), "ARTIST update phase");
+            CGS_STATIC_ASSERT((offsetof(ThreadLayout, mAssertFromSecondaryThread) == 0x7C), "ARTIST secondary assert");
+        }
     };
 }
+
+CGS_STATIC_ASSERT((sizeof(CgsSystem::ThreadLayout) == 0x80), "ARTIST ThreadLayout size");

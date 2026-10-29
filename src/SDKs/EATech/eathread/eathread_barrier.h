@@ -2,6 +2,7 @@
 #define EA_THREAD_EABARRIER_H
 
 #include "types.hpp"
+#include "SDKs/EATech/eathread/eathread.h"
 
 #include "SDKs/EATech/eathread/eathread_barrier_data.h"  // EABarrierData (the homed data half)
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"         // EA::Thread::BarrierParameters / SemaphoreParameters
@@ -33,8 +34,7 @@
 //   * Barrier holds one EABarrierData at +0 (mnCurrent@0, mnHeight@4, mnIndex@8,
 //     mSemaphore0@0xC, mSemaphore1@0x1C). The ctor builds the data half then Init.
 //   * Wait returns a bool-as-int derived from the X360 `(cntlzw(...) & 0x20) == 0`
-//     reduction -- 1 for the thread that observed the index flip, matching the
-//     EAThread "was-this-the-releasing-thread" return.
+//     reduction -- 1 when another arrival already changed the phase, else0.
 // =====================================================================
 
 namespace EA
@@ -70,7 +70,7 @@ namespace Thread
         // mnCurrent to mnHeight, releases the other arrivals (Semaphore::Post), then
         // every thread flips to the next phase by CAS-ing mnIndex. Returns the X360
         // bool reduction, or kResultError(-2) if an inner wait was cancelled.
-        int Wait();
+        int Wait(const ThreadTime& timeoutAbsolute = kTimeoutNone);
 
     private:
         EABarrierData mBarrierData;  // +0x00 (the only member; offset-0 data half)
@@ -79,6 +79,8 @@ namespace Thread
         Barrier(const Barrier& rhs);
         Barrier& operator=(const Barrier& rhs);
     };
+
+    CGS_STATIC_ASSERT((sizeof(Barrier) == 0x2C), "ARTIST Barrier");
 }
 }
 
