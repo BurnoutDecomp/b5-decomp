@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 
 namespace BrnGameState
 {
@@ -41,6 +42,9 @@ public:
     // HandleLoadingScreenLoaded @0x8234B8A8 once. DWARF BrnOnlineRaceMode.h:15 declares this
     // override; ADDED 2026-08-26 with the 26-slot base.
     virtual bool HasLoadingScreen() const;
+private:
+    // Start initializes the generator at +0xC0 and passes it to the starting-grid setup.
+    CgsNumeric::Random mRandom;
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------

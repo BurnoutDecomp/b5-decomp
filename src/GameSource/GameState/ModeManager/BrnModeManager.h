@@ -17,14 +17,14 @@
 // ---------------------------------------------------------------------------------------------------
 //
 // [!!] MOUNT CONTRACT -- READ BEFORE MOUNTING ANYTHING.
-// The grow embeds FOURTEEN concrete GameMode-derived objects, the HUDMessageLogic and the
+// The grow embeds FIFTEEN concrete GameMode-derived objects, the HUDMessageLogic and the
 // ScoringSystemDebugComponent BY VALUE. That makes ModeManager's implicit default constructor
-// reference (a) BrnGameState::GameMode::GameMode(), (b) the fourteen concrete modes' vtables --
+// reference (a) BrnGameState::GameMode::GameMode(), (b) the fifteen concrete modes' vtables --
 // i.e. EVERY virtual each of them declares -- and (c) CgsDev::DebugComponent::DebugComponent() plus
 // ScoringSystemDebugComponent's two overrides. GameStateModule embeds ModeManager by value and
 // BrnMain.cpp holds the game module in static storage, so that constructor IS emitted in the shipping
 // link (ModeManager::ModeManager() also references ScoringSystem::ScoringSystem()).
-// => THE CORE MOUNT (BrnGameMode.cpp + BrnOfflineGameMode.cpp + BrnOnlineGameMode.cpp + the fourteen
+// => THE CORE MOUNT (BrnGameMode.cpp + BrnOfflineGameMode.cpp + BrnOnlineGameMode.cpp + the fifteen
 //    concrete mode TUs + Hud/BrnHUDMessageLogic.cpp + Debug/BrnScoringSystemDebugComponent.cpp +
 //    CgsDebugComponent.cpp) MUST LAND IN THE SAME COMMIT AS THIS HEADER, or
 //    tools/build/build_game_exe.bat stops linking. The compile gate (selfcheck.py) CANNOT see this --
@@ -85,7 +85,7 @@
 // declarations are enough and BrnGameStateModuleIO.h stays out of this widely-included header;
 // each partfile includes it itself.
 
-// -- the fourteen embedded concrete game modes (ORDER NOTE 2: fourteen, not the DWARF's fifteen) ----
+// -- the fifteen embedded concrete game modes ------------------------------------------------------
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnRaceMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnFaceOffMode.h"
@@ -99,6 +99,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineRoadRageMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.h"
+#include "GameSource/GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineFreeBurnLobbyMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineShowtimeMode.h"
 
@@ -668,11 +669,9 @@ private:
     // ORDER NOTE 1  mapGameModes is [18], not the DWARF's [17]: Construct zeroes 18 slots and
     //               ctor-loops 18, StartGameMode / GetCountdownTimeForMode assert `< 0x12`, the
     //               countdown rodata table is 18 entries, and slot 17 is a real dispatchable mode.
-    // ORDER NOTE 2  FOURTEEN embedded modes, not the DWARF's fifteen. The DWARF's mOnlineFugitive AND
-    //               mOnlineFreeBurn do not exist on X360: Construct points slots 12 (ONLINE_FUGITIVE),
-    //               14 (ONLINE_FREE_BURN) and 17 ALL at the ONE OnlineStuntRunMode @+2256
-    //               (`*(a1+48) = *(a1+56) = *(a1+68) = a1+2256`), so the slot loop invokes that one
-    //               object's ctor virtual three times -- idempotent, keep it that way.
+    // ORDER NOTE 2  The native C++ constructor constructs fifteen distinct modes. Construct
+    //               aliases dispatch slots 12, 14 and 17 to OnlineStuntRun; that does not
+    //               eliminate the separately constructed OnlineFreeBurn object at +0xAD0.
     // ORDER NOTE 3  Slots 6 (E_MODE_ELIMINATOR) and 9 (E_MODE_TRAFFIC_ATTACK) are AUTHORED NULLS --
     //               Construct never stores them. Dispatching into them is a null call and the console
     //               asserts "mpCurrentGameMode"; keep that assert, do not "fix" the nulls.
@@ -696,6 +695,7 @@ private:
     OnlineRoadRageMode       mOnlineRoadRage;                    // +2016   slot 11
     OnlineStuntRunMode       mOnlineStuntRun;                    // +2256   slots 12, 14 AND 17 (ALIAS -- ORDER NOTE 2)
     OnlineBurningHomeRunMode mOnlineBurningHomeRun;              // +2512   slot 13
+    OnlineFreeBurnMode       mOnlineFreeBurn;                    // +2768  separately constructed, not selected by Construct
     OnlineFreeBurnLobbyMode  mOnlineFreeBurnLobby;               // +2952   slot 15 == E_MODE_ONLINE_FREE_BURN_LOBBY.
                                                                  //         Its embedded BurnoutSkillzManager begins at +3136;
                                                                  //         Construct hands it the Street / Mugshot managers

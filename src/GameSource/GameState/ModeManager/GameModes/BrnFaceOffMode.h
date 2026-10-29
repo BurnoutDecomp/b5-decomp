@@ -29,6 +29,9 @@ public:
     virtual f32         GetIntroDurationSeconds() const;
 
 private:
+    // Start writes the rival count at +0xBC.
+    s32 miNumRivalsInRace;
+
     // DWARF: BrnFaceOffMode.cpp:27. The mode's fixed outro timeout; the X360 GetOutroTimeout body
     // returns 0.0, so this constant is 0.0f for this build (same shape as RaceMode).
     static const f32 KF_OUTRO_TIME_SECONDS;
