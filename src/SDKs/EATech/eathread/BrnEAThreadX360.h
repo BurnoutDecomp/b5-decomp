@@ -35,11 +35,8 @@
 // =====================================================================
 
 #include "types.hpp"
-
-// On the MSVC/Windows host the X360 OS primitives map to Win32. We declare the
-// handful of Win32 entry points the X360 build uses rather than pulling all of
-// <Windows.h> into this header.
-typedef void* HANDLE;
+#include <cstddef>
+#include <xtl.h>   // native HANDLE and OS declarations
 
 namespace EA
 {
@@ -132,10 +129,6 @@ namespace Thread
     //                              when it reaches 0).
     //   +0x24 mName[32]          : thread name (SetName strncpy's 32 bytes, NUL@+0x43).
     //
-    // FLAG: +0x04 is never touched by this TU's code and its meaning is not
-    // recoverable from this dossier (the modern EATech DWARF places intptr_t
-    // mnReturnValue earlier; the X360 layout above is asm-authoritative). It is
-    // left as an HONEST placeholder. The record is exactly 68 bytes.
     struct EAThreadDynamicData
     {
         HANDLE mhThread;                  // +0x00
@@ -149,6 +142,16 @@ namespace Thread
         s32    mnRefCount;                // +0x20  (lwarx/stwcx. AtomicInt32)
         char   mName[32];                 // +0x24..0x43
     };
+
+    CGS_STATIC_ASSERT((sizeof(EAThreadDynamicData) == 0x44), "ARTIST thread record stride");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mnThreadId) == 4), "ARTIST OS thread id");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mnStatus) == 8), "ARTIST thread status");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mnReturnValue) == 0xC), "ARTIST thread return");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mpStartContext) == 0x10), "ARTIST thread entry arguments");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mhThreadHandleCopy) == 0x18), "ARTIST copied thread handle");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mpBeginThreadUserWrapper) == 0x1C), "ARTIST thread wrapper");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mnRefCount) == 0x20), "ARTIST thread references");
+    CGS_STATIC_ASSERT((offsetof(EAThreadDynamicData, mName) == 0x24), "ARTIST thread name");
 
     // X360: 24 statically-allocated EAThreadDynamicData slots guarded by a
     // parallel 24-entry busy-flag table (one int per slot, claimed via
@@ -175,6 +178,8 @@ namespace Thread
     bool     SetThreadPriority(int nPriority);
     // 0x82B42610: a1 points at a millisecond count; 0 -> yield, else SleepEx.
     u32      ThreadSleep(const u32* lpuMilliseconds);
+    // 0x82B42628: GetTickCount()+10000, with native 32-bit wrap.
+    u32      GetThreadTime();
 
     // ---- Futex (X360 fast user-space mutex) --------------------------------
 

@@ -7,26 +7,17 @@
 //   CgsFileSystem::OperationPool::AddOperation  @ 0x828E9828
 //   CgsFileSystem::OperationPool::ReadOperation @ 0x828E9960
 
-// OS critical-section hooks (FLAGGED platform APIs). The X360 build calls the NT
-// Rtl* critical-section primitives directly on the pool's embedded section (which the
-// Futex wraps). Declared extern here, supplied by the platform layer; mirrors the
-// MassiveAd precedent of wrapping the OS critical section by name rather than pulling
-// in <windows.h>.
-extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
-extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
-extern "C" long RtlInitializeCriticalSection(void* lpCriticalSection);
-extern "C" long RtlDeleteCriticalSection(void* lpCriticalSection);
-
+// Use the native SDK critical-section declarations.
 namespace CgsFileSystem
 {
-    // Construct/Destruct — the X360 split this pool's bring-up between the DeviceManager ctor
+    // Construct/Destruct â€” the X360 split this pool's bring-up between the DeviceManager ctor
     // (RtlInitializeCriticalSection on mFutex + the Semaphore subobject ctor) and Add-
     // PhysicalDevice (zero the used-flags + Semaphore::Init count 0). Here it is consolidated:
     // init the lock, clear the slot table + sequence counter. mOperationCount (the vendor
     // EA::Thread::Semaphore subobject) is created count-0 by its own member ctor.
     void OperationPool::Construct()
     {
-        RtlInitializeCriticalSection(&mFutex);
+        RtlInitializeCriticalSection(&mFutex.mCriticalSection);
         for (s32 liIndex = 0; liIndex < KI_MAX_OPERATIONS; ++liIndex)
             mabUsedOperations[liIndex] = false;
         muNextOperationNumber = 0;
@@ -34,7 +25,7 @@ namespace CgsFileSystem
 
     void OperationPool::Destruct()
     {
-        RtlDeleteCriticalSection(&mFutex);
+        RtlDeleteCriticalSection(&mFutex.mCriticalSection);
     }
 
     // The absolute-deadline argument the X360 hands Semaphore::Wait (unk_820F6FD8). A
@@ -45,7 +36,7 @@ namespace CgsFileSystem
     // @ 0x828E9828
     bool OperationPool::AddOperation(const Operation* lpOperation)
     {
-        RtlEnterCriticalSection(&mFutex);
+        RtlEnterCriticalSection(&mFutex.mCriticalSection);
 
         // Sequence-counter exhaustion guard (asm: ld @0x4E60 compared to (u64)-1).
         CGS_ASSERT(muNextOperationNumber != static_cast<u64>(-1),
@@ -69,7 +60,7 @@ namespace CgsFileSystem
             ++muNextOperationNumber;
         }
 
-        RtlLeaveCriticalSection(&mFutex);
+        RtlLeaveCriticalSection(&mFutex.mCriticalSection);
 
         if (liIndex >= KI_MAX_OPERATIONS)
         {
@@ -86,7 +77,7 @@ namespace CgsFileSystem
         // Block until an operation is available.
         mOperationCount.Wait(&KU_WAIT_FOREVER);
 
-        RtlEnterCriticalSection(&mFutex);
+        RtlEnterCriticalSection(&mFutex.mCriticalSection);
 
         // Pick the used slot with the highest priority; break ties by the lowest
         // operation number (FIFO within a priority band).
@@ -133,13 +124,13 @@ namespace CgsFileSystem
             CGS_ASSERT(false,
                        "A lockable operation queue should never fail to find an operation - something dodgy is going on\n");
             muNextOperationNumber = 0;
-            RtlLeaveCriticalSection(&mFutex);
+            RtlLeaveCriticalSection(&mFutex.mCriticalSection);
             return false;
         }
 
         memcpy(lpOutOperation, &maOperations[liBestIndex], sizeof(Operation));
         mabUsedOperations[liBestIndex] = false;
-        RtlLeaveCriticalSection(&mFutex);
+        RtlLeaveCriticalSection(&mFutex.mCriticalSection);
         return true;
     }
 }

@@ -97,7 +97,7 @@ int MessageQueue::ShutDown()
             mbInitialized = !mResponseList.empty();
             mMutex.Unlock();
 
-            EA::Thread::ThreadSleep(10);
+            { const u32 luSleepMilliseconds = 10; EA::Thread::ThreadSleep(&luSleepMilliseconds); }
         }
     }
     return 0;
@@ -223,8 +223,8 @@ bool MessageQueue::_ExtractResponse(const MessagePtr& rMessage, ResponsePtr& rRe
 //   }
 //   unlock ; return result
 //
-// The console's Condition::Wait reports a timeout as -1 (its semaphore's timeout
-// code); the linked EAThread Condition reports it as kResultTimeout.
+// ARTIST shuts down only for Condition::Wait result -1 (error). A normal
+// timeout result -2 leaves the queue available for another wait.
 // ---------------------------------------------------------------------------
 ResponsePtr MessageQueue::_WaitForResponse(const MessagePtr& rMessage)
 {
@@ -250,7 +250,7 @@ ResponsePtr MessageQueue::_WaitForResponse(const MessagePtr& rMessage)
         {
             const EA::Thread::ThreadTime ltDeadline =
                 EA::Thread::GetThreadTime() + static_cast<EA::Thread::ThreadTime>(miWaitTimeoutMs);
-            if (mCondition.Wait(&mMutex, ltDeadline) == EA::Thread::Condition::kResultTimeout)
+            if (mCondition.Wait(&mMutex, &ltDeadline) == EA::Thread::Condition::kResultError)
                 mbShuttingDown = true;
         }
     }

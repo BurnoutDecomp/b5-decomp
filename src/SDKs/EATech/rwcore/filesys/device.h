@@ -208,11 +208,7 @@ namespace rw
             // The X360 object lays its members at fixed offsets (op list +0x08, op-list
             // mutex +0x18, work condition +0x48, worker thread +0xA8, completion mutex
             // +0xB0, completion condition +0xE0, driver +0x140, read budget +0x148). Those
-            // offsets are NOT reproduced here: the host EA::Thread::Mutex / ::Condition /
-            // ::Thread have different sizes than the console primitives, and
-            // every access in this TU is by member NAME (never `this+N`), so the layout is
-            // free to follow the host ABI. Member ORDER is preserved to mirror the X360
-            // construction/destruction order.
+            // Native EAThread objects preserve these offsets.
             class Device
             {
             public:
@@ -281,6 +277,17 @@ namespace rw
                 EA::Thread::Condition mCompletion;        // +0x0E0 ("op completed")
                 DeviceDriver*         mpDriver;           // X360 +0x140
                 u64                   mu64ReadBudget;     // X360 +0x148 (optimal-read budget)
+
+                void CheckLayout()
+                {
+                    CGS_STATIC_ASSERT((offsetof(Device, mLock) == 0x18), "ARTIST device lock");
+                    CGS_STATIC_ASSERT((offsetof(Device, mWork) == 0x48), "ARTIST device work condition");
+                    CGS_STATIC_ASSERT((offsetof(Device, mThread) == 0xA8), "ARTIST device worker");
+                    CGS_STATIC_ASSERT((offsetof(Device, mCompletionLock) == 0xB0), "ARTIST device completion lock");
+                    CGS_STATIC_ASSERT((offsetof(Device, mCompletion) == 0xE0), "ARTIST device completion condition");
+                    CGS_STATIC_ASSERT((offsetof(Device, mpDriver) == 0x140), "ARTIST device driver");
+                    CGS_STATIC_ASSERT((offsetof(Device, mu64ReadBudget) == 0x148), "ARTIST device read budget");
+                }
             };
 
             // Device::`scalar deleting destructor' @0x82BBE3B0: the MSVC `delete` thunk --

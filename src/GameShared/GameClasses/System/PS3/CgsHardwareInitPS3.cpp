@@ -1,3 +1,4 @@
+#include <xtl.h>
 #include <cstdio>
 #include <cstring>
 
@@ -65,13 +66,6 @@ namespace
     CgsMemory::HeapMallocCoreAllocator gJobManagerAllocator;
     EA::Jobs::JobScheduler             gJobManager;
 }
-
-// ---------------------------------------------------------------------------
-// X360 platform (XDK) APIs -- todo external callees; declaration suffices.
-// Signatures recovered from the InitializeHardware call sites.
-// ---------------------------------------------------------------------------
-extern "C" int  XMountUtilityDrive(int fFormatClean, int dwBytesPerCluster, int dwFileCacheSize);
-extern "C" void XFlushUtilityDrive();
 
 // ---------------------------------------------------------------------------
 // Static storage for the shared HardwareInit members (the X360 data symbols

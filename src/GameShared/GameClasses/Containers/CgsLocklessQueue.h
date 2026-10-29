@@ -94,7 +94,8 @@ bool LocklessQueue<T>::Lock(bool lbWait)
             {
                 return false;
             }
-            EA::Thread::ThreadSleep(0);
+            const u32 luSleepMilliseconds = 0;
+            EA::Thread::ThreadSleep(&luSleepMilliseconds);
             continue;
         }
 
@@ -141,7 +142,8 @@ bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
                 return false;
             }
             Unlock();
-            EA::Thread::ThreadSleep(static_cast<EA::Thread::ThreadTime>(liSleepTime));
+            const u32 luSleepMilliseconds = static_cast<u32>(liSleepTime);
+            EA::Thread::ThreadSleep(&luSleepMilliseconds);
             Lock(true);
             continue;
         }
@@ -178,7 +180,8 @@ bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
                 return false;
             }
             Unlock();
-            EA::Thread::ThreadSleep(static_cast<EA::Thread::ThreadTime>(liSleepTime));
+            const u32 luSleepMilliseconds = static_cast<u32>(liSleepTime);
+            EA::Thread::ThreadSleep(&luSleepMilliseconds);
             Lock(true);
             continue;
         }

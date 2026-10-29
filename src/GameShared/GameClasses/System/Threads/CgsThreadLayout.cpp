@@ -170,7 +170,7 @@ namespace CgsSystem
             for (;;)
             {
                 EA::Thread::ThreadTime lSleepMs = 1000;
-                EA::Thread::ThreadSleep(lSleepMs);
+                EA::Thread::ThreadSleep(&lSleepMs);
             }
         }
 
