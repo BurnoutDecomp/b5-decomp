@@ -93,7 +93,7 @@ namespace BrnGraphics
         AntiAliasTilingPlan lPlan = lrPlan;
         for (u32 luTile = 0; luTile < lPlan.mu32NumTiles; ++luTile)
         {
-            auto& lrRect = lPlan.maTile[luTile];
+            AntiAliasTilingPlan::TileRect& lrRect = lPlan.maTile[luTile];
             lrRect.mu32Left = static_cast<u32>(static_cast<u64>(lrRect.mu32Left) * luWidth / 1280u);
             lrRect.mu32Right = static_cast<u32>(static_cast<u64>(lrRect.mu32Right) * luWidth / 1280u);
             lrRect.mu32Top = static_cast<u32>(static_cast<u64>(lrRect.mu32Top) * luHeight / 720u);
