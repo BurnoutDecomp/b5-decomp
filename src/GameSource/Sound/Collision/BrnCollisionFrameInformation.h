@@ -17,7 +17,7 @@
 // transform, the crash "fatality" state machine, the impact-time / super-slo-mo
 // flags, the paused-source bit set, replay state and the hard-stop flag.
 //
-// DWARF (BrnCollisionFrameInformation.h:44) gives the full layout/surface:
+// DecFIGS supplies the shared declaration; ARTIST adds convoy state at59/5C:
 //   struct BrnSound::Logic::FrameInformation {
 //       Matrix44Affine                         mPlayerTransform;     // :73
 //       DataPoint<EFatalityFlag>               meFatality;           // :74
@@ -64,11 +64,11 @@ enum EFatalityFlag
 // BrnCollisionFrameInformation.h:44 (DWARF). Per-frame sound-logic snapshot.
 struct FrameInformation
 {
+    // Native827E3E64..7C initializes only the two enum histories, paused bits
+    // and hard-stop history. Replay/convoy/counter words remain untouched.
     FrameInformation()
         : meFatality(E_FATAL_OFF)
         , meImpactTime(AttribSys::Enums::eImpactTime::False)
-        , mbInReplay(false)
-        , mu32FatalStartCount(0)
         , mIsHardStop(false)
     {
         maPaused.Prepare();
@@ -96,6 +96,10 @@ struct FrameInformation
                                                 meImpactTime;       // :75
     CgsContainers::BitArray<3>               maPaused;             // :76
     bool                                     mbInReplay;           // :77
+    // ARTIST826EC804/814: convoy-action flag and its car-in-front index.
+    // These X360 additions are absent from the DecFIGS declaration.
+    bool                                     mbInConvoy;
+    s32                                      miCarInFrontIndex;
     u32                                      mu32FatalStartCount;  // :78
     CgsSound::Utils::DataPoint<bool>         mIsHardStop;          // :79
 };

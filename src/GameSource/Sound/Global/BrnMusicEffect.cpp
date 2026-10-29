@@ -671,8 +671,7 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
         lRecord.mbPreview       = 1;
 
         CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
-            reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-                lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+            (&lpModule->GetPreUpdateOutput().mGuiOutEventQueue);
         lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 502, 24);
     }
 
@@ -896,8 +895,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                     lNewTrack.mbPreview       = 0;
 
                     CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
-                        reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-                            lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+                        (&lpModule->GetPreUpdateOutput().mGuiOutEventQueue);
                     lpGuiOut->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lNewTrack), 502, 24);
                 }
@@ -983,8 +981,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             std::strcpy(lEvent.macComposerTextId, lrTrack.mpcComposerTextId);
             std::strcpy(lEvent.macWorkTextId, lrTrack.mpcWorkTextId);
             CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
-                reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-                    lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+                (&lpModule->GetPreUpdateOutput().mGuiOutEventQueue);
             lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
                                503, sizeof(lEvent));
             miPicParadiseMusic = (miPicParadiseMusic + 1) % KI_NUM_PICTURE_PARADISE_NAMES;
@@ -1024,8 +1021,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
         {
             u8 lu8AudioReady = 0;
             CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
-                reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-                    lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+                (&lpModule->GetPreUpdateOutput().mGuiOutEventQueue);
             lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8AudioReady),
                                504, 1);
         }
@@ -1117,8 +1113,7 @@ void MusicEffect::ProcessUpdate()
         Module::SoundLogicModule* lpGuiModule =
             static_cast<Module::SoundLogicModule*>(mpLogicModule);
         CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
-            reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-                lpGuiModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+            (&lpGuiModule->GetPreUpdateOutput().mGuiOutEventQueue);
         lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lfGuiVolume),
                            513, static_cast<s32>(sizeof(f32)));
         mfLastPublishedGuiVolume = lfGuiVolume;

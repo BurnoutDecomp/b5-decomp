@@ -1222,7 +1222,7 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
         // Hex-Rays incorrectly aliases that register with the module flags load.
         const BrnSound::Module::SoundLogicModule* lpModule =
             static_cast<const BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-        if (lpModule && (lpModule->mDispatchState.mu64Flags & 2u) == 0)
+        if (lpModule && (lpModule->GetFrameInformation().maPaused.GetBitField(0) & 2u) == 0)
         {
             lu8ChokeGroup  = 0;
             lu8MixerOutput = 3;

@@ -172,10 +172,9 @@ namespace Module
         static bool MutexIsLockedFn();
 
         // --- members, in DWARF source order (BrnRootSoundModule.h:224-259) ---
-        // [gated] DWARF :224 `JobScheduler mScheduler` is OMITTED: the JobScheduler type is not
-        // reconstructed yet and none of the boot-path functions touch it. Restore it at the head
-        // of the member list when its type lands (semantic parity is by named members, not byte
-        // offsets, so inserting it later moves nothing logically).
+        // The DecFIGS-only JobScheduler is absent from the ARTIST constructor.
+        // Native alignment of the contained logic serialiser supplies the gap
+        // after the228-byte ModuleSingleBuffered base, placing logic at280.
 
         // DWARF :228. The embedded sound-logic sub-module (X360 this+0x280). Its engine base
         // (CgsSound::Logic::Module) embeds the playback module at +0x238 -- X360 this+0x4B8 --

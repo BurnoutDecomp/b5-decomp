@@ -19,42 +19,13 @@
 #include "GameSource/AttribSys/Generated/classes/burnoutglobaldata.h"
 #include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
+#include "GameSource/Replays/Serialisers/BrnReplaySoundSerialiser.h"
 #include "SharedClasses/BrnSharedConstants.h"                    // BrnUpdateSet
 
-// =============================================================================
-// BrnSound::Module::SoundLogicModule
-//   GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h (DWARF home) +
-//   GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.cpp
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. SoundLogicModule is the Burnout
-// sound-logic module facade. It inherits BrnSound::Logic::IResourceRequester
-// (DWARF: `struct SoundLogicModule : public BrnSound::Logic::IResourceRequester`)
-// and so carries a vtable; GetResourceRegistrar() is the IResourceRequester
-// override that hands out the embedded registrar.
-//
-// MINIMAL SLICE: only the two members this group's functions touch are modelled
-// as real typed members, in DWARF source order:
-//   * maTriggerActions  (Array<SoundTriggerAction,16>) -- searched by
-//     GetSoundTriggerAction (X360 0x826AFF88, reads the array base at this+0x4CA0;
-//     element stride 32, count word at array+0x200, matching the committed
-//     Array<T,N> shape).
-//   * mResourceRegistrar (BrnSound::Logic::ResourceRegistrar) -- returned by
-//     GetResourceRegistrar (X360 0x826838C0: `addi r3, r3, 0x588; blr`, i.e.
-//     &mResourceRegistrar at this+0x588).
-// The earlier DWARF members (mpBrnLogicInputBuffer, mpBrnLogicOutputBuffer) are
-// modelled as their real pointer types so maTriggerActions follows them in
-// sequence; the members between maTriggerActions and mResourceRegistrar, and the
-// SoundLogicModule tail, are not touched by this group and are intentionally
-// omitted from this slice (they land with the full SoundLogicModule TU).
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 ASM reaches maTriggerActions
-// at this+0x4CA0 and mResourceRegistrar at this+0x588 assuming 4-byte pointers +
-// a 4-byte vptr. On a 64-bit host those widths differ, so members are pinned BY
-// NAME and SEQUENCE only; absolute offsets are NOT static_asserted across the
-// vtable / pointer members.
-// FLAG: minimal slice -- the omitted members (DWARF BrnSoundLogicModule.h:374-401)
-// are reconstructed by the full SoundLogicModule TU; do not duplicate them here.
-// =============================================================================
+// Native SoundLogicModule layout is pinned by ARTIST827E3DA8 construction,
+// Construct826C9330, field readers and CheckClassSizes823C01A4 (sizeof13680).
+// DecFIGS supplies the shared declaration order; its PS3-only shape does not
+// override the native replay serialiser or the convoy fields in FrameInformation.
 
 namespace BrnSound
 {
@@ -93,7 +64,7 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // PrepareStateManagersOnBoot (0x826837F8) iterating the same 9 slots.
     static const s32 KI_NUM_STATE_MANAGERS = 9;
 
-    // The Prepare resumable-stage machine (X360 0x82703C18, stage word @ this+19775).
+    // Prepare82703C18 persists its stage at native byte134FC.
     // Stage order mirrors the X360 switch: AddMonitor -> base Module::Prepare ->
     // construct+connect the 3 Voices + LoadAsset(BurnoutGlobalData) -> ResourceBridging ->
     // CreateStateManagers -> PrepareStateManagersOnBoot -> done.
@@ -108,16 +79,15 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
         E_PREPSTAGE_DONE          = 6,  // case 6: prepared
     };
 
-    SoundLogicModule()
-        : CgsSound::Logic::Module()
-        , mpBrnLogicInputBuffer(0)
-        , mpBrnLogicOutputBuffer(0)
-        , mpBrnAllocator(0)
-        , meBrnPrepareStage(E_PREPSTAGE_PERFMON)
-        , mbConstructed(false)
-        , mbPrepared(false)
+    enum EReleaseStage
     {
-    }
+        E_BRN_RELEASE_START = 0,
+        E_BRN_RELEASE_SELF = 1,
+        E_BRN_RELEASE_MASTER_VOICE = 2,
+        E_BRN_RELEASE_DONE = 3
+    };
+
+    SoundLogicModule();
     virtual ~SoundLogicModule() {}
 
     // Bring-up (X360 ctor 0x827E3DA8 + the registrar bring-up 0x826B0470): the engine
@@ -279,141 +249,45 @@ private:
     // the online-intro rival sweep and the online race start trigger.
     void ProcessCameraFlags(const Io::RootInputBuffer::DirectorCamera& arCamera);
 
-    // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
-    // touched members are real typed members; the rest of the class tail is omitted
-    // from this slice (see header note).
-    Io::LogicInputBuffer*  mpBrnLogicInputBuffer;   // BrnSoundLogicModule.h:365 (X360 this+0x4C94)
-    Io::LogicOutputBuffer* mpBrnLogicOutputBuffer;  // BrnSoundLogicModule.h:366 (X360 this+0x4C98)
-
-    // The logic RW allocator Prepare captures first (X360 word a1[19777] = a2 -- the
-    // &gLogicTestBedAlloc the root's LOGIC stage passes; DWARF member name pending, held
-    // by usage). Distinct from the ENGINE base's mpAllocator (which the base Prepare
-    // adopts from the same argument).
-    rw::IResourceAllocator* mpBrnAllocator;         // X360 word 19777 (byte +0x4D04)
-
-    Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
-
-public:
-    // X360 SoundLogicModule + 0x13570 (79216): the dispatch-state block the game-action /
-    // GUI dispatch maintains, read back by MusicEffect::UpdateParams and HUDEffect::Notify.
-    // Layout from the INSTRUCTIONS that touch it (the pseudocode renders the 64-bit word
-    // as two dwords and invented a "+4 byte" nothing ever wrote):
-    //   +0x13570  u64 mu64Flags  ONE 64-bit word (`ld`/`std` everywhere): bit 0 set by game
-    //                            actions 86/88 (`ori 1` @0x826ECEC8), cleared by 87/89
-    //                            (`clrrdi 1` @0x826ECEE0); bit 1 set/cleared by GUI event 33
-    //                            GuiEventLoadingScreenState (ProcessGuiEvents @0x826EDCCC),
-    //                            which CgsGui::ViewModule::ProcessIncomingAptEvent @0x8285EAE8
-    //                            posts for PlayAptLoadingMovie 19 / StopAptLoadingMovie 20.
-    //                            UpdateParams @0x826FE788 tests the WHOLE word (`ld`/`cmpldi`);
-    //                            HUDEffect::Notify @0x826F60B0 tests bit 1 (`ldx` + `rlwinm
-    //                            30,30`) and reads the word's high dword as a mixer output.
-    //   +0x13578  u8  mu8SimPausedBit  UpdateFrameInformation @0x826B01B8: `updateSet & 1`
-    //                            (the update set's sim-paused bit), stored every tick.
-    //   +0x13579  u8  mu8FlagAt1 set to 1 by game action 16 when its +0x1C field != -1
-    //                            (@0x826EC804); cleared every tick by UpdateFrameInformation.
-    //   +0x1357C  s32 mi32At4    that +0x1C field, stored by game action 16 (@0x826EC814).
-    struct DispatchState
-    {
-        u64 mu64Flags;
-        u8  mu8SimPausedBit;
-        u8  mu8FlagAt1;
-        u8  maReserved[2];
-        s32 mi32At4;
-    };
-    DispatchState mDispatchState;
-
-    // X360 MusicEffect::UpdateParams @0x826FE784..0x826FE7D0: the music streams are held
-    // (no new EA Trax song is selected; mbStreamPaused goes to the three streams) while the
-    // flags word is non-zero AND this tick's update set does not carry the sim-paused bit --
-    // a pause has been requested (86) or the loading screen is up (33), and the simulation
-    // itself is not what is paused.
-    bool AreMusicStreamsPaused() const
-    {
-        return mDispatchState.mu64Flags != 0 && mDispatchState.mu8SimPausedBit == 0;
-    }
-
 private:
+    // Native member order: ARTIST827E3DA8 constructor and826C9330 Construct.
+    Io::LogicInputBuffer* mpBrnLogicInputBuffer;   // +4C94
+    Io::LogicOutputBuffer* mpBrnLogicOutputBuffer; // +4C98
+    Array<BrnGameState::GameStateModuleIO::SoundTriggerAction,16> maTriggerActions; // +4CA0
+    Io::PreUpdateOutput mPreUpdateOutput;         // +4EB0
+    CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray mFreedStreamBufferIds; // +51E0
+    CgsSound::Logic::Voice mMasterVoice;           // +51F0
+    CgsSound::Logic::Voice mGlobalReverbVoice;     // +51FC
+    CgsSound::Logic::Voice mSubmixVoice;           // +5208
+    u32 muBrnUniqueId;                            // +5214
+    BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // +5218
+    CgsSound::Logic::StateManager* mapStateManagers[KI_NUM_STATE_MANAGERS]; // +134D8
+    EPrepareStage meBrnPrepareStage;              // +134FC
+    EReleaseStage meBrnReleaseStage;              // +13500
+    rw::IResourceAllocator* mpBrnAllocator;        // +13504
+    Attrib::Gen::burnoutglobaldata mBurnoutGlobalData; // +13508
+    BrnSound::Logic::FrameInformation mFrameInformation; // +13520
+    CgsNumeric::Random mRandomGenerator;           // +13590
+    bool mbSeenAnyRivals;                         // +135C0
+    s32 miCommandStreamUsage;                     // +135C4
+    s32 miResourceRegistrarMonitor;               // +135C8
+    f32 mfHoldTimer;                             // +135CC
+    bool mbHoldingVolumes;                       // +135D0
 
-    CgsSound::Logic::Voice mMasterVoice;       // X360 this+0x51F0, ident 1
+    // The actual replay serialiser is cache-line aligned. Construct826C9350
+    // calls SoundSerialiser::Construct8264C9F8 at13600; CheckClassSizes823C01A4
+    // independently gives SoundLogicModule sizeof13680.
+    CGS_ALIGN(128) BrnReplays::SoundSerialiser mSoundSerialiser; // +13600
 
 public:
-    // The console reaches this member by address (`addi rN, module, 0x51F0`) from
-    // SubmixesEffect::Attach @0x826D2DD4 and ::ProcessUpdate @0x826D2F80; the DWARF
-    // names the accessor BrnSound::Module::SoundLogicModule::GetMasterVoice. Added
-    // so those bodies reach it BY NAME rather than by a raw +0x51F0 cast.
-    CgsSound::Logic::Voice&       GetMasterVoice()       { return mMasterVoice; }
+    CgsSound::Logic::Voice& GetMasterVoice() { return mMasterVoice; }
     const CgsSound::Logic::Voice& GetMasterVoice() const { return mMasterVoice; }
 
-private:
-    CgsSound::Logic::Voice mGlobalReverbVoice; // X360 this+0x51FC, ident 2
-    CgsSound::Logic::Voice mSubmixVoice;       // X360 this+0x5208, ident -16
+    bool AreMusicStreamsPaused() const
+    {
+        return !mFrameInformation.maPaused.IsZero() && !mFrameInformation.mbInReplay;
+    }
 
-    // X360 this+0x5214 (the word between mSubmixVoice's 12 bytes and
-    // mResourceRegistrar @+0x5218): SoundLogicModule's OWN unique-id cursor, the
-    // one GetUniqueId @0x826838C8 reads and writes. It is DISTINCT from the engine
-    // base's muUniqueId @+0x230 -- the override never touches that one.
-    u32 muBrnUniqueId;
-
-    BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (+0x588 from the IResourceRequester sub-object == X360 this+0x5218)
-
-    // DecFIGS BrnSoundLogicModule.h: the generated view over BurnoutGlobalData.bin.
-    // It is constructed before the asset is available and rebound by
-    // ResourcesAreReady once the registrar completes the load.
-    Attrib::Gen::burnoutglobaldata mBurnoutGlobalData;
-    BrnSound::Logic::FrameInformation mFrameInformation;
-    CgsNumeric::Random mRandomGenerator;
-
-    // Latched by the first online-intro rival sweep so the online-race VO goes out once;
-    // cleared again when the intro-start camera flag rises (ProcessCameraFlags).
-    bool mbSeenAnyRivals;
-
-    // The volume hold PrepareStateManagersOnEnteringGameplay opens: while
-    // mbHoldingVolumes is set, Update counts mfHoldTimer down by the game dt and posts
-    // the release once it runs out.
-    f32  mfHoldTimer;
-    bool mbHoldingVolumes;
-
-    // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
-    // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)
-
-    // The fixed bank of 9 sound-logic state managers (X360 this+79064). Each slot is filled
-    // by CreateStateManagers via StateManager::CreateStateMan(i, this) (null when no leaf is
-    // registered for that id). Pinned by name; offset NOT asserted.
-    CgsSound::Logic::StateManager* mapStateManagers[KI_NUM_STATE_MANAGERS]; // X360 this+79064
-
-    // Prepare-machine bookkeeping (the BRN machine's stage word, X360 word a1[19775] ==
-    // byte +0x4CFC, DISTINCT from the engine base's mePrepareStage @+0x4C84; +0x4D00 ==
-    // word a1[19776], the voices/base progress word the console stamps 1/2 -- folded into
-    // the stage machine here). Pinned by name; the omitted ~79KB of Voice/state-manager/IO
-    // members sit between maTriggerActions and these in the real layout (grow-in).
-    s32  meBrnPrepareStage;
-    bool mbConstructed;
-    bool mbPrepared;
-
-    // The "Resource Registrar" CPU monitor handle (X360 word a1[19826] == byte
-    // +0x4D48; Prepare case 0 registers it).
-    s32  miResourceRegistrarMonitor;
-
-    // DWARF (the dump's PreUpdateOutput member; X360 this+20144 == +0x4EB0 -- the
-    // block SoundLogicModule::PreUpdate @0x826E1F10 publishes). By-value embed;
-    // pinned by name (host widths differ -- see the header LAYOUT NOTE).
-    BrnSound::Module::Io::PreUpdateOutput mPreUpdateOutput;
-
-    // The freed-stream-buffer voice-id list (X360 root+0x5460 == this+0x51E0,
-    // directly after mPreUpdateOutput): RootSoundModule::Update @0x826FB238
-    // AppendArray's the playback output buffer's freed list into it each frame
-    // (the ids of stream voices whose buffers completed their grace scrub).
-    // DWARF member name un-dumped; held by usage. Same element type as the
-    // playback FreedBuffersArray so AppendArray matches instantiations.
-    CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray mFreedStreamBufferIds;
-
-    // [marked deviation -- PC DRIVER LATCH, NOT AN X360 MEMBER] The one-shot latch for the
-    // PrepareStateManagersOnEnteringGameplay(4) poll in Update(). On the console the
-    // equivalent state is the LoadSoundModuleAgain / RootSoundModule::
-    // PrepareOnEnteringGameplay stage machine (0x823E7700 / 0x82704188), which has no body in
-    // this tree; this latch stands in for "that stage has completed". Appended LAST so no
-    // named member's sequence moves. Delete it with the driver when that chain lands.
-    bool mbEnteringGameplayPrepared;
 };
 
 } // namespace Module

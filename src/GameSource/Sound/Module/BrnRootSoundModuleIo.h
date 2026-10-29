@@ -134,20 +134,19 @@ namespace Io
     // The middle queue is copied via Clear()+Append (NOT memcpy) because it owns a
     // self-referential mpEvents pointer into its own inline buffer.
     //
-    // The GuiOut and AudioEffects queues are NOT touched member-wise by this group,
-    // so they are modelled as named opaque byte storage of their exact X360 width;
-    // the real typed members land with the BrnPreUpdateSharedIo.h TU without moving
-    // anything. The AudioCarDataLoadedQueue IS modelled as its real committed type
-    // (EventQueue<AudioCarDataLoadedEvent,16>) so the Clear()+Append the X360 body
-    // performs are reconstructed by name against the committed queue generics.
-    // FLAG: minimal slice -- the omitted GuiOut/AudioEffects queue internals are
-    // reconstructed by the BrnPreUpdateSharedIo.h TU; do not duplicate them here.
+    // Both pointer-free variable queues use their genuine engine types. Their
+    // leading flags start unconstructed; the car-data queue is bound by Construct.
     // =========================================================================
     typedef CgsModule::EventQueue<BrnWorld::RaceCarEntityModuleIO::AudioCarDataLoadedEvent, 16>
         AudioCarLoadedDataQueue;   // BrnWorldModuleIO.h:1505 (DWARF typedef)
 
     struct PreUpdateOutput
     {
+        PreUpdateOutput()
+        {
+            mGuiOutEventQueue.MarkUnconstructed();
+            mAudioEffectsMessageQueue.MarkUnconstructed();
+        }
         // GetCarDataLoadedQueue() const (BrnPreUpdateSharedIo.h:193); referenced by
         // SetPreUpdateOutput to merge the source's audio-car-loaded events.
         const AudioCarLoadedDataQueue& GetCarDataLoadedQueue() const { return mAudioCarDataLoadedQueue; }
@@ -159,7 +158,7 @@ namespace Io
         const AudioEffectsMessageQueue& GetAudioEffectsMessageQueue() const { return mAudioEffectsMessageQueue; }
         AudioEffectsMessageQueue&       GetAudioEffectsMessageQueue()       { return mAudioEffectsMessageQueue; }
 
-        u8                      maGuiOutEventQueueStorage[0x110];     // @ +0x000 mGuiOutEventQueue
+        CgsModule::VariableEventQueue<256,16> mGuiOutEventQueue;     // @ +0x000 mGuiOutEventQueue
         AudioCarLoadedDataQueue mAudioCarDataLoadedQueue;            // @ +0x110 (0x190 wide)
         // Adopted real type (was named opaque u8[0x90] storage): the committed
         // AudioEffectsMessageQueue (SharedIO/BrnPreUpdateSharedIo.h) is pointer-free
@@ -547,8 +546,7 @@ namespace Io
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
-            reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-                mPreUpdateOutput.maGuiOutEventQueueStorage)->Construct();
+            (&mPreUpdateOutput.mGuiOutEventQueue)->Construct();
             mPreUpdateOutput.mAudioCarDataLoadedQueue.Construct();
             mPreUpdateOutput.mAudioEffectsMessageQueue.Construct();
         }
@@ -563,8 +561,7 @@ namespace Io
         // its VariableEventQueue<32768,16>::Append<256,16> into the GUI input buffer.
         const CgsModule::VariableEventQueue<256, 16>& GetGuiEventQueue() const
         {
-            return *reinterpret_cast<const CgsModule::VariableEventQueue<256, 16>*>(
-                GetPreUpdateOutput().maGuiOutEventQueueStorage);
+            return *(&GetPreUpdateOutput().mGuiOutEventQueue);
         }
 
         // BrnRootSoundModuleIo.h:346 (DWARF). X360 0x826E0C10.

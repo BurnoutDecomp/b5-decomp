@@ -387,8 +387,7 @@ void SpeechEffect::PostSpeechFinished()
         mbFirstTimeTipPlaying = false;
     }
     CgsModule::VariableEventQueue<256, 16>* lpGuiQueue =
-        reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
-            lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+        (&lpModule->GetPreUpdateOutput().mGuiOutEventQueue);
     lpGuiQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&luPayload), 467, 1);
 }
 
