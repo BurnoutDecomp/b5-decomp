@@ -25,6 +25,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
 #include <cstring>                                                              // memset / memcmp / strncmp
 #include <cstdlib>                                                              // atoi (prop-instance zone number)
+#include <xbdm.h>  // DmMapDevkitDrive
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 
@@ -1068,82 +1069,53 @@ namespace BrnResource
 
     void GameDataModule::Construct()
     {
-        // X360 0x82671B90 first runs the module base's Construct (stage/DataBuffer reset; it
-        // clears mbIsNewModule, which is re-raised below).
         CgsModule::ModuleSingleBuffered::Construct();
-
-        mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
-        mePrepareStage = E_PREPARE_START;
         meReleaseStage = E_RELEASE_DONE;
-        miNumBankCreationRequests = 0;
+        mePrepareStage = E_PREPARE_START;
+        miPopupsPrepareStage = 0;
+        miChallengeListPrepareStage = 0;
+        miVehicleListPrepareStage = 0;
+        miHudMessagesPrepareStage = 0;
         miNumBanksCreated = 0;
-        miNumPoolCreationRequests = 0;
+        miNumBankCreationRequests = 0;
         miNumPoolsCreated = 0;
+        miResourcePrepareStage = 0;
+        miWheelListPrepareStage = 0;
+        miNumPoolCreationRequests = 0;
         miNumAllocatorCreationRequests = 0;
         miNumAllocatorsCreated = 0;
+        muLoadedSoundBundlesCount = 0;
 
-        // X360 0x82671B90: wire the in-flight event-slot pool -- capacity 96
-        // (`*(a1+439324) = 96`), the module-embedded element array (a1+439328) and
-        // free-index array (a1+443936), then Clear -- and the internal receiver queue
-        // (0x8000-byte buffer @a1+363120, 16-byte alignment: `*(a1+363112)=0x8000;
-        // *(a1+363116)=16` + Clear). Every request the world handlers publish into the
-        // ResourceModule names mReceiverQueue as its mpUser reply-to.
         mGameDataEventSlotPool.Construct(maGameDataEventSlots, masGameDataEventSlotFreeIndices,
-                                         static_cast<s16>(KI_NUM_GAMEDATA_EVENT_SLOTS));
+                                        static_cast<s16>(KI_NUM_GAMEDATA_EVENT_SLOTS));
         mReceiverQueue.Construct();
-
-        // X360 0x82671B90: the attrib reply receiver (a1+395888) + the embedded
-        // AttribSysModule (a1+399000) are constructed in the same pass.
         mAttribSysReceiverQueue.Construct();
-        mAttribSysModule.Construct();
-
-        // Completion-routing state words (X360 a1+439284 / a1+475936 / a1+475940). [reliable
-        // init] zero-start so the counters are coherent from the first Update; the X360
-        // Construct's full store list for this region is not mapped (the module rides
-        // zero-init BSS there), so this is the same observable state.
-        muLoadedSoundBundlesCount       = 0;
-        miCollisionWorldRefCount        = 0;
-        mbCollisionWorldInvalidated = 0;
-        miResourcePrepareStage          = 0;
-        miVehicleListPrepareStage       = 0;
-        miChallengeListPrepareStage     = 0;   // [challenge-list wave] X360 a1[139] (0x22C)
-        miICEListPrepareStage           = 0;
-        miWheelListPrepareStage         = 0;
-        miHudMessagesPrepareStage       = 0;   // [gateui r3] X360 a1[145]
-        miPopupsPrepareStage            = 0;   // the console Construct stores 0 at +0x65998
-
-        // X360 0x82671B90 also constructs the two resident data tables here (VehicleList::
-        // Construct @0x82677850 and WheelList::Construct @0x82677DB8 both list
-        // GameDataModule::Construct as their only caller). They MUST run before Prepare
-        // stages 9/12: AddListResource appends into slot tables that Construct seeds with -1.
-        mVehicleList.Construct();
-        mWheelList.Construct();
-
-        // [challenge-list wave 2026-08-27] the third of the trio the X360 Construct brings up
-        // here (ChallengeList::Construct @0x82677D00 lists GameDataModule::Construct as its
-        // only caller, exactly like the two above). It MUST run before Prepare stage 10:
-        // AddListResource appends into a slot table Construct seeds with -1, and every
-        // maStaticDataLists ResourcePtr has to be self-linked before it is assigned into.
-        mChallengeList.Construct();
-
-        // [gateui r3] X360 0x82671D1C: HudMessageController::Construct(this + 0x65950) --
-        // through the ICF-folded one-store symbol at 0x82676600 (see the banner on
-        // HudMessageController::Construct). It MUST run before Prepare stage 13:
-        // AddMessages' first act is the "already loaded" tripwire on mbMessagesUsed.
-        mHudMessageController.Construct();
-
-        // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
-        // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
-        // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
-        mAllocatorList.Construct();
-
         mAudioStreamAllocator.Construct();
         ConstructResourceModule();
-        rw::IResourceAllocator* lpAllocator = GetDebugAllocator();
+        mAttribSysModule.Construct();
+        mGameTalk.Construct(false);
+        mDebugGameTalkInterface.Construct(&mGameTalk);
+        mLiveUpdateModule.Construct(&mGameTalk);
+        mVehicleList.Construct();
+        mWheelList.Construct();
+        mHudMessageController.Construct();
+        mChallengeList.Construct();
+        mAllocatorList.Construct();
 
-        // ARTIST 82671E84/90 constructs the manager before the DLC debug page,
-        // establishing the shared availability table that its variables reference.
-        mDebugComponent.Construct(this, lpAllocator);
+        mTextureStateParams.muAddressU = 2;
+        mTextureStateParams.muMagFilter = 1;
+        mTextureStateParams.muMinFilter = 1;
+        mTextureStateParams.muAddressV = 2;
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        mTextureStateResource = static_cast<rw::IResourceAllocator*>(GetGlobalResourceAllocator())->DoAllocate(lDescriptor, 0);
+        mbIsNewModule = true;
+        miCollisionWorldRefCount = 0;
+        mbCollisionWorldInvalidated = false;
+        muFirstCollisionBlockAddress = 0;
+        muNumCollisionBlocks = 0;
+        mDebugComponent.Construct(this, GetDebugAllocator());
+        DmMapDevkitDrive();
         mDLCManager.Construct();
         mDLCDebugComponent.Construct();
     }
