@@ -242,7 +242,6 @@ namespace BrnGameState
         s32         GetCumulativePoints() const       { return miCumulativePoints; }      // :160
         s32         GetRoundDisconnected() const      { return miRoundDisconnectedIn; }   // :163
         f32         GetDriftDistance() const          { return mfCurrentDriftDistance; }  // :166
-        EPlayerStatus GetStatus() const               { return mePlayerStatus; }          // :169
         GameStateModuleIO::EPlayerTeam GetTeam() const           { return mePlayerTeam; }            // :172
         GameStateModuleIO::EPlayerTeam GetRoundStartTeam() const { return meRoundStartPlayerTeam; }  // :175
         EActiveRaceCarIndex GetActiveRaceCarIndex() const { return meRaceCarIndex; }      // :178 (scorers call this)
@@ -269,7 +268,6 @@ namespace BrnGameState
         void SetCumulativePoints(s32 liPoints)            { miCumulativePoints = liPoints; }   // :190
         void SetRoundDisconnected(s32 liRound)            { miRoundDisconnectedIn = liRound; } // :194
         void SetDriftDistance(f32 lfDistance)             { mfCurrentDriftDistance = lfDistance; } // :198
-        void SetStatus(EPlayerStatus leStatus)            { mePlayerStatus = leStatus; }       // :202
         void SetTeam(GameStateModuleIO::EPlayerTeam leTeam)            { mePlayerTeam = leTeam; }           // :206
         void SetRoundStartTeam(GameStateModuleIO::EPlayerTeam leTeam)  { meRoundStartPlayerTeam = leTeam; } // :210
 
@@ -300,7 +298,6 @@ namespace BrnGameState
         s32                             miRoundDisconnectedIn;// :271
         f32                             mfCurrentDriftDistance;// :272
 
-        EPlayerStatus                   mePlayerStatus;       // :275
         GameStateModuleIO::EPlayerTeam  mePlayerTeam;         // :276
         GameStateModuleIO::EPlayerTeam  meRoundStartPlayerTeam;// :279
 

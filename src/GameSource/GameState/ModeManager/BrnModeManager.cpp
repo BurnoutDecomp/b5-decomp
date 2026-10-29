@@ -198,10 +198,8 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
         CGS_ASSERT((leActiveRaceCarIndex > -1) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
                    "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
         CarData* lpCarData = mScoringSystem.GetCarData(leActiveRaceCarIndex);
-        // X360: bail unless the car is present and its per-car state field (CarData+0x13C) == 2.
-        // FLAG: CarData+0x13C is outside the minimal CarData slice; the only state-style field this
-        // TU can name is GetStatus(). E_PLAYER_STATUS_COUNT == 2 matches the compared constant.
-        if ((lpCarData == 0) || (lpCarData->GetStatus() != CarData::E_PLAYER_STATUS_COUNT))
+        // 0x82329910 checks the current team (+0x13C) for the blue runner.
+        if ((lpCarData == 0) || (lpCarData->GetTeam() != GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM))
         {
             return false;
         }
