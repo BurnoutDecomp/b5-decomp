@@ -3,39 +3,24 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer
-#include "eathread/eathread_futex.h"                                          // EA::Thread::Futex (CRITICAL_SECTION-backed lock)
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayerChunkBuffer.h"   // CgsGraphics::ChunkBuffer
 #include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"        // CgsFileSystem::StreamDeviceDiskRead
 #include "SDKs/EATech/include/Common/vp6/vfw_pb_interface.h"                         // xPB_INST, YUV_BUFFER_CONFIG
 
-namespace renderengine { class Texture; }
+namespace rw { namespace movie { class IVideoRenderableOperations; } }
 namespace BrnGui { class MovieManager; }
 
 namespace CgsGraphics
 {
     class MovieVideoRenderer;
-    // ARTIST player state ids, supplied Render entry and arena-backed renderer owner.
-    // FFmpeg replaces transport, On2 decode and conversion to a native BGRA frame.
-    // Existing wall-clock pacing/crossfade remain reconstruction debt. The console's chunked
-    // file + VP6 job decode pipeline (AddVideoStream / ReadChunkSet / StartDecodes /
-    // WaitForDecode over the members at the end of the class) is present but not driven by the
-    // PC playback, which decodes through FFmpeg.
+    // ARTIST native player; DecFIGS corroborates the member names and order.
     class MoviePlayer
     {
     public:
-        // X360 @0x827DD390: initializes the per-player lock (RtlInitializeCriticalSection on
-        // console; mLock's Futex ctor on PC), installs the vtable, and zeroes the playback +
-        // decode-stream state. The state-zeroing is shared with Construct(), which the
-        // constructor delegates to.
         MoviePlayer();
-
         void Construct();
-
-        // SetMovieFile records the file name (DWARF-attested signature); Prepare opens + readies the stream for
-        // it (the X360 PrepareResources, which on console allocated chunk buffers + spun the decode job).
-        // Release/Destruct tear the stream down. lbPreload prepares immediately instead of lazily at Play.
-        bool SetMovieFile(const char* lpMovieFileName, bool lbPreload = false);
+        bool SetMovieFile(const char* lpcMovieFileName, const char* lpcLanguageCode, bool lbLooped);
         bool Prepare(rw::IResourceAllocator* lpAllocator, const char* lpcMovieFileName,
                      const char* lpcLanguageCode = 0);
         bool Release();
@@ -77,7 +62,7 @@ namespace CgsGraphics
         };
 
         PlayerStateType GetPlayerState() const { return mePlayerState; }
-        bool            IsFinished() const     { return !mbIsOkToPlay || mbFinished; }
+        bool            IsFinished() const     { return miCurrentFrame >= maVP6Headers[0].mTotalFrames; }
 
         // Original unit-screen rectangle; the shared screen transform maps it to the display.
         void SetRectangle(float fLeft, float fTop, float fRight, float fBottom);
@@ -86,8 +71,6 @@ namespace CgsGraphics
         void SetCrossfade(int32_t liCrossfadeInFrames, int32_t liCrossfadeOutFrames);
 
         void Play();
-        void Pause();
-        void Unpause();
         void Stop();
 
         void Update();                                                  // advance to the frame due now
@@ -96,12 +79,9 @@ namespace CgsGraphics
     private:
         friend class MovieVideoRenderer;
         friend class BrnGui::MovieManager;
-        bool PrepareResources();                  // open the stream (FFmpeg) for mcMovieFileName
-        void ReleaseResources();                  // free the stream + frame texture
-        bool DecodeFrame();                       // [PC] pull one decoded frame into mpFrame (+ mfFramePtsSec)
-        bool DecodeStripFrame();                  // [PC] 3-strip VP6: one band from its own decoder chain
-        bool EnsureTexture(u32 luWidth, u32 luHeight);
-        void UploadFrame();                       // [PC] sws_scale mpFrame -> the renderengine texture
+        void PrepareResources(const char* lpcLanguageCode);
+        void ReleaseResources();
+        void ResetChunkSet();
 
         // ---- console chunk / VP6 decode pipeline (CgsMoviePlayer_wBT_01.cpp) ------------------
         // Read chunks until luNumChunks are complete in mChunkBuffer; false when the stream ran dry.
@@ -123,36 +103,35 @@ namespace CgsGraphics
         static u16 ByteSwap(u16 luValue) { return static_cast<u16>((luValue >> 8) | (luValue << 8)); }
         static s16 ByteSwap(s16 lsValue) { return static_cast<s16>(ByteSwap(static_cast<u16>(lsValue))); }
 
-        // ---- player state and original resource ownership ------------------------------------------------------
-        // Per-player lock. The X360 ctor initializes a Win32 CRITICAL_SECTION at this slot
-        // (RtlInitializeCriticalSection); the committed EA::Thread::Futex is that exact
-        // CRITICAL_SECTION-backed mutex, reused BY NAME, so its ctor performs the init.
-        EA::Thread::Futex mLock;
+        // ARTIST offsets. The critical section belongs to mMovieStream at
+        // +0x1E0 (ctor827DD390), not to a separate player-level lock.
+        PlayerStateType mePlayerState;                     // +0x000
+        char            macMovieFileName[256];             // +0x004
+        bool            mbIsLooped;                        // +0x104
+        f32             mfRectLeft, mfRectTop, mfRectRight, mfRectBottom; // +0x108
+        s32             miCrossfadeInFrames, miCrossfadeOutFrames; // +0x118
+        s32             miVideoRender;                     // +0x120 perf monitor
+        rw::IResourceAllocator* mpRwAllocator;              // +0x124
+        Im2dRenderBuffer* mpIm2dRenderBuffer;                // +0x128
+        xPB_INST          maVP6Decoders[KI_MAX_VIDEOS];      // +0x12C
+        YUV_BUFFER_CONFIG maYUVConfigs[KI_MAX_VIDEOS];       // +0x13C
+        CgsFileSystem::StreamDeviceDiskRead mMovieStream;    // +0x1E0
+        void*             mpMoviePlayerBuffer;              // +0x780
+        ChunkBuffer       mChunkBuffer;                     // +0x784
+        VP6ChunkHeader    maVP6Headers[KI_MAX_VIDEOS];       // +0x7D8
+        s32               miCurrentFrame;                   // +0x858
+        u64               muStartTimeInCycles;              // +0x860
+        bool              mbReadyToRender;                  // +0x868
+        bool              mbDroppingFrames;                 // +0x869
+        MoviePlayerCoreAllocator mAllocator;                // +0x86C
+        s32               miNumVideos;                      // +0x878
+        s32               miNumAudios;                      // +0x87C
+        bool              mbDecodingFrame;                  // +0x880
+        rw::Resource      mRwVideoRendererResource;          // +0x884
+        MovieVideoRenderer* mpRwVideoRenderer;               // +0x898
+        rw::Resource      mRwVideoRenderableOperationsResource; // +0x89C
+        rw::movie::IVideoRenderableOperations* mpRwVideoRenderableOperations; // +0x8B0
 
-        PlayerStateType mePlayerState;
-        char            mcMovieFileName[256];
-        bool            mbIsOkToPlay;             // stream prepared, ready to Play
-        bool            mbIsLooped;
-        bool            mbFinished;
-        rw::IResourceAllocator* mpAllocator;
-        rw::Resource mRwVideoRendererResource;
-        MovieVideoRenderer* mpRwVideoRenderer;
-        Im2dRenderBuffer* mpIm2dRenderBuffer;
-        bool mbReadyToRender;
-
-        f32   mfRectLeft, mfRectTop, mfRectRight, mfRectBottom;   // unit-screen rectangle
-        s32   miCrossfadeInFrames, miCrossfadeOutFrames;
-
-        // ---- console decode pipeline state (offsets are the console's) -------------------------
-        xPB_INST          maVP6Decoders[KI_MAX_VIDEOS];   // +0x12C one VP6 decoder per video stream
-        YUV_BUFFER_CONFIG maYUVConfigs[KI_MAX_VIDEOS];    // +0x13C each stream's last decoded picture
-        CgsFileSystem::StreamDeviceDiskRead mMovieStream; // +0x1E0
-        void*             mpMoviePlayerBuffer;            // +0x780 backing store of mChunkBuffer
-        ChunkBuffer       mChunkBuffer;                   // +0x784 the current chunk set
-        VP6ChunkHeader    maVP6Headers[KI_MAX_VIDEOS];    // +0x7D8
-        s32               miNumVideos;                    // +0x878
-        s32               miNumAudios;                    // +0x87C
-        bool              mbDecodingFrame;                // +0x880 decodes are queued for the chunk set
     };
 }
 
