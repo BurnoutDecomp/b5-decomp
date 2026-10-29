@@ -18,7 +18,8 @@
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cmath>     // std::signbit (the vmaxfp / vminfp zero ordering); std::fma (TestLineSphere4's vmaddfp)
+#include <xtl.h>
+#include <xboxmath.h>
 #include "types.hpp"   // uintptr_t (TestLineSphere4's :308 alignment assert)
 #include <cstring>   // std::memcpy (the Mask4 lanes)
 
@@ -58,6 +59,34 @@ namespace CgsGeometric
 
     namespace
     {
+        // These are native VMX instructions, also when the surrounding source
+        // carries one lane in an f32. Keep each original rounding boundary.
+        __forceinline f32 LineVmxMul(f32 a, f32 b)
+        {
+            return __vmulfp(XMVectorReplicate(a), XMVectorReplicate(b)).x;
+        }
+        __forceinline f32 LineVmxSub(f32 a, f32 b)
+        {
+            return __vsubfp(XMVectorReplicate(a), XMVectorReplicate(b)).x;
+        }
+        __forceinline f32 LineVmxMadd(f32 a, f32 b, f32 c)
+        {
+            return __vmaddfp(XMVectorReplicate(a), XMVectorReplicate(b), XMVectorReplicate(c)).x;
+        }
+        __forceinline bool LineVmxGE(f32 a, f32 b)
+        {
+            const __vector4 lMask = __vcmpgefp(XMVectorReplicate(a), XMVectorReplicate(b));
+            u32 luMask;
+            std::memcpy(&luMask, &lMask, sizeof(luMask));
+            return luMask != 0;
+        }
+        __forceinline bool LineVmxGT(f32 a, f32 b)
+        {
+            const __vector4 lMask = __vcmpgtfp(XMVectorReplicate(a), XMVectorReplicate(b));
+            u32 luMask;
+            std::memcpy(&luMask, &lMask, sizeof(luMask));
+            return luMask != 0;
+        }
         // ---- the console's reciprocal ----------------------------------------------------------
         // `vrefp128 v0, v126` then THREE Newton-Raphson steps, each `vnmsubfp128 e = 1 - d*x`
         // followed by `vmaddfp x = x*e + x` (0x828124FC..0x82812538; the same eleven instructions
@@ -66,20 +95,17 @@ namespace CgsGeometric
         // spells it VecRecipEst + one inline step + two CgsNumeric::NewtonRaphsonReciprocalIteratation
         // (DWARF CgsReciprocal.h:42 / :152 NewtonRaphsonReciprocal3).
         //
-        // PC LOWERING: the estimate is the exact quotient and the console's three refinement steps
-        // then run AS WRITTEN. That keeps the one property a decision here depends on: a ZERO
-        // direction lane refines to NaN (e = 1 - 0*inf = NaN), not to the +/-inf a bare 1/d gives.
-        // (Finite lanes land within an ulp of the console's.)
-        // MOVE-WHEN CgsNumeric/CgsReciprocal.h has a home in the tree (Numeric/** is not this lane's).
         inline f32 NewtonRaphsonReciprocal3(f32 lfValue)
         {
-            f32 lfReciprocal = 1.0f / lfValue;                            // vrefp128 (the estimate)
+            const __vector4 lValue = XMVectorReplicate(lfValue);
+            const __vector4 lOne = XMVectorReplicate(1.0f);
+            __vector4 lReciprocal = __vrefp(lValue);
             for (s32 liStep = 0; liStep < 3; ++liStep)
             {
-                const f32 lfError = 1.0f - lfValue * lfReciprocal;       // vnmsubfp128 vE, vD, vX
-                lfReciprocal      = lfReciprocal * lfError + lfReciprocal; // vmaddfp vX, vX, vX, vE
+                const __vector4 lError = __vnmsubfp(lValue, lReciprocal, lOne);
+                lReciprocal = __vmaddfp(lReciprocal, lError, lReciprocal);
             }
-            return lfReciprocal;
+            return lReciprocal.x;
         }
 
         // `vcmpgefp P, min` AND `vnot(vcmpgtfp P, max)` -- note the asymmetry on a NaN lane: the
@@ -87,14 +113,14 @@ namespace CgsGeometric
         // would have let it through.
         inline bool IsWithinSlab(f32 lfValue, f32 lfMin, f32 lfMax)
         {
-            return (lfValue >= lfMin) && !(lfValue > lfMax);
+            return LineVmxGE(lfValue, lfMin) && !LineVmxGT(lfValue, lfMax);
         }
 
         // `vcmpgefp one, t` AND `vnot(vcmpgtfp zero, t)` -- t in [0, 1]; a NaN t is rejected by
         // the first compare.
         inline bool IsOnSegment(f32 lfT)
         {
-            return (1.0f >= lfT) && !(0.0f > lfT);
+            return LineVmxGE(1.0f, lfT) && !LineVmxGT(0.0f, lfT);
         }
     }
 
@@ -141,7 +167,7 @@ namespace CgsGeometric
         f32 lafReciprocal[3];
         for (s32 liAxis = 0; liAxis < 3; ++liAxis)
         {
-            lafDirection[liAxis]  = lafEnd[liAxis] - lafStart[liAxis];
+            lafDirection[liAxis]  = LineVmxSub(lafEnd[liAxis], lafStart[liAxis]);
             lafReciprocal[liAxis] = NewtonRaphsonReciprocal3(lafDirection[liAxis]);
         }
 
@@ -165,8 +191,8 @@ namespace CgsGeometric
         {
             const f32 lafT[2] =
             {
-                lafReciprocal[liAxis] * (lafMin[liAxis] - lafStart[liAxis]),   // tmin (vmulfp128 v12)
-                lafReciprocal[liAxis] * (lafMax[liAxis] - lafStart[liAxis]),   // tmax (vmulfp128 v11)
+                LineVmxMul(lafReciprocal[liAxis], LineVmxSub(lafMin[liAxis], lafStart[liAxis])),
+                LineVmxMul(lafReciprocal[liAxis], LineVmxSub(lafMax[liAxis], lafStart[liAxis])),
             };
 
             for (s32 liFace = 0; liFace < 2; ++liFace)
@@ -179,7 +205,7 @@ namespace CgsGeometric
                     {
                         continue;
                     }
-                    const f32 lfCrossing = lafDirection[liOther] * lfT + lafStart[liOther];   // vmaddcfp128
+                    const f32 lfCrossing = LineVmxMadd(lafDirection[liOther], lfT, lafStart[liOther]);
                     lbHit = lbHit && IsWithinSlab(lfCrossing, lafMin[liOther], lafMax[liOther]);
                 }
                 lbFaceHit = lbFaceHit || lbHit;
@@ -208,7 +234,7 @@ namespace CgsGeometric
                                       const Vector3& lrDirection, f32 lfLength)
         {
             const Vector4& lrCentre  = lrSphere.mPositionRadius;
-            const f32      lfRadius2 = lrCentre.w * lrCentre.w;                          // vmulfp128 v6, v6, v6
+            const f32      lfRadius2 = LineVmxMul(lrCentre.w, lrCentre.w);
 
             // ROUNDING (ROUNDING_RULE.md rule 3, 2026-09-25 -- REVIEW-J on 335639ce): every `vmaddfp` here rounds
             // ONCE (std::fma); the vmulfp128 / vsubfp steps round separately (rule 4). All eleven fused sites
@@ -216,40 +242,40 @@ namespace CgsGeometric
             // change each was written a*b + c, rounding the product first.
 
             // The far end of the segment, e = L * d + s.
-            const f32 lfEndX = std::fma(lfLength, lrDirection.x, lrStart.x);             // vmaddfp v1  0x828BD1B0
-            const f32 lfEndY = std::fma(lfLength, lrDirection.y, lrStart.y);             // vmaddfp v31 0x828BD1AC
-            const f32 lfEndZ = std::fma(lfLength, lrDirection.z, lrStart.z);             // vmaddfp v2  0x828BD1A8
+            const f32 lfEndX = LineVmxMadd(lfLength, lrDirection.x, lrStart.x);
+            const f32 lfEndY = LineVmxMadd(lfLength, lrDirection.y, lrStart.y);
+            const f32 lfEndZ = LineVmxMadd(lfLength, lrDirection.z, lrStart.z);
 
             // The centre relative to the start, and its projection on the unit direction.
-            const f32 lfDx = lrCentre.x - lrStart.x;                                     // vsubfp v11
-            const f32 lfDy = lrCentre.y - lrStart.y;                                     // vsubfp v12
-            const f32 lfDz = lrCentre.z - lrStart.z;                                     // vsubfp v10
-            const f32 lfT  = std::fma(lrDirection.z, lfDz,                               // vmaddfp 0x828BD1CC
-                             std::fma(lrDirection.x, lfDx,                               // vmaddfp 0x828BD1C4
-                                      lrDirection.y * lfDy));                            // vmulfp128 0x828BD1B4
+            const f32 lfDx = LineVmxSub(lrCentre.x, lrStart.x);
+            const f32 lfDy = LineVmxSub(lrCentre.y, lrStart.y);
+            const f32 lfDz = LineVmxSub(lrCentre.z, lrStart.z);
+            const f32 lfT  = LineVmxMadd(lrDirection.z, lfDz,
+                             LineVmxMadd(lrDirection.x, lfDx,
+                                         LineVmxMul(lrDirection.y, lfDy)));
 
             // The perpendicular offset (C - s) - t * d (vmulfp128 0x828BD1D0..0x828BD1D8, then vsubfp
             // 0x828BD1E4 / 0x828BD1EC / 0x828BD1F0 -- NOT fused), and the three squared distances, each
             // y*y (vmulfp128) then x*x + that, then z*z + that (two vmaddfp).
-            const f32 lfTx = lfT * lrDirection.x;
-            const f32 lfTy = lfT * lrDirection.y;
-            const f32 lfTz = lfT * lrDirection.z;
-            const f32 lfPx = lfDx - lfTx;
-            const f32 lfPy = lfDy - lfTy;
-            const f32 lfPz = lfDz - lfTz;
-            const f32 lfPerpendicular2 = std::fma(lfPz, lfPz, std::fma(lfPx, lfPx, lfPy * lfPy));   // 0x828BD214 / 0x828BD200
-            const f32 lfStart2         = std::fma(lfDz, lfDz, std::fma(lfDx, lfDx, lfDy * lfDy));   // 0x828BD208 / 0x828BD1F8
-            const f32 lfEx = lrCentre.x - lfEndX;                                        // vsubfp 0x828BD1C0
-            const f32 lfEy = lrCentre.y - lfEndY;                                        // vsubfp 0x828BD1BC
-            const f32 lfEz = lrCentre.z - lfEndZ;                                        // vsubfp 0x828BD1B8
-            const f32 lfEnd2           = std::fma(lfEz, lfEz, std::fma(lfEx, lfEx, lfEy * lfEy));   // 0x828BD20C / 0x828BD1FC
+            const f32 lfTx = LineVmxMul(lfT, lrDirection.x);
+            const f32 lfTy = LineVmxMul(lfT, lrDirection.y);
+            const f32 lfTz = LineVmxMul(lfT, lrDirection.z);
+            const f32 lfPx = LineVmxSub(lfDx, lfTx);
+            const f32 lfPy = LineVmxSub(lfDy, lfTy);
+            const f32 lfPz = LineVmxSub(lfDz, lfTz);
+            const f32 lfPerpendicular2 = LineVmxMadd(lfPz, lfPz, LineVmxMadd(lfPx, lfPx, LineVmxMul(lfPy, lfPy)));
+            const f32 lfStart2 = LineVmxMadd(lfDz, lfDz, LineVmxMadd(lfDx, lfDx, LineVmxMul(lfDy, lfDy)));
+            const f32 lfEx = LineVmxSub(lrCentre.x, lfEndX);
+            const f32 lfEy = LineVmxSub(lrCentre.y, lfEndY);
+            const f32 lfEz = LineVmxSub(lrCentre.z, lfEndZ);
+            const f32 lfEnd2 = LineVmxMadd(lfEz, lfEz, LineVmxMadd(lfEx, lfEx, LineVmxMul(lfEy, lfEy)));
 
             // vcmpgefp128 (t >= 0) AND vnot(vcmpgtfp t > L): the foot of the perpendicular lies on the
             // segment. Each distance term is vnot(vcmpgtfp d2 > R2), so a NaN distance reads as inside.
-            const bool lbOnSegment = (lfT >= 0.0f) && !(lfT > lfLength);
-            return (lbOnSegment && !(lfPerpendicular2 > lfRadius2))
-                || !(lfStart2 > lfRadius2)
-                || !(lfEnd2 > lfRadius2);
+            const bool lbOnSegment = LineVmxGE(lfT, 0.0f) && !LineVmxGT(lfT, lfLength);
+            return (lbOnSegment && !LineVmxGT(lfPerpendicular2, lfRadius2))
+                || !LineVmxGT(lfStart2, lfRadius2)
+                || !LineVmxGT(lfEnd2, lfRadius2);
         }
 
         // `vmaxfp` / `vminfp` of the two slab parameters of one axis (0x828BD99C / 0x828BD9A4 / 0x828BD9B8 and
@@ -259,17 +285,11 @@ namespace CgsGeometric
         // these were `a > b ? a : b` / `a < b ? a : b`, which answer the OTHER operand for a NaN vA.)
         inline f32 SlabFar(f32 lfA, f32 lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
-            return (lfA > lfB) ? lfA : lfB;
+            return __vmaxfp(XMVectorReplicate(lfA), XMVectorReplicate(lfB)).x;
         }
         inline f32 SlabNear(f32 lfA, f32 lfB)
         {
-            if (lfA != lfA) return lfA;
-            if (lfB != lfB) return lfB;
-            if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
-            return (lfA < lfB) ? lfA : lfB;
+            return __vminfp(XMVectorReplicate(lfA), XMVectorReplicate(lfB)).x;
         }
     }
 
@@ -373,11 +393,11 @@ namespace CgsGeometric
             bool lbCrosses = true;
             for (s32 liAxis = 0; liAxis < 3; ++liAxis)
             {
-                const f32 lfTMax = lafReciprocal[liAxis] * (lafMax[liAxis] - lafStart[liAxis]);
-                const f32 lfTMin = lafReciprocal[liAxis] * (lafMin[liAxis] - lafStart[liAxis]);
+                const f32 lfTMax = LineVmxMul(lafReciprocal[liAxis], LineVmxSub(lafMax[liAxis], lafStart[liAxis]));
+                const f32 lfTMin = LineVmxMul(lafReciprocal[liAxis], LineVmxSub(lafMin[liAxis], lafStart[liAxis]));
                 const f32 lfFar  = SlabFar(lfTMax, lfTMin);
                 const f32 lfNear = SlabNear(lfTMax, lfTMin);
-                lbCrosses = lbCrosses && !(0.0f > lfFar) && (1.0f >= lfNear);
+                lbCrosses = lbCrosses && !LineVmxGT(0.0f, lfFar) && LineVmxGE(1.0f, lfNear);
             }
             SetMask4Lane(lResult, liLane, lbCrosses);
         }
