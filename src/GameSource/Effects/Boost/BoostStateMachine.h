@@ -122,6 +122,7 @@ namespace BrnEffects
         TaggedEffect mEffects[KU_MAX_BOOST_EFFECTS];  // +0x10  the 4 boost effect tags
         f32          mfExhaustSmokeBlend;             // +0x20  exhaust-smoke blend value
 
+#if !defined(_XBOX)
         // ---- ⚠ HOST-SIDE BRING-UP FIELDS. NOT CONSOLE STATE, NOT AT ANY X360 OFFSET. --------
         // The console positions its boost effects from the DEFORMED per-frame locator table
         // (DeformationOutputInterface::maLocatorData). That table is empty on this build --
@@ -135,7 +136,12 @@ namespace BrnEffects
         // DELETE-WHEN the deformation module publishes VehicleLocatorOutput for race cars.
         rw::math::vpu::Matrix44Affine maBoostLocatorLocal[KU_MAX_BOOST_EFFECTS];
         bool                          mbBoostLocatorLocalValid;
+#endif
     };
+
+#if defined(_XBOX)
+    CGS_STATIC_ASSERT((sizeof(BoostStateMachine) == 0x24), "native BoostStateMachine layout drift");
+#endif
 
     // Console sizeof == 0x24 (4-byte vptr + mState + mTime + the four added members).
     // On the x64 host the vptr widens to 8 bytes, so the byte-exact size differs by
