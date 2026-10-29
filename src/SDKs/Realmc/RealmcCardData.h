@@ -25,13 +25,8 @@
 //   +0x50  maPrevious -- the prior card-data block, 80 bytes.
 //                        Total object size = 0xA0 (160) bytes.
 //
-//   The first 32-bit word of each block (offset +0 within the block) is a
-//   state/identifier word: operator== / operator!= compare ONLY that leading
-//   word of each object (*a1 vs *a2), and operator= snapshots the current block
-//   into the previous block whenever that leading word changes. The remaining
-//   76 bytes of each block are opaque card payload (device/content id, name,
-//   etc.) memcpy'd wholesale by the X360, so they are modelled as a raw byte
-//   tail rather than fabricated named members.
+//   Each block is the XDK XDEVICE_DATA record. The leading DeviceID word
+//   is the comparison key; the remaining fields are copied with the block.
 //
 // PLATFORM/VENDOR EXTERNS (flagged):
 //   * Empty() returns a shared, lazily-initialised singleton CardData living in
@@ -43,20 +38,20 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include <xtl.h>
+#include <cstddef>
 
 namespace RealmcIface
 {
 
-// ---------------------------------------------------------------------------
-// CardData::Block -- one 80-byte card-data record. The leading word is the
-// state/id compared by the relational operators; the tail is opaque payload.
-// ---------------------------------------------------------------------------
-struct CardDataBlock
-{
-    uint32_t muState;       // +0x00  state/id word (the compare key)
-    uint8_t  maPayload[76]; // +0x04  opaque card payload (76 bytes)
-};
-// 0x04 + 76 == 0x50 (80) bytes per block.
+// The XDK record is the exact 0x50-byte current and previous card block.
+typedef XDEVICE_DATA CardDataBlock;
+CGS_STATIC_ASSERT((sizeof(CardDataBlock) == 0x50), "XDEVICE_DATA size");
+CGS_STATIC_ASSERT((offsetof(CardDataBlock, DeviceID) == 0x00), "XDEVICE_DATA id offset");
+CGS_STATIC_ASSERT((offsetof(CardDataBlock, DeviceType) == 0x04), "XDEVICE_DATA type offset");
+CGS_STATIC_ASSERT((offsetof(CardDataBlock, ulDeviceBytes) == 0x08), "XDEVICE_DATA capacity offset");
+CGS_STATIC_ASSERT((offsetof(CardDataBlock, ulDeviceFreeBytes) == 0x10), "XDEVICE_DATA free space offset");
+CGS_STATIC_ASSERT((offsetof(CardDataBlock, wszFriendlyName) == 0x18), "XDEVICE_DATA name offset");
 
 class CardData
 {

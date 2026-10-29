@@ -46,25 +46,18 @@ XenonRunnableTask::~XenonRunnableTask()
 int XenonRunnableTask::VerifyActiveCard()
 {
     // CardExists reads the active block's leading device-id word (mCardData at
-    // State+0x08; its first word is maCurrent.muState -- the X360 passes
+    // State+0x08; its first word is maCurrent.DeviceID -- the X360 passes
     // mpState+8 as the device-id pointer).
-    if (!XenonUtil::CardExists(&mpState->mCardData.maCurrent.muState))
+    if (!XenonUtil::CardExists(&mpState->mCardData.maCurrent.DeviceID))
         return 0;
 
     mpState->mCardData = CardData::Empty();
     return 7;
 }
 
-// The active card block is the XDK device record (XDEVICE_DATA): DeviceID +0x00,
-// DeviceType +0x04, ulDeviceBytes +0x08, ulDeviceFreeBytes +0x10, then the wide
-// friendly name at +0x18 (27 WCHARs, zero-terminated; 80 bytes with the tail
-// pad). CardDataBlock keeps everything after the DeviceID word as an opaque
-// payload, so the name starts 0x14 bytes into that payload.
-static const unsigned int KU_FRIENDLY_NAME_PAYLOAD_OFFSET = 0x18 - 0x04;
-
 static const char16_t* GetDeviceFriendlyName(const CardDataBlock& rBlock)
 {
-    return reinterpret_cast<const char16_t*>(&rBlock.maPayload[KU_FRIENDLY_NAME_PAYLOAD_OFFSET]);
+    return reinterpret_cast<const char16_t*>(rBlock.wszFriendlyName);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +74,7 @@ static const char16_t* GetDeviceFriendlyName(const CardDataBlock& rBlock)
 RealmcCore::String16 XenonRunnableTask::GetCardName()
 {
     RealmcCore::String16 lName;
-    if (mpState->mCardData.maCurrent.muState != 0)
+    if (mpState->mCardData.maCurrent.DeviceID != 0)
     {
         lName = RealmcCore::String16(GetDeviceFriendlyName(mpState->mCardData.maCurrent),
                                      RealmcCore::allocator());
@@ -147,7 +140,7 @@ int XenonRunnableTask::SelectDevice(int liMode, bool lbKeepActiveCard, int liByt
         return KI_RESULT_NOT_SIGNED_IN;
 
     if (mpState->mCardData != CardData::Empty() &&
-        XenonUtil::CardExists(&mpState->mCardData.maCurrent.muState) != 0)
+        XenonUtil::CardExists(&mpState->mCardData.maCurrent.DeviceID) != 0)
     {
         mpState->mCardData = CardData::Empty();
         lbCardGone = true;
@@ -209,7 +202,7 @@ int XenonRunnableTask::SelectDevice(int liMode, bool lbKeepActiveCard, int liByt
             else if (mpState->mbDeviceMounted)
             {
                 const CardData lPrevious = mpState->mCardData.PreviousState();
-                if (XenonUtil::CardExists(&lPrevious.maCurrent.muState) == 0)
+                if (XenonUtil::CardExists(&lPrevious.maCurrent.DeviceID) == 0)
                     mpState->mCardData = lPrevious;
             }
 
