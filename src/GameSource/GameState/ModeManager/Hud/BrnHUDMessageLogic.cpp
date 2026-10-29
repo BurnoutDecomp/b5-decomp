@@ -175,6 +175,8 @@ void HUDMessageLogic::Prepare()
     miNextRivalCheckpoint = 1;
     meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     mRivalCheckpointID = 0;
+    mbDoneNeckAndNeck = false;
+    mfWrongWayTime = 0.0f;
     meBurningHomeRunRunnerCrashRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID; // +0x248
     miBurningHomeRunCrashesToGo = 0;                                           // +0x24C
     mfTimeInMode               = 0.0f;                                  // +0x1C4

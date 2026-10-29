@@ -364,6 +364,7 @@ private:
     s32 miNextRivalCheckpoint;       // ARTIST +548
     EActiveRaceCarIndex meCheckpointTriggeringRaceCarIndex; // ARTIST +552
     CgsID mRivalCheckpointID;        // ARTIST +560
+    bool mbDoneNeckAndNeck;          // +0x238, cleared by Prepare 0x82366540
 
     // Per-car "has changed team this round" flags (X360 +0x240). One bit per active race
     // car slot (E_ACTIVE_RACE_CAR_INDEX_COUNT == 8).
@@ -378,5 +379,6 @@ private:
     // (DWARF :307, X360 +0x250): -1.0 until the first frame of the mode sets it, 0.0 once the last
     // mark is spent.
     f32 mfNextDistanceToFinishMessage;   // ARTIST +592
+    f32 mfWrongWayTime;                 // +0x254, cleared by Prepare 0x82366538
 };
 }

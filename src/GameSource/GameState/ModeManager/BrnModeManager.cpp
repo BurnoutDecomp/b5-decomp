@@ -311,9 +311,9 @@ void ModeManager::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlaye
     const s32 liPreviousScore = lpCarData->GetScoreData()->GetOnlineStuntScore();   // X360 CarData+0xD4
     const s32 liActiveCarIndex = static_cast<s32>(lpCarData->GetActiveRaceCarIndex()); // X360 CarData+0x144
 
-    miNetworkStuntScore          = liScore;            // X360 +0x6CD4
-    miNetworkStuntPreviousScore  = liPreviousScore;    // X360 +0x6CD8
-    miNetworkStuntActiveCarIndex = liActiveCarIndex;   // X360 +0x6CD0
+    mHUDMessageLogic.miScoreSampleThisFrame = liScore;            // X360 +0x6CD4
+    mHUDMessageLogic.miScoreSampleLastFrame = liPreviousScore;    // X360 +0x6CD8
+    mHUDMessageLogic.miScoreMessageRaceCarIndex = static_cast<EActiveRaceCarIndex>(liActiveCarIndex);   // X360 +0x6CD0
 
     mScoringSystem.SetNetworkStuntScore(lNetworkPlayerID, liScore);
 }
@@ -382,11 +382,11 @@ void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDist
 
     // X360 assert (BrnGameStateSharedIO.h:1421); BrnWorld::KI_MAX_ACTIVE_RACE_CARS == the active-car
     // count == E_ACTIVE_RACE_CAR_INDEX_COUNT (8) in this codebase. Message kept verbatim.
-    CGS_ASSERT(miNumActiveRaceCars <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+    CGS_ASSERT(mScoringSystem.GetNumberOfActiveCars() <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "liNumActiveRaceCars <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
 
-    lpRaceDistanceInterface->SetNumActiveRaceCars(miNumActiveRaceCars);   // X360 *(out+0x24) = *(this+0x5C98)
-    lpRaceDistanceInterface->SetTotalRaceDistance(mfTotalRaceDistance);   // X360 *(out+0x20) = *(this+0x6A94)
+    lpRaceDistanceInterface->SetNumActiveRaceCars(mScoringSystem.GetNumberOfActiveCars());   // X360 *(out+0x24) = *(this+0x5C98)
+    lpRaceDistanceInterface->SetTotalRaceDistance(mScoringSystem.GetTotalRaceDistance());   // X360 *(out+0x20) = *(this+0x6A94)
 
     for (s32 liRaceCarIndex = 0; liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCarIndex)
     {
