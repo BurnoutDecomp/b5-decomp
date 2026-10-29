@@ -2,6 +2,8 @@
 #define RW_GPFX_TINT_H
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "rw/rwcore_structs.h"                                                  // rw::Resource
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"     // renderengine::ProgramVariableHandle
 
@@ -23,8 +25,7 @@
 //   m_textureTintMapResource      +0xC8  (rw::Resource handle array)
 //   m_textureStateTintMapResource +0xDC
 //   m_allocator                   +0xF0
-// (Offsets are the X360 4-byte-pointer image; the PC build lays the named members out for its own
-// pointer width -- semantic parity, not byte-matching, so the layout is intentionally not pinned.)
+// (Offsets are for the X360 4-byte-pointer image.)
 
 // The rw resource allocator the post-fx effects are handed is rw::IResourceAllocator:
 // its DoAllocate(descriptor, name) -> rw::Resource is the host equivalent of
@@ -40,9 +41,8 @@ namespace postfx
     // (DWARF rwgpfxtintblender.h). Tint::BeginBlendJob seeds only the destination-surface
     // geometry (size / dst strides / dst pointer) from the locked tint-map texture; the caller
     // (BrnPostFx::BeginTintBlend) fills numSources / src[] / factor[] before scheduling the job.
-    // The X360 block is 0x80 bytes (m_blendLock follows at +0x80); the named destination fields
-    // are laid out first and the caller-filled remainder is carried as opaque source storage
-    // (PC-semantic parity, not byte-matched).
+    // The X360 block is 0x80 bytes (m_blendLock follows at +0x80); the 60-byte pad
+    // is present in the DecFIGS declaration.
     // ⚠ LAYOUT CORRECTION -- THE COMMITTED VERSION WAS MISSING `numSources` AND SHIFTED EVERY
     // FIELD AFTER IT BY ONE WORD. The DWARF names all eight members
     // (references/DecFIGS/dwarfdump/.../include/postfx/rwgpfxtintblender.h:14-22) and BOTH X360
@@ -114,7 +114,7 @@ namespace postfx
     private:
         rw::graphics::postfx::TintBlendParameters m_blendParameters;        // +0x00
         bool                                m_blendLock;                    // +0x80
-        f32                                 m_colourLookupOffset[4];        // +0x90 Vector4
+        __declspec(align(16)) f32           m_colourLookupOffset[4];        // +0x90 Vector4
         renderengine::ProgramVariableHandle m_colourLookupOffsetHandle;     // +0xA0
         renderengine::Texture::Locked       m_textureLock;                  // +0xA4
         renderengine::Texture*              m_textureTintMap;               // +0xC0
