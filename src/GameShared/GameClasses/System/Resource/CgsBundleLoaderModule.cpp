@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/core/stdc/stdc.h"
 #include <cstring>
 #include <xtl.h>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -55,15 +56,14 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
         return false;
     Events::LoadBundleRequest lRequest;
     while (mLoadRequestQueue.Peek(&lRequest)) {
-        // Native correction: ARTIST828FB934 compares an untagged CRC with
-        // IDs tagged by ProcessBundleEntryList (828FB114), so its resident
-        // fast path misses normal bundles. Use the same ID as insertion and
-        // unload. Replacement requests must still read and replace the data.
-        if (lRequest.mbLiveUpdateReplace)
-            break;
+        // ARTIST828FB8F8..934: uppercase the lookup text, then compare the
+        // full resident ID against the untagged, zero-extended32-bit CRC.
+        // The native fast path has no live-update or stream-stage exclusion.
+        char lacLookupName[256];
+        std::strncpy(lacLookupName, lRequest.macFileName, sizeof(lacLookupName));
+        rw::core::stdc::StringToUpperCase(lacLookupName, lacLookupName);
         ID lId;
-        lId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(lRequest.macFileName)))
-                    | 0x8000000000000000ull);
+        lId.SetHash(static_cast<u32>(ID::HashString(reinterpret_cast<const u8*>(lacLookupName))));
         s32 liLoaded = 0;
         while (liLoaded < miMaxLoadedBundles) {
             const LoadedBundleData& lrLoaded = mpLoadedBundles[liLoaded];
@@ -71,22 +71,14 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
                 break;
             ++liLoaded;
         }
-        if (liLoaded == miMaxLoadedBundles)
+        if (liLoaded >= miMaxLoadedBundles)
             break;
-        // The repaired resident fast path must retain the original completion
-        // order. During prefetch the active bundle may still be fixing up;
-        // publishing a later cache hit here would overtake its load response.
-        if (meStreamStage != STREAMSTAGE_IDLE)
-            return false;
         ++mpLoadedBundles[liLoaded].miRefCount;
         PostLoadFinishedEvent(lpOutput, &lRequest, Events::LoadBundleResponse::E_RESULT_SUCCESS);
         mLoadRequestQueue.Pop(&lRequest);
         if (mLoadRequestQueue.GetLength() <= 0)
             return false;
     }
-    // Avoid opening the active bundle twice while it is still being loaded.
-    if (meStreamStage != STREAMSTAGE_IDLE && _stricmp(lRequest.macFileName, mLoadRequest.macFileName) == 0)
-        return false;
     Events::OpenReadStreamRequest lOpen = Events::OpenReadStreamRequest();
     lOpen.Construct(&mReceiverQueue, liNextStream);
     char lacName[256];
@@ -104,6 +96,11 @@ bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) /
     lOpen.SetNormalPriority(25);
     lOpen.SetHighPriority(25);
     lOpen.SetUseHDCache(lRequest.mbUseHDCache);
+    // ARTIST828FBE10: only the nonresident open path suppresses a request
+    // whose name matches the active bundle, preserving the queued request.
+    if (meStreamStage != STREAMSTAGE_IDLE &&
+        rw::core::stdc::StringNoCaseCompare(lRequest.macFileName, mLoadRequest.macFileName) == 0)
+        return false;
     mLoadRequestQueue.Pop(&lRequest);
     if (meStreamStage == STREAMSTAGE_IDLE)
         mLoadRequest = lRequest;
