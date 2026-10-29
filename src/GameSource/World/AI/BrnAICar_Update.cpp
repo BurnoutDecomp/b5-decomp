@@ -809,9 +809,9 @@ namespace BrnAI
             // 0x82792B50  lwz r3,0x14B0(this) ; bl BrnAI::AIDriver::ResetPIDTuningState @0x8277DA48
             // The console has NO null guard here (`lwz r3,0x14B0 ; bl`); the [GUARD] is the
             // host's, because AIModule::Construct never runs the console's AICar::Construct.
-            if (mpDriverHost != 0)
+            if (mpDriver != 0)
             {
-                mpDriverHost->ResetPIDTuningState();
+                mpDriver->ResetPIDTuningState();
             }
         }
 
@@ -976,10 +976,10 @@ namespace BrnAI
             // (BrnRacingLine.h :130 / :133); 400.0004 == 1 / (1 - 0.9975), which is what pins the
             // pairing. On the host the RacingLine object lives in AIDriver's trailing member, so
             // this is the de-inlined form of the two console stores.
-            if (mpDriverHost != 0)
+            if (mpDriver != 0)
             {
-                mpDriverHost->GetRacingLine().mfCentreLineAhead      = 0.9975f;
-                mpDriverHost->GetRacingLine().mfCentreLineAheadRecip = 400.0004f;
+                mpDriver->GetRacingLine().mfCentreLineAhead      = 0.9975f;
+                mpDriver->GetRacingLine().mfCentreLineAheadRecip = 400.0004f;
             }
         }
 
@@ -1081,7 +1081,7 @@ namespace BrnAI
         miNextRouteNodeIndex            = -1;                                    // 0x827926C8 stw r9(-1),0x1524
         mfSpeedOutOfRange               = KF_DEFAULT_OUT_OF_RANGE_SPEED;         // 0x827926CC stfs flt_8300D7FC,0x14E8 (== mfDesiredSpeed)
         miOpponentIndex                 = -1;                                    // 0x827926D0 stb r9(-1),0x153A
-        mpDriverHost                    = 0;                                     // 0x827926DC stw r30(0),0x14B0 (the guest mpDriver slot)
+        mpDriver                    = 0;                                     // 0x827926DC stw r30(0),0x14B0 (the guest mpDriver slot)
         meCarState                      = E_AI_CAR_STATE_INACTIVE;               // 0x827926E0 stw r7(2),0x14C8
         mfDistanceToCheckpoint          = KF_AICAR_FLT_MAX;                      // 0x827926F0 stfs flt_82F302F4,0x14F0
         miRaceCarIndex                  = static_cast<s32>(leGlobalRaceCarIndex);// 0x827926F4 stw r28,0x14C4  <-- the car's own global slot
@@ -1157,7 +1157,7 @@ namespace BrnAI
         meRouteFindingStyle      = E_ROUTE_FINDING_FREE_ROAM;                               // 0x14C0
         mbUseAIShortcuts         = 0;                                                       // 0x153E
         mbWantsAlternativeRoute  = 0;                                                       // 0x153F
-        mpDriverHost             = 0;                                                       // stw 0,0x14B0 (guest mpDriver)
+        mpDriver             = 0;                                                       // stw 0,0x14B0 (guest mpDriver)
 
         if (!lbKeepTransform)                                                               // 0x82792898
         {
@@ -1217,7 +1217,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetDriver(AIDriver* lpDriver)
     {
-        mpDriverHost = lpDriver;                                                            // stw r11,0x14B0
+        mpDriver = lpDriver;                                                            // stw r11,0x14B0
 
         Attrib::Gen::burnoutcarasset lCarAsset(mCarAssetAttribKey, 0);                      // ld r4,0x14D8 ; bl sub_82204998
         Attrib::Gen::physicsvehiclehandling lHandling(
