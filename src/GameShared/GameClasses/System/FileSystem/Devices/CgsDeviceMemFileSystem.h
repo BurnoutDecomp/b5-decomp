@@ -1,36 +1,50 @@
 #pragma once
 
-// CgsDeviceMemFileSystem.h — canonical home for CgsFileSystem::DeviceMemFileSystem,
-// the in-memory file-system device (a CgsFileSystem::Device that serves files out
-// of a RAM image rather than physical storage).
-//
-// SOURCE (X360 ARTIST):
-//   DeviceMemFileSystem::`vector deleting destructor' @ 0x828E0FF8
-//
-// MINIMAL SLICE: this pass lands only the polymorphic type + its virtual destructor
-// so the destructor's vtable slot (X360 off_8209FEA8) is emitted exactly once. The
-// device's real members (the backing memory image, the per-file table) and its
-// Init/Close/Read/Write/Seek overrides are added when those bodies are
-// reconstructed. The destructor itself owns no heap members — the X360 thunk only
-// restores the vtable pointer and conditionally frees the object.
-
 #include "types.hpp"
-#include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"
+#include "SDKs/EATech/rwcore/filesys/device.h"
 
 namespace CgsFileSystem
 {
-    class DeviceMemFileSystem : public Device
+    // ARTIST828F04E8 allocates0x2418 bytes: DeviceDriver20, constructed byte,
+    // and64 naturally aligned144-byte MemFile records. DecFIGS names the fields.
+    class DeviceMemFileSystem : public rw::core::filesys::DeviceDriver
     {
     public:
-        // @0x828E0FF8 (MSVC synthesises the 'vector deleting destructor' thunk from
-        // this virtual ~DeviceMemFileSystem(): it restores the vtable slot at this+0
-        // and, when the low "should-free" flag bit is set, frees the object).
+        static const u32 KU_MAX_MEM_FILES = 64;
+        struct MemFile
+        {
+            char macName[128];
+            u64 muSize;
+            void* mpData;
+        };
+        explicit DeviceMemFileSystem(const char* lpcName);
         virtual ~DeviceMemFileSystem();
-
-        // The per-operation overrides (Init/Close/Read/Write/Seek) are reconstructed
-        // separately; until then the class inherits Device's pure declarations and
-        // stays abstract. The defined virtual destructor below still forces the
-        // vtable (and the vector-deleting-destructor thunk) to be emitted in the .cpp.
+        void Construct();
+        bool UnregisterMemFile(const char* lpcName);
+        virtual void* Open(const char*, unsigned int, rw::core::filesys::Handle**);
+        virtual void Close(void*);
+        virtual unsigned int Read(void*, void*, unsigned int, rw::core::filesys::DeviceDriver*, void*);
+        virtual unsigned int Write(void*, const void*, unsigned int, rw::core::filesys::DeviceDriver*, void*);
+        virtual u64 Seek(void*, u64, int, rw::core::filesys::DeviceDriver*, void*);
+        virtual u64 GetSize(void*);
+        virtual bool Resize(void*, u64);
+        virtual bool Delete(const char*);
+        virtual bool Move(const char*, const char*);
+        virtual void* FindBegin(const char*, FindData*);
+        virtual bool FindNext(void*, FindData*);
+        virtual bool FindEnd(void*);
+        virtual bool DirectoryCreate(const char*);
+        virtual bool DirectoryRemove(const char*);
+    private:
+        bool mbConstructed;
+        MemFile maMemFiles[KU_MAX_MEM_FILES];
+        // ARTIST828DD740..750: allocated handle contains data, size, position.
+        struct OpenMemFile
+        {
+            void* mpData;
+            u64 muSize;
+            u64 muPosition;
+        };
+        static void AssertNativeLayout();
     };
-
-} // namespace CgsFileSystem
+}
