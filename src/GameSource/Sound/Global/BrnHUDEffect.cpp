@@ -357,13 +357,6 @@ bool HUDEffect::Attach()
         mGameModeData.mEventScoreDelta.maPoints[luPoint] = 0.0f;
     mGameModeData.mEventScoreDelta.muNextPoint = 0;
 
-    if (HudSoundDiagBudget(guHudDiagAttach))
-    {
-        HudSoundDiagPrintf(
-            "[hud-sound-attach] mHudMessageData bound: NumMappings=%u (0 == the "
-            "presentationcomponent collection did not resolve)\n",
-            mHudMessageData.HasData() ? mHudMessageData.NumMappings() : 0u);
-    }
     return true;
 }
 
@@ -555,12 +548,7 @@ void HUDEffect::PlaySound(ePresentationSampleTags aeTag, u8 au8MixerOutput)
     if (lbResolved)
     {
         // [DIAG] NOT IN THE X360 BINARY -- the cue witness (BRN_HUD_SOUND_DIAG=1).
-        if (HudSoundDiagBudget(guHudDiagCues))
-        {
-            HudSoundDiagPrintf("[hud-cue] splice tag %d -> mixer out %u (sample %d)\n",
-                               static_cast<s32>(aeTag), static_cast<u32>(au8MixerOutput),
-                               static_cast<s32>(lTag.miSampleIndex));
-        }
+
         PlaySound(lTag, au8MixerOutput);
     }
 }
@@ -879,13 +867,6 @@ void HUDEffect::UpdateGameModeHud(Module::SoundLogicModule* apModule)
     // [DIAG] NOT IN THE X360 BINARY -- opt-in witness (BRN_HUD_SOUND_DIAG=1) that this
     // lane is being reached AND which mode it dispatched to. It fires on CHANGE only, so
     // a whole event costs one line.
-    if (liCurrentMode != giHudDiagLastMode && HudSoundDiagBudget(guHudDiagModes))
-    {
-        giHudDiagLastMode = liCurrentMode;
-        HudSoundDiagPrintf("[hud-mode] game mode %d (previous %d, state %d)\n",
-                           liCurrentMode, lpGameMode->miPreviousGameModeType,
-                           lpGameMode->miCurrentGameModeState);
-    }
 
     switch (liCurrentMode)
     {
@@ -980,15 +961,7 @@ void HUDEffect::ProcessUpdate()
         // exists and is being mixed.
         if (liState != static_cast<s32>(mauLastVoiceState[liVoice]))
         {
-            if (liState == CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING &&
-                HudSoundDiagBudget(guHudDiagVoices))
-            {
-                HudSoundDiagPrintf(
-                    "[hud-sound-voice] gui slot=%d now PLAYING (live=%d mixer=%u gain=%.4f)\n",
-                    liVoice, lrVoice.HasLiveVoice() ? 1 : 0,
-                    static_cast<u32>(mau8MixerOutputs[liVoice]),
-                    static_cast<double>(lfGain));
-            }
+
             mauLastVoiceState[liVoice] = static_cast<u8>(liState);
         }
     }
@@ -1258,20 +1231,9 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
         }
     }
 
-    const bool lbDiag = HudSoundDiagBudget(guHudDiagMessages);
     if (!lbFound)
     {
-        if (lbDiag)
-        {
-            HudSoundDiagPrintf(
-                "[hud-sound-msg] type=%d action=%d info=%d id=0x%08X%08X -> NO MAPPING "
-                "(NumMappings=%u)\n",
-                lrEvent.miComponentType, lrEvent.miAction,
-                lrEvent.miAdditionalInformation,
-                static_cast<u32>(lrEvent.mHudMessageId >> 32),
-                static_cast<u32>(lrEvent.mHudMessageId),
-                mHudMessageData.HasData() ? mHudMessageData.NumMappings() : 0u);
-        }
+
         return;
     }
 
@@ -1280,33 +1242,14 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
         if (KB_HUD_SPEW_MESSAGES)
             BrnSound::Debug::DebugComponent::mLogCombined << "[HUD] Ignoring "
                 << lacMessageId << "\tat [" << mfRunningTime << "] due to re-trigger.\n";
-        if (lbDiag)
-        {
-            HudSoundDiagPrintf(
-                "[hud-sound-msg] type=%d action=%d info=%d id=0x%08X%08X -> RE-TRIGGER "
-                "(%.3f s since last)\n",
-                lrEvent.miComponentType, lrEvent.miAction,
-                lrEvent.miAdditionalInformation,
-                static_cast<u32>(lrEvent.mHudMessageId >> 32),
-                static_cast<u32>(lrEvent.mHudMessageId),
-                static_cast<double>(mfTimeSinceLastTrigger));
-        }
+
         return;
     }
 
     const s32 liFreeVoice = GetFreeVoice(lu8ChokeGroup);
     if (liFreeVoice == -1)
     {
-        if (lbDiag)
-        {
-            HudSoundDiagPrintf(
-                "[hud-sound-msg] type=%d action=%d id=0x%08X%08X splice=%d -> NO FREE "
-                "VOICE (choke=%u)\n",
-                lrEvent.miComponentType, lrEvent.miAction,
-                static_cast<u32>(lrEvent.mHudMessageId >> 32),
-                static_cast<u32>(lrEvent.mHudMessageId),
-                liSpliceIndex, static_cast<u32>(lu8ChokeGroup));
-        }
+
         return;
     }
     CGS_ASSERT(liFreeVoice >= 0, "liFreeVoice >= 0");
@@ -1330,18 +1273,6 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     mau8ChokeGroups[liFreeVoice]  = lu8ChokeGroup;
     SetMixerInputValue(0, 0x7FFF);
 
-    if (lbDiag)
-    {
-        HudSoundDiagPrintf(
-            "[hud-sound-msg] type=%d action=%d info=%d id=0x%08X%08X -> PLAY splice=%d "
-            "slot=%d mixer=%u choke=%u bank=%d\n",
-            lrEvent.miComponentType, lrEvent.miAction,
-            lrEvent.miAdditionalInformation,
-            static_cast<u32>(lrEvent.mHudMessageId >> 32),
-            static_cast<u32>(lrEvent.mHudMessageId),
-            liSpliceIndex, liFreeVoice, static_cast<u32>(lu8MixerOutput),
-            static_cast<u32>(lu8ChokeGroup), lParams.mpContent ? 1 : 0);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1413,14 +1344,6 @@ void HUDEffect::PlaySound(const BrnEffectObject::SampleTag& arTag, u8 au8MixerOu
     lrHudVoice.mfClientPitch  = 1.0f;
     lrHudVoice.mu8MixerOutput = au8MixerOutput;
 
-    if (HudSoundDiagBudget(guHudDiagPlays))
-    {
-        HudSoundDiagPrintf(
-            "[hud-sound-play] game-mode voice slot=%d sample=%d vol=%.3f mixer=%u\n",
-            liSlot, static_cast<s32>(arTag.miSampleIndex),
-            static_cast<double>(arTag.mfVolume),
-            static_cast<u32>(au8MixerOutput));
-    }
 }
 
 } // namespace Logic

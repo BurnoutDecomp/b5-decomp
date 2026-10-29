@@ -166,9 +166,6 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     EngRevDataSet mEngineDataSet;
     CgsSound::Utils::InterpolateLine mEngineStartLineRPM;
 
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG witness accumulator.
-    f32 mfDiagWitnessTimer;
-
 protected:
     // BrnPhysicsControl.cpp:940, ARTIST @ 0x826B2860.  Converts the raw
     // physics RPM through the per-car cubic PhysicsRpmMap into [0,1].
@@ -188,8 +185,6 @@ protected:
     // throttle} sample.
     static EngineRevEntry UpdateEngRevDataSet(EngRevDataSet& arSet, f32 afTimeStep);
 
-    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG (see BrnEngineAudioDiag.h).
-    void EngineParamWitness(f32 afTimeStep);
 };
 
 } // namespace Engines

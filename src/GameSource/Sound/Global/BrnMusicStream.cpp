@@ -200,13 +200,7 @@ void MusicStream::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
         if (liKey != miDiagLastGainQ)
         {
             miDiagLastGainQ = liKey;
-            CgsSound::Diag::StreamDiagPrintf(
-                "[sndstream] gain slot=%u spec=0x%08X effectGain=%.4f vol=%.4f "
-                "-> send=%.4f state=%d pause=%d\n",
-                static_cast<u32>(mu8OutputSlot),
-                static_cast<u32>(mCreateParams.mContentSpecName),
-                afGain, lfVolume, afGain * lfVolume, static_cast<int>(meState),
-                (mbInternalPause || mbStreamPaused) ? 1 : 0);
+
         }
     }
 }

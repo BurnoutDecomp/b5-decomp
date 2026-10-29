@@ -74,23 +74,9 @@ s32 KI_SPEW_PASSBY_STATE_INFO = 0; // ARTIST dword_82FFB930
 namespace
 {
 
-    void PassbySoundDiag(const char* lpcMessage)
-    {
-    }
 
-    void PassbySoundDiagWaiting(bool lbCreated)
-    {
-        static u32 suCalls = 0;
-        return;
-        if ((suCalls++ % 600u) != 0)
-            return;
-        char lacMsg[160];
-        std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[passby-sound] Prepare: still WAITING on the splicer bank "
-                      "(created=%d) after %u polls\n",
-                      lbCreated ? 1 : 0, suCalls);
-        CgsDev::Log::WriteToLog(lacMsg);
-    }
+
+
 }
 
 // Expiry window: an active cache entry is cleared once it has been live for at
@@ -368,25 +354,24 @@ bool PassbyStateManager::Prepare()
     case E_PREPARE_BEGIN:
         mePrepareState = E_PREPARE_BEGIN;
         LoadAsset( "sound\\splicer\\PassbyAsset.bundle", 0, ResourceRegistrar::E_DATA );
-        PassbySoundDiag( "[passby-sound] Prepare: LoadAsset issued for "
-                         "sound\\splicer\\PassbyAsset.bundle\n" );
+
         // fall through
     case E_PREPARE_UPDATING:
         mePrepareState = E_PREPARE_UPDATING;
         if( !mSplicerBank.IsLoaded() )
         {
-            PassbySoundDiagWaiting( mSplicerBank.IsCreated() );
+
             return false;
         }
         miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor(
             "Passbys", static_cast<CgsDev::PerfMonCpuPage>( 14 ), false, 1.0f, true );
-        PassbySoundDiag( "[passby-sound] Prepare: splicer bank LOADED\n" );
+
         // fall through
     case E_PREPARE_STATES:
         mePrepareState = E_PREPARE_STATES;
         if( !PrepareStates( 1, KU_NUMBER_OF_PASSBY_STATES, 0 ) )
             return false;
-        PassbySoundDiag( "[passby-sound] Prepare: FINISHED (8 states prepared)\n" );
+
         // fall through
     case E_PREPARE_FINISHED:
         mePrepareState = E_PREPARE_FINISHED;
@@ -494,8 +479,7 @@ void PassbyStateManager::UpdateParams( f32 lfTimeStep )
 // ---------------------------------------------------------------------------
 void PassbyStateManager::ResourcesAreReady()
 {
-    PassbySoundDiag("[passby-sound] ResourcesAreReady: constructing the "
-                    "PassbyAsset splicer bank\n");
+
     mSplicerBank.Construct(
         GetLogicModule(),
         static_cast<u32>(CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~")),

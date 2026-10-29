@@ -350,12 +350,7 @@ void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamReque
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). Witnesses the PLAY request
     // as posted: which user, which ContentSpec, what priority, which ring slot.
-    CgsSound::Diag::StreamDiagPrintf(
-        "[sndstream] post PLAY user=%p spec=0x%08X prio=%u id=%u ring=%u/%u t=%.2f\n",
-        static_cast<const void*>(lStreamRequest.mpAttachment),
-        DiagSpecOf(lStreamRequest.mpAttachment), lStreamRequest.mu32Priority,
-        muUniqueId - 1u, muPlayRequestCount,
-        static_cast<u32>(E_MAX_STREAM_REQUESTS), mfCurrentTime);
+
 }
 
 // ---------------------------------------------------------------------------
@@ -408,10 +403,7 @@ void StreamingStateManager::PostStreamRequest(const StreamStopRequest& lStopRequ
     PostStreamRequestInternal(lStamped);
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1).
-    CgsSound::Diag::StreamDiagPrintf(
-        "[sndstream] post STOP user=%p spec=0x%08X fade=%.2f id=%u\n",
-        static_cast<const void*>(lStamped.mpAttachment),
-        DiagSpecOf(lStamped.mpAttachment), lStamped.mfFadeOut, lStamped.mu32UniqueId);
+
 }
 
 void StreamingStateManager::PostStreamRequestInternal(const StreamStopRequest& arRequest)
@@ -554,10 +546,7 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
             lpState->Attach(&lrRequest);
             // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The request was
             // ACCEPTED: a StreamingState took it and will bring a voice up.
-            CgsSound::Diag::StreamDiagPrintf(
-                "[sndstream] accept spec=0x%08X id=%u prio=%u -> state=%p\n",
-                DiagSpecOf(lrRequest.mpAttachment), lrRequest.mu32UniqueId,
-                lrRequest.mu32Priority, static_cast<const void*>(lpState));
+
         }
         else
         {
@@ -567,11 +556,7 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
             if (guDiagRefusals < KU_DIAG_REFUSAL_CAP)
             {
                 ++guDiagRefusals;
-                CgsSound::Diag::StreamDiagPrintf(
-                    "[sndstream] REFUSED (no free state) spec=0x%08X id=%u prio=%u -> repost%s\n",
-                    DiagSpecOf(lrRequest.mpAttachment), lrRequest.mu32UniqueId,
-                    lrRequest.mu32Priority,
-                    guDiagRefusals == KU_DIAG_REFUSAL_CAP ? " [last refusal witness]" : "");
+
             }
             RePostStreamRequest(lrRequest);
         }

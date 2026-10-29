@@ -443,15 +443,6 @@ void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
         break;
     }
 
-    if (HudSoundDiagBudget(guFxDiagMessages))
-    {
-        HudSoundDiagPrintf(
-            "[fx-sound-msg] type=%d slot=%d -> %s sample=%d vol=%.3f bank=%d\n",
-            leType, liSlot, lbResolved ? "PLAY" : "IGNORED",
-            static_cast<s32>(lTag.miSampleIndex),
-            static_cast<double>(lTag.mfVolume), lpBank ? 1 : 0);
-    }
-
     if (!lbResolved)
         return;
 
