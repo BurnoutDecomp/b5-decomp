@@ -121,18 +121,6 @@ namespace ICE
     }
 
     // ------------------------------------------------------------------------
-    // ICETake::GetSubTakeLength -- the bound sub-take's authored length, the mirror
-    // of the inline GetLength() one member along (mpSubTakeData instead of
-    // mpTakeData). The sole caller (ICEAuthor::GetSubAssemRatio) divides it by the
-    // edit take's length, and only after the edit take has been checked for a bound,
-    // non-zero-length take.
-    // ------------------------------------------------------------------------
-    f32 ICETake::GetSubTakeLength() const
-    {
-        return mpSubTakeData->GetLength();
-    }
-
-    // ------------------------------------------------------------------------
     // ICETake::MarkChannelFromSubTake -- flag a channel as sourced from the
     // sub-take rather than the primary take, by setting its bit in the sub-take
     // channel mask. SetDataPointers uses this in edit mode for channels with no
@@ -432,7 +420,8 @@ namespace ICE
         // pointers point into the rebuilt variable-data region. Raw-storage stand-in
         // (the FixDown idiom): ICETake is not default-constructible against the frozen
         // header, and SetDataPointers writes every member it later reads.
-        CGS_ALIGN(ICETake) u8 laScratchStorage[sizeof(ICETake)];
+        CGS_STATIC_ASSERT((__alignof(ICETake) == 4), "native ICETake scratch alignment");
+        CGS_ALIGN(4) u8 laScratchStorage[sizeof(ICETake)];
         ICETake& lScratch = *reinterpret_cast<ICETake*>(laScratchStorage);
         lScratch.Construct(mpResourceManager);
         lScratch.SetDataPointers(lpNewData, false);

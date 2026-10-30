@@ -30,7 +30,7 @@
 // FLAG (ICEAuthor base): the controller IS-AN ICEAuthor and the bodies here call a
 // few ICEAuthor methods (GetCurrentSubtakeGuid / IsEndKeyState) on `this`. Until the
 // ICEAuthor base lands on the struct (see ICEController.hpp), those calls are made
-// through a reinterpret_cast<ICEAuthor*>(this) -- the controller shares the author's
+// through a static_cast<ICEAuthor*>(this) -- the controller shares the author's
 // `this`, and the author fields sit at the same offsets. FLAGged at each call site.
 //
 // FLAG (unrecoverable data tables): the bar-marker layout draws from several ICE
@@ -261,7 +261,7 @@ void ICEController::Render()
 // ============================================================================
 void ICEController::RenderBars()
 {
-    ICEAuthor* lpAuthor = reinterpret_cast<ICEAuthor*>(this); // is-a author
+    ICEAuthor* lpAuthor = static_cast<ICEAuthor*>(this); // is-a author
 
     const s32 liState = miState;
 
@@ -377,12 +377,11 @@ void ICEController::RenderBars()
 
                 // Seed the four poly/colour lanes from the style-selected colour.
                 const Vector4& lrColour = IceBarMarkerColour(liStyle, lbSelected);
-                lrMarker.maPolyA[0] = lrColour.x; lrMarker.maPolyA[1] = lrColour.y;
-                lrMarker.maPolyA[2] = lrColour.z; lrMarker.maPolyA[3] = lrColour.w;
+                lrMarker.maColours[0] = lrColour;
 
                 // A hard-cut interval boundary draws the keyframe sub-box.
                 if (mEditTake.IsHardCut(liBarChannel, (s32)lu16Interval))
-                    lrMarker.miIsKeyframe = 1;
+                    lrMarker.mbIsKeyframe = 1;
 
                 ++mTimeBar.miNumMarkers;
             }
@@ -482,7 +481,7 @@ void ICEController::RenderBars()
         mTimeBar.mbShowIcon = 1;
         // The key-selected read-out marks the selected key and the end-edge flag.
         {
-            const s32 liEndEdge = IceResolveEndKeyEdge(this, miState, miStateArg);
+            const s32 liEndEdge = IceResolveEndKeyEdge(this, miState, miPrevState);
             mTimeBar.miMarkerSelA = (s32)lu16SelectedKey;
             mTimeBar.miMarkerSelB = liEndEdge;
         }
@@ -564,7 +563,7 @@ void ICEController::RenderMenus()
 // ============================================================================
 void ICEController::RenderTargetBox()
 {
-    ICEAuthor* lpAuthor = reinterpret_cast<ICEAuthor*>(this); // is-a author
+    ICEAuthor* lpAuthor = static_cast<ICEAuthor*>(this); // is-a author
 
     // The look-at reference space is the take's decoded element 31.
     const s32 liSpace = mEditTake.GetValueInt(KI_ICE_ELEM_LOOKAT_SPACE);
@@ -593,7 +592,7 @@ void ICEController::RenderTargetBox()
             lu16Key = (u16)(mEditTake.GetNumKeys(liChannel) - 2);
     }
 
-    const s32 liEndEdge = IceResolveEndKeyEdge(this, miState, miStateArg);
+    const s32 liEndEdge = IceResolveEndKeyEdge(this, miState, miPrevState);
     const u16 lu16SampleKey = (u16)(lu16Key + liEndEdge);
 
     // Sample the look-at target offset (elements 3/4/5) at the resolved key.

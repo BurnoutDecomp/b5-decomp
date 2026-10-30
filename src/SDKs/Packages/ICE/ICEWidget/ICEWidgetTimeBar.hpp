@@ -83,14 +83,8 @@
 
 namespace ICE
 {
-    // The per-take marker element of the time bar. 80-byte stride. Four embedded
-    // screen-space poly/colour lanes the segment box is drawn from (RenderPoly reads
-    // the element directly as its Poly/colour argument; the draw path touches the
-    // lanes at +0x00, +0x10, +0x20 and +0x30). The flag at +0x40 marks a "keyframe"
-    // segment and the float at +0x44 is the element's normalised time along the bar.
-    // The remaining bytes are reserved (cleared by Reset/Construct but not
-    // independently attested).
-    // FLAG: element field names/offsets are derived from the body accesses.
+    // Native marker: four colour vectors, byte keyframe flag and float time.
+    // Its alignment bytes are untouched by Construct and Reset.
     struct ICEWidgetTimeBarMarker
     {
         // ARTIST Render passes +0x20 and +0x30 as colour arguments, separately
@@ -107,13 +101,7 @@ namespace ICE
     struct ICEWidgetTimeBar : public ICEWidget
     {
         // ------------------------------------------------------------------
-        // Build the time bar: store the screen origin (lfX/lfY) and the window
-        // start times, clear the read-out state, then Reset(). The float args arrive
-        // in order (lfX, lfY, lfStart): `lfX`/`lfY` are the screen origin; `lfStart`
-        // seeds both the bar-length and time-min lanes; the three int args + the char
-        // are the initial marker count / flags / compact flag. OWNED here (body in
-        // the .cpp).
-        // ------------------------------------------------------------------
+        // ARTIST82531088 receives compact in r7 after the three float args.
         void Construct(f32 lfX, f32 lfY, f32 lfStart,
                        u8 lbCompact);
 

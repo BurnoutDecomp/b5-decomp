@@ -1,31 +1,5 @@
-// ============================================================================
-// SDKs/Packages/ICE/ICEController.cpp
-//
-// ICE::ICEController -- the in-game ICE camera-take editor/driver. This TU bodies
-// the FOUNDATIONAL group of the controller's 23 functions: the lifecycle entry
-// (Construct), the small state predicates/setters (IsMarked / IsShakeEditing /
-// SetZoomRange / SetCurrentIntervalValue / SetJoyVelocities / MoveCursor /
-// BarFlipping) and the tractable menu-refresh helpers. The heavy SIMD draw passes
-// (Render / RenderBars / RenderMenus / RenderTargetBox), the input dispatch
-// (Update / JoyHandler), the menu construct/destruct (ConstructMenus /
-// DestructMenus), the bubble serialisers (ToBubble / FromBubble) and the
-// element-value edit ops (ChangeKeyElementValue(s)) are left declaration-only in
-// the header for the parallel fan-out (see the manifest in the layout dossier).
-//
-// The reconstruction reverses compiler inlining of the embedded ICETake / widget /
-// author-base accesses back into named-member access against the layout in
-// ICEController.hpp (the source-spine offsets are facts pinned there; the bodies access by
-// name, not by cast).
-//
-// FLAG (ICEAuthor base): the controller IS-AN ICEAuthor. Several foundational bodies
-// call ICEAuthor methods (SetParameterChange, GetIntervalKey, SetValue thunks) on
-// `this`. ICEAuthor.hpp is owned by another agent and not yet present, so those calls
-// are expressed against the forward-declared ICEAuthor base and FLAGged at the call
-// site -- they compile under the per-TU `cl /c` gate (which does not link) and will
-// resolve once the base lands. Where a body needs an unnamed source spine take-arithmetic
-// thunk (the `this+40` ICETake parameter/interval helpers spelled as an unnamed thunk in the
-// pseudocode), the equivalent ICETake member is used (ICETake already models them).
-// ============================================================================
+// ICE controller lifecycle, cursor and zoom helpers. Native inheritance and
+// service wiring are recovered; the trailing controller layout remains incomplete.
 
 #include "SDKs/Packages/ICE/ICEController.hpp"
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"   // ICE::ICEAuthor base methods (called on `this`)
@@ -42,37 +16,17 @@ namespace ICE
 static const f32 KF_ICE_PARAM_ENGAGE_THRESHOLD = 0.1f;
 
 // ---------------------------------------------------------------------------
-// Construct
-//
-// Chain the ICEAuthor base constructor, cache three pointers out of the ICEPointers
-// bundle (the sub-take source a2[2], the action queue a2[0], the timestep source
-// a2[4] -- the source spine reads a2[2]/a2[0]/a2[4]/a2[5]), zero the editor state block, seed
-// the cursor/zoom defaults, clear the 37-entry value-change buffer, seed the mark
-// in/out to -1, then build the menus.
-//
-// source-spine word stores (this-relative): +0xF7C=a2[2], +0xF74=a2[0], +0xF70=a2[4] (the
-// timestep source dereferenced as **), the status block at +0x7204/+0x7208/+0x720C
-// and +0x724C cleared, the "show UI" flag +0x7250=1, the three edit bools
-// +0x7251/+0x7252/+0x7253=0, the cursor floats +0x7254=0.0 / +0x7258=1.0, the bar
-// fade +0x725C=3.0, the bubble radius +0x7264=0.0, the 37-word change buffer at
-// +0x7268 zeroed, the menu/bar-flip state +0x73B8/+0x73BC/+0x73BD zeroed and the mark
-// in/out +0x73C0/+0x73C4 = -1.0.
+// Construct: ARTIST8253DA30 chains Author, binds bundle services, initializes
+// editor state and calls ConstructMenus. Tail field offsets remain incomplete;
+// the base call and service-prefix routing are independently validated.
 // ---------------------------------------------------------------------------
 void ICEController::Construct(ICEPointers* lpICEPointers)
 {
-    // Chain the authoring base first (the controller is-an author).
-    // FLAG (ICEAuthor base): ICEAuthor::Construct() is the real base ctor; until the
-    // base lands, the author-region members are zero/seeded directly below. The source spine
-    // calls ICEAuthor::Construct() here.
-
-    // Cache the three subsystem pointers out of the bundle. The source spine reads a2[2]
-    // (mpActionQueue is a2[2] in the bundle order) into +0xF7C, a2[0] (mpICEMemory)
-    // into +0xF74 and a2[4] (mpICETimer, the timestep source) into +0xF70; the names
-    // here are the manager-consumer names retained for ICEController.hpp.
-    mpSubTakeSource = lpICEPointers->mpActionQueue;          // +0xF7C (a2[2])
-    mpMenuA         = lpICEPointers->mpICEMemory;            // +0xF74 (a2[0], action-queue slot)
-    mpMenuB         = reinterpret_cast<f32*>(lpICEPointers->mpICETimer);  // +0xF70 (a2[4], points at the per-frame timestep)
-    mpMenuC         = lpICEPointers->mpICEMemory;            // +0xF78 (ICE memory manager)
+    ICEAuthor::Construct(lpICEPointers);
+    mpMenuA = lpICEPointers->mpActionQueue;
+    mpMenuC = lpICEPointers->mpICEMemory;
+    mpMenuB = lpICEPointers->mpICETimer;
+    mpSubTakeSource = lpICEPointers->mpResourceManager;
 
     // Zero the on-screen status-text block and the spare edit flag.
     miStatusCount = 0;
@@ -226,8 +180,8 @@ void ICEController::BarFlipping(bool lbForward)
         }
 
         // Re-arm the zoom cursor (clear the active drag).
-        mfZoomCursorLo = -0.1f;   // this+16144 (the active zoom-drag pair, cleared)
-        mfZoomCursorHi = -0.1f;   // this+16148
+        mTimeBar.mfLoopStart = -0.1f;   // this+16144 (the active zoom-drag pair, cleared)
+        mTimeBar.mfLoopEnd = -0.1f;   // this+16148
         return;
     }
 
@@ -254,7 +208,7 @@ void ICEController::MoveCursor()
     const f32 lfParameter = mEditTake.GetParameter();
 
     // Pick the visible-window pair (shake vs non-shake) by editor state.
-    f32* lpWindow = (miState == 8) ? &mfZoomCursorShakeLo : &mfZoomCursorLo;
+    f32* lpWindow = (miState == 8) ? &mfZoomLo : &mfRangeLo;
 
     // Window ratio = window span / take length, or 1.0 when the take has no length.
     f32 lfRatio = 1.0f;
@@ -271,14 +225,14 @@ void ICEController::MoveCursor()
     // Request the parameter change through the author base. The per-frame delta is the
     // horizontal shuttle velocity scaled by the frame timestep, the bar fade and the
     // window ratio; the engage gate is set when the engage axis exceeds the threshold.
-    const f32 lfTimestep = *mpMenuB;
+    const f32 lfTimestep = mpMenuB->GetTimestep();
     const f32 lfMove = (JoyVelocity(34) - JoyVelocity(33)) * lfTimestep * mfBarFade * lfRatio; // 29424-29420
     const bool lbApply = JoyVelocity(18) > KF_ICE_PARAM_ENGAGE_THRESHOLD;                      // 29360
-    reinterpret_cast<ICEAuthor*>(this)->SetParameterChange(lfMove, lbApply);
+    ICEAuthor::SetParameterChange(lfMove, lbApply);
 
     // Re-fetch the window pair (the author call may have re-selected it) and expand it
     // if the parameter scrubbed outside [lo, hi].
-    f32* lpWindow2 = (miState == 8) ? &mfZoomCursorShakeLo : &mfZoomCursorLo;
+    f32* lpWindow2 = (miState == 8) ? &mfZoomLo : &mfRangeLo;
     const f32 lfP = mEditTake.GetParameter();
     if (lfP >= lpWindow2[0])
     {
@@ -311,7 +265,7 @@ void ICEController::MoveCursor()
 void ICEController::SetZoomRange()
 {
     // Frame timestep (mpMenuB points directly at the per-frame timestep float).
-    const f32 lfTimestep = *mpMenuB;
+    const f32 lfTimestep = mpMenuB->GetTimestep();
 
     // Zoom velocity delta this frame. 29428 -> velocity index 35; 29432 -> index 36.
     const f32 lfZoomDelta = (JoyVelocity(35) - JoyVelocity(36)) * lfTimestep;
@@ -333,13 +287,13 @@ void ICEController::SetZoomRange()
     f32 lfLo, lfHi;
     if (miState == 8)
     {
-        lfLo = mfZoomCursorShakeLo;   // this+3876
-        lfHi = mfZoomCursorShakeHi;   // this+3880
+        lfLo = mfZoomLo;   // this+3876
+        lfHi = mfZoomHi;   // this+3880
     }
     else
     {
-        lfLo = mfZoomCursorLo;        // this+3868
-        lfHi = mfZoomCursorHi;        // this+3872
+        lfLo = mfRangeLo;        // this+3868
+        lfHi = mfRangeHi;        // this+3872
     }
 
     // Only adjust when the delta is meaningful and the window keeps a minimum span,
@@ -360,13 +314,13 @@ void ICEController::SetZoomRange()
 
         if (miState == 8)
         {
-            mfZoomCursorShakeLo = lfNewLo;
-            mfZoomCursorShakeHi = lfNewHi;
+            mfZoomLo = lfNewLo;
+            mfZoomHi = lfNewHi;
         }
         else
         {
-            mfZoomCursorLo = lfNewLo;
-            mfZoomCursorHi = lfNewHi;
+            mfRangeLo = lfNewLo;
+            mfRangeHi = lfNewHi;
         }
     }
 }
