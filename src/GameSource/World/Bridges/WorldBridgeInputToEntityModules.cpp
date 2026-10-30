@@ -380,7 +380,7 @@ void BridgeInputToEntityModules(
     // timestep * multiplier (PS3: GetSimTimerStatus().GetCurrentTimeStep()).
     const BrnWorldIO::TimerStatusInterface* lpTimerStatus = lpWorldInput->GetTimerStatusInterface();
     lpPropEntityInputBuffer_PreScene->SetCurrentTimestep(
-        lpTimerStatus->maData[8] * lpTimerStatus->maData[7]);
+        lpTimerStatus->GetSimTimerStatus()->GetCurrentTimeStep());
 }
 
 }
