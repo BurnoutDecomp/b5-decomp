@@ -130,6 +130,7 @@ namespace renderengine
         static void Clear(const ClearColorParameters& lrColor, const ClearDepthStencilParameters& lrDepthStencil,
                           RenderTargetState::TargetID leTarget); // ARTIST82B61E18, body pending
         static void ShowPixelBuffer(PixelBuffer* lpBuffer); // ARTIST82B63298, body pending
+        static bool Initialize();
         static bool Start(const Parameters& lrParameters);
 
         struct DirectDraw
@@ -169,8 +170,10 @@ namespace renderengine
         static void UnSetResource(D3DResource* lpResource);
 
     protected:
+        static void InitializeGlobalBuffers();
         static void EnsureDefaultRenderTarget();
         static void InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters);
+        static Parameters m_parameterCopy; // ARTIST 82F87B00
         static State m_currentState; // ARTIST 83271600
         // DecFIGS device.h:1662; ARTIST dword_83271614.
         static RenderTargetState* m_renderTargetState;
