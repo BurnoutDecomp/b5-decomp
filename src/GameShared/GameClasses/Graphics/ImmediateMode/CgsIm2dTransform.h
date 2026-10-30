@@ -17,6 +17,7 @@ namespace CgsGraphics
         rw::math::vpu::Vector4 mColourScale;
 
         void TransformByAspectRatio();
+        static void SetAspectCorrectionMatrix(const rw::math::fpu::Matrix33Template<float>&);
 
         // The class-wide aspect-correction matrix (X360 static @0x830110F0, nine floats),
         // populated at runtime by SetAspectCorrectionMatrix(const Matrix33&) and read by
