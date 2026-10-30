@@ -6,23 +6,24 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include <cmath>
 #include <cstring>
 
 namespace BrnGui {
 namespace {
 // ARTIST 82F2589C..82F258E4; names from DecFIGS BrnCreditsTextRenderer.cpp:23..40.
-constexpr f32 KF_TEXTBOX_CENTRE_X=418.0f, KF_TEXTBOX_CENTRE_Y=386.0f;
-constexpr f32 KF_TEXTBOX_WIDTH=500.0f, KF_TEXTBOX_HEIGHT=435.0f, KF_TEXTBOX_ANGLE=7.1f;
-constexpr f32 KF_LARGE_TEXT_SIZE=37.0f, KF_SMALL_TEXT_SIZE=25.0f;
-constexpr f32 KF_PARAGRAPH_SPACING0=-5.0f, KF_PARAGRAPH_SPACING1=25.0f;
-constexpr f32 KF_SCROLL_START=-400.0f, KF_SCROLL_SPEED=62.0f;
-constexpr f32 KF_FADE_BORDER=20.0f, KF_FADE_IN_START=-2.0f, KF_FADE_IN_SPEED=1.0f;
-constexpr f32 KF_CREDITS_DROPSHADOW_X=2.0f, KF_CREDITS_DROPSHADOW_Y=3.0f;
-constexpr f32 KF_DROPSHADOW_ALPHA=255.0f;
-constexpr f32 KF_TEXTBOX_RIGHT=KF_TEXTBOX_WIDTH, KF_TEXTBOX_BOTTOM=KF_TEXTBOX_HEIGHT;
-constexpr f32 KF_ONE=1.0f, KF_SHADOW_FADE_RAMP=-100.0f, KF_FADE_Y_MARGIN=100.0f;
-constexpr f32 KF_FRAME_DT=0.016666668f;
+const f32 KF_TEXTBOX_CENTRE_X=418.0f, KF_TEXTBOX_CENTRE_Y=386.0f;
+const f32 KF_TEXTBOX_WIDTH=500.0f, KF_TEXTBOX_HEIGHT=435.0f, KF_TEXTBOX_ANGLE=7.1f;
+const f32 KF_LARGE_TEXT_SIZE=37.0f, KF_SMALL_TEXT_SIZE=25.0f;
+const f32 KF_PARAGRAPH_SPACING0=-5.0f, KF_PARAGRAPH_SPACING1=25.0f;
+const f32 KF_SCROLL_START=-400.0f, KF_SCROLL_SPEED=62.0f;
+const f32 KF_FADE_BORDER=20.0f, KF_FADE_IN_START=-2.0f, KF_FADE_IN_SPEED=1.0f;
+const f32 KF_CREDITS_DROPSHADOW_X=2.0f, KF_CREDITS_DROPSHADOW_Y=3.0f;
+const f32 KF_DROPSHADOW_ALPHA=255.0f;
+const f32 KF_TEXTBOX_RIGHT=KF_TEXTBOX_WIDTH, KF_TEXTBOX_BOTTOM=KF_TEXTBOX_HEIGHT;
+const f32 KF_ONE=1.0f, KF_SHADOW_FADE_RAMP=-100.0f, KF_FADE_Y_MARGIN=100.0f;
+const f32 KF_FRAME_DT=0.016666668f;
 }
 
 void CreditsTextRenderer::Construct()
@@ -34,8 +35,7 @@ void CreditsTextRenderer::Construct()
     // Construct counts the 56 strings before the null in KAC_TESTSTRINGS
     // @82F258E8. Displayed names come from the localisation database.
     miNumStrings = 56;
-    for (auto& lrParagraph : maParagraphs)
-        lrParagraph = {};
+    std::memset(maParagraphs, 0, sizeof(maParagraphs));
 }
 
 bool CreditsTextRenderer::Prepare(CgsGui::GuiEventQueueSmall*,
@@ -309,7 +309,7 @@ void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
     CGS_ASSERT(lpEvent != 0, " null event passed ");
     if (liEventType == 14)
     {
-        const auto* lpNotification =
+        const CgsGui::GuiEventLoadNotification* lpNotification =
             static_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent);
         CgsResource::SafeResourceHandle<CgsResource::Font> lFont;
         lFont.mpResourceMemory = lpNotification->mResourceHandle.mpResourceMemory;
@@ -333,26 +333,20 @@ void CreditsTextRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEvent
         }
         else if (lpNotification->meRequestType == 11 && lpNotification->muLoadRequestId == 203)
         {
-            renderengine::TextureState::Parameters lParameters = {};
+            renderengine::TextureState::Parameters lParameters;
             lParameters.muAddressU = 2;
             lParameters.muAddressV = 2;
             lParameters.muMagFilter = 1;
             lParameters.muMinFilter = 1;
             lParameters.muMipFilter = 2;
-            lParameters.muMaxAnisotropy = 13;
-            lParameters.muField10 = 1;
-            lParameters.mu8Field43 = 1;
-            lParameters.mu8Field44 = 1;
+            lParameters.muMinMipLevel = 13;
+            lParameters.muMaxAnisotropy = 1;
+            lParameters.mbPointBorderEnable = 1;
+            lParameters.mbUnidentified44 = 1;
             lParameters.mpTexture = *static_cast<renderengine::Texture**>(lFont.mpResourceMemory);
             CGS_ASSERT(lParameters.mpTexture != 0, "lpTexture!=NULL");
-            u32 lauDescriptor[10];
-            renderengine::TextureState::GetResourceDescriptor(lauDescriptor);
             rw::ResourceDescriptor lDescriptor;
-            for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-            {
-                lDescriptor.m_baseResourceDescriptors[lu].m_size = lauDescriptor[2 * lu];
-                lDescriptor.m_baseResourceDescriptors[lu].m_alignment = lauDescriptor[2 * lu + 1];
-            }
+            renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
             mBackgroundMaskTextureStateResource = mpHeapAllocator->DoAllocate(lDescriptor, 0);
             mpBackgroundMaskTextureState = renderengine::TextureState::Initialize(
                 &mBackgroundMaskTextureStateResource, &lParameters);
@@ -371,14 +365,18 @@ void CreditsTextRenderer::Update()
     const f32 lfAngle = KF_TEXTBOX_ANGLE * 0.01745329238474369f;
     const f32 lfSin = std::sin(lfAngle);
     const f32 lfCos = std::cos(lfAngle);
-    mScreenTransform.mRightUp = {lfCos / 640.0f, lfSin / 360.0f,
+    const Vector4 lRightUp = {lfCos / 640.0f, lfSin / 360.0f,
                                  lfSin / 640.0f, -lfCos / 360.0f};
-    mScreenTransform.mOriginXYZ = {
+    mScreenTransform.mRightUp = lRightUp;
+    const Vector4 lOrigin = {
         (KF_TEXTBOX_CENTRE_X - 640.0f - 0.5f * (KF_TEXTBOX_WIDTH * lfCos + KF_TEXTBOX_HEIGHT * lfSin)) / 640.0f,
         -(KF_TEXTBOX_CENTRE_Y - 360.0f + 0.5f * (KF_TEXTBOX_WIDTH * lfSin - KF_TEXTBOX_HEIGHT * lfCos)) / 360.0f,
         0.0f, 0.0f};
-    mScreenTransform.mColourShift = {0.0f, 0.0f, 0.0f, 0.0f};
-    mScreenTransform.mColourScale = {1.0f, 1.0f, 1.0f, 1.0f};
+    mScreenTransform.mOriginXYZ = lOrigin;
+    const Vector4 lShift = {0.0f, 0.0f, 0.0f, 0.0f};
+    mScreenTransform.mColourShift = lShift;
+    const Vector4 lScale = {1.0f, 1.0f, 1.0f, 1.0f};
+    mScreenTransform.mColourScale = lScale;
     mScreenTransform.TransformByAspectRatio();
     if (mbRenderEnabled)
     {
@@ -389,7 +387,7 @@ void CreditsTextRenderer::Update()
     // reconstruction mistook byte offsets for array indices N+6 and N.
     if (miNumStrings > 0)
     {
-        const auto& lrLast = maParagraphs[miNumStrings - 1];
+        const ParagraphInfo& lrLast = maParagraphs[miNumStrings - 1];
         if (mfScroll > lrLast.mfPosition + lrLast.mfHeight + KF_TEXTBOX_HEIGHT)
             mfScroll = -KF_TEXTBOX_HEIGHT;
     }
