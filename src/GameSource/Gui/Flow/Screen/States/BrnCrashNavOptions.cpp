@@ -581,8 +581,8 @@ namespace BrnGui
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);
 
-        if (static_cast<u32>(lpComplete->mOverlayId) ==
-                static_cast<u32>(CgsIDCompress(KAC_CANCEL_CONFIRM_OVERLAY)) &&
+        if (lpComplete->mOverlayId ==
+                CgsIDCompress(KAC_CANCEL_CONFIRM_OVERLAY) &&
             lpComplete->meLeaveMethod == 1)
         {
             RestoreSoundSettings();
