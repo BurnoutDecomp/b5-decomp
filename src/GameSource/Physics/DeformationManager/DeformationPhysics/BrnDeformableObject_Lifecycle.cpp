@@ -1,3 +1,4 @@
+#include <float.h>
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // gpDebugPrint -- the opt-in [passer] bring-up probe only
@@ -199,8 +200,10 @@ namespace Deformation
             const Vector3 lAggregateValue = { 0.0f, 0.0f, 0.0f, 0.0f };
             mLastAngularVelocity = lAggregateValue;
         }
-        SetLastLinearVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
-        SetEntitySphereSize(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+        const Vector3 lvZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const VecFloat lvfZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+        SetLastLinearVelocity(lvZero);
+        SetEntitySphereSize(lvfZero);
 
         // ⭐⭐ 2026-08-15 (walls leg 8) -- THE IMPULSE-PASSER MAP ZERO, APPLIED. The PS3 out-of-line
         // ClearVariables @0x6BEEC4 runs ImpulsePasser::Construct(&mImpulsePasser): the
@@ -655,11 +658,9 @@ namespace Deformation
         Vector3     lvNegLimits = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         const bool lbDamageSignPositive = ((lrRandom.RandomUInt() & 1u) != 0u);
-        const Vector3 lDamagePoint = lbDamageSignPositive
-            ? Vector3{  lSensorBBox.mMax.x - 0.30000001f, lSensorBBox.mMax.y,
-                        lSensorBBox.mMax.z - 0.30000001f, 0.0f }
-            : Vector3{ -lSensorBBox.mMax.x + 0.30000001f, lSensorBBox.mMax.y,
-                        lSensorBBox.mMax.z - 0.30000001f, 0.0f };
+        const Vector3 lDamagePoint = {
+            lbDamageSignPositive ? lSensorBBox.mMax.x - 0.30000001f : -lSensorBBox.mMax.x + 0.30000001f,
+            lSensorBBox.mMax.y, lSensorBBox.mMax.z - 0.30000001f, 0.0f };
 
         GetInitialCompressionScalesAndLimits(leResetType, lvfTime,
                                              lv3pCompressionScale_Scratch, lvPosLimits, lvNegLimits);
@@ -701,8 +702,9 @@ namespace Deformation
         // 0x8263A120..0x8263A134: stvx128 0 -> +0x10E0, then _blkmov(+0x10F0, +0x10E0, 0x7F0) -- a
         // forward fill that zeroes all 128 skinning-offset scratch rows on EVERY reset (crash parity
         // G20-D8, 2026-09-23).
+        const Vector3Plus lZeroScratch = { 0.0f, 0.0f, 0.0f, 0.0f };
         for (s32 liRow = 0; liRow < 128; ++liRow)
-            maVerletOffsets_Scratch[liRow] = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
+            maVerletOffsets_Scratch[liRow] = lZeroScratch;
 
         // --- rebuild the IK parts (damage-state only) (asm: if (lbResetParts) { miNumIKBodyParts =
         //     spec->numIKParts; per-part bounds-assert; IKBodyPart::Construct + PrepareIKPart; seed
@@ -1264,7 +1266,7 @@ namespace Deformation
 
             // Wheel world position: the rotation rows scaled by the local lanes, seeded with the
             // translation row (the console's vmaddfp cascade over rows +0x10..+0x40).
-            const Vector3 lvWheelWorld{
+            const Vector3 lvWheelWorld = {
                 lWorldTransform.xAxis.x * lrWheel.mPosition.x + lWorldTransform.yAxis.x * lrWheel.mPosition.y
                     + lWorldTransform.zAxis.x * lrWheel.mPosition.z + lWorldTransform.wAxis.x,
                 lWorldTransform.xAxis.y * lrWheel.mPosition.x + lWorldTransform.yAxis.y * lrWheel.mPosition.y
@@ -1275,13 +1277,13 @@ namespace Deformation
 
             // Nearest live sensor by WORLD sphere centre distance -- read through each sensor's
             // own mpWorldSpaceSphere pointer exactly as the asm does (`lwz sensor+0x1A0`).
-            f32 lfMinDistance = 3.4028235e38f;   // flt_8208F5EC == FLT_MAX seed
+            f32 lfMinDistance = FLT_MAX;   // flt_8208F5EC == FLT_MAX seed
             u8  lu8MinIndex   = 0xFFu;           // li r15, 0xFF sentinel
             for (s32 liSensor = 0; liSensor < liNumSensors; ++liSensor)
             {
                 const Sphere* lpWorldSphere = maDeformationSensors[liSensor].GetWorldSpaceSphere();
                 const Vector4& lrCentre = lpWorldSphere->mPositionRadius;
-                const Vector3 lvDelta{ lrCentre.x - lvWheelWorld.x, lrCentre.y - lvWheelWorld.y,
+                const Vector3 lvDelta = { lrCentre.x - lvWheelWorld.x, lrCentre.y - lvWheelWorld.y,
                                        lrCentre.z - lvWheelWorld.z, 0.0f };
                 // vmsum3fp128 + vrsqrtefp/2xNewton + vsel zero-guard == the guarded Magnitude.
                 const f32 lfDistance = vpu::Magnitude(lvDelta);
@@ -1333,7 +1335,7 @@ namespace Deformation
 
                 // r = centre - carPos; v = linVel + cross(angVel, r) (the vpermwi-0x63 cross pair;
                 // PS3 names gCrossProductPermuteConstant).
-                const Vector3 lvR{ lrSphere.x - lvCarPos.x, lrSphere.y - lvCarPos.y,
+                const Vector3 lvR = { lrSphere.x - lvCarPos.x, lrSphere.y - lvCarPos.y,
                                    lrSphere.z - lvCarPos.z, 0.0f };
                 const Vector3 lvPointVel = vpu::Add(lvLinearVel, vpu::Cross(lvAngularVel, lvR));
 
@@ -1345,9 +1347,9 @@ namespace Deformation
                 // The two packed 16-byte stores (inlined SweptSphere::Set): the world sphere
                 // verbatim, then (dir.xyz, speed * timestep) -- the vperm/vsldoi component
                 // assembly over unk_82CDA3C0/82CDA400, image-verified as exactly this packing.
-                maSweptSpheres[liSphere].Set(
-                    Vector3Plus{ lrSphere.x, lrSphere.y, lrSphere.z, lrSphere.w },
-                    Vector3Plus{ lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP });
+                const Vector3Plus lSphere = { lrSphere.x, lrSphere.y, lrSphere.z, lrSphere.w };
+                const Vector3Plus lSweep = { lvDir.x, lvDir.y, lvDir.z, lfSpeed * KF_CONSOLE_TIMESTEP };
+                maSweptSpheres[liSphere].Set(lSphere, lSweep);
             }
         }
 
@@ -1416,9 +1418,10 @@ namespace Deformation
                 {
                     const Vector4& lrL = maLocalSensorSpheres[liSphere].mPositionRadius;
                     const Vector4& lrW = maWorldSensorSpheres[liSphere].mPositionRadius;
-                    const Vector3  lSpecOff = ( liSphere < liNumSensors )
+                    const Vector3 lZeroOffset = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    const Vector3 lSpecOff = ( liSphere < liNumSensors )
                         ? mpDeformationSpec->GetDeformationSensorSpec(liSphere)->mInitialOffset
-                        : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+                        : lZeroOffset;
                     const f32 lfSpecRad = ( liSphere < liNumSensors )
                         ? mpDeformationSpec->GetDeformationSensorSpec(liSphere)->mfRadius
                         : 0.0f;
@@ -1522,7 +1525,8 @@ namespace Deformation
 
             if (maPartStates[luPartIndex] == static_cast<u8>(E_PART_STATE_HINGED))
             {
-                lpPart->SetJointVelocity(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+                const VecFloat lvfZeroVelocity = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lpPart->SetJointVelocity(lvfZeroVelocity);
             }
         }
     }
