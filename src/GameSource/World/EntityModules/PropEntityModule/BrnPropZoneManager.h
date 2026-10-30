@@ -148,7 +148,8 @@ namespace BrnWorld
     // ========================================================================
     // BrnWorld::PropZoneManager
     // ========================================================================
-    class PropZoneManager
+    // DecFIGS type alignment 128; ARTIST 0x827E04EC places this member at +0x280.
+    class CGS_ALIGN(128) PropZoneManager
     {
     public:
         typedef BrnPhysics::Props::PropZoneData          PropZoneData;
