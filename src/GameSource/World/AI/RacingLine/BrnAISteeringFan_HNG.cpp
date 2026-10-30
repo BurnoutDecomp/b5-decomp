@@ -235,7 +235,7 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
         // run twice) and 0x8277A1E0 (the 17th) -- ONE rounding of (v - min) * scale + 0.5. The PC
         // spelling rounded the product and the sum separately.
         mfWeighting[eFan_ExitHNG][liStep] =
-            std::fmaf(mfWeighting[eFan_ExitHNG][liStep] - lfMinimum, lfScale, 0.5f);
+            (mfWeighting[eFan_ExitHNG][liStep] - lfMinimum) * lfScale + 0.5f;
     }
 #else
     // The console's 0x82779DF4 arm: no section can be resolved, so all three rows read zero.
@@ -288,7 +288,7 @@ f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vec
     //   0x8277A2A8/0x8277A2AC  edge param  = R.y*D.x - round(R.x*D.y)
     //   0x8277A2C8/0x8277A2CC  ray param   = R.y*E.x - round(R.x*E.y)
     // The PC spelling rounded both products. (The |D| root below stays exact std::sqrt: rule 5.)
-    const f32 lfDenominator = std::fmaf(lfDirectionY, lfEdgeX, -(lfDirectionX * lfEdgeY));
+    const f32 lfDenominator = lfDirectionY * lfEdgeX - lfDirectionX * lfEdgeY;
     if (!(lfDenominator >  KF_FAN_EDGE_PARALLEL_EPSILON) &&
         !(lfDenominator < -KF_FAN_EDGE_PARALLEL_EPSILON))
         return KF_FAN_EDGE_NO_INTERSECTION;                 // parallel (or NaN) -- no crossing
@@ -297,11 +297,11 @@ f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vec
     const f32 lfToEdgeY    = lpEdge[liIndex].y - lA.y;
     const f32 lfReciprocal = 1.0f / lfDenominator;
 
-    const f32 lfEdgeParam = std::fmaf(lfToEdgeY, lfDirectionX, -(lfToEdgeX * lfDirectionY)) * lfReciprocal;
+    const f32 lfEdgeParam = (lfToEdgeY * lfDirectionX - lfToEdgeX * lfDirectionY) * lfReciprocal;
     if (lfEdgeParam < 0.0f || lfEdgeParam > 1.0f)
         return KF_FAN_EDGE_NO_INTERSECTION;                 // the crossing misses the segment
 
-    const f32 lfRayParam = std::fmaf(lfToEdgeY, lfEdgeX, -(lfToEdgeX * lfEdgeY)) * lfReciprocal;
+    const f32 lfRayParam = (lfToEdgeY * lfEdgeX - lfToEdgeX * lfEdgeY) * lfReciprocal;
     if (lfRayParam < 1.0f)
         return KF_FAN_EDGE_NO_INTERSECTION;                 // the crossing is short of lB
 
