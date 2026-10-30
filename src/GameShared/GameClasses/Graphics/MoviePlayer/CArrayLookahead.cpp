@@ -24,10 +24,10 @@
 namespace
 {
 // Look-ahead IIR filter weights (rodata: flt_820AFCDC / flt_8210EF68 /
-// flt_82001DA0). The heavier weight lands on the *neighbour* sample; see the
-// exact operand order recovered from the fmadds instructions below.
-const f32 KF_WEIGHT_HI = 0.67000002f;  // flt_820AFCDC
-const f32 KF_WEIGHT_LO = 0.33000001f;  // flt_8210EF68
+// flt_82001DA0). Keep the native literal mapping; the multiply/fmadds order
+// differs by channel and follows the original instructions below.
+const f32 KF_WEIGHT_033 = 0.33000001f;  // flt_820AFCDC: 0x3EA8F5C3
+const f32 KF_WEIGHT_067 = 0.67000002f;  // flt_8210EF68: 0x3F2B851F
 const f32 KF_HALF       = 0.5f;        // flt_82001DA0
 
 // Dissolve run cap seeded when detection is enabled (Initialize: li 0x64).
@@ -230,10 +230,14 @@ void CArrayLookahead::Filter1stOrderDiffLumaVarMean()
         CHistogram* lpPrev = mpArray[luPrev].mpHistogram;
         CHistogram* lpTwoBack = mpArray[luTwoBack].mpHistogram;
 
-        lpTwoBack->mfVariance = lpPrev->mfVariance * KF_WEIGHT_HI + lpTwoBack->mfVariance * KF_WEIGHT_LO;
+        lpTwoBack->mfVariance = lpPrev->mfVariance * KF_WEIGHT_033 + lpTwoBack->mfVariance * KF_WEIGHT_067;
         lpPrev->mfVariance    = (lpPrev->mfVariance + lpTwoBack->mfVariance) * KF_HALF;
 
-        lpTwoBack->mfMean = lpPrev->mfMean * KF_WEIGHT_HI + lpTwoBack->mfMean * KF_WEIGHT_LO;
+        // ARTIST rounds the two-back * 0.67 product first, then fmadds the
+        // previous-frame * 0.33 product. Keep that first single-precision
+        // rounding boundary explicit for the XDK optimizer.
+        volatile f32 lfTwoBackMeanWeighted = lpTwoBack->mfMean * KF_WEIGHT_067;
+        lpTwoBack->mfMean = lfTwoBackMeanWeighted + lpPrev->mfMean * KF_WEIGHT_033;
         lpPrev->mfMean    = (lpPrev->mfMean + lpTwoBack->mfMean) * KF_HALF;
     }
 
@@ -266,10 +270,10 @@ void CArrayLookahead::Filter1stOrderDiffLumaVarMean()
         CHistogram* lpOlder = mpArray[luTwoBack - 1u].mpHistogram;
 
         // IIR-smooth the difference channels the same way as the raw channels.
-        lpOlder->mfVarianceDelta = lpNewer->mfVarianceDelta * KF_WEIGHT_HI + lpOlder->mfVarianceDelta * KF_WEIGHT_LO;
+        lpOlder->mfVarianceDelta = lpNewer->mfVarianceDelta * KF_WEIGHT_033 + lpOlder->mfVarianceDelta * KF_WEIGHT_067;
         lpNewer->mfVarianceDelta = (lpOlder->mfVarianceDelta + lpNewer->mfVarianceDelta) * KF_HALF;
 
-        lpOlder->mfMeanDelta = lpNewer->mfMeanDelta * KF_WEIGHT_HI + lpOlder->mfMeanDelta * KF_WEIGHT_LO;
+        lpOlder->mfMeanDelta = lpOlder->mfMeanDelta * KF_WEIGHT_067 + lpNewer->mfMeanDelta * KF_WEIGHT_033;
         lpNewer->mfMeanDelta = (lpNewer->mfMeanDelta + lpOlder->mfMeanDelta) * KF_HALF;
     }
 }
