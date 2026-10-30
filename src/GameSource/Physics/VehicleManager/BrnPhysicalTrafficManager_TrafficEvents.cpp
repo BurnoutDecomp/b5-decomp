@@ -55,33 +55,6 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                   // FindModelIndexByEntityID / GetDeformableObject
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // ClearStoredContacts
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG / BRN_TRAFFIC_EVENTS_CONTROL / BRN_NETCRASH_DIAG)
-
-namespace
-{
-
-    // ⭐ THE ONE-LINE CONTROL. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    // Restores the pre-2026-08-29 behaviour of this file EXACTLY -- ProcessTrafficEvents returns
-    // without dispatching, which is what the named gate did -- so the control and the treatment
-    // come out of ONE binary and differ in one branch. Without it a "traffic now crashes" claim
-    // rests on comparing two different builds.
-
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    void LogOnce(bool& lrbLogged, const char* lpcMessage)
-    {
-        if (!lrbLogged)
-        {
-            lrbLogged = true;
-            if (CgsDev::Log::gpDebugPrint != 0)
-                *CgsDev::Log::gpDebugPrint << lpcMessage;
-        }
-    }
-
-    const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
-}
-
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -111,16 +84,6 @@ void PhysicalTrafficManager::ProcessTrafficEvents(
     CGS_ASSERT(lpManagerOutputInterface != 0, "lpManagerOutputInterface != NULL");  // :415
     CGS_ASSERT(lpVehicleOutputInterface != 0, "lpVehicleOutputInterface != NULL");  // :416
     CGS_ASSERT(lpDeformationInterface   != 0, "lpDeformationInterface != NULL");    // :417
-
-    // CONTROL ARM. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. See TrafficEventsControl().
-    if (TrafficEventsControl())
-    {
-        static bool s_bControlLogged = false;
-        LogOnce(s_bControlLogged,
-                "[T6-tevt] CONTROL: BRN_TRAFFIC_EVENTS_CONTROL=1 -- ProcessTrafficEvents "
-                "dispatches NOTHING this run (the pre-2026-08-29 gate) [DELETE-WHEN-STABLE]\n");
-        return;
-    }
 
     ProcessSetTrafficCrashingEvents(lpInputInterface, lpOutputRequestInterface,
                                     lpManagerOutputInterface, lpVehicleOutputInterface,
@@ -220,8 +183,6 @@ void PhysicalTrafficManager::ProcessSetTrafficCrashingEvents(
             SetTrafficVehicleNotCrashing(lPhysicsId);
         }
 
-        // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line per drained event, so a
-        // zero here is distinguishable from "the drain never ran" (the [T6-tevt] armed line).
     }
 }
 
@@ -428,7 +389,6 @@ void PhysicalTrafficManager::SetTrafficVehicleNotCrashing(EntityId lTrafficPhysi
     lpVehicle->mePhysicalTrafficState = static_cast<u32>(E_TRAFFIC_TYPE_PHYSICAL);
     lpBody->ClearCrashing();                                          // vtable +4
 
-    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
 }
 
 }   // namespace Vehicle
