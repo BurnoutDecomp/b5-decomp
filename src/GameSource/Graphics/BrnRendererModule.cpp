@@ -557,3 +557,49 @@ void BrnRendererModule::EndOfFrame(bool stalled)
         mbDispatchThreadTakeScreenshot = true;
     }
 }
+
+// ARTIST823FBCE0: native staged release retries each failing owner in place.
+bool BrnRendererModule::Release()
+{
+    switch (meReleaseStage)
+    {
+    case eRendererReleaseStart:
+        meReleaseStage++;
+    case eRendererReleaseCoronas:
+        if (!mCoronaManager.Release(*BrnResource::GetGraphicsAllocator()))
+            return false;
+        meReleaseStage++;
+    case eRendererReleaseBlobbyShadows:
+        meReleaseStage++;
+    case eRendererReleaseManager:
+        if (!CgsModule::ModuleSingleBuffered::Release())
+            return false;
+        meReleaseStage++;
+    case eRendererReleaseDone:
+        mePrepareStage = eRendererPrepareStart;
+        return true;
+    default:
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid Render Module Release State",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1608);
+        CgsDev::Assert::EndAssert();
+        return false;
+    }
+}
+
+// ARTIST82408A58: clear the shared back-buffer aliases before freeing samplers.
+void BrnRendererModule::Destruct()
+{
+    mSunCorona.Destruct();
+    rw::graphics::postfx::RenderTarget* const back = mAllocatedRenderTargets.GetBackBuffer()->GetRenderTarget();
+    if (back)
+    {
+        back->maColourTargets[0].mpTextureState = 0;
+        back->mpSection0State = 0;
+    }
+    mpGraphicsAllocator->Free(mTextureStateResource);
+    if (mpGlassFractureTextureState)
+        mpGlassFractureTextureState = 0;
+    mpGraphicsAllocator->Free(mEnvMapTextureStateResource);
+    msPostFx.Destruct();
+}
