@@ -50,7 +50,7 @@ void SetGlassFractureConstants(float lfFractureStrength,
         (lfFractureStrength > 0.0f) ? (1.0f / lfFractureStrength) : 0.0f;
 
     // Constant 30: {(1 - strength) * inv, inv, 0, 0}.
-    const Vector4 lv4Fracture{ (1.0f - lfFractureStrength) * lfInverseStrength,
+    const Vector4 lv4Fracture = { (1.0f - lfFractureStrength) * lfInverseStrength,
                                lfInverseStrength,
                                0.0f,
                                0.0f };
@@ -60,7 +60,7 @@ void SetGlassFractureConstants(float lfFractureStrength,
     CgsGraphics::mShaderConstantTable.SetShaderConstantData(31, lvUVOffsets);
 
     // Constant 32: {uv.x, uv.x * equalisation, uv.y, uv.y * equalisation}.
-    const Vector4 lv4UVScale{ lvUVScale.x,
+    const Vector4 lv4UVScale = { lvUVScale.x,
                               lvUVScale.x * lfEqualisationFactor,
                               lvUVScale.y,
                               lvUVScale.y * lfEqualisationFactor };

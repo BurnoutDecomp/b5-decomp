@@ -182,15 +182,15 @@ namespace physics
         // The .xyz-only writes are the `vrlimi128 vD,vOld,1,0` w-lane preservation; on the PC
         // those w payloads are their own members, so leaving them alone IS the faithful copy.
         void SetLinearVelocity(const rw::math::vpu::Vector3& lrV)
-        { mVel.x = lrV.x; mVel.y = lrV.y; mVel.z = lrV.z; }
+        { mVel.mV.x = lrV.mV.x; mVel.mV.y = lrV.mV.y; mVel.mV.z = lrV.mV.z; }
 
         void SetAngularVelocity(const rw::math::vpu::Vector3& lrV)
-        { mOmega.x = lrV.x; mOmega.y = lrV.y; mOmega.z = lrV.z; }
+        { mOmega.mV.x = lrV.mV.x; mOmega.mV.y = lrV.mV.y; mOmega.mV.z = lrV.mV.z; }
 
         void ResetForces(const rw::math::vpu::Vector3& lrForce)
         {
-            mForce.x  = lrForce.x; mForce.y  = lrForce.y; mForce.z  = lrForce.z;   // +0x90
-            mTorque.x = 0.0f;      mTorque.y = 0.0f;      mTorque.z = 0.0f;        // +0xA0
+            mForce.mV.x  = lrForce.mV.x; mForce.mV.y  = lrForce.mV.y; mForce.mV.z  = lrForce.mV.z;   // +0x90
+            mTorque.mV.x = 0.0f;      mTorque.mV.y = 0.0f;      mTorque.mV.z = 0.0f;        // +0xA0
         }
 
         void SetState(BodyState leState) { mState = leState; }        // +0x8C
@@ -218,9 +218,9 @@ namespace physics
         void AddForce(const rw::math::vpu::Vector3& lrForce, InputSpace leSpace)
         {
             (void)leSpace;   // only WORLD_SPACE witnessed -- see the banner above
-            mForce.x += lrForce.x * mInvm;
-            mForce.y += lrForce.y * mInvm;
-            mForce.z += lrForce.z * mInvm;
+            mForce.mV.x += lrForce.mV.x * mInvm;
+            mForce.mV.y += lrForce.mV.y * mInvm;
+            mForce.mV.z += lrForce.mV.z * mInvm;
         }
 
         // DWARF rigidbody.h:200 (the Matrix44Affine overload; the :203 QuatPos overload has
@@ -249,10 +249,10 @@ namespace physics
         // on the console the mCom w lane packs mId, and the xyz-only setter below IS that
         // preservation on the host (mId is its own member here).
         rw::math::vpu::Vector3 GetPosition() const
-        { { const rw::math::vpu::Vector3 lResult = { mCom.x, mCom.y, mCom.z, 0.0f }; return lResult; } }
+        { { const rw::math::vpu::Vector3 lResult = { mCom.mV.x, mCom.mV.y, mCom.mV.z, 0.0f }; return lResult; } }
 
         void SetPosition(const rw::math::vpu::Vector3& lrPosition)
-        { mCom.x = lrPosition.x; mCom.y = lrPosition.y; mCom.z = lrPosition.z; }
+        { mCom.mV.x = lrPosition.mV.x; mCom.mV.y = lrPosition.mV.y; mCom.mV.z = lrPosition.mV.z; }
 
     private:
         // The SDK keeps everything private and reaches it through Simulation, the two

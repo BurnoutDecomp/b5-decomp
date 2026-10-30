@@ -29,7 +29,7 @@ namespace BrnPhysics
         // DWARF InterpedParam3.h:60. The console asserts 0 <= liParamIndex < 3.
         f32 GetParam(s32 liParamIndex) const
         {
-            return (&mvParams.x)[liParamIndex];
+            return (&mvParams.mV.x)[liParamIndex];
         }
 
         // DWARF InterpedParam3.h:57 `VecFloat GetInterped(VecFloat) const`.
@@ -43,9 +43,9 @@ namespace BrnPhysics
         // i.e. a quadratic Bezier through A (t=0) and C (t=1) with B as the control point.
         VecFloat GetInterped(VecFloat lvfI) const
         {
-            const f32 lfT = lvfI.x;
-            const f32 lfAB = mvParams.x + (mvParams.y - mvParams.x) * lfT;   // lerp(A, B, t)
-            const f32 lfBC = mvParams.y + (mvParams.z - mvParams.y) * lfT;   // lerp(B, C, t)
+            const f32 lfT = lvfI.mV.x;
+            const f32 lfAB = mvParams.mV.x + (mvParams.mV.y - mvParams.mV.x) * lfT;   // lerp(A, B, t)
+            const f32 lfBC = mvParams.mV.y + (mvParams.mV.z - mvParams.mV.y) * lfT;   // lerp(B, C, t)
             const f32 lfResult = lfAB + (lfBC - lfAB) * lfT;                 // lerp(AB, BC, t)
             { const VecFloat lResult = { lfResult, lfResult, lfResult, lfResult }; return lResult; }
         }

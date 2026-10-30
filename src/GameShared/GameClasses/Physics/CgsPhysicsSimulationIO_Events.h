@@ -516,10 +516,10 @@ namespace PhysicsSimulationIO
             mIDB = luIDA;
 
             // vxor with the 0x80000000 lane splat == per-lane sign flip (all four lanes).
-            mNormal.x = -mNormal.x;
-            mNormal.y = -mNormal.y;
-            mNormal.z = -mNormal.z;
-            mNormal.w = -mNormal.w;
+            mNormal.mV.x = -mNormal.mV.x;
+            mNormal.mV.y = -mNormal.mV.y;
+            mNormal.mV.z = -mNormal.mV.z;
+            mNormal.mV.w = -mNormal.mV.w;
         }
     };
 

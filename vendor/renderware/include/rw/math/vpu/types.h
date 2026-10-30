@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vectorintrinsics.h>
+
 // Portable PC reconstruction of the RenderWare rwmath VPU vector/matrix TYPES
 // (EARenderWare rwmath 1.02.00, rw/math/vpu/*). The console SDK implements these
 // over hardware SIMD (a 16-byte `vector float` register held in `VectorIntrinsic mV`,
@@ -21,10 +23,10 @@ namespace vpu
     // the trivial initialisers the SDK exposes as type methods (SetZero/SetIdentity,
     // spelled `v.SetZero()` / `m.SetIdentity()` at the call sites) are provided here.
     struct CGS_ALIGN(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
-    struct CGS_ALIGN(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
-                                 typedef const Vector3& InParam; };   // w: unused 4th lane
-    struct CGS_ALIGN(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
-                                 typedef const Vector4& InParam; };
+    struct CGS_ALIGN(16) __declspec(passinreg) Vector3 { __vector4 mV; void SetZero() { mV = __vspltisw(0); }
+                                 typedef const Vector3 InParam; };   // w: unused 4th lane
+    struct CGS_ALIGN(16) __declspec(passinreg) Vector4 { __vector4 mV; void SetZero() { mV = __vspltisw(0); }
+                                 typedef const Vector4 InParam; };
 
     // ADDITIVE GROW (rw-physics solver group): the SDK quaternion -- one 16-byte lane
     // register, (x, y, z, w) with w the scalar part. The DWARF spells
@@ -47,7 +49,7 @@ namespace vpu
 
         void SetZero() { x = y = z = w = 0.0f; }
         Vector3 GetVector3() const { const Vector3 lResult = { x, y, z, 0.0f }; return lResult; }
-        void SetVector3(Vector3 lVector) { x = lVector.x; y = lVector.y; z = lVector.z; }
+        void SetVector3(Vector3 lVector) { x = lVector.mV.x; y = lVector.mV.y; z = lVector.mV.z; }
         float GetPlus() const { return w; }
         void SetPlus(float lfValue) { w = lfValue; }
     }; // w: the "plus" lane
