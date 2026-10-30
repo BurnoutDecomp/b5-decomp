@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Gui/View/CgsParticleSystem2d.h"
+#include <cfloat>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"  // Clamp/Max/Min/operator*/GetVector4_One
@@ -26,7 +27,7 @@ namespace
 {
     // -FLT_MAX -- the "never updated" time sentinel the ctor and Release write into
     // mfLastTime (X360 rodata flt_82035570).
-    const f32 KF_TIME_NEVER = -3.4028235e38f;
+    const f32 KF_TIME_NEVER = -FLT_MAX;
 
     // GetRGBA's clamp-to-[0,1]-then-scale-by-255 constant. DWARF (CgsParticleSystem2d.h:194):
     // `extern const VecFloat KF_COLOURSCALE;` -- the .rdata vector constant the ARTIST asm
@@ -52,14 +53,6 @@ namespace
 ParticleSystem2d::ParticleSystem2d()
 {
     mfLastTime = KF_TIME_NEVER;  // guest +0x9C
-
-    // guest +0x20E0..+0x20F0 (5 dwords) and +0x20F8..+0x2108 (5 dwords); the 1-dword gap
-    // at +0x20F4 is never written by the guest.
-    for (int i = 0; i < 5; ++i)
-    {
-        maZeroGroupA[i] = 0;
-        maZeroGroupB[i] = 0;
-    }
 
     // guest +0x2150 (mpAllocator), then the three render-state Resources on the same
     // gap-aware pattern (+0x2154.., +0x216C.., +0x2184..).
@@ -116,9 +109,9 @@ rw::RGBA ParticleSystem2d::GetRGBA(const Vector4& lrColour)
 {
     using namespace rw::math::vpu;
 
-    const Vector4 lZero  = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    const Vector4 lOne   = GetVector4_One();
-    const Vector4 lScaled = Clamp(lrColour, lZero, lOne) * Splat(KF_COLOURSCALE);
+    const ::Vector4 lZero = Splat(0.0f);
+    const ::Vector4 lOne   = GetVector4_One();
+    const ::Vector4 lScaled = Clamp(lrColour, lZero, lOne) * Splat(KF_COLOURSCALE);
 
     return rw::RGBA(PackChannel(lScaled.x),   // r
                     PackChannel(lScaled.y),   // g

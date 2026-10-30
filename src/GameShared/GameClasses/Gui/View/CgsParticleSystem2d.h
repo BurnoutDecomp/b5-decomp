@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"     // Vector2 / Vector4 (rw::math::vpu layout types)
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "rw/rwcore_structs.h"  // rw::RGBA / rw::Resource / rw::IResourceAllocator
 
 namespace renderengine { class TextureState; class BlendState; class DepthStencilState; }
@@ -84,35 +86,37 @@ namespace CgsGui
         static rw::RGBA GetRGBA(const Vector4& lrColour);
 
     private:
-        // guest +0x00 .. +0x9B: emitter/particle tunables + mfSystemTimeBorn (see the
-        // offset table above); unattested by the reconstructed bodies, kept as padding.
-        u8 maPad0[156];
-        f32 mfLastTime;         // guest +0x9C; ctor + Release write -FLT_MAX (DWARF h:199)
-
-        // guest +0xA0 .. +0xB7: mv2LastEmitterPos / miMaxParticles / miNumActiveParticles
-        // per the DWARF order -- none written by the reconstructed bodies, kept as padding.
-        u8 maPad1[24];
-
-        // The three per-particle arrays Release frees back to mpAllocator (guest
-        // +0xB8/+0xBC/+0xC0; DWARF h:204-206).
-        bool*          mabIsActive;
-        ParticleInfo*  maParticles;
+        Vector2 mv2Gravity;
+        Vector2 mv2EmitterPos;
+        Vector2 mv2EmitterDir;
+        Vector2 mv2EmitterVol;
+        f32 mfEmitterInnerCone;
+        f32 mfEmitterOuterCone;
+        f32 mfEmitterLifetime;
+        f32 mfEmitterRate;
+        f32 mfParticleLifetime;
+        f32 mfParticleSpeed;
+        f32 mfParticleStartSize;
+        f32 mfParticleEndSize;
+        f32 mfParticleMinSpin;
+        f32 mfParticleMaxSpin;
+        Vector4 mv4ParticleStartColour;
+        Vector4 mv4ParticleEndColour;
+        f32 mfParticleAnimRate;
+        BillboardRenderer::eAnimMode meParticleAnimMode;
+        f32 mfSystemTimeBorn;
+        f32 mfLastTime;
+        Vector2 mv2LastEmitterPos;
+        s32 miMaxParticles;
+        s32 miNumActiveParticles;
+        bool* mabIsActive;
+        ParticleInfo* maParticles;
         BillboardInfo* maBillboards;
-
-        // guest +0xC4 .. +0x20DF: the bulk of the object (mBillboardRenderer by value,
-        // frame counts, mRandom, ...) -- untouched by the reconstructed bodies.
-        u8 maPad2[8220];
-
-        // guest +0x20E0 .. +0x2108: two zero-filled 5-dword groups with a 1-dword gap at
-        // +0x20F4, matching the ctor's do-while unroll (same gap-aware pattern as
-        // BrnGui::BoostBarRenderer's / BrnGui::MainMapRenderer's maZeroGroups). This region
-        // sits inside the still-unattributed mBillboardRenderer/mRandom span, so the slots
-        // keep neutral names until their owning functions land.
-        u32 maZeroGroupA[5];    // guest +0x20E0..+0x20F0
-        u32 muGapA;             // guest +0x20F4 -- never written by the ctor
-        u32 maZeroGroupB[5];    // guest +0x20F8..+0x2108
-
-        u8 maPad3[68];          // guest +0x210C .. +0x214F (untouched)
+        BillboardRenderer mBillboardRenderer;
+        s32 miFramesX;
+        s32 miFramesY;
+        s32 miNumFrames;
+        CgsNumeric::Random mRandom;
 
         // The render-state tail (guest +0x2150 .. +0x219F; DWARF h:215-225). The ctor
         // zero-fills mpAllocator and the three Resources (on X360 each Resource is the
