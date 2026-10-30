@@ -257,6 +257,8 @@ RW_SIZE_ASSERT(rw::LinearResourceAllocator_vtbl, 56);
 
 struct RGBA {  // sizeof = 4
     RGBA() : m_rgba(0) {}
+    struct NoInitTag {};
+    explicit RGBA(NoInitTag) {}
     RGBA(uint8_t lu8Red, uint8_t lu8Green, uint8_t lu8Blue, uint8_t lu8Alpha);
 
     uint32_t m_rgba;  // +0
