@@ -4,6 +4,7 @@
 #include "GameSource/World/AI/RacingLine/BrnHardNoGoMap.h"            // HardNoGoMap
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"    // RacingLineGenerator + the gates
 
+#include <cfloat>   // FLT_MAX (0x7F7FFFFF)
 #include <cmath>    // std::sqrt (the vrsqrtefp + two-Newton-step length in FanIntersectsEdge), std::fmaf
 
 // BrnAI::SteeringFan -- the HARD-NO-GO / ROUTE-EDGE contributors, partfile 3 of the weighting
@@ -58,7 +59,7 @@ namespace
     // IncludeHardNoGo @0x82779F98 / @0x82779FA4 -- flt_8204F664 / flt_82035570, the seeds of the
     // eFan_ExitHNG min/max scan. The +FLT_MAX seed is compared against again at 0x8277A0D8 to
     // detect "the row was entirely zero", so it must be this exact value.
-    const f32 KF_FAN_FLOAT_MAX = 3.4028235e38f;
+    const f32 KF_FAN_FLOAT_MAX = FLT_MAX;
 
     // IncludeRouteEdgeIntersection @0x8277A4C4 -- flt_82F302B8. An edge hit at this distance or
     // beyond contributes nothing.

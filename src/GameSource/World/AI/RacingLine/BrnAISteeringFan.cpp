@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+#include <cfloat>   // FLT_MAX (0x7F7FFFFF)
 #include <cmath>    // std::cos (XMVectorCos), std::fabs
 #include <cstdlib>  // [DIAG] getenv (BRN_AI_FAN_DIAG)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_AI_FAN_DIAG witness
@@ -106,7 +107,7 @@ namespace BrnAI
     s32 SteeringFan::GetBestIndex()
     {
         s32 liBest   = 0;
-        f32 lfBest   = -3.4028235e38f;
+        f32 lfBest   = -FLT_MAX;
         for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
         {
             if (mfCumulativeWeighting[liStep] > lfBest)
