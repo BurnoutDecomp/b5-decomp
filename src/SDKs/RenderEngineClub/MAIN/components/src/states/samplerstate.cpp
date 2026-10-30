@@ -1,5 +1,5 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/samplerstate.h"
-#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
+#include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   renderengine::SamplerState::GetResourceDescriptor @ 0x82B63588
@@ -13,45 +13,46 @@
 
 namespace renderengine
 {
-    ResourceDescriptorEntry* SamplerState::GetResourceDescriptor(ResourceDescriptorEntry* lpDescriptor)
+    rw::ResourceDescriptor SamplerState::GetResourceDescriptor(const Parameters&)
     {
-        for (ResourceDescriptorEntry* lpEntry = lpDescriptor; lpEntry != lpDescriptor + 5; ++lpEntry)
+        rw::ResourceDescriptor lDescriptor;
+        for (u32 i = 0; i < 5; ++i)
         {
-            lpEntry->muSize = 0;
-            lpEntry->muAlignment = 1;
+            lDescriptor.m_baseResourceDescriptors[i].m_size = 0;
+            lDescriptor.m_baseResourceDescriptors[i].m_alignment = 1;
         }
-
-        lpDescriptor[0].muSize = 0x20;
-        lpDescriptor[0].muAlignment = 4;
-        return lpDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = 0x20;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        return lDescriptor;
     }
 
-    SamplerStateData* SamplerState::Initialize(SamplerStateData** lppState, const SamplerStateParameters* lpParams)
+    SamplerState* SamplerState::Initialize(const rw::Resource& lrResource, const Parameters& lrParams)
     {
-        SamplerStateData* lpState = *lppState;
+        SamplerState* lpState = static_cast<SamplerState*>(lrResource.m_baseResources[0]);
+        const Parameters* lpParams = &lrParams;
 
         lpState->mu8AddressU = static_cast<u8>(lpParams->muAddressU);
         lpState->mu8AddressV = static_cast<u8>(lpParams->muAddressV);
         lpState->mu8AddressW = static_cast<u8>(lpParams->muAddressW);
-        lpState->mbState11Zero = static_cast<u8>(lpParams->mbState11Zero == 0);
-        lpState->mu8MinLevel = static_cast<u8>(lpParams->muMinLevel);
-        lpState->mu8DepthTextureFunction = static_cast<u8>(lpParams->muDepthTextureFunction);
-        lpState->mu8Gamma = static_cast<u8>(lpParams->muGamma);
-        lpState->mbState15 = static_cast<u8>(lpParams->mbState15 != 0);
-        lpState->mbState16 = static_cast<u8>(lpParams->mbState16 != 0);
-        lpState->mu8State17 = static_cast<u8>(lpParams->muState17);
-        lpState->mu8Bias = static_cast<u8>(lpParams->muBias);
-        lpState->mu8MaxLevel = static_cast<u8>(lpParams->muMaxLevel);
-        lpState->mu8MaxAnisotropy = static_cast<u8>(lpParams->muMaxAnisotropy);
+        lpState->mu8ClampPolicy = static_cast<u8>(lpParams->mbPointBorderEnable == 0);
+        lpState->mu8MipFilter = static_cast<u8>(lpParams->muMipFilter);
+        lpState->mu8HGradientExpBias = static_cast<u8>(lpParams->miHGradientExpBias);
+        lpState->mu8VGradientExpBias = static_cast<u8>(lpParams->miVGradientExpBias);
+        lpState->mu8BorderColor = static_cast<u8>(lpParams->mbWhiteBorder != 0);
+        lpState->mbForceBCWToMax = static_cast<u8>(lpParams->mbWhiteBorderW != 0);
+        lpState->mu8TrilinearClamp = static_cast<u8>(lpParams->muTrilinearThreshold);
         lpState->mu8MagFilter = static_cast<u8>(lpParams->muMagFilter);
         lpState->mu8MinFilter = static_cast<u8>(lpParams->muMinFilter);
-        lpState->mu8MipFilter = static_cast<u8>(lpParams->muMipFilter);
-        lpState->mu8Convolution = static_cast<u8>(lpParams->muConvolution);
-        lpState->muColor = lpParams->muColor;
-        lpState->muRemap = lpParams->muRemap;
-        lpState->mbState22 = static_cast<u8>(lpParams->mbState22 != 0);
+        lpState->mu8MagFilterZ = static_cast<u8>(lpParams->muMagFilterZ);
+        lpState->mu8MinFilterZ = static_cast<u8>(lpParams->muMinFilterZ);
+        lpState->mu8MinMipLevel = static_cast<u8>(lpParams->muMinMipLevel);
+        lpState->mu8MaxMipLevel = static_cast<u8>(lpParams->muMaxMipLevel);
+        lpState->mu8MaxAnisotropy = static_cast<u8>(lpParams->muMaxAnisotropy);
+        lpState->mfMipLodBias = lpParams->mfMipLodBias;
+        lpState->mfAnisotropyBias = lpParams->mfAnisotropyBias;
+        lpState->mbSeparateZFilterEnable = static_cast<u8>(lpParams->mbSeparateZFilterEnable != 0);
         lpState->muInitialized = 1;
-        lpState->mbState26 = static_cast<u8>(lpParams->mbState26 != 0);
+        lpState->mbState26 = static_cast<u8>(lpParams->mbUnidentified44 != 0);
         return lpState;
     }
 }

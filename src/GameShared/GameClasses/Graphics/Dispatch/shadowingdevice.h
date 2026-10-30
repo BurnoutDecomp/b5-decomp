@@ -22,6 +22,7 @@ namespace renderengine
     class  DepthStencilState;
     class  RasterizerState;
     struct BlendMaterialState;
+    class  SamplerState;
     class  TextureState;      // pc/gcm/renderengine/renderstates.h -- the whole-unit bind (SetState overload)
 }
 
@@ -72,7 +73,7 @@ namespace shadow
         static bool SetVertexDescriptor(const renderengine::VertexDescriptorData* lpVertexDescriptor);
 
         // Bind a sampler state object through the shadow cache (X360 0x822769E0).
-        static void* SetState(void* lpState, u32 luSamplerId);
+        static void SetState(const renderengine::SamplerState* lpState, u32 luSamplerId);
 
         // Bind a texture (resource) through the shadow cache (X360 0x82276C70).
         static void* SetResource(void* lpTexture, u32 luSamplerId);
@@ -84,7 +85,7 @@ namespace shadow
         // the raster, and writes ALL THREE per-unit shadows. Callers: BrnPostFxShader::Render
         // (the 3D tint volume + scene depth), BrnPostFxBloom, BrnSunCorona, Im3dBlend, the corona
         // renderer. No unit-range assert in this one -- the console has none (faithful).
-        static void* SetState(const renderengine::TextureState* lpState, u32 luSamplerId);
+        static void SetState(const renderengine::TextureState* lpState, u32 luSamplerId);
 
         // DecFIGS shadowingdevice.h:484; ARTIST 823FE530 inlines this
         // StateBlockShadow::m_pMeshState transition over the existing two homes.
