@@ -5,6 +5,7 @@ D3DDevice* gpD3DDevice = 0;
 
 namespace renderengine
 {
+    Device::State Device::m_currentState = Device::STATE_COLD;
     __declspec(align(16)) PixelBuffer gOriginalColorBuffer;
     __declspec(align(16)) PixelBuffer gOriginalDepthStencilBuffer;
     u32 guTilingEnabled = 0;
