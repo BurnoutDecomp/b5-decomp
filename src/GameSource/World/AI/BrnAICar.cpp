@@ -267,8 +267,8 @@ namespace BrnAI
             // keeps fnmsubs' sign (-(+0) = -0), as FX-GATE spells ComputeSpeedRatio's fnmsubs.
             const f32 lfOpponent = static_cast<f32>(miOpponentIndex);
             if (meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE)
-                return -std::fmaf(lfOpponent, KF_DESIRED_OPP_SCALE_RACE, -KF_DESIRED_OPP_BASE_RACE);
-            return -std::fmaf(lfOpponent, KF_DESIRED_OPP_SCALE_DEFAULT, -KF_DESIRED_OPP_BASE_DEFAULT);
+                return -(lfOpponent * KF_DESIRED_OPP_SCALE_RACE - KF_DESIRED_OPP_BASE_RACE);
+            return -(lfOpponent * KF_DESIRED_OPP_SCALE_DEFAULT - KF_DESIRED_OPP_BASE_DEFAULT);
         }
 
         switch (meSpeedSelectionMethod)
