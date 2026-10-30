@@ -1,5 +1,6 @@
 #include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"
 #include "types.hpp"
+#include <xtl.h>
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Add
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGraphics::EnvironmentMap::Construct @ 0x827B40D0
@@ -87,9 +88,9 @@ namespace BrnGraphics
 
     void EnvironmentMap::Construct()
     {
-        mCameraPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
         mfFOV = 0.0f;
         mfAspectRatio = 0.0f;
+        __stvx(XMVectorZero(), &mCameraPosition, 0);
 
         for (u32 luEnvMapFace = 0; luEnvMapFace < E_FACE_NUM; ++luEnvMapFace)
         {
