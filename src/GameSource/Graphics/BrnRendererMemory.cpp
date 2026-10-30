@@ -6,6 +6,12 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
 #include "GameSource/Resource/BrnResourceAllocator.h"
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
+
+// ARTIST 82F2423E has initial image value 1. Both native blits read this byte;
+// the descriptive name records its role where no original symbol survived.
+bool gBlitHalfPixelOffset82F2423E = true;
 
 namespace
 {
@@ -491,4 +497,113 @@ void BrnRendererMemory::CreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocato
     lpSunCorona->Construct(lpAllocator);
 
     mapRenderTarget[E_RENDER_TARGET_SUN_CORONA] = lpSunCorona;
+}
+
+// ARTIST 82406A68. The two quincunx booleans are not read by this X360 body.
+void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& im2d,
+    CgsRenderTarget* sourceBase, CgsRenderTarget* sourceOverlay, bool, bool)
+{
+    using namespace CgsGraphics;
+    typedef rw::math::vpu::Vector4 Vector4;
+    rw::graphics::postfx::RenderTarget* const base = sourceBase->GetRenderTarget();
+    rw::graphics::postfx::RenderTarget* const overlay = sourceOverlay->GetRenderTarget();
+    const renderengine::TextureState* const baseState = base->maColourTargets[0].mpTextureState;
+    const renderengine::TextureState* const overlayState = overlay->maColourTargets[0].mpTextureState;
+    const Im2dTransform transform = Im2dTransform::GetDefault();
+    im2d.BeginRendering();
+    im2d.SetTransform(transform);
+    im2d.SetState(baseState, 0);
+    im2d.SetState(overlayState, 1);
+
+    const renderengine::ProgramBufferData* const vertexProgram = mpCompositeBlitVertexProgramBuffer;
+    const renderengine::ProgramBufferData* const pixelProgram = mpCompositeBlitPixelProgramBuffer;
+    shadow::Device::SetVertexProgram(vertexProgram);
+    shadow::Device::SetPixelProgram(pixelProgram);
+
+    Basic2dColouredTexturedVertex vertices[4] =
+    {
+        { { 0.0f, 0.0f }, { 255, 255, 255, 255 }, { 0.0f, 0.0f } },
+        { { 0.0f, 1.0f }, { 255, 255, 255, 255 }, { 0.0f, 1.0f } },
+        { { 1.0f, 0.0f }, { 255, 255, 255, 255 }, { 1.0f, 0.0f } },
+        { { 1.0f, 1.0f }, { 255, 255, 255, 255 }, { 1.0f, 1.0f } }
+    };
+    Vector4 uvOffsets = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector4 uvScales = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (gBlitHalfPixelOffset82F2423E)
+    {
+        uvOffsets.x = (1.0f / static_cast<f32>(base->muWidth)) * 0.5f;
+        uvOffsets.y = (1.0f / static_cast<f32>(base->muHeight)) * 0.5f;
+        uvOffsets.z = (1.0f / static_cast<f32>(overlay->muWidth)) * 0.5f;
+        uvOffsets.w = (1.0f / static_cast<f32>(overlay->muHeight)) * 0.5f;
+    }
+
+    renderengine::ProgramVariableHandle offsetsHandle;
+    renderengine::ProgramVariableHandle scalesHandle;
+    renderengine::ProgramBuffer::GetVariableHandleByName(mpCompositeBlitVertexProgramBuffer,
+        reinterpret_cast<const u8*>("gUVOffsets"), &offsetsHandle);
+    renderengine::ProgramBuffer::GetVariableHandleByName(mpCompositeBlitVertexProgramBuffer,
+        reinterpret_cast<const u8*>("gUVScales"), &scalesHandle);
+    renderengine::FloatShaderStateIterator iterator;
+    renderengine::Device::BeginShaderStates(offsetsHandle, iterator);
+    *iterator.m_dest++ = uvOffsets;
+    renderengine::Device::BeginShaderStates(scalesHandle, iterator);
+    *iterator.m_dest++ = uvScales;
+
+    const f32 inverseWidth = 1.0f / static_cast<f32>(base->muWidth);
+    const f32 inverseHeight = 1.0f / static_cast<f32>(base->muHeight);
+    const Vector4 quincunxOffsets =
+    {
+        0.166f * inverseWidth, -0.166f * inverseHeight,
+        0.0f * inverseWidth, 0.0f * inverseHeight
+    };
+    renderengine::ProgramVariableHandle quincunxHandle;
+    renderengine::ProgramBuffer::GetVariableHandleByName(mpCompositeBlitPixelProgramBuffer,
+        reinterpret_cast<const u8*>("gQuincunxOffsets"), &quincunxHandle);
+    renderengine::Device::BeginShaderStates(quincunxHandle, iterator);
+    *iterator.m_dest = quincunxOffsets;
+
+    im2d.Render(static_cast<renderengine::PrimitiveType>(D3DPT_TRIANGLESTRIP), vertices, 4);
+    im2d.EndRendering();
+    shadow::Device::ResetShadowing();
+}
+
+// ARTIST 82406EA8. Reinitializes the shared blit sampler for the live depth texture.
+void BrnRendererMemory::BlitDepth(CgsGraphics::Im2d& im2d, CgsRenderTarget* source)
+{
+    using namespace CgsGraphics;
+    rw::graphics::postfx::RenderTarget* const target = source->GetRenderTarget();
+    D3DDevice_SetShaderGPRAllocation(::gpD3DDevice, 0, 64, 64);
+    const Im2dTransform transform = Im2dTransform::GetDefault();
+    im2d.BeginRendering();
+    im2d.SetTransform(transform);
+
+    renderengine::TextureState::Parameters parameters;
+    parameters.muMagFilter = 0;
+    parameters.muMinFilter = 0;
+    parameters.mpTexture = target->mDepthTarget.mpTexture;
+    mpBlitTextureState = renderengine::TextureState::Initialize(mBlitTextureStateResource, parameters);
+    im2d.SetState(mpBlitTextureState);
+    const renderengine::ProgramBufferData* const vertexProgram = mpDepthBlitVertexProgramBuffer;
+    const renderengine::ProgramBufferData* const pixelProgram = mpDepthBlitPixelProgramBuffer;
+    shadow::Device::SetVertexProgram(vertexProgram);
+    shadow::Device::SetPixelProgram(pixelProgram);
+
+    f32 offsetX = 0.0f;
+    f32 offsetY = 0.0f;
+    if (gBlitHalfPixelOffset82F2423E)
+    {
+        offsetX = (1.0f / static_cast<f32>(target->muWidth)) * 0.5f;
+        offsetY = (1.0f / static_cast<f32>(target->muHeight)) * 0.5f;
+    }
+    Basic2dColouredTexturedVertex vertices[4] =
+    {
+        { { 0.0f, 0.0f }, { 255, 255, 255, 255 }, { offsetX, offsetY } },
+        { { 0.0f, 1.0f }, { 255, 255, 255, 255 }, { offsetX, offsetY + 1.0f } },
+        { { 1.0f, 1.0f }, { 255, 255, 255, 255 }, { offsetX + 1.0f, offsetY + 1.0f } },
+        { { 1.0f, 0.0f }, { 255, 255, 255, 255 }, { offsetX + 1.0f, offsetY } }
+    };
+    im2d.Render(static_cast<renderengine::PrimitiveType>(D3DPT_RECTLIST), vertices, 3);
+    im2d.EndRendering();
+    D3DDevice_SetShaderGPRAllocation(::gpD3DDevice, 0, 0, 0);
+    shadow::Device::ResetShadowing();
 }

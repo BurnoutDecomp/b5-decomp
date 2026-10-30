@@ -26,9 +26,7 @@
 //   - mu32ScreenWidth / mu32ScreenHeight take the front-buffer resolution from the device parameters.
 // ARTIST uses four-byte pointers; the complete native object is0x70 bytes.
 //
-// X360-ATTESTATION GATE: only the methods the X360 ARTIST ledger attests for this class are declared
-// (Construct + the Create* render-target helpers it calls + CreateBackBuffer). The many PS3-only
-// getters/Blit paths the DWARF lists are left out.
+// Native declarations are gated on ARTIST callers and bodies. PS3-only members remain excluded.
 
 namespace renderengine
 {
@@ -133,10 +131,8 @@ struct BrnRendererMemory
     // (`addi r4, r29, 0xB30` / `mr r5, r28` / `lwz r6, 0x25C(r29)` / `li r7, 0` @0x82408C00 /
     // `li r8, 0` @0x82408BF8), which is exactly this arity. Hex-Rays prints four and loses both bools.
     //
-    // BODIED 2026-09-05 (the quarter-res particle chain). lIm2d is CARRIED AND UNUSED: on the
-    // console the quad goes through CgsGraphics::Basic2dColouredTexturedVertex_::Render, whose PC
-    // realisation (CgsIm2d.cpp:150-193) is the fixed-function 2D GUI path and cannot carry a bound
-    // vertex/pixel program pair. See the definition's banner and brn_im2dblit.fx.
+    // Native path binds both source samplers and the shader pair, uploads UV/quincunx constants,
+    // then draws four triangle-strip vertices through the supplied Im2d. ARTIST ignores both bools.
     void BlitComposite(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource0,
                        CgsRenderTarget* lpSource1, bool lbFlag0, bool lbFlag1);
 
@@ -145,10 +141,8 @@ struct BrnRendererMemory
     // the function that finally initialises mpBlitTextureState (+0x44) out of mBlitTextureStateResource
     // (+0x48), which answers the "Initialize'd lazily on first use" note on Construct.
     //
-    // BODIED 2026-09-05 (the quarter-res particle chain). Same lIm2d note as BlitComposite above;
-    // and the console's per-call TextureState::Initialize over the source's DEPTH texture is
-    // replaced by the source render target's OWN depth TextureState (GetDepthTextureState()),
-    // which already holds that same texture -- see the definition's banner.
+    // Native path initializes that shared sampler on each call, binds the depth shaders and draws
+    // three RECTLIST vertices through the supplied Im2d, with temporary 64/64 GPR allocation.
     void BlitDepth(CgsGraphics::Im2d& lIm2d, CgsRenderTarget* lpSource);
 
 private:
