@@ -57,6 +57,13 @@ namespace renderengine
     class Device
     {
     public:
+        enum State
+        {
+            STATE_NA = -1, STATE_COLD = 0, STATE_INITIALIZE = 1, STATE_START = 2,
+            STATE_FORCEENUMSIZEINT = 0x7FFFFFFF
+        };
+        static State GetState() { return m_currentState; }
+
         // ARTIST 82B61540 and 82B61960: native creation parameters, copied by
         // value in seven GPR doublewords plus44 stack bytes by Renderer.
         struct Parameters
@@ -144,6 +151,7 @@ namespace renderengine
         static void UnSetResource(D3DResource* lpResource);
 
     protected:
+        static State m_currentState; // ARTIST 83271600
         // DecFIGS device.h:1662; ARTIST dword_83271614.
         static RenderTargetState* m_renderTargetState;
     };
