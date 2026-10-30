@@ -262,7 +262,6 @@ namespace CgsDev
     // calls Leave before the assert), then assert the released pointer is the live singleton.
     void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
     {
-        if (lruDepth != 0u) --lruDepth;
         gDebugManagerSection.Leave();
         CGS_ASSERT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance");
     }
@@ -343,8 +342,6 @@ namespace CgsDev
 
         lpComponent->OnRegister();
 
-        lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
-        if (lbIniComponent) ActivateComponent(lpComponent);
     }
 
     // X360 0x8282E1E0. Register a "simple" component: a single bool row wired to its mbActive flag.
@@ -381,8 +378,6 @@ namespace CgsDev
         GetUI().GetVariableManager().RegisterVariable(DebugUI::Variant(&lpComponent->mbActive), lpcPath, lpcName);
 
         lpComponent->OnRegister();
-        lpComponent->GetComponentPath(lacIniPath, sizeof(lacIniPath));
-        if (lbIniComponent) ActivateComponent(lpComponent);
     }
 
     // ARTIST 0x828320F0. A full component starts life as a function row. Its first activation
@@ -533,7 +528,7 @@ namespace CgsDev
         const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
 
         char lacText[64];
-        std::snprintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
+        _snprintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
         mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
     }
 
@@ -550,8 +545,9 @@ namespace CgsDev
         const u32 luColour = 0xFF32FFFFu;   // carved (dword_82F32268)
         char lacBuffer[1024];
 
-        std::snprintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
+        _snprintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
                       lpData->miLine, lpData->mpcFile ? lpData->mpcFile : "?");
+        lacBuffer[sizeof(lacBuffer) - 1] = 0;
         lrRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
 
         lrRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
@@ -564,7 +560,7 @@ namespace CgsDev
             char lacAddr[24];
             if (!lpcName)
             {
-                std::snprintf(lacAddr, sizeof(lacAddr), "    0x%08X",
+                _snprintf(lacAddr, sizeof(lacAddr), "    0x%08X",
                               static_cast<u32>(lpData->mStack.GetStackAddress(liIndex)));
                 lpcName = lacAddr;
             }
