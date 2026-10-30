@@ -1,324 +1,223 @@
-#include <xtl.h>   // VK_END / GetAsyncKeyState / MSG / PeekMessage / Translate/DispatchMessage (the assert
-                        // message pump). Included FIRST so winuser.h is fully pulled in before any merged
-                        // renderengine header (reached via device.h below) can suppress it with WIN32_LEAN_AND_MEAN.
-#undef DrawText         // winuser.h defines DrawText as a macro (->DrawTextW); undef it so this file's own
-#ifdef AddMonitor
-#undef AddMonitor
+#include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
+#ifdef DrawText
+#undef DrawText
 #endif
-                        // DrawText method (the assert-overlay text path) resolves. (device.h's later guarded
-                        // re-include won't redefine it.)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mpRender Begin/End/HasRenderBuffer
-#include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.h"  // the call-stack symbol resolver
-#include "GameShared/GameClasses/System/CgsHardwareInit.h"  // IsHardwareWantingToShutdown (the window-close request)
-#include "GameSource/Game/BrnGameModule.hpp"
-#undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
-
-#include <cstdio>    // snprintf (the X360 used CgsCore::SPrintf)
-#include <cstdlib>   // getenv (the harness assert-release marker)
-#include <cstring>   // strncpy / strrchr
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
+#include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"
+#include "GameShared/GameClasses/System/Threads/CgsThreadLayout.h"
+#include "rw/core/debug/DebugCriticalSection.h"
+#include <cstring>
 
 namespace CgsDev
 {
 namespace Assert
 {
-
     Manager gAssertManager;
+    Debug2DImmediateRender* Manager::mpRender;
+    MapFile::Reader* Manager::mpMapFileReader;
+    const char* Manager::mpcMapFileName;
     CgsSystem::ThreadLayout* Manager::mpThreadLayout;
+    extern rw::core::debug::detail::DebugCriticalSection gAssertMutex;
 
-    // The call-stack symbol resolver instance (X360: a static MinimalMemoryReader the bring-up wires via
-    // SetMapFileReader). Lazily wired on the first assert below.
-    static MapFile::MinimalMemoryReader gMinimalMemoryReader;
-
-
-    // The on-screen assert text colour (carved from the X360 DebugManager::RenderAssert text event,
-    // dword_82F32268 = 0xFF32FFFF - a high-contrast light yellow, packed 0xAABBGGRR).
-    static const u32 KU_ASSERT_TEXT_COLOUR = 0xFF32FFFFu;
-
-    // Layout (X360 DrawLines/DrawLine/DisplayCallstack): text starts at x=40 and each drawn line
-    // advances the running Y by 14; DrawLines wraps a string at 50 columns or a newline.
-    static const s32 KI_TEXT_LEFT      = 40;
-    static const s32 KI_LINE_ADVANCE   = 14;
-    static const s32 KI_MAX_LINE_CHARS = 50;
-
-    // X360 KF_VECTOR_FONT_SIZE (CgsAssertManager.cpp:56) is a SINGLE float, so the glyphs are SQUARE -
-    // and it is paired with the 14px line advance above, so it is ~14 (the glyph cell is 8 and caps span
-    // the full cell, so a glyph is about this many pixels tall). The exact constant flows through SIMD
-    // (VPU) code the decompiler mangles, so this is the square size that fills the 14px line spacing; an
-    // earlier {10,12} was a too-small, non-square guess (the reason the text rendered small + narrow).
-    static const f32 KF_VECTOR_FONT_SIZE = 14.0f;
-
+    // DecFIGS B1CA00 stores only these three fields; ARTIST independently pins
+    // all offsets/roles and their zero initial values at global83019000.
     Manager::Manager()
-        : mpRender(0)
-        , mpMapFileReader(0)
-        , mpcMapFileName(0)
-        , mpAssertHandlerList(0)
-        , mbInitialised(false)
-        , mbGotAssert(false)
-        , mbInAssert(false)
-        , miDrawPositionY(0)
-        , miAssertCount(0)
-    {
-        mCurrentAssert.mpMapReader = 0;
-        mCurrentAssert.mpcFile = 0;
-        mCurrentAssert.miLine = 0;
-        mCurrentAssert.macAssertMessage[0] = '\0';
-    }
-
-    // X360 SetRenderer (CgsAssertManager.h:117): the debug bring-up hands the assert manager the 2D
-    // immediate renderer (DebugManager::ConstructRenderer). Wire it up + set up the assert's own vector
-    // font (a separate instance from the HUD renderer's). The exact KF_VECTOR_FONT_SIZE is a data-section
-    // follow-on; the size below matches the 14px line advance.
-    void Manager::SetRenderer(Debug2DImmediateRender* lpRenderer)
-    {
-        mpRender = lpRenderer;
-        mVectorFont.Construct();
-        mVectorFont.SetRenderer(lpRenderer);
-        Vector2 lSize = { KF_VECTOR_FONT_SIZE, KF_VECTOR_FONT_SIZE, 0.0f, 0.0f };
-        mVectorFont.SetSize(lSize);
-        mbInitialised = true;
-    }
-
-    // X360 SetMapFileReader (CgsAssertManager.h:120): hand the manager the function-map reader + the map
-    // file it should open to resolve call-stack addresses to function names.
-    void Manager::SetMapFileReader(MapFile::Reader* lpReader, const char* lpcMapFileName)
-    {
-        mpMapFileReader = lpReader;
-        mpcMapFileName  = lpcMapFileName;
-    }
-
-    // X360 HandleAssert (CgsAssertManager.h:150) -> DoAssert (0x82820338): latch the FIRST failing assert
-    // (the X360 halts on the first, so the first is the one shown), log every assert + its call-stack,
-    // run the handlers, then halt on-screen. An assert before the renderer has a frame buffer can't draw,
-    // so it logs + continues; the re-entrancy guard stops an assert raised while the dialog is up from
-    // starting a nested halt.
-    // ============================================================================================
-    // [PC bring-up] REPEAT SUPPRESSION -- NOT CONSOLE BEHAVIOUR, AND IT CANNOT BE.
-    // ============================================================================================
-    // The X360 halts FOREVER on the FIRST assert (DoAssert 0x82820338 loops in DisplayAssertScreen),
-    // so the console never reaches a second occurrence of anything and has no repeat policy to be
-    // faithful to. This build's resume-on-END halt is already a documented PC divergence; what was
-    // NOT documented is its cost when an assert fires EVERY FRAME.
-    //
-    // MEASURED (run scratch/flow_run/20260826_194302): once an event starts at a junction the
-    // player is parked in, GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent posts action 201
-    // every frame (console-faithful -- the mbAtJunctionWithEvent latch keeps it posting while the
-    // car stands in the region), the bridge turns it into GUI 311, and SatNavRenderer::RecvEvent
-    // fires FOUR asserts per frame because the event-start table was never published
-    // (GameStateModule::SendSetUpAllEventStartsMessage is unreconstructed -- the FLAG at
-    // BrnGameStateModule.cpp:1916). Each one resolved the whole .cgsmap and then BLOCKED the update
-    // thread in the loop below until the harness pulsed Local\BurnoutPC_Assert_Release, which
-    // boot_test.ps1's Settle() does every 200 ms. Cost: 559 asserts / 4 == 139 game frames in the
-    // 191 s after the start, i.e. the simulation ran at 0.73 Hz. Everything downstream then looks
-    // broken while being merely starved -- the started stunt mode sat in E_GMS_INTRO because the
-    // offline-intro self-trigger integrates the fixed 1/60 s step and needs 360 of them for
-    // StuntAttackMode::GetIntroDurationSeconds() == 6.0f, and got 139.
-    //
-    // POLICY, chosen so the assert-storm ORACLE is preserved exactly: the FIRST occurrence of each
-    // distinct (file, line) keeps ALL of the old behaviour -- latched, logged, call-stack resolved,
-    // halted. Every LATER occurrence of that same site is still counted and still gets its own
-    // `[ASSERT n]` line (so `asserts=N` and every grep for a message still work), but skips the map
-    // resolve and the blocking halt. No assert is hidden; only the repeat of one already reported in
-    // full is made cheap. BRN_ASSERT_NO_SUPPRESS=1 restores the old halt-every-time behaviour, and
-    // the table falling full also falls back to it rather than silently suppressing.
-    // ============================================================================================
-    namespace
-    {
-        struct AssertSite
-        {
-            const char* mpcFile;
-            s32         miLine;
-            s32         miCount;
-        };
-
-        const s32   KI_MAX_ASSERT_SITES = 256;
-        AssertSite  gaAssertSites[KI_MAX_ASSERT_SITES];
-        s32         giNumAssertSites = 0;
-
-        // 0 == first time this (file,line) has been seen (or the table is full / suppression is
-        // switched off, both of which take the full path); >0 == this is repeat number N.
-        s32 NoteAssertSite(const char* lpcFile, s32 liLine)
-        {
-
-            for (s32 liIndex = 0; liIndex < giNumAssertSites; ++liIndex)
-            {
-                if (gaAssertSites[liIndex].miLine == liLine &&
-                    std::strcmp(gaAssertSites[liIndex].mpcFile, lpcFile) == 0)
-                {
-                    return ++gaAssertSites[liIndex].miCount;
-                }
-            }
-
-            if (giNumAssertSites >= KI_MAX_ASSERT_SITES)
-                return 0;   // table full -- fall back to the old full-report-every-time behaviour
-
-            gaAssertSites[giNumAssertSites].mpcFile = lpcFile;
-            gaAssertSites[giNumAssertSites].miLine  = liLine;
-            gaAssertSites[giNumAssertSites].miCount = 0;
-            ++giNumAssertSites;
-            return 0;
-        }
-    }
-
-    void Manager::HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine)
-    {
-        StackUnpick lStack;
-        lStack.Prepare();
-    }
-
-    void Manager::RegisterAssertHandler(AssertHandler*)
-    {
-        // The handler list (AssertHandler::OnAssert chain) is the assert-handler-interface follow-on;
-        // the boot path registers none.
-    }
-
-    void Manager::ExecuteAssertHandlers()
-    {
-        // No handlers registered on the boot path (see RegisterAssertHandler).
-    }
-
-    // X360 CanRenderAssert (CgsAssertManager.h:171): the dialog may draw only once a renderer is wired,
-    // it has a frame buffer to render through (set by the first DebugManager::Render), and an assert is
-    // pending.
-    bool Manager::CanRenderAssert() const
-    {
-        return mbInitialised && mbGotAssert && mpRender != 0 && mpRender->HasRenderBuffer();
-    }
-
-    // X360 ClearCurrentAssert (CgsAssertManager.h:166): dismiss the pending assert (END pressed -> resume).
-    void Manager::ClearCurrentAssert()
     {
         mbGotAssert = false;
+        mpAssertHandlerList = 0;
+        mbInitialised = false;
     }
 
+    // ARTIST82817568: the actual ordered virtual handler chain, no boot special case.
+    void Manager::ExecuteAssertHandlers()
+    {
+        AssertHandler* lpHandler = mpAssertHandlerList;
+        while (lpHandler)
+        {
+            lpHandler->OnAssert(mCurrentAssert);
+            lpHandler = lpHandler->mpNext;
+        }
+    }
+
+    // The other native readiness predicate is ICF82C296C8 (li r3,1;blr).
+    // Both8282051C..44 and828206D0..F8 then test this exact device state.
+    bool Manager::CanRenderAssert()
+    {
+        return renderengine::Device::GetState() == renderengine::Device::STATE_START;
+    }
+
+    // ARTIST82820578 export hole, recovered directly through82820754.
+    void Manager::HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine)
+    {
+        if (Message::gxMessageFilterFlags & 1)
+            *Log::gpDebugPrint << "CGSASSERT: "
+                << (lpcMessage ? lpcMessage : "<NULLSTRING>") << " in "
+                << (lpcFile ? lpcFile : "<NULLSTRING>") << " line " << liLine << "\n";
+        if (!mbGotAssert)
+        {
+            mCurrentAssert.mpcFile = lpcFile;
+            mCurrentAssert.miLine = liLine;
+            std::memset(mCurrentAssert.macAssertMessage, 0, KI_MESSAGEBUFFERSIZE);
+            std::strncpy(mCurrentAssert.macAssertMessage, lpcMessage, KI_MESSAGEBUFFERSIZE);
+            mbGotAssert = true;
+            if (gAssertManager.mbInitialised && gAssertManager.CanRenderAssert())
+                gAssertManager.DoAssert();
+            if (Message::gxMessageFilterFlags & 1)
+                *Log::gpDebugPrint << "...CACHED ASSERT\n";
+        }
+        else if (Message::gxMessageFilterFlags & 1)
+            *Log::gpDebugPrint << "...IGNORED. ALREADY HAVE ANOTHER ASSERT\n";
+    }
+
+    // ARTIST82820338..5C, inlined from DecFIGS h157.
+    void Manager::InitialiseMapFileReader()
+    {
+        if (mpMapFileReader)
+        {
+            mpMapFileReader->Prepare(mpcMapFileName, &mCurrentAssert.mStack);
+            mCurrentAssert.mpMapReader = mpMapFileReader;
+        }
+    }
+
+    // ARTIST82820338: log this captured stack, run handlers, interrupt the other
+    // native threads, then keep rendering. There is no resume or release path.
     void Manager::DoAssert()
     {
-        mbInAssert = true;
-        mCurrentAssert.mpMapReader = mpMapFileReader;
-
-        ExecuteAssertHandlers();
-
-        // The native front end has coordinated frame ownership before entering
-        // the assert mutex. Keep the modal END-to-resume loop on that owner.
-        // Early asserts with no prepared renderer remain logged-only.
-        if (CanRenderAssert())
+        InitialiseMapFileReader();
+        if (mCurrentAssert.mStack.GetNumStackAddresses() > 0)
         {
-            IDirect3DSurface9* lpBackBuffer = 0;
-            if (lpBackBuffer) lpBackBuffer->Release();
-            if (!lSavedFrame.IsReady())
+            if (Message::gxMessageFilterFlags & 1)
+                *Log::gpDebugPrint << "\nCallstack:\n";
+            for (s32 liIndex = 0; liIndex < mCurrentAssert.mStack.GetNumStackAddresses(); ++liIndex)
             {
-                Log::WriteToLog("[assert] could not preserve the native render context; report retained in log.\n");
-                ClearCurrentAssert();
-                mbInAssert = false;
-                return;
+                char lacBuffer[16];
+                CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "    0x%08X",
+                    static_cast<u32>(mCurrentAssert.mStack.GetStackAddress(liIndex)));
+                const char* lpcString = lacBuffer;
+                if (mpMapFileReader)
+                {
+                    const char* const lpcDecoded = mpMapFileReader->GetStackEntryName(liIndex);
+                    if (lpcDecoded)
+                        lpcString = lpcDecoded;
+                }
+                if (Message::gxMessageFilterFlags & 1)
+                    *Log::gpDebugPrint << (lpcString ? lpcString : "<NULLSTRING>") << "\n";
             }
-
-            for (;;)
-            {
-                // The host has been asked to shut down (the user closed the window): abandon
-                // the halt so this frame unwinds and EngineUpdate can reach the release path.
-                // Checked BEFORE the draw, so the same assert re-firing on the way out returns
-                // immediately instead of re-entering the halt every frame.
-                if (CgsSystem::HardwareInit::IsHardwareWantingToShutdown())
-                    break;
-                DisplayAssertScreen();
-                if (HarnessRelease::Signalled())
-                    break;
-                Sleep(1);
-            }
-            // Wait for END to be released so the keypress doesn't carry into the resumed game.
-            ClearCurrentAssert();
+            if (Message::gxMessageFilterFlags & 1)
+                *Log::gpDebugPrint << "\nEndCallstack\n";
         }
-
-        mbInAssert = false;
+        ExecuteAssertHandlers();
+        if (mpThreadLayout)
+            mpThreadLayout->InteruptThreadForAssert(&mCurrentAssert);
+        for (;;)
+            DisplayAssertScreen();
     }
 
-    // X360 DisplayAssertScreen 0x82820210: Begin the renderer -> DisplayCurrentAssert + DisplayCallstack
-    // -> End -> ShowPixelBuffer (present). The PC adds the message pump (keep the window alive) and opens
-    // the scene WITHOUT clearing (FrameBeginNoClear) so the dialog overlays the frozen game frame
-    // (preserved by the COPY swap), matching the X360 which never clears. If a scene was already open
-    // (the assert fired mid-render) BeginScene fails, so that frame is presented and a fresh scene begun.
+    // ARTIST828204F8: the actual pending global assert handoff under its mutex.
+    void Manager::RenderThreadAsserts()
+    {
+        if (gAssertManager.mbGotAssert && gAssertManager.CanRenderAssert())
+        {
+            gAssertMutex.Enter();
+            gAssertManager.DoAssert();
+        }
+    }
 
-    // X360 DisplayCurrentAssert 0x8281FFF8: heading "CGSASSERT: (thread <name>)", then the file, then
-    // "Line: <n>", then the assert message (each file/message wrapped). The thread name needs the
-    // threading system, so it is "Main" here.
+    // ARTIST82820210: reset this font's renderer, clear the native target, draw,
+    // increment the real device frame counter, present and update the map reader.
+    void Manager::DisplayAssertScreen()
+    {
+        mVectorFont.SetRenderer(mpRender);
+        miDrawPositionY = 40;
+        renderengine::ClearColorParameters lColor;
+        lColor.m_color.x = 0.5f;
+        lColor.m_color.y = 0.0f;
+        lColor.m_color.z = 0.0f;
+        lColor.m_color.w = 0.0f;
+        const renderengine::ClearDepthStencilParameters lDepthStencil = { 0x30, 1.0f, 0 };
+        renderengine::Device::Clear(lColor, lDepthStencil,
+            renderengine::RenderTargetState::TARGETID_COLOR_ALL);
+        if (mpRender)
+            mpRender->Begin();
+        DisplayCurrentAssert();
+        DisplayCallstack();
+        if (mpRender)
+            mpRender->End();
+        ++renderengine::gDeviceFrameCounter83271624;
+        renderengine::Device::ShowPixelBuffer(&renderengine::gOriginalColorBuffer);
+        if (mpMapFileReader)
+            mpMapFileReader->Update();
+    }
+
     void Manager::DisplayCurrentAssert()
     {
+        // ARTIST copies this literal; it does not query or invent a thread name.
+        char lacThread[32];
+        std::strcpy(lacThread, "unknown");
         char lacHeading[128];
-        std::snprintf(lacHeading, sizeof(lacHeading), "CGSASSERT: (thread %s)", "Main");
+        CgsCore::SPrintf(lacHeading, sizeof(lacHeading), "CGSASSERT: (thread %s)", lacThread);
         char lacLine[32];
-        std::snprintf(lacLine, sizeof(lacLine), "Line: %d", mCurrentAssert.miLine);
-
-        if (lacHeading[0])
-            DrawLine(lacHeading);
+        CgsCore::SPrintf(lacLine, sizeof(lacLine), "Line: %d\n", mCurrentAssert.miLine);
+        DrawLine(lacHeading);
         DrawLines(mCurrentAssert.mpcFile);
-        if (lacLine[0])
-            DrawLine(lacLine);
+        DrawLine(lacLine);
         DrawLines(mCurrentAssert.macAssertMessage);
         miDrawPositionY = static_cast<s16>(miDrawPositionY + 10);
     }
 
-    // X360 DisplayCallstack 0x828200F8: one line per captured frame - the function name resolved through
-    // the map-file reader (off_83018F20) if available, otherwise the raw "    0x........" address.
     void Manager::DisplayCallstack()
     {
-        const s32 liCount = mCurrentAssert.mStack.GetNumStackAddresses();
-        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        for (s32 liIndex = 0; liIndex < mCurrentAssert.mStack.GetNumStackAddresses(); ++liIndex)
         {
-            const char* lpcName = mpMapFileReader ? mpMapFileReader->GetStackEntryName(liIndex) : 0;
-            if (lpcName)
+            char lacBuffer[16];
+            CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer), "    0x%08X",
+                static_cast<u32>(mCurrentAssert.mStack.GetStackAddress(liIndex)));
+            const char* lpcString = lacBuffer;
+            if (mpMapFileReader)
             {
-                DrawLine(lpcName);
+                const char* const lpcDecoded = mpMapFileReader->GetStackEntryName(liIndex);
+                if (lpcDecoded)
+                    lpcString = lpcDecoded;
             }
-            else
-            {
-                char lacBuffer[24];
-                std::snprintf(lacBuffer, sizeof(lacBuffer), "    0x%p",
-                              reinterpret_cast<void*>(mCurrentAssert.mStack.GetStackAddress(liIndex)));
-                DrawLine(lacBuffer);
-            }
+            DrawLine(lpcString);
         }
     }
 
-    // X360 DrawLines 0x8281FEF0: split lpcMessage into runs of at most KI_MAX_LINE_CHARS, breaking on
-    // newlines, and DrawLine each non-empty run.
+    void Manager::DrawLine(const char* lpcMessage)
+    {
+        if (*lpcMessage)
+        {
+            DrawText(40, miDrawPositionY, lpcMessage);
+            miDrawPositionY = static_cast<s16>(miDrawPositionY + 14);
+        }
+    }
+
     void Manager::DrawLines(const char* lpcMessage)
     {
         if (!lpcMessage)
             return;
-
-        const char* lpc = lpcMessage;
-        while (*lpc)
+        while (*lpcMessage)
         {
             s32 liLength = 0;
-            while (lpc[liLength] && lpc[liLength] != '\n' && liLength < KI_MAX_LINE_CHARS)
+            while (lpcMessage[liLength] && lpcMessage[liLength] != '\n' && liLength < KI_MAX_LINE_LENGTH)
                 ++liLength;
-
-            char lacLine[KI_MAX_LINE_CHARS + 1];
-            std::strncpy(lacLine, lpc, static_cast<size_t>(liLength));
-            lacLine[liLength] = '\0';
-            if (lacLine[0])
-                DrawLine(lacLine);
-
-            lpc += liLength;
-            if (*lpc == '\n')
-                ++lpc;
+            char lacLine[KI_MAX_LINE_LENGTH + 1];
+            std::strncpy(lacLine, lpcMessage, liLength);
+            lacLine[liLength] = 0;
+            DrawLine(lacLine);
+            lpcMessage += liLength;
+            if (*lpcMessage == '\n')
+                ++lpcMessage;
         }
     }
 
-    // X360 DrawLine: draw one line at the left margin + running Y, then advance Y.
-    void Manager::DrawLine(const char* lpcMessage)
-    {
-        DrawText(KI_TEXT_LEFT, miDrawPositionY, lpcMessage);
-        miDrawPositionY = static_cast<s16>(miDrawPositionY + KI_LINE_ADVANCE);
-    }
-
-    // X360 DrawText 0x8281FE90: if a renderer is wired, draw lpcMessage at (liX, liY) via the vector font.
     void Manager::DrawText(s32 liX, s32 liY, const char* lpcMessage)
     {
         if (mpRender)
-            mVectorFont.Print(static_cast<f32>(liX), static_cast<f32>(liY), lpcMessage, KU_ASSERT_TEXT_COLOUR);
+            mVectorFont.Print(static_cast<f32>(liX), static_cast<f32>(liY), lpcMessage);
     }
 }
 }

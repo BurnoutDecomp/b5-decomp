@@ -1,86 +1,87 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                          // KI_MESSAGEBUFFERSIZE + the BeginAssert/FireAssert/EndAssert front-end
-#include "GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.h"   // StackUnpick (AssertData::mStack)
-#include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"     // VectorFont (Manager::mVectorFont) + fwd Debug2DImmediateRender
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.h"
+#include "GameShared/GameClasses/Development/VectorFont/CgsVectorFont.h"
 
 namespace CgsSystem { struct ThreadLayout; }
 
 namespace CgsDev
 {
-    namespace MapFile { struct Reader; }   // the function-map call-stack symbol resolver
-
+    namespace MapFile { struct Reader; }
 namespace Assert
 {
-    struct AssertHandler;
-
-    // CgsDev::Assert::AssertData (CgsAssertManager.h:58, DWARF) - the captured failing assert that the
-    // on-screen renderer draws: the call-stack, the message, the file, and the line. mpMapReader is the
-    // map-file symbol resolver (null until that follow-on lands; frames render as raw addresses).
     struct AssertData
     {
-        StackUnpick      mStack;
+        StackUnpick mStack;
         MapFile::Reader* mpMapReader;
-        char             macAssertMessage[KI_MESSAGEBUFFERSIZE];
-        const char*      mpcFile;
-        s32              miLine;
+        char macAssertMessage[KI_MESSAGEBUFFERSIZE];
+        const char* mpcFile;
+        s32 miLine;
     };
 
-    // CgsDev::Assert::Manager (CgsAssertManager.h:102, DWARF) - the assert handler + on-screen renderer.
-    // FAITHFUL HALT: HandleAssert -> DoAssert captures + logs the assert, runs the registered handlers,
-    // (would halt the other threads), then loops on-screen in DisplayAssertScreen drawing the assert via
-    // mpRender + mVectorFont. The X360 loops forever (while(1) DisplayAssertScreen); this build draws the
-    // same dialog each frame, pumps the window so it stays alive, and RESUMES when END is pressed - so a
-    // non-fatal assert freezes the game, shows the report, and lets you continue. The blocking happens on
-    // the asserting thread (the only thread on the loading boot). InteruptThreadForAssert (halt the other
-    // threads) and the map-file symbol resolver are the threading/map-file follow-on. Method names + the
-    // member set come from the DWARF; draw bodies from the X360 (DrawText 0x8281FE90, DrawLines
-    // 0x8281FEF0, DisplayCurrentAssert 0x8281FFF8, DisplayCallstack 0x828200F8, DoAssert 0x82820338,
-    // DisplayAssertScreen 0x82820210).
+    class Manager;
+    // DecFIGS h77..87; ARTIST8281757C..A4 dispatches slot0 and reads next+4.
+    struct AssertHandler
+    {
+        AssertHandler();
+        virtual void OnAssert(AssertData& lrAssertData);
+    private:
+        friend class Manager;
+        AssertHandler* mpNext;
+    };
+
+    // ARTIST instance: handlers+0, AssertData+4, font+1E0, flags/Y+200/201/202.
+    // The four shared homes are independent of the instance; there is no padding proxy.
     class Manager
     {
     public:
         Manager();
-
+        static void RenderThreadAsserts();
         void RegisterAssertHandler(AssertHandler* lpHandler);
-        void SetRenderer(Debug2DImmediateRender* lpRenderer);   // CgsAssertManager.h:117
-        void SetMapFileReader(MapFile::Reader* lpReader, const char* lpcMapFileName);  // CgsAssertManager.h:120
-        // DecFIGS h:123; ARTIST823CA024 stores the actual shared layout home.
-        void SetThreadLayout(CgsSystem::ThreadLayout* lpThreadLayout)
+        static void SetRenderer(Debug2DImmediateRender* lpRenderer) { mpRender = lpRenderer; }
+        static void SetMapFileReader(MapFile::Reader* lpReader, const char* lpcMapFileName)
+        { mpMapFileReader = lpReader; mpcMapFileName = lpcMapFileName; }
+        static void SetThreadLayout(CgsSystem::ThreadLayout* lpThreadLayout)
         { mpThreadLayout = lpThreadLayout; }
+
+    protected:
+        friend void Construct();
+        friend void FireAssert(const char*, const char*, int);
         void HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine);
+        void DoAssert();
+        void InitialiseMapFileReader();
+        void ExecuteAssertHandlers();
+        bool CanRenderAssert();
+        void DisplayAssertScreen();
+        void DisplayCurrentAssert();
+        void DisplayCallstack();
+        void DrawLine(const char* lpcMessage);
+        void DrawLines(const char* lpcMessage);
+        void DrawText(s32 liX, s32 liY, const char* lpcMessage);
 
-        // The pending assert (for DebugManager::RenderAssert, the on-screen overlay).
-        bool              HasAssert() const     { return mbGotAssert; }
-        const AssertData& GetAssertData() const { return mCurrentAssert; }
+        static Debug2DImmediateRender* mpRender;       // ARTIST83018F1C
+        static MapFile::Reader* mpMapFileReader;       // ARTIST83018F20
+        static const char* mpcMapFileName;             // ARTIST83018F24
+        static CgsSystem::ThreadLayout* mpThreadLayout;// ARTIST83018F18
+        static const s32 KI_MAX_LINE_LENGTH = 50;
 
-    private:
-        void ExecuteAssertHandlers();        // CgsAssertManager.h:160
-        void DoAssert();                     // CgsAssertManager.h:154 - the blocking on-screen halt loop
-        void DisplayAssertScreen();          // CgsAssertManager.h:174 - render one frame of the dialog + present
-        void DisplayCurrentAssert();         // CgsAssertManager.h:177
-        void DisplayCallstack();             // CgsAssertManager.h:180
-        void DrawLine(const char* lpcMessage);                  // CgsAssertManager.h:183
-        void DrawLines(const char* lpcMessage);                 // CgsAssertManager.h:186
-        void DrawText(s32 liX, s32 liY, const char* lpcMessage);// CgsAssertManager.h:189
-        bool CanRenderAssert() const;        // CgsAssertManager.h:171
-        void ClearCurrentAssert();           // CgsAssertManager.h:166
-
-        static CgsSystem::ThreadLayout* mpThreadLayout; // ARTIST83018F18, no instance storage.
-        Debug2DImmediateRender* mpRender;          // the 2D renderer (X360: static; wired by SetRenderer)
-        MapFile::Reader*        mpMapFileReader;   // the call-stack symbol resolver (X360: static)
-        const char*             mpcMapFileName;    // the map file the reader opens (X360: static)
-        AssertHandler*          mpAssertHandlerList;
-        AssertData              mCurrentAssert;
-        VectorFont              mVectorFont;
-        bool                    mbInitialised;
-        bool                    mbGotAssert;
-        bool                    mbInAssert;         // re-entrancy guard (X360 byte_83019201): inside the halt loop
-        s16                     miDrawPositionY;    // running text Y, advanced per drawn line
-        s32                     miAssertCount;      // total asserts seen (for the log)
+        AssertHandler* mpAssertHandlerList;
+        AssertData mCurrentAssert;
+        VectorFont mVectorFont;
+        bool mbInitialised;
+        bool mbGotAssert;
+        s16 miDrawPositionY;
     };
 
+    // Existing source spelling for the actual Manager object at ARTIST83019000
+    // (DecFIGS names the same object gManager).
     extern Manager gAssertManager;
 }
 }
+
+#if defined(_XBOX)
+CGS_STATIC_ASSERT((sizeof(CgsDev::Assert::AssertData) == 0x1D8), "ARTIST AssertData size");
+CGS_STATIC_ASSERT((sizeof(CgsDev::Assert::Manager) == 0x210), "ARTIST assert Manager size");
+#endif
