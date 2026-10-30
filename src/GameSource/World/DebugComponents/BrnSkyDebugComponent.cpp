@@ -13,6 +13,7 @@
 
 #include "rw/math/vpu/vector3_operation.h"
 
+#include <xtl.h>
 #include <cmath>
 
 namespace BrnWorld
@@ -26,48 +27,24 @@ namespace
     const f32 KF_RADIANS_PER_SECOND_OF_DAY = 0.000072722054f;
     const f32 KF_JUNKYARD_MAX_VERTICAL = 0.98900002f;
 
-    f32 JunkyardFlush(f32 lfValue)
-    {
-        return std::fpclassify(lfValue) == FP_SUBNORMAL
-            ? std::copysign(0.0f, lfValue) : lfValue;
-    }
-
-    f32 JunkyardMultiply(f32 lfA, f32 lfB)
-    {
-        return JunkyardFlush(JunkyardFlush(lfA) * JunkyardFlush(lfB));
-    }
-
-    f32 JunkyardMultiplyAdd(f32 lfA, f32 lfC, f32 lfB)
-    {
-        return JunkyardFlush(std::fmaf(JunkyardFlush(lfA), JunkyardFlush(lfC), JunkyardFlush(lfB)));
-    }
-
-    f32 JunkyardNegativeMultiplySubtract(f32 lfA, f32 lfC, f32 lfB)
-    {
-        const f32 lfDifference = JunkyardMultiplyAdd(lfA, lfC, -JunkyardFlush(lfB));
-        return lfDifference != lfDifference ? lfDifference : -lfDifference;
-    }
-
-    // ARTIST 827C7804..783C: both refinements run unconditionally and the
-    // resulting scale multiplies all four lanes. No zero-vector fallback.
-    // FLAG (numeric model): rounded rsqrt seed and canonical scalar dot3;
-    // hardware estimate bits, NaN payloads and floating status remain unverified.
+    // ARTIST 827C7804..783C: two VMX rsqrt refinements, no zero fallback.
     Vector3 NormalizeJunkyardKeyLightDirection(Vector3 lDirection)
     {
-        lDirection = {JunkyardFlush(lDirection.x), JunkyardFlush(lDirection.y),
-                      JunkyardFlush(lDirection.z), JunkyardFlush(lDirection.w)};
-        const f32 lfLengthSquared = JunkyardFlush(rw::math::vpu::MagnitudeSquared(lDirection));
-        f32 lfEstimate = JunkyardFlush(static_cast<f32>(
-            1.0 / std::sqrt(static_cast<double>(lfLengthSquared))));
-        for (s32 liStep = 0; liStep < 2; ++liStep)
+        const XMVECTOR direction = __lvx(&lDirection, 0);
+        const XMVECTOR square = __vmsum3fp(direction, direction);
+        const XMVECTOR one = XMVectorReplicate(1.0f);
+        const XMVECTOR half = XMVectorReplicate(0.5f);
+        XMVECTOR estimate = __vrsqrtefp(square);
+        for (s32 i = 0; i < 2; ++i)
         {
-            const f32 lfSquare = JunkyardMultiply(lfEstimate, lfEstimate);
-            const f32 lfHalf = JunkyardMultiply(lfEstimate, 0.5f);
-            const f32 lfResidual = JunkyardNegativeMultiplySubtract(lfLengthSquared, lfSquare, 1.0f);
-            lfEstimate = JunkyardMultiplyAdd(lfHalf, lfResidual, lfEstimate);
+            const XMVECTOR squaredEstimate = __vmulfp(estimate, estimate);
+            const XMVECTOR scaledEstimate = __vmulfp(estimate, half);
+            const XMVECTOR residual = __vnmsubfp(square, squaredEstimate, one);
+            estimate = __vmaddfp(scaledEstimate, residual, estimate);
         }
-        return {JunkyardMultiply(lDirection.x, lfEstimate), JunkyardMultiply(lDirection.y, lfEstimate),
-                JunkyardMultiply(lDirection.z, lfEstimate), JunkyardMultiply(lDirection.w, lfEstimate)};
+        Vector3 result;
+        __stvx(__vmulfp(direction, estimate), &result, 0);
+        return result;
     }
 
     f32 ClockToSeconds(u32 luHours, u32 luMinutes, u32 luSeconds)
@@ -133,19 +110,10 @@ void DebugComponent::OnActivate()
 {
     const char* const KPC_ROOT = "";
 
-    const auto RegisterFloat = [this](f32* lpfValue, const char* lpcGroup,
-                                      const char* lpcName, f32 lfMin, f32 lfMax, f32 lfStep)
-    {
-        RegisterVariable(lpfValue, lpcGroup, lpcName);
-        SetRange(lpfValue, lfMin, lfMax);
-        SetStep(lpfValue, lfStep);
-    };
-    const auto RegisterClock = [this](u32* lpuValue, const char* lpcGroup,
-                                      const char* lpcName, u32 luMax)
-    {
-        RegisterVariable(lpuValue, lpcGroup, lpcName);
-        SetRange(lpuValue, 0u, luMax);
-    };
+#define RegisterFloat(value, group, name, minimum, maximum, step) \
+    do { RegisterVariable(value, group, name); SetRange(value, minimum, maximum); SetStep(value, step); } while (0)
+#define RegisterClock(value, group, name, maximum) \
+    do { RegisterVariable(value, group, name); SetRange(value, 0u, maximum); } while (0)
 
     RegisterVariable(&mbUpdateValuesFromTool, KPC_ROOT, "Update values from Tool");
     RegisterVariable(&mbPrintDebugInfo, KPC_ROOT, "Print debug information");
@@ -261,6 +229,8 @@ void DebugComponent::OnActivate()
     RegisterClock(&muSunElevTodUBoundHH, "Sun Clamp", "UBound Hours", 23);
     RegisterClock(&muSunElevTodUBoundMM, "Sun Clamp", "UBound Minutes", 59);
     RegisterClock(&muSunElevTodUBoundSS, "Sun Clamp", "UBound Seconds", 59);
+#undef RegisterFloat
+#undef RegisterClock
 }
 
 // @0x827B3B28. Copy every menu scalar into the live blended environment.
