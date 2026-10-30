@@ -62,8 +62,17 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/fpu/scalar_operation.h"
 #include <cstdlib>   // getenv -- the [crashplay] witness only
-#include <cmath>     // std::fmaf -- the console's fused fmadds / fnmsubs (OnBounce / OnVehicleHitConfirmed /
-                     // UpdateMomentum / GetShowtimeTrafficDensityScale); std::fabs (IsZeroVmx)
+#include <cmath>     // std::fmaf on PC; std::fabs (IsZeroVmx)
+#include <cfloat>    // FLT_MAX, original Construct debounce initial value
+
+// The native XDK contracts these expressions to the original PPC fused operations.
+#if defined(_XBOX)
+#define CRASHPLAY_FMA(a, b, c) ((a) * (b) + (c))
+#define CRASHPLAY_NEGATIVE_PRODUCT(a, b, c) ((c) - (a) * (b))
+#else
+#define CRASHPLAY_FMA(a, b, c) std::fmaf((a), (b), (c))
+#define CRASHPLAY_NEGATIVE_PRODUCT(a, b, c) std::fmaf(-(a), (b), (c))
+#endif
 
 namespace BrnWorld
 {
@@ -211,61 +220,33 @@ struct TriggerCrashBreakerEvent
 // ever set the debug component's back-pointer. 3,316 of those asserts had to be dismissed by the
 // harness during that one run.
 //
-// WHAT IS ATTESTED, AND WHAT IS NOT:
-//   * The six calls the DecFIGS DWARF lists as this function's callees are all here, in its order:
-//     Vector3::SetZero, FixedRingBuffer<EntityId,32>::Construct + RingBuffer::Clear,
-//     VolumeInstanceId::SetInvalid, FixedRingBuffer<EntityId,8>::Construct + RingBuffer::Clear.
-//   * FLAG: mCrashPlayDebugComponent.Construct(this) is NOT in that callee list -- but it is two
-//     stores, so it inlines away and would not appear there, Feb-2007's Construct makes exactly
-//     this call, and the console's own assert PROVES something must set the pointer. The only
-//     DWARF-declared setter is CrashPlayDebugComponent::Construct(CrashPlayManager*).
-//   * FLAG: the scalar zeroing below is a value-initialisation, not an attested store list. The
-//     class is carved out of module storage that nothing else writes, and the debug component
-//     reads these members before the first Activate. Activate re-seeds every one of them.
-//   * NOT reproduced: Feb-2007's `mbIsCrashPlayActive = true`. That is pre-merge drift -- on this
-//     build Activate is what turns crash play on, and constructing it ON would make every car
-//     permanently in crash play from boot.
+// ARTIST RaceCarEntityModule::Construct inlines these stores at 0x822FDA5C..0x822FDB0C.
+// Preserve untouched bytes: the original does not initialize the other manager scalars here.
 // =================================================================================================
 void CrashPlayManager::Construct()
 {
-    mCrashPlayDebugComponent.Construct( this );
-
+    mfTimeSinceLastVehicleImpact = FLT_MAX;
+    mfTimeSinceLastTrafficStomp = FLT_MAX;
+    mfTimeSinceLastHitOverheadSign = FLT_MAX;
+    mfCrashPlayTime = 0.0f;
+    mfBoostPercentage = 0.0f;
+    mfBounceBoostTimer = 0.0f;
     mPlayerCarVolumeInstanceID.SetInvalid();
+    mbIsCrashPlayActive = false;
     mLastPlayerPos.SetZero();
-
+    mbInfiniteAftertouch = false;
+    mbInfiniteBoost = false;
+    mbEarningAirTimeBoost = false;
+    mbAboutToLoseBoost = false;
+    mbBouncePromptNeeded = false;
+    mbBoostChargePending = false;
+    miLastStreetEntered = 0;
     mRecentCrashSet.Construct();
-    mRecentCrashSet.Clear();
     mRecentLeaptSet.Construct();
-    mRecentLeaptSet.Clear();
-
-    miCarsLeaptThisFrame           = 0;
-    miLastStreetEntered            = 0;
-    mbSendNewRoadMessage           = false;
-    muLastJunctionEnteredID        = 0;
-    mbSendNewJunctionMessage       = false;
-    mfCrashPlayTime                = 0.0f;
-    mfTimeSinceLastInAir           = 0.0f;
-    mfTimeSinceLastOnGround        = 0.0f;
-    mfTimeSinceLastVehicleImpact   = KF_MIN_TIME_BETWEEN_AIR_RAMS;
-    mfTimeSinceLastHitOverheadSign = KF_MIN_TIME_BETWEEN_HITTING_OVERHEAD_SIGNS;
-    mbTrafficStomp                 = false;
-    miFramesUntilAirRam            = 0;
-    mfTimeSinceLastTrafficStomp    = KF_MIN_TIME_BETWEEN_TRAFFIC_STOMPS;
-
-    mfBoostPercentage              = 0.0f;
-    mfAftertouchPower              = 0.0f;
-    mfDifficultyLevel              = 0.0f;
-    mfBounceBoostTimer             = 0.0f;
-    mfLoseBoostGracePeriod         = 0.0f;
-    miConsecutiveBouncesOnGround   = 0;
-    mbIsCrashPlayActive            = false;
-    mbIsInShowtime                 = false;
-    mbInfiniteAftertouch           = false;
-    mbInfiniteBoost                = false;
-    mbEarningAirTimeBoost          = false;
-    mbAboutToLoseBoost             = false;
-    mbBouncePromptNeeded           = false;
-    mbBoostChargePending           = false;
+    mCrashPlayDebugComponent.Construct(this);
+    miFramesUntilAirRam = 0;
+    miCarsLeaptThisFrame = 0;
+    mbIsInShowtime = false;
 }
 
 // =================================================================================================
@@ -550,7 +531,7 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
         // `fmadds f0, f0(KF_BOOST_FOR_DISTANCE_TRAVELLED), f1(distance), f13(boost)` @0x82302174 --
         // ONE rounding. [FX-AIBUZZ 2026-09-24: was `+= K * d`, two roundings; K is 0.0 in the shipped
         // tuning (see the banner), so only a tuned K could show it -- spelled as the console computes it]
-        mfBoostPercentage = std::fmaf( KF_BOOST_FOR_DISTANCE_TRAVELLED, lfDistanceTravelledLastFrame,
+        mfBoostPercentage = CRASHPLAY_FMA( KF_BOOST_FOR_DISTANCE_TRAVELLED, lfDistanceTravelledLastFrame,
                                        mfBoostPercentage );
     }
     mLastPlayerPos = lPlayerPosition;
@@ -575,10 +556,11 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
             // `fnmsubs f13, f13(KF_COST_FOR_BEING_ON_GROUND), f30(dt), f12(boost)` @0x823021F8 ==
             // -(K * dt - boost), ONE rounding == fmaf(-K, dt, boost) (round-to-nearest is symmetric).
             // [FX-AIBUZZ 2026-09-24: was `-= K * dt`, two roundings]
-            mfBoostPercentage = std::fmaf( -KF_COST_FOR_BEING_ON_GROUND, lfSimTimerTimeStep,
+            mfBoostPercentage = CRASHPLAY_NEGATIVE_PRODUCT( KF_COST_FOR_BEING_ON_GROUND, lfSimTimerTimeStep,
                                            mfBoostPercentage );
             ++gCrashPlayWitness.muGroundFrames;                                       // [crashplay]
-            gCrashPlayWitness.mfGroundSpent += KF_COST_FOR_BEING_ON_GROUND * lfSimTimerTimeStep;
+            volatile f32 lfWitnessCost = KF_COST_FOR_BEING_ON_GROUND;
+            gCrashPlayWitness.mfGroundSpent += lfWitnessCost * lfSimTimerTimeStep;
         }
 
         if( mfTimeSinceLastInAir > KF_TIME_ON_GROUND_PROMPT_NEEDED )
@@ -595,7 +577,7 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
         {
             // `fmadds f0, f0(KF_BOOST_FOR_INITIAL_AIRTIME), f30(dt), f13(boost)` @0x82302260 -- ONE
             // rounding, then the inlined Clamp(0, 100) fsel pair. [FX-AIBUZZ 2026-09-24: was two roundings]
-            mfBoostPercentage = std::fmaf( KF_BOOST_FOR_INITIAL_AIRTIME, lfSimTimerTimeStep,
+            mfBoostPercentage = CRASHPLAY_FMA( KF_BOOST_FOR_INITIAL_AIRTIME, lfSimTimerTimeStep,
                                            mfBoostPercentage );
             ClampBoostLevel();
         }
@@ -632,7 +614,7 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     const f32 lfDecayRate = rw::math::fpu::IsZero( mfTimeSinceLastInAir )
                             ? KF_AFTERTOUCH_AIR_DECAY_TIME
                             : KF_AFTERTOUCH_GROUND_DECAY_TIME;
-    mfAftertouchPower = rw::math::fpu::Max( std::fmaf( -lfSimTimerTimeStep, lfDecayRate, mfAftertouchPower ),
+    mfAftertouchPower = rw::math::fpu::Max( CRASHPLAY_NEGATIVE_PRODUCT( lfSimTimerTimeStep, lfDecayRate, mfAftertouchPower ),
                                             0.0f );
 
     // ...and a second, faster bleed once the meter is empty, so a spent player loses steering too.
@@ -640,7 +622,7 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     if( rw::math::fpu::IsZero( mfBoostPercentage ) )
     {
         mfAftertouchPower = rw::math::fpu::Max(
-                std::fmaf( -lfSimTimerTimeStep, KF_AFTERTOUCH_NO_BOOST_DECAY_TIME, mfAftertouchPower ),
+                CRASHPLAY_NEGATIVE_PRODUCT( lfSimTimerTimeStep, KF_AFTERTOUCH_NO_BOOST_DECAY_TIME, mfAftertouchPower ),
                 0.0f );
     }
 }
@@ -958,7 +940,7 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
         // `fsubs f13, HARD, EASY` @0x822A7F60 ; `fmadds f0, f13, f11(mfDifficultyLevel), f0(EASY)`
         // @0x822A7F6C -- ONE rounding (the console fuses it), then `fsubs boost - cost` @0x822A7F70.
         // [FX-TAILS-A 2026-09-24: was two roundings; e.g. difficulty 0.48 cost 14.7999992 vs 14.8000002]
-        const f32 lfBoostCost = std::fmaf( KF_COST_FOR_BOUNCE_BOOST_HARD - KF_COST_FOR_BOUNCE_BOOST_EASY,
+        const f32 lfBoostCost = CRASHPLAY_FMA( KF_COST_FOR_BOUNCE_BOOST_HARD - KF_COST_FOR_BOUNCE_BOOST_EASY,
                                            mfDifficultyLevel,
                                            KF_COST_FOR_BOUNCE_BOOST_EASY );
         mfBoostPercentage -= lfBoostCost;
@@ -1079,7 +1061,7 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
                                  / ( KF_UPPER_LIMIT_VEHICLE_SCORE - KF_LOWER_LIMIT_VEHICLE_SCORE );
         // `fmadds f0, f0(scaled), f8(HIGH - LOW), f12(LOW)` @0x822C33AC -- one rounding -- then
         // `fadds f0, f0, f7(boost)` @0x822C33B0. [FX-TAILS-A 2026-09-24: was two roundings]
-        const f32 lfBoost = std::fmaf( lfScaledScore,
+        const f32 lfBoost = CRASHPLAY_FMA( lfScaledScore,
                                        KF_BOOST_FOR_VEHICLE_IMPACT_HIGH - KF_BOOST_FOR_VEHICLE_IMPACT_LOW,
                                        KF_BOOST_FOR_VEHICLE_IMPACT_LOW );
         mfBoostPercentage += lfBoost;
@@ -1104,7 +1086,7 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
             // @0x822C344C -- i.e. (boost + (HI - LO) * d) + LO, not boost + (LO + (HI - LO) * d).
             // [FX-TAILS-A 2026-09-24 / FX-SHOWTIME2 follow-up: e.g. 30 cars, boost 8.15 ->
             //  49.1499977 on the console, 49.1500015 in the old spelling]
-            mfBoostPercentage = std::fmaf( KF_BOOST_FOR_EVERY_10_CARS_HIT_HI - KF_BOOST_FOR_EVERY_10_CARS_HIT_LO,
+            mfBoostPercentage = CRASHPLAY_FMA( KF_BOOST_FOR_EVERY_10_CARS_HIT_HI - KF_BOOST_FOR_EVERY_10_CARS_HIT_LO,
                                            mfDifficultyLevel,
                                            mfBoostPercentage )
                               + KF_BOOST_FOR_EVERY_10_CARS_HIT_LO;
@@ -1124,7 +1106,7 @@ f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
     // `fsubs f12, 1.0, difficulty` ; `fsubs f13, MAX (0x82CDB558), MIN (0x82CDB554)` ;
     // `fmadds f31, f13, f12, f0(MIN)` @0x822A8110 -- ONE rounding.
     // [FX-AIBUZZ 2026-09-24: was MIN + (MAX - MIN) * (1 - d), two roundings]
-    const f32 lfScale = std::fmaf( KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY,
+    const f32 lfScale = CRASHPLAY_FMA( KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY,
                                    1.0f - mfDifficultyLevel,
                                    KF_MIN_TRAFFIC_DENSITY );
 
@@ -1159,7 +1141,7 @@ void CrashPlayManager::Deactivate()
     mfBoostPercentage   = 0.0f;
     mbIsCrashPlayActive = false;
 
-    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
         *CgsDev::Log::gpDebugPrint << "SHOWTIME! CrashPlayManager::Deactivate called.\n";
     }
