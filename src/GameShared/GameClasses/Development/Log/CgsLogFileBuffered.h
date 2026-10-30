@@ -36,6 +36,7 @@ namespace Log
         StrStreamBase& operator<<(const char* lpcText) ;
 
     protected:
+        HANDLE miFile;            // X360 +0x08, DWARF CgsLogFileBuffered.h:81
         void Append(const char* lpcText);
         char* mpcBuffer;          // caller-supplied flush scratch
         s32   miBufferLength;     // capacity of mpcBuffer
