@@ -69,6 +69,9 @@ namespace BrnGameState
             E_PREPARE_INVITE_SUBSTATE_COUNT                            = 5,
         };
 
+        // ARTIST827E44B8 constructs the first embedded event queue unconstructed.
+        GameStateInviteManager() { mGameEventQueue.MarkUnconstructed(); }
+
         // ---- public lifecycle / per-frame API (Update is bodied in this TU; the rest elsewhere) ----
         void Construct();
         bool Prepare();

@@ -12,10 +12,7 @@
 // output buffers, so the layouts are the real full member sets (the previous NOMINAL 256-byte
 // blobs are replaced).
 //
-// GameEventQueue is modelled as an opaque, size-correct storage span (== the committed
-// GameStateModuleIO mGameEventQueueStorage pattern) because the CgsModule::VariableEventQueue<1536,16>
-// class it aliases is not yet reconstructed; the operator= copies it as a raw block, matching the
-// X360. WheelFFSpring / GameEventQueue members are only ever block-copied here.
+// The embedded game-event queue is the recovered VariableEventQueue<1536,16>.
 // ============================================================================
 
 #include <cstddef>     // offsetof (the traffic-state-queue seat gate inside VehicleOutputInterface)
@@ -78,6 +75,9 @@ namespace Vehicle
     {
         typedef CgsModule::EventQueue<ImpactEvent, 16>          ImpactEventQueue;           // BrnVehicleEvents.h:575
         typedef CgsModule::EventQueue<PhysicalTrafficState, 20> PhysicalTrafficStateQueue;  // BrnVehicleEvents.h:574
+
+        // ARTIST827E44B8 initializes only this embedded queue's construction flag.
+        VehicleOutputInterface() { mGameEventQueue.MarkUnconstructed(); }
 
         // DWARF BrnVehicleOutputInterface.h:312.
         // X360-ATTESTED as the INLINED body of PhysicsModuleIO::OutputBuffer::Construct
@@ -178,24 +178,9 @@ namespace Vehicle
         VehicleOutputInterface& operator=(const VehicleOutputInterface& lOther);
 
         // The game-event queue @0x65F0 as its
-        // LIVE type -- DWARF :386 types the member GameEventQueue == CgsModule::
-        // VariableEventQueue<1536,16>; the storage stays the size-correct opaque span until the
-        // queue is homed as a typed member, and this accessor is the one sanctioned span-cast
-        // seam (same pattern as VehicleManager::Construct's maRaceCarDebugComponent store).
-        // The X360 reaches it as a bare `addi this, 0x65F0` at its AddEvent sites
-        // (0x826437A4 / 0x82643B48) and at UpdateVehiclePhysics' ProcessAftertouchEvents call.
-        CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueue()
-        {
-            return reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
-                &mGameEventQueueStorage[0]);
-        }
-        // The read twin: WorldModule::BridgePhysicsToOutput @0x827AEB18 leg 5 reaches the same
-        // queue through the read-locked physics buffer (`addi r4, r11, 0x65F0` @0x827AEBE0).
-        const CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueue() const
-        {
-            return reinterpret_cast<const CgsModule::VariableEventQueue<1536, 16>*>(
-                &mGameEventQueueStorage[0]);
-        }
+        // DWARF :386; X360 addresses this queue directly at +0x65F0.
+        CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueue() { return &mGameEventQueue; }
+        const CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueue() const { return &mGameEventQueue; }
 
         // MOVED HERE 2026-08-24 (physics mount wave B3b) from VehicleManagerOutputInterface,
         // where task #110 proved it was minted on the wrong class: the two driver-feedback
@@ -218,7 +203,7 @@ namespace Vehicle
         PhysicalTrafficStateQueue   mTrafficStateQueue;       // @0x2620  (DWARF :385)
         // GameEventQueue == CgsModule::VariableEventQueue<1536,16> (not yet reconstructed); modelled
         // as opaque size-correct storage (0x610 == 1552 bytes) -- only ever block-copied here.
-        u8                          mGameEventQueueStorage[0x610]; // @0x65F0 (DWARF :386, GameEventQueue)
+        CgsModule::VariableEventQueue<1536, 16> mGameEventQueue; // @0x65F0 (DWARF :386)
         AggressiveDrivingFlags      mAggressiveDrivingFlags;  // @0x6C00  (DWARF :387)
 
         // mTrafficStateQueue is private, so offsetof on it needs the complete-class context a
@@ -273,7 +258,7 @@ namespace Vehicle
         //     0x82643B00  lbz  r9, 0x6C00(r17)
         //     0x82643B1C  stb  r9, 0x6C00(r17)
         // 0x65F0 == 26096 and 0x6C00 == 27648 are, EXACTLY, VehicleOutputInterface::
-        // mGameEventQueueStorage and VehicleOutputInterface::mAggressiveDrivingFlags -- see that
+        // mGameEventQueue and VehicleOutputInterface::mAggressiveDrivingFlags -- see that
         // struct's member table thirty lines above. VehicleManagerOutputInterface's own last member
         // ends at 0x87C, so +26096 and +27648 are ~24 KB OUT OF BOUNDS for the class they are
         // declared on; a body written here could only have reached them by leaving the object.

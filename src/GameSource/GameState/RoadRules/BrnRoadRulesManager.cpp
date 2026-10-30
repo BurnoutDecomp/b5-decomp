@@ -129,8 +129,8 @@ void RoadRulesManager::OnEnterRoad(GameStateModuleIO::GameActionQueue* queue, Br
     queue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&action),
                     GameStateModuleIO::E_ACTION_ROAD_RULES_ENTER_ROAD, sizeof(action));   // console size 0xA8
     CGS_ASSERT(mpModeManager != 0, "mpModeManager");
-    if (const auto* mode = mpModeManager->GetCurrentGameMode())
-        const_cast<GameMode*>(mode)->OnEnterRoad(road);
+    if (GameMode* mode = mpModeManager->GetCurrentGameMode())
+        mode->OnEnterRoad(road);
 }
 
 // ARTIST 0x82348320.
