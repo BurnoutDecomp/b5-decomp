@@ -275,38 +275,9 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     SetupOpponentData(lpStartGameModeParams, &lGameModeParams);
     SetupCheckpointDistricts(&lGameModeParams);
 
-    // [x] UN-PARKED 2026-08-26 (fix round). Both blockers this leg was parked on have landed:
-    // BrnGameMode.h now carries the console 26-slot order with
-    // `virtual CgsSystem::EFrameRateManagerType GetFrameRateType() const;` at slot 7 (:230), and
-    // the enum's real home already exists at CgsFrameRate.h:27 (the earlier "does not exist
-    // anywhere in the tree" claim is refuted -- it is also what
-    // CgsFrameRateTypeRequestInterface.h:27-34 types its own member with).
-    // Console @0x8234FE6C..0x8234FEA8, store order preserved (`stw` FIRST, then `stb` -- note this
-    // is the OPPOSITE order from ExitCurrentMode's write of the same two fields):
-    //     lwz r3, 0xD98(r31) / lwz r11, 0(r3) / lwz r11, 0x1C(r11) / bctrl   ; vtbl+28 == slot 7
-    //     mr  r29, r3
-    //     bl  OutputBuffer::GetFrameRateTypeRequestInterface                 ; -> r11
-    //     stw r29, 0(r11)          ; meRequestedFrameRateType
-    //     stb r7(1), 4(r11)        ; mbRequestValid = 1
-    // Cross-check on the value: all EIGHT offline mode vtables return 1 from slot 7 (folded leaf
-    // 0x82C296C8 = `li r3,1; blr`) and all SEVEN online ones return 2 (0x827DF718) -- so for a
-    // stunt race this requests type 1, matching ExitCurrentMode's hard-coded 1 on the way out.
-    // [!] FLAG -- OPAQUE PLACEHOLDER WRITE, same as ExitCurrentMode's below:
-    // GameStateModuleIO::OutputBufferFrameRateTypeReqInterface is still
-    // `struct { u8 maOpaque[12]; }` (BrnGameStateModuleIO.h:274, "Swap for the real
-    // FrameRateTypeRequestInterface"), so the two console offsets (+0 word, +4 byte) are written
-    // through that storage rather than through named members. header_request #6 still stands; when
-    // it lands both of this file's blocks become plain assignments.
-    {
-        const s32 liRequestedFrameRateType =
-            static_cast<s32>(mpCurrentGameMode->GetFrameRateType());
-
-        GameStateModuleIO::OutputBufferFrameRateTypeReqInterface* lpFrameRateRequest =
-            lpOutputBuffer->GetFrameRateTypeRequestInterface();
-
-        std::memcpy(&lpFrameRateRequest->maOpaque[0], &liRequestedFrameRateType, sizeof(s32));
-        lpFrameRateRequest->maOpaque[4] = 1;
-    }
+    // ARTIST8234FE6C..A8 requests the mode's own frame-rate type.
+    const CgsSystem::EFrameRateManagerType leFrameRateType = mpCurrentGameMode->GetFrameRateType();
+    lpOutputBuffer->GetFrameRateTypeRequestInterface()->RequestFrameRateTypeChange(leFrameRateType);
 
     // this+0x6A90 == mScoringSystem + 0x5CE0. PINNED, not guessed: BrnScoringSystem_Lookup.cpp:532
     // already annotates the identical store as `SetCheckPointDistancesToFinishReady(false)
@@ -478,19 +449,8 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
     // asm 0x8234C11C..0x82350128. The console asks for frame-rate-manager type 1 -- which is
     // exactly what all EIGHT offline mode vtables return from slot 7 (folded leaf 0x82C296C8,
     // `li r3,1; blr`), i.e. "back to the offline/free-roam frame-rate manager".
-    // [!] FLAG -- OPAQUE PLACEHOLDER WRITE: GameStateModuleIO::OutputBufferFrameRateTypeReqInterface
-    // is still `struct { u8 maOpaque[12]; }` in BrnGameStateModuleIO.h:274 ("Swap for the real
-    // FrameRateTypeRequestInterface when those are homed"). The two console offsets (+0 word,
-    // +4 byte) are written through that opaque storage rather than through named members;
-    // header_request #6 asks for the two members so this becomes an assignment.
-    {
-        GameStateModuleIO::OutputBufferFrameRateTypeReqInterface* lpFrameRateRequest =
-            lpOutputBuffer->GetFrameRateTypeRequestInterface();
-        const s32 liRequestedFrameRateType = 1;
-        // `stb r28(1), 4(r3)` then `stw r28(1), 0(r3)` -- in that order on the console.
-        lpFrameRateRequest->maOpaque[4] = 1;
-        std::memcpy(&lpFrameRateRequest->maOpaque[0], &liRequestedFrameRateType, sizeof(s32));
-    }
+    lpOutputBuffer->GetFrameRateTypeRequestInterface()->RequestFrameRateTypeChange(
+        CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED);
 
     // Online free-burn lobby / online showtime only: re-post the "stop the mode intro" action so
     // the GUI drops the intro splash on the way out.
@@ -559,9 +519,8 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
 // ARTIST 0x82343E88: copy the scorer's original results and queue action229,264 bytes.
 void ModeManager::SendGameResultsToNetwork(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    // Value-initialisation makes the four otherwise unwritten tail alignment bytes
-    // deterministic; original operator= then copies every defined engine field.
-    GameStateModuleIO::OnlineGameResults lResults = {};
+    // ARTIST constructs the Time members before assigning the score results.
+    GameStateModuleIO::OnlineGameResults lResults;
     lResults = mScoringSystem.mOnlineGameResults;
     lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResults),
         GameStateModuleIO::E_ACTION_ONLINE_GAME_RESULT, static_cast<s32>(sizeof(lResults)));

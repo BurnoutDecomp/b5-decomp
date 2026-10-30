@@ -449,8 +449,8 @@ PostWorldInputBuffer::RCEntityGlobalRaceCarOutputInterface* PostWorldInputBuffer
 //     VariableEventQueue<3072,16>::Construct (this + 13332)      // ResourceRequestIface@ +0x3414
 //     VariableEventQueue<3072,16>::Clear     (this + 13332)
 //     this+16420 = 0; this+16424 = 1.0f                          // TimerRequestInterface
-//     this+16428 = 0; this+16432 = 1.0f                          // FrameRateTypeRequestInterface
-//     this+16436 = 0; this+16440 = 0
+//     this+16428 = 0; this+16432 = 1.0f                          // second TimerRequests
+//     this+16440 = false; this+16436 = 0                         // FrameRateTypeRequestInterface
 //     TakedownEvent<..,8>::Construct         (this + 16448)      // TakedownEventOutputQ@ +0x4040
 //     DirtyTrickEvent<..,28>::Construct      (this + 16784)
 //     GameStateToNetworkInterface::Clear     (this + 16784)
@@ -505,6 +505,9 @@ void OutputBuffer::Construct()
         lpRequests->mRequestQueue.Construct();
         lpRequests->mRequestQueue.Clear();
     }
+
+    // ARTIST8238299C..A0 clears the request flag and resets the requested type.
+    mFrameRateTypeRequestInterface.Clear();
 
     // ⭐ 2026-09-03 (takedown wave, run 9): the console's
     //     TakedownEvent<..,8>::Construct(this + 16448)          // TakedownEventOutputQ @ +0x4040
@@ -898,15 +901,27 @@ const OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface(
 // X360 0x8231D6B0 - write-lock accessor for the frame-rate-type request interface (this+16436).
 OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<OutputBufferFrameRateTypeReqInterface*>(&mFrameRateTypeRequestInterfaceStorage);
+    if (!IsBufferLockedForWriting())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Not locked for writing\n",
+            "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 278);
+        CgsDev::Assert::EndAssert();
+    }
+    return &mFrameRateTypeRequestInterface;
 }
 
 // X360 0x823B9990 - read-lock accessor for the frame-rate-type request interface (this+16436).
 const OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const OutputBufferFrameRateTypeReqInterface*>(&mFrameRateTypeRequestInterfaceStorage);
+    if (!IsBufferLockedForReading())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 277);
+        CgsDev::Assert::EndAssert();
+    }
+    return &mFrameRateTypeRequestInterface;
 }
 
 // X360 0x82362C28 - write-lock accessor for the GUI event queue (this+18496).
