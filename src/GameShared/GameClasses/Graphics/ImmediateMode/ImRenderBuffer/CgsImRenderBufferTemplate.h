@@ -266,7 +266,7 @@ namespace CgsGraphics
     template <typename V>
     struct ImCommandPushMaskTextureState : public ImCommand          // DWARF :191
     {
-        const TextureState* mpTextureState;  // [c:0x08]
+        const renderengine::TextureState* mpTextureState;  // [c:0x08]
         V*                  mpVertices;      // [c:0x0C console]
     };
 

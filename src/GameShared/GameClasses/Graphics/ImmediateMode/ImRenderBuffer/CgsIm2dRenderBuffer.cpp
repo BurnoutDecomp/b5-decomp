@@ -188,7 +188,7 @@ namespace CgsGraphics
         // carved successfully (the guest's `if (v9 && v10)` guard).
         if (lpCommand != 0 && lpRun != 0)
         {
-            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+            lpCommand->mpTextureState = lpTextureState;
             lpCommand->mpVertices     = lpRun;
             lpRun[0] = lpaMaskVertices[0];   // min corner {pos, colour, uv}
             lpRun[1] = lpaMaskVertices[1];   // max corner {pos, colour, uv}
