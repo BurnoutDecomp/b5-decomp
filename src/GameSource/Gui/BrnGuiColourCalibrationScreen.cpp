@@ -1,9 +1,11 @@
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // CgsDev::Log::WriteToLog ([calib-screen] trace)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CgsResource::Events::AcquireResourceResponse
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiOptionsBrightnessContrastPostFxControl
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                     // GameDataIO::InputBuffer / RequestInterface<32768>
 // BrnGui::ColourCalibrationScreen -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -60,16 +62,7 @@ namespace
     // pool-module request/response tag).
     const s32 KI_EVENT_ACQUIRERESOURCE = 4;
 
-    template <class T>
-    void AddGuiOutEvent(CgsModule::VariableEventQueue<18432, 16>* lpQueue, const T& lrEvent)
-    {
-        CGS_ASSERT(lpQueue != NULL, "lpQueue");
-        if (lpQueue != NULL)
-        {
-            lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrEvent),
-                              lrEvent.GetEventType(), static_cast<s32>(sizeof(T)));
-        }
-    }
+
 }
 
 // @ 0x8244EE78 -- the console body is exactly two things, in this order: bring the
@@ -113,7 +106,7 @@ void ColourCalibrationScreen::RecvEvent(const CgsModule::Event* lpEvent, s32 liI
 // @ 0x8246AA28
 void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
                                      const BrnResource::GameDataIO::OutputBuffer* lpGDMOutput,
-                                     CgsModule::VariableEventQueue<18432, 16>* lpGuiOutEvents,
+                                     CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput,
                                      rw::IResourceAllocator* lpAllocator)
 {
     (void)lpGDMOutput;   // r5: never read by the console body either (see the header note)
@@ -165,65 +158,25 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
                 mColourCalibrationTextureHandle.mpResourceMemory);
         CGS_ASSERT(NULL != lpColourCalibrationTexture, "NULL != lpColourCalibrationTexture");
 
-        // Build the sampler parameters the X360 stores (clamp addressing, point filters,
-        // 13x aniso, the {0,0,0,1,1} trailing flag bytes) over the acquired texture.
-        renderengine::TextureState::Parameters lTextureStateParameters = {};
+        // ARTIST8246AC6C..CCD: address UVW=2, all filters=0.
+        // Mip filter differs from the native constructor default of 2.
+        renderengine::TextureState::Parameters lTextureStateParameters;
         lTextureStateParameters.muAddressU      = 2;
         lTextureStateParameters.muAddressV      = 2;
         lTextureStateParameters.muAddressW      = 2;
         lTextureStateParameters.muMagFilter     = 0;
         lTextureStateParameters.muMinFilter     = 0;
         lTextureStateParameters.muMipFilter     = 0;
-        lTextureStateParameters.muMaxAnisotropy = 13;
-        lTextureStateParameters.muField10       = 1;
+        lTextureStateParameters.muMinMipLevel = 13;
+        lTextureStateParameters.muMaxAnisotropy       = 1;
         lTextureStateParameters.mfMipLodBias    = 0.0f;
-        lTextureStateParameters.mu8Field43      = 1;
-        lTextureStateParameters.mu8Field44      = 1;
+        lTextureStateParameters.mbPointBorderEnable      = 1;
+        lTextureStateParameters.mbUnidentified44      = 1;
         lTextureStateParameters.mpTexture       = lpColourCalibrationTexture;
 
-        // Size + carve the texture-state resource, then initialise the state over it.
-        //
-        // ⚠️ CORRECTED THIS WAVE -- the console's carve is rw::IResourceAllocator::DoAllocate,
-        // NOT a fifth vtable slot. The asm @0x8246ACDC-F8 is
-        //     r11 = *(r25)            ; the allocator's vptr
-        //     r5  = r3                ; the descriptor GetResourceDescriptor just filled
-        //     r6  = 0                 ; the debug NAME argument
-        //     r4  = r25               ; this
-        //     r3  = &var_90           ; the hidden STRUCT-RETURN pointer
-        //     r11 = *(r11 + 0x10) ; bctrl
-        // PowerPC returns a >8-byte struct through an sret pointer in r3, so Hex-Rays'
-        // four-argument `Allocate(out, this, descriptor, flags)` is really the two-argument
-        // `rw::Resource DoAllocate(const ResourceDescriptor&, const char* name)` with the
-        // out-param hoisted in front (AGENTS.md rule 4). The five words the console then
-        // copies into this+0x424 (@0x8246ACFC-AD20) are that returned rw::Resource in its
-        // X360 BaseResourceDescriptors<5> width.
-        // The previous body reached vtable slot +0x10 through a hand-declared interface
-        // slice. That is a GUEST vtable index: the host's rw::IResourceAllocator has FOUR
-        // virtuals (dtor / DoAllocate / Free / DoFree), so index 4 is past the end of the
-        // real vtable and the call would have jumped through whatever follows it. Reaching
-        // DoAllocate BY NAME is both the faithful call and the only safe one, and it is the
-        // same conversion the reviewed CgsAptRenderHandler texture-state carve performs.
-        u32 lauDescriptor[10];
-        renderengine::TextureState::GetResourceDescriptor(lauDescriptor);
-
-        if (lpAllocator != NULL)
-        {
-            // GetResourceDescriptor writes the X360 5-entry form (10 words); the host's
-            // rw::ResourceDescriptor is the 4-entry one. Slot 0 carries the whole
-            // texture-state object; slots 1..3 are the console's own {0, 1} empties.
-            rw::ResourceDescriptor lAllocDescriptor;
-            lAllocDescriptor.m_baseResourceDescriptors[0].m_size      = lauDescriptor[0];
-            lAllocDescriptor.m_baseResourceDescriptors[0].m_alignment = lauDescriptor[1];
-            for (u32 luSlot = 1; luSlot < rw::KU_RESOURCE_LANE_COUNT; ++luSlot)
-            {
-                lAllocDescriptor.m_baseResourceDescriptors[luSlot].m_size      = 0u;
-                lAllocDescriptor.m_baseResourceDescriptors[luSlot].m_alignment = 1u;
-            }
-            mTextureStateResource = lpAllocator->DoAllocate(lAllocDescriptor, NULL);
-        }
-        else
-        {
-        }
+        rw::ResourceDescriptor lDescriptor;
+        renderengine::TextureState::GetResourceDescriptor(&lDescriptor);
+        mTextureStateResource = lpAllocator->DoAllocate(lDescriptor, 0);
 
         mpTextureState = renderengine::TextureState::Initialize(&mTextureStateResource,
                                                                 &lTextureStateParameters);
@@ -237,7 +190,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         GuiOptionsBrightnessContrastPostFxControl lControl;
         lControl.mColourCalibrationTextureHandle = mColourCalibrationTextureHandle;
         lControl.mbEnablePostFx                  = false;
-        AddGuiOutEvent(lpGuiOutEvents, lControl);
+        lpGuiOutput->AddGuiOutEvent(lControl);
         break;
     }
 
@@ -246,7 +199,7 @@ void ColourCalibrationScreen::Update(BrnResource::GameDataIO::InputBuffer* lpGDM
         GuiOptionsBrightnessContrastPostFxControl lControl;
         lControl.mColourCalibrationTextureHandle = CgsResource::NULLResourceHandle;
         lControl.mbEnablePostFx                  = true;
-        AddGuiOutEvent(lpGuiOutEvents, lControl);
+        lpGuiOutput->AddGuiOutEvent(lControl);
 
         meState = E_COLOURCALIBRATIONSCREENSTATE_CONSTRUCTED;
         CgsDev::Log::WriteToLog("[calib-screen] hidden -- post-fx restored\n");
