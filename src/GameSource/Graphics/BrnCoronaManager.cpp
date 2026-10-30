@@ -3,6 +3,9 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // CgsDev::Log::WriteToLog
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/depthstencilstate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/rasterizerstate.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"        // saBlendStates[2]
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h" // saDepthStencilStates[1]/[2]
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"  // CgsGraphics::ResourceAllocatorCreate
@@ -118,9 +121,9 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(const Vector3& lvPositi
         const f32 lfDistSqr = rw::math::vpu::MagnitudeSquared(lvDelta);
 
         f32 lfAlphaScale = 1.0f;
-        if (lfFadeDistSqr > kfCoronaFadeDistance)
+        if (lfDistSqr > kfCoronaFadeDistance)
         {
-            lfAlphaScale = 1.0f - ((lfFadeDistSqr - kfCoronaFadeDistance) / (kfNoFadeDistanceSqrd - kfCoronaFadeDistance));
+            lfAlphaScale = 1.0f - ((lfDistSqr - kfCoronaFadeDistance) / (kfNoFadeDistanceSqrd - kfCoronaFadeDistance));
             if (lfAlphaScale < 0.0f)
                 lfAlphaScale = 0.0f;
         }
@@ -204,7 +207,7 @@ void BrnCoronaManager::BrnSubmissionInterface::AddPropCorona(const Vector3& lvPo
     const Vector3 lvDelta = rw::math::vpu::operator-(lvPosition, mCameraPosition);
     const f32 lfDistSqr = rw::math::vpu::MagnitudeSquared(lvDelta);
 
-    const BrnEffects::Curves::SmoothStep lScaleCurve{};
+    const BrnEffects::Curves::SmoothStep lScaleCurve = {};
     const f32 lfSize = lScaleCurve.Evaluate(kPropCoronaScaleCurveParams, lvSize, lfDistSqr);
 
     SetAlphaByte(gPropCoronaColour, static_cast<uint8_t>(lfAlpha * 255.0f));
@@ -415,25 +418,6 @@ void BrnCoronaManager::Construct(rw::IResourceAllocator& lrAllocator)
     m_textureAtlas                  = 0;
     mSubmissionInterface[0].mpBuffer = m_coronaBuffer0;   // stw, 0x50(this)
     mSubmissionInterface[1].mpBuffer = m_coronaBuffer1;   // stw, 0xC0(this)
-
-    // Neither interface has been Cleared yet: the console's first StartOfFrame does that before any
-    // producer runs. Publish the cursors here too so a producer that beats the first StartOfFrame
-    // (possible on PC, where Construct is lazy) writes into the buffer rather than through null.
-    m_coronaBuffer0->Lock(mSubmissionInterface[0].mBufferIterator);
-    m_coronaBuffer1->Lock(mSubmissionInterface[1].mBufferIterator);
-
-    {
-        char lacMessage[224];
-        std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[corona] manager constructed: buffers=2 x %u slots (%u bytes each),"
-                      " atlasUV[0] = (%.4f,%.4f)..(%.4f,%.4f), fadeDistanceSqrd=%.1f\n",
-                      (unsigned)luNumCoronas,
-                      (unsigned)((luNumCoronas << 6) + 16u),
-                      s_atlasUVs[0][0].x, s_atlasUVs[0][0].y,
-                      s_atlasUVs[0][3].x, s_atlasUVs[0][3].y,
-                      kfCoronaFadeDistance);
-        CgsDev::Log::WriteToLog(lacMessage);
-    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -522,6 +506,7 @@ void BrnCoronaManager::Render(f32 lfWhiteLevel)
 
     // The interface the WORLD filled last frame is the one Update is not publishing now.
     BrnSubmissionInterface& lrInterface = mSubmissionInterface[mu8SubmissionSwapIndex ^ 1u];
+    const u32 luNumCoronas = lrInterface.mBufferIterator.GetNumCoronasWritten();
 
     renderengine::CoronaRenderer::RenderParameters lParams;
     lParams.muFlags = 0;                                        // not written by the console; see banner
@@ -549,72 +534,27 @@ void BrnCoronaManager::Render(f32 lfWhiteLevel)
 // BrnCoronaManager::SetTextureAtlas @ 0x823FD000
 //
 // Frees the previous atlas texture-state resource (if one exists), builds a fresh TextureState
-// from a fixed sampler-parameter block (2/2/2 address mode, linear mag/min filter, 13x aniso,
-// point mip filter, no LOD bias) over the new atlas texture, records it as m_textureStateAtlas /
+// from a fixed sampler-parameter block (2/2/2 address mode, linear mag/min filter, min mip 13,
+// anisotropy 1, no mip filtering or LOD bias) over the new atlas texture, records it as m_textureStateAtlas /
 // m_textureStateAtlasResource, and publishes the trio to the renderer -- which is the inlined
 // CoronaRenderer::SetTextureAtlas(state, 4 sub-images, &s_atlasUVs[0][0]) at @0x823FD108-2C.
 // ---------------------------------------------------------------------------------------------
-void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& lAllocator, renderengine::Texture* lpTextureAtlas)
+// ARTIST823FD000: free the old resource first, then publish the new atlas state.
+void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& allocatorRef,
+    renderengine::Texture* textureAtlas)
 {
-    // THE ALLOCATOR IS CALLED BY NAME, NOT BY GUESSED SLOT. The X360 reaches the allocator through
-    // two indirect calls, `(*(*a2 + 16))(out, a2, desc, 0)` and `(*(*a2 + 20))(a2, &resource)`.
-    // This TU used to model that with a local `class ResourceCarvingAllocator` reinterpret_cast over
-    // the real rw::IResourceAllocator -- the EXACT shim CgsResourceAllocatorCreate.h documents as
-    // destructive (guessed console 4-byte slots over an 8-byte host vtable whose slot 0 is the
-    // VIRTUAL DESTRUCTOR). The named calls below are the same two operations on the committed
-    // interface: DoAllocate (via the shared helper) and DoFree(const Resource&).
-    rw::IResourceAllocator* lpAllocator = const_cast<rw::IResourceAllocator*>(&lAllocator);
-
+    rw::IResourceAllocator* const allocator = const_cast<rw::IResourceAllocator*>(&allocatorRef);
     if (m_textureStateAtlas)
-        lpAllocator->DoFree(m_textureStateAtlasResource);
+        allocator->DoFree(m_textureStateAtlasResource);
 
-    renderengine::TextureState::Parameters lTextureStateParams = {};
-    lTextureStateParams.muAddressU      = 2;
-    lTextureStateParams.muAddressV      = 2;
-    lTextureStateParams.muAddressW      = 2;
-    lTextureStateParams.muMagFilter     = 1;
-    lTextureStateParams.muMinFilter     = 1;
-    lTextureStateParams.muMipFilter     = 0;
-    lTextureStateParams.muField6        = 0;
-    lTextureStateParams.muField7        = 0;
-    lTextureStateParams.muMaxAnisotropy = 13;
-    lTextureStateParams.muField9        = 0;
-    lTextureStateParams.muField10       = 1;
-    lTextureStateParams.mfMipLodBias    = 0.0f;
-    lTextureStateParams.mfField12       = 0.0f;
-    lTextureStateParams.muField13       = 0;
-    lTextureStateParams.muField14       = 0;
-    lTextureStateParams.muField15       = 0;
-    lTextureStateParams.mu8Field40      = 0;
-    lTextureStateParams.mu8Field41      = 0;
-    lTextureStateParams.mu8Field42      = 0;
-    lTextureStateParams.mu8Field43      = 1;
-    lTextureStateParams.mu8Field44      = 1;
-    lTextureStateParams.mpTexture       = lpTextureAtlas;
-
-    // renderengine::TextureState::GetResourceDescriptor writes ten words (texturestate.cpp:17-25);
-    // the console's stack block is larger but only those ten are consumed. Sized to match the
-    // sibling call sites (CgsFont.cpp:323, CgsAptRenderHandler.cpp:326,
-    // BrnGuiColourCalibrationScreen.cpp:221).
-    u32 laDescriptor[10] = {};
-    renderengine::TextureState::GetResourceDescriptor(laDescriptor);
-
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &m_textureStateAtlasResource, laDescriptor);
-
-    // NOTE: the asm never stores lpTextureAtlas into m_textureAtlas (this+4) -- only
-    // m_textureStateAtlas (this+8) is written, via TextureState::Initialize's return. Left as-is
-    // to match the binary exactly rather than adding an unattested store.
-    m_textureStateAtlas = renderengine::TextureState::Initialize(&m_textureStateAtlasResource, &lTextureStateParams);
-
-    // @0x823FD108-2C, in the asm's order -- the inlined CoronaRenderer::SetTextureAtlas.
-    renderengine::CoronaRenderer::SetTextureAtlas(m_textureStateAtlas, 4u, &s_atlasUVs[0][0]);
-
-    {
-        char lacMessage[192];
-        std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[corona] atlas bound: texture=%d textureState=%d subImages=4 -> pass %s\n",
-                      (int)(lpTextureAtlas != 0), (int)(m_textureStateAtlas != 0),
-                      renderengine::CoronaRenderer::IsReady() ? "READY" : "NOT READY");
-        CgsDev::Log::WriteToLog(lacMessage);
-    }
+    renderengine::TextureState::Parameters parameters;
+    parameters.muAddressU = parameters.muAddressV = parameters.muAddressW = 2;
+    parameters.muMagFilter = parameters.muMinFilter = 1;
+    parameters.muMipFilter = 0;
+    parameters.mpTexture = textureAtlas;
+    rw::ResourceDescriptor descriptor;
+    renderengine::TextureState::GetResourceDescriptor(&descriptor);
+    m_textureStateAtlasResource = allocator->DoAllocate(descriptor, 0);
+    m_textureStateAtlas = renderengine::TextureState::Initialize(&m_textureStateAtlasResource, &parameters);
+    renderengine::CoronaRenderer::SetTextureAtlas(m_textureStateAtlas, 4, &s_atlasUVs[0][0]);
 }
