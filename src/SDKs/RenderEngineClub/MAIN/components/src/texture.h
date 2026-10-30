@@ -51,7 +51,7 @@ public:
     u32 GetHeight() const;
     u32 GetDepth() const;
     PixelFormat GetFormat() const;
-    static u32 GetPixelDataSize(Type, u32 width, u32 height, u32 depth, u32 levels, PixelFormat);
+    static u32 GetPixelDataSize(Type, u32 width, u32 height, u32 depth, PixelFormat, u32 levels);
     bool Lock(u32 flags, u32 mipLevel, u32 index, Locked&);
     void Unlock(const Locked&);
     static void Destruct(Texture*);

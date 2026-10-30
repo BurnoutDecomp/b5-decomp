@@ -190,9 +190,9 @@ void Texture::GetParameters(Parameters& parametersRef) const
     parameters->muNumLevels = texture->Format.MaxMipLevel + 1;
 }
 
-u32 Texture::GetPixelDataSize(Type type, u32 width, u32 height, u32 depth, u32 levels, PixelFormat format)
+u32 Texture::GetPixelDataSize(Type type, u32 width, u32 height, u32 depth, PixelFormat format, u32 levels)
 {
-    u32 size;
+    u32 size = 0;
     Xbox2SetTextureHeader(0, width, height, depth, levels, format, type, &size, 0);
     return size;
 }
@@ -213,7 +213,7 @@ rw::ResourceDescriptor Texture::GetResourceDescriptor(const Parameters& paramete
     {
         descriptor->m_baseResourceDescriptors[2].m_size = GetPixelDataSize(parameters->meType,
             parameters->muWidth, parameters->muHeight, parameters->muDepth,
-            parameters->muNumLevels, parameters->meFormat);
+            parameters->meFormat, parameters->muNumLevels);
         descriptor->m_baseResourceDescriptors[2].m_alignment = D3DTEXTURE_ALIGNMENT;
     }
     return descriptorRef;
