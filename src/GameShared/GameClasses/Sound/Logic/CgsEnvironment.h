@@ -130,6 +130,7 @@ struct Environment
     // zero the manager map, wire + create the dynamic mixer, register the four
     // CPU monitors. Bodied in CgsEnvironment.cpp (phase B2).
     void Construct(const EnvironmentSpec& akrSpec);
+    void Destruct();
 
     // @ 0x826C3F78 (DWARF h:275). The per-frame drive: accumulate mfGameTime,
     // update the microphones, seed every registered manager's time fields + run

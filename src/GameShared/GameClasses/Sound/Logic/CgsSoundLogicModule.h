@@ -96,6 +96,7 @@ public:
     // construct the message queue + seed the stages (prepare Start / release
     // Done) + mbIsNewModule.
     void Construct() ;
+    virtual bool Release();
 
     // @ 0x826C42A8 (DWARF :82: Prepare(rw::IResourceAllocator*, InputBuffer*,
     // OutputBuffer*, const ModuleParams&)). The stage machine (see the .cpp).

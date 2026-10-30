@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
+#include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor / Start/StopMonitor
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"                  // Nicotine mixer-allocator face
@@ -26,6 +27,19 @@ namespace CgsSound
 {
 namespace Logic
 {
+
+// ARTIST 0x826C3F00: clear the manager map, destroy the mixer base, and
+// return the Environment resource through the allocator captured before teardown.
+void Environment::Destruct()
+{
+    rw::IResourceAllocator* lpAllocator = mpAllocator;
+    for (s32 liSlot = 0; liSlot < KI_MAX_NUMBER_OF_STATES; ++liSlot)
+        mapStateManagers[liSlot] = 0;
+    mDynamicMixer.Nicotine::IDynamicMixer::~IDynamicMixer();
+    rw::Resource lResource;
+    lResource.m_baseResources[0] = this;
+    lpAllocator->DoFree(lResource);
+}
 
 bool Environment::AddStateManager(StateManager* apStateManager)
 {

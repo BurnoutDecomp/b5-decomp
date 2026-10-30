@@ -384,6 +384,36 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
     return lbPrepared;
 }
 
+// ARTIST 0x826C97B0. Preserve the base release retry and both stage words.
+bool SoundLogicModule::Release()
+{
+    switch (meBrnReleaseStage)
+    {
+    case E_BRN_RELEASE_START:
+    case E_BRN_RELEASE_SELF:
+        meBrnReleaseStage = E_BRN_RELEASE_SELF;
+        if (!CgsSound::Logic::Module::Release())
+            return false;
+        meBrnPrepareStage = E_PREPSTAGE_BASE;
+        // fall through
+    case E_BRN_RELEASE_DONE:
+        meBrnReleaseStage = E_BRN_RELEASE_DONE;
+        meBrnPrepareStage = E_PREPSTAGE_PERFMON;
+        return true;
+    default:
+        CGS_ASSERT(false, "Invalid Stage\n");
+        return false;
+    }
+}
+
+// ARTIST 0x82697850. The serialiser Destruct call folds to the shared blr.
+void SoundLogicModule::Destruct()
+{
+    CgsModule::ModuleSingleBuffered::Destruct();
+    maTriggerActions.Clear();
+    miCommandStreamUsage = 0;
+}
+
 // ARTIST 0x82703F18. Pending requests are bridged on the retry path.
 bool SoundLogicModule::PrepareOnEnteringGameplay(rw::IResourceAllocator* apAllocator,
                                                   CgsModule::IOBuffer* apInputBuffer,
