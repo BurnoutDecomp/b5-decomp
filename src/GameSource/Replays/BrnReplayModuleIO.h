@@ -78,8 +78,8 @@ namespace ReplayIO
     //   +0x004  StatusInterface                       mStatusInterface        (sizeof 0x618)
     //   +0x61C  BrnResource::GameDataIO::RequestInterface<1024> mGameDataRequestInterface (sizeof 0x410 = 1024+16)
     //   +0xA2C  GuiEventQueue (GuiEventQueueSmall)    mGuiEventQueue          (VariableEventQueue<4096,16>)
-    // The four owned accessors (this TU): GetStatusInterface const/non-const (this+4),
-    // GetGameDataRequestInterface non-const (this+0x61C), GetGuiEventQueue const (this+0xA2C).
+    // The five owned accessors (this TU): GetStatusInterface const/non-const (this+4),
+    // GetGameDataRequestInterface const/non-const (this+0x61C), GetGuiEventQueue const (this+0xA2C).
     // GROWN from a prior opaque-storage placeholder once this type's accessor TU landed.
     struct OutputBuffer_PreSim : public CgsModule::IOBuffer
     {
@@ -98,6 +98,8 @@ namespace ReplayIO
         // X360 0x8264E1D0: write-lock (bit 3, "Not locked for writing", :104); returns
         // &mStatusInterface (this+4).
         StatusInterface* GetStatusInterface();
+        // X360 0x823BB128: read-lock; ICF-shared +0x61C accessor, called at 0x823F1F3C.
+        const GameDataRequestInterface* GetGameDataRequestInterface() const;
         // X360 0x8264E278: write-lock (bit 3, "Not locked for writing", :108); returns
         // &mGameDataRequestInterface (this+0x61C).
         GameDataRequestInterface* GetGameDataRequestInterface();
