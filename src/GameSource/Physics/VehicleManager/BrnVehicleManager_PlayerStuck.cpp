@@ -1,3 +1,4 @@
+#include <float.h>
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_PlayerStuck.cpp
 //
@@ -112,7 +113,7 @@ namespace
 
     // flt_8208F5EC == 0x7F7FFFFF: the "no hit yet" distance the per-line best-t is seeded with
     // (0x82618614 in PostSimulation, 0x825C3A98 in DoPlayerStuckLineTests).
-    const f32 KF_NO_HIT_DISTANCE = 3.4028235e38f;
+    const f32 KF_NO_HIT_DISTANCE = FLT_MAX;
 
     // DoPlayerStuckLineTests' two "is the car moving" cut-offs, compared against SQUARED
     // magnitudes (`vmsum3fp128 v0, v0, v0` then `vcmpgtfp.`):

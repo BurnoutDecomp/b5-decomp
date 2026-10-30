@@ -159,13 +159,6 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         const bool lbIsLocalPlayer = (liRaceCar == static_cast<s32>(mePlayerActiveRaceCarIndex));
         const bool lbPlayerStuck   = lbIsLocalPlayer && mbPlayerCarStuckInCollision;
 
-        if (lbPlayerStuck)
-        {
-            if (!sbLoggedPlayerStuck)
-            {
-                sbLoggedPlayerStuck = true;
-            }
-        }
 
         const bool lbForceReset = lpRaceCar->IsBeached() || lbPlayerStuck;
 
