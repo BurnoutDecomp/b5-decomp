@@ -352,9 +352,7 @@ namespace Vehicle
     // follows the `bl` at 0x8262DB80; sentinel written at 0x8261D3FC..0x8261D404 from
     // dword_82F2A3A4 == 0xFFFFFFFF), so `extrwi 14,8` yields 16383 every time. On console that is
     // still inside the enclosing VehicleManager; on the host it is ~15.4 KB past a u8[600]. The
-    // index expression is kept verbatim and the READ is bounds-gated the same way the mounted
-    // BrnPhysicalTrafficManager.cpp:474 gates its own map read, so a stray host byte equal to 127
-    // cannot masquerade as a create-drain failure.
+    // index expression and the out-of-bounds read are retained as in the original.
     // =============================================================================================
     void PhysicalTrafficManager::RecycleTrafficVehicle(
             s32 liIndexToRecycle,
@@ -395,15 +393,12 @@ namespace Vehicle
                              lpDeformationInterface, false);
 
         // Re-read AFTER RemoveTrafficVehicle, so this is 0xFFFFFFFF >> 10 & 0x3FFF == 16383 every
-        // time (see banner). Host bounds guard on the READ only; the index is verbatim.
+        // time (see banner). The original reads the map at that index.
         const u32 luEntityIndex =
             (maTrafficEntityIDs[liIndexToRecycle].muValue >> 10) & 0x3FFFu;   // `extrwi r11,r11,14,8`
-        if (luEntityIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap))
-        {
-            CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] != KU8_INVALID_MAP,
-                       "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liIndexToRecycle]."
-                       "GetEntityIndex()] != KU8_INVALID_MAP");                              // :3466
-        }
+        CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] != KU8_INVALID_MAP,
+                   "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liIndexToRecycle]."
+                   "GetEntityIndex()] != KU8_INVALID_MAP");                                  // :3466
 
         // THE DEFECT ABOVE, VERBATIM: the console indexes the map WITH THE MAP, not with the
         // entity index the assert on the line above just read.
